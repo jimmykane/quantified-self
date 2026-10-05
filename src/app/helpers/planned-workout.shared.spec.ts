@@ -434,3 +434,24 @@ describe('planned workout formatting', () => {
     expect(formatWorkoutTargetV1(target, imperial, undefined, sport)).toContain('/ 500');
   });
 });
+
+
+describe('bounded early-Lap endings', () => {
+  const recipe = (ending: unknown) => ({ version: 1, sport: ActivityTypes.Running,
+    nodes: [{ kind: 'step', id: 'work', purpose: 'work', ending, targets: [] }] });
+  it.each([undefined, false, true])('preserves optional permission %s and exact numeric limits', allowEarlyLap => {
+    for (const ending of [{ kind: 'time', seconds: 90.123 }, { kind: 'distance', meters: 1609.344 }]) {
+      const input = recipe({ ...ending, ...(allowEarlyLap === undefined ? {} : { allowEarlyLap }) });
+      expect(deserializeWorkoutStructureV1(serializeWorkoutStructureV1(input))).toEqual(input);
+      const parsed = parseWorkoutStructureV1(input).nodes[0];
+      if (parsed.kind === 'step') expect(formatWorkoutEndingV1(parsed.ending).includes('or Lap')).toBe(allowEarlyLap === true);
+    }
+  });
+  it.each([null, 0, 1, 'true', {}, undefined])('rejects an explicitly invalid permission %s', allowEarlyLap => {
+    expect(() => parseWorkoutStructureV1(recipe({ kind: 'time', seconds: 90, allowEarlyLap }))).toThrow();
+  });
+  it.each([{ kind: 'manual' }, { kind: 'kilojoules', kilojoules: 10 }, { kind: 'repetitions', repetitions: 5 }])(
+    'rejects permission on unbounded/other ending $kind', ending => {
+      expect(() => parseWorkoutStructureV1(recipe({ ...ending, allowEarlyLap: false }))).toThrow();
+    });
+});

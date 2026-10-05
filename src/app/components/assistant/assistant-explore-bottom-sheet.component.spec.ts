@@ -14,6 +14,7 @@ import {
   ASSISTANT_PROMPT_CARDS,
   ASSISTANT_YESTERDAY_TRAINING_IMPACT_PROMPT,
 } from '@shared/assistant.prompts';
+import { ASSISTANT_MAX_MESSAGE_CHARS } from '@shared/assistant.types';
 import { AssistantExploreBottomSheetComponent } from './assistant-explore-bottom-sheet.component';
 import { writeFileSync, readFileSync, readdirSync } from 'node:fs';
 import { compile } from 'sass';
@@ -79,7 +80,13 @@ describe('AssistantExploreBottomSheetComponent', () => {
     const toggle = fixture.nativeElement.querySelector('[aria-label^="Training plans access"]');
     expect(toggle).not.toBeNull();
     expect(fixture.nativeElement.textContent).toContain('sensitive health or personal information');
-    expect(fixture.nativeElement.textContent).toContain('choose what happens to its workouts');
+    expect(fixture.nativeElement.textContent).toContain('choose whether to keep its workouts as standalone or delete them');
+    expect(fixture.nativeElement.textContent).toContain('Workout deletion is recoverable');
+    expect(fixture.nativeElement.textContent).toContain('Plan deletion is permanent');
+    expect(fixture.nativeElement.textContent).toContain('With Plan and workout changes also on');
+    expect(fixture.nativeElement.textContent).toContain('older, uncompleted service copies');
+    expect(fixture.nativeElement.textContent).toContain('Sending needs Pro; removing copies does not');
+    expect(fixture.nativeElement.textContent).toContain('valid service access and provider support');
     expect(fixture.nativeElement.textContent).toContain('Turn on Training plans before allowing changes');
     expect(fixture.nativeElement.querySelectorAll('.assistant-training-access app-compact-row')).toHaveLength(3);
     const changeToggles = Array.from(fixture.nativeElement.querySelectorAll(
@@ -125,6 +132,23 @@ describe('AssistantExploreBottomSheetComponent', () => {
       kind: 'prompt',
       prompt,
     });
+  });
+
+  it('selects today\'s workout without enabling optional data or change access', () => {
+    const buttons = Array.from(
+      fixture.nativeElement.querySelectorAll('.assistant-explore-prompts button'),
+    ) as HTMLButtonElement[];
+
+    buttons.at(-1)!.click();
+
+    expect(bottomSheetRef.dismiss).toHaveBeenCalledExactlyOnceWith({
+      kind: 'prompt',
+      prompt: ASSISTANT_CREATE_TODAYS_WORKOUT_PROMPT,
+    });
+    expect(ASSISTANT_CREATE_TODAYS_WORKOUT_PROMPT.length).toBeLessThanOrEqual(ASSISTANT_MAX_MESSAGE_CHARS);
+    expect(component.data.trainingPlansEnabled ?? false).toBe(false);
+    expect(component.data.trainingPlanChangesEnabled ?? false).toBe(false);
+    expect(component.data.timelineNotesEnabled ?? false).toBe(false);
   });
 
   it('returns explicit precise activity-location consent to the Assistant page', () => {

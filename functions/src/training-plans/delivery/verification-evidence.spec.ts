@@ -39,6 +39,18 @@ describe('provider-neutral inspection evidence', () => {
     expect(observeInspection(undefined, 'a', { ...policy, authoritativeAbsenceKeys: [] }, missing, 0).state).toBe('unknown');
     expect(observeInspection(undefined, 'a', policy, { ...missing, artifacts: missing.artifacts.map(item => ({ ...item, authoritative: false })) }, 0).state).toBe('unknown');
   });
+  it('retains a complete not-found observation without declaring authoritative absence, and clears it after a failed check', () => {
+    const scheduleOnly = { ...policy, authoritativeAbsenceKeys: ['schedule'], repairReadyKeys: ['schedule'] };
+    const paired: InspectionObservation = { conflict: false, artifacts: [
+      { key: 'workout', state: 'absent', authoritative: false }, { key: 'schedule', state: 'absent', authoritative: true },
+    ] };
+    const result = observeInspection(undefined, 'a', scheduleOnly, paired, 10);
+    expect(result).toMatchObject({ state: 'unknown', missing: false, missingKeys: [], observedMissingKeys: ['schedule', 'workout'] });
+    for (const observation of [{ artifacts: [], conflict: false }, { ...paired, conflict: true },
+      { ...paired, artifacts: [{ key: 'workout', state: 'absent', authoritative: false }, { key: 'schedule', state: 'unknown', authoritative: false }] }]) {
+      expect(observeInspection(result, 'a', scheduleOnly, observation as InspectionObservation, 11).observedMissingKeys).toBeUndefined();
+    }
+  });
   it('models independent Wahoo Plan/Workout/association resources without Garmin assumptions', () => {
     const wahoo = { ...policy, required: ['plan', 'workout', 'association'],
       authoritativeAbsenceKeys: ['plan', 'workout', 'association'], repairReadyKeys: ['plan', 'workout', 'association'] };

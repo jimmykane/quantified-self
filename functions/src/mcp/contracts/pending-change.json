@@ -1,7 +1,7 @@
 {
   "formatVersion": 1,
-  "candidateSha256": "99f7cea923f2fcc1a70360883a3628623e0bc5b1844eb793ef7f3007ccea0782",
+  "candidateSha256": "cf80d31c5c98ee03641f01bd4267604b6592b97e8dedfd4857496e71b066147e",
   "lifecycleAction": "developer-refresh",
-  "summary": "Preserve prior Training lifecycle/library/status recovery, Strength/pool, Health/manual measurements, Timeline/event/activity, snapshots/TSS impact and OAuth/PKCE changes. Add read-only get_workout_prescription_analysis under training-plans:read with exact subtotals, explicit speed ranges, unknown coverage and purpose/repeat counts. Keep existing schemas and native approval intact. Deploy separately, refresh/rescan metadata, then sync bundled guidance.",
+  "summary": "Preserve prior Training/Health/Timeline/activity, OAuth/PKCE, Strength/pool, library, measurements, status recovery, deletion and early-Lap recipe reads/previews. Add read-only get_workout_prescription_analysis under training-plans:read with exact prescribed subtotals, explicit speed ranges, unknown coverage and purpose/repeat/early-Lap counts. Keep frozen existing schemas, grants and native/app approval. Deploy separately, then refresh/rescan exact metadata and sync bundled guidance.",
   "rescanRequired": true
 }

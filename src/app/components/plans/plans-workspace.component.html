@@ -6,23 +6,19 @@
     leadingIcon="event_note"
     [subtitle]="libraryView() ? (editor() ? 'Build a reusable workout. Add dates later.' : 'Keep your common workouts ready for any plan.') : editor() ? 'Date, sport, and workout steps.' : showPlanForm() ? 'Workouts across a date range.' : 'Workouts, with or without a plan.'"
     [status]="pageStatus()">
-    @if (browsing()) {
-    <div pageHeaderActions class="plans-header-actions">
-      @if (!libraryView()) {
-      <app-training-delivery-button scope="history" entityId="current" title="Plans and standalone workouts"
+    @if (browsing() && !libraryView()) {
+      <app-training-delivery-button pageHeaderTitleActions scope="history" entityId="current"
+        title="Plans and standalone workouts" historyLabel="Sync"
         [disabled]="busyAction() !== null || scheduleState().status !== 'ready'"></app-training-delivery-button>
-      <a mat-button routerLink="/calendar" appHapticTap>
-        <mat-icon aria-hidden="true">calendar_month</mat-icon>
-        <span>Main Calendar</span>
-      </a>
-      } @else {
+    }
+    @if (browsing() && libraryView()) {
+      <div pageHeaderActions class="plans-header-actions">
         <a mat-button routerLink="/training/plans" appHapticTap><mat-icon aria-hidden="true">arrow_back</mat-icon>Plans</a>
         <a mat-flat-button routerLink="/training/plans/library/new" appHapticTap
           [state]="{ trainingPlansEditorReturn: { uid: currentUser()?.uid, url: '/training/plans/library' } }">
           <mat-icon aria-hidden="true">add</mat-icon>New saved workout
         </a>
-      }
-    </div>
+      </div>
     }
   </app-page-header>
 
@@ -343,6 +339,11 @@
             <ol class="workout-summary">
               @for (summary of row.summary; track $index) { <li>{{ summary }}</li> }
             </ol>
+            @if (row.item.structure.sport !== strengthSport) {
+              <app-workout-profile [structure]="row.item.structure" [unitSettings]="currentUser()?.settings?.unitSettings ?? null"
+                [contextKey]="currentUser()?.uid + '/library/' + row.item.id + '/' + row.item.revision" [initiallyExpanded]="false"
+                unavailableReason="This saved recipe cannot be profiled. Its original instructions remain above."></app-workout-profile>
+            }
             <div compactRowAction class="workout-row-actions">
               @if (row.item.status === 'active') {
                 <button mat-flat-button type="button" appHapticTap (click)="beginLibraryPlacement(row.item)"
@@ -425,14 +426,14 @@
     @if (editor(); as session) {
       <section class="workout-editor" aria-labelledby="plans-title">
           <fieldset class="editor-fields" [disabled]="busyAction() !== null" aria-label="Workout details">
-          <div class="workout-editor-basics">
-            <mat-form-field>
+          <div class="workout-editor-basics" [class.workout-editor-basics--library]="libraryView()">
+            <mat-form-field subscriptSizing="dynamic">
               <mat-label>Workout title</mat-label>
               <input #workoutTitleInput matInput maxlength="120" [ngModel]="session.value.title"
                 (ngModelChange)="updateEditorField('title', $event)">
             </mat-form-field>
             @if (!libraryView()) {
-            <mat-form-field>
+            <mat-form-field subscriptSizing="dynamic">
               <mat-label>Date</mat-label>
               <input matInput required [matDatepicker]="workoutDatePicker" [ngModel]="workoutDatePickerValue()"
                 (dateInput)="updateWorkoutDateInput($event.value)"
@@ -442,7 +443,7 @@
               <mat-error>Choose a valid date.</mat-error>
             </mat-form-field>
             }
-            <mat-form-field>
+            <mat-form-field subscriptSizing="dynamic">
               <mat-label>Sport</mat-label>
               <mat-select [value]="session.value.sport" [disabled]="busyAction() !== null"
                 (selectionChange)="updateEditorField('sport', $event.value)">
@@ -457,14 +458,15 @@
               </mat-select>
             </mat-form-field>
             @if (editorIsPoolSwimming()) {
-              <mat-form-field>
+            <div class="workout-pool-fields">
+              <mat-form-field subscriptSizing="dynamic">
                 <mat-label>Pool length (optional)</mat-label>
                 <input matInput type="number" min="1" max="1000" step="0.01"
                   [ngModel]="session.value.poolLengthValue ?? null"
                   (ngModelChange)="updateEditorField('poolLengthValue', $event === '' || $event === null ? null : +$event)">
                 <mat-hint>Leave empty for an unspecified pool size. Some Garmin devices need a specified length.</mat-hint>
               </mat-form-field>
-              <mat-form-field>
+              <mat-form-field subscriptSizing="dynamic">
                 <mat-label>Pool unit</mat-label>
                 <mat-select [value]="session.value.poolLengthUnit ?? 'meters'" [disabled]="busyAction() !== null"
                   (selectionChange)="updateEditorField('poolLengthUnit', $event.value)">
@@ -472,6 +474,7 @@
                   <mat-option value="yards">Yards</mat-option>
                 </mat-select>
               </mat-form-field>
+            </div>
             }
           </div>
 
@@ -538,7 +541,7 @@
                       @for (set of exercise.sets; track set.id; let setIndex = $index) {
                         <div class="strength-set-fields" [attr.aria-label]="exercise.name + ' set ' + (setIndex + 1)">
                           <span class="strength-set-number">Set {{ setIndex + 1 }}</span>
-                          <mat-form-field subscriptSizing="dynamic">
+                          <mat-form-field class="strength-set-type" subscriptSizing="dynamic">
                             <mat-label>Set type</mat-label>
                             <mat-select [value]="set.ending.kind"
                               (selectionChange)="updateStrengthSet(exerciseIndex, setIndex, 'kind', $event.value)">
@@ -553,14 +556,18 @@
                               (ngModelChange)="updateStrengthSet(exerciseIndex, setIndex, 'value', $event)">
                           </mat-form-field>
                           <mat-form-field subscriptSizing="dynamic">
-                            <mat-label>External load ({{ editorWeightUnit() }}, optional)</mat-label>
+                            <mat-label>Load ({{ editorWeightUnit() }})</mat-label>
                             <input matInput type="number" min="0" step="any" [ngModel]="strengthLoadInputValue(set.externalLoadKg)"
+                              [attr.aria-label]="'External load (' + editorWeightUnit() + ', optional)'"
                               (ngModelChange)="updateStrengthSet(exerciseIndex, setIndex, 'externalLoadKg', $event)">
+                            <mat-hint>Optional external load</mat-hint>
                           </mat-form-field>
-                          <mat-form-field subscriptSizing="dynamic">
-                            <mat-label>Rest after (seconds, optional)</mat-label>
+                          <mat-form-field class="strength-set-rest" subscriptSizing="dynamic">
+                            <mat-label>Rest after (s)</mat-label>
                             <input matInput type="number" min="1" step="1" [ngModel]="set.restAfterSeconds ?? null"
+                              aria-label="Rest after (seconds, optional)"
                               (ngModelChange)="updateStrengthSet(exerciseIndex, setIndex, 'restAfterSeconds', $event)">
+                            <mat-hint>Optional</mat-hint>
                           </mat-form-field>
                           <button appHapticTap mat-icon-button type="button" matTooltip="Remove set"
                             [attr.aria-label]="'Remove set ' + (setIndex + 1) + ' of ' + exercise.name"
@@ -581,30 +588,66 @@
               }
             </section>
           } @else {
+          <app-workout-profile [structure]="editorProfile()" [unitSettings]="session.unitSettings"
+            [contextKey]="editorProfileContext()" (stepSelected)="editorProfileSelection.set($event)"></app-workout-profile>
           <section class="workout-nodes" aria-labelledby="workout-steps-title">
             <div class="workout-nodes-heading">
               <div>
                 <h2 id="workout-steps-title">Workout steps</h2>
-                <p>Follow these steps in order. A repeat loops its steps.</p>
+                <p>Follow these steps in order. Drag a handle or use the step actions to move or duplicate. A repeat loops its steps.</p>
               </div>
               <div class="workout-node-add-actions">
-                <button appHapticTap mat-stroked-button type="button" (click)="addEditorStep()" [disabled]="busyAction() !== null">
+                <button appHapticTap mat-stroked-button type="button" (click)="addEditorStep()" [disabled]="busyAction() !== null || editorNodeCount() >= editorNodeLimit">
                   <mat-icon aria-hidden="true">add</mat-icon><span>Add step</span>
                 </button>
-                <button appHapticTap mat-stroked-button type="button" (click)="addEditorRepeat()" [disabled]="busyAction() !== null">
+                <button appHapticTap mat-stroked-button type="button" (click)="addEditorRepeat()" [disabled]="busyAction() !== null || editorNodeCount() + 3 > editorNodeLimit">
                   <mat-icon aria-hidden="true">repeat</mat-icon><span>Add repeat</span>
                 </button>
               </div>
             </div>
 
+            @if (editorNodeCount() >= editorNodeLimit) {
+              <p class="workout-node-limit">This workout has reached the {{ editorNodeLimit }}-node limit, including repeat blocks and their steps.</p>
+            }
+            <div cdkDropList class="workout-node-list" [cdkDropListData]="null" [cdkDropListDisabled]="busyAction() !== null"
+              (cdkDropListDropped)="dropEditorNode($event)">
             @for (node of session.value.nodes; track node.id; let nodeIndex = $index; let lastNode = $last) {
-              <app-compact-row class="workout-node-row" layout="stacked" density="compact"
+              <app-compact-row cdkDrag [cdkDragData]="node.id" [cdkDragDisabled]="busyAction() !== null"
+                [cdkDragStartDelay]="editorDragDelay" cdkDragPreviewContainer="parent"
+                (cdkDragStarted)="startEditorDrag(node.id)"
+                class="workout-node-row" layout="stacked" density="compact"
+                [class.profile-selected]="editorProfileStepId() === node.id || (editorProfileStepId() && editorProfileSelection()?.repeatId === node.id)"
                 [title]="node.kind === 'step' ? 'Step ' + (nodeIndex + 1) : 'Repeat block ' + (nodeIndex + 1)"
                 [titleId]="'workout-node-' + node.id" [showDivider]="!lastNode">
-                  <button compactRowAction appHapticTap mat-icon-button type="button" matTooltip="Remove node" [disabled]="busyAction() !== null"
+                  <div compactRowAction class="workout-node-actions">
+                  <button cdkDragHandle mat-icon-button class="workout-drag-handle" type="button"
+                    [disabled]="busyAction() !== null" matTooltip="Drag to reorder; use actions for keyboard moves"
+                    [attr.aria-label]="'Drag workout node ' + (nodeIndex + 1) + ' to reorder; use actions for keyboard moves'">
+                    <mat-icon aria-hidden="true">drag_indicator</mat-icon>
+                  </button>
+                  <button appHapticTap mat-icon-button type="button" [matMenuTriggerFor]="nodeActions" [matMenuTriggerRestoreFocus]="false"
+                    (menuOpened)="openEditorNodeMenu(node.id)" (menuClosed)="closeEditorNodeMenu()"
+                    [disabled]="busyAction() !== null" [attr.data-editor-node-action]="node.id"
+                    [attr.aria-label]="'Actions for workout node ' + (nodeIndex + 1)">
+                    <mat-icon aria-hidden="true">more_vert</mat-icon>
+                  </button>
+                  <mat-menu #nodeActions="matMenu" class="qs-menu-panel">
+                    <button mat-menu-item type="button" (click)="moveEditorNode(node.id, -1)" [disabled]="busyAction() !== null || nodeIndex === 0">
+                      <mat-icon aria-hidden="true">arrow_upward</mat-icon><span>Move up</span>
+                    </button>
+                    <button mat-menu-item type="button" (click)="moveEditorNode(node.id, 1)" [disabled]="busyAction() !== null || lastNode">
+                      <mat-icon aria-hidden="true">arrow_downward</mat-icon><span>Move down</span>
+                    </button>
+                    <button mat-menu-item type="button" (click)="duplicateEditorNode(node.id)"
+                      [disabled]="busyAction() !== null || editorNodeCount() + (node.kind === 'repeat' ? node.steps.length + 1 : 1) > editorNodeLimit">
+                      <mat-icon aria-hidden="true">content_copy</mat-icon><span>Duplicate {{ node.kind === 'repeat' ? 'repeat block' : 'step' }}</span>
+                    </button>
+                  </mat-menu>
+                  <button appHapticTap mat-icon-button type="button" matTooltip="Remove node" [disabled]="busyAction() !== null"
                     [attr.aria-label]="'Remove workout node ' + (nodeIndex + 1)" (click)="removeEditorNode(nodeIndex)">
                     <mat-icon>delete</mat-icon>
                   </button>
+                  </div>
                   @if (node.kind === 'repeat') {
                     <div class="repeat-heading">
                       <mat-form-field subscriptSizing="dynamic">
@@ -612,23 +655,55 @@
                         <input matInput type="number" min="1" max="100" [ngModel]="node.count"
                           (ngModelChange)="updateNode(nodeIndex, 'count', +$event)">
                       </mat-form-field>
-                      <button appHapticTap mat-button type="button" (click)="addRepeatStep(nodeIndex)" [disabled]="busyAction() !== null">
+                      <button appHapticTap mat-button type="button" (click)="addRepeatStep(nodeIndex)" [disabled]="busyAction() !== null || editorNodeCount() >= editorNodeLimit">
                         <mat-icon aria-hidden="true">add</mat-icon><span>Add repeat step</span>
                       </button>
                     </div>
-                    @for (step of node.steps; track step.id; let stepIndex = $index) {
-                      <div class="workout-step-editor repeat-step-editor">
+                    <div cdkDropList class="repeat-step-list" [cdkDropListData]="node.id" [cdkDropListDisabled]="busyAction() !== null"
+                      (cdkDropListDropped)="dropEditorNode($event, node.id)">
+                    @for (step of node.steps; track step.id; let stepIndex = $index; let lastStep = $last) {
+                      <div cdkDrag [cdkDragData]="step.id" [cdkDragDisabled]="busyAction() !== null"
+                        [cdkDragStartDelay]="editorDragDelay" cdkDragPreviewContainer="parent"
+                        (cdkDragStarted)="startEditorDrag(step.id, node.id)"
+                        class="workout-step-editor repeat-step-editor" [class.profile-selected]="editorProfileStepId() === step.id">
+                        <span class="cdk-visually-hidden">@if (editorProfileStepId() === step.id) { Selected in workout profile }</span>
                         <div class="step-index">{{ stepIndex + 1 }}</div>
+                        <div class="repeat-step-actions">
+                          <button cdkDragHandle mat-icon-button class="workout-drag-handle" type="button" [disabled]="busyAction() !== null"
+                            matTooltip="Drag within this repeat; use actions for keyboard moves"
+                            [attr.aria-label]="'Drag step ' + (stepIndex + 1) + ' within repeat block ' + (nodeIndex + 1) + '; use actions for keyboard moves'">
+                            <mat-icon aria-hidden="true">drag_indicator</mat-icon>
+                          </button>
+                          <button appHapticTap mat-icon-button type="button" [matMenuTriggerFor]="childActions" [matMenuTriggerRestoreFocus]="false"
+                            (menuOpened)="openEditorNodeMenu(step.id)" (menuClosed)="closeEditorNodeMenu()"
+                            [disabled]="busyAction() !== null" [attr.data-editor-node-action]="step.id"
+                            [attr.aria-label]="'Actions for step ' + (stepIndex + 1) + ' within repeat block ' + (nodeIndex + 1)">
+                            <mat-icon aria-hidden="true">more_vert</mat-icon>
+                          </button>
+                          <mat-menu #childActions="matMenu" class="qs-menu-panel">
+                            <button mat-menu-item type="button" (click)="moveEditorNode(step.id, -1, node.id)" [disabled]="busyAction() !== null || stepIndex === 0">
+                              <mat-icon aria-hidden="true">arrow_upward</mat-icon><span>Move up</span>
+                            </button>
+                            <button mat-menu-item type="button" (click)="moveEditorNode(step.id, 1, node.id)" [disabled]="busyAction() !== null || lastStep">
+                              <mat-icon aria-hidden="true">arrow_downward</mat-icon><span>Move down</span>
+                            </button>
+                            <button mat-menu-item type="button" (click)="duplicateEditorNode(step.id, node.id)"
+                              [disabled]="busyAction() !== null || editorNodeCount() >= editorNodeLimit">
+                              <mat-icon aria-hidden="true">content_copy</mat-icon><span>Duplicate step</span>
+                            </button>
+                          </mat-menu>
+                          <button appHapticTap mat-icon-button type="button" matTooltip="Remove repeat step" [disabled]="busyAction() !== null"
+                            [attr.aria-label]="'Remove repeat step ' + (stepIndex + 1)"
+                            (click)="removeRepeatStep(nodeIndex, stepIndex)">
+                            <mat-icon aria-hidden="true">remove_circle</mat-icon>
+                          </button>
+                        </div>
                         <ng-container *ngTemplateOutlet="stepFields; context: {
                           $implicit: step, nodeIndex: nodeIndex, stepIndex: stepIndex
                         }"></ng-container>
-                        <button appHapticTap mat-icon-button type="button" matTooltip="Remove repeat step" [disabled]="busyAction() !== null"
-                          [attr.aria-label]="'Remove repeat step ' + (stepIndex + 1)"
-                          (click)="removeRepeatStep(nodeIndex, stepIndex)">
-                          <mat-icon>remove_circle</mat-icon>
-                        </button>
                       </div>
                     }
+                    </div>
                   } @else {
                     <div class="workout-step-editor">
                       <ng-container *ngTemplateOutlet="stepFields; context: {
@@ -638,6 +713,7 @@
                   }
               </app-compact-row>
             }
+            </div>
           </section>
           }
           </fieldset>
@@ -695,13 +771,28 @@
               <mat-option [value]="ending.value">{{ ending.label }}</mat-option>
             }
           </mat-select>
+          @if (step.endingKind === 'manual') {
+            <mat-hint>Ends when you press the lap button, without a time or distance limit. Wahoo delivery is unsupported.</mat-hint>
+          }
         </mat-form-field>
-        <mat-form-field subscriptSizing="dynamic">
-          <mat-label>{{ step.endingKind === 'time' ? 'Minutes' : editorDistanceUnit() }}</mat-label>
-          <input matInput type="number" [attr.min]="step.endingKind === 'distance' ? 0 : 0.01"
-            [attr.step]="step.endingKind === 'distance' ? 'any' : '0.01'" [ngModel]="step.endingValue"
-            (ngModelChange)="updateStep(nodeIndex, stepIndex, 'endingValue', +$event)">
-        </mat-form-field>
+        @if (step.endingKind === 'time') {
+          <app-workout-time-input class="workout-duration-input" [value]="step.endingValue"
+            [disabled]="busyAction() !== null"
+            (durationChange)="updateStep(nodeIndex, stepIndex, 'endingValue', $event.minutes, $event.seconds)"></app-workout-time-input>
+        } @else if (step.endingKind === 'distance') {
+          <mat-form-field subscriptSizing="dynamic">
+            <mat-label>{{ editorDistanceUnit() }}</mat-label>
+            <input matInput type="number" min="0" step="any" [ngModel]="step.endingValue"
+              (ngModelChange)="updateStep(nodeIndex, stepIndex, 'endingValue', +$event)">
+          </mat-form-field>
+        }
+        @if (step.endingKind === 'time' || step.endingKind === 'distance') {
+          <div class="early-lap-option">
+            <mat-checkbox [checked]="step.allowEarlyLap === true" [disabled]="busyAction() !== null"
+              (change)="updateStep(nodeIndex, stepIndex, 'allowEarlyLap', $event.checked)">Allow early Lap</mat-checkbox>
+            <p class="editor-hint">Ends at the limit or when you press Lap. Suunto delivery supports this option.</p>
+          </div>
+        }
         <mat-form-field subscriptSizing="dynamic">
           <mat-label>Target</mat-label>
           <mat-select [value]="step.targetKind" [disabled]="busyAction() !== null" (selectionChange)="updateStep(nodeIndex, stepIndex, 'targetKind', $event.value)">
@@ -710,17 +801,22 @@
             }
           </mat-select>
         </mat-form-field>
-        @if (step.targetKind !== 'none') {
+        @if (step.targetKind === 'pace') {
+          <app-workout-time-input mode="pace" [label]="'Faster ' + editorPaceUnit()"
+            [value]="step.targetMinimum" [disabled]="busyAction() !== null"
+            (valueChange)="updateStep(nodeIndex, stepIndex, 'targetMinimum', $event)"></app-workout-time-input>
+          <app-workout-time-input mode="pace" [label]="'Slower ' + editorPaceUnit()"
+            [value]="step.targetMaximum" [disabled]="busyAction() !== null"
+            (valueChange)="updateStep(nodeIndex, stepIndex, 'targetMaximum', $event)"></app-workout-time-input>
+        } @else if (step.targetKind !== 'none') {
           <mat-form-field subscriptSizing="dynamic">
-            <mat-label>{{ step.targetKind === 'pace' ? 'Faster ' + editorPaceUnit() : 'Minimum' }}</mat-label>
-            <input matInput type="number" min="0"
-              [attr.step]="step.targetKind === 'pace' ? 'any' : '0.01'" [ngModel]="step.targetMinimum"
+            <mat-label>Minimum</mat-label>
+            <input matInput type="number" min="0" step="0.01" [ngModel]="step.targetMinimum"
               (ngModelChange)="updateStep(nodeIndex, stepIndex, 'targetMinimum', $event)">
           </mat-form-field>
           <mat-form-field subscriptSizing="dynamic">
-            <mat-label>{{ step.targetKind === 'pace' ? 'Slower ' + editorPaceUnit() : 'Maximum' }}</mat-label>
-            <input matInput type="number" min="0"
-              [attr.step]="step.targetKind === 'pace' ? 'any' : '0.01'" [ngModel]="step.targetMaximum"
+            <mat-label>Maximum</mat-label>
+            <input matInput type="number" min="0" step="0.01" [ngModel]="step.targetMaximum"
               (ngModelChange)="updateStep(nodeIndex, stepIndex, 'targetMaximum', $event)">
           </mat-form-field>
         }
@@ -798,6 +894,11 @@
                     <li>{{ summary }}</li>
                   }
                 </ol>
+                @if (row.workout.structure.sport !== strengthSport) {
+                  <app-workout-profile [structure]="row.workout.structure" [unitSettings]="currentUser()?.settings?.unitSettings ?? null"
+                    [contextKey]="currentUser()?.uid + '/workout/' + row.workout.id + '/' + row.workout.revision" [initiallyExpanded]="false"
+                    unavailableReason="This saved recipe cannot be profiled. Its original instructions remain above."></app-workout-profile>
+                }
                 <app-training-delivery-button scope="workout" [entityId]="row.workout.id" [title]="row.workout.title"
                   [summaryWorkouts]="[row.workout]" [summaryPlan]="view() === 'plans' ? selectedPlan() : null"
                   [summaryCompletions]="completions()"

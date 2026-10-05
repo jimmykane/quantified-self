@@ -14,14 +14,15 @@ MCP server, schemas, projections, and Sports Lib-backed metric discovery used by
 public URL remains `/ai-insights` so existing links and post-auth return URLs continue to work, but that route now loads
 the conversational Assistant.
 
-For a user-requested workout suggestion for today, the server collects a bounded context before asking Gemini to
+For a user-requested dated workout suggestion, the server collects a bounded context before asking Gemini to
 recommend anything. It prepares Form, Form Now, ramp-rate and Training Summary snapshots through the existing
 `prepare_training_metrics` lifecycle, then reads the ready Form, ramp-rate and Training Summary payloads. A preparing
 snapshot uses the existing retry path rather than being presented as a value. The server then reads today's load, sleep,
 HRV and readiness from `get_daily_report`, counts recorded local weekdays from canonical daily Duration buckets, and
 checks today's recorded activities. When the independent **Timeline notes** choice is on, it reads up to two 64-note
-pages in the recent-to-today window, including overlapping ongoing notes; closed notes precede ongoing notes. It marks
-each note ended or ongoing from its actual dates. When **Training plans** is on, it reads today's calendar workouts and
+pages from the recent window through the requested future day, including overlapping ongoing notes; closed notes precede ongoing notes.
+The existing 366-day query bound remains; a more distant target reports incomplete note coverage and cannot support a preview.
+It marks each note ended, ongoing or upcoming from its actual dates. When **Training plans** is on, it reads the requested day's calendar workouts and
 their exact stored completion states through one bounded bulk lookup. The authored schedule list alone never establishes
 completion. The server appends these checked facts to the answer, including missing-access or incomplete-scan limits.
 An incomplete note, activity or plan scan cannot support a new workout preview. If note or plan access is off, the
@@ -32,9 +33,20 @@ proposal for in-app review only if the user asked to create/send it.
 Sparse weekday counts are reported as limited evidence, not a consistent habit, and unfiltered Duration totals cannot
 establish which sport was performed.
 Preview and queued delivery are not provider acceptance or watch receipt.
+Short follow-ups such as “What about tomorrow?”, “For tomorrow please” and “without that plan” keep this evidence path
+only through an uninterrupted recommendation thread. The requested date is separate from the current evidence date:
+the calendar and weekday pattern follow the workout date, while readiness, sleep and completed activities remain dated
+as of the current turn. Tomorrow's suggestion is conditional on rechecking readiness, not a forecast of tomorrow's sleep.
+Relative dates inherited from earlier user messages use their stored timestamp and the current turn's IANA timezone;
+ambiguous or impossible dates require clarification. “Today is done” and a no-plan hypothetical remain explicit constraints
+for short continuations; a prior day's “today is done” does not block a new day. A hypothetical never modifies the actual
+schedule. An explicit new request supersedes the earlier recommendation's constraints. A create preview for the wrong
+date is rejected before MCP, with one-date correction guidance. A missing/withheld preview tool does not force Gemini to
+call an unavailable tool. No follow-up inherits permission to create, send or apply a change.
 Combined comparison-and-workout requests retain the live daily and activity tools instead of being forced into a
 single-purpose comparison workflow. Plan-level and provider-only actions use the batch Training preview even when a
 strength or pool workout is mentioned; one authored strength or pool-length change uses its focused preview.
+Explicit plan creation remains on that multi-workout workflow rather than being reduced to a one-date recommendation.
 
 ## Request architecture
 
@@ -137,16 +149,39 @@ Two additional default-off toggles enable **Plan and workout changes** and **Pla
 the read toggle but remain independent of each other. The first grants `training-plans:write`; the second grants
 `training-delivery:write`. A write-enabled in-process session exposes the focused single-workout preview plus the bounded
 batch preview to Gemini. The focused preview can include an atomic initial provider send only when the delivery toggle is
-also enabled. The model can prepare one strict proposal after reading current records. For Workout Library changes it
+also enabled. With both change toggles, current plan/workout deletion uses the additive `preview_training_deletion`.
+The Assistant asks whether to also remove older, uncompleted service copies unless the user already explicitly chose;
+eligible upcoming copies withdraw automatically. The required choice is bound into the existing proposal and app-owned
+Apply, not direct model/provider writes. Plan deletion additionally asks whether to keep workouts as standalone or
+permanently delete them. Without delivery access, explain that older-copy cleanup is unavailable and only offer legacy
+deletion if the user accepts that limitation. Completed activities stay untouched, and valid access/provider support
+may prevent cleanup; an applied deletion is not provider/app/watch removal proof. Replies keep the focused preview
+only through an uninterrupted deletion clarification chain; a new task or cancellation ends that routing. Removing a
+workout from a plan is an association change, not inferred deletion. Routing never supplies Apply approval. The model
+can prepare one strict proposal after reading current records. For Workout Library changes it
 must also read the library revision and exact saved recipe or source workout, then use the additive library preview.
 That preview supports one create, save, duplicate, edit, archive/restore, confirmed permanent recipe delete, or
 explicit-date placement. Saved recipes have no date or provider consent. The model cannot call
 `apply_training_changes`, `apply_saved_workout_change` or provider
 transport. Quantified Self stores the safe preview with the conversation and shows an **Apply changes** / **Dismiss**
-surface. Applying uses a dedicated Auth + App Check callable that rechecks the same conversation generation and toggles,
+surface. Single current deletions instead show **Review plan deletion** / **Delete plan** or **Review workout deletion** /
+**Delete workout** and **Dismiss**. The review keeps the server-authored workout disposition and service-copy choice;
+it never infers older-copy removal from combined permission or changes it in the browser. Plan/history deletion is
+permanent; workout deletion is recoverable. Apply displays the actual server deletion receipt rather than a generic
+sync-update message. Requested cleanup remains unconfirmed, and a failed or missing deletion outcome never reports
+partial success or gives success haptics. The access sheet explains both required change choices and that removal,
+unlike new delivery, does not require Pro but still needs valid service access/provider support.
+Applying uses a dedicated Auth + App Check callable that rechecks the same conversation generation and toggles,
 then invokes the common proposal service. Dismissal clears the server-owned proposal without changes. New chat, a toggle
 change, account switch, expiry, schedule conflict or stale grant makes the proposal unusable. Provider results are
 independent and a send failure never removes a newly authored workout. Call/output budgets and quotas are unchanged.
+Apply and Dismiss also append a bounded server-authored **Training review result** to the latest assistant message's
+existing evidence array. It includes the review timestamp, compact reviewed summary, authored outcome counts and grouped
+service-request outcomes, not proposal references, remote identities or raw provider messages. Subsequent turns receive
+this confirmation, so a suggestion is not mistaken for an applied change or a queued request for delivery. Generation and
+deletion fences remain transaction-scoped; a concurrent follow-up completion preserves the stored result. This update
+does not extend retention or add a message, collection, public field or callable. If the authored change was accepted but
+recording its chat result fails, Apply still reports the accepted change; an allowlisted warning records the cleanup failure.
 For a Suunto-bound workout, the Assistant omits unrequested step notes and keeps necessary watch instructions concise.
 If a provider must shorten authored instructions or make another mapping adjustment, the proposal review names the
 consequence before the user's one in-app confirmation; that confirmation also approves the current digest-bound Send.
@@ -320,7 +355,7 @@ schema. The original strict MCP schema still validates every invocation, includi
 variants. Numeric literals become typed values with a descriptive allowed value, and oversized catalog enums become
 discovery guidance; Gemini rejects those declarations while MCP still validates the exact values. Session setup fails
 closed if an input cannot be projected. Gemini receives only the most relevant Training preview for the current question
-(focused workout create, batch lifecycle, strength, or pool-length edit), because combining all four nested preview
+(focused workout create, batch lifecycle, strength, pool-length, library, or deletion), because combining the nested preview
 schemas with the full read catalogue exceeds its accepted tool request. The authorized in-process MCP session remains
 complete. Regression coverage walks every tool with all optional permissions enabled and checks that Gemini cannot
 receive an undefined required property, array item, or non-string enum.
@@ -342,7 +377,8 @@ unsupported answer.
 The model receives only:
 
 - the current user message and IANA timezone;
-- at most the latest six completed conversation turns;
+- at most the latest six completed conversation turns, each carrying its stored `createdAt` timestamp and any compact
+  server-authored Training confirmation; prior metric evidence and chart payloads are not copied into model history;
 - the MCP server instructions and allowlisted tool schemas;
 - the bounded validated outputs of tools selected for the current question, with direct in-app URLs removed before
   model delivery. Absolute numeric MCP fields ending in `TimeMs`, `DateMs`, `DayMs`, or `AtMs`, plus `bucketStartMs`,
@@ -370,6 +406,21 @@ the model's system instructions, while the user's message remains untrusted. The
 tool is absent or generation does not invoke the declared tools in order. Tests execute every current example through
 every declared mocked MCP workflow tool and verify each workflow against the production MCP tool registry. The
 Assistant examples are therefore the only user-facing conversational prompt catalog that needs maintenance.
+
+The existing **Today's workout** contextual card asks for one new standalone session using readiness, recorded recovery,
+recent load and the 28-day recorded weekday pattern. It conditionally includes relevant recent/ongoing Timeline notes
+and checks existing workouts under their independent read choices. It asks the model to establish the suggested sport's
+usual recorded per-session duration and load with the period/session count, compare the proposed duration/load with
+those values, explain any reduction using current recovery/training evidence, and ask for missing information before
+choosing a duration when that baseline is unavailable. This is a contextual prompt instruction using
+existing reads, not a new duration calculation or a minimum workout length. Selecting it only fills the composer; optional access
+and change permissions remain off until the user enables them, and adding the session still requires app-owned review
+and **Apply changes**. Missing records do not establish skipped training or a regular habit. MCP impact: this starter-copy
+update reuses the existing bounded daily context and focused workout proposal; it changes no tool, schema, scope, metric,
+consent default, provider action, registered contract or bundled plugin. No new read or write coverage is required.
+The example uses "does not duplicate" so the existing negative-qualifier routing keeps the focused create-workout
+preview; the contraction "doesn't duplicate" is currently interpreted as a separate duplication request. Runtime tests
+validate the exact shared example against the focused preview, daily context and schedule-only proposal behavior.
 
 The latest-workout and yesterday Training-impact cards are contextual examples rather than fixed workflow examples.
 They use the ordinary guarded Training-impact routing because the exact activity reference or complete local-day
@@ -427,6 +478,25 @@ not authored by the model. The evidence adapter:
 - never stores raw tool output in the conversation document.
 
 This evidence is a compact audit aid, not a full transcript of internal tool calls.
+Historical answers are conversational context, not fresh account facts. Validated reads for the current turn override
+earlier sleep, readiness, completed-volume and plan claims, including a newly complete empty activity list. A pending
+preview is not an applied change. Only server-authored confirmation establishes acceptance; current sync reads are still
+needed to establish provider delivery.
+
+Assistant answer bodies render simple Markdown through an Assistant-specific renderer and Angular's normal HTML
+sanitization. Raw HTML is escaped, external images never load, and only HTTP(S) Markdown links are interactive. User
+messages remain plain text. Headings, lists, tables and code use app typography and surfaces; wide tables and code
+have their own shared QS scrollbars. Standalone ISO calendar dates in prose display using the app's regional formatting
+preference with an explicit UTC formatter, preserving the calendar day. Timestamps, code, IDs, filenames and link
+destinations are left intact; stored messages and proposal arguments remain unchanged. Note-review dates use the same
+calendar formatter.
+
+For dated workout recommendations, the server-authored **From your records** list keeps the workout/evidence dates,
+target-weekday counts, today's actual activities, ongoing/ended/upcoming notes, exact persisted activity links and unavailable/incomplete data explicit. It uses
+familiar app labels instead of snapshot/read diagnostics. This is presentation only: no MCP tool, schema, scope,
+consent, Training calculation, completion inference, mutation or proposal/confirmation contract changes. No public
+contract refresh or plugin rebuild is required. Updated server copy requires a separately approved Functions release;
+existing saved answers receive only the frontend formatting improvements.
 
 ## Conversation lifecycle and quota
 
@@ -439,6 +509,11 @@ There is one active document at `users/{uid}/assistantConversations/active`:
 - one `coordinate_free` or `precise_activity` location-access mode for the generation;
 - one independent `timelineNotesEnabled` flag (missing means false);
 - one four-minute pending-turn lease to serialize requests.
+
+This is active-chat context, not cross-chat memory. **New chat**, expiry and account changes do not retrieve an earlier
+conversation or infer durable preferences. The date/follow-up and confirmation corrections preserve the same six-turn,
+seven-day and transcript-byte bounds. Existing saved messages gain date context when read; missing historical Apply
+results cannot be fabricated retroactively.
 
 Each browser send also carries a client-generated opaque request ID. That ID becomes the stored user-message ID. On
 completion, the server also records a SHA-256 request fingerprint in the private receipt array; it does not duplicate

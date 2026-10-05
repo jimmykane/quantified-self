@@ -7,7 +7,7 @@ const positive = z.number().finite().positive();
 const count = z.number().int().nonnegative().max(9900);
 const coverage = z.enum(['none', 'partial', 'complete']);
 const range = z.strictObject({ minimumSeconds: positive, maximumSeconds: positive });
-const summary = z.strictObject({ executedSteps: count,
+const summary = z.strictObject({ executedSteps: count, earlyLapSteps: count,
   duration: z.strictObject({ exactSubtotalSeconds: number, exactSteps: count,
     estimatedSubtotalRange: range.nullable(), estimatedSteps: count, unknownSteps: count,
     coveredSubtotalRange: range.nullable(), completeExactSeconds: positive.nullable(),
@@ -24,6 +24,7 @@ export const WORKOUT_PRESCRIPTION_ANALYSIS_SCHEMA = z.strictObject({ version: z.
     rest: summary, other: summary } satisfies Record<WorkoutStepPurposeV1, typeof summary>),
   steps: z.array(z.strictObject({ stepId: nodeId, repeatId: nodeId.nullable(),
     multiplier: z.number().int().min(1).max(100), purpose: z.enum(WORKOUT_STEP_PURPOSES),
+    allowEarlyLap: z.boolean(),
     prescribedSeconds: positive.nullable(), prescribedMeters: positive.nullable(),
     duration: z.discriminatedUnion('kind', [
       z.strictObject({ kind: z.literal('exact'), seconds: positive }),

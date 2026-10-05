@@ -175,7 +175,6 @@ import {
   TRAINING_WORKSPACE_DERIVED_METRIC_KINDS,
   type DashboardDerivedMetricsState,
 } from '../../services/dashboard-derived-metrics.service';
-import { environment } from '../../../environments/environment';
 
 interface TrainingMixDisciplineViewModel extends TrainingMixDetailsViewModel {
   summary: DashboardTrainingDisciplineSummary;
@@ -329,7 +328,6 @@ function createEmptyTrainingLoadMetricsViewModel(): TrainingLoadMetricsViewModel
   standalone: false,
 })
 export class TrainingWorkspaceComponent implements OnInit, OnDestroy {
-  public readonly trainingFeedbackMailtoHref = `mailto:${environment.supportEmail}?subject=${encodeURIComponent('Training feedback')}`;
   public isLoading = true;
   public derivedState: DashboardDerivedMetricsState = createDashboardDerivedMetricsMissingState();
   public trainingRecovery = createEmptyTrainingRecoveryViewModel();
@@ -349,6 +347,7 @@ export class TrainingWorkspaceComponent implements OnInit, OnDestroy {
   public trainingComparisonState: TrainingComparisonState = 'preparing';
   public trainingSummaryCards: readonly TrainingSummaryCard[] = [];
   public trainingDataAsOfText: string | null = null;
+  public readonly derivedMetricsStatusExpanded = signal(false);
   public derivedMetricsRouteStatus: TrainingDerivedMetricsRouteStatus | null = {
     type: 'pending',
     title: 'Building derived metrics',
@@ -572,6 +571,14 @@ export class TrainingWorkspaceComponent implements OnInit, OnDestroy {
     this.trainingRecoveryHistoryExpanded = !this.trainingRecoveryHistoryExpanded;
   }
 
+  public toggleDerivedMetricsStatusDetails(): void {
+    if (!this.derivedMetricsRouteStatus) {
+      return;
+    }
+    this.derivedMetricsStatusExpanded.update(expanded => !expanded);
+    this.hapticsService?.selection();
+  }
+
   public retryDerivedMetricsRebuild(): void {
     const uid = this.currentUserUID;
     if (!uid) {
@@ -764,6 +771,7 @@ export class TrainingWorkspaceComponent implements OnInit, OnDestroy {
   }
 
   private resetWorkspace(): void {
+    this.derivedMetricsStatusExpanded.set(false);
     this.preferenceWriteGeneration += 1;
     this.queuedDestinationWrite = null;
     this.isSavingDestination = false;
@@ -1098,6 +1106,7 @@ export class TrainingWorkspaceComponent implements OnInit, OnDestroy {
       return;
     }
     this.derivedMetricsRouteStatus = null;
+    this.derivedMetricsStatusExpanded.set(false);
   }
 
   private refreshTrainingSportVisibility(): void {

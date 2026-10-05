@@ -1,10 +1,14 @@
 import { describe, expect, it } from 'vitest';
-import type { TrainingDeliveryStatusV1 } from '@shared/training-provider-delivery';
+import { GARMIN_WORKOUT_NOT_FOUND_ISSUE, type TrainingDeliveryStatusV1 } from '@shared/training-provider-delivery';
 import type { TrainingVerificationV1 } from '@shared/training-provider-verification';
 import { TRAINING_DELIVERY_STATUS_LABELS } from './training-delivery-display.helper';
 import { trainingVerificationCommandError, trainingVerificationLabel } from './training-verification-display.helper';
 
 describe('Training remote check labels', () => {
+  it('distinguishes a not-found observation from an ordinary inconclusive check without claiming definitive deletion', () => {
+    expect(trainingVerificationLabel({ provider: 'garmin', status: 'needs_attention', issues: [GARMIN_WORKOUT_NOT_FOUND_ISSUE] } as TrainingDeliveryStatusV1))
+      .toBe('Not found in Garmin · review required');
+  });
   it('offers another check, not a nonexistent Cancel/Save review, after a revision conflict', () => {
     expect(trainingVerificationCommandError({ code: 'functions/aborted' })).toContain('Check again');
     expect(trainingVerificationCommandError({ code: 'aborted' })).not.toContain('Cancel');

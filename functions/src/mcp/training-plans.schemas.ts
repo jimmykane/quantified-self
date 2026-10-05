@@ -11,6 +11,7 @@ import {
   WORKOUT_POOL_LENGTH_MAX_METERS,
   parseWorkoutStructureV1,
   type WorkoutEndingKindV1,
+  type WorkoutEndingV1,
   type WorkoutNodeV1,
   type WorkoutSpeedPresentationV1,
   type WorkoutStepPurposeV1,
@@ -28,16 +29,17 @@ export const TRAINING_PLANS_WRITE_SCOPE = 'training-plans:write';
 export const TRAINING_DELIVERY_WRITE_SCOPE = 'training-delivery:write';
 export const TRAINING_READ_EXTENSION_TOOLS = ['query_planned_workouts_by_date',
   'get_planned_workout_completions', 'assess_planned_workout_compatibility', 'get_strength_workout_details',
-  'get_planned_workout_v2', 'list_saved_workouts', 'get_saved_workout', 'get_workout_prescription_analysis'] as const;
+  'get_planned_workout_v2', 'get_planned_workout_v3', 'list_saved_workouts', 'get_saved_workout', 'get_saved_workout_v2', 'get_workout_prescription_analysis'] as const;
 export const TRAINING_READ_TOOLS = ['list_training_plans', 'get_training_plan', 'query_planned_workouts',
   'get_planned_workout', 'get_training_sync_status', 'get_planned_workout_completion',
   ...TRAINING_READ_EXTENSION_TOOLS] as const;
 export type TrainingReadTool = typeof TRAINING_READ_TOOLS[number];
 export const TRAINING_PREVIEW_TOOLS = ['preview_create_planned_workout', 'preview_training_changes',
-  'preview_strength_workout_change', 'preview_planned_workout_v2_change', 'preview_saved_workout_change'] as const;
+  'preview_strength_workout_change', 'preview_planned_workout_v2_change', 'preview_planned_workout_v3_change', 'preview_saved_workout_change', 'preview_saved_workout_v2_change',
+  'preview_training_deletion'] as const;
 export const TRAINING_WRITE_TOOLS = [...TRAINING_PREVIEW_TOOLS, 'apply_training_changes', 'apply_saved_workout_change'] as const;
-export const TRAINING_WRITE_EXTENSION_TOOLS = ['preview_strength_workout_change', 'preview_planned_workout_v2_change',
-  'preview_saved_workout_change', 'apply_saved_workout_change'] as const;
+export const TRAINING_WRITE_EXTENSION_TOOLS = ['preview_strength_workout_change', 'preview_planned_workout_v2_change', 'preview_planned_workout_v3_change',
+  'preview_saved_workout_change', 'preview_saved_workout_v2_change', 'apply_saved_workout_change', 'preview_training_deletion'] as const;
 export type TrainingWriteTool = typeof TRAINING_WRITE_TOOLS[number];
 export const trainingDate = z.string().length(10).refine(value => {
   try { return normalizeTrainingLocalDate(value) === value; } catch { return false; }
@@ -61,6 +63,7 @@ export const TRAINING_READ_INPUTS = {
   query_planned_workouts_by_date: z.strictObject(workoutQuery),
   get_planned_workout: z.strictObject({ workoutRef: ref }),
   get_planned_workout_v2: z.strictObject({ workoutRef: ref }),
+  get_planned_workout_v3: z.strictObject({ workoutRef: ref }),
   get_strength_workout_details: z.strictObject({ workoutRef: ref }),
   get_training_sync_status: z.strictObject({ scope: z.enum(['plan', 'workout']), reference: ref }),
   get_planned_workout_completion: z.strictObject({ workoutRef: ref }),
@@ -70,6 +73,7 @@ export const TRAINING_READ_INPUTS = {
     status: z.enum(['active', 'archived']).optional(), limit: z.number().int().min(1).max(25).default(25),
     cursor: z.string().min(1).max(8192).optional() }),
   get_saved_workout: z.strictObject({ savedWorkoutRef: ref }),
+  get_saved_workout_v2: z.strictObject({ savedWorkoutRef: ref }),
   get_workout_prescription_analysis: z.strictObject({ source: z.enum(['scheduled', 'saved']), reference: ref }),
 };
 
@@ -110,6 +114,13 @@ export const MCP_WORKOUT_RECIPE_VARIANT_COVERAGE = {
     repetitions: true,
     manual: true,
   } satisfies Record<WorkoutEndingKindV1, true>,
+  endingFields: {
+    time: { kind: true, seconds: true, allowEarlyLap: true },
+    distance: { kind: true, meters: true, allowEarlyLap: true },
+    kilojoules: { kind: true, kilojoules: true },
+    repetitions: { kind: true, repetitions: true },
+    manual: { kind: true },
+  } satisfies { [K in WorkoutEndingV1['kind']]: Record<keyof Extract<WorkoutEndingV1, { kind: K }>, true> },
   targetModes: {
     absolute: true,
     relative: true,
@@ -179,6 +190,19 @@ export const TRAINING_RECIPE_WITH_POOL_SCHEMA = z.strictObject({ ...recipeFields
   poolLength: z.strictObject({ meters: z.number().finite().min(WORKOUT_POOL_LENGTH_MIN_METERS)
     .max(WORKOUT_POOL_LENGTH_MAX_METERS), presentation: z.enum(['meters', 'yards']) }).optional(),
 }).refine(value => { try { parseWorkoutStructureV1(value); return true; } catch { return false; } });
+const earlyLapEnding = z.discriminatedUnion('kind', [
+  z.strictObject({ kind: z.literal('time'), seconds: positive, allowEarlyLap: z.boolean().optional() }),
+  z.strictObject({ kind: z.literal('distance'), meters: positive, allowEarlyLap: z.boolean().optional() }),
+  ...ending.options.slice(2),
+]);
+const earlyLapStep = step.extend({ ending: earlyLapEnding });
+/** Deliberately additive: older advertised recipe shapes remain unchanged. */
+export const TRAINING_RECIPE_WITH_EARLY_LAP_SCHEMA = z.strictObject({ ...TRAINING_RECIPE_WITH_POOL_SCHEMA.shape,
+  nodes: z.array(z.union([earlyLapStep, z.strictObject({ kind: z.literal('repeat'), id: nodeId,
+    count: z.number().int().min(1).max(WORKOUT_STRUCTURE_MAX_REPEAT_COUNT),
+    steps: z.array(earlyLapStep).min(1).max(WORKOUT_STRUCTURE_MAX_NODES) })])).min(1).max(WORKOUT_STRUCTURE_MAX_NODES),
+}).refine(value => { try { parseWorkoutStructureV1(value); return true; } catch { return false; } });
+
 const plan = z.strictObject({ planRef: ref, name: z.string().min(1).max(120), lifecycle,
   startDate: trainingDate, endDate: trainingDate, revision: count, currentWorkoutCount: count.max(400),
   color: z.string().max(32).nullable(), createdAtMs: count, updatedAtMs: count });
@@ -231,6 +255,11 @@ export const TRAINING_READ_OUTPUTS = {
     revision: count.positive(), createdAtMs: count, updatedAtMs: count,
     structure: TRAINING_RECIPE_WITH_POOL_SCHEMA, strength: TRAINING_STRENGTH_DRAFT_SCHEMA.optional(),
   }) }),
+  get_saved_workout_v2: z.strictObject({ libraryRevision: count, savedWorkout: z.strictObject({
+    savedWorkoutRef: ref, title: z.string().min(1).max(120), status: z.enum(['active', 'archived']),
+    revision: count.positive(), createdAtMs: count, updatedAtMs: count,
+    structure: TRAINING_RECIPE_WITH_EARLY_LAP_SCHEMA, strength: TRAINING_STRENGTH_DRAFT_SCHEMA.optional(),
+  }) }),
   get_training_plan: z.strictObject({ scheduleRevision: count, plan }),
   query_planned_workouts: z.strictObject({ ...envelope, startDate: trainingDate, endDate: trainingDate,
     scope: z.enum(['calendar', 'standalone', 'plan', 'all']), workouts: z.array(workout).max(100) }),
@@ -241,6 +270,9 @@ export const TRAINING_READ_OUTPUTS = {
       text: z.string().max(2000) })).max(100) }) }),
   get_planned_workout_v2: z.strictObject({ scheduleRevision: count, workout: workout.extend({
     structure: TRAINING_RECIPE_WITH_POOL_SCHEMA, displaySteps: z.array(z.strictObject({ nodeId,
+      text: z.string().max(2000) })).max(100) }) }),
+  get_planned_workout_v3: z.strictObject({ scheduleRevision: count, workout: workout.extend({
+    structure: TRAINING_RECIPE_WITH_EARLY_LAP_SCHEMA, displaySteps: z.array(z.strictObject({ nodeId,
       text: z.string().max(2000) })).max(100) }) }),
   get_strength_workout_details: z.strictObject({ scheduleRevision: count, workoutRef: ref,
     details: TRAINING_STRENGTH_DETAILS_SCHEMA.omit({ workoutId: true }) }),
@@ -304,6 +336,15 @@ export const TRAINING_CHANGE_SCHEMA = z.discriminatedUnion('kind', [
     timeZone: z.string().min(1).max(100).optional() }),
 ]);
 
+/** Additive deletion choice; the registered batch schema must remain frozen. */
+export const TRAINING_DELETION_CHANGE_SCHEMA = z.discriminatedUnion('kind', [
+  z.strictObject({ kind: z.literal('delete-workout'), workout: z.strictObject({ ref }),
+    removePastProviderCopies: z.boolean() }),
+  z.strictObject({ kind: z.literal('delete-plan'), plan: z.strictObject({ ref }),
+    workoutDisposition: z.enum(['convert-to-standalone', 'delete-workouts']),
+    removePastProviderCopies: z.boolean() }),
+]);
+
 const proposedChange = z.strictObject({ index: count.max(24), kind: z.string().min(1).max(64), summary: z.string().min(1).max(500) });
 const providerPreview = z.strictObject({ index: count.max(24), provider: z.enum(PLANNED_WORKOUT_PROVIDER_IDS),
   targetType: z.enum(['plan', 'workout']), action: z.enum(['enable', 'send', 'resume', 'stop', 'retry', 'check', 'approve']),
@@ -340,15 +381,19 @@ const workoutV2Update = z.strictObject({ kind: z.literal('update-workout'), work
   plan: optionalPlanTarget, localDate: trainingDate,
   title: z.string().trim().min(1).max(120), structure: TRAINING_RECIPE_WITH_POOL_SCHEMA });
 export const TRAINING_WORKOUT_V2_CHANGE_SCHEMA = z.discriminatedUnion('kind', [workoutV2Create, workoutV2Update]);
+export const TRAINING_WORKOUT_V3_CHANGE_SCHEMA = z.discriminatedUnion('kind', [
+  workoutV2Create.extend({ structure: TRAINING_RECIPE_WITH_EARLY_LAP_SCHEMA }),
+  workoutV2Update.extend({ structure: TRAINING_RECIPE_WITH_EARLY_LAP_SCHEMA }),
+]);
 export const TRAINING_CREATE_WORKOUT_INPUT_WITHOUT_DELIVERY = z.strictObject(focusedWorkoutPreviewInput);
 
-const savedWorkoutChange = z.discriminatedUnion('kind', [
+const savedWorkoutChangeWithRecipe = (recipe: typeof TRAINING_RECIPE_WITH_POOL_SCHEMA | typeof TRAINING_RECIPE_WITH_EARLY_LAP_SCHEMA) => z.discriminatedUnion('kind', [
   z.strictObject({ kind: z.literal('create'), title: z.string().trim().min(1).max(120),
-    structure: TRAINING_RECIPE_WITH_POOL_SCHEMA, strength: TRAINING_STRENGTH_DRAFT_SCHEMA.optional() }),
+    structure: recipe, strength: TRAINING_STRENGTH_DRAFT_SCHEMA.optional() }),
   z.strictObject({ kind: z.literal('save-workout'), workoutRef: ref, expectedWorkoutRevision: count.positive() }),
   z.strictObject({ kind: z.literal('copy'), savedWorkoutRef: ref, expectedRevision: count.positive() }),
   z.strictObject({ kind: z.literal('update'), savedWorkoutRef: ref, expectedRevision: count.positive(),
-    title: z.string().trim().min(1).max(120), structure: TRAINING_RECIPE_WITH_POOL_SCHEMA,
+    title: z.string().trim().min(1).max(120), structure: recipe,
     strength: TRAINING_STRENGTH_DRAFT_SCHEMA.optional() }),
   z.strictObject({ kind: z.literal('set-status'), savedWorkoutRef: ref, expectedRevision: count.positive(),
     status: z.enum(['active', 'archived']) }),
@@ -361,7 +406,12 @@ const savedWorkoutChange = z.discriminatedUnion('kind', [
     confirmPlanRangeExtension: z.boolean() }),
 ]);
 
+const savedWorkoutChange = savedWorkoutChangeWithRecipe(TRAINING_RECIPE_WITH_POOL_SCHEMA);
+const savedWorkoutV2Change = savedWorkoutChangeWithRecipe(TRAINING_RECIPE_WITH_EARLY_LAP_SCHEMA);
+
 export const TRAINING_WRITE_INPUTS = {
+  preview_training_deletion: z.strictObject({ expectedScheduleRevision: count,
+    change: TRAINING_DELETION_CHANGE_SCHEMA }),
   preview_create_planned_workout: z.strictObject({
     ...focusedWorkoutPreviewInput,
     delivery: z.strictObject({
@@ -377,6 +427,10 @@ export const TRAINING_WRITE_INPUTS = {
     change: TRAINING_STRENGTH_CHANGE_SCHEMA }),
   preview_planned_workout_v2_change: z.strictObject({ expectedScheduleRevision: count,
     change: TRAINING_WORKOUT_V2_CHANGE_SCHEMA }),
+  preview_planned_workout_v3_change: z.strictObject({ expectedScheduleRevision: count,
+    change: TRAINING_WORKOUT_V3_CHANGE_SCHEMA }),
+  preview_saved_workout_v2_change: z.strictObject({ expectedScheduleRevision: count,
+    expectedLibraryRevision: count, change: savedWorkoutV2Change }),
   preview_saved_workout_change: z.strictObject({ expectedScheduleRevision: count,
     expectedLibraryRevision: count, change: savedWorkoutChange }),
   apply_training_changes: z.strictObject({ proposalRef: ref,
@@ -390,11 +444,14 @@ const trainingPreviewOutput = z.strictObject({ proposalRef: ref, expiresAtMs: co
     changes: z.array(proposedChange).min(1).max(25), providerPreviews: z.array(providerPreview).max(100) });
 
 export const TRAINING_WRITE_OUTPUTS = {
+  preview_training_deletion: trainingPreviewOutput,
   preview_create_planned_workout: trainingPreviewOutput,
   preview_training_changes: trainingPreviewOutput,
   preview_strength_workout_change: trainingPreviewOutput,
   preview_planned_workout_v2_change: trainingPreviewOutput,
   preview_saved_workout_change: trainingPreviewOutput,
+  preview_saved_workout_v2_change: trainingPreviewOutput,
+  preview_planned_workout_v3_change: trainingPreviewOutput,
   apply_training_changes: z.strictObject({ proposalRef: ref,
     status: z.enum(['applied', 'partially_applied']), scheduleRevision: count,
     changes: z.array(appliedChange).max(25), providers: z.array(providerResult).max(100),

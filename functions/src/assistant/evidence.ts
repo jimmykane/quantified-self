@@ -427,7 +427,9 @@ export function buildAssistantEvidence(
     return { toolName: tool.name, title: truncate(tool.title, 160), summary: truncate(result.displaySummary, 240),
       facts: [{ label: 'Step definitions', value: String(result.analysis.counts.definedSteps) },
         { label: 'Executed steps', value: String(result.analysis.counts.executedSteps) },
-        { label: 'Duration coverage', value: result.analysis.summary.duration.coverage }], links: [] };
+        { label: 'Duration coverage', value: result.analysis.summary.duration.coverage },
+        ...(result.analysis.summary.earlyLapSteps > 0
+          ? [{ label: 'Steps allowing early Lap', value: String(result.analysis.summary.earlyLapSteps) }] : [])], links: [] };
   }
   if ((TRAINING_READ_TOOLS as readonly string[]).includes(tool.name)) {
     if (tool.name === 'get_planned_workout_completion' || tool.name === 'get_planned_workout_completions') {

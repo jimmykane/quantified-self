@@ -366,6 +366,14 @@ describe('ToolsComparePageComponent', () => {
     fixture.detectChanges();
   });
 
+  it('keeps chart preferences out of the Compare header', () => {
+    userSubject.next(new User('user-1'));
+    fixture.detectChanges();
+    expect(fixture.nativeElement.textContent).not.toContain('Distinct line patterns');
+    expect(fixture.nativeElement.querySelector('[aria-label="Comparison chart options"]')).toBeNull();
+    expect(hapticsServiceMock.selection).not.toHaveBeenCalled();
+  });
+
   it('tracks the initial comparison route view', () => {
     expect(analyticsServiceMock.logToolCompareView).toHaveBeenCalledWith('new', false);
   });
@@ -1382,7 +1390,7 @@ describe('ToolsComparePageComponent', () => {
     const sharedTableControls = readFileSync('src/styles/_table-controls.scss', 'utf8');
 
     expect(styles).toContain("@use '../../../styles/table-controls' as tableControls;");
-    expect(styles).toContain('@include tableControls.comparisonTableControlsLayout($includeDeviceColorsButton: true);');
+    expect(styles).toContain('@include tableControls.comparisonTableControlsLayout();');
     expect(styles).toContain('@include bp.max-768 {');
     expect(sharedTableControls).toContain('.comparison-table-controls');
     expect(sharedTableControls).toContain('.comparison-table-actions');

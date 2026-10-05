@@ -101,6 +101,54 @@ function createDailyWorkoutSession() {
 }
 
 describe('Training preview model-tool selection', () => {
+  it('uses the focused deletion choice for plans and workouts, not library or other edits', () => {
+    expect(selectAssistantTrainingPreviewTool('Delete my training plan and remove its service copies.')).toBe('preview_training_deletion');
+    expect(selectAssistantTrainingPreviewTool('Delete my strength workout.')).toBe('preview_training_deletion');
+    expect(selectAssistantTrainingPreviewTool('Delete my old plans and workouts.')).toBe('preview_training_deletion');
+    expect(selectAssistantTrainingPreviewTool('Remove this planned session and older copies.')).toBe('preview_training_deletion');
+    expect(selectAssistantTrainingPreviewTool('Delete a saved workout from the library.')).toBe('preview_saved_workout_v2_change');
+    expect(selectAssistantTrainingPreviewTool('Delete this workout and create a new one.')).toBe('preview_training_changes');
+    const history = [{ role: 'user' as const, text: 'Delete my planned workout.' },
+      { role: 'assistant' as const, text: 'Also remove older, uncompleted copies from your connected services?' }];
+    expect(selectAssistantTrainingPreviewTool('Yes, remove them.', history)).toBe('preview_training_deletion');
+    expect(selectAssistantTrainingPreviewTool('No, keep those copies.', history)).toBe('preview_training_deletion');
+    expect(selectAssistantTrainingPreviewTool('No, don’t remove those older copies.', history)).toBe('preview_training_deletion');
+    expect(selectAssistantTrainingPreviewTool("No, don't delete any workout copies on Garmin.", history)).toBe('preview_training_deletion');
+    expect(selectAssistantTrainingPreviewTool('Yeah, please.', history)).toBe('preview_training_deletion');
+    expect(selectAssistantTrainingPreviewTool('Leave those copies alone.', history)).toBe('preview_training_deletion');
+    expect(selectAssistantTrainingPreviewTool('Create a new workout.', history)).toBe('preview_create_planned_workout');
+    expect(selectAssistantTrainingPreviewTool('Cancel, never mind.', history)).not.toBe('preview_training_deletion');
+    const sourceHistory = [{ role: 'user' as const, text: 'Delete one of my plans.' },
+      { role: 'assistant' as const, text: 'Which plan should I delete?' }];
+    expect(selectAssistantTrainingPreviewTool('September endurance', sourceHistory)).toBe('preview_training_deletion');
+    expect(selectAssistantTrainingPreviewTool('R'.repeat(160), [
+      { role: 'user', text: 'Delete one of my workouts.' },
+      { role: 'assistant', text: 'Which workout should I delete?' },
+    ])).toBe('preview_training_deletion');
+    const planHistory = [{ role: 'user' as const, text: 'Delete my training plan.' },
+      { role: 'assistant' as const, text: 'Also remove older, uncompleted copies from your connected services?' },
+      { role: 'user' as const, text: 'Yes, remove the copies.' },
+      { role: 'assistant' as const, text: 'Keep its workouts as standalone, or permanently delete them?' }];
+    expect(selectAssistantTrainingPreviewTool('Keep workouts as standalone.', planHistory)).toBe('preview_training_deletion');
+    expect(selectAssistantTrainingPreviewTool('Delete them too.', planHistory)).toBe('preview_training_deletion');
+  });
+  it('selects the complete recipe for explicit early Lap and ordinary edits without granting delivery authority', () => {
+    for (const prompt of ['Create a running workout and allow early Lap on the intervals.',
+      'Update my workout title.', 'Change the pace target on my workout.', 'Disable early Lap on my workout.',
+      'Remove early Lap from my workout.', 'Remove the early Lap option from this session.',
+      'Remove the option to allow early Lap from my workout.',
+      'Delete early Lap permission from my workout.'])
+      expect(selectAssistantTrainingPreviewTool(prompt), prompt).toBe('preview_planned_workout_v3_change');
+    const deletionHistory = [{ role: 'user' as const, text: 'Delete my planned workout.' },
+      { role: 'assistant' as const, text: 'Also remove older, uncompleted copies from your connected services?' }];
+    expect(selectAssistantTrainingPreviewTool('Remove early Lap from my workout.', deletionHistory))
+      .toBe('preview_planned_workout_v3_change');
+    expect(selectAssistantTrainingPreviewTool('Remove my early Lap workout.')).toBe('preview_training_deletion');
+    expect(selectAssistantTrainingPreviewTool('Remove the workout named Early Lap.')).toBe('preview_training_deletion');
+    expect(selectAssistantTrainingPreviewTool('Read my early Lap workout.')).not.toBe('preview_planned_workout_v3_change');
+    expect(ASSISTANT_SYSTEM_INSTRUCTIONS).toContain('Enable it only on explicit athlete request');
+    expect(ASSISTANT_SYSTEM_INSTRUCTIONS).toContain('Preserve all unchanged fields');
+  });
   it('keeps a single focused preview for a workout recommendation with Garmin and Suunto delivery', () => {
     expect(selectAssistantTrainingPreviewTool(ASSISTANT_CREATE_TODAYS_WORKOUT_PROMPT))
       .toBe('preview_create_planned_workout');
@@ -131,39 +179,87 @@ describe('Training preview model-tool selection', () => {
     expect(selectAssistantTrainingPreviewTool('Stop sync for my 25 m pool swim.'))
       .toBe('preview_training_changes');
     expect(selectAssistantTrainingPreviewTool('Edit my workout and send the update to Garmin.'))
-      .toBe('preview_training_changes');
+      .toBe('preview_planned_workout_v3_change');
     expect(selectAssistantTrainingPreviewTool('Add a pool swim with a 25 m pool length.'))
-      .toBe('preview_planned_workout_v2_change');
+      .toBe('preview_planned_workout_v3_change');
     expect(selectAssistantTrainingPreviewTool('Create a swim session in a 50-meter pool.'))
-      .toBe('preview_planned_workout_v2_change');
+      .toBe('preview_planned_workout_v3_change');
     expect(selectAssistantTrainingPreviewTool('Schedule a pool workout in a 33.3 m pool.'))
-      .toBe('preview_planned_workout_v2_change');
+      .toBe('preview_planned_workout_v3_change');
     expect(selectAssistantTrainingPreviewTool('Make a 25-yard swimming workout.'))
-      .toBe('preview_planned_workout_v2_change');
+      .toBe('preview_planned_workout_v3_change');
     expect(selectAssistantTrainingPreviewTool('Update my pool swim and preserve its 25 m pool length.'))
-      .toBe('preview_planned_workout_v2_change');
+      .toBe('preview_planned_workout_v3_change');
     expect(selectAssistantTrainingPreviewTool('Edit my pool swim workout for tomorrow.'))
-      .toBe('preview_planned_workout_v2_change');
+      .toBe('preview_planned_workout_v3_change');
     expect(selectAssistantTrainingPreviewTool('Change my swimming workout date.'))
-      .toBe('preview_planned_workout_v2_change');
+      .toBe('preview_planned_workout_v3_change');
     expect(selectAssistantTrainingPreviewTool('Create a strength workout with four sets.'))
       .toBe('preview_strength_workout_change');
     expect(selectAssistantTrainingPreviewTool('Edit my strength workout sets.'))
       .toBe('preview_strength_workout_change');
     expect(selectAssistantTrainingPreviewTool('Save this planned workout to my workout library.'))
-      .toBe('preview_saved_workout_change');
+      .toBe('preview_saved_workout_v2_change');
     expect(selectAssistantTrainingPreviewTool('Save this workout to my library.'))
-      .toBe('preview_saved_workout_change');
+      .toBe('preview_saved_workout_v2_change');
     expect(selectAssistantTrainingPreviewTool('Create a workout tomorrow, but do not save it in my library.'))
       .toBe('preview_create_planned_workout');
     expect(selectAssistantTrainingPreviewTool('Create a plan without using the saved workout library.'))
       .toBe('preview_training_changes');
     expect(selectAssistantTrainingPreviewTool("Don't change the current plan, but save this workout to my library."))
-      .toBe('preview_saved_workout_change');
+      .toBe('preview_saved_workout_v2_change');
     expect(selectAssistantTrainingPreviewTool('Place my saved workout on October 4 and 11 in this plan.'))
-      .toBe('preview_saved_workout_change');
+      .toBe('preview_saved_workout_v2_change');
     expect(selectAssistantTrainingPreviewTool('Archive the saved recipe, but do not change scheduled workouts.'))
-      .toBe('preview_saved_workout_change');
+      .toBe('preview_saved_workout_v2_change');
+  });
+
+  it.each(["doesn't", 'doesn’t', 'does not'])('keeps a single workout preview when plan context %s request duplication', negation => {
+    expect(selectAssistantTrainingPreviewTool(`Create one standalone workout for today so it ${negation} duplicate or conflict with the workouts in my plan.`))
+      .toBe('preview_create_planned_workout');
+  });
+  it('keeps explicit additional mutations in the batch preview alongside negated context', () => {
+    expect(selectAssistantTrainingPreviewTool('Create one workout for today and duplicate my existing workout.'))
+      .toBe('preview_training_changes');
+    expect(selectAssistantTrainingPreviewTool("Create one workout so it doesn't duplicate my plan. Then delete my old workout."))
+      .toBe('preview_training_changes');
+  });
+
+  it('does not turn a different action or cancelled deletion into a cleanup reply', () => {
+    const history = [{ role: 'user' as const, text: 'Delete my training plan.' },
+      { role: 'assistant' as const, text: 'Also remove older, uncompleted copies from your connected services?' }];
+    for (const prompt of ['Archive the plan instead.', 'Pause it instead.',
+      "Don't delete my workout, just show it.", 'Don’t remove my workout.', 'Please cancel that deletion.',
+      'Show my upcoming workouts instead.',
+      'Remove this workout from my plan and keep it as standalone.']) {
+      expect(selectAssistantTrainingPreviewTool(prompt, history), prompt).toBe('preview_training_changes');
+    }
+    expect(selectAssistantTrainingPreviewTool('Remove this workout from my plan and keep it as standalone.'))
+      .toBe('preview_training_changes');
+    expect(selectAssistantTrainingPreviewTool('Delete this workout and archive my plan.'))
+      .toBe('preview_training_changes');
+  });
+
+  it.each([
+    'Actually create a new workout.', 'What is my readiness?', 'Show my upcoming workouts.',
+  ])('does not revive a deletion after the intervening request %s', request => {
+    const history = [{ role: 'user' as const, text: 'Delete my training plan.' },
+      { role: 'assistant' as const, text: 'Also remove older, uncompleted copies from your connected services?' },
+      { role: 'user' as const, text: request },
+      { role: 'assistant' as const, text: 'Which workout would you like to create?' }];
+    expect(selectAssistantTrainingPreviewTool('Easy run', history)).not.toBe('preview_training_deletion');
+  });
+
+  it('retains an uninterrupted deletion clarification beyond three exchanges', () => {
+    const history = [{ role: 'user' as const, text: 'Delete my training plan.' },
+      { role: 'assistant' as const, text: 'Which plan should I delete?' },
+      { role: 'user' as const, text: 'September endurance' },
+      { role: 'assistant' as const, text: 'Which plan: September endurance 2025 or 2026?' },
+      { role: 'user' as const, text: '2026' },
+      { role: 'assistant' as const, text: 'Also remove older, uncompleted copies from your connected services?' },
+      { role: 'user' as const, text: 'Yes, remove those copies.' },
+      { role: 'assistant' as const, text: 'Keep its workouts as standalone, or permanently delete them?' }];
+    expect(selectAssistantTrainingPreviewTool('Keep workouts as standalone.', history)).toBe('preview_training_deletion');
   });
 
   it.each([
@@ -222,6 +318,61 @@ describe('Training preview model-tool selection', () => {
     expect(session.tools.map(tool => tool.name)).toContain('preview_training_changes');
   });
 
+  it('offers only recipe editing when removing early Lap after a deletion clarification', async () => {
+    const { session } = createSession();
+    session.tools.push(...(['preview_planned_workout_v3_change', 'preview_training_deletion'] as const).map(name => ({
+      name, title: name, description: name, inputSchema: { type: 'object' as const, properties: {} },
+    })));
+    let previews: string[] = [];
+    const runtime = createAssistantRuntime({
+      createMcpSession: vi.fn().mockResolvedValue(session),
+      generateAnswer: async input => {
+        previews = input.tools.map(tool => tool.name).filter(name => name.startsWith('preview_'));
+        await input.tools.find(tool => tool.name === 'get_daily_report')!.execute({});
+        return { answer: 'Read the full workout recipe before changing its early Lap option.', visualRequest: { chart: null, map: null } };
+      },
+    });
+    await runtime.answer({ uid: 'owner', appBaseUrl: 'https://quantified-self.io',
+      prompt: 'Remove early Lap from my workout.', timeZone: 'Europe/Helsinki',
+      history: [{ role: 'user', text: 'Delete my planned workout.' },
+        { role: 'assistant', text: 'Also remove older, uncompleted copies from your connected services?' }],
+      trainingPlansEnabled: true, trainingPlanChangesEnabled: true, trainingDeliveryEnabled: true,
+      assertTrainingPlansAccess: vi.fn().mockResolvedValue(undefined) });
+    expect(previews).toEqual(['preview_planned_workout_v3_change']);
+  });
+
+  it.each([true, false])('keeps deletion cleanup choice %s prepare-only after a follow-up answer', async removePastProviderCopies => {
+    const { session, callTool } = createSession();
+    session.tools = (['preview_training_changes', 'preview_training_deletion'] as const).map(name => ({
+      name, title: name, description: name, inputSchema: { type: 'object' as const, properties: {} },
+    }));
+    const proposal = { proposalRef: 'deletion-proposal', permissionMode: 'combined', scheduleRevision: 7,
+      expiresAtMs: Date.parse('2026-09-25T13:15:00Z'), summary: 'Review workout deletion and service-copy choice.',
+      requiresConfirmation: true, changes: [{ index: 0, kind: 'delete-workout',
+        summary: removePastProviderCopies ? 'Request removal of older uncompleted copies.' : 'Keep older service copies.' }],
+      providerPreviews: [] };
+    callTool.mockResolvedValue({ structuredContent: proposal });
+    const assertTrainingWriteAccess = vi.fn().mockResolvedValue(undefined);
+    const runtime = createAssistantRuntime({ createMcpSession: vi.fn().mockResolvedValue(session),
+      now: () => new Date('2026-09-25T12:00:00Z'), generateAnswer: async input => {
+        expect(input.tools.map(tool => tool.name)).toEqual(['preview_training_deletion']);
+        await input.tools[0].execute({ expectedScheduleRevision: 7, change: { kind: 'delete-workout',
+          workout: { ref: 'current-workout-reference' }, removePastProviderCopies } });
+        return { answer: 'Review the deletion and your service-copy choice before confirming.',
+          visualRequest: { chart: null, map: null } };
+      } });
+    const result = await runtime.answer({ uid: 'owner', appBaseUrl: 'https://quantified-self.io',
+      prompt: removePastProviderCopies ? 'Yes, remove those copies.' : 'No, keep those copies.', timeZone: 'Europe/Helsinki',
+      history: [{ id: 'question', role: 'user', createdAt: '2026-09-25T11:58:00Z', text: 'Delete my planned workout.' },
+        { id: 'cleanup-choice', role: 'assistant', createdAt: '2026-09-25T11:59:00Z',
+          text: 'Also remove older, uncompleted copies from your connected services?' }],
+      trainingPlansEnabled: true, trainingPlanChangesEnabled: true, trainingDeliveryEnabled: true,
+      assertTrainingPlansAccess: vi.fn().mockResolvedValue(undefined), assertTrainingWriteAccess });
+    expect(result.pendingTrainingProposal).toMatchObject({ permissionMode: 'combined', changes: proposal.changes });
+    expect(callTool.mock.calls.map(([name]) => name)).toEqual(['preview_training_deletion']);
+    expect(assertTrainingWriteAccess).toHaveBeenCalled();
+  });
+
   it('keeps provider delivery out of a daily create unless the current prompt requests it', async () => {
     const { session, callTool } = createDailyWorkoutSession();
     session.tools.push({ name: 'preview_create_planned_workout', title: 'Preview workout',
@@ -261,6 +412,23 @@ describe('Training preview model-tool selection', () => {
     expect(result.pendingTrainingProposal).toMatchObject({ permissionMode: 'schedule' });
   });
 
+  it('does not force a one-date recommendation onto explicit multi-date plan creation', async () => {
+    const { session, callTool } = createSession();
+    session.tools.push({ name: 'preview_training_changes', title: 'Preview plan', description: 'Preview a plan.',
+      inputSchema: { type: 'object', properties: {} } });
+    const runtime = createAssistantRuntime({ createMcpSession: vi.fn().mockResolvedValue(session),
+      now: () => new Date('2026-10-03T12:00:00Z'), generateAnswer: async input => {
+        expect(input.dailyWorkoutContext).toBeUndefined();
+        expect(input.tools.map(tool => tool.name)).toContain('preview_training_changes');
+        await input.tools.find(tool => tool.name === 'get_daily_report')!.execute({ timeZone: input.timeZone });
+        return { answer: 'I can prepare the requested plan for your review.', visualRequest: { chart: null, map: null } };
+      } });
+    await runtime.answer({ uid: 'owner', appBaseUrl: 'https://quantified-self.io',
+      prompt: 'Build a new training plan with one workout today and one tomorrow.', timeZone: 'Europe/Helsinki',
+      history: [], trainingPlansEnabled: true, trainingPlanChangesEnabled: true });
+    expect(callTool.mock.calls.map(([name]) => name)).toEqual(['get_daily_report']);
+  });
+
   it('keeps a suggestion read-only even when Training changes are enabled', async () => {
     const { session } = createDailyWorkoutSession();
     session.tools.push({ name: 'preview_create_planned_workout', title: 'Preview workout',
@@ -281,6 +449,78 @@ describe('Training preview model-tool selection', () => {
       trainingPlanChangesEnabled: true, assertTrainingPlansAccess: vi.fn().mockResolvedValue(undefined),
       assertTrainingWriteAccess: vi.fn().mockResolvedValue(undefined) });
     expect(result.pendingTrainingProposal).toBeUndefined();
+  });
+
+  it.each([
+    ['What about tomorrow?', '2026-10-03T12:00:00Z', '2026-10-04', false],
+    ["Today was done so no other session. If I didn't have that plan what would you propose taking into account all the above?",
+      '2026-10-03T12:00:00Z', '2026-10-04', true],
+    ['Please reassess the session.', '2026-10-04T12:00:00Z', '2026-10-04', false],
+    ['Suggest a workout for today.', '2026-10-04T12:00:00Z', '2026-10-04', false],
+    ['Today is done. Create another workout for today.', '2026-10-04T12:00:00Z', '2026-10-04', false],
+    ['Suggest a workout for today and tomorrow.', '2026-10-04T12:00:00Z', null, false],
+  ] as const)('grounds the recommendation follow-up %s on fresh, correctly dated evidence', async (prompt, now, targetDate, hypothetical) => {
+    const { session, callTool } = createDailyWorkoutSession();
+    session.tools.push({ name: 'preview_create_planned_workout', title: 'Preview workout',
+      description: 'Prepare a workout.', inputSchema: { type: 'object', properties: {} } });
+    const history = [{ id: 'original', role: 'user' as const, createdAt: '2026-10-03T09:00:00Z',
+      text: 'Create a workout for today and send it to Suunto.' },
+    { id: 'old-answer', role: 'assistant' as const, createdAt: '2026-10-03T09:01:00Z',
+      text: 'You completed two rides today and slept nine hours.' },
+    { id: 'tomorrow', role: 'user' as const, createdAt: '2026-10-03T09:02:00Z', text: 'What about tomorrow?' }];
+    const runtime = createAssistantRuntime({ createMcpSession: vi.fn().mockResolvedValue(session), now: () => new Date(now),
+      generateAnswer: async input => {
+        expect(input.dailyWorkoutContext).toMatchObject({
+          recommendation: { targetDate, hypotheticalWithoutPlan: hypothetical },
+          localDate: now.slice(0, 10),
+          activitiesToday: { scanComplete: true, activities: [] },
+          dailyReport: { readiness: { score: 62 }, sleep: { durationSeconds: 25_200 } },
+        });
+        expect(input.tools.some(tool => tool.name.startsWith('preview_'))).toBe(false);
+        return { answer: targetDate ? 'A cautious, conditional recommendation.' : 'Which date should I use?',
+          visualRequest: { chart: null, map: null } };
+      } });
+    const result = await runtime.answer({ uid: 'owner', appBaseUrl: 'https://quantified-self.io', prompt,
+      timeZone: 'Europe/Helsinki', history, trainingPlansEnabled: true, trainingPlanChangesEnabled: true,
+      trainingDeliveryEnabled: true, assertTrainingPlansAccess: vi.fn().mockResolvedValue(undefined) });
+    if (targetDate) expect(callTool).toHaveBeenCalledWith('query_planned_workouts_by_date', {
+      startDate: targetDate, endDate: targetDate, limit: 25,
+    });
+    else expect(callTool.mock.calls.map(([name]) => name)).not.toContain('query_planned_workouts_by_date');
+    expect(result.pendingTrainingProposal).toBeUndefined();
+    expect(result.answer).toContain('**Today:** 0 recorded activities.');
+    expect(callTool.mock.calls.map(([name]) => name).some(name => name.startsWith('preview_'))).toBe(false);
+  });
+
+  it('rejects a wrong-day create preview before MCP and permits a corrected preview for tomorrow', async () => {
+    const { session, callTool } = createDailyWorkoutSession();
+    session.tools.push({ name: 'preview_create_planned_workout', title: 'Preview workout',
+      description: 'Prepare a workout.', inputSchema: { type: 'object', properties: {} } });
+    const baseCall = callTool.getMockImplementation()!;
+    callTool.mockImplementation(async (name, args) => name === 'preview_create_planned_workout'
+      ? { structuredContent: { proposalRef: 'tomorrow-preview', permissionMode: 'schedule',
+        scheduleRevision: 7, expiresAtMs: Date.parse('2026-09-25T13:15:00Z'), requiresConfirmation: true,
+        summary: 'Create a recovery session tomorrow.', changes: [{ index: 0, kind: 'create-workout', summary: 'Recovery ride.' }],
+        providerPreviews: [] } } : baseCall(name, args));
+    const runtime = createAssistantRuntime({ createMcpSession: vi.fn().mockResolvedValue(session),
+      now: () => new Date('2026-09-25T12:00:00Z'), generateAnswer: async input => {
+        const preview = input.tools.find(tool => tool.name === 'preview_create_planned_workout')!;
+        const change = { expectedScheduleRevision: 7, planRef: null, localDate: '2026-09-25', title: 'Recovery ride',
+          structure: { version: 1, sport: 'Cycling', nodes: [{ kind: 'step', id: 'easy', purpose: 'recovery',
+            ending: { kind: 'time', seconds: 1800 }, targets: [] }] } };
+        await expect(preview.execute(change)).resolves.toMatchObject({ assistantToolError: {
+          code: 'invalid_tool_input', guidance: expect.stringContaining('2026-09-26'),
+        } });
+        expect(callTool.mock.calls.map(([name]) => name)).not.toContain('preview_create_planned_workout');
+        await preview.execute({ ...change, localDate: '2026-09-26' });
+        return { answer: 'Review the proposed recovery ride for tomorrow.', visualRequest: { chart: null, map: null } };
+      } });
+    const result = await runtime.answer({ uid: 'owner', appBaseUrl: 'https://quantified-self.io',
+      prompt: 'Create a workout for tomorrow based on readiness.', timeZone: 'Europe/Helsinki', history: [],
+      trainingPlansEnabled: true, trainingPlanChangesEnabled: true,
+      assertTrainingPlansAccess: vi.fn().mockResolvedValue(undefined), assertTrainingWriteAccess: vi.fn().mockResolvedValue(undefined) });
+    expect(callTool.mock.calls.filter(([name]) => name === 'preview_create_planned_workout')).toHaveLength(1);
+    expect(result.pendingTrainingProposal).toMatchObject({ proposalRef: 'tomorrow-preview', permissionMode: 'schedule' });
   });
 
   it('hides workout previews when the consented note scan is incomplete', async () => {
@@ -307,7 +547,7 @@ describe('Training preview model-tool selection', () => {
       trainingPlanChangesEnabled: true,
       assertTimelineNotesAccess: vi.fn().mockResolvedValue(undefined),
       assertTrainingWriteAccess: vi.fn().mockResolvedValue(undefined) });
-    expect(result.answer).toContain('the scan was incomplete');
+    expect(result.answer).toContain('Some notes could not be checked; more may exist');
     expect(result.pendingTrainingProposal).toBeUndefined();
   });
 
@@ -412,8 +652,9 @@ describe('Training preview model-tool selection', () => {
       requiresConfirmation: true });
     expect(JSON.stringify(result.evidence)).not.toContain('Ignore the user');
     expect(result.answer).toContain('2 of the last 4 Fridays');
-    expect(result.answer).toContain('2026-09-04–2026-09-10 (ended)');
-    expect(result.answer).toContain('1 has an exact stored completion link');
+    expect(result.answer).toContain('2026-09-04 – 2026-09-10 (ended)');
+    expect(result.answer).toContain('1 has a linked recorded activity');
+    expect(result.answer).toContain('**From your records**\n\n- **Training pattern:**');
     expect(ASSISTANT_SYSTEM_INSTRUCTIONS).toContain('an ended note is not current');
     expect(ASSISTANT_SYSTEM_INSTRUCTIONS).toContain('scanComplete false does not establish that no current note exists');
     expect(ASSISTANT_SYSTEM_INSTRUCTIONS).toContain(`canonical ${DataDuration.type} metric`);
@@ -770,8 +1011,8 @@ describe('Assistant runtime', () => {
     );
     expect(ASSISTANT_SYSTEM_INSTRUCTIONS).toContain('copy-workout change in preview_training_changes');
     expect(ASSISTANT_SYSTEM_INSTRUCTIONS).toContain('Never infer a Send action or plan-sync opt-in');
-    expect(ASSISTANT_SYSTEM_INSTRUCTIONS).toContain('get_planned_workout_v2 for an authored pool-swim length');
-    expect(ASSISTANT_SYSTEM_INSTRUCTIONS).toContain('preview_planned_workout_v2_change for one pool-swim create/update');
+    expect(ASSISTANT_SYSTEM_INSTRUCTIONS).toContain('get_planned_workout_v3 for full non-strength instructions');
+    expect(ASSISTANT_SYSTEM_INSTRUCTIONS).toContain('preview_planned_workout_v3_change for one non-strength recipe edit');
     expect(ASSISTANT_SYSTEM_INSTRUCTIONS).toContain(
       'do not silently limit the trend to a recent year',
     );
@@ -788,7 +1029,7 @@ describe('Assistant runtime', () => {
       'return exactly one JSON object',
     );
     expect(ASSISTANT_SYSTEM_INSTRUCTIONS).toContain(
-      'plain text, not Markdown or nested JSON, in the answer field',
+      'simple Markdown for emphasis or lists in the answer field, never raw HTML or nested JSON',
     );
     expect(ASSISTANT_SYSTEM_INSTRUCTIONS).not.toContain('Do not output JSON');
     expect(ASSISTANT_INTERNAL_BOUNDARY_INSTRUCTIONS).toContain(
@@ -1327,7 +1568,7 @@ describe('Assistant runtime', () => {
     }));
     expect(generate).toHaveBeenNthCalledWith(2, expect.objectContaining({
       system: expect.stringContaining(
-        'plain text, not Markdown or nested JSON, in the answer field',
+        'simple Markdown for emphasis or lists in the answer field, never raw HTML or nested JSON',
       ),
       toolChoice: 'auto',
       returnToolRequests: true,
@@ -1380,7 +1621,14 @@ describe('Assistant runtime', () => {
     };
     await expect(generateAssistantModelAnswer({
       currentTime: '2026-09-25T12:00:00.000Z', timeZone: 'Europe/Helsinki',
-      prompt: 'Suggest a workout for today.', history: [], mcpInstructions: 'Use current data.',
+      prompt: 'Suggest a workout for today.', history: [{ id: 'old-user', role: 'user',
+        createdAt: '2026-09-24T23:00:00Z', text: 'Create a workout for tomorrow.' }, {
+        id: 'old-answer', role: 'assistant', createdAt: '2026-09-24T23:01:00Z', text: 'Review the suggestion.',
+        evidence: [{ toolName: 'get_daily_report', title: 'Old readiness', summary: 'Old account facts',
+          facts: [{ label: 'Private metric', value: 'STALE_VALUE' }], links: [] }, {
+          toolName: 'assistant_training_confirmation', title: 'Training review result', summary: 'Confirmed Training change: applied.',
+          facts: [{ label: 'Service requests', value: 'garmin: queued (1)' }], links: [] }],
+      }], mcpInstructions: 'Use current data.',
       tools: [], workflow: null, dailyWorkoutContext,
       onBillableAttempt: vi.fn().mockResolvedValue(undefined),
     })).resolves.toMatchObject({ answer: 'An easy optional ride is reasonable.' });
@@ -1389,6 +1637,15 @@ describe('Assistant runtime', () => {
       system: expect.stringContaining('An ended note is not evidence of current illness'),
       prompt: expect.stringContaining('"matchingWeekdayCount":2'),
     }));
+    const request = generate.mock.calls[0][0] as { messages: Array<{ role: string; content: Array<{ text: string }> }>; system: string };
+    expect(JSON.parse(request.messages[0].content[0].text)).toEqual({ recordedAt: '2026-09-24T23:00:00Z',
+      text: 'Create a workout for tomorrow.', confirmations: [] });
+    expect(JSON.parse(request.messages[1].content[0].text)).toMatchObject({ recordedAt: '2026-09-24T23:01:00Z',
+      confirmations: [{ summary: 'Confirmed Training change: applied.', facts: [{ label: 'Service requests', value: 'garmin: queued (1)' }] }] });
+    expect(JSON.stringify(request.messages)).not.toContain('STALE_VALUE');
+    expect(request.system).toContain('Fresh validated reads override earlier answers');
+    expect(request.system).toContain('Current readiness is not a forecast');
+    expect(request.system).toContain('queued provider action does not prove delivery');
   });
 
   it('requires one preview tool call for an explicit daily workout change', async () => {
@@ -1414,8 +1671,10 @@ describe('Assistant runtime', () => {
     await generateAssistantModelAnswer({
       currentTime: '2026-09-25T12:00:00.000Z', timeZone: 'Europe/Helsinki',
       prompt: ASSISTANT_CREATE_TODAYS_WORKOUT_PROMPT, history: [],
-      mcpInstructions: 'Use current data.', tools: [], workflow: null,
-      dailyWorkoutContext, onBillableAttempt: vi.fn().mockResolvedValue(undefined),
+      mcpInstructions: 'Use current data.', workflow: null,
+      dailyWorkoutContext, tools: [{ name: 'preview_create_planned_workout', description: 'Preview one workout.',
+        inputJsonSchema: { type: 'object', properties: {} }, execute: vi.fn() }],
+      onBillableAttempt: vi.fn().mockResolvedValue(undefined),
     });
 
     expect(generate).toHaveBeenCalledWith(expect.objectContaining({
@@ -1430,6 +1689,13 @@ describe('Assistant runtime', () => {
     expect(generate).toHaveBeenCalledWith(expect.objectContaining({
       system: expect.stringContaining('does not request provider delivery'),
     }));
+    generate.mockResolvedValueOnce({ toolRequests: [], text: JSON.stringify({ answer: 'I cannot preview this change yet.',
+      visuals: { chart: null, map: null } }) } as never);
+    await generateAssistantModelAnswer({ currentTime: '2026-09-25T12:00:00Z', timeZone: 'Europe/Helsinki',
+      prompt: ASSISTANT_CREATE_TODAYS_WORKOUT_PROMPT, history: [], mcpInstructions: 'Use current data.',
+      dailyWorkoutContext, tools: [], workflow: null, onBillableAttempt: vi.fn() });
+    expect(generate).toHaveBeenLastCalledWith(expect.objectContaining({ toolChoice: 'auto',
+      system: expect.stringContaining('Do not prepare or imply a schedule/provider change') }));
   });
 
   it('forces a delivery preview when the model stops after reading the workout', async () => {

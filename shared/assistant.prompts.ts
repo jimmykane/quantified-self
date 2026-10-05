@@ -35,7 +35,7 @@ export interface AssistantPromptCard {
 export interface AssistantPromptExample extends AssistantPromptWorkflow, AssistantPromptCard {}
 
 export const ASSISTANT_CREATE_TODAYS_WORKOUT_PROMPT =
-  'Create one new standalone workout for today based on my readiness—using my HRV, sleep, overnight heart rate, and recent training load. Consider the workouts already in my plan so the session does not duplicate or conflict with them. Show me the proposed session before adding it.';
+  "Create one new standalone workout for today based on my readiness, using my HRV, sleep, overnight heart rate and recent training load. Consider my training consistency over the last 28 days, including which weekdays I recorded workouts. Establish and state my usual per-session duration and training load for the suggested sport from recent recorded sessions, with the period and session count. Compare the proposed duration and load with those per-session values and explain any reduction using today's recovery and training evidence. If that baseline is unavailable, ask for the missing information before choosing a duration. Check the workouts already in my plan so the session does not duplicate or conflict with them. If you have access to my Timeline notes, consider relevant recent or ongoing notes too. Show me the proposed session before adding it.";
 
 export const ASSISTANT_LATEST_TRAINING_IMPACT_PROMPT =
   'Did my latest completed workout build fitness load or only offset decay?';

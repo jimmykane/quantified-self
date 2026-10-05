@@ -281,7 +281,8 @@ describe('Assistant callable', () => {
     await expect(runApplyAssistantTrainingProposal({ proposalRef: proposal.proposalRef,
       permissionMode: proposal.permissionMode, conversationId: 'conversation-1', confirm: false }, context, store))
       .resolves.toEqual({ status: 'dismissed', scheduleRevision: 7, changes: [], providers: [] });
-    expect(store.clearTrainingProposal).toHaveBeenCalledWith('user-1', 'conversation-1', proposal.proposalRef);
+    expect(store.clearTrainingProposal).toHaveBeenCalledWith('user-1', 'conversation-1', proposal.proposalRef,
+      { status: 'dismissed', scheduleRevision: 7, changes: [], providers: [] });
   });
 
   it('applies the current proposal with the exact Assistant conversation authority and then clears it', async () => {
@@ -309,7 +310,14 @@ describe('Assistant callable', () => {
       scopes: ['training-plans:read', 'training-plans:write', 'training-delivery:write'],
       arguments: { proposalRef: proposal.proposalRef, permissionMode: 'combined' },
     }));
-    expect(store.clearTrainingProposal).toHaveBeenCalledWith('user-1', 'conversation-1', proposal.proposalRef);
+    expect(store.clearTrainingProposal).toHaveBeenCalledWith('user-1', 'conversation-1', proposal.proposalRef,
+      { status: 'applied', scheduleRevision: 8,
+        changes: [{ index: 0, kind: 'create-workout', status: 'applied', message: 'Created the workout.' }],
+        providers: [{ index: 1, provider: 'garmin', status: 'applied', message: 'Delivery was queued.' }] });
+    vi.mocked(store.clearTrainingProposal).mockRejectedValue(new Error('Receipt persistence failed'));
+    await expect(runApplyAssistantTrainingProposal({ proposalRef: proposal.proposalRef,
+      permissionMode: proposal.permissionMode, conversationId: 'conversation-1', confirm: true }, context, store, applyProposal))
+      .resolves.toMatchObject({ status: 'applied', scheduleRevision: 8 });
   });
 
   it('routes a confirmed saved-workout proposal only to the library apply path', async () => {
@@ -338,7 +346,51 @@ describe('Assistant callable', () => {
       connectionId: 'first-party-assistant-v1:conversation-1',
       scopes: ['training-plans:read', 'training-plans:write'],
     }));
-    expect(store.clearTrainingProposal).toHaveBeenCalledWith('user-1', 'conversation-1', proposalRef);
+    expect(store.clearTrainingProposal).toHaveBeenCalledWith('user-1', 'conversation-1', proposalRef,
+      expect.objectContaining({ status: 'applied', changes: [expect.objectContaining({ kind: 'place' })] }));
+  });
+
+  it.each(['delete-workout', 'delete-plan'] as const)('keeps %s cleanup behind the current app-owned approval and both permissions', async kind => {
+    const { store } = createDependencies();
+    const proposal = { proposalRef: 'opaque-deletion', permissionMode: 'combined' as const,
+      expiresAtMs: Date.parse('2026-08-03T12:15:00Z'), scheduleRevision: 7,
+      summary: 'Review deletion and service-copy choice.', requiresConfirmation: true as const,
+      changes: [{ index: 0, kind, summary: 'Request older uncompleted service-copy cleanup.' }], providerPreviews: [] };
+    const state = { conversation: { version: 1 as const, conversationId: 'conversation-1', messages: [],
+      expiresAt: '2026-08-10T12:00:00.000Z' }, pendingRequestId: null, locationAccess: 'coordinate_free' as const,
+    trainingPlansEnabled: true, trainingPlanChangesEnabled: true, trainingDeliveryEnabled: true,
+    pendingTrainingProposal: proposal };
+    vi.mocked(store.getActiveConversationState).mockResolvedValue(state);
+    const result = { proposalRef: proposal.proposalRef, status: 'applied' as const, scheduleRevision: 8,
+      changes: [{ index: 0, kind, status: 'applied' as const,
+        message: 'Deletion applied. Service-copy cleanup was requested; removal is not yet confirmed.' }],
+      providers: [], createdReferences: [] };
+    const applyProposal = vi.fn().mockResolvedValue(result);
+    const request = { proposalRef: proposal.proposalRef, permissionMode: proposal.permissionMode,
+      conversationId: 'conversation-1', confirm: true };
+    for (const revoked of [{ trainingDeliveryEnabled: false }, { trainingPlanChangesEnabled: false },
+      { trainingPlansEnabled: false }, { conversation: { ...state.conversation, conversationId: 'new-chat' } }]) {
+      vi.mocked(store.getActiveConversationState).mockResolvedValue({ ...state, ...revoked });
+      await expect(runApplyAssistantTrainingProposal(request, context, store, applyProposal)).rejects.toMatchObject({ code: 'aborted' });
+      expect(applyProposal).not.toHaveBeenCalled();
+    }
+    vi.mocked(store.getActiveConversationState).mockResolvedValue(state);
+    await expect(runApplyAssistantTrainingProposal({ ...request, confirm: false }, context, store, applyProposal))
+      .resolves.toMatchObject({ status: 'dismissed' });
+    expect(applyProposal).not.toHaveBeenCalled();
+    vi.mocked(store.getActiveConversationState).mockResolvedValue({ ...state, pendingTrainingProposal: undefined });
+    await expect(runApplyAssistantTrainingProposal(request, context, store, applyProposal)).rejects.toMatchObject({ code: 'aborted' });
+    expect(applyProposal).not.toHaveBeenCalled();
+    const freshProposal = { ...proposal, proposalRef: 'fresh-deletion-preview' };
+    vi.mocked(store.getActiveConversationState).mockResolvedValue({ ...state, pendingTrainingProposal: freshProposal });
+    applyProposal.mockResolvedValue({ ...result, proposalRef: freshProposal.proposalRef });
+    await expect(runApplyAssistantTrainingProposal({ ...request, proposalRef: freshProposal.proposalRef }, context, store, applyProposal))
+      .resolves.toMatchObject({ status: 'applied', changes: result.changes, providers: [] });
+    expect(applyProposal).toHaveBeenCalledOnce();
+    expect(applyProposal).toHaveBeenCalledWith({ uid: 'user-1',
+      connectionId: 'first-party-assistant-v1:conversation-1',
+      scopes: ['training-plans:read', 'training-plans:write', 'training-delivery:write'],
+      arguments: { proposalRef: freshProposal.proposalRef, permissionMode: 'combined' } });
   });
 
   it('does not expose unexpected apply failures through the Assistant callable', async () => {

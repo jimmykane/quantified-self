@@ -16,6 +16,8 @@ import {
   viewChild,
 } from '@angular/core';
 import { Location } from '@angular/common';
+import { LiveAnnouncer } from '@angular/cdk/a11y';
+import { DragDropModule, type CdkDragDrop } from '@angular/cdk/drag-drop';
 import { toObservable, toSignal } from '@angular/core/rxjs-interop';
 import { MatDialog } from '@angular/material/dialog';
 import { MatSnackBar } from '@angular/material/snack-bar';
@@ -29,6 +31,7 @@ import {
   MANUAL_WORKOUT_EDITOR_ROWING_SPORTS_V1,
   isRowingWorkoutSportV1,
   isSwimmingWorkoutSportV1,
+  WORKOUT_STRUCTURE_MAX_NODES,
 } from '@shared/planned-workout';
 import { normalizeUserUnitSettings } from '@shared/unit-aware-display';
 import dayjs, { type Dayjs } from 'dayjs';
@@ -47,6 +50,9 @@ import { ConfirmationDialogComponent, type ConfirmationWithPastProviderCleanup }
 import { CompactRowComponent } from '../shared/compact-row/compact-row.component';
 import { PlanScheduleCalendarComponent } from './plan-schedule-calendar.component';
 import { TrainingDeliveryButtonComponent } from './training-delivery-button.component';
+import { WorkoutTimeInputComponent } from './workout-time-input.component';
+import { WorkoutProfileComponent } from './workout-profile.component';
+import type { WorkoutProfileSelection } from '../../helpers/workout-profile.helper';
 import { resolvePlanScheduleDate } from '../../helpers/plan-schedule-calendar.helper';
 import { TRAINING_PLAN_COLOR_OPTIONS, trainingPlanAppearance } from '../../helpers/training-plan-appearance.helper';
 import {
@@ -62,6 +68,7 @@ import {
   createManualWorkoutEditorStep,
   createManualWorkoutEditorValue,
   changeManualWorkoutEditorSport,
+  changeManualWorkoutEditorStepEnding,
   formatManualWorkoutStructure,
   manualWorkoutEditorToStructure,
   workoutStructureToManualEditor,
@@ -72,6 +79,12 @@ import {
   type ManualWorkoutSport,
   type ManualWorkoutTarget,
 } from '../../helpers/planned-workout-editor.helper';
+import {
+  duplicateManualWorkoutEditorNode,
+  manualWorkoutEditorNodeCount,
+  manualWorkoutEditorSiblings,
+  moveManualWorkoutEditorNode,
+} from '../../helpers/planned-workout-editor-actions.helper';
 import {
   DELETED_WORKOUT_RECOVERY_DAYS,
   addDaysToTrainingLocalDate,
@@ -165,7 +178,7 @@ const EMPTY_SCHEDULE: CurrentTrainingScheduleV1 = {
 @Component({
   selector: 'app-plans-workspace',
   standalone: true,
-  imports: [SharedModule, CompactRowComponent, PlanScheduleCalendarComponent, TrainingDeliveryButtonComponent],
+  imports: [SharedModule, DragDropModule, CompactRowComponent, PlanScheduleCalendarComponent, TrainingDeliveryButtonComponent, WorkoutTimeInputComponent, WorkoutProfileComponent],
   templateUrl: './plans-workspace.component.html',
   styleUrls: ['./plans-workspace.component.scss'],
   changeDetection: ChangeDetectionStrategy.OnPush,
@@ -180,6 +193,7 @@ export class PlansWorkspaceComponent {
   private readonly host = inject<ElementRef<HTMLElement>>(ElementRef);
   private readonly dialog = inject(MatDialog);
   private readonly snackBar = inject(MatSnackBar);
+  private readonly liveAnnouncer = inject(LiveAnnouncer);
   private readonly route = inject(ActivatedRoute);
   private readonly router = inject(Router);
   private readonly location = inject(Location);
@@ -209,6 +223,17 @@ export class PlansWorkspaceComponent {
   private historyRequestSequence = 0;
   private deletedWorkoutRequestSequence = 0;
   private nodeSequence = 1;
+  private editorDrag: { generation: number; uid: string; nodeId: string; repeatId: string | null; siblingIds: string[] } | null = null;
+  private editorMenuFocus: { generation: number; uid: string; nodeId: string } | null = null;
+  private readonly pendingEditorNodeFocus = signal<{ generation: number; uid: string; nodeId: string } | null>(null);
+  private editorHasAnnouncement = false;
+  readonly editorNodeLimit = WORKOUT_STRUCTURE_MAX_NODES;
+  readonly editorNodeCount = computed(() => this.editor() ? manualWorkoutEditorNodeCount(this.editor()!.value) : 0);
+  readonly editorDragDelay = { touch: 200, mouse: 0 };
+
+  constructor() {
+    this.destroyRef.onDestroy(() => this.clearEditorAnnouncement());
+  }
 
   readonly sportOptionGroups: ReadonlyArray<{
     label: string;
@@ -243,6 +268,7 @@ export class PlansWorkspaceComponent {
   readonly endingOptions: ReadonlyArray<{ value: ManualWorkoutEnding; label: string }> = [
     { value: 'time', label: 'Time' },
     { value: 'distance', label: 'Distance' },
+    { value: 'manual', label: 'Lap button press' },
   ];
   readonly targetOptions: ReadonlyArray<{ value: ManualWorkoutTarget; label: string }> = [
     { value: 'none', label: 'No target' },
@@ -378,6 +404,18 @@ export class PlansWorkspaceComponent {
   readonly deleteDisposition = signal<DeleteTrainingPlanRequestV1['workoutDisposition']>('convert-to-standalone');
   readonly removePastProviderCopies = signal(false);
   readonly editor = signal<WorkoutEditorSession | null>(null);
+  readonly editorProfileSelection = signal<WorkoutProfileSelection | null>(null);
+  readonly editorProfileContext = computed(() => this.editor()
+    ? `${this.currentUser()?.uid}/${this.editorGeneration}` : '');
+  readonly editorProfile = computed(() => {
+    const session = this.editor();
+    if (!session || this.editorIsStrength()) return null;
+    try { return this.editorStructure(session); } catch { return null; }
+  });
+  readonly editorProfileStepId = computed(() => {
+    const id = this.editorProfileSelection()?.stepId;
+    return this.editorProfile()?.nodes.some(node => node.kind === 'step' ? node.id === id : node.steps.some(step => step.id === id)) ? id : null;
+  });
   readonly workoutDatePickerValue = computed(() => workoutDatePickerInput(this.editor()?.value.localDate ?? ''));
   readonly workoutDateInputInvalid = signal(false);
   readonly busyAction = signal<string | null>(null);
@@ -518,6 +556,18 @@ export class PlansWorkspaceComponent {
     row.scrollIntoView?.({ block: 'nearest' });
     this.pendingDuplicateFocus.set(null);
   });
+  private readonly editorNodeFocusEffect = afterRenderEffect(() => {
+    const pending = this.pendingEditorNodeFocus();
+    this.editor();
+    if (!pending) return;
+    if (pending.generation === this.editorGeneration && pending.uid === this.currentUser()?.uid && !this.busyAction()) {
+      const button = Array.from(this.host.nativeElement.querySelectorAll<HTMLButtonElement>('[data-editor-node-action]'))
+        .find(candidate => candidate.dataset['editorNodeAction'] === pending.nodeId);
+      button?.focus();
+      button?.scrollIntoView?.({ block: 'nearest' });
+    }
+    this.pendingEditorNodeFocus.set(null);
+  });
 
   private readonly selectionEffect = effect(() => {
     const plans = this.planOptions();
@@ -554,7 +604,7 @@ export class PlansWorkspaceComponent {
     if (this.routeOwner !== uid) {
       this.routeOwner = uid;
       this.appliedRouteKey = null;
-      this.editorGeneration += 1;
+      this.advanceEditorGeneration();
       this.editor.set(null);
       this.libraryEditorItem.set(null);
       this.placementItem.set(null);
@@ -584,7 +634,7 @@ export class PlansWorkspaceComponent {
 
   private applyRoute(requested: TrainingPlansRouteState): void {
     this.appliedRouteKey = trainingPlansRouteKey(this.currentUser()?.uid, requested);
-    this.editorGeneration += 1;
+    this.advanceEditorGeneration();
     this.editor.set(null);
     this.libraryEditorItem.set(null);
     this.placementItem.set(null);
@@ -925,7 +975,7 @@ export class PlansWorkspaceComponent {
   }
 
   private startNewWorkoutEditor(destinationPlanId: string | null, localDate: string): void {
-    this.editorGeneration += 1;
+    this.advanceEditorGeneration();
     this.workoutDateInputInvalid.set(false);
     this.editor.set({
       mode: 'create',
@@ -953,7 +1003,7 @@ export class PlansWorkspaceComponent {
     try {
       this.closeHistory();
       this.clearPlanActions();
-      this.editorGeneration += 1;
+      this.advanceEditorGeneration();
       this.workoutDateInputInvalid.set(false);
       const strength = workout.structure.sport === ActivityTypes.StrengthTraining;
       const unitSettings = normalizeUserUnitSettings(this.currentUser()?.settings?.unitSettings);
@@ -997,7 +1047,7 @@ export class PlansWorkspaceComponent {
 
   cancelEditor(): void {
     if (this.busyAction() || !this.editor()) return;
-    this.editorGeneration += 1;
+    this.advanceEditorGeneration();
     this.editor.set(null);
     const state = this.location.getState() as { trainingPlansEditorReturn?: { uid?: string; url?: string } } | null;
     const previous = state?.trainingPlansEditorReturn;
@@ -1161,6 +1211,7 @@ export class PlansWorkspaceComponent {
   }
 
   addEditorStep(): void {
+    if (this.busyAction() || this.editorIsStrength() || this.editorNodeCount() >= WORKOUT_STRUCTURE_MAX_NODES) return;
     this.editor.update(session => session ? {
       ...session,
       value: {
@@ -1171,6 +1222,7 @@ export class PlansWorkspaceComponent {
   }
 
   addEditorRepeat(): void {
+    if (this.busyAction() || this.editorIsStrength() || this.editorNodeCount() + 3 > WORKOUT_STRUCTURE_MAX_NODES) return;
     this.editor.update(session => session ? {
       ...session,
       value: {
@@ -1196,6 +1248,7 @@ export class PlansWorkspaceComponent {
   }
 
   addRepeatStep(nodeIndex: number): void {
+    if (this.busyAction() || this.editorIsStrength() || this.editorNodeCount() >= WORKOUT_STRUCTURE_MAX_NODES) return;
     this.editor.update(session => {
       if (!session) return null;
       const nodes = session.value.nodes.map((node, index) => index === nodeIndex && node.kind === 'repeat'
@@ -1215,6 +1268,87 @@ export class PlansWorkspaceComponent {
     });
   }
 
+  private advanceEditorGeneration(): void {
+    this.editorGeneration += 1;
+    this.editorProfileSelection.set(null);
+    this.editorDrag = null;
+    this.editorMenuFocus = null;
+    this.pendingEditorNodeFocus.set(null);
+    this.clearEditorAnnouncement();
+  }
+
+  private clearEditorAnnouncement(): void {
+    if (!this.editorHasAnnouncement) return;
+    this.editorHasAnnouncement = false;
+    // An empty announcement also replaces a pending delayed message; clear() alone does not.
+    void this.liveAnnouncer.announce('', 'polite');
+  }
+
+  moveEditorNode(nodeId: string, direction: -1 | 1, repeatId: string | null = null): void {
+    const session = this.editor();
+    if (!session) return;
+    const index = manualWorkoutEditorSiblings(session.value, repeatId).findIndex(node => node.id === nodeId);
+    this.applyEditorNodeAction(nodeId, repeatId, value => moveManualWorkoutEditorNode(value, nodeId, index + direction, repeatId), 'moved');
+  }
+
+  duplicateEditorNode(nodeId: string, repeatId: string | null = null): void {
+    this.applyEditorNodeAction(nodeId, repeatId, value => duplicateManualWorkoutEditorNode(value, nodeId,
+      kind => this.nextNodeId(kind), repeatId), 'copied');
+  }
+
+  startEditorDrag(nodeId: string, repeatId: string | null = null): void {
+    const session = this.editor();
+    const uid = this.currentUser()?.uid;
+    this.editorDrag = session && uid && !this.busyAction() && !this.editorIsStrength()
+      ? { generation: this.editorGeneration, uid, nodeId, repeatId,
+        siblingIds: manualWorkoutEditorSiblings(session.value, repeatId).map(node => node.id) } : null;
+  }
+
+  openEditorNodeMenu(nodeId: string): void {
+    const uid = this.currentUser()?.uid;
+    this.editorMenuFocus = uid ? { generation: this.editorGeneration, uid, nodeId } : null;
+  }
+
+  closeEditorNodeMenu(): void {
+    // Material's default restoration would focus the source after copying. Restore our chosen row,
+    // including the original trigger on Escape/backdrop dismissal.
+    this.pendingEditorNodeFocus.set(this.editorMenuFocus);
+    this.editorMenuFocus = null;
+  }
+
+  dropEditorNode(event: CdkDragDrop<string | null>, repeatId: string | null = null): void {
+    const drag = this.editorDrag;
+    this.editorDrag = null;
+    const session = this.editor();
+    if (!drag || !session || drag.generation !== this.editorGeneration || drag.uid !== this.currentUser()?.uid
+      || drag.repeatId !== repeatId || event.previousContainer !== event.container || !event.isPointerOverContainer
+      || event.container.data !== repeatId || event.item.data !== drag.nodeId) return;
+    const ids = manualWorkoutEditorSiblings(session.value, repeatId).map(node => node.id);
+    if (ids.length !== drag.siblingIds.length || ids.some((id, index) => id !== drag.siblingIds[index])) return;
+    this.applyEditorNodeAction(drag.nodeId, repeatId,
+      value => moveManualWorkoutEditorNode(value, drag.nodeId, event.currentIndex, repeatId), 'moved');
+  }
+
+  private applyEditorNodeAction(nodeId: string, repeatId: string | null,
+    action: (value: ManualWorkoutEditorValue) => ManualWorkoutEditorValue, verb: 'moved' | 'copied'): void {
+    const session = this.editor();
+    const uid = this.currentUser()?.uid;
+    if (!session || !uid || this.busyAction() || this.editorIsStrength()) return;
+    const value = action(session.value);
+    if (value === session.value) return;
+    const siblings = manualWorkoutEditorSiblings(value, repeatId);
+    const sourceIndex = siblings.findIndex(node => node.id === nodeId);
+    const index = sourceIndex + (verb === 'copied' ? 1 : 0);
+    const node = siblings[index];
+    this.editor.set({ ...session, value });
+    this.haptics.selection();
+    this.editorHasAnnouncement = true;
+    // CDK clears and delays the live region so consecutive identical results are announced again.
+    void this.liveAnnouncer.announce(`${node.kind === 'repeat' ? 'Repeat block' : 'Step'} ${verb} to position ${index + 1} of ${siblings.length}${repeatId ? ' within the repeat block' : ''}.`, 'polite');
+    if (this.editorMenuFocus) this.editorMenuFocus = { generation: this.editorGeneration, uid, nodeId: node.id };
+    this.pendingEditorNodeFocus.set({ generation: this.editorGeneration, uid, nodeId: node.id });
+  }
+
   updateNode(nodeIndex: number, field: string, value: unknown): void {
     this.editor.update(session => {
       if (!session) return null;
@@ -1225,18 +1359,23 @@ export class PlansWorkspaceComponent {
     });
   }
 
-  updateStep(nodeIndex: number, stepIndex: number | null, field: string, value: unknown): void {
+  updateStep(nodeIndex: number, stepIndex: number | null, field: string, value: unknown, durationSeconds?: number): void {
     if (this.busyAction()) return;
+    const sourceDuration = typeof value === 'number' && Number.isFinite(durationSeconds) && durationSeconds > 0
+      && durationSeconds / 60 === value ? { editorValue: value, seconds: durationSeconds } : undefined;
     this.editor.update(session => {
       if (!session) return null;
       const nodes = session.value.nodes.map((node, index) => {
         if (index !== nodeIndex) return node;
-        const isSelection = ['purpose', 'endingKind', 'targetKind'].includes(field);
+        const isSelection = ['purpose', 'endingKind', 'targetKind', 'allowEarlyLap'].includes(field);
         if (stepIndex === null && node.kind === 'step') {
           if (isSelection && node[field as keyof ManualWorkoutEditorStep] !== value) this.haptics.selection();
+          if (field === 'endingKind') {
+            return changeManualWorkoutEditorStepEnding(node, value as ManualWorkoutEnding, session.value.sport, session.unitSettings);
+          }
           return { ...node, [field]: value,
-            ...((field === 'endingKind' || field === 'endingValue') && value !== node[field]
-              ? { sourceDistance: undefined } : {}),
+            ...(field === 'endingValue' && value !== node[field]
+              ? { sourceDistance: undefined, sourceDuration: node.endingKind === 'time' ? sourceDuration : undefined } : {}),
             ...((field === 'targetKind' || field === 'targetMinimum' || field === 'targetMaximum') && value !== node[field]
               ? { sourcePace: undefined } : {}),
           } as ManualWorkoutEditorStep;
@@ -1247,9 +1386,12 @@ export class PlansWorkspaceComponent {
             steps: node.steps.map((step, candidate) => {
               if (candidate !== stepIndex) return step;
               if (isSelection && step[field as keyof ManualWorkoutEditorStep] !== value) this.haptics.selection();
+              if (field === 'endingKind') {
+                return changeManualWorkoutEditorStepEnding(step, value as ManualWorkoutEnding, session.value.sport, session.unitSettings);
+              }
               return { ...step, [field]: value,
-                ...((field === 'endingKind' || field === 'endingValue') && value !== step[field]
-                  ? { sourceDistance: undefined } : {}),
+                ...(field === 'endingValue' && value !== step[field]
+                  ? { sourceDistance: undefined, sourceDuration: step.endingKind === 'time' ? sourceDuration : undefined } : {}),
                 ...((field === 'targetKind' || field === 'targetMinimum' || field === 'targetMaximum') && value !== step[field]
                   ? { sourcePace: undefined } : {}),
               } as ManualWorkoutEditorStep;
@@ -1360,7 +1502,7 @@ export class PlansWorkspaceComponent {
       if (!response || this.destroyRef.destroyed || generation !== this.editorGeneration || uid !== this.currentUser()?.uid) return;
       this.selectWorkoutScope(session.destinationPlanId, session.value.localDate);
       this.editor.set(null);
-      this.editorGeneration += 1;
+      this.advanceEditorGeneration();
       const route = this.browseRouteState();
       this.navigateWorkspace(trainingPlansBrowseRoute(route.planId, route.standalone), route, { replaceUrl: true });
       this.snackBar.open('Workout added.', 'Dismiss', { duration: 3000 });
@@ -1389,7 +1531,7 @@ export class PlansWorkspaceComponent {
     if (!response || this.destroyRef.destroyed || generation !== this.editorGeneration || uid !== this.currentUser()?.uid) return;
     this.selectWorkoutScope(session.destinationPlanId, session.value.localDate);
     this.editor.set(null);
-    this.editorGeneration += 1;
+    this.advanceEditorGeneration();
     const route = this.browseRouteState();
     this.navigateWorkspace(trainingPlansBrowseRoute(route.planId, route.standalone), route, { replaceUrl: true });
     this.snackBar.open('Workout updated.', 'Dismiss', { duration: 3000 });

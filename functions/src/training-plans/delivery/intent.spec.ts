@@ -4,7 +4,7 @@ import { resolveDeliveryIntent, deliveryIdentity, deliveryContentDigest } from '
 import type { DeliveryContext, DeliveryLedgerV1 } from './contracts';
 import { FakeTrainingTransport } from './test-support/fake-transport';
 import { SuuntoGuideTransport } from './suunto/transport';
-import { assessSuuntoGuideV2ForRecovery } from './suunto/mapping';
+import { assessSuuntoGuideV2ForRecovery, assessSuuntoGuideV3ForRecovery, assessSuuntoGuideV4ForRecovery, assessSuuntoGuideV5ForRecovery } from './suunto/mapping';
 
 const base: DeliveryContext = {
   workout: { schemaVersion: 1, id: 'workout', planId: null, revision: 1, localDate: '2026-09-10', lifecycle: 'planned',
@@ -77,18 +77,19 @@ describe('delivery intent', () => {
     transport.level = 'unsupported';
     expect(resolveDeliveryIntent(context)).toMatchObject({ desired: 'preserve', status: 'unsupported' });
   });
-  it('keeps exact v2 loss approval across Suunto presentation-only upgrades, never across edits or authority changes', () => {
+  it.each([assessSuuntoGuideV2ForRecovery, assessSuuntoGuideV3ForRecovery, assessSuuntoGuideV4ForRecovery, assessSuuntoGuideV5ForRecovery])(
+    'keeps exact legacy loss approval across Suunto display upgrades, never across edits or authority changes', assessLegacy => {
     const transport = new SuuntoGuideTransport(async () => { throw Error('No HTTP during assessment'); }, 'Quantified Self');
     const workout = { ...base.workout!, structure: { ...base.workout!.structure, nodes: [{ ...base.workout!.structure.nodes[0],
       note: 'A'.repeat(45) }] } };
     const destination = base.connection.destinationKey;
-    const prior = assessSuuntoGuideV2ForRecovery(workout, destination, 'Europe/Helsinki', 'Quantified Self');
+    const prior = assessLegacy(workout, destination, 'Europe/Helsinki', 'Quantified Self');
     const context: DeliveryContext = { ...base, workout, transport,
       setting: { ...base.setting!, provider: 'suunto', approvedDigest: prior.digest } };
     const ledger = { connectionEpoch: 0, destinationKey: 'account-a', acceptedDigest: prior.digest,
       acceptedContentDigest: deliveryContentDigest(workout, 'Europe/Helsinki') } as DeliveryLedgerV1;
     expect(transport.assess(workout, 'account-a', 'Europe/Helsinki')).toMatchObject({
-      mappingVersion: 'suunto-guides-v3', compatibleApprovalDigest: prior.digest,
+      mappingVersion: 'suunto-guides-v6', compatibleApprovalDigests: expect.arrayContaining([prior.digest]),
     });
     expect(resolveDeliveryIntent(context, ledger)).toMatchObject({ desired: 'present', status: 'pending', approvalDigest: null });
     const currentDigest = transport.assess(workout, 'account-a', 'Europe/Helsinki').digest;
@@ -122,8 +123,11 @@ describe('delivery intent', () => {
     expect(resolveDeliveryIntent({ ...context, setting: null }, retired).desired).toBe('absent');
     expect(resolveDeliveryIntent({ ...context, connection: { ...context.connection, epoch: 1 } }, retired).status)
       .toBe('fresh_consent_required');
-    expect(transport.assess(workout, 'other-account', 'Europe/Helsinki').compatibleApprovalDigest).not.toBe(prior.digest);
-    expect(transport.assess(workout, 'account-a', 'UTC').compatibleApprovalDigest).not.toBe(prior.digest);
+    expect(transport.assess(workout, 'other-account', 'Europe/Helsinki').compatibleApprovalDigests).not.toContain(prior.digest);
+    expect(transport.assess(workout, 'account-a', 'UTC').compatibleApprovalDigests).not.toContain(prior.digest);
+    const v3Digest = assessSuuntoGuideV3ForRecovery(workout, destination, 'Europe/Helsinki', 'Quantified Self').digest;
+    expect(resolveDeliveryIntent(context, { ...retired, mappingApprovalProof: { ...proof, mappingDigest: v3Digest } }).desired)
+      .toBe('present');
   });
   it('keeps an earlier provider copy when the current workout becomes unsupported', () => {
     const transport = new FakeTrainingTransport();

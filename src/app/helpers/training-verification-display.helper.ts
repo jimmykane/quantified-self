@@ -1,4 +1,4 @@
-import type { TrainingDeliveryStatusV1 } from '@shared/training-provider-delivery';
+import { GARMIN_WORKOUT_NOT_FOUND_ISSUE, GARMIN_WORKOUT_WITH_CALENDAR_NOT_FOUND_ISSUE, type TrainingDeliveryStatusV1 } from '@shared/training-provider-delivery';
 import type { TrainingVerificationV1 } from '@shared/training-provider-verification';
 import type { TrainingWorkoutCompletionV1 } from '@shared/training-workout-completion';
 import { TRAINING_DELIVERY_STATUS_LABELS, trainingDeliveryCommandError, trainingDeliveryStatusLabel } from './training-delivery-display.helper';
@@ -20,6 +20,10 @@ export function trainingVerificationCommandError(error: unknown): string {
 export function trainingVerificationLabel(status: TrainingDeliveryStatusV1, verification?: TrainingVerificationV1,
   completion?: Pick<TrainingWorkoutCompletionV1, 'workoutId' | 'provider'>): string {
   const suunto = status.provider === 'suunto';
+  if (status.provider === 'garmin' && status.status === 'needs_attention'
+    && status.issues.some(issue => [GARMIN_WORKOUT_NOT_FOUND_ISSUE, GARMIN_WORKOUT_WITH_CALENDAR_NOT_FOUND_ISSUE].includes(issue))) {
+    return 'Not found in Garmin · review required';
+  }
   if (status.status === 'approval_required') {
     if (status.hasRemoteCopy || status.lastAcceptedAtMs != null) return 'Update needs review';
     // An interrupted attempt may have been accepted before QS could save the ID.

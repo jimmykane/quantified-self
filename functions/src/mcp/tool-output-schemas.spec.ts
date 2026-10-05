@@ -453,6 +453,15 @@ const trainingReadFixtures = {
  list_saved_workouts: { libraryRevision: 1, scanComplete: true, recordsScanned: 1, nextCursor: null,
    workouts: [{ savedWorkoutRef: 'opaque-saved-workout-reference', title: 'Easy run', status: 'active',
      revision: 1, createdAtMs: 1, updatedAtMs: 1 }] },
+ get_saved_workout_v2: { libraryRevision: 1, savedWorkout: { savedWorkoutRef: 'opaque-saved-workout-reference',
+   title: 'Lap option', status: 'active', revision: 1, createdAtMs: 1, updatedAtMs: 1,
+   structure: { version: 1, sport: ActivityTypes.Running,
+     nodes: [{ kind: 'step', id: 'step', purpose: 'work', ending: { kind: 'time', seconds: 1800, allowEarlyLap: false }, targets: [] }] } } },
+ get_planned_workout_v3: { scheduleRevision: 1, workout: { workoutRef: 'opaque-workout-reference', planRef: null,
+   title: 'Lap option', localDate: '2026-07-01', lifecycle: 'planned', revision: 1, createdAtMs: 1, updatedAtMs: 1,
+   structure: { version: 1, sport: ActivityTypes.Swimming, poolLength: { meters: 25, presentation: 'meters' },
+     nodes: [{ kind: 'repeat', id: 'repeat', count: 2, steps: [{ kind: 'step', id: 'step', purpose: 'work', ending: { kind: 'distance', meters: 400.125, allowEarlyLap: true }, targets: [] }] }] },
+   displaySteps: [{ nodeId: 'repeat', text: 'Repeat 2 times' }] } },
  get_saved_workout: { libraryRevision: 1, savedWorkout: { savedWorkoutRef: 'opaque-saved-workout-reference',
    title: 'Easy run', status: 'active', revision: 1, createdAtMs: 1, updatedAtMs: 1,
    structure: { version: 1, sport: ActivityTypes.Running,
@@ -575,7 +584,11 @@ const service = {
     readTrainingPlans: vi.fn(async (input: { tool: TrainingReadTool }) => trainingReadFixtures[input.tool]),
     previewCreatePlannedWorkout: vi.fn().mockResolvedValue(trainingPreviewFixture),
     previewTrainingChanges: vi.fn().mockResolvedValue(trainingPreviewFixture),
+    previewTrainingDeletion: vi.fn().mockResolvedValue({ ...trainingPreviewFixture, permissionMode: 'combined',
+      changes: [{ index: 0, kind: 'delete-workout', summary: 'Delete in QS and request eligible service-copy cleanup. Recorded activities stay.' }] }),
     previewStrengthWorkoutChange: vi.fn().mockResolvedValue(trainingPreviewFixture),
+    previewPlannedWorkoutV3Change: vi.fn().mockResolvedValue(trainingPreviewFixture),
+    previewSavedWorkoutV2Change: vi.fn().mockResolvedValue(trainingPreviewFixture),
     previewPlannedWorkoutV2Change: vi.fn().mockResolvedValue(trainingPreviewFixture),
     previewSavedWorkoutChange: vi.fn().mockResolvedValue(trainingPreviewFixture),
     applyTrainingChanges: vi.fn().mockResolvedValue(trainingApplyFixture),
@@ -1378,6 +1391,8 @@ const successfulToolArguments: Record<
   query_planned_workouts: { startDate: '2026-07-01', endDate: '2026-07-02' },
   query_planned_workouts_by_date: { startDate: '2026-07-01', endDate: '2026-07-02' },
   get_planned_workout: { workoutRef: 'opaque-workout-reference' },
+  get_planned_workout_v3: { workoutRef: 'opaque-workout-reference' },
+  get_saved_workout_v2: { savedWorkoutRef: 'opaque-saved-workout-reference' },
   get_planned_workout_v2: { workoutRef: 'opaque-workout-reference' },
   get_strength_workout_details: { workoutRef: 'opaque-workout-reference' },
   get_training_sync_status: { scope: 'plan', reference: 'opaque-plan-reference' },
@@ -1396,11 +1411,18 @@ const successfulToolArguments: Record<
   preview_training_changes: { expectedScheduleRevision: 1, changes: [{
     kind: 'rename-plan', plan: { ref: 'opaque-plan-reference' }, name: 'Autumn build',
   }] },
+  preview_training_deletion: { expectedScheduleRevision: 1, change: { kind: 'delete-workout',
+    workout: { ref: 'opaque-workout-reference' }, removePastProviderCopies: true } },
   preview_strength_workout_change: { expectedScheduleRevision: 1, change: {
     kind: 'create-workout', localKey: 'strength', plan: null, localDate: '2026-07-02', title: 'Strength',
     strength: { version: 1, exercises: [{ id: 'exercise-1', name: 'Squat', sets: [{ id: 'set-1',
       ending: { kind: 'repetitions', repetitions: 5 }, externalLoadKg: 40, restAfterSeconds: 90 }] }] },
   } },
+  preview_planned_workout_v3_change: { expectedScheduleRevision: 1, change: {
+    kind: 'create-workout', localKey: 'early-lap', plan: null, localDate: '2026-07-02', title: 'Lap option',
+    structure: trainingReadFixtures.get_planned_workout_v3.workout.structure } },
+  preview_saved_workout_v2_change: { expectedScheduleRevision: 1, expectedLibraryRevision: 1,
+    change: { kind: 'create', title: 'Lap option', structure: trainingReadFixtures.get_saved_workout_v2.savedWorkout.structure } },
   preview_planned_workout_v2_change: { expectedScheduleRevision: 1, change: {
     kind: 'create-workout', localKey: 'pool-swim', plan: null, localDate: '2026-07-02', title: 'Pool swim',
     structure: { version: 1, sport: 'Swimming', poolLength: { meters: 25, presentation: 'meters' },
@@ -2029,7 +2051,7 @@ describe.each<FixtureTransport>(['in-memory', 'legacy-http', 'modern-http'])('MC
     // Keep the frozen surface's budget; each additive family has its own explicit bound.
     const planTools = tools.filter(tool => (TRAINING_READ_TOOLS as readonly string[]).includes(tool.name));
     const planReadExtensions = planTools.filter(tool => (TRAINING_READ_EXTENSION_TOOLS as readonly string[]).includes(tool.name)
-      && tool.name !== 'get_workout_prescription_analysis' && tool.name !== 'get_planned_workout_v2' && !['list_saved_workouts', 'get_saved_workout'].includes(tool.name));
+      && !['get_workout_prescription_analysis', 'get_planned_workout_v2', 'get_planned_workout_v3', 'get_saved_workout_v2'].includes(tool.name) && !['list_saved_workouts', 'get_saved_workout'].includes(tool.name));
     const analysisTools = planTools.filter(tool => tool.name === 'get_workout_prescription_analysis');
     expect(Buffer.byteLength(JSON.stringify(analysisTools), 'utf8')).toBeLessThan(24 * 1024);
     const planReadV2 = planTools.filter(tool => tool.name === 'get_planned_workout_v2');
@@ -2041,14 +2063,20 @@ describe.each<FixtureTransport>(['in-memory', 'legacy-http', 'modern-http'])('MC
     expect(Buffer.byteLength(JSON.stringify(planLibraryReads), 'utf8')).toBeLessThan(20 * 1024);
     const planWriteTools = tools.filter(tool => (TRAINING_WRITE_TOOLS as readonly string[]).includes(tool.name));
     const planWriteExtensions = planWriteTools.filter(tool => (TRAINING_WRITE_EXTENSION_TOOLS as readonly string[]).includes(tool.name)
-      && tool.name !== 'preview_planned_workout_v2_change' && tool.name !== 'preview_saved_workout_change');
+      && tool.name !== 'preview_planned_workout_v2_change' && tool.name !== 'preview_saved_workout_change'
+      && !['preview_training_deletion', 'preview_planned_workout_v3_change', 'preview_saved_workout_v2_change'].includes(tool.name));
+    const planDeletionPreview = planWriteTools.filter(tool => tool.name === 'preview_training_deletion');
     const planWriteV2 = planWriteTools.filter(tool => tool.name === 'preview_planned_workout_v2_change');
     const planWriteLibrary = planWriteTools.filter(tool => tool.name === 'preview_saved_workout_change');
     const planWriteCore = planWriteTools.filter(tool => !(TRAINING_WRITE_EXTENSION_TOOLS as readonly string[]).includes(tool.name));
     expect(Buffer.byteLength(JSON.stringify(planWriteCore), 'utf8')).toBeLessThan(48 * 1024);
     expect(Buffer.byteLength(JSON.stringify(planWriteExtensions), 'utf8')).toBeLessThan(12 * 1024);
+    expect(Buffer.byteLength(JSON.stringify(planDeletionPreview), 'utf8')).toBeLessThan(6 * 1024);
     expect(Buffer.byteLength(JSON.stringify(planWriteV2), 'utf8')).toBeLessThan(20 * 1024);
     expect(Buffer.byteLength(JSON.stringify(planWriteLibrary), 'utf8')).toBeLessThan(24 * 1024);
+    for (const name of ['get_planned_workout_v3', 'get_saved_workout_v2', 'preview_planned_workout_v3_change', 'preview_saved_workout_v2_change']) {
+      expect(Buffer.byteLength(JSON.stringify(tools.filter(tool => tool.name === name)), 'utf8')).toBeLessThan(24 * 1024);
+    }
     const applyTrainingChangesTool = tools.find(tool => tool.name === 'apply_training_changes');
     expect(applyTrainingChangesTool?.title).toBe('Apply previewed Training changes');
     expect(applyTrainingChangesTool?.annotations).toEqual({
@@ -2495,6 +2523,41 @@ describe.each<FixtureTransport>(['in-memory', 'legacy-http', 'modern-http'])('MC
     expect(JSON.stringify(reply)).toContain('do not create replacement workouts');
     expect(JSON.stringify(reply)).not.toContain('smaller page');
     expect(Buffer.byteLength(JSON.stringify(reply))).toBeLessThan(256 * 1024);
+    expect(service.applyTrainingChanges).not.toHaveBeenCalled();
+  });
+
+  it('requires all three deletion grants and rejects private input/output on every transport', async () => {
+    const service = createFixtureDataService();
+    const scopes = [MCP_OAUTH_SCOPES.TrainingPlansRead, MCP_OAUTH_SCOPES.TrainingPlansWrite,
+      MCP_OAUTH_SCOPES.TrainingDeliveryWrite];
+    const args = successfulToolArguments.preview_training_deletion;
+    for (const missing of scopes) {
+      const denied = await connectFixtureServer(service, scopes.filter(scope => scope !== missing));
+      connections.push(denied);
+      expect((await denied.client.listTools()).tools.map(tool => tool.name)).not.toContain('preview_training_deletion');
+      await expect(denied.client.callTool({ name: 'preview_training_deletion', arguments: args })).rejects.toThrow('not found');
+      expect(service.previewTrainingDeletion).not.toHaveBeenCalled();
+    }
+    const connection = await connectFixtureServer(service, scopes); connections.push(connection);
+    const fixture = await service.previewTrainingDeletion({ uid: 'fixture', connectionId: 'fixture', scopes: [], arguments: args });
+    vi.mocked(service.previewTrainingDeletion).mockClear();
+    for (const injected of [{ uid: 'attacker' }, { scopes: [] }, { connectionId: 'attacker' },
+      { change: { ...(args.change as object), remoteWorkoutId: 'PRIVATE-DELETION-CANARY' } }]) {
+      const result = await connection.client.callTool({ name: 'preview_training_deletion', arguments: { ...args, ...injected } });
+      expect(result.isError).toBe(true);
+      expect(service.previewTrainingDeletion).not.toHaveBeenCalled();
+      expect(JSON.stringify(result)).not.toContain('PRIVATE-DELETION-CANARY');
+    }
+    for (const field of ['uid', 'remoteWorkoutId', 'mutationId', 'receipt', 'destinationKey']) {
+      for (const projection of [{ ...fixture, [field]: 'PRIVATE-DELETION-CANARY' },
+        { ...fixture, changes: [{ ...fixture.changes[0], [field]: 'PRIVATE-DELETION-CANARY' }] }]) {
+        service.previewTrainingDeletion = vi.fn().mockResolvedValue(projection);
+        const result = await connection.client.callTool({ name: 'preview_training_deletion', arguments: args });
+        expect(result.isError, field).toBe(true);
+        expect(result).not.toHaveProperty('structuredContent');
+        expect(JSON.stringify(result)).not.toContain('PRIVATE-DELETION-CANARY');
+      }
+    }
     expect(service.applyTrainingChanges).not.toHaveBeenCalled();
   });
 

@@ -28,6 +28,7 @@ describe('shared workout prescription analysis', () => {
     expect(result.summary.distance).toEqual({ exactSubtotalMeters: 4000, exactSteps: 4, unknownSteps: 5,
       completeExactMeters: null, coverage: 'partial' });
     expect(result.steps[1]).toEqual({ stepId: 'work', repeatId: 'main', multiplier: 4, purpose: 'work',
+      allowEarlyLap: false,
       prescribedSeconds: null, prescribedMeters: 1000, duration: { kind: 'estimated',
         minimumSeconds: expect.closeTo(240, 10), maximumSeconds: 300, basis: 'absolute-speed' } });
     expect(result.byPurpose.warmup.duration.completeExactSeconds).toBe(600);
@@ -45,6 +46,24 @@ describe('shared workout prescription analysis', () => {
       estimatedSubtotalRange: null, completeRange: { minimumSeconds: 61.25, maximumSeconds: 61.25 }, coverage: 'complete' });
     expect(result.summary.distance).toMatchObject({ exactSubtotalMeters: 0, completeExactMeters: null, coverage: 'none' });
     expect(result.summary.duration.completeExactSeconds).toBe(wahooDurationSeconds(input));
+  });
+  it('retains prescribed limits and counts early Lap executions without changing absence or false', () => {
+    const input = recipe([step('fixed', { kind: 'time', seconds: 60 }),
+      step('false', { kind: 'distance', meters: 100, allowEarlyLap: false }, speed(2, 4)),
+      { kind: 'repeat', id: 'repeat', count: 3, steps: [
+        step('time', { kind: 'time', seconds: 30, allowEarlyLap: true }, [], 'recovery'),
+        step('distance', { kind: 'distance', meters: 200, allowEarlyLap: true }, speed(2, 4)),
+      ] }]);
+    const before = JSON.stringify(input);
+    const result = analyzeWorkoutStructureV1(input);
+    expect(result.summary).toMatchObject({ executedSteps: 8, earlyLapSteps: 6,
+      duration: { exactSubtotalSeconds: 150, completeRange: { minimumSeconds: 325, maximumSeconds: 500 }, coverage: 'complete' },
+      distance: { exactSubtotalMeters: 700 } });
+    expect(result.steps.map(step => step.allowEarlyLap)).toEqual([false, false, true, true]);
+    expect(result.byPurpose.recovery).toMatchObject({ earlyLapSteps: 3, duration: { completeExactSeconds: 90 } });
+    expect(aggregateWorkoutAnalysesV1([result, result], { sourceComplete: true }).summary.earlyLapSteps).toBe(12);
+    expect(JSON.stringify(input)).toBe(before);
+    expect(wahooDurationSeconds(input)).toBeNull();
   });
   it('counts distance-only prescriptions without inventing duration or timed-step distance', () => {
     const result = analyzeWorkoutStructureV1(recipe([step('distance', { kind: 'distance', meters: 1609.344 })]));

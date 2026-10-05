@@ -40,8 +40,24 @@ lock is acquired keeps the proposal resumable so the same approved apply can fin
 Permanent single-workout deletion and history restoration remain excluded. The latter allows plan delivery
 enablement and workout send/resume/stop/retry/check/approval. Delivery remains Pro and is gated by provider connection,
 permissions, configuration, compatibility and explicit consent.
-MCP plan and recoverable workout deletion never select the manual UI's optional past-provider-copy cleanup. Their
-previews distinguish eligible future-copy withdrawal from past copies, which remain, and recorded activities are untouched.
+The additive `preview_training_deletion` offers the manual UI's optional older-copy cleanup for one current plan or
+recoverable workout deletion. With both existing child write grants, the client asks whether to also remove older,
+uncompleted copies from connected services (unless already explicitly chosen), then supplies a required
+`removePastProviderCopies` boolean. The proposal binds that choice to the existing deletion transaction, revisions,
+owner/connection/grant and approval. Plan deletion still requires its workout disposition. Upcoming eligible copies
+already withdraw by default; completed activities are never deleted. Cleanup needs current same-account access and
+provider support, and is not app/watch removal proof. No provider HTTP occurs in preview or MCP apply. The frozen
+batch deletion remains available without this opt-in; clients must explain its older-copy limitation rather than
+silently substitute it for requested full cleanup. Removal does not require Pro. Source implementation needs separate
+deployment and catalog refresh. MCP read-impact review: current plan/workout recipes, units, completion links and sync
+projections remain unchanged; cleanup intent stays server-only. Verification covers explicit yes/no choices, both plan
+dispositions, preview without provider I/O, lost-reply replay, revoked grants, completed-copy protection and removal after
+Pro expiry in `npm run test:functions-emulators -- mcp-data`, plus the existing provider cleanup regressions in the
+`delivery` emulator group. Assistant tests keep follow-up choices prepare-only and require the app-owned Apply. Routing
+follows only an uninterrupted deletion clarification chain; cancellation, another task, and removal from a plan must
+not inherit an earlier deletion intent. This runtime-only routing correction changes no MCP wire contract or read
+projection. Public contract tests check all three transports, scope isolation and recursive private-field rejection. No new callable,
+provider adapter, consent scope or cleanup store is introduced.
 External clients prepare one strict proposal of at most 25 changes, then invoke the separately approval-gated
 `apply_training_changes` write tool. ChatGPT, Claude and other MCP hosts own their native tool-approval UI; QS does not
 use MCP elicitation for a second confirmation round. A host may let its user configure automatic tool approval, which QS
@@ -103,25 +119,51 @@ validation and the public recipe coverage gate remain identical.
 The built-in Assistant has separate default-off **Training plans**, **Plan and workout changes**, and **Planned-workout
 sync changes** choices. Only applicable focused/batch preview tools enter Gemini context. The model cannot apply changes; Quantified Self
 stores one bounded proposal under the current server-owned conversation and the user must apply or dismiss it in the app.
+Single plan/workout deletion reviews use explicit **Delete plan** / **Delete workout** actions, preserving the exact
+server preview's workout disposition and service-copy choice. Their receipts state authored deletion separately from
+unconfirmed background service cleanup; declined older-copy removal stays declined. Missing or failed deletion results
+do not get success messaging or haptics. The Training access sheet explains both required change toggles and removal
+without Pro. This Assistant presentation and receipt-wording change adds no MCP tool, field, scope, provider action or
+read projection; no registered-contract or bundled-plugin update is needed. Verification uses the Assistant component,
+helper and callable specs and the deletion cases in the `mcp-data` emulator group, including both plan dispositions
+and both cleanup choices. Backend/frontend deployment remains separate.
 Plan-level and provider-only actions select the batch preview before a sport keyword can select a focused recipe editor;
 a combined historical comparison and workout recommendation keeps live daily and completed-activity reads available.
-For a today recommendation, the server prepares Form, Form Now, ramp-rate and Training Summary snapshots before the
+For a dated workout recommendation, the server prepares Form, Form Now, ramp-rate and Training Summary snapshots before the
 daily report, then reads the ready Form, ramp-rate and Training Summary payloads. It also reads canonical daily
 `Duration` buckets and today's completed activities. The model-only bucket projection supplies local weekday labels;
 server code counts positive-duration dates in the 28-day local window, including today, without changing MCP output or
 Training calculations. With separate consent, the server reads recent Timeline notes for up to two bounded pages,
-marks each ended or ongoing from its actual dates, and never treats an ended sickness note as current illness. Closed
+marks each ended, ongoing or upcoming from its actual dates, and never treats an ended sickness note as current illness. Closed
 notes precede ongoing notes, so an incomplete scan cannot prove their absence. With Training plans read access, it
-reads today's calendar and one bounded bulk exact-completion result for its listed workouts; a planned lifecycle is
+reads the requested day's calendar and one bounded bulk exact-completion result for its listed workouts; a planned lifecycle is
 not completion evidence. The server appends these verified facts and gaps to the recommendation. Incomplete activity,
 note or calendar scans block a workout preview. Note access remains independent of Training read/write choices;
 missing consent is reported rather than treated as an empty history. This Assistant-only orchestration changes no MCP
 tool, schema, scope, projection, consent or provider action, and needs no registered-client or plugin update.
+The recommendation date is resolved from the current request or its uninterrupted dated user-message chain, using stored
+message timestamps and the turn's IANA timezone. “Tomorrow” does not drift to today or roll forward when inherited after
+midnight. Weekday consistency matches the target day, while readiness, sleep and recorded activities describe the current
+evidence day; fresh reads override earlier answers. Future recommendations are conditional on a later readiness check.
+“Today is done” and a no-plan hypothetical remain explicit constraints for short follow-ups, never provider/write consent.
+An ambiguous date requires clarification; a create preview on a different date is rejected before MCP. Consented notes
+include upcoming dated context through the requested day within the existing 366-day query and two-page bounds; incomplete
+coverage blocks a preview. No historical answer establishes today's completed volume or future readiness.
+Preview selection treats a negated existing-workout change as context, including contracted `doesn't`/`doesn’t`,
+so avoiding duplicate plan workouts keeps one focused create preview. Explicit additional mutations still use the batch preview.
 Proposal references bind the exact conversation generation, so permission changes, New chat, stale tabs and account
 switches cannot reuse them. The dedicated App Check callable rechecks the conversation before applying and clears the
 pending proposal after either apply or dismiss. Internal Training reads recognize both the fixed first-party Assistant
 identity and its conversation-bound suffix as server-owned authority while retaining that complete identity in opaque
 reference binding. They never require or synthesize an external MCP connection record.
+The existing Assistant evidence array retains a compact, server-authored Apply/Dismiss result, including authored counts
+and grouped service-request outcomes. It survives a concurrent follow-up completion, remains generation/deletion fenced,
+and distinguishes accepted delivery intent from confirmed provider delivery. No retention extension, cross-chat memory,
+new persistence model or callable is introduced. See [Assistant context and lifecycle](assistant.md).
+MCP impact review: these changes affect first-party orchestration and existing chat evidence only. Public tools, recipe
+JSON, scopes, schemas, safe projections, native approval and bundled-plugin contracts are unchanged. Verification includes
+date/follow-up/model-context unit cases, real Firestore Apply/Dismiss plus concurrent-history fixtures, frontend contracts
+and registered MCP compatibility checks. No registered-client refresh, reauthorization or plugin rebuild is required.
 
 External MCP clients and the built-in Assistant have different recovery paths for missing Training access. An external
 client must start OAuth authorization again and approve `training-plans:read` plus either independent child scope as
@@ -161,8 +203,8 @@ This document is the implementation guide for the authenticated `/training` work
 engineers, data engineers, reviewers, and AI coding agents. Update it whenever the Training product contract, a derived
 metric payload, the sports-lib durability protocol, or the refresh pipeline changes.
 
-Private [Timeline notes](timeline-notes.md) are available from the compact secondary header action to every signed-in
-account, independently of Training plan checks. The workspace supplies a shared note context to readiness, load/Form,
+Private [Timeline notes](timeline-notes.md) are managed from Dashboard, Health, or Calendar, independently of Training
+plan checks. Training keeps a hidden shared notes workspace outside its header to supply the bounded note context to readiness, load/Form,
 freshness forecast, body-weight, power-system history, swimming trends and weekly durability charts. Notes preserve each
 chart's existing calendar convention; weekly tooltips retain actual dates. They never change Training inputs, formulas,
 readiness, forecasts, persisted snapshots or sport filters. The manager owns editing and account-scoped settings; charts
@@ -389,8 +431,10 @@ Form history and canonical parent/activity join.
 - User help copy: `src/app/shared/help.content.ts`
 
 Training is available to signed-in users from the sidenav. Its route header uses the shared `app-page-header` route
-primitive, with a Feedback action that opens the configured support email with a Training-specific subject, plus direct
-**Calendar** and **Dashboard** route actions. The Dashboard header does not duplicate the Training or Health navigation
+primitive for the title, compact update disclosure, and conditional derived-metrics **Retry** action. Timeline notes, Feedback,
+Calendar, and Dashboard shortcuts are omitted from this header; use app navigation for Calendar and Dashboard and the
+Training help article's email action for feedback. This presentation changes no chart-note reads, Training calculations,
+planning/MCP contract, consent, or mutation. The Dashboard header does not duplicate the Training or Health navigation
 links; its calendar icon opens the mini calendar. Dashboard does not add curated Training snapshots as default
 Dashboard dependencies or configurable tiles.
 
@@ -488,13 +532,17 @@ recipe migration, dependency upgrades, derived-schema changes, or backfills.
 Counts have distinct meanings: `structuralNodes` includes repeat containers and each defined child once;
 `definedSteps` counts leaves once; `executedSteps` multiplies each leaf by its enclosing repeat's total pass count.
 The 100-node/100-repeat canonical limits permit at most 9,900 executions but fewer than 100 repeated definitions.
-Each step result preserves `stepId`, nullable `repeatId`, authored `purpose`, and `multiplier`. Its prescribed seconds,
+Each step result preserves `stepId`, nullable `repeatId`, authored `purpose`, `multiplier`, and `allowEarlyLap`. Its prescribed seconds,
 prescribed metres, and duration classification describe one execution; summaries apply the multiplier. No expanded
 execution array is created. Notes, target objects, provider metadata and full strength details are not analysis fields.
 
 Duration rules:
 
 - A time ending supplies an exact duration. Distance endings supply exact prescribed metres but no exact time.
+- These are nominal prescribed limits, not guaranteed athlete elapsed time or distance. A numeric ending with
+  `allowEarlyLap: true` retains its limit/classification and contributes to `earlyLapSteps` in whole, purpose and
+  aggregate summaries; its execution may end sooner. Absence and false both analyze as no early-Lap allowance,
+  without rewriting their distinct authored recipe forms. Manual/Lap remains an unknown ending.
 - Distance plus absolute speed supplies an estimated range `[metres / maximumSpeed, metres / minimumSpeed]`.
   Pace presentation does not change the canonical m/s calculation. Equal bounds remain a point estimate.
 - Relative speed uses only the recipe's saved threshold-speed snapshot times percentage points divided by 100.
@@ -530,7 +578,8 @@ This foundation does not implement either consumer's chart/calendar feature.
 preserving existing swimming/rowing display rules. Exact time is labelled as a timed subtotal when incomplete;
 estimated covered time retains an estimate label and the count of steps with unknown duration. Prescribed distance is
 labelled as a subtotal unless every execution is distance-ended. An arithmetic failure shows unavailable totals while
-retaining the ordered instructions. Summaries never enter canonical persistence or provider payloads.
+retaining the ordered instructions. Early-Lap recipes additionally label totals as prescribed limits and show the number
+of executions that allow early Lap. Summaries never enter canonical persistence or provider payloads.
 
 MCP impact: additive `get_workout_prescription_analysis({ source: scheduled | saved, reference })` under existing
 `training-plans:read` returns the current record revision, applicable schedule/library revision, sport, strict analysis,
@@ -573,11 +622,28 @@ negative values, non-positive endings/reference snapshots, inverted ranges, more
 100, nested repeats, and more than two targets per step. Its JSON output must remain Firestore-safe and must round-trip through stringify/parse without changing
 the persisted v1 value. The manual editor exposes canonical Running, Trail Running, Treadmill, Cycling, Mountain Biking,
 Indoor Cycling, E-Biking, Hand Cycle, Swimming (labelled Pool swimming), and Open Water Swimming sports plus date-only,
-time/distance, fixed-repeat, and single absolute HR/power/pace inputs. Both swim profiles enter distance steps in metres
+time/distance/lap-button, fixed-repeat, and single absolute HR/power/pace inputs. Both swim profiles enter distance steps in metres
 rather than kilometres, and pace targets follow the user's swim-pace preference (/100 m or /100 yd). Changing an unsaved
 editor sport converts displayed distances and paces without changing their canonical values. The pool editor may
 select an optional physical length; a 25 m step alone never asserts a 25 m pool, and open-water swimming has no pool
 length. Other providers do not receive the selected length and require explicit degradation review. These are Sports Lib activity-type strings, not provider profile IDs.
+
+The interval editor's **End by → Lap button press** choice is available for every purpose (warmup, work, recovery,
+cooldown, rest, other), including repeat children and library recipes. It stores the existing strict `{ kind: 'manual' }`
+ending; the numeric input is hidden and any retained editor-only numeric draft value is never serialized. A step waits
+for the lap button with no time/distance limit, not a combined timer-or-button rule. Within the same unsaved editor,
+temporarily selecting Lap button preserves the exact previous distance, including when switching sports changes its
+display unit. Selecting Time or editing the distance discards that distance cache. Reopening a saved lap-ended step
+does not recover a previous numeric draft: only the manual ending is persisted. Reopening and resaving preserves
+the step ID, purpose, targets, instructions and fixed repeats. Garmin maps it to `OPEN`, Suunto to `manualLap`, and
+COROS to `EndManually` for supported sports; COROS delivery remains disabled. Wahoo remains unsupported and cannot
+receive a guessed timed replacement. Lap advances a step; it does not stop the recording or create a QS completion link.
+MCP impact: existing recipe read and strict proposal/confirmation contracts already support `manual` endings across
+purposes and repeat children. Regression tests cover full recipe reads and compatibility without synthesizing duration
+or dropping targets/instructions. No stored/wire schema, scope, consent, tool registration, metric, provider transport,
+or bundled plugin/skill changes are required for exposing this existing ending in the editor. Other editor limitations
+(kJ/repetition endings, relative targets and secondary targets) remain unchanged.
+
 Running and cycling distance-step inputs follow the owner's `distanceUnits` preference (kilometres or miles), while
 their pace-target inputs independently follow the first selected `paceUnits` preference (min/km or min/mi). The editor
 captures normalized units when opened so a settings update in another tab cannot reinterpret an unsaved number. Existing
@@ -590,6 +656,56 @@ value to be no greater than the Slower value; the editor does not silently reord
 than rounding to zero. No recipe field, schedule history or stored workout requires migration. Garmin and Suunto consume
 canonical metres directly; COROS applies its existing documented integer-metre rounding and degradation approval;
 Wahoo's dated Workout delivery still rejects distance-ended recipes because its required complete exact timed duration is unavailable, even when prescription analysis can estimate a range.
+
+Interval draft ordering and duplication use `planned-workout-editor-actions.helper.ts` with the existing v1 ordered
+node arrays. Plans, Standalone and Workout Library share the same editor controls. A move preserves every node ID and
+moves a repeat with its children; a child can move only within its own repeat. Duplication inserts immediately after the
+source, generates unique bounded IDs for the copied block and every copied child, and independently copies exact-duration,
+distance and pace caches as well as purpose, note, repeat count and draft fields. Pool settings remain workout-level.
+Partial/invalid fields remain editable and are still rejected by the existing save conversion. The canonical 100-node
+limit counts both repeat blocks and children; additions and copies are disabled when the complete addition cannot fit.
+Strength exercises/sets use their separate editor and are deliberately outside this interval feature.
+
+Dedicated Angular CDK handles support pointer moves with a 200 ms touch delay; form controls never serve as handles.
+The outer list and each child list remain unconnected. Material Actions menus provide Move up, Move down and Duplicate
+for touch/keyboard users, with disabled boundary actions. Accepted moves/copies announce the resulting position, focus
+the affected row's Actions button and emit one selection haptic. CDK's live announcer clears and delays each message so
+identical consecutive results are announced again; editor cancellation, account changes and destruction replace pending
+announcements with an empty message. Actions menus use the shared QS menu panel styling and their capacity state reads
+the computed total once per template binding instead of rescanning the recipe. Menu dismissal restores the trigger. Cancelled/outside,
+unchanged, stale-session, changed-list, cross-parent and busy drops leave the draft and feedback unchanged. Copy/move only
+changes the local editor: Save reuses the existing revision-checked schedule or library mutation; failure retains the draft
+and Cancel discards it. Existing history, completion links and delivery reconciliation remain owned by those mutations.
+
+MCP impact review: ordering changes prescription content, but requires no new wire shape or mutation kind. Existing
+`get_planned_workout`, v2 and saved-recipe reads preserve node/child order and public structural IDs; complete-recipe
+create/update proposals already represent the resulting content through their existing strict approval/revision boundary.
+Focused read/schema fixtures cover reordered/copied repeats, fresh IDs, notes, fractional seconds, exact metres and m/s,
+display order, scope/reference isolation and rejection of editor-cache/provider fields. No scopes, provider actions,
+Assistant permission, migration, registered digest or plugin build/refresh changes are required. Bundled Training,
+Activity and cross-domain guidance already discover the authoritative recipe and preview/apply contracts.
+Verification covers draft helpers, real Material menus/focus, native mouse drag/drop through separate outer/child handles
+(with synthetic geometry in JSDOM), repeated announcements and their lifecycle, busy/cancelled/stale operations,
+plan/standalone/library save/reopen and revision-conflict retention. Isolated rendered-fixture browser checks verify
+layout in light/dark at desktop and 320 px; physical touch dragging/vibration still require device QA.
+
+Timed interval steps use separate Hours, Minutes and Seconds inputs, including fixed-repeat children and the shared
+Workout Library editor. Hours/minutes are nonnegative integers, minutes/seconds are below 60, and the total is positive;
+fractional seconds remain representable. The editor's internal minute boundary is unchanged (1.25 → 75 seconds,
+1.5 → 90 seconds), while persisted v1 endings remain canonical seconds. Reopened times retain their exact saved seconds
+in an editor-only cache; unchanged saves and temporary Lap button → Time toggles cannot round the prescription.
+Distance selection discards that cache; duration edits replace it with the new prescription. Cleared/invalid drafts stay
+editable and fail before mutation. Retyping an unchanged displayed part or pace is a no-op, preserving exact source values.
+New duration input events also carry exact authored seconds to the editor-only cache: integer inputs such as 31 or 123
+seconds must not gain arithmetic noise by passing through decimal minutes. Neither event metadata nor the cache persists.
+Pace inputs accept m:ss (and h:mm:ss for long splits) plus legacy decimal minutes; Sports Lib's duration formatter
+renders editable splits in the already-selected denominator. Exact unchanged saved m/s targets keep the existing cache,
+including running min/km or min/mi, swimming /100 m or /100 yd and rowing /500 m. Range inversion remains an error.
+Strength's existing timed-hold/rest seconds inputs are unchanged; this change concerns the interval step editor.
+MCP impact: presentation only. Existing strict recipe reads and approval-gated proposals still use seconds and m/s;
+no tool, field, schema, consent, provider action, Assistant permission, skill, Sports Lib type or migration changes.
+Provider serializers, scheduling/history and completed-activity totals are unchanged. Verification covers real input
+events, plan/standalone/library saves, repeat children, exact reopen/resave, invalid drafts, units and pending controls.
 MCP impact: #734 adds `get_planned_workout_v2` and `preview_planned_workout_v2_change` while preserving registered v1
 schemas. The read uses existing Training plans consent and includes only an authored pool length in canonical metres
 plus its metre/yard presentation; a distance step never implies pool size. The focused create/update preview uses
@@ -670,6 +786,52 @@ recipe. Extract the neutral structure, codec, validator, and reusable analysis t
 pass separately authorized create/update/reschedule/delete round trips, Wahoo and Suunto mapping fixtures are complete, the provider adapters
 have not contaminated the neutral model, and persisted Quantified Self fixtures round-trip unchanged through a locally
 packed Sports Lib package. That gate is tracked by GitHub issue #654 under epic #583.
+
+### Workout visual profiles
+
+`WorkoutProfileComponent` is the shared read-only interval renderer for the live Plans/Standalone/library editor
+and the **Show profile** disclosure on saved scheduled and library workouts. Saved inspection consumes the complete
+canonical recipe independently of the narrower manual editor: cadence, speed presentation, relative snapshots,
+two simultaneous targets, and manual/kJ/repetition endings remain readable. Strength retains its exercise editor;
+the v1 strength compatibility summary is not presented as a complete exercise profile.
+
+`workout-profile.helper.ts` shapes presentation only. The horizontal axis is explicitly step order with equal widths,
+never elapsed time or distance. The shared prescription analyzer now supplies canonical timing and coverage for
+consumers; this renderer keeps its explicit step domain and does not estimate widths, average pace, zones or generic
+intensity. A future time-scaled view must consume that shared analysis and its uncertainty.
+One target metric is shown at a time (HR, power, pace, speed or cadence). Both authored targets remain in accessible
+details and tooltips. Constant targets, including warm-up/cool-down targets, are rectangles rather than invented ramps;
+untargeted steps have empty metric spaces and a separately labelled purpose strip. Relative ranges resolve only from
+their saved reference snapshot, with percentage/reference and resolved-range text; missing/invalid snapshots fail closed.
+A valid relative pace target starting at 0% speed has no finite pace range. Its authored percentage/reference remains
+in details and tooltips with an explicit explanation; only that band is omitted, while all other steps remain visible.
+If no finite bands exist, the purpose strip remains available and accessible text distinguishes that from no targets.
+Pace axes reverse speed bounds and follow the canonical Sports Lib formatter, including swim and rowing conventions.
+Physical pool length is explicit metadata and is never inferred from distance steps.
+
+Profiles expand at most 128 occurrences. Above that presentation budget, each repeat shows one selectable pass,
+the complete occurrence count is disclosed, and every pass (including the last of 9,900 legal occurrences) remains
+inspectable. This is grouping, not truncation or a lower recipe limit. Selection keys combine canonical step ID,
+repeat ID and iteration; canonical IDs and recipe JSON never change. Editor selection highlights the source step and
+survives reordering and crossing the expansion budget: a selected repeat pass remains selected when grouping becomes
+necessary, without selection-only redraws dismissing the first tap's tooltip. Invalid drafts remove the chart instead
+of retaining the last valid preview. Owner/editor/revision
+context changes clear presentation selection. Saved disclosures shape data and instantiate charts only when opened.
+
+Rendering uses the shared ECharts loader/host controller, theme/resize and viewport-bound escaped tooltip helpers,
+including the viewport tooltip host for horizontally scrollable phone charts. Material selectors, labelled purpose
+markers, text details, pressed-state buttons and arrow/Home/End navigation provide touch and keyboard equivalents.
+Accepted selection owns haptics; raw chart pointer feedback is disabled to avoid duplicate/no-op feedback. Component
+tests cover silent hydration/context changes, selection and disposal; browser checks use synthetic recipes, not private
+exports. Physical vibration still needs device verification.
+
+MCP impact: no schema, scope, consent, recipe variant, projection, provider action, plugin guidance or mutation change.
+Focused `get_planned_workout`/`get_planned_workout_v2` regressions retain exact mixed distance/HR and untargeted
+60/75/90-second fixtures, two saved-reference targets, a valid zero-percent relative pace range, canonical ordering and
+scope/connection isolation. Presentation
+fields stay local. The component accepts `changedStepIds` and emits canonical occurrence selection for a future
+Assistant review consumer; current summary-only proposal previews are unchanged and do not supply full recipes.
+The registered read/write and confirmation contracts remain authoritative.
 
 ### Persistence, mutation, and history
 
@@ -1008,8 +1170,11 @@ action opens the existing editor with that date
 and plan prefilled. Dates support native keyboard activation plus arrow-key and Page Up/Down navigation, keeping focus
 and selection together. The date-cell button/ripple pattern follows Activity Calendar; a Material datepicker cannot
 contain separate accessible workout-edit actions without overriding its internals. Standalone retains its compact list.
-The **Main Calendar** link identifies the separate all-activity destination. No drag/drop, write API, provider sync,
-completed-activity matching, or new metric is introduced by this presentation change.
+The workspace header keeps **Sync** beside the **Plans** title. It opens **Workout sync history**, with the full name
+retained for assistive technology and in its tooltip. Calendar remains available through app navigation and the Dashboard;
+the former **Main Calendar** header action is removed. The library and workout-editor header actions are unchanged.
+MCP impact review: this header-only presentation changes no plan/workout reads, data contracts, consent, mutations,
+provider sync, completion matching, or exposed metrics.
 The full-month boundary-grid correction changes only visible disabled date cells. It does not alter authored schedules,
 date selection, provider delivery, MCP Training reads or mutations, consent, schemas, Assistant guidance, or the
 registered MCP contract.
@@ -1027,6 +1192,20 @@ Fieldsets, grid children, and repeat rows allow shrinking
 without horizontal page overflow. Selection haptics belong to explicit UI actions; mutation success/error feedback follows
 the actual result, and hydration, typing, and unchanged choices stay silent. Phone emulation verifies layout and wiring,
 not physical vibration or a real mobile keyboard.
+
+The shared scheduled/library workout editor uses content-sized Material hint/error regions: wrapped pool-length help
+and validation messages reserve their real height instead of colliding with the next field or **Save to** legend.
+Controls align at the top of each grid row, with 16px row gaps and 24px between editor sections. Pool length and its
+unit stay together on a separate row; the undated library basics use two columns. Step/exercise inputs have space below
+their compact-row headings, and repeat controls are separated from the first repeated step.
+On wide screens, Hours/Minutes/Seconds share the ending row; at 1100px and below, they occupy their own full-width row.
+Strength sets switch to two columns at that same breakpoint, keep Remove beside the set number, and separate sets with
+a divider. Phones keep Set type and Rest full-width while pairing Reps/Seconds with Load. Short visual load/rest labels
+retain explicit units, optional hints and full accessible names. Existing Material touch targets, thin scrollbars,
+keyboard order, haptics and sticky save actions remain unchanged.
+MCP impact review: this spacing/label pass changes no recipe, canonical values, schedule/library mutations, read
+projections, scopes, consent, Assistant guidance, provider mapping or registered contract. App Help's existing
+step, pool-length, strength-unit and library instructions remain accurate; no help-content change is needed.
 
 A newly created plan remains selectable using the server-acknowledged record and revision until the independent live
 plan and state listeners catch up. This transient, user-scoped bridge prevents jumping back to a previously active plan
@@ -1265,7 +1444,7 @@ that an inactive plan is sending. A missing status is not a confirmed delivery; 
 Unavailable Send/configuration actions stay hidden, but existing settings, problems, reconnect links and Stop remain
 readable. Status details expand in groups of 25 using a live loaded-prefix query, so subsequent pages cannot retain stale
 statuses or miss records moving across page boundaries. Plan workouts retain Stop even when their first delivery fails.
-The workspace's **Workout sync history** entry appears only when delivery records exist and remains reachable after deleting
+The workspace's compact **Sync** history entry appears only when delivery records exist and remains reachable after deleting
 their plan/workout. Each retained row opens delivery details independently of the authored editor. Deleted sources permit
 only Retry/Stop against the server-resolved existing account/workout identity (revision zero for a missing source); they
 cannot be sent, restored, or enrolled through these commands. Retry advances retained-record reconciliation without Pro
@@ -1375,6 +1554,19 @@ delivery latency, `stale_suppressed` for obsolete work, and `recovered_acceptanc
 For HTTP failures, group by `jsonPayload.httpStatus` and `jsonPayload.failurePhase` to distinguish rejected responses
 from network uncertainty and response decoding. Legacy failure records lack these fields and cannot prove a specific
 provider response status after the fact.
+Wahoo contract-guard failures add only the fixed private `wahooContractCheck` label to the existing WARNING, with
+`failurePhase="contract"`. Filter by `jsonPayload.provider="wahoo"` and group failures by that label to distinguish
+ownership/identity mismatches, missing or invalid completion evidence, moved dates, unconfirmed associations and
+ambiguous DELETE 404s. `plan_deleted` means the provider returned `deleted=true`; `plan_deletion_state_unknown` means
+it did not return an explicit live state. A DELETE 404 alone remains an unacknowledged write, not proof of removal.
+General inspection, upload discovery and upserts still cannot infer authoritative absence or authorize replacement.
+The removal-only convergence path below can separately establish that retained copies are already absent. Its final
+ordinary `accepted` or `recovered_acceptance` INFO includes only the fixed `outcome="already_absent"` after durable worker
+completion; it does not claim a DELETE was performed. `retained_ownership_unknown`, `account_not_confirmed` and
+`plan_absence_not_confirmed` distinguish inadequate retained ownership, current-account readback and catalog access.
+Labels contain no provider field values. Demo-Firestore fixtures verify warning propagation, safe refusals, complete
+cleanup state and suppression of false success when persistence fails or authority/lease changes.
+MCP and Help wire impact: none; recipes, safe status projections, consent, tools, schemas and provider actions are unchanged.
 Suunto Guide HTTP 400 failures also include fixed `providerResponseShape`, `providerRejection`, optional
 `providerField` and `providerValidation` values. These are classifier outputs, not Suunto's free-text reason;
 `unclassified` means the safe log alone cannot establish the exact validation defect. This private diagnostic change
@@ -1445,8 +1637,11 @@ in again; an old authorization cannot be reused. For plan-to-standalone deletion
 marker pointer across temporary disconnects and rechecks the private marker on retry. A later standalone-workout
 deletion without opt-in overrides that earlier plan choice. COROS deliberately remains in backend reconciliation and tests, but
 its contract allows deleting only unexecuted workouts dated today or later, so past copies are retained and reported
-as unsupported. New-send UI availability remains a separate policy. MCP deletion previews/applies omit the
-opt-in and retain default past-copy preservation; this change adds no MCP tool, schema, scope, or provider action.
+as unsupported. New-send UI availability remains a separate policy. The additive MCP deletion preview uses this same
+opt-in and worker, with both independent Training write grants and native/app approval; its applied result requests
+cleanup rather than claiming provider removal. The registered batch schema remains unchanged and preserves past copies.
+This adds no callable, transport, consent scope, private projection, or cleanup persistence model. Explicit-disconnect
+epochs and completed-copy protections remain authoritative, even after reconnecting the same account.
 
 #### Garmin workout sport profiles (#647)
 
@@ -1605,24 +1800,103 @@ implementation, not cloud acceptance, watch receipt or completed-activity proof.
 
 #### SuuntoPlus Guide delivery (#650)
 
+##### Optional early Lap on numeric endings (#784 Training 07)
+
+`WorkoutTimeEndingV1` and `WorkoutDistanceEndingV1` optionally carry `allowEarlyLap?: boolean`.
+True means the unchanged seconds/metres limit **or** an athlete Lap press. Absent and false keep the numeric ending;
+`manual` remains indefinite until Lap and rejects the field, as do repetitions/kilojoules. The shared strict parser
+rejects non-booleans and unknown fields. No migration, inferred default, historical activity reparse, metric schema
+change or FIT SDK dependency is needed. A device's own skip behavior is separate from this authored permission, and
+step transitions never establish workout completion.
+
+The Material checkbox is initially unchecked, appears only for numeric endings, and works for top-level/repeat steps
+and saved-recipe editing. Untouched old recipes retain absence; explicit false survives save/read/copy/history/library
+placement. Changing the draft to manual omits the flag from that ending; returning to a numeric ending before saving
+retains the draft choice. Exact canonical seconds/metres, targets, notes, pool length and repeat counts stay intact.
+Accepted checkbox changes have one selection haptic; initialization, no-ops and disabled actions are silent.
+
+Suunto mapping `suunto-guides-v6` implements documented OR conditions. A true ending keeps the native time/distance
+countdown and uses `or(stepDuration|stepDistance, manualLap)`. Generated notes mention Lap without overwriting authored
+notes. When a Guide uses manual-lap block averages, v6 privately expands fixed repeats into occurrence screens and
+routes each early-Lap boundary to two identical next-screen variants: automatic exit enters the variant with exactly
+one `createManualLap`; a button exit enters the variant without that command because the button already created the
+lap. The manual transition is checked first if both conditions coincide. Manual-only exits add no lap. The next pass,
+post-repeat step and completion boundary follow the same rule. These private occurrence IDs/branches never enter the
+canonical recipe, MCP or Assistant output. Guides without manual-lap averages keep compact OR transitions without
+automatic laps. Compatibility shares optional-reading selection with the serializer and caps the actual expanded Guide
+at the provider's 1000 screens. A compact repeat is not rejected merely because its iteration count would exceed that
+bound if expanded; one selected manual-lap average anywhere in the Guide requires boundaries across all occurrences.
+
+Absent/false recipes keep the same v5 Guide JSON. Frozen v2–v5 serializers and exact journal digests remain
+available for uncertain-acceptance recovery; historical serializers reject true. Unknown/content-mismatched digests
+never authorize replacement POSTs. Current diagnostics label v6 and retain v2–v5/unknown labels. Existing Guide IDs,
+consent, accepted-identity protection, completed-copy protection and native mapping-approval rules remain in force.
+Garmin, COROS and Wahoo reject true as `unsupported_ending` before transport: published device skip behavior, a global
+auto-advance switch or a single-trigger API is not verified per-step OR support. Their false/absent artifacts and
+availability remain unchanged.
+
+MCP adds `get_planned_workout_v3`, `get_saved_workout_v2`, `preview_planned_workout_v3_change` and
+`preview_saved_workout_v2_change`; older registered recipe schemas remain frozen. Latest strict full reads/previews
+round-trip every purpose, target, repeat child, numeric value, pool length and optional flag. Compile-time ending-field
+coverage makes future optional additions explicit. Old detail reads and recipe-replacement previews fail closed when
+this field is present, including explicit false, instead of dropping it. The focused previews disclose enabled-step
+counts and removal from previously enabled steps, and reuse the existing owner/connection/grant/revision/expiry-bound,
+idempotent, separately confirmed Apply. No new mutation kind, provider action, OAuth scope or transport authority is
+added. Assistant selects the latest full recipe/editor for a non-strength edit, preserves unchanged fields and enables
+Lap only on explicit athlete intent; removing the early-Lap option routes to recipe editing, including after an earlier
+deletion clarification, while removing the workout itself retains the deletion path. It remains prepare-only with
+app-owned confirmation. Provider delivery is a
+separately authorized proposal after creation. Training, Activity and cross-domain plugin skills discover the latest
+advertised tools and keep planned recipes distinct from recorded laps/completion.
+
+Release order: after separate deployment authorization, release compatible Functions/MCP before the frontend,
+refresh/rescan registered MCP metadata using the exact pending candidate, and refresh the plugin/client catalog.
+Keep the registered baseline/history frozen until that lifecycle action. A frontend rollback preserves the stored flag;
+an older backend is not a safe writer for newly authored fields. No blanket requeue, data backfill or provider API
+operation belongs to implementation. Local fixtures and loopback emulator tests cover automatic/button/repeat paths,
+no duplicate boundary laps, exact fields, strict public contracts and proposal persistence, identity-preserving
+create/update/reschedule, frozen v5 lost-ACK recovery and unchanged retries. Before claiming device proof, record the
+watch/firmware and inspect recorded lap boundaries and block-average resets for automatic, early, coincident,
+manual-only and repeat/final boundaries. Local OR fixtures do not prove watch behavior.
+
 ##### Current readings and boundary notifications (#784)
 
-Mapping v3 independently implements the documented partner [Guide schema](https://apizone.suunto.com/suuntoplus-guide-description),
+The v5 screen baseline (retained by v6 for absent/false early Lap) builds on Training 01's reviewed v4 boundary/recovery logic and independently implements the documented partner [Guide schema](https://apizone.suunto.com/suuntoplus-guide-description),
 without dependencies or undocumented app-wrapper `alerts`, `trigger`, or `extensions`. Investigation compared
 [OpenAthlete](https://github.com/openathleteorg/openathlete/blob/main/apps/api/src/modules/providers-sync/mapping/suunto-guide.mapper.ts)
 and [suunto-mcp](https://github.com/googlarz/suunto-mcp/blob/main/src/guide-zip.ts); neither is imported or copied into QS.
 Additional authored targets and ZoneSense remain separate in #773.
 
-- Running/Trail Running/Treadmill, Walking/Hiking, pool/open-water swimming and Rowing/Indoor Rowing default to
-  current `pace` and `heartRate`; supported cycling variants default to `power`, `heartRate`, `speed`; strength uses HR
-  where exercise/set instructions fit. Suunto renders native units; watch rowing pace is **not** asserted to be /500 m.
-  Sensor availability depends on the watch/sport/sensor. Missing readings are unavailable, never synthetic zeroes;
-  native power smoothing may still apply. No averaging windows or `createManualLap` are emitted.
-- At most five fields: reserve the ending countdown, every authored target and the existing instruction first. Remaining
-  capacity goes to the primary target's documented measured counterpart (power/cadence sensors for running/cycling,
-  never guessed swimming stroke/rowing mappings), HR, then sport defaults, deduplicated
-  by live-field type. The primary live reading goes first, then the countdown and supporting content. A manual instruction
-  longer than 40 code points keeps its existing text-only layout (up to 54), never further shortened to add metrics.
+- Running/Trail Running/Treadmill default to lap-average `pace` and current `heartRate`. Supported cycling
+  variants default to lap-average `power`, current `heartRate`, `cadence` and `speed`. Pool/open-water swimming
+  default to lap-average `pace`, lap-average `strokeRate` and current `heartRate`. Walking/Hiking and
+  Rowing/Indoor Rowing retain pace/HR; strength retains HR where exercise/set instructions fit.
+  Averaged fields use only documented `window: 'manualLap', aggregate: 'average'`, labelled `Avg pace`,
+  `Avg pwr` or `Avg strk` (each below nine code points). Current HR is never relabelled as averaged.
+  Suunto renders native units; watch rowing pace is **not** asserted to be /500 m.
+  Power/cadence sensor fields are limited to documented running/cycling mappings; running power retains Suunto's
+  native current-reading smoothing. Swimming `strokeRate` is a separate documented watch field, not cadence,
+  a new authored target, or a rowing-stroke mapping. Authored swim power/cadence targets remain unchanged;
+  they do not acquire a guessed measured counterpart. Watch/sport/sensor support determines whether readings
+  exist; unsupported or missing readings stay unavailable rather than becoming synthetic zeroes. Provider field
+  support is not universal device support or sensor-presence detection.
+- Guides containing any manual-lap average align that window with every prescribed block. Automatic transitions
+  create a lap on entering the next FieldsStep, including recovery/rest and repeat passes; a manual transition's button
+  already creates that lap, so the next step omits `createManualLap`. The first screen starts with recording and creates
+  no zero-length opening lap. The non-timed final screen closes an automatically ended final block, but not a manually
+  ended one. Laps are source-recorded and can appear in the FIT/activity; they are not adherence or QS completion proof.
+  With early Lap absent/false, pressing Lap during a timed/distance step resets the average early without advancing the
+  prescribed step. With true, v6 advances through the button path described above. Guides
+  without any manual-lap average, including HR-only strength, emit no automatic laps. Long text-only steps keep their
+  instructions and participate in boundaries only when another step in the Guide uses a manual-lap average.
+  Native repeats need different incoming-boundary handling when the first pass's predecessor differs from the last
+  repeat child's ending. Only in that case, emit one `times: 1` repeat followed by `times: count - 1`; otherwise keep
+  one native repeat. This preserves total passes and forbidden-ID omissions without expanding up to 100 copies.
+- At most five fields: reserve the ending countdown, every authored target and the existing instruction first.
+  Remaining capacity goes to both targets' documented measured counterparts in authored order, then current HR
+  and sport defaults, deduplicated by measured-field type. Untargeted steps keep zero target fields. The primary
+  measured reading goes first, then the countdown and supporting content. A manual instruction longer than
+  40 code points keeps its existing text-only layout (up to 54), never further shortened to add readings.
   Existing timed/targeted text truncation and other meaningful-loss warnings remain approval-gated.
 - Every authored FieldsStep, including rest/recovery and repeat children, gets partner `notification: {title, text}`.
   The title remains the phase. Authored notes/exercise instructions take priority in the body and retain the existing
@@ -1631,7 +1905,7 @@ Additional authored targets and ZoneSense remain separate in #773.
   Distance steps say `Follow distance countdown`, leaving unit presentation to Suunto's native numeric field; manual
   steps say `Press lap when ready`. Text does not inherit watch unit settings. Fractional/day-length/unrepresentable or
   overlong generated durations use `Follow time countdown` instead of displaying zero or truncating a number. This wording is
-  part of the not-yet-deployed v3 mapping; the frozen v2 recovery payload is unchanged.
+  retained in v5; frozen v2/v3/v4 recovery payloads are unchanged.
   Starting the next step requests the prior interval's end alert. A final non-timed `Complete` FieldsStep says
   `Guide complete` and requests a final notification, including after a terminal repeat. It adds no prescribed duration,
   does not stop recording, and does not mark the QS workout completed. Existing timed/distance/manual transitions,
@@ -1639,55 +1913,77 @@ Additional authored targets and ZoneSense remain separate in #773.
 - Sound/vibration follow watch settings, not QS control. No pre-end beeps or out-of-target alerts are promised. The
   documented popup may occupy the screen for about 20 seconds; short intervals require explicit watch QA.
 
-Deployment is separately approved. After deployment, new sends use v3 and ordinary reconciliation updates eligible,
+Deployment is separately approved. After deployment, new sends use v5 and ordinary reconciliation updates eligible,
 already-consented future Guides by PUT, preserving external/remote IDs and pinning. Past/completed copies, consent
 withdrawal, Pro expiry, disconnection and deletion fences retain their existing protection. The delivery digest includes
-v3; no Firestore migration is needed. Presentation-only additions do not require new approval. Where a meaningful loss
-was already approved under v2, the adapter recomputes the exact v2 digest from the **same** workout, strength companion,
+v5; no Firestore migration is needed. These screen/lap-boundary changes require no extra mapping-loss approval. Where a meaningful loss
+was already approved under v2/v3/v4, the adapter recomputes the exact historical digests from the **same** workout, strength companion,
 destination, zone and owner and verifies the same warning list. Only that exact approval is compatible; edited
 instructions/targets/date/metadata or changed authority cannot inherit it. An accepted copy or immutable attempt must
 also retain the matching full canonical content digest; old payloads can omit truncated text, so a changed hidden suffix
 must not inherit approval. Once verified, the private ledger retains the exact approved digest, current mapping digest
 and full content digest as `mappingApprovalProof`, independently of provider acceptance. Retiring an obsolete,
-never-started or unaccepted v2 attempt must not erase that proof and require a redundant approval. The tuple is rechecked
+never-started or unaccepted old attempt must not erase that proof and require a redundant approval. The tuple is rechecked
 against the adapter's current equivalence result and current saved approval on every use; it neither grants consent nor
-claims delivery. Missing or mismatched proof fails closed. This optional private ledger field requires no migration,
+claims delivery. A proof carried from v2 through v3 remains usable only when both historical digests are recomputed as
+equivalent for the current complete prescription, with the same saved approval. Missing or mismatched proof fails closed.
+The internal assessment's `compatibleApprovalDigests` is never persisted or projected. This optional private ledger field requires no migration,
 remains under the user subtree and is excluded from owner-visible status and MCP reads. Other adapters and the public
 confirmation/proposal contract are unchanged.
 
-Already-started uncertain v2 attempts reconstruct the original v2 JSON and verify its immutable operation digest before
-comparing full owned remote content. After acceptance recovery, normal reconciliation applies v3 to the same retained
+Already-started uncertain v2/v3/v4 attempts reconstruct their original JSON and verify the immutable operation digest before
+comparing full owned remote content. After acceptance recovery, normal reconciliation applies v5 to the same retained
 ID. Unknown digests, mismatched content and non-authoritative absence stay uncertain and never authorize another POST.
 The v2 golden fixture deliberately freezes old field titles/order, text adaptation, strength instructions and absence
-of generated readings/notifications/completion screen. Fresh delivery never uses the recovery-only serializer.
+of generated readings/notifications/completion screen. Separate v3 running/strength golden fixtures freeze the live-reading
+layout and absence of averaging/automatic laps. Frozen v4 running/cycling/swimming fixtures preserve the
+Training 01 screens, averaging and boundary placement; v4 strength remains byte-equivalent to the v3 strength
+fixture. Unchanged remote payloads need no redundant PUT solely to advance the mapping digest. Fresh delivery never uses a recovery-only serializer.
+
+Suunto file readback has been observed to add `notification.type: "default"` to submitted notifications (#784).
+The transport compares the full owned Guide against its digest-verified prescription, permitting only that exact
+added marker on matching FieldsSteps, including native repeat children and the final screen, when the expected
+notification has no type. It does not discard arbitrary response fields or normalize identity, text, targets,
+transitions, averaging windows, lap commands, dates or repeat counts. Other/malformed types and extra keys still
+mismatch. Comparison is non-mutating: outgoing v2–v6 JSON, mapping digests and immutable journals stay frozen.
+This lets lost create/update acknowledgements recover the retained identity and makes unchanged execution a no-op;
+unknown acceptance, missing/duplicate copies and authority failures still cannot authorize another create. The
+marker is private readback metadata, never persisted in authored recipes or projected through MCP. Fixtures enrich
+file GETs by default; lifecycle tests cover lost responses, rescheduling, duplicate dispatch and strict mismatch cases.
 
 Existing `[TrainingDelivery]` Suunto acceptance, recovered-acceptance, stale-suppression, failure and checkpoint-failure
-events include two transient allowlisted labels: `guideMappingVersion` (`suunto-guides-v3`, `suunto-guides-v2`, `unknown`,
+events include two transient allowlisted labels: `guideMappingVersion` (`suunto-guides-v6`, `suunto-guides-v5`, `suunto-guides-v4`, `suunto-guides-v3`, `suunto-guides-v2`, `unknown`,
 or `not_applicable` for removal) and `deliveryPhase` (`execute` or `recover`). The version is proved by recomputing the
 immutable upsert operation's exact payload digest, including strength details, rather than copying the current adapter's
 version onto a legacy attempt. An unrecognized digest or classification failure yields `unknown` and cannot alter
 delivery/recovery. Classification runs once per claimed operation without credentials or HTTP; the phase switches to
 `execute` if recovery resumes a safe request. Other providers' existing events are unchanged.
 For rollout triage, combine `jsonPayload.message="[TrainingDelivery]"`, `jsonPayload.provider="suunto"` and
-`jsonPayload.event="failure"` with `jsonPayload.guideMappingVersion="suunto-guides-v3"` for v3 failures, or
-`jsonPayload.guideMappingVersion="suunto-guides-v2"` and `jsonPayload.deliveryPhase="recover"` for legacy recovery.
+`jsonPayload.event="failure"` with `jsonPayload.guideMappingVersion="suunto-guides-v6"` for current failures, or
+the exact `suunto-guides-v2`/`suunto-guides-v3`/`suunto-guides-v4` label and `jsonPayload.deliveryPhase="recover"` for legacy recovery.
 Checkpoint failures use `jsonPayload.event="checkpoint_failed"`. These labels are not stored in Firestore or exposed
 to the browser/MCP, and contain no UID, account/Guide/workout identity, digest, recipe, instruction, sensor reading,
 credential, provider body or raw error. They report serializer/recovery provenance, not app/watch receipt or completion.
 
-MCP impact: **no wire impact**. Live readings are watch-side fields, not activity metrics or authored recipe targets.
+MCP impact: **no wire impact**. Current/lap-average readings are watch-side fields, not new activity metrics or authored recipe targets.
 No tool, registered input/output, scope, consent, Assistant permission, provider action, bundled skill, Sports Lib class,
-endpoint or provider enablement changes. Regression tests exercise unchanged recipes, unlinked/linked completion and
+endpoint or provider enablement changes. Regression tests JSON-round-trip running/cycling/swimming recipes, target variants, Unicode instructions and
+non-default-unit canonical values through strict read/write validation; they exercise unchanged recipes, unlinked/linked completion and
 safe delivery reads and reject private Guide fields and diagnostic labels in strict projection/recipe shapes. Delivery remains cloud acceptance
-only, not evidence of watch readings, boundary alerts, completion or adherence. Recorded laps/totals are unchanged.
+only, not evidence of watch readings, boundary alerts, completion or adherence. New source-recorded lap boundaries may
+appear through the existing independently authorized activity-lap read, with its unchanged schema and bounds; planned
+totals, completion matching and authored recipe/MCP proposal semantics are unchanged.
 
-Local fixtures and isolated demo-emulator HTTP cover layout, create/update/reschedule, IDs, retry, digest-verified v2
+Local fixtures and isolated demo-emulator HTTP cover layout, all time/distance/manual predecessor combinations, repeat
+wrap boundaries (including 100 passes), unchanged v2/v3/v4 golden JSON, create/update/reschedule, IDs, retry, digest-verified v2/v3/v4
 recovery, consent withdrawal and past/completed protection. #784 stays open until separately approved account QA and
-watch evidence: running repeats, cycling power, strength rest/manual sets; update/readback and no duplicates; record
-watch model/firmware and check metrics, every boundary/final alert, muted settings and short-interval usability.
+watch evidence: running repeats, cycling average power/cadence/speed, swimming average pace/stroke rate,
+HR-target current-HR priority, missing/unsupported sensors and strength rest/manual sets; update/readback and no duplicates; record
+watch model/firmware and check each selected average resets at every automatic/manual/repeat boundary, recorded lap boundaries,
+an extra button press during a timed step, metrics, every boundary/final alert, muted settings and short-interval usability.
 Any failure remains tracked there. Production QA artifact cleanup needs separate approval identifying exact records.
 
-Mapping `suunto-guides-v3` retains v2's conversion of common typographic dashes, curly quotes, ellipses and non-breaking spaces only in
+Mapping `suunto-guides-v5` retains v2's conversion of common typographic dashes, curly quotes, ellipses and non-breaking spaces only in
 outgoing watch text. Its default watch subtitle is derived from the title, word-shortened with an ASCII ellipsis to
 fit 23 code points. Those cosmetic adaptations require no per-workout approval; QS titles/recipes and the app-only
 description remain unchanged. Explicit subtitle truncation, title/instruction loss and remaining unsupported watch
@@ -2115,10 +2411,92 @@ retained-ID readback, expected title/type/duration/date, live Plan and associati
 positive adoption, never absence. Larger, partial, unstable, duplicate or empty inventories require attention without
 another POST. A pre-existing Plan found without local receipts also requires Workout discovery, not a blind create.
 An uncertain PUT resumes against owned retained IDs; missing resources never authorize replacement POSTs. A lost
-DELETE acknowledgement remains ambiguous and cannot trigger speculative Plan cleanup.
+DELETE acknowledgement remains ambiguous until fresh, guarded removal readback can establish a safe outcome; the
+404 from the DELETE itself never acknowledges that write or authorizes speculative Plan cleanup.
 If recovery positively identifies a copy that is now past or provider-completed, retain that protective evidence and
 retire the superseded attempt without another write or a false delivery-success claim. The normal public status then
 becomes Past or Completed; a lost response must not leave such a protected copy stuck in an uncertainty retry loop.
+
+Removal-only already-absent convergence independently reads the exact retained Plan and Workout IDs, including when
+the Plan is missing. Missing copies require the current credential's `/v1/user` ID to match its bound account; a
+missing Plan also requires an empty exact `external_id` lookup or the matching owned `deleted=true` tombstone.
+This is a bounded app-owned catalog check,
+not an account-history scan. A retained pair must have its prior confirmed association; an incomplete upload receipt
+cannot substitute for that proof. Auth, access, quota, network, malformed or contradictory responses remain failures.
+
+- Both retained copies absent: checkpoint `artifact=null` with private `removalOutcome="already_absent"`, without any
+  provider DELETE, and finish through normal worker acceptance. Clear the active artifact, attempt, lease and retry
+  state and remove its delivery job; preserve immutable attempts/acceptances and consistent safe status/verification projections.
+- Plan present / Workout absent: validate the owned Plan and retained pair/account, checkpoint the observed missing
+  Workout, then remove only the remaining Plan through the existing write journal.
+- Plan absent / Workout present: independently check the Workout's ID/token, summary, date and live association.
+  A surviving copy without a readable owned associated Plan remains unresolved with a fixed diagnostic, not deleted
+  using only its historical association. Completed, unknown-completion, manually moved or protected past copies remain safe.
+- Both present: existing Workout-then-Plan DELETE order and accepted-resource checkpoints are unchanged.
+
+Existing REMOVE attempts with `progress=null`, interrupted partial checkpoints, and lost DELETE acknowledgements
+use the same scoped readback. Unknown upload journals cannot become removal success. A read-only absence checkpoint
+must still own a live lease and current account/connection epoch and generation at the persistence transaction,
+including tombstone and plan-lock checks. Stale observations are discarded, not treated as late provider writes that
+could quarantine a newer copy/lease/queue. Recovery may record the old REMOVE outcome while a newer Send is pending,
+but never deletes or overwrites the newer copy or consent. Failed persistence emits `checkpoint_failed`, not durable
+success; a retry can converge through the retained journal. Final success is local cleanup satisfaction, not a receipt
+for the earlier external deletion, watch disappearance or recorded-activity removal.
+Protective completion/date GET readback during REMOVE follows the same lease and current-authority fences instead
+of the late-write acknowledgement path. It updates only the exact retained identity and cannot clear concurrently
+learned completion; a stale observation cannot quarantine another worker or delete its delivery job. Actual DELETE
+receipts still use the existing explicit step/state journal and late-acceptance protection.
+
+Wahoo can retain a removed library Plan as `deleted=true` in exact lookup. An acknowledged withdrawal atomically
+reserves the next private `wahooPlanGeneration` in the delivery ledger. A later consented Send, Resume, plan
+reactivation or horizon re-entry uses that generation's destination/workout-bound Plan external ID; ordinary edits,
+reschedules, retries and reconnect recovery keep the same generation. The dated Workout's completion token stays
+stable, but its old copy must have been withdrawn before another is created. This is not an undelete request or an
+API POST-idempotency assumption. A lost new-create response still requires the existing positive adoption proof.
+FIT completion validates the exact accepted Plan incarnation as well as the stable token and account; old Plan
+references cannot complete a replacement occurrence.
+Legacy missing operation reservations mean generation zero only. Renewed artifacts must match an explicit
+reservation, and final REMOVE acceptance rechecks that reservation against the ledger even after its artifact
+became null; a missing or conflicting reservation cannot reset or advance the next Plan identity.
+An explicitly malformed ledger reservation, including null, is rejected before claiming a new attempt or
+calling the provider; it is never defaulted into a legacy incarnation.
+
+Legacy ledgers without a generation can recover it from a compact owner-scoped read of the latest 25 attempt records.
+Only the most recent prior operation can qualify: an accepted, finished REMOVE with a null final artifact and an
+original confirmed pair belonging to this exact delivery, account and workout. Unknown journals, partial/uncertain
+operations, conflicting/tied history, changed identities and quarantined attempts cannot qualify. An existing legacy
+Send is retired only when its null progress and null artifact prove that no provider write started; the replacement
+attempt and generation are reserved in the same deletion/authority-fenced claim transaction. Attempts are preserved,
+not rewritten or deleted. An already blocked legacy Send needs the existing explicit Retry after deployment.
+
+Removal also accepts a matching owned `deleted=true` Plan as a tombstone only after independently checking the dated
+Workout, current account and exact catalog. A surviving or completed Workout remains protected/unresolved; deleting
+a Plan does not establish Workout absence. A lost Plan DELETE response can therefore converge without another
+DELETE, then reserve the next generation exactly once. Normal inspection and automatic missing-copy repair remain
+unchanged. An upsert encountering a tombstone without withdrawal proof becomes Needs attention immediately, with a
+safe explanation and no repeated automatic retries or speculative POSTs. Completed recordings and their links are
+never removed or reset by Stop/Send.
+
+MCP impact of Plan incarnation handling: no new public field, action, scope, consent, approval bypass, client refresh
+or plugin change. Existing Send/Stop previews and idempotent apply use the same server command; status reads expose
+only existing Delivered/Removed/Needs attention outcomes, and completion reads retain their linked/unlinked contract.
+Strict negative fixtures reject generation fields, while API/FIT completion and demo worker fixtures cover renewed
+delivery. Generation and withdrawal receipts remain private server state under the existing Rules boundary.
+
+Verification: Wahoo transport/HTTP unit fixtures cover account/catalog refusals, partial states, protected copies,
+legacy journals, unchanged upsert/inspection policy, and lost-response recovery. The registered delivery emulator
+group reproduces delivered + linked completion → external provider removal → recoverable source deletion → existing
+event-deletion cleanup → already-absent reconciliation, including an existing null REMOVE journal, concurrent workers,
+checkpoint failures and authority/lease/new-Send races. All records/providers are synthetic on loopback demo Firestore;
+these tests do not retry or remediate a production record. Live convergence still requires separately approved Functions
+deployment followed by read-only confirmation of that record's ledger, attempt, queue and projections.
+
+MCP impact review: no new tool, schema, consent, permission, mutation kind, plugin artifact or client refresh. Existing
+`get_training_sync_status` exposes ordinary `removed`/no-copy results for available workouts; existing completion reads
+show unlinked state once the matching event is deleted. Deleted-source references remain unavailable under the current
+MCP contract rather than silently gaining history access. Strict fixtures reject private absence outcomes, journals,
+account readback and HTTP evidence. The existing deletion preview/apply still confirms only the QS mutation and queued
+best-effort cleanup. Help's current Stop, completed-copy and best-effort deletion explanations remain accurate.
 
 New/reconnected OAuth requests retain existing scopes and add `plans_read plans_write`; existing credentials are not
 assumed to have those grants. Missing Training permissions expose targeted reconnect copy/action without breaking
@@ -2232,7 +2610,7 @@ unchanged Schedule is reused without a POST. Before creating a replacement, a po
 same retained Workout is adopted under its new Schedule ID; multiple matches remain inconclusive and cannot create
 another copy. Changed dates/owners/associations require attention. Evidence-binding changes clear confirmed absence
 before a new observation chain begins. A missing Workout is
-non-authoritative, remains `unknown`, does not reduce the copy to a confirmed missing state and cannot trigger recreation.
+non-authoritative, remains `unknown`, does not reduce the copy to a confirmed missing state and cannot trigger automatic recreation.
 An owner-account #769 probe found both retained Workout and Schedule IDs returning 404, with a separate same-account QS
 Workout returning 200 and no matching date-list association. A Schedule POST against that missing Workout was rejected
 with 404 and created no artifact. This proves the exact retained pair was not readable in that probe; it does not prove
@@ -2242,14 +2620,36 @@ automatic Workout replacement, require provider-supported, same-owner not-found 
 permission/account errors; two unchanged observations at least 15 minutes apart under the same binding; no surviving
 or reappearing association; and bounded recovery for an uncertain root Workout POST that cannot duplicate provider
 records. Account-side create/update/delete proof must establish that full lifecycle. Until then, the check remains
-inconclusive, retains the prior Last sent timestamp, and never starts another Workout POST. The compact workout row
-reads the bounded current verification projection so a later inconclusive check no longer appears simply as Synced;
-plan totals and MCP sync status continue to describe accepted delivery, not a fresh live cloud inventory.
-The replacement-workout path is not enabled in production. #769 closed with this explicit limit: the provider evidence
-does not establish safe automatic Workout replacement, so missing-Workout checks remain inconclusive. Repairs reuse
-the operation journal and
+inconclusive and retains the prior Last sent timestamp. A complete negative observation is now retained privately as
+`observedMissingKeys`, separately from authoritative `missing`/`missingKeys`. A missing Workout makes the safe delivery
+projection `needs_attention` and not synced, even with its earlier acceptance and retained IDs. The compact row and
+details say **Not found in Garmin** rather than conflating a 404 with a transport/permission failure. Last sent remains
+historical; plan totals and existing MCP sync reads count this as `needs_attention`, not a current synced workout.
+
+#769 is reopened for explicit owner-reviewed recovery. **Create replacement Garmin copy** is an app-only workout
+action, not Check, Retry, ordinary Send, or automatic repair. The server offers a preview only after a complete,
+current, same-binding inspection found both retained Workout and Schedule absent. The inspection is at most 24 hours
+old, with a finite whole-millisecond timestamp and exactly the two expected artifact keys; malformed private
+evidence cannot offer replacement. A changed prescription/revision, account/connection/epoch, consent, active lease/attempt, plan lock, Pro loss,
+past date or completion rejects review/apply. A surviving Schedule remains unsupported for manual root replacement
+until its provider lifecycle is proved; fixture support does not enable that unproved state. The preview warns that
+404 is not definitive deletion evidence and a duplicate is possible if an old copy reappears. Its exact digest must
+be confirmed; the command changes neither the authored recipe nor other providers and preserves mapping approval.
+Idempotent mutation receipts prevent replay; the worker independently reinspects both IDs before creating one new
+pair. A fully reappearing pair is reused without POST, but an explicitly reviewed current prescription or reschedule
+is applied through retained-ID updates before its digest is accepted. An unchanged pair is a no-op and does not advance
+Last sent; automatic Schedule-only repair still does not overwrite provider-side recipe edits. Partial reappearance, unknown/conflicting reads and permission
+failures stop for attention. The original IDs remain in immutable private attempt evidence. Uncertain root POST
+acceptance is never cleared by Retry, edits or a second replacement request. An accepted retained replacement ID can
+continue without repeating POST; this never claims watch receipt or links a completed activity by similarity.
+If an ordinary edit of a previously accepted Garmin pair fails during readback before any write-start journal,
+QS retires only that provably unstarted attempt and queues a fresh inspection. This keeps Check and explicit replacement
+review usable after an edit to a missing copy. Started, legacy and partially accepted attempts remain journaled and
+cannot take this path; no inspection or ordinary Retry authorizes a new root POST.
+The explicit flow requires separately approved Functions/frontend release and authorized account-side proof before
+#769 is complete; automatic missing-Workout repair stays disabled. Repairs reuse the operation journal and
 stable QS identity; unknown replacement-POST acceptance remains blocked, including Retry. Stop, pause, transfers and
-deletion supersede repair. Pro expiry pauses it; past/provider-confirmed completed workouts remain protected. Successful
+deletion supersede repair. Pro expiry pauses it; past/provider-confirmed completed workouts remain protected. Automatic
 repair cycles are limited to two per delivery per rolling day, then deferred until capacity returns. The production
 policy version change invalidates older evidence so it must be observed under the artifact-specific rules. No new
 webhook endpoint is introduced.
@@ -2280,10 +2680,13 @@ and device availability are separate. Unsupported verification reads **Sent · r
 or verified presence. Checking/restoring/deferred/inconclusive states remain concise, with thin global scrollbars,
 surface-free details, keyboard access and sign-out guards. Provider-delivery restrictions are unchanged.
 
-MCP impact: none. `get_training_sync_status` already consumes the sanitized delivery projection, where confirmed missing
-artifacts stop counting as synced and restoration remains an existing non-success delivery outcome. This change adds no
-tool, scope, field, provider ID, live check, write authority or provider payload to MCP; registered schemas, Assistant
-routing and bundled plugin guidance remain unchanged.
+MCP read impact: `get_training_sync_status` consumes the sanitized delivery projection; confirmed missing artifacts
+and observed missing Garmin Workouts no longer count as synced. Regression tests cover retained prior acceptance,
+`needs_attention`, zero synced count and private-evidence exclusion. No registered schema, scope, field or plugin
+metadata changes. The app-only `replace` action is explicitly rejected by registered v1 proposals; it must not widen
+Assistant/MCP authority via the shared app enum. The additive approval-gated MCP/Assistant replacement flow is tracked
+in #801 (real #583 subissue in Project 2), not silently deferred or routed through Send/Retry. Existing MCP reads need
+no new provider HTTP and never expose observed keys, review binding, journals or old/new provider IDs.
 
 Diagnostics use `[TrainingVerification]` with allowlisted event/provider/category/coverage/latency fields and
 `[TrainingDelivery]` acceptance/recovery events. Example Cloud Logging filters:
@@ -2933,11 +3336,15 @@ semantic level-two heading because it is a Dashboard section. When the visible s
 training analysis` eyebrow remains above the title and a Dashboard-style `Data through <weekday, UTC date>` subtitle
 appears below it. The subtitle uses the validated `training_summary` snapshot's `asOfDayMs`; it
 represents the actual derived-data cutoff, never the browser clock. While any snapshot that backs a visible Training
-surface is missing, queued, processing, building, or stale, the projected status context replaces that eyebrow instead
-of inserting a banner into the analytical content. A stale snapshot says that any available last completed values
-remain visible while the replacement finishes. A failed visible snapshot takes precedence,
-uses the same line, and adds a Material Retry action that force-requests the complete Training metric scope. When the
-visible scope is healthy, the normal eyebrow returns. The status scope follows the selected destination: Overview
+surface is missing, queued, processing, building, or stale, an icon-only Material disclosure beside the title shows a
+spinning sync icon. The eyebrow and validated data cutoff remain visible. The 48 px title-action slot stays reserved
+when healthy to avoid a status-driven height change. The icon has a status-specific accessible label and tooltip;
+screen readers receive the full status through a live region. Activating it expands a surface-free explanation below
+the header using `aria-expanded`, `aria-controls`, and a hidden content region, with one selection haptic. Reduced motion
+disables the rotation. A stale snapshot explains that available last completed values remain visible while the replacement
+finishes. A failed visible snapshot takes precedence, uses a static warning icon, and adds a Material Retry action that
+force-requests the complete Training metric scope. Completion removes the icon and closes the explanation; account
+changes also reset disclosure state without haptics. The status scope follows the selected destination: Overview
 evaluates global surfaces, a sport evaluates only its summary/build and declared
 specialist capabilities, and Other power activities evaluates rolling power systems. The optional imported recovery
 snapshot participates only while its active `Recovery left` estimate is visible on Overview, so missing, failed, or

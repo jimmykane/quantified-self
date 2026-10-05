@@ -1,4 +1,3 @@
-import { createHash } from 'node:crypto';
 import { wahooDurationSeconds, wahooWorkoutSportProfileV1 } from '../../../../../shared/wahoo-workout-sports';
 import type { ScheduledWorkoutV1 } from '../../../../../shared/training-plans';
 import type { StrengthWorkoutDetailsV1 } from '../../../../../shared/strength-workout';
@@ -6,14 +5,12 @@ import { trainingDeliveryLocalDate } from '../../../../../shared/training-provid
 import { assessTrainingDeliveryMapping, wahooWorkoutMapping } from '../mapping';
 import { hashTrainingScheduleRequestPayload } from '../../persistence';
 import { TrainingDeliveryTransportError, type DeliveryAssessment } from '../contracts';
+import { wahooIdentities } from './identity';
+export { wahooIdentities } from './identity';
 
 export const WAHOO_MAPPING_VERSION = 'wahoo-plans-v4';
 export { wahooDurationSeconds };
 export const WAHOO_DURATION_ISSUE = 'Wahoo delivery requires time-based steps throughout. QS does not estimate the required duration from distance, work, repetitions or manual transitions.';
-export function wahooIdentities(destination: string, workoutId: string) {
-  const hash = createHash('sha256').update(JSON.stringify([destination, workoutId])).digest('base64url');
-  return { externalId: `qs-plan-${hash}`, workoutToken: `qs-workout-${hash}` };
-}
 /** Date-only QS scheduling is represented at local noon (not UTC midnight).
  * day_code is optional and deliberately omitted: the public epoch statement and
  * examples disagree. Post-release observation must keep checking the resulting
@@ -46,7 +43,7 @@ export function assessWahooDelivery(workout: ScheduledWorkoutV1, destination: st
     mappingVersion: WAHOO_MAPPING_VERSION, digest: hashTrainingScheduleRequestPayload({ version: WAHOO_MAPPING_VERSION, digest: assessment.digest, duration }) };
 }
 export function wahooPlanBody(workout: ScheduledWorkoutV1, destination: string, create: boolean,
-  strength?: StrengthWorkoutDetailsV1 | null): string {
+  strength?: StrengthWorkoutDetailsV1 | null, generation = 0): string {
   // Wahoo's published plan.json schema marks description optional, but its
   // production Plan validator rejects files without it. Scheduled workouts do
   // not have a separate description: interval sports use the bounded title,
@@ -54,7 +51,7 @@ export function wahooPlanBody(workout: ScheduledWorkoutV1, destination: string, 
   const plan = wahooWorkoutMapping(workout, strength).artifact;
   return new URLSearchParams({ 'plan[file]': `data:application/json;base64,${Buffer.from(JSON.stringify(plan)).toString('base64')}`,
     'plan[filename]': 'plan.json', 'plan[provider_updated_at]': new Date(workout.updatedAtMs).toISOString(),
-    ...(create ? { 'plan[external_id]': wahooIdentities(destination, workout.id).externalId } : {}) }).toString();
+    ...(create ? { 'plan[external_id]': wahooIdentities(destination, workout.id, generation).externalId } : {}) }).toString();
 }
 export function wahooWorkoutFields(workout: ScheduledWorkoutV1, destination: string, zone: string, planId: string) {
   const seconds = wahooDurationSeconds(workout.structure);

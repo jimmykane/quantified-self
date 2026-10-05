@@ -21,6 +21,53 @@ describe('help.content', () => {
       'exact timed-duration requirement', 'separate **workout prescription analysis**', 'client tool-catalog refresh'])
       expect(copy).toContain(phrase);
   });
+
+  it('explains dated follow-ups, fresh evidence and confirmed Training outcomes without promising cross-chat memory', () => {
+    const copy = HELP_SECTIONS.find(section => section.id === 'ai-insights')!.content;
+    for (const phrase of ['message dates and confirmed Training changes', 'Freshly checked records take precedence',
+      'not memory across separate chats', 'requested date clear', "not a prediction of tomorrow's sleep",
+      'without changing your actual schedule', '**Training review result**', 'accepted sync request is not proof of delivery']) {
+      expect(copy).toContain(phrase);
+    }
+  });
+  it('explains accessible interval moves, independent copies, parent boundaries and saving', () => {
+    const copy = HELP_SECTIONS.find(section => section.id === 'training-plans')!.content;
+    for (const phrase of ['**drag handle**', '**Move up**', '**Move down**', '**Duplicate step**',
+      '**Duplicate repeat block**', 'move only within that repeat', 'immediately after the original',
+      'Plans, Standalone and the Workout library', 'saved only when you save the editor',
+      'counting repeat blocks and their steps', 'Strength exercises use their separate editor']) expect(copy).toContain(phrase);
+  });
+  it('explains explicit duration parts and colon pace without changing canonical units or provider capabilities', () => {
+    const copy = HELP_SECTIONS.find(section => section.id === 'training-plans')!.content;
+    for (const phrase of ['**Hours**, **Minutes**, and **Seconds**', '0 / 1 / 15', '0 / 1 / 30',
+      'including inside repeats and in the Workout library', '**m:ss**', '**4:30**',
+      'decimal minutes such as 4.5 still work', 'provider-specific delivery limits still apply']) expect(copy).toContain(phrase);
+  });
+  it('explains Wahoo re-sending after confirmed withdrawal without promising blind recreation or recording deletion', () => {
+    const copy = HELP_SECTIONS.find(section => section.id === 'training-plans')!.content;
+    expect(copy).toContain('After Wahoo confirms withdrawal of an upcoming copy');
+    expect(copy).toContain('without reusing its deleted provider Plan');
+    expect(copy).toContain('QS shows **Needs attention**');
+    expect(copy).toContain('never deletes completed recordings or resets their activity links');
+  });
+  it('explains the Assistant deletion review and distinguishes authored deletion from service cleanup', () => {
+    const copy = HELP_SECTIONS.find(section => section.id === 'ai-insights')!.content;
+    for (const phrase of ['with both Training change choices on', '**Delete plan**', '**Delete workout**',
+      'Workout deletion is recoverable', 'choose whether its workouts stay standalone or are deleted',
+      'Older-copy cleanup is optional', 'does not require Pro',
+      'not removal from a connected app or watch', 'Completed activities stay untouched']) {
+      expect(copy).toContain(phrase);
+    }
+  });
+  it('explains the explicit MCP older-copy cleanup choice without promising provider or watch removal', () => {
+    const copy = HELP_SECTIONS.find(section => section.id === 'training-plans')!.content;
+    expect(copy).toContain('also remove older, uncompleted service copies');
+    expect(copy).toContain('Both Training change permissions are required');
+    expect(copy).toContain('deletion preview before approval');
+    expect(copy).toContain('released and discovered');
+    expect(copy).toContain('never deletes recorded activities');
+    expect(copy).not.toContain('MCP plan and workout deletion do not select this option');
+  });
   it('explains uncertain MCP apply replies without authorizing replacement workouts or approval bypass', () => {
     const copy = HELP_SECTIONS.find(section => section.id === 'training-plans')!.content;
     expect(copy).toContain('it may already have applied');
@@ -33,10 +80,14 @@ describe('help.content', () => {
   });
   it('explains bounded Suunto live screens, native sensors/units and watch-controlled boundary alerts', () => {
     const content = HELP_SECTIONS.find(section => section.id === 'training-plans')!.content;
-    for (const phrase of ['## Suunto Guide screens and interval alerts', '**pace and HR**', '**power, HR and speed**',
+    for (const phrase of ['## Suunto Guide screens and interval alerts', '**block-average pace and current HR**', '**block-average power, current HR, cadence and speed**', '**block-average pace, swimming stroke rate and current HR**',
+      '**Avg pwr**', '**Avg strk**', 'Both targets', 'Untargeted steps stay untargeted', 'rowing strokes are not inferred', 'HR stays current',
       'at most five fields', 'Long manual instructions stay text-only', 'Suunto renders native watch units',
       'not guaranteed to match the 500 m split', 'missing readings are unavailable, not zero',
-      'do not create recorded laps or lap averages', 'including rest/recovery and every repeat', '**Guide complete**',
+      "Suunto's current manual-lap average", 'not instant readings or the whole-workout average',
+      'create recorded laps at automatic step boundaries', 'does not create a duplicate',
+      'creates no opening lap', 'resets the displayed average early', 'including HR-only strength Guides',
+      'do not prove target adherence', 'including rest/recovery and every repeat', '**Guide complete**',
       'without adding workout time or stopping activity recording', '**your watch settings**',
       'no promised pre-end countdown beeps or out-of-target alerts', 'approximately 20 seconds',
       'prioritize your notes or exercise/set instructions', '**For 01m 30s**', '**Recover for 30s**', '**Rest for 02m 00s**',
@@ -77,6 +128,19 @@ describe('help.content', () => {
     expect(content).toContain('no separate approval for each workout or edit');
     expect(content).toContain('Additional mapping losses, such as shortened exercise instructions, still need review');
     expect(content).toContain('Sent Guide status does not prove app/watch receipt or workout completion');
+  });
+
+  it('explains lap-button endings and their provider and completion boundaries', () => {
+    const content = HELP_SECTIONS.find(section => section.id === 'training-plans')!.content;
+    expect(content).toContain('**End by -> Lap button press**');
+    expect(content).toContain('warmup, work, recovery, cooldown, rest, or other steps');
+    expect(content).toContain('including steps inside fixed repeats');
+    expect(content).toContain('no time or distance limit');
+    expect(content).toContain('not a timer plus a button condition');
+    expect(content).toContain('Garmin and Suunto support these manual transitions');
+    expect(content).toContain('COROS has the mapping but delivery remains **Coming soon**');
+    expect(content).toContain('Wahoo cannot receive lap-ended steps');
+    expect(content).toContain('does not stop the recording or mark the QS workout completed');
   });
   it('keeps COROS strength implementation distinct from public Send or delivery proof', () => {
     const content = HELP_SECTIONS.find(section => section.id === 'training-plans')!.content;
@@ -651,7 +715,7 @@ describe('help.content', () => {
     expect(calendarSection?.content).toContain('same sleep-stage breakdown used in Health');
     expect(calendarSection?.content).toContain('full-width **Calendar** section');
     expect(calendarSection?.content).toContain('**Today** card opens a compact month calendar in a bottom sheet');
-    expect(calendarSection?.content).toContain('Dashboard and Training headers also link to the full [Calendar](/calendar)');
+    expect(calendarSection?.content).toContain('Open the full [Calendar](/calendar) from the app navigation or the dashboard Calendar section');
     expect(calendarSection?.content).toContain('without changing their saved settings');
     expect(calendarSection?.content).toContain('out of suggestions until you add it manually');
     expect(calendarSection?.content).toContain('show overlapping activity-group circles');
@@ -810,9 +874,9 @@ describe('help.content', () => {
     expect(trainingSection?.content).toContain('last 7 completed UTC Training days');
     expect(trainingSection?.content).toContain('exact number of completed parent activities');
     expect(trainingSection?.content).toContain('four consecutive 7-day blocks');
-    expect(trainingSection?.content).toContain('compact line above the **Training** title');
-    expect(trainingSection?.content).toContain('content does not shift');
-    expect(trainingSection?.content).toContain('failed update adds **Retry**');
+    expect(trainingSection?.content).toContain('**sync icon** beside the **Training** title');
+    expect(trainingSection?.content).toContain('Tap it to expand the update details');
+    expect(trainingSection?.content).toContain('warning icon and **Retry**');
     expect(trainingSection?.content).toContain('**Largest sport load change**');
     expect(trainingSection?.content).toContain('do not mean that the workspace is filtered');
     expect(trainingSection?.content).toContain('neutral higher/lower language');
@@ -926,7 +990,7 @@ describe('help.content', () => {
     expect(gettingStartedSection?.content).toContain('**Training** is your fixed workspace');
     expect(gettingStartedSection?.content).toContain('[Training analysis guide](/help#training-analysis)');
     expect(gettingStartedSection?.content).toContain('[Training Analysis overview](/features/training-analysis)');
-    expect(gettingStartedSection?.content).toContain('**Feedback** action to email support');
+    expect(gettingStartedSection?.content).toContain('**Email Training Feedback** action');
     expect(gettingStartedSection?.content).not.toContain('**Training (Beta)**');
     expect(gettingStartedSection?.links).toContainEqual({
       label: 'Training analysis guide',
@@ -1091,10 +1155,20 @@ describe('help.content', () => {
     expect(gettingStartedSection?.content).toContain('[FIT and GPX Route Files](/features/fit-gpx-route-files)');
     expect(gettingStartedSection?.content).toContain('[File Comparison Tool](/tools/compare)');
     expect(gettingStartedSection?.content).toContain('[Tools -> Compare](/tools/compare/saved)');
+    expect(gettingStartedSection?.content).toContain('**Distinct line patterns** is in **Settings -> Charts**, below **Line Width**');
+    expect(gettingStartedSection?.content).toContain('It is off by default');
+    expect(gettingStartedSection?.content).toContain('Primary and overlay lines keep their normal stroke widths');
+    expect(gettingStartedSection?.content).toContain('Use **Save Changes** to apply this account preference');
+    expect(gettingStartedSection?.content).toContain('in **Chart options** on merged and benchmark event details');
+    expect(gettingStartedSection?.content).toContain('changes in event details save immediately and use the same preference');
     expect(gettingStartedSection?.content).toContain('sortable, filterable, paginated table with device, activity type, and review tag filters, selected-row bulk delete, distance, ascent, descent, visible benchmark pairs, GNSS/heart-rate/altitude benchmark error metrics colored by low/moderate/high error, clickable draft metric cells that open the benchmark flow, quick description notes, and custom reviewer tags');
     expect(gettingStartedSection?.content).toContain('Benchmark reports show an **At a Glance** reviewer summary');
     expect(gettingStartedSection?.content).toContain('report share menu can copy that summary');
     expect(gettingStartedSection?.content).toContain('account-level device color preferences from saved file comparisons');
+    expect(gettingStartedSection?.content).toContain('**Use Okabe–Ito preset**');
+    expect(gettingStartedSection?.content).toContain('**Standard** is selected by default and also offers dark gray and tan');
+    expect(gettingStartedSection?.content).toContain('solid, dashed, dotted, and dash-dot patterns');
+    expect(gettingStartedSection?.content).toContain('black becomes neutral gray in dark mode');
     expect(gettingStartedSection?.content).toContain('keyed by the base device name rather than firmware/software version');
     expect(gettingStartedSection?.content).toContain('activity toggles, event tables, benchmark dialogs, charts, and maps');
     expect(gettingStartedSection?.content).toContain('uploaded FIT/TCX/GPX/JSON/SML activity files');
@@ -1423,6 +1497,8 @@ describe('help.content', () => {
     expect(serviceConnectionsSection?.content).toContain('asks COROS whether that account is still bound');
     expect(serviceConnectionsSection?.content).toContain('related automatic activity and saved-route settings turn off');
     expect(serviceConnectionsSection?.content).toContain('temporary check failure shows **Retry**');
+    expect(serviceConnectionsSection?.content).toContain('Connection checks pause while you connect or disconnect');
+    expect(serviceConnectionsSection?.content).toContain('Results from an earlier connection do not replace the current connection status');
     expect(serviceConnectionsSection?.content).toContain('recover a missing or expired COROS FIT download link');
     expect(serviceConnectionsSection?.content).toContain('mode, submode, device, source timezones, training-plan workout ID, and multisport component');
     expect(serviceConnectionsSection?.content).toContain('cycling-family routes use bike');
@@ -1588,6 +1664,9 @@ describe('help.content', () => {
     const serviceConnectionsSection = HELP_SECTIONS.find(section => section.id === 'service-connections');
     expect(serviceConnectionsSection?.content).toContain('## Wahoo');
     expect(serviceConnectionsSection?.content).toContain('Workouts without a FIT file are skipped');
+    expect(serviceConnectionsSection?.content).toContain('Services shows **Import already running** and prevents another request');
+    expect(serviceConnectionsSection?.content).toContain('Closing the dialog does not cancel the import');
+    expect(serviceConnectionsSection?.content).toContain('queued activities continue processing in the background');
     expect(serviceConnectionsSection?.content).toContain('does **not** delete activities already imported');
     expect(serviceConnectionsSection?.content).toContain('send a FIT activity file directly to Wahoo');
     expect(serviceConnectionsSection?.content).toContain('checks that same upload instead of sending the FIT again');
@@ -1755,4 +1834,18 @@ it('explains separately approved activity description access and event semantics
   expect(content).toContain('Activities in the same event share that description');
   expect(content).toContain('refresh cannot add it');
   expect(content).toContain('without truncation');
+
+
 });
+
+  it('explains early Lap separately from indefinite Lap and gates unsupported delivery', () => {
+    const content = JSON.stringify(HELP_SECTIONS);
+    expect(content).toContain('Allow early Lap');
+    expect(content).toContain('no numeric limit');
+    expect(content).toContain('Suunto delivery supports the early-Lap option');
+    expect(content).toContain('Garmin, COROS and Wahoo');
+    expect(content).toContain('explicitly review enabling or removing');
+    expect(content).toContain('With **Allow early Lap** off, pressing Lap');
+    expect(content).toContain('With it enabled, Lap ends that step early');
+    expect(content).toContain('generated time/distance alerts also mention Lap');
+  });

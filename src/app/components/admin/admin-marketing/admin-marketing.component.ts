@@ -41,6 +41,7 @@ export class AdminMarketingComponent implements OnInit, OnDestroy {
   private readonly sanitizer = inject(DomSanitizer);
   private previewTimer: ReturnType<typeof setTimeout> | null = null;
   private previewSequence = 0;
+  private refreshSequence = 0;
   private destroyed = false;
   list: MarketingCampaignListResponse | null = null;
   selected: MarketingCampaignView | null = null;
@@ -84,7 +85,9 @@ export class AdminMarketingComponent implements OnInit, OnDestroy {
     frame.style.height = `${Number.isFinite(height) ? Math.max(360, height + 2) : 650}px`;
   }
 
-  get canEdit(): boolean { return !this.selected || this.selected.status === 'draft'; }
+  get canEdit(): boolean { return this.canEditAudience || this.selected?.status === 'paused'; }
+  get canEditAudience(): boolean { return !this.selected || this.selected.status === 'draft'; }
+  get canResume(): boolean { return this.selected?.status === 'paused' && !this.dirty && this.selected.lastTestState === 'SUCCESS'; }
   get canRetryPreparation(): boolean {
     if (this.selected?.status !== 'preparing') return false;
     const started = Date.parse(this.selected.updatedAt);
@@ -96,19 +99,29 @@ export class AdminMarketingComponent implements OnInit, OnDestroy {
   get exclusions() { return this.selected?.exclusions; }
 
   async refresh(): Promise<void> {
+    const sequence = ++this.refreshSequence;
     try {
       const result = await this.functions.call<undefined, MarketingCampaignListResponse>('listMarketingCampaigns');
+      if (this.destroyed || sequence !== this.refreshSequence) return;
       this.list = result.data;
       this.error = '';
       this.cap = result.data.dailyCap;
       if (this.selected) {
         const fresh = result.data.campaigns.find(item => item.id === this.selected?.id);
-        if (fresh) this.selected = fresh;
+        if (fresh) this.updateSelected(fresh);
       }
-    } catch (error) { this.error = this.message(error); }
+    } catch (error) {
+      if (!this.destroyed && sequence === this.refreshSequence) this.error = this.message(error);
+    }
   }
   choose(campaign: MarketingCampaignView, feedback = true): void {
     if (feedback && this.selected?.id !== campaign.id) this.haptics.selection();
+    const recipient = feedback ? campaign.lastTestTo || '' : this.testTo || campaign.lastTestTo || '';
+    this.loadCampaign(campaign, recipient);
+    this.error = '';
+    this.notice = '';
+  }
+  private loadCampaign(campaign: MarketingCampaignView, testRecipient: string): void {
     this.selected = campaign;
     this.draft = { name: campaign.name, subject: campaign.subject, content: campaign.content,
       cta: campaign.cta, filters: { ...campaign.filters, plans: [...campaign.filters.plans] } };
@@ -116,11 +129,18 @@ export class AdminMarketingComponent implements OnInit, OnDestroy {
     this.showCta = !!campaign.cta;
     this.ctaLabel = campaign.cta?.label || '';
     this.ctaUrl = campaign.cta?.url || '';
-    this.testTo = feedback ? campaign.lastTestTo || '' : this.testTo || campaign.lastTestTo || '';
+    this.testTo = testRecipient;
     this.resetPreview();
     this.schedulePreview();
-    this.error = '';
-    this.notice = '';
+  }
+  private updateSelected(campaign: MarketingCampaignView): void {
+    const savedDraft = { name: campaign.name, subject: campaign.subject, content: campaign.content,
+      cta: campaign.cta, filters: campaign.filters };
+    if (!this.dirty && JSON.stringify(this.collectDraft()) !== JSON.stringify(savedDraft)) {
+      this.loadCampaign(campaign, this.testTo);
+    } else {
+      this.selected = campaign;
+    }
   }
   newDraft(): void {
     if (this.selected || this.draft.name || this.draft.subject) this.haptics.selection();
@@ -136,7 +156,7 @@ export class AdminMarketingComponent implements OnInit, OnDestroy {
     this.notice = '';
   }
   togglePlan(plan: MarketingPlan, checked: boolean): void {
-    if (this.draft.filters.plans.includes(plan) === checked) return;
+    if (this.busy || !this.canEditAudience || this.draft.filters.plans.includes(plan) === checked) return;
     this.haptics.selection();
     this.draft.filters.plans = checked
       ? [...new Set([...this.draft.filters.plans, plan])]
@@ -145,11 +165,12 @@ export class AdminMarketingComponent implements OnInit, OnDestroy {
   }
   markDirty(): void { this.dirty = true; this.schedulePreview(); }
   onContentChange(content: MarketingDocument): void {
+    if (this.busy || !this.canEdit) return;
     this.draft.content = content;
     this.markDirty();
   }
   setCta(enabled: boolean): void {
-    if (this.showCta === enabled) return;
+    if (this.busy || !this.canEdit || this.showCta === enabled) return;
     this.showCta = enabled;
     this.haptics.selection();
     this.markDirty();
@@ -167,15 +188,20 @@ export class AdminMarketingComponent implements OnInit, OnDestroy {
   }
   private async run<T>(label: string, request: () => Promise<T>, success: (result: T) => void): Promise<void> {
     if (this.busy) return;
+    // A read started before this mutation must not restore its older saved
+    // message or test result while the mutation is pending or after it completes.
+    this.refreshSequence++;
     this.busy = label; this.error = ''; this.notice = '';
     try { success(await request()); await this.refresh(); this.haptics.success(); }
     catch (error) { this.error = this.message(error); this.haptics.error(); }
     finally { this.busy = ''; }
   }
   async save(): Promise<void> {
+    if (!this.canEdit) return;
     await this.run('Saving', async () => (await this.functions.call('saveMarketingCampaign',
       { id: this.selected?.id || null, draft: this.collectDraft() })).data as MarketingCampaignView,
-      campaign => { this.choose(campaign, false); this.notice = 'Draft saved.'; });
+      campaign => { this.choose(campaign, false); this.notice = campaign.status === 'paused'
+        ? 'Changes saved. Send a new test before resuming.' : 'Draft saved.'; });
   }
   private clearPreviewTimer(): void {
     if (this.previewTimer) clearTimeout(this.previewTimer);
@@ -240,16 +266,17 @@ export class AdminMarketingComponent implements OnInit, OnDestroy {
       filters: { plans: draft.filters.plans.length ? draft.filters.plans : this.plans,
         signupFrom: null, signupTo: null } };
     await this.run('Sending test', async () => (await this.functions.call('sendMarketingTest',
-      saved ? { id: this.selected!.id, to } : { id: null, to, draft: previewDraft })).data,
+      saved ? { id: this.selected!.id, to, draft } : { id: null, to, draft: previewDraft })).data,
       () => { this.notice = saved
         ? `Test submitted to ${to}. Refresh until SMTP acceptance appears.`
         : `Test submitted to ${to}. Check that inbox for delivery.`; });
   }
   async change(action: 'start' | 'pause' | 'resume' | 'retry'): Promise<void> {
-    if (!this.selected) return;
+    if (!this.selected || (action === 'resume' && !this.canResume)) return;
+    const expectedDraft = action === 'start' || action === 'resume' ? this.collectDraft() : null;
     await this.run(action, async () => (await this.functions.call('changeMarketingCampaignStatus',
-      { id: this.selected!.id, action })).data as MarketingCampaignView,
-      campaign => { this.selected = campaign; this.notice = `Campaign ${action} request completed.`; });
+      { id: this.selected!.id, action, ...(expectedDraft ? { draft: expectedDraft } : {}) })).data as MarketingCampaignView,
+      campaign => { this.updateSelected(campaign); this.notice = `Campaign ${action} request completed.`; });
   }
   async clone(): Promise<void> { await this.campaignAction('cloneMarketingCampaign', 'Cloning', 'Campaign copied as a new draft.'); }
   private async campaignAction(name: 'prepareMarketingCampaign' | 'cloneMarketingCampaign', label: string, message: string): Promise<void> {

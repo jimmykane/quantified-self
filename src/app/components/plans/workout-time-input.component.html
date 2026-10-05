@@ -1,0 +1,34 @@
+@if (mode() === 'duration') {
+  <fieldset class="duration-fields" [disabled]="disabled()" [attr.aria-label]="label()">
+    <mat-form-field subscriptSizing="dynamic">
+      <mat-label>Hours</mat-label>
+      <input matInput type="number" min="0" step="1" inputmode="numeric"
+        [attr.aria-label]="label() + ' hours'" data-duration-part="hours" [disabled]="disabled()"
+        [ngModel]="parts().hours" (ngModelChange)="changePart('hours', $event)" [errorStateMatcher]="errorMatcher"
+        [aria-describedby]="error() ? errorId : ''">
+    </mat-form-field>
+    <mat-form-field subscriptSizing="dynamic">
+      <mat-label>Minutes</mat-label>
+      <input matInput type="number" min="0" max="59" step="1" inputmode="numeric"
+        [attr.aria-label]="label() + ' minutes'" data-duration-part="minutes" [disabled]="disabled()"
+        [ngModel]="parts().minutes" (ngModelChange)="changePart('minutes', $event)" [errorStateMatcher]="errorMatcher"
+        [aria-describedby]="error() ? errorId : ''">
+    </mat-form-field>
+    <mat-form-field subscriptSizing="dynamic">
+      <mat-label>Seconds</mat-label>
+      <input matInput type="number" min="0" max="60" step="any" inputmode="decimal"
+        [attr.aria-label]="label() + ' seconds'" data-duration-part="seconds" [disabled]="disabled()"
+        [ngModel]="parts().seconds" (ngModelChange)="changePart('seconds', $event)" [errorStateMatcher]="errorMatcher"
+        [aria-describedby]="error() ? errorId : ''">
+    </mat-form-field>
+    @if (error(); as message) { <p class="duration-error" [id]="errorId" role="alert">{{ message }}</p> }
+  </fieldset>
+} @else {
+  <mat-form-field subscriptSizing="dynamic">
+    <mat-label>{{ label() }}</mat-label>
+    <input matInput type="text" [attr.aria-label]="label()" placeholder="4:30" [disabled]="disabled()"
+      [ngModel]="paceText()" (ngModelChange)="changePace($event)" [errorStateMatcher]="errorMatcher">
+    @if (error(); as message) { <mat-error>{{ message }}</mat-error> }
+    @else { <mat-hint>m:ss, e.g. 4:30. Decimal minutes also work.</mat-hint> }
+  </mat-form-field>
+}

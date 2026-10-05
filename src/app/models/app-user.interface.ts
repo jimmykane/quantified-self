@@ -214,6 +214,7 @@ export interface AppChartSettingsInterface extends Omit<UserChartSettingsInterfa
     syncChartHoverToMap?: boolean;
     eventChartOverlayDataTypeByPrimary?: Record<string, string>;
     colorAltitudeByGrade?: boolean;
+    useDistinctComparisonLinePatterns?: boolean;
     showSwimLengths: boolean;
 }
 
@@ -253,6 +254,8 @@ export interface AppDeviceDisplaySettingsInterface {
 }
 
 export interface AppUserServiceMetaInterface extends UserServiceMetaInterface, ServiceConnectionMetaFields {
+    /** Server-owned Wahoo history scan expiry; a UI hint, not provider authority. */
+    historyImportLeaseExpiresAt?: number;
     didLastRouteImport?: AppDateValue;
     queuedRoutesFromLastRouteImportCount?: number;
     skippedRoutesFromLastRouteImportCount?: number;

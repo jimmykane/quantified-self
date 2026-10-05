@@ -4,6 +4,7 @@ import { Timestamp } from 'firebase-admin/firestore';
 import {
   ASSISTANT_CONVERSATION_VERSION,
   ASSISTANT_MAX_STORED_MESSAGES,
+  ASSISTANT_MAX_EVIDENCE_ITEMS,
   isAssistantLocationAccess,
   isValidAssistantRequestId,
   type AssistantConversation,
@@ -11,6 +12,7 @@ import {
   type AssistantMessage,
   type AssistantContentProposalPreview,
   type AssistantTrainingProposalPreview,
+  type ApplyAssistantTrainingProposalResponse,
 } from '../../../shared/assistant.types';
 import { isAssistantContentProposal, validateAssistantConversation } from '../../../shared/assistant-response.contract';
 import { getUserDeletionGuardStateInTransaction } from '../shared/user-deletion-guard';
@@ -167,7 +169,8 @@ export interface AssistantConversationStore {
     pendingTrainingProposal?: AssistantTrainingProposalPreview,
     pendingContentProposal?: AssistantContentProposalPreview,
   ) => Promise<CompletedAssistantTurn>;
-  clearTrainingProposal: (uid: string, conversationId: string, proposalRef: string) => Promise<void>;
+  clearTrainingProposal: (uid: string, conversationId: string, proposalRef: string,
+    result?: ApplyAssistantTrainingProposalResponse) => Promise<void>;
   clearContentProposal: (uid: string, conversationId: string, proposalRef: string) => Promise<void>;
   releaseTurn: (uid: string, begunTurn: BegunAssistantTurn) => Promise<void>;
   resetConversation: (
@@ -878,7 +881,7 @@ export function createAssistantConversationStore(
       });
     },
 
-    clearTrainingProposal: async (uid, conversationId, proposalRef) => {
+    clearTrainingProposal: async (uid, conversationId, proposalRef, result) => {
       const db = dependencies.db();
       const conversationRef = getConversationRef(db, uid);
       await db.runTransaction(async transaction => {
@@ -892,7 +895,44 @@ export function createAssistantConversationStore(
         if (conversation.pendingTrainingProposal?.proposalRef !== proposalRef) {
           throw new AssistantConversationStoreError('conversation_changed', 'The Training proposal is no longer current.');
         }
-        transaction.update(conversationRef, { pendingTrainingProposal: null });
+        let messages = conversation.messages;
+        if (result) {
+          let latestAssistant = messages.length - 1;
+          while (latestAssistant >= 0 && messages[latestAssistant].role !== 'assistant') latestAssistant -= 1;
+          if (latestAssistant >= 0) {
+            const counts = ['applied', 'already_applied', 'failed'].map(status =>
+              `${result.changes.filter(change => change.status === status).length} ${status.replace('_', ' ')}`);
+            const confirmation = {
+              toolName: 'assistant_training_confirmation',
+              title: 'Training review result',
+              summary: result.status === 'dismissed' ? 'Dismissed. Nothing was applied.'
+                : `Confirmed Training change: ${result.status.replace('_', ' ')}.`,
+              facts: [
+                { label: 'Recorded at', value: new Date(nowMs).toISOString() },
+                { label: 'Reviewed request', value: conversation.pendingTrainingProposal.summary.slice(0, 160) },
+                { label: 'Authored changes', value: counts.join('; ') },
+                { label: 'Service requests', value: (['garmin', 'coros', 'wahoo', 'suunto'] as const).flatMap(provider => {
+                  const requests = result.providers.filter(request => request.provider === provider);
+                  if (!requests.length) return [];
+                  const statuses = new Set(requests.map(request => request.status));
+                  return [`${provider}: ${statuses.size === 1 ? requests[0].status : 'mixed'} (${requests.length})`];
+                }).join('; ') || 'None' },
+                { label: 'Delivery', value: 'Accepted service requests are delivery intent, not confirmed provider delivery or app/watch receipt.' },
+              ],
+              links: [],
+            };
+            messages = messages.map((message, index) => index !== latestAssistant ? message : {
+              ...message, evidence: [...(message.evidence ?? []).slice(0, ASSISTANT_MAX_EVIDENCE_ITEMS - 1), confirmation],
+            });
+            while (!validateAssistantConversation(toPublicConversation({ ...conversation, messages })).ok && messages.length > 2) {
+              messages = messages.slice(2);
+            }
+            if (!validateAssistantConversation(toPublicConversation({ ...conversation, messages })).ok) {
+              throw new AssistantConversationStoreError('turn_lost', 'The Training review result could not be stored safely.');
+            }
+          }
+        }
+        transaction.update(conversationRef, { pendingTrainingProposal: null, messages });
       });
     },
 

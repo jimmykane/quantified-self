@@ -2,12 +2,14 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import JSZip from 'jszip';
 import { ActivityTypes } from '@sports-alliance/sports-lib';
 import type { ScheduledWorkoutV1 } from '../../../../../shared/training-plans';
+import type { WorkoutStepV1 } from '../../../../../shared/planned-workout';
 import type { DeliveryCheckpoint, DeliveryOperation } from '../contracts';
 import { SuuntoGuideTransport } from './transport';
 import { SuuntoGuideHttpError } from './http';
 import { SuuntoHttpFixture } from '../test-support/suunto-http-fixture';
 import { packageGuide, readGuideArchive } from './archive';
-import { assessSuuntoGuideV2ForRecovery, guideExternalId, guideMapping } from './mapping';
+import type { SuuntoGuideFieldsStepV1, SuuntoGuideJsonV1 } from '../../providers/suunto-guide.serializer';
+import { assessSuuntoGuideV2ForRecovery, assessSuuntoGuideV3ForRecovery, assessSuuntoGuideV4ForRecovery, guideExternalId, guideMapping } from './mapping';
 
 describe('Suunto Guide lifecycle — synthetic transport', () => {
   const now = Date.parse('2026-12-29T12:00:00Z'); const owner = 'Quantified Self';
@@ -30,10 +32,14 @@ describe('Suunto Guide lifecycle — synthetic transport', () => {
   });
   it('classifies only exact journal digests without changing the operation or making HTTP calls', () => {
     const before = structuredClone(op);
-    expect(transport.diagnosticMappingVersion(op)).toBe('suunto-guides-v3');
+    expect(transport.diagnosticMappingVersion(op)).toBe('suunto-guides-v6');
     expect(op).toEqual(before);
     op.digest = assessSuuntoGuideV2ForRecovery(op.workout!, op.destinationKey, op.timeZone, owner).digest;
     expect(transport.diagnosticMappingVersion(op)).toBe('suunto-guides-v2');
+    op.digest = assessSuuntoGuideV3ForRecovery(op.workout!, op.destinationKey, op.timeZone, owner).digest;
+    expect(transport.diagnosticMappingVersion(op)).toBe('suunto-guides-v3');
+    op.digest = assessSuuntoGuideV4ForRecovery(op.workout!, op.destinationKey, op.timeZone, owner).digest;
+    expect(transport.diagnosticMappingVersion(op)).toBe('suunto-guides-v4');
     op.digest = 'unknown-version';
     expect(transport.diagnosticMappingVersion(op)).toBeNull();
     expect(transport.diagnosticMappingVersion({ ...op, kind: 'remove', workout: null })).toBeNull();
@@ -106,6 +112,70 @@ describe('Suunto Guide lifecycle — synthetic transport', () => {
     expect(await recover()).toMatchObject({ kind: 'accepted' });
     expect(server.calls.filter(req => req.method === 'POST')).toHaveLength(1);
   });
+  it.each([false, true])('does not rewrite unchanged content when default notification enrichment is %s', async enriched => {
+    server.addDefaultNotificationType = enriched;
+    const original = (await execute())!;
+    const retained = server.guides.get(original.ids.guide)!; retained.pinned = true;
+    const sent = structuredClone(retained.guide);
+    next(); const digest = op.digest;
+    expect((await execute())!.ids).toEqual(original.ids);
+    expect(op.digest).toBe(digest);
+    expect(retained).toEqual({ guide: sent, pinned: true });
+    expect(server.calls.filter(req => req.method === 'POST')).toHaveLength(1);
+    expect(server.calls.filter(req => req.method === 'PUT')).toHaveLength(0);
+    expect(checkpoint).toHaveBeenLastCalledWith(expect.objectContaining({ ids: original.ids }),
+      { version: 1, step: 'finished', state: 'accepted' });
+  });
+  it('recovers enriched repeat children and the final screen without mutating the sent prescription', async () => {
+    next({ structure: { ...op.workout!.structure, nodes: [{ kind: 'repeat', id: 'repeat', count: 2,
+      steps: [op.workout!.structure.nodes[0] as WorkoutStepV1] }] } });
+    const sent = guideMapping(op.workout!, op.destinationKey, owner).artifact;
+    const digest = op.digest;
+    server.afterHandle = async req => { if (req.method === 'POST') { server.afterHandle = null; throw new SuuntoGuideHttpError('uncertain', false); } };
+    await expect(execute()).rejects.toMatchObject({ kind: 'uncertain' });
+    const result = await recover(); expect(result).toMatchObject({ kind: 'accepted' });
+    expect(op.digest).toBe(digest);
+    expect([...server.guides.values()][0].guide).toEqual(sent);
+    expect(server.calls.filter(req => req.method === 'POST')).toHaveLength(1);
+    expect(server.calls.filter(req => req.method === 'PUT')).toHaveLength(0);
+    expect(await recover()).toEqual(result);
+  });
+  it.each(['alarm', 'Default', 'default ', null, false, 0, {}, []])(
+    'does not ignore a different or malformed notification type: %j', async type => {
+      const artifact = (await execute())!;
+      const step = server.guides.get(artifact.ids.guide)!.guide.steps[0] as SuuntoGuideFieldsStepV1;
+      Object.assign(step.notification!, { type });
+      op = { ...op, artifact: null, progress: { version: 1, step: 'create', state: 'started' } };
+      expect(await recover()).toEqual({ kind: 'uncertain' });
+      await expect(execute()).rejects.toMatchObject({ kind: 'uncertain' });
+      expect(server.calls.filter(req => req.method === 'POST')).toHaveLength(1);
+      expect(server.calls.filter(req => req.method === 'PUT')).toHaveLength(0);
+    });
+  it.each<{ name: string; change: (guide: SuuntoGuideJsonV1) => void }>([
+    { name: 'notification text', change: guide => { (guide.steps[0] as SuuntoGuideFieldsStepV1).notification!.text = 'Changed'; } },
+    { name: 'notification title', change: guide => { (guide.steps[0] as SuuntoGuideFieldsStepV1).notification!.title = 'Changed'; } },
+    { name: 'unknown notification field', change: guide => { Object.assign((guide.steps[0] as SuuntoGuideFieldsStepV1).notification!, { sound: 'default' }); } },
+    { name: 'missing notification', change: guide => { delete (guide.steps[0] as SuuntoGuideFieldsStepV1).notification; } },
+    { name: 'countdown', change: guide => { Object.assign((guide.steps[0] as SuuntoGuideFieldsStepV1).fields[1], { value: 99 }); } },
+    { name: 'average window', change: guide => { Object.assign((guide.steps[0] as SuuntoGuideFieldsStepV1).fields[0], { window: 'workout' }); } },
+    { name: 'lap boundary', change: guide => { (guide.steps[0] as SuuntoGuideFieldsStepV1).createManualLap = true; } },
+    { name: 'default marker outside notification', change: guide => { Object.assign((guide.steps[0] as SuuntoGuideFieldsStepV1).fields[0], { notification: { type: 'default' } }); } },
+    { name: 'unknown root field', change: guide => { Object.assign(guide, { notification: { type: 'default' } }); } },
+  ])('keeps enriched content with changed $name uncertain without another create', async ({ change }) => {
+    const artifact = (await execute())!;
+    change(server.guides.get(artifact.ids.guide)!.guide);
+    op = { ...op, artifact: null, progress: { version: 1, step: 'create', state: 'started' } };
+    expect(await recover()).toEqual({ kind: 'uncertain' });
+    await expect(execute()).rejects.toMatchObject({ kind: 'uncertain' });
+    expect(server.calls.filter(req => req.method === 'POST')).toHaveLength(1);
+  });
+  it('does not recognize enriched content when the journal digest is unknown', async () => {
+    await execute(); op = { ...op, digest: 'unknown-digest', artifact: null,
+      progress: { version: 1, step: 'create', state: 'started' } };
+    const count = server.calls.length;
+    expect(await recover()).toEqual({ kind: 'uncertain' });
+    expect(server.calls).toHaveLength(count);
+  });
   it('recovers accepted create after checkpoint persistence fails', async () => {
     checkpoint = async (_artifact, progress) => { if (progress?.state === 'accepted') throw new Error('persistence'); };
     await expect(execute()).rejects.toThrow('persistence'); checkpoint = vi.fn();
@@ -154,6 +224,17 @@ describe('Suunto Guide lifecycle — synthetic transport', () => {
     server.afterHandle = async req => { if (req.method === 'PUT') { server.afterHandle = null; throw new SuuntoGuideHttpError('uncertain', false); } };
     await expect(execute()).rejects.toThrow(); expect(await recover()).toMatchObject({ kind: 'accepted' });
     expect(server.calls.filter(req => req.method === 'POST')).toHaveLength(1);
+    expect(server.calls.filter(req => req.method === 'PUT')).toHaveLength(1);
+  });
+  it('recovers an enriched reschedule readback against the new date without another write', async () => {
+    const original = (await execute())!; server.guides.get(original.ids.guide)!.pinned = true;
+    next({ localDate: '2027-01-02', title: 'Rescheduled' });
+    server.afterHandle = async req => { if (req.method === 'PUT') { server.afterHandle = null; throw new SuuntoGuideHttpError('uncertain', false); } };
+    await expect(execute()).rejects.toMatchObject({ kind: 'uncertain' });
+    expect(await recover()).toEqual({ kind: 'accepted', artifact: { ...original, localDate: '2027-01-02' } });
+    expect(server.guides.get(original.ids.guide)!.pinned).toBe(true);
+    expect(server.calls.filter(req => req.method === 'POST')).toHaveLength(1);
+    expect(server.calls.filter(req => req.method === 'PUT')).toHaveLength(1);
   });
   it('does not claim a lost DELETE completed from an ambiguous 404', async () => {
     await execute(); op = { ...op, kind: 'remove', workout: null, progress: null };

@@ -54,6 +54,8 @@ export class ServicesCorosComponent extends ServicesAbstractComponentDirective {
 
   private suuntoConnectionSubscription: Subscription | null = null;
   private lastCOROSBindingStateCheckKey: string | null = null;
+  private corosBindingStateCheckRevision = 0;
+  private disconnectedCOROSConnectionKey: string | null = null;
   private corosBindingStateRetryTimer: ReturnType<typeof globalThis.setTimeout> | null = null;
   private corosBindingStateAutomaticStaleRetryKey: string | null = null;
   private corosBindingStateAutomaticStaleRetryTimer: ReturnType<typeof globalThis.setTimeout> | null = null;
@@ -110,14 +112,40 @@ export class ServicesCorosComponent extends ServicesAbstractComponentDirective {
     void this.checkCOROSBindingStateIfEligible();
   }
 
+  override async deauthorizeService(event: Event | null): Promise<boolean> {
+    const connectionKey = this.getCOROSConnectionKey();
+    const disconnect = super.deauthorizeService(event);
+    // The base method locks synchronously before awaiting confirmation.
+    if (this.isDisconnecting) void this.checkCOROSBindingStateIfEligible();
+    const didDisconnect = await disconnect;
+    if (this.isDestroyed) return didDisconnect;
+    if (didDisconnect) {
+      this.disconnectedCOROSConnectionKey = connectionKey;
+      this.connectionStateChanged.emit(this.isConnectedToService());
+    }
+    // Cancellation or a newer connection can outlive a discarded check without
+    // another metadata update. The disconnected generation remains ineligible.
+    void this.checkCOROSBindingStateIfEligible();
+    return didDisconnect;
+  }
+
   public retryCOROSBindingStateCheck(): void {
-    if (this.isCOROSBindingStateRetryDisabled || this.isCheckingCOROSBindingState) return;
+    if (this.isCOROSBindingStateRetryDisabled || this.isCheckingCOROSBindingState
+      || this.getCOROSBindingStateCheckKey() === null) return;
+    this.hapticsService.selection();
     this.corosBindingStateCheckError = false;
     void this.checkCOROSBindingStateIfEligible(true);
   }
 
   get hasStoredCOROSConnection(): boolean {
-    return !this.isDisconnectPending && (!!this.activeCorosServiceToken || this.forceConnected);
+    // Disconnect clears the lifecycle state before the token projection trigger
+    // removes the account summaries. Those older summaries cannot revive it.
+    const connectionWasCleared = !!this.serviceMeta?.connectionStateGeneration
+      && !this.serviceMeta.connectionState;
+    const disconnectedLocally = this.disconnectedCOROSConnectionKey !== null
+      && this.disconnectedCOROSConnectionKey === this.getCOROSConnectionKey();
+    return !this.isDisconnectPending && !connectionWasCleared && !disconnectedLocally
+      && (!!this.activeCorosServiceToken || this.forceConnected);
   }
 
   isConnectedToService = () => !this.isReconnectRequired && this.hasStoredCOROSConnection;
@@ -202,24 +230,44 @@ export class ServicesCorosComponent extends ServicesAbstractComponentDirective {
     return providerUserId || undefined;
   }
 
-  private async checkCOROSBindingStateIfEligible(force = false): Promise<void> {
-    if (this.isDestroyed) return;
+  private getCOROSConnectionKey(): string | null {
     const userID = `${this.user?.uid || ''}`.trim();
     const providerUserId = `${this.getCOROSProviderUserId(this.activeCorosServiceToken) || ''}`.trim();
+    return userID && providerUserId
+      ? JSON.stringify([userID, providerUserId, this.serviceMeta?.connectionStateGeneration || null])
+      : null;
+  }
+
+  private getCOROSBindingStateCheckKey(): string | null {
+    const connectionKey = this.getCOROSConnectionKey();
+    const params = this.route.snapshot.queryParamMap;
+    // Metadata emits before the base subscription locks the OAuth callback.
+    const hasPendingAuthorization = params.get('serviceName') === this.serviceName
+      && (!!params.get('connect') || (!!params.get('code') && !!params.get('state')));
     const isEligible = this.showConnectionSummary
-      && !!userID
-      && !!providerUserId
+      && connectionKey !== null
+      && this.hasStoredCOROSConnection
+      && !hasPendingAuthorization
+      && !this.isConnecting
+      && !this.isDisconnecting
       && !this.isReconnectRequired
       && !this.isDisconnectPending;
-    if (!isEligible) {
+    return isEligible ? connectionKey : null;
+  }
+
+  private async checkCOROSBindingStateIfEligible(force = false): Promise<void> {
+    if (this.isDestroyed) return;
+    const checkKey = this.getCOROSBindingStateCheckKey();
+    if (checkKey === null) {
+      this.corosBindingStateCheckRevision++;
       this.lastCOROSBindingStateCheckKey = null;
       this.isCheckingCOROSBindingState = false;
+      this.corosBindingStateCheckError = false;
       this.clearCOROSBindingStateRetryCooldown();
       this.clearCOROSBindingStateAutomaticStaleRetry();
       return;
     }
 
-    const checkKey = `${userID}:${providerUserId}`;
     if (this.corosBindingStateAutomaticStaleRetryKey !== null
       && this.corosBindingStateAutomaticStaleRetryKey !== checkKey) {
       this.clearCOROSBindingStateAutomaticStaleRetry();
@@ -228,13 +276,21 @@ export class ServicesCorosComponent extends ServicesAbstractComponentDirective {
       this.lastCOROSBindingStateCheckKey === checkKey
       || this.corosBindingStateAutomaticStaleRetryKey === checkKey
     )) return;
+    const checkRevision = ++this.corosBindingStateCheckRevision;
+    const isCurrentCheck = () => !this.isDestroyed
+      && this.corosBindingStateCheckRevision === checkRevision
+      && this.getCOROSBindingStateCheckKey() === checkKey;
     this.lastCOROSBindingStateCheckKey = checkKey;
     this.isCheckingCOROSBindingState = true;
     this.corosBindingStateCheckError = false;
     this.changeDetectorRef.markForCheck();
     try {
-      const result = await this.userService.checkCurrentUserCOROSBindingState(userID, providerUserId);
-      if (this.isDestroyed) return;
+      const result = await this.userService.checkCurrentUserCOROSBindingState(
+        `${this.user?.uid || ''}`.trim(),
+        `${this.getCOROSProviderUserId(this.activeCorosServiceToken) || ''}`.trim(),
+        this.serviceMeta?.connectionStateGeneration,
+      );
+      if (!isCurrentCheck()) return;
       if (this.lastCOROSBindingStateCheckKey === checkKey) {
         this.clearCOROSBindingStateRetryCooldown();
       }
@@ -245,7 +301,7 @@ export class ServicesCorosComponent extends ServicesAbstractComponentDirective {
         this.clearCOROSBindingStateAutomaticStaleRetry(checkKey);
       }
     } catch (error) {
-      if (this.isDestroyed) return;
+      if (!isCurrentCheck()) return;
       if (this.lastCOROSBindingStateCheckKey === checkKey) {
         this.corosBindingStateCheckError = true;
         this.setCOROSBindingStateRetryCooldown(this.getCOROSBindingStateRetryAt(error));
@@ -253,8 +309,10 @@ export class ServicesCorosComponent extends ServicesAbstractComponentDirective {
       }
       this.logger.error(error);
     } finally {
-      if (!this.isDestroyed
-        && (this.lastCOROSBindingStateCheckKey === checkKey || this.lastCOROSBindingStateCheckKey === null)) {
+      if (!this.isDestroyed && this.corosBindingStateCheckRevision === checkRevision) {
+        if (!isCurrentCheck() && this.lastCOROSBindingStateCheckKey === checkKey) {
+          this.lastCOROSBindingStateCheckKey = null;
+        }
         this.isCheckingCOROSBindingState = false;
         this.changeDetectorRef.markForCheck();
       }
@@ -274,9 +332,7 @@ export class ServicesCorosComponent extends ServicesAbstractComponentDirective {
       this.corosBindingStateAutomaticStaleRetryTimer = null;
       if (this.isDestroyed || this.corosBindingStateAutomaticStaleRetryKey !== checkKey) return;
 
-      const currentUserID = `${this.user?.uid || ''}`.trim();
-      const currentProviderUserId = `${this.getCOROSProviderUserId(this.activeCorosServiceToken) || ''}`.trim();
-      if (`${currentUserID}:${currentProviderUserId}` !== checkKey) {
+      if (this.getCOROSBindingStateCheckKey() !== checkKey) {
         this.corosBindingStateAutomaticStaleRetryKey = null;
         return;
       }

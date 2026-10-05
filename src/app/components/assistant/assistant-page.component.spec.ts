@@ -15,6 +15,7 @@ import { Auth } from 'app/firebase/auth';
 import { AppThemes } from '@sports-alliance/sports-lib';
 import type { AssistantChatResponse, AssistantContentProposalPreview, AssistantTrainingProposalPreview } from '@shared/assistant.types';
 import { ASSISTANT_PROMPT_EXAMPLES } from '@shared/assistant.prompts';
+import { formatAssistantCalendarDate, formatAssistantCalendarRange } from '../../helpers/assistant-message-format.helper';
 import { normalizeUserUnitSettings } from '@shared/unit-aware-display';
 import { AssistantQuotaService } from '../../services/assistant-quota.service';
 import { AppHapticsService } from '../../services/app.haptics.service';
@@ -186,6 +187,42 @@ describe('AssistantPageComponent', () => {
     fixture.detectChanges();
   });
 
+  it('formats assistant replies safely while retaining user messages and stored text', () => {
+    const assistantText = '**From your records**\n\n- Note ended on 2026-09-10.\n\n<img src="https://example.com/track" onerror="alert(1)">';
+    component.conversation.set({ ...chatResponse.conversation, messages: [
+      { ...chatResponse.conversation.messages[0], text: '**My text** 2026-09-10 <script>alert(1)</script>' },
+      { ...chatResponse.conversation.messages[1], text: assistantText },
+    ] });
+    fixture.detectChanges();
+    const reply = fixture.nativeElement.querySelector('.message-assistant') as HTMLElement;
+    const user = fixture.nativeElement.querySelector('.message-user') as HTMLElement;
+    expect(reply.querySelector('strong')?.textContent).toBe('From your records');
+    expect(reply.querySelector('li')?.textContent).toBe(`Note ended on ${formatAssistantCalendarDate('2026-09-10')}.`);
+    expect(reply.querySelector('img, script')).toBeNull();
+    expect(user.textContent).toContain('**My text** 2026-09-10 <script>alert(1)</script>');
+    expect(user.querySelector('strong, script')).toBeNull();
+    expect(component.conversation()?.messages[1].text).toBe(assistantText);
+    expect(hapticsService.selection).not.toHaveBeenCalled();
+  });
+
+  it('gives one haptic for an accepted Markdown link activation and none for body text', () => {
+    component.conversation.set({ ...chatResponse.conversation, messages: [
+      { ...chatResponse.conversation.messages[1], text: 'Your summary. [**Learn more**](https://example.com)' },
+    ] });
+    fixture.detectChanges();
+    const reply = fixture.nativeElement.querySelector('.assistant-message-body') as HTMLElement;
+    reply.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    expect(hapticsService.selection).not.toHaveBeenCalled();
+    // Stop native JSDOM navigation after the component's delegated click handler.
+    fixture.nativeElement.addEventListener('click', (event: MouseEvent) => event.preventDefault());
+    reply.querySelector('strong')!.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }));
+    expect(hapticsService.selection).toHaveBeenCalledTimes(1);
+    const prevented = new MouseEvent('click', { bubbles: true, cancelable: true });
+    prevented.preventDefault();
+    reply.querySelector('a')!.dispatchEvent(prevented);
+    expect(hapticsService.selection).toHaveBeenCalledTimes(1);
+  });
+
   it('invites an empty chat to ask one grounded training-history question', () => {
     const text = fixture.nativeElement.textContent as string;
 
@@ -300,6 +337,78 @@ describe('AssistantPageComponent', () => {
     expect(review.querySelectorAll('.training-proposal-actions button')).toHaveLength(2);
   });
 
+  it.each(['delete-workout', 'delete-plan'] as const)('reviews %s and its explicit cleanup choice, then displays the server outcome', async kind => {
+    const noun = kind === 'delete-plan' ? 'plan' : 'workout';
+    const summary = 'Also request removal of older, uncompleted service copies.';
+    const message = `The ${noun} was deleted. Service-copy cleanup was requested; removal is not yet confirmed.`;
+    component.conversation.set(chatResponse.conversation);
+    component.pendingTrainingProposal.set({ ...trainingProposal,
+      changes: [{ index: 0, kind, summary }], providerPreviews: [] });
+    assistantService.applyTrainingProposal.mockResolvedValueOnce({ status: 'applied', scheduleRevision: 2,
+      changes: [{ index: 0, kind, status: 'applied', message }], providers: [] });
+    fixture.detectChanges();
+    const review = fixture.nativeElement.querySelector('.training-proposal') as HTMLElement;
+    expect(review.querySelector('h2')!.textContent).toBe(`Review ${noun} deletion`);
+    expect(review.textContent).toContain(summary);
+    expect(review.textContent).toContain('not confirmed here');
+    expect(review.textContent).toContain('Completed activities stay untouched');
+    expect(review.textContent).not.toContain('Provider results are independent');
+    const buttons = review.querySelectorAll<HTMLButtonElement>('.training-proposal-actions button');
+    expect(Array.from(buttons).map(button => button.textContent?.trim())).toEqual([`Delete ${noun}`, 'Dismiss']);
+    expect(assistantService.applyTrainingProposal).not.toHaveBeenCalled();
+    await component.applyPendingTrainingProposal();
+    expect(assistantService.applyTrainingProposal).toHaveBeenCalledWith({
+      proposalRef: trainingProposal.proposalRef, permissionMode: 'combined',
+      conversationId: chatResponse.conversation.conversationId, confirm: true,
+    });
+    expect(component.trainingProposalResult()).toBe(message);
+    expect(component.trainingProposalResult()).not.toContain('updates or checks');
+    expect(hapticsService.success).toHaveBeenCalledOnce();
+    expect(component.applyingTrainingProposal()).toBe(false);
+  });
+
+  it('preserves a declined older-copy cleanup choice in a recoverable deletion review', async () => {
+    component.conversation.set(chatResponse.conversation);
+    component.pendingTrainingProposal.set({ ...trainingProposal, changes: [{ index: 0,
+      kind: 'delete-workout', summary: 'Delete “Run”. Eligible upcoming copies withdraw; older copies remain.' }],
+    providerPreviews: [] });
+    const message = 'The workout was moved to recoverable history. Older copies remain; removal of eligible upcoming copies is not yet confirmed.';
+    assistantService.applyTrainingProposal.mockResolvedValueOnce({ status: 'applied', scheduleRevision: 2,
+      changes: [{ index: 0, kind: 'delete-workout', status: 'applied', message }], providers: [] });
+    fixture.detectChanges();
+    expect(fixture.nativeElement.querySelector('.training-proposal').textContent).toContain('older copies remain');
+    await component.applyPendingTrainingProposal();
+    expect(component.trainingProposalResult()).toBe(message);
+  });
+
+  it('does not report a failed deletion as partially applied or give success feedback', async () => {
+    component.conversation.set(chatResponse.conversation);
+    component.pendingTrainingProposal.set({ ...trainingProposal,
+      changes: [{ index: 0, kind: 'delete-workout', summary: 'Delete the run.' }], providerPreviews: [] });
+    assistantService.applyTrainingProposal.mockResolvedValueOnce({ status: 'partially_applied', scheduleRevision: 1,
+      changes: [{ index: 0, kind: 'delete-workout', status: 'failed', message: 'The schedule changed. Read it again before deleting.' }], providers: [] });
+    await component.applyPendingTrainingProposal();
+    expect(component.trainingProposalResult()).toBe('The schedule changed. Read it again before deleting.');
+    expect(hapticsService.success).not.toHaveBeenCalled();
+    expect(hapticsService.error).toHaveBeenCalledOnce();
+  });
+
+  it('dismisses a deletion without applying it and does not confirm an empty deletion result', async () => {
+    component.conversation.set(chatResponse.conversation);
+    const proposal = { ...trainingProposal,
+      changes: [{ index: 0, kind: 'delete-workout', summary: 'Delete the run.' }], providerPreviews: [] };
+    component.pendingTrainingProposal.set(proposal);
+    await component.dismissPendingTrainingProposal();
+    expect(assistantService.applyTrainingProposal).toHaveBeenLastCalledWith(expect.objectContaining({ confirm: false }));
+    expect(component.trainingProposalResult()).toContain('Nothing was changed');
+    hapticsService.success.mockClear();
+    component.pendingTrainingProposal.set({ ...proposal, proposalRef: 'fresh-deletion-preview' });
+    await component.applyPendingTrainingProposal();
+    expect(component.trainingProposalResult()).toContain('No deletion result was returned');
+    expect(hapticsService.success).not.toHaveBeenCalled();
+    expect(hapticsService.error).toHaveBeenCalledOnce();
+  });
+
   it('reviews every saved-workout placement date without irrelevant provider-failure copy', async () => {
     component.conversation.set(chatResponse.conversation);
     component.pendingTrainingProposal.set({ ...trainingProposal, permissionMode: 'schedule',
@@ -377,7 +486,7 @@ describe('AssistantPageComponent', () => {
 
     const review = fixture.nativeElement.querySelector('.content-proposal') as HTMLElement;
     expect(review.textContent).toContain('Title: Recovery block');
-    expect(review.textContent).toContain('Dates: 2026-09-22 – 2026-09-28');
+    expect(review.textContent).toContain(`Dates: ${formatAssistantCalendarRange('2026-09-22', '2026-09-28')}`);
     expect(review.textContent).toContain('Category: Injury health');
     expect(review.textContent).toContain('Details: None');
     expect(review.textContent).toContain('Charts and calendar: Hidden');

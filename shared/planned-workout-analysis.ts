@@ -1,5 +1,6 @@
 import {
   WORKOUT_STEP_PURPOSES,
+  allowsEarlyLapV1,
   countWorkoutStructureNodesV1,
   parseWorkoutStructureV1,
   type WorkoutStepPurposeV1,
@@ -18,6 +19,8 @@ export type WorkoutStepDurationV1 =
 export interface WorkoutDurationRangeV1 { minimumSeconds: number; maximumSeconds: number }
 export interface WorkoutAnalysisSummaryV1 {
   executedSteps: number;
+  /** Numeric totals are prescribed limits; these executions can end sooner on Lap. */
+  earlyLapSteps: number;
   duration: {
     exactSubtotalSeconds: number;
     exactSteps: number;
@@ -49,6 +52,7 @@ export interface WorkoutStepAnalysisV1 {
   repeatId: string | null;
   multiplier: number;
   purpose: WorkoutStepPurposeV1;
+  allowEarlyLap: boolean;
   /** Values below describe one execution; summaries apply multiplier. */
   prescribedSeconds: number | null;
   prescribedMeters: number | null;
@@ -80,7 +84,7 @@ function safeCount(value: number): number {
   return value;
 }
 function emptySummary(): WorkoutAnalysisSummaryV1 {
-  return { executedSteps: 0, duration: { exactSubtotalSeconds: 0, exactSteps: 0,
+  return { executedSteps: 0, earlyLapSteps: 0, duration: { exactSubtotalSeconds: 0, exactSteps: 0,
     estimatedSubtotalRange: null, estimatedSteps: 0, unknownSteps: 0, coveredSubtotalRange: null,
     completeExactSeconds: null, completeRange: null, coverage: 'none' },
   distance: { exactSubtotalMeters: 0, exactSteps: 0, unknownSteps: 0, completeExactMeters: null, coverage: 'none' } };
@@ -133,6 +137,7 @@ function addRange(left: WorkoutDurationRangeV1 | null, right: WorkoutDurationRan
 function addStep(summary: WorkoutAnalysisSummaryV1, step: WorkoutStepAnalysisV1): void {
   const multiplier = step.multiplier;
   summary.executedSteps = safeCount(summary.executedSteps + multiplier);
+  if (step.allowEarlyLap) summary.earlyLapSteps = safeCount(summary.earlyLapSteps + multiplier);
   const duration = summary.duration;
   switch (step.duration.kind) {
     case 'exact':
@@ -164,6 +169,7 @@ export function analyzeWorkoutStructureV1(value: unknown): WorkoutAnalysisV1 {
     for (const step of node.kind === 'step' ? [node] : node.steps) {
       const result: WorkoutStepAnalysisV1 = { stepId: step.id, repeatId: node.kind === 'repeat' ? node.id : null,
         multiplier: node.kind === 'repeat' ? node.count : 1, purpose: step.purpose,
+        allowEarlyLap: allowsEarlyLapV1(step.ending),
         prescribedSeconds: step.ending.kind === 'time' ? step.ending.seconds : null,
         prescribedMeters: step.ending.kind === 'distance' ? step.ending.meters : null, duration: analyzeDuration(step) };
       analysis.steps.push(result);
@@ -180,6 +186,7 @@ export function analyzeWorkoutStructureV1(value: unknown): WorkoutAnalysisV1 {
 
 function addSummary(total: WorkoutAnalysisSummaryV1, next: WorkoutAnalysisSummaryV1): void {
   total.executedSteps = safeCount(total.executedSteps + next.executedSteps);
+  total.earlyLapSteps = safeCount(total.earlyLapSteps + next.earlyLapSteps);
   for (const field of ['exactSteps', 'estimatedSteps', 'unknownSteps'] as const)
     total.duration[field] = safeCount(total.duration[field] + next.duration[field]);
   total.duration.exactSubtotalSeconds = finite(total.duration.exactSubtotalSeconds + next.duration.exactSubtotalSeconds);

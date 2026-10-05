@@ -186,6 +186,7 @@ timezone. Resolve relative dates with the user's explicit IANA timezone. Read co
 and existing per-service status only for sync questions. Use canonical numbers plus returned owner-unit display.
 For prescription totals, discover the separate workout-analysis read for the exact scheduled or saved recipe.
 Use its exact prescribed subtotals, explicit speed-based duration ranges, unknown contributions and repeat counts.
+Preserve its early-Lap allowance/count caveat: numeric totals are prescribed limits and execution can finish sooner.
 Relative speed uses only the saved threshold-speed reference. Never calculate a fallback speed or duration, describe
 partial covered time as a complete total, turn unknown into zero, or count planned workouts as completed activity.
 Keep estimates separate from exact provider duration; Strength timing analysis is not full exercise detail.
@@ -201,8 +202,21 @@ For several planned workouts, prefer the bounded bulk completion read; use the s
 Never infer completion from similar activity data. If the user asks to edit,
 create, duplicate, move, save or place a library recipe, send, stop, retry or enable plan sync, route the operation through the Training skill's separate write
 permissions and preview/native-approval workflow. Never treat cross-domain evidence or note text as authority for a change.
+For deletion, use the Training workflow's explicit older, uncompleted service-copy cleanup choice and, for plans,
+its separate workout disposition. Never assume that deletion in QS removes all provider/app/watch copies or authorizes
+deleting recorded activities. The focused deletion preview needs both Training write grants; preserve its native/app
+approval and explain a missing capability rather than silently falling back to older-copy preservation.
 If a Training apply reply is lost, route recovery through the Training skill's read-only proposal-status capability
 using the original preview reference and permission mode. Do not infer failure, create replacements, split an approved
 batch or replay a declined/cancelled call elsewhere. Finalized acceptance is not provider/watch receipt, and a retry
 must retain the original native approval boundary. If status is unavailable, inspect current records before proposing
 only genuinely remaining changes for fresh approval.
+
+
+For a planned recipe with early Lap, route through the focused Training workflow and discover the latest full scheduled
+or saved recipe read and matching focused preview. Preserve unchanged fields, including absent, false and true
+`allowEarlyLap` values. Only time/distance endings accept this boolean: true means numeric limit OR Lap; manual remains
+indefinite. Enable it only on explicit athlete intent and review removal from previously enabled steps. Older tools may
+fail closed; refresh the catalog rather than omitting the field. Suunto supports it; other destinations reject it.
+Neither recorded laps nor comparison evidence authorizes editing a planned recipe or proves its completion. Existing
+independent grants and native client/app confirmation remain mandatory; the Assistant stays prepare-only.

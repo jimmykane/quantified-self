@@ -175,7 +175,16 @@
   min-width: 0;
 }
 
-.health-detail-window p { min-width: 0; }
+.health-detail-window p { flex: 1; min-width: 0; }
+
+// Transient saving/source reads must not change the space available to the charts.
+.health-view-progress {
+  align-items: center;
+  display: flex;
+  flex: 0 0 24px;
+  height: 24px;
+  justify-content: center;
+}
 
 .health-sources-button { flex: 0 0 auto; }
 

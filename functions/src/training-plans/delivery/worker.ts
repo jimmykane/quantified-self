@@ -1,6 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import * as logger from 'firebase-functions/logger';
 import { parseScheduledWorkoutV1 } from '../../../../shared/training-plans';
+import { trainingDeliveryLocalDate } from '../../../../shared/training-provider-delivery';
 import { getUserDeletionGuardStateInTransaction } from '../../shared/user-deletion-guard';
 import { getCloudTaskRetryBackoffSeconds, MAX_RETRY_COUNT } from '../../shared/queue-config';
 import { DELIVERY_LEDGER, DELIVERY_LEASE_MS, DELIVERY_QUEUE, TrainingDeliveryTransportError,
@@ -9,10 +10,11 @@ import { readDeliveryContext, writeDelivery } from './store';
 import { deliveryContentDigest, resolveDeliveryIntent } from './intent';
 import { stageTrainingDeliveryReconciliation } from './marker';
 import { inspectionBinding } from './verification-evidence';
-import { canRepairMissingArtifacts, VERIFICATION_DAY_MS } from './verification-contracts';
+import { canExecuteDeliveryRepair, VERIFICATION_DAY_MS } from './verification-contracts';
 import { emptyVerification } from './verification-queue';
 import { deliveryDiagnosticLabels, deliveryDiagnosticMapping, observeDeliveryCheckpoint, type DeliveryDiagnosticPhase } from './diagnostics';
 import { processTrainingDeliveryBatch } from './batch-worker';
+import { recoverWahooWithdrawalGeneration, wahooArtifactGeneration, wahooPlanGeneration } from './wahoo/identity';
 
 function validateArtifact(value: DeliveryArtifact | null): void {
   if (value === null) return;
@@ -79,6 +81,19 @@ export async function processTrainingDelivery(runtime: DeliveryRuntime, uid: str
     // Keep authorization evidence separate from acceptance: retiring an old
     // unaccepted attempt must not erase a verified presentation-only upgrade.
     if (intent.mappingApprovalProof) ledger.mappingApprovalProof = intent.mappingApprovalProof;
+    if (ledger.provider === 'wahoo') {
+      if (ledger.wahooPlanGeneration !== undefined) wahooPlanGeneration(ledger.wahooPlanGeneration);
+      const recoveredGeneration = await recoverWahooWithdrawalGeneration(tx, ledgerRef, ledger);
+      if (recoveredGeneration !== undefined) {
+        ledger.wahooPlanGeneration = recoveredGeneration;
+        if (ledger.attempt) {
+          // progress=null and artifact=null prove this legacy attempt made no
+          // provider write. Retire it rather than rewriting an immutable identity.
+          tx.set(ledgerRef.collection('attempts').doc(ledger.attempt.id), { state: 'not-accepted' }, { merge: true });
+          ledger.attempt = null;
+        }
+      }
+    }
     const recover = !!ledger.attempt;
     if (!ledger.attempt) {
       const kind = intent.desired === 'present' && ledger.acceptedDigest !== intent.digest ? 'upsert'
@@ -86,7 +101,7 @@ export async function processTrainingDelivery(runtime: DeliveryRuntime, uid: str
       if (!kind) { writeDelivery(runtime, tx, uid, ledger); tx.delete(jobRef); return null; }
       if (kind === 'upsert' && ledger.repair?.continuation) {
         const policy = transport.inspection?.policy;
-        if (!ledger.actual || !policy || !canRepairMissingArtifacts(policy, ledger.repair.missing)) {
+        if (!ledger.actual || !policy || !canExecuteDeliveryRepair(policy, ledger.repair)) {
           ledger.status = 'provider_unavailable';
           writeDelivery(runtime, tx, uid, ledger); tx.delete(jobRef); return null;
         }
@@ -95,13 +110,17 @@ export async function processTrainingDelivery(runtime: DeliveryRuntime, uid: str
         ledger.repair = { ...ledger.repair, policyVersion: policy.version,
           binding: inspectionBinding({ ...ledger, actual: ledger.repair.original }, context, policy) };
       }
-      if (kind === 'upsert' && ledger.verification?.missing && (!ledger.repair || !transport.inspection?.policy
-        || !canRepairMissingArtifacts(transport.inspection.policy, ledger.repair.missing)
+      if (kind === 'upsert' && (ledger.verification?.missing || ledger.repair?.manualReplacement) && (!ledger.repair || !transport.inspection?.policy
+        || !canExecuteDeliveryRepair(transport.inspection.policy, ledger.repair)
         || inspectionBinding({ ...ledger, actual: ledger.repair.original }, context, transport.inspection.policy) !== ledger.repair.binding)) {
         // An edit/transfer/reconnect invalidates confirmation, not the stable remote identity.
         // Re-inspect current intent before another repair; never fall through to ordinary upsert.
+        if (ledger.repair?.manualReplacement) {
+          ledger.status = 'needs_attention';
+          ledger.issues = ['The workout or provider authority changed. Check Garmin again and review replacement using the latest version.'];
+        }
         ledger.repair = null;
-        ledger.verification = { ...ledger.verification, binding: '', state: 'pending', missing: false, missingKeys: [],
+        ledger.verification = { ...emptyVerification(runtime.now()), ...ledger.verification, observedMissingKeys: [], binding: '', state: 'pending', missing: false, missingKeys: [],
           suspectedAtMs: null, checkedAtMs: null, cursor: null, nextCheckAtMs: runtime.now() };
         writeDelivery(runtime, tx, uid, ledger);
         tx.set(jobRef, { uid, kind: 'verification', priority: 'ordinary', deliveryId: id, dueAtMs: 0, dispatchToken: randomUUID() });
@@ -114,6 +133,8 @@ export async function processTrainingDelivery(runtime: DeliveryRuntime, uid: str
         ...(kind === 'upsert' && context.strength ? { strength: context.strength } : {}),
         artifact: ledger.actual ?? (kind === 'remove' ? ledger.repair?.original ?? null : null), progress: null,
         ...(kind === 'remove' && context.pastCleanup ? { allowPastRemoval: true } : {}),
+        ...(ledger.provider === 'wahoo' ? { wahooPlanGeneration: wahooPlanGeneration(ledger.wahooPlanGeneration === undefined
+          ? wahooArtifactGeneration(ledger.actual) : ledger.wahooPlanGeneration) } : {}),
         ...(ledger.repair ? { repair: ledger.repair } : {}) };
       tx.create(ledgerRef.collection('attempts').doc(ledger.attempt.id), {
         schemaVersion: 1, operation: ledger.attempt, state: 'started', startedAtMs: runtime.now(),
@@ -135,6 +156,9 @@ export async function processTrainingDelivery(runtime: DeliveryRuntime, uid: str
   const diagnosticMapping = deliveryDiagnosticMapping(claim.provider, transport, operation);
   let diagnosticPhase: DeliveryDiagnosticPhase = claim.recover ? 'recover' : 'execute';
   const diagnosticLabels = () => deliveryDiagnosticLabels(diagnosticMapping, diagnosticPhase);
+  const removalLabels = () => claim.provider === 'wahoo' && operation.kind === 'remove'
+    && operation.progress?.step === 'finished' && operation.progress.state === 'accepted'
+    && operation.progress.removalOutcome === 'already_absent' ? { outcome: 'already_absent' } : {};
   let recoveredAcceptance = false;
 
   const checkpoint = async (artifact: DeliveryArtifact | null, complete = false,
@@ -146,16 +170,58 @@ export async function processTrainingDelivery(runtime: DeliveryRuntime, uid: str
       || (progress.repairApplied !== undefined && (typeof progress.repairApplied !== 'boolean' || !operation.repair || progress.state !== 'accepted')))) {
       throw new TrainingDeliveryTransportError('uncertain');
     }
+    if (progress?.removalOutcome !== undefined && (claim.provider !== 'wahoo' || operation.kind !== 'remove'
+      || progress.removalOutcome !== 'already_absent' || progress.state !== 'accepted'
+      || !['workout-remove', 'finished'].includes(progress.step))) throw new TrainingDeliveryTransportError('uncertain');
     if (complete && ((operation.kind === 'remove') !== (artifact === null))) {
       // A successful upsert must identify a copy; a successful removal must leave none.
       // Preserve the journal and inspect inconsistent acknowledgements rather than claiming success.
       throw new TrainingDeliveryTransportError('uncertain');
     }
+    const observedAbsence = claim.provider === 'wahoo' && operation.kind === 'remove'
+      && (progress?.removalOutcome === 'already_absent' || (complete && operation.progress?.removalOutcome === 'already_absent'));
+    // Wahoo REMOVE's no-progress artifact checkpoints are protective GET readback
+    // (completion/date), not DELETE receipts. DELETEs always use explicit journals.
+    const protectiveReadback = claim.provider === 'wahoo' && operation.kind === 'remove'
+      && !complete && progress === undefined && artifact !== null;
+    const readOnlyRemoval = observedAbsence || protectiveReadback;
+    const currentPro = readOnlyRemoval ? await runtime.hasPro(uid) : pro;
     const recorded = await observeDeliveryCheckpoint(claim.provider, complete, progress, () => db.runTransaction(async tx => {
       if ((await getUserDeletionGuardStateInTransaction(db, tx, uid)).shouldSkip) return false;
       const doc = await tx.get(ledgerRef);
       if (!doc.exists) return false;
       const ledger = doc.data() as DeliveryLedgerV1;
+      // Removal readback did not perform a provider write. A stale observation
+      // must neither erase a newer copy nor quarantine its lease/queue as a late
+      // write acknowledgement. Only its original live lease may persist it.
+      if (readOnlyRemoval && (ledger.attempt?.id !== operation.id || ledger.lease?.id !== leaseId
+        || ledger.lease.expiresAtMs <= runtime.now())) return false;
+      if (readOnlyRemoval) {
+        // Unlike a late HTTP write receipt, read-only observations must still be bound
+        // to current authority when persisted, including changes after the last
+        // request guard. Recovery may record the old REMOVE while a new Send is
+        // pending; execute must still have an authorized absent intent.
+        const [workoutDoc, locks] = await Promise.all([
+          tx.get(user.collection('scheduledWorkouts').doc(ledger.workoutId)),
+          tx.get(user.collection('trainingPlanState').doc('current').collection('planDeletionLocks').limit(1)),
+        ]);
+        const context = await readDeliveryContext(runtime, tx, uid,
+          workoutDoc.exists ? parseScheduledWorkoutV1(workoutDoc.data()) : null, ledger.provider, currentPro, ledger.workoutId, ledger);
+        if (!locks.empty || !context.transport || context.connection.state !== 'connected'
+          || context.connection.destinationKey !== operation.destinationKey || context.connection.epoch !== ledger.connectionEpoch
+          || context.connection.generation !== operation.connectionGeneration
+          || ledger.blockedConnectionGeneration === context.connection.generation
+          || (observedAbsence && ledger.actual && !context.transport.canRemove(ledger.actual,
+            trainingDeliveryLocalDate(runtime.now(), operation.timeZone), !!context.pastCleanup && !!operation.allowPastRemoval))
+          || (observedAbsence && diagnosticPhase === 'execute' && resolveDeliveryIntent(context, ledger).desired !== 'absent')) return false;
+        if (protectiveReadback) {
+          // A GET may strengthen protection for this exact retained copy. It must
+          // not replace another identity or clear completion learned concurrently.
+          if (!ledger.actual || !artifact || Object.keys(artifact.ids).length !== Object.keys(ledger.actual.ids).length
+            || Object.entries(artifact.ids).some(([key, value]) => ledger.actual!.ids[key] !== value)) return false;
+          artifact = { ...artifact, completed: artifact.completed || ledger.actual.completed };
+        }
+      }
       // Request-start journals must still own the lease. Late acceptance evidence is
       // retained below even after ownership changes, but cannot launch another request.
       if (progress && progress.state !== 'accepted'
@@ -176,6 +242,15 @@ export async function processTrainingDelivery(runtime: DeliveryRuntime, uid: str
         writeDelivery(runtime, tx, uid, ledger);
         tx.delete(jobRef);
         return false;
+      }
+      if (complete && claim.provider === 'wahoo' && operation.kind === 'remove'
+        && ledger.wahooPlanGeneration !== undefined
+        && wahooPlanGeneration(operation.wahooPlanGeneration) !== wahooPlanGeneration(ledger.wahooPlanGeneration)) {
+        // A finished REMOVE may have artifact=null already. Validate its durable
+        // reservation too, before retiring the journal or advancing the ledger.
+        throw new TrainingDeliveryTransportError('uncertain', 0, {
+          failurePhase: 'contract', wahooContractCheck: 'operation_invalid',
+        });
       }
       // Record acceptance even when a newer authored edit arrived during the HTTP call.
       tx.set(ledgerRef.collection('attempts').doc(operation.id), {
@@ -199,6 +274,11 @@ export async function processTrainingDelivery(runtime: DeliveryRuntime, uid: str
         ledger.acceptedContentDigest = null;
       }
       if (complete) {
+        if (claim.provider === 'wahoo' && operation.kind === 'remove') {
+          // Reserve once, in the same transaction that accepts withdrawal. A
+          // future Send must not reuse Wahoo's soft-deleted library Plan key.
+          ledger.wahooPlanGeneration = wahooPlanGeneration((operation.wahooPlanGeneration ?? 0) + 1);
+        }
         ledger.pastCleanup = null;
         const repairTimes = (ledger.verification?.repairTimes ?? []).filter(time => time > runtime.now() - VERIFICATION_DAY_MS);
         ledger.verification = { ...emptyVerification(runtime.now()),
@@ -273,7 +353,7 @@ export async function processTrainingDelivery(runtime: DeliveryRuntime, uid: str
         || ledger.blockedConnectionGeneration === context.connection.generation) return 'blocked';
       const intent = resolveDeliveryIntent(context, ledger);
       if (operation.kind === 'upsert' && operation.repair && (!context.transport?.inspection?.policy
-        || !canRepairMissingArtifacts(context.transport.inspection.policy, operation.repair.missing)
+        || !canExecuteDeliveryRepair(context.transport.inspection.policy, operation.repair)
         || inspectionBinding({ ...ledger, actual: operation.repair.original, desiredDigest: operation.digest },
           context, context.transport.inspection.policy) !== operation.repair.binding)) return 'recover-only';
       return (operation.kind === 'upsert' && intent.desired === 'present' && intent.digest === operation.digest)
@@ -296,7 +376,8 @@ export async function processTrainingDelivery(runtime: DeliveryRuntime, uid: str
       if (recovery.kind === 'accepted') {
         recoveredAcceptance = true;
         await checkpoint(recovery.artifact, true);
-        logger.info('[TrainingDelivery]', { event: 'recovered_acceptance', provider: claim.provider, repair: !!operation.repair, ...diagnosticLabels() });
+        logger.info('[TrainingDelivery]', { event: 'recovered_acceptance', provider: claim.provider, repair: !!operation.repair,
+          ...removalLabels(), ...diagnosticLabels() });
         return;
       }
       if (recovery.kind === 'uncertain') { inspectionUncertain = true; throw new TrainingDeliveryTransportError('uncertain'); }
@@ -313,9 +394,11 @@ export async function processTrainingDelivery(runtime: DeliveryRuntime, uid: str
     const artifact = await transport.execute(operation, transportCheckpoint, requestGuard);
     await checkpoint(artifact, true);
     logger.info('[TrainingDelivery]', { event: operation.repair ? 'repair_accepted' : 'accepted', provider: claim.provider, operation: operation.kind,
+      ...removalLabels(),
       latencyMs: runtime.now() - startedAt, ...diagnosticLabels() });
   } catch (error) {
     const failure = error instanceof TrainingDeliveryTransportError ? error : new TrainingDeliveryTransportError('uncertain');
+    if (operation.repair?.manualReplacement && failure.kind === 'uncertain') inspectionUncertain = true;
     let retryCount = 0;
     await db.runTransaction(async tx => {
       if ((await getUserDeletionGuardStateInTransaction(db, tx, uid)).shouldSkip) return;
@@ -323,22 +406,51 @@ export async function processTrainingDelivery(runtime: DeliveryRuntime, uid: str
       if (!doc.exists) return;
       const ledger = doc.data() as DeliveryLedgerV1;
       if (ledger.attempt?.id !== operation.id || ledger.lease?.id !== leaseId) return;
+      if (claim.provider === 'garmin' && operation.kind === 'upsert' && !operation.repair && !ledger.repair
+        && failure.kind === 'uncertain' && operation.progress === null && ledger.attempt.progress === null
+        && typeof ledger.lastAcceptedAtMs === 'number' && Number.isSafeInteger(ledger.lastAcceptedAtMs)
+        && transport.inspection?.policy.version === 'garmin-retained-v2-schedule-repair'
+        && operation.artifact?.ids.workout && operation.artifact.ids.schedule && operation.artifact.ids.owner
+        && ledger.actual?.ids.workout === operation.artifact.ids.workout
+        && ledger.actual.ids.schedule === operation.artifact.ids.schedule && ledger.actual.ids.owner === operation.artifact.ids.owner) {
+        // This known old pair failed before ANY write-start journal. Retiring that
+        // provably unstarted edit enables a fresh bound check, not a replacement
+        // POST. Started/legacy/partial creates and repairs can never take this path.
+        tx.set(ledgerRef.collection('attempts').doc(operation.id), { state: 'not-accepted' }, { merge: true });
+        ledger.attempt = null;
+        ledger.lease = null;
+        ledger.status = 'needs_attention';
+        ledger.issues = ['The earlier Garmin copy could not be confirmed before updating it. QS will check it again; no replacement was sent.'];
+        ledger.verification = { ...emptyVerification(runtime.now()),
+          requestedAtMs: ledger.verification?.requestedAtMs ?? 0,
+          repairTimes: ledger.verification?.repairTimes ?? [] };
+        ledger.updatedAtMs = runtime.now();
+        writeDelivery(runtime, tx, uid, ledger);
+        tx.set(jobRef, { uid, kind: 'verification', priority: 'ordinary', deliveryId: id,
+          dueAtMs: Math.max(runtime.now(), ledger.providerNotBeforeMs ?? 0), dispatchToken: randomUUID() });
+        return;
+      }
       ledger.lease = null;
       if (failure.kind !== 'deferred') ledger.retries += 1;
       retryCount = ledger.retries;
       ledger.status = failure.kind === 'deferred' ? 'retrying' : failure.kind === 'auth' ? 'reconnect_required' : failure.kind === 'permission' ? 'connection_repair'
         : failure.kind === 'provider_access' ? 'provider_unavailable'
-        : failure.kind === 'uncertain' ? inspectionUncertain || ledger.retries >= MAX_RETRY_COUNT ? 'needs_attention' : 'retrying'
+        : failure.kind === 'uncertain' ? inspectionUncertain || failure.diagnostics.wahooContractCheck === 'plan_deleted'
+          || ledger.retries >= MAX_RETRY_COUNT ? 'needs_attention' : 'retrying'
           : failure.kind === 'terminal' || ledger.retries >= MAX_RETRY_COUNT ? 'failed' : 'retrying';
       ledger.blockedConnectionGeneration = ['auth', 'permission'].includes(failure.kind) ? operation.connectionGeneration : null;
       ledger.providerAccessBlocked = failure.kind === 'provider_access';
       if (failure.kind === 'permission') ledger.issues = ['Workout delivery permission is missing. Reconnect the provider and allow workout delivery.'];
       if (failure.kind === 'provider_access') ledger.issues = ['The provider has not allowed this application to deliver workouts. Reconnecting may not resolve this.'];
+      if (failure.diagnostics.wahooContractCheck === 'plan_deleted') ledger.issues = [
+        'Wahoo reports this plan deleted. Safe withdrawal has not been confirmed, so QS will not recreate or retry the copy automatically.',
+      ];
       ledger.providerNotBeforeMs = Math.max(ledger.providerNotBeforeMs ?? 0,
         failure.retryAfterMs > 0 ? runtime.now() + failure.retryAfterMs : 0);
       ledger.retryAtMs = Math.max(runtime.now() + getCloudTaskRetryBackoffSeconds(ledger.retries) * 1000, ledger.providerNotBeforeMs);
       ledger.updatedAtMs = runtime.now();
-      if (operation.repair && ledger.verification) ledger.verification.state = failure.kind === 'deferred' ? 'deferred' : 'confirmed_missing';
+      if (operation.repair && ledger.verification) ledger.verification.state = failure.kind === 'deferred' ? 'deferred'
+        : operation.repair.manualReplacement ? 'unknown' : 'confirmed_missing';
       writeDelivery(runtime, tx, uid, ledger);
       if (ledger.status === 'retrying') tx.set(jobRef, { uid, kind: 'delivery', deliveryId: id,
         provider: ledger.provider, destinationKey: ledger.destinationKey, operationKind: operation.kind,

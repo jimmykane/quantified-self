@@ -148,7 +148,8 @@ vi.mock('../queue/user-deletion-skip', () => ({
     shouldSkipQueueWorkForDeletedUser: vi.fn().mockResolvedValue(false),
 }));
 
-vi.mock('../request-helper', () => {
+vi.mock('../request-helper', async (importOriginal) => {
+    const actual = await importOriginal<typeof import('../request-helper')>();
     const fit = Buffer.alloc(32);
     fit.writeUInt8(14, 0);
     fit.writeUInt8(0x20, 1);
@@ -161,6 +162,7 @@ vi.mock('../request-helper', () => {
         contentLength: fit.length,
     });
     return {
+        ...actual,
         default: { get: getBinaryResponse, getBinaryResponse },
         get: getBinaryResponse,
         getBinaryResponse,
@@ -391,6 +393,7 @@ describe('User Not Found Scenarios', () => {
             const queueItem: any = {
                 id: 'g-item-1',
                 retryCount: 0,
+                callbackURL: 'https://apis.garmin.com/wellness-api/rest/activityFile?id=1&token=t',
                 userAccessToken: 'token',
                 token: 't',
                 activityFileID: '1',

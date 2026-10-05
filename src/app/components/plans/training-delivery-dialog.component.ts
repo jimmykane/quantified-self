@@ -5,7 +5,7 @@ import { MAT_DIALOG_DATA, MatDialog, MatDialogRef } from '@angular/material/dial
 import { catchError, combineLatest, map, of, startWith, switchMap } from 'rxjs';
 import { ServiceNames } from '@sports-alliance/sports-lib';
 import { PLANNED_WORKOUT_PROVIDER_IDS, PLANNED_WORKOUT_PROVIDER_CAPABILITIES_V1, type PlannedWorkoutProviderId } from '@shared/planned-workout-providers';
-import { normalizeDeliveryTimeZone, TRAINING_DELIVERY_PAGE_SIZE, type TrainingDeliveryAction, type TrainingDeliveryCommandV1,
+import { GARMIN_WORKOUT_NOT_FOUND_ISSUE, normalizeDeliveryTimeZone, TRAINING_DELIVERY_PAGE_SIZE, type TrainingDeliveryAction, type TrainingDeliveryCommandV1,
   type TrainingDeliveryPreviewV1, type TrainingDeliveryStatusV1 } from '@shared/training-provider-delivery';
 import { SharedModule } from '../../modules/shared.module';
 import { AppUserService } from '../../services/app.user.service';
@@ -147,6 +147,7 @@ export class TrainingDeliveryDialogComponent {
       case 'stop': return `${this.stopLabel()}?`;
       case 'approve': return `Review ${this.draftLabel()} differences`;
       case 'retry': return this.data.scope === 'plan' ? 'Retry plan sync' : 'Retry workout sync';
+      case 'replace': return 'Create replacement Garmin copy?';
       default: {
         const provider = this.providerDetailVisible() ? this.activeRow()?.displayLabel : null;
         if (this.data.scope === 'history') return provider ? `${provider} sync history` : 'Workout sync history';
@@ -165,6 +166,7 @@ export class TrainingDeliveryDialogComponent {
     switch (draft?.action) {
       case 'stop': return this.stopLabel();
       case 'retry': return 'Request recovery';
+      case 'replace': return 'Create replacement Garmin copy';
       case 'approve': return 'Approve differences';
       case 'resume': return 'Resume workout sync';
       case 'configure': return 'Enable plan sync';
@@ -235,6 +237,10 @@ export class TrainingDeliveryDialogComponent {
         || statuses.some(item => item.hasRemoteCopy || !['stopped', 'removed', 'past', 'completed'].includes(item.status)),
       approvalDigest: suppressed ? null : statuses.find(item => item.status === 'approval_required' && item.approvalDigest)?.approvalDigest ?? null,
       canRetry: statuses.some(item => ['failed', 'needs_attention', 'retrying', 'provider_unavailable'].includes(item.status)),
+      canReplace: provider === 'garmin' && this.data.scope === 'workout' && this.workout()?.lifecycle === 'planned'
+        && !this.completions().some(item => item.workoutId === this.data.id && item.planId === this.workout()?.planId)
+        && statuses.some(item => item.status === 'needs_attention' && item.issues.includes(GARMIN_WORKOUT_NOT_FOUND_ISSUE)
+          && item.verification?.state === 'unknown' && item.verification.canCheck),
       wahooReconnect: provider === 'wahoo' && statuses.some(item => item.issues.includes(WAHOO_TRAINING_PERMISSION_ISSUE)),
       reconnect: statuses.some(item => ['reconnect_required', 'connection_repair', 'fresh_consent_required'].includes(item.status)),
     };
@@ -267,7 +273,7 @@ export class TrainingDeliveryDialogComponent {
     return !!preview && (preview.command.action === 'stop'
       || (preview.result.available && (preview.result.hasPro || preview.command.action === 'retry') && preview.result.connection === 'connected'
         && (!['send', 'resume'].includes(preview.command.action) || preview.result.workoutCompatibility !== 'unsupported')
-        && (preview.command.action !== 'approve' || !!preview.result.approvalDigest)));
+        && (!['approve', 'replace'].includes(preview.command.action) || !!preview.result.approvalDigest)));
   });
 
   constructor() {
@@ -313,6 +319,7 @@ export class TrainingDeliveryDialogComponent {
     const setting = this.view().settings.find(item => item.provider === provider);
     const setupAction = ['configure', 'send', 'resume'].includes(action);
     if (setupAction && !this.delivery.isSetupAvailable(provider, this.planDelivery())) return;
+    if (action === 'replace' && !this.rows().some(row => row.provider === provider && row.canReplace)) return;
     // Historical copies can still need consent for an old account. They must not
     // silently turn opening current settings into enabling delivery again.
     const editingSettings = !!setting?.enabled && !renewConsent && (action === 'configure' || action === 'send');
@@ -387,9 +394,9 @@ export class TrainingDeliveryDialogComponent {
         ...(draft.action === 'approve' ? { approvalDigest: draft.approvalDigest } : {}) };
       const result = await this.delivery.preview(command, current);
       if (!current()) return;
-      this.preview.set({ result, command: command.action === 'approve' && result.approvalDigest
+      this.preview.set({ result, command: ['approve', 'replace'].includes(command.action) && result.approvalDigest
         ? { ...command, approvalDigest: result.approvalDigest } : command });
-    } catch (error) { if (current()) { this.error.set(trainingDeliveryCommandError(error, false)); this.haptics.error(); } }
+    } catch (error) { if (current()) { this.error.set(trainingDeliveryCommandError(error, false, draft.action)); this.haptics.error(); } }
     finally { if (current()) this.phase.set(null); }
   }
   async confirm(): Promise<void> {
@@ -405,10 +412,11 @@ export class TrainingDeliveryDialogComponent {
       await this.delivery.mutate(preview.command, current);
       if (!current()) return;
       this.notice.set(preview.command.action === 'stop' ? `${this.stopLabel()} saved. Eligible copies will be removed in the background.`
+        : preview.command.action === 'replace' ? 'Garmin replacement requested. Status will update after the recheck and delivery.'
         : preview.command.action === 'retry' ? 'Recovery requested. Service retry limits still apply.'
           : 'Sync settings saved. Workout delivery continues in the background.');
       this.preview.set(null); this.draft.set(null); this.closeOnCancel = false; this.haptics.success();
-    } catch (error) { if (current()) { this.error.set(trainingDeliveryCommandError(error, true)); this.haptics.error(); } }
+    } catch (error) { if (current()) { this.error.set(trainingDeliveryCommandError(error, true, preview.command.action)); this.haptics.error(); } }
     finally { if (current()) this.phase.set(null); }
   }
   private clearTimeZoneReview(): void {

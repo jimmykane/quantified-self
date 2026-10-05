@@ -481,12 +481,13 @@ describe('workout prescription analysis evidence', () => {
     const value = { source: 'scheduled', reference: 'private-reference', revision: 2, scheduleRevision: 3,
       libraryRevision: null, sport: ActivityTypes.Running,
       analysis: analyzeWorkoutStructureV1({ version: 1, sport: ActivityTypes.Running, nodes: [
-        { kind: 'step', id: 'private-step-id', purpose: 'warmup', ending: { kind: 'time', seconds: 600 }, targets: [] },
+        { kind: 'step', id: 'private-step-id', purpose: 'warmup', ending: { kind: 'time', seconds: 600, allowEarlyLap: true }, targets: [] },
         { kind: 'step', id: 'private-rest-id', purpose: 'rest', ending: { kind: 'manual' }, targets: [] },
-      ] }), displaySummary: '10m timed subtotal + 1 step with unknown duration' };
+      ] }), displaySummary: '10m timed subtotal + 1 step with unknown duration (prescribed limits) · 1 step allows early Lap' };
     const evidence = buildAssistantEvidence({ name: 'get_workout_prescription_analysis', title: 'Prescription analysis' }, value);
     expect(evidence.summary).toBe(value.displaySummary);
     expect(evidence.facts).toContainEqual({ label: 'Duration coverage', value: 'partial' });
+    expect(evidence.facts).toContainEqual({ label: 'Steps allowing early Lap', value: '1' });
     expect(JSON.stringify(evidence)).not.toMatch(/private|revision|600/);
     expect(evidence.links).toEqual([]);
   });

@@ -22,6 +22,20 @@ describe('Wahoo Training HTTP boundary', () => {
       new Response('{"id":1,"user_id":123}', { status: 200 })));
     await expect(client(post, vi.fn())).resolves.toMatchObject({ status: 200, body: { id: 1, user_id: 123 } });
   });
+  it('allows the exact account GET and binds its returned identity to the active credential', async () => {
+    const fetcher = vi.fn(async () => new Response('{"id":123}', { status: 200 }));
+    const beforeSend = vi.fn(); const current = authority();
+    const client = createWahooTrainingClient(async () => current, fetcher);
+    await expect(client({ method: 'GET', path: '/v1/user' }, beforeSend)).resolves.toEqual({ status: 200, body: { id: 123 } });
+    expect(current.assertCurrent).toHaveBeenCalledOnce(); expect(beforeSend).toHaveBeenCalledOnce();
+    expect(fetcher).toHaveBeenCalledWith('https://api.wahooligan.com/v1/user', expect.objectContaining({ method: 'GET', redirect: 'error' }));
+  });
+  it.each(['{"id":456}', '{"id":"invalid"}', '{}', '[]', 'null'])(
+    'does not accept malformed or different account evidence: %s', async body => {
+      const client = createWahooTrainingClient(async () => authority(), vi.fn(async () => new Response(body, { status: 200 })));
+      await expect(client({ method: 'GET', path: '/v1/user' }, vi.fn())).rejects.toBeInstanceOf(TrainingDeliveryTransportError);
+    },
+  );
   it.each([['https://evil.example', 'GET'], ['/v1/plans/1?url=evil', 'GET'], ['/v1/plans', 'DELETE'], ['/v1/workouts/1/plans', 'PUT']])(
     'rejects unsupported path/method %s %s before authorization', async (path, method) => {
       const authorize = vi.fn(async () => authority()); const fetcher = vi.fn();

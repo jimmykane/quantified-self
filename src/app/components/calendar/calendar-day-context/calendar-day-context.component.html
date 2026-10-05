@@ -112,46 +112,44 @@
       @if (dayStory().items.length) {
         <ol class="calendar-day-timeline-list">
           @for (item of dayStory().items; track item.key) {
-            <li class="calendar-day-timeline-item">
+            <li class="calendar-day-timeline-item" [class.calendar-day-timeline-item--activity]="item.kind === 'activity'">
               <span class="calendar-day-timeline-time">{{ item.timeLabel }}</span>
-              @if (item.activityType) {
-                <app-activity-type-icon class="calendar-day-timeline-icon" [activityType]="item.activityType"
-                  size="20px" aria-hidden="true"></app-activity-type-icon>
+              @if (item.kind === 'activity') {
+                <div class="calendar-day-timeline-activity">
+                  @if (activitiesByStoryKey().get(item.key); as activity) {
+                    <ng-container [ngTemplateOutlet]="activityRow" [ngTemplateOutletContext]="{ $implicit: activity }"></ng-container>
+                  }
+                </div>
               } @else {
-                <mat-icon class="calendar-day-timeline-icon" [style.color]="item.color || null" aria-hidden="true">{{ item.icon }}</mat-icon>
-              }
-              <div class="calendar-day-timeline-content">
-                @switch (item.kind) {
-                  @case ('sleep') {
-                    <button mat-button appHapticTap type="button" (click)="showSleepStages()">{{ item.title }}</button>
-                  }
-                  @case ('activity') {
-                    @if (item.id && data().userId) {
+                @if (item.activityType) {
+                  <app-activity-type-icon class="calendar-day-timeline-icon" [activityType]="item.activityType"
+                    size="20px" aria-hidden="true"></app-activity-type-icon>
+                } @else {
+                  <mat-icon class="calendar-day-timeline-icon" [style.color]="item.color || null" aria-hidden="true">{{ item.icon }}</mat-icon>
+                }
+                <div class="calendar-day-timeline-content">
+                  @switch (item.kind) {
+                    @case ('sleep') {
+                      <button mat-button appHapticTap type="button" (click)="showSleepStages()">{{ item.title }}</button>
+                    }
+                    @case ('note') {
+                      <button mat-button appHapticTap type="button" (click)="selectTimelineNote(item.id)">{{ item.title }}</button>
+                    }
+                    @case ('plan') {
                       <a class="calendar-day-context-navigation-link" appHapticTap
-                        [routerLink]="['/user', data().userId, 'event', item.id]" (click)="prepareNavigation()">{{ item.title }}</a>
-                    } @else { <strong>{{ item.title }}</strong> }
+                        [routerLink]="['/training/plans/workout', item.id]" (click)="prepareNavigation()">{{ item.title }}</a>
+                    }
                   }
-                  @case ('note') {
-                    <button mat-button appHapticTap type="button" (click)="selectTimelineNote(item.id)">{{ item.title }}</button>
-                  }
-                  @case ('plan') {
-                    <a class="calendar-day-context-navigation-link" appHapticTap
-                      [routerLink]="['/training/plans/workout', item.id]" (click)="prepareNavigation()">{{ item.title }}</a>
-                  }
+                  <small>{{ item.detail }}</small>
+                </div>
+                @if (item.kind === 'plan') {
+                  <button mat-icon-button appHapticTap type="button" matTooltip="Duplicate to…"
+                    [attr.aria-label]="'Duplicate ' + item.title + ' to another date'"
+                    [disabled]="duplicatingId() !== null || !data().scheduleSource" (click)="duplicateWorkout(item.id)">
+                    @if (duplicatingId() === item.id) { <mat-spinner diameter="18" aria-hidden="true"></mat-spinner> }
+                    @else { <mat-icon aria-hidden="true">content_copy</mat-icon> }
+                  </button>
                 }
-                <small>{{ item.detail }}</small>
-                @if (item.kind === 'activity' && trainingImpactState().status !== 'private'
-                  && trainingImpactByEventId().get(item.id); as impact) {
-                  <app-training-impact [impact]="impact" variant="compact"></app-training-impact>
-                }
-              </div>
-              @if (item.kind === 'plan') {
-                <button mat-icon-button appHapticTap type="button" matTooltip="Duplicate to…"
-                  [attr.aria-label]="'Duplicate ' + item.title + ' to another date'"
-                  [disabled]="duplicatingId() !== null || !data().scheduleSource" (click)="duplicateWorkout(item.id)">
-                  @if (duplicatingId() === item.id) { <mat-spinner diameter="18" aria-hidden="true"></mat-spinner> }
-                  @else { <mat-icon aria-hidden="true">content_copy</mat-icon> }
-                </button>
               }
             </li>
           }
@@ -195,27 +193,7 @@
         @else if (activityState().status === 'error') { <p role="alert">Activities could not be loaded.</p> }
         @else if (previewActivities().length) {
           @for (activity of previewActivities(); track activity.id) {
-            <ng-template #activityContent>
-              <app-activity-type-icon class="calendar-day-context-preview-icon" [activityType]="activity.activityType"
-                size="20px" aria-hidden="true"></app-activity-type-icon>
-              <div class="calendar-day-context-preview-copy">
-                <span class="calendar-day-context-preview-title">{{ activity.name }}</span>
-                <small>{{ activity.duration }}</small>
-                @if (trainingImpactState().status !== 'private') {
-                  <app-training-impact [impact]="activity.trainingImpact" variant="compact"></app-training-impact>
-                }
-              </div>
-            </ng-template>
-            @if (activity.route) {
-              <a class="calendar-day-context-preview-entry" appHapticTap
-                [routerLink]="activity.route" (click)="prepareNavigation()">
-                <ng-container [ngTemplateOutlet]="activityContent"></ng-container>
-              </a>
-            } @else {
-              <div class="calendar-day-context-preview-entry">
-                <ng-container [ngTemplateOutlet]="activityContent"></ng-container>
-              </div>
-            }
+            <ng-container [ngTemplateOutlet]="activityRow" [ngTemplateOutletContext]="{ $implicit: activity }"></ng-container>
           }
           @if (activities().length > previewActivities().length) {
             <span class="calendar-day-context-preview-more">+{{ activities().length - previewActivities().length }} more on the full day</span>
@@ -287,6 +265,7 @@
     </div>
   }
   } @else {
+  @if (activityState().status !== 'ready' || activities().length) {
   <section class="calendar-day-context-section" aria-label="Activities on selected day">
     <div class="calendar-day-context-section-header"><h3>Activities</h3>
       @if (activityState().status === 'ready') { <span>{{ day().eventCount }} completed · {{ day().durationLabel }}</span> }
@@ -295,27 +274,12 @@
     @else if (activityState().status === 'error') { <p role="alert">Activities could not be loaded.</p> }
     @else if (activities().length) {
       <app-activity-calendar-volume-list [rows]="activityGroups()"></app-activity-calendar-volume-list>
-      <mat-nav-list>
-        @for (activity of activities(); track activity.id) {
-          @if (activity.route) {
-            <a mat-list-item appHapticTap [routerLink]="activity.route" (click)="prepareNavigation()">
-              <span matListItemTitle>{{ activity.name }}</span><span matListItemLine>{{ activity.duration }}</span>
-              @if (trainingImpactState().status !== 'private') {
-                <app-training-impact matListItemLine [impact]="activity.trainingImpact" variant="compact"></app-training-impact>
-              }
-              <span matListItemMeta aria-hidden="true"><mat-icon>chevron_right</mat-icon></span>
-            </a>
-          } @else {
-            <div mat-list-item><span matListItemTitle>{{ activity.name }}</span><span matListItemLine>{{ activity.duration }}</span>
-              @if (trainingImpactState().status !== 'private') {
-                <app-training-impact matListItemLine [impact]="activity.trainingImpact" variant="compact"></app-training-impact>
-              }
-            </div>
-          }
-        }
-      </mat-nav-list>
-    } @else { <p>No completed activity for this day.</p> }
+      @for (activity of activities(); track activity.id) {
+        <ng-container [ngTemplateOutlet]="activityRow" [ngTemplateOutletContext]="{ $implicit: activity }"></ng-container>
+      }
+    }
   </section>
+  }
 
   @if (noteRows().length) {
     <section class="calendar-day-context-section" aria-label="Timeline notes on selected day">
@@ -369,3 +333,26 @@
   }
   </div>
 </section>
+
+<ng-template #activityRow let-activity>
+  <ng-template #activityContent>
+    <app-activity-type-icon class="calendar-day-context-preview-icon" [activityType]="activity.activityType"
+      size="20px" aria-hidden="true"></app-activity-type-icon>
+    <div class="calendar-day-context-preview-copy">
+      <span class="calendar-day-context-preview-title">{{ activity.name }}</span>
+      <small>{{ activity.duration }}</small>
+      @if (trainingImpactState().status !== 'private') {
+        <app-training-impact [impact]="activity.trainingImpact" variant="compact"></app-training-impact>
+      }
+    </div>
+  </ng-template>
+  @if (activity.route) {
+    <a class="calendar-day-context-preview-entry" appHapticTap [routerLink]="activity.route" (click)="prepareNavigation()">
+      <ng-container [ngTemplateOutlet]="activityContent"></ng-container>
+    </a>
+  } @else {
+    <div class="calendar-day-context-preview-entry">
+      <ng-container [ngTemplateOutlet]="activityContent"></ng-container>
+    </div>
+  }
+</ng-template>

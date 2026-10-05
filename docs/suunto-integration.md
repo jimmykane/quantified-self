@@ -6,6 +6,11 @@ Suunto 24/7 Health is available production-wide for active connected Suunto acco
 
 The separate Suunto activity-history picker defaults to the latest two calendar years through today. Users can select a longer or shorter range before submitting; this default does not change the Sleep and 24/7 Health history range policies below.
 
+Queued workout FIT downloads retain their 60-second deadline and apply a QS response limit of 128 MiB with redirects
+disabled. This application limit can reject a valid larger file; oversized downloads stop in the existing failed-job
+flow under `SUUNTO_ACTIVITY_FILE_TOO_LARGE` for operator review, including after token refresh. It does not alter
+Sleep or 24/7 Health pulls. See [download handling and rollout](provider-integration-guide.md#downloading-provider-files-safely).
+
 The Suunto destination card in Services also offers **Send past activities**. Its paged server preview/send path can deliver retained Garmin, COROS, or Wahoo FIT imports and manual FIT/FIT.gz uploads using the shared activity-sync queue. The source account may be disconnected after import; the Suunto destination must remain connected. The server verifies manual-upload origin and saved file generation before queueing, and the worker repeats the check before upload. This one-time action leaves automatic routes off. See [outbound activity delivery](provider-integration-guide.md#outbound-activity-delivery) for queue and retry behavior.
 
 If a saved activity or original becomes permanently ineligible before Suunto upload, the shared worker records a skipped queue result. Temporary Storage failures retry; an already accepted Suunto upload keeps its reconciliation state.
@@ -31,6 +36,10 @@ Production-wide Sleep polling uses an independent nested canonical-root/token ke
 The timestamp-only comparison correction changes `processRouteSyncTask` only; it needs no data migration, index, secret, webhook-registration, destination-worker or frontend change. After an explicitly approved deployment, monitor `provider_route_content_unchanged` import skips and confirm that timestamp-only updates leave successful destination delivery times unchanged. A real route edit must still advance the saved source revision and deliver normally. Roll back the worker revision to restore the prior comparison without changing retained data.
 
 Production setup must subscribe `SUUNTO_247_ACTIVITY_CREATED`, `SUUNTO_247_RECOVERY_CREATED`, and `SUUNTO_247_SLEEP_CREATED` to the canonical `receiveSuunto247Data` endpoint. Workout and Route notifications remain pointed at `insertSuuntoAppActivityToQueue` and `insertSuuntoAppRouteToQueue` respectively, all using the configured `SUUNTOAPP_NOTIFICATION_SECRET`. The retired `receiveSuuntoAppSleepData` endpoint must not be registered with Suunto. This repository change does not register provider webhooks or deploy Functions.
+
+The canonical receiver uses [target-aware entrypoint loading](functions-entrypoint-loading.md) from its existing
+`sleep/webhooks` owner module with 512 MiB. Its Gen 1 HTTP trigger, URL, 60-second timeout and notification secret are
+unchanged; increasing memory and isolating startup do not alter signed admission, lifecycle fencing or queue behavior.
 
 ## Normalization
 

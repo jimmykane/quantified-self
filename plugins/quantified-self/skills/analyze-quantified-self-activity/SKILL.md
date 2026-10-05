@@ -138,3 +138,12 @@ For several planned workouts, prefer the bounded bulk completion read; use the s
 Never infer completion from activity similarity. Route any
 request to create/edit a planned workout or change provider delivery through the Training skill's separate permissions
 and preview/native-approval workflow; activity permission alone never authorizes it.
+
+
+For a planned recipe with early Lap, route through the focused Training workflow and discover the latest full scheduled
+or saved recipe read and matching focused preview. Preserve unchanged fields, including absent, false and true
+`allowEarlyLap` values. Only time/distance endings accept this boolean: true means numeric limit OR Lap; manual remains
+indefinite. Enable it only on explicit athlete intent and review removal from previously enabled steps. Older tools may
+fail closed; refresh the catalog rather than omitting the field. Suunto supports it; other destinations reject it.
+Neither recorded laps nor comparison evidence authorizes editing a planned recipe or proves its completion. Existing
+independent grants and native client/app confirmation remain mandatory; the Assistant stays prepare-only.

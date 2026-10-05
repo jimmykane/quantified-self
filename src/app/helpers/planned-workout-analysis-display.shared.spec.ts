@@ -32,6 +32,15 @@ describe('owner-unit workout analysis display', () => {
     expect(formatWorkoutAnalysisSummaryV1(combined.summary)).toContain('estimated (partial source)');
     expect(formatWorkoutAnalysisSummaryV1(combined.summary)).toContain('distance subtotal');
   });
+  it('labels numeric totals as prescribed limits when early Lap can shorten execution', () => {
+    const input = { ...recipe, nodes: [{ ...recipe.nodes[0], ending: { kind: 'time', seconds: 60, allowEarlyLap: true } }] };
+    const time = resolveUnitAwareDisplayFromValue(DataDuration.type, 60)!.text;
+    expect(formatWorkoutPrescriptionSummaryV1(input)).toBe(`${time} (prescribed limits) · 1 step allows early Lap`);
+    expect(formatWorkoutPrescriptionSummaryV1({ ...input, nodes: [{ kind: 'repeat', id: 'repeat', count: 3, steps: input.nodes }] }))
+      .toContain('3 steps allow early Lap');
+    expect(formatWorkoutPrescriptionSummaryV1({ ...input, nodes: [{ ...input.nodes[0], ending: { kind: 'time', seconds: 60, allowEarlyLap: false } }] }))
+      .toBe(time);
+  });
   it.each([DistanceUnits.Kilometers, DistanceUnits.Miles])('uses swimming and rowing sport-specific distance display with %s', distanceUnits => {
     const units = normalizeUserUnitSettings({ distanceUnits });
     const swimming = { ...recipe, sport: ActivityTypes.Swimming };

@@ -16,7 +16,7 @@ import {
 } from '@shared/planned-workout';
 
 export type ManualWorkoutSport = ManualWorkoutEditorSportV1 | ActivityTypes.StrengthTraining;
-export type ManualWorkoutEnding = 'time' | 'distance';
+export type ManualWorkoutEnding = 'time' | 'distance' | 'manual';
 export type ManualWorkoutTarget = 'none' | 'heart-rate' | 'power' | 'pace';
 
 export interface ManualWorkoutEditorStep {
@@ -25,11 +25,14 @@ export interface ManualWorkoutEditorStep {
   purpose: WorkoutStepPurposeV1;
   endingKind: ManualWorkoutEnding;
   endingValue: number;
+  allowEarlyLap?: boolean;
   targetKind: ManualWorkoutTarget;
   targetMinimum: number | null;
   targetMaximum: number | null;
   note?: string;
-  /** Editor-only: keep the exact saved metres when a rounded unit conversion was not edited. */
+  /** Editor-only: preserve exact saved seconds through display and temporary lap endings. */
+  sourceDuration?: { editorValue: number; seconds: number };
+  /** Editor-only: preserve exact metres through rounded display and temporary lap endings. */
   sourceDistance?: { editorValue: number; meters: number };
   /** Editor-only: keep the exact saved speed range when displayed pace was not edited. */
   sourcePace?: {
@@ -107,6 +110,35 @@ function distanceMetersFromEditor(
     ? step.sourceDistance.meters : step.endingValue * distanceScale(sport, units);
 }
 
+/** Keep time/distance drafts through lap toggles without reusing the other ending's unit cache. */
+export function changeManualWorkoutEditorStepEnding(
+  step: ManualWorkoutEditorStep,
+  endingKind: ManualWorkoutEnding,
+  sport: ManualWorkoutSport,
+  units?: UserUnitSettingsInterface | null,
+): ManualWorkoutEditorStep {
+  if (step.endingKind === endingKind) return step;
+  let sourceDistance: ManualWorkoutEditorStep['sourceDistance'];
+  let sourceDuration: ManualWorkoutEditorStep['sourceDuration'];
+  if (step.endingKind === 'distance' && endingKind === 'manual'
+    && Number.isFinite(step.endingValue) && step.endingValue > 0) {
+    const meters = distanceMetersFromEditor(step, sport, units);
+    if (Number.isFinite(meters) && meters > 0) {
+      sourceDistance = { editorValue: step.endingValue, meters };
+    }
+  } else if (step.endingKind === 'manual' && endingKind === 'distance') {
+    sourceDistance = step.sourceDistance;
+  }
+  if (step.endingKind === 'time' && endingKind === 'manual'
+    && Number.isFinite(step.endingValue) && step.endingValue > 0) {
+    sourceDuration = { editorValue: step.endingValue,
+      seconds: step.sourceDuration?.editorValue === step.endingValue ? step.sourceDuration.seconds : step.endingValue * 60 };
+  } else if (step.endingKind === 'manual' && endingKind === 'time') {
+    sourceDuration = step.sourceDuration;
+  }
+  return { ...step, endingKind, sourceDistance, sourceDuration };
+}
+
 function paceSpeedRangeFromEditor(
   step: ManualWorkoutEditorStep,
   minimum: number,
@@ -132,12 +164,14 @@ function endingFromEditor(
   sport: ManualWorkoutSport,
   units?: UserUnitSettingsInterface | null,
 ): WorkoutEndingV1 {
+  if (step.endingKind === 'manual') return { kind: 'manual' };
   if (!Number.isFinite(step.endingValue) || step.endingValue <= 0) {
     throw new Error('Every step needs a positive duration or distance.');
   }
   return step.endingKind === 'time'
-    ? { kind: 'time', seconds: step.endingValue * 60 }
-    : { kind: 'distance', meters: distanceMetersFromEditor(step, sport, units) };
+    ? { kind: 'time', ...(step.allowEarlyLap === undefined ? {} : { allowEarlyLap: step.allowEarlyLap }), seconds: step.sourceDuration?.editorValue === step.endingValue
+      ? step.sourceDuration.seconds : step.endingValue * 60 }
+    : { kind: 'distance', ...(step.allowEarlyLap === undefined ? {} : { allowEarlyLap: step.allowEarlyLap }), meters: distanceMetersFromEditor(step, sport, units) };
 }
 
 function targetFromEditor(
@@ -280,20 +314,27 @@ function editorStep(
   sport: ManualWorkoutSport,
   units?: UserUnitSettingsInterface | null,
 ): ManualWorkoutEditorStep {
-  if (step.ending.kind !== 'time' && step.ending.kind !== 'distance') {
+  if (step.ending.kind !== 'time' && step.ending.kind !== 'distance' && step.ending.kind !== 'manual') {
     throw new Error('This workout uses an ending that the first manual editor cannot change.');
   }
   if (step.targets.length > 1) throw new Error('This workout has more targets than the first manual editor supports.');
   const target = editorTarget(step.targets[0], sport, units);
   const endingValue = step.ending.kind === 'time'
     ? step.ending.seconds / 60
-    : roundEditorNumber(step.ending.meters / distanceScale(sport, units));
+    : step.ending.kind === 'distance'
+      ? roundEditorNumber(step.ending.meters / distanceScale(sport, units))
+      // Editor-only default for switching back to a numeric ending; never part of a manual prescription.
+      : createManualWorkoutEditorStep(step.id).endingValue;
   return {
     kind: 'step',
     id: step.id,
     purpose: step.purpose,
     endingKind: step.ending.kind,
+    ...('allowEarlyLap' in step.ending ? { allowEarlyLap: step.ending.allowEarlyLap } : {}),
     endingValue,
+    ...(step.ending.kind === 'time' ? {
+      sourceDuration: { editorValue: endingValue, seconds: step.ending.seconds },
+    } : {}),
     ...(step.ending.kind === 'distance' ? {
       sourceDistance: { editorValue: endingValue, meters: step.ending.meters },
     } : {}),
@@ -338,7 +379,9 @@ export function changeManualWorkoutEditorSport(
   const toDistance = distanceScale(sport, units);
   const paceRatio = paceDistanceMeters(sport, units) / paceDistanceMeters(value.sport, units);
   const convert = (step: ManualWorkoutEditorStep): ManualWorkoutEditorStep => {
-    const meters = step.endingKind === 'distance'
+    const hasDistanceDraft = step.endingKind === 'manual'
+      && step.sourceDistance?.editorValue === step.endingValue;
+    const meters = step.endingKind === 'distance' || hasDistanceDraft
       ? distanceMetersFromEditor(step, value.sport, units) : null;
     const endingValue = meters !== null ? roundEditorNumber(meters / toDistance) : step.endingValue;
     const canConvertPace = step.targetKind === 'pace'

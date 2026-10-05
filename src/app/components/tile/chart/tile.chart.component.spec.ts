@@ -79,6 +79,7 @@ class MockTileChartActionsComponent {
   @Input() chartTimeInterval?: TimeIntervals;
   @Input() chartDataValueType?: ChartDataValueTypes;
   @Input() showLayoutControls = true;
+  @Input() calendarViewSaving = false;
   @Output() savingChange = new EventEmitter<boolean>();
   @Output() editTile = new EventEmitter<number>();
 }
@@ -116,6 +117,9 @@ class MockActivityCalendarTileComponent {
   @Input() timelineNotes: unknown;
   @Input() dayContextEnabled = false;
   @Input() privateHealthEnabled = false;
+  @Input() viewSaving = false;
+  @Input() view: 'month' | '30d' = 'month';
+  @Output() viewChange = new EventEmitter<'month' | '30d'>();
   @Output() selectedDateKeyChange = new EventEmitter<string>();
 }
 
@@ -1115,6 +1119,26 @@ describe('TileChartComponent', () => {
     fixture.detectChanges();
     expect(component.showCalendarRouteAction).toBe(false);
     expect(fixture.nativeElement.querySelector('.calendar-route-action')).toBeNull();
+  });
+
+  it('forwards Calendar selector changes through the existing settings save and blocks concurrent actions', () => {
+    component.chartType = DASHBOARD_ACTIVITY_CALENDAR_CHART_TYPE;
+    component.showActions = true;
+    fixture.detectChanges();
+    const calendar = fixture.debugElement.query(By.directive(MockActivityCalendarTileComponent)).componentInstance as MockActivityCalendarTileComponent;
+    const actions = getActionsComponent();
+    const persisted = vi.spyOn(component.calendarViewChange, 'emit');
+    expect(calendar.view).toBe('month');
+    calendar.viewChange.emit('30d'); fixture.detectChanges();
+    expect(persisted).toHaveBeenCalledExactlyOnceWith('30d');
+    fixture.componentRef.setInput('calendarView', '30d'); fixture.detectChanges();
+    expect(calendar.view).toBe('30d');
+    fixture.componentRef.setInput('calendarViewSaving', true); fixture.detectChanges();
+    expect(actions.calendarViewSaving).toBe(true);
+    expect(calendar.viewSaving).toBe(true);
+    fixture.componentRef.setInput('calendarViewSaving', false);
+    component.onTileActionSaving(true); fixture.detectChanges();
+    expect(calendar.viewSaving).toBe(true);
   });
 
   it('should size the Calendar route action like other compact tile-header buttons', () => {

@@ -36,7 +36,10 @@ in addition to the existing Sleep grant for this supplement. See the shared
 [provider integration contract](provider-integration-guide.md#nightly-hrv-across-sleep-and-health).
 ## Delivery and trust boundary
 
-- Configure Garmin for **Ping/Pull**, not Push. Garmin's ping has no local request signature, so the public request is only an availability hint.
+- Configure Garmin for **Ping/Pull**. Garmin callbacks use a dedicated shared credential in the exact `/<secret>/API`
+  suffix of each function URL, checked before payload inspection, account lookup, queue work, or lifecycle changes.
+  This is credential possession, not a Garmin body signature. The separate OAuth-authenticated pull remains the
+  authority for Health data. The public `garmin-client-id` header is not authentication.
 - `receiveGarminAPIHealthData` is the sole Sleep and Health summary endpoint. Garmin deregistration and user-permission endpoints remain separate.
 - The handler accepts at most 10 MiB, validates exact Garmin HTTPS callback hosts and mapped family paths (including `pulseOx` and `respiration` REST aliases), validates one bounded pull token and an upload window of at most 24 hours, deduplicates exact descriptors, and resolves unique provider accounts with bounded batched lookups. Before returning `200`, it stores at most 250 callbacks and 700 KiB per UID-scoped live batch row. A retryable Firestore trigger immediately dispatches each newly created or replacement batch revision outside the acknowledgement path. Retry-state writes for the same revision do not create a new task, so the existing Cloud Task retains its configured backoff.
 - Direct Push summaries, malformed callbacks, unsupported `epochs`, and disabled families are acknowledged and dropped. Only a durable queue-write outage returns `5xx` so Garmin can retry.
@@ -45,6 +48,50 @@ in addition to the existing Sleep grant for this supplement. See the shared
 - A terminally invalid callback response records `healthSyncState/GarminAPI` as failed through the current credential and connection lifecycle fence before the exact queue revision moves to the DLQ. If that fence is stale, the callback is skipped instead of overwriting a newer connection state.
 - Daily `averageStressLevel` validation failures and unsupported Stress Details state codes attach bounded `validation` metadata to the existing WARNING: fixed family/field/reason, zero-based summary index, value type, and the first offending sample offset when applicable. Only finite numeric values with absolute value at most 1,000,000 are included; all other values are omitted with a disposition code. Strings, objects, raw summaries, provider identities, and credentials are never included. A later successful callback may restore `ready` without recovering an earlier failed batch; inspect the failed jobs separately.
 - Callback URLs contain short-lived pull credentials. Garmin workout, Sleep, and Health failures retain their original `callbackURL` or `garminCallbackURLs` in admin-only failed-job records under the existing 30-day expiry for bounded operator recovery; failure alone does not prove that the URL expired. Successful and skipped live rows still remove them. Keep them out of events, Health records, logs, and safe admin response projections; this retention change adds no logging or projection. Retention does not authorize automatic replay or bypass current account/connection/deletion checks.
+
+Activity Files use the same callback guard, a 10 MiB ingress limit and a 10,000-file bound. Invalid authenticated
+deliveries are acknowledged without account lookup or queue work; durable queue failures still return 500.
+Before admission and again before token refresh/download, activity URLs must be HTTPS on exactly
+`apis.garmin.com`, use the standard HTTPS port, have no userinfo/fragment, and target
+`/wellness-api/rest/activityFile` with one nonempty ID and at most one nonempty pull token. Legacy URLs without a
+pull token remain supported. The original URL and query encoding are retained, including opaque IDs. Arbitrary
+hosts, other Garmin API resources and ambiguous ID/token parameters are rejected. Unsafe stored URLs move to the
+existing DLQ without a download; this also covers records queued before the ingress guard was introduced.
+
+Both the first activity download and the GPX-to-FIT fallback refuse redirects, use a 60-second deadline that covers
+body reading, and stream-enforce a 128 MiB response bound. This is an explicit QS worker safety limit, not a claimed
+Garmin contractual maximum. Files exceeding it move to `GARMIN_ACTIVITY_FILE_TOO_LARGE` for operator review without
+repeated identical downloads; normal files retain their original bytes. Review any legitimate oversized file before
+changing the limit and worker memory. Fetch failures retain only a fixed error message and status category, never
+provider bodies or signed URL text. Parser work limits are a separate concern.
+
+## Temporary webhook URL probe
+
+`garminWebhookProbe` was a temporary public Gen 2 endpoint for checking Garmin's URL transport. It discarded
+payloads, acknowledged POSTs with `200`, and logged only boolean marker/header facts. Its successful transport test
+established path preservation, while the portal removed query parameters; it did not prove sender authentication or
+production ingestion. PR #800 removes the probe source, export, isolated loader and probe-only tests/checks.
+
+Source removal or deployment of only the four callback receivers does not delete the existing cloud Function.
+Retire the deployed probe after the [production cutover](#production-configuration):
+
+1. Check saved endpoint URLs in every Garmin app used for this test, including evaluation and On Hold entries.
+   Replace probe URLs intended for ingestion with their correct protected receiver. Do not leave a payload-discarding
+   probe configured as an ingestion endpoint.
+2. Verify protected POST delivery and actual Health/activity processing on the real receivers; a probe `200` is not
+   ingestion evidence. Deploy and verify the four strict cleanup receivers before removing the live probe.
+3. With separate explicit approval for this exact deletion, remove only `garminWebhookProbe` in `europe-west2` from
+   project `quantified-self-io`:
+
+```bash
+firebase functions:delete garminWebhookProbe --region europe-west2 --project quantified-self-io
+```
+
+4. Confirm the Function is absent from the deployed inventory and protected ingestion remains healthy. Do not delete
+   any other Function, queue, secret or provider data. Do not redeploy the probe as a rollback step.
+
+Preparing or merging #800 performs no cloud deletion. The existing product Help remains accurate: this operator-only
+retirement changes no supported integration, user flow, OAuth permission, entitlement or MCP surface.
 
 ## Identity and lifecycle
 
@@ -181,16 +228,71 @@ deployment or data deletion.
 
 ## Production configuration
 
-No new secret is required. The existing Garmin OAuth client credentials authorize callback pulls.
+Deployment of [#800](https://github.com/jimmykane/quantified-self/pull/800) closes the legacy bare URLs. Update and
+verify the Garmin portal URLs first, then deploy the receivers with one plain `GARMINAPI_WEBHOOK_SECRET` value.
+There is no cutoff timestamp, JSON configuration or compatibility switch. Code or PR completion alone does not
+change production behavior. Existing Garmin OAuth credentials still authorize pulls. Provision the callback secret through the approved
+[secret-management workflow](function-secret-management.md#garmin-callback-credential-and-migration) before deploying
+the four callback receivers. They retain their existing names, regions and memory. No additional Function is required.
 
-In Garmin's Endpoint Configuration Tool:
+1. Inventory the actual deployed callbacks and saved Garmin URLs. The deployed deregistration name is
+   `deauthorizeGarminAPIUsers`; `receiveGarminAPIDeregistration` is its internal handler name, not a separate exported
+   deployment. Include any genuinely deployed older aliases in the retirement review instead of assuming an alias
+   exists from old documentation.
+2. Provision `GARMINAPI_WEBHOOK_SECRET` as exactly 64 lowercase hexadecimal characters, without JSON or whitespace.
+   If the value was already stored as JSON, publish the same underlying secret as a plain value through the approved
+   secret-version workflow before deployment. Running receivers retain their injected version until redeployed.
+   First deploy the initial rollout revision's four receivers and `processWorkoutTask` under separate deployment
+   approval. That version accepts protected and exact legacy URLs using the same plain secret, without a timed cutoff,
+   while the portal is migrated. Skip this initial deployment only if protected delivery is already supported and
+   the activity download protections are already deployed.
+3. In Garmin's Endpoint Configuration Tool, update and confirm the saved URL for **every enabled** endpoint ends in
+   the correct `/<secret>/API` suffix on its production receiver. Replace stale or temporary probe URLs before
+   deploying the cleanup:
 
-1. Set `receiveGarminAPIHealthData` as the Ping URL for `sleeps` and each enabled Health family.
-2. Leave `epochs` and out-of-scope families disabled.
-3. Keep the existing `receiveGarminAPIDeregistration` and `receiveGarminAPIUserPermissions` endpoint configurations enabled and unchanged.
-4. Keep the legacy Sleep function deployed until the canonical URL has demonstrated delivery, then remove the alias in a later cleanup change.
-5. For a connected Pro account with Historical Data Export and Health Export permission, use the in-app Garmin history action and verify that it reports **Sleep & Health history**. Keep Summary Resender for bounded operational recovery only.
+   | Garmin endpoint | Production receiver |
+   | --- | --- |
+   | Sleep and enabled Health Ping families | `receiveGarminAPIHealthData` |
+   | Activity Files | `insertGarminAPIActivityFileToQueue` |
+   | Deregistrations | `deauthorizeGarminAPIUsers` |
+   | User Permissions Change | `receiveGarminAPIUserPermissions` |
 
-For planned maintenance or an unhealthy receiver, set the affected summary families to **On Hold** before changing or rolling back endpoints. Garmin continues queueing notifications while a family is enabled and On Hold; remove On Hold only after the canonical endpoint is healthy. For rollback, put the affected families On Hold, restore `sleeps` to the still-deployed legacy Sleep URL, disable the Health families if necessary, deploy or restore the previous backend revision, verify the legacy endpoint, and then release On Hold. Use Summary Resender for a bounded recovery window if notifications were missed; do not replay an unbounded history range during incident recovery.
+   Leave `epochs` and out-of-scope families disabled. The probe discards payloads even when it reports successful
+   delivery, so it cannot serve as a production receiver. No query parameter is required;
+   the portal removed query parameters in the operator's transport test while preserving the path.
+4. Before deploying, verify POST delivery to the updated URLs and normal Health/activity processing with safe
+   test-account evidence on the current receivers. A 200 alone does not prove ingestion. Validate lifecycle behavior
+   with synthetic tests, or separately approved exact account-side actions; do not disconnect a live account merely
+   to test routing. Confirm accepted-route logs show `authenticated: true, legacy: false` for the protected deliveries.
+   The initial rollout's bare deliveries show `authenticated: false, legacy: true`; those URLs stay open until cleanup.
+5. Separately approve and deploy the four receivers from this revision together. Each updated receiver closes its
+   bare URL immediately and authenticates before account/queue work. The activity URL/redirect/download protections
+   from #798 remain in `processWorkoutTask`; include that worker if those protections have not yet been deployed.
+   Do not redirect old URLs. The removed probe export needs the explicit retirement step below; deploying only these
+   four receivers leaves the existing cloud probe active.
+6. After deployment, recheck protected delivery and queue/worker/import outcomes. `[GarminWebhook] Accepted callback
+   route` reports only `functionName`, `authenticated`, and `legacy`; confirm `authenticated: true, legacy: false`.
+   Bare and wrong-secret paths must return 403 without side effects; GET returns 405. Watch for stale deliveries.
+7. Retire the deployed `garminWebhookProbe` using the [probe retirement procedure](#temporary-webhook-url-probe),
+   after confirming no saved Garmin endpoint still targets it. The PR removes its code; the exact cloud deletion
+   requires separate explicit approval and must not remove any other resource.
+8. For a connected Pro account with Historical Data Export and Health Export permission, the existing in-app history
+   action still reports **Sleep & Health history**. Summary Resender remains bounded operational recovery after the
+   protected receiver is healthy.
+
+The initial rollout retains bare-path compatibility until these cleanup receivers are deployed. Preparing or merging
+this PR does not change the currently running receivers or retire legacy URLs.
+
+For separately approved maintenance, Garmin's **On Hold** control can retain notifications while a receiver is being
+changed. Resume only after the protected receiver is healthy. A rollback must retain callback authentication; reopening
+bare URLs restores the reported boundary failure, so do not roll back to the initial compatibility revision.
+When rolling back to #798, retain the same plain secret and redeploy
+the four receivers through the approved workflow so bare paths remain closed; do not restore its JSON migration format.
+Use Summary Resender only for a bounded recovery window.
+
+The application's Help, OAuth scopes, connection UI, entitlements and MCP contracts need no change for this
+operator-managed callback migration. No provider calls, cloud configuration, secret values or deployment are performed
+by the implementation PR. A leaked path credential can still admit requests;
+the shared secret does not provide body integrity, replay prevention or account-wide resource quotas.
 
 Monitor non-2xx responses, `processGarminHealthBackfillTask` depth/state in the admin queue view, `sleepSyncQueue` retry/DLQ counts, `users/{uid}/sleepSyncState/GarminAPI` Health cursor fields, `users/{uid}/healthSyncState/GarminAPI`, and the expected source-record/sample-chunk families. Each accepted or durably failed ingress log includes non-zero per-family counts for received and valid Ping descriptors, direct-summary/Push-shaped descriptors, invalid Ping descriptors, queued work, skipped accounts, disabled families, and received/direct-summary `epochs` descriptors that remain unsupported. These counters contain only fixed summary-family names and integer counts. Do not log or export callback URLs, OAuth credentials, raw payloads, or raw provider account IDs.

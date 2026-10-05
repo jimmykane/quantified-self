@@ -39,7 +39,9 @@
       </div>
     }
   } @else {
-  <button mat-button appHapticTap type="button" (click)="open()" [disabled]="disabled()">
+  <button mat-button appHapticTap type="button" (click)="open()" [disabled]="disabled()"
+      [attr.aria-label]="scope() === 'history' ? 'Workout sync history' : null"
+      [matTooltip]="scope() === 'history' && historyLabel() !== 'Workout sync history' ? 'Workout sync history' : ''">
     <mat-icon aria-hidden="true">sync</mat-icon>{{ buttonLabel() }}
   </button>
     @if (summaryWorkouts() !== null && (readState().error || summaryState().error)) {

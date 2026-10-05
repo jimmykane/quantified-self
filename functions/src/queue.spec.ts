@@ -155,7 +155,8 @@ vi.mock('./history', () => ({
 }));
 
 // Mock request-helper (used by queue.ts)
-vi.mock('./request-helper', () => {
+vi.mock('./request-helper', async (importOriginal) => {
+    const { ResponseBodyTooLargeError } = await importOriginal<typeof import('./request-helper')>();
     const mock: any = vi.fn().mockResolvedValue(Buffer.from('test-fit-data'));
     mock.get = vi.fn().mockResolvedValue(Buffer.from('test-fit-data'));
     mock.getBinaryResponse = mock.get;
@@ -164,6 +165,7 @@ vi.mock('./request-helper', () => {
     mock.delete = vi.fn().mockResolvedValue(Buffer.from('test-fit-data'));
     return {
         __esModule: true,
+        ResponseBodyTooLargeError,
         default: mock,
         ...mock
     };
@@ -191,7 +193,8 @@ vi.mock('./utils', () => ({
 }));
 
 import * as utils from './utils';
-import { getBinaryResponse } from './request-helper';
+import { getBinaryResponse, ResponseBodyTooLargeError } from './request-helper';
+import { SUUNTO_FIT_MAX_RESPONSE_BYTES } from './suunto/constants';
 
 vi.mock('./queue/provider-event-id', () => ({
     resolveProviderImportEventID: vi.fn().mockResolvedValue('standardized-event-id'),
@@ -4007,6 +4010,27 @@ describe('queue', () => {
             expect(getBinaryResponse).toHaveBeenCalledTimes(2);
             expect(result).toBe(QueueResult.Processed);
             expect(getTokenData).toHaveBeenCalledTimes(2); // Initial + Force Refresh
+        });
+
+        it.each([false, true])('moves an oversized Suunto FIT to DLQ without parsing or retrying (after refresh: %s)', async (afterRefresh) => {
+            const error = Object.assign(new ResponseBodyTooLargeError(
+                SUUNTO_FIT_MAX_RESPONSE_BYTES, SUUNTO_FIT_MAX_RESPONSE_BYTES + 1,
+            ), { message: 'private provider body and credential URL' });
+            if (afterRefresh) vi.mocked(getBinaryResponse).mockRejectedValueOnce({ statusCode: 401 });
+            vi.mocked(getBinaryResponse).mockRejectedValueOnce(error);
+
+            const result = await parseWorkoutQueueItemForServiceName(ServiceNames.SuuntoApp, suuntoQueueItem);
+
+            expect(result).toBe(QueueResult.MovedToDLQ);
+            expect(getBinaryResponse).toHaveBeenCalledTimes(afterRefresh ? 2 : 1);
+            expect(EventImporterFIT.getFromArrayBuffer).not.toHaveBeenCalled();
+            expect(utils.setEvent).not.toHaveBeenCalled();
+            expect(mockBatch.set).toHaveBeenCalledWith(expect.anything(), expect.objectContaining({
+                context: 'SUUNTO_ACTIVITY_FILE_TOO_LARGE',
+                error: 'Suunto FIT response exceeded the 128 MiB download limit.',
+            }));
+            expect(JSON.stringify(mockBatch.set.mock.calls)).not.toContain('private provider body');
+            expect(mockBatch.delete).toHaveBeenCalledWith(mockRef);
         });
 
         it('should defer a Suunto 401 retry when another worker owns the forced token refresh', async () => {

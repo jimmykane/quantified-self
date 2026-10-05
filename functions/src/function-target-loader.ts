@@ -19,6 +19,8 @@ const TARGET_LOADERS: Readonly<Record<string, ModuleLoader>> = Object.freeze({
     () => module.require('./suunto/auth/wrapper') as FunctionModule,
   requestAndSetSuuntoAPIAccessToken:
     () => module.require('./suunto/auth/wrapper') as FunctionModule,
+  receiveSuunto247Data:
+    () => module.require('./sleep/webhooks') as FunctionModule,
   listMarketingCampaigns: loadMarketingHandlers,
   saveMarketingCampaign: loadMarketingHandlers,
   cloneMarketingCampaign: loadMarketingHandlers,

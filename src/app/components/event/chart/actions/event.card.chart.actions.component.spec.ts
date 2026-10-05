@@ -6,20 +6,26 @@ import { CommonModule } from '@angular/common';
 import { MatBadgeModule } from '@angular/material/badge';
 import { MatButtonModule } from '@angular/material/button';
 import { MatIconModule } from '@angular/material/icon';
-import { MatMenuModule } from '@angular/material/menu';
+import { MatMenuModule, MatMenuTrigger } from '@angular/material/menu';
+import { MatProgressSpinnerModule } from '@angular/material/progress-spinner';
+import { OverlayContainer } from '@angular/cdk/overlay';
+import { By } from '@angular/platform-browser';
 import { MatSliderModule } from '@angular/material/slider';
-import { MatSlideToggleModule } from '@angular/material/slide-toggle';
+import { MatSlideToggleModule, type MatSlideToggleChange } from '@angular/material/slide-toggle';
 import { MatTooltipModule } from '@angular/material/tooltip';
 import { ChartCursorBehaviours, EventInterface, User, XAxisTypes } from '@sports-alliance/sports-lib';
 import { vi } from 'vitest';
 import { EventCardChartActionsComponent } from './event.card.chart.actions.component';
 import { AppAnalyticsService } from '../../../../services/app.analytics.service';
+import { AppHapticsService } from '../../../../services/app.haptics.service';
 import { MenuRadioListComponent } from '../../../shared/menu-radio-list/menu-radio-list.component';
 import { MatDividerModule } from '@angular/material/divider';
 
 describe('EventCardChartActionsComponent', () => {
   let component: EventCardChartActionsComponent;
   let fixture: ComponentFixture<EventCardChartActionsComponent>;
+
+  const hapticsServiceMock = { selection: vi.fn() };
 
   const analyticsServiceMock = {
     logEvent: vi.fn(),
@@ -35,12 +41,14 @@ describe('EventCardChartActionsComponent', () => {
         MatDividerModule,
         MatIconModule,
         MatMenuModule,
+        MatProgressSpinnerModule,
         MatSliderModule,
         MatSlideToggleModule,
         MatTooltipModule,
       ],
       declarations: [EventCardChartActionsComponent, MenuRadioListComponent],
       providers: [
+        { provide: AppHapticsService, useValue: hapticsServiceMock },
         { provide: AppAnalyticsService, useValue: analyticsServiceMock },
       ],
     }).compileComponents();
@@ -58,6 +66,80 @@ describe('EventCardChartActionsComponent', () => {
     component.syncChartHoverToMap = false;
     fixture.detectChanges();
     vi.clearAllMocks();
+  });
+
+  async function openOptionsMenu(): Promise<HTMLElement> {
+    fixture.detectChanges();
+    fixture.debugElement.query(By.css('button[aria-label="Chart options"]')).injector.get(MatMenuTrigger).openMenu();
+    fixture.detectChanges();
+    await fixture.whenStable();
+    return TestBed.inject(OverlayContainer).getContainerElement();
+  }
+
+  function patternChange(checked: boolean): MatSlideToggleChange {
+    return { checked, source: { checked: component.useDistinctLinePatterns } } as MatSlideToggleChange;
+  }
+
+  it('hides patterns for ordinary events and opens options with one haptic', async () => {
+    expect(hapticsServiceMock.selection).not.toHaveBeenCalled();
+    const overlay = await openOptionsMenu();
+    expect(overlay.querySelector('.chart-options-menu__pattern-row')).toBeNull();
+    expect(hapticsServiceMock.selection).toHaveBeenCalledOnce();
+  });
+
+  it('renders the saved pattern choice and emits an accepted menu toggle once', async () => {
+    component.showDistinctLinePatternsToggle = true;
+    component.canChangeDistinctLinePatterns = true;
+    component.useDistinctLinePatterns = true;
+    const emit = vi.spyOn(component.distinctLinePatternsChange, 'emit');
+    const overlay = await openOptionsMenu();
+    const toggle = overlay.querySelector('.chart-options-menu__pattern-row button[role="switch"]') as HTMLButtonElement;
+    expect(toggle.getAttribute('aria-checked')).toBe('true');
+    toggle.click();
+    expect(emit).toHaveBeenCalledExactlyOnceWith(false);
+    expect(analyticsServiceMock.logEvent).toHaveBeenCalledWith('event_chart_settings_change', { property: 'useDistinctComparisonLinePatterns' });
+    expect(hapticsServiceMock.selection).toHaveBeenCalledOnce(); // The parent owns mutation feedback.
+  });
+
+  it('keeps the rendered switch off if its parent immediately rejects the change', async () => {
+    component.showDistinctLinePatternsToggle = true;
+    component.canChangeDistinctLinePatterns = true;
+    const overlay = await openOptionsMenu();
+    const toggle = overlay.querySelector('.chart-options-menu__pattern-row button[role="switch"]') as HTMLButtonElement;
+    toggle.click();
+    fixture.detectChanges();
+    expect(component.useDistinctLinePatterns).toBe(false);
+    expect(toggle.getAttribute('aria-checked')).toBe('false');
+  });
+
+  it('disables pending pattern changes and shows saving feedback in the menu and trigger', async () => {
+    component.showDistinctLinePatternsToggle = true;
+    component.canChangeDistinctLinePatterns = true;
+    component.isSavingDistinctLinePatterns = true;
+    const emit = vi.spyOn(component.distinctLinePatternsChange, 'emit');
+    const overlay = await openOptionsMenu();
+    const toggle = overlay.querySelector('.chart-options-menu__pattern-row button[role="switch"]') as HTMLButtonElement;
+    expect(toggle.disabled).toBe(false);
+    expect(toggle.getAttribute('aria-disabled')).toBe('true');
+    expect(toggle.tabIndex).toBe(0);
+    expect(overlay.querySelector('[aria-label="Saving line patterns"]')).toBeTruthy();
+    expect(fixture.nativeElement.querySelector('[aria-label="Saving chart settings"]')).toBeTruthy();
+    component.onDistinctLinePatternsChange(patternChange(true));
+    expect(emit).not.toHaveBeenCalled();
+  });
+
+  it('leaves unavailable and unchanged pattern choices silent', async () => {
+    component.showDistinctLinePatternsToggle = true;
+    const emit = vi.spyOn(component.distinctLinePatternsChange, 'emit');
+    const overlay = await openOptionsMenu();
+    const toggle = overlay.querySelector('.chart-options-menu__pattern-row button[role="switch"]') as HTMLButtonElement;
+    expect(toggle.disabled).toBe(true);
+    component.onDistinctLinePatternsChange(patternChange(true));
+    component.canChangeDistinctLinePatterns = true;
+    component.onDistinctLinePatternsChange(patternChange(false));
+    expect(emit).not.toHaveBeenCalled();
+    expect(analyticsServiceMock.logEvent).not.toHaveBeenCalled();
+    expect(hapticsServiceMock.selection).toHaveBeenCalledOnce();
   });
 
   it('should create', () => {

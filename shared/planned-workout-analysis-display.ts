@@ -26,6 +26,10 @@ export function formatWorkoutAnalysisSummaryV1(
       durationText += ` + ${count} step${duration.unknownSteps === 1 ? '' : 's'} with unknown duration`;
     } else if (duration.coverage === 'partial') durationText += ' (partial source)';
   }
+  if (summary.earlyLapSteps > 0) {
+    const count = new Intl.NumberFormat(locale).format(summary.earlyLapSteps);
+    durationText += ` (prescribed limits) · ${count} step${summary.earlyLapSteps === 1 ? ' allows' : 's allow'} early Lap`;
+  }
   const distance = summary.distance;
   if (distance.exactSteps === 0) return durationText;
   const display = isSwimmingWorkoutSportV1(sport)

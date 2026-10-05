@@ -120,6 +120,23 @@
   flex: 0 0 auto;
 }
 
+.event-chart-panel__series-legend-item--device {
+  opacity: 1;
+}
+
+.event-chart-panel__series-legend-dot--line {
+  width: 24px;
+  height: 0;
+  border-radius: 0;
+  border-top: var(--series-line-width, 3px) solid var(--series-color);
+}
+
+.event-chart-panel__series-legend-dot--dash-dot {
+  height: var(--series-line-width, 3px);
+  border-top: 0;
+  background: repeating-linear-gradient(to right, var(--series-color) 0 8px, transparent 8px 11px, var(--series-color) 11px 13px, transparent 13px 16px);
+}
+
 .event-chart-panel__series-legend-label {
   min-width: 0;
   overflow: hidden;

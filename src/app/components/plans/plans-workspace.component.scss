@@ -119,6 +119,28 @@
 
 .plan-form-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 
+// Hints/errors grow with their content without stretching neighboring controls.
+.workout-editor-basics,
+.step-fields {
+  align-items: start;
+  row-gap: 16px;
+}
+.workout-editor-basics--library { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.workout-pool-fields {
+  display: grid;
+  grid-column: 1 / -1;
+  grid-template-columns: inherit;
+  align-items: start;
+  gap: 16px 12px;
+  min-width: 0;
+}
+.early-lap-option { grid-column: 1 / -1; min-width: 0; }
+.early-lap-option .editor-hint {
+  margin: 4px 0 0;
+  color: var(--mat-sys-on-surface-variant);
+  font: var(--mat-sys-body-small);
+}
+
 .plan-deletion-card mat-card-content {
   padding-top: 16px;
 }
@@ -187,6 +209,8 @@
 }
 
 .editor-fields {
+  display: grid;
+  gap: 24px;
   border: 0;
   padding: 0;
   margin: 0;
@@ -277,8 +301,8 @@
   align-items: center;
   flex-wrap: wrap;
   gap: 16px;
-  margin: 8px 0 24px;
-  padding: 16px;
+  margin: 0;
+  padding: 12px 16px;
   border: 1px solid var(--mat-sys-outline-variant);
   border-radius: var(--mat-sys-corner-small);
   min-width: 0;
@@ -303,22 +327,54 @@
   gap: 14px;
 }
 
-.strength-exercise-fields { display: grid; gap: 12px; min-width: 0; }
+.strength-exercise-fields { display: grid; gap: 16px; min-width: 0; padding-top: 12px; }
 .strength-exercise-fields > mat-form-field { max-width: 420px; }
 .strength-set-fields {
   display: grid;
   grid-template-columns: auto repeat(4, minmax(0, 1fr)) auto;
-  gap: 10px;
+  gap: 16px 12px;
   align-items: start;
   min-width: 0;
 }
 .strength-set-fields > mat-form-field { min-width: 0; }
 .strength-set-number { padding-top: 16px; white-space: nowrap; font: var(--mat-sys-label-large); }
+.strength-set-fields + .strength-set-fields {
+  border-top: 1px solid var(--mat-sys-outline-variant);
+  padding-top: 16px;
+}
 
 .workout-step-editor {
-  display: flex;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
   align-items: start;
   gap: 10px;
+  padding-top: 12px;
+}
+
+.repeat-step-editor {
+  grid-template-columns: auto minmax(0, 1fr) auto;
+}
+
+.repeat-step-editor .step-fields { grid-column: 2; grid-row: 1; }
+.repeat-heading { padding-top: 12px; }
+.repeat-step-list { margin-top: 16px; }
+.workout-node-actions { display: flex; align-items: center; }
+.repeat-step-actions { display: flex; grid-column: 3; grid-row: 1; }
+.workout-drag-handle { cursor: grab; touch-action: none; }
+.workout-drag-handle:active { cursor: grabbing; }
+.workout-drag-handle:disabled { cursor: default; }
+.workout-node-list, .repeat-step-list { min-width: 0; }
+.workout-node-limit { margin: 0; color: var(--mat-sys-on-surface-variant); }
+.cdk-drag-preview {
+  box-sizing: border-box;
+  background: var(--mat-sys-surface-container);
+  color: var(--mat-sys-on-surface);
+  border-radius: 12px;
+  border: 1px solid var(--mat-sys-outline-variant);
+}
+.cdk-drag-placeholder { opacity: 0.25; }
+@media (prefers-reduced-motion: no-preference) {
+  .cdk-drag-animating { transition: transform 180ms ease; }
 }
 
 .workout-step-editor .step-fields {
@@ -326,8 +382,8 @@
 }
 
 .repeat-step-editor + .repeat-step-editor {
-  margin-top: 12px;
-  padding-top: 12px;
+  margin-top: 16px;
+  padding-top: 16px;
   border-top: 1px solid var(--mat-sys-outline-variant);
 }
 
@@ -480,9 +536,15 @@ mat-card-actions button,
   align-items: center;
 }
 
-@media (max-width: 900px) {
+@media (max-width: 1100px) {
+  .step-fields { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .workout-duration-input { grid-column: 1 / -1; }
   .strength-set-fields { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-  .strength-set-number { grid-column: 1 / -1; padding-top: 0; }
+  .strength-set-number { grid-column: 1; grid-row: 1; padding-top: 0; align-self: center; }
+  .strength-set-fields > button { grid-column: 2; grid-row: 1; justify-self: end; }
+}
+
+@media (max-width: 900px) {
   .plan-schedule-layout { grid-template-columns: minmax(0, 1fr); gap: 24px; }
 
   .plan-schedule-layout .workout-day-details {
@@ -508,9 +570,8 @@ mat-card-actions button,
   .workout-row-actions,
   .editor-save-actions { flex-wrap: wrap; }
   .editor-library-copy-action { flex: 1 1 100%; }
-  .strength-set-fields { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); }
-  .strength-set-fields > mat-form-field { grid-column: 1 / -1; }
-  .strength-set-fields > button { justify-self: end; }
+  .strength-set-type,
+  .strength-set-rest { grid-column: 1 / -1; }
   .plans-view-navigation {
     flex-wrap: wrap;
     gap: 8px;
@@ -561,18 +622,22 @@ mat-card-actions button,
     grid-row: 2;
   }
 
-  .repeat-step-editor > button {
+  .repeat-step-actions {
     grid-column: 2;
     grid-row: 1;
   }
 
   .repeat-heading {
     flex-wrap: wrap;
-    margin-bottom: 12px;
   }
 
   .repeat-heading mat-form-field {
     flex: 1 1 120px;
   }
 
+}
+.workout-node-row.profile-selected,
+.repeat-step-editor.profile-selected {
+  outline: 2px solid var(--mat-sys-primary);
+  outline-offset: 2px;
 }

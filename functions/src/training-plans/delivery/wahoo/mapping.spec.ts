@@ -200,6 +200,19 @@ describe('Wahoo delivery mapping (no editor changes)', () => {
     expect(identity.externalId.length).toBeLessThan(64);
     expect(identity.workoutToken.length).toBeLessThan(64);
   });
+  it('reserves distinct Plan generations while preserving the original completion marker', () => {
+    const original = wahooIdentities('a', 'workout');
+    const renewed = wahooIdentities('a', 'workout', 1);
+    expect(renewed.externalId).not.toBe(original.externalId);
+    expect(renewed.workoutToken).toBe(original.workoutToken);
+    expect(renewed.planGeneration).toBe('1');
+    expect(wahooIdentities('a', 'workout', 1)).toEqual(renewed);
+    expect(wahooIdentities('a', 'workout', 2).externalId).not.toBe(renewed.externalId);
+    expect(wahooIdentities('b', 'workout', 1).externalId).not.toBe(renewed.externalId);
+    for (const generation of [-1, 0.5, NaN, Infinity, 2_147_483_648]) {
+      expect(() => wahooIdentities('a', 'workout', generation)).toThrow();
+    }
+  });
   it('retains old OAuth scopes and requires explicit new grants', () => {
     expect(hasWahooTrainingScopes(WAHOO_API_SCOPES)).toBe(true);
     for (const scope of ['routes_read', 'routes_write', 'offline_data']) expect(WAHOO_API_SCOPES.split(' ')).toContain(scope);

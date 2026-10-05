@@ -6,10 +6,11 @@ import {
 } from './function-target-loader';
 
 describe('function target loader', () => {
-  it('optimizes the Suunto OAuth, marketing, and Training endpoints', () => {
+  it('optimizes the Suunto OAuth/webhook, marketing, and Training endpoints', () => {
     expect(OPTIMIZED_FUNCTION_TARGETS).toEqual([
       'getSuuntoAPIAuthRequestTokenRedirectURI',
       'requestAndSetSuuntoAPIAccessToken',
+      'receiveSuunto247Data',
       'listMarketingCampaigns',
       'saveMarketingCampaign',
       'cloneMarketingCampaign',
@@ -66,8 +67,8 @@ describe('function target loader', () => {
     })).toBeUndefined();
   });
 
-  it('returns the original exported function object', () => {
-    const handler = { __trigger: { platform: 'gcfv2' } };
+  it.each(['gcfv1', 'gcfv2'])('returns the original %s function object', platform => {
+    const handler = { __trigger: { platform } };
     const loader = vi.fn(() => ({ suuntoTarget: handler }));
 
     expect(loadFunctionTarget('suuntoTarget', { suuntoTarget: loader })).toBe(handler);

@@ -34,6 +34,9 @@ export class TileActionsAbstractDirective extends TileAbstractDirective {
   private readonly snackBar = inject(MatSnackBar);
   protected pendingBaseline: AppDashboardSettingsInterface | null = null;
   public isSaving = false;
+  @Input() calendarViewSaving = false;
+  get isActionSaving(): boolean { return this.isSaving || this.calendarViewSaving; }
+
   public canConfigure = true;
   readonly tileSizeOptions = [1, 2, 3, 4] as const;
   onLayoutMenuOpened(): void { if (!this.isSaving) this.hapticsService.selection(); }
