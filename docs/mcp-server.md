@@ -2375,6 +2375,8 @@ The Assistant treats the replacement preview's server-owned `invalid_request`/`d
 terminal blocked review, not a request to force a successful preview. It emits fixed guidance without raw server text,
 creates no confirmation proposal, and does not substitute another provider action. Strict schema rejection remains
 correctable. This handling is private to the Assistant and changes no registered MCP schema or provider authority.
+Explicit eligibility-only replacement previews use that dedicated tool rather than the ordinary delivery preview.
+Forbidding Apply or Send does not cancel the requested review, and the review never supplies Apply authority.
 
 Use the Functions emulator and local Angular app for the OAuth/consent flow. At minimum run:
 

@@ -2634,6 +2634,8 @@ consent changes. Lost replies use existing proposal status/receipts. The Assista
 dedicated app-owned replacement confirmation; stale, revoked, changed-account, Stop/completion, lock and Pro changes
 fail closed. An ineligible replacement review returns a fixed blocked explanation in the Assistant without a
 proposal, repeated preview, or Send/Retry fallback; strict malformed input remains separately correctable.
+Explicit replacement-eligibility preview requests select that same dedicated tool, including requests that forbid
+Apply or Send. Such a review is not Apply approval; ordinary status questions and negated previews do not select it.
 Existing MCP reads need no new provider HTTP and never expose observed keys, review binding, journals
 or old/new provider IDs. Separate deployment and registered-client refresh/rescan are required before advertising
 the additive tool as live; an older catalog must never substitute Send/Retry or a new authored workout.
