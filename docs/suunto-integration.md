@@ -27,6 +27,8 @@ rejection, so this recovery neither proves the resource was deleted nor authoriz
 
 A workout whose refreshed read still returns 403 moves to the existing failed-job store with
 `SUUNTO_WORKOUT_ACCESS_DENIED`, a fixed safe message and the actual retry count, rather than manufacturing 20 retries.
+Only a 403 from the retried workout read qualifies for this access-denied category. A 403 from OAuth refresh remains
+subject to the existing credential-failure retry/terminal policy, not a claim that workout access was tested.
 Legacy shared-account jobs still consider every matching owner: success wins, and a transient sibling failure or token
 refresh contention prevents premature access-denied finalization. Transient refresh/read failures keep existing backoff.
 History propagates the second failure without another read or queue write. Health allows at most one authorization

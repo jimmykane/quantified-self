@@ -4153,11 +4153,11 @@ describe('queue', () => {
             expect(mockBatch.set).not.toHaveBeenCalled();
         });
 
-        it('keeps a transient refresh failure after 403 retryable without claiming access denied', async () => {
+        it.each([403, 503])('keeps a refresh HTTP %s failure retryable without claiming workout access denied', async refreshStatusCode => {
             vi.mocked(getBinaryResponse).mockRejectedValueOnce({ statusCode: 403 });
             vi.mocked(getTokenData)
                 .mockResolvedValueOnce({ accessToken: 'old-token', userName: 'suuntoUser' } as any)
-                .mockRejectedValueOnce(Object.assign(new Error('refresh unavailable'), { statusCode: 503 }));
+                .mockRejectedValueOnce(Object.assign(new Error('refresh unavailable'), { statusCode: refreshStatusCode }));
 
             await expect(parseWorkoutQueueItemForServiceName(ServiceNames.SuuntoApp, suuntoQueueItem))
                 .resolves.toBe(QueueResult.RetryIncremented);

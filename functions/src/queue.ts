@@ -1095,6 +1095,7 @@ async function parseWorkoutQueueItemForServiceNameInternal(
           serviceName,
           providerStatusCode: e.statusCode,
         });
+        let refreshedDownloadStarted = false;
         try {
           // Force refresh token and save
           serviceToken = await getTokenData(tokenQueryDocumentSnapshot, serviceName, true);
@@ -1104,6 +1105,7 @@ async function parseWorkoutQueueItemForServiceNameInternal(
             sawInactiveProviderAccount = true;
             continue;
           }
+          refreshedDownloadStarted = true;
           const downloadedPayload = await getWorkoutForService(
             serviceName,
             queueItem as SuuntoAppWorkoutQueueItemInterface | GarminAPIActivityQueueItemInterface,
@@ -1157,7 +1159,7 @@ async function parseWorkoutQueueItemForServiceNameInternal(
             sawRetryableFailure = true;
             continue;
           }
-          if (serviceName === ServiceNames.SuuntoApp && retryError.statusCode === 403) {
+          if (refreshedDownloadStarted && serviceName === ServiceNames.SuuntoApp && retryError.statusCode === 403) {
             suuntoAccessDeniedError = new Error('Suunto workout access denied after token refresh (HTTP 403).');
             logger.warn('Suunto workout access remains denied after one token refresh.', {
               queueItemId: queueItem.id,
