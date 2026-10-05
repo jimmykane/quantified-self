@@ -316,14 +316,23 @@ export class PlansWorkspaceComponent {
   readonly placementItem = signal<WorkoutLibraryItemV1 | null>(null);
   readonly placementPreview = computed(() => this.placementItem()
     ? presentWorkoutLibraryItem(this.placementItem()!, this.currentUser()?.settings?.unitSettings, this.locale) : null);
-  readonly placementRetry = signal<PlaceWorkoutLibraryRequestV1 | null>(null);
+  private readonly placementAttempt = signal<{
+    request: PlaceWorkoutLibraryRequestV1;
+    plan: TrainingPlanV1 | null;
+  } | null>(null);
+  readonly placementRetry = computed(() => this.placementAttempt()?.request ?? null);
   readonly placementLocked = computed(() => this.busyAction() !== null || this.placementRetry() !== null);
   readonly placementPlanId = signal<string | null>(null);
   readonly placementStartDate = signal(todayLocalDate());
   readonly placementEndDate = signal(todayLocalDate());
   readonly placementWeekdays = signal<number[]>([]);
   private readonly placementWeekdaysCustomized = signal(false);
-  readonly placementDestination = computed(() => this.planOptions().find(plan => plan.id === this.placementPlanId()) ?? null);
+  readonly placementDestination = computed(() => {
+    const attempt = this.placementAttempt();
+    return attempt ? attempt.plan : this.planOptions().find(plan => plan.id === this.placementPlanId()) ?? null;
+  });
+  readonly placementDestinationLabel = computed(() => this.placementDestination()?.name
+    ?? (this.placementPlanId() ? 'Unavailable plan' : 'Standalone'));
   readonly placementRangeExtension = computed(() => {
     const plan = this.placementDestination();
     const dates = this.placementDates();
@@ -333,6 +342,8 @@ export class PlansWorkspaceComponent {
     return start !== plan.startLocalDate || end !== plan.endLocalDate ? `${start}–${end}` : null;
   });
   readonly placementError = computed(() => {
+    // An uncertain request must stay replayable even after newer live data arrives.
+    if (this.placementRetry()) return null;
     const start = this.placementStartDate();
     const end = this.placementEndDate();
     try {
@@ -358,6 +369,8 @@ export class PlansWorkspaceComponent {
     return null;
   });
   readonly placementDates = computed(() => {
+    const request = this.placementRetry();
+    if (request) return request.dates;
     const start = this.placementStartDate();
     const end = this.placementEndDate();
     const weekdays = this.placementWeekdays();
@@ -647,7 +660,7 @@ export class PlansWorkspaceComponent {
       this.editor.set(null);
       this.libraryEditorItem.set(null);
       this.placementItem.set(null);
-      this.placementRetry.set(null);
+      this.placementAttempt.set(null);
       if (this.busyAction()?.startsWith('place-')) this.busyAction.set(null);
       this.librarySearch.set('');
       this.librarySport.set(null);
@@ -683,7 +696,7 @@ export class PlansWorkspaceComponent {
     this.editor.set(null);
     this.libraryEditorItem.set(null);
     this.placementItem.set(null);
-    this.placementRetry.set(null);
+    this.placementAttempt.set(null);
     if (this.busyAction()?.startsWith('place-')) this.busyAction.set(null);
     this.showPlanForm.set(false);
     this.closeHistory();
@@ -1659,8 +1672,13 @@ export class PlansWorkspaceComponent {
     this.placementWeekdays.set([new Date(`${date}T12:00:00Z`).getUTCDay()]);
     this.placementWeekdaysCustomized.set(false);
     // The review replaces the results, so keyboard and screen-reader users land at its heading.
-    afterNextRender(() => this.host.nativeElement.querySelector<HTMLElement>('#library-placement-heading')?.focus(),
-      { injector: this.injector });
+    const uid = this.currentUser()?.uid;
+    const generation = this.editorGeneration;
+    afterNextRender(() => {
+      if (uid === this.currentUser()?.uid && generation === this.editorGeneration && this.placementItem()?.id === item.id) {
+        this.host.nativeElement.querySelector<HTMLElement>('#library-placement-heading')?.focus();
+      }
+    }, { injector: this.injector });
   }
 
   private returnToLibraryBrowse(): void {
@@ -1693,9 +1711,21 @@ export class PlansWorkspaceComponent {
   cancelLibraryPlacement(): void {
     if (this.placementLocked()) return;
     const id = this.placementItem()?.id;
+    if (!id) return;
     this.placementItem.set(null);
-    afterNextRender(() => this.host.nativeElement.querySelector<HTMLElement>(`[data-library-add="${id}"]`)?.focus(),
-      { injector: this.injector });
+    this.restoreLibraryPlacementFocus(id);
+  }
+
+  private restoreLibraryPlacementFocus(id: string): void {
+    const uid = this.currentUser()?.uid;
+    const generation = this.editorGeneration;
+    afterNextRender(() => {
+      if (uid !== this.currentUser()?.uid || generation !== this.editorGeneration || this.placementItem()) return;
+      // A live archive/delete or listener error can hide the original action.
+      const target = this.host.nativeElement.querySelector<HTMLElement>(`[data-library-add="${id}"]`)
+        ?? this.host.nativeElement.querySelector<HTMLElement>('#library-heading');
+      target?.focus();
+    }, { injector: this.injector });
   }
 
   setPlacementPlan(value: string): void {
@@ -1706,6 +1736,7 @@ export class PlansWorkspaceComponent {
   }
 
   togglePlacementWeekday(day: number): void {
+    if (this.placementLocked()) return;
     this.haptics.selection();
     this.placementWeekdaysCustomized.set(true);
     this.placementWeekdays.update(days => days.includes(day) ? days.filter(value => value !== day)
@@ -1713,6 +1744,7 @@ export class PlansWorkspaceComponent {
   }
 
   setPlacementStartDate(value: string): void {
+    if (this.placementLocked()) return;
     const old = this.placementStartDate();
     this.placementStartDate.set(value);
     if (this.placementEndDate() === old) this.placementEndDate.set(value);
@@ -1721,6 +1753,11 @@ export class PlansWorkspaceComponent {
       normalizeTrainingLocalDate(value);
       this.placementWeekdays.set([new Date(`${value}T12:00:00Z`).getUTCDay()]);
     } catch { this.placementWeekdays.set([]); }
+  }
+
+  setPlacementEndDate(value: string): void {
+    if (this.placementLocked()) return;
+    this.placementEndDate.set(value);
   }
 
   async placeLibraryItem(): Promise<void> {
@@ -1740,7 +1777,7 @@ export class PlansWorkspaceComponent {
       planId: plan?.id ?? null, expectedPlanRevision: plan?.revision ?? null,
       dates, confirmPlanRangeExtension: false };
     this.busyAction.set(`place-${item.id}`);
-    this.placementRetry.set(request);
+    this.placementAttempt.set({ request, plan });
     try {
       let response;
       try { response = await this.libraryService.place(request); }
@@ -1748,28 +1785,33 @@ export class PlansWorkspaceComponent {
         const message = errorMessage(error);
         if (!current()) return;
         if (!plan || !/requires extending/i.test(message)) throw error;
-        this.placementRetry.set(null); // This rejection is definitive: nothing was added.
         const extendedStart = dates[0] < plan.startLocalDate ? dates[0] : plan.startLocalDate;
         const finalDate = dates[dates.length - 1];
         const extendedEnd = finalDate > plan.endLocalDate ? finalDate : plan.endLocalDate;
         const placementMessage = `Adding ${dates.length} ${dates.length === 1 ? 'workout' : 'workouts'} `
           + `will extend ${plan.name} to ${extendedStart}–${extendedEnd}.`;
-        if (!await this.confirm('Extend plan dates?', placementMessage, 'Extend and add workouts') || !current()) return;
+        if (!await this.confirm('Extend plan dates?', placementMessage, 'Extend and add workouts')) {
+          // This rejection is definitive: nothing was added.
+          if (current()) this.placementAttempt.set(null);
+          return;
+        }
+        if (!current()) return;
         request = { ...request, confirmPlanRangeExtension: true };
-        this.placementRetry.set(request);
+        this.placementAttempt.set({ request, plan });
         response = await this.libraryService.place(request);
       }
       if (!current()) return;
       this.haptics.success();
-      this.placementRetry.set(null);
+      this.placementAttempt.set(null);
       this.placementItem.set(null);
+      this.restoreLibraryPlacementFocus(item.id);
       this.snackBar.open(`${response.workoutIds.length} ${response.workoutIds.length === 1 ? 'workout' : 'workouts'} added to your calendar.`,
         'Dismiss', { duration: 5000 });
     } catch (error) {
       if (!current()) return;
       const code = (error as { code?: string })?.code?.replace(/^functions\//, '');
       if (code && ['invalid-argument', 'failed-precondition', 'aborted', 'out-of-range', 'resource-exhausted',
-        'permission-denied', 'unauthenticated', 'not-found', 'already-exists'].includes(code)) this.placementRetry.set(null);
+        'permission-denied', 'unauthenticated', 'not-found', 'already-exists'].includes(code)) this.placementAttempt.set(null);
       this.showError(error);
     } finally { if (current() && this.busyAction() === `place-${item.id}`) this.busyAction.set(null); }
   }

@@ -314,7 +314,7 @@
       <section class="workout-library" aria-labelledby="library-heading">
         <div class="workout-list-heading">
           <div>
-            <h2 id="library-heading">Saved workouts <span class="workout-count">({{ libraryRows().length }})</span></h2>
+            <h2 id="library-heading" tabindex="-1">Saved workouts <span class="workout-count">({{ libraryRows().length }})</span></h2>
             <p>Reusable recipes, without dates or service sync. Adding one makes independent calendar workouts.</p>
           </div>
         </div>
@@ -432,9 +432,13 @@
                 <mat-form-field><mat-label>Save to</mat-label>
                   <mat-select [value]="placementPlanId() ?? 'standalone'" [disabled]="placementLocked()"
                     (selectionChange)="setPlacementPlan($event.value)">
-                    <mat-option value="standalone">Standalone</mat-option>
-                    @for (plan of planOptions(); track plan.id) {
-                      @if (plan.lifecycle !== 'archived') { <mat-option [value]="plan.id">{{ plan.name }}</mat-option> }
+                    @if (placementLocked()) {
+                      <mat-option [value]="placementPlanId() ?? 'standalone'">{{ placementDestinationLabel() }}</mat-option>
+                    } @else {
+                      <mat-option value="standalone">Standalone</mat-option>
+                      @for (plan of planOptions(); track plan.id) {
+                        @if (plan.lifecycle !== 'archived') { <mat-option [value]="plan.id">{{ plan.name }}</mat-option> }
+                      }
                     }
                   </mat-select>
                 </mat-form-field>
@@ -442,7 +446,7 @@
                   <input matInput type="date" [ngModel]="placementStartDate()" (ngModelChange)="setPlacementStartDate($event)" (change)="haptics.selection()">
                 </mat-form-field>
                 <mat-form-field><mat-label>Through</mat-label>
-                  <input matInput type="date" [ngModel]="placementEndDate()" (ngModelChange)="placementEndDate.set($event)" (change)="haptics.selection()">
+                  <input matInput type="date" [ngModel]="placementEndDate()" (ngModelChange)="setPlacementEndDate($event)" (change)="haptics.selection()">
                 </mat-form-field>
               </div>
               <div class="library-weekdays" role="group" aria-label="Repeat on weekdays">
@@ -456,10 +460,16 @@
               @if (placementOverlaps()) { · {{ placementOverlaps() }} existing {{ placementOverlaps() === 1 ? 'workout' : 'workouts' }} in this destination on those dates }
               @if (placementDates().length > 100) { · Maximum 100 dates at once }
             </p>
-            <p class="library-placement-review"><strong>{{ placementDestination()?.name ?? 'Standalone' }}</strong>
+            <p class="library-placement-review"><strong>{{ placementDestinationLabel() }}</strong>
               · {{ placementDates().join(', ') }}
             </p>
-            @if (placementRangeExtension()) { <p>Plan dates would extend to {{ placementRangeExtension() }}. QS will ask you to confirm.</p> }
+            @if (placementRangeExtension()) {
+              @if (placementRetry()?.confirmPlanRangeExtension) {
+                <p>Confirmed plan date extension: {{ placementRangeExtension() }}.</p>
+              } @else {
+                <p>Plan dates would extend to {{ placementRangeExtension() }}. QS will ask you to confirm.</p>
+              }
+            }
             @if (placementRetry() && !busyAction()) {
               <p role="alert">The result could not be confirmed. Retry this exact placement to recover the result safely. Dates and destination stay locked until it is resolved.</p>
             }

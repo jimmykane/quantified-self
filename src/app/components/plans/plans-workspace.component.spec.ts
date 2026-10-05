@@ -1235,9 +1235,17 @@ describe('PlansWorkspaceComponent', () => {
     libraryItems.next([{ ...item, revision: 3, status: 'archived' }]);
     component.cancelLibraryPlacement();
     component.setPlacementPlan('standalone');
+    component.setPlacementStartDate('2026-10-01');
+    component.setPlacementEndDate('2026-10-31');
+    component.togglePlacementWeekday(0);
     fixture.detectChanges();
     expect(component.placementItem()).toBe(item);
     expect(component.placementPlanId()).toBe('active-plan');
+    expect(component.placementStartDate()).toBe('2026-09-09');
+    expect(component.placementEndDate()).toBe('2026-09-09');
+    expect(component.placementWeekdays()).toEqual([3]);
+    expect(component.placementDates()).toEqual(original.dates);
+    expect(haptics.selection).not.toHaveBeenCalled();
     expect(fixture.nativeElement.textContent).toContain('Retry exact placement');
     expect(fixture.debugElement.query(By.directive(MatSelect)).componentInstance.disabled).toBe(true);
     expect(haptics.error).toHaveBeenCalledOnce();
@@ -1261,8 +1269,56 @@ describe('PlansWorkspaceComponent', () => {
     expect(libraryPlace).toHaveBeenCalledOnce();
   });
 
+  it.each(['cancelled', 'added', 'archived'])('restores library focus after a placement is %s', async result => {
+    const item = savedItem();
+    libraryItems.next([item]);
+    setRouteState({ mode: 'library-browse' });
+    libraryPlace.mockResolvedValue({ workoutIds: ['copy'] });
+    const fixture = await renderPlans();
+    const component = fixture.componentInstance;
+    (fixture.nativeElement.querySelector('[data-library-add="saved-run"]') as HTMLButtonElement).click();
+    fixture.detectChanges(); await fixture.whenStable();
+    expect(document.activeElement).toBe(fixture.nativeElement.querySelector('#library-placement-heading'));
+    if (result === 'cancelled') component.cancelLibraryPlacement();
+    else {
+      if (result === 'archived') libraryItems.next([{ ...item, status: 'archived' }]);
+      await component.placeLibraryItem();
+    }
+    fixture.detectChanges(); await fixture.whenStable();
+    expect(document.activeElement).toBe(fixture.nativeElement.querySelector(result === 'archived'
+      ? '#library-heading' : '[data-library-add="saved-run"]'));
+    expect(libraryPlace).toHaveBeenCalledTimes(result === 'cancelled' ? 0 : 1);
+  });
+
+  it.each(['renamed', 'archived', 'removed'])('keeps the submitted destination visible when its live plan is %s after a lost reply', async change => {
+    const scheduleChanges = new BehaviorSubject(schedule);
+    watchSchedule.mockReturnValue(scheduleChanges);
+    setRouteState({ mode: 'library-browse', date: '2026-09-09' });
+    libraryPlace.mockRejectedValueOnce(Object.assign(new Error('Reply lost'), { code: 'functions/unavailable' }))
+      .mockResolvedValueOnce({ workoutIds: ['copy'], dates: ['2026-09-09'] });
+    const fixture = await renderPlans();
+    const component = fixture.componentInstance;
+    component.beginLibraryPlacement(savedItem());
+    await component.placeLibraryItem();
+    const original = libraryPlace.mock.calls[0][0];
+    scheduleChanges.next({ ...schedule, plans: change === 'removed' ? [] : schedule.plans.map(plan =>
+      plan.id !== original.planId ? plan : { ...plan, revision: plan.revision + 1,
+        name: change === 'renamed' ? 'Different plan name' : plan.name,
+        lifecycle: change === 'archived' ? 'archived' : plan.lifecycle }) });
+    fixture.detectChanges();
+    await fixture.whenStable();
+    fixture.detectChanges();
+    expect(fixture.nativeElement.querySelector('.library-placement-review').textContent)
+      .toContain('Autumn build · 2026-09-09');
+    expect(fixture.nativeElement.querySelector('.mat-mdc-select-value').textContent).toContain('Autumn build');
+    await component.placeLibraryItem();
+    expect(libraryPlace.mock.calls[1][0]).toEqual(original);
+  });
+
   it('replays the confirmed extension request after a lost reply without asking for another extension or adding another batch', async () => {
     const item = savedItem();
+    const scheduleChanges = new BehaviorSubject(schedule);
+    watchSchedule.mockReturnValue(scheduleChanges);
     setRouteState({ mode: 'library-browse', date: '2026-10-25' });
     libraryPlace.mockRejectedValueOnce(new Error('Moving this workout requires extending Autumn build.'))
       .mockRejectedValueOnce(Object.assign(new Error('Reply lost'), { code: 'functions/deadline-exceeded' }))
@@ -1273,6 +1329,11 @@ describe('PlansWorkspaceComponent', () => {
     fixture.componentInstance.beginLibraryPlacement(item);
     await fixture.componentInstance.placeLibraryItem();
     expect(fixture.componentInstance.placementRetry()?.confirmPlanRangeExtension).toBe(true);
+    scheduleChanges.next({ ...schedule, plans: schedule.plans.map(plan => ({ ...plan,
+      endLocalDate: '2026-10-25', revision: plan.revision + 1 })) });
+    fixture.detectChanges();
+    expect(fixture.nativeElement.textContent).toContain('Confirmed plan date extension: 2026-09-01–2026-10-25');
+    expect(fixture.nativeElement.textContent).not.toContain('QS will ask you to confirm');
     await fixture.componentInstance.placeLibraryItem();
     expect(libraryPlace.mock.calls[2][0]).toEqual(libraryPlace.mock.calls[1][0]);
     expect(confirmDialog).toHaveBeenCalledOnce();

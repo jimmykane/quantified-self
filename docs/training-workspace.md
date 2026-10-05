@@ -955,12 +955,15 @@ with `?date=YYYY-MM-DD`. The library preserves that calendar label exactly rathe
 it to today/plan start, and carries it through recipe-editor navigation. The existing owner-bound Calendar return
 service retains the selected day and displayed period on Back. Choosing a recipe replaces results with a focused review
 of the exact saved version/prescription, explicit plan or Standalone destination, all dates, overlap count and prospective
-plan range. Cancel makes no write and returns focus to the recipe action. The active plan is the default destination;
+plan range. Cancel makes no write. Cancellation and successful placement return focus to the recipe action, or the
+library heading if a live update hides that action. The active plan is the default destination;
 outside dates still require the existing explicit range-extension confirmation. No drag/drop, folders or recipe
 persistence redesign is introduced.
 
 Placement retains its exact request, revisions, confirmed-extension flag and mutation ID while the current review has
-an uncertain result. Retry replays that request even if library data refreshes, using the existing server receipt to
+an uncertain result. The review also retains the submitted plan name and range, including when a live update renames,
+archives or removes that plan; an already-confirmed extension remains visible without promising another confirmation.
+Retry replays that request even if library data refreshes, using the existing server receipt to
 avoid duplicate copies. Date/destination controls and Cancel remain locked until the result resolves; definitive
 validation, capacity, revision or authorization rejections release the review for correction. This retry state is local
 to the open review, not durable across reload/navigation. Account, route and component-generation fences prevent a late
