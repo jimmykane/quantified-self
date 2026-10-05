@@ -202,6 +202,7 @@ describe('Training plan MCP reads', () => {
     expect(linked).toMatchObject({ state: 'linked', provider: 'suunto', workoutChangedSinceCompletion: false });
     expect(JSON.stringify(linked)).not.toMatch(/private-event|private-activity|notification|Guide complete/);
     for (const fields of [{ guide }, { notification: { title: 'Complete', text: 'Guide complete' } },
+      { notification: { type: 'default', title: 'Complete', text: 'Guide complete' } },
       { fields: [{ type: 'strokeRate', title: 'Avg strk', window: 'manualLap', aggregate: 'average' }] },
       { createManualLap: true }, { window: 'manualLap' }, { aggregate: 'average' }, { strokeRate: 40 },
       { compatibleApprovalDigests: ['private-v4'] }, { mappingVersion: 'suunto-guides-v5' }, { compatibleApprovalDigest: 'private' },
@@ -226,7 +227,8 @@ describe('Training plan MCP reads', () => {
     await expect(f.run('get_training_sync_status', args)).rejects.toThrow();
     delete f.collections.trainingDeliveryStatuses[id].mappingApprovalProof;
     for (const [key, value] of [['guideMappingVersion', 'suunto-guides-v5'], ['deliveryPhase', 'recover'], ['createManualLap', true],
-      ['window', 'manualLap'], ['aggregate', 'average'], ['strokeRate', 40]]) {
+      ['window', 'manualLap'], ['aggregate', 'average'], ['strokeRate', 40],
+      ['notification', { type: 'default', title: 'Complete', text: 'Guide complete' }]]) {
       f.collections.trainingDeliveryStatuses[id][key] = value;
       await expect(f.run('get_training_sync_status', args)).rejects.toThrow();
       delete f.collections.trainingDeliveryStatuses[id][key];

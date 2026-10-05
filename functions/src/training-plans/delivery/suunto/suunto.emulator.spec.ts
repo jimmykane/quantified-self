@@ -332,6 +332,39 @@ describe.skipIf(!process.env.FIRESTORE_EMULATOR_HOST)('Suunto worker with real F
     await command('retry'); await drain(); await processTrainingDelivery(runtime, uid, row.id); await drain();
     expect((await ledger()).status).toBe('delivered'); expect(server.calls.filter(call => call.method === 'POST')).toHaveLength(1);
   });
+  it('recovers default-enriched edit/reschedule acceptance once and clears retry work without changing consent', async () => {
+    const original = await send(); const id = original.actual!.ids.guide;
+    server.guides.get(id)!.pinned = true;
+    const consent = (await user().collection('trainingDeliverySettings').get()).docs.map(doc => doc.data());
+    await user().collection('scheduledWorkouts').doc('w').update({ title: 'Edited and rescheduled',
+      localDate: '2026-09-18', revision: 2, updatedAtMs: now + 1 });
+    await mark();
+    server.afterHandle = async request => { if (request.method === 'PUT') {
+      server.afterHandle = null; throw new SuuntoGuideHttpError('uncertain', false);
+    } };
+    await processTrainingDelivery(runtime, uid, original.id);
+    expect(await ledger()).toMatchObject({ status: 'retrying', attempt: { progress: { step: 'update', state: 'started' } } });
+    await command('retry'); await drain();
+    const retriedConsent = (await user().collection('trainingDeliverySettings').get()).docs.map(doc => doc.data());
+    // Explicit Retry advances the settings revision, never its sending authority.
+    expect(retriedConsent).toEqual(consent.map(setting => ({ ...setting, revision: setting.revision + 1 })));
+    await Promise.all([processTrainingDelivery(runtime, uid, original.id), processTrainingDelivery(runtime, uid, original.id)]);
+    await drain();
+    expect(await ledger()).toMatchObject({ status: 'delivered', attempt: null, lease: null,
+      actual: { ids: original.actual!.ids, localDate: '2026-09-18' } });
+    expect(server.guides.get(id)).toMatchObject({ pinned: true, guide: {
+      name: 'Edited and rescheduled', localDate: '2026-09-18' } });
+    expect((await user().collection('trainingDeliverySettings').get()).docs.map(doc => doc.data())).toEqual(retriedConsent);
+    const queued = (await db.collection(DELIVERY_QUEUE).where('uid', '==', uid).get()).docs.map(doc => doc.data());
+    // Sending is complete; only the existing periodic reconciliation job remains.
+    expect(queued).toEqual([expect.objectContaining({ kind: 'reconcile', dueAtMs: now + 30 * 60_000 })]);
+    await command('retry'); await drain(); await processTrainingDelivery(runtime, uid, original.id); await drain();
+    expect((await ledger()).status).toBe('delivered');
+    expect(server.guides.size).toBe(1);
+    expect(server.calls.filter(call => call.method === 'POST')).toHaveLength(1);
+    expect(server.calls.filter(call => call.method === 'PUT')).toHaveLength(1);
+    expect((await user().collection('trainingWorkoutCompletions').get()).empty).toBe(true);
+  });
   it('upgrades a known v2 Guide in place, preserving pinning, consent, recipe and IDs; unchanged retries do not write', async () => {
     const delivered = await send();
     const workout = parseScheduledWorkoutV1((await user().collection('scheduledWorkouts').doc('w').get()).data());

@@ -1,4 +1,11 @@
-@if (isHistoryImportPending()) {
+@if (isWahooHistoryImportRunning()) {
+<div class="status-container" role="status">
+  <app-status-info type="pending" title="Import already running">
+    A Wahoo history import is already running. Please wait for it to finish.
+    Closing this dialog does not cancel the import.
+  </app-status-info>
+</div>
+} @else if (isHistoryImportPending()) {
 <!-- Optimistic UI: Show queued status immediately using Shared Callout Component -->
 <div class="status-container">
   @if (serviceName === serviceNames.SuuntoApp || serviceName === serviceNames.COROSAPI || serviceName === serviceNames.WahooAPI) {
@@ -72,7 +79,7 @@
 </div>
 }
 
-@if (formGroup && isAllowedToDoHistoryImport && !isHistoryImportPending()) {
+@if (formGroup && isAllowedToDoHistoryImport && !isHistoryImportPending() && !isWahooHistoryImportRunning()) {
 @if (isPro) {
 <form [formGroup]="formGroup" class="qs-form history-import-form">
   @if (isMissingGarminPermissions) {

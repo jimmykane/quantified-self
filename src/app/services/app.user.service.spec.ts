@@ -2851,6 +2851,29 @@ describe('AppUserService', () => {
         });
 
         describe('checkCurrentUserCOROSBindingState', () => {
+            it('coalesces only within the same connection generation after reconnecting the same account', async () => {
+                let rejectOldCall!: (reason: unknown) => void;
+                let resolveNewCall!: (value: unknown) => void;
+                mockFunctionsService.call
+                    .mockReturnValueOnce(new Promise((_resolve, reject) => { rejectOldCall = reject; }))
+                    .mockReturnValueOnce(new Promise(resolve => { resolveNewCall = resolve; }));
+
+                const oldCheck = service.checkCurrentUserCOROSBindingState('u1', 'open-id', 'old-generation');
+                const oldFailure = expect(oldCheck).rejects.toThrow('old connection');
+                const newCheck = service.checkCurrentUserCOROSBindingState('u1', 'open-id', 'new-generation');
+                expect(newCheck).not.toBe(oldCheck);
+                expect(service.checkCurrentUserCOROSBindingState('u1', 'open-id', 'new-generation')).toBe(newCheck);
+                expect(mockFunctionsService.call).toHaveBeenCalledTimes(2);
+                expect(mockFunctionsService.call).toHaveBeenNthCalledWith(1, 'getCOROSAPIBindingState');
+                expect(mockFunctionsService.call).toHaveBeenNthCalledWith(2, 'getCOROSAPIBindingState');
+
+                rejectOldCall(new Error('old connection'));
+                await oldFailure;
+                expect(service.checkCurrentUserCOROSBindingState('u1', 'open-id', 'new-generation')).toBe(newCheck);
+                resolveNewCall({ data: { status: 'bound', bound: true } });
+                await expect(newCheck).resolves.toEqual({ status: 'bound', bound: true });
+            });
+
             it('coalesces concurrent checks for the same local and provider account', async () => {
                 let resolveCall!: (value: unknown) => void;
                 mockFunctionsService.call.mockReturnValueOnce(new Promise(resolve => {

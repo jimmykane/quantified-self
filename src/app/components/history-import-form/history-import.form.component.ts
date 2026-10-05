@@ -16,7 +16,7 @@ import { AppAnalyticsService } from '../../services/app.analytics.service';
 import { LoggerService } from '../../services/logger.service';
 import { User } from '@sports-alliance/sports-lib';
 
-import { UserServiceMetaInterface } from '@sports-alliance/sports-lib';
+import { AppUserServiceMetaInterface } from '../../models/app-user.interface';
 import { Subscription } from 'rxjs';
 import { ServiceNames } from '@sports-alliance/sports-lib';
 import { COROS_HISTORY_IMPORT_LIMIT_MONTHS, GARMIN_HISTORY_IMPORT_COOLDOWN_DAYS, GARMIN_HISTORY_IMPORT_LIMIT_YEARS, HISTORY_IMPORT_ACTIVITIES_PER_DAY_LIMIT, HISTORY_IMPORT_DEFAULT_RANGE_YEARS, HISTORY_IMPORT_PROCESSING_CAPACITY_PER_DAY_PER_USER_ESTIMATE } from '@shared/history-import.constants';
@@ -32,6 +32,7 @@ import dayjs from 'dayjs';
 import relativeTime from 'dayjs/plugin/relativeTime';
 import { AppAuthService } from '../../authentication/app.auth.service';
 import { AppSleepService } from '../../services/app.sleep.service';
+import { AppHapticsService } from '../../services/app.haptics.service';
 
 dayjs.extend(relativeTime);
 
@@ -56,7 +57,7 @@ type HealthAvailabilityState = 'idle' | 'loading' | 'available' | 'unavailable' 
 
 export class HistoryImportFormComponent implements OnInit, OnDestroy, OnChanges {
   @Input() serviceName: ServiceNames;
-  @Input() userMetaForService: UserServiceMetaInterface | undefined;
+  @Input() userMetaForService: AppUserServiceMetaInterface | undefined;
   @Input() minDate: Date | null = null;
   @Input() missingPermissions: string[] = [];
   @Input() isLoadingParent = false;
@@ -78,6 +79,7 @@ export class HistoryImportFormComponent implements OnInit, OnDestroy, OnChanges 
   public garminHistoryLimitYears = GARMIN_HISTORY_IMPORT_LIMIT_YEARS;
   /** Optimistic UI flag - blocks re-submission immediately after success */
   public isHistoryImportPending = signal(false);
+  public isWahooHistoryImportRunning = signal(false);
   /** Stores the actual backend response for display (COROS/Suunto/Wahoo only). */
   public pendingImportResult = signal<HistoryImportResult | null>(null);
   public isSleepBackfillSubmitting = signal(false);
@@ -103,6 +105,9 @@ export class HistoryImportFormComponent implements OnInit, OnDestroy, OnChanges 
   private changeDetectorRef = inject(ChangeDetectorRef);
   private authService = inject(AppAuthService);
   private sleepService = inject(AppSleepService);
+  private hapticsService = inject(AppHapticsService);
+  private isDestroyed = false;
+  private wahooHistoryLeaseTimer: ReturnType<typeof globalThis.setTimeout> | null = null;
   private currentUserID: string | null = null;
   private sleepSyncStateSubscription: Subscription | null = null;
   private sleepSyncStateKey: string | null = null;
@@ -125,6 +130,7 @@ export class HistoryImportFormComponent implements OnInit, OnDestroy, OnChanges 
     this.formGroup.disable();
 
     const user = await this.authService.getUser();
+    if (this.isDestroyed) return;
     this.isPro = AppUserUtilities.hasProAccess(user);
     this.currentUserID = this.coerceUserID(user);
 
@@ -177,6 +183,7 @@ export class HistoryImportFormComponent implements OnInit, OnDestroy, OnChanges 
   }
 
   private processChanges() {
+    this.syncWahooHistoryImportRunning();
     this.checksHealthBackfillAvailability = this.serviceName === ServiceNames.SuuntoApp
       || this.serviceName === ServiceNames.GarminAPI;
     this.syncHealthAvailability();
@@ -186,7 +193,7 @@ export class HistoryImportFormComponent implements OnInit, OnDestroy, OnChanges 
 
     if (!this.userMetaForService || !this.userMetaForService.didLastHistoryImport) {
       this.isAllowedToDoHistoryImport = true;
-      (this.isAllowedToDoHistoryImport && !this.isMissingGarminPermissions) ? this.formGroup.enable() : this.formGroup.disable();
+      this.updateActivityHistoryFormState();
       return;
     }
 
@@ -196,7 +203,6 @@ export class HistoryImportFormComponent implements OnInit, OnDestroy, OnChanges 
       case ServiceNames.WahooAPI:
         if (!this.userMetaForService.processedActivitiesFromLastHistoryImportCount) {
           this.isAllowedToDoHistoryImport = true;
-          this.formGroup.enable();
           break;
         }
         this.nextImportAvailableDate = new Date(this.userMetaForService.didLastHistoryImport + ((this.userMetaForService.processedActivitiesFromLastHistoryImportCount / HISTORY_IMPORT_ACTIVITIES_PER_DAY_LIMIT) * 24 * 60 * 60 * 1000)) // 7 days for  285,7142857143 per day
@@ -217,7 +223,39 @@ export class HistoryImportFormComponent implements OnInit, OnDestroy, OnChanges 
         // this.isAllowedToDoHistoryImport = false;
         break;
     }
-    (this.isAllowedToDoHistoryImport && !this.isMissingGarminPermissions) ? this.formGroup.enable() : this.formGroup.disable();
+    this.updateActivityHistoryFormState();
+  }
+
+  private updateActivityHistoryFormState(): void {
+    if (this.isAllowedToDoHistoryImport && !this.isMissingGarminPermissions
+      && !this.isSubmitting && !this.isHistoryImportPending() && !this.isWahooHistoryImportRunning()) {
+      this.formGroup.enable();
+    } else {
+      this.formGroup.disable();
+    }
+  }
+
+  private syncWahooHistoryImportRunning(): void {
+    this.clearWahooHistoryLeaseTimer();
+    const expiresAt = this.serviceName === ServiceNames.WahooAPI
+      ? this.userMetaForService?.historyImportLeaseExpiresAt
+      : undefined;
+    const remainingMs = typeof expiresAt === 'number' && Number.isFinite(expiresAt)
+      ? expiresAt - Date.now()
+      : 0;
+    this.isWahooHistoryImportRunning.set(remainingMs > 0);
+    if (remainingMs <= 0 || this.isDestroyed) return;
+    this.wahooHistoryLeaseTimer = globalThis.setTimeout(() => {
+      this.wahooHistoryLeaseTimer = null;
+      if (!this.isDestroyed) this.processChanges();
+    }, Math.min(remainingMs, 2_147_483_647));
+  }
+
+  private clearWahooHistoryLeaseTimer(): void {
+    if (this.wahooHistoryLeaseTimer !== null) {
+      globalThis.clearTimeout(this.wahooHistoryLeaseTimer);
+      this.wahooHistoryLeaseTimer = null;
+    }
   }
 
   private updateProviderHistoryMinimumDate(): void {
@@ -238,22 +276,22 @@ export class HistoryImportFormComponent implements OnInit, OnDestroy, OnChanges 
 
   async onSubmit(event: Event) {
     event.preventDefault();
+    if (this.isDestroyed || !this.formGroup) return;
+    this.syncWahooHistoryImportRunning();
+    if (this.isSubmitting || this.formGroup.disabled || this.isHistoryImportPending() || this.isWahooHistoryImportRunning()) return;
     if (!this.formGroup.valid) {
       this.validateAllFormFields(this.formGroup);
       return;
     }
 
-    if (this.isSubmitting) {
-      return;
-    }
+    this.isSubmitting = true;
+    this.hapticsService.selection();
 
     try {
       this.analyticsService.logEvent('imported_history', { method: this.serviceName });
     } catch (e) {
       this.logger.error(e);
     }
-
-    this.isSubmitting = true;
 
     // Explicitly disable the form to force UI state update
     this.formGroup.disable({ emitEvent: false });
@@ -263,6 +301,9 @@ export class HistoryImportFormComponent implements OnInit, OnDestroy, OnChanges 
     await new Promise(resolve => setTimeout(resolve, 100));
 
     try {
+      if (this.isDestroyed) return;
+      this.syncWahooHistoryImportRunning();
+      if (this.isWahooHistoryImportRunning()) return;
 
       // Normalize dates: start = 00:00, end = 23:59
       const startDate = dayjs(this.formGroup.get('startDate')?.value).startOf('day').toDate();
@@ -273,6 +314,7 @@ export class HistoryImportFormComponent implements OnInit, OnDestroy, OnChanges 
         startDate,
         endDate
       );
+      if (this.isDestroyed) return;
       this.importInitiated.emit(result);
 
       // Set optimistic flag immediately to prevent re-submission
@@ -296,17 +338,30 @@ export class HistoryImportFormComponent implements OnInit, OnDestroy, OnChanges 
           duration: 2000,
         });
       }
+      this.hapticsService.success();
     } catch (e: any) {
+      if (this.serviceName === ServiceNames.WahooAPI
+        && (e?.code === 'functions/already-exists' || e?.code === 'already-exists')) {
+        if (this.isDestroyed) return;
+        this.snackBar.open('A Wahoo history import is already running. Please wait for it to finish.', undefined, {
+          duration: 4000,
+        });
+        return;
+      }
       this.logger.error(e);
+      if (this.isDestroyed) return;
 
       this.snackBar.open(`Could not import history for ${this.serviceName} due to ${e.message}`, undefined, {
         duration: 2000,
       });
+      this.hapticsService.error();
     } finally {
-      this.isSubmitting = false;
-      // Re-evaluate form state
-      this.processChanges();
-      this.changeDetectorRef.detectChanges();
+      if (!this.isDestroyed) {
+        this.isSubmitting = false;
+        // Re-evaluate form state
+        this.processChanges();
+        this.changeDetectorRef.detectChanges();
+      }
     }
   }
 
@@ -322,6 +377,8 @@ export class HistoryImportFormComponent implements OnInit, OnDestroy, OnChanges 
   }
 
   ngOnDestroy(): void {
+    this.isDestroyed = true;
+    this.clearWahooHistoryLeaseTimer();
     this.sleepSyncStateSubscription?.unsubscribe();
     this.healthAvailabilityRequestGeneration += 1;
   }

@@ -1849,6 +1849,17 @@ layout and absence of averaging/automatic laps. Frozen v4 running/cycling/swimmi
 Training 01 screens, averaging and boundary placement; v4 strength remains byte-equivalent to the v3 strength
 fixture. Unchanged remote payloads need no redundant PUT solely to advance the mapping digest. Fresh delivery never uses a recovery-only serializer.
 
+Suunto file readback has been observed to add `notification.type: "default"` to submitted notifications (#784).
+The transport compares the full owned Guide against its digest-verified prescription, permitting only that exact
+added marker on matching FieldsSteps, including native repeat children and the final screen, when the expected
+notification has no type. It does not discard arbitrary response fields or normalize identity, text, targets,
+transitions, averaging windows, lap commands, dates or repeat counts. Other/malformed types and extra keys still
+mismatch. Comparison is non-mutating: outgoing v2–v6 JSON, mapping digests and immutable journals stay frozen.
+This lets lost create/update acknowledgements recover the retained identity and makes unchanged execution a no-op;
+unknown acceptance, missing/duplicate copies and authority failures still cannot authorize another create. The
+marker is private readback metadata, never persisted in authored recipes or projected through MCP. Fixtures enrich
+file GETs by default; lifecycle tests cover lost responses, rescheduling, duplicate dispatch and strict mismatch cases.
+
 Existing `[TrainingDelivery]` Suunto acceptance, recovered-acceptance, stale-suppression, failure and checkpoint-failure
 events include two transient allowlisted labels: `guideMappingVersion` (`suunto-guides-v6`, `suunto-guides-v5`, `suunto-guides-v4`, `suunto-guides-v3`, `suunto-guides-v2`, `unknown`,
 or `not_applicable` for removal) and `deliveryPhase` (`execute` or `recover`). The version is proved by recomputing the

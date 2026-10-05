@@ -1285,6 +1285,32 @@ describe('HealthWorkspaceComponent', () => {
     expect(haptics.selection).not.toHaveBeenCalled();
   });
 
+  it.each([HEALTH_METRIC_IDS.RestingHeartRate, HEALTH_METRIC_IDS.BloodOxygenSaturation])(
+    'keeps %s charts mounted while additional source readings load, with progress in the date header', async metric => {
+      await createComponent(undefined, '30d', {}, metric);
+      const root = fixture.nativeElement as HTMLElement;
+      const chart = root.querySelector('app-health-metric-chart');
+      const progress = root.querySelector('.health-detail-window .health-view-progress');
+      expect(chart).toBeTruthy();
+      expect(progress?.querySelector('mat-spinner')).toBeNull();
+
+      component.selectedSleepStatus.set('loading');
+      fixture.detectChanges();
+      expect(component.metricSourcesLoading()).toBe(true);
+      expect(component.metricSourceNotice()).toBeNull();
+      expect(root.querySelector('app-health-metric-chart')).toBe(chart);
+      expect(progress?.querySelector('mat-spinner')).toBeTruthy();
+      expect(progress?.textContent).toContain('Loading additional readings');
+      expect([...root.querySelectorAll('.health-notice')].some(notice => notice.textContent?.includes('Loading additional readings'))).toBe(false);
+
+      component.selectedSleepStatus.set('ready');
+      fixture.detectChanges();
+      expect(root.querySelector('.health-view-progress')).toBe(progress);
+      expect(progress?.querySelector('mat-spinner')).toBeNull();
+      expect(root.querySelector('app-health-metric-chart')).toBe(chart);
+      expect(haptics.selection).not.toHaveBeenCalled();
+    });
+
   it('keeps provider readings visible when Sleep fails and explains omitted all-day samples beside a Sleep summary', async () => {
     await createComponent(undefined, '1y', {}, HEALTH_METRIC_IDS.HeartRate);
     component.selectedSleepStatus.set('error'); fixture.detectChanges();
@@ -2640,6 +2666,38 @@ describe('HealthWorkspaceComponent', () => {
     component.toggleProvider(HEALTH_PROVIDERS.GarminAPI);
     fixture.detectChanges();
     expect(component.omittedSampleSourceNotice()).toBeNull();
+  });
+
+  it('shows pending preference saves in the reserved date-header slot without replacing the chart', async () => {
+    await createComponent();
+    let finishSave!: () => void;
+    updateHealthWorkspacePreferences.mockImplementationOnce(() => new Promise<void>(resolve => { finishSave = resolve; }));
+    const root = fixture.nativeElement as HTMLElement;
+    const progress = root.querySelector('.health-detail-window .health-view-progress');
+
+    component.selectRange('14d');
+    fixture.detectChanges();
+    expect(component.isSavingPreferences()).toBe(true);
+    expect(progress?.querySelector('mat-spinner')).toBeTruthy();
+    expect(progress?.textContent).toContain('Saving Health view');
+    expect(root.querySelector('.health-range-save-status')).toBeNull();
+    // The new date window legitimately loads new readings; the pending settings
+    // write must neither hide them nor replace their chart when saving finishes.
+    await vi.waitFor(() => {
+      fixture.detectChanges();
+      expect(root.querySelector('app-health-metric-chart')).toBeTruthy();
+    });
+    const chart = root.querySelector('app-health-metric-chart');
+    expect(component.isSavingPreferences()).toBe(true);
+
+    finishSave();
+    await fixture.whenStable();
+    fixture.detectChanges();
+    expect(component.isSavingPreferences()).toBe(false);
+    expect(root.querySelector('.health-view-progress')).toBe(progress);
+    expect(progress?.querySelector('mat-spinner')).toBeNull();
+    expect(root.querySelector('app-health-metric-chart')).toBe(chart);
+    expect(haptics.selection).toHaveBeenCalledTimes(1);
   });
 
   it('keeps a selected Health view active and offers retry when preference persistence fails', async () => {

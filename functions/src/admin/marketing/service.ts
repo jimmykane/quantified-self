@@ -35,6 +35,15 @@ function checkedId(value: unknown): string {
   if (typeof value !== 'string' || !/^[A-Za-z0-9_-]{10,60}$/.test(value)) badRequest('Invalid campaign ID.');
   return value as string;
 }
+function checkedExpectedDraft(value: unknown): MarketingCampaignDraft | null {
+  if (value === undefined) return null;
+  try { return validateMarketingDraft(value); } catch (error) { badRequest(error); }
+}
+function requireMatchingDraft(actual: MarketingCampaignDraft, expected: MarketingCampaignDraft | null): void {
+  if (expected && JSON.stringify(actual) !== JSON.stringify(expected)) {
+    throw new HttpsError('failed-precondition', 'The saved message changed. Refresh, review it and try again.');
+  }
+}
 export function checkedTestEmail(value: unknown): string {
   if (typeof value !== 'string') badRequest('Enter a test recipient email address.');
   const email = (value as string).trim();
@@ -164,8 +173,20 @@ export async function saveCampaign(idInput: unknown, input: unknown, actorUid: s
     const ref = campaigns().doc(id);
     const doc = await tx.get(ref);
     if (!doc.exists) throw new HttpsError('not-found', 'Campaign not found.');
-    if (doc.get('status') !== 'draft') throw new HttpsError('failed-precondition', 'Clone this campaign to edit its content.');
-    tx.update(ref, { ...draft!, updatedAt: now, lastTestMailId: null, lastTestState: null });
+    const status = doc.get('status');
+    if (status !== 'draft' && status !== 'paused') {
+      throw new HttpsError('failed-precondition', 'Pause a running campaign to edit its content, or clone it as a new draft.');
+    }
+    if (status === 'paused') {
+      const frozen = validateMarketingDraft(doc.data()).filters;
+      if (frozen.signupFrom !== draft!.filters.signupFrom || frozen.signupTo !== draft!.filters.signupTo ||
+          frozen.plans.length !== draft!.filters.plans.length || !frozen.plans.every(plan => draft!.filters.plans.includes(plan))) {
+        throw new HttpsError('failed-precondition', 'The prepared audience is fixed. Clone the campaign to change its audience.');
+      }
+    }
+    tx.update(ref, { name: draft!.name, subject: draft!.subject, content: draft!.content, cta: draft!.cta,
+      ...(status === 'draft' ? { filters: draft!.filters } : {}),
+      updatedAt: now, lastTestMailId: null, lastTestState: null });
   });
   return getCampaign(id);
 }
@@ -297,15 +318,17 @@ export async function sendTest(idInput: unknown, adminUid: string, secret: strin
     draft = await getCampaign(idInput);
   }
   const campaign = unsaved ? null : draft as MarketingCampaignView;
-  if (campaign && campaign.status !== 'draft' && campaign.status !== 'ready') {
-    throw new HttpsError('failed-precondition', 'Tests are available for saved drafts and ready campaigns.');
+  if (campaign && campaign.status !== 'draft' && campaign.status !== 'ready' && campaign.status !== 'paused') {
+    throw new HttpsError('failed-precondition', 'Tests are available for saved drafts, ready campaigns, and paused campaigns.');
   }
+  const testedDraft = validateMarketingDraft(draft!);
+  if (campaign) requireMatchingDraft(testedDraft, checkedExpectedDraft(draftInput));
   const user = await getAuth(adminUid);
   if (!user?.email || user.disabled) throw new HttpsError('failed-precondition', 'Your admin account needs an enabled email address.');
   const mailId = `marketing_test_${campaign?.id || 'unsaved'}_${randomUUID()}`;
   const firstName = recipient.toLowerCase() === user.email.toLowerCase()
     ? user.displayName?.trim().split(/\s+/)[0] || 'friend' : 'friend';
-  const mail = mailPayload(draft!, recipient, firstName, adminUid, secret, null, 1, testUnsubscribeUrl);
+  const mail = mailPayload(testedDraft, recipient, firstName, adminUid, secret, null, 1, testUnsubscribeUrl);
   if (!campaign) {
     const submitted = await reserveMail(mailId, mail);
     if (!submitted) throw new HttpsError('resource-exhausted', 'The UTC daily marketing limit has been reached.');
@@ -319,7 +342,8 @@ export async function sendTest(idInput: unknown, adminUid: string, secret: strin
     const [campaignDoc, controlDoc, dayDoc, mailDoc] = await Promise.all([
       tx.get(ref), tx.get(control()), tx.get(day), tx.get(mailRef),
     ]);
-    if (campaignDoc.get('status') !== campaign.status || campaignDoc.get('updatedAt') !== campaign.updatedAt) {
+    if (campaignDoc.get('status') !== campaign.status || campaignDoc.get('updatedAt') !== campaign.updatedAt ||
+        JSON.stringify(validateMarketingDraft(campaignDoc.data())) !== JSON.stringify(testedDraft)) {
       throw new HttpsError('failed-precondition', 'The campaign changed while preparing the test. Refresh and try again.');
     }
     const cap = controlDoc.exists ? validDailyCap(controlDoc.get('dailyCap')) : DEFAULT_MARKETING_DAILY_CAP;
@@ -334,7 +358,7 @@ export async function sendTest(idInput: unknown, adminUid: string, secret: strin
   return { mailId, submitted };
 }
 
-export async function setCampaignStatus(idInput: unknown, action: 'start' | 'pause' | 'resume' | 'retry'): Promise<MarketingCampaignView> {
+export async function setCampaignStatus(idInput: unknown, action: 'start' | 'pause' | 'resume' | 'retry', expectedDraftInput?: unknown): Promise<MarketingCampaignView> {
   const id = checkedId(idInput);
   const ref = campaigns().doc(id);
   if (action === 'retry') {
@@ -352,18 +376,21 @@ export async function setCampaignStatus(idInput: unknown, action: 'start' | 'pau
     }
     return getCampaign(id);
   }
+  const expectedDraft = action === 'start' || action === 'resume' ? checkedExpectedDraft(expectedDraftInput) : null;
   await db().runTransaction(async tx => {
     const doc = await tx.get(ref);
     if (!doc.exists) throw new HttpsError('not-found', 'Campaign not found.');
     const status = doc.get('status');
-    if (action === 'start') {
-      if (status !== 'ready') throw new HttpsError('failed-precondition', 'Prepare the campaign before starting.');
+    if (action === 'start' && status !== 'ready') throw new HttpsError('failed-precondition', 'Prepare the campaign before starting.');
+    if (action === 'pause' && status !== 'running') throw new HttpsError('failed-precondition', 'Only a running campaign can be paused.');
+    if (action === 'resume' && status !== 'paused') throw new HttpsError('failed-precondition', 'Only a paused campaign can resume.');
+    if (action === 'start' || action === 'resume') {
+      requireMatchingDraft(validateMarketingDraft(doc.data()), expectedDraft);
       const testId = doc.get('lastTestMailId');
       if (!testId) throw new HttpsError('failed-precondition', 'Send a test email and wait for SMTP acceptance first.');
       const test = await tx.get(db().collection('mail').doc(testId));
       if (test.get('delivery.state') !== 'SUCCESS') throw new HttpsError('failed-precondition', 'Wait for successful SMTP acceptance of the test email.');
-    } else if (action === 'pause' && status !== 'running') throw new HttpsError('failed-precondition', 'Only a running campaign can be paused.');
-    else if (action === 'resume' && status !== 'paused') throw new HttpsError('failed-precondition', 'Only a paused campaign can resume.');
+    }
     tx.update(ref, { status: action === 'pause' ? 'paused' : 'running',
       ...(action === 'start' ? { startedAt: new Date().toISOString() } : {}), updatedAt: new Date().toISOString() });
   });
@@ -406,7 +433,6 @@ export async function dispatchCampaigns(secret: string): Promise<number> {
     for (const campaignDoc of running.docs) {
       if (!available) break;
       const campaignRef = campaignDoc.ref;
-      const draft = validateMarketingDraft(campaignDoc.data());
       let lastRecipient: FirebaseFirestore.QueryDocumentSnapshot | undefined;
       while (available) {
         const pageSize = available + 20;
@@ -436,6 +462,9 @@ export async function dispatchCampaigns(secret: string): Promise<number> {
               tx.get(mail),
             ]);
             if (campaign.get('status') !== 'running' || recipientNow.get('status') !== 'pending' || existingMail.exists) return 'stale';
+            // A worker may have started before a pause/edit/resume. Render from
+            // the campaign read in this transaction so it submits the saved version.
+            const draft = validateMarketingDraft(campaign.data());
             const latestCap = controlDoc.exists ? validDailyCap(controlDoc.get('dailyCap')) : DEFAULT_MARKETING_DAILY_CAP;
             const used = dayDoc.get('used') || 0;
             if (used >= latestCap) return 'capped';
