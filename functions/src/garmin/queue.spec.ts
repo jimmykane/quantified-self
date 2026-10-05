@@ -276,7 +276,7 @@ describe('Garmin Queue', () => { // Grouping for cleaner output
             };
         });
 
-        it.each(['/unknown', '/wrong/API'])('rejects forged activity ingress before payload access or account lookup: %s', async path => {
+        it.each(['/', '/wrong/API'])('rejects forged activity ingress before payload access or account lookup: %s', async path => {
             req.path = path;
             Object.defineProperty(req, 'body', { get() { throw new Error('body accessed'); } });
             await insertGarminAPIActivityFileToQueue(req, res);
@@ -322,8 +322,7 @@ describe('Garmin Queue', () => { // Grouping for cleaner output
             expect(res.status).toHaveBeenCalledWith(200);
         });
 
-        it.each(['/', `/${'a'.repeat(64)}/API`])('extracts metadata and queues an activity through rollout route %s', async path => {
-            req.path = path;
+        it('should correctly extract metadata and call addToQueueForGarmin', async () => {
             await insertGarminAPIActivityFileToQueue(req, res);
 
             expect(addToQueueForGarmin).toHaveBeenCalledWith({

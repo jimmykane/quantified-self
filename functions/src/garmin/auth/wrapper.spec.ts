@@ -306,8 +306,7 @@ describe('Garmin Auth Wrapper', () => {
             expect(serviceAuthLifecycle.cleanupServiceTokenById).not.toHaveBeenCalled();
         });
 
-        it.each(['/', `/${'a'.repeat(64)}/API`])('cleans up users by reverse lookup through rollout route %s', async path => {
-            req.path = path;
+        it('should clean up users by reverse lookup using the shared lifecycle cleanup', async () => {
             req.body = { deregistrations: [{ userId: 'garminUser123' }] };
 
             // Mock Collection Group Query
@@ -519,7 +518,7 @@ describe('Garmin Auth Wrapper', () => {
         });
 
         it('rejects forged permissions before lookup or writes', async () => {
-            req.path = '/wrong/API';
+            req.path = '/';
             Object.defineProperty(req, 'body', { get() { throw new Error('body accessed'); } });
             await receiveGarminAPIUserPermissions(req, res);
             expect(res.status).toHaveBeenCalledWith(403);
@@ -528,8 +527,7 @@ describe('Garmin Auth Wrapper', () => {
             expect(mockBatchCommit).not.toHaveBeenCalled();
         });
 
-        it.each(['/', `/${'a'.repeat(64)}/API`])('processes permission changes through rollout route %s', async path => {
-            req.path = path;
+        it('should process valid permission change payload and update token', async () => {
             const { receiveGarminAPIUserPermissions } = await import('./wrapper');
 
             const permissions = ['ACTIVITY_EXPORT', 'HEALTH_EXPORT'];
