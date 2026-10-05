@@ -2,8 +2,11 @@ import { ActivityInterface, LapInterface, LapTypes } from '@sports-alliance/spor
 
 export type EventLapTypeInput = LapTypes | string | null | undefined;
 type EventLapLike = Pick<LapInterface, 'type'>;
-type EventLapActivityLike = Pick<ActivityInterface, 'getLaps'>;
+type EventLapActivityLike = Pick<ActivityInterface, 'getLaps'> & Partial<Pick<
+  ActivityInterface, 'startDate' | 'endDate' | 'getDuration' | 'getDistance'
+>>;
 
+// Terminal chart/map markers remain separate from lap table visibility.
 export const EXCLUDED_EVENT_LAP_TYPES = [LapTypes.session_end] as const satisfies readonly LapTypes[];
 
 const LAP_TYPE_ALIASES = LapTypes as unknown as Record<string, string>;
@@ -58,8 +61,45 @@ export function isEventLapTypeAllowed(lapType: EventLapTypeInput, allowedLapType
   return allowedLapTypeSet.size === 0 || allowedLapTypeSet.has(normalizedLapType);
 }
 
+function isWholeActivityLap(activity: EventLapActivityLike, lap: LapInterface): boolean {
+  const activityStart = activity.startDate?.getTime();
+  const activityEnd = activity.endDate?.getTime();
+  const lapStart = lap.startDate?.getTime();
+  const lapEnd = lap.endDate?.getTime();
+  // FIT timestamps and summary totals can round independently. Keep uncertain
+  // records visible; only suppress a confirmed duplicate of the activity.
+  if (![activityStart, activityEnd, lapStart, lapEnd].every(Number.isFinite)
+    || activityEnd <= activityStart
+    || Math.abs(lapStart - activityStart) > 1000
+    || Math.abs(lapEnd - activityEnd) > 1000) {
+    return false;
+  }
+
+  const totals = [
+    [activity.getDuration?.()?.getValue?.(), lap.getDuration?.()?.getValue?.()],
+    [activity.getDistance?.()?.getValue?.(), lap.getDistance?.()?.getValue?.()],
+  ].filter(([activityValue, lapValue]) => (
+    Number.isFinite(activityValue) && Number.isFinite(lapValue)
+    && activityValue >= 0 && lapValue >= 0
+  ));
+
+  // One second of timer rounding or one metre of distance rounding is allowed.
+  return totals.length > 0 && totals.every(([activityValue, lapValue]) => (
+    Math.abs(activityValue - lapValue) <= 1
+  ));
+}
+
+export function getVisibleEventLaps(activity: EventLapActivityLike): LapInterface[] {
+  const laps = activity.getLaps?.() || [];
+  if (laps.length === 1 && isWholeActivityLap(activity, laps[0])) {
+    return [];
+  }
+
+  // Session end is a real final segment after earlier laps, including short
+  // remainders. The provider's trigger does not determine table visibility.
+  return laps.filter((lap: EventLapLike) => normalizeEventLapType(lap.type) !== '');
+}
+
 export function hasVisibleEventLaps(activities: readonly EventLapActivityLike[] | null | undefined): boolean {
-  return (activities || []).some((activity) =>
-    (activity.getLaps() || []).some((lap: EventLapLike) => isEventLapTypeAllowed(lap.type, []))
-  );
+  return (activities || []).some((activity) => getVisibleEventLaps(activity).length > 0);
 }

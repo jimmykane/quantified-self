@@ -565,6 +565,7 @@ HRV and Sleep each have their own date range and older/newer navigation. While a
 ### Event lap tables
 
 - Event details include a **Laps** table when selected activities contain lap data.
+- A sole lap that repeats the whole activity is hidden. Final segments after earlier laps remain visible, including Garmin **Session end** laps and Suunto final partial laps. Chart and map end markers are handled separately.
 - To change it, open **Laps -> Columns**, choose Running, Cycling, Swimming, or Other activities, then tick the metrics you want to see. Use the typed metric search to quickly narrow long lists.
 - Quantified Self remembers a separate column list for each of those sport families. A triathlon can therefore keep different running, cycling, and swimming lap layouts.
 - Running and trail-running laps use pace, cycling laps use speed, and swimming laps use swim pace. These values, along with other convertible metrics, follow your unit preferences in **Settings -> Units**.
