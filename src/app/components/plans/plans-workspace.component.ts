@@ -1336,7 +1336,7 @@ export class PlansWorkspaceComponent {
       if (!session) return null;
       const nodes = session.value.nodes.map((node, index) => {
         if (index !== nodeIndex) return node;
-        const isSelection = ['purpose', 'endingKind', 'targetKind'].includes(field);
+        const isSelection = ['purpose', 'endingKind', 'targetKind', 'allowEarlyLap'].includes(field);
         if (stepIndex === null && node.kind === 'step') {
           if (isSelection && node[field as keyof ManualWorkoutEditorStep] !== value) this.haptics.selection();
           if (field === 'endingKind') {

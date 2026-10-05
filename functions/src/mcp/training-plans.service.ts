@@ -3,7 +3,7 @@ import { FieldPath } from 'firebase-admin/firestore';
 import { z } from 'zod';
 import type { UserUnitSettingsInterface } from '@sports-alliance/sports-lib';
 import { ActivityTypes } from '@sports-alliance/sports-lib';
-import { formatWorkoutStepV1, parseWorkoutStructureV1 } from '../../../shared/planned-workout';
+import { formatWorkoutStepV1, parseWorkoutStructureV1, hasAuthoredEarlyLapV1 } from '../../../shared/planned-workout';
 import { buildTrainingDeliverySummaries } from '../../../shared/training-delivery-summary';
 import { assessPlannedWorkoutProviderMappingV1, PLANNED_WORKOUT_PROVIDER_IDS,
   type PlannedWorkoutProviderId } from '../../../shared/planned-workout-providers';
@@ -12,7 +12,7 @@ import { parseStrengthWorkoutDetailsV1, strengthProjectionMatchesDetails, type S
 import { parseWorkoutLibraryItemV1 } from '../../../shared/workout-library';
 import { isUserDeletionTombstoneActive } from '../shared/user-deletion-guard';
 import { TRAINING_PLANS_SCOPE, TRAINING_READ_INPUTS, TRAINING_READ_OUTPUTS, TRAINING_RECIPE_SCHEMA,
-  TRAINING_RECIPE_WITH_POOL_SCHEMA,
+  TRAINING_RECIPE_WITH_POOL_SCHEMA, TRAINING_RECIPE_WITH_EARLY_LAP_SCHEMA,
   trainingDate, type TrainingReadResult, type TrainingReadTool } from './training-plans.schemas';
 
 export const TRAINING_READ_LIMITS = { page: 25, scan: 1000, inputBytes: 2 * 1024 * 1024,
@@ -224,8 +224,8 @@ export async function readTrainingPlans(input: TrainingReadInput, reads: Trainin
       },
     };
     const plans = new Map<string, Document>();
-    if (input.tool === 'get_saved_workout') {
-      const a = TRAINING_READ_INPUTS.get_saved_workout.parse(args.data);
+    if ((input.tool === 'get_saved_workout' || input.tool === 'get_saved_workout_v2')) {
+      const a = TRAINING_READ_INPUTS[input.tool].parse(args.data);
       const decoded = refSchema.safeParse(decode(a.savedWorkoutRef));
       if (!decoded.success || decoded.data.kind !== 'saved-workout') {
         throw new TrainingReadError('invalid_request', 'Invalid saved-workout reference.');
@@ -234,10 +234,12 @@ export async function readTrainingPlans(input: TrainingReadInput, reads: Trainin
       if (!document) throw new TrainingReadError('invalid_request', 'This saved workout is no longer available.');
       const item = parseWorkoutLibraryItemV1({ ...document.data, id: document.id });
       if (item.createdAtMs !== decoded.data.createdAtMs) throw unavailable();
+      if (input.tool === 'get_saved_workout' && hasAuthoredEarlyLapV1(item.structure))
+        throw new TrainingReadError('invalid_request', 'Read this recipe with get_saved_workout_v2 to preserve its early Lap setting.');
       return { libraryRevision: state.libraryRevision ?? 0, savedWorkout: {
         savedWorkoutRef: a.savedWorkoutRef, title: item.title, status: item.status,
         revision: item.revision, createdAtMs: item.createdAtMs, updatedAtMs: item.updatedAtMs,
-        structure: TRAINING_RECIPE_WITH_POOL_SCHEMA.parse(item.structure),
+        structure: (input.tool === 'get_saved_workout_v2' ? TRAINING_RECIPE_WITH_EARLY_LAP_SCHEMA : TRAINING_RECIPE_WITH_POOL_SCHEMA).parse(item.structure),
         ...(item.strength ? { strength: item.strength } : {}),
       } };
     }
@@ -326,7 +328,7 @@ export async function readTrainingPlans(input: TrainingReadInput, reads: Trainin
       const a = TRAINING_READ_INPUTS.get_training_plan.parse(args.data);
       return { scheduleRevision: state.revision, plan: projectPlan(await resolve(a.planRef, 'plan')) };
     }
-    if (input.tool === 'get_planned_workout' || input.tool === 'get_planned_workout_v2') {
+    if (input.tool === 'get_planned_workout' || input.tool === 'get_planned_workout_v2' || input.tool === 'get_planned_workout_v3') {
       const a = TRAINING_READ_INPUTS[input.tool].parse(args.data);
       const doc = await resolve(a.workoutRef, 'workout', true);
       const summary = await projectWorkout(doc);
@@ -339,9 +341,13 @@ export async function readTrainingPlans(input: TrainingReadInput, reads: Trainin
       }
       // Existing registered clients retain the frozen v1 projection. The additive
       // wire-v2 read returns the selected physical pool length when one was authored.
+      if (input.tool !== 'get_planned_workout_v3' && hasAuthoredEarlyLapV1(canonicalStructure))
+        throw new TrainingReadError('invalid_request', 'Read this workout with get_planned_workout_v3 to preserve its early Lap setting.');
       const legacyStructure = { ...canonicalStructure };
       delete legacyStructure.poolLength;
-      const structure = input.tool === 'get_planned_workout_v2'
+      const structure = input.tool === 'get_planned_workout_v3'
+        ? TRAINING_RECIPE_WITH_EARLY_LAP_SCHEMA.parse(canonicalStructure)
+        : input.tool === 'get_planned_workout_v2'
         ? TRAINING_RECIPE_WITH_POOL_SCHEMA.parse(canonicalStructure)
         : TRAINING_RECIPE_SCHEMA.parse(legacyStructure);
       const units = await view.units();

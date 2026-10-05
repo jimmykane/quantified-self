@@ -122,6 +122,12 @@
 // A wrapped ending hint must not stretch the neighboring outlined controls.
 .step-fields { align-items: start; }
 .workout-duration-input { grid-column: 1 / -1; }
+.early-lap-option { grid-column: 1 / -1; min-width: 0; }
+.early-lap-option .editor-hint {
+  margin: 4px 0 0;
+  color: var(--mat-sys-on-surface-variant);
+  font: var(--mat-sys-body-small);
+}
 
 .plan-deletion-card mat-card-content {
   padding-top: 16px;

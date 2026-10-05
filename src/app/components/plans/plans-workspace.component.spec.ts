@@ -1609,6 +1609,42 @@ describe('PlansWorkspaceComponent', () => {
     }));
   });
 
+  it.each([false, true])('wires early Lap through the checkbox, save and library copy for repeat=%s', async repeat => {
+    const step = { kind: 'step' as const, id: 'exact', purpose: 'work' as const,
+      ending: { kind: 'distance' as const, meters: 1609.344 }, targets: [] };
+    schedule.workouts[0].structure = { version: 1, sport: ActivityTypes.Running,
+      nodes: repeat ? [{ kind: 'repeat', id: 'repeat', count: 2, steps: [step] }] : [step] };
+    setRouteState({ mode: 'edit', workoutId: 'plan-workout' });
+    const fixture = await renderPlans(); const component = fixture.componentInstance;
+    haptics.selection.mockClear();
+    const checkbox = fixture.nativeElement.querySelector('.early-lap-option input[type="checkbox"]') as HTMLInputElement;
+    expect(checkbox.checked).toBe(false);
+    expect(haptics.selection).not.toHaveBeenCalled();
+    checkbox.click(); fixture.detectChanges();
+    expect(checkbox.checked).toBe(true);
+    expect(haptics.selection).toHaveBeenCalledOnce();
+    component.updateStep(0, repeat ? 0 : null, 'allowEarlyLap', true);
+    expect(haptics.selection).toHaveBeenCalledOnce();
+    await component.saveEditorCopyToLibrary();
+    expect(libraryMutate).toHaveBeenCalledWith(expect.objectContaining({ operation: expect.objectContaining({
+      kind: 'create', structure: expect.objectContaining({ nodes: repeat ? [expect.objectContaining({ steps: [
+        expect.objectContaining({ ending: { kind: 'distance', meters: 1609.344, allowEarlyLap: true } }),
+      ] })] : [expect.objectContaining({ ending: { kind: 'distance', meters: 1609.344, allowEarlyLap: true } })] }),
+    }) }));
+    component.busyAction.set('save-workout'); fixture.detectChanges();
+    expect(checkbox.disabled).toBe(true); checkbox.click();
+    expect(checkbox.checked).toBe(true);
+    component.busyAction.set(null); fixture.detectChanges();
+    haptics.selection.mockClear(); checkbox.click(); fixture.detectChanges();
+    expect(haptics.selection).toHaveBeenCalledOnce();
+    await component.saveWorkout();
+    expect(mutate).toHaveBeenCalledWith(expect.objectContaining({ operation: expect.objectContaining({
+      kind: 'update-workout', structure: expect.objectContaining({ nodes: repeat ? [expect.objectContaining({ steps: [
+        expect.objectContaining({ ending: { kind: 'distance', meters: 1609.344, allowEarlyLap: false } }),
+      ] })] : [expect.objectContaining({ ending: { kind: 'distance', meters: 1609.344, allowEarlyLap: false } })] }),
+    }) }));
+  });
+
   it('keeps lap endings when copying an edited scheduled recipe to the library', async () => {
     libraryMutate.mockResolvedValue({ mutationId: 'mutation-1', item: null });
     setRouteState({ mode: 'edit', workoutId: 'plan-workout' });

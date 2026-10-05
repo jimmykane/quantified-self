@@ -1813,4 +1813,15 @@ it('explains separately approved activity description access and event semantics
   expect(content).toContain('Activities in the same event share that description');
   expect(content).toContain('refresh cannot add it');
   expect(content).toContain('without truncation');
+
+
 });
+
+  it('explains early Lap separately from indefinite Lap and gates unsupported delivery', () => {
+    const content = JSON.stringify(HELP_SECTIONS);
+    expect(content).toContain('Allow early Lap');
+    expect(content).toContain('no numeric limit');
+    expect(content).toContain('Suunto delivery supports the early-Lap option');
+    expect(content).toContain('Garmin, COROS and Wahoo');
+    expect(content).toContain('explicitly review enabling or removing');
+  });

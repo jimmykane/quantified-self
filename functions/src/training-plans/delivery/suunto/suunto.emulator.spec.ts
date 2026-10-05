@@ -17,7 +17,7 @@ import { SuuntoHttpFixture } from '../test-support/suunto-http-fixture';
 import { buildSuuntoHealthWebhookAccountBinding, getSuuntoHealthWebhookAccountBindingRef } from '../../../suunto/health-webhook-binding';
 import { readSuuntoGuideCompletions, retainSuuntoGuideCompletions } from '../../../suunto/guide-completion';
 import { suuntoFitFixture, suuntoMultiSessionFitFixture } from '../test-support/suunto-fit-fixture';
-import { guideExternalId, assessSuuntoGuideV2ForRecovery, assessSuuntoGuideV3ForRecovery, assessSuuntoGuideV4ForRecovery, guidePayloadForRecovery } from './mapping';
+import { guideExternalId, assessSuuntoGuideV2ForRecovery, assessSuuntoGuideV3ForRecovery, assessSuuntoGuideV4ForRecovery, assessSuuntoGuideV5ForRecovery, guidePayloadForRecovery } from './mapping';
 import { deliveryIdentity } from '../intent';
 import { retainGarminFITWorkoutReferences } from '../../completion/fit-workout-evidence';
 import { standardWorkoutReferenceFitFixture } from '../test-support/suunto-fit-fixture';
@@ -45,9 +45,9 @@ describe.skipIf(!process.env.FIRESTORE_EMULATOR_HOST)('Suunto worker with real F
   const send = async () => { await command('send'); await drain(); const row = await ledger(); await processTrainingDelivery(runtime, uid, row.id); await drain(); return ledger(); };
   // Simulate a journal and provider archive written by the previous deployed
   // serializer. The fixture, Firestore and all provider HTTP remain local/demo.
-  const startedLegacy = async (version: 'v2' | 'v3' | 'v4' = 'v2') => {
+  const startedLegacy = async (version: 'v2' | 'v3' | 'v4' | 'v5' = 'v2') => {
     const row = await ledger(); const operation = row.attempt!;
-    operation.digest = (version === 'v2' ? assessSuuntoGuideV2ForRecovery : version === 'v3' ? assessSuuntoGuideV3ForRecovery : assessSuuntoGuideV4ForRecovery)(operation.workout!, operation.destinationKey,
+    operation.digest = (version === 'v2' ? assessSuuntoGuideV2ForRecovery : version === 'v3' ? assessSuuntoGuideV3ForRecovery : version === 'v4' ? assessSuuntoGuideV4ForRecovery : assessSuuntoGuideV5ForRecovery)(operation.workout!, operation.destinationKey,
       operation.timeZone, 'Quantified Self', operation.strength).digest;
     const payload = guidePayloadForRecovery(operation, 'Quantified Self')!;
     const [id, remote] = [...server.guides.entries()][0];
@@ -102,7 +102,7 @@ describe.skipIf(!process.env.FIRESTORE_EMULATOR_HOST)('Suunto worker with real F
     await drain(); expect(server.guides.size).toBe(1);
     expect([...server.guides.values()][0].guide.steps[0]).toMatchObject({ notification: { title: 'Work', text: 'For 10m 00s' } });
     expect(logger.info).toHaveBeenCalledWith('[TrainingDelivery]', expect.objectContaining({
-      event: 'accepted', provider: 'suunto', guideMappingVersion: 'suunto-guides-v5', deliveryPhase: 'execute',
+      event: 'accepted', provider: 'suunto', guideMappingVersion: 'suunto-guides-v6', deliveryPhase: 'execute',
     }));
     expect(await ledger()).toMatchObject({ status: 'delivered', verification: { state: 'unsupported', missing: false } });
     expect((await user().collection(TRAINING_DELIVERY_VERIFICATIONS).doc(row.id).get()).data())
@@ -416,7 +416,7 @@ describe.skipIf(!process.env.FIRESTORE_EMULATOR_HOST)('Suunto worker with real F
     } };
     const original = await send(); expect(original.status).toBe('retrying');
     expect(logger.warn).toHaveBeenCalledWith('[TrainingDelivery]', expect.objectContaining({
-      event: 'failure', guideMappingVersion: 'suunto-guides-v5', deliveryPhase: 'execute',
+      event: 'failure', guideMappingVersion: 'suunto-guides-v6', deliveryPhase: 'execute',
     }));
     const legacy = await startedLegacy(version);
     expect(JSON.stringify(legacy.payload).includes('notification')).toBe(version !== 'v2');
@@ -456,7 +456,7 @@ describe.skipIf(!process.env.FIRESTORE_EMULATOR_HOST)('Suunto worker with real F
       expect(guide.steps.at(-1)).toMatchObject({ createManualLap: true });
     }
     expect(logger.info).toHaveBeenCalledWith('[TrainingDelivery]', expect.objectContaining({
-      event: 'accepted', guideMappingVersion: 'suunto-guides-v5', deliveryPhase: 'execute',
+      event: 'accepted', guideMappingVersion: 'suunto-guides-v6', deliveryPhase: 'execute',
     }));
     const logs = JSON.stringify([...vi.mocked(logger.info).mock.calls, ...vi.mocked(logger.warn).mock.calls]);
     for (const value of [uid, legacy.id, legacy.operation.digest, legacy.operation.destinationKey, 'notification', 'Squat']) {
@@ -610,7 +610,7 @@ describe.skipIf(!process.env.FIRESTORE_EMULATOR_HOST)('Suunto worker with real F
     await command('retry'); await drain(); await processTrainingDelivery(runtime, uid, row.id); await drain();
     expect((await ledger()).status).toBe('delivered'); expect(server.guides.size).toBe(1);
     expect(logger.info).toHaveBeenCalledWith('[TrainingDelivery]', expect.objectContaining({
-      event: 'accepted', guideMappingVersion: 'suunto-guides-v5', deliveryPhase: 'execute',
+      event: 'accepted', guideMappingVersion: 'suunto-guides-v6', deliveryPhase: 'execute',
     }));
     expect((await user().collection('trainingDeliverySettings').doc('workout_w_suunto').get()).data()?.enabled).toBe(true);
   });
@@ -845,4 +845,38 @@ describe.skipIf(!process.env.FIRESTORE_EMULATOR_HOST)('Suunto worker with real F
     expect((await user().collection(DELIVERY_LEDGER).doc(first === 'suunto' ? 'garmin-delivery' : suuntoDelivery.id).get())
       .get('actual.completed')).toBe(false);
   });
+  it('recovers a frozen v5 lost create ACK without replacing or redundantly updating its Guide', async () => {
+    server.afterHandle = async request => { if (request.method === 'POST') {
+      server.afterHandle = null; throw new SuuntoGuideHttpError('uncertain', false);
+    } };
+    const original = await send(); expect(original.status).toBe('retrying');
+    const legacy = await startedLegacy('v5');
+    await command('retry'); await drain(); await processTrainingDelivery(runtime, uid, original.id); await drain();
+    expect((await ledger()).actual?.ids.guide).toBe(legacy.id);
+    await processTrainingDelivery(runtime, uid, original.id); await drain();
+    expect((await ledger()).status).toBe('delivered');
+    expect(server.calls.filter(call => call.method === 'POST')).toHaveLength(1);
+    expect(server.calls.filter(call => call.method === 'PUT')).toHaveLength(0);
+    expect(server.guides.get(legacy.id)!.guide).toEqual(legacy.payload);
+  });
+
+  it('delivers and edits early Lap repeat paths on the same Guide identity without changing the canonical recipe', async () => {
+    const structure = { version: 1, sport: ActivityTypes.Running, nodes: [{ kind: 'repeat', id: 'repeat', count: 2, steps: [
+      { kind: 'step', id: 'work', purpose: 'work', ending: { kind: 'time', seconds: 90.123, allowEarlyLap: true }, targets: [] },
+      { kind: 'step', id: 'recovery', purpose: 'recovery', ending: { kind: 'distance', meters: 400.125, allowEarlyLap: false }, targets: [] },
+    ] }] };
+    await user().collection('scheduledWorkouts').doc('w').update({ structure });
+    const sent = await send(); expect(sent.status).toBe('delivered'); const id = sent.actual!.ids.guide;
+    expect(JSON.stringify(server.guides.get(id)!.guide.steps)).toContain('"type":"or"');
+    expect((await user().collection('scheduledWorkouts').doc('w').get()).get('structure')).toEqual(structure);
+    await user().collection('scheduledWorkouts').doc('w').update({ revision: 2, localDate: '2026-09-18', updatedAtMs: now + 1 });
+    await mark(); await processTrainingDelivery(runtime, uid, sent.id); await drain();
+    expect((await ledger()).actual?.ids.guide).toBe(id);
+    expect(server.calls.filter(call => call.method === 'POST')).toHaveLength(1);
+    expect(server.calls.filter(call => call.method === 'PUT')).toHaveLength(1);
+    expect((await user().collection('scheduledWorkouts').doc('w').get()).get('structure')).toEqual(structure);
+    await mark(); await processTrainingDelivery(runtime, uid, sent.id); await drain();
+    expect(server.calls.filter(call => call.method === 'PUT')).toHaveLength(1);
+  });
+
 });

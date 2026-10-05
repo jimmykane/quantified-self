@@ -105,7 +105,7 @@ describe('Training preview model-tool selection', () => {
     expect(selectAssistantTrainingPreviewTool('Delete my strength workout.')).toBe('preview_training_deletion');
     expect(selectAssistantTrainingPreviewTool('Delete my old plans and workouts.')).toBe('preview_training_deletion');
     expect(selectAssistantTrainingPreviewTool('Remove this planned session and older copies.')).toBe('preview_training_deletion');
-    expect(selectAssistantTrainingPreviewTool('Delete a saved workout from the library.')).toBe('preview_saved_workout_change');
+    expect(selectAssistantTrainingPreviewTool('Delete a saved workout from the library.')).toBe('preview_saved_workout_v2_change');
     expect(selectAssistantTrainingPreviewTool('Delete this workout and create a new one.')).toBe('preview_training_changes');
     const history = [{ role: 'user' as const, text: 'Delete my planned workout.' },
       { role: 'assistant' as const, text: 'Also remove older, uncompleted copies from your connected services?' }];
@@ -130,6 +130,14 @@ describe('Training preview model-tool selection', () => {
       { role: 'assistant' as const, text: 'Keep its workouts as standalone, or permanently delete them?' }];
     expect(selectAssistantTrainingPreviewTool('Keep workouts as standalone.', planHistory)).toBe('preview_training_deletion');
     expect(selectAssistantTrainingPreviewTool('Delete them too.', planHistory)).toBe('preview_training_deletion');
+  });
+  it('selects the complete recipe for explicit early Lap and ordinary edits without granting delivery authority', () => {
+    for (const prompt of ['Create a running workout and allow early Lap on the intervals.',
+      'Update my workout title.', 'Change the pace target on my workout.', 'Disable early Lap on my workout.'])
+      expect(selectAssistantTrainingPreviewTool(prompt)).toBe('preview_planned_workout_v3_change');
+    expect(selectAssistantTrainingPreviewTool('Read my early Lap workout.')).not.toBe('preview_planned_workout_v3_change');
+    expect(ASSISTANT_SYSTEM_INSTRUCTIONS).toContain('Enable it only on explicit athlete request');
+    expect(ASSISTANT_SYSTEM_INSTRUCTIONS).toContain('Preserve all unchanged fields');
   });
   it('keeps a single focused preview for a workout recommendation with Garmin and Suunto delivery', () => {
     expect(selectAssistantTrainingPreviewTool(ASSISTANT_CREATE_TODAYS_WORKOUT_PROMPT))
@@ -161,39 +169,39 @@ describe('Training preview model-tool selection', () => {
     expect(selectAssistantTrainingPreviewTool('Stop sync for my 25 m pool swim.'))
       .toBe('preview_training_changes');
     expect(selectAssistantTrainingPreviewTool('Edit my workout and send the update to Garmin.'))
-      .toBe('preview_training_changes');
+      .toBe('preview_planned_workout_v3_change');
     expect(selectAssistantTrainingPreviewTool('Add a pool swim with a 25 m pool length.'))
-      .toBe('preview_planned_workout_v2_change');
+      .toBe('preview_planned_workout_v3_change');
     expect(selectAssistantTrainingPreviewTool('Create a swim session in a 50-meter pool.'))
-      .toBe('preview_planned_workout_v2_change');
+      .toBe('preview_planned_workout_v3_change');
     expect(selectAssistantTrainingPreviewTool('Schedule a pool workout in a 33.3 m pool.'))
-      .toBe('preview_planned_workout_v2_change');
+      .toBe('preview_planned_workout_v3_change');
     expect(selectAssistantTrainingPreviewTool('Make a 25-yard swimming workout.'))
-      .toBe('preview_planned_workout_v2_change');
+      .toBe('preview_planned_workout_v3_change');
     expect(selectAssistantTrainingPreviewTool('Update my pool swim and preserve its 25 m pool length.'))
-      .toBe('preview_planned_workout_v2_change');
+      .toBe('preview_planned_workout_v3_change');
     expect(selectAssistantTrainingPreviewTool('Edit my pool swim workout for tomorrow.'))
-      .toBe('preview_planned_workout_v2_change');
+      .toBe('preview_planned_workout_v3_change');
     expect(selectAssistantTrainingPreviewTool('Change my swimming workout date.'))
-      .toBe('preview_planned_workout_v2_change');
+      .toBe('preview_planned_workout_v3_change');
     expect(selectAssistantTrainingPreviewTool('Create a strength workout with four sets.'))
       .toBe('preview_strength_workout_change');
     expect(selectAssistantTrainingPreviewTool('Edit my strength workout sets.'))
       .toBe('preview_strength_workout_change');
     expect(selectAssistantTrainingPreviewTool('Save this planned workout to my workout library.'))
-      .toBe('preview_saved_workout_change');
+      .toBe('preview_saved_workout_v2_change');
     expect(selectAssistantTrainingPreviewTool('Save this workout to my library.'))
-      .toBe('preview_saved_workout_change');
+      .toBe('preview_saved_workout_v2_change');
     expect(selectAssistantTrainingPreviewTool('Create a workout tomorrow, but do not save it in my library.'))
       .toBe('preview_create_planned_workout');
     expect(selectAssistantTrainingPreviewTool('Create a plan without using the saved workout library.'))
       .toBe('preview_training_changes');
     expect(selectAssistantTrainingPreviewTool("Don't change the current plan, but save this workout to my library."))
-      .toBe('preview_saved_workout_change');
+      .toBe('preview_saved_workout_v2_change');
     expect(selectAssistantTrainingPreviewTool('Place my saved workout on October 4 and 11 in this plan.'))
-      .toBe('preview_saved_workout_change');
+      .toBe('preview_saved_workout_v2_change');
     expect(selectAssistantTrainingPreviewTool('Archive the saved recipe, but do not change scheduled workouts.'))
-      .toBe('preview_saved_workout_change');
+      .toBe('preview_saved_workout_v2_change');
   });
 
   it('does not turn a different action or cancelled deletion into a cleanup reply', () => {
@@ -840,8 +848,8 @@ describe('Assistant runtime', () => {
     );
     expect(ASSISTANT_SYSTEM_INSTRUCTIONS).toContain('copy-workout change in preview_training_changes');
     expect(ASSISTANT_SYSTEM_INSTRUCTIONS).toContain('Never infer a Send action or plan-sync opt-in');
-    expect(ASSISTANT_SYSTEM_INSTRUCTIONS).toContain('get_planned_workout_v2 for an authored pool-swim length');
-    expect(ASSISTANT_SYSTEM_INSTRUCTIONS).toContain('preview_planned_workout_v2_change for one pool-swim create/update');
+    expect(ASSISTANT_SYSTEM_INSTRUCTIONS).toContain('get_planned_workout_v3 for full non-strength instructions');
+    expect(ASSISTANT_SYSTEM_INSTRUCTIONS).toContain('preview_planned_workout_v3_change for one non-strength recipe edit');
     expect(ASSISTANT_SYSTEM_INSTRUCTIONS).toContain(
       'do not silently limit the trend to a recent year',
     );

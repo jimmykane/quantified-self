@@ -1,3 +1,4 @@
+import { hasAuthoredEarlyLapV1, parseWorkoutStructureV1 } from '../../../shared/planned-workout';
 import * as admin from 'firebase-admin';
 import { randomUUID } from 'node:crypto';
 import { Timestamp } from 'firebase-admin/firestore';
@@ -20,7 +21,7 @@ import { TrainingScheduleMutationError } from '../training-plans/mutation';
 import { decodeOpaqueValue, encodeOpaqueValue, McpDataError } from './data.service';
 import { TRAINING_PLANS_SCOPE, TRAINING_PLANS_WRITE_SCOPE, TRAINING_WRITE_INPUTS,
   TRAINING_WRITE_OUTPUTS } from './training-plans.schemas';
-import { assertAuthorityInTransaction, type TrainingWriteInput } from './training-plans-write.service';
+import { describeEarlyLapRecipeEffect, assertAuthorityInTransaction, type TrainingWriteInput } from './training-plans-write.service';
 
 const PROPOSALS = 'trainingMcpLibraryProposals';
 const PROPOSAL_TTL_MS = 15 * 60 * 1000;
@@ -92,12 +93,12 @@ export function isWorkoutLibraryProposalRef(input: TrainingWriteInput, value: st
 }
 
 export async function previewSavedWorkoutChange(input: TrainingWriteInput,
-  provided?: LibraryWriteDependencies): Promise<Preview> {
+  provided?: LibraryWriteDependencies, recipeMode: 'legacy' | 'v2' = 'legacy'): Promise<Preview> {
   const deps = provided ?? defaultDependencies();
   const encodedArguments = JSON.stringify(input.arguments);
   if (typeof encodedArguments !== 'string') invalid('Provide one valid saved-workout change.');
   if (Buffer.byteLength(encodedArguments, 'utf8') > 256 * 1024) invalid('The library proposal is too large.');
-  const parsed = TRAINING_WRITE_INPUTS.preview_saved_workout_change.safeParse(input.arguments);
+  const parsed = TRAINING_WRITE_INPUTS[recipeMode === 'v2' ? 'preview_saved_workout_v2_change' : 'preview_saved_workout_change'].safeParse(input.arguments);
   if (!parsed.success) invalid('Provide one valid saved-workout change, exact revisions, and explicit dates when placing it.');
   if (REQUIRED_SCOPES.some(scope => !input.scopes.includes(scope))) invalid('Training plan read and write permission is required.');
   const user = deps.db.collection('users').doc(input.uid);
@@ -136,6 +137,7 @@ export async function previewSavedWorkoutChange(input: TrainingWriteInput,
     let expectedPlanRevision: number | null = null;
     let planRangePreview: string | null = null;
     let title = '';
+    let previousStructure: import('../../../shared/planned-workout').WorkoutStructureV1 | undefined;
     if ('savedWorkoutRef' in change) {
       const target = decodeReference(change.savedWorkoutRef, 'saved-workout', input);
       const snapshot = await tx.get(user.collection('workoutLibrary').doc(target.id));
@@ -143,10 +145,13 @@ export async function previewSavedWorkoutChange(input: TrainingWriteInput,
       const item = parseWorkoutLibraryItemV1(snapshot.data());
       if (item.id !== target.id || item.createdAtMs !== target.createdAtMs
         || item.revision !== change.expectedRevision) invalid('The saved workout changed. Read it again.');
+      if (recipeMode === 'legacy' && change.kind === 'update' && hasAuthoredEarlyLapV1(item.structure))
+        invalid('Read the saved recipe with v2 and use the v2 preview to preserve or explicitly change early Lap permission.');
       if (change.kind === 'place' && item.status !== 'active') invalid('Archived workouts cannot be placed.');
       savedItemId = item.id;
       savedItemCreatedAtMs = item.createdAtMs;
       title = item.title;
+      previousStructure = item.structure;
     }
     if (change.kind === 'save-workout') {
       const target = decodeReference(change.workoutRef, 'workout', input);
@@ -215,11 +220,14 @@ export async function previewSavedWorkoutChange(input: TrainingWriteInput,
             expectedRevision: change.expectedRevision, confirmDeletion: true };
         }
       })() });
-    const summary = change.kind === 'place'
+    let summary = change.kind === 'place'
       ? `Place “${title}” on ${change.dates.length} explicit date${change.dates.length === 1 ? '' : 's'} in ${planId ? 'the selected plan' : 'Standalone'}.${planRangePreview ? ` Extend the plan range to ${planRangePreview}.` : ''} The copies have independent identities and no completion links. Existing plan sync preferences may send plan copies; standalone copies are not opted in.`
       : change.kind === 'delete'
         ? `Permanently remove “${title}” from the saved-workout library. Already scheduled workouts and their history stay unchanged.`
         : `${change.kind === 'set-status' ? change.status === 'active' ? 'Restore' : 'Archive' : change.kind === 'save-workout' ? 'Save the scheduled workout as a' : change.kind === 'copy' ? 'Duplicate the' : change.kind === 'update' ? 'Update the' : 'Create a'} saved workout “${title}”. Already scheduled workouts are independent and will not change.`;
+    if ((change.kind === 'create' || change.kind === 'update') && recipeMode === 'v2') {
+      summary = `${describeEarlyLapRecipeEffect(previousStructure, parseWorkoutStructureV1(change.structure))} ${summary}`;
+    }
     const changes: Preview['changes'] = change.kind === 'place'
       ? Array.from({ length: Math.ceil(change.dates.length / 20) }, (_, index) => ({
         index, kind: 'place', summary: `Dates ${index * 20 + 1}–${Math.min((index + 1) * 20, change.dates.length)}: ${change.dates.slice(index * 20, (index + 1) * 20).join(', ')}`,

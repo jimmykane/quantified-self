@@ -447,6 +447,19 @@ export function assessPlannedWorkoutProviderMappingV1(
     }
   }
 
+  if (provider === 'suunto') {
+    let screens = 1; let earlyLap = false;
+    for (const node of structure.nodes) {
+      for (const step of node.kind === 'step' ? [node] : node.steps) {
+        const early = (step.ending.kind === 'time' || step.ending.kind === 'distance') && step.ending.allowEarlyLap === true;
+        earlyLap ||= early;
+        screens += (node.kind === 'step' ? 1 : node.count) * (early ? 2 : 1);
+      }
+    }
+    if (earlyLap && screens > 1000) issues.push({ severity: 'unsupported', code: 'unsupported_ending',
+      path: '$.nodes', message: 'Early Lap boundary paths exceed the Suunto Guide 1000-screen limit. Reduce repeat passes or steps.' });
+  }
+
   const referenceSnapshots = new Map<string, number>();
   if (provider === 'wahoo' && isWahooUntargetedWorkoutSportV1(structure.sport) && wahooDurationSeconds(structure) === null) {
     issues.push({ severity: 'unsupported', code: 'unsupported_ending', path: '$.nodes',
@@ -463,6 +476,11 @@ export function assessPlannedWorkoutProviderMappingV1(
         message: 'Wahoo Walking/Hiking and swim/rowing intensity-target delivery is not verified. Keep this prescription in QS or use another compatible provider.',
       });
     }
+    if (provider !== 'suunto' && (step.ending.kind === 'time' || step.ending.kind === 'distance')
+      && step.ending.allowEarlyLap === true) issues.push({
+      severity: 'unsupported', code: 'unsupported_ending', path: `${path}.ending.allowEarlyLap`,
+      message: `${PLANNED_WORKOUT_PROVIDER_CAPABILITIES_V1[provider].label} has no verified per-step time/distance-or-Lap mapping. Keep this option in QS or use Suunto.`,
+    });
     const supportedEndings = provider === 'wahoo'
       ? ['time', 'distance', 'kilojoules']
       : ['time', 'distance', 'manual'];
