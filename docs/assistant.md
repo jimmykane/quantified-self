@@ -414,6 +414,9 @@ and change permissions remain off until the user enables them, and adding the se
 and **Apply changes**. Missing records do not establish skipped training or a regular habit. MCP impact: this starter-copy
 update reuses the existing bounded daily context and focused workout proposal; it changes no tool, schema, scope, metric,
 consent default, provider action, registered contract or bundled plugin. No new read or write coverage is required.
+The example uses "does not duplicate" so the existing negative-qualifier routing keeps the focused create-workout
+preview; the contraction "doesn't duplicate" is currently interpreted as a separate duplication request. Runtime tests
+validate the exact shared example against the focused preview, daily context and schedule-only proposal behavior.
 
 The latest-workout and yesterday Training-impact cards are contextual examples rather than fixed workflow examples.
 They use the ordinary guarded Training-impact routing because the exact activity reference or complete local-day
