@@ -7,7 +7,7 @@ export function validateMarketingSchedule(value: unknown): MarketingDailySchedul
   if (Object.keys(schedule).some(key => key !== 'time' && key !== 'timeZone') ||
       typeof schedule.time !== 'string' || !/^([01]\d|2[0-3]):[0-5]\d$/.test(schedule.time) ||
       typeof schedule.timeZone !== 'string' || schedule.timeZone.length > 100 ||
-      !/^[A-Za-z_]+(?:\/[A-Za-z0-9_+\-]+)*$/.test(schedule.timeZone)) {
+      !/^[A-Za-z_]+(?:\/[A-Za-z0-9_+-]+)*$/.test(schedule.timeZone)) {
     throw new Error('Choose a daily time (HH:mm) and a valid timezone.');
   }
   try {

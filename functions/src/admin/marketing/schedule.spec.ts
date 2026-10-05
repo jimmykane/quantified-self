@@ -12,6 +12,10 @@ describe('daily marketing schedule', () => {
     expect(marketingScheduleGate(null, {}, at('2026-10-05T01:00:00Z')).due).toBe(true);
   });
 
+  it.each(['America/Port-au-Prince', 'Etc/GMT+3', 'Etc/GMT-3'])('accepts timezone punctuation in %s', timeZone => {
+    expect(validateMarketingSchedule({ time: '09:00', timeZone })).toEqual({ time: '09:00', timeZone });
+  });
+
   it.each([false, [], {}, { time: '24:00', timeZone: 'UTC' }, { time: '9:00', timeZone: 'UTC' },
     { time: '09:60', timeZone: 'UTC' }, { time: '09:00', timeZone: 'Invalid/Zone' },
     { time: '09:00', timeZone: '+03:00' }, { time: '09:00', timeZone: 'UTC', extra: true }])('rejects malformed schedules %#', value => {
