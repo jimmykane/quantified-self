@@ -911,7 +911,17 @@ Provider file URLs are external input even if they came from an authenticated pa
 
 Treat a successful HTTP status as transport success, not proof that a provider file is ready. Normalize only recognized wrappers and validate the complete FIT envelope—including its declared length—before invoking Sports Lib. Apply a decoded-body limit when the provider contract documents a safe maximum; do not invent one that could reject valid activity files. A provider-specific incomplete or placeholder response should remain retryable with a distinct exhausted-retry DLQ context. Diagnostics may retain only structural facts such as byte length, an allowlisted content-type category, and validation reason; never retain or log the response body. If a structurally valid FIT parses without a session, retry only when provider evidence supports a narrowly bounded not-ready case (for Suunto, a suspiciously small response); keep ordinary full-sized sessionless files terminal so permanent corruption does not consume the retry budget.
 
-Suunto FIT downloads in the queued sync worker use a 60-second provider deadline without a decoded-body cap because its contract does not establish a safe maximum. The download explicitly sends `Accept: */*`: Suunto's endpoint returns 500 for FIT-specific media types but accepts the wildcard request. That worker has a 540-second runtime, leaving time for sanitized error handling after an abort.
+Suunto FIT downloads in the queued sync worker use the existing 60-second deadline plus an application safety bound
+of 128 MiB per response, enforced while reading even when Content-Length is absent. Redirects are rejected. This is
+an operator-selected QS limit, not a documented Suunto maximum: a valid larger file will require operator review.
+Oversized responses move immediately to the existing failed-job flow with `SUUNTO_ACTIVITY_FILE_TOO_LARGE`, including
+after a forced token refresh, instead of repeatedly downloading the same oversized response. Failure records retain
+only a fixed safe error, never the provider body or credential URL. Timeout and incomplete-file retries retain their
+existing behavior. The download explicitly sends `Accept: */*`: Suunto's endpoint returns 500 for FIT-specific media
+types but accepts the wildcard request. That worker has a 540-second runtime, leaving time for sanitized error
+handling after an abort. Deploy the workout processor after verification; watch this failed-job category and download
+failures for compatibility problems. Reverting this Functions change restores the prior download policy without
+changing existing activity data, connections, or queues.
 
 Garmin Activity Files deliberately use an application safety bound: 128 MiB per response and a 60-second deadline,
 including the GPX-to-FIT fallback. This is not asserted as a Garmin API maximum; oversized files move to a distinct
