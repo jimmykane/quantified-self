@@ -101,6 +101,31 @@ describe('WorkoutTargetsEditorComponent', () => {
     expect(haptics.selection).toHaveBeenCalledOnce();
   });
 
+  it.each([false, true])('does not call an unsaved reference a saved snapshot after conversion (reopened: %s)', async reopened => {
+    const { child, host, settle } = await render();
+    const canonical = { kind: 'speed' as const, mode: 'relative' as const, presentation: 'pace' as const,
+      minimumPercent: 80, maximumPercent: 120, reference: { kind: 'threshold-speed' as const, metersPerSecond: 3.1234567890123 } };
+    host.targets.set([reopened ? workoutTargetToManualEditor(canonical, host.sport, host.units)
+      : { ...createManualWorkoutEditorTarget('speed'), mode: 'relative', minimum: 80, maximum: 120 }]); await settle();
+    child.number(0, 'referenceValue', 4.123456789); await settle();
+    expect(child.rows()[0].savedReference).toBe(false);
+    child.select(0, 'presentation', 'speed'); await settle();
+    expect(child.rows()[0].savedReference).toBe(false);
+    child.select(0, 'presentation', 'pace'); await settle();
+    expect(child.rows()[0].savedReference).toBe(false);
+  });
+
+  it('clears converted speed snapshots when selecting another target mode', async () => {
+    const { child, host, settle } = await render();
+    host.targets.set([{ ...createManualWorkoutEditorTarget('speed'), mode: 'relative', referenceValue: 4.123456789 }]); await settle();
+    child.select(0, 'presentation', 'speed'); await settle();
+    expect(host.targets()[0].speedSource).toBeDefined();
+    child.select(0, 'mode', 'absolute'); await settle();
+    expect(host.targets()[0]).toMatchObject({ mode: 'absolute', minimum: null, maximum: null, referenceValue: null });
+    expect(host.targets()[0].speedSource).toBeUndefined();
+    expect(host.targets()[0].source).toBeUndefined();
+  });
+
   it('ignores every action while saving and leaves the draft intact', async () => {
     const { child, host, settle } = await render();
     host.targets.set([{ ...createManualWorkoutEditorTarget('cadence'), minimum: 80, maximum: 90 }]); host.disabled.set(true); await settle();

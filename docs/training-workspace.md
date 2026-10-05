@@ -589,11 +589,16 @@ mode clears incompatible numeric inputs rather than assigning them new semantics
 convert valid prescriptions without changing canonical m/s; unfinished fields remain editable.
 An unfinished range or percentage does not clear another filled bound or speed reference when switching presentation:
 completed fields convert independently, absolute pace/speed bounds exchange positions, and saved references retain their exact m/s.
+Completed newly typed fields also retain their exact canonical speed in a separate local `speedSource` snapshot while
+neighboring fields are unfinished. Presentation/sport conversions update its displayed values, duplication copies it
+independently, and kind/mode changes discard it. Missing fields never acquire invented canonical values.
 
 Relative references are typed snapshots: maximum/threshold HR in bpm, FTP/critical power in watts, threshold speed
 in m/s, and preferred cadence in rpm. The current user settings model supplies units but no explicit athlete reference
 settings. New references therefore require manual positive input; no imported threshold, population value or zone ID
-is substituted. Reopening retains saved snapshots independently of settings changes or missing settings. Percentages
+is substituted. Reopening retains saved snapshots independently of settings changes or missing settings. Percentage edits
+and presentation/sport conversions preserve a saved reference's provenance; converting a manually entered or edited
+reference does not label it as saved. These labels track persistence, independently of the local precision caches. Percentages
 are percentage points (80 means 80%) and may exceed 100. Relative pace percentages scale speed, not reciprocal pace;
 zero percent stays a valid prescription with an unavailable finite-pace explanation. A canonical resolved range uses
 the existing Sports Lib formatter. Cadence remains canonical cadence, including saved swimming/rowing targets;

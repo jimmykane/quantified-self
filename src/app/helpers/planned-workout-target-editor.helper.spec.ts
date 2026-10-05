@@ -5,7 +5,7 @@ import { normalizeUserUnitSettings } from '@shared/unit-aware-display';
 import { manualWorkoutEditorToStructure, workoutStructureToManualEditor } from './planned-workout-editor.helper';
 import {
   changeManualEditorTargetPresentation, changeManualEditorTargetSport, createManualWorkoutEditorTarget, manualEditorTargetPreview,
-  manualEditorTargetToWorkout, workoutEditorTargetUnit, workoutTargetToManualEditor,
+  copyManualWorkoutEditorTarget, manualEditorTargetToWorkout, workoutEditorTargetUnit, workoutTargetToManualEditor,
 } from './planned-workout-target-editor.helper';
 
 const targets: WorkoutTargetV1[] = [
@@ -91,6 +91,47 @@ describe('ordered manual workout targets', () => {
     expect(speed.referenceValue).toBe(12);
     expect(speed.minimum).toBeNull(); expect(speed.maximum).toBeNull();
     expect(changeManualEditorTargetPresentation(speed, 'pace', ActivityTypes.Running).referenceValue).toBe(5);
+  });
+
+  it.each(['pace', 'speed'] as const)('preserves newly typed %s values through combined presentation and sport changes in incomplete drafts', presentation => {
+    for (const units of preferences) for (const saved of [false, true]) {
+      const original: WorkoutTargetV1 = { kind: 'speed', mode: 'relative', presentation, minimumPercent: 80, maximumPercent: 120,
+        reference: { kind: 'threshold-speed', metersPerSecond: 3.1234567890123 } };
+      const relative = { ...(saved ? workoutTargetToManualEditor(original, ActivityTypes.Running, units)
+        : { ...createManualWorkoutEditorTarget('speed'), mode: 'relative' as const, presentation, minimum: 80 }),
+      maximum: null, referenceValue: presentation === 'pace' ? 4.123456789 : 12.123456789 };
+      const expected = manualEditorTargetToWorkout({ ...relative, maximum: 120 }, ActivityTypes.Running, units);
+      const next = presentation === 'pace' ? 'speed' : 'pace';
+      const switched = changeManualEditorTargetPresentation(relative, next, ActivityTypes.Running, units);
+      expect(manualEditorTargetToWorkout({ ...switched, maximum: 120 }, ActivityTypes.Running, units))
+        .toEqual({ ...expected, presentation: next });
+      const swim = changeManualEditorTargetSport(switched, ActivityTypes.Running, ActivityTypes.Swimming, units);
+      const swimOriginalPresentation = changeManualEditorTargetPresentation(swim, presentation, ActivityTypes.Swimming, units);
+      const returned = changeManualEditorTargetSport(swimOriginalPresentation, ActivityTypes.Swimming, ActivityTypes.Running, units);
+      expect(manualEditorTargetToWorkout({ ...returned, maximum: 120 }, ActivityTypes.Running, units)).toEqual(expected);
+      expect(JSON.stringify(manualEditorTargetToWorkout({ ...returned, maximum: 120 }, ActivityTypes.Running, units)))
+        .not.toMatch(/source|speedSource|referenceSaved/);
+
+      const absolute = { ...createManualWorkoutEditorTarget('speed'), presentation,
+        minimum: presentation === 'pace' ? 4.123456789 : 12.123456789 };
+      const single = manualEditorTargetToWorkout({ ...absolute, rangeMode: 'single' }, ActivityTypes.Running, units);
+      const changed = changeManualEditorTargetPresentation(absolute, next, ActivityTypes.Running, units);
+      const changedSport = changeManualEditorTargetSport(changed, ActivityTypes.Running, ActivityTypes.Swimming, units);
+      const restored = changeManualEditorTargetPresentation(changedSport, presentation, ActivityTypes.Swimming, units);
+      const final = changeManualEditorTargetSport(restored, ActivityTypes.Swimming, ActivityTypes.Running, units);
+      expect(manualEditorTargetToWorkout({ ...final, rangeMode: 'single' }, ActivityTypes.Running, units)).toEqual(single);
+    }
+  });
+
+  it('duplicates newly converted reference snapshots independently', () => {
+    const draft = { ...createManualWorkoutEditorTarget('speed'), mode: 'relative' as const, referenceValue: 4.123456789 };
+    const converted = changeManualEditorTargetPresentation(draft, 'speed', ActivityTypes.Running);
+    const copied = copyManualWorkoutEditorTarget(converted);
+    expect(copied.speedSource).toBeDefined();
+    expect(copied.speedSource).not.toBe(converted.speedSource);
+    expect(copied.speedSource!.referenceValue).not.toBe(converted.speedSource!.referenceValue);
+    copied.speedSource!.referenceValue!.metersPerSecond = 10;
+    expect(converted.speedSource!.referenceValue!.metersPerSecond).not.toBe(10);
   });
 
   it('does not overflow finite speed inputs when rounding their display precision', () => {

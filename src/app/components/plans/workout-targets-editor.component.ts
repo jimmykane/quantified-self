@@ -3,7 +3,7 @@ import { ActivityTypes, type UserUnitSettingsInterface } from '@sports-alliance/
 import { WORKOUT_STRUCTURE_MAX_TARGETS_PER_STEP, type WorkoutTargetKindV1 } from '@shared/planned-workout';
 import {
   WORKOUT_EDITOR_REFERENCE_OPTIONS, changeManualEditorTargetPresentation, createManualWorkoutEditorTarget,
-  manualEditorTargetPreview, workoutEditorTargetUnit, type ManualWorkoutEditorTarget,
+  manualEditorTargetHasSavedReference, manualEditorTargetPreview, workoutEditorTargetUnit, type ManualWorkoutEditorTarget,
 } from '../../helpers/planned-workout-target-editor.helper';
 import { SharedModule } from '../../modules/shared.module';
 import { AppHapticsService } from '../../services/app.haptics.service';
@@ -38,8 +38,7 @@ export class WorkoutTargetsEditorComponent {
         : pace ? `Faster ${unit}` : `Minimum (${target.mode === 'relative' ? '%' : unit})`,
       maximumLabel: pace ? `Slower ${unit}` : `Maximum (${target.mode === 'relative' ? '%' : unit})`,
       preview: manualEditorTargetPreview(target, this.sport(), this.unitSettings(), this.locale),
-      savedReference: target.source?.target.mode === 'relative' && target.source.target.reference.kind === target.referenceKind
-        && target.source.referenceValue === target.referenceValue,
+      savedReference: manualEditorTargetHasSavedReference(target),
     };
   }));
 
@@ -72,7 +71,7 @@ export class WorkoutTargetsEditorComponent {
     } else if (field === 'presentation' && (value === 'pace' || value === 'speed')) {
       changed = changeManualEditorTargetPresentation(target, value, this.sport(), this.unitSettings());
     } else if (field === 'mode' && (value === 'absolute' || value === 'relative')) {
-      changed = { ...target, mode: value, minimum: null, maximum: null, referenceValue: null, source: undefined };
+      changed = { ...target, mode: value, minimum: null, maximum: null, referenceValue: null, source: undefined, speedSource: undefined };
     } else if (field === 'rangeMode' && (value === 'single' || value === 'range')) {
       changed = { ...target, rangeMode: value, maximum: value === 'single' ? target.minimum : target.maximum };
     } else if (field === 'referenceKind') {

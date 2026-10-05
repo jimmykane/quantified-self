@@ -409,7 +409,7 @@ describe('complete manual target editor coverage', () => {
     expect(TRAINING_WRITE_INPUTS.preview_saved_workout_change.parse({ expectedScheduleRevision: 1, expectedLibraryRevision: 1,
       change: { kind: 'create', title: 'Mixed targets', structure: input } }).change).toMatchObject({ structure: input });
     const step = input.nodes[0].kind === 'repeat' ? input.nodes[0].steps[0] : input.nodes[0];
-    for (const field of ['source', 'rangeMode', 'referenceValue', 'editorMinimum', 'providerWorkoutId']) {
+    for (const field of ['source', 'speedSource', 'referenceSaved', 'rangeMode', 'referenceValue', 'editorMinimum', 'providerWorkoutId']) {
       const leaked = recipe(step.ending, [{ ...target, [field]: 'private' }, companion] as WorkoutTargetV1[]);
       expect(TRAINING_RECIPE_SCHEMA.safeParse(leaked).success).toBe(false);
     }

@@ -10,6 +10,8 @@ import { normalizeUserUnitSettings, resolveUnitAwareDisplayStat } from '@shared/
 
 type RelativeTarget = Extract<WorkoutTargetV1, { mode: 'relative' }>;
 export type WorkoutEditorReferenceKind = RelativeTarget['reference']['kind'];
+type SpeedEditorField = 'minimum' | 'maximum' | 'referenceValue';
+interface EditorSpeedSnapshot { editorValue: number; metersPerSecond: number }
 export interface ManualWorkoutEditorTarget {
   kind: WorkoutTargetKindV1;
   mode: 'absolute' | 'relative';
@@ -20,7 +22,10 @@ export interface ManualWorkoutEditorTarget {
   referenceKind: WorkoutEditorReferenceKind;
   referenceValue: number | null;
   /** Local display snapshot. Never serialized into the canonical recipe. */
-  source?: { target: WorkoutTargetV1; minimum: number; maximum: number; referenceValue: number | null };
+  source?: { target: WorkoutTargetV1; minimum: number; maximum: number; referenceValue: number | null; referenceSaved?: boolean };
+  /** Exact completed fields through conversion of an unfinished draft. Never persisted. */
+  speedSource?: { mode: 'absolute' | 'relative'; presentation: 'pace' | 'speed';
+    minimum?: EditorSpeedSnapshot; maximum?: EditorSpeedSnapshot; referenceValue?: EditorSpeedSnapshot };
 }
 
 function cloneWorkoutTarget(target: WorkoutTargetV1): WorkoutTargetV1 {
@@ -34,7 +39,12 @@ function cloneWorkoutTarget(target: WorkoutTargetV1): WorkoutTargetV1 {
 }
 
 export function copyManualWorkoutEditorTarget(target: ManualWorkoutEditorTarget): ManualWorkoutEditorTarget {
-  return { ...target, ...(target.source ? { source: { ...target.source, target: cloneWorkoutTarget(target.source.target) } } : {}) };
+  return { ...target, ...(target.source ? { source: { ...target.source, target: cloneWorkoutTarget(target.source.target) } } : {}),
+    ...(target.speedSource ? { speedSource: { ...target.speedSource,
+      ...(target.speedSource.minimum ? { minimum: { ...target.speedSource.minimum } } : {}),
+      ...(target.speedSource.maximum ? { maximum: { ...target.speedSource.maximum } } : {}),
+      ...(target.speedSource.referenceValue ? { referenceValue: { ...target.speedSource.referenceValue } } : {}),
+    } } : {}) };
 }
 
 export const WORKOUT_EDITOR_REFERENCE_OPTIONS: Record<WorkoutTargetKindV1, readonly { value: WorkoutEditorReferenceKind; label: string }[]> = {
@@ -115,6 +125,22 @@ function referenceValue(target: RelativeTarget): number {
   }
 }
 
+function cachedEditorSpeed(target: ManualWorkoutEditorTarget, field: SpeedEditorField): number | undefined {
+  const source = target.speedSource;
+  const snapshot = source?.[field];
+  return target.kind === 'speed' && source?.mode === target.mode && source.presentation === target.presentation
+    && snapshot?.editorValue === target[field] ? snapshot.metersPerSecond : undefined;
+}
+
+export function manualEditorTargetHasSavedReference(target: ManualWorkoutEditorTarget): boolean {
+  const source = target.source;
+  const saved = source?.target;
+  return target.mode === 'relative' && saved?.mode === 'relative' && saved.kind === target.kind
+    && source.referenceSaved !== false && saved.reference.kind === target.referenceKind
+    && (saved.kind !== 'speed' || saved.presentation === target.presentation)
+    && source.referenceValue === target.referenceValue;
+}
+
 export function workoutTargetToManualEditor(target: WorkoutTargetV1, sport: ActivityTypes, units?: UserUnitSettingsInterface | null): ManualWorkoutEditorTarget {
   const [low, high] = bounds(target);
   const presentation = target.kind === 'speed' ? target.presentation : 'pace';
@@ -125,7 +151,7 @@ export function workoutTargetToManualEditor(target: WorkoutTargetV1, sport: Acti
   return { ...createManualWorkoutEditorTarget(target.kind), mode: target.mode, presentation,
     rangeMode: low === high ? 'single' : 'range', minimum, maximum,
     ...(target.mode === 'relative' ? { referenceKind: target.reference.kind } : {}), referenceValue: ref,
-    source: { target: cloneWorkoutTarget(target), minimum, maximum, referenceValue: ref } };
+    source: { target: cloneWorkoutTarget(target), minimum, maximum, referenceValue: ref, referenceSaved: target.mode === 'relative' } };
 }
 
 /** Preserve each untouched canonical bound independently, including inverted pace bounds. */
@@ -144,9 +170,13 @@ export function manualEditorTargetToWorkout(target: ManualWorkoutEditorTarget, s
   const canonical = (field: 'minimum' | 'maximum'): number => {
     const input = target[field]!;
     const index = pace ? field === 'minimum' ? 1 : 0 : field === 'minimum' ? 0 : 1;
+    const speed = target.kind === 'speed' && target.mode === 'absolute' ? cachedEditorSpeed(target, field) : undefined;
+    if (speed !== undefined) return speed;
     if (saved && target.source?.[field] === input) return saved[index];
     const other = field === 'minimum' ? 'maximum' : 'minimum';
     // An edited bound matching the untouched displayed bound means the same exact prescription.
+    const otherSpeed = target.kind === 'speed' && target.mode === 'absolute' ? cachedEditorSpeed(target, other) : undefined;
+    if (input === target[other] && otherSpeed !== undefined) return otherSpeed;
     if (saved && input === target[other] && target.source?.[other] === target[other]) return saved[1 - index];
     return target.kind === 'speed' && target.mode === 'absolute' ? toSpeed(input, target.presentation, sport, units) : input;
   };
@@ -157,9 +187,10 @@ export function manualEditorTargetToWorkout(target: ManualWorkoutEditorTarget, s
     if (typeof target.referenceValue !== 'number' || !Number.isFinite(target.referenceValue) || target.referenceValue <= 0) {
       throw new Error('Relative targets need a positive reference value.');
     }
-    const ref = compatible && source?.mode === 'relative' && source.reference.kind === target.referenceKind
+    const cachedReference = target.kind === 'speed' ? cachedEditorSpeed(target, 'referenceValue') : undefined;
+    const ref = cachedReference ?? (compatible && source?.mode === 'relative' && source.reference.kind === target.referenceKind
       && target.source?.referenceValue === target.referenceValue ? referenceValue(source)
-      : target.kind === 'speed' ? toSpeed(target.referenceValue, target.presentation, sport, units) : target.referenceValue;
+      : target.kind === 'speed' ? toSpeed(target.referenceValue, target.presentation, sport, units) : target.referenceValue);
     const range = { mode: 'relative' as const, minimumPercent: low, maximumPercent: high };
     switch (target.kind) {
       case 'heart-rate': return { ...range, kind: target.kind, reference: { kind: target.referenceKind as 'max-heart-rate' | 'threshold-heart-rate', bpm: ref } };
@@ -176,57 +207,72 @@ export function manualEditorTargetToWorkout(target: ManualWorkoutEditorTarget, s
   }
 }
 
-/** Rehydrate a valid draft in a new sport/presentation; retain partial input if it cannot yet be converted. */
-export function changeManualEditorTargetPresentation(target: ManualWorkoutEditorTarget, presentation: 'pace' | 'speed', sport: ActivityTypes, units?: UserUnitSettingsInterface | null): ManualWorkoutEditorTarget {
-  if (target.kind !== 'speed' || target.presentation === presentation) return target;
-  try {
-    const canonical = manualEditorTargetToWorkout(target, sport, units);
-    if (canonical.kind === 'speed') return { ...workoutTargetToManualEditor({ ...canonical, presentation }, sport, units), rangeMode: target.rangeMode };
-  } catch { /* Convert completed fields independently while the prescription is unfinished. */ }
+function rehydrateConvertedTarget(canonical: WorkoutTargetV1, target: ManualWorkoutEditorTarget,
+  sport: ActivityTypes, units?: UserUnitSettingsInterface | null): ManualWorkoutEditorTarget {
+  const converted = workoutTargetToManualEditor(canonical, sport, units);
+  return { ...converted, rangeMode: target.rangeMode,
+    source: { ...converted.source!, referenceSaved: manualEditorTargetHasSavedReference(target) } };
+}
+
+/** Resolve each completed field without assigning canonical values to missing fields. */
+function convertPartialSpeedTarget(target: ManualWorkoutEditorTarget, from: ActivityTypes, to: ActivityTypes,
+  presentation: 'pace' | 'speed', units?: UserUnitSettingsInterface | null): ManualWorkoutEditorTarget {
   const previous = target.source?.target;
   const source = previous?.kind === 'speed' && previous.mode === target.mode && previous.presentation === target.presentation
     ? target.source : undefined;
   const convertedSource = source && previous?.kind === 'speed'
-    ? workoutTargetToManualEditor({ ...previous, presentation }, sport, units).source : undefined;
-  const matches = (field: 'minimum' | 'maximum' | 'referenceValue') => source && source[field] === target[field]
+    ? workoutTargetToManualEditor({ ...previous, presentation }, to, units).source : undefined;
+  const matches = (field: SpeedEditorField) => source && source[field] === target[field]
     && (field !== 'referenceValue' || (previous?.mode === 'relative' && previous.reference.kind === target.referenceKind));
-  const convert = (field: 'minimum' | 'maximum' | 'referenceValue', destination = field): number | null => {
+  const convert = (field: SpeedEditorField): { value: number | null; snapshot?: EditorSpeedSnapshot } => {
     const value = target[field];
-    if (value === null) return null;
-    if (matches(field) && convertedSource) return convertedSource[destination];
-    return fromSpeed(toSpeed(value, target.presentation, sport, units), presentation, sport, units);
+    let speed = cachedEditorSpeed(target, field);
+    if (speed === undefined && matches(field) && previous?.kind === 'speed') {
+      if (field === 'referenceValue' && previous.mode === 'relative') speed = previous.reference.metersPerSecond;
+      else if (previous.mode === 'absolute') speed = bounds(previous)[target.presentation === 'pace'
+        ? field === 'minimum' ? 1 : 0 : field === 'minimum' ? 0 : 1];
+    }
+    if (speed === undefined && typeof value === 'number' && Number.isFinite(value) && value >= 0
+      && (target.presentation !== 'pace' || value > 0)) speed = toSpeed(value, target.presentation, from, units);
+    if (speed === undefined || !Number.isFinite(speed) || speed < 0 || (field === 'referenceValue' && speed === 0)) return { value };
+    const converted = fromSpeed(speed, presentation, to, units);
+    return { value: converted, snapshot: { editorValue: converted, metersPerSecond: speed } };
   };
-  const minimumField = target.mode === 'absolute' && target.rangeMode === 'range' ? 'maximum' : 'minimum';
-  const maximumField = 'minimum';
-  const minimum = target.mode === 'relative' ? target.minimum : convert(minimumField, 'minimum');
-  const maximum = target.mode === 'relative' ? target.maximum : convert(maximumField, 'maximum');
-  const ref = target.mode === 'relative' ? convert('referenceValue') : target.referenceValue;
-  return { ...target, presentation, minimum, maximum, referenceValue: ref,
+  const swap = target.mode === 'absolute' && target.presentation !== presentation;
+  const minimumField = swap && target.rangeMode === 'range' ? 'maximum' : 'minimum';
+  const maximumField = swap || target.rangeMode === 'single' ? 'minimum' : 'maximum';
+  const minimum = target.mode === 'absolute' ? convert(minimumField) : { value: target.minimum };
+  const maximum = target.mode === 'absolute' ? convert(maximumField) : { value: target.maximum };
+  const ref = target.mode === 'relative' ? convert('referenceValue') : { value: target.referenceValue };
+  return { ...target, presentation, minimum: minimum.value, maximum: maximum.value, referenceValue: ref.value,
+    speedSource: { mode: target.mode, presentation,
+      ...(minimum.snapshot ? { minimum: minimum.snapshot } : {}),
+      ...(maximum.snapshot ? { maximum: maximum.snapshot } : {}),
+      ...(ref.snapshot ? { referenceValue: ref.snapshot } : {}) },
     source: convertedSource ? { ...convertedSource,
-      minimum: matches(target.mode === 'relative' ? 'minimum' : minimumField) ? minimum! : Number.NaN,
-      maximum: matches(target.mode === 'relative' ? 'maximum' : maximumField) ? maximum! : Number.NaN,
-      referenceValue: matches('referenceValue') ? ref : Number.NaN,
+      minimum: matches(target.mode === 'relative' ? 'minimum' : minimumField) ? minimum.value! : Number.NaN,
+      maximum: matches(target.mode === 'relative' ? 'maximum' : maximumField) ? maximum.value! : Number.NaN,
+      referenceValue: matches('referenceValue') ? ref.value : Number.NaN,
+      referenceSaved: manualEditorTargetHasSavedReference(target),
     } : undefined };
 }
 
+/** Rehydrate a valid draft in a new presentation; convert completed fields in partial drafts independently. */
+export function changeManualEditorTargetPresentation(target: ManualWorkoutEditorTarget, presentation: 'pace' | 'speed', sport: ActivityTypes, units?: UserUnitSettingsInterface | null): ManualWorkoutEditorTarget {
+  if (target.kind !== 'speed' || target.presentation === presentation) return target;
+  try {
+    const canonical = manualEditorTargetToWorkout(target, sport, units);
+    if (canonical.kind === 'speed') return rehydrateConvertedTarget({ ...canonical, presentation }, target, sport, units);
+  } catch { /* Unfinished prescriptions retain only their completed fields. */ }
+  return convertPartialSpeedTarget(target, sport, sport, presentation, units);
+}
+
 export function changeManualEditorTargetSport(target: ManualWorkoutEditorTarget, from: ActivityTypes, to: ActivityTypes, units?: UserUnitSettingsInterface | null): ManualWorkoutEditorTarget {
-  if (target.kind !== 'speed') return target;
-  try { return { ...workoutTargetToManualEditor(manualEditorTargetToWorkout(target, from, units), to, units), rangeMode: target.rangeMode }; }
+  if (target.kind !== 'speed' || from === to) return target;
+  try { return rehydrateConvertedTarget(manualEditorTargetToWorkout(target, from, units), target, to, units); }
   catch {
-    // Convert complete individual fields even while a neighboring field is empty/invalid.
     if (target.presentation !== 'pace') return target;
-    const ratio = paceDistance(to, units) / paceDistance(from, units);
-    const convert = (value: number | null) => value === null ? null : roundInput(value * ratio);
-    const minimum = target.mode === 'absolute' ? convert(target.minimum) : target.minimum;
-    const maximum = target.mode === 'absolute' ? convert(target.maximum) : target.maximum;
-    const ref = convert(target.referenceValue);
-    // Carry a saved cache only for fields whose displayed value still matched it before conversion.
-    const source = target.source ? { ...target.source,
-      minimum: target.source.minimum === target.minimum ? minimum! : Number.NaN,
-      maximum: target.source.maximum === target.maximum ? maximum! : Number.NaN,
-      referenceValue: target.source.referenceValue === target.referenceValue ? ref : Number.NaN,
-    } : undefined;
-    return { ...target, minimum, maximum, referenceValue: ref, source };
+    return convertPartialSpeedTarget(target, from, to, target.presentation, units);
   }
 }
 
