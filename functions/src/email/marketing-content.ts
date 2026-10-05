@@ -5,6 +5,7 @@ import type {
   MarketingDocument,
   MarketingTextMark,
 } from '../../../shared/admin-marketing';
+import { validateMarketingSchedule } from '../../../shared/marketing-schedule';
 
 const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
 const MAX_NODES = 500;
@@ -125,7 +126,7 @@ export function validateMarketingDraft(value: unknown): MarketingCampaignDraft {
     cta = { label: cleanLine(value.cta.label, 'Button label', 80), url: safeMarketingUrl(value.cta.url) };
     if (!cta.url.startsWith('https:')) throw new Error('Button must link to HTTPS.');
   }
-  return { name, subject, content, cta, filters: validateFilters(value.filters) };
+  return { name, subject, content, cta, filters: validateFilters(value.filters), schedule: validateMarketingSchedule(value.schedule) };
 }
 
 function escapeHtml(text: string): string {

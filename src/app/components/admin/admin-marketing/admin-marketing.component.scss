@@ -28,6 +28,8 @@ mat-form-field { width: 100%; }
 .text-preview { min-height: 280px; max-height: 650px; overflow: auto; white-space: pre-wrap; overflow-wrap: anywhere; margin: 0; padding: 16px; background: var(--mat-sys-surface); border: 1px solid var(--mat-sys-outline-variant); border-radius: 8px; }
 .cta-settings { display: grid; gap: 14px; margin-top: 18px; }
 .cta-settings .field-grid { gap: 12px; }
+.sending-schedule { margin: 0 0 24px; }
+.schedule-fields { margin-top: 20px; }
 .actions, .plans, .test-send-controls { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; }
 .plans { margin: 12px 0; }
 .actions { padding-top: 14px; border-top: 1px solid var(--mat-sys-outline-variant); }

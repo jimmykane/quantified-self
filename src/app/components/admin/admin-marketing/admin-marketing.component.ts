@@ -15,6 +15,9 @@ import { PageHeaderComponent } from '../../shared/page-header/page-header.compon
 import { AppHapticsService } from '../../../services/app.haptics.service';
 import { MatButtonToggleModule } from '@angular/material/button-toggle';
 import { MatSlideToggleModule } from '@angular/material/slide-toggle';
+import { MatSelectModule } from '@angular/material/select';
+import { BrowserCompatibilityService } from '../../../services/browser.compatibility.service';
+import { validateMarketingSchedule } from '../../../../../shared/marketing-schedule';
 import { DomSanitizer, SafeHtml } from '@angular/platform-browser';
 import { MarketingRichEditorComponent } from './marketing-rich-editor.component';
 import { hasVisibleMarketingText } from './marketing-editor';
@@ -22,7 +25,7 @@ import { openPreviewLinksOutsideFrame } from './marketing-preview-links';
 
 function emptyDraft(): MarketingCampaignDraft {
   return { name: '', subject: '', content: { type: 'doc', content: [{ type: 'paragraph', content: [] }] },
-    cta: null, filters: { plans: ['free', 'basic', 'pro'], signupFrom: null, signupTo: null } };
+    cta: null, filters: { plans: ['free', 'basic', 'pro'], signupFrom: null, signupTo: null }, schedule: null };
 }
 
 @Component({
@@ -30,7 +33,7 @@ function emptyDraft(): MarketingCampaignDraft {
   standalone: true,
   imports: [CommonModule, FormsModule, RouterModule, MatButtonModule, MatCardModule, MatCheckboxModule,
     MatFormFieldModule, MatIconModule, MatInputModule, MatProgressSpinnerModule, MatButtonToggleModule,
-    MatSlideToggleModule, MarketingRichEditorComponent, PageHeaderComponent],
+    MatSlideToggleModule, MatSelectModule, MarketingRichEditorComponent, PageHeaderComponent],
   templateUrl: './admin-marketing.component.html',
   styleUrls: ['./admin-marketing.component.scss'],
 })
@@ -61,6 +64,24 @@ export class AdminMarketingComponent implements OnInit, OnDestroy {
   previewError = '';
   activePreview: 'desktop' | 'phone' | 'text' = 'desktop';
   readonly plans: MarketingPlan[] = ['free', 'basic', 'pro'];
+  private readonly localTimeZone = new Intl.DateTimeFormat().resolvedOptions().timeZone;
+  timeZones = [...new Set(['UTC', this.localTimeZone, ...BrowserCompatibilityService.getSupportedTimeZones()])].sort();
+  scheduleMode: 'now' | 'daily' = 'now';
+  scheduleTime = '09:00';
+  scheduleTimeZone = this.localTimeZone;
+  get scheduleError(): string {
+    try { validateMarketingSchedule(this.scheduleMode === 'daily' ? { time: this.scheduleTime, timeZone: this.scheduleTimeZone } : null); return ''; }
+    catch (error) { return this.message(error); }
+  }
+  get nextDailyBatch(): string | null {
+    if (!this.selected?.schedule || !this.selected.nextScheduledSendAt) return null;
+    const instant = Date.parse(this.selected.nextScheduledSendAt);
+    // A quota-exhausted or missed occurrence can leave a past cursor. Do not
+    // present that timestamp as the next future sending time.
+    if (!Number.isFinite(instant) || instant <= Date.now()) return null;
+    return new Date(instant).toLocaleString(undefined,
+      { timeZone: this.selected.schedule.timeZone, timeZoneName: 'short' });
+  }
 
   ngOnInit(): void { void this.refresh(); }
   ngOnDestroy(): void { this.destroyed = true; this.clearPreviewTimer(); this.previewSequence++; }
@@ -124,7 +145,11 @@ export class AdminMarketingComponent implements OnInit, OnDestroy {
   private loadCampaign(campaign: MarketingCampaignView, testRecipient: string): void {
     this.selected = campaign;
     this.draft = { name: campaign.name, subject: campaign.subject, content: campaign.content,
-      cta: campaign.cta, filters: { ...campaign.filters, plans: [...campaign.filters.plans] } };
+      cta: campaign.cta, filters: { ...campaign.filters, plans: [...campaign.filters.plans] }, schedule: campaign.schedule || null };
+    this.scheduleMode = campaign.schedule ? 'daily' : 'now';
+    this.scheduleTime = campaign.schedule?.time || '09:00';
+    this.scheduleTimeZone = campaign.schedule?.timeZone || this.localTimeZone;
+    if (!this.timeZones.includes(this.scheduleTimeZone)) this.timeZones = [...this.timeZones, this.scheduleTimeZone].sort();
     this.dirty = false;
     this.showCta = !!campaign.cta;
     this.ctaLabel = campaign.cta?.label || '';
@@ -135,7 +160,7 @@ export class AdminMarketingComponent implements OnInit, OnDestroy {
   }
   private updateSelected(campaign: MarketingCampaignView): void {
     const savedDraft = { name: campaign.name, subject: campaign.subject, content: campaign.content,
-      cta: campaign.cta, filters: campaign.filters };
+      cta: campaign.cta, filters: campaign.filters, schedule: campaign.schedule || null };
     if (!this.dirty && JSON.stringify(this.collectDraft()) !== JSON.stringify(savedDraft)) {
       this.loadCampaign(campaign, this.testTo);
     } else {
@@ -146,6 +171,9 @@ export class AdminMarketingComponent implements OnInit, OnDestroy {
     if (this.selected || this.draft.name || this.draft.subject) this.haptics.selection();
     this.selected = null;
     this.draft = emptyDraft();
+    this.scheduleMode = 'now';
+    this.scheduleTime = '09:00';
+    this.scheduleTimeZone = this.localTimeZone;
     this.dirty = false;
     this.showCta = false;
     this.ctaLabel = '';
@@ -175,12 +203,25 @@ export class AdminMarketingComponent implements OnInit, OnDestroy {
     this.haptics.selection();
     this.markDirty();
   }
+  setScheduleMode(mode: 'now' | 'daily'): void {
+    if (this.busy || !this.canEdit || mode === this.scheduleMode) return;
+    this.scheduleMode = mode;
+    this.haptics.selection();
+    this.markDirty();
+  }
+  setScheduleTimeZone(timeZone: string): void {
+    if (this.busy || !this.canEdit || timeZone === this.scheduleTimeZone) return;
+    this.scheduleTimeZone = timeZone;
+    this.haptics.selection();
+    this.markDirty();
+  }
   private collectDraft(): MarketingCampaignDraft {
     return { name: this.draft.name, subject: this.draft.subject,
       content: this.draft.content,
       cta: this.showCta ? { label: this.ctaLabel, url: this.ctaUrl } : null,
       filters: { plans: [...this.draft.filters.plans], signupFrom: this.draft.filters.signupFrom || null,
-        signupTo: this.draft.filters.signupTo || null } };
+        signupTo: this.draft.filters.signupTo || null },
+      schedule: this.scheduleMode === 'daily' ? { time: this.scheduleTime, timeZone: this.scheduleTimeZone } : null };
   }
   private message(error: unknown): string {
     const candidate = error as { message?: string };
@@ -197,7 +238,7 @@ export class AdminMarketingComponent implements OnInit, OnDestroy {
     finally { this.busy = ''; }
   }
   async save(): Promise<void> {
-    if (!this.canEdit) return;
+    if (!this.canEdit || this.scheduleError) return;
     await this.run('Saving', async () => (await this.functions.call('saveMarketingCampaign',
       { id: this.selected?.id || null, draft: this.collectDraft() })).data as MarketingCampaignView,
       campaign => { this.choose(campaign, false); this.notice = campaign.status === 'paused'
@@ -235,7 +276,7 @@ export class AdminMarketingComponent implements OnInit, OnDestroy {
   }
   private async renderPreview(sequence: number): Promise<void> {
     const draft = this.collectDraft();
-    const previewDraft = { ...draft, name: draft.name.trim() || 'Preview',
+    const previewDraft = { ...draft, name: draft.name.trim() || 'Preview', schedule: null,
       filters: { plans: draft.filters.plans.length ? draft.filters.plans : this.plans,
         signupFrom: null, signupTo: null } };
     this.previewBusy = true;
@@ -262,7 +303,7 @@ export class AdminMarketingComponent implements OnInit, OnDestroy {
     const to = this.testTo.trim();
     const saved = this.selected && !this.dirty;
     const draft = this.collectDraft();
-    const previewDraft = { ...draft, name: draft.name.trim() || 'Test message',
+    const previewDraft = { ...draft, name: draft.name.trim() || 'Test message', schedule: null,
       filters: { plans: draft.filters.plans.length ? draft.filters.plans : this.plans,
         signupFrom: null, signupTo: null } };
     await this.run('Sending test', async () => (await this.functions.call('sendMarketingTest',
@@ -276,7 +317,9 @@ export class AdminMarketingComponent implements OnInit, OnDestroy {
     const expectedDraft = action === 'start' || action === 'resume' ? this.collectDraft() : null;
     await this.run(action, async () => (await this.functions.call('changeMarketingCampaignStatus',
       { id: this.selected!.id, action, ...(expectedDraft ? { draft: expectedDraft } : {}) })).data as MarketingCampaignView,
-      campaign => { this.updateSelected(campaign); this.notice = `Campaign ${action} request completed.`; });
+      campaign => { this.updateSelected(campaign); this.notice = campaign.schedule && (action === 'start' || action === 'resume')
+        ? `Daily sending enabled at ${campaign.schedule.time} (${campaign.schedule.timeZone}).`
+        : `Campaign ${action} request completed.`; });
   }
   async clone(): Promise<void> { await this.campaignAction('cloneMarketingCampaign', 'Cloning', 'Campaign copied as a new draft.'); }
   private async campaignAction(name: 'prepareMarketingCampaign' | 'cloneMarketingCampaign', label: string, message: string): Promise<void> {

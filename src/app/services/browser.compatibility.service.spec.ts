@@ -46,6 +46,18 @@ describe('BrowserCompatibilityService', () => {
         expect(service).toBeTruthy();
     });
 
+    it('offers timezone choices when the optional Intl API is unavailable', () => {
+        const descriptor = Object.getOwnPropertyDescriptor(Intl, 'supportedValuesOf');
+        try {
+            Object.defineProperty(Intl, 'supportedValuesOf', { value: undefined, configurable: true, writable: true });
+            expect(BrowserCompatibilityService.getSupportedTimeZones()).toContain('Europe/Helsinki');
+        } finally {
+            if (descriptor) Object.defineProperty(Intl, 'supportedValuesOf', descriptor);
+            else delete (Intl as typeof Intl & { supportedValuesOf?: unknown }).supportedValuesOf;
+        }
+        expect(BrowserCompatibilityService.getSupportedTimeZones()).toContain('Europe/Helsinki');
+    });
+
     it('detects Web Crypto without prompting when it is unavailable', () => {
         expect(service.checkWebCryptoSupport()).toBe(true);
         vi.stubGlobal('crypto', undefined);

@@ -14,6 +14,7 @@ import { createLocalEmailTemplateRenderer } from '../../email/template-renderer'
 import { MANUAL_CAMPAIGN_EMAIL_TEMPLATE_CATALOG } from '../../email/template-catalog';
 import { renderMarketingContent, validateMarketingDraft } from '../../email/marketing-content';
 import { blankStats, DEFAULT_MARKETING_DAILY_CAP, remainingToday, selectedPlan, signupInRange, transitionStats, utcDay, validDailyCap } from './core';
+import { armMarketingSchedule, marketingScheduleGate, validateMarketingSchedule } from '../../../../shared/marketing-schedule';
 
 const db = () => admin.firestore();
 const campaigns = () => db().collection('marketingCampaigns');
@@ -54,6 +55,7 @@ export function checkedTestEmail(value: unknown): string {
 }
 function asView(id: string, data: FirebaseFirestore.DocumentData): MarketingCampaignView {
   return { id, name: data.name, subject: data.subject, content: data.content, cta: data.cta, filters: data.filters,
+    schedule: validateMarketingSchedule(data.schedule), nextScheduledSendAt: data.nextScheduledSendAt || null,
     status: data.status, stats: data.stats, exclusions: data.exclusions, createdAt: data.createdAt,
     updatedAt: data.updatedAt, startedAt: data.startedAt || null,
     lastTestMailId: data.lastTestMailId || null, lastTestState: data.lastTestState || null,
@@ -165,7 +167,8 @@ export async function saveCampaign(idInput: unknown, input: unknown, actorUid: s
   if (idInput === null || idInput === undefined) {
     const ref = campaigns().doc();
     await ref.create({ ...draft!, status: 'draft', stats: blankStats(), exclusions: blankExclusions(), createdAt: now,
-      updatedAt: now, createdBy: actorUid, startedAt: null, lastTestMailId: null, lastTestState: null });
+      updatedAt: now, createdBy: actorUid, startedAt: null, lastTestMailId: null, lastTestState: null,
+      nextScheduledSendAt: null, scheduledDispatchUtcDate: null });
     return getCampaign(ref.id);
   }
   const id = checkedId(idInput);
@@ -184,7 +187,13 @@ export async function saveCampaign(idInput: unknown, input: unknown, actorUid: s
         throw new HttpsError('failed-precondition', 'The prepared audience is fixed. Clone the campaign to change its audience.');
       }
     }
-    tx.update(ref, { name: draft!.name, subject: draft!.subject, content: draft!.content, cta: draft!.cta,
+    // An older client that omits the new field must not turn a daily campaign
+    // into immediate sending. Current clients explicitly send null for Send now.
+    const schedule = Object.prototype.hasOwnProperty.call(input, 'schedule')
+      ? draft!.schedule : validateMarketingSchedule(doc.get('schedule'));
+    const scheduleChanged = JSON.stringify(schedule) !== JSON.stringify(validateMarketingSchedule(doc.get('schedule')));
+    tx.update(ref, { name: draft!.name, subject: draft!.subject, content: draft!.content, cta: draft!.cta, schedule,
+      ...(scheduleChanged ? { nextScheduledSendAt: null, scheduledDispatchUtcDate: null } : {}),
       ...(status === 'draft' ? { filters: draft!.filters } : {}),
       updatedAt: now, lastTestMailId: null, lastTestState: null });
   });
@@ -193,7 +202,7 @@ export async function saveCampaign(idInput: unknown, input: unknown, actorUid: s
 export async function cloneCampaign(idInput: unknown, actorUid: string): Promise<MarketingCampaignView> {
   const source = await getCampaign(idInput);
   return saveCampaign(null, { name: `Copy of ${source.name}`.slice(0, 120), subject: source.subject,
-    content: source.content, cta: source.cta, filters: source.filters }, actorUid);
+    content: source.content, cta: source.cta, filters: source.filters, schedule: source.schedule }, actorUid);
 }
 export function previewCampaign(input: unknown): { subject: string; html: string; text: string } {
   let draft: MarketingCampaignDraft;
@@ -358,7 +367,8 @@ export async function sendTest(idInput: unknown, adminUid: string, secret: strin
   return { mailId, submitted };
 }
 
-export async function setCampaignStatus(idInput: unknown, action: 'start' | 'pause' | 'resume' | 'retry', expectedDraftInput?: unknown): Promise<MarketingCampaignView> {
+export async function setCampaignStatus(idInput: unknown, action: 'start' | 'pause' | 'resume' | 'retry', expectedDraftInput?: unknown,
+  nowProvider: () => Date = () => new Date()): Promise<MarketingCampaignView> {
   const id = checkedId(idInput);
   const ref = campaigns().doc(id);
   if (action === 'retry') {
@@ -378,6 +388,7 @@ export async function setCampaignStatus(idInput: unknown, action: 'start' | 'pau
   }
   const expectedDraft = action === 'start' || action === 'resume' ? checkedExpectedDraft(expectedDraftInput) : null;
   await db().runTransaction(async tx => {
+    const now = nowProvider();
     const doc = await tx.get(ref);
     if (!doc.exists) throw new HttpsError('not-found', 'Campaign not found.');
     const status = doc.get('status');
@@ -391,8 +402,9 @@ export async function setCampaignStatus(idInput: unknown, action: 'start' | 'pau
       const test = await tx.get(db().collection('mail').doc(testId));
       if (test.get('delivery.state') !== 'SUCCESS') throw new HttpsError('failed-precondition', 'Wait for successful SMTP acceptance of the test email.');
     }
-    tx.update(ref, { status: action === 'pause' ? 'paused' : 'running',
-      ...(action === 'start' ? { startedAt: new Date().toISOString() } : {}), updatedAt: new Date().toISOString() });
+    const scheduleState = action === 'pause' ? {} : armMarketingSchedule(validateMarketingSchedule(doc.get('schedule')), doc.data()!, now);
+    tx.update(ref, { status: action === 'pause' ? 'paused' : 'running', ...scheduleState,
+      ...(action === 'start' ? { startedAt: now.toISOString() } : {}), updatedAt: now.toISOString() });
   });
   return getCampaign(id);
 }
@@ -415,8 +427,8 @@ export async function completeCampaignIfDrained(campaignRef: FirebaseFirestore.D
   });
 }
 
-export async function dispatchCampaigns(secret: string): Promise<number> {
-  const today = utcDay(new Date());
+export async function dispatchCampaigns(secret: string, nowProvider: () => Date = () => new Date()): Promise<number> {
+  const today = utcDay(nowProvider());
   const [capDoc, usedDoc] = await Promise.all([control().get(), dayRef(today).get()]);
   const cap = capDoc.exists ? validDailyCap(capDoc.get('dailyCap')) : DEFAULT_MARKETING_DAILY_CAP;
   // Bound each invocation; the schedule resumes remaining work without holding
@@ -433,8 +445,13 @@ export async function dispatchCampaigns(secret: string): Promise<number> {
     for (const campaignDoc of running.docs) {
       if (!available) break;
       const campaignRef = campaignDoc.ref;
+      if (!marketingScheduleGate(validateMarketingSchedule(campaignDoc.get('schedule')), campaignDoc.data(), nowProvider()).due) {
+        await completeCampaignIfDrained(campaignRef);
+        continue;
+      }
       let lastRecipient: FirebaseFirestore.QueryDocumentSnapshot | undefined;
-      while (available) {
+      let waiting = false;
+      while (available && !waiting) {
         const pageSize = available + 20;
         let recipientQuery = campaignRef.collection('recipients').where('status', '==', 'pending')
           .orderBy(FieldPath.documentId()).limit(pageSize);
@@ -453,7 +470,8 @@ export async function dispatchCampaigns(secret: string): Promise<number> {
           const mailId = `marketing_${campaignDoc.id}_${uid}_${attempt}`;
           const consentRef = db().doc(`users/${uid}/legal/agreements`);
           const submittedMail = await db().runTransaction(async tx => {
-            const day = dayRef(utcDay(new Date()));
+            const now = nowProvider();
+            const day = dayRef(utcDay(now));
             const mail = db().collection('mail').doc(mailId);
             const [controlDoc, dayDoc, campaign, recipientNow, consent, latestGuard, subscriptions, existingMail] = await Promise.all([
               tx.get(control()), tx.get(day), tx.get(campaignRef), tx.get(recipientDoc.ref), tx.get(consentRef),
@@ -465,6 +483,8 @@ export async function dispatchCampaigns(secret: string): Promise<number> {
             // A worker may have started before a pause/edit/resume. Render from
             // the campaign read in this transaction so it submits the saved version.
             const draft = validateMarketingDraft(campaign.data());
+            const scheduleGate = marketingScheduleGate(draft.schedule || null, campaign.data()!, now);
+            if (!scheduleGate.due) return 'waiting';
             const latestCap = controlDoc.exists ? validDailyCap(controlDoc.get('dailyCap')) : DEFAULT_MARKETING_DAILY_CAP;
             const used = dayDoc.get('used') || 0;
             if (used >= latestCap) return 'capped';
@@ -478,17 +498,18 @@ export async function dispatchCampaigns(secret: string): Promise<number> {
             }
             if (!consent.exists || consent.get(ACCEPTED_MARKETING_POLICY_FIELD) !== true || latestGuard.shouldSkip ||
                 !selectedPlan(plan, draft.filters)) {
-              tx.update(recipientDoc.ref, { status: 'skipped', skippedReason: 'consent-account-or-plan', skippedAt: new Date().toISOString() });
+              tx.update(recipientDoc.ref, { status: 'skipped', skippedReason: 'consent-account-or-plan', skippedAt: now.toISOString() });
               tx.update(campaignRef, { stats: transitionStats(campaign.get('stats') as MarketingCampaignStats, 'pending', 'skipped') });
               return 'skipped';
             }
-            tx.set(day, { used: used + 1, updatedAt: new Date().toISOString() }, { merge: true });
+            tx.set(day, { used: used + 1, updatedAt: now.toISOString() }, { merge: true });
             tx.create(mail, mailPayload(draft, user.email!, user.displayName?.trim().split(/\s+/)[0] || '', uid, secret, campaignDoc.id, attempt));
-            tx.update(recipientDoc.ref, { status: 'queued', mailId, attempt, queuedAt: new Date().toISOString() });
-            tx.update(campaignRef, { stats: transitionStats(campaign.get('stats') as MarketingCampaignStats, 'pending', 'queued') });
+            tx.update(recipientDoc.ref, { status: 'queued', mailId, attempt, queuedAt: now.toISOString() });
+            tx.update(campaignRef, { stats: transitionStats(campaign.get('stats') as MarketingCampaignStats, 'pending', 'queued'), ...scheduleGate.state });
             return 'submitted';
           });
           if (submittedMail === 'capped') return submitted;
+          if (submittedMail === 'waiting') { waiting = true; break; }
           if (submittedMail === 'submitted') { submitted++; available--; }
         }
         lastRecipient = recipientDocs.docs[recipientDocs.docs.length - 1];

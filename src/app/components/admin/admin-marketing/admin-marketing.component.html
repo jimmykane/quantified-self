@@ -24,9 +24,9 @@
         <mat-card-header><mat-card-title>{{ selected ? selected.name : 'New campaign' }}</mat-card-title></mat-card-header>
         <mat-card-content>
           @if (selected?.status === 'paused') {
-            <p class="frozen">Paused. You can edit the message for remaining recipients. Emails already queued may still send with their original content. The audience stays fixed.</p>
+            <p class="frozen">Paused. You can edit the message and schedule for remaining recipients. Emails already queued may still send with their original content. The audience stays fixed.</p>
           } @else if (selected?.status === 'running') {
-            <p class="frozen">Pause to edit the message for remaining recipients. The audience stays fixed.</p>
+            <p class="frozen">Pause to edit the message or schedule for remaining recipients. The audience stays fixed.</p>
           } @else if (selected && !canEdit) {
             <p class="frozen">Content and audience are frozen. Clone to make changes.</p>
           }
@@ -86,6 +86,30 @@
               }
             </section>
           </div>
+          <section class="sending-schedule" aria-labelledby="sending-schedule-heading">
+            <h3 id="sending-schedule-heading">Sending schedule</h3>
+            <mat-button-toggle-group [value]="scheduleMode" [disabled]="!!busy || !canEdit" (change)="setScheduleMode($event.value)" aria-label="Sending schedule">
+              <mat-button-toggle value="now">Send now</mat-button-toggle>
+              <mat-button-toggle value="daily">Send daily at…</mat-button-toggle>
+            </mat-button-toggle-group>
+            @if (scheduleMode === 'daily') {
+              <div class="field-grid schedule-fields">
+                <mat-form-field appearance="outline"><mat-label>Daily sending time</mat-label>
+                  <input matInput type="time" step="60" required [(ngModel)]="scheduleTime" (ngModelChange)="markDirty()" [disabled]="!!busy || !canEdit">
+                </mat-form-field>
+                <mat-form-field appearance="outline"><mat-label>Timezone</mat-label>
+                  <mat-select [ngModel]="scheduleTimeZone" (selectionChange)="setScheduleTimeZone($event.value)" [disabled]="!!busy || !canEdit">
+                    @for (zone of timeZones; track zone) { <mat-option [value]="zone">{{ zone }}</mat-option> }
+                  </mat-select>
+                </mat-form-field>
+              </div>
+              <p>Start schedules the next occurrence of this time. The worker checks every five minutes, then sends under the shared UTC daily limit. Tests send immediately.</p>
+              @if (scheduleError) { <p class="unsaved-note" role="alert">{{ scheduleError }}</p> }
+              @if (selected?.status === 'running' && nextDailyBatch) { <p>Next daily batch: {{ nextDailyBatch }}</p> }
+            } @else {
+              <p>Start sends immediately. Remaining recipients continue every five minutes as the UTC daily limit allows.</p>
+            }
+          </section>
           <h3>Audience</h3>
           <p>Enabled, non-admin users with an email and explicit marketing consent. Sign-up dates are inclusive in UTC. Login provider and email verification do not affect eligibility.</p>
           <div class="plans">
@@ -100,10 +124,10 @@
             <p class="unsaved-note">{{ dirty ? 'Save your edits, then send a new test.' : 'Send a test of the saved message and wait for SMTP acceptance before resuming.' }}</p>
           }
           <div class="actions">
-            @if (canEdit) { <button mat-flat-button type="button" [disabled]="!!busy || (selected?.status === 'paused' && !dirty)" (click)="save()">{{ selected?.status === 'paused' ? 'Save changes' : 'Save draft' }}</button> }
+            @if (canEdit) { <button mat-flat-button type="button" [disabled]="!!busy || !!scheduleError || (selected?.status === 'paused' && !dirty)" (click)="save()">{{ selected?.status === 'paused' ? 'Save changes' : 'Save draft' }}</button> }
             @if (selected?.status === 'draft' || canRetryPreparation) { <button mat-stroked-button type="button" [disabled]="!!busy || dirty" (click)="prepare()">{{ canRetryPreparation ? 'Retry preparation' : 'Prepare audience' }}</button> }
             @if (selected?.status === 'ready') {
-              <button mat-flat-button type="button" [disabled]="!!busy || selected?.lastTestState !== 'SUCCESS'" (click)="change('start')">Start sending</button>
+              <button mat-flat-button type="button" [disabled]="!!busy || selected?.lastTestState !== 'SUCCESS'" (click)="change('start')">{{ selected?.schedule ? 'Start scheduled sending' : 'Start sending' }}</button>
             }
             @if (selected?.status === 'running') { <button mat-stroked-button type="button" [disabled]="!!busy" (click)="change('pause')">Pause</button> }
             @if (selected?.status === 'paused') { <button mat-flat-button type="button" [disabled]="!!busy || !canResume" (click)="change('resume')">Resume</button> }
