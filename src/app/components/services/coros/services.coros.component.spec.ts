@@ -7,6 +7,7 @@ import { MatIconModule } from '@angular/material/icon';
 import { HttpClientTestingModule } from '@angular/common/http/testing';
 import { MatSnackBarModule, MatSnackBar } from '@angular/material/snack-bar';
 import { RouterTestingModule } from '@angular/router/testing';
+import { ActivatedRoute, convertToParamMap, Router } from '@angular/router';
 import { FormsModule } from '@angular/forms';
 import { MatDatepickerModule } from '@angular/material/datepicker';
 import { MatNativeDateModule } from '@angular/material/core';
@@ -33,8 +34,9 @@ import { of, Subject } from 'rxjs';
 import { ACTIVITY_SYNC_ROUTE_IDS } from '@shared/activity-sync-routes';
 import { ServiceConnectionStatusComponent } from '../service-connection-status/service-connection-status.component';
 import { buildSuuntoServiceConnectionViewModel } from '../../../helpers/suunto-service-connection.helper';
-import { Auth2ServiceTokenInterface } from '@sports-alliance/sports-lib';
-import { AppUserInterface } from '../../../models/app-user.interface';
+import { Auth2ServiceTokenInterface, ServiceNames } from '@sports-alliance/sports-lib';
+import { AppUserInterface, AppUserServiceMetaInterface } from '../../../models/app-user.interface';
+import { ServiceConnectionAccountProjection, ServiceOAuthCompletionResult } from '@shared/service-connection';
 
 describe('ServicesCorosComponent', () => {
     let component: ServicesCorosComponent;
@@ -259,6 +261,45 @@ describe('ServicesCorosComponent', () => {
         expect(mockHapticsService.selection).not.toHaveBeenCalled();
     });
 
+    it.each(['existing connection', 'new connection'] as const)('pauses and resumes binding checks around OAuth for the %s', async connection => {
+        const accounts$ = new Subject<ServiceConnectionAccountProjection[]>();
+        const meta$ = new Subject<AppUserServiceMetaInterface | undefined>();
+        mockUserService.getServiceToken.mockReturnValue(accounts$);
+        mockUserService.getUserMetaForService.mockReturnValue(meta$);
+        let completeOAuth!: (result: ServiceOAuthCompletionResult) => void;
+        mockUserService.requestAndSetCurrentUserCOROSAPIAccessToken.mockReturnValueOnce(
+            new Promise<ServiceOAuthCompletionResult>(resolve => { completeOAuth = resolve; }),
+        );
+        const route = TestBed.inject(ActivatedRoute);
+        let queryParams = convertToParamMap({ serviceName: ServiceNames.COROSAPI, code: 'code', state: 'state' });
+        vi.spyOn(route.snapshot, 'queryParamMap', 'get').mockImplementation(() => queryParams);
+        vi.spyOn(TestBed.inject(Router), 'navigate').mockImplementation(async () => {
+            queryParams = convertToParamMap({ serviceName: ServiceNames.COROSAPI });
+            return true;
+        });
+        component.user = { uid: 'user-1', settings: {} } as AppUserInterface;
+        await component.ngOnChanges();
+        accounts$.next(connection === 'existing connection' ? [{ providerUserId: 'coros-user' }] : []);
+        meta$.next(connection === 'existing connection'
+            ? { connectionState: 'connected', providerUserId: 'coros-user', connectionStateGeneration: 'old-generation' }
+            : undefined);
+
+        expect(component.isConnecting).toBe(true);
+        expect(mockUserService.checkCurrentUserCOROSBindingState).not.toHaveBeenCalled();
+
+        accounts$.next([{ providerUserId: 'coros-user' }]);
+        meta$.next({ connectionState: 'connected', providerUserId: 'coros-user', connectionStateGeneration: 'new-generation' });
+        expect(mockUserService.checkCurrentUserCOROSBindingState).not.toHaveBeenCalled();
+        completeOAuth({ connected: true, outcome: 'connected' });
+
+        await vi.waitFor(() => expect(component.isConnecting).toBe(false));
+        await vi.waitFor(() => expect(mockUserService.checkCurrentUserCOROSBindingState).toHaveBeenCalledTimes(1));
+        expect(mockUserService.checkCurrentUserCOROSBindingState).toHaveBeenCalledWith('user-1', 'coros-user', 'new-generation');
+        expect(TestBed.inject(LoggerService).error).not.toHaveBeenCalled();
+        expect(mockHapticsService.selection).not.toHaveBeenCalled();
+        expect(mockHapticsService.success).toHaveBeenCalledTimes(1);
+    });
+
     it('keeps a completed disconnect disconnected while its old account projection is still visible', async () => {
         component.hasProAccess = true;
         component.user = { uid: 'user-1', settings: {} } as AppUserInterface;
@@ -410,6 +451,45 @@ describe('ServicesCorosComponent', () => {
         expect(TestBed.inject(LoggerService).error).not.toHaveBeenCalled();
         expect(component.corosBindingStateCheckError).toBe(false);
         expect(component.isCheckingCOROSBindingState).toBe(false);
+    });
+
+    it('checks a newer connection that arrives while an earlier disconnect is finishing', async () => {
+        let completeDisconnect!: () => void;
+        mockUserService.deauthorizeService.mockReturnValueOnce(new Promise<void>(resolve => { completeDisconnect = resolve; }));
+        component.user = { uid: 'user-1', settings: {} } as AppUserInterface;
+        component.serviceTokens = [{ providerUserId: 'coros-user' }];
+        component.serviceMeta = { connectionState: 'connected', providerUserId: 'coros-user', connectionStateGeneration: 'old-generation' };
+        const serviceData = component as unknown as { onServiceDataChanged(): void };
+        serviceData.onServiceDataChanged();
+        await Promise.resolve();
+        const disconnect = component.deauthorizeService(null);
+        await Promise.resolve();
+        component.serviceMeta = { connectionState: 'connected', providerUserId: 'coros-user', connectionStateGeneration: 'new-generation' };
+        serviceData.onServiceDataChanged();
+        expect(mockUserService.checkCurrentUserCOROSBindingState).toHaveBeenCalledTimes(1);
+
+        completeDisconnect();
+        await disconnect;
+        await Promise.resolve();
+
+        expect(component.isConnectedToService()).toBe(true);
+        expect(mockUserService.checkCurrentUserCOROSBindingState).toHaveBeenCalledTimes(2);
+        expect(mockUserService.checkCurrentUserCOROSBindingState).toHaveBeenLastCalledWith('user-1', 'coros-user', 'new-generation');
+        expect(TestBed.inject(LoggerService).error).not.toHaveBeenCalled();
+    });
+
+    it('does not emit another connection state if disconnect completion tears down the view', async () => {
+        component.user = { uid: 'user-1', settings: {} } as AppUserInterface;
+        component.serviceTokens = [{ providerUserId: 'coros-user' }];
+        const emit = vi.spyOn(component.connectionStateChanged, 'emit');
+        mockAnalyticsService.logEvent.mockImplementation(event => {
+            if (event === 'disconnected_from_service') fixture.destroy();
+        });
+
+        await component.deauthorizeService(null);
+
+        expect(emit).toHaveBeenCalledTimes(1);
+        expect(mockUserService.checkCurrentUserCOROSBindingState).not.toHaveBeenCalled();
     });
 
     it('checks a new generation of the same COROS account and ignores the earlier rejection', async () => {

@@ -118,13 +118,14 @@ export class ServicesCorosComponent extends ServicesAbstractComponentDirective {
     // The base method locks synchronously before awaiting confirmation.
     if (this.isDisconnecting) void this.checkCOROSBindingStateIfEligible();
     const didDisconnect = await disconnect;
+    if (this.isDestroyed) return didDisconnect;
     if (didDisconnect) {
       this.disconnectedCOROSConnectionKey = connectionKey;
       this.connectionStateChanged.emit(this.isConnectedToService());
     }
-    // A cancelled confirmation can outlive a discarded check without producing
-    // another metadata update. Resume only if the current connection is eligible.
-    if (!didDisconnect && !this.isDestroyed) void this.checkCOROSBindingStateIfEligible();
+    // Cancellation or a newer connection can outlive a discarded check without
+    // another metadata update. The disconnected generation remains ineligible.
+    void this.checkCOROSBindingStateIfEligible();
     return didDisconnect;
   }
 
@@ -239,9 +240,14 @@ export class ServicesCorosComponent extends ServicesAbstractComponentDirective {
 
   private getCOROSBindingStateCheckKey(): string | null {
     const connectionKey = this.getCOROSConnectionKey();
+    const params = this.route.snapshot.queryParamMap;
+    // Metadata emits before the base subscription locks the OAuth callback.
+    const hasPendingAuthorization = params.get('serviceName') === this.serviceName
+      && (!!params.get('connect') || (!!params.get('code') && !!params.get('state')));
     const isEligible = this.showConnectionSummary
       && connectionKey !== null
       && this.hasStoredCOROSConnection
+      && !hasPendingAuthorization
       && !this.isConnecting
       && !this.isDisconnecting
       && !this.isReconnectRequired
