@@ -1,8 +1,9 @@
 # Timeline notes
 
 Timeline notes are private, user-created calendar context, independent of Health metrics, Sleep sessions, and workouts.
-Every authenticated account can use the compact **Timeline notes** header action in Dashboard, Health, Training, and Calendar, without a
+Every authenticated account can use the compact **Timeline notes** header action in Dashboard, Health, and Calendar, without a
 subscription or connected provider. Existing workspace entry-point rollout and provider import checks are unchanged.
+Training charts retain their shared note annotations, but the Training route has no note-manager header action.
 
 ## Contract and lifecycle
 

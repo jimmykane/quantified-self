@@ -1,0 +1,16 @@
+:host { display: block; min-width: 0; }
+section { min-width: 0; }
+.profile-hint { margin: 8px 0; color: var(--mat-sys-on-surface-variant); font: var(--mat-sys-body-small); overflow-wrap: anywhere; }
+.profile-metric { width: 200px; max-width: 100%; }
+.profile-repeat-selectors { display: flex; gap: 8px; flex-wrap: wrap; margin: 8px 0; }
+.profile-repeat-selectors mat-form-field { width: 220px; max-width: 100%; }
+.profile-chart-scroll { max-width: 100%; overflow-x: auto; }
+.profile-chart { height: 270px; min-width: 100%; }
+.profile-chart.purpose-only { height: 94px; }
+.profile-steps { margin: 8px 0; padding: 0; list-style: none; max-height: 220px; overflow-y: auto; }
+.profile-steps li { padding: 4px 0; border-bottom: 1px solid var(--mat-sys-outline-variant); }
+.profile-steps button { height: auto; min-height: 44px; max-width: 100%; text-align: start; white-space: normal; }
+.profile-steps button[aria-pressed='true'] { background: var(--mat-sys-secondary-container); color: var(--mat-sys-on-secondary-container); }
+.profile-target-text { display: block; padding: 0 12px 4px; font: var(--mat-sys-body-small); color: var(--mat-sys-on-surface-variant); overflow-wrap: anywhere; }
+.profile-selection { margin-top: 8px; font: var(--mat-sys-body-medium); overflow-wrap: anywhere; }
+.profile-selection p { margin: 4px 0; }

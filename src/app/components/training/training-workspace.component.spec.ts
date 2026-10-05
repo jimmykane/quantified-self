@@ -13,6 +13,7 @@ import { AppAuthService } from '../../authentication/app.auth.service';
 import { AppThemeService } from '../../services/app.theme.service';
 import { AppSleepService } from '../../services/app.sleep.service';
 import { AppAnalyticsService } from '../../services/app.analytics.service';
+import { AppHapticsService } from '../../services/app.haptics.service';
 import { SLEEP_PROVIDERS, type SleepSession } from '@shared/sleep';
 import type {
   DerivedTrainingDurabilityMetricPayload,
@@ -187,17 +188,13 @@ describe('TrainingWorkspaceComponent', () => {
     const element = fixture.nativeElement as HTMLElement;
     expect(element.querySelector('#training-title')?.textContent?.trim()).toBe('Training');
     expect(element.querySelector('.qs-page-header__leading-icon')?.textContent?.trim()).toBe('monitoring');
-    expect(element.querySelector('.qs-page-header__subtitle')).toBeNull();
-    const feedbackAction = element.querySelector('.training-feedback-action');
-    expect(feedbackAction?.getAttribute('aria-label')).toBe('Send feedback about Training to support');
-    expect(feedbackAction?.getAttribute('href')).toContain('mailto:');
-    expect(feedbackAction?.getAttribute('href')).toContain('subject=Training%20feedback');
-    expect(feedbackAction?.getAttribute('target')).toBeNull();
-    expect(feedbackAction?.getAttribute('rel')).toBeNull();
-    const calendarAction = element.querySelector('.training-calendar-action');
-    expect(calendarAction?.getAttribute('aria-label')).toBe('Open activity calendar');
-    expect(calendarAction?.querySelector('mat-icon')?.textContent?.trim()).toBe('calendar_month');
-    expect(element.querySelector('.training-dashboard-action')?.getAttribute('aria-label')).toBe('Return to dashboard');
+    expect(element.querySelector('.qs-page-header__subtitle')?.textContent).toContain('Data through');
+    expect(element.querySelector('.training-feedback-action')).toBeNull();
+    expect(element.querySelector('.training-calendar-action')).toBeNull();
+    expect(element.querySelector('.training-dashboard-action')).toBeNull();
+    expect(element.querySelector('.training-page-actions')).toBeNull();
+    expect(element.querySelector('app-timeline-notes-workspace')?.hasAttribute('hidden')).toBe(true);
+    expect(element.querySelector('app-page-header app-timeline-notes-workspace')).toBeNull();
     const sportVisibilityAction = element.querySelector('.training-sport-visibility-action');
     expect(sportVisibilityAction?.getAttribute('aria-label')).toContain('Choose sport shortcuts.');
     expect(sportVisibilityAction?.textContent).toContain('Shortcuts');
@@ -216,12 +213,7 @@ describe('TrainingWorkspaceComponent', () => {
     expect(element.textContent).toContain('Viewing All training · All recorded training');
     expect(element.textContent).not.toContain('Best build vs now');
     const template = readFileSync(resolve(process.cwd(), 'src/app/components/training/training-workspace.component.html'), 'utf8');
-    for (const actionClass of [
-      'training-sport-visibility-action',
-      'training-feedback-action',
-      'training-calendar-action',
-      'training-dashboard-action',
-    ]) {
+    for (const actionClass of ['training-sport-visibility-action']) {
       expect(template).toMatch(new RegExp(`<[^>]+mat-button[^>]+class="${actionClass}"`, 's'));
       expect(template).not.toMatch(new RegExp(`<[^>]+mat-stroked-button[^>]+class="${actionClass}"`, 's'));
     }
@@ -318,7 +310,7 @@ describe('TrainingWorkspaceComponent', () => {
     expect(subtitle?.previousElementSibling?.querySelector('#training-title')).toBe(title);
   });
 
-  it('keeps every route-header action in one compact row through tablet widths', () => {
+  it('keeps retry and sport shortcut actions compact through tablet widths', () => {
     const stylePath = resolve(process.cwd(), 'src/app/components/training/training-workspace.component.scss');
     const styles = readFileSync(stylePath, 'utf8');
     const compactActionsStart = styles.indexOf('@media (max-width: 800px)');
@@ -327,12 +319,11 @@ describe('TrainingWorkspaceComponent', () => {
 
     expect(compactActionsStart).toBeGreaterThan(-1);
     expect(extraSmallLayoutStart).toBeGreaterThan(compactActionsStart);
-    expect(compactActionsStyles).toContain('.training-sport-visibility-action,');
-    expect(compactActionsStyles).toContain('.training-sport-visibility-action-label,');
-    expect(compactActionsStyles).toContain('.training-page-actions .training-sport-visibility-action mat-icon,');
-    expect(compactActionsStyles).toContain('.training-calendar-action,');
-    expect(compactActionsStyles).toContain('.training-calendar-action-label,');
-    expect(compactActionsStyles).toContain('.training-page-actions .training-calendar-action mat-icon,');
+    expect(compactActionsStyles).toContain('.training-sport-visibility-action {');
+    expect(compactActionsStyles).toContain('.training-sport-visibility-action-label {');
+    expect(compactActionsStyles).toContain('.training-page-actions .training-sport-visibility-action mat-icon {');
+    expect(compactActionsStyles).toContain('.training-derived-metrics-retry,');
+    expect(compactActionsStyles).not.toContain('.training-calendar-action');
     expect(compactActionsStyles).toContain('flex-wrap: nowrap;');
     expect(compactActionsStyles).toContain('width: 48px;');
   });
@@ -2728,14 +2719,17 @@ describe('TrainingWorkspaceComponent', () => {
 
   it('keeps derived metric listeners active after the initial user change', async () => {
     const derivedState$ = new Subject<DashboardDerivedMetricsState>();
+    const user$ = new BehaviorSubject({ uid: 'user-1' });
     const derivedMetrics = { watch: vi.fn(() => derivedState$), ensureForDashboard: vi.fn() };
+    const haptics = { selection: vi.fn() };
 
     await TestBed.configureTestingModule({
       imports: [TrainingMetricTextComponent, TrainingBuildMetricsComponent, TrainingMixDetailsComponent],
       declarations: [TrainingWorkspaceComponent],
       providers: [
-        { provide: AppAuthService, useValue: { user$: of({ uid: 'user-1' }) } },
+        { provide: AppAuthService, useValue: { user$ } },
         { provide: DashboardDerivedMetricsService, useValue: derivedMetrics },
+        { provide: AppHapticsService, useValue: haptics },
         { provide: AppSleepService, useValue: createSleepService() },
         { provide: AppThemeService, useValue: { appTheme: () => AppThemes.Normal } },
       ],
@@ -2768,8 +2762,26 @@ describe('TrainingWorkspaceComponent', () => {
     const firstSection = fixture.nativeElement.querySelector('.training-section');
     expect(routeStatus?.textContent).toContain('Refreshing derived metrics');
     expect(routeStatus?.textContent).toContain('Available last completed values');
-    expect(pageHeader?.nextElementSibling?.classList).toContain('training-destination-navigation');
-    expect(pageHeader?.nextElementSibling?.nextElementSibling).toBe(firstSection);
+    const statusToggle = fixture.nativeElement.querySelector('.training-update-toggle') as HTMLButtonElement;
+    const statusDetails = fixture.nativeElement.querySelector('#training-update-details') as HTMLElement;
+    expect(statusToggle.getAttribute('aria-expanded')).toBe('false');
+    expect(statusToggle.getAttribute('aria-controls')).toBe(statusDetails.id);
+    expect(statusToggle.querySelector('mat-icon')?.classList).toContain('training-update-spinning');
+    expect(statusDetails.hidden).toBe(true);
+    expect(haptics.selection).not.toHaveBeenCalled();
+    statusToggle.click();
+    fixture.detectChanges();
+    expect(statusToggle.getAttribute('aria-expanded')).toBe('true');
+    expect(statusDetails.hidden).toBe(false);
+    expect(statusDetails.textContent).toContain('Available last completed values');
+    expect(haptics.selection).toHaveBeenCalledOnce();
+    statusToggle.click();
+    fixture.detectChanges();
+    expect(statusDetails.hidden).toBe(true);
+    expect(haptics.selection).toHaveBeenCalledTimes(2);
+    expect(pageHeader?.nextElementSibling).toBe(statusDetails);
+    expect(statusDetails.nextElementSibling?.classList).toContain('training-destination-navigation');
+    expect(statusDetails.nextElementSibling?.nextElementSibling).toBe(firstSection);
     expect(fixture.nativeElement.textContent).toContain('Updating your training comparison');
 
     derivedState$.next({
@@ -2786,6 +2798,7 @@ describe('TrainingWorkspaceComponent', () => {
     const retryButton = fixture.nativeElement.querySelector('.training-derived-metrics-retry') as HTMLButtonElement;
     expect(fixture.nativeElement.querySelector('.training-derived-metrics-status')?.textContent)
       .toContain('Derived metrics update failed');
+    expect(statusToggle.querySelector('mat-icon')?.classList).not.toContain('training-update-spinning');
     expect(retryButton.getAttribute('aria-label')).toBe('Retry derived metrics update');
     retryButton.click();
     expect(derivedMetrics.ensureForDashboard).toHaveBeenLastCalledWith(
@@ -2793,6 +2806,23 @@ describe('TrainingWorkspaceComponent', () => {
       expect.objectContaining({ trainingSummaryStatus: 'failed' }),
       { force: true, metricKinds: TRAINING_WORKSPACE_DERIVED_METRIC_KINDS },
     );
+    statusToggle.click();
+    fixture.detectChanges();
+    derivedState$.next(createRouteReadyDerivedState());
+    fixture.detectChanges();
+    expect(fixture.nativeElement.querySelector('.training-update-toggle')).toBeNull();
+    expect(fixture.componentInstance.derivedMetricsStatusExpanded()).toBe(false);
+    expect(haptics.selection).toHaveBeenCalledTimes(3);
+    fixture.componentInstance.toggleDerivedMetricsStatusDetails();
+    expect(haptics.selection).toHaveBeenCalledTimes(3);
+    derivedState$.next(createRouteReadyDerivedState({ trainingSummaryStatus: 'processing' }));
+    fixture.detectChanges();
+    expect((fixture.nativeElement.querySelector('#training-update-details') as HTMLElement).hidden).toBe(true);
+    (fixture.nativeElement.querySelector('.training-update-toggle') as HTMLButtonElement).click();
+    user$.next({ uid: 'user-2' });
+    fixture.detectChanges();
+    expect(fixture.componentInstance.derivedMetricsStatusExpanded()).toBe(false);
+    expect(haptics.selection).toHaveBeenCalledTimes(4);
   });
 
   it('ignores the optional recovery status unless an active estimate is visible', () => {

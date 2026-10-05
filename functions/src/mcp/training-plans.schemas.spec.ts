@@ -14,6 +14,7 @@ import {
   TRAINING_READ_OUTPUTS,
   TRAINING_RECIPE_SCHEMA,
   TRAINING_RECIPE_WITH_POOL_SCHEMA,
+  TRAINING_RECIPE_WITH_EARLY_LAP_SCHEMA,
   TRAINING_WRITE_INPUTS,
 } from './training-plans.schemas';
 
@@ -103,7 +104,54 @@ describe('app-only Garmin replacement boundary', () => {
   });
 });
 
+describe('ordered and duplicated interval recipes', () => {
+  it('round-trips ordered blocks and fresh child IDs through existing reads and complete-recipe proposals', () => {
+    const recovery = { kind: 'step' as const, id: 'recovery', purpose: 'recovery' as const,
+      ending: { kind: 'time' as const, seconds: 75.1234567890123 }, targets: [], note: 'Easy recovery' };
+    const work = { kind: 'step' as const, id: 'work', purpose: 'work' as const,
+      ending: { kind: 'distance' as const, meters: 1609.344123 }, targets: [{ kind: 'speed' as const, mode: 'absolute' as const,
+        presentation: 'pace' as const, minimumMetersPerSecond: 3.14159265, maximumMetersPerSecond: 4.123456789 }], note: 'Hold form' };
+    const input: WorkoutStructureV1 = { version: 1, sport: ActivityTypes.Running, nodes: [
+      { kind: 'repeat', id: 'block', count: 4, steps: [recovery, work] },
+      { ...recovery, id: 'cooldown', purpose: 'cooldown' },
+      { kind: 'repeat', id: 'block-copy', count: 4, steps: [{ ...recovery, id: 'recovery-copy' }, { ...work, id: 'work-copy' }] },
+    ] };
+    expectPublicReadWriteRoundTrip(input);
+    const update = { kind: 'update-workout', workout: { ref: 'opaque-workout' }, plan: null,
+      localDate: '2026-10-05', title: 'Ordered intervals', structure: input };
+    expect(TRAINING_CHANGE_SCHEMA.parse(update)).toMatchObject({ structure: input });
+    expect(TRAINING_READ_OUTPUTS.get_saved_workout.parse({ libraryRevision: 3, savedWorkout: {
+      savedWorkoutRef: 'opaque-saved', title: 'Ordered intervals', status: 'active', revision: 2,
+      createdAtMs: 1, updatedAtMs: 2, structure: input,
+    } }).savedWorkout.structure).toEqual(input);
+    for (const field of ['sourceDuration', 'sourceDistance', 'sourcePace', 'providerWorkoutId']) {
+      const leaked = { ...input, nodes: [{ ...input.nodes[0], [field]: { private: true } }, ...input.nodes.slice(1)] };
+      expect(TRAINING_CHANGE_SCHEMA.safeParse({ ...update, structure: leaked }).success).toBe(false);
+    }
+    const duplicateIds = { ...input, nodes: [input.nodes[0], input.nodes[0]] };
+    expect(TRAINING_CHANGE_SCHEMA.safeParse({ ...update, structure: duplicateIds }).success).toBe(false);
+  });
+});
+
 describe('Strict public Training recipe v1', () => {
+  it.each([ActivityTypes.Running, ActivityTypes.Cycling, ActivityTypes.Swimming, ActivityTypes.OpenWaterSwimming])(
+    'preserves %s canonical recipes through public read/write validation without watch fields', sport => {
+      for (const ending of [endingFixtures.time, endingFixtures.distance, endingFixtures.manual]) {
+        for (const targets of [[], ...Object.values(targetVariantFixtures).map(target => [target]),
+          [targetVariantFixtures['heart-rate:absolute'], targetVariantFixtures['power:absolute']]]) {
+          const input = { ...recipe(ending, targets), sport };
+          expectPublicReadWriteRoundTrip(input);
+          for (const fields of [{ createManualLap: true }, { window: 'manualLap', aggregate: 'average' },
+            { fields: [{ type: 'strokeRate', title: 'Avg strk' }] }, { mappingVersion: 'suunto-guides-v5' }]) {
+            const bad = { ...input, nodes: [{ ...input.nodes[0], ...fields }] };
+            expect(TRAINING_RECIPE_SCHEMA.safeParse(bad).success).toBe(false);
+            expect(TRAINING_WRITE_INPUTS.preview_create_planned_workout.safeParse({
+              expectedScheduleRevision: 1, localDate: '2026-09-18', title: 'Workout', structure: bad,
+            }).success).toBe(false);
+          }
+        }
+      }
+    });
   it.each([ActivityTypes.Walking, ActivityTypes.Hiking, ActivityTypes.Rowing, ActivityTypes.IndoorRowing])('round-trips %s through the frozen read and approval-gated proposal schema', sport => {
     expectPublicReadWriteRoundTrip({ ...recipe({ kind: 'distance', meters: 500 }), sport });
   });
@@ -302,5 +350,48 @@ describe('Strict Training write proposal contract', () => {
         draft.exercises[0].sets[0], draft.exercises[0].sets[0] ] }] } } }).success).toBe(false);
     expect(TRAINING_WRITE_INPUTS.preview_training_changes.safeParse({ expectedScheduleRevision: 1,
       changes: [{ ...input.change, structure: recipe({ kind: 'manual' }) }] }).success).toBe(false);
+  });
+});
+
+
+describe('additive early Lap recipe contract', () => {
+  it.each(WORKOUT_STEP_PURPOSES)('round-trips exact time/distance settings for %s, including repeat children and pool length', purpose => {
+    for (const allowEarlyLap of [undefined, false, true]) for (const numeric of [
+      { kind: 'time' as const, seconds: 90.123 }, { kind: 'distance' as const, meters: 1609.344 },
+    ]) {
+      const ending = { ...numeric, ...(allowEarlyLap === undefined ? {} : { allowEarlyLap }) };
+      const step = { kind: 'step' as const, id: 'top', purpose, ending, targets: [] };
+      const input = { version: 1, sport: ActivityTypes.Swimming, poolLength: { meters: 22.86, presentation: 'yards' },
+        nodes: [step, { kind: 'repeat', id: 'repeat', count: 3, steps: [{ ...step, id: 'child' }] }] };
+      const wire = JSON.parse(JSON.stringify(input));
+      expect(TRAINING_RECIPE_WITH_EARLY_LAP_SCHEMA.parse(wire)).toEqual(input);
+      const scheduled = TRAINING_READ_OUTPUTS.get_planned_workout_v3.parse({ scheduleRevision: 1, workout: {
+        workoutRef: 'opaque', planRef: null, title: 'Swim', localDate: '2026-10-05', lifecycle: 'planned',
+        revision: 1, createdAtMs: 1, updatedAtMs: 1, structure: wire, displaySteps: [] } });
+      expect(scheduled.workout.structure).toEqual(input);
+      const saved = TRAINING_READ_OUTPUTS.get_saved_workout_v2.parse({ libraryRevision: 1, savedWorkout: {
+        savedWorkoutRef: 'opaque', title: 'Swim', status: 'active', revision: 1, createdAtMs: 1, updatedAtMs: 1, structure: wire } });
+      expect(saved.savedWorkout.structure).toEqual(input);
+      const planned = TRAINING_WRITE_INPUTS.preview_planned_workout_v3_change.parse({ expectedScheduleRevision: 1,
+        change: { kind: 'create-workout', localKey: 'swim', title: 'Swim', plan: null, localDate: '2026-10-05', structure: wire } });
+      expect(planned.change).toMatchObject({ structure: input });
+      const library = TRAINING_WRITE_INPUTS.preview_saved_workout_v2_change.parse({ expectedScheduleRevision: 1,
+        expectedLibraryRevision: 1, change: { kind: 'create', title: 'Swim', structure: wire } });
+      expect(library.change).toMatchObject({ structure: input });
+      expect(TRAINING_RECIPE_WITH_POOL_SCHEMA.safeParse(wire).success).toBe(allowEarlyLap === undefined);
+    }
+  });
+  it('keeps the ending-field coverage gate exhaustive', () => {
+    expect(MCP_WORKOUT_RECIPE_VARIANT_COVERAGE.endingFields).toEqual({
+      time: { kind: true, seconds: true, allowEarlyLap: true },
+      distance: { kind: true, meters: true, allowEarlyLap: true },
+      kilojoules: { kind: true, kilojoules: true }, repetitions: { kind: true, repetitions: true }, manual: { kind: true },
+    });
+  });
+  it.each([null, 1, 'true', {}, undefined])('rejects an explicitly invalid numeric flag %s', allowEarlyLap => {
+    expect(TRAINING_RECIPE_WITH_EARLY_LAP_SCHEMA.safeParse(recipe({ kind: 'time', seconds: 60, allowEarlyLap } as never)).success).toBe(false);
+  });
+  it.each(['manual', 'kilojoules', 'repetitions'])('rejects early Lap on %s, including false', kind => {
+    expect(TRAINING_RECIPE_WITH_EARLY_LAP_SCHEMA.safeParse(recipe({ ...endingFixtures[kind as keyof typeof endingFixtures], allowEarlyLap: false } as never)).success).toBe(false);
   });
 });

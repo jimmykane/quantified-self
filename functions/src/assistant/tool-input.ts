@@ -118,7 +118,7 @@ function normalizeAssistantTrainingPreviewInput(
       structure: normalizeAssistantWorkoutStructure(input.structure),
     };
   }
-  if (toolName === 'preview_planned_workout_v2_change'
+  if (['preview_planned_workout_v2_change', 'preview_planned_workout_v3_change', 'preview_saved_workout_v2_change'].includes(toolName)
     && input.change && typeof input.change === 'object' && !Array.isArray(input.change)) {
     const change = input.change as Record<string, unknown>;
     return {

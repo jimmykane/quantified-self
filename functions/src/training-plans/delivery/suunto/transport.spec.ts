@@ -7,7 +7,7 @@ import { SuuntoGuideTransport } from './transport';
 import { SuuntoGuideHttpError } from './http';
 import { SuuntoHttpFixture } from '../test-support/suunto-http-fixture';
 import { packageGuide, readGuideArchive } from './archive';
-import { assessSuuntoGuideV2ForRecovery, assessSuuntoGuideV3ForRecovery, guideExternalId, guideMapping } from './mapping';
+import { assessSuuntoGuideV2ForRecovery, assessSuuntoGuideV3ForRecovery, assessSuuntoGuideV4ForRecovery, guideExternalId, guideMapping } from './mapping';
 
 describe('Suunto Guide lifecycle — synthetic transport', () => {
   const now = Date.parse('2026-12-29T12:00:00Z'); const owner = 'Quantified Self';
@@ -30,12 +30,14 @@ describe('Suunto Guide lifecycle — synthetic transport', () => {
   });
   it('classifies only exact journal digests without changing the operation or making HTTP calls', () => {
     const before = structuredClone(op);
-    expect(transport.diagnosticMappingVersion(op)).toBe('suunto-guides-v4');
+    expect(transport.diagnosticMappingVersion(op)).toBe('suunto-guides-v6');
     expect(op).toEqual(before);
     op.digest = assessSuuntoGuideV2ForRecovery(op.workout!, op.destinationKey, op.timeZone, owner).digest;
     expect(transport.diagnosticMappingVersion(op)).toBe('suunto-guides-v2');
     op.digest = assessSuuntoGuideV3ForRecovery(op.workout!, op.destinationKey, op.timeZone, owner).digest;
     expect(transport.diagnosticMappingVersion(op)).toBe('suunto-guides-v3');
+    op.digest = assessSuuntoGuideV4ForRecovery(op.workout!, op.destinationKey, op.timeZone, owner).digest;
+    expect(transport.diagnosticMappingVersion(op)).toBe('suunto-guides-v4');
     op.digest = 'unknown-version';
     expect(transport.diagnosticMappingVersion(op)).toBeNull();
     expect(transport.diagnosticMappingVersion({ ...op, kind: 'remove', workout: null })).toBeNull();

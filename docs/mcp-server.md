@@ -42,6 +42,15 @@ once per fetch. It is bounded to 2 MiB, an individual record to 128 KiB and comp
 256 KiB. Oversized records fail without truncating instructions. Canonical values remain alongside Sports Lib display;
 manual/mixed-ending recipes receive no invented duration estimate.
 
+Interval editor ordering/duplication uses the same canonical ordered arrays: moves retain structural IDs, copies receive
+fresh IDs for the copied node and every repeat child. Planned-workout reads (v1/v2), their ordered display steps and full
+saved-recipe reads preserve that resulting prescription. Existing complete-recipe create/update proposals cover these
+edits through the unchanged scope, revision, preview/native-approval and idempotent-apply boundaries. This adds no tool,
+schema, consent, provider action or permission; editor-only exact-value caches never enter a saved or exposed recipe.
+Focused read/schema fixtures verify copied/reordered repeats, notes, fractional seconds, exact metres/m/s, fresh IDs,
+scope/reference fences and unknown-field rejection. No migration, registered contract update or local-plugin rebuild/
+refresh is needed; the existing focused Training, Activity and cross-domain workflows still discover runtime contracts.
+
 The bulk completion read accepts 1–25 unique opaque workout references and returns the same exact linked/unlinked
 projection as the single-workout tool in input order. It does not scan for similar activities. Completed-activity
 references remain independently gated by `activity-details:read`; provider/event/activity identities never leak when that
@@ -209,21 +218,26 @@ Its model-facing Genkit schema is a typed projection of the strict MCP input, no
 references and recipe/change unions are made legible to Gemini, while MCP still rejects invalid variants and
 unapproved writes. Include the full optional-permission tool catalogue in schema-compatibility tests when a Training
 or content input changes; otherwise one incompatible declaration can prevent every Assistant answer before a tool runs.
-The Assistant selects one relevant Training preview per turn rather than advertising all four deeply nested proposals
+The Assistant selects one relevant Training preview per turn rather than advertising all deeply nested proposals
 to Gemini together; public MCP clients continue to see all tools under their independent grants.
 Plan-level and provider-only actions select the batch preview before sport-specific recipe wording; one authored strength
 or pool-length change selects its focused preview. A combined comparison and workout recommendation retains live daily
 and completed-activity reads instead of inheriting a single-purpose analytical workflow. This is internal routing only:
 the public tool list, scopes, strict schemas and approval boundary do not change.
-The same combined today recommendation deterministically collects a bounded context through the existing MCP session.
+The same dated workout recommendation deterministically collects a bounded context through the existing MCP session.
 It prepares and reads relevant ready Training snapshots, the daily report, canonical `Duration` buckets and today's
-activities. With separate consent it reads bounded dated Timeline notes and today's planned workouts, followed by a
+activities. With separate consent it reads bounded dated Timeline notes and the requested day's planned workouts, followed by a
 bulk exact-completion read for the listed workouts. The server counts local weekday activity days and appends verified
 note dates, scan limits and completion states to the answer; an incomplete scan blocks a workout preview. User-authored
 text cannot instruct a provider or authorize a plan change. The internal model-only projection adds local date/weekday
 labels to numeric metric buckets using the request's IANA time zone, without changing the validated public metric
 response or registered contract. Gemini keeps its six model-selected calls for additional detail or one expressly
 requested focused preview; the deterministic context has a separate bounded read budget.
+First-party follow-ups preserve dated user-message context, target-day calendar/weekday semantics and compact server-owned
+Apply/Dismiss confirmation evidence. Current validated reads override prior answers; current readiness is not future
+readiness, and inherited conversation context never grants write or provider consent. These are internal Assistant
+corrections, not new MCP tools, scopes, schemas, exposed fields or approval behavior. The registered baseline, pending
+changes and bundled plugin remain unchanged. See [Assistant context and lifecycle](assistant.md) for retention and tests.
 
 Every future planning feature must review MCP impact in the same PR: explicit projections, schemas, consent, bounds, units,
 Assistant/plugin guidance and tests. Record a no-impact rationale or a focused epic-linked Project 2 deferral. Maintaining
@@ -251,6 +265,14 @@ Suunto Guide delivery (#650) uses these existing local sync projections without 
 schema. Read tests cover delivered, scheduled-for-later and needs-attention Suunto states, truthful workout-derived plan
 counts, and strict rejection of private evidence injected into a public status. No Guide/account IDs, FIT completion
 evidence, watch receipts, live checks or write actions are exposed; consent and bundled skill routing remain unchanged.
+Sport/prescription-specific Suunto v5 screens add no wire impact: current HR and manual-lap-average pace,
+cycling power and swimming stroke rate are private Guide presentation fields. Countdown, authored targets/notes,
+recipe units, completion and safe sync projections remain unchanged. Strict read/write round-trip tests cover
+running/cycling/swimming target variants; negative fixtures reject averaging windows, aggregates, lap commands,
+stroke-rate fields, mapping versions and approval/recovery evidence. Source-recorded laps can appear through the
+existing independently granted activity-lap read, with unchanged schema and bounds. No tool, scope, consent,
+mutation, provider action, Assistant routing or bundled-plugin change; no catalog refresh or plugin rebuild is needed.
+Watch support/sensors, alerts and adherence cannot be inferred from delivery acceptance or these read projections.
 The manual editor's additional canonical running/cycling profiles also require no MCP contract change: the existing
 recipe schema already accepts the complete Sports Lib activity-type enum, and focused coverage proves an exact Mountain
 Biking sport survives the read projection. Suunto numeric activity recommendations and Garmin's broad
@@ -425,6 +447,26 @@ approval, short expiry, owner/connection/grant/revision binding, compatibility r
 mandatory. `all_connected` includes only providers for which the connection, permissions, configuration and workout are
 currently eligible. No new tool, action, field, scope, consent default, provider identifier, plugin artifact or
 registered-client refresh is introduced; connecting a provider alone never creates delivery consent or sends a workout.
+
+### Full recipes with optional early Lap
+
+The additive `get_planned_workout_v3` and `get_saved_workout_v2` return the entire strict recipe, including pool length
+and `allowEarlyLap` on time/distance endings. Absent, false and true are preserved; manual/repetition/kJ endings reject
+the field. Old full reads fail closed on field presence instead of projecting it away. Optional ending fields have an
+explicit compile-time coverage gate alongside variant coverage.
+
+`preview_planned_workout_v3_change` and `preview_saved_workout_v2_change` accept the complete latest recipe under the
+existing read plus schedule-write grants and disclose enabling/removing early Lap. Old replacement previews cannot
+clear the setting. Apply uses the existing authority, revision, expiry, native approval and idempotency boundaries;
+there is no new scope, mutation or provider action. Assistant preserves unchanged settings, enables them only on
+explicit athlete request, and remains prepare-only with app confirmation. Latest focused workout creation does not
+include delivery; a separately authorized existing delivery proposal follows creation. Suunto supports the option;
+other destinations reject it before HTTP. Neither transitions nor local compatibility prove completion or watch receipt.
+
+Registered recipe schemas/baselines/history remain frozen. Deploy compatible backend code only after separate approval,
+then perform the exact pending developer refresh/rescan and client/plugin tool-catalog refresh before the updated UI.
+No activity reparse, persisted-data migration, wider consent or automatic provider requeue is needed. Detailed product,
+mapping and recovery rules live in [Training workspace](training-workspace.md#optional-early-lap-on-numeric-endings-784-training-07).
 
 ## Purpose and boundary
 

@@ -14,6 +14,21 @@ import {
 } from './policies.content';
 
 describe('help.content', () => {
+  it('explains dated follow-ups, fresh evidence and confirmed Training outcomes without promising cross-chat memory', () => {
+    const copy = HELP_SECTIONS.find(section => section.id === 'ai-insights')!.content;
+    for (const phrase of ['message dates and confirmed Training changes', 'Freshly checked records take precedence',
+      'not memory across separate chats', 'requested date clear', "not a prediction of tomorrow's sleep",
+      'without changing your actual schedule', '**Training review result**', 'accepted sync request is not proof of delivery']) {
+      expect(copy).toContain(phrase);
+    }
+  });
+  it('explains accessible interval moves, independent copies, parent boundaries and saving', () => {
+    const copy = HELP_SECTIONS.find(section => section.id === 'training-plans')!.content;
+    for (const phrase of ['**drag handle**', '**Move up**', '**Move down**', '**Duplicate step**',
+      '**Duplicate repeat block**', 'move only within that repeat', 'immediately after the original',
+      'Plans, Standalone and the Workout library', 'saved only when you save the editor',
+      'counting repeat blocks and their steps', 'Strength exercises use their separate editor']) expect(copy).toContain(phrase);
+  });
   it('explains explicit duration parts and colon pace without changing canonical units or provider capabilities', () => {
     const copy = HELP_SECTIONS.find(section => section.id === 'training-plans')!.content;
     for (const phrase of ['**Hours**, **Minutes**, and **Seconds**', '0 / 1 / 15', '0 / 1 / 30',
@@ -57,10 +72,11 @@ describe('help.content', () => {
   });
   it('explains bounded Suunto live screens, native sensors/units and watch-controlled boundary alerts', () => {
     const content = HELP_SECTIONS.find(section => section.id === 'training-plans')!.content;
-    for (const phrase of ['## Suunto Guide screens and interval alerts', '**block-average pace and current HR**', '**power, HR and speed**',
+    for (const phrase of ['## Suunto Guide screens and interval alerts', '**block-average pace and current HR**', '**block-average power, current HR, cadence and speed**', '**block-average pace, swimming stroke rate and current HR**',
+      '**Avg pwr**', '**Avg strk**', 'Both targets', 'Untargeted steps stay untargeted', 'rowing strokes are not inferred', 'HR stays current',
       'at most five fields', 'Long manual instructions stay text-only', 'Suunto renders native watch units',
       'not guaranteed to match the 500 m split', 'missing readings are unavailable, not zero',
-      "Suunto's current manual-lap average", 'not instant pace or the whole-workout average',
+      "Suunto's current manual-lap average", 'not instant readings or the whole-workout average',
       'create recorded laps at automatic step boundaries', 'does not create a duplicate',
       'creates no opening lap', 'resets the displayed average early', 'including HR-only strength Guides',
       'do not prove target adherence', 'including rest/recovery and every repeat', '**Guide complete**',
@@ -691,7 +707,7 @@ describe('help.content', () => {
     expect(calendarSection?.content).toContain('same sleep-stage breakdown used in Health');
     expect(calendarSection?.content).toContain('full-width **Calendar** section');
     expect(calendarSection?.content).toContain('**Today** card opens a compact month calendar in a bottom sheet');
-    expect(calendarSection?.content).toContain('Dashboard and Training headers also link to the full [Calendar](/calendar)');
+    expect(calendarSection?.content).toContain('Open the full [Calendar](/calendar) from the app navigation or the dashboard Calendar section');
     expect(calendarSection?.content).toContain('without changing their saved settings');
     expect(calendarSection?.content).toContain('out of suggestions until you add it manually');
     expect(calendarSection?.content).toContain('show overlapping activity-group circles');
@@ -850,9 +866,9 @@ describe('help.content', () => {
     expect(trainingSection?.content).toContain('last 7 completed UTC Training days');
     expect(trainingSection?.content).toContain('exact number of completed parent activities');
     expect(trainingSection?.content).toContain('four consecutive 7-day blocks');
-    expect(trainingSection?.content).toContain('compact line above the **Training** title');
-    expect(trainingSection?.content).toContain('content does not shift');
-    expect(trainingSection?.content).toContain('failed update adds **Retry**');
+    expect(trainingSection?.content).toContain('**sync icon** beside the **Training** title');
+    expect(trainingSection?.content).toContain('Tap it to expand the update details');
+    expect(trainingSection?.content).toContain('warning icon and **Retry**');
     expect(trainingSection?.content).toContain('**Largest sport load change**');
     expect(trainingSection?.content).toContain('do not mean that the workspace is filtered');
     expect(trainingSection?.content).toContain('neutral higher/lower language');
@@ -966,7 +982,7 @@ describe('help.content', () => {
     expect(gettingStartedSection?.content).toContain('**Training** is your fixed workspace');
     expect(gettingStartedSection?.content).toContain('[Training analysis guide](/help#training-analysis)');
     expect(gettingStartedSection?.content).toContain('[Training Analysis overview](/features/training-analysis)');
-    expect(gettingStartedSection?.content).toContain('**Feedback** action to email support');
+    expect(gettingStartedSection?.content).toContain('**Email Training Feedback** action');
     expect(gettingStartedSection?.content).not.toContain('**Training (Beta)**');
     expect(gettingStartedSection?.links).toContainEqual({
       label: 'Training analysis guide',
@@ -1805,4 +1821,18 @@ it('explains separately approved activity description access and event semantics
   expect(content).toContain('Activities in the same event share that description');
   expect(content).toContain('refresh cannot add it');
   expect(content).toContain('without truncation');
+
+
 });
+
+  it('explains early Lap separately from indefinite Lap and gates unsupported delivery', () => {
+    const content = JSON.stringify(HELP_SECTIONS);
+    expect(content).toContain('Allow early Lap');
+    expect(content).toContain('no numeric limit');
+    expect(content).toContain('Suunto delivery supports the early-Lap option');
+    expect(content).toContain('Garmin, COROS and Wahoo');
+    expect(content).toContain('explicitly review enabling or removing');
+    expect(content).toContain('With **Allow early Lap** off, pressing Lap');
+    expect(content).toContain('With it enabled, Lap ends that step early');
+    expect(content).toContain('generated time/distance alerts also mention Lap');
+  });

@@ -883,10 +883,23 @@ export async function runApplyAssistantTrainingProposal(
     throw new HttpsError('aborted', 'The Assistant data-access setting changed. Review the proposal again.');
   }
   if (!confirm) {
-    await conversationStore.clearTrainingProposal(uid, conversationId, proposalRef);
-    return { status: 'dismissed', scheduleRevision: current.pendingTrainingProposal.scheduleRevision,
+    const result: ApplyAssistantTrainingProposalResponse = { status: 'dismissed', scheduleRevision: current.pendingTrainingProposal.scheduleRevision,
       changes: [], providers: [] };
+    await conversationStore.clearTrainingProposal(uid, conversationId, proposalRef, result);
+    return result;
   }
+  const retainResult = async (result: ApplyAssistantTrainingProposalResponse) => {
+    try {
+      await conversationStore.clearTrainingProposal(uid, conversationId, proposalRef, result);
+    } catch (error) {
+      // A committed, idempotent authored change is still accepted if the chat
+      // was replaced meanwhile or its confirmation cleanup needs a retry.
+      logger.warn('[Assistant] Applied Training proposal could not be cleared.', {
+        errorName: error instanceof Error ? error.name : 'unknown',
+      });
+    }
+    return result;
+  };
   try {
     const writeInput = {
       uid,
@@ -904,21 +917,19 @@ export async function runApplyAssistantTrainingProposal(
       }
       const result = await applyLibraryProposal({ ...writeInput,
         arguments: { proposalRef, permissionMode: 'schedule' } });
-      await conversationStore.clearTrainingProposal(uid, conversationId, proposalRef);
-      return { status: result.status, scheduleRevision: result.scheduleRevision,
+      return retainResult({ status: result.status, scheduleRevision: result.scheduleRevision,
         changes: [{ index: 0, kind: result.kind, status: 'applied',
           message: result.kind === 'place'
             ? `${result.workoutRefs.length} workout${result.workoutRefs.length === 1 ? '' : 's'} added to the schedule.`
-            : 'Saved workout library updated.' }], providers: [] };
+            : 'Saved workout library updated.' }], providers: [] });
     }
     const result = await applyProposal(writeInput);
-    await conversationStore.clearTrainingProposal(uid, conversationId, proposalRef);
-    return {
+    return retainResult({
       status: result.status,
       scheduleRevision: result.scheduleRevision,
       changes: result.changes,
       providers: result.providers,
-    };
+    });
   } catch (error) {
     if (error instanceof HttpsError) throw error;
     if (error instanceof McpDataError) throw new HttpsError('failed-precondition', error.message);

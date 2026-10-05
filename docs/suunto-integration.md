@@ -6,6 +6,11 @@ Suunto 24/7 Health is available production-wide for active connected Suunto acco
 
 The separate Suunto activity-history picker defaults to the latest two calendar years through today. Users can select a longer or shorter range before submitting; this default does not change the Sleep and 24/7 Health history range policies below.
 
+Queued workout FIT downloads retain their 60-second deadline and apply a QS response limit of 128 MiB with redirects
+disabled. This application limit can reject a valid larger file; oversized downloads stop in the existing failed-job
+flow under `SUUNTO_ACTIVITY_FILE_TOO_LARGE` for operator review, including after token refresh. It does not alter
+Sleep or 24/7 Health pulls. See [download handling and rollout](provider-integration-guide.md#downloading-provider-files-safely).
+
 The Suunto destination card in Services also offers **Send past activities**. Its paged server preview/send path can deliver retained Garmin, COROS, or Wahoo FIT imports and manual FIT/FIT.gz uploads using the shared activity-sync queue. The source account may be disconnected after import; the Suunto destination must remain connected. The server verifies manual-upload origin and saved file generation before queueing, and the worker repeats the check before upload. This one-time action leaves automatic routes off. See [outbound activity delivery](provider-integration-guide.md#outbound-activity-delivery) for queue and retry behavior.
 
 If a saved activity or original becomes permanently ineligible before Suunto upload, the shared worker records a skipped queue result. Temporary Storage failures retry; an already accepted Suunto upload keeps its reconciliation state.

@@ -205,3 +205,12 @@ using the original preview reference and permission mode. Do not infer failure, 
 batch or replay a declined/cancelled call elsewhere. Finalized acceptance is not provider/watch receipt, and a retry
 must retain the original native approval boundary. If status is unavailable, inspect current records before proposing
 only genuinely remaining changes for fresh approval.
+
+
+For a planned recipe with early Lap, route through the focused Training workflow and discover the latest full scheduled
+or saved recipe read and matching focused preview. Preserve unchanged fields, including absent, false and true
+`allowEarlyLap` values. Only time/distance endings accept this boolean: true means numeric limit OR Lap; manual remains
+indefinite. Enable it only on explicit athlete intent and review removal from previously enabled steps. Older tools may
+fail closed; refresh the catalog rather than omitting the field. Suunto supports it; other destinations reject it.
+Neither recorded laps nor comparison evidence authorizes editing a planned recipe or proves its completion. Existing
+independent grants and native client/app confirmation remain mandatory; the Assistant stays prepare-only.

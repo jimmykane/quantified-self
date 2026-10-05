@@ -131,7 +131,7 @@ describe('sleep webhooks', () => {
         expect(input.garminCallbackURLs).toEqual(callbackURLs);
     }
 
-    it.each(['/unknown', '/wrong/API', '/receiveGarminAPIHealthData/wrong/API'])('rejects forged Health ingress before inspecting the payload: %s', async path => {
+    it.each(['/', '/wrong/API', '/receiveGarminAPIHealthData/wrong/API'])('rejects forged Health ingress before inspecting the payload: %s', async path => {
         const response = createResponse();
         const request = { method: 'POST', path };
         Object.defineProperty(request, 'body', { get() { throw new Error('body accessed'); } });
@@ -158,13 +158,13 @@ describe('sleep webhooks', () => {
         expect(hoisted.addSleepSyncQueueItem).not.toHaveBeenCalled();
     });
 
-    it.each(['/', `/${'a'.repeat(64)}/API`])('queues Garmin Sleep callbacks through rollout route %s', async path => {
+    it('queues Garmin Sleep Ping/Pull callbacks through the canonical endpoint', async () => {
         hoisted.garminEnabled = true;
         const response = createResponse();
         const callbackURL = garminCallbackURL('sleeps');
 
         await receiveGarminAPIHealthData({
-            path,
+            path: `/${'a'.repeat(64)}/API`,
             method: 'POST',
             rawBody: Buffer.from('{}'),
             body: {

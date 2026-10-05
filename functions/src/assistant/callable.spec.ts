@@ -281,7 +281,8 @@ describe('Assistant callable', () => {
     await expect(runApplyAssistantTrainingProposal({ proposalRef: proposal.proposalRef,
       permissionMode: proposal.permissionMode, conversationId: 'conversation-1', confirm: false }, context, store))
       .resolves.toEqual({ status: 'dismissed', scheduleRevision: 7, changes: [], providers: [] });
-    expect(store.clearTrainingProposal).toHaveBeenCalledWith('user-1', 'conversation-1', proposal.proposalRef);
+    expect(store.clearTrainingProposal).toHaveBeenCalledWith('user-1', 'conversation-1', proposal.proposalRef,
+      { status: 'dismissed', scheduleRevision: 7, changes: [], providers: [] });
   });
 
   it('applies the current proposal with the exact Assistant conversation authority and then clears it', async () => {
@@ -309,7 +310,14 @@ describe('Assistant callable', () => {
       scopes: ['training-plans:read', 'training-plans:write', 'training-delivery:write'],
       arguments: { proposalRef: proposal.proposalRef, permissionMode: 'combined' },
     }));
-    expect(store.clearTrainingProposal).toHaveBeenCalledWith('user-1', 'conversation-1', proposal.proposalRef);
+    expect(store.clearTrainingProposal).toHaveBeenCalledWith('user-1', 'conversation-1', proposal.proposalRef,
+      { status: 'applied', scheduleRevision: 8,
+        changes: [{ index: 0, kind: 'create-workout', status: 'applied', message: 'Created the workout.' }],
+        providers: [{ index: 1, provider: 'garmin', status: 'applied', message: 'Delivery was queued.' }] });
+    vi.mocked(store.clearTrainingProposal).mockRejectedValue(new Error('Receipt persistence failed'));
+    await expect(runApplyAssistantTrainingProposal({ proposalRef: proposal.proposalRef,
+      permissionMode: proposal.permissionMode, conversationId: 'conversation-1', confirm: true }, context, store, applyProposal))
+      .resolves.toMatchObject({ status: 'applied', scheduleRevision: 8 });
   });
 
   it('routes a confirmed saved-workout proposal only to the library apply path', async () => {
@@ -338,7 +346,8 @@ describe('Assistant callable', () => {
       connectionId: 'first-party-assistant-v1:conversation-1',
       scopes: ['training-plans:read', 'training-plans:write'],
     }));
-    expect(store.clearTrainingProposal).toHaveBeenCalledWith('user-1', 'conversation-1', proposalRef);
+    expect(store.clearTrainingProposal).toHaveBeenCalledWith('user-1', 'conversation-1', proposalRef,
+      expect.objectContaining({ status: 'applied', changes: [expect.objectContaining({ kind: 'place' })] }));
   });
 
   it.each(['delete-workout', 'delete-plan'] as const)('keeps %s cleanup behind the current app-owned approval and both permissions', async kind => {

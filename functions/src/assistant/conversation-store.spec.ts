@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type {
+  ApplyAssistantTrainingProposalResponse,
   AssistantEvidence,
   AssistantMessage,
   AssistantVisual,
@@ -259,6 +260,55 @@ describe('Assistant conversation store', () => {
     await store.clearTrainingProposal('owner', chat.conversationId, proposal.proposalRef);
     expect((await store.getActiveConversationState('owner')).pendingTrainingProposal).toBeUndefined();
     await expect(store.clearTrainingProposal('owner', chat.conversationId, proposal.proposalRef))
+      .rejects.toMatchObject({ code: 'conversation_changed' });
+  });
+
+  it.each(['applied', 'partially_applied', 'dismissed'] as const)('retains a bounded, safe %s Training outcome for follow-ups', async status => {
+    const harness = createFirestoreHarness(); let sequence = 0;
+    let deletion = false;
+    const store = createAssistantConversationStore({ db: () => harness.db as never,
+      now: () => new Date('2026-08-03T12:00:00Z'), createId: () => `confirmation-${++sequence}`,
+      getDeletionGuard: async () => ({ userExists: true, deletionInProgress: deletion, shouldSkip: deletion }) });
+    const chat = await store.resetConversation('owner', 'coordinate_free', false, null, true, true, true);
+    const begun = requireStartedTurn(await store.beginTurn('owner', chat.conversationId, undefined, undefined,
+      'coordinate_free', false, true, true, true));
+    const proposal = { proposalRef: 'private-reference', permissionMode: 'combined' as const,
+      expiresAtMs: Date.parse('2026-08-03T12:15:00Z'), scheduleRevision: 1,
+      summary: 'Create and send one workout.', requiresConfirmation: true as const,
+      changes: [{ index: 0, kind: 'create-workout', summary: 'Create one workout.' }], providerPreviews: [] };
+    await store.completeTurn('owner', begun, message('question', 'user', 'Create a workout for tomorrow'),
+      { ...message('reply', 'assistant', 'Review the proposal.'), evidence: largeValidEvidence() }, proposal);
+    const result: ApplyAssistantTrainingProposalResponse = { status, scheduleRevision: 2,
+      changes: status === 'dismissed' ? [] : [{ index: 0, kind: 'create-workout', status: 'applied', message: 'SECRET authored payload' }],
+      providers: status === 'dismissed' ? [] : Array.from({ length: 100 }, (_, index) => ({ index,
+        provider: 'garmin', status: index === 0 && status === 'partially_applied' ? 'blocked' : 'queued', message: 'SECRET destination IDs' })) };
+    deletion = true;
+    await expect(store.clearTrainingProposal('owner', chat.conversationId, proposal.proposalRef, result))
+      .rejects.toBeInstanceOf(AssistantConversationStoreError);
+    deletion = false;
+    await expect(store.clearTrainingProposal('another-owner', chat.conversationId, proposal.proposalRef, result))
+      .rejects.toMatchObject({ code: 'conversation_changed' });
+    const following = requireStartedTurn(await store.beginTurn('owner', chat.conversationId, undefined, undefined,
+      'coordinate_free', false, true, true, true));
+    await store.clearTrainingProposal('owner', chat.conversationId, proposal.proposalRef, result);
+    const state = await store.getActiveConversationState('owner');
+    const evidence = state.conversation?.messages[1].evidence ?? [];
+    expect(evidence).toHaveLength(6);
+    expect(evidence[5]).toMatchObject({ toolName: 'assistant_training_confirmation',
+      summary: status === 'dismissed' ? 'Dismissed. Nothing was applied.' : `Confirmed Training change: ${status.replace('_', ' ')}.`,
+      facts: expect.arrayContaining([{ label: 'Service requests', value: status === 'dismissed' ? 'None'
+        : `garmin: ${status === 'partially_applied' ? 'mixed' : 'queued'} (100)` }]) });
+    expect(JSON.stringify(evidence[5])).not.toMatch(/SECRET|private-reference/);
+    expect(state.conversation?.expiresAt).toBe(chat.expiresAt);
+    // A turn begun before Apply must not overwrite the newly recorded confirmation.
+    expect(following.history[1].evidence).not.toEqual(evidence);
+    await store.completeTurn('owner', following, message('follow-up', 'user', 'What happened?'), message('answer', 'assistant', 'Confirmed result.'));
+    expect((await store.getActiveConversationState('owner')).conversation?.messages[1].evidence).toEqual(evidence);
+    const afterConfirmation = requireStartedTurn(await store.beginTurn('owner', chat.conversationId, undefined, undefined,
+      'coordinate_free', false, true, true, true));
+    expect(afterConfirmation.history[1].evidence).toEqual(evidence);
+    await store.resetConversation('owner');
+    await expect(store.clearTrainingProposal('owner', chat.conversationId, proposal.proposalRef, result))
       .rejects.toMatchObject({ code: 'conversation_changed' });
   });
 

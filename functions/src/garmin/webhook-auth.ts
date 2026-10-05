@@ -38,13 +38,11 @@ export function authenticateGarminWebhook(
       createHash('sha256').update(path).digest(),
       createHash('sha256').update(expectedPath).digest(),
     );
-  // Staged portal rollout only: #800 removes this exact bare-root compatibility.
-  const legacy = path === '/';
-  if (!authenticated && !legacy) {
+  if (!authenticated) {
     response.status(403).send('Forbidden');
     return false;
   }
   // Request URLs can contain the credential. Only log fixed route facts.
-  logger.info('[GarminWebhook] Accepted callback route', { functionName, authenticated, legacy });
+  logger.info('[GarminWebhook] Accepted callback route', { functionName, authenticated, legacy: false });
   return true;
 }
