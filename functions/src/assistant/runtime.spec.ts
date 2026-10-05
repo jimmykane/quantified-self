@@ -133,8 +133,17 @@ describe('Training preview model-tool selection', () => {
   });
   it('selects the complete recipe for explicit early Lap and ordinary edits without granting delivery authority', () => {
     for (const prompt of ['Create a running workout and allow early Lap on the intervals.',
-      'Update my workout title.', 'Change the pace target on my workout.', 'Disable early Lap on my workout.'])
-      expect(selectAssistantTrainingPreviewTool(prompt)).toBe('preview_planned_workout_v3_change');
+      'Update my workout title.', 'Change the pace target on my workout.', 'Disable early Lap on my workout.',
+      'Remove early Lap from my workout.', 'Remove the early Lap option from this session.',
+      'Remove the option to allow early Lap from my workout.',
+      'Delete early Lap permission from my workout.'])
+      expect(selectAssistantTrainingPreviewTool(prompt), prompt).toBe('preview_planned_workout_v3_change');
+    const deletionHistory = [{ role: 'user' as const, text: 'Delete my planned workout.' },
+      { role: 'assistant' as const, text: 'Also remove older, uncompleted copies from your connected services?' }];
+    expect(selectAssistantTrainingPreviewTool('Remove early Lap from my workout.', deletionHistory))
+      .toBe('preview_planned_workout_v3_change');
+    expect(selectAssistantTrainingPreviewTool('Remove my early Lap workout.')).toBe('preview_training_deletion');
+    expect(selectAssistantTrainingPreviewTool('Remove the workout named Early Lap.')).toBe('preview_training_deletion');
     expect(selectAssistantTrainingPreviewTool('Read my early Lap workout.')).not.toBe('preview_planned_workout_v3_change');
     expect(ASSISTANT_SYSTEM_INSTRUCTIONS).toContain('Enable it only on explicit athlete request');
     expect(ASSISTANT_SYSTEM_INSTRUCTIONS).toContain('Preserve all unchanged fields');
@@ -265,6 +274,29 @@ describe('Training preview model-tool selection', () => {
     expect(modelTools).toContain('preview_create_planned_workout');
     expect(modelTools.filter(name => name.startsWith('preview_'))).toEqual(['preview_create_planned_workout']);
     expect(session.tools.map(tool => tool.name)).toContain('preview_training_changes');
+  });
+
+  it('offers only recipe editing when removing early Lap after a deletion clarification', async () => {
+    const { session } = createSession();
+    session.tools.push(...(['preview_planned_workout_v3_change', 'preview_training_deletion'] as const).map(name => ({
+      name, title: name, description: name, inputSchema: { type: 'object' as const, properties: {} },
+    })));
+    let previews: string[] = [];
+    const runtime = createAssistantRuntime({
+      createMcpSession: vi.fn().mockResolvedValue(session),
+      generateAnswer: async input => {
+        previews = input.tools.map(tool => tool.name).filter(name => name.startsWith('preview_'));
+        await input.tools.find(tool => tool.name === 'get_daily_report')!.execute({});
+        return { answer: 'Read the full workout recipe before changing its early Lap option.', visualRequest: { chart: null, map: null } };
+      },
+    });
+    await runtime.answer({ uid: 'owner', appBaseUrl: 'https://quantified-self.io',
+      prompt: 'Remove early Lap from my workout.', timeZone: 'Europe/Helsinki',
+      history: [{ role: 'user', text: 'Delete my planned workout.' },
+        { role: 'assistant', text: 'Also remove older, uncompleted copies from your connected services?' }],
+      trainingPlansEnabled: true, trainingPlanChangesEnabled: true, trainingDeliveryEnabled: true,
+      assertTrainingPlansAccess: vi.fn().mockResolvedValue(undefined) });
+    expect(previews).toEqual(['preview_planned_workout_v3_change']);
   });
 
   it.each([true, false])('keeps deletion cleanup choice %s prepare-only after a follow-up answer', async removePastProviderCopies => {

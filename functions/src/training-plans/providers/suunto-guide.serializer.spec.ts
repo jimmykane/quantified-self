@@ -7,6 +7,7 @@ import { serializeSuuntoGuideJsonV1, serializeSuuntoGuideV2ForRecovery, serializ
 import cyclingV4 from './fixtures/suunto-cycling-v4-recovery.json';
 import swimmingV4 from './fixtures/suunto-swimming-v4-recovery.json';
 import { getDefaultUserUnitSettings, resolveUnitAwareDisplayStat } from '../../../../shared/unit-aware-display';
+import { assessPlannedWorkoutProviderMappingV1 } from '../../../../shared/planned-workout-providers';
 
 const options = { name: 'Synthetic intervals', owner: 'Quantified Self', url: 'https://quantified-self.io/training/plans',
     localDate: '2026-09-24', sourceWorkoutId: 'synthetic-repeat', allowDegraded: false };
@@ -435,6 +436,36 @@ describe('Suunto athlete-authored early Lap boundaries', () => {
     expect(() => serializeSuuntoGuideJsonV1({ version: 1, sport: ActivityTypes.Running,
       nodes: [{ kind: 'repeat', id: 'many', count: 100, steps: Array.from({ length: 10 }, (_, i) => ({
         ...step, id: `work-${i}`, ending: { kind: 'time', seconds: 60, allowEarlyLap: true } })) }] }, options)).toThrow('1000-screen');
+  });
+  it('accepts compact repeats when prescribed fields leave no manual-lap average', () => {
+    const recipe: WorkoutStructureV1 = { version: 1, sport: ActivityTypes.Running,
+      nodes: [{ kind: 'repeat', id: 'many', count: 100, steps: Array.from({ length: 10 }, (_, i) => ({
+        ...step, id: `work-${i}`, ending: { kind: 'time', seconds: 60, allowEarlyLap: true }, note: 'Stay relaxed',
+        targets: [{ kind: 'heart-rate', mode: 'absolute', minimumBpm: 120, maximumBpm: 140 },
+          { kind: 'cadence', mode: 'absolute', minimumRpm: 80, maximumRpm: 90 }],
+      })) }] };
+    expect(assessPlannedWorkoutProviderMappingV1('suunto', recipe).level).toBe('exact');
+    const guide = serializeSuuntoGuideJsonV1(recipe, options).artifact;
+    expect(guide.steps).toHaveLength(2);
+    expect(guide.steps[0]).toMatchObject({ type: 'repeat', times: 100 });
+    if (guide.steps[0].type !== 'repeat') throw new Error('Expected compact repeat');
+    expect(guide.steps[0].steps.flatMap(screen => screen.fields).some(field => 'window' in field)).toBe(false);
+    expect(JSON.stringify(guide)).not.toContain('createManualLap');
+    // One selected average elsewhere requires boundaries across all occurrences.
+    expect(() => serializeSuuntoGuideJsonV1({ ...recipe, nodes: [...recipe.nodes,
+      { ...step, id: 'average' }] }, options)).toThrow('1000-screen');
+  });
+  it('accepts exactly 1000 expanded screens and rejects one more', () => {
+    const recipe: WorkoutStructureV1 = { version: 1, sport: ActivityTypes.Running, nodes: [
+      { kind: 'repeat', id: 'many', count: 90, steps: Array.from({ length: 10 }, (_, i) => ({
+        ...step, id: `work-${i}`, ending: { kind: 'time', seconds: 60, ...(i === 0 ? { allowEarlyLap: true } : {}) },
+      })) }, ...Array.from({ length: 9 }, (_, i) => ({ ...step, id: `finish-${i}` })),
+    ] };
+    expect(assessPlannedWorkoutProviderMappingV1('suunto', recipe).level).toBe('exact');
+    expect(serializeSuuntoGuideJsonV1(recipe, options).artifact.steps).toHaveLength(1000);
+    const tooLarge = { ...recipe, nodes: [...recipe.nodes, { ...step, id: 'extra' }] };
+    expect(assessPlannedWorkoutProviderMappingV1('suunto', tooLarge).level).toBe('unsupported');
+    expect(() => serializeSuuntoGuideJsonV1(tooLarge, options)).toThrow('1000-screen');
   });
 });
 

@@ -1,5 +1,8 @@
 import { ActivityTypes, DataDuration } from '@sports-alliance/sports-lib';
 import { resolveUnitAwareDisplayStat } from '../../../../shared/unit-aware-display';
+import { suuntoGuideWatchTextV1 as watchText, suuntoGuideLiveReadingsV1 as sportLiveFields,
+    suuntoGuideMeasuredTargetV1 as measuredTarget, suuntoGuideOptionalReadingsV1, isSuuntoGuideManualLapAverageV1,
+    type SuuntoGuideReadingTypeV1 as SuuntoGuideReadingType } from '../../../../shared/suunto-guide-presentation';
 import {
     parseWorkoutStructureV1,
     allowsEarlyLapV1,
@@ -38,7 +41,6 @@ export type SuuntoGuideFieldV1 =
     | { type: 'targetCadence'; min: number; max: number; title: string };
 
 export type SuuntoGuideLiveFieldType = 'heartRate' | 'power' | 'pace' | 'speed' | 'cadence';
-type SuuntoGuideReadingType = SuuntoGuideLiveFieldType | 'strokeRate';
 type GuidePresentation = 'legacy-v2' | 'live-v3' | 'block-pace-v4' | 'sport-screens-v5' | 'early-lap-v6';
 
 export interface SuuntoGuideFieldsStepV1 {
@@ -131,16 +133,6 @@ function codePointLength(value: string): number {
 
 function truncateCodePoints(value: string, maximum: number): string {
     return Array.from(value).slice(0, maximum).join('');
-}
-
-/** Cosmetic watch-font substitutions only. Never transliterate letters, strip
- * unknown characters, or apply these changes to ownership/identity fields. */
-function watchText(value: string): string {
-    return value.replace(/[\u2010-\u2015]/g, '-')
-        .replace(/[\u2018\u2019]/g, "'")
-        .replace(/[\u201c\u201d]/g, '"')
-        .replace(/\u2026/g, '...')
-        .replace(/[\u00a0\u202f]/g, ' ');
 }
 
 function generatedWatchSubtitle(name: string): string {
@@ -354,39 +346,8 @@ function collectStepIssues(
     });
 }
 
-function sportLiveFields(sport: ActivityTypes): SuuntoGuideLiveFieldType[] {
-    if (sport === ActivityTypes.StrengthTraining) return ['heartRate'];
-    if ([ActivityTypes.Cycling, ActivityTypes.MountainBiking, ActivityTypes.IndoorCycling,
-        ActivityTypes.EBiking, ActivityTypes.Handcycle].includes(sport)) return ['power', 'heartRate', 'speed'];
-    return ['pace', 'heartRate'];
-}
-
-function measuredTarget(target: WorkoutTargetV1, sport: ActivityTypes): SuuntoGuideLiveFieldType | null {
-    // The partner schema documents power/cadence sensors for running/cycling,
-    // not swimming stroke rate or rowing strokes. Preserve authored target
-    // fields, but do not invent a sensor mapping for other sports.
-    const hasPowerCadence = sportLiveFields(sport)[0] === 'power'
-        || [ActivityTypes.Running, ActivityTypes.TrailRunning, ActivityTypes.Treadmill].includes(sport);
-    switch (target.kind) {
-        case 'heart-rate': return 'heartRate';
-        case 'power': return hasPowerCadence ? 'power' : null;
-        case 'speed': return target.presentation === 'pace' ? 'pace' : 'speed';
-        case 'cadence': return hasPowerCadence ? 'cadence' : null;
-    }
-}
-
-function sportScreenReadings(sport: ActivityTypes): SuuntoGuideReadingType[] {
-    if (sportLiveFields(sport)[0] === 'power') return ['power', 'heartRate', 'cadence', 'speed'];
-    if ([ActivityTypes.Swimming, ActivityTypes.OpenWaterSwimming].includes(sport)) {
-        // Suunto documents swimming strokeRate separately from running/cycling
-        // cadence. It is contextual watch data, never a cadence-target mapping.
-        return ['pace', 'strokeRate', 'heartRate'];
-    }
-    return sportLiveFields(sport);
-}
-
 function sportReadingField(type: SuuntoGuideReadingType, sport: ActivityTypes): SuuntoGuideFieldV1 {
-    if (type === 'pace' || type === 'strokeRate' || (type === 'power' && sportLiveFields(sport)[0] === 'power')) {
+    if (type === 'strokeRate' || ((type === 'pace' || type === 'power') && isSuuntoGuideManualLapAverageV1(type, sport))) {
         return { type, title: type === 'pace' ? 'Avg pace' : type === 'power' ? 'Avg pwr' : 'Avg strk',
             window: 'manualLap', aggregate: 'average' };
     }
@@ -394,19 +355,6 @@ function sportReadingField(type: SuuntoGuideReadingType, sport: ActivityTypes): 
         heartRate: 'HR', power: 'Power', pace: 'Pace', speed: 'Speed', cadence: 'Cadence',
     };
     return { type, title: titles[type] };
-}
-
-function sportStepReadings(step: WorkoutStepV1, sport: ActivityTypes, capacity: number): SuuntoGuideFieldV1[] {
-    const defaults = sportScreenReadings(sport);
-    const counterparts = step.targets.flatMap(target => {
-        const type = measuredTarget(target, sport);
-        return type ? [type] : [];
-    });
-    // Preserve primary/secondary prescription order ahead of contextual fields.
-    // Field support does not establish that a particular watch has a sensor.
-    const candidates = [...new Set<SuuntoGuideReadingType>(step.targets.length
-        ? [...counterparts, 'heartRate', ...defaults] : defaults)];
-    return candidates.slice(0, capacity).map(type => sportReadingField(type, sport));
 }
 
 function notificationText(step: WorkoutStepV1): string {
@@ -456,7 +404,7 @@ function stepToSuunto(step: WorkoutStepV1, sport: ActivityTypes, presentation: G
             heartRate: 'HR', power: 'Power', pace: 'Pace', speed: 'Speed', cadence: 'Cadence',
         };
         const live: SuuntoGuideFieldV1[] = ['sport-screens-v5', 'early-lap-v6'].includes(presentation)
-            ? sportStepReadings(step, sport, 5 - fields.length)
+            ? suuntoGuideOptionalReadingsV1(step, sport).map(type => sportReadingField(type, sport))
             : candidates.slice(0, 5 - fields.length)
             .map(type => type === 'pace' && presentation === 'block-pace-v4'
                 ? { type, title: 'Avg pace', window: 'manualLap', aggregate: 'average' }

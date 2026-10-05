@@ -325,13 +325,20 @@ function removesWorkoutFromPlan(prompt: string): boolean {
   return /\bremove\b[^.!?;\n]{0,100}\bfrom\b[^.!?;\n]{0,40}\bplans?\b/iu.test(prompt);
 }
 
+function removesEarlyLapPermission(prompt: string): boolean {
+  // The object being removed is the option, not the workout. Keep actual
+  // requests such as "remove my early Lap workout" on the deletion path.
+  return /\b(?:remove|delete)\s+(?:(?!\b(?:plans?|workouts?|sessions?)\b)[^.!?;\n]){0,60}\bearly[-\s]*lap\b(?!\s+(?:planned\s+)?(?:plans?|workouts?|sessions?)\b)/iu.test(prompt);
+}
+
 function canBeTrainingDeletionReply(prompt: string): boolean {
   return prompt.length <= 160
     && !/\?|^\s*(?:please\s+)?(?:what|how|why|when|where|who|can|could|would|should|show|list|tell|check|review|read|explain|compare|analy[sz]e|recommend)\b/iu.test(prompt)
     && !/\b(?:cancel|stop|forget|never\s*mind)\b/iu.test(prompt)
     && !/\b(?:don't|don’t|do not|never)\s+(?:delete|remove)\b[^.!?;\n]{0,60}\b(?:plans?|workouts?|sessions?)\b(?!\s+copies\b)/iu.test(prompt)
     && !/\b(?:create|add|build|make|draft|propose|suggest|schedule|edit|update|modify|change|move|copy|duplicate|shift|send|sync|archive|pause|activate|rename|restore|enable|disable|resume|retry|library|templates?)\b/iu.test(prompt)
-    && !removesWorkoutFromPlan(prompt);
+    && !removesWorkoutFromPlan(prompt)
+    && !removesEarlyLapPermission(prompt);
 }
 
 export function selectAssistantTrainingPreviewTool(prompt: string,
@@ -368,7 +375,8 @@ export function selectAssistantTrainingPreviewTool(prompt: string,
   }
   if (/\b(?:delete|remove)\b[\s\S]{0,80}\b(?:plans?|workouts?|sessions?)\b/u.test(question)
     && !/\b(?:create|add|build|make|draft|propose|suggest|schedule|edit|update|modify|change|move|copy|duplicate|shift|archive|pause|activate|rename|restore|send|sync|enable|disable|stop|resume|retry|cancel|forget)\b/u.test(question)
-    && !removesWorkoutFromPlan(question)) {
+    && !removesWorkoutFromPlan(question)
+    && !removesEarlyLapPermission(question)) {
     return 'preview_training_deletion';
   }
   const createsPlan = /\b(create|add|build|make)\s+(?:(?:a|an|new|my|the)\s+){0,3}(?:training\s+)?plan\b/u.test(question);
@@ -380,7 +388,9 @@ export function selectAssistantTrainingPreviewTool(prompt: string,
   // mutation. Select those operations before matching sport words in context.
   if (createsPlan || changesPlan || multipleWorkouts) return 'preview_training_changes';
   const authorsEarlyLap = /\b(?:early[-\s]*lap|allow[\s\S]{0,30}lap|lap[\s\S]{0,30}(?:early|button))\b/u.test(question);
-  const authorsWorkout = (authorsEarlyLap && /\b(?:allow|enable|disable|remove|turn|set)\b/u.test(question)) || /\b(create|add|schedule|make|build|draft|propose|suggest|edit|update|modify|change)\b/u.test(question);
+  const authorsWorkout = removesEarlyLapPermission(question)
+    || (authorsEarlyLap && /\b(?:allow|enable|disable|turn|set)\b/u.test(question))
+    || /\b(create|add|schedule|make|build|draft|propose|suggest|edit|update|modify|change)\b/u.test(question);
   const deliveryOnly = /\b(send|sync|enable|stop|retry|approve)\b/u.test(question) && !authorsWorkout;
   const changesDeliverySettings = /\b(change|edit|update|modify)\s+(?:(?:the|my|existing)\s+)?(?:sync|delivery|provider)\b/u.test(question);
   if (deliveryOnly || changesDeliverySettings) return 'preview_training_changes';

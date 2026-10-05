@@ -1662,7 +1662,9 @@ one `createManualLap`; a button exit enters the variant without that command bec
 lap. The manual transition is checked first if both conditions coincide. Manual-only exits add no lap. The next pass,
 post-repeat step and completion boundary follow the same rule. These private occurrence IDs/branches never enter the
 canonical recipe, MCP or Assistant output. Guides without manual-lap averages keep compact OR transitions without
-automatic laps. Compatibility conservatively caps the possible expanded Guide at the provider's 1000 screens.
+automatic laps. Compatibility shares optional-reading selection with the serializer and caps the actual expanded Guide
+at the provider's 1000 screens. A compact repeat is not rejected merely because its iteration count would exceed that
+bound if expanded; one selected manual-lap average anywhere in the Guide requires boundaries across all occurrences.
 
 Absent/false recipes keep the same v5 Guide JSON. Frozen v2–v5 serializers and exact journal digests remain
 available for uncertain-acceptance recovery; historical serializers reject true. Unknown/content-mismatched digests
@@ -1680,7 +1682,9 @@ this field is present, including explicit false, instead of dropping it. The foc
 counts and removal from previously enabled steps, and reuse the existing owner/connection/grant/revision/expiry-bound,
 idempotent, separately confirmed Apply. No new mutation kind, provider action, OAuth scope or transport authority is
 added. Assistant selects the latest full recipe/editor for a non-strength edit, preserves unchanged fields and enables
-Lap only on explicit athlete intent; it remains prepare-only with app-owned confirmation. Provider delivery is a
+Lap only on explicit athlete intent; removing the early-Lap option routes to recipe editing, including after an earlier
+deletion clarification, while removing the workout itself retains the deletion path. It remains prepare-only with
+app-owned confirmation. Provider delivery is a
 separately authorized proposal after creation. Training, Activity and cross-domain plugin skills discover the latest
 advertised tools and keep planned recipes distinct from recorded laps/completion.
 
@@ -1720,7 +1724,8 @@ Additional authored targets and ZoneSense remain separate in #773.
   already creates that lap, so the next step omits `createManualLap`. The first screen starts with recording and creates
   no zero-length opening lap. The non-timed final screen closes an automatically ended final block, but not a manually
   ended one. Laps are source-recorded and can appear in the FIT/activity; they are not adherence or QS completion proof.
-  Pressing Lap during a timed/distance step resets the average early without advancing the prescribed step. Guides
+  With early Lap absent/false, pressing Lap during a timed/distance step resets the average early without advancing the
+  prescribed step. With true, v6 advances through the button path described above. Guides
   without any manual-lap average, including HR-only strength, emit no automatic laps. Long text-only steps keep their
   instructions and participate in boundaries only when another step in the Guide uses a manual-lap average.
   Native repeats need different incoming-boundary handling when the first pass's predecessor differs from the last

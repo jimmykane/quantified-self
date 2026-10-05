@@ -1824,4 +1824,7 @@ it('explains separately approved activity description access and event semantics
     expect(content).toContain('Suunto delivery supports the early-Lap option');
     expect(content).toContain('Garmin, COROS and Wahoo');
     expect(content).toContain('explicitly review enabling or removing');
+    expect(content).toContain('With **Allow early Lap** off, pressing Lap');
+    expect(content).toContain('With it enabled, Lap ends that step early');
+    expect(content).toContain('generated time/distance alerts also mention Lap');
   });

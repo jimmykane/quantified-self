@@ -129,7 +129,9 @@ Timed/distance endings separately support athlete-authored `allowEarlyLap?: bool
 Lap, while absent/false retain the numeric ending. The editor starts unchecked and never adds it to manual, repetition
 or kJ endings. Suunto v6 implements documented OR transitions; its private branch screens reuse button-created laps
 and create exactly one lap on automatic boundaries when block averages need them. Fixed repeats preserve their authored
-prescription while private occurrence screens remain within a conservative 1000-screen cap. Garmin, COROS and Wahoo
+prescription while private occurrence screens remain within the 1000-screen cap. Compatibility uses the same selected
+readings as serialization: Guides without manual-lap averages keep compact repeats, while one selected average requires
+boundary paths across all occurrences. Garmin, COROS and Wahoo
 reject true before HTTP because faithful per-step OR support is unverified. Device-global skip/auto-advance controls do
 not establish it. False/absent mappings remain unchanged. This adds no provider, scope, new consent or completion claim.
 
