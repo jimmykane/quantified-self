@@ -688,7 +688,7 @@ describe('EventCardComponent', () => {
         expect(component.hasDurabilityFlag()).toBe(false);
     });
 
-    it('keeps the performance area available to explain missing durability output', () => {
+    it('does not render an empty performance area for missing durability output alone', () => {
         mockPerformanceCurveDataService.getAvailability.mockReturnValue({
             hasPowerCurve: false,
             hasDurability: false,
@@ -701,8 +701,8 @@ describe('EventCardComponent', () => {
 
         expect(component.hasDurabilityFlag()).toBe(false);
         expect(component.durabilityOutputUnavailableFlag()).toBe(true);
-        expect(component.hasPerformanceChartsFlag()).toBe(true);
-        expect(fixture.nativeElement.querySelector('app-event-performance-charts')).not.toBeNull();
+        expect(component.hasPerformanceChartsFlag()).toBe(false);
+        expect(fixture.nativeElement.querySelector('app-event-performance-charts')).toBeNull();
     });
 
     it('should compute hasCadencePowerFlag as false when no cadence-power data exists', () => {

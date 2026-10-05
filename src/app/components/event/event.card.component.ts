@@ -140,7 +140,9 @@ export class EventCardComponent implements OnInit {
 
   public hasPerformanceChartsFlag = computed(() =>
     this.hasIntensityZonesFlag()
-      || this.performanceCurveAvailability().hasAny
+      || this.hasPowerCurveFlag()
+      || this.hasDurabilityFlag()
+      || this.hasCadencePowerFlag()
   );
 
   public hasDevicesFlag = computed(() =>
