@@ -175,7 +175,6 @@ import {
   TRAINING_WORKSPACE_DERIVED_METRIC_KINDS,
   type DashboardDerivedMetricsState,
 } from '../../services/dashboard-derived-metrics.service';
-import { environment } from '../../../environments/environment';
 
 interface TrainingMixDisciplineViewModel extends TrainingMixDetailsViewModel {
   summary: DashboardTrainingDisciplineSummary;
@@ -329,7 +328,6 @@ function createEmptyTrainingLoadMetricsViewModel(): TrainingLoadMetricsViewModel
   standalone: false,
 })
 export class TrainingWorkspaceComponent implements OnInit, OnDestroy {
-  public readonly trainingFeedbackMailtoHref = `mailto:${environment.supportEmail}?subject=${encodeURIComponent('Training feedback')}`;
   public isLoading = true;
   public derivedState: DashboardDerivedMetricsState = createDashboardDerivedMetricsMissingState();
   public trainingRecovery = createEmptyTrainingRecoveryViewModel();

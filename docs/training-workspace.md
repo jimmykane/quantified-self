@@ -200,8 +200,8 @@ This document is the implementation guide for the authenticated `/training` work
 engineers, data engineers, reviewers, and AI coding agents. Update it whenever the Training product contract, a derived
 metric payload, the sports-lib durability protocol, or the refresh pipeline changes.
 
-Private [Timeline notes](timeline-notes.md) are available from the compact secondary header action to every signed-in
-account, independently of Training plan checks. The workspace supplies a shared note context to readiness, load/Form,
+Private [Timeline notes](timeline-notes.md) are managed from Dashboard, Health, or Calendar, independently of Training
+plan checks. Training keeps a hidden shared notes workspace outside its header to supply the bounded note context to readiness, load/Form,
 freshness forecast, body-weight, power-system history, swimming trends and weekly durability charts. Notes preserve each
 chart's existing calendar convention; weekly tooltips retain actual dates. They never change Training inputs, formulas,
 readiness, forecasts, persisted snapshots or sport filters. The manager owns editing and account-scoped settings; charts
@@ -428,8 +428,10 @@ Form history and canonical parent/activity join.
 - User help copy: `src/app/shared/help.content.ts`
 
 Training is available to signed-in users from the sidenav. Its route header uses the shared `app-page-header` route
-primitive, with a Feedback action that opens the configured support email with a Training-specific subject, plus direct
-**Calendar** and **Dashboard** route actions. The Dashboard header does not duplicate the Training or Health navigation
+primitive for the title, data/status context, and conditional derived-metrics **Retry** action. Timeline notes, Feedback,
+Calendar, and Dashboard shortcuts are omitted from this header; use app navigation for Calendar and Dashboard and the
+Training help article's email action for feedback. This presentation changes no chart-note reads, Training calculations,
+planning/MCP contract, consent, or mutation. The Dashboard header does not duplicate the Training or Health navigation
 links; its calendar icon opens the mini calendar. Dashboard does not add curated Training snapshots as default
 Dashboard dependencies or configurable tiles.
 

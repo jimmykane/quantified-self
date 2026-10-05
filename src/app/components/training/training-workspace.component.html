@@ -1,4 +1,6 @@
 <main class="training-workspace qs-workspace-page" aria-labelledby="training-title">
+  <!-- Keep the bounded chart-note context without exposing its manager controls on Training. -->
+  <app-timeline-notes-workspace #timelineNotes class="training-notes-context" hidden />
   <app-page-header
     class="training-page-header"
     title="Training"
@@ -21,9 +23,8 @@
         <span><strong>{{ derivedMetricsRouteStatus.title }}</strong> · {{ derivedMetricsRouteStatus.description }}</span>
       </div>
     }
-    <div pageHeaderActions class="training-page-actions">
-      <app-timeline-notes-workspace #timelineNotes />
-      @if (derivedMetricsRouteStatus?.showRetry) {
+    @if (derivedMetricsRouteStatus?.showRetry) {
+      <div pageHeaderActions class="training-page-actions">
         <button
           mat-stroked-button
           type="button"
@@ -34,35 +35,8 @@
           <mat-icon aria-hidden="true">refresh</mat-icon>
           <span class="training-derived-metrics-retry-label">Retry</span>
         </button>
-      }
-      <a
-        mat-button
-        class="training-feedback-action"
-        [href]="trainingFeedbackMailtoHref"
-        aria-label="Send feedback about Training to support"
-      >
-        <mat-icon aria-hidden="true">feedback</mat-icon>
-        <span class="training-feedback-action-label">Feedback</span>
-      </a>
-      <a
-        mat-button
-        class="training-calendar-action"
-        routerLink="/calendar"
-        aria-label="Open activity calendar"
-      >
-        <mat-icon aria-hidden="true">calendar_month</mat-icon>
-        <span class="training-calendar-action-label">Calendar</span>
-      </a>
-      <a
-        mat-button
-        class="training-dashboard-action"
-        routerLink="/dashboard"
-        aria-label="Return to dashboard"
-      >
-        <mat-icon aria-hidden="true">dashboard</mat-icon>
-        <span class="training-dashboard-action-label">Dashboard</span>
-      </a>
-    </div>
+      </div>
+    }
   </app-page-header>
 
   <nav class="training-destination-navigation" aria-label="Training analysis destination">

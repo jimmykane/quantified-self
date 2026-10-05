@@ -707,7 +707,7 @@ describe('help.content', () => {
     expect(calendarSection?.content).toContain('same sleep-stage breakdown used in Health');
     expect(calendarSection?.content).toContain('full-width **Calendar** section');
     expect(calendarSection?.content).toContain('**Today** card opens a compact month calendar in a bottom sheet');
-    expect(calendarSection?.content).toContain('Dashboard and Training headers also link to the full [Calendar](/calendar)');
+    expect(calendarSection?.content).toContain('Open the full [Calendar](/calendar) from the app navigation or the dashboard Calendar section');
     expect(calendarSection?.content).toContain('without changing their saved settings');
     expect(calendarSection?.content).toContain('out of suggestions until you add it manually');
     expect(calendarSection?.content).toContain('show overlapping activity-group circles');
@@ -982,7 +982,7 @@ describe('help.content', () => {
     expect(gettingStartedSection?.content).toContain('**Training** is your fixed workspace');
     expect(gettingStartedSection?.content).toContain('[Training analysis guide](/help#training-analysis)');
     expect(gettingStartedSection?.content).toContain('[Training Analysis overview](/features/training-analysis)');
-    expect(gettingStartedSection?.content).toContain('**Feedback** action to email support');
+    expect(gettingStartedSection?.content).toContain('**Email Training Feedback** action');
     expect(gettingStartedSection?.content).not.toContain('**Training (Beta)**');
     expect(gettingStartedSection?.links).toContainEqual({
       label: 'Training analysis guide',

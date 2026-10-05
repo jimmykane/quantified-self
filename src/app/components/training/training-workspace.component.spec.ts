@@ -188,16 +188,12 @@ describe('TrainingWorkspaceComponent', () => {
     expect(element.querySelector('#training-title')?.textContent?.trim()).toBe('Training');
     expect(element.querySelector('.qs-page-header__leading-icon')?.textContent?.trim()).toBe('monitoring');
     expect(element.querySelector('.qs-page-header__subtitle')).toBeNull();
-    const feedbackAction = element.querySelector('.training-feedback-action');
-    expect(feedbackAction?.getAttribute('aria-label')).toBe('Send feedback about Training to support');
-    expect(feedbackAction?.getAttribute('href')).toContain('mailto:');
-    expect(feedbackAction?.getAttribute('href')).toContain('subject=Training%20feedback');
-    expect(feedbackAction?.getAttribute('target')).toBeNull();
-    expect(feedbackAction?.getAttribute('rel')).toBeNull();
-    const calendarAction = element.querySelector('.training-calendar-action');
-    expect(calendarAction?.getAttribute('aria-label')).toBe('Open activity calendar');
-    expect(calendarAction?.querySelector('mat-icon')?.textContent?.trim()).toBe('calendar_month');
-    expect(element.querySelector('.training-dashboard-action')?.getAttribute('aria-label')).toBe('Return to dashboard');
+    expect(element.querySelector('.training-feedback-action')).toBeNull();
+    expect(element.querySelector('.training-calendar-action')).toBeNull();
+    expect(element.querySelector('.training-dashboard-action')).toBeNull();
+    expect(element.querySelector('.training-page-actions')).toBeNull();
+    expect(element.querySelector('app-timeline-notes-workspace')?.hasAttribute('hidden')).toBe(true);
+    expect(element.querySelector('app-page-header app-timeline-notes-workspace')).toBeNull();
     const sportVisibilityAction = element.querySelector('.training-sport-visibility-action');
     expect(sportVisibilityAction?.getAttribute('aria-label')).toContain('Choose sport shortcuts.');
     expect(sportVisibilityAction?.textContent).toContain('Shortcuts');
@@ -216,12 +212,7 @@ describe('TrainingWorkspaceComponent', () => {
     expect(element.textContent).toContain('Viewing All training · All recorded training');
     expect(element.textContent).not.toContain('Best build vs now');
     const template = readFileSync(resolve(process.cwd(), 'src/app/components/training/training-workspace.component.html'), 'utf8');
-    for (const actionClass of [
-      'training-sport-visibility-action',
-      'training-feedback-action',
-      'training-calendar-action',
-      'training-dashboard-action',
-    ]) {
+    for (const actionClass of ['training-sport-visibility-action']) {
       expect(template).toMatch(new RegExp(`<[^>]+mat-button[^>]+class="${actionClass}"`, 's'));
       expect(template).not.toMatch(new RegExp(`<[^>]+mat-stroked-button[^>]+class="${actionClass}"`, 's'));
     }
@@ -318,7 +309,7 @@ describe('TrainingWorkspaceComponent', () => {
     expect(subtitle?.previousElementSibling?.querySelector('#training-title')).toBe(title);
   });
 
-  it('keeps every route-header action in one compact row through tablet widths', () => {
+  it('keeps retry and sport shortcut actions compact through tablet widths', () => {
     const stylePath = resolve(process.cwd(), 'src/app/components/training/training-workspace.component.scss');
     const styles = readFileSync(stylePath, 'utf8');
     const compactActionsStart = styles.indexOf('@media (max-width: 800px)');
@@ -327,12 +318,11 @@ describe('TrainingWorkspaceComponent', () => {
 
     expect(compactActionsStart).toBeGreaterThan(-1);
     expect(extraSmallLayoutStart).toBeGreaterThan(compactActionsStart);
-    expect(compactActionsStyles).toContain('.training-sport-visibility-action,');
-    expect(compactActionsStyles).toContain('.training-sport-visibility-action-label,');
-    expect(compactActionsStyles).toContain('.training-page-actions .training-sport-visibility-action mat-icon,');
-    expect(compactActionsStyles).toContain('.training-calendar-action,');
-    expect(compactActionsStyles).toContain('.training-calendar-action-label,');
-    expect(compactActionsStyles).toContain('.training-page-actions .training-calendar-action mat-icon,');
+    expect(compactActionsStyles).toContain('.training-sport-visibility-action {');
+    expect(compactActionsStyles).toContain('.training-sport-visibility-action-label {');
+    expect(compactActionsStyles).toContain('.training-page-actions .training-sport-visibility-action mat-icon {');
+    expect(compactActionsStyles).toContain('.training-derived-metrics-retry,');
+    expect(compactActionsStyles).not.toContain('.training-calendar-action');
     expect(compactActionsStyles).toContain('flex-wrap: nowrap;');
     expect(compactActionsStyles).toContain('width: 48px;');
   });

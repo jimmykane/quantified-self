@@ -15,6 +15,7 @@
 }
 
 .training-workspace { color: var(--mat-sys-on-surface); font-size: var(--training-inter-base-font-size); }
+.training-notes-context { display: none; }
 .training-section-heading, .training-capacity-panel header { display: flex; align-items: center; justify-content: space-between; gap: 16px; }
 .training-page-header { margin-bottom: 32px; }
 .training-page-actions { display: flex; align-items: center; justify-content: flex-end; gap: 8px; flex-wrap: wrap; }
@@ -380,10 +381,7 @@ dd { margin: 5px 0 0; font-size: var(--training-card-stat-font-size); font-weigh
   }
 
   .training-derived-metrics-retry,
-  .training-sport-visibility-action,
-  .training-feedback-action,
-  .training-calendar-action,
-  .training-dashboard-action {
+  .training-sport-visibility-action {
     align-items: center;
     display: inline-flex;
     justify-content: center;
@@ -393,18 +391,12 @@ dd { margin: 5px 0 0; font-size: var(--training-card-stat-font-size); font-weigh
   }
 
   .training-derived-metrics-retry-label,
-  .training-sport-visibility-action-label,
-  .training-feedback-action-label,
-  .training-calendar-action-label,
-  .training-dashboard-action-label {
+  .training-sport-visibility-action-label {
     display: none;
   }
 
   .training-page-actions .training-derived-metrics-retry mat-icon,
-  .training-page-actions .training-sport-visibility-action mat-icon,
-  .training-page-actions .training-feedback-action mat-icon,
-  .training-page-actions .training-calendar-action mat-icon,
-  .training-page-actions .training-dashboard-action mat-icon {
+  .training-page-actions .training-sport-visibility-action mat-icon {
     margin-inline: 0;
   }
 }
