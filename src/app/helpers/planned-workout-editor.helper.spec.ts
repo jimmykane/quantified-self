@@ -1,4 +1,4 @@
-import { ActivityTypes, DistanceUnits, PaceUnits, SwimPaceUnits } from '@sports-alliance/sports-lib';
+import { ActivityTypes, DistanceUnits, PaceUnits, SpeedUnits, SwimPaceUnits } from '@sports-alliance/sports-lib';
 import { describe, expect, it } from 'vitest';
 import type { WorkoutStructureV1 } from '@shared/planned-workout';
 import { normalizeUserUnitSettings } from '@shared/unit-aware-display';
@@ -6,6 +6,8 @@ import {
   createManualWorkoutEditorStep,
   changeManualWorkoutEditorSport,
   changeManualWorkoutEditorStepEnding,
+  changeManualWorkoutEditorStepTarget,
+  manualWorkoutEditorSpeedUnit,
   formatManualWorkoutStructure,
   manualWorkoutEditorToStructure,
   workoutStructureToManualEditor,
@@ -14,6 +16,96 @@ import {
 } from './planned-workout-editor.helper';
 
 describe('manual planned-workout editor conversion', () => {
+  it.each([ActivityTypes.Running, ActivityTypes.TrailRunning, ActivityTypes.Treadmill,
+    ActivityTypes.Cycling, ActivityTypes.IndoorCycling, ActivityTypes.MountainBiking])('round-trips editable cadence for %s', sport => {
+    const value: ManualWorkoutEditorValue = { title: 'Cadence intervals', localDate: '2026-10-05', sport,
+      nodes: [{ ...createManualWorkoutEditorStep('cadence'), targetKind: 'cadence', targetMinimum: 80, targetMaximum: 95 }] };
+    const structure = manualWorkoutEditorToStructure(value);
+    expect(structure.nodes[0]).toMatchObject({ targets: [{ kind: 'cadence', mode: 'absolute', minimumRpm: 80, maximumRpm: 95 }] });
+    const reopened = workoutStructureToManualEditor(value.title, value.localDate, structure);
+    expect(reopened.nodes[0]).toMatchObject({ targetKind: 'cadence', targetMinimum: 80, targetMaximum: 95 });
+    expect(manualWorkoutEditorToStructure(reopened)).toEqual(structure);
+    for (const nextSport of [ActivityTypes.Swimming, ActivityTypes.Rowing, ActivityTypes.Hiking]) {
+      expect(manualWorkoutEditorToStructure(changeManualWorkoutEditorSport(reopened, nextSport)).nodes).toEqual(structure.nodes);
+    }
+  });
+
+  it.each([[null, 90], [NaN, 90], [-1, 90], [95, 80]])('rejects invalid cadence bounds %s–%s', (minimum, maximum) => {
+    const value: ManualWorkoutEditorValue = { title: 'Invalid cadence', localDate: '2026-10-05', sport: ActivityTypes.Cycling,
+      nodes: [{ ...createManualWorkoutEditorStep('invalid'), targetKind: 'cadence', targetMinimum: minimum, targetMaximum: maximum }] };
+    expect(() => manualWorkoutEditorToStructure(value)).toThrow();
+  });
+
+  it('clears incompatible numeric bounds when switching to or from cadence', () => {
+    const pace: ManualWorkoutEditorStep = { ...createManualWorkoutEditorStep('pace'), targetKind: 'pace', targetMinimum: 4, targetMaximum: 5 };
+    const cadence = changeManualWorkoutEditorStepTarget(pace, 'cadence', ActivityTypes.Running);
+    expect(cadence).toMatchObject({ targetKind: 'cadence', targetMinimum: null, targetMaximum: null });
+    expect(changeManualWorkoutEditorStepTarget({ ...cadence, targetMinimum: 170, targetMaximum: 180 }, 'speed', ActivityTypes.Running))
+      .toMatchObject({ targetKind: 'speed', targetMinimum: null, targetMaximum: null });
+  });
+
+  it.each([
+    { unit: SpeedUnits.KilometersPerHour, label: 'km/h', minimum: 18, maximum: 36, factor: 3.6 },
+    { unit: SpeedUnits.MilesPerHour, label: 'mph', minimum: 10, maximum: 20, factor: 3600 / 1609.344 },
+    { unit: SpeedUnits.MetersPerSecond, label: 'm/s', minimum: 5, maximum: 10, factor: 1 },
+    { unit: SpeedUnits.FeetPerSecond, label: 'ft/s', minimum: 10, maximum: 20, factor: 1 / .3048 },
+    { unit: SpeedUnits.Knots, label: 'kn', minimum: 10, maximum: 20, factor: 3600 / 1852 },
+  ])('stores cycling speed entered in $label as canonical m/s', ({ unit, label, minimum, maximum, factor }) => {
+    const units = normalizeUserUnitSettings({ distanceUnits: DistanceUnits.Miles,
+      paceUnits: [PaceUnits.MinutesPerMile], speedUnits: [unit] });
+    const value: ManualWorkoutEditorValue = { title: 'Cycling intervals', localDate: '2026-10-05', sport: ActivityTypes.Cycling,
+      nodes: [{ ...createManualWorkoutEditorStep('ride'), targetKind: 'speed', targetMinimum: minimum, targetMaximum: maximum }] };
+    const structure = manualWorkoutEditorToStructure(value, units);
+    const node = structure.nodes[0];
+    if (node.kind !== 'step' || node.targets[0].kind !== 'speed' || node.targets[0].mode !== 'absolute') throw new Error('Expected speed target');
+    const target = node.targets[0];
+    expect(manualWorkoutEditorSpeedUnit(units)).toBe(label);
+    expect(target).toMatchObject({ kind: 'speed', mode: 'absolute', presentation: 'speed' });
+    expect(target.minimumMetersPerSecond).toBeCloseTo(minimum / factor, 10);
+    expect(target.maximumMetersPerSecond).toBeCloseTo(maximum / factor, 10);
+    expect(workoutStructureToManualEditor(value.title, value.localDate, structure, units).nodes[0])
+      .toMatchObject({ targetKind: 'speed', targetMinimum: minimum, targetMaximum: maximum });
+  });
+
+  it('preserves exact saved speed through reopen and sport changes', () => {
+    const units = normalizeUserUnitSettings({ speedUnits: [SpeedUnits.MilesPerHour] });
+    const structure: WorkoutStructureV1 = { version: 1, sport: ActivityTypes.Cycling,
+      nodes: [{ kind: 'step', id: 'precise', purpose: 'work', ending: { kind: 'time', seconds: 60 },
+        targets: [{ kind: 'speed', mode: 'absolute', presentation: 'speed', minimumMetersPerSecond: 5.123456789,
+          maximumMetersPerSecond: 10.987654321 }] }] };
+    const editor = workoutStructureToManualEditor('Exact speed', '2026-10-05', structure, units);
+    expect(manualWorkoutEditorToStructure(editor, units)).toEqual(structure);
+    const indoor = changeManualWorkoutEditorSport(editor, ActivityTypes.IndoorCycling, units);
+    expect(manualWorkoutEditorToStructure(indoor, units).nodes).toEqual(structure.nodes);
+  });
+
+  it('converts pace and speed choices without changing the physical target range', () => {
+    const step: ManualWorkoutEditorStep = { ...createManualWorkoutEditorStep('pace'), targetKind: 'pace', targetMinimum: 4, targetMaximum: 5 };
+    const speed = changeManualWorkoutEditorStepTarget(step, 'speed', ActivityTypes.Cycling);
+    expect(speed).toMatchObject({ targetKind: 'speed', targetMinimum: 12, targetMaximum: 15 });
+    const pace = changeManualWorkoutEditorStepTarget(speed, 'pace', ActivityTypes.Cycling);
+    expect(pace).toMatchObject({ targetKind: 'pace', targetMinimum: 4, targetMaximum: 5 });
+    const value: ManualWorkoutEditorValue = { title: 'Presentation', localDate: '2026-10-05', sport: ActivityTypes.Cycling, nodes: [pace] };
+    expect(manualWorkoutEditorToStructure(value).nodes[0]).toMatchObject({ targets: [{
+      presentation: 'pace', minimumMetersPerSecond: 1000 / 300, maximumMetersPerSecond: 1000 / 240,
+    }] });
+  });
+
+  it('keeps zero-speed bounds finite and clears an unconvertible pace draft', () => {
+    const step: ManualWorkoutEditorStep = { ...createManualWorkoutEditorStep('stopped'), targetKind: 'speed', targetMinimum: 0, targetMaximum: 18 };
+    const value: ManualWorkoutEditorValue = { title: 'Speed', localDate: '2026-10-05', sport: ActivityTypes.Cycling, nodes: [step] };
+    expect(manualWorkoutEditorToStructure(value).nodes[0]).toMatchObject({ targets: [{ presentation: 'speed', minimumMetersPerSecond: 0,
+      maximumMetersPerSecond: 5 }] });
+    expect(changeManualWorkoutEditorStepTarget(step, 'pace', ActivityTypes.Cycling))
+      .toMatchObject({ targetKind: 'pace', targetMinimum: null, targetMaximum: null });
+  });
+
+  it.each([[null, 18], [NaN, 18], [-1, 18], [36, 18]])('rejects invalid speed bounds %s–%s', (minimum, maximum) => {
+    const value: ManualWorkoutEditorValue = { title: 'Invalid speed', localDate: '2026-10-05', sport: ActivityTypes.Cycling,
+      nodes: [{ ...createManualWorkoutEditorStep('invalid'), targetKind: 'speed', targetMinimum: minimum, targetMaximum: maximum }] };
+    expect(() => manualWorkoutEditorToStructure(value)).toThrow();
+  });
+
   it.each([75, 90, 3723, 123.456789012345, 1e-9])('preserves exact %s-second endings through reopen and lap toggles', seconds => {
     const structure: WorkoutStructureV1 = { version: 1, sport: ActivityTypes.Running,
       nodes: [{ kind: 'repeat', id: 'repeat', count: 3, steps: [
@@ -518,8 +610,8 @@ describe('manual planned-workout editor conversion', () => {
         }],
       }],
     };
-    expect(() => workoutStructureToManualEditor('Cadence', '2026-09-03', base))
-      .toThrow('cadence target');
+    expect(workoutStructureToManualEditor('Cadence', '2026-09-03', base).nodes[0])
+      .toMatchObject({ targetKind: 'cadence', targetMinimum: 170, targetMaximum: 180 });
 
     const relative: WorkoutStructureV1 = {
       ...base,

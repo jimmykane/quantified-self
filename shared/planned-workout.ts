@@ -321,7 +321,7 @@ export function isRowingWorkoutSportV1(sport?: ActivityTypes): boolean {
 export const INITIAL_MANUAL_WORKOUT_EDITOR_PROFILE_V1: WorkoutCompatibilityProfileV1 = {
   sports: MANUAL_WORKOUT_EDITOR_SPORTS_V1,
   endingKinds: ['time', 'distance'],
-  targetKinds: ['heart-rate', 'power', 'speed'],
+  targetKinds: ['heart-rate', 'power', 'speed', 'cadence'],
   supportsRepeats: true,
   supportsRelativeTargets: false,
   maxNodes: WORKOUT_STRUCTURE_MAX_NODES,
@@ -991,7 +991,8 @@ function formatSpeedValue(
 ): UnitAwareStatDisplay | null {
   const isSwim = isSwimmingWorkoutSportV1(sport);
   if (presentation === 'pace' && isRowingWorkoutSportV1(sport)) {
-    const duration = resolveUnitAwareDisplayFromValue(DataDuration.type, 500 / metersPerSecond, unitSettings);
+    const paceSeconds = Math.round((500 / metersPerSecond) * 1000) / 1000;
+    const duration = resolveUnitAwareDisplayFromValue(DataDuration.type, paceSeconds, unitSettings);
     const distance = resolveUnitAwareDisplayFromValue(DataDistance.type, 500, {
       ...normalizeUserUnitSettings(unitSettings), distanceUnits: DistanceUnits.Kilometers,
     });

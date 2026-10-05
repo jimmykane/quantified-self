@@ -569,7 +569,13 @@ or bundled plugin/skill changes are required for exposing this existing ending i
 
 Running and cycling distance-step inputs follow the owner's `distanceUnits` preference (kilometres or miles), while
 their pace-target inputs independently follow the first selected `paceUnits` preference (min/km or min/mi). The editor
-captures normalized units when opened so a settings update in another tab cannot reinterpret an unsaved number. Existing
+also offers **Speed**, including for cycling, using numeric minimum/maximum inputs in the first selected `speedUnits`
+preference (for example km/h or mph). Speed targets reopen for editing, preserve exact canonical m/s until changed,
+and select Speed in the profile. Switching Pace/Speed converts the bounds while preserving the physical range;
+invalid drafts or zero-speed bounds cannot be converted into a finite pace range and clear the converted inputs.
+Both presentations remain explicit authored choices. Duplicate steps copy their speed snapshots independently.
+The existing absolute speed recipe variant, provider mappings and MCP contracts are unchanged.
+The editor captures normalized units when opened so a settings update in another tab cannot reinterpret an unsaved number. Existing
 metre and m/s values display at readable precision but retain their exact canonical values on an unchanged edit;
 newly typed values convert to canonical metres and m/s before the existing schedule mutation. One international mile
 is 1609.344 metres. Sports Lib 21.3 supplies the owner-unit display formatters, but no matching inverse editor API
@@ -714,7 +720,7 @@ packed Sports Lib package. That gate is tracked by GitHub issue #654 under epic 
 
 `WorkoutProfileComponent` is the shared read-only interval renderer for the live Plans/Standalone/library editor
 and the **Show profile** disclosure on saved scheduled and library workouts. Saved inspection consumes the complete
-canonical recipe independently of the narrower manual editor: cadence, speed presentation, relative snapshots,
+canonical recipe independently of the narrower manual editor: relative snapshots,
 two simultaneous targets, and manual/kJ/repetition endings remain readable. Strength retains its exercise editor;
 the v1 strength compatibility summary is not presented as a complete exercise profile.
 
@@ -723,13 +729,25 @@ never elapsed time or distance. No shared planned-workout analyzer is currently 
 renderer does not estimate distance-step time, total duration, average pace, zones or generic intensity. A future
 time-scaled view must consume the shared analyzer and its uncertainty rather than introduce a private estimator.
 One target metric is shown at a time (HR, power, pace, speed or cadence). Both authored targets remain in accessible
-details and tooltips. Constant targets, including warm-up/cool-down targets, are rectangles rather than invented ramps;
+details and tooltips. Editor/profile pickers and tooltips label pool/open-water pace as **Swim pace** and
+outdoor/indoor rowing pace as **Rowing pace**; these are sport-specific labels for the existing pace presentation.
+Constant targets, including warm-up/cool-down targets, are rectangles rather than invented ramps;
 untargeted steps have empty metric spaces and a separately labelled purpose strip. Relative ranges resolve only from
 their saved reference snapshot, with percentage/reference and resolved-range text; missing/invalid snapshots fail closed.
 A valid relative pace target starting at 0% speed has no finite pace range. Its authored percentage/reference remains
 in details and tooltips with an explicit explanation; only that band is omitted, while all other steps remain visible.
 If no finite bands exist, the purpose strip remains available and accessible text distinguishes that from no targets.
-Pace axes reverse speed bounds and follow the canonical Sports Lib formatter, including swim and rowing conventions.
+Pace axes reverse speed bounds and use explicit time intervals in the owner's selected pace denominator,
+with Sports Lib labels for running/swimming and fixed per-500-m rowing pace. Whole-second ticks avoid floating-point
+truncation after unit conversion. Authored bounds, including unusually slow limits, stay visible; recorded-stream
+outlier filtering does not apply to prescriptions. Range rectangles end at their exact axis coordinates; constant
+targets are centered markers. Speed uses round numeric intervals chosen after conversion to the owner's selected
+speed unit, so grid lines land on values such as 10/20/30 km/h. Other metrics retain their numeric axes.
+Editor and profile pickers prioritize Pace for running/swimming/rowing and Power/Speed for cycling, without
+changing authored targets or an explicit profile metric selection. The manual editor supports absolute cadence
+for running/cycling, with rpm-labelled bounds and canonical `minimumRpm`/`maximumRpm` storage. Changing to/from
+cadence clears incompatible draft bounds; changing sport preserves the target. Saved cadence remains editable on
+other sports but is never relabelled or converted to stroke rate. New swim/rowing stroke targets are not inferred.
 Physical pool length is explicit metadata and is never inferred from distance steps.
 
 Profiles expand at most 128 occurrences. Above that presentation budget, each repeat shows one selectable pass,

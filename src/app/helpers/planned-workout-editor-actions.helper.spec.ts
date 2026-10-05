@@ -87,6 +87,21 @@ describe('manual workout draft ordering and duplication', () => {
     expect(canDuplicateManualWorkoutEditorNode(blockAtLimit, 'work', 'block')).toBe(true);
   });
 
+  it('copies exact cycling speed snapshots without sharing mutable cache state', () => {
+    const editor = workoutStructureToManualEditor('Speed intervals', '2026-10-05', { version: 1, sport: ActivityTypes.Cycling,
+      nodes: [{ kind: 'step', id: 'ride', purpose: 'work', ending: { kind: 'time', seconds: 60 },
+        targets: [{ kind: 'speed', mode: 'absolute', presentation: 'speed', minimumMetersPerSecond: 5.123456789,
+          maximumMetersPerSecond: 9.87654321 }] }] });
+    const copy = duplicateManualWorkoutEditorNode(editor, 'ride', ids());
+    const structure = manualWorkoutEditorToStructure(copy);
+    expect(structure.nodes[1]).toEqual({ ...structure.nodes[0], id: 'step-copy-1' });
+    if (copy.nodes[1].kind !== 'step' || editor.nodes[0].kind !== 'step') throw new Error('Expected steps');
+    expect(copy.nodes[1].sourceSpeed).not.toBe(editor.nodes[0].sourceSpeed);
+    copy.nodes[1].sourceSpeed!.maximumMetersPerSecond = 100;
+    expect(editor.nodes[0].sourceSpeed!.maximumMetersPerSecond).toBe(9.87654321);
+    expect(JSON.stringify(structure)).not.toContain('sourceSpeed');
+  });
+
   it('copies partial fields for continued editing and keeps exact duration caches independent', () => {
     const original = draft();
     original.nodes[0] = { ...createManualWorkoutEditorStep('partial'), endingValue: Number.NaN,

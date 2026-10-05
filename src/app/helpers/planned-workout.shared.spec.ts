@@ -299,7 +299,10 @@ describe('planned workout v1 contract', () => {
 });
 
 describe('planned workout compatibility', () => {
-  it('accepts the first manual editor slice', () => {
+  it.each([
+    { kind: 'power', mode: 'absolute', minimumWatts: 180, maximumWatts: 220 },
+    { kind: 'cadence', mode: 'absolute', minimumRpm: 80, maximumRpm: 95 },
+  ] as const)('accepts the manual editor $kind target', target => {
     const workout: WorkoutStructureV1 = {
       version: 1,
       sport: ActivityTypes.Cycling,
@@ -308,7 +311,7 @@ describe('planned workout compatibility', () => {
         id: 'ride',
         purpose: 'work',
         ending: { kind: 'time', seconds: 1800 },
-        targets: [{ kind: 'power', mode: 'absolute', minimumWatts: 180, maximumWatts: 220 }],
+        targets: [target],
       }],
     };
 
@@ -364,7 +367,6 @@ describe('planned workout compatibility', () => {
     expect(result.compatible).toBe(false);
     expect(result.issues.map(issue => issue.code)).toEqual([
       'unsupported_ending',
-      'unsupported_target',
       'unsupported_relative_target',
     ]);
   });
@@ -431,7 +433,7 @@ describe('planned workout formatting', () => {
       minimumMetersPerSecond: 500 / 120, maximumMetersPerSecond: 500 / 105 } as const;
     expect(formatWorkoutEndingV1(ending, imperial, undefined, sport)).toContain('500');
     expect(formatWorkoutEndingV1(ending, imperial, undefined, sport)).toContain('m');
-    expect(formatWorkoutTargetV1(target, imperial, undefined, sport)).toContain('/ 500');
+    expect(formatWorkoutTargetV1(target, imperial, undefined, sport)).toBe('01m 45s–02m 00s / 500.0 m');
   });
 });
 

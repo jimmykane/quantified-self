@@ -85,11 +85,11 @@ describe('WorkoutProfileComponent', () => {
   it('changes metric through Material semantic events and clears context without feedback or stale details', async () => {
     const fixture = await render();
     const select = fixture.debugElement.query(By.directive(MatSelect)).componentInstance as MatSelect;
-    select.selectionChange.emit({ source: select, value: 'heart-rate' });
-    select.selectionChange.emit({ source: select, value: 'heart-rate' });
+    select.selectionChange.emit({ source: select, value: 'power' });
+    select.selectionChange.emit({ source: select, value: 'power' });
     fixture.componentInstance.selectStep(fixture.componentInstance.steps()[0]);
     fixture.detectChanges(); await fixture.whenStable();
-    expect(fixture.componentInstance.metric()).toBe('heart-rate');
+    expect(fixture.componentInstance.metric()).toBe('power');
     expect(haptics.selection).toHaveBeenCalledTimes(2);
     fixture.componentRef.setInput('contextKey', 'new-owner/workout/1'); fixture.detectChanges(); await fixture.whenStable();
     expect(fixture.componentInstance.selected()).toBeNull();
@@ -106,7 +106,7 @@ describe('WorkoutProfileComponent', () => {
     fixture.componentInstance.selectStep(fixture.componentInstance.steps()[0]);
     fixture.detectChanges(); await fixture.whenStable();
     expect(hiddenCount()).toBe(initial);
-    fixture.componentInstance.selectMetric('heart-rate'); fixture.detectChanges(); await fixture.whenStable();
+    fixture.componentInstance.selectMetric('power'); fixture.detectChanges(); await fixture.whenStable();
     expect(hiddenCount()).toBeGreaterThan(initial);
   });
 
@@ -123,6 +123,7 @@ describe('WorkoutProfileComponent', () => {
 
   it('escapes notes in text and tooltips, marks changed canonical IDs and renders equal targets as rectangles', async () => {
     const fixture = await render();
+    fixture.componentInstance.selectMetric('power');
     fixture.componentRef.setInput('changedStepIds', ['set']); fixture.detectChanges(); await fixture.whenStable();
     fixture.componentInstance.selectStep(fixture.componentInstance.steps()[0]); fixture.detectChanges();
     expect(fixture.nativeElement.querySelector('script')).toBeNull();

@@ -13,7 +13,7 @@
         <mat-form-field appearance="outline" subscriptSizing="dynamic" class="profile-metric">
           <mat-label>Target view</mat-label>
           <mat-select [value]="metric()" (selectionChange)="selectMetric($event.value)">
-            @for (value of profile.metrics; track value) { <mat-option [value]="value">{{ metricLabels[value] }}</mat-option> }
+            @for (value of profile.metrics; track value) { <mat-option [value]="value">{{ metricLabels()[value] }}</mat-option> }
           </mat-select>
         </mat-form-field>
       }
