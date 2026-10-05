@@ -1,7 +1,7 @@
-@if (isWahooHistoryImportRunning()) {
+@if (isActivityHistoryImportRunning()) {
 <div class="status-container" role="status">
   <app-status-info type="pending" title="Import already running">
-    A Wahoo history import is already running. Please wait for it to finish.
+    {{ historyImportRunningMessage }}
     Closing this dialog does not cancel the import.
   </app-status-info>
 </div>
@@ -79,7 +79,7 @@
 </div>
 }
 
-@if (formGroup && isAllowedToDoHistoryImport && !isHistoryImportPending() && !isWahooHistoryImportRunning()) {
+@if (formGroup && isAllowedToDoHistoryImport && !isHistoryImportPending() && !isActivityHistoryImportRunning()) {
 @if (isPro) {
 <form [formGroup]="formGroup" class="qs-form history-import-form">
   @if (isMissingGarminPermissions) {

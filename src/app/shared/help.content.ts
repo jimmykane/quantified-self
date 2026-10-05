@@ -1058,6 +1058,8 @@ The picker starts with the latest two calendar years selected. You can expand it
 
 Garmin can deliver imported activities gradually over hours or days.
 
+While Garmin activity history is being requested, Services shows **Import already running** and prevents another request. Closing the dialog does not cancel the request; reopening it shows the current running state. If another tab started the request before the status arrived, the duplicate request shows a wait message. Once the request is accepted, the usual **30-day cooldown** applies while activities continue arriving from Garmin.
+
 Garmin Sleep and Health history import is separate from activity history import. It requests sleep through Garmin Health API and records appear later as Garmin sends sleep notifications.
 
 Garmin can also send source-attributed Daily, Stress Details, HRV, User Metrics, Body Composition, Pulse Ox, All-day Respiration, Blood Pressure, Skin Temperature, and Health Snapshot summaries for connected accounts with Health Export permission. Missing measurements remain unavailable, Garmin Body Battery remains provider-specific, and these Health records do not replace Sleep sessions or workout metrics. Connected Pro accounts see **Sleep & available Health history** while Garmin Health is enabled; one request queues Sleep plus all ten Health families for up to the latest rolling five years in paced windows, respecting stricter provider limits. If Garmin Health is temporarily disabled, the control falls back to **Import Sleep history**. Garmin Summary Resender is reserved for bounded operational recovery after live delivery is verified.
