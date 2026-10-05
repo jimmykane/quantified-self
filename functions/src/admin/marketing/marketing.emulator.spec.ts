@@ -686,6 +686,82 @@ describe.skipIf(!enabled)('marketing campaign durability (emulators)', () => {
     expect((await ref.collection('recipients').get()).size).toBe(1);
   });
 
+  it.each(['eligible', 'disabled', 'deleting'] as const)('stops scanning a paused audience during an in-flight %s account lookup', async accountState => {
+    await isolateWorker();
+    const older = await readyScheduledCampaign(3, null);
+    const newer = await readyScheduledCampaign(1, null);
+    await older.ref.update({ createdAt: '1990-01-01T00:00:00Z' });
+    const firstUid = older.users.map(user => user.uid).sort()[0];
+    if (accountState === 'deleting') await db.doc(`userDeletionTombstones/${firstUid}`).set({ active: true });
+    const clock = () => new Date('2026-10-10T08:00:00Z');
+    await setCampaignStatus(older.campaign.id, 'start', undefined, clock);
+    await setCampaignStatus(newer.campaign.id, 'start', undefined, clock);
+    await db.doc('marketingControl/global').set({ dailyCap: 10 });
+    await db.doc('marketingDispatchDays/2026-10-10').set({ used: 0 });
+    const auth = admin.auth();
+    const originalGetUser = auth.getUser.bind(auth);
+    let lookupStarted!: () => void;
+    let releaseLookup!: () => void;
+    const started = new Promise<void>(resolve => { lookupStarted = resolve; });
+    const released = new Promise<void>(resolve => { releaseLookup = resolve; });
+    const lookup = vi.spyOn(auth, 'getUser').mockImplementation(async uid => {
+      if (uid === firstUid) { lookupStarted(); await released; }
+      const user = await originalGetUser(uid);
+      return uid === firstUid && accountState === 'disabled' ? { ...user, disabled: true } : user;
+    });
+    const worker = dispatchCampaigns(secret, clock);
+    try {
+      await started;
+      await setCampaignStatus(older.campaign.id, 'pause', undefined, clock);
+      releaseLookup();
+      expect(await worker).toBe(1);
+      const audience = new Set(older.users.map(user => user.uid));
+      expect(lookup.mock.calls.filter(([uid]) => audience.has(uid))).toHaveLength(1);
+      expect((await older.ref.get()).get('stats')).toMatchObject({ pending: 3, queued: 0, skipped: 0 });
+      expect((await newer.ref.get()).get('stats.queued')).toBe(1);
+    } finally { releaseLookup(); await worker; lookup.mockRestore(); }
+  });
+
+  it.each(['disabled', 'deleting'] as const)('waits before skipping an in-flight %s account after the schedule changes', async accountState => {
+    await isolateWorker();
+    const { campaign, ref, users, testId } = await readyScheduledCampaign(1, null);
+    const uid = users[0].uid;
+    if (accountState === 'deleting') await db.doc(`userDeletionTombstones/${uid}`).set({ active: true });
+    const clock = () => new Date('2026-10-10T08:00:00Z');
+    await setCampaignStatus(campaign.id, 'start', undefined, clock);
+    await db.doc('marketingControl/global').set({ dailyCap: 10 });
+    await db.doc('marketingDispatchDays/2026-10-10').set({ used: 0 });
+    const auth = admin.auth();
+    const originalGetUser = auth.getUser.bind(auth);
+    let lookupStarted!: () => void;
+    let releaseLookup!: () => void;
+    const started = new Promise<void>(resolve => { lookupStarted = resolve; });
+    const released = new Promise<void>(resolve => { releaseLookup = resolve; });
+    const lookup = vi.spyOn(auth, 'getUser').mockImplementation(async accountUid => {
+      if (accountUid === uid) { lookupStarted(); await released; }
+      const user = await originalGetUser(accountUid);
+      return accountUid === uid && accountState === 'disabled' ? { ...user, disabled: true } : user;
+    });
+    const worker = dispatchCampaigns(secret, clock);
+    try {
+      await started;
+      await setCampaignStatus(campaign.id, 'pause', undefined, clock);
+      await saveCampaign(campaign.id, { ...draft, schedule: { time: '09:00', timeZone: 'UTC' } }, 'admin');
+      await ref.update({ lastTestMailId: testId });
+      await setCampaignStatus(campaign.id, 'resume', undefined, clock);
+      releaseLookup();
+      expect(await worker).toBe(0);
+      expect((await ref.get()).get('stats')).toMatchObject({ pending: 1, queued: 0, skipped: 0 });
+      expect((await ref.collection('recipients').doc(uid).get()).get('status')).toBe('pending');
+      expect((await db.doc('marketingDispatchDays/2026-10-10').get()).get('used')).toBe(0);
+      lookup.mockImplementation(originalGetUser);
+      if (accountState === 'deleting') await db.doc(`userDeletionTombstones/${uid}`).update({ expireAt: admin.firestore.Timestamp.fromMillis(0) });
+      expect(await dispatchCampaigns(secret, () => new Date('2026-10-10T09:00:00Z'))).toBe(1);
+      expect((await ref.get()).get('stats')).toMatchObject({ pending: 0, queued: 1, skipped: 0 });
+      expect((await db.doc('marketingDispatchDays/2026-10-10').get()).get('used')).toBe(1);
+    } finally { releaseLookup(); await worker; lookup.mockRestore(); }
+  });
+
   it('rechecks a changed schedule inside an in-flight mail reservation', async () => {
     await isolateWorker();
     const { campaign, ref, users, testId } = await readyScheduledCampaign(1, null);

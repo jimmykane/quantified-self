@@ -409,12 +409,19 @@ export async function setCampaignStatus(idInput: unknown, action: 'start' | 'pau
   return getCampaign(id);
 }
 
-async function skipRecipient(campaignRef: FirebaseFirestore.DocumentReference, recipientRef: FirebaseFirestore.DocumentReference, reason: string): Promise<void> {
-  await db().runTransaction(async tx => {
+async function skipRecipient(campaignRef: FirebaseFirestore.DocumentReference, recipientRef: FirebaseFirestore.DocumentReference,
+  reason: string, nowProvider: () => Date): Promise<'waiting' | 'stale' | 'skipped'> {
+  return db().runTransaction(async tx => {
     const [campaign, recipient] = await Promise.all([tx.get(campaignRef), tx.get(recipientRef)]);
-    if (campaign.get('status') !== 'running' || recipient.get('status') !== 'pending') return;
-    tx.update(recipientRef, { status: 'skipped', skippedReason: reason, skippedAt: new Date().toISOString() });
+    if (campaign.get('status') !== 'running') return 'waiting';
+    if (recipient.get('status') !== 'pending') return 'stale';
+    const now = nowProvider();
+    // A pause/edit/resume may have moved the sending time while Auth or the
+    // deletion guard was being read. Defer eligibility decisions until it is due.
+    if (!marketingScheduleGate(validateMarketingSchedule(campaign.get('schedule')), campaign.data()!, now).due) return 'waiting';
+    tx.update(recipientRef, { status: 'skipped', skippedReason: reason, skippedAt: now.toISOString() });
     tx.update(campaignRef, { stats: transitionStats(campaign.get('stats') as MarketingCampaignStats, 'pending', 'skipped') });
+    return 'skipped';
   });
 }
 
@@ -463,9 +470,15 @@ export async function dispatchCampaigns(secret: string, nowProvider: () => Date 
           const recipient = recipientDoc.data();
           const uid = recipientDoc.id;
           const user = await getAuth(uid);
-          if (!authAllowed(user)) { await skipRecipient(campaignRef, recipientDoc.ref, 'account-or-email'); continue; }
+          if (!authAllowed(user)) {
+            if (await skipRecipient(campaignRef, recipientDoc.ref, 'account-or-email', nowProvider) === 'waiting') { waiting = true; break; }
+            continue;
+          }
           const guard = await getUserDeletionGuardState(db(), uid);
-          if (guard.shouldSkip) { await skipRecipient(campaignRef, recipientDoc.ref, 'deleted'); continue; }
+          if (guard.shouldSkip) {
+            if (await skipRecipient(campaignRef, recipientDoc.ref, 'deleted', nowProvider) === 'waiting') { waiting = true; break; }
+            continue;
+          }
           const attempt = (recipient.attempt || 0) + 1;
           const mailId = `marketing_${campaignDoc.id}_${uid}_${attempt}`;
           const consentRef = db().doc(`users/${uid}/legal/agreements`);
@@ -479,7 +492,8 @@ export async function dispatchCampaigns(secret: string, nowProvider: () => Date 
               tx.get(db().collection('customers').doc(uid).collection('subscriptions').where('status', 'in', [...ACTIVE_SUBSCRIPTION_STATUSES])),
               tx.get(mail),
             ]);
-            if (campaign.get('status') !== 'running' || recipientNow.get('status') !== 'pending' || existingMail.exists) return 'stale';
+            if (campaign.get('status') !== 'running') return 'waiting';
+            if (recipientNow.get('status') !== 'pending' || existingMail.exists) return 'stale';
             // A worker may have started before a pause/edit/resume. Render from
             // the campaign read in this transaction so it submits the saved version.
             const draft = validateMarketingDraft(campaign.data());
