@@ -1112,6 +1112,8 @@ COROS uses one active connected account for every import and delivery. New OAuth
 
 When you open the COROS connection overview, Quantified Self asks COROS whether that account is still bound. If COROS says it is unbound, the card changes to **Reconnect required** and related automatic activity and saved-route settings turn off. A temporary check failure shows **Retry** and does not mark the account disconnected.
 
+Connection checks pause while you connect or disconnect. Results from an earlier connection do not replace the current connection status.
+
 For imported activities, Quantified Self can recover a missing or expired COROS FIT download link from the workout identity. Imported event attribution preserves the COROS mode, submode, device, source timezones, training-plan workout ID, and multisport component when COROS supplies them; the expiring provider link is not kept on new events.
 
 COROS FIT activity uploads in Services are asynchronous and use per-file status, short provider upload pacing, and failed-file retry controls. Once COROS issues an upload ID, refresh or retry checks that same upload first instead of posting the FIT again. A duplicate is shown as a completed result.
@@ -1167,6 +1169,8 @@ Wahoo is a **Pro** activity integration. Connect Wahoo from Services to:
 - automatically send new Wahoo activities to COROS, or choose a date range to send past retained Wahoo activities to COROS.
 
 Quantified Self imports only Wahoo records with an available FIT file. Workouts without a FIT file are skipped, as are workouts Wahoo identifies as originating from a third-party fitness application. History is returned newest first and is queued for background processing; large ranges may take time to appear.
+
+While Wahoo history is being scanned, Services shows **Import already running** and prevents another request. Closing the dialog does not cancel the import; reopening it shows the current running state. If another tab started the import before the status arrived, the duplicate request shows the same wait message. Once the scan finishes, the usual history-import cooldown applies, and queued activities continue processing in the background.
 
 Direct FIT activity delivery only sends the selected file to Wahoo. It does not create or retain an activity in Quantified Self. During the initial send, Quantified Self parses the FIT on the server and uses the same explicit Wahoo workout-type mapping as automatic delivery. Wahoo may process an activity upload asynchronously; Services keeps the upload status and the optional mapped type available to refresh. If Wahoo has already issued an upload ID, retrying after a connection or status error checks that same upload instead of sending the FIT again. A fresh upload starts only after Wahoo explicitly reports that processing failed. If you connected Wahoo before activity sending was available, reconnect it once to grant workout write access.
 
