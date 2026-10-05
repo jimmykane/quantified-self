@@ -44,7 +44,7 @@ export const TRAINING_PLANS_PAGE_SECTIONS = [
   {
     eyebrow: 'Structured Workouts',
     title: 'Build the workout you mean',
-    copy: 'The interval editor supports running, cycling, pool and open-water swimming, walking, hiking, rowing and indoor rowing with date-only scheduling, time, distance, or lap-button-ended steps, fixed repeats, and one absolute heart-rate, power, or pace target per step. Lap-ended steps wait for your button press, without a time or distance limit; Garmin and Suunto support this ending, while Wahoo delivery is unsupported and COROS delivery remains Coming soon. The separate strength editor supports ordered named exercises, individual sets with repetitions or timed holds, optional external load in your selected kg or lb unit, and optional rest after each set. Swim and rowing distance steps use metres. Rowing pace is a 500 m split; swim pace follows your /100 m or /100 yd setting. Pool workouts can store an optional physical pool length in metres or yards, separately from step distance; open-water workouts have no pool length.',
+    copy: 'The interval editor supports running, cycling, pool and open-water swimming, walking, hiking, rowing and indoor rowing with date-only scheduling, time, distance, or lap-button-ended steps, fixed repeats, and up to two different absolute or relative heart-rate, power, speed/pace, or cadence targets per step. Relative targets use an explicit saved reference snapshot. Lap-ended steps wait for your button press, without a time or distance limit; Garmin and Suunto support this ending, while Wahoo delivery is unsupported and COROS delivery remains Coming soon. The separate strength editor supports ordered named exercises, individual sets with repetitions or timed holds, optional external load in your selected kg or lb unit, and optional rest after each set. Swim and rowing distance steps use metres. Rowing pace is a 500 m split; swim pace follows your /100 m or /100 yd setting. Pool workouts can store an optional physical pool length in metres or yards, separately from step distance; open-water workouts have no pool length.',
     items: [
       {
         icon: 'directions_run',
@@ -74,7 +74,7 @@ export const TRAINING_PLANS_PAGE_SECTIONS = [
       {
         icon: 'repeat',
         title: 'Clear limits, predictable recipes',
-        copy: 'Use up to 100 total nodes, fixed repeat counts up to 100, no nested repeats, and one supported absolute target per step in the current editor.',
+        copy: 'Use up to 100 total nodes, fixed repeat counts up to 100, no nested repeats, and up to two different supported target kinds per step. Choose absolute values or percentages of an explicit reference, as a range or single value.',
       },
     ],
   },

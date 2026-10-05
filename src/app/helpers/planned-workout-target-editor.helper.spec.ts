@@ -34,7 +34,7 @@ describe('ordered manual workout targets', () => {
   it('authors every reference explicitly, preserves percentages above 100, and rejects missing or incompatible references', () => {
     for (const canonical of targets.filter(t => t.mode === 'relative')) {
       const draft = workoutTargetToManualEditor(canonical, ActivityTypes.Running);
-      const { source, ...fresh } = draft;
+      const fresh = { ...draft, source: undefined };
       expect(manualEditorTargetToWorkout(fresh, ActivityTypes.Running)).toMatchObject({ minimumPercent: draft.minimum, maximumPercent: draft.maximum });
       expect(() => manualEditorTargetToWorkout({ ...fresh, referenceValue: null }, ActivityTypes.Running)).toThrow('positive reference');
       expect(() => manualEditorTargetToWorkout({ ...fresh, referenceKind: 'threshold-speed' === fresh.referenceKind ? 'max-heart-rate' : 'threshold-speed' }, ActivityTypes.Running)).toThrow('compatible');
