@@ -153,4 +153,63 @@ describe('WorkoutProfileComponent', () => {
     expect(component.steps()).toHaveLength(3); expect(haptics.selection).toHaveBeenCalledTimes(2);
     expect(JSON.stringify(large)).toBe(before);
   });
+
+  it('keeps the selected repeat occurrence when edits cross the grouping budget', async () => {
+    const fixture = await render();
+    const component = fixture.componentInstance;
+    component.selectStep(component.steps()[1]);
+    fixture.detectChanges(); await fixture.whenStable();
+    const large = structuredClone(structure);
+    large.nodes[0] = { kind: 'repeat', id: 'set', count: 100, steps: [
+      ...(large.nodes[0].kind === 'repeat' ? large.nodes[0].steps : []),
+      { kind: 'step', id: 'recovery', purpose: 'recovery', ending: { kind: 'time', seconds: 60 }, targets: [] },
+    ] };
+    fixture.componentRef.setInput('structure', large);
+    fixture.detectChanges(); await fixture.whenStable();
+    expect(component.model().grouped).toBe(true);
+    expect(component.model().repeats[0].iteration).toBe(2);
+    expect(component.selected()).toMatchObject({ occurrenceKey: 'set/2/warmup', ordinal: 3 });
+    expect(haptics.selection).toHaveBeenCalledTimes(1);
+  });
+
+  it('shows authored instructions when the only pace target has no finite range', async () => {
+    const fixture = await render();
+    fixture.componentRef.setInput('structure', { version: 1, sport: ActivityTypes.Running, nodes: [
+      { kind: 'step', id: 'open-pace', purpose: 'work', ending: { kind: 'manual' }, targets: [
+        { kind: 'speed', mode: 'relative', minimumPercent: 0, maximumPercent: 100,
+          presentation: 'pace', reference: { kind: 'threshold-speed', metersPerSecond: 4 } },
+      ] },
+    ] });
+    fixture.detectChanges(); await fixture.whenStable();
+    expect(fixture.componentInstance.model()).not.toBeNull();
+    expect(fixture.componentInstance.metric()).toBeNull();
+    expect(fixture.nativeElement.textContent).toContain('0–100%');
+    expect(fixture.nativeElement.textContent).toContain('No finite pace range');
+    expect(fixture.nativeElement.textContent).not.toContain('No target prescribed');
+    expect(fixture.componentInstance.summary()).toContain('No finite target ranges to plot');
+    expect(haptics.selection).not.toHaveBeenCalled();
+  });
+
+  it('remembers a new selection after a repeat shrinks past the previously chosen pass', async () => {
+    const fixture = await render();
+    const component = fixture.componentInstance;
+    const large = structuredClone(structure);
+    large.nodes[0] = { kind: 'repeat', id: 'set', count: 100, steps: [
+      ...(large.nodes[0].kind === 'repeat' ? large.nodes[0].steps : []),
+      { kind: 'step', id: 'recovery', purpose: 'recovery', ending: { kind: 'manual' }, targets: [] },
+    ] };
+    fixture.componentRef.setInput('structure', large); fixture.detectChanges(); await fixture.whenStable();
+    component.selectStep(component.steps()[0]); component.selectRepeatPass('set', 100);
+    fixture.detectChanges(); await fixture.whenStable();
+    const smaller = structuredClone(large);
+    if (smaller.nodes[0].kind === 'repeat') smaller.nodes[0].count = 70;
+    fixture.componentRef.setInput('structure', smaller); fixture.detectChanges(); await fixture.whenStable();
+    expect(component.selected()).toBeNull();
+    const hidden = chart.dispatchAction.mock.calls.filter(call => call[0]?.type === 'hideTip').length;
+    component.selectStep(component.steps()[0]); fixture.detectChanges(); await fixture.whenStable();
+    expect(chart.dispatchAction.mock.calls.filter(call => call[0]?.type === 'hideTip')).toHaveLength(hidden);
+    fixture.componentRef.setInput('structure', large); fixture.detectChanges(); await fixture.whenStable();
+    expect(component.selected()).toMatchObject({ occurrenceKey: 'set/1/warmup' });
+    expect(component.model().repeats[0].iteration).toBe(1);
+  });
 });

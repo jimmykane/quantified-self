@@ -8,7 +8,7 @@
       <p class="profile-hint">Exercise details are shown in the strength editor.</p>
     } @else if (model(); as profile) {
       @if (profile.pool) { <p class="profile-hint">Pool length · {{ profile.pool }}</p> }
-      <p class="profile-hint">Equal widths show step order, not time or distance. Empty target spaces have no target for the selected metric.</p>
+      <p class="profile-hint">Equal widths show step order, not time or distance. Empty target spaces have no finite range for the selected metric.</p>
       @if (profile.metrics.length > 0) {
         <mat-form-field appearance="outline" subscriptSizing="dynamic" class="profile-metric">
           <mat-label>Target view</mat-label>

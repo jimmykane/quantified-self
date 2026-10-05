@@ -702,6 +702,9 @@ One target metric is shown at a time (HR, power, pace, speed or cadence). Both a
 details and tooltips. Constant targets, including warm-up/cool-down targets, are rectangles rather than invented ramps;
 untargeted steps have empty metric spaces and a separately labelled purpose strip. Relative ranges resolve only from
 their saved reference snapshot, with percentage/reference and resolved-range text; missing/invalid snapshots fail closed.
+A valid relative pace target starting at 0% speed has no finite pace range. Its authored percentage/reference remains
+in details and tooltips with an explicit explanation; only that band is omitted, while all other steps remain visible.
+If no finite bands exist, the purpose strip remains available and accessible text distinguishes that from no targets.
 Pace axes reverse speed bounds and follow the canonical Sports Lib formatter, including swim and rowing conventions.
 Physical pool length is explicit metadata and is never inferred from distance steps.
 
@@ -709,7 +712,9 @@ Profiles expand at most 128 occurrences. Above that presentation budget, each re
 the complete occurrence count is disclosed, and every pass (including the last of 9,900 legal occurrences) remains
 inspectable. This is grouping, not truncation or a lower recipe limit. Selection keys combine canonical step ID,
 repeat ID and iteration; canonical IDs and recipe JSON never change. Editor selection highlights the source step and
-survives reordering. Invalid drafts remove the chart instead of retaining the last valid preview. Owner/editor/revision
+survives reordering and crossing the expansion budget: a selected repeat pass remains selected when grouping becomes
+necessary, without selection-only redraws dismissing the first tap's tooltip. Invalid drafts remove the chart instead
+of retaining the last valid preview. Owner/editor/revision
 context changes clear presentation selection. Saved disclosures shape data and instantiate charts only when opened.
 
 Rendering uses the shared ECharts loader/host controller, theme/resize and viewport-bound escaped tooltip helpers,
@@ -721,7 +726,8 @@ exports. Physical vibration still needs device verification.
 
 MCP impact: no schema, scope, consent, recipe variant, projection, provider action, plugin guidance or mutation change.
 Focused `get_planned_workout`/`get_planned_workout_v2` regressions retain exact mixed distance/HR and untargeted
-60/75/90-second fixtures, two saved-reference targets, canonical ordering and scope/connection isolation. Presentation
+60/75/90-second fixtures, two saved-reference targets, a valid zero-percent relative pace range, canonical ordering and
+scope/connection isolation. Presentation
 fields stay local. The component accepts `changedStepIds` and emits canonical occurrence selection for a future
 Assistant review consumer; current summary-only proposal previews are unchanged and do not supply full recipes.
 The registered read/write and confirmation contracts remain authoritative.

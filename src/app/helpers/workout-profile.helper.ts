@@ -31,8 +31,8 @@ export interface WorkoutProfileSelection {
 }
 export interface WorkoutProfileBand {
   metric: WorkoutProfileMetric;
-  minimum: number;
-  maximum: number;
+  minimum: number | null;
+  maximum: number | null;
   text: string;
   relative: boolean;
 }
@@ -81,6 +81,12 @@ function bandForTarget(target: WorkoutTargetV1, structure: WorkoutStructureV1,
   const absolute = workoutProfileAbsoluteTarget(target);
   if (absolute.mode !== 'absolute') throw new Error('Target snapshot could not be resolved.');
   const text = formatWorkoutTargetV1(target, units, locale, structure.sport);
+  // The canonical relative contract permits 0%. Zero speed has no finite pace;
+  // keep the authored instruction without inventing a bound or discarding the recipe.
+  if (absolute.kind === 'speed' && absolute.presentation === 'pace' && absolute.minimumMetersPerSecond === 0) {
+    return { metric: 'pace', minimum: null, maximum: null,
+      text: `${text} · No finite pace range (saved reference)`, relative: target.mode === 'relative' };
+  }
   const bandText = target.mode === 'relative'
     ? `${text} · ${formatWorkoutTargetV1(absolute, units, locale, structure.sport)} (saved reference)` : text;
   switch (absolute.kind) {
@@ -98,11 +104,15 @@ function bandForTarget(target: WorkoutTargetV1, structure: WorkoutStructureV1,
   }
 }
 
+export function workoutProfileOccurrenceCount(structure: WorkoutStructureV1): number {
+  return structure.nodes.reduce((sum, node) => sum + (node.kind === 'step' ? 1 : node.count * node.steps.length), 0);
+}
+
 export function buildWorkoutProfile(structure: WorkoutStructureV1,
   units?: UserUnitSettingsInterface | null, locale?: string,
   repeatPasses: Readonly<Record<string, number>> = {}): WorkoutProfileModel {
   const parsed = parseWorkoutStructureV1(structure);
-  const occurrenceCount = parsed.nodes.reduce((sum, node) => sum + (node.kind === 'step' ? 1 : node.count * node.steps.length), 0);
+  const occurrenceCount = workoutProfileOccurrenceCount(parsed);
   const grouped = occurrenceCount > WORKOUT_PROFILE_EXPANSION_BUDGET;
   const occurrences: WorkoutProfileOccurrence[] = [];
   const repeats: WorkoutProfileModel['repeats'] = [];
@@ -115,7 +125,8 @@ export function buildWorkoutProfile(structure: WorkoutStructureV1,
       ending: formatWorkoutEndingV1(step.ending, units, locale, parsed.sport),
       targets: step.targets.map(target => {
         const band = bandForTarget(target, parsed, units, locale);
-        if (!Number.isFinite(band.minimum) || !Number.isFinite(band.maximum)) throw new Error('Target range cannot be plotted.');
+        if ((band.minimum !== null && !Number.isFinite(band.minimum))
+          || (band.maximum !== null && !Number.isFinite(band.maximum))) throw new Error('Target range cannot be plotted.');
         return band;
       }), note: step.note ?? null });
   };
@@ -138,7 +149,8 @@ export function buildWorkoutProfile(structure: WorkoutStructureV1,
     }
     ordinal += node.count * node.steps.length;
   }
-  const metrics = [...new Set(occurrences.flatMap(step => step.targets.map(target => target.metric)))];
+  const metrics = [...new Set(occurrences.flatMap(step => step.targets
+    .filter(target => target.minimum !== null && target.maximum !== null).map(target => target.metric)))];
   const pool = parsed.poolLength
     ? formatWorkoutEndingV1({ kind: 'distance', meters: parsed.poolLength.meters }, units, locale, parsed.sport) : null;
   return { structure: parsed, occurrences, occurrenceCount, grouped, repeats, metrics, pool };

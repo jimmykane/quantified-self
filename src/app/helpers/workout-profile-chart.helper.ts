@@ -10,16 +10,18 @@ export function buildWorkoutProfileChartOption(model: WorkoutProfileModel, metri
   selectedKey: string | null, changedStepIds: readonly string[], dark: boolean, width: number,
   mobile: boolean, units?: UserUnitSettingsInterface | null, locale?: string): Parameters<EChartsType['setOption']>[0] {
   const style = buildDashboardEChartsStyleTokens(dark, width);
-  const bandValues = model.occurrences.flatMap(step => step.targets.filter(t => t.metric === metric));
+  const metricBands = (step: WorkoutProfileModel['occurrences'][number]) => step.targets
+    .filter(t => t.metric === metric && t.minimum !== null && t.maximum !== null);
+  const bandValues = model.occurrences.flatMap(metricBands);
   const maximum = Math.max(1, ...bandValues.map(t => t.maximum));
-  const minimum = metric === 'pace' ? Math.min(...bandValues.map(t => t.minimum)) * .95 : 0;
+  const minimum = metric === 'pace' && bandValues.length ? Math.min(...bandValues.map(t => t.minimum)) * .95 : 0;
   const upper = Number.isFinite(maximum * 1.05) ? maximum * 1.05 : maximum;
   const purposeGrid = metric ? 1 : 0;
   const series: CustomSeriesOption[] = [];
   if (metric) {
     series.push({ type: 'custom', name: 'Target range', xAxisIndex: 0, yAxisIndex: 0, clip: true,
       encode: { x: 0, y: [1, 2] },
-      data: model.occurrences.flatMap((step, i) => step.targets.filter(t => t.metric === metric)
+      data: model.occurrences.flatMap((step, i) => metricBands(step)
         .map(t => ({ value: [i, t.minimum, t.maximum], occurrenceKey: step.occurrenceKey }))),
       renderItem: (params, api) => {
         const index = Number(api.value(0));

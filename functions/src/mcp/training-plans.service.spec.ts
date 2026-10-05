@@ -70,15 +70,19 @@ describe('Training plan MCP reads', () => {
         { kind: 'cadence', mode: 'relative', minimumPercent: 90, maximumPercent: 100,
           reference: { kind: 'preferred-cadence', rpm: 180 } },
       ] },
+      { kind: 'step', id: 'open-pace', purpose: 'recovery', ending: { kind: 'manual' }, targets: [
+        { kind: 'speed', mode: 'relative', presentation: 'pace', minimumPercent: 0, maximumPercent: 100,
+          reference: { kind: 'threshold-speed', metersPerSecond: 4 } },
+      ] },
     ] };
     f.structures.w1 = recipe;
     const before = JSON.stringify(recipe);
     const workoutRef = f.codec.encode({ kind: 'workout', id: 'w1', createdAtMs: 1 }, 'owner', 'connection');
     for (const tool of ['get_planned_workout', 'get_planned_workout_v2'] as const) {
       const result = TRAINING_READ_OUTPUTS[tool].parse(await f.run(tool, { workoutRef }));
-      expect(JSON.stringify(result.workout.structure)).toBe(before);
+      expect(JSON.parse(JSON.stringify(result.workout.structure))).toEqual(JSON.parse(before));
       expect(result.workout.displaySteps.map(step => step.nodeId)).toEqual([
-        'hr-kilometre', 'changes', 'effort-60', 'effort-75', 'effort-90', 'two-targets',
+        'hr-kilometre', 'changes', 'effort-60', 'effort-75', 'effort-90', 'two-targets', 'open-pace',
       ]);
       expect(result.workout.displaySteps.map(step => step.text).join(' ')).toContain('01m 15s');
       expect(JSON.stringify(result)).not.toMatch(/occurrenceKey|selectedMetric|repeatPasses|estimatedDuration|chartWidth/);

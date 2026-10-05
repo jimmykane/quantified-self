@@ -14,7 +14,7 @@ import { ECHARTS_CARTESIAN_IMMEDIATE_UPDATE_SETTINGS, EChartsHostController } fr
 import { resolveEChartsThemeName } from '../../helpers/echarts-theme.helper';
 import { isEChartsMobileTooltipViewport } from '../../helpers/echarts-tooltip-interaction.helper';
 import { buildWorkoutProfileChartOption } from '../../helpers/workout-profile-chart.helper';
-import { buildWorkoutProfile, WORKOUT_PROFILE_METRIC_LABELS, type WorkoutProfileMetric, type WorkoutProfileOccurrence, type WorkoutProfileSelection } from '../../helpers/workout-profile.helper';
+import { buildWorkoutProfile, workoutProfileOccurrenceCount, WORKOUT_PROFILE_EXPANSION_BUDGET, WORKOUT_PROFILE_METRIC_LABELS, type WorkoutProfileMetric, type WorkoutProfileOccurrence, type WorkoutProfileSelection } from '../../helpers/workout-profile.helper';
 
 let nextProfileId = 0;
 
@@ -38,11 +38,26 @@ export class WorkoutProfileComponent {
   readonly selectedKey = signal<string | null>(null);
   readonly selectedMetric = signal<WorkoutProfileMetric | null>(null);
   readonly repeatPasses = signal<Record<string, number>>({});
+  private readonly displayRepeatPasses = computed(() => {
+    const structure = this.structure();
+    if (!structure || workoutProfileOccurrenceCount(structure) <= WORKOUT_PROFILE_EXPANSION_BUDGET) return {};
+    const preferences = this.repeatPasses();
+    return Object.fromEntries(structure.nodes.flatMap(node => {
+      if (node.kind === 'step') return [];
+      const requested = preferences[node.id];
+      const pass = Number.isInteger(requested) && requested >= 1 && requested <= node.count ? requested : 1;
+      return [[node.id, pass]];
+    }));
+  }, { equal: (a, b) => Object.keys(a).length === Object.keys(b).length && Object.keys(a).every(id => a[id] === b[id]) });
   readonly metricLabels = WORKOUT_PROFILE_METRIC_LABELS;
   readonly isStrength = computed(() => this.structure()?.sport === ActivityTypes.StrengthTraining);
   readonly model = computed(() => {
     if (!this.expanded() || !this.structure() || this.isStrength()) return null;
-    try { return buildWorkoutProfile(this.structure(), this.unitSettings(), this.locale, this.repeatPasses()); }
+    try {
+      // Only an actual displayed-pass change redraws content. Remembering a selected
+      // pass must not dismiss the first tap's tooltip, including after count edits.
+      return buildWorkoutProfile(this.structure(), this.unitSettings(), this.locale, this.displayRepeatPasses());
+    }
     catch { return null; }
   });
   readonly metric = computed(() => this.model()?.metrics.includes(this.selectedMetric())
@@ -52,7 +67,11 @@ export class WorkoutProfileComponent {
     changed: this.changedStepIds().includes(step.stepId) || this.changedStepIds().includes(step.repeatId),
     targetsText: step.targets.map(t => t.text).join(' · ') || 'No target prescribed' })) ?? []);
   readonly chartWidth = computed(() => Math.max(320, (this.model()?.occurrences.length ?? 0) * 46 + (this.metric() ? 96 : 16)));
-  readonly summary = computed(() => `${this.model()?.occurrenceCount ?? 0} step occurrences. Equal widths show step order, not time or distance. ${this.metric() ? this.metricLabels[this.metric()] + ' target ranges.' : 'No targets prescribed.'} Use the step buttons for details.`);
+  readonly summary = computed(() => {
+    const targets = this.metric() ? `${this.metricLabels[this.metric()]} target ranges.`
+      : this.steps().some(step => step.targets.length) ? 'No finite target ranges to plot.' : 'No targets prescribed.';
+    return `${this.model()?.occurrenceCount ?? 0} step occurrences. Equal widths show step order, not time or distance. ${targets} Use the step buttons for details.`;
+  });
 
   private readonly theme = inject(AppThemeService);
   private readonly haptics = inject(AppHapticsService);
@@ -114,6 +133,9 @@ export class WorkoutProfileComponent {
     const canonical = this.model()?.occurrences.find(s => s.occurrenceKey === step.occurrenceKey);
     if (!canonical || this.selectedKey() === canonical.occurrenceKey) return;
     this.selectedKey.set(canonical.occurrenceKey);
+    if (canonical.repeatId && this.repeatPasses()[canonical.repeatId] !== canonical.iteration) {
+      this.repeatPasses.update(passes => ({ ...passes, [canonical.repeatId]: canonical.iteration }));
+    }
     this.stepSelected.emit({ occurrenceKey: canonical.occurrenceKey, stepId: canonical.stepId, repeatId: canonical.repeatId, iteration: canonical.iteration });
     this.haptics.selection();
   }
