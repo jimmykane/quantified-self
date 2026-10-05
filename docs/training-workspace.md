@@ -686,6 +686,46 @@ pass separately authorized create/update/reschedule/delete round trips, Wahoo an
 have not contaminated the neutral model, and persisted Quantified Self fixtures round-trip unchanged through a locally
 packed Sports Lib package. That gate is tracked by GitHub issue #654 under epic #583.
 
+### Workout visual profiles
+
+`WorkoutProfileComponent` is the shared read-only interval renderer for the live Plans/Standalone/library editor
+and the **Show profile** disclosure on saved scheduled and library workouts. Saved inspection consumes the complete
+canonical recipe independently of the narrower manual editor: cadence, speed presentation, relative snapshots,
+two simultaneous targets, and manual/kJ/repetition endings remain readable. Strength retains its exercise editor;
+the v1 strength compatibility summary is not presented as a complete exercise profile.
+
+`workout-profile.helper.ts` shapes presentation only. The horizontal axis is explicitly step order with equal widths,
+never elapsed time or distance. No shared planned-workout analyzer is currently available on this base, so this
+renderer does not estimate distance-step time, total duration, average pace, zones or generic intensity. A future
+time-scaled view must consume the shared analyzer and its uncertainty rather than introduce a private estimator.
+One target metric is shown at a time (HR, power, pace, speed or cadence). Both authored targets remain in accessible
+details and tooltips. Constant targets, including warm-up/cool-down targets, are rectangles rather than invented ramps;
+untargeted steps have empty metric spaces and a separately labelled purpose strip. Relative ranges resolve only from
+their saved reference snapshot, with percentage/reference and resolved-range text; missing/invalid snapshots fail closed.
+Pace axes reverse speed bounds and follow the canonical Sports Lib formatter, including swim and rowing conventions.
+Physical pool length is explicit metadata and is never inferred from distance steps.
+
+Profiles expand at most 128 occurrences. Above that presentation budget, each repeat shows one selectable pass,
+the complete occurrence count is disclosed, and every pass (including the last of 9,900 legal occurrences) remains
+inspectable. This is grouping, not truncation or a lower recipe limit. Selection keys combine canonical step ID,
+repeat ID and iteration; canonical IDs and recipe JSON never change. Editor selection highlights the source step and
+survives reordering. Invalid drafts remove the chart instead of retaining the last valid preview. Owner/editor/revision
+context changes clear presentation selection. Saved disclosures shape data and instantiate charts only when opened.
+
+Rendering uses the shared ECharts loader/host controller, theme/resize and viewport-bound escaped tooltip helpers,
+including the viewport tooltip host for horizontally scrollable phone charts. Material selectors, labelled purpose
+markers, text details, pressed-state buttons and arrow/Home/End navigation provide touch and keyboard equivalents.
+Accepted selection owns haptics; raw chart pointer feedback is disabled to avoid duplicate/no-op feedback. Component
+tests cover silent hydration/context changes, selection and disposal; browser checks use synthetic recipes, not private
+exports. Physical vibration still needs device verification.
+
+MCP impact: no schema, scope, consent, recipe variant, projection, provider action, plugin guidance or mutation change.
+Focused `get_planned_workout`/`get_planned_workout_v2` regressions retain exact mixed distance/HR and untargeted
+60/75/90-second fixtures, two saved-reference targets, canonical ordering and scope/connection isolation. Presentation
+fields stay local. The component accepts `changedStepIds` and emits canonical occurrence selection for a future
+Assistant review consumer; current summary-only proposal previews are unchanged and do not supply full recipes.
+The registered read/write and confirmation contracts remain authoritative.
+
 ### Persistence, mutation, and history
 
 #### Workout library snapshots (#653)

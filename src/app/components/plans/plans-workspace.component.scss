@@ -603,3 +603,8 @@ mat-card-actions button,
   }
 
 }
+.workout-node-row.profile-selected,
+.repeat-step-editor.profile-selected {
+  outline: 2px solid var(--mat-sys-primary);
+  outline-offset: 2px;
+}
