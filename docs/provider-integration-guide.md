@@ -43,6 +43,15 @@ Suunto Health history adapts to item-count limits by halving oversized target wi
 
 Suunto Health failure logs retain allowlisted operation stages and error classifications before raw errors are sanitized for retry storage. Distinguish worker HTTP 500s from validated upstream status codes; RPC, transport, validation and unknown failures have separate safe diagnostics. See [backfill diagnostic fields](health-backfill-operations.md#verification). Do not add raw provider responses, exception messages, stacks, credential URLs or account identifiers to those fields.
 
+Suunto workout downloads, activity-history reads, and Health pulls allow one same-account forced token refresh and
+read retry after HTTP 401 or 403. Health shares that recovery budget across all feeds/subrequests in one invocation;
+its existing durable queue retry policy remains unchanged. Never select another connected account to recover old work.
+A workout still returning 403 moves to `SUUNTO_WORKOUT_ACCESS_DENIED` without fabricating a retry increment; legacy
+shared-account rows still try other matching owners, and transient failures or refresh contention remain retryable.
+403 is not proof of global token revocation or a deleted workout. Do not revoke credentials based on that response.
+An unexpired-token log proves only local expiry, not provider acceptance. See [Suunto integration](suunto-integration.md)
+for recovery, deployment targets, and rollback.
+
 The canonical `receiveSuunto247Data` webhook uses isolated owner-module entrypoint loading at 512 MiB while retaining
 its Gen 1 HTTP trigger, 60-second timeout and notification secret. See [entrypoint verification](functions-entrypoint-loading.md);
 this startup/memory configuration does not change webhook authentication, durable admission or provider registration.

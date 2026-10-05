@@ -387,6 +387,7 @@ export async function processSuuntoHealthQueueItem(
     throw new SuuntoHealthAccountValidationError();
   }
   let resolvedAccessTokenNeedsValidation = true;
+  let authorizationRefreshAttempted = false;
 
   let pullAttempts = 0;
   const pullDeadline = Date.now() + SUUNTO_HEALTH_PULL_BUDGET_MS;
@@ -442,7 +443,7 @@ export async function processSuuntoHealthQueueItem(
       return await requestWithObservation();
     } catch (error) {
       const statusCode = providerStatusCode(error);
-      if (statusCode !== 401) {
+      if ((statusCode !== 401 && statusCode !== 403) || authorizationRefreshAttempted) {
         // Provider errors may contain request URLs, credentials, or response
         // fragments. The validated numeric HTTP status is safe and lets us
         // distinguish provider failures from transport failures in Cloud Logs.
@@ -454,6 +455,8 @@ export async function processSuuntoHealthQueueItem(
       }
     }
 
+    // Share one recovery budget across all feeds and adaptive subrequests.
+    authorizationRefreshAttempted = true;
     onStage?.('token_refresh');
     const refreshedToken = await getTokenData(tokenSnapshot, ServiceNames.SuuntoApp, true, {
       opaqueTelemetry: true,

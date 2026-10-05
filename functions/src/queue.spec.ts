@@ -4000,9 +4000,9 @@ describe('queue', () => {
             }));
         });
 
-        it('should handle 401 Unauthorized with token refresh and retry', async () => {
+        it.each([401, 403])('recovers a Suunto download HTTP %s with one token refresh and retry', async statusCode => {
             vi.mocked(getBinaryResponse)
-                .mockRejectedValueOnce({ statusCode: 401 })
+                .mockRejectedValueOnce({ statusCode })
                 .mockResolvedValueOnce(createBinaryResponse(createSyntheticFitPayload()));
 
             const result = await parseWorkoutQueueItemForServiceName(ServiceNames.SuuntoApp, suuntoQueueItem);
@@ -4010,6 +4010,9 @@ describe('queue', () => {
             expect(getBinaryResponse).toHaveBeenCalledTimes(2);
             expect(result).toBe(QueueResult.Processed);
             expect(getTokenData).toHaveBeenCalledTimes(2); // Initial + Force Refresh
+            expect(getTokenData).toHaveBeenLastCalledWith(
+                vi.mocked(getTokenData).mock.calls[0][0], ServiceNames.SuuntoApp, true,
+            );
         });
 
         it.each([false, true])('moves an oversized Suunto FIT to DLQ without parsing or retrying (after refresh: %s)', async (afterRefresh) => {
@@ -4033,8 +4036,8 @@ describe('queue', () => {
             expect(mockBatch.delete).toHaveBeenCalledWith(mockRef);
         });
 
-        it('should defer a Suunto 401 retry when another worker owns the forced token refresh', async () => {
-            vi.mocked(getBinaryResponse).mockRejectedValueOnce({ statusCode: 401 });
+        it.each([401, 403])('defers a Suunto HTTP %s retry when another worker owns token refresh', async statusCode => {
+            vi.mocked(getBinaryResponse).mockRejectedValueOnce({ statusCode });
             vi.mocked(getTokenData)
                 .mockResolvedValueOnce({
                     accessToken: 'stale-token',
@@ -4056,8 +4059,8 @@ describe('queue', () => {
             }));
         });
 
-        it('should move to DLQ when forced refresh after download 401 returns terminal invalid_grant', async () => {
-            vi.mocked(getBinaryResponse).mockRejectedValueOnce({ statusCode: 401 });
+        it.each([401, 403])('retains terminal invalid_grant handling after download HTTP %s', async statusCode => {
+            vi.mocked(getBinaryResponse).mockRejectedValueOnce({ statusCode });
             vi.mocked(getTokenData)
                 .mockResolvedValueOnce({
                     accessToken: 'stale-token',
@@ -4084,14 +4087,84 @@ describe('queue', () => {
             expect(mockBatch.delete).toHaveBeenCalledWith(mockRef);
         });
 
-        it('should handle 403 Forbidden by increasing retry count significantly', async () => {
-            vi.mocked(getBinaryResponse).mockRejectedValue({ statusCode: 403 });
+        it.each([401, 403])('records refreshed Suunto 403 after HTTP %s as access denied without fabricated retries', async statusCode => {
+            vi.mocked(getBinaryResponse)
+                .mockRejectedValueOnce({ statusCode })
+                .mockRejectedValueOnce(Object.assign(new Error('private-provider-response'), { statusCode: 403 }));
 
             const result = await parseWorkoutQueueItemForServiceName(ServiceNames.SuuntoApp, suuntoQueueItem);
             expect(result).toBe(QueueResult.MovedToDLQ);
             expect(mockBatch.set).toHaveBeenCalledWith(expect.anything(), expect.objectContaining({
-                context: 'MAX_RETRY_REACHED'
+                context: 'SUUNTO_WORKOUT_ACCESS_DENIED',
+                retryCount: 0,
+                error: 'Suunto workout access denied after token refresh (HTTP 403).',
             }));
+            expect(getTokenData).toHaveBeenCalledTimes(2);
+            expect(getBinaryResponse).toHaveBeenCalledTimes(2);
+            expect(utils.setEvent).not.toHaveBeenCalled();
+            expect(JSON.stringify(mockBatch.set.mock.calls)).not.toContain('private-provider-response');
+        });
+
+        it('does not download with a different account returned during 403 recovery', async () => {
+            vi.mocked(getBinaryResponse).mockRejectedValueOnce({ statusCode: 403 });
+            vi.mocked(getTokenData)
+                .mockResolvedValueOnce({ accessToken: 'old-account-token', userName: 'suuntoUser' } as any)
+                .mockResolvedValueOnce({ accessToken: 'new-account-token', userName: 'different-account' } as any);
+
+            await parseWorkoutQueueItemForServiceName(ServiceNames.SuuntoApp, suuntoQueueItem);
+
+            expect(getBinaryResponse).toHaveBeenCalledTimes(1);
+            expect(utils.setEvent).not.toHaveBeenCalled();
+            expect(mockRef.update).toHaveBeenCalledWith(expect.objectContaining({ resultStatus: 'skipped' }));
+        });
+
+        it('skips the refreshed download if account deletion starts during 403 recovery', async () => {
+            vi.mocked(getBinaryResponse).mockRejectedValueOnce({ statusCode: 403 });
+            vi.mocked(getTokenData)
+                .mockResolvedValueOnce({ accessToken: 'old-token', userName: 'suuntoUser' } as any)
+                .mockRejectedValueOnce(new TokenRefreshSkippedForDeletedUserError());
+
+            await parseWorkoutQueueItemForServiceName(ServiceNames.SuuntoApp, suuntoQueueItem);
+
+            expect(getBinaryResponse).toHaveBeenCalledTimes(1);
+            expect(utils.setEvent).not.toHaveBeenCalled();
+            expect(mockBatch.set).not.toHaveBeenCalled();
+            expect(mockRef.update).toHaveBeenCalledWith(expect.objectContaining({
+                skippedReason: QUEUE_SKIPPED_REASONS.UserDeletedOrDeleting,
+            }));
+        });
+
+        it('defers instead of downloading if disconnect starts during 403 recovery', async () => {
+            const error = Object.assign(new Error('disconnect pending'), { name: 'TokenUseSkippedForPendingDisconnectError' });
+            vi.mocked(getBinaryResponse).mockRejectedValueOnce({ statusCode: 403 });
+            vi.mocked(getTokenData)
+                .mockResolvedValueOnce({ accessToken: 'old-token', userName: 'suuntoUser' } as any)
+                .mockRejectedValueOnce(error);
+            mockRef.get.mockResolvedValue({ exists: true, data: () => ({ ...suuntoQueueItem, ref: undefined }) });
+            mockDocRef.get.mockResolvedValue({ exists: true, data: () => ({
+                disconnectState: 'disconnect_pending', disconnectGeneration: 'pending-generation',
+            }) });
+
+            await expect(parseWorkoutQueueItemForServiceName(ServiceNames.SuuntoApp, suuntoQueueItem))
+                .resolves.toBe(QueueResult.Deferred);
+
+            expect(getBinaryResponse).toHaveBeenCalledTimes(1);
+            expect(utils.setEvent).not.toHaveBeenCalled();
+            expect(mockBatch.set).not.toHaveBeenCalled();
+        });
+
+        it('keeps a transient refresh failure after 403 retryable without claiming access denied', async () => {
+            vi.mocked(getBinaryResponse).mockRejectedValueOnce({ statusCode: 403 });
+            vi.mocked(getTokenData)
+                .mockResolvedValueOnce({ accessToken: 'old-token', userName: 'suuntoUser' } as any)
+                .mockRejectedValueOnce(Object.assign(new Error('refresh unavailable'), { statusCode: 503 }));
+
+            await expect(parseWorkoutQueueItemForServiceName(ServiceNames.SuuntoApp, suuntoQueueItem))
+                .resolves.toBe(QueueResult.RetryIncremented);
+
+            expect(getBinaryResponse).toHaveBeenCalledTimes(1);
+            expect(mockRef.update).toHaveBeenCalledWith(expect.objectContaining({ retryCount: 1 }));
+            expect(mockBatch.set).not.toHaveBeenCalled();
         });
 
         it('should handle 500 Internal Server Error by retrying instead of immediate DLQ', async () => {
@@ -4168,8 +4241,10 @@ describe('queue', () => {
             } as any);
             vi.mocked(getTokenData)
                 .mockResolvedValueOnce({ accessToken: 'forbidden', userName: 'suuntoUser' } as any)
+                .mockResolvedValueOnce({ accessToken: 'refreshed-forbidden', userName: 'suuntoUser' } as any)
                 .mockResolvedValueOnce({ accessToken: 'provider-ready', userName: 'suuntoUser' } as any);
             vi.mocked(getBinaryResponse)
+                .mockRejectedValueOnce({ statusCode: 403 })
                 .mockRejectedValueOnce({ statusCode: 403 })
                 .mockResolvedValueOnce(createBinaryResponse(Buffer.from('FIT is still preparing'), 'text/plain'));
 

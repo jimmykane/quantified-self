@@ -311,7 +311,7 @@ export async function getTokenData(
   if (!token.expired() && !forceRefreshAndSave) {
     await assertTokenUseAllowedForUser(doc, serviceName, 'before_return', options);
     if (options.opaqueTelemetry) {
-      logger.info('[ServiceAuth] Provider token remains valid.', { serviceName });
+      logger.info('[ServiceAuth] Provider token is unexpired; provider access has not been verified.', { serviceName });
     } else {
       logger.info(`Token is not expired won't refresh ${doc.id}`);
     }

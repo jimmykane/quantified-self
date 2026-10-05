@@ -659,10 +659,10 @@ describe('Suunto Health provider sync', () => {
     expect(hoisted.requestGet).toHaveBeenCalledTimes(2);
   });
 
-  it('force-refreshes once after a provider 401 and advances the write fence', async () => {
+  it.each([401, 403])('force-refreshes once after provider HTTP %s and advances the write fence', async statusCode => {
     const onRequest = vi.fn();
     hoisted.requestGet.mockReset()
-      .mockRejectedValueOnce({ response: { statusCode: 401 }, body: 'private response' })
+      .mockRejectedValueOnce({ response: { statusCode }, body: 'private response' })
       .mockResolvedValueOnce([{
         timestamp: '2026-08-26T12:00:00.000Z',
         entryData: { HR: 60 },
@@ -696,7 +696,7 @@ describe('Suunto Health provider sync', () => {
 
     expect(result.healthResults).toHaveLength(1);
     expect(onRequest.mock.calls.map(([observation]) => [observation.feed, observation.outcome])).toEqual([
-      ['activity', 'unauthorized'], ['activity', 'success'],
+      ['activity', statusCode === 401 ? 'unauthorized' : 'failed'], ['activity', 'success'],
       ['statistics', 'success'], ['recovery', 'success'],
     ]);
     expect(hoisted.getTokenData).toHaveBeenCalledWith(snapshot, ServiceNames.SuuntoApp, true, {
@@ -738,6 +738,59 @@ describe('Suunto Health provider sync', () => {
     expect(JSON.stringify(caught)).toContain('"providerStatusCode":503');
     expect(JSON.stringify(caught)).not.toContain('private-provider-response');
     expect(JSON.stringify(caught)).not.toContain('private-access-token');
+  });
+
+  it('stops after one refresh when Health still returns 403 and retains only safe telemetry', async () => {
+    hoisted.requestGet.mockReset().mockRejectedValue(Object.assign(new Error('private-body-and-token'), { statusCode: 403 }));
+    const snapshot = tokenSnapshot();
+    await expect(processSuuntoHealthQueueItem(queueItem(), snapshot, 'staged-user', currentAuthorityGuards(snapshot)))
+      .rejects.toMatchObject({ message: 'Suunto Health request failed.', providerStatusCode: 403 });
+    expect(hoisted.requestGet).toHaveBeenCalledTimes(2);
+    expect(hoisted.getTokenData).toHaveBeenCalledTimes(2);
+    expect(hoisted.getTokenData.mock.calls.filter(call => call[2] === true)).toHaveLength(1);
+  });
+
+  it('shares one authorization refresh across Health feeds', async () => {
+    hoisted.requestGet.mockReset()
+      .mockRejectedValueOnce({ statusCode: 403 })
+      .mockResolvedValueOnce([])
+      .mockRejectedValueOnce({ statusCode: 401 });
+    const snapshot = tokenSnapshot();
+    await expect(processSuuntoHealthQueueItem(queueItem(), snapshot, 'staged-user', currentAuthorityGuards(snapshot)))
+      .rejects.toMatchObject({ providerStatusCode: 401 });
+    expect(hoisted.requestGet).toHaveBeenCalledTimes(3);
+    expect(hoisted.getTokenData.mock.calls.filter(call => call[2] === true)).toHaveLength(1);
+  });
+
+  it('refuses a different Suunto account returned during Health 403 refresh', async () => {
+    hoisted.requestGet.mockReset().mockRejectedValueOnce({ statusCode: 403 });
+    hoisted.getTokenData.mockResolvedValueOnce(tokenReturnProjection())
+      .mockResolvedValueOnce({ ...tokenReturnProjection(), userName: 'different-account' });
+    const snapshot = tokenSnapshot();
+    await expect(processSuuntoHealthQueueItem(queueItem(), snapshot, 'staged-user', currentAuthorityGuards(snapshot)))
+      .rejects.toMatchObject({ name: 'SuuntoHealthAccountValidationError' });
+    expect(hoisted.requestGet).toHaveBeenCalledTimes(1);
+  });
+
+  it.each(['disconnect', 'reconnect', 'deletion'])('blocks Health 403 recovery when %s starts', async change => {
+    hoisted.requestGet.mockReset().mockImplementationOnce(async () => {
+      if (change === 'deletion') hoisted.userDeleting = true;
+      if (change === 'reconnect') hoisted.connectionStateGeneration = 'replacement-connection';
+      if (change === 'disconnect') hoisted.tokenRootData = {
+        ...hoisted.tokenRootData, disconnectState: 'pending', serviceDisconnectOperationGeneration: 'disconnect-1',
+      };
+      throw { statusCode: 403 };
+    });
+    hoisted.getTokenData.mockImplementation(async (_snapshot, _serviceName, forceRefresh, options) => {
+      if (forceRefresh) await options.beforeRefreshRequest();
+      return tokenReturnProjection();
+    });
+    const snapshot = tokenSnapshot();
+    await expect(processSuuntoHealthQueueItem(queueItem(), snapshot, 'staged-user', currentAuthorityGuards(snapshot)))
+      .rejects.toMatchObject({ name: change === 'deletion'
+        ? 'TokenRefreshSkippedForDeletedUserError' : 'SuuntoHealthAccountValidationError' });
+    expect(hoisted.requestGet).toHaveBeenCalledTimes(1);
+    expect(hoisted.tokenData.accessToken).toBe('initial-access-token');
   });
 
   it('does not expose an invalid provider status in retry telemetry', async () => {
