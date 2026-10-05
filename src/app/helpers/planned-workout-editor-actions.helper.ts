@@ -1,3 +1,4 @@
+import { copyManualWorkoutEditorTarget } from './planned-workout-target-editor.helper';
 import { WORKOUT_STRUCTURE_MAX_NODES } from '@shared/planned-workout';
 import type {
   ManualWorkoutEditorNode,
@@ -62,7 +63,7 @@ export function duplicateManualWorkoutEditorNode(
     ...step, id: freshId('step'),
     ...(step.sourceDuration ? { sourceDuration: { ...step.sourceDuration } } : {}),
     ...(step.sourceDistance ? { sourceDistance: { ...step.sourceDistance } } : {}),
-    ...(step.sourcePace ? { sourcePace: { ...step.sourcePace } } : {}),
+    targets: step.targets.map(copyManualWorkoutEditorTarget),
   });
   const copy: ManualWorkoutEditorNode = source.kind === 'repeat'
     ? { ...source, id: freshId('repeat'), steps: source.steps.map(copyStep) } : copyStep(source);

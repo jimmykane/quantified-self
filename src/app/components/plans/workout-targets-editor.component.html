@@ -1,0 +1,87 @@
+<div class="targets-heading"><span>Targets · {{ targets().length }}/2</span>
+  <button mat-button type="button" (click)="add()" [disabled]="disabled() || !canAdd()">
+    <mat-icon aria-hidden="true">add</mat-icon>Add target
+  </button>
+</div>
+@if (!targets().length) { <p class="target-hint">No intensity target. Add up to two different target kinds.</p> }
+@for (row of rows(); track $index; let index = $index) {
+  <div class="target-editor" role="group" [attr.aria-label]="'Target ' + (index + 1)">
+    <div class="target-heading"><span>Target {{ index + 1 }}</span><div class="target-actions">
+      @if (targets().length > 1) {
+        <button mat-icon-button type="button" [disabled]="disabled()" (click)="move(index, index === 0 ? 1 : -1)"
+          [attr.aria-label]="index === 0 ? 'Move target down' : 'Move target up'">
+          <mat-icon aria-hidden="true">{{ index === 0 ? 'arrow_downward' : 'arrow_upward' }}</mat-icon>
+        </button>
+      }
+      <button mat-icon-button type="button" (click)="remove(index)" [disabled]="disabled()" [attr.aria-label]="'Remove target ' + (index + 1)">
+        <mat-icon aria-hidden="true">remove_circle</mat-icon>
+      </button>
+    </div></div>
+    <div class="target-fields">
+      <mat-form-field subscriptSizing="dynamic"><mat-label>Target kind</mat-label>
+        <mat-select [value]="row.target.kind" [disabled]="disabled()" (selectionChange)="select(index, 'kind', $event.value)">
+          @for (kind of row.kinds; track kind.value) { <mat-option [value]="kind.value" [disabled]="kind.disabled">{{ kind.label }}</mat-option> }
+        </mat-select>
+      </mat-form-field>
+      <mat-form-field subscriptSizing="dynamic"><mat-label>Target mode</mat-label>
+        <mat-select [value]="row.target.mode" [disabled]="disabled()" (selectionChange)="select(index, 'mode', $event.value)">
+          <mat-option value="absolute">Absolute</mat-option><mat-option value="relative">Percent of reference</mat-option>
+        </mat-select>
+      </mat-form-field>
+      @if (row.target.kind === 'speed') {
+        <mat-form-field subscriptSizing="dynamic"><mat-label>Presentation</mat-label>
+          <mat-select [value]="row.target.presentation" [disabled]="disabled()" (selectionChange)="select(index, 'presentation', $event.value)">
+            <mat-option value="pace">Pace</mat-option><mat-option value="speed">Speed</mat-option>
+          </mat-select>
+        </mat-form-field>
+      }
+      <mat-form-field subscriptSizing="dynamic"><mat-label>Bounds</mat-label>
+        <mat-select [value]="row.target.rangeMode" [disabled]="disabled()" (selectionChange)="select(index, 'rangeMode', $event.value)">
+          <mat-option value="range">Range</mat-option><mat-option value="single">Single value</mat-option>
+        </mat-select>
+      </mat-form-field>
+      @if (row.pace) {
+        <app-workout-time-input mode="pace" [label]="row.minimumLabel" [value]="row.target.minimum" [disabled]="disabled()"
+          (valueChange)="number(index, 'minimum', $event)"></app-workout-time-input>
+        @if (row.target.rangeMode === 'range') {
+          <app-workout-time-input mode="pace" [label]="row.maximumLabel" [value]="row.target.maximum" [disabled]="disabled()"
+            (valueChange)="number(index, 'maximum', $event)"></app-workout-time-input>
+        }
+      } @else {
+        <mat-form-field subscriptSizing="dynamic"><mat-label>{{ row.minimumLabel }}</mat-label>
+          <input matInput type="number" min="0" step="any" [disabled]="disabled()" [ngModel]="row.target.minimum"
+            [attr.aria-label]="row.minimumLabel" (ngModelChange)="number(index, 'minimum', $event)">
+        </mat-form-field>
+        @if (row.target.rangeMode === 'range') {
+          <mat-form-field subscriptSizing="dynamic"><mat-label>{{ row.maximumLabel }}</mat-label>
+            <input matInput type="number" min="0" step="any" [disabled]="disabled()" [ngModel]="row.target.maximum"
+              [attr.aria-label]="row.maximumLabel" (ngModelChange)="number(index, 'maximum', $event)">
+          </mat-form-field>
+        }
+      }
+      @if (row.target.mode === 'relative') {
+        <mat-form-field subscriptSizing="dynamic"><mat-label>Reference</mat-label>
+          <mat-select [value]="row.target.referenceKind" [disabled]="disabled()" (selectionChange)="select(index, 'referenceKind', $event.value)">
+            @for (reference of row.references; track reference.value) { <mat-option [value]="reference.value">{{ reference.label }}</mat-option> }
+          </mat-select>
+        </mat-form-field>
+        @if (row.target.kind === 'speed' && row.target.presentation === 'pace') {
+          <app-workout-time-input mode="pace" [label]="'Reference ' + row.unit" [value]="row.target.referenceValue" [disabled]="disabled()"
+            (valueChange)="number(index, 'referenceValue', $event)"></app-workout-time-input>
+        } @else {
+          <mat-form-field subscriptSizing="dynamic"><mat-label>Reference ({{ row.unit }})</mat-label>
+            <input matInput type="number" min="0" step="any" [disabled]="disabled()" [ngModel]="row.target.referenceValue"
+              [attr.aria-label]="'Reference ' + row.unit" (ngModelChange)="number(index, 'referenceValue', $event)">
+          </mat-form-field>
+        }
+      }
+    </div>
+    @if (row.target.mode === 'relative') {
+      <p class="target-hint">{{ row.savedReference ? 'Saved reference snapshot' : 'Enter an explicit reference' }}. Percentages use 80 for 80%. Changing the reference changes this prescription.</p>
+    }
+    @if (row.target.kind === 'cadence') {
+      <p class="target-hint">Canonical cadence. Swimming and rowing targets do not imply a stroke-rate conversion; provider support varies.</p>
+    }
+    <p class="target-preview" aria-live="polite">{{ row.preview }}</p>
+  </div>
+}

@@ -792,33 +792,8 @@
             <p class="editor-hint">Ends at the limit or when you press Lap. Suunto delivery supports this option.</p>
           </div>
         }
-        <mat-form-field subscriptSizing="dynamic">
-          <mat-label>Target</mat-label>
-          <mat-select [value]="step.targetKind" [disabled]="busyAction() !== null" (selectionChange)="updateStep(nodeIndex, stepIndex, 'targetKind', $event.value)">
-            @for (target of targetOptions; track target.value) {
-              <mat-option [value]="target.value">{{ target.label }}</mat-option>
-            }
-          </mat-select>
-        </mat-form-field>
-        @if (step.targetKind === 'pace') {
-          <app-workout-time-input mode="pace" [label]="'Faster ' + editorPaceUnit()"
-            [value]="step.targetMinimum" [disabled]="busyAction() !== null"
-            (valueChange)="updateStep(nodeIndex, stepIndex, 'targetMinimum', $event)"></app-workout-time-input>
-          <app-workout-time-input mode="pace" [label]="'Slower ' + editorPaceUnit()"
-            [value]="step.targetMaximum" [disabled]="busyAction() !== null"
-            (valueChange)="updateStep(nodeIndex, stepIndex, 'targetMaximum', $event)"></app-workout-time-input>
-        } @else if (step.targetKind !== 'none') {
-          <mat-form-field subscriptSizing="dynamic">
-            <mat-label>Minimum</mat-label>
-            <input matInput type="number" min="0" step="0.01" [ngModel]="step.targetMinimum"
-              (ngModelChange)="updateStep(nodeIndex, stepIndex, 'targetMinimum', $event)">
-          </mat-form-field>
-          <mat-form-field subscriptSizing="dynamic">
-            <mat-label>Maximum</mat-label>
-            <input matInput type="number" min="0" step="0.01" [ngModel]="step.targetMaximum"
-              (ngModelChange)="updateStep(nodeIndex, stepIndex, 'targetMaximum', $event)">
-          </mat-form-field>
-        }
+        <app-workout-targets-editor [targets]="step.targets" [sport]="editor().value.sport" [unitSettings]="editor().unitSettings"
+          [disabled]="busyAction() !== null" (targetsChange)="updateStep(nodeIndex, stepIndex, 'targets', $event)"></app-workout-targets-editor>
       </div>
     </ng-template>
 

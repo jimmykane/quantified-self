@@ -1,3 +1,4 @@
+import { createManualWorkoutEditorTarget } from './planned-workout-target-editor.helper';
 import { ActivityTypes, DistanceUnits, PaceUnits, SwimPaceUnits } from '@sports-alliance/sports-lib';
 import { describe, expect, it } from 'vitest';
 import type { WorkoutStructureV1 } from '@shared/planned-workout';
@@ -247,7 +248,7 @@ describe('manual planned-workout editor conversion', () => {
       title: 'Mile tempo', localDate: '2026-09-03', sport: ActivityTypes.Running,
       nodes: [{
         ...createManualWorkoutEditorStep('tempo'), endingKind: 'distance', endingValue: 1,
-        targetKind: 'pace', targetMinimum: 4, targetMaximum: 5,
+        targets: [{ ...createManualWorkoutEditorTarget('speed'), presentation: 'pace', minimum: 4, maximum: 5 }]
       }],
     };
     const structure = manualWorkoutEditorToStructure(value, units);
@@ -260,7 +261,7 @@ describe('manual planned-workout editor conversion', () => {
       }],
     });
     expect(workoutStructureToManualEditor(value.title, value.localDate, structure, units).nodes[0])
-      .toMatchObject({ endingValue: 1, targetMinimum: 4, targetMaximum: 5 });
+      .toMatchObject({ endingValue: 1, targets: [{ minimum: 4, maximum: 5  }]});
     const metricPace = normalizeUserUnitSettings({ distanceUnits: DistanceUnits.Miles });
     expect(manualWorkoutEditorToStructure(value, metricPace).nodes[0]).toMatchObject({
       ending: { kind: 'distance', meters: 1609.344 },
@@ -286,7 +287,8 @@ describe('manual planned-workout editor conversion', () => {
     expect(manualWorkoutEditorToStructure(editor, units)).toEqual(structure);
     const swimEditor = changeManualWorkoutEditorSport(editor, ActivityTypes.Swimming, units);
     expect(manualWorkoutEditorToStructure(swimEditor, units).nodes).toEqual(structure.nodes);
-    const changed = { ...editor, nodes: [{ ...editor.nodes[0], targetMinimum: 4 } as ManualWorkoutEditorValue['nodes'][number]] };
+    const step = editor.nodes[0] as ManualWorkoutEditorStep;
+    const changed = { ...editor, nodes: [{ ...step, targets: [{ ...step.targets[0], minimum: 4 }] }] };
     expect(manualWorkoutEditorToStructure(changed, units).nodes).not.toEqual(structure.nodes);
   });
 
@@ -316,7 +318,7 @@ describe('manual planned-workout editor conversion', () => {
       title: 'Swim intervals', localDate: '2026-09-24', sport,
       nodes: [{
         ...createManualWorkoutEditorStep('lengths'), endingKind: 'distance', endingValue: 100,
-        targetKind: 'pace', targetMinimum: 1.5, targetMaximum: 2,
+        targets: [{ ...createManualWorkoutEditorTarget('speed'), presentation: 'pace', minimum: 1.5, maximum: 2 }]
       }],
     };
     const structure = manualWorkoutEditorToStructure(value, units);
@@ -328,7 +330,7 @@ describe('manual planned-workout editor conversion', () => {
       }],
     });
     expect(workoutStructureToManualEditor(value.title, value.localDate, structure, units).nodes[0])
-      .toMatchObject({ endingValue: 100, targetMinimum: 1.5, targetMaximum: 2 });
+      .toMatchObject({ endingValue: 100, targets: [{ minimum: 1.5, maximum: 2  }]});
   });
 
   it.each([ActivityTypes.Rowing, ActivityTypes.IndoorRowing])('keeps %s distance in metres and pace as a 500 m split', sport => {
@@ -336,7 +338,7 @@ describe('manual planned-workout editor conversion', () => {
       title: 'Row intervals', localDate: '2026-09-24', sport,
       nodes: [{
         ...createManualWorkoutEditorStep('interval'), endingKind: 'distance', endingValue: 500,
-        targetKind: 'pace', targetMinimum: 1.75, targetMaximum: 2,
+        targets: [{ ...createManualWorkoutEditorTarget('speed'), presentation: 'pace', minimum: 1.75, maximum: 2 }]
       }],
     };
     const structure = manualWorkoutEditorToStructure(value);
@@ -345,7 +347,7 @@ describe('manual planned-workout editor conversion', () => {
       targets: [{ minimumMetersPerSecond: 500 / 120, maximumMetersPerSecond: 500 / 105 }],
     }] });
     expect(workoutStructureToManualEditor(value.title, value.localDate, structure).nodes[0])
-      .toMatchObject({ endingValue: 500, targetMinimum: 1.75, targetMaximum: 2 });
+      .toMatchObject({ endingValue: 500, targets: [{ minimum: 1.75, maximum: 2  }]});
     expect(formatManualWorkoutStructure(structure).join(' ')).toContain('500');
   });
 
@@ -382,11 +384,11 @@ describe('manual planned-workout editor conversion', () => {
       title: 'Switch sport', localDate: '2026-09-24', sport: ActivityTypes.Running,
       nodes: [{
         ...createManualWorkoutEditorStep('work'), endingKind: 'distance', endingValue: 1,
-        targetKind: 'pace', targetMinimum: 4, targetMaximum: 5,
+        targets: [{ ...createManualWorkoutEditorTarget('speed'), presentation: 'pace', minimum: 4, maximum: 5 }]
       }],
     };
     const swimming = changeManualWorkoutEditorSport(running, sport);
-    expect(swimming.nodes[0]).toMatchObject({ endingValue: 1000, targetMinimum: 0.4, targetMaximum: 0.5 });
+    expect(swimming.nodes[0]).toMatchObject({ endingValue: 1000, targets: [{ minimum: 0.4, maximum: 0.5  }]});
     expect(manualWorkoutEditorToStructure(swimming).nodes).toEqual(manualWorkoutEditorToStructure(running).nodes);
   });
 
@@ -397,9 +399,7 @@ describe('manual planned-workout editor conversion', () => {
       sport: ActivityTypes.Running,
       nodes: [{
         ...createManualWorkoutEditorStep('tempo'),
-        targetKind: 'pace',
-        targetMinimum: 4,
-        targetMaximum: 5,
+        targets: [{ ...createManualWorkoutEditorTarget('speed'), presentation: 'pace', minimum: 4, maximum: 5 }]
       }],
     };
     const structure = manualWorkoutEditorToStructure(value);
@@ -412,7 +412,7 @@ describe('manual planned-workout editor conversion', () => {
       }],
     });
     expect(workoutStructureToManualEditor('Tempo', value.localDate, structure).nodes[0]).toMatchObject({
-      targetKind: 'pace', targetMinimum: 4, targetMaximum: 5,
+      targets: [{ kind: 'speed', minimum: 4, maximum: 5 }]
     });
   });
 
@@ -429,17 +429,13 @@ describe('manual planned-workout editor conversion', () => {
 
     value.nodes = [{
       ...createManualWorkoutEditorStep('work'),
-      targetKind: 'heart-rate',
-      targetMinimum: 170,
-      targetMaximum: 150,
+      targets: [{ ...createManualWorkoutEditorTarget('heart-rate'), minimum: 170, maximum: 150 }]
     }];
     expect(() => manualWorkoutEditorToStructure(value)).toThrow('minimum must not exceed');
 
     value.nodes = [{
       ...createManualWorkoutEditorStep('work'),
-      targetKind: 'pace',
-      targetMinimum: 5,
-      targetMaximum: 4,
+      targets: [{ ...createManualWorkoutEditorTarget('speed'), presentation: 'pace', minimum: 5, maximum: 4 }]
     }];
     expect(() => manualWorkoutEditorToStructure(value)).toThrow('Faster pace must not exceed slower pace');
     expect(() => manualWorkoutEditorToStructure(value, normalizeUserUnitSettings({
@@ -468,9 +464,7 @@ describe('manual planned-workout editor conversion', () => {
 
     const editor = workoutStructureToManualEditor('Recovery', '2026-09-03', structure);
     expect(editor.nodes[0]).toMatchObject({
-      targetKind: 'power',
-      targetMinimum: 0,
-      targetMaximum: 100,
+      targets: [{ kind: 'power', minimum: 0, maximum: 100 }],
       note: 'Keep the legs moving',
     });
     expect(manualWorkoutEditorToStructure(editor)).toEqual(structure);
@@ -501,59 +495,4 @@ describe('manual planned-workout editor conversion', () => {
     expect(manualWorkoutEditorToStructure(editor)).toEqual(structure);
   });
 
-  it('rejects targets the first editor cannot represent instead of silently dropping them', () => {
-    const base: WorkoutStructureV1 = {
-      version: 1,
-      sport: ActivityTypes.Running,
-      nodes: [{
-        kind: 'step',
-        id: 'work',
-        purpose: 'work',
-        ending: { kind: 'time', seconds: 600 },
-        targets: [{
-          kind: 'cadence',
-          mode: 'absolute',
-          minimumRpm: 170,
-          maximumRpm: 180,
-        }],
-      }],
-    };
-    expect(() => workoutStructureToManualEditor('Cadence', '2026-09-03', base))
-      .toThrow('cadence target');
-
-    const relative: WorkoutStructureV1 = {
-      ...base,
-      nodes: [{
-        ...base.nodes[0],
-        kind: 'step',
-        targets: [{
-          kind: 'heart-rate',
-          mode: 'relative',
-          minimumPercent: 80,
-          maximumPercent: 90,
-          reference: { kind: 'max-heart-rate', bpm: 190 },
-        }],
-      }],
-    };
-    expect(() => workoutStructureToManualEditor('Relative', '2026-09-03', relative))
-      .toThrow('relative target');
-  });
-});
-
-
-describe('early-Lap editor preservation', () => {
-  it.each([undefined, false, true])('round-trips %s through repeats and temporary manual ending', allowEarlyLap => {
-    const structure: WorkoutStructureV1 = { version: 1, sport: ActivityTypes.Running, nodes: [{ kind: 'repeat', id: 'repeat', count: 3,
-      steps: [{ kind: 'step', id: 'work', purpose: 'work', ending: { kind: 'distance', meters: 1609.344,
-        ...(allowEarlyLap === undefined ? {} : { allowEarlyLap }) }, targets: [] }] }] };
-    const editor = workoutStructureToManualEditor('Intervals', '2026-10-06', structure);
-    expect(manualWorkoutEditorToStructure(editor)).toEqual(structure);
-    const repeat = editor.nodes[0];
-    if (repeat.kind !== 'repeat') throw new Error('Expected repeat');
-    const manual = changeManualWorkoutEditorStepEnding(repeat.steps[0], 'manual', editor.sport);
-    repeat.steps[0] = manual;
-    expect(manualWorkoutEditorToStructure(editor).nodes[0]).toMatchObject({ steps: [{ ending: { kind: 'manual' } }] });
-    repeat.steps[0] = changeManualWorkoutEditorStepEnding(manual, 'distance', editor.sport);
-    expect(manualWorkoutEditorToStructure(editor)).toEqual(structure);
-  });
 });

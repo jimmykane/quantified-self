@@ -1,0 +1,222 @@
+import {
+  ActivityTypes, PaceUnits, SwimPaceUnits, DataCadence, DataHeartRate, DataPace, DataPower, DataSpeed, DataSwimDistance, DataSwimPace,
+  DynamicDataLoader, type DataInterface, type UserUnitSettingsInterface,
+} from '@sports-alliance/sports-lib';
+import {
+  formatWorkoutTargetV1, isRowingWorkoutSportV1, isSwimmingWorkoutSportV1,
+  type WorkoutTargetKindV1, type WorkoutTargetV1,
+} from '@shared/planned-workout';
+import { normalizeUserUnitSettings, resolveUnitAwareDisplayStat } from '@shared/unit-aware-display';
+
+type RelativeTarget = Extract<WorkoutTargetV1, { mode: 'relative' }>;
+export type WorkoutEditorReferenceKind = RelativeTarget['reference']['kind'];
+export interface ManualWorkoutEditorTarget {
+  kind: WorkoutTargetKindV1;
+  mode: 'absolute' | 'relative';
+  presentation: 'pace' | 'speed';
+  rangeMode: 'single' | 'range';
+  minimum: number | null;
+  maximum: number | null;
+  referenceKind: WorkoutEditorReferenceKind;
+  referenceValue: number | null;
+  /** Local display snapshot. Never serialized into the canonical recipe. */
+  source?: { target: WorkoutTargetV1; minimum: number; maximum: number; referenceValue: number | null };
+}
+
+function cloneWorkoutTarget(target: WorkoutTargetV1): WorkoutTargetV1 {
+  if (target.mode === 'absolute') return { ...target };
+  switch (target.kind) {
+    case 'heart-rate': return { ...target, reference: { ...target.reference } };
+    case 'power': return { ...target, reference: { ...target.reference } };
+    case 'speed': return { ...target, reference: { ...target.reference } };
+    case 'cadence': return { ...target, reference: { ...target.reference } };
+  }
+}
+
+export function copyManualWorkoutEditorTarget(target: ManualWorkoutEditorTarget): ManualWorkoutEditorTarget {
+  return { ...target, ...(target.source ? { source: { ...target.source, target: cloneWorkoutTarget(target.source.target) } } : {}) };
+}
+
+export const WORKOUT_EDITOR_REFERENCE_OPTIONS: Record<WorkoutTargetKindV1, readonly { value: WorkoutEditorReferenceKind; label: string }[]> = {
+  'heart-rate': [{ value: 'max-heart-rate', label: 'Maximum heart rate' }, { value: 'threshold-heart-rate', label: 'Threshold heart rate' }],
+  power: [{ value: 'functional-threshold-power', label: 'Functional threshold power' }, { value: 'critical-power', label: 'Critical power' }],
+  speed: [{ value: 'threshold-speed', label: 'Threshold speed / pace' }],
+  cadence: [{ value: 'preferred-cadence', label: 'Preferred cadence' }],
+};
+
+export function createManualWorkoutEditorTarget(kind: WorkoutTargetKindV1 = 'heart-rate'): ManualWorkoutEditorTarget {
+  return { kind, mode: 'absolute', presentation: 'pace', rangeMode: 'range', minimum: null, maximum: null,
+    referenceKind: WORKOUT_EDITOR_REFERENCE_OPTIONS[kind][0].value, referenceValue: null };
+}
+
+function selectedData(data: DataInterface, units?: UserUnitSettingsInterface | null): DataInterface {
+  return DynamicDataLoader.getUnitBasedDataFromDataInstance(data, normalizeUserUnitSettings(units))[0] ?? data;
+}
+
+function paceDistance(sport: ActivityTypes, units?: UserUnitSettingsInterface | null): number {
+  if (isRowingWorkoutSportV1(sport)) return 500;
+  const selected = normalizeUserUnitSettings(units);
+  // Exact inverse distances: Sports Lib rounds its mile conversion factor for display.
+  return isSwimmingWorkoutSportV1(sport)
+    ? selected.swimPaceUnits[0] === SwimPaceUnits.MinutesPer100Yard ? 91.44 : 100
+    : selected.paceUnits[0] === PaceUnits.MinutesPerMile ? 1609.344 : 1000;
+}
+
+function speedScale(units?: UserUnitSettingsInterface | null): number {
+  return Number(selectedData(new DataSpeed(1), units).getValue());
+}
+
+function roundInput(value: number): number {
+  const rounded = Math.round(value * 1e6) / 1e6;
+  return rounded !== 0 || value === 0 ? rounded : value;
+}
+
+function toSpeed(value: number, presentation: 'pace' | 'speed', sport: ActivityTypes, units?: UserUnitSettingsInterface | null): number {
+  return presentation === 'pace' ? paceDistance(sport, units) / (value * 60) : value / speedScale(units);
+}
+function fromSpeed(value: number, presentation: 'pace' | 'speed', sport: ActivityTypes, units?: UserUnitSettingsInterface | null): number {
+  return roundInput(presentation === 'pace' ? paceDistance(sport, units) / (value * 60) : value * speedScale(units));
+}
+
+export function workoutEditorTargetUnit(target: ManualWorkoutEditorTarget, sport: ActivityTypes, units?: UserUnitSettingsInterface | null): string {
+  const unit = (data: DataInterface) => resolveUnitAwareDisplayStat(data, normalizeUserUnitSettings(units))!.unit;
+  switch (target.kind) {
+    case 'heart-rate': return unit(new DataHeartRate(1));
+    case 'power': return unit(new DataPower(1));
+    case 'cadence': return unit(new DataCadence(1));
+    case 'speed': {
+      if (target.presentation === 'speed') return unit(new DataSpeed(1));
+      // Rowing has a fixed split denominator, independent of running/swimming preferences.
+      if (isRowingWorkoutSportV1(sport)) {
+        const minutes = resolveUnitAwareDisplayStat(new DataPace(1))!.unit.split('/')[0];
+        const distance = resolveUnitAwareDisplayStat(new DataSwimDistance(500))!;
+        return `${minutes}/${distance.value}${distance.unit}`;
+      }
+      return unit(isSwimmingWorkoutSportV1(sport) ? new DataSwimPace(100) : new DataPace(1000));
+    }
+  }
+}
+
+function bounds(target: WorkoutTargetV1): [number, number] {
+  if (target.mode === 'relative') return [target.minimumPercent, target.maximumPercent];
+  switch (target.kind) {
+    case 'heart-rate': return [target.minimumBpm, target.maximumBpm];
+    case 'power': return [target.minimumWatts, target.maximumWatts];
+    case 'cadence': return [target.minimumRpm, target.maximumRpm];
+    case 'speed': return [target.minimumMetersPerSecond, target.maximumMetersPerSecond];
+  }
+}
+function referenceValue(target: RelativeTarget): number {
+  switch (target.kind) {
+    case 'heart-rate': return target.reference.bpm;
+    case 'power': return target.reference.watts;
+    case 'cadence': return target.reference.rpm;
+    case 'speed': return target.reference.metersPerSecond;
+  }
+}
+
+export function workoutTargetToManualEditor(target: WorkoutTargetV1, sport: ActivityTypes, units?: UserUnitSettingsInterface | null): ManualWorkoutEditorTarget {
+  const [low, high] = bounds(target);
+  const presentation = target.kind === 'speed' ? target.presentation : 'pace';
+  const inverse = target.kind === 'speed' && target.mode === 'absolute' && presentation === 'pace';
+  const minimum = target.kind === 'speed' && target.mode === 'absolute' ? fromSpeed(inverse ? high : low, presentation, sport, units) : low;
+  const maximum = target.kind === 'speed' && target.mode === 'absolute' ? fromSpeed(inverse ? low : high, presentation, sport, units) : high;
+  const ref = target.mode === 'relative' ? target.kind === 'speed' ? fromSpeed(referenceValue(target), presentation, sport, units) : referenceValue(target) : null;
+  return { ...createManualWorkoutEditorTarget(target.kind), mode: target.mode, presentation,
+    rangeMode: low === high ? 'single' : 'range', minimum, maximum,
+    ...(target.mode === 'relative' ? { referenceKind: target.reference.kind } : {}), referenceValue: ref,
+    source: { target: cloneWorkoutTarget(target), minimum, maximum, referenceValue: ref } };
+}
+
+/** Preserve each untouched canonical bound independently, including inverted pace bounds. */
+export function manualEditorTargetToWorkout(target: ManualWorkoutEditorTarget, sport: ActivityTypes, units?: UserUnitSettingsInterface | null): WorkoutTargetV1 {
+  const minimum = target.minimum, maximum = target.rangeMode === 'single' ? target.minimum : target.maximum;
+  if (typeof minimum !== 'number' || typeof maximum !== 'number') throw new Error('Target ranges need two numeric values.');
+  if (!Number.isFinite(minimum) || !Number.isFinite(maximum)) throw new Error('Target ranges need two finite values.');
+  const pace = target.kind === 'speed' && target.mode === 'absolute' && target.presentation === 'pace';
+  if (minimum < 0 || maximum < 0) throw new Error('Target ranges cannot be negative.');
+  if (pace && (minimum === 0 || maximum === 0)) throw new Error('Pace target ranges need two positive values.');
+  if (minimum > maximum) throw new Error(pace ? 'Faster pace must not exceed slower pace.' : 'The target minimum must not exceed its maximum.');
+  const source = target.source?.target;
+  const compatible = source?.kind === target.kind && source.mode === target.mode
+    && (source.kind !== 'speed' || source.presentation === target.presentation);
+  const saved = compatible && source ? bounds(source) : null;
+  const canonical = (field: 'minimum' | 'maximum'): number => {
+    const input = target[field]!;
+    const index = pace ? field === 'minimum' ? 1 : 0 : field === 'minimum' ? 0 : 1;
+    if (saved && target.source?.[field] === input) return saved[index];
+    return target.kind === 'speed' && target.mode === 'absolute' ? toSpeed(input, target.presentation, sport, units) : input;
+  };
+  const low = canonical(target.rangeMode === 'single' ? 'minimum' : pace ? 'maximum' : 'minimum');
+  const high = target.rangeMode === 'single' ? low : canonical(pace ? 'minimum' : 'maximum');
+  if (target.mode === 'relative') {
+    if (!WORKOUT_EDITOR_REFERENCE_OPTIONS[target.kind].some(option => option.value === target.referenceKind)) throw new Error('Choose a compatible target reference.');
+    if (typeof target.referenceValue !== 'number' || !Number.isFinite(target.referenceValue) || target.referenceValue <= 0) {
+      throw new Error('Relative targets need a positive reference value.');
+    }
+    const ref = compatible && source?.mode === 'relative' && source.reference.kind === target.referenceKind
+      && target.source?.referenceValue === target.referenceValue ? referenceValue(source)
+      : target.kind === 'speed' ? toSpeed(target.referenceValue, target.presentation, sport, units) : target.referenceValue;
+    const range = { mode: 'relative' as const, minimumPercent: low, maximumPercent: high };
+    switch (target.kind) {
+      case 'heart-rate': return { ...range, kind: target.kind, reference: { kind: target.referenceKind as 'max-heart-rate' | 'threshold-heart-rate', bpm: ref } };
+      case 'power': return { ...range, kind: target.kind, reference: { kind: target.referenceKind as 'functional-threshold-power' | 'critical-power', watts: ref } };
+      case 'speed': return { ...range, kind: target.kind, presentation: target.presentation, reference: { kind: 'threshold-speed', metersPerSecond: ref } };
+      case 'cadence': return { ...range, kind: target.kind, reference: { kind: 'preferred-cadence', rpm: ref } };
+    }
+  }
+  switch (target.kind) {
+    case 'heart-rate': return { kind: target.kind, mode: 'absolute', minimumBpm: low, maximumBpm: high };
+    case 'power': return { kind: target.kind, mode: 'absolute', minimumWatts: low, maximumWatts: high };
+    case 'speed': return { kind: target.kind, mode: 'absolute', presentation: target.presentation, minimumMetersPerSecond: low, maximumMetersPerSecond: high };
+    case 'cadence': return { kind: target.kind, mode: 'absolute', minimumRpm: low, maximumRpm: high };
+  }
+}
+
+/** Rehydrate a valid draft in a new sport/presentation; retain partial input if it cannot yet be converted. */
+export function changeManualEditorTargetPresentation(target: ManualWorkoutEditorTarget, presentation: 'pace' | 'speed', sport: ActivityTypes, units?: UserUnitSettingsInterface | null): ManualWorkoutEditorTarget {
+  if (target.kind !== 'speed' || target.presentation === presentation) return target;
+  try {
+    const canonical = manualEditorTargetToWorkout(target, sport, units);
+    if (canonical.kind === 'speed') return { ...workoutTargetToManualEditor({ ...canonical, presentation }, sport, units), rangeMode: target.rangeMode };
+  } catch { /* Unfinished drafts stay editable; changing presentation clears incompatible numeric fields. */ }
+  return { ...target, presentation, minimum: target.mode === 'relative' ? target.minimum : null,
+    maximum: target.mode === 'relative' ? target.maximum : null, referenceValue: null, source: undefined };
+}
+
+export function changeManualEditorTargetSport(target: ManualWorkoutEditorTarget, from: ActivityTypes, to: ActivityTypes, units?: UserUnitSettingsInterface | null): ManualWorkoutEditorTarget {
+  if (target.kind !== 'speed') return target;
+  try { return { ...workoutTargetToManualEditor(manualEditorTargetToWorkout(target, from, units), to, units), rangeMode: target.rangeMode }; }
+  catch {
+    // Convert complete individual fields even while a neighboring field is empty/invalid.
+    if (target.presentation !== 'pace') return target;
+    const ratio = paceDistance(to, units) / paceDistance(from, units);
+    const convert = (value: number | null) => value === null ? null : roundInput(value * ratio);
+    const minimum = target.mode === 'absolute' ? convert(target.minimum) : target.minimum;
+    const maximum = target.mode === 'absolute' ? convert(target.maximum) : target.maximum;
+    const ref = convert(target.referenceValue);
+    // Carry a saved cache only for fields whose displayed value still matched it before conversion.
+    const source = target.source ? { ...target.source,
+      minimum: target.source.minimum === target.minimum ? minimum! : Number.NaN,
+      maximum: target.source.maximum === target.maximum ? maximum! : Number.NaN,
+      referenceValue: target.source.referenceValue === target.referenceValue ? ref : Number.NaN,
+    } : undefined;
+    return { ...target, minimum, maximum, referenceValue: ref, source };
+  }
+}
+
+export function manualEditorTargetPreview(target: ManualWorkoutEditorTarget, sport: ActivityTypes, units?: UserUnitSettingsInterface | null, locale?: string): string {
+  try {
+    const displayUnits = normalizeUserUnitSettings(units);
+    const canonical = manualEditorTargetToWorkout(target, sport, displayUnits);
+    if (canonical.mode === 'absolute') return formatWorkoutTargetV1(canonical, displayUnits, locale, sport);
+    const scale = referenceValue(canonical) / 100;
+    const low = canonical.minimumPercent * scale, high = canonical.maximumPercent * scale;
+    if (canonical.kind === 'speed' && canonical.presentation === 'pace' && low === 0) return 'Resolved pace is unavailable at zero speed.';
+    const range: WorkoutTargetV1 = canonical.kind === 'heart-rate' ? { kind: canonical.kind, mode: 'absolute', minimumBpm: low, maximumBpm: high }
+      : canonical.kind === 'power' ? { kind: canonical.kind, mode: 'absolute', minimumWatts: low, maximumWatts: high }
+      : canonical.kind === 'cadence' ? { kind: canonical.kind, mode: 'absolute', minimumRpm: low, maximumRpm: high }
+      : { kind: canonical.kind, mode: 'absolute', presentation: canonical.presentation, minimumMetersPerSecond: low, maximumMetersPerSecond: high };
+    return `Resolved · ${formatWorkoutTargetV1(range, displayUnits, locale, sport)}`;
+  } catch (error) { return error instanceof Error ? error.message : 'Complete the target.'; }
+}

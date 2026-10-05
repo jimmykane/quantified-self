@@ -545,7 +545,7 @@ negative values, non-positive endings/reference snapshots, inverted ranges, more
 100, nested repeats, and more than two targets per step. Its JSON output must remain Firestore-safe and must round-trip through stringify/parse without changing
 the persisted v1 value. The manual editor exposes canonical Running, Trail Running, Treadmill, Cycling, Mountain Biking,
 Indoor Cycling, E-Biking, Hand Cycle, Swimming (labelled Pool swimming), and Open Water Swimming sports plus date-only,
-time/distance/lap-button, fixed-repeat, and single absolute HR/power/pace inputs. Both swim profiles enter distance steps in metres
+time/distance/lap-button, fixed-repeat, and up to two unique absolute or relative HR/power/speed/cadence targets. Both swim profiles enter distance steps in metres
 rather than kilometres, and pace targets follow the user's swim-pace preference (/100 m or /100 yd). Changing an unsaved
 editor sport converts displayed distances and paces without changing their canonical values. The pool editor may
 select an optional physical length; a 25 m step alone never asserts a 25 m pool, and open-water swimming has no pool
@@ -565,7 +565,7 @@ MCP impact: existing recipe read and strict proposal/confirmation contracts alre
 purposes and repeat children. Regression tests cover full recipe reads and compatibility without synthesizing duration
 or dropping targets/instructions. No stored/wire schema, scope, consent, tool registration, metric, provider transport,
 or bundled plugin/skill changes are required for exposing this existing ending in the editor. Other editor limitations
-(kJ/repetition endings, relative targets and secondary targets) remain unchanged.
+(kJ/repetition endings) remain unchanged. Target expansion is described below.
 
 Running and cycling distance-step inputs follow the owner's `distanceUnits` preference (kilometres or miles), while
 their pace-target inputs independently follow the first selected `paceUnits` preference (min/km or min/mi). The editor
@@ -580,11 +580,45 @@ than rounding to zero. No recipe field, schedule history or stored workout requi
 canonical metres directly; COROS applies its existing documented integer-metre rounding and degradation approval;
 Wahoo's dated Workout delivery still rejects distance-ended recipes because its required duration is unknown.
 
+The shared `WorkoutTargetsEditorComponent` and `planned-workout-target-editor.helper.ts` expose all existing v1
+absolute/relative target variants in Plans, Standalone and the Workout library, including repeat children. Draft steps
+use ordered `targets[]`; no target, one target or two different kinds are allowed. Add/remove/reorder are explicit,
+duplicate kinds are disabled, and the strict shared parser remains the final save boundary. Range and single-value
+controls serialize the same canonical bounds; single values have equal bounds. Switching kind or absolute/relative
+mode clears incompatible numeric inputs rather than assigning them new semantics. Speed/pace presentation switches
+convert valid prescriptions without changing canonical m/s; unfinished fields remain editable.
+
+Relative references are typed snapshots: maximum/threshold HR in bpm, FTP/critical power in watts, threshold speed
+in m/s, and preferred cadence in rpm. The current user settings model supplies units but no explicit athlete reference
+settings. New references therefore require manual positive input; no imported threshold, population value or zone ID
+is substituted. Reopening retains saved snapshots independently of settings changes or missing settings. Percentages
+are percentage points (80 means 80%) and may exceed 100. Relative pace percentages scale speed, not reciprocal pace;
+zero percent stays a valid prescription with an unavailable finite-pace explanation. A canonical resolved range uses
+the existing Sports Lib formatter. Cadence remains canonical cadence, including saved swimming/rowing targets;
+those targets never acquire invented stroke-rate semantics or measured provider counterparts.
+
+Each target's local source snapshot tracks displayed bounds/reference independently. Editing one bound preserves the
+other exact canonical bound; percentage-only edits preserve the reference's exact saved m/s. Valid presentation/sport
+changes rehydrate those snapshots. Duration/distance caches remain independent, and an unchanged rounded yard pool
+length now preserves its exact saved metres. Source caches, range controls and reference input fields are never
+serialized into recipes or Firestore. New speed inputs invert the Sports Lib selected-unit numeric scale; pace/distance
+inputs retain the exact physical mile/yard denominators described above. Open editors capture normalized owner units.
+
+MCP impact review: no wire expansion. Existing strict scheduled/library recipe reads and complete-recipe proposals
+already represent all eight target variants, all six reference kinds, both speed presentations and ordered two-target
+steps. Added schema fixtures cover fractional values, zero and >100% bounds, repeats, order and rejection of local
+editor/private fields; loopback proposal tests preserve exact mixed targets through approved create/update, history
+and idempotent replay. Existing read projection, native approval, scope/owner/connection/grant/revision fences and
+provider compatibility remain authoritative. No stored migration, new mutation kind, provider action, consent,
+registered-contract digest, Assistant schema/guidance or plugin refresh is introduced. Bundled Training and cross-domain
+guidance already require explicit references and authoritative live tools. Frontend, provider serializer, structured
+output and registered-contract checks verify this coverage; device receipt and physical haptics need separate QA.
+
 Interval draft ordering and duplication use `planned-workout-editor-actions.helper.ts` with the existing v1 ordered
 node arrays. Plans, Standalone and Workout Library share the same editor controls. A move preserves every node ID and
 moves a repeat with its children; a child can move only within its own repeat. Duplication inserts immediately after the
 source, generates unique bounded IDs for the copied block and every copied child, and independently copies exact-duration,
-distance and pace caches as well as purpose, note, repeat count and draft fields. Pool settings remain workout-level.
+distance and target snapshots as well as purpose, note, repeat count and draft fields. Pool settings remain workout-level.
 Partial/invalid fields remain editable and are still rejected by the existing save conversion. The canonical 100-node
 limit counts both repeat blocks and children; additions and copies are disabled when the complete addition cannot fit.
 Strength exercises/sets use their separate editor and are deliberately outside this interval feature.

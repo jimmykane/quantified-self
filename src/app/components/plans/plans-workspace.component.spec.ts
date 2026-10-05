@@ -1,3 +1,5 @@
+import { createManualWorkoutEditorTarget } from '../../helpers/planned-workout-target-editor.helper';
+import { WorkoutTargetsEditorComponent } from './workout-targets-editor.component';
 import { signal } from '@angular/core';
 import { Location } from '@angular/common';
 import { TestBed } from '@angular/core/testing';
@@ -442,7 +444,7 @@ describe('PlansWorkspaceComponent', () => {
     const component = fixture.componentInstance;
     component.updateEditorField('title', 'QA interval timing');
     component.addEditorRepeat();
-    component.updateStep(0, null, 'targetKind', 'pace');
+    component.updateStep(0, null, 'targets', [{ ...createManualWorkoutEditorTarget('speed'), minimum: null, maximum: null }]);
     fixture.detectChanges(); await fixture.whenStable(); fixture.detectChanges();
     const type = async (input: HTMLInputElement, value: string) => {
       input.value = value; input.dispatchEvent(new Event('input', { bubbles: true }));
@@ -456,9 +458,9 @@ describe('PlansWorkspaceComponent', () => {
     }
     const paceInputs: HTMLInputElement[] = [...fixture.nativeElement.querySelectorAll('app-workout-time-input input[type="text"]')];
     await type(paceInputs[0], '4:30'); await type(paceInputs[1], '5:00');
-    expect(haptics.selection).toHaveBeenCalledOnce(); // Target selection, never typing.
+    expect(haptics.selection).not.toHaveBeenCalled(); // Draft setup and typing are silent.
     const firstNode = component.editor()!.value.nodes[0];
-    expect(firstNode).toMatchObject({ endingValue: 62.05, targetMinimum: 4.5, targetMaximum: 5 });
+    expect(firstNode).toMatchObject({ endingValue: 62.05, targets: [{ minimum: 4.5, maximum: 5 }] });
     await component.saveWorkout();
     const operation = (scope === 'library' ? libraryMutate : mutate).mock.calls[0][0].operation;
     expect(operation.structure.nodes[0]).toMatchObject({ ending: { kind: 'time', seconds: 3723 },
@@ -468,6 +470,46 @@ describe('PlansWorkspaceComponent', () => {
       steps: [{ ending: { kind: 'time', seconds: 75 } }, { ending: { kind: 'time', seconds: 90 } }] });
     expect(JSON.stringify(operation.structure)).not.toMatch(/sourceDuration|sourcePace|hours|endingValue/);
     if (scope === 'library') expect(mutate).not.toHaveBeenCalled();
+  });
+
+  it.each(['scheduled', 'library'] as const)('reopens mixed snapshots in %s and keeps them exact after a settings refresh', async scope => {
+    const structure = { version: 1 as const, sport: ActivityTypes.Cycling, nodes: [{ kind: 'repeat' as const, id: 'block', count: 3, steps: [
+      { kind: 'step' as const, id: 'work', purpose: 'work' as const, ending: { kind: 'time' as const, seconds: 61.1234567890123 }, targets: [
+        { kind: 'power' as const, mode: 'relative' as const, minimumPercent: 80.123456789, maximumPercent: 130.123456789,
+          reference: { kind: 'critical-power' as const, watts: 283.123456789 } },
+        { kind: 'heart-rate' as const, mode: 'absolute' as const, minimumBpm: 150.123456789, maximumBpm: 170.123456789 },
+      ], note: 'Preserve both targets' },
+      { kind: 'step' as const, id: 'recovery', purpose: 'recovery' as const, ending: { kind: 'distance' as const, meters: 1234.123456789 }, targets: [
+        { kind: 'speed' as const, mode: 'relative' as const, presentation: 'pace' as const, minimumPercent: 0, maximumPercent: 90,
+          reference: { kind: 'threshold-speed' as const, metersPerSecond: 3.1234567890123 } },
+        { kind: 'cadence' as const, mode: 'absolute' as const, minimumRpm: 80.123456789, maximumRpm: 90.123456789 },
+      ] },
+    ] }] };
+    if (scope === 'scheduled') {
+      schedule.workouts[0].structure = structure;
+      setRouteState({ mode: 'edit', workoutId: 'plan-workout' });
+    } else {
+      libraryItems.next([{ schemaVersion: 1, id: 'mixed-library', title: 'Mixed snapshots', structure,
+        status: 'active', revision: 2, createdAtMs: 1, updatedAtMs: 2 }]);
+      libraryGet.mockResolvedValue(libraryItems.value[0]);
+      libraryMutate.mockResolvedValue({ mutationId: 'mutation-1', item: null });
+      setRouteState({ mode: 'library-edit', itemId: 'mixed-library' });
+    }
+    const fixture = await renderPlans();
+    expect(fixture.nativeElement.querySelectorAll('.target-editor')).toHaveLength(4);
+    expect(fixture.nativeElement.textContent).toContain('Saved reference snapshot');
+    const capturedUnits = fixture.componentInstance.editor()!.unitSettings;
+    const refreshed = { ...user, settings: { unitSettings: normalizeUserUnitSettings({ paceUnits: [PaceUnits.MinutesPerMile] }) } };
+    userSignal.set(refreshed); userSubject.next(refreshed); fixture.detectChanges();
+    expect(fixture.componentInstance.editor()!.unitSettings).toEqual(capturedUnits);
+    if (scope === 'scheduled') {
+      await fixture.componentInstance.saveEditorCopyToLibrary();
+      expect(libraryMutate.mock.calls[0][0].operation.structure).toEqual(structure);
+    }
+    await fixture.componentInstance.saveWorkout();
+    const operation = (scope === 'library' ? libraryMutate : mutate).mock.calls[0][0].operation;
+    expect(operation.structure).toEqual(structure);
+    expect(JSON.stringify(operation.structure)).not.toMatch(/source|rangeMode|referenceValue/);
   });
 
   it('reopens and resaves exact timed prescriptions without numeric-input rounding', async () => {
@@ -506,7 +548,7 @@ describe('PlansWorkspaceComponent', () => {
   });
 
   it.each([
-    { sport: ActivityTypes.Running, units: normalizeUserUnitSettings({ paceUnits: [PaceUnits.MinutesPerMile] }), meters: 1609.344, label: 'min/mi' },
+    { sport: ActivityTypes.Running, units: normalizeUserUnitSettings({ paceUnits: [PaceUnits.MinutesPerMile] }), meters: 1609.344, label: 'min/m' },
     { sport: ActivityTypes.Swimming, units: normalizeUserUnitSettings({}), meters: 100, label: 'min/100m' },
     { sport: ActivityTypes.OpenWaterSwimming, units: normalizeUserUnitSettings({ swimPaceUnits: [SwimPaceUnits.MinutesPer100Yard] }), meters: 91.44, label: 'min/100yd' },
     { sport: ActivityTypes.Rowing, units: normalizeUserUnitSettings({}), meters: 500, label: 'min/500m' },
@@ -519,7 +561,7 @@ describe('PlansWorkspaceComponent', () => {
     const component = fixture.componentInstance;
     component.updateEditorField('title', 'Pace input units');
     component.updateEditorField('sport', sport);
-    component.updateStep(0, null, 'targetKind', 'pace');
+    component.updateStep(0, null, 'targets', [{ ...createManualWorkoutEditorTarget('speed'), minimum: null, maximum: null }]);
     fixture.detectChanges(); await fixture.whenStable(); fixture.detectChanges();
     const inputs: HTMLInputElement[] = [...fixture.nativeElement.querySelectorAll('app-workout-time-input input[type="text"]')];
     expect(inputs[0].getAttribute('aria-label')).toBe('Faster ' + label);
@@ -546,7 +588,7 @@ describe('PlansWorkspaceComponent', () => {
     expect(mutate).not.toHaveBeenCalled();
     expect(fixture.nativeElement.querySelector('[role="alert"]').textContent).toContain('below 60');
     component.updateStep(0, null, 'endingValue', 1.25);
-    component.updateStep(0, null, 'targetKind', 'pace');
+    component.updateStep(0, null, 'targets', [{ ...createManualWorkoutEditorTarget('speed'), minimum: null, maximum: null }]);
     fixture.detectChanges(); await fixture.whenStable(); fixture.detectChanges();
     const pace: HTMLInputElement = fixture.nativeElement.querySelector('app-workout-time-input input[type="text"]');
     pace.value = '4:'; pace.dispatchEvent(new Event('input', { bubbles: true }));
@@ -563,8 +605,8 @@ describe('PlansWorkspaceComponent', () => {
     const component = fixture.componentInstance;
     component.updateEditorField('title', 'Controlled long run and pace changes');
     component.updateStep(0, null, 'endingValue', 62.05);
-    component.updateStep(0, null, 'targetKind', 'pace');
-    component.updateStep(0, null, 'targetMinimum', 4.5); component.updateStep(0, null, 'targetMaximum', 5);
+    component.updateStep(0, null, 'targets', [{ ...createManualWorkoutEditorTarget('speed'), minimum: null, maximum: null }]);
+    component.updateStep(0, null, 'targets', [{ ...createManualWorkoutEditorTarget('speed'), minimum: 4.5, maximum: 5 }]);
     component.addEditorRepeat();
     component.updateStep(1, 0, 'endingValue', 1.25); component.updateStep(1, 1, 'endingValue', 1.5);
     fixture.detectChanges(); await fixture.whenStable(); fixture.detectChanges();
@@ -573,6 +615,7 @@ describe('PlansWorkspaceComponent', () => {
       ['app-plans-workspace', 'src/app/components/plans/plans-workspace.component.scss'],
       ['app-compact-row', 'src/app/components/shared/compact-row/compact-row.component.scss'],
       ['app-workout-time-input', 'src/app/components/plans/workout-time-input.component.scss'],
+      ['app-workout-targets-editor', 'src/app/components/plans/workout-targets-editor.component.scss'],
       ['app-page-header', 'src/app/components/shared/page-header/page-header.component.scss'],
       ['app-workout-profile', 'src/app/components/plans/workout-profile.component.scss'],
     ].map(([host, file]) => sass.compileString(host + ' {' + readFileSync(file, 'utf8')
@@ -584,6 +627,22 @@ describe('PlansWorkspaceComponent', () => {
       '<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">'
       + '<link rel="stylesheet" href="styles.css">' + Array.from(document.head.querySelectorAll('style')).map(style => style.outerHTML).join('')
       + '<style>' + css + '</style></head><body class="app-hydrated"><app-plans-workspace>' + markup.outerHTML + '</app-plans-workspace></body></html>');
+    component.updateStep(0, null, 'targets', [
+      { ...createManualWorkoutEditorTarget('heart-rate'), mode: 'relative', minimum: 80, maximum: 105, referenceValue: 185 },
+      { ...createManualWorkoutEditorTarget('cadence'), minimum: 80, maximum: 95 },
+    ]);
+    component.updateStep(1, 0, 'targets', [
+      { ...createManualWorkoutEditorTarget('power'), mode: 'relative', referenceKind: 'critical-power', minimum: 80, maximum: 120, referenceValue: 250 },
+      { ...createManualWorkoutEditorTarget('speed'), minimum: 4.5, maximum: 5 },
+    ]);
+    fixture.detectChanges(); await fixture.whenStable(); fixture.detectChanges();
+    const targetMarkup = fixture.nativeElement.cloneNode(true) as HTMLElement;
+    const targetInputs: HTMLInputElement[] = [...fixture.nativeElement.querySelectorAll('input')];
+    targetMarkup.querySelectorAll('input').forEach((input, index) => input.setAttribute('value', targetInputs[index].value));
+    writeFileSync(join(process.env.TRAINING_DELIVERY_QA_DIR, 'target-editor.html'),
+      '<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">'
+      + '<link rel="stylesheet" href="styles.css">' + Array.from(document.head.querySelectorAll('style')).map(style => style.outerHTML).join('')
+      + '<style>' + css + '</style></head><body class="app-hydrated"><app-plans-workspace>' + targetMarkup.outerHTML + '</app-plans-workspace></body></html>');
     const repeat = component.editor()!.value.nodes[1] as ManualWorkoutEditorRepeat;
     component.duplicateEditorNode(repeat.id);
     component.moveEditorNode(repeat.id, -1);
@@ -1260,7 +1319,7 @@ describe('PlansWorkspaceComponent', () => {
   it.each([
     { preference: {}, label: 'Kilometres', meters: 1000, pace: 'min/km' },
     { preference: { distanceUnits: DistanceUnits.Miles, paceUnits: [PaceUnits.MinutesPerMile] },
-      label: 'Miles', meters: 1609.344, pace: 'min/mi' },
+      label: 'Miles', meters: 1609.344, pace: 'min/m' },
   ])('uses $label and $pace in the editor and saves canonical values', async ({ preference, label, meters, pace }) => {
     const unitUser = { ...user, settings: { unitSettings: normalizeUserUnitSettings(preference) } };
     TestBed.overrideProvider(AppUserService, { useValue: { user: signal(unitUser), user$: of(unitUser) } });
@@ -1269,12 +1328,11 @@ describe('PlansWorkspaceComponent', () => {
     fixture.componentInstance.updateEditorField('title', 'Distance test');
     fixture.componentInstance.updateStep(0, null, 'endingKind', 'distance');
     fixture.componentInstance.updateStep(0, null, 'endingValue', 1);
-    fixture.componentInstance.updateStep(0, null, 'targetKind', 'pace');
-    fixture.componentInstance.updateStep(0, null, 'targetMinimum', 4);
-    fixture.componentInstance.updateStep(0, null, 'targetMaximum', 5);
+    fixture.componentInstance.updateStep(0, null, 'targets', [{ ...createManualWorkoutEditorTarget('speed'), minimum: null, maximum: null }]);
+    fixture.componentInstance.updateStep(0, null, 'targets', [{ ...createManualWorkoutEditorTarget('speed'), minimum: 4, maximum: 5 }]);
     fixture.detectChanges();
     expect(fixture.componentInstance.editorDistanceUnit()).toBe(label);
-    expect(fixture.componentInstance.editorPaceUnit()).toBe(pace);
+    expect(fixture.debugElement.query(By.directive(WorkoutTargetsEditorComponent)).componentInstance.rows()[0].unit).toBe(pace);
     expect(fixture.nativeElement.querySelector('.step-fields')?.textContent).toContain(label);
     await fixture.componentInstance.saveWorkout();
     expect(mutate).toHaveBeenCalledWith(expect.objectContaining({
@@ -2015,7 +2073,9 @@ describe('PlansWorkspaceComponent', () => {
     fixture.detectChanges();
     expect(fixture.componentInstance.editorIsSwimming()).toBe(true);
     expect(fixture.nativeElement.textContent).toContain('Metres');
-    expect(fixture.componentInstance.editorPaceUnit()).toBe('min/100m');
+    fixture.componentInstance.updateStep(0, null, 'targets', [{ ...createManualWorkoutEditorTarget('speed'), minimum: 1, maximum: 2 }]);
+    fixture.detectChanges();
+    expect(fixture.debugElement.query(By.directive(WorkoutTargetsEditorComponent)).componentInstance.rows()[0].unit).toBe('min/100m');
     fixture.componentInstance.updateEditorField('title', 'Pool test');
     await fixture.componentInstance.saveWorkout();
     expect(mutate).toHaveBeenCalledWith(expect.objectContaining({
@@ -2035,7 +2095,9 @@ describe('PlansWorkspaceComponent', () => {
     fixture.componentInstance.updateStep(0, null, 'endingKind', 'distance');
     fixture.detectChanges();
     expect(fixture.nativeElement.textContent).toContain('Metres');
-    expect(fixture.componentInstance.editorPaceUnit()).toBe('min/500m');
+    fixture.componentInstance.updateStep(0, null, 'targets', [{ ...createManualWorkoutEditorTarget('speed'), minimum: 1, maximum: 2 }]);
+    fixture.detectChanges();
+    expect(fixture.debugElement.query(By.directive(WorkoutTargetsEditorComponent)).componentInstance.rows()[0].unit).toBe('min/500m');
   });
 
   it('saves a selected 25 m pool length separately from the swim step distance', async () => {
@@ -2071,7 +2133,9 @@ describe('PlansWorkspaceComponent', () => {
     fixture.detectChanges();
     expect(fixture.componentInstance.editorIsSwimming()).toBe(true);
     expect(fixture.nativeElement.textContent).toContain('Metres');
-    expect(fixture.componentInstance.editorPaceUnit()).toBe('min/100m');
+    fixture.componentInstance.updateStep(0, null, 'targets', [{ ...createManualWorkoutEditorTarget('speed'), minimum: 1, maximum: 2 }]);
+    fixture.detectChanges();
+    expect(fixture.debugElement.query(By.directive(WorkoutTargetsEditorComponent)).componentInstance.rows()[0].unit).toBe('min/100m');
     await fixture.componentInstance.saveWorkout();
     expect(mutate).toHaveBeenCalledWith(expect.objectContaining({
       operation: expect.objectContaining({

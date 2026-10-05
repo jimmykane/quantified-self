@@ -80,6 +80,40 @@ describe.skipIf(!process.env.FIRESTORE_EMULATOR_HOST)('Training MCP write propos
   const statusInput = (proposalRef: string) => ({ uid, connectionId: 'connection', scopes,
     arguments: { proposalRef, permissionMode: 'combined' } });
 
+  it('persists exact mixed target snapshots and their order through approved create/update and idempotent replay', async () => {
+    const recipe = { ...structure, sport: ActivityTypes.Cycling, nodes: [{ kind: 'repeat', id: 'block', count: 3,
+      steps: [{ ...structure.nodes[0], ending: { kind: 'time', seconds: 61.1234567890123 }, targets: [
+        { kind: 'speed', mode: 'relative', presentation: 'pace', minimumPercent: 0, maximumPercent: 130.123456789,
+          reference: { kind: 'threshold-speed', metersPerSecond: 3.1234567890123 } },
+        { kind: 'cadence', mode: 'absolute', minimumRpm: 80.123456789, maximumRpm: 90.123456789 },
+      ] }] }] };
+    const preview = await previewTrainingChanges({ uid, connectionId: 'connection', scopes, arguments: {
+      expectedScheduleRevision: 1, changes: [{ kind: 'create-workout', localKey: 'mixed', plan: null,
+        localDate: '2026-09-18', title: 'Mixed targets', structure: recipe }] } }, deps);
+    expect((await db.collection('users').doc(uid).collection('scheduledWorkouts').get()).empty).toBe(true);
+    const scheduleInput = (proposalRef: string) => ({ ...statusInput(proposalRef),
+      arguments: { proposalRef, permissionMode: 'schedule' } });
+    const input = scheduleInput(preview.proposalRef);
+    const created = await applyTrainingChanges(input, deps);
+    expect(created.status).toBe('applied');
+    expect(await applyTrainingChanges(input, deps)).toEqual(created);
+    const user = db.collection('users').doc(uid);
+    const saved = (await user.collection('scheduledWorkouts').get()).docs[0];
+    expect(saved.get('structure')).toEqual(recipe);
+    const step = recipe.nodes[0].steps[0];
+    const edited = { ...recipe, nodes: [{ ...recipe.nodes[0], steps: [{ ...step, targets: [step.targets[1],
+      { ...step.targets[0], minimumPercent: 90.123456789 }] }] }] };
+    const update = await previewTrainingChanges({ uid, connectionId: 'connection', scopes, arguments: {
+      expectedScheduleRevision: (await user.collection('trainingPlanState').doc('current').get()).get('revision'),
+      changes: [{ kind: 'update-workout', workout: { ref: created.createdReferences[0].reference }, plan: null,
+        localDate: '2026-09-18', title: 'Mixed targets edited', structure: edited }] } }, deps);
+    expect((await saved.ref.get()).get('structure')).toEqual(recipe);
+    expect((await applyTrainingChanges(scheduleInput(update.proposalRef), deps)).status).toBe('applied');
+    expect((await saved.ref.get()).get('structure')).toEqual(edited);
+    expect((await saved.ref.collection('revisions').get()).docs.map(doc => doc.get('snapshot.structure'))).toContainEqual(recipe);
+    expect(JSON.stringify((await saved.ref.get()).get('structure'))).not.toMatch(/source|rangeMode|referenceValue/);
+  });
+
   it.each([true, false])('retains the confirmed %s Assistant outcome through a concurrent follow-up without transport calls', async confirm => {
     const store = createAssistantConversationStore({ db: () => db, now: () => new Date(deps.now()),
       createId: () => `assistant-${++sequence}` });

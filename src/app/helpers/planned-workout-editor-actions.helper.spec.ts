@@ -1,3 +1,4 @@
+import { createManualWorkoutEditorTarget } from './planned-workout-target-editor.helper';
 import { ActivityTypes, DistanceUnits, PaceUnits } from '@sports-alliance/sports-lib';
 import { describe, expect, it } from 'vitest';
 import { normalizeUserUnitSettings } from '@shared/unit-aware-display';
@@ -68,7 +69,7 @@ describe('manual workout draft ordering and duplication', () => {
     expect(JSON.stringify(structure)).not.toMatch(/sourceDuration|sourceDistance|sourcePace/);
     const sourceBlock = copy.nodes[2] as ManualWorkoutEditorRepeat;
     const copiedBlock = copy.nodes[3] as ManualWorkoutEditorRepeat;
-    expect(copiedBlock.steps[0].sourcePace).not.toBe(sourceBlock.steps[0].sourcePace);
+    expect(copiedBlock.steps[0].targets[0].source).not.toBe(sourceBlock.steps[0].targets[0].source);
     expect(copiedBlock.steps[0].sourceDistance).not.toBe(sourceBlock.steps[0].sourceDistance);
     const pool = { ...draft(), sport: ActivityTypes.Swimming, poolLengthValue: 25, poolLengthUnit: 'yards' as const };
     expect(duplicateManualWorkoutEditorNode(pool, 'block', ids())).toMatchObject({ poolLengthValue: 25, poolLengthUnit: 'yards' });
@@ -90,7 +91,7 @@ describe('manual workout draft ordering and duplication', () => {
   it('copies partial fields for continued editing and keeps exact duration caches independent', () => {
     const original = draft();
     original.nodes[0] = { ...createManualWorkoutEditorStep('partial'), endingValue: Number.NaN,
-      targetKind: 'power', targetMinimum: null, targetMaximum: 250, note: 'Finish this draft',
+      targets: [{ ...createManualWorkoutEditorTarget('power'), minimum: null, maximum: 250 }], note: 'Finish this draft',
       sourceDuration: { editorValue: 1.25, seconds: 75 } };
     const copy = duplicateManualWorkoutEditorNode(original, 'partial', ids());
     expect(copy.nodes[1]).toEqual({ ...original.nodes[0], id: 'step-copy-1' });
