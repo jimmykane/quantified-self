@@ -258,4 +258,32 @@ describe.skipIf(!process.env.FIRESTORE_EMULATOR_HOST)('MCP workout library propo
         dates: ['2026-10-02'], confirmPlanRangeExtension: false } }), deps))
       .rejects.toThrow('400-workout');
   });
+  it('preserves true and false settings through saved creation, independent placement and explicit removal', async () => {
+    const { uid, user, deps, input } = await setup();
+    const early = { ...structure, nodes: [{ kind: 'repeat', id: 'repeat', count: 2, steps: [
+      { ...structure.nodes[0], ending: { kind: 'time', seconds: 90.123, allowEarlyLap: true } },
+      { ...structure.nodes[0], id: 'distance', ending: { kind: 'distance', meters: 400.125, allowEarlyLap: false } },
+    ] }] };
+    const preview = await previewSavedWorkoutChange(input({ expectedScheduleRevision: 0, expectedLibraryRevision: 0,
+      change: { kind: 'create', title: 'Early Lap', structure: early } }), deps, 'v2');
+    expect(preview.changes[0].summary).toContain('Early Lap: enabled on 1');
+    const saved = await applySavedWorkoutChange(input({ proposalRef: preview.proposalRef, permissionMode: 'schedule' }), deps);
+    const id = decodeOpaqueValue('training_read', saved.savedWorkoutRef!, uid, 'connection', 'Saved workout').id as string;
+    expect((await user.collection('workoutLibrary').doc(id).get()).get('structure')).toEqual(early);
+    const placement = await previewSavedWorkoutChange(input({ expectedScheduleRevision: 0, expectedLibraryRevision: 1,
+      change: { kind: 'place', savedWorkoutRef: saved.savedWorkoutRef, expectedRevision: 1, planRef: null,
+        expectedPlanRevision: null, dates: ['2026-10-02', '2026-10-09'], confirmPlanRangeExtension: false } }), deps, 'v2');
+    const placed = await applySavedWorkoutChange(input({ proposalRef: placement.proposalRef, permissionMode: 'schedule' }), deps);
+    for (const doc of (await user.collection('scheduledWorkouts').get()).docs) expect(doc.get('structure')).toEqual(early);
+    const args = { expectedScheduleRevision: placed.scheduleRevision, expectedLibraryRevision: 1,
+      change: { kind: 'update', savedWorkoutRef: saved.savedWorkoutRef, expectedRevision: 1, title: 'Numeric only', structure } };
+    await expect(previewSavedWorkoutChange(input(args), deps)).rejects.toThrow('v2');
+    const removal = await previewSavedWorkoutChange(input(args), deps, 'v2');
+    expect(removal.changes[0].summary).toContain('Removed from 1 previously enabled step');
+    await applySavedWorkoutChange(input({ proposalRef: removal.proposalRef, permissionMode: 'schedule' }), deps);
+    expect((await user.collection('workoutLibrary').doc(id).get()).get('structure')).toEqual(structure);
+    for (const doc of (await user.collection('scheduledWorkouts').get()).docs) expect(doc.get('structure')).toEqual(early);
+    expect((await user.collection('trainingDeliverySettings').get()).empty).toBe(true);
+  });
+
 });

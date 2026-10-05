@@ -2,11 +2,12 @@ import { ActivityTypes, DataDuration, DistanceUnits, WeightUnits } from '@sports
 import { describe, expect, it } from 'vitest';
 import type { WorkoutEndingV1, WorkoutStructureV1, WorkoutStepV1 } from '../../../../shared/planned-workout';
 import { packageGuide, readGuideArchive } from '../delivery/suunto/archive';
-import { serializeSuuntoGuideJsonV1, serializeSuuntoGuideV2ForRecovery, serializeSuuntoGuideV4ForRecovery,
+import { serializeSuuntoGuideJsonV1, serializeSuuntoGuideV2ForRecovery, serializeSuuntoGuideV4ForRecovery, serializeSuuntoGuideV5ForRecovery,
     type SuuntoGuideFieldsStepV1 } from './suunto-guide.serializer';
 import cyclingV4 from './fixtures/suunto-cycling-v4-recovery.json';
 import swimmingV4 from './fixtures/suunto-swimming-v4-recovery.json';
 import { getDefaultUserUnitSettings, resolveUnitAwareDisplayStat } from '../../../../shared/unit-aware-display';
+import { assessPlannedWorkoutProviderMappingV1 } from '../../../../shared/planned-workout-providers';
 
 const options = { name: 'Synthetic intervals', owner: 'Quantified Self', url: 'https://quantified-self.io/training/plans',
     localDate: '2026-09-24', sourceWorkoutId: 'synthetic-repeat', allowDegraded: false };
@@ -386,4 +387,99 @@ describe('Suunto Guide repeat step IDs', () => {
         expect(result.artifact.steps[2]).toHaveProperty('id');
         expect(result.artifact.steps[0]).not.toHaveProperty('id');
     });
+});
+
+
+describe('Suunto athlete-authored early Lap boundaries', () => {
+  it.each(['time', 'distance'] as const)('preserves %s countdown and branches without duplicate laps across repeat passes', kind => {
+    const ending: WorkoutEndingV1 = kind === 'time' ? { kind, seconds: 90.25, allowEarlyLap: true }
+      : { kind, meters: 400.125, allowEarlyLap: true };
+    const recipe: WorkoutStructureV1 = { version: 1, sport: ActivityTypes.Running, nodes: [
+      { kind: 'repeat', id: 'intervals', count: 3, steps: [
+        { ...step, ending }, { ...step, id: 'recovery', purpose: 'recovery', ending: { kind: 'time', seconds: 30 } },
+      ] }, { ...step, id: 'finish', ending } ] };
+    const original = JSON.stringify(recipe);
+    const guide = serializeSuuntoGuideJsonV1(recipe, options).artifact;
+    expect(JSON.stringify(recipe)).toBe(original);
+    expect(guide.steps.every(node => node.type === 'fields')).toBe(true);
+    const screens = guide.steps as SuuntoGuideFieldsStepV1[];
+    for (const screen of screens.filter(node => node.transitions?.length === 2)) {
+      expect(screen.transitions![1].condition).toEqual({ type: 'or', conditions: [
+        kind === 'time' ? { type: 'stepDuration', value: 90.25 } : { type: 'stepDistance', value: 400.125 }, { type: 'manualLap' }] });
+      const [button, automatic] = screen.transitions!.map(t => screens.find(s => s.id === t.stepId)!);
+      expect(button).not.toHaveProperty('createManualLap');
+      expect(automatic.createManualLap).toBe(true);
+      expect(button.fields).toEqual(automatic.fields);
+      expect(button.transitions).toEqual(automatic.transitions);
+    }
+    // Walk both paths and prove exactly seven prescribed occurrences + completion.
+    for (const pressLap of [false, true]) {
+      let current = screens[0]; const played: SuuntoGuideFieldsStepV1[] = [];
+      while (current) {
+        played.push(current);
+        const transition = current.transitions?.[pressLap ? 0 : current.transitions.length - 1];
+        current = screens.find(node => node.id === transition?.stepId)!;
+      }
+      expect(played).toHaveLength(8);
+      expect(played.at(-1)?.title).toBe('Complete');
+      expect(played.slice(1).map(node => node.createManualLap ?? false)).toEqual(
+        pressLap ? [false, true, false, true, false, true, false] : Array(7).fill(true));
+    }
+  });
+  it('keeps false/absent legacy payloads identical and rejects early Lap from old recovery versions', () => {
+    const legacy = { version: 1, sport: ActivityTypes.Running, nodes: [step] };
+    expect(serializeSuuntoGuideJsonV1({ ...legacy, nodes: [{ ...step, ending: { kind: 'time', seconds: 60, allowEarlyLap: false } }] }, options).artifact)
+      .toEqual(serializeSuuntoGuideJsonV1(legacy, options).artifact);
+    expect(() => serializeSuuntoGuideV4ForRecovery({ ...legacy, nodes: [{ ...step, ending: { kind: 'time', seconds: 60, allowEarlyLap: true } }] }, options)).toThrow();
+  });
+  it('fails closed beyond the documented provider screen bound', () => {
+    expect(() => serializeSuuntoGuideJsonV1({ version: 1, sport: ActivityTypes.Running,
+      nodes: [{ kind: 'repeat', id: 'many', count: 100, steps: Array.from({ length: 10 }, (_, i) => ({
+        ...step, id: `work-${i}`, ending: { kind: 'time', seconds: 60, allowEarlyLap: true } })) }] }, options)).toThrow('1000-screen');
+  });
+  it('accepts compact repeats when prescribed fields leave no manual-lap average', () => {
+    const recipe: WorkoutStructureV1 = { version: 1, sport: ActivityTypes.Running,
+      nodes: [{ kind: 'repeat', id: 'many', count: 100, steps: Array.from({ length: 10 }, (_, i) => ({
+        ...step, id: `work-${i}`, ending: { kind: 'time', seconds: 60, allowEarlyLap: true }, note: 'Stay relaxed',
+        targets: [{ kind: 'heart-rate', mode: 'absolute', minimumBpm: 120, maximumBpm: 140 },
+          { kind: 'cadence', mode: 'absolute', minimumRpm: 80, maximumRpm: 90 }],
+      })) }] };
+    expect(assessPlannedWorkoutProviderMappingV1('suunto', recipe).level).toBe('exact');
+    const guide = serializeSuuntoGuideJsonV1(recipe, options).artifact;
+    expect(guide.steps).toHaveLength(2);
+    expect(guide.steps[0]).toMatchObject({ type: 'repeat', times: 100 });
+    if (guide.steps[0].type !== 'repeat') throw new Error('Expected compact repeat');
+    expect(guide.steps[0].steps.flatMap(screen => screen.fields).some(field => 'window' in field)).toBe(false);
+    expect(JSON.stringify(guide)).not.toContain('createManualLap');
+    // One selected average elsewhere requires boundaries across all occurrences.
+    expect(() => serializeSuuntoGuideJsonV1({ ...recipe, nodes: [...recipe.nodes,
+      { ...step, id: 'average' }] }, options)).toThrow('1000-screen');
+  });
+  it('accepts exactly 1000 expanded screens and rejects one more', () => {
+    const recipe: WorkoutStructureV1 = { version: 1, sport: ActivityTypes.Running, nodes: [
+      { kind: 'repeat', id: 'many', count: 90, steps: Array.from({ length: 10 }, (_, i) => ({
+        ...step, id: `work-${i}`, ending: { kind: 'time', seconds: 60, ...(i === 0 ? { allowEarlyLap: true } : {}) },
+      })) }, ...Array.from({ length: 9 }, (_, i) => ({ ...step, id: `finish-${i}` })),
+    ] };
+    expect(assessPlannedWorkoutProviderMappingV1('suunto', recipe).level).toBe('exact');
+    expect(serializeSuuntoGuideJsonV1(recipe, options).artifact.steps).toHaveLength(1000);
+    const tooLarge = { ...recipe, nodes: [...recipe.nodes, { ...step, id: 'extra' }] };
+    expect(assessPlannedWorkoutProviderMappingV1('suunto', tooLarge).level).toBe('unsupported');
+    expect(() => serializeSuuntoGuideJsonV1(tooLarge, options)).toThrow('1000-screen');
+  });
+});
+
+
+describe('v5 recovery remains frozen', () => {
+  it('recreates historical screens exactly for false and absent permissions, and rejects true', () => {
+    const recipe = { version: 1, sport: ActivityTypes.Running, nodes: [{ kind: 'step', id: 'work', purpose: 'work',
+      ending: { kind: 'time', seconds: 90.123 }, targets: [] }] };
+    const options = { name: 'Frozen', owner: 'Quantified Self', url: 'https://quantified-self.io/training/plans', localDate: '2026-10-05', sourceWorkoutId: 'fixture', externalId: 'fixture', allowDegraded: true };
+    const old = serializeSuuntoGuideV5ForRecovery(recipe, options).artifact;
+    expect(serializeSuuntoGuideJsonV1(recipe, options).artifact).toEqual(old);
+    const explicit = { ...recipe, nodes: [{ ...recipe.nodes[0], ending: { ...recipe.nodes[0].ending, allowEarlyLap: false } }] };
+    expect(serializeSuuntoGuideV5ForRecovery(explicit, options).artifact).toEqual(old);
+    expect(() => serializeSuuntoGuideV5ForRecovery({ ...explicit, nodes: [{ ...explicit.nodes[0],
+      ending: { ...explicit.nodes[0].ending, allowEarlyLap: true } }] }, options)).toThrow();
+  });
 });

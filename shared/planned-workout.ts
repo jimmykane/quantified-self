@@ -64,11 +64,24 @@ export type WorkoutSpeedPresentationV1 = 'pace' | 'speed';
 export interface WorkoutTimeEndingV1 {
   kind: 'time';
   seconds: number;
+  /** Athlete-authored permission to end this bounded step early with Lap. */
+  allowEarlyLap?: boolean;
 }
 
 export interface WorkoutDistanceEndingV1 {
   kind: 'distance';
   meters: number;
+  allowEarlyLap?: boolean;
+}
+
+export function allowsEarlyLapV1(ending: WorkoutEndingV1): boolean {
+  return (ending.kind === 'time' || ending.kind === 'distance') && ending.allowEarlyLap === true;
+}
+
+/** Presence, including explicit false, matters to strict legacy readers/editors. */
+export function hasAuthoredEarlyLapV1(structure: WorkoutStructureV1): boolean {
+  return structure.nodes.some(node => (node.kind === 'step' ? [node] : node.steps)
+    .some(step => 'allowEarlyLap' in step.ending));
 }
 
 export interface WorkoutKilojoulesEndingV1 {
@@ -492,6 +505,15 @@ function readRange(
   return true;
 }
 
+function parseEarlyLap(record: Record<string, unknown>, path: string, context: ParseContext): { allowEarlyLap?: boolean } {
+  if (!Object.prototype.hasOwnProperty.call(record, 'allowEarlyLap')) return {};
+  if (typeof record.allowEarlyLap !== 'boolean') {
+    pushIssue(context, 'invalid_value', `${path}.allowEarlyLap`, 'Early Lap permission must be a boolean.');
+    return {};
+  }
+  return { allowEarlyLap: record.allowEarlyLap };
+}
+
 function parseEnding(value: unknown, path: string, context: ParseContext): WorkoutEndingV1 | null {
   const record = readRecord(value, path, context);
   if (!record) return null;
@@ -500,14 +522,14 @@ function parseEnding(value: unknown, path: string, context: ParseContext): Worko
 
   switch (kind) {
     case 'time': {
-      rejectUnknownFields(record, ['kind', 'seconds'], path, context);
+      rejectUnknownFields(record, ['kind', 'seconds', 'allowEarlyLap'], path, context);
       const seconds = readPositiveNumber(record.seconds, `${path}.seconds`, context, validDuration);
-      return seconds === null ? null : { kind, seconds };
+      return seconds === null ? null : { kind, seconds, ...parseEarlyLap(record, path, context) };
     }
     case 'distance': {
-      rejectUnknownFields(record, ['kind', 'meters'], path, context);
+      rejectUnknownFields(record, ['kind', 'meters', 'allowEarlyLap'], path, context);
       const meters = readPositiveNumber(record.meters, `${path}.meters`, context, validDistance);
-      return meters === null ? null : { kind, meters };
+      return meters === null ? null : { kind, meters, ...parseEarlyLap(record, path, context) };
     }
     case 'kilojoules': {
       rejectUnknownFields(record, ['kind', 'kilojoules'], path, context);
@@ -991,15 +1013,16 @@ export function formatWorkoutEndingV1(
 ): string {
   switch (ending.kind) {
     case 'time':
-      return resolveUnitAwareDisplayFromValue(DataDuration.type, ending.seconds, unitSettings)?.text ?? `${ending.seconds} s`;
+      return (resolveUnitAwareDisplayFromValue(DataDuration.type, ending.seconds, unitSettings)?.text ?? `${ending.seconds} s`)
+        + (ending.allowEarlyLap ? ' or Lap' : '');
     case 'distance':
-      return (isSwimmingWorkoutSportV1(sport)
+      return ((isSwimmingWorkoutSportV1(sport)
         ? resolveUnitAwareDisplayStat(new DataSwimDistance(ending.meters), unitSettings)
         : resolveUnitAwareDisplayFromValue(DataDistance.type, ending.meters,
           isRowingWorkoutSportV1(sport)
             ? { ...normalizeUserUnitSettings(unitSettings), distanceUnits: DistanceUnits.Kilometers }
             : unitSettings))?.text
-        ?? `${ending.meters} m`;
+        ?? `${ending.meters} m`) + (ending.allowEarlyLap ? ' or Lap' : '');
     case 'kilojoules':
       return resolveUnitAwareDisplayFromValue(DataPowerWork.type, ending.kilojoules, unitSettings)?.text
         ?? `${ending.kilojoules} kJ`;

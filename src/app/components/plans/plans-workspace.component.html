@@ -769,6 +769,13 @@
               (ngModelChange)="updateStep(nodeIndex, stepIndex, 'endingValue', +$event)">
           </mat-form-field>
         }
+        @if (step.endingKind === 'time' || step.endingKind === 'distance') {
+          <div class="early-lap-option">
+            <mat-checkbox [checked]="step.allowEarlyLap === true" [disabled]="busyAction() !== null"
+              (change)="updateStep(nodeIndex, stepIndex, 'allowEarlyLap', $event.checked)">Allow early Lap</mat-checkbox>
+            <p class="editor-hint">Ends at the limit or when you press Lap. Suunto delivery supports this option.</p>
+          </div>
+        }
         <mat-form-field subscriptSizing="dynamic">
           <mat-label>Target</mat-label>
           <mat-select [value]="step.targetKind" [disabled]="busyAction() !== null" (selectionChange)="updateStep(nodeIndex, stepIndex, 'targetKind', $event.value)">

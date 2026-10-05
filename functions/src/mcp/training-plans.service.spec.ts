@@ -865,3 +865,38 @@ describe('Training plan MCP reads', () => {
     expect(incomplete.scanComplete).toBe(false); expect(incomplete.services.every(s => s.syncedWorkouts === null)).toBe(true);
   });
 });
+
+
+describe('complete early Lap reads', () => {
+  it.each([true, false])('preserves %s exactly and fails closed on older full-recipe reads', async allowEarlyLap => {
+    const f = fixture(); f.collections.scheduledWorkouts = { w1: workout(null) };
+    const input = { version: 1, sport: ActivityTypes.Running, nodes: [{ kind: 'repeat', id: 'repeat', count: 2,
+      steps: [{ kind: 'step', id: 'time', purpose: 'work', ending: { kind: 'time', seconds: 90.123, allowEarlyLap }, targets: [] },
+        { kind: 'step', id: 'distance', purpose: 'recovery', ending: { kind: 'distance', meters: 400.125, allowEarlyLap }, targets: [] }] }] };
+    f.structures.w1 = input;
+    const ref = f.codec.encode({ kind: 'workout', id: 'w1', createdAtMs: 1 }, 'owner', 'connection');
+    const result = TRAINING_READ_OUTPUTS.get_planned_workout_v3.parse(await f.run('get_planned_workout_v3', { workoutRef: ref }));
+    expect(JSON.parse(JSON.stringify(result.workout.structure))).toEqual(input);
+    expect(JSON.stringify(result.workout.displaySteps).includes('or Lap')).toBe(allowEarlyLap);
+    for (const tool of ['get_planned_workout', 'get_planned_workout_v2'] as const)
+      await expect(f.run(tool, { workoutRef: ref })).rejects.toThrow('get_planned_workout_v3');
+    await expect(f.run('get_planned_workout_v3', { workoutRef: ref }, ['metrics:read'])).rejects.toThrow('permission');
+    await expect(f.run('get_planned_workout_v3', { workoutRef: ref }, undefined, 'foreign')).rejects.toThrow();
+    expect(JSON.stringify(result)).not.toContain('qs-boundary');
+  });
+  it.each([true, false])('reads a saved %s flag with strict projection and blocks lossy legacy reads', async allowEarlyLap => {
+    const f = fixture();
+    const structure = { version: 1, sport: ActivityTypes.Swimming, poolLength: { meters: 22.86, presentation: 'yards' },
+      nodes: [{ kind: 'step', id: 'saved-step', purpose: 'work', ending: { kind: 'distance', meters: 400.125, allowEarlyLap }, targets: [] }] };
+    f.collections.workoutLibrary = { library: { schemaVersion: 1, id: 'library', title: 'Swim', status: 'active',
+      revision: 1, createdAtMs: 1, updatedAtMs: 1 } };
+    f.structures.library = structure;
+    const ref = f.codec.encode({ kind: 'saved-workout', id: 'library', createdAtMs: 1 }, 'owner', 'connection');
+    const result = TRAINING_READ_OUTPUTS.get_saved_workout_v2.parse(await f.run('get_saved_workout_v2', { savedWorkoutRef: ref }));
+    expect(JSON.parse(JSON.stringify(result.savedWorkout.structure))).toEqual(structure);
+    expect(result.savedWorkout).not.toHaveProperty('id');
+    await expect(f.run('get_saved_workout', { savedWorkoutRef: ref })).rejects.toThrow('get_saved_workout_v2');
+    await expect(f.run('get_saved_workout_v2', { savedWorkoutRef: ref }, ['metrics:read'])).rejects.toThrow('permission');
+  });
+
+});

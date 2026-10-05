@@ -1639,9 +1639,68 @@ implementation, not cloud acceptance, watch receipt or completed-activity proof.
 
 #### SuuntoPlus Guide delivery (#650)
 
+##### Optional early Lap on numeric endings (#784 Training 07)
+
+`WorkoutTimeEndingV1` and `WorkoutDistanceEndingV1` optionally carry `allowEarlyLap?: boolean`.
+True means the unchanged seconds/metres limit **or** an athlete Lap press. Absent and false keep the numeric ending;
+`manual` remains indefinite until Lap and rejects the field, as do repetitions/kilojoules. The shared strict parser
+rejects non-booleans and unknown fields. No migration, inferred default, historical activity reparse, metric schema
+change or FIT SDK dependency is needed. A device's own skip behavior is separate from this authored permission, and
+step transitions never establish workout completion.
+
+The Material checkbox is initially unchecked, appears only for numeric endings, and works for top-level/repeat steps
+and saved-recipe editing. Untouched old recipes retain absence; explicit false survives save/read/copy/history/library
+placement. Changing the draft to manual omits the flag from that ending; returning to a numeric ending before saving
+retains the draft choice. Exact canonical seconds/metres, targets, notes, pool length and repeat counts stay intact.
+Accepted checkbox changes have one selection haptic; initialization, no-ops and disabled actions are silent.
+
+Suunto mapping `suunto-guides-v6` implements documented OR conditions. A true ending keeps the native time/distance
+countdown and uses `or(stepDuration|stepDistance, manualLap)`. Generated notes mention Lap without overwriting authored
+notes. When a Guide uses manual-lap block averages, v6 privately expands fixed repeats into occurrence screens and
+routes each early-Lap boundary to two identical next-screen variants: automatic exit enters the variant with exactly
+one `createManualLap`; a button exit enters the variant without that command because the button already created the
+lap. The manual transition is checked first if both conditions coincide. Manual-only exits add no lap. The next pass,
+post-repeat step and completion boundary follow the same rule. These private occurrence IDs/branches never enter the
+canonical recipe, MCP or Assistant output. Guides without manual-lap averages keep compact OR transitions without
+automatic laps. Compatibility shares optional-reading selection with the serializer and caps the actual expanded Guide
+at the provider's 1000 screens. A compact repeat is not rejected merely because its iteration count would exceed that
+bound if expanded; one selected manual-lap average anywhere in the Guide requires boundaries across all occurrences.
+
+Absent/false recipes keep the same v5 Guide JSON. Frozen v2–v5 serializers and exact journal digests remain
+available for uncertain-acceptance recovery; historical serializers reject true. Unknown/content-mismatched digests
+never authorize replacement POSTs. Current diagnostics label v6 and retain v2–v5/unknown labels. Existing Guide IDs,
+consent, accepted-identity protection, completed-copy protection and native mapping-approval rules remain in force.
+Garmin, COROS and Wahoo reject true as `unsupported_ending` before transport: published device skip behavior, a global
+auto-advance switch or a single-trigger API is not verified per-step OR support. Their false/absent artifacts and
+availability remain unchanged.
+
+MCP adds `get_planned_workout_v3`, `get_saved_workout_v2`, `preview_planned_workout_v3_change` and
+`preview_saved_workout_v2_change`; older registered recipe schemas remain frozen. Latest strict full reads/previews
+round-trip every purpose, target, repeat child, numeric value, pool length and optional flag. Compile-time ending-field
+coverage makes future optional additions explicit. Old detail reads and recipe-replacement previews fail closed when
+this field is present, including explicit false, instead of dropping it. The focused previews disclose enabled-step
+counts and removal from previously enabled steps, and reuse the existing owner/connection/grant/revision/expiry-bound,
+idempotent, separately confirmed Apply. No new mutation kind, provider action, OAuth scope or transport authority is
+added. Assistant selects the latest full recipe/editor for a non-strength edit, preserves unchanged fields and enables
+Lap only on explicit athlete intent; removing the early-Lap option routes to recipe editing, including after an earlier
+deletion clarification, while removing the workout itself retains the deletion path. It remains prepare-only with
+app-owned confirmation. Provider delivery is a
+separately authorized proposal after creation. Training, Activity and cross-domain plugin skills discover the latest
+advertised tools and keep planned recipes distinct from recorded laps/completion.
+
+Release order: after separate deployment authorization, release compatible Functions/MCP before the frontend,
+refresh/rescan registered MCP metadata using the exact pending candidate, and refresh the plugin/client catalog.
+Keep the registered baseline/history frozen until that lifecycle action. A frontend rollback preserves the stored flag;
+an older backend is not a safe writer for newly authored fields. No blanket requeue, data backfill or provider API
+operation belongs to implementation. Local fixtures and loopback emulator tests cover automatic/button/repeat paths,
+no duplicate boundary laps, exact fields, strict public contracts and proposal persistence, identity-preserving
+create/update/reschedule, frozen v5 lost-ACK recovery and unchanged retries. Before claiming device proof, record the
+watch/firmware and inspect recorded lap boundaries and block-average resets for automatic, early, coincident,
+manual-only and repeat/final boundaries. Local OR fixtures do not prove watch behavior.
+
 ##### Current readings and boundary notifications (#784)
 
-Mapping v5 builds on Training 01's reviewed v4 boundary/recovery logic and independently implements the documented partner [Guide schema](https://apizone.suunto.com/suuntoplus-guide-description),
+The v5 screen baseline (retained by v6 for absent/false early Lap) builds on Training 01's reviewed v4 boundary/recovery logic and independently implements the documented partner [Guide schema](https://apizone.suunto.com/suuntoplus-guide-description),
 without dependencies or undocumented app-wrapper `alerts`, `trigger`, or `extensions`. Investigation compared
 [OpenAthlete](https://github.com/openathleteorg/openathlete/blob/main/apps/api/src/modules/providers-sync/mapping/suunto-guide.mapper.ts)
 and [suunto-mcp](https://github.com/googlarz/suunto-mcp/blob/main/src/guide-zip.ts); neither is imported or copied into QS.
@@ -1665,7 +1724,8 @@ Additional authored targets and ZoneSense remain separate in #773.
   already creates that lap, so the next step omits `createManualLap`. The first screen starts with recording and creates
   no zero-length opening lap. The non-timed final screen closes an automatically ended final block, but not a manually
   ended one. Laps are source-recorded and can appear in the FIT/activity; they are not adherence or QS completion proof.
-  Pressing Lap during a timed/distance step resets the average early without advancing the prescribed step. Guides
+  With early Lap absent/false, pressing Lap during a timed/distance step resets the average early without advancing the
+  prescribed step. With true, v6 advances through the button path described above. Guides
   without any manual-lap average, including HR-only strength, emit no automatic laps. Long text-only steps keep their
   instructions and participate in boundaries only when another step in the Guide uses a manual-lap average.
   Native repeats need different incoming-boundary handling when the first pass's predecessor differs from the last
@@ -1720,14 +1780,14 @@ Training 01 screens, averaging and boundary placement; v4 strength remains byte-
 fixture. Unchanged remote payloads need no redundant PUT solely to advance the mapping digest. Fresh delivery never uses a recovery-only serializer.
 
 Existing `[TrainingDelivery]` Suunto acceptance, recovered-acceptance, stale-suppression, failure and checkpoint-failure
-events include two transient allowlisted labels: `guideMappingVersion` (`suunto-guides-v5`, `suunto-guides-v4`, `suunto-guides-v3`, `suunto-guides-v2`, `unknown`,
+events include two transient allowlisted labels: `guideMappingVersion` (`suunto-guides-v6`, `suunto-guides-v5`, `suunto-guides-v4`, `suunto-guides-v3`, `suunto-guides-v2`, `unknown`,
 or `not_applicable` for removal) and `deliveryPhase` (`execute` or `recover`). The version is proved by recomputing the
 immutable upsert operation's exact payload digest, including strength details, rather than copying the current adapter's
 version onto a legacy attempt. An unrecognized digest or classification failure yields `unknown` and cannot alter
 delivery/recovery. Classification runs once per claimed operation without credentials or HTTP; the phase switches to
 `execute` if recovery resumes a safe request. Other providers' existing events are unchanged.
 For rollout triage, combine `jsonPayload.message="[TrainingDelivery]"`, `jsonPayload.provider="suunto"` and
-`jsonPayload.event="failure"` with `jsonPayload.guideMappingVersion="suunto-guides-v5"` for current failures, or
+`jsonPayload.event="failure"` with `jsonPayload.guideMappingVersion="suunto-guides-v6"` for current failures, or
 the exact `suunto-guides-v2`/`suunto-guides-v3`/`suunto-guides-v4` label and `jsonPayload.deliveryPhase="recover"` for legacy recovery.
 Checkpoint failures use `jsonPayload.event="checkpoint_failed"`. These labels are not stored in Firestore or exposed
 to the browser/MCP, and contain no UID, account/Guide/workout identity, digest, recipe, instruction, sensor reading,

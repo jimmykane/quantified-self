@@ -218,7 +218,7 @@ Its model-facing Genkit schema is a typed projection of the strict MCP input, no
 references and recipe/change unions are made legible to Gemini, while MCP still rejects invalid variants and
 unapproved writes. Include the full optional-permission tool catalogue in schema-compatibility tests when a Training
 or content input changes; otherwise one incompatible declaration can prevent every Assistant answer before a tool runs.
-The Assistant selects one relevant Training preview per turn rather than advertising all four deeply nested proposals
+The Assistant selects one relevant Training preview per turn rather than advertising all deeply nested proposals
 to Gemini together; public MCP clients continue to see all tools under their independent grants.
 Plan-level and provider-only actions select the batch preview before sport-specific recipe wording; one authored strength
 or pool-length change selects its focused preview. A combined comparison and workout recommendation retains live daily
@@ -442,6 +442,26 @@ approval, short expiry, owner/connection/grant/revision binding, compatibility r
 mandatory. `all_connected` includes only providers for which the connection, permissions, configuration and workout are
 currently eligible. No new tool, action, field, scope, consent default, provider identifier, plugin artifact or
 registered-client refresh is introduced; connecting a provider alone never creates delivery consent or sends a workout.
+
+### Full recipes with optional early Lap
+
+The additive `get_planned_workout_v3` and `get_saved_workout_v2` return the entire strict recipe, including pool length
+and `allowEarlyLap` on time/distance endings. Absent, false and true are preserved; manual/repetition/kJ endings reject
+the field. Old full reads fail closed on field presence instead of projecting it away. Optional ending fields have an
+explicit compile-time coverage gate alongside variant coverage.
+
+`preview_planned_workout_v3_change` and `preview_saved_workout_v2_change` accept the complete latest recipe under the
+existing read plus schedule-write grants and disclose enabling/removing early Lap. Old replacement previews cannot
+clear the setting. Apply uses the existing authority, revision, expiry, native approval and idempotency boundaries;
+there is no new scope, mutation or provider action. Assistant preserves unchanged settings, enables them only on
+explicit athlete request, and remains prepare-only with app confirmation. Latest focused workout creation does not
+include delivery; a separately authorized existing delivery proposal follows creation. Suunto supports the option;
+other destinations reject it before HTTP. Neither transitions nor local compatibility prove completion or watch receipt.
+
+Registered recipe schemas/baselines/history remain frozen. Deploy compatible backend code only after separate approval,
+then perform the exact pending developer refresh/rescan and client/plugin tool-catalog refresh before the updated UI.
+No activity reparse, persisted-data migration, wider consent or automatic provider requeue is needed. Detailed product,
+mapping and recovery rules live in [Training workspace](training-workspace.md#optional-early-lap-on-numeric-endings-784-training-07).
 
 ## Purpose and boundary
 

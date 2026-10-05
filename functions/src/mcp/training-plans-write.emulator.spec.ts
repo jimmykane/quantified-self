@@ -23,7 +23,7 @@ import { processTrainingBulkShift, reconcileTrainingBulkShifts } from '../traini
 import { mutateTrainingScheduleForUser } from '../training-plans/persistence';
 import { BULK_SHIFT_LEASE_MS } from '../training-plans/staged-shift';
 import { applyTrainingChanges, getTrainingChangeStatus, previewCreatePlannedWorkout, previewTrainingChanges,
-  previewStrengthWorkoutChange, previewPlannedWorkoutV2Change, previewTrainingDeletion,
+  previewStrengthWorkoutChange, previewPlannedWorkoutV2Change, previewPlannedWorkoutV3Change, previewTrainingDeletion,
   type TrainingWriteDependencies } from './training-plans-write.service';
 import { TRAINING_DELIVERY_WRITE_SCOPE, TRAINING_PLANS_SCOPE, TRAINING_PLANS_WRITE_SCOPE } from './training-plans.schemas';
 
@@ -1632,4 +1632,34 @@ describe.skipIf(!process.env.FIRESTORE_EMULATOR_HOST)('Training MCP write propos
     await expect(applyTrainingChanges(input, deps)).resolves.toMatchObject({ status: 'applied' });
     expect((await user.collection('scheduledWorkouts').get()).size).toBe(1);
   });
+  it('reviews and persists early Lap without a legacy edit clearing it, and retains replay/scope/revision checks', async () => {
+    const early = { ...structure, nodes: [{ kind: 'repeat', id: 'repeat', count: 2, steps: [
+      { ...structure.nodes[0], ending: { kind: 'time', seconds: 90.123, allowEarlyLap: true } },
+      { ...structure.nodes[0], id: 'recovery', purpose: 'recovery', ending: { kind: 'distance', meters: 400.125, allowEarlyLap: false } },
+    ] }] };
+    const createdPreview = await previewPlannedWorkoutV3Change({ uid, connectionId: 'connection', scopes,
+      arguments: { expectedScheduleRevision: 1, change: { kind: 'create-workout', localKey: 'early', plan: null,
+        localDate: '2026-09-18', title: 'Early Lap', structure: early } } }, deps);
+    expect(createdPreview.changes[0].summary).toContain('Early Lap: enabled on 1');
+    const created = await applyTrainingChanges({ uid, connectionId: 'connection', scopes,
+      arguments: { proposalRef: createdPreview.proposalRef, permissionMode: 'schedule' } }, deps);
+    const saved = (await db.collection('users').doc(uid).collection('scheduledWorkouts').get()).docs[0];
+    expect(saved.get('structure')).toEqual(early);
+    expect((await saved.ref.collection('revisions').get()).docs.map(doc => doc.get('snapshot.structure'))).toContainEqual(early);
+    const change = { kind: 'update-workout', workout: { ref: created.createdReferences[0].reference },
+      plan: null, localDate: '2026-09-19', title: 'Early Lap edited', structure };
+    const args = { expectedScheduleRevision: created.scheduleRevision, change };
+    await expect(previewPlannedWorkoutV2Change({ uid, connectionId: 'connection', scopes, arguments: args }, deps)).rejects.toThrow('v3');
+    await expect(previewPlannedWorkoutV3Change({ uid, connectionId: 'connection', scopes: [TRAINING_PLANS_SCOPE], arguments: args }, deps)).rejects.toThrow('permission');
+    const preview = await previewPlannedWorkoutV3Change({ uid, connectionId: 'connection', scopes, arguments: args }, deps);
+    expect(preview.changes[0].summary).toContain('Removed from 1 previously enabled step');
+    const applied = await applyTrainingChanges({ uid, connectionId: 'connection', scopes,
+      arguments: { proposalRef: preview.proposalRef, permissionMode: 'schedule' } }, deps);
+    expect((await saved.ref.get()).get('structure')).toEqual(structure);
+    expect(await applyTrainingChanges({ uid, connectionId: 'connection', scopes,
+      arguments: { proposalRef: preview.proposalRef, permissionMode: 'schedule' } }, deps)).toEqual(applied);
+    await expect(previewPlannedWorkoutV3Change({ uid, connectionId: 'connection', scopes, arguments: args }, deps)).rejects.toThrow('schedule changed');
+    expect((await db.collection('users').doc(uid).collection('trainingDeliverySettings').get()).empty).toBe(true);
+  });
+
 });

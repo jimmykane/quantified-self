@@ -30,7 +30,7 @@ describe('Suunto Guide lifecycle — synthetic transport', () => {
   });
   it('classifies only exact journal digests without changing the operation or making HTTP calls', () => {
     const before = structuredClone(op);
-    expect(transport.diagnosticMappingVersion(op)).toBe('suunto-guides-v5');
+    expect(transport.diagnosticMappingVersion(op)).toBe('suunto-guides-v6');
     expect(op).toEqual(before);
     op.digest = assessSuuntoGuideV2ForRecovery(op.workout!, op.destinationKey, op.timeZone, owner).digest;
     expect(transport.diagnosticMappingVersion(op)).toBe('suunto-guides-v2');

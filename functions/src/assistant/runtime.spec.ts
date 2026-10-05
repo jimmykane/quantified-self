@@ -105,7 +105,7 @@ describe('Training preview model-tool selection', () => {
     expect(selectAssistantTrainingPreviewTool('Delete my strength workout.')).toBe('preview_training_deletion');
     expect(selectAssistantTrainingPreviewTool('Delete my old plans and workouts.')).toBe('preview_training_deletion');
     expect(selectAssistantTrainingPreviewTool('Remove this planned session and older copies.')).toBe('preview_training_deletion');
-    expect(selectAssistantTrainingPreviewTool('Delete a saved workout from the library.')).toBe('preview_saved_workout_change');
+    expect(selectAssistantTrainingPreviewTool('Delete a saved workout from the library.')).toBe('preview_saved_workout_v2_change');
     expect(selectAssistantTrainingPreviewTool('Delete this workout and create a new one.')).toBe('preview_training_changes');
     const history = [{ role: 'user' as const, text: 'Delete my planned workout.' },
       { role: 'assistant' as const, text: 'Also remove older, uncompleted copies from your connected services?' }];
@@ -130,6 +130,23 @@ describe('Training preview model-tool selection', () => {
       { role: 'assistant' as const, text: 'Keep its workouts as standalone, or permanently delete them?' }];
     expect(selectAssistantTrainingPreviewTool('Keep workouts as standalone.', planHistory)).toBe('preview_training_deletion');
     expect(selectAssistantTrainingPreviewTool('Delete them too.', planHistory)).toBe('preview_training_deletion');
+  });
+  it('selects the complete recipe for explicit early Lap and ordinary edits without granting delivery authority', () => {
+    for (const prompt of ['Create a running workout and allow early Lap on the intervals.',
+      'Update my workout title.', 'Change the pace target on my workout.', 'Disable early Lap on my workout.',
+      'Remove early Lap from my workout.', 'Remove the early Lap option from this session.',
+      'Remove the option to allow early Lap from my workout.',
+      'Delete early Lap permission from my workout.'])
+      expect(selectAssistantTrainingPreviewTool(prompt), prompt).toBe('preview_planned_workout_v3_change');
+    const deletionHistory = [{ role: 'user' as const, text: 'Delete my planned workout.' },
+      { role: 'assistant' as const, text: 'Also remove older, uncompleted copies from your connected services?' }];
+    expect(selectAssistantTrainingPreviewTool('Remove early Lap from my workout.', deletionHistory))
+      .toBe('preview_planned_workout_v3_change');
+    expect(selectAssistantTrainingPreviewTool('Remove my early Lap workout.')).toBe('preview_training_deletion');
+    expect(selectAssistantTrainingPreviewTool('Remove the workout named Early Lap.')).toBe('preview_training_deletion');
+    expect(selectAssistantTrainingPreviewTool('Read my early Lap workout.')).not.toBe('preview_planned_workout_v3_change');
+    expect(ASSISTANT_SYSTEM_INSTRUCTIONS).toContain('Enable it only on explicit athlete request');
+    expect(ASSISTANT_SYSTEM_INSTRUCTIONS).toContain('Preserve all unchanged fields');
   });
   it('keeps a single focused preview for a workout recommendation with Garmin and Suunto delivery', () => {
     expect(selectAssistantTrainingPreviewTool(ASSISTANT_CREATE_TODAYS_WORKOUT_PROMPT))
@@ -161,39 +178,39 @@ describe('Training preview model-tool selection', () => {
     expect(selectAssistantTrainingPreviewTool('Stop sync for my 25 m pool swim.'))
       .toBe('preview_training_changes');
     expect(selectAssistantTrainingPreviewTool('Edit my workout and send the update to Garmin.'))
-      .toBe('preview_training_changes');
+      .toBe('preview_planned_workout_v3_change');
     expect(selectAssistantTrainingPreviewTool('Add a pool swim with a 25 m pool length.'))
-      .toBe('preview_planned_workout_v2_change');
+      .toBe('preview_planned_workout_v3_change');
     expect(selectAssistantTrainingPreviewTool('Create a swim session in a 50-meter pool.'))
-      .toBe('preview_planned_workout_v2_change');
+      .toBe('preview_planned_workout_v3_change');
     expect(selectAssistantTrainingPreviewTool('Schedule a pool workout in a 33.3 m pool.'))
-      .toBe('preview_planned_workout_v2_change');
+      .toBe('preview_planned_workout_v3_change');
     expect(selectAssistantTrainingPreviewTool('Make a 25-yard swimming workout.'))
-      .toBe('preview_planned_workout_v2_change');
+      .toBe('preview_planned_workout_v3_change');
     expect(selectAssistantTrainingPreviewTool('Update my pool swim and preserve its 25 m pool length.'))
-      .toBe('preview_planned_workout_v2_change');
+      .toBe('preview_planned_workout_v3_change');
     expect(selectAssistantTrainingPreviewTool('Edit my pool swim workout for tomorrow.'))
-      .toBe('preview_planned_workout_v2_change');
+      .toBe('preview_planned_workout_v3_change');
     expect(selectAssistantTrainingPreviewTool('Change my swimming workout date.'))
-      .toBe('preview_planned_workout_v2_change');
+      .toBe('preview_planned_workout_v3_change');
     expect(selectAssistantTrainingPreviewTool('Create a strength workout with four sets.'))
       .toBe('preview_strength_workout_change');
     expect(selectAssistantTrainingPreviewTool('Edit my strength workout sets.'))
       .toBe('preview_strength_workout_change');
     expect(selectAssistantTrainingPreviewTool('Save this planned workout to my workout library.'))
-      .toBe('preview_saved_workout_change');
+      .toBe('preview_saved_workout_v2_change');
     expect(selectAssistantTrainingPreviewTool('Save this workout to my library.'))
-      .toBe('preview_saved_workout_change');
+      .toBe('preview_saved_workout_v2_change');
     expect(selectAssistantTrainingPreviewTool('Create a workout tomorrow, but do not save it in my library.'))
       .toBe('preview_create_planned_workout');
     expect(selectAssistantTrainingPreviewTool('Create a plan without using the saved workout library.'))
       .toBe('preview_training_changes');
     expect(selectAssistantTrainingPreviewTool("Don't change the current plan, but save this workout to my library."))
-      .toBe('preview_saved_workout_change');
+      .toBe('preview_saved_workout_v2_change');
     expect(selectAssistantTrainingPreviewTool('Place my saved workout on October 4 and 11 in this plan.'))
-      .toBe('preview_saved_workout_change');
+      .toBe('preview_saved_workout_v2_change');
     expect(selectAssistantTrainingPreviewTool('Archive the saved recipe, but do not change scheduled workouts.'))
-      .toBe('preview_saved_workout_change');
+      .toBe('preview_saved_workout_v2_change');
   });
 
   it('does not turn a different action or cancelled deletion into a cleanup reply', () => {
@@ -257,6 +274,29 @@ describe('Training preview model-tool selection', () => {
     expect(modelTools).toContain('preview_create_planned_workout');
     expect(modelTools.filter(name => name.startsWith('preview_'))).toEqual(['preview_create_planned_workout']);
     expect(session.tools.map(tool => tool.name)).toContain('preview_training_changes');
+  });
+
+  it('offers only recipe editing when removing early Lap after a deletion clarification', async () => {
+    const { session } = createSession();
+    session.tools.push(...(['preview_planned_workout_v3_change', 'preview_training_deletion'] as const).map(name => ({
+      name, title: name, description: name, inputSchema: { type: 'object' as const, properties: {} },
+    })));
+    let previews: string[] = [];
+    const runtime = createAssistantRuntime({
+      createMcpSession: vi.fn().mockResolvedValue(session),
+      generateAnswer: async input => {
+        previews = input.tools.map(tool => tool.name).filter(name => name.startsWith('preview_'));
+        await input.tools.find(tool => tool.name === 'get_daily_report')!.execute({});
+        return { answer: 'Read the full workout recipe before changing its early Lap option.', visualRequest: { chart: null, map: null } };
+      },
+    });
+    await runtime.answer({ uid: 'owner', appBaseUrl: 'https://quantified-self.io',
+      prompt: 'Remove early Lap from my workout.', timeZone: 'Europe/Helsinki',
+      history: [{ role: 'user', text: 'Delete my planned workout.' },
+        { role: 'assistant', text: 'Also remove older, uncompleted copies from your connected services?' }],
+      trainingPlansEnabled: true, trainingPlanChangesEnabled: true, trainingDeliveryEnabled: true,
+      assertTrainingPlansAccess: vi.fn().mockResolvedValue(undefined) });
+    expect(previews).toEqual(['preview_planned_workout_v3_change']);
   });
 
   it.each([true, false])('keeps deletion cleanup choice %s prepare-only after a follow-up answer', async removePastProviderCopies => {
@@ -840,8 +880,8 @@ describe('Assistant runtime', () => {
     );
     expect(ASSISTANT_SYSTEM_INSTRUCTIONS).toContain('copy-workout change in preview_training_changes');
     expect(ASSISTANT_SYSTEM_INSTRUCTIONS).toContain('Never infer a Send action or plan-sync opt-in');
-    expect(ASSISTANT_SYSTEM_INSTRUCTIONS).toContain('get_planned_workout_v2 for an authored pool-swim length');
-    expect(ASSISTANT_SYSTEM_INSTRUCTIONS).toContain('preview_planned_workout_v2_change for one pool-swim create/update');
+    expect(ASSISTANT_SYSTEM_INSTRUCTIONS).toContain('get_planned_workout_v3 for full non-strength instructions');
+    expect(ASSISTANT_SYSTEM_INSTRUCTIONS).toContain('preview_planned_workout_v3_change for one non-strength recipe edit');
     expect(ASSISTANT_SYSTEM_INSTRUCTIONS).toContain(
       'do not silently limit the trend to a recent year',
     );

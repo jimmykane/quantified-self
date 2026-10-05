@@ -539,3 +539,21 @@ describe('manual planned-workout editor conversion', () => {
       .toThrow('relative target');
   });
 });
+
+
+describe('early-Lap editor preservation', () => {
+  it.each([undefined, false, true])('round-trips %s through repeats and temporary manual ending', allowEarlyLap => {
+    const structure: WorkoutStructureV1 = { version: 1, sport: ActivityTypes.Running, nodes: [{ kind: 'repeat', id: 'repeat', count: 3,
+      steps: [{ kind: 'step', id: 'work', purpose: 'work', ending: { kind: 'distance', meters: 1609.344,
+        ...(allowEarlyLap === undefined ? {} : { allowEarlyLap }) }, targets: [] }] }] };
+    const editor = workoutStructureToManualEditor('Intervals', '2026-10-06', structure);
+    expect(manualWorkoutEditorToStructure(editor)).toEqual(structure);
+    const repeat = editor.nodes[0];
+    if (repeat.kind !== 'repeat') throw new Error('Expected repeat');
+    const manual = changeManualWorkoutEditorStepEnding(repeat.steps[0], 'manual', editor.sport);
+    repeat.steps[0] = manual;
+    expect(manualWorkoutEditorToStructure(editor).nodes[0]).toMatchObject({ steps: [{ ending: { kind: 'manual' } }] });
+    repeat.steps[0] = changeManualWorkoutEditorStepEnding(manual, 'distance', editor.sport);
+    expect(manualWorkoutEditorToStructure(editor)).toEqual(structure);
+  });
+});

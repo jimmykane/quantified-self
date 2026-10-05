@@ -25,6 +25,7 @@ export interface ManualWorkoutEditorStep {
   purpose: WorkoutStepPurposeV1;
   endingKind: ManualWorkoutEnding;
   endingValue: number;
+  allowEarlyLap?: boolean;
   targetKind: ManualWorkoutTarget;
   targetMinimum: number | null;
   targetMaximum: number | null;
@@ -168,9 +169,9 @@ function endingFromEditor(
     throw new Error('Every step needs a positive duration or distance.');
   }
   return step.endingKind === 'time'
-    ? { kind: 'time', seconds: step.sourceDuration?.editorValue === step.endingValue
+    ? { kind: 'time', ...(step.allowEarlyLap === undefined ? {} : { allowEarlyLap: step.allowEarlyLap }), seconds: step.sourceDuration?.editorValue === step.endingValue
       ? step.sourceDuration.seconds : step.endingValue * 60 }
-    : { kind: 'distance', meters: distanceMetersFromEditor(step, sport, units) };
+    : { kind: 'distance', ...(step.allowEarlyLap === undefined ? {} : { allowEarlyLap: step.allowEarlyLap }), meters: distanceMetersFromEditor(step, sport, units) };
 }
 
 function targetFromEditor(
@@ -329,6 +330,7 @@ function editorStep(
     id: step.id,
     purpose: step.purpose,
     endingKind: step.ending.kind,
+    ...('allowEarlyLap' in step.ending ? { allowEarlyLap: step.ending.allowEarlyLap } : {}),
     endingValue,
     ...(step.ending.kind === 'time' ? {
       sourceDuration: { editorValue: endingValue, seconds: step.ending.seconds },
