@@ -572,7 +572,10 @@ Strength exercises/sets use their separate editor and are deliberately outside t
 Dedicated Angular CDK handles support pointer moves with a 200 ms touch delay; form controls never serve as handles.
 The outer list and each child list remain unconnected. Material Actions menus provide Move up, Move down and Duplicate
 for touch/keyboard users, with disabled boundary actions. Accepted moves/copies announce the resulting position, focus
-the affected row's Actions button and emit one selection haptic. Menu dismissal restores the trigger. Cancelled/outside,
+the affected row's Actions button and emit one selection haptic. CDK's live announcer clears and delays each message so
+identical consecutive results are announced again; editor cancellation, account changes and destruction replace pending
+announcements with an empty message. Actions menus use the shared QS menu panel styling and their capacity state reads
+the computed total once per template binding instead of rescanning the recipe. Menu dismissal restores the trigger. Cancelled/outside,
 unchanged, stale-session, changed-list, cross-parent and busy drops leave the draft and feedback unchanged. Copy/move only
 changes the local editor: Save reuses the existing revision-checked schedule or library mutation; failure retains the draft
 and Cancel discards it. Existing history, completion links and delivery reconciliation remain owned by those mutations.
@@ -584,7 +587,8 @@ Focused read/schema fixtures cover reordered/copied repeats, fresh IDs, notes, f
 display order, scope/reference isolation and rejection of editor-cache/provider fields. No scopes, provider actions,
 Assistant permission, migration, registered digest or plugin build/refresh changes are required. Bundled Training,
 Activity and cross-domain guidance already discover the authoritative recipe and preview/apply contracts.
-Verification covers draft helpers, real Material menus/focus, CDK list/handle wiring, busy/cancelled/stale operations,
+Verification covers draft helpers, real Material menus/focus, native mouse drag/drop through separate outer/child handles
+(with synthetic geometry in JSDOM), repeated announcements and their lifecycle, busy/cancelled/stale operations,
 plan/standalone/library save/reopen and revision-conflict retention. Isolated rendered-fixture browser checks verify
 layout in light/dark at desktop and 320 px; physical touch dragging/vibration still require device QA.
 

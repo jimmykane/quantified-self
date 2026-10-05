@@ -3,6 +3,7 @@ import { Location } from '@angular/common';
 import { TestBed } from '@angular/core/testing';
 import { By } from '@angular/platform-browser';
 import { CdkDrag, CdkDragHandle, CdkDropList, type CdkDragDrop } from '@angular/cdk/drag-drop';
+import { LiveAnnouncer } from '@angular/cdk/a11y';
 import { MatMenuTrigger } from '@angular/material/menu';
 import { MatDialog } from '@angular/material/dialog';
 import { MAT_ICON_DEFAULT_OPTIONS } from '@angular/material/icon';
@@ -202,7 +203,7 @@ describe('PlansWorkspaceComponent', () => {
     component.cancelEditor();
     expect(schedule.workouts[0].structure).toEqual(original);
     expect(component.editor()).toBeNull();
-    expect(component.editorOrderMessage()).toBe('');
+    expect(document.querySelector('.cdk-live-announcer-element')!.textContent).toBe('');
   });
 
   it('uses Material menus with boundary states, copied-row focus and Escape restoration', async () => {
@@ -213,12 +214,13 @@ describe('PlansWorkspaceComponent', () => {
     const trigger = fixture.debugElement.query(By.css('[data-editor-node-action]')).injector.get(MatMenuTrigger);
     trigger.openMenu(); fixture.detectChanges(); await fixture.whenStable();
     const items = Array.from(document.querySelectorAll<HTMLButtonElement>('.mat-mdc-menu-item'));
+    expect(document.querySelector('[role="menu"]')!.classList.contains('qs-menu-panel')).toBe(true);
     expect(items[0].disabled).toBe(true); expect(items[1].disabled).toBe(false);
     items[2].click(); fixture.detectChanges(); await fixture.whenStable(); fixture.detectChanges();
     expect(component.editor()!.value.nodes).toHaveLength(3);
     expect((document.activeElement as HTMLElement).dataset['editorNodeAction']).toBe(component.editor()!.value.nodes[1].id);
     expect(haptics.selection).toHaveBeenCalledOnce();
-    expect(fixture.nativeElement.querySelector('[role="status"]').textContent).toContain('Step copied to position 2 of 3');
+    await vi.waitFor(() => expect(document.querySelector('.cdk-live-announcer-element')!.textContent).toContain('Step copied to position 2 of 3'));
     const copiedTrigger = fixture.debugElement.queryAll(By.css('[data-editor-node-action]'))[1].injector.get(MatMenuTrigger);
     copiedTrigger.openMenu(); fixture.detectChanges(); await fixture.whenStable();
     document.querySelector('[role="menu"]')!.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', keyCode: 27, bubbles: true }));
@@ -226,6 +228,44 @@ describe('PlansWorkspaceComponent', () => {
     expect(copiedTrigger.menuOpen).toBe(false);
     expect((document.activeElement as HTMLElement).dataset['editorNodeAction']).toBe(component.editor()!.value.nodes[1].id);
     expect(haptics.selection).toHaveBeenCalledOnce();
+    const childTrigger = fixture.debugElement.query(By.css('.repeat-step-actions [data-editor-node-action]')).injector.get(MatMenuTrigger);
+    childTrigger.openMenu(); fixture.detectChanges(); await fixture.whenStable();
+    expect(document.querySelector('[role="menu"]')!.classList.contains('qs-menu-panel')).toBe(true);
+    childTrigger.closeMenu();
+  });
+
+  it('announces consecutive identical move results and keeps boundary no-ops silent', async () => {
+    setRouteState({ mode: 'create', scope: 'standalone', date: '2026-09-09' });
+    const fixture = await renderPlans(); const component = fixture.componentInstance;
+    const announce = vi.spyOn(TestBed.inject(LiveAnnouncer), 'announce');
+    component.addEditorStep(); component.addEditorStep();
+    const [first, second, third] = component.editor()!.value.nodes;
+    const region = document.querySelector('.cdk-live-announcer-element')!;
+    const message = 'Step moved to position 2 of 3.';
+    component.moveEditorNode(third.id, -1);
+    await vi.waitFor(() => expect(region.textContent).toBe(message));
+    component.moveEditorNode(second.id, -1);
+    expect(region.textContent).toBe('');
+    await vi.waitFor(() => expect(region.textContent).toBe(message));
+    expect(announce.mock.calls).toEqual([[message, 'polite'], [message, 'polite']]);
+    component.moveEditorNode(first.id, -1);
+    expect(announce).toHaveBeenCalledTimes(2);
+    expect(haptics.selection).toHaveBeenCalledTimes(2);
+  });
+
+  it.each(['cancel', 'sign-out', 'destroy'] as const)('discards a pending editor announcement after %s', async action => {
+    setRouteState({ mode: 'create', scope: 'standalone', date: '2026-09-09' });
+    const fixture = await renderPlans(); const component = fixture.componentInstance;
+    const announcer = TestBed.inject(LiveAnnouncer);
+    const announce = vi.spyOn(announcer, 'announce');
+    component.duplicateEditorNode(component.editor()!.value.nodes[0].id);
+    if (action === 'cancel') component.cancelEditor();
+    else if (action === 'destroy') fixture.destroy();
+    else { userSignal.set(null); userSubject.next(null); fixture.detectChanges(); }
+    expect(announce).toHaveBeenLastCalledWith('', 'polite');
+    // Wait for the replacement to finish: a stale nonempty message must not reappear.
+    await announce.mock.results[announce.mock.results.length - 1].value;
+    expect(document.querySelector('.cdk-live-announcer-element')!.textContent).toBe('');
   });
 
   it('wires separate unconnected CDK lists and dedicated handles for pointer moves', async () => {
@@ -278,6 +318,57 @@ describe('PlansWorkspaceComponent', () => {
     expect(haptics.selection).not.toHaveBeenCalled(); expect(mutate).not.toHaveBeenCalled();
   });
 
+  it.each(['outer', 'child'] as const)('reorders the %s list through native mouse events and ignores form controls', async scope => {
+    setRouteState({ mode: 'create', scope: 'standalone', date: '2026-09-09' });
+    const fixture = await renderPlans();
+    const component = fixture.componentInstance;
+    component.addEditorRepeat(); fixture.detectChanges(); await fixture.whenStable();
+    const lists = fixture.debugElement.queryAll(By.directive(CdkDropList)).map(element => element.injector.get(CdkDropList));
+    const list = lists[scope === 'outer' ? 0 : 1];
+    const items = list.getSortedItems();
+    const ids = items.map(item => item.data);
+    // JSDOM has no layout. Give CDK real-sized rows, including its cloned placeholders.
+    const measure = HTMLElement.prototype.getBoundingClientRect;
+    const setRect = (element: HTMLElement, top: number, height: number) => {
+      element.dataset['dragTestTop'] = `${top}`;
+      element.dataset['dragTestHeight'] = `${height}`;
+    };
+    setRect(list.element.nativeElement, 100, 400);
+    items.forEach((item, index) => setRect(item.getRootElement(), 100 + index * 200, 200));
+    const geometry = vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect').mockImplementation(function (this: HTMLElement) {
+      return this.dataset['dragTestTop'] === undefined ? measure.call(this)
+        : new DOMRect(100, Number(this.dataset['dragTestTop']), 600, Number(this.dataset['dragTestHeight']));
+    });
+    const mouse = (target: EventTarget, type: string, y: number) => target.dispatchEvent(new MouseEvent(type,
+      { bubbles: true, cancelable: true, button: 0, buttons: type === 'mouseup' ? 0 : 1, detail: 1, clientX: 300, clientY: y }));
+    try {
+      const row = items[1].getRootElement();
+      mouse(row.querySelector('input')!, 'mousedown', 320);
+      mouse(document, 'mousemove', 330); mouse(document, 'mousemove', 180); mouse(document, 'mouseup', 180);
+      expect(document.querySelector('.cdk-drag-preview')).toBeNull();
+      const events: string[] = [];
+      const drops: { index: number; over: boolean; id: string }[] = [];
+      items[1].ended.subscribe(() => events.push('ended'));
+      list.dropped.subscribe(event => { events.push('dropped'); drops.push({ index: event.currentIndex, over: event.isPointerOverContainer, id: event.item.data }); });
+      const handle = row.querySelector(scope === 'outer'
+        ? '.workout-node-actions > .workout-drag-handle' : '.repeat-step-actions > .workout-drag-handle')!;
+      mouse(handle, 'mousedown', 320);
+      mouse(document, 'mousemove', 330); mouse(document, 'mousemove', 180);
+      expect(document.querySelector('.cdk-drag-preview')).not.toBeNull();
+      mouse(document, 'mouseup', 180);
+      // CDK finishes its preview transition outside Angular's stability tracking.
+      await vi.waitFor(() => expect(drops).toEqual([{ index: 0, over: true, id: ids[1] }]));
+      await fixture.whenStable(); fixture.detectChanges(); await fixture.whenStable();
+      const nodes = component.editor()!.value.nodes;
+      expect((scope === 'outer' ? nodes : (nodes[1] as ManualWorkoutEditorRepeat).steps).map(node => node.id)).toEqual([...ids].reverse());
+      expect(events).toEqual(['ended', 'dropped']);
+      expect(haptics.selection).toHaveBeenCalledOnce();
+      expect(mutate).not.toHaveBeenCalled();
+    } finally {
+      geometry.mockRestore();
+    }
+  });
+
   it('disables adding and copying at the structural node budget and while saving', async () => {
     setRouteState({ mode: 'create', scope: 'standalone', date: '2026-09-09' });
     const fixture = await renderPlans(); const component = fixture.componentInstance;
@@ -285,7 +376,7 @@ describe('PlansWorkspaceComponent', () => {
     component.editor.set({ ...session, value: { ...session.value,
       nodes: Array.from({ length: 100 }, (_, index) => createManualWorkoutEditorStep(`step-${index}`)) } });
     component.duplicateEditorNode('step-0'); component.addEditorStep(); component.addEditorRepeat();
-    expect(component.editorNodeCount()).toBe(100); expect(component.canDuplicateEditorNode('step-0')).toBe(false);
+    expect(component.editorNodeCount()).toBe(100);
     // The pure helper covers the full budget. Check pending controls without rendering 100 complete forms.
     component.editor.set(session);
     component.busyAction.set('save-workout'); fixture.detectChanges();
@@ -453,6 +544,18 @@ describe('PlansWorkspaceComponent', () => {
       '<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">'
       + '<link rel="stylesheet" href="styles.css">' + Array.from(document.head.querySelectorAll('style')).map(style => style.outerHTML).join('')
       + '<style>' + css + '</style></head><body class="app-hydrated"><app-plans-workspace>' + ordered.outerHTML + '</app-plans-workspace></body></html>');
+    const trigger = fixture.debugElement.query(By.css('.workout-node-actions [data-editor-node-action]')).injector.get(MatMenuTrigger);
+    trigger.openMenu(); fixture.detectChanges(); await fixture.whenStable();
+    const menuStyles = Array.from(document.head.querySelectorAll('style')).map(style => style.outerHTML).join('');
+    const overlay = document.querySelector('.cdk-overlay-container')!.cloneNode(true) as HTMLElement;
+    // JSDOM gives the viewport zero geometry. Position only the exported overlay for browser layout QA.
+    overlay.querySelector<HTMLElement>('.cdk-overlay-connected-position-bounding-box')!.style.cssText =
+      'top: 16px; left: 16px; height: calc(100vh - 32px); width: calc(100vw - 32px); align-items: flex-start; justify-content: flex-start;';
+    writeFileSync(join(process.env.TRAINING_DELIVERY_QA_DIR, 'ordering-menu.html'),
+      readFileSync(join(process.env.TRAINING_DELIVERY_QA_DIR, 'ordering-editor.html'), 'utf8')
+        .replace('</head>', menuStyles + '</head>')
+        .replace('</body>', overlay.outerHTML + '</body>'));
+    trigger.closeMenu(); fixture.detectChanges(); await fixture.whenStable();
   });
 
   function setRouteState(options: {

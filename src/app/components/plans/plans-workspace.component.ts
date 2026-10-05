@@ -15,6 +15,7 @@ import {
   viewChild,
 } from '@angular/core';
 import { Location } from '@angular/common';
+import { LiveAnnouncer } from '@angular/cdk/a11y';
 import { DragDropModule, type CdkDragDrop } from '@angular/cdk/drag-drop';
 import { toObservable, toSignal } from '@angular/core/rxjs-interop';
 import { MatDialog } from '@angular/material/dialog';
@@ -76,7 +77,6 @@ import {
   type ManualWorkoutTarget,
 } from '../../helpers/planned-workout-editor.helper';
 import {
-  canDuplicateManualWorkoutEditorNode,
   duplicateManualWorkoutEditorNode,
   manualWorkoutEditorNodeCount,
   manualWorkoutEditorSiblings,
@@ -189,6 +189,7 @@ export class PlansWorkspaceComponent {
   private readonly host = inject<ElementRef<HTMLElement>>(ElementRef);
   private readonly dialog = inject(MatDialog);
   private readonly snackBar = inject(MatSnackBar);
+  private readonly liveAnnouncer = inject(LiveAnnouncer);
   private readonly route = inject(ActivatedRoute);
   private readonly router = inject(Router);
   private readonly location = inject(Location);
@@ -221,10 +222,14 @@ export class PlansWorkspaceComponent {
   private editorDrag: { generation: number; uid: string; nodeId: string; repeatId: string | null; siblingIds: string[] } | null = null;
   private editorMenuFocus: { generation: number; uid: string; nodeId: string } | null = null;
   private readonly pendingEditorNodeFocus = signal<{ generation: number; uid: string; nodeId: string } | null>(null);
-  readonly editorOrderMessage = signal('');
+  private editorHasAnnouncement = false;
   readonly editorNodeLimit = WORKOUT_STRUCTURE_MAX_NODES;
   readonly editorNodeCount = computed(() => this.editor() ? manualWorkoutEditorNodeCount(this.editor()!.value) : 0);
   readonly editorDragDelay = { touch: 200, mouse: 0 };
+
+  constructor() {
+    this.destroyRef.onDestroy(() => this.clearEditorAnnouncement());
+  }
 
   readonly sportOptionGroups: ReadonlyArray<{
     label: string;
@@ -1241,18 +1246,19 @@ export class PlansWorkspaceComponent {
     });
   }
 
-  canDuplicateEditorNode(nodeId: string, repeatId: string | null = null): boolean {
-    const session = this.editor();
-    return !!session && !this.busyAction() && !this.editorIsStrength()
-      && canDuplicateManualWorkoutEditorNode(session.value, nodeId, repeatId);
-  }
-
   private advanceEditorGeneration(): void {
     this.editorGeneration += 1;
     this.editorDrag = null;
     this.editorMenuFocus = null;
     this.pendingEditorNodeFocus.set(null);
-    this.editorOrderMessage.set('');
+    this.clearEditorAnnouncement();
+  }
+
+  private clearEditorAnnouncement(): void {
+    if (!this.editorHasAnnouncement) return;
+    this.editorHasAnnouncement = false;
+    // An empty announcement also replaces a pending delayed message; clear() alone does not.
+    void this.liveAnnouncer.announce('', 'polite');
   }
 
   moveEditorNode(nodeId: string, direction: -1 | 1, repeatId: string | null = null): void {
@@ -1313,7 +1319,9 @@ export class PlansWorkspaceComponent {
     const node = siblings[index];
     this.editor.set({ ...session, value });
     this.haptics.selection();
-    this.editorOrderMessage.set(`${node.kind === 'repeat' ? 'Repeat block' : 'Step'} ${verb} to position ${index + 1} of ${siblings.length}${repeatId ? ' within the repeat block' : ''}.`);
+    this.editorHasAnnouncement = true;
+    // CDK clears and delays the live region so consecutive identical results are announced again.
+    void this.liveAnnouncer.announce(`${node.kind === 'repeat' ? 'Repeat block' : 'Step'} ${verb} to position ${index + 1} of ${siblings.length}${repeatId ? ' within the repeat block' : ''}.`, 'polite');
     if (this.editorMenuFocus) this.editorMenuFocus = { generation: this.editorGeneration, uid, nodeId: node.id };
     this.pendingEditorNodeFocus.set({ generation: this.editorGeneration, uid, nodeId: node.id });
   }
