@@ -309,7 +309,8 @@ export class ChartsColumnsComponent implements AfterViewInit, OnChanges, OnDestr
           label: { show: false },
           handle: mobileAxisPointerHandle,
         }
-        : undefined,
+        // ECharts writes tooltip-inherited pointer state here; undefined removes its default object.
+        : {},
       axisLine: {
         show: this.vertical,
         lineStyle: { color: axisColor }

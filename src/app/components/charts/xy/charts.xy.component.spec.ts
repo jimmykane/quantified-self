@@ -166,6 +166,7 @@ describe('ChartsXYComponent', () => {
     expect(option.series[0].type).toBe('line');
     expect(option.series[0].connectNulls).toBe(true);
     expect(option.xAxis.type).toBe('category');
+    expect(option.xAxis.axisPointer).toEqual(expect.any(Object));
     expect(option.yAxis.type).toBe('value');
     expect(mockChart.dispatchAction).toHaveBeenCalledWith({ type: 'hideTip' });
     expect(mockLoader.setOption.mock.calls.at(-1)?.[2]).toEqual({
@@ -337,6 +338,7 @@ describe('ChartsXYComponent', () => {
     const option = getLastOption();
     expect(option.xAxis.type).toBe('value');
     expect(option.yAxis.type).toBe('category');
+    expect(option.yAxis.axisPointer).toEqual(expect.any(Object));
     expect(option.yAxis.inverse).toBe(true);
     expect(option.yAxis.boundaryGap).toBe(false);
     expect(option.grid.left).toBe(0);
