@@ -133,6 +133,22 @@ describe('AssistantExploreBottomSheetComponent', () => {
     });
   });
 
+  it('selects today\'s workout without enabling optional data or change access', () => {
+    const buttons = Array.from(
+      fixture.nativeElement.querySelectorAll('.assistant-explore-prompts button'),
+    ) as HTMLButtonElement[];
+
+    buttons.at(-1)!.click();
+
+    expect(bottomSheetRef.dismiss).toHaveBeenCalledExactlyOnceWith({
+      kind: 'prompt',
+      prompt: ASSISTANT_CREATE_TODAYS_WORKOUT_PROMPT,
+    });
+    expect(component.data.trainingPlansEnabled ?? false).toBe(false);
+    expect(component.data.trainingPlanChangesEnabled ?? false).toBe(false);
+    expect(component.data.timelineNotesEnabled ?? false).toBe(false);
+  });
+
   it('returns explicit precise activity-location consent to the Assistant page', () => {
     component.setPreciseActivityLocations(true);
 

@@ -407,6 +407,14 @@ tool is absent or generation does not invoke the declared tools in order. Tests 
 every declared mocked MCP workflow tool and verify each workflow against the production MCP tool registry. The
 Assistant examples are therefore the only user-facing conversational prompt catalog that needs maintenance.
 
+The existing **Today's workout** contextual card asks for one new standalone session using readiness, recorded recovery,
+recent load and the 28-day recorded weekday pattern. It conditionally includes relevant recent/ongoing Timeline notes
+and checks existing workouts under their independent read choices. Selecting it only fills the composer; optional access
+and change permissions remain off until the user enables them, and adding the session still requires app-owned review
+and **Apply changes**. Missing records do not establish skipped training or a regular habit. MCP impact: this starter-copy
+update reuses the existing bounded daily context and focused workout proposal; it changes no tool, schema, scope, metric,
+consent default, provider action, registered contract or bundled plugin. No new read or write coverage is required.
+
 The latest-workout and yesterday Training-impact cards are contextual examples rather than fixed workflow examples.
 They use the ordinary guarded Training-impact routing because the exact activity reference or complete local-day
 selection exists only at request time: discover the completed activity or bounded day, prepare Form, then call the

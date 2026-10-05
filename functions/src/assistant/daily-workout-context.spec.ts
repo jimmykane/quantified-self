@@ -190,6 +190,8 @@ describe('daily workout context', () => {
     expect(requestsDailyWorkoutChange('Create one workout for today and send it to Suunto.')).toBe(true);
     expect(requestsDailyWorkoutContext(ASSISTANT_CREATE_TODAYS_WORKOUT_PROMPT, [])).toBe(true);
     expect(requestsDailyWorkoutChange(ASSISTANT_CREATE_TODAYS_WORKOUT_PROMPT)).toBe(true);
+    expect(resolveDailyWorkoutRequest(ASSISTANT_CREATE_TODAYS_WORKOUT_PROMPT, [], NOW, 'Europe/Helsinki'))
+      .toEqual({ targetDate: '2026-09-25', hypotheticalWithoutPlan: false, noAdditionalWorkoutToday: false });
   });
 
   it('reads exact completion and prepared snapshots, counts today, and dates an ended note', async () => {
