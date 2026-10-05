@@ -2,7 +2,7 @@ import { createManualWorkoutEditorTarget } from '../../helpers/planned-workout-t
 import { WorkoutTargetsEditorComponent } from './workout-targets-editor.component';
 import { signal } from '@angular/core';
 import { Location } from '@angular/common';
-import { TestBed } from '@angular/core/testing';
+import { TestBed, type ComponentFixture } from '@angular/core/testing';
 import { By } from '@angular/platform-browser';
 import { CdkDrag, CdkDragHandle, CdkDropList, type CdkDragDrop } from '@angular/cdk/drag-drop';
 import { LiveAnnouncer } from '@angular/cdk/a11y';
@@ -20,7 +20,7 @@ import { projectStrengthWorkoutToV1 } from '@shared/strength-workout';
 import type { ScheduledWorkoutV1 } from '@shared/training-plans';
 import type { WorkoutLibraryItemV1 } from '@shared/workout-library';
 import dayjs from 'dayjs';
-import { BehaviorSubject, Subject, concat, defer, of, type Observable } from 'rxjs';
+import { BehaviorSubject, Subject, concat, defer, of, throwError, type Observable } from 'rxjs';
 import { AppUserService } from '../../services/app.user.service';
 import { AppHapticsService } from '../../services/app.haptics.service';
 import { AppThemeService } from '../../services/app.theme.service';
@@ -1145,6 +1145,268 @@ describe('PlansWorkspaceComponent', () => {
     await fixture.whenStable();
 
     expect(libraryWatch).toHaveBeenCalledWith(user.uid);
+  });
+
+  function savedItem(): WorkoutLibraryItemV1 {
+    return { schemaVersion: 1, id: 'saved-run', title: 'Easy run', structure: schedule.workouts[0].structure,
+      status: 'active', revision: 2, createdAtMs: 1, updatedAtMs: 2 };
+  }
+
+  it('filters active recipes by title and exact sport, distinguishes no matches, and restores archived recipes explicitly', async () => {
+    const item = savedItem();
+    libraryItems.next([item, { ...item, id: 'archived', status: 'archived' },
+      { ...item, id: 'bike', title: 'Bike tempo', structure: { ...item.structure, sport: ActivityTypes.Cycling } }]);
+    setRouteState({ mode: 'library-browse' });
+    const fixture = await renderPlans();
+    const component = fixture.componentInstance;
+    expect(component.libraryRows()).toHaveLength(2);
+    expect(fixture.debugElement.query(By.directive(MatSelect)).componentInstance.value).toBe('all');
+    component.setLibrarySport('all');
+    expect(haptics.selection).not.toHaveBeenCalled();
+    component.librarySearch.set('  EASY ');
+    component.setLibrarySport(ActivityTypes.Running);
+    fixture.detectChanges();
+    expect(component.libraryRows().map(row => row.item.id)).toEqual(['saved-run']);
+    expect(fixture.nativeElement.querySelector('.workout-prescription-summary').textContent).toContain('30m 00s');
+    component.setLibrarySport(ActivityTypes.Running);
+    expect(haptics.selection).toHaveBeenCalledOnce();
+    component.librarySearch.set('missing');
+    fixture.detectChanges();
+    expect(fixture.nativeElement.textContent).toContain('No saved workouts match these filters');
+    expect(fixture.nativeElement.textContent).not.toContain('No saved workouts yet');
+    component.librarySearch.set('');
+    component.setLibraryStatusFilter('archived');
+    fixture.detectChanges();
+    expect(component.libraryRows().map(row => row.item.id)).toEqual(['archived']);
+    expect(fixture.nativeElement.querySelector('[data-library-add]')).toBeNull();
+    component.beginLibraryPlacement({ ...item, status: 'archived' });
+    expect(component.placementItem()).toBeNull();
+    expect(libraryPlace).not.toHaveBeenCalled();
+  });
+
+  it('retries a failed owner library listener without mounting one on Calendar or writing anything', async () => {
+    libraryWatch.mockReturnValueOnce(throwError(() => new Error('Offline')));
+    setRouteState({ mode: 'library-browse' });
+    const fixture = await renderPlans();
+    expect(fixture.nativeElement.textContent).toContain('Could not load saved workouts');
+    const retry = [...fixture.nativeElement.querySelectorAll('button')]
+      .find((button: HTMLButtonElement) => button.textContent?.trim() === 'Retry') as HTMLButtonElement;
+    retry.click();
+    fixture.detectChanges(); await fixture.whenStable(); fixture.detectChanges();
+    expect(libraryWatch).toHaveBeenCalledTimes(2);
+    expect(fixture.nativeElement.textContent).toContain('No saved workouts yet');
+    expect(haptics.selection).toHaveBeenCalledOnce();
+    expect(libraryMutate).not.toHaveBeenCalled();
+  });
+
+  it.each(['2026-03-29', '2026-10-25', '2027-01-01'])('places the selected calendar label %s unchanged, including DST and year boundaries', async date => {
+    const item = savedItem();
+    libraryItems.next([item]);
+    setRouteState({ mode: 'library-browse', date });
+    libraryPlace.mockResolvedValue({ workoutIds: ['copy'], dates: [date] });
+    const fixture = await renderPlans();
+    fixture.componentInstance.beginLibraryPlacement(item);
+    fixture.componentInstance.setPlacementPlan('standalone');
+    fixture.detectChanges();
+    expect(fixture.componentInstance.placementDates()).toEqual([date]);
+    expect(fixture.nativeElement.textContent).toContain(`Selected Calendar day: ${date}`);
+    await fixture.componentInstance.placeLibraryItem();
+    expect(libraryPlace).toHaveBeenCalledWith(expect.objectContaining({ dates: [date], planId: null,
+      expectedPlanRevision: null, expectedTemplateRevision: 2 }));
+    expect(Object.keys(libraryPlace.mock.calls[0][0]).sort()).toEqual(['mutationId', 'itemId',
+      'expectedTemplateRevision', 'expectedStateRevision', 'planId', 'expectedPlanRevision', 'dates',
+      'confirmPlanRangeExtension'].sort());
+  });
+
+  it('locks an uncertain result and replays exactly the same request despite newer live recipes and schedule state', async () => {
+    const item = savedItem();
+    const scheduleChanges = new BehaviorSubject(schedule);
+    watchSchedule.mockReturnValue(scheduleChanges);
+    libraryItems.next([item]);
+    setRouteState({ mode: 'library-browse', date: '2026-09-09' });
+    libraryPlace.mockRejectedValueOnce(Object.assign(new Error('Reply lost'), { code: 'functions/unavailable' }))
+      .mockResolvedValueOnce({ workoutIds: ['copy'], dates: ['2026-09-09'] });
+    const fixture = await renderPlans();
+    const component = fixture.componentInstance;
+    component.beginLibraryPlacement(item);
+    await component.placeLibraryItem();
+    const original = libraryPlace.mock.calls[0][0];
+    scheduleChanges.next({ ...schedule, state: { ...schedule.state, revision: 5, currentWorkoutCount: 400 } });
+    libraryItems.next([{ ...item, revision: 3, status: 'archived' }]);
+    component.cancelLibraryPlacement();
+    component.setPlacementPlan('standalone');
+    fixture.detectChanges();
+    expect(component.placementItem()).toBe(item);
+    expect(component.placementPlanId()).toBe('active-plan');
+    expect(fixture.nativeElement.textContent).toContain('Retry exact placement');
+    expect(fixture.debugElement.query(By.directive(MatSelect)).componentInstance.disabled).toBe(true);
+    expect(haptics.error).toHaveBeenCalledOnce();
+    expect(haptics.success).not.toHaveBeenCalled();
+    await component.placeLibraryItem();
+    expect(libraryPlace.mock.calls[1][0]).toEqual(original);
+    expect(component.placementRetry()).toBeNull();
+    expect(component.placementItem()).toBeNull();
+    expect(haptics.success).toHaveBeenCalledOnce();
+  });
+
+  it('releases a definitively rejected placement for correction and cancels without writing', async () => {
+    setRouteState({ mode: 'library-browse' });
+    libraryPlace.mockRejectedValue(Object.assign(new Error('Workout capacity reached'), { code: 'functions/resource-exhausted' }));
+    const fixture = await renderPlans();
+    fixture.componentInstance.beginLibraryPlacement(savedItem());
+    await fixture.componentInstance.placeLibraryItem();
+    expect(fixture.componentInstance.placementRetry()).toBeNull();
+    fixture.componentInstance.cancelLibraryPlacement();
+    expect(fixture.componentInstance.placementItem()).toBeNull();
+    expect(libraryPlace).toHaveBeenCalledOnce();
+  });
+
+  it('replays the confirmed extension request after a lost reply without asking for another extension or adding another batch', async () => {
+    const item = savedItem();
+    setRouteState({ mode: 'library-browse', date: '2026-10-25' });
+    libraryPlace.mockRejectedValueOnce(new Error('Moving this workout requires extending Autumn build.'))
+      .mockRejectedValueOnce(Object.assign(new Error('Reply lost'), { code: 'functions/deadline-exceeded' }))
+      .mockResolvedValueOnce({ workoutIds: ['copy'] });
+    const fixture = await renderPlans();
+    const confirmDialog = vi.spyOn((fixture.componentInstance as unknown as { dialog: MatDialog }).dialog, 'open')
+      .mockReturnValue({ afterClosed: () => of(true) } as never);
+    fixture.componentInstance.beginLibraryPlacement(item);
+    await fixture.componentInstance.placeLibraryItem();
+    expect(fixture.componentInstance.placementRetry()?.confirmPlanRangeExtension).toBe(true);
+    await fixture.componentInstance.placeLibraryItem();
+    expect(libraryPlace.mock.calls[2][0]).toEqual(libraryPlace.mock.calls[1][0]);
+    expect(confirmDialog).toHaveBeenCalledOnce();
+    expect(haptics.success).toHaveBeenCalledOnce();
+  });
+
+  it.each(['account', 'route'])('fences an extension confirmation after a %s change', async change => {
+    setRouteState({ mode: 'library-browse', date: '2026-10-25' });
+    libraryPlace.mockRejectedValueOnce(new Error('Moving this workout requires extending Autumn build.'));
+    const fixture = await renderPlans();
+    const confirmation = new Subject<boolean>();
+    vi.spyOn((fixture.componentInstance as unknown as { dialog: MatDialog }).dialog, 'open')
+      .mockReturnValue({ afterClosed: () => confirmation } as never);
+    fixture.componentInstance.beginLibraryPlacement(savedItem());
+    const pending = fixture.componentInstance.placeLibraryItem();
+    await Promise.resolve(); await Promise.resolve();
+    if (change === 'account') { userSignal.set(null); userSubject.next(null); }
+    else setRouteState({}, true);
+    fixture.detectChanges();
+    confirmation.next(true); confirmation.complete(); await pending;
+    expect(libraryPlace).toHaveBeenCalledOnce();
+    expect(haptics.success).not.toHaveBeenCalled();
+    expect(snackBarOpen).not.toHaveBeenCalled();
+  });
+
+  it('discards a late placement reply without unlocking another owner’s pending placement', async () => {
+    setRouteState({ mode: 'library-browse' });
+    let resolveOld!: (value: unknown) => void;
+    let resolveNew!: (value: unknown) => void;
+    libraryPlace.mockReturnValueOnce(new Promise(resolve => { resolveOld = resolve; }))
+      .mockReturnValueOnce(new Promise(resolve => { resolveNew = resolve; }));
+    const fixture = await renderPlans();
+    const component = fixture.componentInstance;
+    component.beginLibraryPlacement(savedItem());
+    const old = component.placeLibraryItem();
+    const newUser = { ...user, uid: 'other-owner' };
+    userSignal.set(newUser); userSubject.next(newUser);
+    fixture.detectChanges(); await fixture.whenStable();
+    component.beginLibraryPlacement(savedItem());
+    const next = component.placeLibraryItem();
+    resolveOld({ workoutIds: ['old-copy'] }); await old;
+    expect(component.busyAction()).toBe('place-saved-run');
+    expect(haptics.success).not.toHaveBeenCalled();
+    expect(snackBarOpen).not.toHaveBeenCalled();
+    resolveNew({ workoutIds: ['new-copy'] }); await next;
+    expect(haptics.success).toHaveBeenCalledOnce();
+    expect(component.busyAction()).toBeNull();
+  });
+
+  it('keeps unsupported prescriptions placeable and reveals their complete instructions through a keyboard-accessible disclosure', async () => {
+    const item = savedItem();
+    item.structure = { ...item.structure, nodes: [{ kind: 'step', id: 'energy', purpose: 'work',
+      ending: { kind: 'kilojoules', kilojoules: 500 }, targets: [], note: 'Stop at the top' }] };
+    libraryItems.next([item]);
+    setRouteState({ mode: 'library-browse' });
+    const fixture = await renderPlans();
+    expect(fixture.nativeElement.querySelector('[aria-label="Edit saved workout Easy run"]')).toBeNull();
+    const disclosure = fixture.nativeElement.querySelector('[aria-controls="library-details-saved-run"]') as HTMLButtonElement;
+    expect(disclosure.getAttribute('aria-expanded')).toBe('false');
+    disclosure.click(); fixture.detectChanges();
+    expect(disclosure.getAttribute('aria-expanded')).toBe('true');
+    expect(fixture.nativeElement.querySelector('#library-details-saved-run').hidden).toBe(false);
+    expect(fixture.nativeElement.textContent).toContain('Stop at the top');
+    expect(haptics.selection).toHaveBeenCalledOnce();
+    fixture.componentInstance.beginLibraryPlacement(item);
+    expect(fixture.componentInstance.placementItem()?.structure).toEqual(item.structure);
+  });
+
+  it('preserves Calendar context when cancelling a recipe editor', async () => {
+    setRouteState({ mode: 'library-create', date: '2026-10-25' });
+    const fixture = await renderPlans();
+    const location = TestBed.inject(Location);
+    const back = vi.spyOn(location, 'back').mockImplementation(() => undefined);
+    vi.spyOn(location, 'getState').mockReturnValue({ trainingPlansEditorReturn: {
+      uid: user.uid, url: '/training/plans/library?date=2026-10-25' } });
+    fixture.componentInstance.cancelEditor();
+    expect(back).toHaveBeenCalledOnce();
+  });
+
+  it('blocks oversized date batches, calendar capacity and a plan extension beyond 366 days before placement', async () => {
+    setRouteState({ mode: 'library-browse', date: '2026-09-09' });
+    const fixture = await renderPlans();
+    const component = fixture.componentInstance;
+    component.beginLibraryPlacement(savedItem());
+    component.placementEndDate.set('2027-01-01');
+    component.placementWeekdays.set([0, 1, 2, 3, 4, 5, 6]);
+    expect(component.placementError()).toBe('Add at most 100 dates at once.');
+    await component.placeLibraryItem();
+    expect(libraryPlace).not.toHaveBeenCalled();
+    component.placementEndDate.set('2026-09-09');
+    component.placementPlanId.set('missing-plan');
+    expect(component.placementError()).toContain('available destination');
+    component.placementPlanId.set('active-plan');
+    component.setPlacementStartDate('2028-01-01');
+    expect(component.placementError()).toContain('366 days');
+    component.setPlacementPlan('standalone');
+    expect(component.placementError()).toBeNull();
+    // A live capacity increase must not invalidate receipt replay after an uncertain successful write.
+    schedule.state.currentWorkoutCount = 400;
+    component.setPlacementStartDate('2028-01-02');
+    expect(component.placementError()).toContain('400 current workouts');
+    expect(libraryPlace).not.toHaveBeenCalled();
+  });
+
+  it('reviews complete strength instructions, explicit dates and pending feedback in a focused placement', async () => {
+    const strength = { version: 1 as const, exercises: [{ id: 'squat', name: 'Squat with a deliberately long exercise label',
+      sets: Array.from({ length: 12 }, (_, index) => ({ id: `set-${index}`, ending: { kind: 'repetitions' as const, repetitions: 5 },
+        externalLoadKg: 80, restAfterSeconds: 90 })) }] };
+    const item = { ...savedItem(), title: 'Saved strength session with a long title', strength,
+      structure: projectStrengthWorkoutToV1({ ...strength, workoutId: 'saved', revision: 2 }) };
+    libraryItems.next([item, { ...savedItem(), id: 'run-2' }]);
+    setRouteState({ mode: 'library-browse', date: '2026-10-25' });
+    const fixture = await renderPlans();
+    exportLibraryQa(fixture, 'library-browse');
+    const component = fixture.componentInstance;
+    component.beginLibraryPlacement(item);
+    component.setPlacementPlan('standalone');
+    fixture.detectChanges(); await fixture.whenStable(); fixture.detectChanges();
+    const preview = fixture.nativeElement.querySelector('.library-placement .workout-summary');
+    expect(preview.querySelectorAll('li')).toHaveLength(12);
+    expect(preview.textContent).toContain('Set 12 · 5 reps · 80.0 kg · Rest 01m 30s');
+    expect(fixture.nativeElement.querySelector('[aria-label="Filter saved workouts"]')).toBeNull();
+    expect(fixture.nativeElement.querySelector('.library-placement-review').textContent).toContain('Standalone · 2026-10-25');
+    exportLibraryQa(fixture, 'library-placement');
+    let resolvePlacement!: (value: unknown) => void;
+    libraryPlace.mockReturnValue(new Promise(resolve => { resolvePlacement = resolve; }));
+    const pending = component.placeLibraryItem();
+    fixture.detectChanges();
+    expect(fixture.nativeElement.querySelector('.library-placement .button-content mat-spinner')).not.toBeNull();
+    expect(fixture.nativeElement.textContent).toContain('Adding…');
+    exportLibraryQa(fixture, 'library-pending');
+    resolvePlacement({ workoutIds: ['strength-copy'] }); await pending;
+    expect(haptics.success).toHaveBeenCalledOnce();
+    expect(haptics.error).not.toHaveBeenCalled();
   });
 
   it('starts placement inside a future active plan instead of suggesting an unwanted extension', async () => {
@@ -2949,6 +3211,28 @@ describe('PlansWorkspaceComponent', () => {
     expect(fixture.componentInstance.editor()).toBeNull();
     expect(mutate).not.toHaveBeenCalled();
   });
+
+  function exportLibraryQa(fixture: ComponentFixture<PlansWorkspaceComponent>, name: string): void {
+    if (!process.env.TRAINING_DELIVERY_QA_DIR) return;
+    const sass = createRequire(createRequire(resolve('package.json')).resolve('@angular/build/package.json'))('sass');
+    const css = [
+      ['app-plans-workspace', 'src/app/components/plans/plans-workspace.component.scss'],
+      ['app-compact-row', 'src/app/components/shared/compact-row/compact-row.component.scss'],
+    ].map(([host, file]) => sass.compileString(host + ' {' + readFileSync(file, 'utf8')
+      .replace(/:host\(([^)]+)\)/g, '&$1').replace(/:host/g, '&') + '}').css).join('\n');
+    const source = fixture.nativeElement.querySelector('.workout-library') as HTMLElement;
+    const rendered = source.cloneNode(true) as HTMLElement;
+    const inputs = rendered.querySelectorAll('input');
+    source.querySelectorAll('input').forEach((input, index) => {
+      inputs[index].setAttribute('value', input.value);
+      inputs[index].toggleAttribute('checked', input.checked);
+    });
+    writeFileSync(join(process.env.TRAINING_DELIVERY_QA_DIR, `${name}.html`),
+      '<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">'
+      + '<link rel="stylesheet" href="styles.css">' + Array.from(document.head.querySelectorAll('style')).map(style => style.outerHTML).join('')
+      + '<style>' + css + '</style></head><body><app-plans-workspace><main class="plans-workspace qs-workspace-page">'
+      + rendered.outerHTML + '</main></app-plans-workspace></body></html>');
+  }
 
   async function renderPlans() {
     vi.spyOn(TestBed.inject(Router), 'navigate').mockImplementation((commands, extras) => {

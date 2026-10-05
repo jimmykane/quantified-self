@@ -2,6 +2,7 @@ import { randomUUID } from 'node:crypto';
 import { Firestore, DocumentReference, Query } from 'firebase-admin/firestore';
 import { afterAll, describe, expect, it, vi } from 'vitest';
 import { ActivityTypes } from '@sports-alliance/sports-lib';
+import { projectStrengthWorkoutToV1 } from '../../../shared/strength-workout';
 import { createFirestoreTrainingReads, readTrainingPlans, type TrainingReadCodec } from './training-plans.service';
 import { trainingDeliverySummaryIdentity } from '../../../shared/training-delivery-summary';
 import { TRAINING_READ_OUTPUTS, type TrainingReadTool } from './training-plans.schemas';
@@ -49,6 +50,52 @@ describe.skipIf(!process.env.FIRESTORE_EMULATOR_HOST)('Training MCP loopback Fir
       .rejects.toThrow('library changed');
     await user.collection('mcpConnections').doc('connection').update({ revokedAtMs: 2 });
     await expect(run('list_saved_workouts', {})).rejects.toThrow();
+  }, 30_000);
+  it('keeps exact sport and complete strength recipes discoverable through existing saved-workout reads without exposing placement or provider identity', async () => {
+    const uid = `library-discovery-${randomUUID()}`;
+    const user = db.collection('users').doc(uid);
+    const reads = createFirestoreTrainingReads(() => db);
+    const codec: TrainingReadCodec = { encode: value => JSON.stringify(value), decode: value => JSON.parse(value) };
+    const run = (tool: TrainingReadTool, args: unknown) => readTrainingPlans({ tool, arguments: args, uid,
+      connectionId: 'connection', scopes: ['training-plans:read'] }, reads, codec);
+    await user.set({});
+    await user.collection('mcpConnections').doc('connection').set({ status: 'active', scopes: ['training-plans:read'] });
+    await user.collection('trainingPlanState').doc('current').set({ revision: 1, activePlanId: null });
+    const strength = { version: 1 as const, exercises: [{ id: 'squat', name: 'Heavy squat', sets: [
+      { id: 'set-1', ending: { kind: 'repetitions' as const, repetitions: 5 }, externalLoadKg: 80, restAfterSeconds: 90 },
+      { id: 'set-2', ending: { kind: 'time' as const, seconds: 30 }, externalLoadKg: 60 },
+    ] }] };
+    const metadata = { schemaVersion: 1, revision: 2, createdAtMs: 1, updatedAtMs: 2,
+      providerId: 'PRIVATE', completion: 'PRIVATE', templateOrigin: { itemId: 'PRIVATE' } };
+    await user.collection('workoutLibrary').doc('strength').set({ ...metadata, id: 'strength', title: 'Heavy squat',
+      status: 'archived', strength, structure: projectStrengthWorkoutToV1({ ...strength, workoutId: 'saved', revision: 2 }) });
+    const structure = { version: 1 as const, sport: ActivityTypes.MountainBiking, nodes: [{ kind: 'step' as const,
+      id: 'manual', purpose: 'work' as const, ending: { kind: 'manual' as const }, targets: [], note: 'Stop at the summit' },
+    { kind: 'step' as const, id: 'descent', purpose: 'cooldown' as const,
+      ending: { kind: 'time' as const, seconds: 300, allowEarlyLap: true }, targets: [], note: 'Lap when back at the trailhead' }] };
+    await user.collection('workoutLibrary').doc('bike').set({ ...metadata, id: 'bike', title: 'Summit ride', status: 'active', structure });
+    const active = TRAINING_READ_OUTPUTS.list_saved_workouts.parse(await run('list_saved_workouts', { status: 'active' }));
+    expect(active.workouts.map(item => item.title)).toEqual(['Summit ride']);
+    const exact = TRAINING_READ_OUTPUTS.get_saved_workout_v2.parse(await run('get_saved_workout_v2', {
+      savedWorkoutRef: active.workouts[0].savedWorkoutRef,
+    }));
+    expect(exact.savedWorkout.structure).toEqual(structure);
+    const archived = TRAINING_READ_OUTPUTS.list_saved_workouts.parse(await run('list_saved_workouts', {
+      status: 'archived', search: 'SQUAT',
+    }));
+    expect(archived.workouts).toHaveLength(1);
+    const detail = TRAINING_READ_OUTPUTS.get_saved_workout.parse(await run('get_saved_workout', {
+      savedWorkoutRef: archived.workouts[0].savedWorkoutRef,
+    }));
+    expect(detail.savedWorkout.strength).toEqual(JSON.parse(JSON.stringify(strength)));
+    const latestStrength = TRAINING_READ_OUTPUTS.get_saved_workout_v2.parse(await run('get_saved_workout_v2', {
+      savedWorkoutRef: archived.workouts[0].savedWorkoutRef,
+    }));
+    expect(latestStrength.savedWorkout.strength).toEqual(JSON.parse(JSON.stringify(strength)));
+    expect(detail.savedWorkout.status).toBe('archived');
+    expect(JSON.stringify([active, exact, archived, detail, latestStrength])).not.toMatch(/PRIVATE|providerId|completion|templateOrigin/);
+    expect((await user.collection('scheduledWorkouts').get()).empty).toBe(true);
+    expect((await user.collection('trainingDeliverySettings').get()).empty).toBe(true);
   }, 30_000);
   it('reads a full 400-workout, four-service plan in bounded Firestore pages and detects retained-record overflow', async () => {
     const uid = `training-scale-${randomUUID()}`, user = db.collection('users').doc(uid);

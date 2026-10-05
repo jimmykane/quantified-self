@@ -941,6 +941,40 @@ The library UI uses the existing unit-aware manual/strength editor and compact r
 listener runs only on library routes, and editor Cancel returns through a recorded same-owner library browse entry
 or replaces a direct link with the safe browse route. Placement selects a destination,
 inclusive dates and weekdays, previews count/overlaps, and honors the account week-start preference in weekday order.
+Title search, exact canonical sport and Active/Archived/All filters are local presentation state over the existing
+bounded library (200 entries); Active is the initial view. Empty-library, no-matches, loading and failed-listener states
+are distinct, and Retry resubscribes only on the owner library route. Filters reset on owner change and never persist
+into a recipe. Compact rows show two prescription lines with a keyboard-accessible Show/Hide disclosure for the full
+prescription. Strength previews use the complete exercise draft, including each set's time/repetitions, external load
+and rest; interval previews retain repeats, targets, pool length, optional early-Lap endings and notes. Canonical values use the owner's Sports Lib
+unit settings. A valid recipe outside the manual editor's vocabulary remains previewable and placeable unchanged;
+the UI explains the editing limitation and omits Edit rather than coercing its structure.
+
+Every owned selected-day Add workout surface (Calendar/Dashboard preview, full day and sheet) offers **Add from library**
+with `?date=YYYY-MM-DD`. The library preserves that calendar label exactly rather than converting an instant or clamping
+it to today/plan start, and carries it through recipe-editor navigation. The existing owner-bound Calendar return
+service retains the selected day and displayed period on Back. Choosing a recipe replaces results with a focused review
+of the exact saved version/prescription, explicit plan or Standalone destination, all dates, overlap count and prospective
+plan range. Cancel makes no write and returns focus to the recipe action. The active plan is the default destination;
+outside dates still require the existing explicit range-extension confirmation. No drag/drop, folders or recipe
+persistence redesign is introduced.
+
+Placement retains its exact request, revisions, confirmed-extension flag and mutation ID while the current review has
+an uncertain result. Retry replays that request even if library data refreshes, using the existing server receipt to
+avoid duplicate copies. Date/destination controls and Cancel remain locked until the result resolves; definitive
+validation, capacity, revision or authorization rejections release the review for correction. This retry state is local
+to the open review, not durable across reload/navigation. Account, route and component-generation fences prevent a late
+reply or range confirmation from continuing a stale placement or changing another owner's UI. Pending adds use an
+explicit spinner; semantic filter/disclosure/destination actions have one selection haptic owner, and success/error
+feedback follows the actual async outcome. Physical haptics still require device verification.
+
+MCP impact review for library discovery/selected-day placement: no wire impact. Existing `list_saved_workouts` already
+supports title/status discovery, and exact `get_saved_workout`/`get_saved_workout_v2` reads retain canonical sport and full strength drafts;
+browser sport filtering does not add a public list field/filter. Existing saved-workout placement proposals already
+review exact dates, destination, source/schedule/plan revisions and explicit range extension. Focused owner-read fixtures
+cover archived strength sets/load/rest and exact Mountain Biking/manual/early-Lap instructions with private identity exclusion.
+No tool/schema/scope/consent, Assistant routing, bundled guidance, provider action or registered digest changes; no
+plugin sync or registered-client refresh is required by this presentation change.
 Scheduled workout rows expose **Save to library** directly; this uses the server's exact-revision `save-workout`
 snapshot operation. The workout editor also exposes **Save copy to library**: it creates an independent recipe from
 the currently displayed draft, including unsaved edits, without mutating the scheduled workout or its sync consent.

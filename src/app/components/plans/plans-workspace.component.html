@@ -15,7 +15,8 @@
       <div pageHeaderActions class="plans-header-actions">
         <a mat-button routerLink="/training/plans" appHapticTap><mat-icon aria-hidden="true">arrow_back</mat-icon>Plans</a>
         <a mat-flat-button routerLink="/training/plans/library/new" appHapticTap
-          [state]="{ trainingPlansEditorReturn: { uid: currentUser()?.uid, url: '/training/plans/library' } }">
+          [queryParams]="{ date: libraryCalendarDate() }"
+          [state]="{ trainingPlansEditorReturn: { uid: currentUser()?.uid, url: libraryBrowseUrl() } }">
           <mat-icon aria-hidden="true">add</mat-icon>New saved workout
         </a>
       </div>
@@ -317,16 +318,42 @@
             <p>Reusable recipes, without dates or service sync. Adding one makes independent calendar workouts.</p>
           </div>
         </div>
+        @if (libraryCalendarDate()) {
+          <p class="library-calendar-context">Selected Calendar day: <strong>{{ libraryCalendarDate() }}</strong></p>
+        }
+        @if (!placementItem()) {
+        <div class="library-filters" aria-label="Filter saved workouts">
+          <mat-form-field><mat-label>Search saved workouts</mat-label>
+            <input matInput type="search" maxlength="120" [ngModel]="librarySearch()" (ngModelChange)="librarySearch.set($event)">
+          </mat-form-field>
+          <mat-form-field><mat-label>Sport</mat-label>
+            <mat-select [value]="librarySport() ?? 'all'" (selectionChange)="setLibrarySport($event.value)">
+              <mat-option value="all">All sports</mat-option>
+              @for (sport of librarySports(); track sport) { <mat-option [value]="sport">{{ sport }}</mat-option> }
+            </mat-select>
+          </mat-form-field>
+          <mat-form-field><mat-label>Saved workout status</mat-label>
+            <mat-select [value]="libraryStatus()" (selectionChange)="setLibraryStatusFilter($event.value)">
+              <mat-option value="active">Active</mat-option><mat-option value="archived">Archived</mat-option>
+              <mat-option value="all">All</mat-option>
+            </mat-select>
+          </mat-form-field>
+        </div>
         @if (libraryState().status === 'loading') {
           <div class="workout-empty-state" role="status"><mat-spinner diameter="24"></mat-spinner>Loading saved workouts…</div>
         } @else if (libraryState().status === 'error') {
-          <div class="workout-empty-state" role="alert">Could not load saved workouts. {{ libraryState().message }} Reload to try again.</div>
-        } @else if (libraryRows().length === 0) {
+          <div class="workout-empty-state" role="alert">Could not load saved workouts. {{ libraryState().message }}
+            <button mat-button type="button" appHapticTap (click)="retryLibraryLoad()">Retry</button>
+          </div>
+        } @else if (libraryItems().length === 0) {
           <div class="workout-empty-state" role="status">
             <mat-icon aria-hidden="true">library_books</mat-icon>
             <span>No saved workouts yet. Save one from a plan or create a new recipe here.</span>
           </div>
-        }
+        } @else if (libraryRows().length === 0) {
+          <p role="status">No saved workouts match these filters. Change the search, sport, or status.</p>
+        } @else {
+          <p class="library-result-count" role="status">{{ libraryRows().length }} of {{ libraryItems().length }} saved workouts</p>
         @for (row of libraryRows(); track row.item.id; let last = $last) {
           <app-compact-row class="workout-row" layout="stacked" density="compact" [mobileActionFullWidth]="true" [title]="row.item.title"
             [titleId]="'saved-workout-' + row.item.id" [headingLevel]="3" [showDivider]="!last">
@@ -344,14 +371,29 @@
                 [contextKey]="currentUser()?.uid + '/library/' + row.item.id + '/' + row.item.revision" [initiallyExpanded]="false"
                 unavailableReason="This saved recipe cannot be profiled. Its original instructions remain above."></app-workout-profile>
             }
+            <button mat-button type="button" class="library-prescription-toggle" appHapticTap (click)="toggleLibraryPreview(row.item.id)"
+              [attr.aria-expanded]="libraryExpandedIds().includes(row.item.id)"
+              [attr.aria-controls]="'library-details-' + row.item.id">
+              {{ libraryExpandedIds().includes(row.item.id) ? 'Hide' : 'Show' }} prescription
+            </button>
+            <div class="library-prescription-details" [id]="'library-details-' + row.item.id" [hidden]="!libraryExpandedIds().includes(row.item.id)">
+              @if (libraryExpandedIds().includes(row.item.id)) {
+              <ol class="workout-summary" tabindex="0" [attr.aria-label]="'Prescription for ' + row.item.title">@for (detail of row.details; track $index) { <li>{{ detail }}</li> }</ol>
+              }
+            </div>
+            @if (!row.editable) { <p class="library-editor-note">This recipe can be placed exactly as saved. Its instructions are not supported by the manual editor.</p> }
             <div compactRowAction class="workout-row-actions">
               @if (row.item.status === 'active') {
                 <button mat-flat-button type="button" appHapticTap (click)="beginLibraryPlacement(row.item)"
-                  [disabled]="busyAction() !== null"><mat-icon aria-hidden="true">event_available</mat-icon> Add to dates</button>
+                  [attr.data-library-add]="row.item.id"
+                  [disabled]="placementLocked()"><mat-icon aria-hidden="true">event_available</mat-icon> Add to dates</button>
               }
+              @if (row.editable) {
               <a mat-button [routerLink]="['/training/plans/library', row.item.id]" appHapticTap
-                [state]="{ trainingPlansEditorReturn: { uid: currentUser()?.uid, url: '/training/plans/library' } }"
+                [queryParams]="{ date: libraryCalendarDate() }"
+                [state]="{ trainingPlansEditorReturn: { uid: currentUser()?.uid, url: libraryBrowseUrl() } }"
                 [attr.aria-label]="'Edit saved workout ' + row.item.title"><mat-icon aria-hidden="true">edit</mat-icon> Edit</a>
+              }
               <button mat-icon-button type="button" appHapticTap [matMenuTriggerFor]="libraryActions"
                 [attr.aria-label]="busyAction() === 'library-' + row.item.id ? 'Updating ' + row.item.title : 'More actions for ' + row.item.title"
                 [disabled]="busyAction() !== null">
@@ -377,15 +419,19 @@
             </div>
           </app-compact-row>
         }
+        }
+        }
         @if (placementItem(); as item) {
           <section class="library-placement" aria-labelledby="library-placement-heading">
-            <h3 id="library-placement-heading">Add {{ item.title }} to your calendar</h3>
-            <p>Choose a date range and weekdays. Each date gets its own editable workout.</p>
-            <fieldset [disabled]="busyAction() !== null">
+            <h3 id="library-placement-heading" tabindex="-1">Add {{ item.title }} to your calendar</h3>
+            <p>Choose a date range and weekdays. Each date gets its own independent workout.</p>
+            <p>{{ item.structure.sport }} · Saved version {{ item.revision }}</p>
+            <ol class="workout-summary" tabindex="0" aria-label="Saved prescription">@for (detail of placementPreview()?.details; track $index) { <li>{{ detail }}</li> }</ol>
+            <fieldset [disabled]="placementLocked()">
               <div class="library-placement-fields">
                 <mat-form-field><mat-label>Save to</mat-label>
-                  <mat-select [value]="placementPlanId() ?? 'standalone'" [disabled]="busyAction() !== null"
-                    (selectionChange)="placementPlanId.set($event.value === 'standalone' ? null : $event.value); haptics.selection()">
+                  <mat-select [value]="placementPlanId() ?? 'standalone'" [disabled]="placementLocked()"
+                    (selectionChange)="setPlacementPlan($event.value)">
                     <mat-option value="standalone">Standalone</mat-option>
                     @for (plan of planOptions(); track plan.id) {
                       @if (plan.lifecycle !== 'archived') { <mat-option [value]="plan.id">{{ plan.name }}</mat-option> }
@@ -393,29 +439,40 @@
                   </mat-select>
                 </mat-form-field>
                 <mat-form-field><mat-label>From</mat-label>
-                  <input matInput type="date" [ngModel]="placementStartDate()" (ngModelChange)="setPlacementStartDate($event)">
+                  <input matInput type="date" [ngModel]="placementStartDate()" (ngModelChange)="setPlacementStartDate($event)" (change)="haptics.selection()">
                 </mat-form-field>
                 <mat-form-field><mat-label>Through</mat-label>
-                  <input matInput type="date" [ngModel]="placementEndDate()" (ngModelChange)="placementEndDate.set($event)">
+                  <input matInput type="date" [ngModel]="placementEndDate()" (ngModelChange)="placementEndDate.set($event)" (change)="haptics.selection()">
                 </mat-form-field>
               </div>
               <div class="library-weekdays" role="group" aria-label="Repeat on weekdays">
                 @for (option of placementWeekdayOptions(); track option.day) {
-                  <mat-checkbox [checked]="placementWeekdays().includes(option.day)"
+                <mat-checkbox [checked]="placementWeekdays().includes(option.day)" [disabled]="placementLocked()"
                     (change)="togglePlacementWeekday(option.day)">{{ option.label }}</mat-checkbox>
                 }
               </div>
             </fieldset>
             <p aria-live="polite">{{ placementDates().length }} {{ placementDates().length === 1 ? 'date' : 'dates' }} selected
-              @if (placementOverlaps()) { · {{ placementOverlaps() }} existing {{ placementOverlaps() === 1 ? 'workout' : 'workouts' }} on those dates }
+              @if (placementOverlaps()) { · {{ placementOverlaps() }} existing {{ placementOverlaps() === 1 ? 'workout' : 'workouts' }} in this destination on those dates }
               @if (placementDates().length > 100) { · Maximum 100 dates at once }
             </p>
+            <p class="library-placement-review"><strong>{{ placementDestination()?.name ?? 'Standalone' }}</strong>
+              · {{ placementDates().join(', ') }}
+            </p>
+            @if (placementRangeExtension()) { <p>Plan dates would extend to {{ placementRangeExtension() }}. QS will ask you to confirm.</p> }
+            @if (placementRetry() && !busyAction()) {
+              <p role="alert">The result could not be confirmed. Retry this exact placement to recover the result safely. Dates and destination stay locked until it is resolved.</p>
+            }
             @if (placementError()) { <p class="library-placement-error" role="alert">{{ placementError() }}</p> }
             <div class="form-actions">
-              <button mat-button type="button" appHapticTap (click)="placementItem.set(null)" [disabled]="busyAction() !== null">Cancel</button>
+              <button mat-button type="button" appHapticTap (click)="cancelLibraryPlacement()" [disabled]="placementLocked()">Cancel</button>
               <button mat-flat-button type="button" appHapticTap (click)="placeLibraryItem()"
                 [disabled]="busyAction() !== null || placementError() !== null || placementDates().length === 0">
-                Add {{ placementDates().length }} {{ placementDates().length === 1 ? 'workout' : 'workouts' }}
+                <span class="button-content">
+                  @if (busyAction() === 'place-' + item.id) { <mat-spinner diameter="18" aria-hidden="true"></mat-spinner> }
+                  @else { <mat-icon aria-hidden="true">event_available</mat-icon> }
+                  <span>{{ busyAction() === 'place-' + item.id ? 'Adding…' : placementRetry() ? 'Retry exact placement' : 'Add ' + placementDates().length + (placementDates().length === 1 ? ' workout' : ' workouts') }}</span>
+                </span>
               </button>
             </div>
           </section>
