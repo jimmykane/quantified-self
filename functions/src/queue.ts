@@ -89,6 +89,8 @@ import {
   SUUNTO_FIT_RETRY_EXHAUSTED_CONTEXT,
 } from './suunto/fit-download';
 import { getServiceTokenRootDocumentRef } from './service-token-store';
+import { ResponseBodyTooLargeError } from './request-helper';
+import { SUUNTO_FIT_DOWNLOAD_TOO_LARGE_CONTEXT } from './suunto/constants';
 
 type ProviderWorkoutQueueItem = SuuntoAppWorkoutQueueItemInterface
   | GarminAPIActivityQueueItemInterface
@@ -1070,6 +1072,10 @@ async function parseWorkoutQueueItemForServiceNameInternal(
         }
       } else if (e instanceof PermanentCOROSFITDownloadError) {
         return moveToDeadLetterQueue(queueItem, e, bulkWriter, 'COROS_FIT_DOWNLOAD_REJECTED');
+      } else if (serviceName === ServiceNames.SuuntoApp && e instanceof ResponseBodyTooLargeError) {
+        return moveToDeadLetterQueue(queueItem,
+          new Error('Suunto FIT response exceeded the 128 MiB download limit.'),
+          bulkWriter, SUUNTO_FIT_DOWNLOAD_TOO_LARGE_CONTEXT);
       } else if (e instanceof RetryableSuuntoFITPayloadError) {
         logger.warn('Suunto FIT response was incomplete and will be retried.', {
           queueItemId: queueItem.id,
@@ -1121,6 +1127,11 @@ async function parseWorkoutQueueItemForServiceNameInternal(
             logger.warn(`Terminal auth failure during forced refresh for ${serviceName} token ${tokenQueryDocumentSnapshot.id} while processing ${queueItem.id}; trying any remaining matching tokens before DLQ.`);
             terminalAuthError = selectPreferredTerminalAuthError(terminalAuthError, retryError);
             continue;
+          }
+          if (serviceName === ServiceNames.SuuntoApp && retryError instanceof ResponseBodyTooLargeError) {
+            return moveToDeadLetterQueue(queueItem,
+              new Error('Suunto FIT response exceeded the 128 MiB download limit.'),
+              bulkWriter, SUUNTO_FIT_DOWNLOAD_TOO_LARGE_CONTEXT);
           }
           if (retryError instanceof RetryableSuuntoFITPayloadError) {
             logger.warn('Suunto FIT response remained incomplete after token refresh and will be retried.', {

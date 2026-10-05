@@ -38,7 +38,7 @@ describe('downloadSuuntoFITFile', () => {
     vi.clearAllMocks();
   });
 
-  it('uses provider-compliant authorization, a 60-second timeout, and no body limit', async () => {
+  it('uses provider-compliant authorization and bounds the download without following redirects', async () => {
     const fit = createSyntheticFitPayload(Buffer.from([0x01, 0x02, 0x03]));
     mockGetBinaryResponse.mockResolvedValue({
       body: fit,
@@ -57,8 +57,11 @@ describe('downloadSuuntoFITFile', () => {
       }),
       url: 'https://cloudapi.suunto.com/v3/workouts/workout%2Fwith%20space/fit',
     }));
-    expect(mockGetBinaryResponse.mock.calls[0][0]).toMatchObject({ timeout: 60_000 });
-    expect(mockGetBinaryResponse.mock.calls[0][0]).not.toHaveProperty('maxResponseBytes');
+    expect(mockGetBinaryResponse.mock.calls[0][0]).toMatchObject({
+      timeout: 60_000,
+      maxResponseBytes: 128 * 1024 * 1024,
+      redirect: 'error',
+    });
   });
 
   it('does not double-prefix an existing Bearer token', async () => {
