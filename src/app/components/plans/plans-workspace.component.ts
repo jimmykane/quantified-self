@@ -46,6 +46,7 @@ import { ConfirmationDialogComponent, type ConfirmationWithPastProviderCleanup }
 import { CompactRowComponent } from '../shared/compact-row/compact-row.component';
 import { PlanScheduleCalendarComponent } from './plan-schedule-calendar.component';
 import { TrainingDeliveryButtonComponent } from './training-delivery-button.component';
+import { WorkoutTimeInputComponent } from './workout-time-input.component';
 import { resolvePlanScheduleDate } from '../../helpers/plan-schedule-calendar.helper';
 import { TRAINING_PLAN_COLOR_OPTIONS, trainingPlanAppearance } from '../../helpers/training-plan-appearance.helper';
 import {
@@ -61,6 +62,7 @@ import {
   createManualWorkoutEditorStep,
   createManualWorkoutEditorValue,
   changeManualWorkoutEditorSport,
+  changeManualWorkoutEditorStepEnding,
   formatManualWorkoutStructure,
   manualWorkoutEditorToStructure,
   workoutStructureToManualEditor,
@@ -163,7 +165,7 @@ const EMPTY_SCHEDULE: CurrentTrainingScheduleV1 = {
 @Component({
   selector: 'app-plans-workspace',
   standalone: true,
-  imports: [SharedModule, CompactRowComponent, PlanScheduleCalendarComponent, TrainingDeliveryButtonComponent],
+  imports: [SharedModule, CompactRowComponent, PlanScheduleCalendarComponent, TrainingDeliveryButtonComponent, WorkoutTimeInputComponent],
   templateUrl: './plans-workspace.component.html',
   styleUrls: ['./plans-workspace.component.scss'],
   changeDetection: ChangeDetectionStrategy.OnPush,
@@ -241,6 +243,7 @@ export class PlansWorkspaceComponent {
   readonly endingOptions: ReadonlyArray<{ value: ManualWorkoutEnding; label: string }> = [
     { value: 'time', label: 'Time' },
     { value: 'distance', label: 'Distance' },
+    { value: 'manual', label: 'Lap button press' },
   ];
   readonly targetOptions: ReadonlyArray<{ value: ManualWorkoutTarget; label: string }> = [
     { value: 'none', label: 'No target' },
@@ -1217,8 +1220,10 @@ export class PlansWorkspaceComponent {
     });
   }
 
-  updateStep(nodeIndex: number, stepIndex: number | null, field: string, value: unknown): void {
+  updateStep(nodeIndex: number, stepIndex: number | null, field: string, value: unknown, durationSeconds?: number): void {
     if (this.busyAction()) return;
+    const sourceDuration = typeof value === 'number' && Number.isFinite(durationSeconds) && durationSeconds > 0
+      && durationSeconds / 60 === value ? { editorValue: value, seconds: durationSeconds } : undefined;
     this.editor.update(session => {
       if (!session) return null;
       const nodes = session.value.nodes.map((node, index) => {
@@ -1226,9 +1231,12 @@ export class PlansWorkspaceComponent {
         const isSelection = ['purpose', 'endingKind', 'targetKind'].includes(field);
         if (stepIndex === null && node.kind === 'step') {
           if (isSelection && node[field as keyof ManualWorkoutEditorStep] !== value) this.haptics.selection();
+          if (field === 'endingKind') {
+            return changeManualWorkoutEditorStepEnding(node, value as ManualWorkoutEnding, session.value.sport, session.unitSettings);
+          }
           return { ...node, [field]: value,
-            ...((field === 'endingKind' || field === 'endingValue') && value !== node[field]
-              ? { sourceDistance: undefined } : {}),
+            ...(field === 'endingValue' && value !== node[field]
+              ? { sourceDistance: undefined, sourceDuration: node.endingKind === 'time' ? sourceDuration : undefined } : {}),
             ...((field === 'targetKind' || field === 'targetMinimum' || field === 'targetMaximum') && value !== node[field]
               ? { sourcePace: undefined } : {}),
           } as ManualWorkoutEditorStep;
@@ -1239,9 +1247,12 @@ export class PlansWorkspaceComponent {
             steps: node.steps.map((step, candidate) => {
               if (candidate !== stepIndex) return step;
               if (isSelection && step[field as keyof ManualWorkoutEditorStep] !== value) this.haptics.selection();
+              if (field === 'endingKind') {
+                return changeManualWorkoutEditorStepEnding(step, value as ManualWorkoutEnding, session.value.sport, session.unitSettings);
+              }
               return { ...step, [field]: value,
-                ...((field === 'endingKind' || field === 'endingValue') && value !== step[field]
-                  ? { sourceDistance: undefined } : {}),
+                ...(field === 'endingValue' && value !== step[field]
+                  ? { sourceDistance: undefined, sourceDuration: step.endingKind === 'time' ? sourceDuration : undefined } : {}),
                 ...((field === 'targetKind' || field === 'targetMinimum' || field === 'targetMaximum') && value !== step[field]
                   ? { sourcePace: undefined } : {}),
               } as ManualWorkoutEditorStep;

@@ -23,6 +23,7 @@ import expectedGarminFixture from './fixtures/garmin-running-v1.json';
 import expectedGarminPoolFixture from './fixtures/garmin-pool-swimming-v1.json';
 import expectedSuuntoFixture from './fixtures/suunto-running-v1.json';
 import legacySuuntoFixture from './fixtures/suunto-running-v2-recovery.json';
+import suuntoV3Fixture from './fixtures/suunto-running-v3-recovery.json';
 import expectedWahooFixture from './fixtures/wahoo-running-v1.json';
 import { serializeCorosTrainingPlanV1 } from './coros-training-plan.serializer';
 import {
@@ -34,7 +35,7 @@ import {
     createStableProviderExternalId,
     createStableProviderIntegerId,
 } from './provider-mapping';
-import { serializeSuuntoGuideJsonV1, serializeSuuntoGuideV2ForRecovery } from './suunto-guide.serializer';
+import { serializeSuuntoGuideJsonV1, serializeSuuntoGuideV2ForRecovery, serializeSuuntoGuideV3ForRecovery } from './suunto-guide.serializer';
 import { serializeWahooPlanJsonV1 } from './wahoo-plan.serializer';
 import { wahooDurationSeconds } from '../delivery/wahoo/mapping';
 
@@ -56,6 +57,41 @@ function oneStepStructure(overrides: Partial<WorkoutStructureV1['nodes'][number]
 }
 
 describe('planned-workout provider proof fixtures', () => {
+    it.each([
+        ['warmup', 'WARMUP', 'WarmUp'], ['work', 'ACTIVE', 'Active'],
+        ['recovery', 'RECOVERY', 'Rest'], ['cooldown', 'COOLDOWN', 'CoolDown'],
+        ['rest', 'REST', 'Rest'], ['other', 'ACTIVE', 'Active'],
+    ] as const)('preserves lap-ended %s steps across supported contracts and rejects Wahoo', (purpose, garminIntensity, corosIntensity) => {
+        const structure = oneStepStructure({ purpose, ending: { kind: 'manual' } });
+        const before = JSON.stringify(structure);
+        const corosDegraded = purpose === 'other' || purpose === 'recovery';
+        const garmin = serializeGarminWorkoutV1(structure, { name: 'Lap fixture', allowDegraded: purpose === 'other' });
+        expect(garmin.level).toBe(purpose === 'other' ? 'degraded' : 'exact');
+        expect(garmin.artifact.segments[0].steps).toEqual([expect.objectContaining({ intensity: garminIntensity,
+            durationType: 'OPEN', durationValue: null, durationValueType: null })]);
+        const coros = serializeCorosTrainingPlanV1(structure, {
+            athleteId: 24680, workoutId: 13579, title: 'Lap fixture', localDate: '2026-10-03',
+            lastModifiedDate: '2026-10-02T12:00:00', allowDegraded: corosDegraded,
+        });
+        expect(coros.level).toBe(corosDegraded ? 'degraded' : 'exact');
+        expect(coros.artifact.Workouts[0].Structure).toEqual([expect.objectContaining({
+            IntensityClass: corosIntensity, Length: { Unit: 'EndManually' },
+        })]);
+        expect(isPlannedWorkoutProviderDeliveryEnabled('coros')).toBe(false);
+        const suunto = serializeSuuntoGuideJsonV1(structure, {
+            name: 'Lap fixture', owner: 'Quantified Self', url: 'https://quantified-self.io/training/plans',
+            sourceWorkoutId: 'lap-fixture', localDate: '2026-10-03', allowDegraded: false,
+        });
+        expect(suunto.level).toBe('exact');
+        expect(suunto.artifact.steps[0]).toMatchObject({ transitions: [{ condition: { type: 'manualLap' } }] });
+        expect(assessPlannedWorkoutProviderMappingV1('wahoo', structure)).toMatchObject({
+            level: 'unsupported', issues: expect.arrayContaining([expect.objectContaining({ code: 'unsupported_ending' })]),
+        });
+        expect(() => serializeWahooPlanJsonV1(structure, { name: 'Lap fixture', allowDegraded: true }))
+            .toThrow(ProviderWorkoutMappingError);
+        expect(JSON.stringify(structure)).toBe(before);
+    });
+
     it('keeps mapping fixtures independent from the COROS rollout gate', () => {
         expect(Object.values(PLANNED_WORKOUT_PROVIDER_CAPABILITIES_V1)).toHaveLength(4);
         for (const provider of PLANNED_WORKOUT_PROVIDER_IDS.filter(provider => provider !== 'coros')) {
@@ -223,6 +259,11 @@ describe('planned-workout provider proof fixtures', () => {
         expect(result.level).toBe('exact');
         expect(result.issues).toEqual([]);
         expect(result.artifact).toEqual(expectedSuuntoFixture);
+        expect(serializeSuuntoGuideV3ForRecovery(RUNNING_FIXTURE, {
+            name: 'Fixture intervals', description: 'Redacted provider contract fixture.',
+            owner: 'Quantified Self', url: 'https://quantified-self.io/training/plans',
+            localDate: '2026-09-03', sourceWorkoutId: 'fixture-workout-001', allowDegraded: false,
+        }).artifact).toEqual(suuntoV3Fixture);
         expect(serializeSuuntoGuideV2ForRecovery(RUNNING_FIXTURE, {
             name: 'Fixture intervals', description: 'Redacted provider contract fixture.',
             owner: 'Quantified Self', url: 'https://quantified-self.io/training/plans',

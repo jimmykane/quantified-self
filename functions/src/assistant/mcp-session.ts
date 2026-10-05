@@ -406,7 +406,7 @@ export async function createAssistantMcpSession(
       : []),
     ...(trainingPlansEnabled ? TRAINING_READ_TOOLS : []),
     ...(trainingPlanChangesEnabled
-      ? TRAINING_PREVIEW_TOOLS
+      ? TRAINING_PREVIEW_TOOLS.filter(name => name !== 'preview_training_deletion' || trainingDeliveryEnabled)
       : trainingDeliveryEnabled ? ['preview_training_changes' as const] : []),
   ];
   const auth: AuthenticatedMcpRequest = {

@@ -24,6 +24,7 @@ import { GARMIN_GENERIC_WORKOUT_SPORTS_V1, assessPlannedWorkoutProviderMappingV1
 import { WAHOO_TRAINING_PERMISSION_ISSUE } from '@shared/wahoo-training';
 import { WahooRouteAccessReconnectDialogComponent } from '../wahoo-route-access-reconnect-dialog/wahoo-route-access-reconnect-dialog.component';
 import type { TrainingDeliverySummary } from '../../helpers/training-delivery-summary.helper';
+import { GARMIN_WORKOUT_NOT_FOUND_ISSUE } from '@shared/training-provider-delivery';
 
 describe('Training provider delivery controls', () => {
   const user = signal<{ uid: string } | null>({ uid: 'owner' });
@@ -95,6 +96,34 @@ describe('Training provider delivery controls', () => {
     expect(TestBed.inject(AppEventService).getEventMetaDataKeys).not.toHaveBeenCalled();
     expect(service.preview).not.toHaveBeenCalled(); expect(service.mutate).not.toHaveBeenCalled();
     expect(haptics.selection).not.toHaveBeenCalled();
+  });
+  it('reviews a Garmin replacement separately and confirms only its preview-bound digest', async () => {
+    service.isReady.mockImplementation(provider => provider === 'garmin');
+    service.watchScope.mockReturnValue(of({ settings: [{ provider: 'garmin', enabled: true, revision: 1, timeZone: 'Europe/Helsinki' }],
+      statuses: [{ ...status, issues: [GARMIN_WORKOUT_NOT_FOUND_ISSUE], lastAcceptedAtMs: 1 }],
+      verifications: [{ id: status.id, state: 'unknown', canCheck: true, lastCheckedAtMs: 2 }] }));
+    service.preview.mockResolvedValue({ available: true, connection: 'connected', hasPro: true, effect: 'replace',
+      eligibleCount: 1, warningCount: 0, issues: [], approvalDigest: 'a'.repeat(64) });
+    const fixture = TestBed.createComponent(TrainingDeliveryDialogComponent); fixture.detectChanges();
+    expect(fixture.nativeElement.textContent).toContain('Not found in Garmin');
+    const button = Array.from(fixture.nativeElement.querySelectorAll('button')).find((item: any) => item.textContent.trim() === 'Create replacement Garmin copy') as HTMLButtonElement;
+    expect(button).toBeDefined(); button.click(); await fixture.whenStable(); fixture.detectChanges();
+    expect(service.mutate).not.toHaveBeenCalled();
+    expect(service.preview.mock.calls[0][0]).toMatchObject({ action: 'replace', provider: 'garmin' });
+    expect(service.preview.mock.calls[0][0]).not.toHaveProperty('timeZone');
+    expect(fixture.nativeElement.textContent).toContain('duplicate is possible');
+    expect(fixture.componentInstance.dialogTitle()).toBe('Create replacement Garmin copy?');
+    await fixture.componentInstance.confirm();
+    expect(service.mutate.mock.calls[0][0]).toMatchObject({ action: 'replace', provider: 'garmin', approvalDigest: 'a'.repeat(64), mutationId: 'mutation' });
+  });
+  it.each(['unknown', 'failed', 'completed'] as const)('does not offer replacement for an ordinary %s result', async state => {
+    service.isReady.mockReturnValue(true);
+    service.watchScope.mockReturnValue(of({ settings: [], statuses: [{ ...status, status: state === 'unknown' ? 'delivered' : state }],
+      verifications: [{ id: status.id, state: 'unknown', canCheck: true }] }));
+    const fixture = TestBed.createComponent(TrainingDeliveryDialogComponent); fixture.detectChanges();
+    await fixture.componentInstance.begin('garmin', 'replace');
+    expect(fixture.componentInstance.draft()).toBeNull(); expect(service.preview).not.toHaveBeenCalled();
+    expect(fixture.nativeElement.textContent).not.toContain('Create replacement Garmin copy');
   });
   it('omits COROS from the provider overview even when retained records exist', () => {
     TestBed.overrideProvider(MAT_DIALOG_DATA, { useValue: { scope: 'plan', id: 'p', title: 'Autumn build' } });
@@ -367,7 +396,8 @@ describe('Training provider delivery controls', () => {
     expect(fixture.nativeElement.textContent).toContain('does not confirm a device download');
     const guidance: HTMLElement = fixture.nativeElement.querySelector('#delivery-guidance-details');
     expect(guidance.textContent).toContain('exact Workout and dated Schedule');
-    expect(guidance.textContent).toContain('will not create a replacement Workout automatically');
+    expect(guidance.textContent).toContain('never replaces that Workout automatically');
+    expect(guidance.textContent).toContain('explicitly review Create replacement Garmin copy');
     await fixture.componentInstance.checkProvider('garmin'); fixture.detectChanges();
     expect(service.check).toHaveBeenCalledWith(expect.objectContaining({ action: 'check', scope: 'workout',
       scopeId: 'w', expectedScheduleRevision: 3, expectedScopeRevision: 2, expectedSettingsRevision: 0 }), expect.any(Function));

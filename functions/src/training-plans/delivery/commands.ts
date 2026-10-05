@@ -2,7 +2,7 @@ import { Timestamp } from 'firebase-admin/firestore';
 import { HttpsError, onCall, type CallableRequest } from 'firebase-functions/v2/https';
 import { FUNCTIONS_MANIFEST } from '../../../../shared/functions-manifest';
 import { parseScheduledWorkoutV1 } from '../../../../shared/training-plans';
-import { deliverySettingsId, parseTrainingDeliveryCommandV1, TrainingDeliveryContractError,
+import { deliverySettingsId, GARMIN_WORKOUT_NOT_FOUND_ISSUE, parseTrainingDeliveryCommandV1, TrainingDeliveryContractError,
   TRAINING_DELIVERY_SETTINGS, trainingDeliveryLocalDate, type TrainingDeliveryCommandV1,
   type TrainingDeliveryPreviewV1, type TrainingDeliverySettingsV1 } from '../../../../shared/training-provider-delivery';
 import { enforceAppCheck } from '../../utils';
@@ -13,13 +13,14 @@ import { assertNoTrainingPlanDeletionInProgress } from '../deletion-lock';
 import { TrainingScheduleMutationError } from '../mutation';
 import { DELIVERY_LEDGER, DELIVERY_RECEIPTS, DELIVERY_SCOPES, DELIVERY_STATE, requiresDeliveryMappingApproval,
   type DeliveryLedgerV1, type DeliveryRuntime } from './contracts';
-import { deliveryIdentity } from './intent';
+import { deliveryIdentity, resolveDeliveryIntent } from './intent';
 import { assessTrainingDeliveryMapping } from './mapping';
 import { stageTrainingDeliveryReconciliation } from './marker';
-import { readStrengthDetailsForDelivery } from './store';
+import { readDeliveryContext, readStrengthDetailsForDelivery, writeDelivery } from './store';
 import { productionDeliveryRuntime } from './runtime';
 import type { TrainingVerificationReceiptV1 } from '../../../../shared/training-provider-verification';
-import { VERIFICATION_COALESCE_MS } from './verification-contracts';
+import { VERIFICATION_COALESCE_MS, VERIFICATION_DAY_MS } from './verification-contracts';
+import { inspectionBinding } from './verification-evidence';
 
 export async function trainingDeliveryCommand(runtime: DeliveryRuntime, uid: string, raw: unknown,
   previewOnly: boolean,
@@ -112,18 +113,57 @@ export async function trainingDeliveryCommand(runtime: DeliveryRuntime, uid: str
     const strengths = await Promise.all(workouts.map(item => readStrengthDetailsForDelivery(tx, user, item)));
     const assessments = workouts.map((item, index) => transport?.assess(item, connection.destinationKey, timeZone, strengths[index])
       ?? assessTrainingDeliveryMapping(command.provider, item, connection.destinationKey, timeZone, strengths[index]));
+    // No provider HTTP in previews/transactions. Only the server's current, complete
+    // inspection can offer recovery; the worker independently reinspects before POST.
+    const replacementRef = command.action === 'replace' ? user.collection(DELIVERY_LEDGER).doc(
+      deliveryIdentity(uid, command.provider, connection.destinationKey, command.scopeId)) : null;
+    const replacement = replacementRef ? (await tx.get(replacementRef)).data() as DeliveryLedgerV1 | undefined : undefined;
+    const replacementContext = replacement && workout
+      ? await readDeliveryContext(runtime, tx, uid, workout, command.provider, pro, workout.id, replacement) : null;
+    let replacementDigest: string | null = null;
+    if (command.action === 'replace') {
+      const policy = transport?.inspection?.policy;
+      const evidence = replacement?.verification;
+      const now = runtime.now();
+      const intent = replacementContext ? resolveDeliveryIntent(replacementContext, replacement) : null;
+      if (!replacement || !replacementContext || !policy || policy.version !== 'garmin-retained-v2-schedule-repair'
+        || !pro || connection.state !== 'connected' || replacement.destinationKey !== connection.destinationKey
+        || replacement.connectionEpoch !== connection.epoch || replacement.attempt || replacement.repair
+        || (replacement.lease && replacement.lease.expiresAtMs > runtime.now())
+        || !replacement.actual?.ids.workout || !replacement.actual.ids.schedule || !replacement.actual.ids.owner
+        || replacement.actual.completed || replacement.actual.localDate < today
+        || typeof replacement.lastAcceptedAtMs !== 'number' || !Number.isSafeInteger(replacement.lastAcceptedAtMs)
+        || replacement.lastAcceptedAtMs < 0 || intent?.desired !== 'present'
+        || !['delivered', 'pending'].includes(intent.status) || intent.digest !== replacement.desiredDigest
+        || replacement.status !== 'needs_attention' || evidence?.state !== 'unknown'
+        || !Array.isArray(evidence.observedMissingKeys) || evidence.observedMissingKeys.length !== 2
+        || !evidence.observedMissingKeys.includes('workout') || !evidence.observedMissingKeys.includes('schedule')
+        || typeof evidence.checkedAtMs !== 'number' || !Number.isSafeInteger(evidence.checkedAtMs) || evidence.checkedAtMs < 0
+        || evidence.checkedAtMs > now || evidence.checkedAtMs < now - VERIFICATION_DAY_MS
+        || evidence.binding !== inspectionBinding(replacement, replacementContext, policy)) {
+        throw new HttpsError('failed-precondition', 'Check Garmin again and review the current workout before creating a replacement. An unfinished send, changed account, past or completed workout cannot be replaced.');
+      }
+      replacementDigest = hashTrainingScheduleRequestPayload({ action: 'replace', binding: evidence.binding,
+        checkedAtMs: evidence.checkedAtMs, missing: evidence.observedMissingKeys,
+        scheduleRevision: command.expectedScheduleRevision, scopeRevision: command.expectedScopeRevision });
+    }
     const preview: TrainingDeliveryPreviewV1 = { schemaVersion: 1, available: !!transport,
       connection: connection.state, hasPro: pro, timeZone,
-      effect: command.action === 'stop' ? 'remove-future-copies' : command.action === 'retry' ? 'retry' : command.action === 'approve' ? 'approve' : 'enable',
+      effect: command.action === 'replace' ? 'replace' : command.action === 'stop' ? 'remove-future-copies' : command.action === 'retry' ? 'retry' : command.action === 'approve' ? 'approve' : 'enable',
       settingsRevision: previous?.revision ?? 0,
       eligibleCount: workouts.filter(item => item.lifecycle === 'planned' && item.localDate >= today
         && (!transport || (Date.parse(item.localDate) - Date.parse(today)) / 86_400_000 <= transport.horizonDays)).length,
       warningCount: assessments.filter(item => item.level !== 'exact').length,
       approvalRequiredCount: assessments.filter(requiresDeliveryMappingApproval).length,
-      issues: [...new Set([...(connection.issues ?? []), ...assessments.flatMap(item => item.issues)])].slice(0, 20),
-      approvalDigest: workout && requiresDeliveryMappingApproval(assessments[0]) ? assessments[0].digest : null,
+      issues: [...new Set([...(replacementDigest ? [GARMIN_WORKOUT_NOT_FOUND_ISSUE,
+        'Creating a new Garmin copy can leave a duplicate if the old copy becomes visible again. QS will recheck before sending; other providers and completed activities are unchanged.'] : []),
+        ...(connection.issues ?? []), ...assessments.flatMap(item => item.issues)])].slice(0, 20),
+      approvalDigest: replacementDigest ?? (workout && requiresDeliveryMappingApproval(assessments[0]) ? assessments[0].digest : null),
       workoutCompatibility: workout ? assessments[0]?.level ?? null : null };
     if (previewOnly) return preview;
+    if (command.action === 'replace' && command.approvalDigest !== replacementDigest) {
+      throw new HttpsError('aborted', 'Review and confirm the latest Garmin replacement preview.');
+    }
     const removal = command.action === 'stop';
     // Retry never grants consent. Workers still enforce Pro for creates/updates, while
     // an existing withdrawal or ambiguous acceptance must remain recoverable after expiry.
@@ -160,6 +200,21 @@ export async function trainingDeliveryCommand(runtime: DeliveryRuntime, uid: str
       approvedDigest: command.action === 'approve' || command.action === 'send'
         ? command.approvalDigest ?? null : command.action === 'retry' ? previous?.approvedDigest ?? null : null,
       updatedAtMs: runtime.now() };
+    if (replacement && replacementContext && replacementRef) {
+      // Preserve mapping approval and consent. Replacement approval is one operation,
+      // not permission to broaden provider delivery or change the prescription.
+      result.approvedDigest = previous?.approvedDigest ?? null;
+      const context = { ...replacementContext, override: result,
+        setting: workout?.planId ? replacementContext.setting : result };
+      replacement.repair = { manualReplacement: true, policyVersion: transport!.inspection!.policy.version,
+        binding: inspectionBinding(replacement, context, transport!.inspection!.policy),
+        missing: [...replacement.verification!.observedMissingKeys!], original: replacement.actual! };
+      replacement.acceptedDigest = null;
+      replacement.status = 'pending';
+      replacement.verification = { ...replacement.verification!, state: 'restoring' };
+      replacement.updatedAtMs = runtime.now();
+      writeDelivery(runtime, tx, uid, replacement);
+    }
     tx.set(settingRef, result);
     tx.set(privateState, { revision }, { merge: true });
     tx.create(receiptRef, { hash, result, createdAtMs: runtime.now(), expireAt: Timestamp.fromMillis(runtime.now() + 30 * 86_400_000) });

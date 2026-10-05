@@ -25,6 +25,7 @@ export type SuuntoGuideConditionV1 =
 
 export type SuuntoGuideFieldV1 =
     | { type: SuuntoGuideLiveFieldType; title: string }
+    | { type: 'pace'; title: string; window: 'manualLap'; aggregate: 'average' }
     | { type: 'text'; value: string }
     | { type: 'stepDurationCountdown'; value: number; title: string }
     | { type: 'stepDistanceCountdown'; value: number; title: string }
@@ -35,7 +36,7 @@ export type SuuntoGuideFieldV1 =
     | { type: 'targetCadence'; min: number; max: number; title: string };
 
 export type SuuntoGuideLiveFieldType = 'heartRate' | 'power' | 'pace' | 'speed' | 'cadence';
-type GuidePresentation = 'legacy-v2' | 'live-v3';
+type GuidePresentation = 'legacy-v2' | 'live-v3' | 'block-pace-v4';
 
 export interface SuuntoGuideFieldsStepV1 {
     id?: string;
@@ -44,6 +45,7 @@ export interface SuuntoGuideFieldsStepV1 {
     fields: SuuntoGuideFieldV1[];
     transitions?: Array<{ condition: SuuntoGuideConditionV1 }>;
     notification?: { title: string; text: string };
+    createManualLap?: true;
 }
 
 export type SuuntoGuideRepeatFieldsStepV1 = Omit<SuuntoGuideFieldsStepV1, 'id'> & { id?: never };
@@ -409,7 +411,7 @@ function stepToSuunto(step: WorkoutStepV1, sport: ActivityTypes, presentation: G
     }
     if (fields.length === 0) fields.push({ type: 'text', value: 'Press lap' });
 
-    if (presentation === 'live-v3' && !fields.some(field => field.type === 'text' && codePointLength(field.value) > 40)) {
+    if (presentation !== 'legacy-v2' && !fields.some(field => field.type === 'text' && codePointLength(field.value) > 40)) {
         const defaults = sportLiveFields(sport);
         const primary = step.targets.length > 0 ? measuredTarget(step.targets[0], sport) : defaults[0];
         const candidates = [...new Set([...(primary ? [primary] : []), 'heartRate' as const, ...defaults])];
@@ -417,7 +419,9 @@ function stepToSuunto(step: WorkoutStepV1, sport: ActivityTypes, presentation: G
             heartRate: 'HR', power: 'Power', pace: 'Pace', speed: 'Speed', cadence: 'Cadence',
         };
         const live: SuuntoGuideFieldV1[] = candidates.slice(0, 5 - fields.length)
-            .map(type => ({ type, title: titles[type] }));
+            .map(type => type === 'pace' && presentation === 'block-pace-v4'
+                ? { type, title: 'Avg pace', window: 'manualLap', aggregate: 'average' }
+                : { type, title: titles[type] });
         // The first measured field is the watch's primary reading. Keep the
         // countdown next, and never evict an authored target or instruction.
         fields.unshift(...live.slice(0, 1));
@@ -430,7 +434,7 @@ function stepToSuunto(step: WorkoutStepV1, sport: ActivityTypes, presentation: G
         title: purposeTitle(step.purpose),
         fields,
         transitions: [{ condition: endingCondition(step.ending) }],
-        ...(presentation === 'live-v3' ? { notification: {
+        ...(presentation !== 'legacy-v2' ? { notification: {
             title: purposeTitle(step.purpose),
             text: notificationText(step),
         } } : {}),
@@ -457,16 +461,59 @@ function structureToSteps(structure: WorkoutStructureV1, presentation: GuidePres
             }),
         };
     });
-    if (presentation === 'live-v3') steps.push({
+    if (presentation !== 'legacy-v2') steps.push({
         type: 'fields', title: 'Complete', fields: [{ type: 'text', value: 'Guide complete' }],
         notification: { title: 'Complete', text: 'Guide complete' },
     });
-    return steps;
+    if (presentation !== 'block-pace-v4' || !steps.some(node =>
+        (node.type === 'repeat' ? node.steps : [node]).some(step =>
+            step.fields.some(field => field.type === 'pace' && 'window' in field)))) return steps;
+
+    // Pace has no documented step window. Align its manual-lap window with the
+    // prescription, without making another lap after a button-ended step. The
+    // first screen starts with recording, so it needs no zero-length opening lap.
+    const withBoundary = <T extends SuuntoGuideFieldsStepV1>(step: T, previous: WorkoutEndingV1 | null) => ({
+        ...step, ...(previous && previous.kind !== 'manual' ? { createManualLap: true as const } : {}),
+    });
+    const bounded: SuuntoGuideStepV1[] = [];
+    let previous: WorkoutEndingV1 | null = null;
+    structure.nodes.forEach((node, index) => {
+        const mapped = steps[index];
+        if (node.kind === 'step' && mapped.type === 'fields') {
+            bounded.push(withBoundary(mapped, previous));
+            previous = node.ending;
+        } else if (node.kind === 'repeat' && mapped.type === 'repeat') {
+            const pass = (prior: WorkoutEndingV1 | null) => mapped.steps.map((step, childIndex) =>
+                withBoundary(step, childIndex === 0 ? prior : node.steps[childIndex - 1].ending));
+            const last = node.steps[node.steps.length - 1].ending;
+            const firstPass = pass(previous);
+            const subsequentPass = pass(last);
+            // Native repeats reuse one child definition. Only split off the
+            // first pass when its incoming lap boundary differs from the wrap.
+            // Two bounded repeat containers avoid expanding up to 100 passes.
+            if (node.count > 1 && firstPass[0].createManualLap !== subsequentPass[0].createManualLap) {
+                bounded.push({ type: 'repeat', times: 1, steps: firstPass },
+                    { type: 'repeat', times: node.count - 1, steps: subsequentPass });
+            } else bounded.push({ type: 'repeat', times: node.count, steps: firstPass });
+            previous = last;
+        }
+    });
+    // Close the final automatic block in the recorded laps. A lap-ended final
+    // block is already closed by the button; completion adds no timed exercise.
+    bounded.push(withBoundary(steps[steps.length - 1] as SuuntoGuideFieldsStepV1, previous));
+    return bounded;
 }
 
 export function serializeSuuntoGuideJsonV1(
     structureValue: unknown,
     options: SerializeSuuntoGuideOptionsV1,
+): ProviderSerializationResultV1<SuuntoGuideJsonV1> {
+    return serializeGuide(structureValue, options, 'block-pace-v4');
+}
+
+/** Recovery only: keep current-reading v3 JSON behind its immutable attempt digest. */
+export function serializeSuuntoGuideV3ForRecovery(
+    structureValue: unknown, options: SerializeSuuntoGuideOptionsV1,
 ): ProviderSerializationResultV1<SuuntoGuideJsonV1> {
     return serializeGuide(structureValue, options, 'live-v3');
 }
@@ -540,6 +587,13 @@ function serializeGuide(structureValue: unknown, options: SerializeSuuntoGuideOp
 export function serializeSuuntoStrengthGuideV1(
     detailsValue: unknown,
     options: SerializeSuuntoGuideOptionsV1,
+): ProviderSerializationResultV1<SuuntoGuideJsonV1> {
+    return serializeStrength(detailsValue, options, 'block-pace-v4');
+}
+
+/** Recovery only; strength keeps its existing current-HR instruction screens. */
+export function serializeSuuntoStrengthGuideV3ForRecovery(
+    detailsValue: unknown, options: SerializeSuuntoGuideOptionsV1,
 ): ProviderSerializationResultV1<SuuntoGuideJsonV1> {
     return serializeStrength(detailsValue, options, 'live-v3');
 }

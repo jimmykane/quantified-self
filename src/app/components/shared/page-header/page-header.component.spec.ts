@@ -20,7 +20,9 @@ import { PageHeaderComponent } from './page-header.component';
       @if (showProjectedLeading) {
         <button pageHeaderLeading type="button">Open calendar</button>
       }
-      <button pageHeaderActions type="button">Action</button>
+      @if (showActions) {
+        <button pageHeaderActions type="button">Action</button>
+      }
       @if (showTitleActions) {
         <button pageHeaderTitleActions type="button">Sources</button>
       }
@@ -38,6 +40,7 @@ class PageHeaderHostComponent {
   leadingAction = false;
   showProjectedLeading = true;
   showTitleActions = false;
+  showActions = true;
 }
 
 describe('PageHeaderComponent', () => {
@@ -57,6 +60,18 @@ describe('PageHeaderComponent', () => {
       .toBe('Sources');
     expect(fixture.nativeElement.querySelector('.qs-page-header__actions [pageHeaderActions]')?.textContent)
       .toBe('Action');
+  });
+
+  it('leaves the main action area empty when controls belong to the title row', async () => {
+    const fixture = await createFixture();
+    fixture.componentInstance.showActions = false;
+    fixture.componentInstance.showTitleActions = true;
+    fixture.detectChanges();
+    expect(fixture.nativeElement.querySelector('.qs-page-header__actions')?.textContent?.trim()).toBe('');
+    expect(fixture.nativeElement.querySelector('.qs-page-header__title-actions button')?.textContent).toBe('Sources');
+    expect(fixture.nativeElement.querySelector('h1')?.textContent).toBe('Training');
+    expect(fixture.nativeElement.querySelector('.qs-page-header__subtitle')?.textContent)
+      .toBe('Data through Thursday, 6 August 2026');
   });
 
   it('renders a route heading with contextual copy and projected controls', async () => {

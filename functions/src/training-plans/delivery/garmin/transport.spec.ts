@@ -160,6 +160,37 @@ describe('Garmin workout/schedule lifecycle, synthetic HTTP only', () => {
     operation = { ...nextOperation(operation), repair: { policyVersion: GARMIN_INSPECTION_POLICY.version,
       binding: 'synthetic-authority', missing, original } };
   };
+  it('updates a reappearing original to the reviewed prescription without creating another root', async () => {
+    const original = (await execute())!;
+    operation = { ...nextOperation(operation, { title: 'Reviewed revised run', localDate: '2026-09-16' }),
+      repair: { manualReplacement: true, policyVersion: GARMIN_INSPECTION_POLICY.version,
+        binding: 'synthetic-authority', missing: ['workout', 'schedule'], original } };
+    server.calls.length = 0;
+    const result = await execute();
+    expect(result?.ids).toEqual(original.ids);
+    expect(result?.localDate).toBe('2026-09-16');
+    expect(server.workouts.get(original.ids.workout)?.workoutName).toBe('Reviewed revised run');
+    expect(server.schedules.get(original.ids.schedule)?.date).toBe('2026-09-16');
+    expect(writes().map(call => call.method)).toEqual(['PUT', 'PUT']);
+    expect(operation.progress).toMatchObject({ step: 'finished', state: 'accepted', repairApplied: true });
+  });
+  it('records an applied root replacement when its new schedule is discovered rather than POSTed', async () => {
+    const original = (await execute())!;
+    server.workouts.delete(original.ids.workout); server.schedules.delete(original.ids.schedule);
+    operation = { ...nextOperation(operation), repair: { manualReplacement: true,
+      policyVersion: GARMIN_INSPECTION_POLICY.version, binding: 'synthetic-authority', missing: ['workout', 'schedule'], original } };
+    server.calls.length = 0;
+    server.afterHandle = async request => {
+      if (request.method !== 'POST' || !request.path.includes('workout')) return;
+      const createdId = [...server.workouts.keys()][0];
+      server.schedules.set('1234', { scheduleId: '1234', workoutId: createdId, date: operation.workout!.localDate });
+    };
+    const result = await execute();
+    expect(result?.ids.workout).not.toBe(original.ids.workout);
+    expect(result?.ids.schedule).toBe('1234');
+    expect(writes()).toHaveLength(1);
+    expect(operation.progress).toMatchObject({ step: 'finished', state: 'accepted', repairApplied: true });
+  });
   const interruptReplacement = async () => {
     const original = (await execute())!;
     const oldWorkout = structuredClone(server.workouts.get(original.ids.workout)!);

@@ -137,13 +137,29 @@ Two additional default-off toggles enable **Plan and workout changes** and **Pla
 the read toggle but remain independent of each other. The first grants `training-plans:write`; the second grants
 `training-delivery:write`. A write-enabled in-process session exposes the focused single-workout preview plus the bounded
 batch preview to Gemini. The focused preview can include an atomic initial provider send only when the delivery toggle is
-also enabled. The model can prepare one strict proposal after reading current records. For Workout Library changes it
+also enabled. With both change toggles, current plan/workout deletion uses the additive `preview_training_deletion`.
+The Assistant asks whether to also remove older, uncompleted service copies unless the user already explicitly chose;
+eligible upcoming copies withdraw automatically. The required choice is bound into the existing proposal and app-owned
+Apply, not direct model/provider writes. Plan deletion additionally asks whether to keep workouts as standalone or
+permanently delete them. Without delivery access, explain that older-copy cleanup is unavailable and only offer legacy
+deletion if the user accepts that limitation. Completed activities stay untouched, and valid access/provider support
+may prevent cleanup; an applied deletion is not provider/app/watch removal proof. Replies keep the focused preview
+only through an uninterrupted deletion clarification chain; a new task or cancellation ends that routing. Removing a
+workout from a plan is an association change, not inferred deletion. Routing never supplies Apply approval. The model
+can prepare one strict proposal after reading current records. For Workout Library changes it
 must also read the library revision and exact saved recipe or source workout, then use the additive library preview.
 That preview supports one create, save, duplicate, edit, archive/restore, confirmed permanent recipe delete, or
 explicit-date placement. Saved recipes have no date or provider consent. The model cannot call
 `apply_training_changes`, `apply_saved_workout_change` or provider
 transport. Quantified Self stores the safe preview with the conversation and shows an **Apply changes** / **Dismiss**
-surface. Applying uses a dedicated Auth + App Check callable that rechecks the same conversation generation and toggles,
+surface. Single current deletions instead show **Review plan deletion** / **Delete plan** or **Review workout deletion** /
+**Delete workout** and **Dismiss**. The review keeps the server-authored workout disposition and service-copy choice;
+it never infers older-copy removal from combined permission or changes it in the browser. Plan/history deletion is
+permanent; workout deletion is recoverable. Apply displays the actual server deletion receipt rather than a generic
+sync-update message. Requested cleanup remains unconfirmed, and a failed or missing deletion outcome never reports
+partial success or gives success haptics. The access sheet explains both required change choices and that removal,
+unlike new delivery, does not require Pro but still needs valid service access/provider support.
+Applying uses a dedicated Auth + App Check callable that rechecks the same conversation generation and toggles,
 then invokes the common proposal service. Dismissal clears the server-owned proposal without changes. New chat, a toggle
 change, account switch, expiry, schedule conflict or stale grant makes the proposal unusable. Provider results are
 independent and a send failure never removes a newly authored workout. Call/output budgets and quotas are unchanged.
@@ -320,7 +336,7 @@ schema. The original strict MCP schema still validates every invocation, includi
 variants. Numeric literals become typed values with a descriptive allowed value, and oversized catalog enums become
 discovery guidance; Gemini rejects those declarations while MCP still validates the exact values. Session setup fails
 closed if an input cannot be projected. Gemini receives only the most relevant Training preview for the current question
-(focused workout create, batch lifecycle, strength, or pool-length edit), because combining all four nested preview
+(focused workout create, batch lifecycle, strength, pool-length, library, or deletion), because combining the nested preview
 schemas with the full read catalogue exceeds its accepted tool request. The authorized in-process MCP session remains
 complete. Regression coverage walks every tool with all optional permissions enabled and checks that Gemini cannot
 receive an undefined required property, array item, or non-string enum.
@@ -427,6 +443,21 @@ not authored by the model. The evidence adapter:
 - never stores raw tool output in the conversation document.
 
 This evidence is a compact audit aid, not a full transcript of internal tool calls.
+
+Assistant answer bodies render simple Markdown through an Assistant-specific renderer and Angular's normal HTML
+sanitization. Raw HTML is escaped, external images never load, and only HTTP(S) Markdown links are interactive. User
+messages remain plain text. Headings, lists, tables and code use app typography and surfaces; wide tables and code
+have their own shared QS scrollbars. Standalone ISO calendar dates in prose display using the app's regional formatting
+preference with an explicit UTC formatter, preserving the calendar day. Timestamps, code, IDs, filenames and link
+destinations are left intact; stored messages and proposal arguments remain unchanged. Note-review dates use the same
+calendar formatter.
+
+For today's workout recommendations, the server-authored **From your records** list keeps weekday counts, actual
+activities, ongoing/ended notes, exact persisted activity links and unavailable/incomplete data explicit. It uses
+familiar app labels instead of snapshot/read diagnostics. This is presentation only: no MCP tool, schema, scope,
+consent, Training calculation, completion inference, mutation or proposal/confirmation contract changes. No public
+contract refresh or plugin rebuild is required. Updated server copy requires a separately approved Functions release;
+existing saved answers receive only the frontend formatting improvements.
 
 ## Conversation lifecycle and quota
 

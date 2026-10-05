@@ -22,6 +22,17 @@ describe('Policy consent fields', () => {
 });
 
 describe('Built-in Assistant policy', () => {
+  it('discloses deletion cleanup as an explicit approved choice under both existing Training grants', () => {
+    const external = CONNECTED_SERVICES_POLICY_SECTION.topics
+      .find(candidate => candidate.id === POLICIES_MCP_CLIENTS_FRAGMENT)?.content.join(' ') ?? '';
+    expect(external).toContain('both Training change permissions');
+    expect(external).toContain('older, uncompleted copies');
+    expect(external).toContain('explicit choice appears in the deletion preview');
+    expect(external).toContain('does not require Pro');
+    expect(external).toContain('Completed copies and recorded activities stay protected');
+    expect(external).toContain('not confirmed removal from a provider app or watch');
+    expect(external).toContain('earlier explicit disconnects');
+  });
   it('discloses separate optional notes consent, full text and retained client copies', () => {
     const assistant = CONNECTED_SERVICES_POLICY_SECTION.topics
       .find(candidate => candidate.id === POLICIES_AI_AND_PROCESSORS_FRAGMENT)?.content.join(' ') ?? '';

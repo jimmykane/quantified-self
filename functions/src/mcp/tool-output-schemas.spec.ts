@@ -569,6 +569,8 @@ const service = {
     readTrainingPlans: vi.fn(async (input: { tool: TrainingReadTool }) => trainingReadFixtures[input.tool]),
     previewCreatePlannedWorkout: vi.fn().mockResolvedValue(trainingPreviewFixture),
     previewTrainingChanges: vi.fn().mockResolvedValue(trainingPreviewFixture),
+    previewTrainingDeletion: vi.fn().mockResolvedValue({ ...trainingPreviewFixture, permissionMode: 'combined',
+      changes: [{ index: 0, kind: 'delete-workout', summary: 'Delete in QS and request eligible service-copy cleanup. Recorded activities stay.' }] }),
     previewStrengthWorkoutChange: vi.fn().mockResolvedValue(trainingPreviewFixture),
     previewPlannedWorkoutV2Change: vi.fn().mockResolvedValue(trainingPreviewFixture),
     previewSavedWorkoutChange: vi.fn().mockResolvedValue(trainingPreviewFixture),
@@ -1389,6 +1391,8 @@ const successfulToolArguments: Record<
   preview_training_changes: { expectedScheduleRevision: 1, changes: [{
     kind: 'rename-plan', plan: { ref: 'opaque-plan-reference' }, name: 'Autumn build',
   }] },
+  preview_training_deletion: { expectedScheduleRevision: 1, change: { kind: 'delete-workout',
+    workout: { ref: 'opaque-workout-reference' }, removePastProviderCopies: true } },
   preview_strength_workout_change: { expectedScheduleRevision: 1, change: {
     kind: 'create-workout', localKey: 'strength', plan: null, localDate: '2026-07-02', title: 'Strength',
     strength: { version: 1, exercises: [{ id: 'exercise-1', name: 'Squat', sets: [{ id: 'set-1',
@@ -2032,12 +2036,15 @@ describe.each<FixtureTransport>(['in-memory', 'legacy-http', 'modern-http'])('MC
     expect(Buffer.byteLength(JSON.stringify(planLibraryReads), 'utf8')).toBeLessThan(20 * 1024);
     const planWriteTools = tools.filter(tool => (TRAINING_WRITE_TOOLS as readonly string[]).includes(tool.name));
     const planWriteExtensions = planWriteTools.filter(tool => (TRAINING_WRITE_EXTENSION_TOOLS as readonly string[]).includes(tool.name)
-      && tool.name !== 'preview_planned_workout_v2_change' && tool.name !== 'preview_saved_workout_change');
+      && tool.name !== 'preview_planned_workout_v2_change' && tool.name !== 'preview_saved_workout_change'
+      && tool.name !== 'preview_training_deletion');
+    const planDeletionPreview = planWriteTools.filter(tool => tool.name === 'preview_training_deletion');
     const planWriteV2 = planWriteTools.filter(tool => tool.name === 'preview_planned_workout_v2_change');
     const planWriteLibrary = planWriteTools.filter(tool => tool.name === 'preview_saved_workout_change');
     const planWriteCore = planWriteTools.filter(tool => !(TRAINING_WRITE_EXTENSION_TOOLS as readonly string[]).includes(tool.name));
     expect(Buffer.byteLength(JSON.stringify(planWriteCore), 'utf8')).toBeLessThan(48 * 1024);
     expect(Buffer.byteLength(JSON.stringify(planWriteExtensions), 'utf8')).toBeLessThan(12 * 1024);
+    expect(Buffer.byteLength(JSON.stringify(planDeletionPreview), 'utf8')).toBeLessThan(6 * 1024);
     expect(Buffer.byteLength(JSON.stringify(planWriteV2), 'utf8')).toBeLessThan(20 * 1024);
     expect(Buffer.byteLength(JSON.stringify(planWriteLibrary), 'utf8')).toBeLessThan(24 * 1024);
     const applyTrainingChangesTool = tools.find(tool => tool.name === 'apply_training_changes');
@@ -2486,6 +2493,41 @@ describe.each<FixtureTransport>(['in-memory', 'legacy-http', 'modern-http'])('MC
     expect(JSON.stringify(reply)).toContain('do not create replacement workouts');
     expect(JSON.stringify(reply)).not.toContain('smaller page');
     expect(Buffer.byteLength(JSON.stringify(reply))).toBeLessThan(256 * 1024);
+    expect(service.applyTrainingChanges).not.toHaveBeenCalled();
+  });
+
+  it('requires all three deletion grants and rejects private input/output on every transport', async () => {
+    const service = createFixtureDataService();
+    const scopes = [MCP_OAUTH_SCOPES.TrainingPlansRead, MCP_OAUTH_SCOPES.TrainingPlansWrite,
+      MCP_OAUTH_SCOPES.TrainingDeliveryWrite];
+    const args = successfulToolArguments.preview_training_deletion;
+    for (const missing of scopes) {
+      const denied = await connectFixtureServer(service, scopes.filter(scope => scope !== missing));
+      connections.push(denied);
+      expect((await denied.client.listTools()).tools.map(tool => tool.name)).not.toContain('preview_training_deletion');
+      await expect(denied.client.callTool({ name: 'preview_training_deletion', arguments: args })).rejects.toThrow('not found');
+      expect(service.previewTrainingDeletion).not.toHaveBeenCalled();
+    }
+    const connection = await connectFixtureServer(service, scopes); connections.push(connection);
+    const fixture = await service.previewTrainingDeletion({ uid: 'fixture', connectionId: 'fixture', scopes: [], arguments: args });
+    vi.mocked(service.previewTrainingDeletion).mockClear();
+    for (const injected of [{ uid: 'attacker' }, { scopes: [] }, { connectionId: 'attacker' },
+      { change: { ...(args.change as object), remoteWorkoutId: 'PRIVATE-DELETION-CANARY' } }]) {
+      const result = await connection.client.callTool({ name: 'preview_training_deletion', arguments: { ...args, ...injected } });
+      expect(result.isError).toBe(true);
+      expect(service.previewTrainingDeletion).not.toHaveBeenCalled();
+      expect(JSON.stringify(result)).not.toContain('PRIVATE-DELETION-CANARY');
+    }
+    for (const field of ['uid', 'remoteWorkoutId', 'mutationId', 'receipt', 'destinationKey']) {
+      for (const projection of [{ ...fixture, [field]: 'PRIVATE-DELETION-CANARY' },
+        { ...fixture, changes: [{ ...fixture.changes[0], [field]: 'PRIVATE-DELETION-CANARY' }] }]) {
+        service.previewTrainingDeletion = vi.fn().mockResolvedValue(projection);
+        const result = await connection.client.callTool({ name: 'preview_training_deletion', arguments: args });
+        expect(result.isError, field).toBe(true);
+        expect(result).not.toHaveProperty('structuredContent');
+        expect(JSON.stringify(result)).not.toContain('PRIVATE-DELETION-CANARY');
+      }
+    }
     expect(service.applyTrainingChanges).not.toHaveBeenCalled();
   });
 

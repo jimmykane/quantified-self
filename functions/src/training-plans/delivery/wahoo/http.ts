@@ -27,6 +27,7 @@ function parse(raw: string): unknown {
     token => /^-?\d{16,}$/.test(token) ? JSON.stringify(token) : token));
 }
 function valid(request: WahooTrainingRequest): boolean {
+  if (request.method === 'GET' && request.path === '/v1/user') return true;
   if (request.method === 'POST') return /^\/v1\/(plans|workouts)$/.test(request.path) && !!request.body;
   if (request.method === 'GET' && (/^\/v1\/plans\?external_id=qs-plan-[A-Za-z0-9_-]{43}$/.test(request.path)
     || /^\/v1\/workouts\?page=[1-5]&per_page=100$/.test(request.path)
@@ -173,6 +174,11 @@ export function createWahooTrainingClient(authorize: () => Promise<{ accessToken
       const raw = await readBounded(response);
       const body = raw.trim() ? parse(raw) : null;
       if (request.method === 'GET' && body === null) throw new Error('empty');
+      // A removal-only visibility probe must confirm the principal of this exact
+      // credential, not merely reuse its locally retained account identifier.
+      if (request.path === '/v1/user' && wahooId(wahooObject(body).id) !== authority.account) {
+        throw new WahooTrainingHttpError('auth', true, 0, { wahooContractCheck: 'account_not_confirmed' });
+      }
       const rows = Array.isArray(body) ? body : body && typeof body === 'object' && Array.isArray(wahooObject(body).workouts)
         ? wahooObject(body).workouts as unknown[] : body ? [body] : [];
       for (const row of rows) {

@@ -32,6 +32,9 @@
         <p>{{ data.scope === 'plan' ? 'Stop syncing this plan’s workouts to ' + draftLabel() + ' and remove eligible future copies.' : planBound() && canSend() ? 'Exclude this workout from the plan’s sync with ' + draftLabel() + '. It stays in your QS plan. If an upcoming copy exists, QS will request its removal. Other workouts are not affected.' : 'Stop syncing only this workout to ' + draftLabel() + ' and remove its eligible future copy. Other workouts are not affected.' }} Workouts already sent for past dates or completed workouts are kept.</p>
       } @else if (draft.action === 'retry') {
         <p>Check unfinished sync work and try again. Retry does not resume stopped sync or grant new consent.</p>
+      } @else if (draft.action === 'replace') {
+        <p>Create one new Garmin copy of this workout after rechecking the earlier copy. Check Garmin Connect first: a not-found response is not proof of deletion, so a duplicate is possible if the old copy reappears. If QS finds the old copy again before sending, it reuses that copy and applies the workout and date you reviewed.</p>
+        <p>Your QS workout, other providers and completed activities stay unchanged. If Garmin may have accepted a send but its response was lost, QS stops for attention instead of blindly sending again.</p>
       } @else if (editingSettings()) {
         <p>Sync with {{ draftLabel() }} is already enabled. Change the time zone used for scheduled workout dates.</p>
       } @else if (draft.action !== 'approve') {
@@ -57,7 +60,7 @@
       @if (busy()) {
         <div class="delivery-progress" role="status">
           <mat-spinner diameter="20" aria-hidden="true"></mat-spinner>
-          <span>{{ phase() === 'preview' ? 'Checking availability and workout compatibility…' : 'Saving your sync settings…' }}</span>
+          <span>{{ phase() === 'preview' ? 'Checking availability and workout compatibility…' : draft.action === 'replace' ? 'Requesting the reviewed Garmin replacement…' : 'Saving your sync settings…' }}</span>
         </div>
         <p class="delivery-caption">{{ phase() === 'preview' ? 'Nothing is sent until you confirm.' : 'You can close this dialog. Sync status will update in the background.' }}</p>
       }
@@ -68,7 +71,7 @@
             <p>Removal must wait until this service is available and the same account is connected. Copies left after disconnect may need removing in the connected app.</p>
           }
         } @else {
-          @if (draft.action !== 'retry' && draft.action !== 'approve') {
+          @if (draft.action !== 'retry' && draft.action !== 'approve' && draft.action !== 'replace') {
             <p class="delivery-caption">{{ preview.result.eligibleCount }} {{ preview.result.eligibleCount === 1 ? 'workout' : 'workouts' }} in the scheduling window. Workouts already sent for past dates or completed workouts are kept.</p>
           }
           @if (!preview.result.hasPro) { <p>Pro is required for creates and updates. Removal and recovery remain available. <a routerLink="/subscriptions" (click)="dialogRef.close()" appHapticTap>View Pro</a></p> }
@@ -176,6 +179,9 @@
                   <button mat-button type="button" appHapticTap [disabled]="busy() || !canReview()" (click)="begin(row.provider, data.scope === 'plan' ? 'configure' : 'send', undefined, true)">Review sync setup</button>
                 }
                 @if (row.canRetry) { <button mat-button appHapticTap type="button" [disabled]="busy() || !canReview()" (click)="begin(row.provider, 'retry')">{{ data.scope === 'plan' ? 'Retry plan sync' : 'Retry workout sync' }}</button> }
+                @if (row.canReplace) {
+                  <button mat-button appHapticTap type="button" [disabled]="busy() || !canReview()" (click)="begin(row.provider, 'replace')">Create replacement Garmin copy</button>
+                }
                 @if (row.approvalDigest && data.scope === 'workout' && canSend()) {
                   <button mat-flat-button appHapticTap type="button" [attr.aria-label]="'Review workout changes for ' + row.label" [disabled]="busy() || !canReview()" (click)="begin(row.provider, 'approve', row.approvalDigest)">Review</button>
                 }
@@ -272,7 +278,7 @@
       }
       @if (activeRow()?.provider === 'garmin') {
         <p>Found in connected app means Garmin returned the exact Workout and dated Schedule for your connected account. It does not confirm a watch download.</p>
-        <p>Could not check workout means the latest check did not confirm both records. Last sent still records Garmin's earlier acceptance; a missing Workout response alone does not prove safe deletion, so QS will not create a replacement Workout automatically. A confirmed missing calendar entry can be restored using the original Workout.</p>
+        <p>Could not check workout means the latest check did not confirm both records. Not found in Garmin means a complete check returned a missing earlier Workout; this is not proof of deletion. Last sent records earlier acceptance. QS never replaces that Workout automatically: when both the earlier workout and calendar entry were not found, check Garmin Connect, then explicitly review Create replacement Garmin copy. A remaining calendar entry blocks replacement. A confirmed missing calendar entry can be restored using the original Workout.</p>
       }
       @if (showsCorosGuidance()) {
         <p>QS sends each upcoming workout to your COROS training calendar. The COROS app manages watch synchronization; Sent does not confirm that your watch received it.</p>

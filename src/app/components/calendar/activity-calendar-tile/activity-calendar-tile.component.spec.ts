@@ -78,6 +78,34 @@ describe('ActivityCalendarTileComponent', () => {
     }).compileComponents();
   });
 
+  it('switches the visible Month / 30 days buttons once and disables them during a preference save', async () => {
+    const fixture = TestBed.createComponent(ActivityCalendarTileComponent);
+    fixture.componentRef.setInput('user', user);
+    fixture.componentRef.setInput('dayContextEnabled', true);
+    fixture.detectChanges(); await fixture.whenStable(); fixture.detectChanges();
+    const emitted = vi.spyOn(fixture.componentInstance.viewChange, 'emit');
+    const buttons = Array.from(fixture.nativeElement.querySelectorAll('mat-button-toggle button')) as HTMLButtonElement[];
+    expect(buttons.map(button => button.textContent?.trim())).toEqual(['Month', '30 days']);
+    expect(buttons.map(button => button.getAttribute('aria-checked'))).toEqual(['true', 'false']);
+    expect(haptics.selection).not.toHaveBeenCalled();
+    buttons[0].click(); fixture.detectChanges();
+    expect(emitted).not.toHaveBeenCalled(); expect(haptics.selection).not.toHaveBeenCalled();
+    buttons[1].click(); fixture.detectChanges(); await fixture.whenStable(); fixture.detectChanges();
+    expect(emitted).toHaveBeenCalledExactlyOnceWith('30d');
+    expect(haptics.selection).toHaveBeenCalledOnce();
+    expect(buttons.map(button => button.getAttribute('aria-checked'))).toEqual(['false', 'true']);
+    fixture.componentRef.setInput('viewSaving', true); fixture.detectChanges();
+    expect(buttons.every(button => button.disabled)).toBe(true);
+    expect(fixture.nativeElement.querySelector('[aria-label="Saving calendar view"]')).toBeTruthy();
+    buttons[0].click();
+    expect(emitted).toHaveBeenCalledTimes(1); expect(haptics.selection).toHaveBeenCalledOnce();
+    fixture.componentRef.setInput('view', '30d'); fixture.detectChanges();
+    fixture.componentRef.setInput('view', 'month'); fixture.componentRef.setInput('viewSaving', false); fixture.detectChanges();
+    expect(buttons.map(button => button.getAttribute('aria-checked'))).toEqual(['true', 'false']);
+    expect(buttons.every(button => !button.disabled)).toBe(true);
+    expect(haptics.selection).toHaveBeenCalledOnce();
+  });
+
   it('hydrates the saved mode silently, pages exactly 30 local days, and resets on Today', async () => {
     const fixture = TestBed.createComponent(ActivityCalendarTileComponent);
     fixture.componentRef.setInput('user', user);
@@ -205,6 +233,7 @@ describe('ActivityCalendarTileComponent', () => {
     expect(fixture.nativeElement.querySelector('.calendar-day-context-totals')).toBeNull();
     expect(fixture.nativeElement.querySelector('.activity-calendar--dashboard-context')).toBeTruthy();
     expect(fixture.nativeElement.querySelector('.activity-calendar-tile-header')).toBeNull();
+    expect(fixture.nativeElement.querySelector('mat-button-toggle-group')?.getAttribute('aria-label')).toBe('Calendar view');
     expect(fixture.nativeElement.querySelector('.activity-calendar-tile')?.getAttribute('aria-label')).toBe('Calendar');
     expect(fixture.nativeElement.querySelector('.activity-calendar-tile-navigation > span')?.textContent.trim())
       .toBe(fixture.componentInstance.calendarModel().periodLabel);

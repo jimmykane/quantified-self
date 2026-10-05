@@ -25,6 +25,8 @@ export interface DeliveryAssessment {
   /** Private, adapter-proved equivalent approval for the identical prescription
    * before a presentation-only mapping upgrade. Never exposed as a wire field. */
   compatibleApprovalDigest?: string;
+  /** Same proof, for multiple frozen presentation versions. Internal only. */
+  compatibleApprovalDigests?: readonly string[];
   issues: string[];
   digest: string;
   mappingVersion: string;
@@ -40,6 +42,8 @@ export interface DeliveryArtifact {
   timeZone?: string;
 }
 export interface DeliveryOperation {
+  /** Private Wahoo Plan incarnation, reserved only after confirmed withdrawal. */
+  wahooPlanGeneration?: number;
   id: string;
   kind: 'upsert' | 'remove';
   deliveryId: string;
@@ -72,6 +76,8 @@ export interface DeliveryTransportProgress {
   state: 'ready' | 'started' | 'rejected' | 'accepted';
   /** Adapter-proved no-op repairs must not consume the successful-repair limit. */
   repairApplied?: boolean;
+  /** Private Wahoo REMOVE evidence: observed absence, not an acknowledged DELETE. */
+  removalOutcome?: 'already_absent';
 }
 export type DeliveryCheckpoint = (artifact: DeliveryArtifact | null, progress?: DeliveryTransportProgress | null) => Promise<void>;
 /** Recheck the exact attempt, lease, current intent and authority before EVERY request.
@@ -105,6 +111,13 @@ export type TrainingDeliveryProviderValidation = 'invalid_step_type' | 'invalid_
   | 'invalid_repeat_structure' | 'forbidden_repeat_step_id' | 'invalid_child_step' | 'invalid_field_type' | 'invalid_condition_type'
   | 'invalid_transition' | 'invalid_guide_json' | 'unclassified';
 export type TrainingDeliveryProviderResponseShape = 'empty' | 'json' | 'text' | 'oversized' | 'unreadable';
+const WAHOO_CONTRACT_CHECKS = ['artifact_invalid', 'operation_invalid', 'journal_unknown', 'artifact_protected',
+  'plan_response_invalid', 'plan_identity_mismatch', 'plan_ownership_mismatch', 'plan_deleted', 'plan_deletion_state_unknown', 'plan_not_readable',
+  'workout_response_invalid', 'workout_identity_mismatch', 'workout_ownership_mismatch', 'workout_not_readable',
+  'workout_completion_unknown', 'workout_completed', 'workout_in_past', 'workout_date_invalid', 'workout_date_changed',
+  'workout_plan_mismatch', 'association_not_confirmed', 'read_response_invalid', 'workout_delete_not_found', 'plan_delete_not_found',
+  'retained_ownership_unknown', 'account_not_confirmed', 'plan_absence_not_confirmed'] as const;
+export type WahooTrainingContractCheck = typeof WAHOO_CONTRACT_CHECKS[number];
 export interface TrainingDeliveryTransportDiagnostics {
   httpStatus?: number;
   failurePhase?: 'request' | 'response' | 'decode' | 'contract';
@@ -112,6 +125,8 @@ export interface TrainingDeliveryTransportDiagnostics {
   providerField?: TrainingDeliveryProviderField;
   providerValidation?: TrainingDeliveryProviderValidation;
   providerResponseShape?: TrainingDeliveryProviderResponseShape;
+  /** Fixed private validation label, never provider content or an artifact identity. */
+  wahooContractCheck?: WahooTrainingContractCheck;
 }
 
 /** Adapters must checkpoint every accepted artifact (e.g. workout, then schedule).
@@ -162,6 +177,8 @@ export class TrainingDeliveryTransportError extends Error {
         ? { providerValidation: diagnostics.providerValidation } : {}),
       ...(providerResponseShapes.includes(diagnostics.providerResponseShape as TrainingDeliveryProviderResponseShape)
         ? { providerResponseShape: diagnostics.providerResponseShape } : {}),
+      ...(WAHOO_CONTRACT_CHECKS.includes(diagnostics.wahooContractCheck as WahooTrainingContractCheck)
+        ? { wahooContractCheck: diagnostics.wahooContractCheck } : {}),
     };
   }
 }
@@ -186,6 +203,8 @@ export interface DeliveryRuntime {
   transport(provider: PlannedWorkoutProviderId, uid: string): TrainingDeliveryTransport | null;
 }
 export interface DeliveryLedgerV1 {
+  /** Wahoo's next/current Plan incarnation; preserved across reconciliation. */
+  wahooPlanGeneration?: number;
   /** Private proof of exact approval equivalence across a presentation-only
    * mapping upgrade. Independent of remote acceptance and retained when an
    * obsolete attempt is retired. Does not grant consent or expose a wire field. */

@@ -48,6 +48,10 @@ app-activity-calendar-tile {
   flex: 0 0 auto;
 }
 
+.tile-chart-calendar > .tile-header-controls {
+  top: 20px;
+}
+
 .pie {
   /*max-height: 40%;*/
   /*min-height: 40%;*/

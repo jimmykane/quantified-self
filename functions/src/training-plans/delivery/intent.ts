@@ -62,7 +62,9 @@ export function resolveDeliveryIntent(context: DeliveryContext, ledger?: Deliver
   // A legacy payload digest can omit truncated authored text. Carry approval
   // only with an independently retained full-prescription digest, so edits to
   // the formerly hidden suffix cannot inherit presentation-upgrade consent.
-  const canCarryApproval = !!assessment.compatibleApprovalDigest && approval === assessment.compatibleApprovalDigest;
+  const compatibleDigests = [...(assessment.compatibleApprovalDigest ? [assessment.compatibleApprovalDigest] : []),
+    ...(assessment.compatibleApprovalDigests ?? [])];
+  const canCarryApproval = !!approval && compatibleDigests.includes(approval);
   const contentDigest = canCarryApproval ? deliveryContentDigest(workout, timeZone, context.strength) : null;
   const compatibleApproval = canCarryApproval
     && (((ledger?.acceptedDigest === approval || ledger?.acceptedDigest === assessment.digest)
@@ -70,7 +72,8 @@ export function resolveDeliveryIntent(context: DeliveryContext, ledger?: Deliver
       || ((ledger?.attempt?.digest === approval || ledger?.attempt?.digest === assessment.digest)
         && ledger?.attempt?.contentDigest === contentDigest)
       || (ledger?.mappingApprovalProof?.approvedDigest === approval
-        && ledger.mappingApprovalProof.mappingDigest === assessment.digest
+        && (ledger.mappingApprovalProof.mappingDigest === assessment.digest
+          || compatibleDigests.includes(ledger.mappingApprovalProof.mappingDigest))
         && ledger.mappingApprovalProof.contentDigest === contentDigest));
   if (requiresDeliveryMappingApproval(assessment) && approval !== assessment.digest
     && !compatibleApproval) {

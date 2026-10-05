@@ -89,6 +89,22 @@ describe('McpAuthorizationComponent', () => {
     });
   });
 
+  it('explains explicit service-copy cleanup under the existing delivery grant without adding permission choices', async () => {
+    functions.call.mockResolvedValueOnce({ data: { requestId: 'deletion-request', scopes: ['training-plans:read',
+      'training-plans:write', 'training-delivery:write'], clientName: 'Training client', redirectUri: 'https://client.example/callback' } });
+    const fixture = TestBed.createComponent(McpAuthorizationComponent);
+    fixture.detectChanges(); await fixture.whenStable(); fixture.detectChanges();
+    expect(fixture.componentInstance.scopeOptions()).toHaveLength(3);
+    expect(fixture.nativeElement.textContent).toContain('explicit request to remove older, uncompleted service copies');
+    expect(fixture.nativeElement.textContent).toContain('never deletes recorded activities');
+    expect(fixture.nativeElement.textContent).toContain('removal does not require Pro');
+    fixture.componentInstance.toggleScope('training-delivery:write', { checked: false } as never);
+    await fixture.componentInstance.approve();
+    expect(functions.call).toHaveBeenLastCalledWith('decideMcpAuthorization', {
+      requestId: 'deletion-request', approved: true, grantedScopes: ['training-plans:read', 'training-plans:write'],
+    });
+  });
+
   it('preselects requested manual management independently and supports withholding its write grant', async () => {
     functions.call.mockResolvedValueOnce({ data: { requestId: 'manual-request', scopes: ['measurements:write', 'measurements:read'],
       clientName: 'Measurement client', redirectUri: 'https://client.example/callback' } });

@@ -12,11 +12,12 @@ import {
 } from '../../helpers/device-color-preferences.helper';
 import {
   AppDeviceColorPreferenceService,
-  DEVICE_COLOR_PREFERENCE_PALETTE,
   DeviceColorPreferenceChangeMap,
 } from '../../services/color/app-device-color-preference.service';
 import { AppColors } from '../../services/color/app.colors';
 import { SharedModule } from '../../modules/shared.module';
+import { OKABE_ITO_DEVICE_COLORS, STANDARD_DEVICE_COLORS } from '../../helpers/device-color-palette.helper';
+import { AppHapticsService } from '../../services/app.haptics.service';
 
 export interface DeviceColorPreferenceDialogDevice {
   key: string;
@@ -42,9 +43,16 @@ export class DeviceColorPreferencesDialogComponent {
   private snackBar = inject(MatSnackBar);
   private deviceColorPreferenceService = inject(AppDeviceColorPreferenceService);
   private data = inject<DeviceColorPreferencesDialogData>(MAT_DIALOG_DATA);
+  private haptics = inject(AppHapticsService);
   private originalColorByName = { ...this.deviceColorPreferenceService.deviceColorByName() };
 
-  readonly palette = DEVICE_COLOR_PREFERENCE_PALETTE;
+  readonly paletteOptions = [
+    { id: 'standard', label: 'Standard', colors: STANDARD_DEVICE_COLORS },
+    { id: 'okabe-ito', label: 'Okabe–Ito', colors: OKABE_ITO_DEVICE_COLORS },
+  ];
+  readonly selectedPaletteID = signal('standard');
+  readonly presetDeviceLimit = OKABE_ITO_DEVICE_COLORS.length;
+  readonly selectedPalette = computed(() => this.paletteOptions.find(palette => palette.id === this.selectedPaletteID())!);
   readonly devices = signal<DeviceColorPreferenceDialogDevice[]>(this.normalizeDevices(this.data.devices));
   readonly selectedDeviceKey = signal(this.resolveInitialDeviceKey());
   readonly stagedColorByName = signal<Record<string, string>>({ ...this.originalColorByName });
@@ -62,6 +70,29 @@ export class DeviceColorPreferencesDialogComponent {
   readonly customColorValue = signal(this.selectedDeviceColor() || this.selectedAutomaticColor());
   readonly hasChanges = computed(() => !equal(this.originalColorByName, this.stagedColorByName()));
 
+  selectPalette(id: string): void {
+    if (this.isSaving() || id === this.selectedPaletteID() || !this.paletteOptions.some(palette => palette.id === id)) {
+      return;
+    }
+    this.selectedPaletteID.set(id);
+    this.haptics.selection();
+  }
+
+  useOkabeItoPreset(): void {
+    if (this.isSaving() || !this.devices().length || this.devices().length > OKABE_ITO_DEVICE_COLORS.length) {
+      return;
+    }
+    const nextColors = { ...this.stagedColorByName() };
+    this.devices().forEach((device, index) => nextColors[device.key] = OKABE_ITO_DEVICE_COLORS[index].color);
+    if (equal(nextColors, this.stagedColorByName()) && this.selectedPaletteID() === 'okabe-ito') {
+      return;
+    }
+    this.stagedColorByName.set(nextColors);
+    this.selectedPaletteID.set('okabe-ito');
+    this.customColorValue.set(this.selectedDeviceColor() || this.selectedAutomaticColor());
+    this.haptics.selection();
+  }
+
   onDeviceSelectionChange(event: MatSelectionListChange): void {
     const selectedOption = event.source.selectedOptions.selected[0] || event.options[0];
     const deviceKey = selectedOption?.value;
@@ -76,12 +107,13 @@ export class DeviceColorPreferencesDialogComponent {
     }
 
     const normalizedDeviceKey = normalizeDeviceColorKey(deviceKey);
-    if (!this.devices().some(device => device.key === normalizedDeviceKey)) {
+    if (normalizedDeviceKey === this.selectedDeviceKey() || !this.devices().some(device => device.key === normalizedDeviceKey)) {
       return;
     }
 
     this.selectedDeviceKey.set(normalizedDeviceKey);
     this.customColorValue.set(this.selectedDeviceColor() || this.selectedAutomaticColor());
+    this.haptics.selection();
   }
 
   setSelectedDeviceColor(rawColor: string): void {
@@ -91,7 +123,7 @@ export class DeviceColorPreferencesDialogComponent {
 
     const deviceKey = this.selectedDeviceKey();
     const color = normalizeDeviceColorValue(rawColor);
-    if (!deviceKey || !color) {
+    if (!deviceKey || !color || color === this.selectedDeviceColor()) {
       return;
     }
 
@@ -100,6 +132,7 @@ export class DeviceColorPreferencesDialogComponent {
       [deviceKey]: color,
     }));
     this.customColorValue.set(color);
+    this.haptics.selection();
   }
 
   resetSelectedDeviceColor(): void {
@@ -108,7 +141,7 @@ export class DeviceColorPreferencesDialogComponent {
     }
 
     const deviceKey = this.selectedDeviceKey();
-    if (!deviceKey) {
+    if (!deviceKey || !this.selectedDeviceColor()) {
       return;
     }
 
@@ -118,6 +151,7 @@ export class DeviceColorPreferencesDialogComponent {
       return nextColors;
     });
     this.customColorValue.set(this.selectedAutomaticColor());
+    this.haptics.selection();
   }
 
   async apply(): Promise<void> {
@@ -133,8 +167,10 @@ export class DeviceColorPreferencesDialogComponent {
     this.isSaving.set(true);
     try {
       await this.deviceColorPreferenceService.applyDeviceColorChanges(this.buildChangeMap());
+      this.haptics.success();
       this.dialogRef.close(true);
     } catch (error) {
+      this.haptics.error();
       const message = error instanceof Error && error.message
         ? error.message
         : 'Could not save device colors.';

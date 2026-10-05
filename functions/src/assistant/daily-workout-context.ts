@@ -239,30 +239,42 @@ export async function collectDailyWorkoutContext(input: {
 export function dailyWorkoutFacts(context: DailyWorkoutContext): string {
   const facts: string[] = [];
   const weekday = `${context.weekday}s`;
-  facts.push(`${context.weekdayConsistency.matchingWeekdayCount} of the last ${context.weekdayConsistency.weekdayOpportunities} ${weekday} have recorded positive workout duration; missing days are unknown.`);
+  facts.push(`**Training pattern:** Workouts recorded on ${context.weekdayConsistency.matchingWeekdayCount} of the last ${context.weekdayConsistency.weekdayOpportunities} ${weekday}. Days without records are unknown.`);
   facts.push(context.activitiesToday.scanComplete
-    ? `${context.activitiesToday.activities.length} recorded activities today.`
-    : `Today's activity scan was incomplete; the completed-activity count is unknown.`);
+    ? `**Today:** ${context.activitiesToday.activities.length} recorded activities.`
+    : `**Today:** Some activities could not be checked, so the total is unknown.`);
   if (context.timelineNotes.access === 'disabled') {
     facts.push('Timeline notes were not checked because access is off.');
   } else {
     const ended = context.timelineNotes.notes.filter(note => note.status === 'ended');
     const ongoing = context.timelineNotes.notes.filter(note => note.status === 'ongoing');
-    facts.push(`${ongoing.length} ongoing and ${ended.length} ended Timeline notes found in the 28-day window${context.timelineNotes.scanComplete ? '.' : '; the scan was incomplete and more notes may exist.'}`);
+    facts.push(`**Timeline notes (last 28 days):** Found ${ongoing.length} ongoing, ${ended.length} ended.${context.timelineNotes.scanComplete ? '' : ' Some notes could not be checked; more may exist.'}`);
     for (const note of [...ongoing, ...ended].slice(0, 3)) {
-      facts.push(`${String(note.category)} note “${escapeMarkdownText(note.title)}”: ${String(note.startDate)}–${String(note.endDate ?? 'ongoing')} (${String(note.status)}).`);
+      const category = String(note.category).replace(/_/g, ' ');
+      facts.push(`“${escapeMarkdownText(note.title)}” (${escapeMarkdownText(category)}): ${String(note.startDate)} – ${String(note.endDate ?? 'ongoing')}${note.endDate === null ? '' : ` (${String(note.status)})`}.`);
     }
   }
   if (context.plannedWorkouts.access === 'disabled') {
-    facts.push('Planned workouts and exact completion links were not checked because Training plans access is off.');
+    facts.push('Planned workouts and linked activities were not checked because Training plans access is off.');
   } else {
     const linked = context.plannedWorkouts.workouts.filter(workout =>
       asRecord(workout.completion)?.state === 'linked');
-    facts.push(`${context.plannedWorkouts.workouts.length} planned workout${context.plannedWorkouts.workouts.length === 1 ? '' : 's'} listed for today; ${linked.length} ${linked.length === 1 ? 'has an' : 'have'} exact stored completion link${linked.length === 1 ? '' : 's'}${context.plannedWorkouts.scanComplete ? '.' : '; the plan scan was incomplete and more workouts may exist.'}`);
+    const count = context.plannedWorkouts.workouts.length;
+    const planned = count === 0
+      ? `No workouts ${context.plannedWorkouts.scanComplete ? 'listed for today' : 'found so far'}.`
+      : `${count} workout${count === 1 ? '' : 's'}; ${linked.length} ${linked.length === 1 ? 'has a' : 'have a'} linked recorded activity.`;
+    facts.push(`**Planned today:** ${planned}${context.plannedWorkouts.scanComplete ? '' : ' Some planned workouts could not be checked; more may exist.'}`);
     for (const workout of linked.slice(0, 3)) {
-      facts.push(`Exact completion linked: “${escapeMarkdownText(workout.title)}”.`);
+      facts.push(`Linked to a recorded activity: “${escapeMarkdownText(workout.title)}”.`);
     }
   }
-  facts.push(`Training Form snapshot ${context.trainingSnapshots.form ? 'read' : 'unavailable'}; ramp-rate snapshot ${context.trainingSnapshots.rampRate ? 'read' : 'unavailable'}; Training Summary snapshot ${context.trainingSnapshots.trainingSummary ? 'read' : 'unavailable'}.`);
-  return facts.join(' ');
+  const training = [
+    { label: 'Freshness', available: context.trainingSnapshots.form !== null },
+    { label: 'Ramp rate', available: context.trainingSnapshots.rampRate !== null },
+    { label: 'Training summary', available: context.trainingSnapshots.trainingSummary !== null },
+  ];
+  const checked = training.filter(item => item.available).map(item => item.label).join(', ');
+  const unavailable = training.filter(item => !item.available).map(item => item.label).join(', ');
+  facts.push(`**Training data:** ${[checked && `${checked} checked.`, unavailable && `${unavailable} unavailable.`].filter(Boolean).join(' ')}`);
+  return facts.map(fact => `- ${fact}`).join('\n');
 }

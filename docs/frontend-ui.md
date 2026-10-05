@@ -85,6 +85,42 @@ Give each primary route title a stable `titleId` and reference it from the route
 `aria-labelledby`. Keep a title status concise and expose failures with the supplied warning status or an equivalent
 projected `role="alert"` state.
 
+### Benchmark device appearance
+
+The Device colors dialog opens with the Standard palette selected. Choosing Use Okabe–Ito preset stages the
+published palette before the existing account-settings transaction.
+The first four swatches are vermillion, blue, black, and reddish purple; the remaining four retain the published values.
+Named Standard swatches also include dark gray and tan. The preset supports at most eight listed devices and never
+silently repeats colors. Individual colors and Automatic reset remain available; Cancel discards every staged change.
+Swatches expose color names, hex values, and pressed state. Accepted actions and completed writes use shared haptics.
+
+`device-chart-appearance.helper.ts` applies device colors to merged/benchmark panels after either worker or synchronous
+numeric builds. The account chart setting `useDistinctComparisonLinePatterns` defaults to false. A **Distinct line
+patterns** toggle lives below **Line Width** in Settings → Charts and uses Save Changes. Settings writes this preference
+only when the toggle is edited; untouched toggles follow account refreshes even while other form fields are dirty.
+The same toggle appears in **Chart options** on merged and benchmark event details and saves immediately. The event
+chart owns optimistic presentation, pending feedback, rollback and mutation haptics; the actions component owns menu
+opening feedback. Writes verify the signed-in account UID, independently of the event's display user. Sign-out or an
+account switch invalidates pending feedback, including a new session for the same UID; destroyed charts ignore
+completions. Guests cannot change this account preference. The observed settings refresh cached chart presentation.
+Compare’s header keeps the **Device colors** action and does not own chart-setting mutations. The device-color
+button uses its intrinsic width there rather than the full-width mobile table-action treatment. Color
+preferences and line patterns are independent: either can change without resetting the other.
+With patterns off, charts retain solid lines, normal widths/overlay opacity, and dot
+legends. ECharts merge updates explicitly reset line types to solid when patterns are removed. With it on,
+full event order assigns solid, dashed, dotted, and dash-dot patterns, repeating after four activities;
+filtering activities or missing metrics does not shift a remaining activity's pattern. The same patterns appear in
+primary/overlay lines and accessible legend samples. Enabling patterns leaves primary and overlay stroke widths
+unchanged, including configured widths below 2px; legend samples match the rendered widths. Patterned overlays and
+legends keep full opacity. The overlay metric is identified by its legend and tooltip labels. Comparison charts suppress zone and altitude-grade coloring to
+retain device identity. Normal activity charts retain metric and zone coloring. Saved preferences are observed by
+the chart; theme changes also refresh presentation when only timeline markers need rebuilding. Rendered series and
+timeline-marker colors blend toward theme foreground when necessary to meet 3.5:1 contrast against conservative
+light/dark surface colors before marker opacity is applied, leaving stored hex values unchanged. Dark-map
+brightening preserves achromatic black/gray rather than adding red saturation. Palette provenance:
+https://jfly.uni-koeln.de/color/index.html#pallet. Simulation and contrast checks do not replace user testing on actual
+benchmark charts, particularly overlapping lines and map backgrounds.
+
 ## Shared scrollbars
 
 `src/styles/_scrollbars.scss`, included once by `src/styles.scss`, owns the app's thin, rounded QS scrollbar skin.

@@ -111,10 +111,12 @@ describe('daily workout context', () => {
     const facts = dailyWorkoutFacts(result);
     expect(facts).toContain('2 of the last 4 Fridays');
     expect(facts).toContain('Belly Pain”');
-    expect(facts).toContain('2026-09-04–2026-09-10 (ended)');
-    expect(facts).toContain('1 has an exact stored completion link');
-    expect(facts).toContain('Exact completion linked: “Wahoo test”');
-    expect(facts).toContain('Form snapshot read; ramp-rate snapshot read; Training Summary snapshot read');
+    expect(facts).toContain('2026-09-04 – 2026-09-10 (ended)');
+    expect(facts).toContain('1 has a linked recorded activity');
+    expect(facts).toContain('Linked to a recorded activity: “Wahoo test”');
+    expect(facts).toContain('Freshness, Ramp rate, Training summary checked');
+    expect(facts.split('\n').every(line => line.startsWith('- '))).toBe(true);
+    expect(facts).not.toContain('snapshot');
   });
 
   it('keeps disabled access and incomplete scans explicit', async () => {
@@ -128,7 +130,27 @@ describe('daily workout context', () => {
     expect(read.mock.calls.map(([name]) => name)).not.toContain('query_timeline_notes');
     expect(read.mock.calls.map(([name]) => name)).not.toContain('query_planned_workouts_by_date');
     expect(dailyWorkoutFacts(result)).toContain('Timeline notes were not checked because access is off');
-    expect(dailyWorkoutFacts(result)).toContain('completion links were not checked because Training plans access is off');
+    expect(dailyWorkoutFacts(result)).toContain('linked activities were not checked because Training plans access is off');
+  });
+
+  it('keeps missing records distinct from incomplete reads in the readable summary', async () => {
+    const base = fixtureRead();
+    const read = vi.fn(async (name: string, args: Record<string, unknown>) =>
+      name === 'get_training_metric' ? { metricKind: args.metricKind, payload: {} } : base(name));
+    const result = await collectDailyWorkoutContext({ now: NOW, timeZone: 'Europe/Helsinki',
+      timelineNotesEnabled: true, trainingPlansEnabled: true, read: read as never });
+    result.activitiesToday.scanComplete = false;
+    result.timelineNotes.scanComplete = false;
+    result.plannedWorkouts.scanComplete = false;
+    result.plannedWorkouts.workouts = [];
+    const incomplete = dailyWorkoutFacts(result);
+    expect(incomplete).toContain('Some activities could not be checked, so the total is unknown');
+    expect(incomplete).toContain('Some notes could not be checked; more may exist');
+    expect(incomplete).toContain('No workouts found so far');
+    expect(incomplete).toContain('Some planned workouts could not be checked; more may exist');
+    expect(incomplete).not.toContain('No workouts listed for today');
+    result.plannedWorkouts.scanComplete = true;
+    expect(dailyWorkoutFacts(result)).toContain('No workouts listed for today');
   });
 
   it('fails closed when batch completion results do not match the listed workouts', async () => {
@@ -161,7 +183,7 @@ describe('daily workout context', () => {
       timelineNotesEnabled: true, trainingPlansEnabled: false, read: read as never });
     expect(result.timelineNotes.scanComplete).toBe(true);
     expect(result.timelineNotes.notes.map(note => note.status)).toEqual(['ended', 'ongoing']);
-    expect(dailyWorkoutFacts(result)).toContain('1 ongoing and 1 ended Timeline notes');
+    expect(dailyWorkoutFacts(result)).toContain('**Timeline notes (last 28 days):** Found 1 ongoing, 1 ended');
     expect(read.mock.calls.filter(([name]) => name === 'query_timeline_notes')).toHaveLength(2);
   });
 
@@ -175,6 +197,6 @@ describe('daily workout context', () => {
     expect(result.trainingSnapshots).toMatchObject({ form: null, rampRate: null,
       trainingSummary: null });
     expect(read.mock.calls.map(([name]) => name)).not.toContain('get_training_metric');
-    expect(dailyWorkoutFacts(result)).toContain('Form snapshot unavailable');
+    expect(dailyWorkoutFacts(result)).toContain('Freshness, Ramp rate, Training summary unavailable');
   });
 });

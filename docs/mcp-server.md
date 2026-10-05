@@ -143,9 +143,19 @@ using Research because Research may invoke connector tools without another appro
 proposal and binds it to the owner, connection, grant, revision and expiry; replay returns its persisted terminal result.
 Plan deletion is available only as the sole proposal change and requires an explicit `convert-to-standalone` or
 `delete-workouts` choice. Its preview states that the plan and revision history are permanently removed, describes the
-workout effect, and states that eligible future provider copies may withdraw, while past provider copies and recorded
-activities remain. MCP deletion does not offer the manual UI's separate past-copy cleanup opt-in. If its resumable
-multi-transaction
+workout effect, and distinguishes automatic eligible future-copy withdrawal from optional older-copy cleanup.
+The additive `preview_training_deletion` requires both child write grants plus the parent read grant, one exact current
+plan/workout reference, the current schedule revision and an explicit `removePastProviderCopies` boolean. Ask
+“Also remove older, uncompleted copies from your connected services?” unless the user already chose. A plan still
+requires its workout disposition. False preserves older copies; true requests best-effort removal through the existing
+mutation-bound cleanup marker and worker. It is not new sync consent, a live provider check, recorded-activity deletion
+or app/watch removal proof. Valid same-account access, disconnect epochs, provider restrictions and completed-copy
+protection remain authoritative. Preview performs no provider I/O; existing approval-gated `apply_training_changes`
+retains the choice and both grants through retries. Legacy batch input is frozen and still preserves older copies;
+never silently use it instead when the user requested full cleanup. For multiple targets, review separate focused
+deletions rather than extending that schema. No new callable, OAuth scope or cleanup model is introduced. Deploy and
+refresh client catalogs separately before use; no reauthorization is needed if all three grants already exist.
+If its resumable multi-transaction
 deletion or cleanup is interrupted after the lock is acquired, the proposal remains retryable and the same approved apply
 resumes the idempotent operation instead of recording a false terminal failure. Permanent single-workout deletion and
 history restoration remain deliberately absent.
@@ -355,13 +365,14 @@ the Health UI display may use pounds when selected. No tool, schema, scope, cons
 or bundled skill changes. The separate Strength Training feature uses this preference only at its app editor boundary;
 its MCP read and preview continue to use canonical kilograms.
 
-Garmin schedule-only remote repair and #769's frontend-only check wording preserve the registered MCP contract.
-The existing sanitized delivery status already stops a confirmed missing copy from counting as synced and represents
-restoration as a non-success outcome.
-Artifact-specific inspection authority, retained provider IDs and repair evidence remain private; MCP performs no live
-provider check or repair and gains no tool, field, scope, consent or write authority. In particular, a `synced` MCP
-delivery outcome records the last accepted send, not a fresh Garmin cloud read; an inconclusive later Workout check
-cannot be promoted to `confirmed_missing` and the frozen v1 tool exposes no verification-state field.
+Garmin schedule-only remote repair and #769's explicit app-only replacement preserve the registered MCP contract.
+The existing sanitized delivery status stops a confirmed missing copy or a complete not-found Garmin Workout
+observation from counting as synced, using existing non-success outcomes rather than new fields.
+Artifact-specific inspection authority, retained provider IDs and repair evidence remain private; MCP sync reads
+perform no live provider check or repair and gain no tool, field, scope, consent or write authority. In particular, a
+`synced` MCP delivery outcome records the last accepted send, not a fresh Garmin cloud read; an unproved negative
+cannot be promoted to `confirmed_missing` and the frozen v1 tool exposes no verification-state field. The additive
+MCP replacement action is tracked in #801, not implemented through the v1 Send or Retry action.
 
 COROS Training delivery (#648) uses the shared provider-readiness boundary with no wire-contract change. COROS is
 currently disabled there for the app, Functions runtime and MCP; explicit COROS proposals report unavailable and
@@ -398,6 +409,13 @@ link remain private and are rejected from MCP projections. The existing sanitize
 current link. Completed #651 is exact-marker-only: fallback candidate discovery and manual link/unlink/relink
 are explicitly out of scope.
 No private Wahoo identity or live check is introduced.
+
+Wahoo Stop -> Send incarnation handling preserves that public contract. After confirmed withdrawal, the worker
+reserves a new private Plan identity once, reuses it through retries and validates it during FIT completion matching.
+An unproved deleted Plan maps to the existing Needs attention outcome, not a new provider action or automatic
+recreation permission. `wahooPlanGeneration`, artifact `planGeneration`, withdrawal receipts and provider identities
+remain excluded from strict sync and completion projections. Existing approval-gated Send/Stop preview/apply, Pro
+policy and owner/connection/deletion fences are unchanged; no plugin rebuild or registered-client refresh is needed.
 
 Public Garmin, Wahoo and Suunto Training delivery changes runtime availability, not the MCP wire contract. An already
 authorized client with `training-plans:read` and `training-delivery:write` may preview an explicit delivery change for
@@ -946,6 +964,7 @@ The analytics and map entries follow the
 | `assess_planned_workout_compatibility` | `training-plans:read` | Local mapping fidelity for one current workout; no connection/provider call or delivery guarantee |
 | `preview_create_planned_workout` | `training-plans:read` + `training-plans:write`; optional delivery also requires `training-delivery:write` | Focused one-workout proposal with optional atomic initial send; server-owned local key |
 | `preview_training_changes` | `training-plans:read` plus the relevant Training write scope(s) | Strict bounded proposal with authored and per-provider effects; no authored mutation |
+| `preview_training_deletion` | `training-plans:read` + `training-plans:write` + `training-delivery:write` | One deletion with explicit older uncompleted service-copy cleanup choice; existing approval-gated apply |
 | `preview_saved_workout_change` | `training-plans:read` + `training-plans:write` | One revision-bound library edit or 1–100-date placement preview; no provider consent or authored mutation |
 | `apply_training_changes` | Same scopes bound into the proposal; native client approval gate | Idempotently applies a preview-created proposal and returns independent authored/provider outcomes |
 | `get_training_change_status` | Same original Training read and child-write grants bound into the proposal | Read-only retained apply result or lower-bound checkpoints after an uncertain reply; never applies or resumes |
@@ -2286,6 +2305,13 @@ after validation, but no additional server deployment or registered-app rescan o
   sleep data, or user IDs.
 
 ## Local verification and release
+
+Garmin app-only missing-copy recovery (#769) does not widen registered v1 Training provider actions. Existing
+`get_training_sync_status` reports `needs_attention` and zero synced workouts after a complete not-found Workout
+observation, retaining the historical accepted-send timestamp without private inspection or provider identities.
+Registered proposals still reject `replace` and client-supplied replacement authority. A focused additive MCP preview,
+approval and Assistant prepare-only integration is tracked in #801 under #583 / Project 2; do not emulate it with
+Send/Retry or let the broader app command enum grow the frozen registered contract.
 
 Use the Functions emulator and local Angular app for the OAuth/consent flow. At minimum run:
 

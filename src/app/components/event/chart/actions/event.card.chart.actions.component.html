@@ -42,8 +42,13 @@
     <button mat-icon-button type="button"
       class="qs-action-menu-icon-button event-chart-actions__icon-button"
       [matMenuTriggerFor]="optionsMenu" [disabled]="!user"
-      aria-label="Chart options">
+      [attr.aria-busy]="isSavingDistinctLinePatterns"
+      aria-label="Chart options" (menuOpened)="onOptionsMenuOpened()">
+      @if (isSavingDistinctLinePatterns) {
+      <mat-progress-spinner diameter="24" mode="indeterminate" aria-label="Saving chart settings"></mat-progress-spinner>
+      } @else {
       <mat-icon>tune</mat-icon>
+      }
     </button>
   </span>
 </section>
@@ -113,6 +118,25 @@
   </section>
 
   <mat-divider></mat-divider>
+
+  @if (showDistinctLinePatternsToggle) {
+  <section mat-menu-item [attr.aria-busy]="isSavingDistinctLinePatterns"
+    matTooltip="Saved to your chart settings. Applies to merged and benchmark charts." matTooltipPosition="above">
+    <div class="chart-options-menu__pattern-row">
+      <mat-slide-toggle [checked]="useDistinctLinePatterns"
+        [disabled]="!canChangeDistinctLinePatterns || isSavingDistinctLinePatterns"
+        [disabledInteractive]="isSavingDistinctLinePatterns"
+        (click)="$event.stopPropagation()" (change)="onDistinctLinePatternsChange($event)">
+        Distinct line patterns
+      </mat-slide-toggle>
+      <span class="chart-options-menu__pattern-status">
+        @if (isSavingDistinctLinePatterns) {
+        <mat-progress-spinner diameter="18" mode="indeterminate" aria-label="Saving line patterns"></mat-progress-spinner>
+        }
+      </span>
+    </div>
+  </section>
+  }
 
   <section mat-menu-item>
     <mat-slide-toggle [checked]="showLaps" [disabled]="!user"

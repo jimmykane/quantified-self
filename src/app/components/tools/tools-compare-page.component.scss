@@ -134,6 +134,9 @@ h2 {
 .workspace-header-actions {
   display: flex;
   justify-content: flex-end;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 0.5rem;
 }
 
 .workspace-panel {
@@ -345,7 +348,7 @@ h2 {
   min-height: 5rem;
 }
 
-@include tableControls.comparisonTableControlsLayout($includeDeviceColorsButton: true);
+@include tableControls.comparisonTableControlsLayout();
 
 .comparison-table-controls {
   margin-bottom: 0.75rem;

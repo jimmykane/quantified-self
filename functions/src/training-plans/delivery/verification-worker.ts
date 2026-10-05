@@ -3,13 +3,19 @@ import * as logger from 'firebase-functions/logger';
 import { parseScheduledWorkoutV1 } from '../../../../shared/training-plans';
 import { getUserDeletionGuardStateInTransaction } from '../../shared/user-deletion-guard';
 import { DELIVERY_LEDGER, DELIVERY_LEASE_MS, DELIVERY_QUEUE, TrainingDeliveryTransportError,
-  type DeliveryLedgerV1, type DeliveryRuntime } from './contracts';
+  type DeliveryIntent, type DeliveryLedgerV1, type DeliveryRuntime } from './contracts';
 import { resolveDeliveryIntent } from './intent';
 import { queuedDeliveryOperation, readDeliveryContext, writeDelivery } from './store';
 import { inspectionBinding, observeInspection } from './verification-evidence';
 import { emptyVerification } from './verification-queue';
 import { canRepairMissingArtifacts, VERIFICATION_DAY_MS, type InspectionObservation } from './verification-contracts';
 import { stageTrainingDeliveryReconciliation } from './marker';
+import { GARMIN_WORKOUT_NOT_FOUND_ISSUE, GARMIN_WORKOUT_WITH_CALENDAR_NOT_FOUND_ISSUE } from '../../../../shared/training-provider-delivery';
+
+function canInspectIntent(ledger: DeliveryLedgerV1, intent: DeliveryIntent): boolean {
+  return intent.status === 'delivered' || ledger.verification?.missing === true
+    || (ledger.provider === 'garmin' && ledger.status === 'needs_attention' && intent.status === 'pending' && ledger.lastAcceptedAtMs !== null);
+}
 
 /** Shares the delivery lease. No HTTP is performed inside a transaction. */
 export async function processTrainingVerification(runtime: DeliveryRuntime, uid: string, id: string): Promise<void> {
@@ -32,7 +38,7 @@ export async function processTrainingVerification(runtime: DeliveryRuntime, uid:
     const intent = resolveDeliveryIntent(context, ledger);
     const inspection = context.transport?.inspection;
     if (!inspection || inspection.policy.mode === 'unavailable' || !ledger.actual || ledger.attempt
-      || intent.desired !== 'present' || (intent.status !== 'delivered' && !ledger.verification?.missing) || ledger.desiredDigest !== intent.digest) {
+      || intent.desired !== 'present' || !canInspectIntent(ledger, intent) || ledger.desiredDigest !== intent.digest) {
       tx.delete(job); stageTrainingDeliveryReconciliation(tx, runtime.db, uid); return null;
     }
     const evidence = ledger.verification ?? emptyVerification(runtime.now());
@@ -61,7 +67,7 @@ export async function processTrainingVerification(runtime: DeliveryRuntime, uid:
       const intent = resolveDeliveryIntent(context, ledger);
       if (ledger.lease?.id !== leaseId || ledger.lease.expiresAtMs <= runtime.now() || ledger.attempt
         || intent.desired !== 'present' || intent.digest !== ledger.desiredDigest
-        || (intent.status !== 'delivered' && !ledger.verification?.missing) || !context.transport?.inspection
+        || !canInspectIntent(ledger, intent) || !context.transport?.inspection
         || context.transport.inspection.policy.mode === 'unavailable'
         || context.transport.inspection.policy.version !== claim.inspection.policy.version
         || inspectionBinding(ledger, context, context.transport.inspection.policy) !== claim.binding) throw new TrainingDeliveryTransportError('deferred', 60_000);
@@ -91,7 +97,7 @@ export async function processTrainingVerification(runtime: DeliveryRuntime, uid:
     const intent = resolveDeliveryIntent(context, ledger);
     const current = locks.empty && !ledger.attempt && ledger.lease.expiresAtMs > runtime.now() && intent.desired === 'present'
       && intent.digest === ledger.desiredDigest
-      && (intent.status === 'delivered' || ledger.verification?.missing) && context.transport?.inspection?.policy.version === claim.inspection.policy.version
+      && canInspectIntent(ledger, intent) && context.transport?.inspection?.policy.version === claim.inspection.policy.version
       && context.transport.inspection.policy.mode !== 'unavailable'
       && inspectionBinding(ledger, context, context.transport.inspection.policy) === claim.binding;
     // Retain provider backoff independently of the check request/evidence. A manual
@@ -116,6 +122,15 @@ export async function processTrainingVerification(runtime: DeliveryRuntime, uid:
     ledger.verification = evidence;
     ledger.updatedAtMs = runtime.now();
     if (evidence.state === 'present') { ledger.status = intent.status; ledger.issues = intent.issues; }
+    if (!failure && ledger.provider === 'garmin' && evidence.observedMissingKeys?.includes('workout')) {
+      ledger.status = 'needs_attention';
+      ledger.issues = [evidence.observedMissingKeys.includes('schedule')
+        ? GARMIN_WORKOUT_NOT_FOUND_ISSUE : GARMIN_WORKOUT_WITH_CALENDAR_NOT_FOUND_ISSUE, ...intent.issues].slice(0, 20);
+    } else if (ledger.issues.some(issue => [GARMIN_WORKOUT_NOT_FOUND_ISSUE, GARMIN_WORKOUT_WITH_CALENDAR_NOT_FOUND_ISSUE].includes(issue))) {
+      // A failed/partial later check must not advertise a replacement review whose
+      // observed-negative evidence is no longer current.
+      ledger.issues = ['The latest Garmin check could not confirm the earlier copy. Check again before reviewing replacement.', ...intent.issues].slice(0, 20);
+    }
     if (failure && ['auth', 'permission'].includes(failure.kind)) {
       ledger.status = failure.kind === 'auth' ? 'reconnect_required' : 'connection_repair';
       ledger.blockedConnectionGeneration = claim.connectionGeneration;
@@ -147,7 +162,12 @@ export async function processTrainingVerification(runtime: DeliveryRuntime, uid:
         filtered: observation.coverage.filtered !== false, nextCursor: evidence.cursor,
       } : null });
     writeDelivery(runtime, tx, uid, ledger);
-    if (ledger.repair && evidence.state === 'restoring') {
+    if ((ledger.repair && evidence.state === 'restoring')
+      || (ledger.provider === 'garmin' && evidence.state === 'present' && intent.status === 'pending'
+        && queuedDeliveryOperation(ledger) === 'upsert')) {
+      // A positive check after invalidated replacement approval can prove the old
+      // pair reappeared. Resume the already-authorized edit against those IDs, not
+      // a new root POST or another day of checking without dispatching the edit.
       const operationKind = queuedDeliveryOperation(ledger);
       if (!operationKind) throw new TrainingDeliveryTransportError('terminal');
       tx.set(job, { uid, kind: 'delivery', deliveryId: id, provider: ledger.provider,

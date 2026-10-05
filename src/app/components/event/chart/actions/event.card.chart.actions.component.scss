@@ -110,6 +110,26 @@ section.container {
   font-family: 'Barlow Condensed', sans-serif;
 }
 
+.chart-options-menu__pattern-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+
+  mat-slide-toggle {
+    flex: 1 1 auto;
+    min-width: 0;
+  }
+}
+
+.chart-options-menu__pattern-status {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 18px;
+  width: 18px;
+  height: 18px;
+}
+
 @include xsmall {
   section.container {
     justify-content: flex-end;

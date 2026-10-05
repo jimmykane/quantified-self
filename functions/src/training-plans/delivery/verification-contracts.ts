@@ -33,6 +33,8 @@ export interface RemoteInspection {
   inspect(request: InspectionRequest, guard: DeliveryRequestGuard): Promise<InspectionObservation>;
 }
 export interface DeliveryRepair {
+  /** Granted only by the owner-reviewed app command. Never inferred from Check/Retry/404. */
+  manualReplacement?: true;
   policyVersion: string;
   binding: string;
   missing: string[];
@@ -42,6 +44,8 @@ export interface DeliveryRepair {
   continuation?: boolean;
 }
 export interface VerificationEvidence {
+  /** Negative observations without authority for automatic repair (private, not missing=true). */
+  observedMissingKeys?: string[];
   binding: string;
   state: TrainingVerificationState;
   missing: boolean;
@@ -79,4 +83,14 @@ export function canRepairMissingArtifacts(policy: InspectionPolicy, missingKeys:
   return isInspectionPolicyValid(policy) && policy.mode !== 'unavailable' && Array.isArray(missingKeys) && missingKeys.length > 0
     && missingKeys.length === new Set(missingKeys).size
     && missingKeys.every(key => typeof key === 'string' && policy.repairReadyKeys.includes(key));
+}
+
+/** Explicit consent does not broaden automatic absence/repair policy. */
+export function canExecuteDeliveryRepair(policy: InspectionPolicy, repair: DeliveryRepair): boolean {
+  if (repair.manualReplacement !== true) return canRepairMissingArtifacts(policy, repair.missing);
+  return isInspectionPolicyValid(policy) && policy.mode === 'retained-ids'
+    && policy.version === 'garmin-retained-v2-schedule-repair' && repair.policyVersion === policy.version
+    && Array.isArray(repair.missing) && repair.missing.includes('workout') && repair.missing.includes('schedule')
+    && repair.missing.length === new Set(repair.missing).size
+    && repair.missing.every(key => ['workout', 'schedule'].includes(key) && policy.required.includes(key));
 }

@@ -10,7 +10,8 @@ import { createRequire } from 'node:module';
 import { join } from 'node:path';
 import { MAT_ICON_DEFAULT_OPTIONS } from '@angular/material/icon';
 import { ActivityTypes } from '@sports-alliance/sports-lib';
-import type { TrainingDeliverySettingsV1, TrainingDeliveryStatusV1 } from '@shared/training-provider-delivery';
+import { GARMIN_WORKOUT_NOT_FOUND_ISSUE, GARMIN_WORKOUT_WITH_CALENDAR_NOT_FOUND_ISSUE,
+  type TrainingDeliverySettingsV1, type TrainingDeliveryStatusV1 } from '@shared/training-provider-delivery';
 import type { ScheduledWorkoutV1, TrainingPlanV1 } from '@shared/training-plans';
 import { TrainingDeliveryService, type TrainingDeliveryView } from '../../services/training-delivery.service';
 import { AppUserService } from '../../services/app.user.service';
@@ -63,6 +64,26 @@ describe('Training delivery summaries on the workspace', () => {
     await vi.waitFor(() => { fixture.detectChanges(); expect(fixture.componentInstance.summaries().length).toBe(1); });
     return fixture;
   }
+  it('keeps the compact history shortcut accessible and opens the same history with one haptic', async () => {
+    const fixture = TestBed.createComponent(TrainingDeliveryButtonComponent);
+    fixture.componentRef.setInput('scope', 'history'); fixture.componentRef.setInput('entityId', 'current');
+    fixture.componentRef.setInput('title', 'Plans and standalone workouts'); fixture.componentRef.setInput('historyLabel', 'Sync');
+    fixture.detectChanges();
+    await vi.waitFor(() => { fixture.detectChanges(); expect(fixture.componentInstance.hasRecords()).toBe(true); });
+    const button: HTMLButtonElement = fixture.nativeElement.querySelector('button');
+    expect(button.textContent?.trim()).toBe('syncSync');
+    expect(button.getAttribute('aria-label')).toBe('Workout sync history');
+    expect(selection).not.toHaveBeenCalled();
+    fixture.componentRef.setInput('disabled', true); fixture.detectChanges(); button.click();
+    expect(open).not.toHaveBeenCalled(); expect(selection).not.toHaveBeenCalled();
+    fixture.componentRef.setInput('disabled', false); fixture.detectChanges(); button.click();
+    expect(selection).toHaveBeenCalledTimes(1);
+    expect(open).toHaveBeenCalledWith(expect.anything(), expect.objectContaining({ data: {
+      scope: 'history', id: 'current', title: 'Plans and standalone workouts',
+    } }));
+    user.set(null); user$.next(null); fixture.detectChanges();
+    expect(fixture.nativeElement.querySelector('button')).toBeNull();
+  });
   it.each(['plan', 'workout'] as const)('shows %s destination confirmation and opens details without granting consent', async scope => {
     const fixture = await render(scope);
     if (scope === 'plan') {
@@ -109,6 +130,21 @@ describe('Training delivery summaries on the workspace', () => {
     });
     expect(fixture.nativeElement.textContent).not.toContain('Garmin Connect · Synced');
     expect(fixture.nativeElement.querySelector('.delivery-summary').getAttribute('aria-label')).toContain('no automatic workout replacement');
+  });
+  it.each([GARMIN_WORKOUT_NOT_FOUND_ISSUE, GARMIN_WORKOUT_WITH_CALENDAR_NOT_FOUND_ISSUE])(
+    'shows complete not-found observations as attention, not synced, without hiding newer authored data: %s', async issue => {
+    const fixture = await render('workout');
+    view$.next({ settings: [setting], statuses: [{ ...status, status: 'needs_attention', differsFromQS: true, issues: [issue], updatedAtMs: 4 }],
+      verifications: [{ schemaVersion: 1, id: status.id, workoutId: workout.id, planId: workout.planId,
+        provider: 'garmin', state: 'unknown', canCheck: true, missing: false, lastCheckedAtMs: 4, nextCheckAtMs: null, updatedAtMs: 4 }] });
+    await vi.waitFor(() => { fixture.detectChanges(); expect(fixture.nativeElement.textContent).toContain('Garmin Connect · Not found in Garmin'); });
+    expect(fixture.nativeElement.textContent).not.toContain('Garmin Connect · Synced');
+    expect(fixture.nativeElement.querySelector('.delivery-summary').getAttribute('aria-label'))
+      .toContain(issue === GARMIN_WORKOUT_NOT_FOUND_ISSUE ? 'review creating a replacement' : 'Replacement is unavailable');
+    fixture.componentRef.setInput('summaryWorkouts', [{ ...workout, updatedAtMs: 5 }]);
+    await vi.waitFor(() => { fixture.detectChanges(); expect(fixture.nativeElement.textContent).toContain('Awaiting latest check'); });
+    expect(fixture.nativeElement.textContent).not.toContain('Not found in Garmin');
+    expect(open).not.toHaveBeenCalled();
   });
   it('does not let old or another destination’s check overrule a new accepted Garmin send', async () => {
     const fixture = await render('workout');

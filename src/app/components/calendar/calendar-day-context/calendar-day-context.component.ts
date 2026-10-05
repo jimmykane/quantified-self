@@ -161,8 +161,8 @@ export class CalendarDayContextComponent {
     route: event.getID?.() && this.data().userId
       ? ['/user', this.data().userId, 'event', event.getID()] : null,
   })));
-  readonly trainingImpactByEventId = computed(() => new Map(
-    this.activities().map(activity => [activity.id, activity.trainingImpact]),
+  readonly activitiesByStoryKey = computed(() => new Map(
+    this.activities().map((activity, index) => [`activity:${activity.id || index}`, activity]),
   ));
   readonly activityGroups = computed(() => buildActivityCalendarFamilyVolumeRows(
     this.activitySummary(),

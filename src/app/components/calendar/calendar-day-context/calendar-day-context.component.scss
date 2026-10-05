@@ -73,7 +73,11 @@
 .calendar-day-context-preview-copy { min-width: 0; overflow-wrap: anywhere; }
 .calendar-day-context-preview-title { @include day.entry-title; }
 .calendar-day-context-preview-copy small { @include day.supporting-text; }
-.calendar-day-context-preview-copy app-training-impact { display: block; max-width: 100%; }
+.calendar-day-context-preview-copy app-training-impact {
+  display: block;
+  max-width: 100%;
+  --training-impact-compact-white-space: normal;
+}
 .calendar-day-context-preview-note-button {
   @include mat.button-overrides((
     text-container-height: auto,
@@ -109,6 +113,9 @@
 .calendar-day-context-timeline .calendar-day-context-section-header > div { min-width: 0; }
 .calendar-day-timeline-list { list-style: none; margin: 14px 0 0; padding: 0; }
 .calendar-day-timeline-item { display: grid; grid-template-columns: minmax(76px, 100px) 24px minmax(0, 1fr) auto; align-items: start; gap: 10px; min-width: 0; padding: 10px 0; border-top: 1px solid var(--mat-sys-outline-variant); }
+.calendar-day-timeline-item--activity { grid-template-columns: minmax(76px, 100px) minmax(0, 1fr); }
+.calendar-day-timeline-activity { min-width: 0; }
+.calendar-day-timeline-item--activity .calendar-day-timeline-time { min-height: 28px; }
 .calendar-day-timeline-time { display: flex; min-height: 44px; align-items: center; color: var(--mat-sys-on-surface-variant); font: var(--mat-sys-label-small); }
 .calendar-day-timeline-icon { display: flex; width: 24px; height: 44px; align-items: center; justify-content: center; margin: 0; color: var(--mat-sys-primary); font-size: 20px; line-height: 20px; }
 .calendar-day-timeline-content { min-width: 0; }
@@ -124,6 +131,7 @@
   .calendar-day-context-health--full .calendar-day-context-metrics { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .calendar-day-context-health--full .calendar-day-context-metrics > :last-child:nth-child(odd) { grid-column: 1 / -1; }
   .calendar-day-timeline-item { grid-template-columns: minmax(54px, 68px) 20px minmax(0, 1fr) auto; gap: 6px; }
+  .calendar-day-timeline-item--activity { grid-template-columns: minmax(54px, 68px) minmax(0, 1fr); }
   .calendar-day-timeline-icon { width: 20px; }
 }
 

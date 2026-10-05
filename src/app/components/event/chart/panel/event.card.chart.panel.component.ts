@@ -60,6 +60,7 @@ import {
   EventPanelRangeStat,
 } from '../../../../helpers/event-echarts-range-stats.helper';
 import { buildEventEChartsVisualTokens } from '../../../../helpers/event-echarts-common.helper';
+import { deviceChartLineType, resolveDeviceChartColor } from '../../../../helpers/device-chart-appearance.helper';
 import { ECHARTS_GLOBAL_FONT_FAMILY, resolveEChartsThemeName } from '../../../../helpers/echarts-theme.helper';
 import { DynamicDataLoader } from '@sports-alliance/sports-lib';
 import type { EventChartOverlayOption } from '../../../../helpers/event-chart-overlay.helper';
@@ -105,6 +106,8 @@ type PanelSeriesLegendItem = {
   key: string;
   label: string;
   color: string;
+  lineStyle?: EventChartPanelSeries['lineStyle'];
+  lineWidth?: number;
 };
 type GradeLegendItem = {
   key: string;
@@ -397,9 +400,11 @@ export class EventCardChartPanelComponent implements AfterViewInit, OnChanges, O
       return [];
     }
 
+    const primaryStrokeWidth = this.resolveSeriesStrokeWidth();
     const legendItems = this.buildSeriesLegendItems(this.panel, {
       scope: 'primary',
       includeMetricName: false,
+      lineWidth: primaryStrokeWidth,
     });
     const overlayPanel = this.getActiveOverlayPanel();
     if (!overlayPanel) {
@@ -409,6 +414,7 @@ export class EventCardChartPanelComponent implements AfterViewInit, OnChanges, O
     return legendItems.concat(this.buildSeriesLegendItems(overlayPanel, {
       scope: 'overlay',
       includeMetricName: true,
+      lineWidth: this.resolveOverlayStrokeWidth(primaryStrokeWidth),
     }));
   }
 
@@ -442,6 +448,7 @@ export class EventCardChartPanelComponent implements AfterViewInit, OnChanges, O
     options: {
       scope: string;
       includeMetricName: boolean;
+      lineWidth: number;
     }
   ): PanelSeriesLegendItem[] {
     const legendItems: PanelSeriesLegendItem[] = [];
@@ -463,6 +470,8 @@ export class EventCardChartPanelComponent implements AfterViewInit, OnChanges, O
           ? `${metricLabel} · ${activityLabel}`
           : activityLabel,
         color: series.color,
+        lineStyle: series.lineStyle,
+        lineWidth: options.lineWidth,
       });
     }
     return legendItems;
@@ -823,10 +832,7 @@ export class EventCardChartPanelComponent implements AfterViewInit, OnChanges, O
         visibleRange,
       })
       : null;
-    const resolvedStrokeWidth = Number(this.strokeWidth);
-    const seriesStrokeWidth = Number.isFinite(resolvedStrokeWidth) && resolvedStrokeWidth > 0
-      ? resolvedStrokeWidth
-      : AppUserUtilities.getDefaultChartStrokeWidth();
+    const seriesStrokeWidth = this.resolveSeriesStrokeWidth();
     const resolvedFillOpacity = Number(this.fillOpacity);
     const seriesFillOpacity = Number.isFinite(resolvedFillOpacity)
       ? Math.min(1, Math.max(0, resolvedFillOpacity))
@@ -868,6 +874,7 @@ export class EventCardChartPanelComponent implements AfterViewInit, OnChanges, O
         animation: this.useAnimations === true,
         lineStyle: {
           width: seriesStrokeWidth,
+          type: deviceChartLineType(series.lineStyle),
           ...(!useZoneColors ? { color: series.color } : {}),
         },
         ...(!useZoneColors ? {
@@ -1104,12 +1111,23 @@ export class EventCardChartPanelComponent implements AfterViewInit, OnChanges, O
     };
   }
 
+  private resolveSeriesStrokeWidth(): number {
+    const resolvedStrokeWidth = Number(this.strokeWidth);
+    return Number.isFinite(resolvedStrokeWidth) && resolvedStrokeWidth > 0
+      ? resolvedStrokeWidth
+      : AppUserUtilities.getDefaultChartStrokeWidth();
+  }
+
+  private resolveOverlayStrokeWidth(primaryStrokeWidth: number): number {
+    return Math.max(1, primaryStrokeWidth - 0.5);
+  }
+
   private buildOverlaySeriesOptions(
     overlayPanel: EventChartPanelModel,
     primaryStrokeWidth: number,
     yAxisIndex = 1
   ): ChartLineSeriesOption[] {
-    const overlayStrokeWidth = Math.max(1, primaryStrokeWidth - 0.5);
+    const overlayStrokeWidth = this.resolveOverlayStrokeWidth(primaryStrokeWidth);
     return overlayPanel.series.map((series) => ({
       id: `overlay::${series.id}`,
       name: series.activityName,
@@ -1125,12 +1143,13 @@ export class EventCardChartPanelComponent implements AfterViewInit, OnChanges, O
       animation: this.useAnimations === true,
       lineStyle: {
         width: overlayStrokeWidth,
+        type: deviceChartLineType(series.lineStyle),
         color: series.color,
-        opacity: OVERLAY_LINE_OPACITY,
+        opacity: series.lineStyle ? 1 : OVERLAY_LINE_OPACITY,
       },
       itemStyle: {
         color: series.color,
-        opacity: OVERLAY_LINE_OPACITY,
+        opacity: series.lineStyle ? 1 : OVERLAY_LINE_OPACITY,
       },
       emphasis: {
         disabled: true,
@@ -1171,6 +1190,7 @@ export class EventCardChartPanelComponent implements AfterViewInit, OnChanges, O
         animation: this.useAnimations === true,
         lineStyle: {
           width: strokeWidth,
+          type: deviceChartLineType(series.lineStyle),
           color: group.color,
         },
         itemStyle: {
@@ -1355,9 +1375,10 @@ export class EventCardChartPanelComponent implements AfterViewInit, OnChanges, O
   }
 
   private buildMarkerLineStyle(marker: EventChartTimelineMarker): Record<string, unknown> {
+    const color = resolveDeviceChartColor(marker.color, this.darkTheme);
     if (marker.markerType === 'swimLength') {
       return {
-        color: marker.color,
+        color,
         type: marker.isIdle ? 'dotted' : 'solid',
         width: 1,
         opacity: marker.isIdle ? 0.24 : 0.38,
@@ -1365,7 +1386,7 @@ export class EventCardChartPanelComponent implements AfterViewInit, OnChanges, O
     }
 
     return {
-      color: marker.color,
+      color,
       type: 'dashed',
       width: 1,
       opacity: 0.45,

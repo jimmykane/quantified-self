@@ -9,7 +9,7 @@ import { MatDatepickerInput } from '@angular/material/datepicker';
 import { MatSelect } from '@angular/material/select';
 import { MatFormField } from '@angular/material/form-field';
 import { ActivatedRoute, Router, convertToParamMap, provideRouter, type Data, type ParamMap } from '@angular/router';
-import { ActivityTypes, DistanceUnits, PaceUnits, WeightUnits } from '@sports-alliance/sports-lib';
+import { ActivityTypes, DistanceUnits, PaceUnits, SwimPaceUnits, WeightUnits } from '@sports-alliance/sports-lib';
 import { normalizeUserUnitSettings } from '@shared/unit-aware-display';
 import { projectStrengthWorkoutToV1 } from '@shared/strength-workout';
 import type { ScheduledWorkoutV1 } from '@shared/training-plans';
@@ -152,6 +152,155 @@ describe('PlansWorkspaceComponent', () => {
 
   afterEach(() => vi.useRealTimers());
 
+  it.each(['plans', 'standalone', 'library'] as const)('saves hours/minutes/seconds and colon pace through real inputs in %s', async scope => {
+    libraryMutate.mockResolvedValue({ mutationId: 'mutation-1', item: null });
+    setRouteState({ mode: scope === 'library' ? 'library-create' : 'create',
+      scope: scope === 'standalone' ? 'standalone' : 'plans', date: '2026-09-09' });
+    const fixture = await renderPlans();
+    const component = fixture.componentInstance;
+    component.updateEditorField('title', 'QA interval timing');
+    component.addEditorRepeat();
+    component.updateStep(0, null, 'targetKind', 'pace');
+    fixture.detectChanges(); await fixture.whenStable(); fixture.detectChanges();
+    const type = async (input: HTMLInputElement, value: string) => {
+      input.value = value; input.dispatchEvent(new Event('input', { bubbles: true }));
+      fixture.detectChanges(); await fixture.whenStable(); fixture.detectChanges();
+    };
+    const durationGroups: HTMLElement[] = [...fixture.nativeElement.querySelectorAll('.duration-fields')];
+    for (const [index, parts] of [[0, ['1', '2', '3']], [1, ['0', '1', '15']], [2, ['0', '1', '30']]] as const) {
+      for (const [partIndex, part] of ['hours', 'minutes', 'seconds'].entries()) {
+        await type(durationGroups[index].querySelector(`[data-duration-part="${part}"]`)!, parts[partIndex]);
+      }
+    }
+    const paceInputs: HTMLInputElement[] = [...fixture.nativeElement.querySelectorAll('app-workout-time-input input[type="text"]')];
+    await type(paceInputs[0], '4:30'); await type(paceInputs[1], '5:00');
+    expect(haptics.selection).toHaveBeenCalledOnce(); // Target selection, never typing.
+    const firstNode = component.editor()!.value.nodes[0];
+    expect(firstNode).toMatchObject({ endingValue: 62.05, targetMinimum: 4.5, targetMaximum: 5 });
+    await component.saveWorkout();
+    const operation = (scope === 'library' ? libraryMutate : mutate).mock.calls[0][0].operation;
+    expect(operation.structure.nodes[0]).toMatchObject({ ending: { kind: 'time', seconds: 3723 },
+      targets: [{ kind: 'speed', mode: 'absolute', presentation: 'pace',
+        minimumMetersPerSecond: 1000 / 300, maximumMetersPerSecond: 1000 / 270 }] });
+    expect(operation.structure.nodes[1]).toMatchObject({ kind: 'repeat', count: 4,
+      steps: [{ ending: { kind: 'time', seconds: 75 } }, { ending: { kind: 'time', seconds: 90 } }] });
+    expect(JSON.stringify(operation.structure)).not.toMatch(/sourceDuration|sourcePace|hours|endingValue/);
+    if (scope === 'library') expect(mutate).not.toHaveBeenCalled();
+  });
+
+  it('reopens and resaves exact timed prescriptions without numeric-input rounding', async () => {
+    schedule.workouts[0].structure.nodes = [{ kind: 'step', id: 'precise-time', purpose: 'work',
+      ending: { kind: 'time', seconds: 123.456789012345 }, targets: [] }];
+    setRouteState({ mode: 'edit', workoutId: 'plan-workout' });
+    const fixture = await renderPlans();
+    expect(fixture.nativeElement.querySelector('[data-duration-part="minutes"]').value).toBe('2');
+    expect(Number(fixture.nativeElement.querySelector('[data-duration-part="seconds"]').value)).toBeCloseTo(3.456789012345, 9);
+    const hours: HTMLInputElement = fixture.nativeElement.querySelector('[data-duration-part="hours"]');
+    hours.dispatchEvent(new Event('input', { bubbles: true }));
+    fixture.detectChanges(); await fixture.whenStable(); fixture.detectChanges();
+    await fixture.componentInstance.saveWorkout();
+    expect(mutate.mock.calls[0][0].operation.structure).toEqual(schedule.workouts[0].structure);
+  });
+
+  it.each([31, 62, 123, 500, 0.123456789012345])('saves exactly %s authored seconds for ordinary and repeat steps', async seconds => {
+    setRouteState({ mode: 'create', scope: 'standalone', date: '2026-09-09' });
+    const fixture = await renderPlans();
+    const component = fixture.componentInstance;
+    component.updateEditorField('title', 'Exact seconds');
+    component.addEditorRepeat();
+    fixture.detectChanges(); await fixture.whenStable(); fixture.detectChanges();
+    const groups: HTMLElement[] = [...fixture.nativeElement.querySelectorAll('.duration-fields')];
+    for (const group of [groups[0], groups[1]]) {
+      for (const [part, value] of [['minutes', Math.floor(seconds / 60)], ['seconds', seconds % 60]]) {
+        const input = group.querySelector(`[data-duration-part="${part}"]`) as HTMLInputElement;
+        input.value = String(value); input.dispatchEvent(new Event('input', { bubbles: true }));
+        fixture.detectChanges(); await fixture.whenStable(); fixture.detectChanges();
+      }
+    }
+    await component.saveWorkout();
+    const nodes = mutate.mock.calls[0][0].operation.structure.nodes;
+    expect(nodes[0].ending.seconds).toBe(seconds);
+    expect(nodes[1].steps[0].ending.seconds).toBe(seconds);
+  });
+
+  it.each([
+    { sport: ActivityTypes.Running, units: normalizeUserUnitSettings({ paceUnits: [PaceUnits.MinutesPerMile] }), meters: 1609.344, label: 'min/mi' },
+    { sport: ActivityTypes.Swimming, units: normalizeUserUnitSettings({}), meters: 100, label: 'min/100m' },
+    { sport: ActivityTypes.OpenWaterSwimming, units: normalizeUserUnitSettings({ swimPaceUnits: [SwimPaceUnits.MinutesPer100Yard] }), meters: 91.44, label: 'min/100yd' },
+    { sport: ActivityTypes.Rowing, units: normalizeUserUnitSettings({}), meters: 500, label: 'min/500m' },
+    { sport: ActivityTypes.IndoorRowing, units: normalizeUserUnitSettings({}), meters: 500, label: 'min/500m' },
+  ])('saves colon pace in the $sport editor using $label', async ({ sport, units, meters, label }) => {
+    const unitUser = { ...user, settings: { unitSettings: units } };
+    TestBed.overrideProvider(AppUserService, { useValue: { user: signal(unitUser), user$: of(unitUser) } });
+    setRouteState({ mode: 'create', scope: 'standalone', date: '2026-09-09' });
+    const fixture = await renderPlans();
+    const component = fixture.componentInstance;
+    component.updateEditorField('title', 'Pace input units');
+    component.updateEditorField('sport', sport);
+    component.updateStep(0, null, 'targetKind', 'pace');
+    fixture.detectChanges(); await fixture.whenStable(); fixture.detectChanges();
+    const inputs: HTMLInputElement[] = [...fixture.nativeElement.querySelectorAll('app-workout-time-input input[type="text"]')];
+    expect(inputs[0].getAttribute('aria-label')).toBe('Faster ' + label);
+    for (const [index, pace] of ['1:30', '2:00'].entries()) {
+      inputs[index].value = pace;
+      inputs[index].dispatchEvent(new Event('input', { bubbles: true }));
+      fixture.detectChanges(); await fixture.whenStable(); fixture.detectChanges();
+    }
+    await component.saveWorkout();
+    expect(mutate.mock.calls[0][0].operation.structure.nodes[0].targets).toEqual([
+      expect.objectContaining({ minimumMetersPerSecond: meters / 120, maximumMetersPerSecond: meters / 90 }),
+    ]);
+  });
+
+  it('never saves invalid or cleared time and pace input', async () => {
+    setRouteState({ mode: 'create', scope: 'standalone', date: '2026-09-09' });
+    const fixture = await renderPlans();
+    const component = fixture.componentInstance;
+    component.updateEditorField('title', 'Invalid timing');
+    const input: HTMLInputElement = fixture.nativeElement.querySelector('[data-duration-part="seconds"]');
+    input.value = '60'; input.dispatchEvent(new Event('input', { bubbles: true }));
+    fixture.detectChanges(); await fixture.whenStable(); fixture.detectChanges();
+    await component.saveWorkout();
+    expect(mutate).not.toHaveBeenCalled();
+    expect(fixture.nativeElement.querySelector('[role="alert"]').textContent).toContain('below 60');
+    component.updateStep(0, null, 'endingValue', 1.25);
+    component.updateStep(0, null, 'targetKind', 'pace');
+    fixture.detectChanges(); await fixture.whenStable(); fixture.detectChanges();
+    const pace: HTMLInputElement = fixture.nativeElement.querySelector('app-workout-time-input input[type="text"]');
+    pace.value = '4:'; pace.dispatchEvent(new Event('input', { bubbles: true }));
+    fixture.detectChanges(); await fixture.whenStable(); fixture.detectChanges();
+    await component.saveWorkout();
+    expect(mutate).not.toHaveBeenCalled();
+  });
+
+  it('exports the real timing editor for optional isolated visual QA', async () => {
+    if (!process.env.TRAINING_DELIVERY_QA_DIR) return;
+    setRouteState({ mode: 'create', scope: 'standalone', date: '2026-09-09' });
+    const fixture = await renderPlans();
+    const component = fixture.componentInstance;
+    component.updateEditorField('title', 'Controlled long run and pace changes');
+    component.updateStep(0, null, 'endingValue', 62.05);
+    component.updateStep(0, null, 'targetKind', 'pace');
+    component.updateStep(0, null, 'targetMinimum', 4.5); component.updateStep(0, null, 'targetMaximum', 5);
+    component.addEditorRepeat();
+    component.updateStep(1, 0, 'endingValue', 1.25); component.updateStep(1, 1, 'endingValue', 1.5);
+    fixture.detectChanges(); await fixture.whenStable(); fixture.detectChanges();
+    const sass = createRequire(createRequire(import.meta.url).resolve('@angular/build/package.json'))('sass');
+    const css = [
+      ['app-plans-workspace', 'src/app/components/plans/plans-workspace.component.scss'],
+      ['app-compact-row', 'src/app/components/shared/compact-row/compact-row.component.scss'],
+      ['app-workout-time-input', 'src/app/components/plans/workout-time-input.component.scss'],
+    ].map(([host, file]) => sass.compileString(host + ' {' + readFileSync(file, 'utf8')
+      .replace(/:host\(([^)]+)\)/g, '&$1').replace(/:host/g, '&') + '}').css).join('\n');
+    const markup = fixture.nativeElement.cloneNode(true) as HTMLElement;
+    const inputs: HTMLInputElement[] = [...fixture.nativeElement.querySelectorAll('input')];
+    markup.querySelectorAll('input').forEach((input, index) => input.setAttribute('value', inputs[index].value));
+    writeFileSync(join(process.env.TRAINING_DELIVERY_QA_DIR, 'timing-editor.html'),
+      '<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">'
+      + '<link rel="stylesheet" href="styles.css">' + Array.from(document.head.querySelectorAll('style')).map(style => style.outerHTML).join('')
+      + '<style>' + css + '</style></head><body><app-plans-workspace>' + markup.outerHTML + '</app-plans-workspace></body></html>');
+  });
+
   function setRouteState(options: {
     mode?: 'browse' | 'create' | 'edit' | 'library-browse' | 'library-create' | 'library-edit';
     scope?: 'plans' | 'standalone';
@@ -176,6 +325,20 @@ describe('PlansWorkspaceComponent', () => {
       routeDataChanges$.next(route.snapshot.data);
     }
   }
+
+  it('places Sync beside the Plans title and removes the Main Calendar header action', async () => {
+    TestBed.overrideProvider(TrainingDeliveryService, { useValue: { anyReady: () => false,
+      watchPresence: () => of(true), isSetupAvailable: () => false,
+      watchSummaryScope: () => of({ settings: [], statuses: [] }) } });
+    const fixture = await renderPlans();
+    const header: HTMLElement = fixture.nativeElement.querySelector('app-page-header');
+    const button = header.querySelector('.qs-page-header__title-row app-training-delivery-button button');
+    expect(button?.getAttribute('aria-label')).toBe('Workout sync history');
+    expect(button?.textContent?.trim()).toBe('syncSync');
+    expect(header.textContent).not.toContain('Main Calendar');
+    expect(header.querySelector('.qs-page-header__actions')?.textContent?.trim()).toBe('');
+    expect(haptics.selection).not.toHaveBeenCalled();
+  });
 
   it('has one contextual add action without overview or duplicate plan headings', async () => {
     const fixture = await renderPlans();
@@ -1226,6 +1389,156 @@ describe('PlansWorkspaceComponent', () => {
       },
       { label: 'Strength', options: [{ value: ActivityTypes.StrengthTraining, label: 'Strength Training' }] },
     ]);
+  });
+
+  it.each(['plans', 'standalone'] as const)('creates a lap-ended workout in %s through the Material selector', async scope => {
+    setRouteState({ mode: 'create', scope, date: '2026-09-09' });
+    const fixture = await renderPlans();
+    const component = fixture.componentInstance;
+    component.updateEditorField('title', 'Warm up until ready');
+    component.updateStep(0, null, 'purpose', 'warmup');
+    haptics.selection.mockClear();
+    const endingSelect = fixture.debugElement.queryAll(By.directive(MatSelect))
+      .find(element => element.componentInstance.value === 'time')!;
+    endingSelect.componentInstance.open();
+    fixture.detectChanges();
+    await fixture.whenStable();
+    expect(endingSelect.componentInstance.options.map((option: { value: string }) => option.value))
+      .toEqual(['time', 'distance', 'manual']);
+    [...document.querySelectorAll<HTMLElement>('mat-option')]
+      .find(option => option.textContent?.includes('Lap button press'))!.click();
+    fixture.detectChanges();
+    await fixture.whenStable();
+    expect(component.editor()?.value.nodes[0]).toMatchObject({ purpose: 'warmup', endingKind: 'manual' });
+    expect(fixture.nativeElement.querySelector('.step-fields input[type="number"]')).toBeNull();
+    const hint: HTMLElement = fixture.nativeElement.querySelector('.step-fields mat-hint');
+    expect(hint.textContent).toContain('without a time or distance limit');
+    expect(hint.textContent).toContain('Wahoo delivery is unsupported');
+    expect(endingSelect.nativeElement.getAttribute('aria-describedby')?.split(' ')).toContain(hint.id);
+    expect(haptics.selection).toHaveBeenCalledOnce();
+    component.updateStep(0, null, 'endingKind', 'manual');
+    expect(haptics.selection).toHaveBeenCalledOnce();
+    const stepId = component.editor()!.value.nodes[0].id;
+    await component.saveWorkout();
+    expect(mutate).toHaveBeenCalledWith(expect.objectContaining({
+      operation: expect.objectContaining({ kind: 'create-workout', planId: scope === 'plans' ? 'active-plan' : null,
+        structure: { version: 1, sport: ActivityTypes.Running, nodes: [{ kind: 'step', id: stepId,
+          purpose: 'warmup', ending: { kind: 'manual' }, targets: [] }] } }),
+    }));
+  });
+
+  it('reopens lap-ended steps with targets and restores numeric inputs when switching endings', async () => {
+    schedule.workouts[0].structure = { version: 1, sport: ActivityTypes.Running,
+      nodes: [{ kind: 'step', id: 'lap-warmup', purpose: 'warmup', ending: { kind: 'manual' },
+        targets: [{ kind: 'heart-rate', mode: 'absolute', minimumBpm: 120, maximumBpm: 140 }],
+        note: 'Press lap when ready' }] };
+    setRouteState({ mode: 'edit', workoutId: 'plan-workout' });
+    const fixture = await renderPlans();
+    const component = fixture.componentInstance;
+    expect(snackBarOpen).not.toHaveBeenCalled();
+    expect(haptics.selection).not.toHaveBeenCalled();
+    expect(fixture.nativeElement.querySelectorAll('.step-fields input[type="number"]')).toHaveLength(2);
+    for (const endingKind of ['time', 'distance'] as const) {
+      component.updateStep(0, null, 'endingKind', endingKind);
+      fixture.detectChanges();
+      expect(fixture.nativeElement.querySelectorAll('.step-fields input[type="number"]')).toHaveLength(endingKind === 'time' ? 5 : 3);
+      expect(fixture.nativeElement.querySelector('.step-fields mat-hint')).toBeNull();
+    }
+    component.updateStep(0, null, 'endingKind', 'manual');
+    component.updateEditorField('title', 'Edited lap warmup');
+    await component.saveWorkout();
+    expect(mutate).toHaveBeenCalledWith(expect.objectContaining({
+      operation: expect.objectContaining({ kind: 'update-workout', workoutId: 'plan-workout',
+        structure: schedule.workouts[0].structure }),
+    }));
+  });
+
+  it('keeps lap endings when copying an edited scheduled recipe to the library', async () => {
+    libraryMutate.mockResolvedValue({ mutationId: 'mutation-1', item: null });
+    setRouteState({ mode: 'edit', workoutId: 'plan-workout' });
+    const fixture = await renderPlans();
+    fixture.componentInstance.updateStep(0, null, 'endingKind', 'manual');
+    await fixture.componentInstance.saveEditorCopyToLibrary();
+    expect(libraryMutate).toHaveBeenCalledWith(expect.objectContaining({
+      operation: expect.objectContaining({ kind: 'create', structure: expect.objectContaining({
+        nodes: [expect.objectContaining({ id: 'steady', ending: { kind: 'manual' } })],
+      }) }),
+    }));
+    expect(mutate).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    [false, ActivityTypes.Running], [true, ActivityTypes.Running],
+    [false, ActivityTypes.Swimming], [true, ActivityTypes.Swimming],
+  ] as const)('preserves exact distance through lap toggles for repeat=%s and sport=%s', async (repeat, sport) => {
+    const imperialUser = { ...user, settings: { unitSettings: { distanceUnits: DistanceUnits.Miles } } };
+    TestBed.overrideProvider(AppUserService, { useValue: { user: signal(imperialUser), user$: of(imperialUser) } });
+    const step = { kind: 'step' as const, id: 'distance', purpose: 'work' as const,
+      ending: { kind: 'distance' as const, meters: 1000 }, targets: [] };
+    schedule.workouts[0].structure = { version: 1, sport: ActivityTypes.Running,
+      nodes: repeat ? [{ kind: 'repeat', id: 'repeats', count: 2, steps: [step] }] : [step] };
+    setRouteState({ mode: 'edit', workoutId: 'plan-workout' });
+    const fixture = await renderPlans();
+    const component = fixture.componentInstance;
+    component.updateStep(0, repeat ? 0 : null, 'endingKind', 'manual');
+    component.updateEditorField('sport', sport);
+    component.updateStep(0, repeat ? 0 : null, 'endingKind', 'distance');
+    await component.saveWorkout();
+    expect(mutate).toHaveBeenCalledWith(expect.objectContaining({
+      operation: expect.objectContaining({ kind: 'update-workout',
+        structure: { ...schedule.workouts[0].structure, sport } }),
+    }));
+  });
+
+  it.each([
+    [false, 'edit'], [true, 'edit'], [false, 'time'], [true, 'time'],
+  ] as const)('discards a previous distance after %s repeat / %s changes', async (repeat, change) => {
+    const imperialUser = { ...user, settings: { unitSettings: { distanceUnits: DistanceUnits.Miles } } };
+    TestBed.overrideProvider(AppUserService, { useValue: { user: signal(imperialUser), user$: of(imperialUser) } });
+    const step = { kind: 'step' as const, id: 'distance', purpose: 'work' as const,
+      ending: { kind: 'distance' as const, meters: 1000 }, targets: [] };
+    schedule.workouts[0].structure = { version: 1, sport: ActivityTypes.Running,
+      nodes: repeat ? [{ kind: 'repeat', id: 'repeats', count: 2, steps: [step] }] : [step] };
+    setRouteState({ mode: 'edit', workoutId: 'plan-workout' });
+    const fixture = await renderPlans();
+    const component = fixture.componentInstance;
+    const child = repeat ? 0 : null;
+    component.updateStep(0, child, 'endingKind', 'manual');
+    component.updateStep(0, child, 'endingKind', change === 'time' ? 'time' : 'distance');
+    component.updateStep(0, child, 'endingValue', 1);
+    component.updateStep(0, child, 'endingKind', 'distance');
+    await component.saveWorkout();
+    const savedStep = { ...step, ending: { kind: 'distance', meters: 1609.344 } };
+    expect(mutate).toHaveBeenCalledWith(expect.objectContaining({
+      operation: expect.objectContaining({ structure: { version: 1, sport: ActivityTypes.Running,
+        nodes: repeat ? [{ kind: 'repeat', id: 'repeats', count: 2, steps: [savedStep] }] : [savedStep] } }),
+    }));
+  });
+
+  it('creates a library recipe with lap-ended repeat children through the shared step controls', async () => {
+    libraryMutate.mockResolvedValue({ mutationId: 'mutation-1', item: null });
+    setRouteState({ mode: 'library-create' });
+    const fixture = await renderPlans();
+    const component = fixture.componentInstance;
+    component.updateEditorField('title', 'Lap repeats');
+    component.addEditorRepeat();
+    component.updateStep(1, 1, 'endingKind', 'manual');
+    fixture.detectChanges();
+    expect(fixture.nativeElement.querySelectorAll('.step-fields mat-hint')).toHaveLength(1);
+    expect(component.editor()?.value.nodes[1]).toMatchObject({ kind: 'repeat', steps: [
+      expect.objectContaining({ endingKind: 'time' }), expect.objectContaining({ endingKind: 'manual' }),
+    ] });
+    await component.saveWorkout();
+    expect(libraryMutate).toHaveBeenCalledWith(expect.objectContaining({
+      operation: expect.objectContaining({ kind: 'create', structure: expect.objectContaining({ nodes: [
+        expect.objectContaining({ ending: { kind: 'time', seconds: 600 } }),
+        expect.objectContaining({ kind: 'repeat', steps: [
+          expect.objectContaining({ ending: { kind: 'time', seconds: 600 } }),
+          expect.objectContaining({ purpose: 'recovery', ending: { kind: 'manual' } }),
+        ] }),
+      ] }) }),
+    }));
+    expect(mutate).not.toHaveBeenCalled();
   });
 
   it('creates an exercise-aware strength workout with reps, hold, load and rest', async () => {

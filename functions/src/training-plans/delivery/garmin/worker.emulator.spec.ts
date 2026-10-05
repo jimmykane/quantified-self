@@ -1,11 +1,11 @@
 import { randomUUID } from 'node:crypto';
-import { Firestore } from 'firebase-admin/firestore';
+import { FieldValue, Firestore } from 'firebase-admin/firestore';
 import { ActivityTypes } from '@sports-alliance/sports-lib';
 import { GARMIN_GENERIC_WORKOUT_SPORTS_V1 } from '../../../../../shared/planned-workout-providers';
 import { projectStrengthWorkoutToV1, type StrengthWorkoutDraftV1 } from '../../../../../shared/strength-workout';
 import { afterAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { ScheduledWorkoutV1 } from '../../../../../shared/training-plans';
-import type { TrainingDeliveryCommandV1, TrainingDeliveryPreviewV1 } from '../../../../../shared/training-provider-delivery';
+import { GARMIN_WORKOUT_NOT_FOUND_ISSUE, GARMIN_WORKOUT_WITH_CALENDAR_NOT_FOUND_ISSUE, type TrainingDeliveryCommandV1, type TrainingDeliveryPreviewV1 } from '../../../../../shared/training-provider-delivery';
 import { DELIVERY_LEDGER, DELIVERY_QUEUE, type DeliveryLedgerV1, type DeliveryOperation, type DeliveryRuntime } from '../contracts';
 import { trainingDeliveryCommand } from '../commands';
 import { stageTrainingDeliveryDisconnect, stageTrainingDeliveryReconciliation } from '../marker';
@@ -51,7 +51,7 @@ describe.skipIf(!process.env.FIRESTORE_EMULATOR_HOST)('Garmin delivery / real Fi
       user().collection('trainingDeliverySettings').doc('workout_w_garmin').get(),
     ]);
     return trainingDeliveryCommand(runtime, uid, { schemaVersion: 1, mutationId: randomUUID(), scope: 'workout', scopeId: 'w',
-      provider: 'garmin', action, timeZone: 'Europe/Helsinki', expectedScheduleRevision: state.data()!.revision,
+      provider: 'garmin', action, ...(action !== 'replace' && action !== 'check' ? { timeZone: 'Europe/Helsinki' } : {}), expectedScheduleRevision: state.data()!.revision,
       expectedScopeRevision: workout.data()!.revision, expectedSettingsRevision: settings.data()?.revision ?? 0,
       ...(approvalDigest ? { approvalDigest } : {}) }, previewOnly);
   };
@@ -312,7 +312,7 @@ describe.skipIf(!process.env.FIRESTORE_EMULATOR_HOST)('Garmin delivery / real Fi
   });
 
   it.each(['workout-only', 'connect-cascade'] as const)(
-    'keeps a %s Garmin Workout deletion inconclusive under the production policy', async deletion => {
+    'keeps %s Workout absence non-authoritative but visibly needing review under the production policy', async deletion => {
       const id = await send(); await processTrainingDelivery(runtime, uid, id); await drain();
       const original = (await ledger()).actual!;
       server.workouts.delete(original.ids.workout);
@@ -321,8 +321,231 @@ describe.skipIf(!process.env.FIRESTORE_EMULATOR_HOST)('Garmin delivery / real Fi
       await processTrainingVerification(runtime, uid, id);
       expect((await ledger()).verification).toMatchObject({ state: 'unknown', missing: false, missingKeys: [] });
       expect((await ledger()).repair).toBeFalsy();
+      expect((await ledger()).status).toBe('needs_attention');
+      expect((await ledger()).issues).toContain(deletion === 'connect-cascade' ? GARMIN_WORKOUT_NOT_FOUND_ISSUE : GARMIN_WORKOUT_WITH_CALENDAR_NOT_FOUND_ISSUE);
       expect(server.calls.filter(request => request.method === 'POST' && request.path.includes('workout'))).toHaveLength(1);
       expect(server.calls.filter(request => request.method === 'POST' && request.path === '/training-api/schedule/')).toHaveLength(1);
+    });
+
+  const missingGarminCopy = async (cascade = true, existingId?: string) => {
+    const id = existingId ?? await send(); await processTrainingDelivery(runtime, uid, id); await drain();
+    const original = (await ledger()).actual!;
+    const savedWorkout = structuredClone(server.workouts.get(original.ids.workout)!);
+    const savedSchedule = structuredClone(server.schedules.get(original.ids.schedule)!);
+    server.workouts.delete(original.ids.workout);
+    if (cascade) server.schedules.delete(original.ids.schedule);
+    await processTrainingVerification(runtime, uid, id);
+    return { id, original, savedWorkout, savedSchedule };
+  };
+  const requestReplacement = async () => {
+    const preview = await command('replace', undefined, true) as TrainingDeliveryPreviewV1;
+    expect(preview.effect).toBe('replace'); expect(preview.approvalDigest).toMatch(/^[a-f0-9]{64}$/);
+    await command('replace', preview.approvalDigest!); await drain();
+  };
+  it('replaces only after explicit review, preserving old IDs', async () => {
+    const { id, original } = await missingGarminCopy();
+    await command('retry'); await drain(); await processTrainingDelivery(runtime, uid, id);
+    expect(server.calls.filter(call => call.method === 'POST' && call.path.includes('workout'))).toHaveLength(1);
+    await command('check'); await drain(); await processTrainingVerification(runtime, uid, id);
+    await expect(command('replace')).rejects.toMatchObject({ code: 'aborted' });
+    await requestReplacement();
+    await Promise.all([processTrainingDelivery(runtime, uid, id), processTrainingDelivery(runtime, uid, id)]);
+    await drain();
+    const result = await ledger();
+    expect(result.status).toBe('delivered'); expect(result.actual!.ids.workout).not.toBe(original.ids.workout);
+    expect(server.workouts.size).toBe(1); expect(server.schedules.size).toBe(1);
+    expect(server.calls.filter(call => call.method === 'POST' && call.path.includes('workout'))).toHaveLength(2);
+    const attempts = await user().collection(DELIVERY_LEDGER).doc(id).collection('attempts').get();
+    expect(attempts.docs.some(doc => doc.get('operation.repair.original.ids.workout') === original.ids.workout)).toBe(true);
+    const statuses = await user().collection('trainingDeliveryStatuses').get();
+    expect(statuses.docs[0].data()).toMatchObject({ status: 'delivered', differsFromQS: false });
+  });
+  it('retires an unstarted edit against a missing retained pair so Check and explicit replacement remain usable', async () => {
+    const id = await send(); await processTrainingDelivery(runtime, uid, id); await drain();
+    const original = (await ledger()).actual!;
+    server.workouts.delete(original.ids.workout); server.schedules.delete(original.ids.schedule);
+    await edit(); await processTrainingDelivery(runtime, uid, id);
+    expect((await ledger()).status).toBe('needs_attention');
+    expect((await ledger()).attempt).toBeNull();
+    expect((await db.collection(DELIVERY_QUEUE).doc(id).get()).get('kind')).toBe('verification');
+    await processTrainingVerification(runtime, uid, id);
+    await requestReplacement(); await processTrainingDelivery(runtime, uid, id); await drain();
+    const result = await ledger();
+    expect(result.status).toBe('delivered');
+    expect(server.workouts.get(result.actual!.ids.workout)?.workoutName).toBe('Revised run');
+    expect(server.schedules.get(result.actual!.ids.schedule)?.date).toBe('2026-09-21');
+    expect(server.calls.filter(call => call.method === 'POST' && call.path.includes('workout'))).toHaveLength(2);
+    const attempts = await user().collection(DELIVERY_LEDGER).doc(id).collection('attempts').get();
+    expect(attempts.docs.some(doc => doc.get('state') === 'not-accepted'
+      && doc.get('operation.progress') === null && doc.get('operation.artifact.ids.workout') === original.ids.workout)).toBe(true);
+  });
+  it('keeps a started retained-ID edit journal after a lost PUT reply and recovers without replacement', async () => {
+    const id = await send(); await processTrainingDelivery(runtime, uid, id); await drain();
+    const original = (await ledger()).actual!;
+    await edit();
+    server.afterHandle = async request => {
+      if (request.method !== 'PUT' || !request.path.includes('workout')) return;
+      server.afterHandle = null; throw new GarminTrainingHttpError('uncertain', false);
+    };
+    await processTrainingDelivery(runtime, uid, id);
+    expect((await ledger()).attempt?.progress).toMatchObject({ step: 'workout-update', state: 'started' });
+    await expect(command('replace', undefined, true)).rejects.toMatchObject({ code: 'failed-precondition' });
+    await retry(id); await drain();
+    expect((await ledger()).status).toBe('delivered');
+    expect((await ledger()).actual!.ids).toEqual(original.ids);
+    expect(server.schedules.get(original.ids.schedule)?.date).toBe('2026-09-21');
+    expect(server.calls.filter(call => call.method === 'POST')).toHaveLength(2);
+  });
+  it('keeps the unproved surviving-Schedule case unsupported rather than enabling replacement', async () => {
+    await missingGarminCopy(false);
+    await expect(command('replace', undefined, true)).rejects.toMatchObject({ code: 'failed-precondition' });
+    expect(server.calls.filter(call => call.method === 'POST' && call.path.includes('workout'))).toHaveLength(1);
+  });
+  it('replays one reviewed mutation receipt without creating another replacement intent or POST', async () => {
+    const { id } = await missingGarminCopy();
+    const preview = await command('replace', undefined, true) as TrainingDeliveryPreviewV1;
+    const settings = await user().collection('trainingDeliverySettings').doc('workout_w_garmin').get();
+    const raw = { schemaVersion: 1, mutationId: randomUUID(), scope: 'workout', scopeId: 'w', provider: 'garmin', action: 'replace',
+      expectedScheduleRevision: 1, expectedScopeRevision: 1, expectedSettingsRevision: settings.get('revision'), approvalDigest: preview.approvalDigest };
+    const [one, two] = await Promise.all([trainingDeliveryCommand(runtime, uid, raw, false), trainingDeliveryCommand(runtime, uid, raw, false)]);
+    expect(two).toEqual(one);
+    await drain(); await processTrainingDelivery(runtime, uid, id); await drain();
+    expect(await trainingDeliveryCommand(runtime, uid, raw, false)).toEqual(one);
+    await expect(trainingDeliveryCommand(runtime, uid, { ...raw, approvalDigest: 'b'.repeat(64) }, false)).rejects.toMatchObject({ code: 'failed-precondition' });
+    expect(server.calls.filter(call => call.method === 'POST' && call.path.includes('workout'))).toHaveLength(2);
+  });
+  it('replaces a plan-bound copy without disabling inherited sync or granting other workouts new consent', async () => {
+    const id = await send(); await processTrainingDelivery(runtime, uid, id); await drain();
+    await user().collection('trainingPlans').doc('p').set({ schemaVersion: 1, id: 'p', name: 'Synthetic recovery plan',
+      lifecycle: 'active', startLocalDate: '2026-09-14', endLocalDate: '2026-09-30', revision: 1,
+      lastCheckpointRevision: 1, workoutCount: 1, createdAtMs: 1, updatedAtMs: 1 });
+    await user().collection('scheduledWorkouts').doc('w').update({ planId: 'p' });
+    await trainingDeliveryCommand(runtime, uid, { schemaVersion: 1, mutationId: randomUUID(), scope: 'plan', scopeId: 'p',
+      provider: 'garmin', action: 'configure', timeZone: 'Europe/Helsinki', expectedScheduleRevision: 1,
+      expectedScopeRevision: 1, expectedSettingsRevision: 0 }, false);
+    await drain(); await missingGarminCopy(true, id); await requestReplacement();
+    await processTrainingDelivery(runtime, uid, id); await drain();
+    expect((await ledger()).status).toBe('delivered');
+    expect((await user().collection('trainingDeliverySettings').doc('plan_p_garmin').get()).get('enabled')).toBe(true);
+    expect((await user().collection('trainingDeliverySettings').doc('workout_w_garmin').get()).get('suppressed')).toBe(false);
+  });
+  it('preserves Generic mapping approval separately from replacement approval', async () => {
+    const baseline = (await user().collection('scheduledWorkouts').doc('w').get()).data() as ScheduledWorkoutV1;
+    await user().collection('scheduledWorkouts').doc('w').update({ structure: { ...baseline.structure, sport: ActivityTypes.Walking } });
+    const mappingPreview = await command('send', undefined, true) as TrainingDeliveryPreviewV1;
+    expect(mappingPreview.workoutCompatibility).toBe('degraded');
+    await command('send', mappingPreview.approvalDigest!); await drain();
+    const id = (await ledger()).id; await processTrainingDelivery(runtime, uid, id); await drain();
+    await missingGarminCopy(true, id); await requestReplacement();
+    expect((await user().collection('trainingDeliverySettings').doc('workout_w_garmin').get()).get('approvedDigest'))
+      .toBe(mappingPreview.approvalDigest);
+    await processTrainingDelivery(runtime, uid, id); await drain();
+    expect((await ledger()).status).toBe('delivered');
+    expect(server.calls.filter(call => call.method === 'POST' && call.path.includes('workout'))).toHaveLength(2);
+    expect((await user().collection('scheduledWorkouts').doc('w').get()).get('structure.sport')).toBe(ActivityTypes.Walking);
+  });
+  it('requires a fresh review after an edit but can then replace the current prescription', async () => {
+    const { id } = await missingGarminCopy(); await requestReplacement(); await edit();
+    await processTrainingDelivery(runtime, uid, id);
+    expect((await ledger()).attempt).toBeNull();
+    await processTrainingVerification(runtime, uid, id);
+    await requestReplacement(); await processTrainingDelivery(runtime, uid, id); await drain();
+    expect((await ledger()).status).toBe('delivered');
+    const copy = (await ledger()).actual!;
+    expect(copy.localDate).toBe('2026-09-21'); expect(server.workouts.get(copy.ids.workout)!.workoutName).toBe('Revised run');
+    expect(server.calls.filter(call => call.method === 'POST' && call.path.includes('workout'))).toHaveLength(2);
+  });
+  it('resumes an authorized edit against the original pair when it reappears after replacement review was invalidated', async () => {
+    const { id, original, savedWorkout, savedSchedule } = await missingGarminCopy();
+    await requestReplacement(); await edit(); await processTrainingDelivery(runtime, uid, id);
+    server.workouts.set(original.ids.workout, savedWorkout); server.schedules.set(original.ids.schedule, savedSchedule);
+    await processTrainingVerification(runtime, uid, id);
+    expect((await db.collection(DELIVERY_QUEUE).doc(id).get()).get('kind')).toBe('delivery');
+    await processTrainingDelivery(runtime, uid, id); await drain();
+    expect((await ledger()).status).toBe('delivered'); expect((await ledger()).actual!.ids).toEqual(original.ids);
+    expect(server.workouts.get(original.ids.workout)!.workoutName).toBe('Revised run');
+    expect(server.schedules.get(original.ids.schedule)!.date).toBe('2026-09-21');
+    expect(server.calls.filter(call => call.method === 'POST' && call.path.includes('workout'))).toHaveLength(1);
+  });
+  it('adopts a fully reappearing original instead of POSTing another Workout', async () => {
+    const { id, original, savedWorkout, savedSchedule } = await missingGarminCopy();
+    await requestReplacement();
+    server.workouts.set(original.ids.workout, savedWorkout); server.schedules.set(original.ids.schedule, savedSchedule);
+    await processTrainingDelivery(runtime, uid, id); await drain();
+    expect((await ledger()).actual).toEqual(original);
+    expect((await ledger()).status).toBe('delivered');
+    expect(server.calls.filter(call => call.method === 'POST' && call.path.includes('workout'))).toHaveLength(1);
+  });
+  it('applies the newly reviewed edit and date when the original pair reappears before replacement', async () => {
+    const { id, original, savedWorkout, savedSchedule } = await missingGarminCopy();
+    await requestReplacement(); await edit(); await processTrainingDelivery(runtime, uid, id);
+    await processTrainingVerification(runtime, uid, id); await requestReplacement();
+    server.workouts.set(original.ids.workout, savedWorkout); server.schedules.set(original.ids.schedule, savedSchedule);
+    now += 5_000;
+    await processTrainingDelivery(runtime, uid, id); await drain();
+    const result = await ledger();
+    expect(result).toMatchObject({ status: 'delivered', lastAcceptedAtMs: now,
+      actual: { ids: original.ids, localDate: '2026-09-21' } });
+    expect(server.workouts.get(original.ids.workout)?.workoutName).toBe('Revised run');
+    expect(server.schedules.get(original.ids.schedule)?.date).toBe('2026-09-21');
+    expect(result.acceptedDigest).toBe(result.desiredDigest);
+    expect(server.calls.filter(call => call.method === 'POST' && call.path.includes('workout'))).toHaveLength(1);
+  });
+  it.each(['missing-time', 'nan-time', 'fractional-time', 'unknown-key', 'duplicate-key'] as const)(
+    'rejects malformed private %s evidence instead of offering replacement', async malformed => {
+      const { id } = await missingGarminCopy();
+      const patch = malformed === 'missing-time' ? { 'verification.checkedAtMs': FieldValue.delete() }
+        : malformed === 'nan-time' ? { 'verification.checkedAtMs': Number.NaN }
+          : malformed === 'fractional-time' ? { 'verification.checkedAtMs': now - 0.5 }
+            : { 'verification.observedMissingKeys': malformed === 'unknown-key'
+              ? ['workout', 'schedule', 'unknown'] : ['workout', 'schedule', 'schedule'] };
+      await user().collection(DELIVERY_LEDGER).doc(id).update(patch);
+      await expect(command('replace', undefined, true)).rejects.toMatchObject({ code: 'failed-precondition' });
+      expect(server.calls.filter(call => call.method !== 'GET')).toHaveLength(2);
+    });
+  it('never repeats an uncertain replacement root POST, including explicit Retry or another Replace', async () => {
+    const { id } = await missingGarminCopy(); await requestReplacement();
+    server.afterHandle = async request => {
+      if (request.method !== 'POST' || !request.path.includes('workout')) return;
+      server.afterHandle = null; throw new GarminTrainingHttpError('uncertain', false);
+    };
+    await processTrainingDelivery(runtime, uid, id);
+    expect((await ledger()).status).toBe('needs_attention');
+    await expect(command('replace', undefined, true)).rejects.toMatchObject({ code: 'failed-precondition' });
+    await command('retry'); await drain(); await retry(id);
+    expect((await ledger()).status).toBe('needs_attention');
+    expect(server.calls.filter(call => call.method === 'POST' && call.path.includes('workout'))).toHaveLength(2);
+    expect(server.workouts.size).toBe(1);
+  });
+  it.each(['stale-check', 'edit', 'permission', 'other-account', 'epoch', 'completion', 'past', 'pro', 'lock'] as const)(
+    'rejects replacement after %s before provider writes', async changed => {
+      const { id } = await missingGarminCopy();
+      const preview = await command('replace', undefined, true) as TrainingDeliveryPreviewV1;
+      const writes = server.calls.filter(call => call.method !== 'GET').length;
+      if (changed === 'stale-check') now += 86_400_001;
+      if (changed === 'edit') await edit();
+      if (changed === 'permission') await credential().update({ permissions: [] });
+      if (changed === 'other-account') await credential().update({ userID: 'account-b' });
+      if (changed === 'epoch') await db.runTransaction(async tx => { stageTrainingDeliveryDisconnect(tx, db, uid, 'garmin'); });
+      if (changed === 'completion') await user().collection(DELIVERY_LEDGER).doc(id).update({ 'actual.completed': true });
+      if (changed === 'past') now += 10 * 86_400_000;
+      if (changed === 'pro') pro = false;
+      if (changed === 'lock') await user().collection('trainingPlanState').doc('current').collection('planDeletionLocks').doc('p').set({});
+      await expect(command('replace', preview.approvalDigest!)).rejects.toBeDefined();
+      expect(server.calls.filter(call => call.method !== 'GET')).toHaveLength(writes);
+    });
+  it.each(['stop', 'completion', 'reconnect', 'edit', 'permission', 'past', 'pro'] as const)(
+    'does not POST a replacement when %s wins between review and worker admission', async changed => {
+      const { id } = await missingGarminCopy(); await requestReplacement();
+      if (changed === 'stop') await command('stop');
+      if (changed === 'completion') await user().collection(DELIVERY_LEDGER).doc(id).update({ 'actual.completed': true });
+      if (changed === 'reconnect') await user().collection('meta').doc(service.name).update({ connectionStateGeneration: 'connection-2' });
+      if (changed === 'edit') await edit();
+      if (changed === 'permission') await credential().update({ permissions: [] });
+      if (changed === 'past') now += 10 * 86_400_000;
+      if (changed === 'pro') pro = false;
+      await processTrainingDelivery(runtime, uid, id); await drain();
+      expect(server.calls.filter(call => call.method === 'POST' && call.path.includes('workout'))).toHaveLength(1);
     });
 
   it('restarts the schedule absence clock after the original association reappears', async () => {

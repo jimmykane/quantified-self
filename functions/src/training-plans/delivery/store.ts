@@ -56,7 +56,8 @@ export async function readDeliveryContext(runtime: DeliveryRuntime, tx: Transact
 
 export function projectDelivery(ledger: DeliveryLedgerV1): TrainingDeliveryStatusV1 {
   return { schemaVersion: 1, id: ledger.id, workoutId: ledger.workoutId, planId: ledger.planId, provider: ledger.provider,
-    status: ledger.status, differsFromQS: !!ledger.actual && (ledger.verification?.missing === true || ledger.desired === 'absent'
+    status: ledger.status, differsFromQS: !!ledger.actual && (ledger.verification?.missing === true
+      || (ledger.provider === 'garmin' && ledger.verification?.observedMissingKeys?.includes('workout') === true) || ledger.desired === 'absent'
       || ledger.acceptedContentDigest !== ledger.contentDigest
       || ['unsupported', 'approval_required'].includes(ledger.status)),
     hasRemoteCopy: !!ledger.actual && !ledger.verification?.missing, timeZone: ledger.timeZone, approvalDigest: ledger.approvalDigest,
@@ -101,6 +102,7 @@ function reconcileRecord(runtime: DeliveryRuntime, context: DeliveryContext, uid
   const retried = settingRevision !== previous?.settingsRevision;
   const mappingApprovalProof = intent.mappingApprovalProof ?? previous?.mappingApprovalProof;
   const record: DeliveryLedgerV1 = { ...(previous?.verification ? { verification: previous.verification } : {}),
+    ...(previous?.wahooPlanGeneration !== undefined ? { wahooPlanGeneration: previous.wahooPlanGeneration } : {}),
     ...(mappingApprovalProof ? { mappingApprovalProof } : {}),
     ...(context.pastCleanup ? { pastCleanup: context.pastCleanup } : {}),
     ...(previous?.providerAccessBlocked && !changed && !retried ? { providerAccessBlocked: true } : {}),
@@ -133,8 +135,17 @@ function reconcileRecord(runtime: DeliveryRuntime, context: DeliveryContext, uid
     record.desired = 'preserve';
   } else record.blockedConnectionGeneration = null;
   // An uncertain create is never cleared by a new edit or a user Retry.
-  if (previous?.status === 'needs_attention' && previous.attempt && !retried) record.status = 'needs_attention';
-  if (previous?.status === 'needs_attention' && previous.verification && !previous.attempt && !changed) record.status = 'needs_attention';
+  if (previous?.status === 'needs_attention' && previous.attempt && !retried) {
+    record.status = 'needs_attention';
+    // Keep the worker's explanation while its unresolved Wahoo journal remains
+    // blocked; a periodic scan must not erase the deleted-Plan warning.
+    if (provider === 'wahoo') record.issues = [...new Set([...previous.issues, ...record.issues])].slice(0, 20);
+  }
+  if (previous?.status === 'needs_attention' && previous.verification && !previous.attempt && !changed
+    && intent.desired === 'present') {
+    record.status = 'needs_attention';
+    record.issues = [...new Set([...previous.issues, ...record.issues])].slice(0, 20);
+  }
   if (previous?.status === 'failed' && !changed && !retried) record.status = 'failed';
   // Application access rejection is not repaired by periodic reconciliation or
   // user OAuth refresh. Keep its safe explanation until an edit or explicit Retry.

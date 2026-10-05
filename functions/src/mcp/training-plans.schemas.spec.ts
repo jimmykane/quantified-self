@@ -94,6 +94,15 @@ function expectPublicReadWriteRoundTrip(input: WorkoutStructureV1): void {
   expect(write).toMatchObject({ structure: input });
 }
 
+describe('app-only Garmin replacement boundary', () => {
+  it('does not silently widen the registered v1 provider delivery action enum', () => {
+    const change = { kind: 'provider-delivery', targetType: 'workout', target: { ref: 'owner-bound-ref' }, providers: ['garmin'] };
+    expect(TRAINING_CHANGE_SCHEMA.safeParse({ ...change, action: 'retry' }).success).toBe(true);
+    expect(TRAINING_CHANGE_SCHEMA.safeParse({ ...change, action: 'replace' }).success).toBe(false);
+    expect(TRAINING_CHANGE_SCHEMA.safeParse({ ...change, action: 'retry', manualReplacement: true }).success).toBe(false);
+  });
+});
+
 describe('Strict public Training recipe v1', () => {
   it.each([ActivityTypes.Walking, ActivityTypes.Hiking, ActivityTypes.Rowing, ActivityTypes.IndoorRowing])('round-trips %s through the frozen read and approval-gated proposal schema', sport => {
     expectPublicReadWriteRoundTrip({ ...recipe({ kind: 'distance', meters: 500 }), sport });
@@ -257,6 +266,27 @@ describe('Strict Training write proposal contract', () => {
       changes: Array.from({ length: 25 }, () => change) }).success).toBe(true);
     expect(TRAINING_WRITE_INPUTS.preview_training_changes.safeParse({ expectedScheduleRevision: 1,
       changes: Array.from({ length: 26 }, () => change) }).success).toBe(false);
+  });
+
+  it('requires an explicit service-copy choice in the additive deletion preview, without widening legacy deletion', () => {
+    for (const removePastProviderCopies of [true, false]) {
+      for (const change of [
+        { kind: 'delete-workout', workout: { ref: 'opaque' }, removePastProviderCopies },
+        { kind: 'delete-plan', plan: { ref: 'opaque' }, workoutDisposition: 'convert-to-standalone', removePastProviderCopies },
+      ]) {
+        expect(TRAINING_WRITE_INPUTS.preview_training_deletion.safeParse({ expectedScheduleRevision: 1, change }).success).toBe(true);
+        expect(TRAINING_WRITE_INPUTS.preview_training_changes.safeParse({ expectedScheduleRevision: 1, changes: [change] }).success).toBe(false);
+        const withoutChoice: Record<string, unknown> = { ...change };
+        delete withoutChoice.removePastProviderCopies;
+        expect(TRAINING_WRITE_INPUTS.preview_training_deletion.safeParse({ expectedScheduleRevision: 1, change: withoutChoice }).success).toBe(false);
+        expect(TRAINING_WRITE_INPUTS.preview_training_deletion.safeParse({ expectedScheduleRevision: 1,
+          change: { ...change, remoteId: 'private' } }).success).toBe(false);
+      }
+    }
+    expect(TRAINING_WRITE_INPUTS.preview_training_deletion.safeParse({ expectedScheduleRevision: 1,
+      change: { kind: 'delete-plan', plan: { ref: 'opaque' }, removePastProviderCopies: true } }).success).toBe(false);
+    expect(TRAINING_WRITE_INPUTS.preview_training_deletion.safeParse({ expectedScheduleRevision: 1,
+      change: { kind: 'delete-workout', workout: { localKey: 'uncreated' }, removePastProviderCopies: true } }).success).toBe(false);
   });
 
   it('requires a complete strength draft in the additive preview and keeps v1 recipes frozen', () => {

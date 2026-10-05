@@ -129,6 +129,16 @@ entities created earlier in that proposal; never invent opaque references, crede
 artifact IDs or approval digests. Plan deletion must be the only proposal change. Never infer its required workout
 disposition: ask whether current workouts should become standalone or be permanently deleted, and explain that the plan
 and its revision history are permanently removed. Permanent single-workout deletion and history restore remain excluded.
+For current plan/workout deletion, ask “Also remove older, uncompleted copies from your connected services?” unless
+already explicitly chosen. Eligible upcoming copies withdraw automatically. With both write grants, discover the
+focused deletion preview and supply the required cleanup boolean, exact current reference and schedule revision.
+False keeps older copies; true requests removal of eligible QS-sent copies across services through existing cleanup.
+Completed activities stay untouched; valid same-account access and provider restrictions may prevent removal, and
+app/watch copies may remain. Show that choice before native/app approval; an applied deletion only requests cleanup.
+Keep the frozen batch schema unchanged. If the focused tool or delivery permission is absent, explain the older-copy
+limitation and use legacy deletion only if the user accepts it; missing tools may need a release/catalog refresh.
+For multiple deletions needing older-copy cleanup, review each focused deletion separately. Never bypass an earlier
+explicit disconnect or delete a recorded activity to remove a planned copy.
 A standalone create may be followed by send to explicit providers or all connected providers. Plan sync means
 automatic per-workout delivery while active, not a native provider plan. Delivery remains Pro, connection, rollout,
 horizon and compatibility gated.

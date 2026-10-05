@@ -4,7 +4,7 @@ import { CUSTOM_ELEMENTS_SCHEMA, signal } from '@angular/core';
 import { NoopAnimationsModule } from '@angular/platform-browser/animations';
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
-import { of } from 'rxjs';
+import { BehaviorSubject, of } from 'rxjs';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   ActivityTypes,
@@ -24,20 +24,30 @@ import {
   DataSwimPace,
   DataTemperature,
   XAxisTypes,
+  User,
 } from '@sports-alliance/sports-lib';
 import { EventCardChartComponent } from './event.card.chart.component';
 import { AppUserSettingsQueryService } from '../../../services/app.user-settings-query.service';
 import { AppUserService } from '../../../services/app.user.service';
 import { AppActivityCursorService } from '../../../services/activity-cursor/app-activity-cursor.service';
 import { AppEventColorService } from '../../../services/color/app.event.color.service';
+import { AppDeviceColorPreferenceService } from '../../../services/color/app-device-color-preference.service';
+import { EventChartPanelWorkerService } from '../../../services/event-chart-panel-worker.service';
+import { resolveDeviceChartColor } from '../../../helpers/device-chart-appearance.helper';
 import { LoggerService } from '../../../services/logger.service';
 import { AppChartSettingsLocalStorageService } from '../../../services/storage/app.chart.settings.local.storage.service';
 import * as eventDataHelper from '../../../helpers/event-echarts-data.helper';
 import { MaterialModule } from '../../../modules/material.module';
+import { MatSnackBar } from '@angular/material/snack-bar';
+import { AppAuthService } from '../../../authentication/app.auth.service';
+import { AppHapticsService } from '../../../services/app.haptics.service';
 
 describe('EventCardChartComponent', () => {
   let fixture: ComponentFixture<EventCardChartComponent>;
   let component: EventCardChartComponent;
+  let authUserSubject: BehaviorSubject<User | null>;
+  const mockHaptics = { selection: vi.fn(), success: vi.fn(), error: vi.fn() };
+  const mockSnackBar = { open: vi.fn() };
 
   const defaultChartSettings = {
     showAllData: false,
@@ -74,6 +84,7 @@ describe('EventCardChartComponent', () => {
   const mockEventColorService = {
     getActivityColor: vi.fn().mockReturnValue('#ff0000'),
   };
+  const deviceColors = signal<Record<string, string>>({});
 
   const mockChartSettingsStorage = {
     getEventChartVisibilityPreference: vi.fn().mockReturnValue({
@@ -96,10 +107,16 @@ describe('EventCardChartComponent', () => {
   };
 
   beforeEach(async () => {
+    authUserSubject = new BehaviorSubject<User | null>({ uid: 'u1' } as User);
+    Object.values(mockHaptics).forEach(mock => mock.mockClear());
+    mockSnackBar.open.mockClear();
+    deviceColors.set({});
+    mockEventColorService.getActivityColor.mockReset();
+    mockEventColorService.getActivityColor.mockReturnValue('#ff0000');
     chartSettingsSignal.set({
       ...defaultChartSettings,
     });
-    mockUserSettingsQuery.updateChartSettings.mockResolvedValue(undefined);
+    mockUserSettingsQuery.updateChartSettings.mockReset().mockResolvedValue(undefined);
     mockUserService.getUserChartDataTypesToUse.mockReset();
     mockUserService.getUserChartDataTypesToUse.mockReturnValue([DataPower.type]);
     mockActivityCursorService.setCursor.mockReset();
@@ -125,11 +142,15 @@ describe('EventCardChartComponent', () => {
       imports: [MaterialModule, NoopAnimationsModule],
       declarations: [EventCardChartComponent],
       providers: [
+        { provide: AppAuthService, useValue: { user$: authUserSubject.asObservable() } },
+        { provide: AppHapticsService, useValue: mockHaptics },
+        { provide: MatSnackBar, useValue: mockSnackBar },
         { provide: BreakpointObserver, useValue: mockBreakpointObserver },
         { provide: AppUserSettingsQueryService, useValue: mockUserSettingsQuery },
         { provide: AppUserService, useValue: mockUserService },
         { provide: AppActivityCursorService, useValue: mockActivityCursorService },
         { provide: AppEventColorService, useValue: mockEventColorService },
+        { provide: AppDeviceColorPreferenceService, useValue: { deviceColorByName: deviceColors } },
         { provide: AppChartSettingsLocalStorageService, useValue: mockChartSettingsStorage },
         { provide: LoggerService, useValue: mockLogger },
       ],
@@ -173,6 +194,107 @@ describe('EventCardChartComponent', () => {
     }
   }
 
+  it('defaults patterns off, silently follows Settings, and ignores unchanged choices', async () => {
+    component.event = { ...component.event, isMerge: true } as any;
+    expect(component.useDistinctLinePatterns()).toBe(false);
+    chartSettingsSignal.set({ ...chartSettingsSignal(), useDistinctComparisonLinePatterns: true });
+    expect(component.useDistinctLinePatterns()).toBe(true);
+    await component.onDistinctLinePatternsChange(true);
+    expect(mockUserSettingsQuery.updateChartSettings).not.toHaveBeenCalled();
+    expect(mockHaptics.selection).not.toHaveBeenCalled();
+  });
+
+  it('saves patterns once, blocks pending changes, and permits turning off before the settings snapshot catches up', async () => {
+    component.event = { ...component.event, isMerge: true } as any;
+    let finishSave!: () => void;
+    mockUserSettingsQuery.updateChartSettings.mockImplementationOnce(() => new Promise<void>(resolve => { finishSave = resolve; }));
+    const save = component.onDistinctLinePatternsChange(true);
+    expect(component.useDistinctLinePatterns()).toBe(true);
+    expect(component.isSavingDistinctLinePatterns()).toBe(true);
+    await component.onDistinctLinePatternsChange(false);
+    expect(mockUserSettingsQuery.updateChartSettings).toHaveBeenCalledOnce();
+    expect(mockHaptics.selection).toHaveBeenCalledOnce();
+    expect(mockHaptics.success).not.toHaveBeenCalled();
+    finishSave();
+    await save;
+    expect(component.isSavingDistinctLinePatterns()).toBe(false);
+    expect(mockHaptics.success).toHaveBeenCalledOnce();
+    await component.onDistinctLinePatternsChange(false);
+    expect(mockUserSettingsQuery.updateChartSettings.mock.calls).toEqual([
+      [{ useDistinctComparisonLinePatterns: true }, { force: true, expectedUserID: 'u1' }],
+      [{ useDistinctComparisonLinePatterns: false }, { force: true, expectedUserID: 'u1' }],
+    ]);
+    expect(component.useDistinctLinePatterns()).toBe(false);
+  });
+
+  it('rolls back a failed pattern save and reports the failure once', async () => {
+    component.event = { ...component.event, isMerge: true } as any;
+    mockUserSettingsQuery.updateChartSettings.mockRejectedValueOnce(new Error('Save failed'));
+    await component.onDistinctLinePatternsChange(true);
+    expect(component.useDistinctLinePatterns()).toBe(false);
+    expect(component.isSavingDistinctLinePatterns()).toBe(false);
+    expect(mockHaptics.error).toHaveBeenCalledOnce();
+    expect(mockHaptics.success).not.toHaveBeenCalled();
+    expect(mockSnackBar.open).toHaveBeenCalledOnce();
+  });
+
+  it('does not change patterns on ordinary events or for a public viewer without a signed-in account', async () => {
+    await component.onDistinctLinePatternsChange(true);
+    component.event = { ...component.event, isMerge: true } as any;
+    authUserSubject.next(null);
+    expect(component.user.uid).toBe('u1');
+    expect(component.canChangeDistinctLinePatterns()).toBe(false);
+    await component.onDistinctLinePatternsChange(true);
+    expect(mockUserSettingsQuery.updateChartSettings).not.toHaveBeenCalled();
+    expect(mockHaptics.selection).not.toHaveBeenCalled();
+  });
+
+  it('ignores old save completion after switching accounts', async () => {
+    component.event = { ...component.event, isMerge: true } as any;
+    let finishSave!: () => void;
+    mockUserSettingsQuery.updateChartSettings.mockImplementationOnce(() => new Promise<void>(resolve => { finishSave = resolve; }));
+    const save = component.onDistinctLinePatternsChange(true);
+    authUserSubject.next({ uid: 'u2' } as User);
+    expect(component.isSavingDistinctLinePatterns()).toBe(false);
+    expect(component.useDistinctLinePatterns()).toBe(false);
+    finishSave();
+    await save;
+    expect(mockHaptics.success).not.toHaveBeenCalled();
+  });
+
+  it('ignores a previous session failure while the same account has a new pattern save pending', async () => {
+    component.event = { ...component.event, isMerge: true } as any;
+    let failOldSave!: (error: Error) => void;
+    let finishNewSave!: () => void;
+    mockUserSettingsQuery.updateChartSettings
+      .mockImplementationOnce(() => new Promise<void>((_resolve, reject) => { failOldSave = reject; }))
+      .mockImplementationOnce(() => new Promise<void>(resolve => { finishNewSave = resolve; }));
+    const oldSave = component.onDistinctLinePatternsChange(true);
+    authUserSubject.next(null);
+    authUserSubject.next({ uid: 'u1' } as User);
+    const newSave = component.onDistinctLinePatternsChange(true);
+    failOldSave(new Error('Previous session failed'));
+    await oldSave;
+    expect(component.isSavingDistinctLinePatterns()).toBe(true);
+    expect(component.useDistinctLinePatterns()).toBe(true);
+    expect(mockHaptics.error).not.toHaveBeenCalled();
+    expect(mockSnackBar.open).not.toHaveBeenCalled();
+    finishNewSave();
+    await newSave;
+    expect(mockHaptics.success).toHaveBeenCalledOnce();
+  });
+
+  it('does not send pattern save feedback after event details are destroyed', async () => {
+    component.event = { ...component.event, isMerge: true } as any;
+    let finishSave!: () => void;
+    mockUserSettingsQuery.updateChartSettings.mockImplementationOnce(() => new Promise<void>(resolve => { finishSave = resolve; }));
+    const save = component.onDistinctLinePatternsChange(true);
+    fixture.destroy();
+    finishSave();
+    await save;
+    expect(mockHaptics.success).not.toHaveBeenCalled();
+  });
+
   it('should create and rebuild chart panels', async () => {
     const buildPanelsSpy = vi.spyOn(eventDataHelper, 'buildEventChartPanels').mockReturnValue([
       {
@@ -213,6 +335,78 @@ describe('EventCardChartComponent', () => {
     expect(buildPanelsSpy).toHaveBeenCalledWith(expect.objectContaining({
       colorIntensityZoneLines: true,
     }));
+  });
+
+  it('applies device appearance to worker results and refreshes saved colors and dark-theme presentation', async () => {
+    chartSettingsSignal.set({ ...chartSettingsSignal(), useDistinctComparisonLinePatterns: true });
+    const activities = ['a', 'b', 'c', 'd'].map(id => ({ getID: () => id, type: ActivityTypes.Cycling }));
+    component.event = { getID: () => 'comparison', isMerge: true, getActivities: () => activities } as any;
+    component.selectedActivities = activities as any;
+    const colors = ['#D55E00', '#0072B2', '#000000', '#CC79A7'];
+    mockEventColorService.getActivityColor.mockImplementation((_all, activity) => deviceColors()[activity.getID()] || colors[activities.indexOf(activity)]);
+    const panels = [{ dataType: DataPower.type, displayName: 'Power', colorGroupKey: 'Power', minX: 0, maxX: 1,
+      series: activities.map(activity => ({ activityID: activity.getID(), color: '#FF0000' })) }] as any;
+    const worker = TestBed.inject(EventChartPanelWorkerService);
+    vi.spyOn(worker, 'shouldUseWorker').mockReturnValue(true);
+    vi.spyOn(worker, 'buildPanels').mockResolvedValue(panels);
+    await (component as any).rebuildPanels('comparison-test');
+    expect(component.allChartPanels[0].series.map(series => series.lineStyle)).toEqual(['solid', 'dashed', 'dotted', 'dash-dot']);
+    expect(component.allChartPanels[0].series[2].color).toBe('#000000');
+    component.darkTheme = true;
+    await (component as any).rebuildPanels('theme-test');
+    expect(component.allChartPanels[0].series[2].color).not.toBe('#000000');
+    deviceColors.set({ b: '#A68A5B' });
+    fixture.detectChanges();
+    await (component as any).rebuildPanels('preference-test');
+    expect(component.allChartPanels[0].series[1].color).toBe(resolveDeviceChartColor('#A68A5B', true));
+    expect(component.allChartPanels[0].series[1].lineStyle).toBe('dashed');
+    expect(panels[0].series[2].color).toBe('#FF0000');
+  });
+
+  it('defaults to solid lines and enables or clears patterns on cached comparison panels', async () => {
+    const activities = ['a', 'b'].map(id => ({ getID: () => id, type: ActivityTypes.Cycling }));
+    component.event = { getID: () => 'comparison', isMerge: true, getActivities: () => activities } as any;
+    component.selectedActivities = activities as any;
+    vi.spyOn(TestBed.inject(EventChartPanelWorkerService), 'shouldUseWorker').mockReturnValue(false);
+    const buildPanels = vi.spyOn(eventDataHelper, 'buildEventChartPanels').mockReturnValue([{
+      dataType: DataPower.type, displayName: 'Power', colorGroupKey: 'Power', minX: 0, maxX: 1,
+      series: activities.map(activity => ({ activityID: activity.getID(), color: '#FF0000' })),
+    }] as any);
+
+    await (component as any).rebuildPanels('initial');
+    expect(component.allChartPanels[0].series.map(series => series.lineStyle)).toEqual([undefined, undefined]);
+    chartSettingsSignal.set({ ...chartSettingsSignal(), useDistinctComparisonLinePatterns: true });
+    await (component as any).rebuildPanels('enabled');
+    expect(component.allChartPanels[0].series.map(series => series.lineStyle)).toEqual(['solid', 'dashed']);
+    chartSettingsSignal.set({ ...chartSettingsSignal(), useDistinctComparisonLinePatterns: false });
+    await (component as any).rebuildPanels('disabled');
+    expect(component.allChartPanels[0].series.map(series => series.lineStyle)).toEqual([undefined, undefined]);
+    expect(buildPanels).toHaveBeenCalledOnce();
+  });
+
+  it.each(['showLaps', 'showSwimLengths'])('refreshes cached device colors when the theme and %s change together', async (setting) => {
+    const activity = {
+      getID: () => 'swim-1', type: ActivityTypes.Cycling,
+      getSwimLengths: () => [{ index: 1, type: 'active', startDate: new Date(0), endDate: new Date(25000) }],
+    } as any;
+    component.event = { getID: () => 'comparison', isMerge: true, getActivities: () => [activity] } as any;
+    component.selectedActivities = [activity];
+    mockEventColorService.getActivityColor.mockReturnValue('#000000');
+    vi.spyOn(TestBed.inject(EventChartPanelWorkerService), 'shouldUseWorker').mockReturnValue(false);
+    const buildPanels = vi.spyOn(eventDataHelper, 'buildEventChartPanels').mockReturnValue([{
+      dataType: DataPower.type, displayName: 'Power', colorGroupKey: 'Power', minX: 0, maxX: 1,
+      series: [{ activityID: activity.getID(), color: '#FF0000' }],
+    }] as any);
+
+    await (component as any).rebuildPanels('initial');
+    expect(component.allChartPanels[0].series[0].color).toBe('#000000');
+    component.darkTheme = true;
+    chartSettingsSignal.set({ ...chartSettingsSignal(), [setting]: false });
+    await (component as any).rebuildPanels('theme-and-markers');
+
+    expect(buildPanels).toHaveBeenCalledOnce();
+    expect(component.allChartPanels[0].series[0].color).toBe(resolveDeviceChartColor('#000000', true));
+    expect(component.chartPanelViews[0].panel).toBe(component.allChartPanels[0]);
   });
 
   it('does not build swim length markers when selected activities have none', async () => {

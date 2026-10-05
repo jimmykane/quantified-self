@@ -32,6 +32,10 @@ The timestamp-only comparison correction changes `processRouteSyncTask` only; it
 
 Production setup must subscribe `SUUNTO_247_ACTIVITY_CREATED`, `SUUNTO_247_RECOVERY_CREATED`, and `SUUNTO_247_SLEEP_CREATED` to the canonical `receiveSuunto247Data` endpoint. Workout and Route notifications remain pointed at `insertSuuntoAppActivityToQueue` and `insertSuuntoAppRouteToQueue` respectively, all using the configured `SUUNTOAPP_NOTIFICATION_SECRET`. The retired `receiveSuuntoAppSleepData` endpoint must not be registered with Suunto. This repository change does not register provider webhooks or deploy Functions.
 
+The canonical receiver uses [target-aware entrypoint loading](functions-entrypoint-loading.md) from its existing
+`sleep/webhooks` owner module with 512 MiB. Its Gen 1 HTTP trigger, URL, 60-second timeout and notification secret are
+unchanged; increasing memory and isolating startup do not alter signed admission, lifecycle fencing or queue behavior.
+
 ## Normalization
 
 Suunto Health data is kept separate from workout FIT metrics and normalized Sleep sessions. The provider and source-record type remain explicit on every record.

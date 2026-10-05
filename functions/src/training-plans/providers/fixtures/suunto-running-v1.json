@@ -38,7 +38,9 @@
         },
         {
           "type": "pace",
-          "title": "Pace"
+          "title": "Avg pace",
+          "window": "manualLap",
+          "aggregate": "average"
         }
       ],
       "transitions": [
@@ -61,10 +63,13 @@
         {
           "type": "fields",
           "title": "Work",
+          "createManualLap": true,
           "fields": [
             {
               "type": "pace",
-              "title": "Pace"
+              "title": "Avg pace",
+              "window": "manualLap",
+              "aggregate": "average"
             },
             {
               "type": "stepDistanceCountdown",
@@ -102,6 +107,7 @@
         {
           "type": "fields",
           "title": "Recovery",
+          "createManualLap": true,
           "fields": [
             {
               "type": "heartRate",
@@ -124,7 +130,9 @@
             },
             {
               "type": "pace",
-              "title": "Pace"
+              "title": "Avg pace",
+              "window": "manualLap",
+              "aggregate": "average"
             }
           ],
           "transitions": [
@@ -146,6 +154,7 @@
       "id": "qs-suunto-e-IgQ0-6lE7Fh6C1hRNE5S-WcJ9XS7I7vcSNoGvlKGo",
       "type": "fields",
       "title": "Cool down",
+      "createManualLap": true,
       "fields": [
         {
           "type": "cadence",
@@ -187,6 +196,7 @@
     {
       "type": "fields",
       "title": "Complete",
+      "createManualLap": true,
       "fields": [
         {
           "type": "text",

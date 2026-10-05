@@ -6,23 +6,19 @@
     leadingIcon="event_note"
     [subtitle]="libraryView() ? (editor() ? 'Build a reusable workout. Add dates later.' : 'Keep your common workouts ready for any plan.') : editor() ? 'Date, sport, and workout steps.' : showPlanForm() ? 'Workouts across a date range.' : 'Workouts, with or without a plan.'"
     [status]="pageStatus()">
-    @if (browsing()) {
-    <div pageHeaderActions class="plans-header-actions">
-      @if (!libraryView()) {
-      <app-training-delivery-button scope="history" entityId="current" title="Plans and standalone workouts"
+    @if (browsing() && !libraryView()) {
+      <app-training-delivery-button pageHeaderTitleActions scope="history" entityId="current"
+        title="Plans and standalone workouts" historyLabel="Sync"
         [disabled]="busyAction() !== null || scheduleState().status !== 'ready'"></app-training-delivery-button>
-      <a mat-button routerLink="/calendar" appHapticTap>
-        <mat-icon aria-hidden="true">calendar_month</mat-icon>
-        <span>Main Calendar</span>
-      </a>
-      } @else {
+    }
+    @if (browsing() && libraryView()) {
+      <div pageHeaderActions class="plans-header-actions">
         <a mat-button routerLink="/training/plans" appHapticTap><mat-icon aria-hidden="true">arrow_back</mat-icon>Plans</a>
         <a mat-flat-button routerLink="/training/plans/library/new" appHapticTap
           [state]="{ trainingPlansEditorReturn: { uid: currentUser()?.uid, url: '/training/plans/library' } }">
           <mat-icon aria-hidden="true">add</mat-icon>New saved workout
         </a>
-      }
-    </div>
+      </div>
     }
   </app-page-header>
 
@@ -694,13 +690,21 @@
               <mat-option [value]="ending.value">{{ ending.label }}</mat-option>
             }
           </mat-select>
+          @if (step.endingKind === 'manual') {
+            <mat-hint>Ends when you press the lap button, without a time or distance limit. Wahoo delivery is unsupported.</mat-hint>
+          }
         </mat-form-field>
-        <mat-form-field subscriptSizing="dynamic">
-          <mat-label>{{ step.endingKind === 'time' ? 'Minutes' : editorDistanceUnit() }}</mat-label>
-          <input matInput type="number" [attr.min]="step.endingKind === 'distance' ? 0 : 0.01"
-            [attr.step]="step.endingKind === 'distance' ? 'any' : '0.01'" [ngModel]="step.endingValue"
-            (ngModelChange)="updateStep(nodeIndex, stepIndex, 'endingValue', +$event)">
-        </mat-form-field>
+        @if (step.endingKind === 'time') {
+          <app-workout-time-input class="workout-duration-input" [value]="step.endingValue"
+            [disabled]="busyAction() !== null"
+            (durationChange)="updateStep(nodeIndex, stepIndex, 'endingValue', $event.minutes, $event.seconds)"></app-workout-time-input>
+        } @else if (step.endingKind === 'distance') {
+          <mat-form-field subscriptSizing="dynamic">
+            <mat-label>{{ editorDistanceUnit() }}</mat-label>
+            <input matInput type="number" min="0" step="any" [ngModel]="step.endingValue"
+              (ngModelChange)="updateStep(nodeIndex, stepIndex, 'endingValue', +$event)">
+          </mat-form-field>
+        }
         <mat-form-field subscriptSizing="dynamic">
           <mat-label>Target</mat-label>
           <mat-select [value]="step.targetKind" [disabled]="busyAction() !== null" (selectionChange)="updateStep(nodeIndex, stepIndex, 'targetKind', $event.value)">
@@ -709,17 +713,22 @@
             }
           </mat-select>
         </mat-form-field>
-        @if (step.targetKind !== 'none') {
+        @if (step.targetKind === 'pace') {
+          <app-workout-time-input mode="pace" [label]="'Faster ' + editorPaceUnit()"
+            [value]="step.targetMinimum" [disabled]="busyAction() !== null"
+            (valueChange)="updateStep(nodeIndex, stepIndex, 'targetMinimum', $event)"></app-workout-time-input>
+          <app-workout-time-input mode="pace" [label]="'Slower ' + editorPaceUnit()"
+            [value]="step.targetMaximum" [disabled]="busyAction() !== null"
+            (valueChange)="updateStep(nodeIndex, stepIndex, 'targetMaximum', $event)"></app-workout-time-input>
+        } @else if (step.targetKind !== 'none') {
           <mat-form-field subscriptSizing="dynamic">
-            <mat-label>{{ step.targetKind === 'pace' ? 'Faster ' + editorPaceUnit() : 'Minimum' }}</mat-label>
-            <input matInput type="number" min="0"
-              [attr.step]="step.targetKind === 'pace' ? 'any' : '0.01'" [ngModel]="step.targetMinimum"
+            <mat-label>Minimum</mat-label>
+            <input matInput type="number" min="0" step="0.01" [ngModel]="step.targetMinimum"
               (ngModelChange)="updateStep(nodeIndex, stepIndex, 'targetMinimum', $event)">
           </mat-form-field>
           <mat-form-field subscriptSizing="dynamic">
-            <mat-label>{{ step.targetKind === 'pace' ? 'Slower ' + editorPaceUnit() : 'Maximum' }}</mat-label>
-            <input matInput type="number" min="0"
-              [attr.step]="step.targetKind === 'pace' ? 'any' : '0.01'" [ngModel]="step.targetMaximum"
+            <mat-label>Maximum</mat-label>
+            <input matInput type="number" min="0" step="0.01" [ngModel]="step.targetMaximum"
               (ngModelChange)="updateStep(nodeIndex, stepIndex, 'targetMaximum', $event)">
           </mat-form-field>
         }

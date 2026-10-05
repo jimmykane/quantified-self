@@ -10,6 +10,14 @@
   min-width: 0;
 }
 
+.qs-page-header:has(> .qs-page-header__actions:empty) {
+  grid-template-columns: minmax(0, 1fr);
+}
+
+.qs-page-header__actions:empty {
+  display: none;
+}
+
 .qs-page-header__content,
 .qs-page-header__context,
 .qs-page-header__actions {

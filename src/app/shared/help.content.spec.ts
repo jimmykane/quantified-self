@@ -14,6 +14,37 @@ import {
 } from './policies.content';
 
 describe('help.content', () => {
+  it('explains explicit duration parts and colon pace without changing canonical units or provider capabilities', () => {
+    const copy = HELP_SECTIONS.find(section => section.id === 'training-plans')!.content;
+    for (const phrase of ['**Hours**, **Minutes**, and **Seconds**', '0 / 1 / 15', '0 / 1 / 30',
+      'including inside repeats and in the Workout library', '**m:ss**', '**4:30**',
+      'decimal minutes such as 4.5 still work', 'provider-specific delivery limits still apply']) expect(copy).toContain(phrase);
+  });
+  it('explains Wahoo re-sending after confirmed withdrawal without promising blind recreation or recording deletion', () => {
+    const copy = HELP_SECTIONS.find(section => section.id === 'training-plans')!.content;
+    expect(copy).toContain('After Wahoo confirms withdrawal of an upcoming copy');
+    expect(copy).toContain('without reusing its deleted provider Plan');
+    expect(copy).toContain('QS shows **Needs attention**');
+    expect(copy).toContain('never deletes completed recordings or resets their activity links');
+  });
+  it('explains the Assistant deletion review and distinguishes authored deletion from service cleanup', () => {
+    const copy = HELP_SECTIONS.find(section => section.id === 'ai-insights')!.content;
+    for (const phrase of ['with both Training change choices on', '**Delete plan**', '**Delete workout**',
+      'Workout deletion is recoverable', 'choose whether its workouts stay standalone or are deleted',
+      'Older-copy cleanup is optional', 'does not require Pro',
+      'not removal from a connected app or watch', 'Completed activities stay untouched']) {
+      expect(copy).toContain(phrase);
+    }
+  });
+  it('explains the explicit MCP older-copy cleanup choice without promising provider or watch removal', () => {
+    const copy = HELP_SECTIONS.find(section => section.id === 'training-plans')!.content;
+    expect(copy).toContain('also remove older, uncompleted service copies');
+    expect(copy).toContain('Both Training change permissions are required');
+    expect(copy).toContain('deletion preview before approval');
+    expect(copy).toContain('released and discovered');
+    expect(copy).toContain('never deletes recorded activities');
+    expect(copy).not.toContain('MCP plan and workout deletion do not select this option');
+  });
   it('explains uncertain MCP apply replies without authorizing replacement workouts or approval bypass', () => {
     const copy = HELP_SECTIONS.find(section => section.id === 'training-plans')!.content;
     expect(copy).toContain('it may already have applied');
@@ -26,10 +57,13 @@ describe('help.content', () => {
   });
   it('explains bounded Suunto live screens, native sensors/units and watch-controlled boundary alerts', () => {
     const content = HELP_SECTIONS.find(section => section.id === 'training-plans')!.content;
-    for (const phrase of ['## Suunto Guide screens and interval alerts', '**pace and HR**', '**power, HR and speed**',
+    for (const phrase of ['## Suunto Guide screens and interval alerts', '**block-average pace and current HR**', '**power, HR and speed**',
       'at most five fields', 'Long manual instructions stay text-only', 'Suunto renders native watch units',
       'not guaranteed to match the 500 m split', 'missing readings are unavailable, not zero',
-      'do not create recorded laps or lap averages', 'including rest/recovery and every repeat', '**Guide complete**',
+      "Suunto's current manual-lap average", 'not instant pace or the whole-workout average',
+      'create recorded laps at automatic step boundaries', 'does not create a duplicate',
+      'creates no opening lap', 'resets the displayed average early', 'including HR-only strength Guides',
+      'do not prove target adherence', 'including rest/recovery and every repeat', '**Guide complete**',
       'without adding workout time or stopping activity recording', '**your watch settings**',
       'no promised pre-end countdown beeps or out-of-target alerts', 'approximately 20 seconds',
       'prioritize your notes or exercise/set instructions', '**For 01m 30s**', '**Recover for 30s**', '**Rest for 02m 00s**',
@@ -70,6 +104,19 @@ describe('help.content', () => {
     expect(content).toContain('no separate approval for each workout or edit');
     expect(content).toContain('Additional mapping losses, such as shortened exercise instructions, still need review');
     expect(content).toContain('Sent Guide status does not prove app/watch receipt or workout completion');
+  });
+
+  it('explains lap-button endings and their provider and completion boundaries', () => {
+    const content = HELP_SECTIONS.find(section => section.id === 'training-plans')!.content;
+    expect(content).toContain('**End by -> Lap button press**');
+    expect(content).toContain('warmup, work, recovery, cooldown, rest, or other steps');
+    expect(content).toContain('including steps inside fixed repeats');
+    expect(content).toContain('no time or distance limit');
+    expect(content).toContain('not a timer plus a button condition');
+    expect(content).toContain('Garmin and Suunto support these manual transitions');
+    expect(content).toContain('COROS has the mapping but delivery remains **Coming soon**');
+    expect(content).toContain('Wahoo cannot receive lap-ended steps');
+    expect(content).toContain('does not stop the recording or mark the QS workout completed');
   });
   it('keeps COROS strength implementation distinct from public Send or delivery proof', () => {
     const content = HELP_SECTIONS.find(section => section.id === 'training-plans')!.content;
@@ -1084,10 +1131,20 @@ describe('help.content', () => {
     expect(gettingStartedSection?.content).toContain('[FIT and GPX Route Files](/features/fit-gpx-route-files)');
     expect(gettingStartedSection?.content).toContain('[File Comparison Tool](/tools/compare)');
     expect(gettingStartedSection?.content).toContain('[Tools -> Compare](/tools/compare/saved)');
+    expect(gettingStartedSection?.content).toContain('**Distinct line patterns** is in **Settings -> Charts**, below **Line Width**');
+    expect(gettingStartedSection?.content).toContain('It is off by default');
+    expect(gettingStartedSection?.content).toContain('Primary and overlay lines keep their normal stroke widths');
+    expect(gettingStartedSection?.content).toContain('Use **Save Changes** to apply this account preference');
+    expect(gettingStartedSection?.content).toContain('in **Chart options** on merged and benchmark event details');
+    expect(gettingStartedSection?.content).toContain('changes in event details save immediately and use the same preference');
     expect(gettingStartedSection?.content).toContain('sortable, filterable, paginated table with device, activity type, and review tag filters, selected-row bulk delete, distance, ascent, descent, visible benchmark pairs, GNSS/heart-rate/altitude benchmark error metrics colored by low/moderate/high error, clickable draft metric cells that open the benchmark flow, quick description notes, and custom reviewer tags');
     expect(gettingStartedSection?.content).toContain('Benchmark reports show an **At a Glance** reviewer summary');
     expect(gettingStartedSection?.content).toContain('report share menu can copy that summary');
     expect(gettingStartedSection?.content).toContain('account-level device color preferences from saved file comparisons');
+    expect(gettingStartedSection?.content).toContain('**Use Okabe–Ito preset**');
+    expect(gettingStartedSection?.content).toContain('**Standard** is selected by default and also offers dark gray and tan');
+    expect(gettingStartedSection?.content).toContain('solid, dashed, dotted, and dash-dot patterns');
+    expect(gettingStartedSection?.content).toContain('black becomes neutral gray in dark mode');
     expect(gettingStartedSection?.content).toContain('keyed by the base device name rather than firmware/software version');
     expect(gettingStartedSection?.content).toContain('activity toggles, event tables, benchmark dialogs, charts, and maps');
     expect(gettingStartedSection?.content).toContain('uploaded FIT/TCX/GPX/JSON/SML activity files');

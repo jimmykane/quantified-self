@@ -128,6 +128,12 @@ async function request(urlOrOptions: string | any, options: any = {}) {
         method: opts.method || 'GET',
         headers: opts.headers || {},
     };
+    if (opts.redirect !== undefined) {
+        if (!['error', 'manual', 'follow'].includes(opts.redirect)) {
+            throw new TypeError('Unsupported redirect policy.');
+        }
+        fetchOptions.redirect = opts.redirect;
+    }
 
     if (opts.body) {
         if (typeof opts.body === 'object' && opts.json !== false) {

@@ -7,7 +7,7 @@ import type { DeliveryOperation, DeliveryTransportProgress, TrainingDeliveryTran
 describe('Private Suunto mapping diagnostics', () => {
   const operation = { kind: 'upsert', digest: 'private-digest', workout: { title: 'private-workout' } } as DeliveryOperation;
   const transport = (value: string | null) => ({ diagnosticMappingVersion: vi.fn(() => value) }) as unknown as TrainingDeliveryTransport;
-  it.each(['suunto-guides-v2', 'suunto-guides-v3'] as const)('uses the verified operation version %s', version => {
+  it.each(['suunto-guides-v2', 'suunto-guides-v3', 'suunto-guides-v4'] as const)('uses the verified operation version %s', version => {
     const adapter = transport(version);
     const mapping = deliveryDiagnosticMapping('suunto', adapter, operation);
     expect(deliveryDiagnosticLabels(mapping, 'recover')).toEqual({ guideMappingVersion: version, deliveryPhase: 'recover' });

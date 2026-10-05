@@ -794,6 +794,9 @@ function buildMcpServerInstructions(auth: AuthenticatedMcpRequest): string {
       const focusedCreateGuidance = auth.scopes.includes(MCP_OAUTH_SCOPES.TrainingDeliveryWrite)
         ? 'include its optional delivery object when the same workout should be sent immediately to providers'
         : 'provider delivery is not available on this connection, so do not add delivery input';
+      instructions.push(auth.scopes.includes(MCP_OAUTH_SCOPES.TrainingDeliveryWrite)
+        ? 'For deletion of a current plan or planned workout, ask "Also remove older, uncompleted copies from your connected services?" unless the user already explicitly chose. Use preview_training_deletion for one exact current reference and schedule revision, with that explicit removePastProviderCopies boolean. Also ask the plan workout disposition when needed. Eligible upcoming copies already withdraw automatically. Cleanup requests all eligible copies originally sent by QS, needs valid same-account access and provider support, and does not delete completed activities or guarantee app/watch removal. Show the choice before native approval; an applied deletion only requests cleanup, not confirmed provider removal. Do not add this field to the frozen batch preview. For several deletions, review each focused deletion separately when older-copy cleanup is requested.'
+        : 'Deletion through this connection cannot request older service-copy cleanup without Training provider delivery changes permission. Legacy deletion still withdraws eligible upcoming copies automatically and keeps older copies and completed activities. Explain that limitation and get the user’s choice before proceeding; never silently substitute legacy deletion for requested full service cleanup.');
       instructions.push(`${readGuidance} Construct non-strength workout recipes using stable unique node IDs and canonical seconds, metres, kilojoules, bpm, watts, metres per second, rpm and percentage points. Pace is still stored as metres per second with pace presentation. For a pool swim with an authored pool length, use preview_planned_workout_v2_change for one create/update, preserving its canonical metres and metres-or-yards presentation; a v1 update must not erase a selected pool length. Never infer pool length from workout distance. For StrengthTraining create or update, use preview_strength_workout_change with the complete exercise-aware draft, canonical external load in kilograms, and current schedule revision; the server derives the compatibility summary. Never use a v1-only create/update for strength or invent omitted sets, load or rest. Never invent a threshold or relative-target reference snapshot; ask when required authored inputs are missing. For one new non-strength workout without a pool length, read the current schedule revision and use preview_create_planned_workout exactly once; ${focusedCreateGuidance}. Do not use the batch tool for either focused case. Use preview_training_changes once only for other or genuinely multi-change requests. Plan deletion must be the sole proposed change: never infer whether its workouts should become standalone or be permanently deleted, and state that the plan and its revision history are permanently removed. Present preview effects, then call the separately approval-gated apply_training_changes tool once; the client owns its native approval UI. Never retry a rejected preview unchanged, imply that a preview changed data, or claim provider delivery succeeded before the apply result says so.`);
     } else {
       instructions.push(`${readGuidance} Only provider-delivery changes are available. Use preview_training_changes once with complete input, present its effects, then call the separately approval-gated apply_training_changes tool once; the client owns its native approval UI. Never retry a rejected preview unchanged or claim delivery succeeded before the apply result says so.`);
@@ -864,7 +867,7 @@ export function createMcpServer(
   });
   const runReadOnlyTool = createReadOnlyToolRunner(outputSchemas);
   const runTrainingWriteTool = async (
-    name: 'preview_create_planned_workout' | 'preview_training_changes' | 'preview_strength_workout_change' | 'preview_planned_workout_v2_change' | 'preview_saved_workout_change' | 'apply_training_changes' | 'apply_saved_workout_change',
+    name: 'preview_create_planned_workout' | 'preview_training_changes' | 'preview_strength_workout_change' | 'preview_planned_workout_v2_change' | 'preview_saved_workout_change' | 'preview_training_deletion' | 'apply_training_changes' | 'apply_saved_workout_change',
     operation: () => Promise<unknown>,
   ) => {
     let stage: 'operation' | 'validation' | 'serialization' = 'operation';
@@ -1033,6 +1036,17 @@ export function createMcpServer(
     && (auth.scopes.includes(MCP_OAUTH_SCOPES.TrainingPlansWrite)
       || auth.scopes.includes(MCP_OAUTH_SCOPES.TrainingDeliveryWrite))) {
     if (auth.scopes.includes(MCP_OAUTH_SCOPES.TrainingPlansWrite)) {
+      if (auth.scopes.includes(MCP_OAUTH_SCOPES.TrainingDeliveryWrite)) {
+        registerMcpTool(server, 'preview_training_deletion', {
+          title: 'Preview Training deletion and service-copy cleanup',
+          description: 'Preview deleting one current plan or recoverably deleting one planned workout. Ask: also remove older, uncompleted copies from connected services? Set removePastProviderCopies only to the user’s explicit choice. Plan deletion also needs a choice to keep workouts as standalone or delete them. Eligible upcoming copies already withdraw by default. Completed activities stay untouched; cleanup is best effort with valid access/provider support, not watch removal. Nothing changes before approval-gated apply_training_changes. Requires both Training write permissions.',
+          inputSchema: TRAINING_WRITE_INPUTS.preview_training_deletion,
+          outputSchema: outputSchemas.preview_training_deletion,
+          annotations: TRAINING_PREVIEW_TOOL_ANNOTATIONS,
+        }, input => runTrainingWriteTool('preview_training_deletion', () => dataService.previewTrainingDeletion({
+          arguments: input, uid: auth.uid, connectionId: auth.connectionId, scopes: auth.scopes,
+        })));
+      }
       const canDeliverCreatedWorkout = auth.scopes.includes(MCP_OAUTH_SCOPES.TrainingDeliveryWrite);
       registerMcpTool(server, 'preview_create_planned_workout', {
         title: 'Preview a new planned workout',
@@ -2254,6 +2268,9 @@ export function requiredScopesForRequest(body: unknown): McpOAuthScope[] {
   }
   if (toolName === 'preview_strength_workout_change' || toolName === 'preview_planned_workout_v2_change') {
     return [MCP_OAUTH_SCOPES.TrainingPlansRead, MCP_OAUTH_SCOPES.TrainingPlansWrite];
+  }
+  if (toolName === 'preview_training_deletion') {
+    return [MCP_OAUTH_SCOPES.TrainingPlansRead, MCP_OAUTH_SCOPES.TrainingPlansWrite, MCP_OAUTH_SCOPES.TrainingDeliveryWrite];
   }
   if (toolName === 'preview_saved_workout_change' || toolName === 'apply_saved_workout_change') {
     return [MCP_OAUTH_SCOPES.TrainingPlansRead, MCP_OAUTH_SCOPES.TrainingPlansWrite];

@@ -236,6 +236,7 @@ describe('AppUserUtilities', () => {
             expect(settings.chartSettings?.stackYAxes).toBe(false);
             expect(settings.chartSettings?.showSwimLengths).toBe(true);
             expect(settings.chartSettings?.syncChartHoverToMap).toBe(false);
+            expect(settings.chartSettings?.useDistinctComparisonLinePatterns).toBe(false);
             expect(settings.chartSettings?.eventChartOverlayDataTypeByPrimary).toEqual({});
             expect(settings.deviceDisplaySettings?.deviceColorByName).toEqual({});
             expect(settings.dashboardSettings?.dateRange).toBe(DateRanges.all);
@@ -263,6 +264,11 @@ describe('AppUserUtilities', () => {
             expect((settings.myTracksSettings as any)?.tripSortDirection).toBe('desc');
             expect(settings.serviceSyncSettings?.activitySyncRoutes?.[ACTIVITY_SYNC_ROUTE_IDS.GarminAPI_to_SuuntoApp]?.enabled).toBe(false);
             expect(settings.serviceSyncSettings?.activitySyncRoutes?.[ACTIVITY_SYNC_ROUTE_IDS.COROSAPI_to_SuuntoApp]?.enabled).toBe(false);
+        });
+
+        it.each([false, true])('preserves an explicit comparison line pattern preference of %s', (enabled) => {
+            const user = { settings: { chartSettings: { useDistinctComparisonLinePatterns: enabled } } } as unknown as User;
+            expect(AppUserUtilities.fillMissingAppSettings(user).chartSettings.useDistinctComparisonLinePatterns).toBe(enabled);
         });
 
         it('should preserve valid dashboard action prompt dismissal state', () => {

@@ -1,6 +1,13 @@
 <h2 mat-dialog-title>Device colors</h2>
 
 <mat-dialog-content class="device-color-dialog-content">
+  <p class="palette-help">Choose a color for each device, or use the Okabe–Ito preset for the listed devices. Changes are saved when you select Apply.</p>
+  <button mat-stroked-button type="button" class="preset-button"
+    [disabled]="isSaving() || devices().length === 0 || devices().length > presetDeviceLimit"
+    (click)="useOkabeItoPreset()">Use Okabe–Ito preset</button>
+  @if (devices().length > presetDeviceLimit) {
+  <p class="palette-help">The preset supports up to eight devices. Select colors individually for larger comparisons.</p>
+  }
   @if (devices().length === 0) {
   <p class="empty-device-colors">No loaded devices</p>
   } @else {
@@ -32,17 +39,31 @@
     <section class="device-color-editor" aria-label="Selected device color">
       <h3 class="mat-title-small">{{ selectedDevice()?.label }}</h3>
 
+      <mat-form-field appearance="outline" subscriptSizing="dynamic">
+        <mat-label>Palette</mat-label>
+        <mat-select [value]="selectedPaletteID()" [disabled]="isSaving()"
+          (selectionChange)="selectPalette($event.value)">
+          @for (palette of paletteOptions; track palette.id) {
+          <mat-option [value]="palette.id">{{ palette.label }}</mat-option>
+          }
+        </mat-select>
+      </mat-form-field>
+      @if (selectedPaletteID() === 'okabe-ito') {
+      <p class="palette-help">Designed by color-blind researchers Masataka Okabe and Kei Ito. Enable Distinct line patterns in Settings → Charts or Chart options on merged and benchmark event details for additional device cues. Dark colors are lightened in dark mode.</p>
+      }
       <div class="palette-grid" role="group" aria-label="Palette colors">
-        @for (color of palette; track color) {
+        @for (swatch of selectedPalette().colors; track swatch.color) {
         <button
           mat-icon-button
           type="button"
           class="palette-swatch"
-          [class.selected]="selectedDeviceColor() === color"
-          [style.--device-color]="color"
+          [class.selected]="selectedDeviceColor() === swatch.color"
+          [style.--device-color]="swatch.color"
           [disabled]="isSaving()"
-          [attr.aria-label]="'Use ' + color"
-          (click)="setSelectedDeviceColor(color)">
+          [attr.aria-label]="'Use ' + swatch.label + ' (' + swatch.color + ')'"
+          [attr.aria-pressed]="selectedDeviceColor() === swatch.color"
+          [matTooltip]="swatch.label"
+          (click)="setSelectedDeviceColor(swatch.color)">
           <span aria-hidden="true"></span>
         </button>
         }
@@ -56,6 +77,7 @@
           [style.--device-color]="customColorValue()"
           aria-hidden="true"></span>
         <input
+          aria-label="Custom device color"
           matInput
           type="color"
           [disabled]="isSaving()"
@@ -77,7 +99,7 @@
 </mat-dialog-content>
 
 <mat-dialog-actions align="end">
-  <button mat-button type="button" [mat-dialog-close]="false" [disabled]="isSaving()">Cancel</button>
+  <button mat-button type="button" appHapticTap [mat-dialog-close]="false" [disabled]="isSaving()">Cancel</button>
   <button
     mat-flat-button
     class="qs-mat-primary"
