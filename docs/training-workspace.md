@@ -128,23 +128,39 @@ helper and callable specs and the deletion cases in the `mcp-data` emulator grou
 and both cleanup choices. Backend/frontend deployment remains separate.
 Plan-level and provider-only actions select the batch preview before a sport keyword can select a focused recipe editor;
 a combined historical comparison and workout recommendation keeps live daily and completed-activity reads available.
-For a today recommendation, the server prepares Form, Form Now, ramp-rate and Training Summary snapshots before the
+For a dated workout recommendation, the server prepares Form, Form Now, ramp-rate and Training Summary snapshots before the
 daily report, then reads the ready Form, ramp-rate and Training Summary payloads. It also reads canonical daily
 `Duration` buckets and today's completed activities. The model-only bucket projection supplies local weekday labels;
 server code counts positive-duration dates in the 28-day local window, including today, without changing MCP output or
 Training calculations. With separate consent, the server reads recent Timeline notes for up to two bounded pages,
-marks each ended or ongoing from its actual dates, and never treats an ended sickness note as current illness. Closed
+marks each ended, ongoing or upcoming from its actual dates, and never treats an ended sickness note as current illness. Closed
 notes precede ongoing notes, so an incomplete scan cannot prove their absence. With Training plans read access, it
-reads today's calendar and one bounded bulk exact-completion result for its listed workouts; a planned lifecycle is
+reads the requested day's calendar and one bounded bulk exact-completion result for its listed workouts; a planned lifecycle is
 not completion evidence. The server appends these verified facts and gaps to the recommendation. Incomplete activity,
 note or calendar scans block a workout preview. Note access remains independent of Training read/write choices;
 missing consent is reported rather than treated as an empty history. This Assistant-only orchestration changes no MCP
 tool, schema, scope, projection, consent or provider action, and needs no registered-client or plugin update.
+The recommendation date is resolved from the current request or its uninterrupted dated user-message chain, using stored
+message timestamps and the turn's IANA timezone. “Tomorrow” does not drift to today or roll forward when inherited after
+midnight. Weekday consistency matches the target day, while readiness, sleep and recorded activities describe the current
+evidence day; fresh reads override earlier answers. Future recommendations are conditional on a later readiness check.
+“Today is done” and a no-plan hypothetical remain explicit constraints for short follow-ups, never provider/write consent.
+An ambiguous date requires clarification; a create preview on a different date is rejected before MCP. Consented notes
+include upcoming dated context through the requested day within the existing 366-day query and two-page bounds; incomplete
+coverage blocks a preview. No historical answer establishes today's completed volume or future readiness.
 Proposal references bind the exact conversation generation, so permission changes, New chat, stale tabs and account
 switches cannot reuse them. The dedicated App Check callable rechecks the conversation before applying and clears the
 pending proposal after either apply or dismiss. Internal Training reads recognize both the fixed first-party Assistant
 identity and its conversation-bound suffix as server-owned authority while retaining that complete identity in opaque
 reference binding. They never require or synthesize an external MCP connection record.
+The existing Assistant evidence array retains a compact, server-authored Apply/Dismiss result, including authored counts
+and grouped service-request outcomes. It survives a concurrent follow-up completion, remains generation/deletion fenced,
+and distinguishes accepted delivery intent from confirmed provider delivery. No retention extension, cross-chat memory,
+new persistence model or callable is introduced. See [Assistant context and lifecycle](assistant.md).
+MCP impact review: these changes affect first-party orchestration and existing chat evidence only. Public tools, recipe
+JSON, scopes, schemas, safe projections, native approval and bundled-plugin contracts are unchanged. Verification includes
+date/follow-up/model-context unit cases, real Firestore Apply/Dismiss plus concurrent-history fixtures, frontend contracts
+and registered MCP compatibility checks. No registered-client refresh, reauthorization or plugin rebuild is required.
 
 External MCP clients and the built-in Assistant have different recovery paths for missing Training access. An external
 client must start OAuth authorization again and approve `training-plans:read` plus either independent child scope as

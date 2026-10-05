@@ -224,15 +224,20 @@ Plan-level and provider-only actions select the batch preview before sport-speci
 or pool-length change selects its focused preview. A combined comparison and workout recommendation retains live daily
 and completed-activity reads instead of inheriting a single-purpose analytical workflow. This is internal routing only:
 the public tool list, scopes, strict schemas and approval boundary do not change.
-The same combined today recommendation deterministically collects a bounded context through the existing MCP session.
+The same dated workout recommendation deterministically collects a bounded context through the existing MCP session.
 It prepares and reads relevant ready Training snapshots, the daily report, canonical `Duration` buckets and today's
-activities. With separate consent it reads bounded dated Timeline notes and today's planned workouts, followed by a
+activities. With separate consent it reads bounded dated Timeline notes and the requested day's planned workouts, followed by a
 bulk exact-completion read for the listed workouts. The server counts local weekday activity days and appends verified
 note dates, scan limits and completion states to the answer; an incomplete scan blocks a workout preview. User-authored
 text cannot instruct a provider or authorize a plan change. The internal model-only projection adds local date/weekday
 labels to numeric metric buckets using the request's IANA time zone, without changing the validated public metric
 response or registered contract. Gemini keeps its six model-selected calls for additional detail or one expressly
 requested focused preview; the deterministic context has a separate bounded read budget.
+First-party follow-ups preserve dated user-message context, target-day calendar/weekday semantics and compact server-owned
+Apply/Dismiss confirmation evidence. Current validated reads override prior answers; current readiness is not future
+readiness, and inherited conversation context never grants write or provider consent. These are internal Assistant
+corrections, not new MCP tools, scopes, schemas, exposed fields or approval behavior. The registered baseline, pending
+changes and bundled plugin remain unchanged. See [Assistant context and lifecycle](assistant.md) for retention and tests.
 
 Every future planning feature must review MCP impact in the same PR: explicit projections, schemas, consent, bounds, units,
 Assistant/plugin guidance and tests. Record a no-impact rationale or a focused epic-linked Project 2 deferral. Maintaining

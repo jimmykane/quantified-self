@@ -7,6 +7,7 @@ import {
   dailyWorkoutFacts,
   requestsDailyWorkoutChange,
   requestsDailyWorkoutContext,
+  resolveDailyWorkoutRequest,
 } from './daily-workout-context';
 
 const NOW = new Date('2026-09-25T12:00:00.000Z');
@@ -51,6 +52,106 @@ function fixtureRead() {
 }
 
 describe('daily workout context', () => {
+  const history = [
+    { role: 'user' as const, text: 'Suggest a workout for today using readiness and my plan.',
+      createdAt: '2026-10-03T09:00:00Z' },
+    { role: 'assistant' as const, text: 'Consider an easy ride.', createdAt: '2026-10-03T09:01:00Z' },
+    { role: 'user' as const, text: 'What about tomorrow?', createdAt: '2026-10-03T09:02:00Z' },
+  ];
+
+  it('retains the recommendation thread for tomorrow and the no-plan hypothetical without inheriting writes', () => {
+    for (const prompt of ['What about tomorrow?', 'For tomorrow please.',
+      "Today was done so no other session. If I didn't have that plan what would you propose taking into account all the above?"]) {
+      expect(requestsDailyWorkoutContext(prompt, history)).toBe(true);
+      expect(requestsDailyWorkoutChange(prompt)).toBe(false);
+      expect(resolveDailyWorkoutRequest(prompt, history, new Date('2026-10-03T10:00:00Z'), 'Europe/Helsinki').targetDate)
+        .toBe('2026-10-04');
+    }
+    expect(resolveDailyWorkoutRequest("Today was done so no other session. If I didn't have that plan, for tomorrow please.",
+      history, new Date('2026-10-03T10:00:00Z'), 'Europe/Helsinki')).toEqual({
+      targetDate: '2026-10-04', hypotheticalWithoutPlan: true, noAdditionalWorkoutToday: true,
+    });
+    expect(requestsDailyWorkoutContext('What about tomorrow?', [...history,
+      { role: 'user', text: 'Show my weight trend.' }])).toBe(false);
+  });
+
+  it('anchors inherited relative dates to the original message while a new today request uses the new day', () => {
+    const nextMorning = new Date('2026-10-04T08:00:00Z');
+    expect(resolveDailyWorkoutRequest('Please reassess the session.', history, nextMorning, 'Europe/Helsinki').targetDate)
+      .toBe('2026-10-04');
+    expect(resolveDailyWorkoutRequest('Create a workout for today.', history, nextMorning, 'Europe/Helsinki').targetDate)
+      .toBe('2026-10-04');
+    expect(resolveDailyWorkoutRequest('What about tomorrow?', history, nextMorning, 'Europe/Helsinki').targetDate)
+      .toBe('2026-10-05');
+  });
+
+  it('retains hypothetical and same-day constraints for short follow-ups but not a new request or new day', () => {
+    const constrained = [...history, { role: 'user' as const, createdAt: '2026-10-03T09:03:00Z',
+      text: "Today was done so no other session. If I didn't have that plan what would you propose taking into account all the above?" }];
+    expect(resolveDailyWorkoutRequest('For tomorrow please.', constrained, new Date('2026-10-03T12:00:00Z'), 'Europe/Helsinki'))
+      .toEqual({ targetDate: '2026-10-04', hypotheticalWithoutPlan: true, noAdditionalWorkoutToday: true });
+    expect(resolveDailyWorkoutRequest('Please reassess the session.', constrained, new Date('2026-10-04T12:00:00Z'), 'Europe/Helsinki'))
+      .toEqual({ targetDate: '2026-10-04', hypotheticalWithoutPlan: true, noAdditionalWorkoutToday: false });
+    expect(resolveDailyWorkoutRequest('Create a workout for today.', constrained, new Date('2026-10-04T12:00:00Z'), 'Europe/Helsinki'))
+      .toEqual({ targetDate: '2026-10-04', hypotheticalWithoutPlan: false, noAdditionalWorkoutToday: false });
+  });
+
+  it.each([
+    ['2026-12-31T23:30:00Z', 'Europe/Helsinki', '2027-01-02'],
+    ['2028-02-28T12:00:00Z', 'Europe/Helsinki', '2028-02-29'],
+    ['2026-03-28T12:00:00Z', 'Europe/Helsinki', '2026-03-29'],
+    ['2026-10-24T12:00:00Z', 'Europe/Helsinki', '2026-10-25'],
+    ['2026-10-04T00:30:00Z', 'America/Los_Angeles', '2026-10-04'],
+  ])('resolves tomorrow as a calendar date across DST/leap/year/zone boundaries %s', (time, zone, target) => {
+    expect(resolveDailyWorkoutRequest('Suggest a workout for tomorrow.', [], new Date(time), zone).targetDate).toBe(target);
+  });
+
+  it('keeps ambiguous or impossible target dates unresolved instead of choosing today', () => {
+    for (const prompt of ['Suggest a workout for today and tomorrow.', 'Suggest a workout on 2026-02-30.']) {
+      expect(resolveDailyWorkoutRequest(prompt, history, NOW, 'Europe/Helsinki').targetDate).toBeNull();
+    }
+  });
+
+  it('keeps explicit plan creation on the multi-workout workflow and ends the previous daily recommendation thread', () => {
+    for (const prompt of ['Create a training plan for tomorrow.', 'Create me a new plan for Tuesday and Wednesday.',
+      'Build a new training plan with one workout today and one tomorrow.']) {
+      expect(requestsDailyWorkoutContext(prompt, history)).toBe(false);
+      expect(requestsDailyWorkoutContext('What about tomorrow?', [...history, { role: 'user', text: prompt }])).toBe(false);
+    }
+    expect(requestsDailyWorkoutContext('Create a workout for tomorrow using my plan.', history)).toBe(true);
+  });
+
+  it('checks the requested day calendar and weekday while keeping current readiness and completed activity dated today', async () => {
+    const base = fixtureRead();
+    const read = vi.fn(async (name: string, args: Record<string, unknown>) => {
+      if (name === 'get_training_metric') return { metricKind: args.metricKind, payload: {} };
+      if (name === 'query_planned_workouts_by_date') return { scheduleRevision: 7, scanComplete: true, workouts: [] };
+      if (name === 'query_timeline_notes') return { scanComplete: true, notes: [{
+        category: 'travel', title: 'Trip', startDate: '2026-09-26', endDate: '2026-09-27',
+        effectiveEndDate: '2026-09-27', timeZone: 'Europe/Helsinki',
+      }] };
+      return base(name);
+    });
+    const result = await collectDailyWorkoutContext({ now: NOW, timeZone: 'Europe/Helsinki',
+      timelineNotesEnabled: true, trainingPlansEnabled: true, read: read as never,
+      request: { targetDate: '2026-09-26', hypotheticalWithoutPlan: true, noAdditionalWorkoutToday: true } });
+    expect(result.localDate).toBe('2026-09-25');
+    expect(result.weekday).toBe('Saturday');
+    expect(result.weekdayConsistency.matchingWeekdayCount).toBe(0);
+    expect(result.timelineNotes.notes[0].status).toBe('upcoming');
+    expect(read).toHaveBeenCalledWith('query_planned_workouts_by_date', {
+      startDate: '2026-09-26', endDate: '2026-09-26', limit: 25,
+    });
+    expect(read).toHaveBeenCalledWith('query_timeline_notes', expect.objectContaining({ endDate: '2026-09-26' }));
+    expect(read).toHaveBeenCalledWith('query_activities', expect.objectContaining({ relativePeriod: 'today' }));
+    const facts = dailyWorkoutFacts(result);
+    expect(facts).toContain('**Planned 2026-09-26:** No workouts listed for 2026-09-26');
+    expect(facts).toContain('as of 2026-09-25, not forecast');
+    expect(facts).toContain('No additional workout today');
+    expect(facts).toContain('hypothetical suggestion');
+    expect(facts).not.toContain('**Planned today:**');
+  });
+
   it('recognizes a today recommendation and its reassessment, but not an unrelated plan question', () => {
     const prompt = 'For today, suggest a cautious workout using sleep and my plan.';
     expect(requestsDailyWorkoutContext(prompt, [])).toBe(true);
@@ -66,6 +167,20 @@ describe('daily workout context', () => {
       { role: 'user', text: prompt }, { role: 'assistant', text: 'Here is the suggestion.' },
       { role: 'user', text: 'Show my weight trend.' },
     ])).toBe(false);
+  });
+
+  it('keeps distant-date notes inside the existing query contract without claiming a complete scan', async () => {
+    const base = fixtureRead();
+    const read = vi.fn(async (name: string, args: Record<string, unknown>) => name === 'get_training_metric'
+      ? { metricKind: args.metricKind, payload: {} } : base(name));
+    const result = await collectDailyWorkoutContext({ now: NOW, timeZone: 'UTC',
+      timelineNotesEnabled: true, trainingPlansEnabled: false, read: read as never,
+      request: { targetDate: '2027-12-31', hypotheticalWithoutPlan: false, noAdditionalWorkoutToday: false } });
+    expect(read).toHaveBeenCalledWith('query_timeline_notes', expect.objectContaining({
+      startDate: '2026-08-29', endDate: '2027-08-29',
+    }));
+    expect(result.timelineNotes.scanComplete).toBe(false);
+    expect(dailyWorkoutFacts(result)).toContain('Some notes could not be checked');
   });
 
   it('previews only an expressly requested workout change', () => {

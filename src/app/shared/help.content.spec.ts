@@ -14,6 +14,14 @@ import {
 } from './policies.content';
 
 describe('help.content', () => {
+  it('explains dated follow-ups, fresh evidence and confirmed Training outcomes without promising cross-chat memory', () => {
+    const copy = HELP_SECTIONS.find(section => section.id === 'ai-insights')!.content;
+    for (const phrase of ['message dates and confirmed Training changes', 'Freshly checked records take precedence',
+      'not memory across separate chats', 'requested date clear', "not a prediction of tomorrow's sleep",
+      'without changing your actual schedule', '**Training review result**', 'accepted sync request is not proof of delivery']) {
+      expect(copy).toContain(phrase);
+    }
+  });
   it('explains accessible interval moves, independent copies, parent boundaries and saving', () => {
     const copy = HELP_SECTIONS.find(section => section.id === 'training-plans')!.content;
     for (const phrase of ['**drag handle**', '**Move up**', '**Move down**', '**Duplicate step**',

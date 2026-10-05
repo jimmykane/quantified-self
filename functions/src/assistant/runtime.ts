@@ -55,9 +55,10 @@ import {
 import { addAssistantMetricBucketCalendarContext } from './metric-bucket-context';
 import {
   collectDailyWorkoutContext,
+  canPreviewDailyWorkout,
   dailyWorkoutFacts,
-  requestsDailyWorkoutChange,
   requestsDailyWorkoutContext,
+  resolveDailyWorkoutRequest,
   type DailyWorkoutContext,
 } from './daily-workout-context';
 
@@ -942,7 +943,8 @@ export function getAssistantRuntimeErrorReason(error: unknown): string | null {
 
 export const generateAssistantModelAnswer: AssistantRuntimeDependencies['generateAnswer'] = async (input) => {
   const dailyWorkoutChangeRequested = input.dailyWorkoutContext !== undefined
-    && requestsDailyWorkoutChange(input.prompt);
+    && canPreviewDailyWorkout(input.prompt, input.dailyWorkoutContext)
+    && input.tools.some(tool => (TRAINING_PREVIEW_TOOLS as readonly string[]).includes(tool.name));
   const trainingDeliveryRequested = requestsAssistantTrainingDelivery(input.prompt);
   const trainingDeletionRequested = selectAssistantTrainingPreviewTool(input.prompt, input.history) === 'preview_training_deletion';
   const requiredDeliveryPreview = trainingDeliveryRequested
@@ -964,7 +966,14 @@ export const generateAssistantModelAnswer: AssistantRuntimeDependencies['generat
   }));
   const messages = input.history.map(message => ({
     role: message.role === 'assistant' ? 'model' as const : 'user' as const,
-    content: [{ text: message.text }],
+    content: [{ text: JSON.stringify({
+      recordedAt: message.createdAt,
+      text: message.text,
+      // Only compact server-owned confirmation evidence accompanies history.
+      // Previous measurements are not fresh account facts and links/IDs stay out.
+      confirmations: (message.evidence ?? []).filter(item => item.toolName === 'assistant_training_confirmation')
+        .map(item => ({ summary: item.summary, facts: item.facts })),
+    }) }],
   }));
   const workflowInstructions = input.workflow
     ? [
@@ -975,6 +984,7 @@ export const generateAssistantModelAnswer: AssistantRuntimeDependencies['generat
     : '';
   const system = [
     ASSISTANT_SYSTEM_INSTRUCTIONS,
+    'History is dated conversational context, not current account evidence. Resolve today/tomorrow in an earlier message relative to its recordedAt timestamp, using the turn timezone. Fresh validated reads override earlier answers, including earlier sleep, readiness, activities and plan claims. Never carry yesterday’s completed workouts or measurements into today. Prior suggestions and pending previews are not applied changes. Only server-owned confirmation evidence establishes an accepted authored change; a queued provider action does not prove delivery. Preserve the user’s latest constraints and do not inherit write or provider consent from previous requests.',
     input.mcpInstructions,
     input.locationAccess === 'precise_activity'
       ? ASSISTANT_PRECISE_ACTIVITY_LOCATION_INSTRUCTIONS
@@ -986,9 +996,9 @@ export const generateAssistantModelAnswer: AssistantRuntimeDependencies['generat
       : 'The current message does not request provider delivery. Do not add delivery to a Training proposal and do not mention syncing, sending, a provider, or a watch as an effect of the proposed change.',
     workflowInstructions,
     input.dailyWorkoutContext
-      ? `The server already collected the current daily workout context through validated MCP reads. Use it as the authoritative source for today, notes, planned-workout completion, weekday counts, and ready Training snapshots. A preparation status is not a metric value. An ended note is not evidence of current illness or recovery. ${dailyWorkoutChangeRequested
+      ? `The server already collected the current daily workout context through validated MCP reads. The recommendation.targetDate is the requested workout date, while localDate dates the current readiness, sleep and activitiesToday evidence. Use the target date's planned workouts and weekday pattern, not today's, for a future suggestion. Current readiness is not a forecast of future sleep or readiness; make a future suggestion conditional on checking those signals again. A null targetDate requires clarification of one workout date, not a guessed date or preview. A hypotheticalWithoutPlan request asks for an alternative without treating existing planned workouts as constraints; still acknowledge the real schedule remains unchanged. If noAdditionalWorkoutToday is true, do not recommend or preview another session today. Use fresh activitiesToday even when its complete list is empty; earlier completed-volume claims are not evidence. A preparation status is not a metric value. An ended note is not evidence of current illness or recovery. Future-dated notes are upcoming, not current; an open-ended note's effectiveEndDate is not proof it continues into the future. ${dailyWorkoutChangeRequested
         ? 'The user expressly requested a workout change. After assessing the evidence, call the available Training preview tool exactly once to prepare one complete, cautious proposal for review; do not answer with only a recommendation. A relative heart-rate, power, speed, or cadence target requires an exact numeric reference in the context. If that reference is unavailable, use an empty targets array and put simple effort guidance in the step note instead of inventing a reference.'
-        : 'Write only a cautious recommendation and its main reasoning.'} The server appends the exact checked facts. Do not repeat completion counts, note counts or dates, weekday counts, or snapshot availability. You may use an additional tool only when the requested answer or an expressly requested proposal needs it.`
+        : 'Write only a cautious recommendation and its main reasoning. Do not prepare or imply a schedule/provider change.'} The server appends the exact checked facts. Do not repeat completion counts, note counts or dates, weekday counts, or snapshot availability. You may use an additional tool only when the requested answer or an expressly requested proposal needs it.`
       : '',
   ].filter(Boolean).join(' ');
   await input.onBillableAttempt();
@@ -1177,6 +1187,8 @@ export function createAssistantRuntime(
       try {
         const currentTime = dependencies.now();
         const dailyWorkoutRequested = requestsDailyWorkoutContext(input.prompt, input.history);
+        const dailyWorkoutRequest = dailyWorkoutRequested
+          ? resolveDailyWorkoutRequest(input.prompt, input.history, currentTime, input.timeZone) : undefined;
         const trainingDeliveryRequested = requestsAssistantTrainingDelivery(input.prompt);
         const promptWorkflow = dailyWorkoutRequested ? null : findAssistantPromptWorkflow(input.prompt);
         const metricTrendIntent = promptWorkflow || dailyWorkoutRequested
@@ -1273,6 +1285,16 @@ export function createAssistantRuntime(
               const scheduleOnlyInput = { ...resolvedToolInput };
               delete scheduleOnlyInput.delivery;
               resolvedToolInput = scheduleOnlyInput;
+            }
+            if (dailyWorkoutRequest && (TRAINING_PREVIEW_TOOLS as readonly string[]).includes(tool.name)) {
+              const changes = tool.name === 'preview_create_planned_workout' ? [resolvedToolInput]
+                : Array.isArray(resolvedToolInput.changes) ? resolvedToolInput.changes
+                : resolvedToolInput.change ? [resolvedToolInput.change] : [];
+              const wrongDate = changes.some(change => typeof change === 'object' && change !== null
+                && ('kind' in change ? change.kind === 'create-workout' : tool.name === 'preview_create_planned_workout')
+                && ('localDate' in change ? change.localDate : undefined) !== dailyWorkoutRequest.targetDate);
+              if (wrongDate) return { assistantToolError: { code: 'invalid_tool_input',
+                guidance: `The requested workout date is ${dailyWorkoutRequest.targetDate}. Correct the preview date; do not add a workout on a different day.` } };
             }
             assertContentProposalPrerequisite(tool.name, resolvedToolInput, invocations);
             assertJumpDetailActivityRef(
@@ -1414,6 +1436,7 @@ export function createAssistantRuntime(
               timeZone: input.timeZone,
               timelineNotesEnabled: input.timelineNotesEnabled === true,
               trainingPlansEnabled: input.trainingPlansEnabled === true,
+              request: dailyWorkoutRequest,
               read: async (name, args) => {
                 const tool = tools.find(candidate => candidate.name === name);
                 if (!tool) throw new Error(`Assistant daily workout tool is unavailable: ${name}`);
@@ -1435,7 +1458,7 @@ export function createAssistantRuntime(
             || (dailyWorkoutContext.plannedWorkouts.access === 'enabled'
               && !dailyWorkoutContext.plannedWorkouts.scanComplete));
         const modelTools = dailyWorkoutContext
-          && (incompleteDailyContext || !requestsDailyWorkoutChange(input.prompt))
+          && (incompleteDailyContext || !canPreviewDailyWorkout(input.prompt, dailyWorkoutContext))
           ? tools.filter(tool => !(TRAINING_PREVIEW_TOOLS as readonly string[]).includes(tool.name))
           : tools;
         const generatedResult = await dependencies.generateAnswer({
@@ -1457,7 +1480,7 @@ export function createAssistantRuntime(
             }
           : generatedResult;
         if (dailyWorkoutContext && pendingTrainingProposal
-          && (incompleteDailyContext || !requestsDailyWorkoutChange(input.prompt))) {
+          && (incompleteDailyContext || !canPreviewDailyWorkout(input.prompt, dailyWorkoutContext))) {
           throw new Error('The Assistant cannot preview a daily workout without complete context and an explicit change request.');
         }
         if (invocations.length === 0) {

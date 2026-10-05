@@ -26,6 +26,8 @@ import { applyTrainingChanges, getTrainingChangeStatus, previewCreatePlannedWork
   previewStrengthWorkoutChange, previewPlannedWorkoutV2Change, previewTrainingDeletion,
   type TrainingWriteDependencies } from './training-plans-write.service';
 import { TRAINING_DELIVERY_WRITE_SCOPE, TRAINING_PLANS_SCOPE, TRAINING_PLANS_WRITE_SCOPE } from './training-plans.schemas';
+import { createAssistantConversationStore } from '../assistant/conversation-store';
+import { runApplyAssistantTrainingProposal } from '../assistant/callable';
 
 describe.skipIf(!process.env.FIRESTORE_EMULATOR_HOST)('Training MCP write proposals with real Firestore transactions', { timeout: 30_000 }, () => {
   const host = process.env.FIRESTORE_EMULATOR_HOST;
@@ -77,6 +79,45 @@ describe.skipIf(!process.env.FIRESTORE_EMULATOR_HOST)('Training MCP write propos
 
   const statusInput = (proposalRef: string) => ({ uid, connectionId: 'connection', scopes,
     arguments: { proposalRef, permissionMode: 'combined' } });
+
+  it.each([true, false])('retains the confirmed %s Assistant outcome through a concurrent follow-up without transport calls', async confirm => {
+    const store = createAssistantConversationStore({ db: () => db, now: () => new Date(deps.now()),
+      createId: () => `assistant-${++sequence}` });
+    const chat = await store.resetConversation(uid, 'coordinate_free', false, null, true, true, true);
+    const connectionId = `first-party-assistant-v1:${chat.conversationId}`;
+    const begun = await store.beginTurn(uid, chat.conversationId, undefined, undefined,
+      'coordinate_free', false, true, true, true);
+    if (begun.kind !== 'started') throw new Error('Expected an Assistant turn.');
+    const preview = await previewCreatePlannedWorkout({ uid, connectionId, scopes, arguments: {
+      expectedScheduleRevision: 1, planRef: null, localDate: '2026-09-18', title: 'Tomorrow recovery run', structure,
+      delivery: { providers: ['garmin'], timeZone: 'Europe/Helsinki' },
+    } }, deps);
+    const createdAt = new Date(deps.now()).toISOString();
+    await store.completeTurn(uid, begun, { id: 'question', role: 'user', createdAt,
+      text: 'Create a workout for tomorrow and send it to Garmin.' },
+    { id: 'proposal', role: 'assistant', createdAt, text: 'Review the proposal before adding it.' }, preview);
+    const following = await store.beginTurn(uid, chat.conversationId, undefined, undefined,
+      'coordinate_free', false, true, true, true);
+    if (following.kind !== 'started') throw new Error('Expected a follow-up turn.');
+    const apply = vi.fn(input => applyTrainingChanges(input, deps));
+    const result = await runApplyAssistantTrainingProposal({ proposalRef: preview.proposalRef,
+      permissionMode: preview.permissionMode, conversationId: chat.conversationId, confirm },
+    { auth: { uid }, app: { appId: 'synthetic-emulator-app' } }, store, apply);
+    expect(result.status).toBe(confirm ? 'applied' : 'dismissed');
+    expect(apply).toHaveBeenCalledTimes(confirm ? 1 : 0);
+    expect((await db.collection('users').doc(uid).collection('scheduledWorkouts').get()).size).toBe(confirm ? 1 : 0);
+    expect(transport?.calls).toEqual([]);
+    await store.completeTurn(uid, following, { id: 'follow-up', role: 'user', createdAt, text: 'What about tomorrow?' },
+      { id: 'answer', role: 'assistant', createdAt, text: 'Use the current schedule and readiness.' });
+    const state = await store.getActiveConversationState(uid);
+    expect(state.pendingTrainingProposal).toBeUndefined();
+    const confirmation = state.conversation?.messages[1].evidence?.[0];
+    expect(confirmation).toMatchObject({ toolName: 'assistant_training_confirmation', summary: confirm
+      ? 'Confirmed Training change: applied.' : 'Dismissed. Nothing was applied.' });
+    expect(confirmation?.facts).toContainEqual({ label: 'Service requests', value: confirm ? 'garmin: applied (1)' : 'None' });
+    expect(JSON.stringify(confirmation)).not.toContain(preview.proposalRef);
+    expect(state.conversation?.expiresAt).toBe(chat.expiresAt);
+  });
 
   it('recovers a lost final response for all 25 changes without repeating source, intent or provider creates', async () => {
     const wahoo = new WahooHttpFixture();

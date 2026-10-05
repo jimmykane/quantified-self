@@ -330,6 +330,23 @@ describe('Training preview model-tool selection', () => {
     expect(result.pendingTrainingProposal).toMatchObject({ permissionMode: 'schedule' });
   });
 
+  it('does not force a one-date recommendation onto explicit multi-date plan creation', async () => {
+    const { session, callTool } = createSession();
+    session.tools.push({ name: 'preview_training_changes', title: 'Preview plan', description: 'Preview a plan.',
+      inputSchema: { type: 'object', properties: {} } });
+    const runtime = createAssistantRuntime({ createMcpSession: vi.fn().mockResolvedValue(session),
+      now: () => new Date('2026-10-03T12:00:00Z'), generateAnswer: async input => {
+        expect(input.dailyWorkoutContext).toBeUndefined();
+        expect(input.tools.map(tool => tool.name)).toContain('preview_training_changes');
+        await input.tools.find(tool => tool.name === 'get_daily_report')!.execute({ timeZone: input.timeZone });
+        return { answer: 'I can prepare the requested plan for your review.', visualRequest: { chart: null, map: null } };
+      } });
+    await runtime.answer({ uid: 'owner', appBaseUrl: 'https://quantified-self.io',
+      prompt: 'Build a new training plan with one workout today and one tomorrow.', timeZone: 'Europe/Helsinki',
+      history: [], trainingPlansEnabled: true, trainingPlanChangesEnabled: true });
+    expect(callTool.mock.calls.map(([name]) => name)).toEqual(['get_daily_report']);
+  });
+
   it('keeps a suggestion read-only even when Training changes are enabled', async () => {
     const { session } = createDailyWorkoutSession();
     session.tools.push({ name: 'preview_create_planned_workout', title: 'Preview workout',
@@ -350,6 +367,78 @@ describe('Training preview model-tool selection', () => {
       trainingPlanChangesEnabled: true, assertTrainingPlansAccess: vi.fn().mockResolvedValue(undefined),
       assertTrainingWriteAccess: vi.fn().mockResolvedValue(undefined) });
     expect(result.pendingTrainingProposal).toBeUndefined();
+  });
+
+  it.each([
+    ['What about tomorrow?', '2026-10-03T12:00:00Z', '2026-10-04', false],
+    ["Today was done so no other session. If I didn't have that plan what would you propose taking into account all the above?",
+      '2026-10-03T12:00:00Z', '2026-10-04', true],
+    ['Please reassess the session.', '2026-10-04T12:00:00Z', '2026-10-04', false],
+    ['Suggest a workout for today.', '2026-10-04T12:00:00Z', '2026-10-04', false],
+    ['Today is done. Create another workout for today.', '2026-10-04T12:00:00Z', '2026-10-04', false],
+    ['Suggest a workout for today and tomorrow.', '2026-10-04T12:00:00Z', null, false],
+  ] as const)('grounds the recommendation follow-up %s on fresh, correctly dated evidence', async (prompt, now, targetDate, hypothetical) => {
+    const { session, callTool } = createDailyWorkoutSession();
+    session.tools.push({ name: 'preview_create_planned_workout', title: 'Preview workout',
+      description: 'Prepare a workout.', inputSchema: { type: 'object', properties: {} } });
+    const history = [{ id: 'original', role: 'user' as const, createdAt: '2026-10-03T09:00:00Z',
+      text: 'Create a workout for today and send it to Suunto.' },
+    { id: 'old-answer', role: 'assistant' as const, createdAt: '2026-10-03T09:01:00Z',
+      text: 'You completed two rides today and slept nine hours.' },
+    { id: 'tomorrow', role: 'user' as const, createdAt: '2026-10-03T09:02:00Z', text: 'What about tomorrow?' }];
+    const runtime = createAssistantRuntime({ createMcpSession: vi.fn().mockResolvedValue(session), now: () => new Date(now),
+      generateAnswer: async input => {
+        expect(input.dailyWorkoutContext).toMatchObject({
+          recommendation: { targetDate, hypotheticalWithoutPlan: hypothetical },
+          localDate: now.slice(0, 10),
+          activitiesToday: { scanComplete: true, activities: [] },
+          dailyReport: { readiness: { score: 62 }, sleep: { durationSeconds: 25_200 } },
+        });
+        expect(input.tools.some(tool => tool.name.startsWith('preview_'))).toBe(false);
+        return { answer: targetDate ? 'A cautious, conditional recommendation.' : 'Which date should I use?',
+          visualRequest: { chart: null, map: null } };
+      } });
+    const result = await runtime.answer({ uid: 'owner', appBaseUrl: 'https://quantified-self.io', prompt,
+      timeZone: 'Europe/Helsinki', history, trainingPlansEnabled: true, trainingPlanChangesEnabled: true,
+      trainingDeliveryEnabled: true, assertTrainingPlansAccess: vi.fn().mockResolvedValue(undefined) });
+    if (targetDate) expect(callTool).toHaveBeenCalledWith('query_planned_workouts_by_date', {
+      startDate: targetDate, endDate: targetDate, limit: 25,
+    });
+    else expect(callTool.mock.calls.map(([name]) => name)).not.toContain('query_planned_workouts_by_date');
+    expect(result.pendingTrainingProposal).toBeUndefined();
+    expect(result.answer).toContain('**Today:** 0 recorded activities.');
+    expect(callTool.mock.calls.map(([name]) => name).some(name => name.startsWith('preview_'))).toBe(false);
+  });
+
+  it('rejects a wrong-day create preview before MCP and permits a corrected preview for tomorrow', async () => {
+    const { session, callTool } = createDailyWorkoutSession();
+    session.tools.push({ name: 'preview_create_planned_workout', title: 'Preview workout',
+      description: 'Prepare a workout.', inputSchema: { type: 'object', properties: {} } });
+    const baseCall = callTool.getMockImplementation()!;
+    callTool.mockImplementation(async (name, args) => name === 'preview_create_planned_workout'
+      ? { structuredContent: { proposalRef: 'tomorrow-preview', permissionMode: 'schedule',
+        scheduleRevision: 7, expiresAtMs: Date.parse('2026-09-25T13:15:00Z'), requiresConfirmation: true,
+        summary: 'Create a recovery session tomorrow.', changes: [{ index: 0, kind: 'create-workout', summary: 'Recovery ride.' }],
+        providerPreviews: [] } } : baseCall(name, args));
+    const runtime = createAssistantRuntime({ createMcpSession: vi.fn().mockResolvedValue(session),
+      now: () => new Date('2026-09-25T12:00:00Z'), generateAnswer: async input => {
+        const preview = input.tools.find(tool => tool.name === 'preview_create_planned_workout')!;
+        const change = { expectedScheduleRevision: 7, planRef: null, localDate: '2026-09-25', title: 'Recovery ride',
+          structure: { version: 1, sport: 'Cycling', nodes: [{ kind: 'step', id: 'easy', purpose: 'recovery',
+            ending: { kind: 'time', seconds: 1800 }, targets: [] }] } };
+        await expect(preview.execute(change)).resolves.toMatchObject({ assistantToolError: {
+          code: 'invalid_tool_input', guidance: expect.stringContaining('2026-09-26'),
+        } });
+        expect(callTool.mock.calls.map(([name]) => name)).not.toContain('preview_create_planned_workout');
+        await preview.execute({ ...change, localDate: '2026-09-26' });
+        return { answer: 'Review the proposed recovery ride for tomorrow.', visualRequest: { chart: null, map: null } };
+      } });
+    const result = await runtime.answer({ uid: 'owner', appBaseUrl: 'https://quantified-self.io',
+      prompt: 'Create a workout for tomorrow based on readiness.', timeZone: 'Europe/Helsinki', history: [],
+      trainingPlansEnabled: true, trainingPlanChangesEnabled: true,
+      assertTrainingPlansAccess: vi.fn().mockResolvedValue(undefined), assertTrainingWriteAccess: vi.fn().mockResolvedValue(undefined) });
+    expect(callTool.mock.calls.filter(([name]) => name === 'preview_create_planned_workout')).toHaveLength(1);
+    expect(result.pendingTrainingProposal).toMatchObject({ proposalRef: 'tomorrow-preview', permissionMode: 'schedule' });
   });
 
   it('hides workout previews when the consented note scan is incomplete', async () => {
@@ -1450,7 +1539,14 @@ describe('Assistant runtime', () => {
     };
     await expect(generateAssistantModelAnswer({
       currentTime: '2026-09-25T12:00:00.000Z', timeZone: 'Europe/Helsinki',
-      prompt: 'Suggest a workout for today.', history: [], mcpInstructions: 'Use current data.',
+      prompt: 'Suggest a workout for today.', history: [{ id: 'old-user', role: 'user',
+        createdAt: '2026-09-24T23:00:00Z', text: 'Create a workout for tomorrow.' }, {
+        id: 'old-answer', role: 'assistant', createdAt: '2026-09-24T23:01:00Z', text: 'Review the suggestion.',
+        evidence: [{ toolName: 'get_daily_report', title: 'Old readiness', summary: 'Old account facts',
+          facts: [{ label: 'Private metric', value: 'STALE_VALUE' }], links: [] }, {
+          toolName: 'assistant_training_confirmation', title: 'Training review result', summary: 'Confirmed Training change: applied.',
+          facts: [{ label: 'Service requests', value: 'garmin: queued (1)' }], links: [] }],
+      }], mcpInstructions: 'Use current data.',
       tools: [], workflow: null, dailyWorkoutContext,
       onBillableAttempt: vi.fn().mockResolvedValue(undefined),
     })).resolves.toMatchObject({ answer: 'An easy optional ride is reasonable.' });
@@ -1459,6 +1555,15 @@ describe('Assistant runtime', () => {
       system: expect.stringContaining('An ended note is not evidence of current illness'),
       prompt: expect.stringContaining('"matchingWeekdayCount":2'),
     }));
+    const request = generate.mock.calls[0][0] as { messages: Array<{ role: string; content: Array<{ text: string }> }>; system: string };
+    expect(JSON.parse(request.messages[0].content[0].text)).toEqual({ recordedAt: '2026-09-24T23:00:00Z',
+      text: 'Create a workout for tomorrow.', confirmations: [] });
+    expect(JSON.parse(request.messages[1].content[0].text)).toMatchObject({ recordedAt: '2026-09-24T23:01:00Z',
+      confirmations: [{ summary: 'Confirmed Training change: applied.', facts: [{ label: 'Service requests', value: 'garmin: queued (1)' }] }] });
+    expect(JSON.stringify(request.messages)).not.toContain('STALE_VALUE');
+    expect(request.system).toContain('Fresh validated reads override earlier answers');
+    expect(request.system).toContain('Current readiness is not a forecast');
+    expect(request.system).toContain('queued provider action does not prove delivery');
   });
 
   it('requires one preview tool call for an explicit daily workout change', async () => {
@@ -1484,8 +1589,10 @@ describe('Assistant runtime', () => {
     await generateAssistantModelAnswer({
       currentTime: '2026-09-25T12:00:00.000Z', timeZone: 'Europe/Helsinki',
       prompt: ASSISTANT_CREATE_TODAYS_WORKOUT_PROMPT, history: [],
-      mcpInstructions: 'Use current data.', tools: [], workflow: null,
-      dailyWorkoutContext, onBillableAttempt: vi.fn().mockResolvedValue(undefined),
+      mcpInstructions: 'Use current data.', workflow: null,
+      dailyWorkoutContext, tools: [{ name: 'preview_create_planned_workout', description: 'Preview one workout.',
+        inputJsonSchema: { type: 'object', properties: {} }, execute: vi.fn() }],
+      onBillableAttempt: vi.fn().mockResolvedValue(undefined),
     });
 
     expect(generate).toHaveBeenCalledWith(expect.objectContaining({
@@ -1500,6 +1607,13 @@ describe('Assistant runtime', () => {
     expect(generate).toHaveBeenCalledWith(expect.objectContaining({
       system: expect.stringContaining('does not request provider delivery'),
     }));
+    generate.mockResolvedValueOnce({ toolRequests: [], text: JSON.stringify({ answer: 'I cannot preview this change yet.',
+      visuals: { chart: null, map: null } }) } as never);
+    await generateAssistantModelAnswer({ currentTime: '2026-09-25T12:00:00Z', timeZone: 'Europe/Helsinki',
+      prompt: ASSISTANT_CREATE_TODAYS_WORKOUT_PROMPT, history: [], mcpInstructions: 'Use current data.',
+      dailyWorkoutContext, tools: [], workflow: null, onBillableAttempt: vi.fn() });
+    expect(generate).toHaveBeenLastCalledWith(expect.objectContaining({ toolChoice: 'auto',
+      system: expect.stringContaining('Do not prepare or imply a schedule/provider change') }));
   });
 
   it('forces a delivery preview when the model stops after reading the workout', async () => {
