@@ -412,7 +412,13 @@ The labels are log-only, not Firestore/browser/MCP fields, and contain no identi
 errors. See the Training source of truth above for exact values and Cloud Logging filters. Product Help needs no new
 copy for these internal diagnostics; its existing screen/alert and delivery-versus-watch guidance remains unchanged.
 The #650 transport packages that JSON with a valid 300 × 300 PNG and preserves Guide identity
-and pin state through PUT. Incoming workout-reference FIT metadata is now read through Sports Lib 21.2.3's bounded
+and pin state through PUT. Suunto file GETs can add `notification.type: "default"`. Full-content comparison permits
+only that exact added marker on corresponding FieldsStep notifications (including repeats/final screens), leaving
+the sent JSON, historical digests, ownership/date/authority checks and every other field unchanged. Lost-response
+recovery can then recognize the retained copy without another create or redundant update. Unknown or changed
+content remains uncertain; this is not generic response sanitization, absence proof or app/watch receipt evidence.
+See [Suunto delivery](training-workspace.md#suuntoplus-guide-delivery-650) for the detailed comparison and tests.
+Incoming workout-reference FIT metadata is now read through Sports Lib 21.2.3's bounded
 metadata-only reader. The public workout-reference classes, return shapes and numeric values remain unchanged, irrelevant
 nonstandard vendor definitions on unrelated messages do not poison usable correlation metadata, and the full FIT parser
 5.2.1 remains lazy for activity and route imports instead of entering application startup bundles.

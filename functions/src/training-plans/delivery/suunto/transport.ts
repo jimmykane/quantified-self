@@ -16,7 +16,33 @@ export const SUUNTO_INSPECTION_POLICY: InspectionPolicy = {
   // is cloud-record evidence only; 404 and offset inventory cannot prove absence.
   authoritativeAbsenceKeys: [], repairReadyKeys: [],
 };
-function equal(a: unknown, b: unknown): boolean { return hashTrainingScheduleRequestPayload(a) === hashTrainingScheduleRequestPayload(b); }
+function record(value: unknown): value is Record<string, unknown> {
+  return value !== null && typeof value === 'object' && !Array.isArray(value);
+}
+/** Compare only the observed readback enrichment, not a projection of the recipe.
+ * Suunto adds notification.type="default" on file GETs. Omission in our sent
+ * notification is equivalent only at a matching FieldsStep (including repeat
+ * children). Keep every other key/value, the sent JSON and journal digests intact.
+ * Identity/authority checks still happen in read() before content comparison. */
+function comparableStep(actual: unknown, expected: unknown): unknown {
+  if (!record(actual) || !record(expected) || actual.type !== expected.type) return actual;
+  if (actual.type === 'repeat' && Array.isArray(actual.steps) && Array.isArray(expected.steps)) {
+    const expectedSteps = expected.steps;
+    return { ...actual, steps: actual.steps.map((step, index) => comparableStep(step, expectedSteps[index])) };
+  }
+  if (actual.type !== 'fields' || !record(actual.notification) || !record(expected.notification)
+    || actual.notification.type !== 'default' || Object.prototype.hasOwnProperty.call(expected.notification, 'type')) return actual;
+  const notification = { ...actual.notification };
+  delete notification.type;
+  return { ...actual, notification };
+}
+function equal(a: unknown, b: unknown): boolean {
+  if (record(a) && record(b) && Array.isArray(a.steps) && Array.isArray(b.steps)) {
+    const expectedSteps = b.steps;
+    a = { ...a, steps: a.steps.map((step, index) => comparableStep(step, expectedSteps[index])) };
+  }
+  return hashTrainingScheduleRequestPayload(a) === hashTrainingScheduleRequestPayload(b);
+}
 
 export class SuuntoGuideTransport implements TrainingDeliveryTransport {
   readonly mappingVersion = SUUNTO_MAPPING_VERSION;
