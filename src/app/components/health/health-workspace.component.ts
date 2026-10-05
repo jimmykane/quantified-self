@@ -646,7 +646,19 @@ export class HealthWorkspaceComponent {
     ];
     const failed = sources.filter(source => source.status === 'error' || source.status === 'denied');
     if (failed.length) return `${failed.map(source => source.label).join(' and ')} could not be loaded. The available readings are shown. Try this view again or check Connectivity.`;
-    return sources.some(source => source.status === 'loading') ? 'Loading additional readings. The available readings are shown.' : null;
+    return null;
+  });
+  readonly metricSourcesLoading = computed(() => !this.selectedIsSleep() && this.metricView().series.length > 0
+    && (this.selectedHealthStatus() === 'loading'
+      || (healthMetricUsesSleep(this.selectedMetric()) && this.selectedSleepStatus() === 'loading')
+      || (isActivityHealthMetricId(this.selectedMetric())
+        && activityEvidenceCanAffectView(this.selectedMetric(), this.filteredHealthResult())
+        && this.selectedActivityHealthStatus() === 'loading')));
+  readonly healthViewStatusText = computed(() => {
+    const messages: string[] = [];
+    if (this.isSavingPreferences()) messages.push('Saving Health view…');
+    if (this.metricSourcesLoading()) messages.push('Loading additional readings. The available readings are shown.');
+    return messages.join(' ');
   });
   readonly isLoading = computed(() => this.selectedStatus() === 'loading');
   readonly isDenied = computed(() => this.selectedStatus() === 'denied');

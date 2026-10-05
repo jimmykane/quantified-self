@@ -182,6 +182,13 @@
           </div>
           <div class="health-detail-window">
             <p>{{ detailSubtitle() }}</p>
+            <span class="health-view-progress" role="status" aria-live="polite"
+              [matTooltip]="healthViewStatusText()">
+              @if (healthViewStatusText()) {
+                <mat-spinner diameter="16" aria-hidden="true"></mat-spinner>
+                <span class="cdk-visually-hidden">{{ healthViewStatusText() }}</span>
+              }
+            </span>
             @if (selectedWindow().canNavigateNewer) {
               <button mat-icon-button type="button" class="health-window-today"
                 matTooltip="Jump to today" aria-label="Jump to today" (click)="jumpToToday()">
@@ -191,12 +198,7 @@
           </div>
         </header>
 
-        @if (isSavingPreferences()) {
-          <div class="health-range-save-status" role="status" aria-live="polite">
-            <mat-spinner diameter="16" aria-hidden="true"></mat-spinner>
-            <span>Saving Health view…</span>
-          </div>
-        } @else if (preferencesSaveFailed()) {
+        @if (preferencesSaveFailed() && !isSavingPreferences()) {
           <div class="health-range-save-status health-range-save-status-error" role="alert">
             <mat-icon aria-hidden="true">cloud_off</mat-icon>
             <span>This Health view is active, but it was not saved.</span>
