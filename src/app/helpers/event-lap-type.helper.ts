@@ -70,23 +70,29 @@ function isWholeActivityLap(activity: EventLapActivityLike, lap: LapInterface): 
   // records visible; only suppress a confirmed duplicate of the activity.
   if (![activityStart, activityEnd, lapStart, lapEnd].every(Number.isFinite)
     || activityEnd <= activityStart
+    || lapEnd <= lapStart
     || Math.abs(lapStart - activityStart) > 1000
     || Math.abs(lapEnd - activityEnd) > 1000) {
     return false;
   }
 
   const totals = [
-    [activity.getDuration?.()?.getValue?.(), lap.getDuration?.()?.getValue?.()],
-    [activity.getDistance?.()?.getValue?.(), lap.getDistance?.()?.getValue?.()],
-  ].filter(([activityValue, lapValue]) => (
-    Number.isFinite(activityValue) && Number.isFinite(lapValue)
-    && activityValue >= 0 && lapValue >= 0
-  ));
+    [activity.getDuration?.(), lap.getDuration?.()],
+    [activity.getDistance?.(), lap.getDistance?.()],
+  ]
+    // A metric omitted by both records provides no evidence. A missing or
+    // invalid value on just one side must prevent duplicate suppression.
+    .filter(([activityStat, lapStat]) => activityStat || lapStat)
+    .map(([activityStat, lapStat]) => [activityStat?.getValue?.(), lapStat?.getValue?.()]);
 
   // One second of timer rounding or one metre of distance rounding is allowed.
-  return totals.length > 0 && totals.every(([activityValue, lapValue]) => (
-    Math.abs(activityValue - lapValue) <= 1
-  ));
+  // Matching zero distance alone cannot confirm a whole-activity duplicate.
+  return totals.some(([activityValue]) => activityValue > 0)
+    && totals.every(([activityValue, lapValue]) => (
+      Number.isFinite(activityValue) && Number.isFinite(lapValue)
+      && activityValue >= 0 && lapValue >= 0
+      && Math.abs(activityValue - lapValue) <= 1
+    ));
 }
 
 export function getVisibleEventLaps(activity: EventLapActivityLike): LapInterface[] {

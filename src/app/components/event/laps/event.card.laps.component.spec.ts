@@ -667,6 +667,22 @@ describe('EventCardLapsComponent', () => {
         expect(fixture.nativeElement.querySelector('app-event-section-header')).toBeNull();
     });
 
+    it('keeps a sole final lap visible when zero distance masks a missing duration', () => {
+        const activity = createHydratedActivity([{
+            lapId: 1, startDate: 0, endDate: 600_000, startIndex: null, endIndex: null,
+            type: LapTypes.session_end, stats: { [DataDistance.type]: 0 },
+        }]);
+        activity.setDistance(new DataDistance(0));
+        component.selectedActivities = [activity];
+        component.ngOnChanges();
+        fixture.detectChanges();
+
+        expect(component.availableLapTypes).toEqual([LapTypes.session_end]);
+        expect(component.getDataSource(activity, LapTypes.session_end)?.data).toHaveLength(1);
+        expect(component.lapColumnMenuGroups).toHaveLength(1);
+        expect(fixture.nativeElement.querySelector('app-event-section-header')).not.toBeNull();
+    });
+
     it('renders and selects a final session end segment after earlier splits', () => {
         const activity = createActivity([
             createRenderableLap(LapTypes.Manual),

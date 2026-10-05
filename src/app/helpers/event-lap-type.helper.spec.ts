@@ -125,6 +125,54 @@ describe('event lap table visibility', () => {
     expect(getVisibleEventLaps(createActivityWithLapTypes([LapTypes.session_end]))).toHaveLength(1);
   });
 
+  it.each([
+    ['activity', DataDuration.type], ['lap', DataDuration.type],
+    ['activity', DataDistance.type], ['lap', DataDistance.type],
+  ])('retains a sole lap when only the %s is missing %s', (side, type) => {
+    const lap = createLap(LapTypes.session_end);
+    const activity = createActivity([lap]);
+    (side === 'activity' ? activity : lap).removeStat(type);
+
+    expect(getVisibleEventLaps(activity)).toEqual([lap]);
+    expect(hasVisibleEventLaps([activity])).toBe(true);
+  });
+
+  it.each([-1, NaN, Infinity])('retains a sole lap when its duration is invalid (%s)', duration => {
+    const lap = createLap(LapTypes.session_end, 0, 600_000, duration);
+    const activity = createActivity([lap]);
+
+    expect(getVisibleEventLaps(activity)).toEqual([lap]);
+  });
+
+  it('does not treat matching zero distance alone as proof of a duplicate', () => {
+    const lap = createLap(LapTypes.session_end, 0, 600_000, 600, 0);
+    const activity = createActivity([lap]);
+    activity.setDistance(new DataDistance(0));
+    activity.removeStat(DataDuration.type);
+    lap.removeStat(DataDuration.type);
+
+    expect(getVisibleEventLaps(activity)).toEqual([lap]);
+  });
+
+  it.each([[1000, 0], [500, 500]])('retains a lap with non-positive time boundaries (%s, %s)', (start, end) => {
+    const lap = createLap(LapTypes.session_end, start, end, 1, 1);
+    const activity = createActivity([lap]);
+    activity.endDate = new Date(1000);
+    activity.setDuration(new DataDuration(1));
+    activity.setDistance(new DataDistance(1));
+
+    expect(getVisibleEventLaps(activity)).toEqual([lap]);
+  });
+
+  it.each([DataDuration.type, DataDistance.type])('still hides a confirmed duplicate when both omit %s', type => {
+    const lap = createLap(LapTypes.session_end);
+    const activity = createActivity([lap]);
+    activity.removeStat(type);
+    lap.removeStat(type);
+
+    expect(getVisibleEventLaps(activity)).toEqual([]);
+  });
+
   it('filters missing lap types and keeps activity visibility independent', () => {
     const hidden = createActivity([createLap(LapTypes.session_end)]);
     const final = createLap(LapTypes.session_end, 120_000, 600_000, 480, 1700);
