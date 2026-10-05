@@ -14,6 +14,7 @@ import {
   ASSISTANT_PROMPT_CARDS,
   ASSISTANT_YESTERDAY_TRAINING_IMPACT_PROMPT,
 } from '@shared/assistant.prompts';
+import { ASSISTANT_MAX_MESSAGE_CHARS } from '@shared/assistant.types';
 import { AssistantExploreBottomSheetComponent } from './assistant-explore-bottom-sheet.component';
 import { writeFileSync, readFileSync, readdirSync } from 'node:fs';
 import { compile } from 'sass';
@@ -144,6 +145,7 @@ describe('AssistantExploreBottomSheetComponent', () => {
       kind: 'prompt',
       prompt: ASSISTANT_CREATE_TODAYS_WORKOUT_PROMPT,
     });
+    expect(ASSISTANT_CREATE_TODAYS_WORKOUT_PROMPT.length).toBeLessThanOrEqual(ASSISTANT_MAX_MESSAGE_CHARS);
     expect(component.data.trainingPlansEnabled ?? false).toBe(false);
     expect(component.data.trainingPlanChangesEnabled ?? false).toBe(false);
     expect(component.data.timelineNotesEnabled ?? false).toBe(false);

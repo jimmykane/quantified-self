@@ -409,7 +409,11 @@ Assistant examples are therefore the only user-facing conversational prompt cata
 
 The existing **Today's workout** contextual card asks for one new standalone session using readiness, recorded recovery,
 recent load and the 28-day recorded weekday pattern. It conditionally includes relevant recent/ongoing Timeline notes
-and checks existing workouts under their independent read choices. Selecting it only fills the composer; optional access
+and checks existing workouts under their independent read choices. It asks the model to establish the suggested sport's
+usual recorded per-session duration and load with the period/session count, compare the proposed duration/load with
+those values, explain any reduction using current recovery/training evidence, and ask for missing information before
+choosing a duration when that baseline is unavailable. This is a contextual prompt instruction using
+existing reads, not a new duration calculation or a minimum workout length. Selecting it only fills the composer; optional access
 and change permissions remain off until the user enables them, and adding the session still requires app-owned review
 and **Apply changes**. Missing records do not establish skipped training or a regular habit. MCP impact: this starter-copy
 update reuses the existing bounded daily context and focused workout proposal; it changes no tool, schema, scope, metric,
