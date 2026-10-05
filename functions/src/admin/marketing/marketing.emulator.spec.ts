@@ -182,7 +182,10 @@ describe.skipIf(!enabled)('marketing campaign durability (emulators)', () => {
   it('does not pause a resumed campaign while an earlier retry request finishes', async () => {
     const campaign = await saveCampaign(null, draft, 'admin');
     const ref = db.collection('marketingCampaigns').doc(campaign.id);
-    await ref.update({ status: 'paused', stats: { eligible: 2, pending: 0, queued: 0, accepted: 0, failed: 2, skipped: 0 } });
+    const testId = `marketing_test_${campaign.id}_emulator`;
+    await db.collection('mail').doc(testId).set({ delivery: { state: 'SUCCESS' } });
+    await ref.update({ status: 'paused', lastTestMailId: testId,
+      stats: { eligible: 2, pending: 0, queued: 0, accepted: 0, failed: 2, skipped: 0 } });
     for (const uid of ['first', 'second']) {
       await ref.collection('recipients').doc(uid).set({ uid, status: 'failed', attempt: 1 });
     }
@@ -241,6 +244,108 @@ describe.skipIf(!enabled)('marketing campaign durability (emulators)', () => {
     expect(edited.lastTestMailId).toBeNull();
   });
 
+  it('edits paused content while preserving the audience, queued mail, and progress, and requires a fresh accepted test', async () => {
+    const user = await admin.auth().createUser({ email: `paused-admin-${randomUUID()}@example.com` });
+    const campaign = await saveCampaign(null, draft, user.uid);
+    const ref = db.collection('marketingCampaigns').doc(campaign.id);
+    const recipient = ref.collection('recipients').doc('already-queued');
+    const mail = db.collection('mail').doc(`marketing_${campaign.id}_already-queued_1`);
+    const stats = { eligible: 5, pending: 1, queued: 1, accepted: 1, failed: 1, skipped: 1 };
+    const startedAt = '2026-09-20T12:00:00.000Z';
+    await recipient.set({ uid: recipient.id, status: 'queued', mailId: mail.id, attempt: 1 });
+    await mail.set({ message: { subject: draft.subject, html: '<p>Original queued message</p>' }, delivery: { state: 'PENDING' } });
+    await ref.update({ status: 'paused', stats, startedAt, snapshotId: 'fixed-snapshot', lastTestMailId: 'previous-test', lastTestState: 'SUCCESS' });
+    const editedDraft = { ...draft, name: 'Updated campaign', subject: 'Updated subject',
+      content: { type: 'doc', content: [{ type: 'paragraph', content: [{ type: 'text', text: 'Updated message.' }] }] },
+      cta: { label: 'Read more', url: 'https://quantified-self.io/help' } };
+
+    for (const filters of [
+      { ...draft.filters, plans: ['pro'] },
+      { ...draft.filters, signupFrom: '2026-09-01' },
+      { ...draft.filters, signupTo: '2026-09-30' },
+    ]) {
+      await expect(saveCampaign(campaign.id, { ...editedDraft, filters }, user.uid)).rejects.toThrow('audience is fixed');
+    }
+    const edited = await saveCampaign(campaign.id, editedDraft, user.uid);
+    expect(edited).toMatchObject({ ...editedDraft, status: 'paused', stats, startedAt,
+      exclusions: campaign.exclusions, createdAt: campaign.createdAt, lastTestMailId: null, lastTestState: null });
+    expect((await ref.get()).get('snapshotId')).toBe('fixed-snapshot');
+    expect((await recipient.get()).data()).toMatchObject({ status: 'queued', mailId: mail.id, attempt: 1 });
+    expect((await mail.get()).get('message.subject')).toBe(draft.subject);
+    expect((await mail.get()).get('message.html')).toBe('<p>Original queued message</p>');
+    await expect(setCampaignStatus(campaign.id, 'resume')).rejects.toThrow('Send a test email');
+
+    await db.doc('marketingControl/global').set({ dailyCap: 2 });
+    await db.doc(`marketingDispatchDays/${utcDay(new Date())}`).set({ used: 0 });
+    const test = await sendTest(campaign.id, user.uid, secret, 'preview@example.org');
+    const testRef = db.collection('mail').doc(test.mailId);
+    expect((await testRef.get()).get('message.html')).toContain('Updated message.');
+    expect((await testRef.get()).get('message.text')).toContain('Read more: https://quantified-self.io/help');
+    expect((await db.doc(`marketingDispatchDays/${utcDay(new Date())}`).get()).get('used')).toBe(1);
+    await expect(setCampaignStatus(campaign.id, 'resume')).rejects.toThrow('successful SMTP acceptance');
+    await testRef.update({ 'delivery.state': 'ERROR' });
+    await expect(setCampaignStatus(campaign.id, 'resume')).rejects.toThrow('successful SMTP acceptance');
+    await testRef.update({ 'delivery.state': 'SUCCESS' });
+    expect((await setCampaignStatus(campaign.id, 'resume')).status).toBe('running');
+    await expect(saveCampaign(campaign.id, editedDraft, user.uid)).rejects.toThrow('Pause a running campaign');
+    await setCampaignStatus(campaign.id, 'pause');
+    await saveCampaign(campaign.id, { ...editedDraft, subject: 'Another edit' }, user.uid);
+    await recordMailDelivery(test.mailId, { delivery: { state: 'PENDING' } },
+      { delivery: { state: 'SUCCESS' }, marketing: { testCampaignId: campaign.id } });
+    await expect(setCampaignStatus(campaign.id, 'resume')).rejects.toThrow('Send a test email');
+  });
+
+  it('uses updated content for a worker already in flight during pause, edit and resume', async () => {
+    // Isolate the worker from running fixtures left by previous tests.
+    const running = await db.collection('marketingCampaigns').where('status', '==', 'running').get();
+    for (const doc of running.docs) await doc.ref.update({ status: 'paused' });
+    const user = await admin.auth().createUser({ email: `edit-recipient-${randomUUID()}@example.com` });
+    await db.doc(`users/${user.uid}`).set({ test: true });
+    await db.doc(`users/${user.uid}/legal/agreements`).set({ acceptedMarketingPolicy: true });
+    const campaign = await saveCampaign(null, draft, 'admin');
+    const ref = db.collection('marketingCampaigns').doc(campaign.id);
+    const recipient = ref.collection('recipients').doc(user.uid);
+    await ref.update({ status: 'running', stats: { eligible: 1, pending: 1, queued: 0, accepted: 0, failed: 0, skipped: 0 } });
+    await recipient.set({ uid: user.uid, status: 'pending', attempt: 0 });
+    await db.doc('marketingControl/global').set({ dailyCap: 2 });
+    await db.doc(`marketingDispatchDays/${utcDay(new Date())}`).set({ used: 0 });
+    const auth = admin.auth();
+    const originalGetUser = auth.getUser.bind(auth);
+    let lookupStarted!: () => void;
+    let releaseLookup!: () => void;
+    const started = new Promise<void>(resolve => { lookupStarted = resolve; });
+    const released = new Promise<void>(resolve => { releaseLookup = resolve; });
+    const lookup = vi.spyOn(auth, 'getUser').mockImplementation(async uid => {
+      if (uid === user.uid) { lookupStarted(); await released; }
+      return originalGetUser(uid);
+    });
+    const dispatch = dispatchCampaigns(secret);
+    try {
+      await started;
+      await setCampaignStatus(campaign.id, 'pause');
+      expect((await recipient.get()).get('status')).toBe('pending');
+      await saveCampaign(campaign.id, { ...draft, subject: 'Latest subject',
+        content: { type: 'doc', content: [{ type: 'paragraph', content: [{ type: 'text', text: 'Latest body.' }] }] },
+        cta: { label: 'Latest button', url: 'https://quantified-self.io/help' } }, 'admin');
+      const testId = `marketing_test_${campaign.id}_emulator`;
+      await db.collection('mail').doc(testId).set({ delivery: { state: 'SUCCESS' } });
+      await ref.update({ lastTestMailId: testId });
+      await setCampaignStatus(campaign.id, 'resume');
+      releaseLookup();
+      expect(await dispatch).toBe(1);
+      const mail = await db.collection('mail').doc((await recipient.get()).get('mailId')).get();
+      expect(mail.get('message.subject')).toBe('Latest subject');
+      expect(mail.get('message.html')).toContain('Latest body.');
+      expect(mail.get('message.text')).toContain('Latest button: https://quantified-self.io/help');
+      expect(mail.get('message.html')).not.toContain('Hello test.');
+      expect((await ref.get()).get('stats')).toMatchObject({ eligible: 1, pending: 0, queued: 1 });
+    } finally {
+      releaseLookup();
+      await dispatch;
+      lookup.mockRestore();
+    }
+  });
+
   it('sends an unsaved test without writing a campaign and still enforces the shared cap', async () => {
     const user = await admin.auth().createUser({ email: `unsaved-admin-${randomUUID()}@example.com` });
     await db.doc('marketingControl/global').set({ dailyCap: 1 });
@@ -264,6 +369,41 @@ describe.skipIf(!enabled)('marketing campaign durability (emulators)', () => {
     expect((await db.collection('marketingCampaigns').get()).size).toBe(campaignsBefore);
     expect((await db.doc(`marketingDispatchDays/${utcDay(new Date())}`).get()).get('used')).toBe(1);
     await expect(sendTest(null, user.uid, secret, target, testDraft)).rejects.toThrow('limit');
+  });
+
+  it.each(['draft', 'paused'])('rejects a stale %s test if content changes even with the same update timestamp', async status => {
+    const user = await admin.auth().createUser({ email: `edit-admin-${randomUUID()}@example.com` });
+    const campaign = await saveCampaign(null, draft, user.uid);
+    const ref = db.collection('marketingCampaigns').doc(campaign.id);
+    await ref.update({ status });
+    await db.doc('marketingControl/global').set({ dailyCap: 10 });
+    const day = db.doc(`marketingDispatchDays/${utcDay(new Date())}`);
+    await day.set({ used: 0 });
+    const auth = admin.auth();
+    const originalGetUser = auth.getUser.bind(auth);
+    let lookupStarted!: () => void;
+    let releaseLookup!: () => void;
+    const started = new Promise<void>(resolve => { lookupStarted = resolve; });
+    const released = new Promise<void>(resolve => { releaseLookup = resolve; });
+    const lookup = vi.spyOn(auth, 'getUser').mockImplementation(async uid => {
+      if (uid === user.uid) { lookupStarted(); await released; }
+      return originalGetUser(uid);
+    });
+    try {
+      const pendingTest = sendTest(campaign.id, user.uid, secret, user.email);
+      await started;
+      await saveCampaign(campaign.id, { ...draft, subject: 'Changed during test preparation' }, user.uid);
+      // Simulate two updates sharing a millisecond timestamp: content must be
+      // compared as well, before reserving a slot or marking this as a valid test.
+      await ref.update({ updatedAt: campaign.updatedAt });
+      releaseLookup();
+      await expect(pendingTest).rejects.toThrow('changed');
+      expect((await ref.get()).get('lastTestMailId')).toBeNull();
+      expect((await day.get()).get('used')).toBe(0);
+    } finally {
+      releaseLookup();
+      lookup.mockRestore();
+    }
   });
 
   it('does not submit a test when the campaign starts while the admin lookup is in flight', async () => {

@@ -84,7 +84,9 @@ export class AdminMarketingComponent implements OnInit, OnDestroy {
     frame.style.height = `${Number.isFinite(height) ? Math.max(360, height + 2) : 650}px`;
   }
 
-  get canEdit(): boolean { return !this.selected || this.selected.status === 'draft'; }
+  get canEdit(): boolean { return this.canEditAudience || this.selected?.status === 'paused'; }
+  get canEditAudience(): boolean { return !this.selected || this.selected.status === 'draft'; }
+  get canResume(): boolean { return this.selected?.status === 'paused' && !this.dirty && this.selected.lastTestState === 'SUCCESS'; }
   get canRetryPreparation(): boolean {
     if (this.selected?.status !== 'preparing') return false;
     const started = Date.parse(this.selected.updatedAt);
@@ -136,7 +138,7 @@ export class AdminMarketingComponent implements OnInit, OnDestroy {
     this.notice = '';
   }
   togglePlan(plan: MarketingPlan, checked: boolean): void {
-    if (this.draft.filters.plans.includes(plan) === checked) return;
+    if (!this.canEditAudience || this.draft.filters.plans.includes(plan) === checked) return;
     this.haptics.selection();
     this.draft.filters.plans = checked
       ? [...new Set([...this.draft.filters.plans, plan])]
@@ -173,9 +175,11 @@ export class AdminMarketingComponent implements OnInit, OnDestroy {
     finally { this.busy = ''; }
   }
   async save(): Promise<void> {
+    if (!this.canEdit) return;
     await this.run('Saving', async () => (await this.functions.call('saveMarketingCampaign',
       { id: this.selected?.id || null, draft: this.collectDraft() })).data as MarketingCampaignView,
-      campaign => { this.choose(campaign, false); this.notice = 'Draft saved.'; });
+      campaign => { this.choose(campaign, false); this.notice = campaign.status === 'paused'
+        ? 'Changes saved. Send a new test before resuming.' : 'Draft saved.'; });
   }
   private clearPreviewTimer(): void {
     if (this.previewTimer) clearTimeout(this.previewTimer);
@@ -246,7 +250,7 @@ export class AdminMarketingComponent implements OnInit, OnDestroy {
         : `Test submitted to ${to}. Check that inbox for delivery.`; });
   }
   async change(action: 'start' | 'pause' | 'resume' | 'retry'): Promise<void> {
-    if (!this.selected) return;
+    if (!this.selected || (action === 'resume' && !this.canResume)) return;
     await this.run(action, async () => (await this.functions.call('changeMarketingCampaignStatus',
       { id: this.selected!.id, action })).data as MarketingCampaignView,
       campaign => { this.selected = campaign; this.notice = `Campaign ${action} request completed.`; });

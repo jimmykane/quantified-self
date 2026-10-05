@@ -23,7 +23,13 @@
       <mat-card>
         <mat-card-header><mat-card-title>{{ selected ? selected.name : 'New campaign' }}</mat-card-title></mat-card-header>
         <mat-card-content>
-          @if (selected && !canEdit) { <p class="frozen">Content and audience are frozen. Clone to make changes.</p> }
+          @if (selected?.status === 'paused') {
+            <p class="frozen">Paused. You can edit the message for remaining recipients. Emails already queued may still send with their original content. The audience stays fixed.</p>
+          } @else if (selected?.status === 'running') {
+            <p class="frozen">Pause to edit the message for remaining recipients. The audience stays fixed.</p>
+          } @else if (selected && !canEdit) {
+            <p class="frozen">Content and audience are frozen. Clone to make changes.</p>
+          }
           <div class="field-grid">
             <mat-form-field appearance="outline"><mat-label>Internal name</mat-label><input matInput [(ngModel)]="draft.name" (ngModelChange)="markDirty()" [disabled]="!canEdit" maxlength="120"></mat-form-field>
             <mat-form-field appearance="outline"><mat-label>Email subject</mat-label><input matInput [(ngModel)]="draft.subject" (ngModelChange)="markDirty()" [disabled]="!canEdit" maxlength="180"></mat-form-field>
@@ -47,7 +53,7 @@
               @if (canEdit || selected?.status === 'ready') {
                 <div class="test-send">
                   <div><h3>Send a test</h3><p>Send the current message to one address. This uses one slot from today's limit. Test unsubscribe links cannot change preferences.</p></div>
-                  @if (selected && dirty) { <p class="unsaved-note">This tests your unsaved edits. Save and send another test before launching the campaign.</p> }
+                  @if (selected && dirty) { <p class="unsaved-note">This tests your unsaved edits. Save and send another test before starting or resuming the campaign.</p> }
                   <div class="test-send-controls">
                     <mat-form-field appearance="outline" subscriptSizing="dynamic"><mat-label>Test email address</mat-label>
                       <input matInput type="email" [(ngModel)]="testTo" #testEmail="ngModel" email required autocomplete="email" placeholder="name@example.com">
@@ -83,21 +89,24 @@
           <h3>Audience</h3>
           <p>Enabled, non-admin users with an email and explicit marketing consent. Sign-up dates are inclusive in UTC. Login provider and email verification do not affect eligibility.</p>
           <div class="plans">
-            @for (plan of plans; track plan) { <mat-checkbox [checked]="draft.filters.plans.includes(plan)" [disabled]="!canEdit" (change)="togglePlan(plan, $event.checked)">{{ plan | titlecase }}</mat-checkbox> }
+            @for (plan of plans; track plan) { <mat-checkbox [checked]="draft.filters.plans.includes(plan)" [disabled]="!canEditAudience" (change)="togglePlan(plan, $event.checked)">{{ plan | titlecase }}</mat-checkbox> }
           </div>
           <div class="field-grid">
-            <mat-form-field appearance="outline"><mat-label>Signed up from (UTC)</mat-label><input matInput type="date" [(ngModel)]="draft.filters.signupFrom" (ngModelChange)="markDirty()" [disabled]="!canEdit"></mat-form-field>
-            <mat-form-field appearance="outline"><mat-label>Signed up through (UTC)</mat-label><input matInput type="date" [(ngModel)]="draft.filters.signupTo" (ngModelChange)="markDirty()" [disabled]="!canEdit"></mat-form-field>
+            <mat-form-field appearance="outline"><mat-label>Signed up from (UTC)</mat-label><input matInput type="date" [(ngModel)]="draft.filters.signupFrom" (ngModelChange)="markDirty()" [disabled]="!canEditAudience"></mat-form-field>
+            <mat-form-field appearance="outline"><mat-label>Signed up through (UTC)</mat-label><input matInput type="date" [(ngModel)]="draft.filters.signupTo" (ngModelChange)="markDirty()" [disabled]="!canEditAudience"></mat-form-field>
           </div>
-          @if (dirty && selected) { <p class="unsaved-note">Save your changes before preparing the audience.</p> }
+          @if (dirty && selected?.status === 'draft') { <p class="unsaved-note">Save your changes before preparing the audience.</p> }
+          @if (selected?.status === 'paused' && !canResume) {
+            <p class="unsaved-note">{{ dirty ? 'Save your edits, then send a new test.' : 'Send a test of the saved message and wait for SMTP acceptance before resuming.' }}</p>
+          }
           <div class="actions">
-            @if (canEdit) { <button mat-flat-button type="button" [disabled]="!!busy" (click)="save()">Save draft</button> }
+            @if (canEdit) { <button mat-flat-button type="button" [disabled]="!!busy || (selected?.status === 'paused' && !dirty)" (click)="save()">{{ selected?.status === 'paused' ? 'Save changes' : 'Save draft' }}</button> }
             @if (selected?.status === 'draft' || canRetryPreparation) { <button mat-stroked-button type="button" [disabled]="!!busy || dirty" (click)="prepare()">{{ canRetryPreparation ? 'Retry preparation' : 'Prepare audience' }}</button> }
             @if (selected?.status === 'ready') {
               <button mat-flat-button type="button" [disabled]="!!busy || selected?.lastTestState !== 'SUCCESS'" (click)="change('start')">Start sending</button>
             }
             @if (selected?.status === 'running') { <button mat-stroked-button type="button" [disabled]="!!busy" (click)="change('pause')">Pause</button> }
-            @if (selected?.status === 'paused') { <button mat-flat-button type="button" [disabled]="!!busy" (click)="change('resume')">Resume</button> }
+            @if (selected?.status === 'paused') { <button mat-flat-button type="button" [disabled]="!!busy || !canResume" (click)="change('resume')">Resume</button> }
             @if (selected?.status === 'paused' || selected?.status === 'completed') {
               <button mat-stroked-button type="button" [disabled]="!!busy || !selected?.stats?.failed" (click)="change('retry')">Retry failed</button>
             }
