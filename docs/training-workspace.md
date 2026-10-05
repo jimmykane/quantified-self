@@ -569,7 +569,13 @@ or bundled plugin/skill changes are required for exposing this existing ending i
 
 Running and cycling distance-step inputs follow the owner's `distanceUnits` preference (kilometres or miles), while
 their pace-target inputs independently follow the first selected `paceUnits` preference (min/km or min/mi). The editor
-captures normalized units when opened so a settings update in another tab cannot reinterpret an unsaved number. Existing
+also offers **Speed**, including for cycling, using numeric minimum/maximum inputs in the first selected `speedUnits`
+preference (for example km/h or mph). Speed targets reopen for editing, preserve exact canonical m/s until changed,
+and select Speed in the profile. Switching Pace/Speed converts the bounds while preserving the physical range;
+invalid drafts or zero-speed bounds cannot be converted into a finite pace range and clear the converted inputs.
+Both presentations remain explicit authored choices. Duplicate steps copy their speed snapshots independently.
+The existing absolute speed recipe variant, provider mappings and MCP contracts are unchanged.
+The editor captures normalized units when opened so a settings update in another tab cannot reinterpret an unsaved number. Existing
 metre and m/s values display at readable precision but retain their exact canonical values on an unchanged edit;
 newly typed values convert to canonical metres and m/s before the existing schedule mutation. One international mile
 is 1609.344 metres. Sports Lib 21.3 supplies the owner-unit display formatters, but no matching inverse editor API
@@ -714,7 +720,7 @@ packed Sports Lib package. That gate is tracked by GitHub issue #654 under epic 
 
 `WorkoutProfileComponent` is the shared read-only interval renderer for the live Plans/Standalone/library editor
 and the **Show profile** disclosure on saved scheduled and library workouts. Saved inspection consumes the complete
-canonical recipe independently of the narrower manual editor: cadence, speed presentation, relative snapshots,
+canonical recipe independently of the narrower manual editor: relative snapshots,
 two simultaneous targets, and manual/kJ/repetition endings remain readable. Strength retains its exercise editor;
 the v1 strength compatibility summary is not presented as a complete exercise profile.
 
@@ -723,13 +729,25 @@ never elapsed time or distance. No shared planned-workout analyzer is currently 
 renderer does not estimate distance-step time, total duration, average pace, zones or generic intensity. A future
 time-scaled view must consume the shared analyzer and its uncertainty rather than introduce a private estimator.
 One target metric is shown at a time (HR, power, pace, speed or cadence). Both authored targets remain in accessible
-details and tooltips. Constant targets, including warm-up/cool-down targets, are rectangles rather than invented ramps;
+details and tooltips. Editor/profile pickers and tooltips label pool/open-water pace as **Swim pace** and
+outdoor/indoor rowing pace as **Rowing pace**; these are sport-specific labels for the existing pace presentation.
+Constant targets, including warm-up/cool-down targets, are rectangles rather than invented ramps;
 untargeted steps have empty metric spaces and a separately labelled purpose strip. Relative ranges resolve only from
 their saved reference snapshot, with percentage/reference and resolved-range text; missing/invalid snapshots fail closed.
 A valid relative pace target starting at 0% speed has no finite pace range. Its authored percentage/reference remains
 in details and tooltips with an explicit explanation; only that band is omitted, while all other steps remain visible.
 If no finite bands exist, the purpose strip remains available and accessible text distinguishes that from no targets.
-Pace axes reverse speed bounds and follow the canonical Sports Lib formatter, including swim and rowing conventions.
+Pace axes reverse speed bounds and use explicit time intervals in the owner's selected pace denominator,
+with Sports Lib labels for running/swimming and fixed per-500-m rowing pace. Whole-second ticks avoid floating-point
+truncation after unit conversion. Authored bounds, including unusually slow limits, stay visible; recorded-stream
+outlier filtering does not apply to prescriptions. Range rectangles end at their exact axis coordinates; constant
+targets are centered markers. Speed uses round numeric intervals chosen after conversion to the owner's selected
+speed unit, so grid lines land on values such as 10/20/30 km/h. Other metrics retain their numeric axes.
+Editor and profile pickers prioritize Pace for running/swimming/rowing and Power/Speed for cycling, without
+changing authored targets or an explicit profile metric selection. The manual editor supports absolute cadence
+for running/cycling, with rpm-labelled bounds and canonical `minimumRpm`/`maximumRpm` storage. Changing to/from
+cadence clears incompatible draft bounds; changing sport preserves the target. Saved cadence remains editable on
+other sports but is never relabelled or converted to stroke rate. New swim/rowing stroke targets are not inferred.
 Physical pool length is explicit metadata and is never inferred from distance steps.
 
 Profiles expand at most 128 occurrences. Above that presentation budget, each repeat shows one selectable pass,
@@ -1115,6 +1133,20 @@ Fieldsets, grid children, and repeat rows allow shrinking
 without horizontal page overflow. Selection haptics belong to explicit UI actions; mutation success/error feedback follows
 the actual result, and hydration, typing, and unchanged choices stay silent. Phone emulation verifies layout and wiring,
 not physical vibration or a real mobile keyboard.
+
+The shared scheduled/library workout editor uses content-sized Material hint/error regions: wrapped pool-length help
+and validation messages reserve their real height instead of colliding with the next field or **Save to** legend.
+Controls align at the top of each grid row, with 16px row gaps and 24px between editor sections. Pool length and its
+unit stay together on a separate row; the undated library basics use two columns. Step/exercise inputs have space below
+their compact-row headings, and repeat controls are separated from the first repeated step.
+On wide screens, Hours/Minutes/Seconds share the ending row; at 1100px and below, they occupy their own full-width row.
+Strength sets switch to two columns at that same breakpoint, keep Remove beside the set number, and separate sets with
+a divider. Phones keep Set type and Rest full-width while pairing Reps/Seconds with Load. Short visual load/rest labels
+retain explicit units, optional hints and full accessible names. Existing Material touch targets, thin scrollbars,
+keyboard order, haptics and sticky save actions remain unchanged.
+MCP impact review: this spacing/label pass changes no recipe, canonical values, schedule/library mutations, read
+projections, scopes, consent, Assistant guidance, provider mapping or registered contract. App Help's existing
+step, pool-length, strength-unit and library instructions remain accurate; no help-content change is needed.
 
 A newly created plan remains selectable using the server-acknowledged record and revision until the independent live
 plan and state listeners catch up. This transient, user-scoped bridge prevents jumping back to a previously active plan
@@ -2535,7 +2567,7 @@ projection `needs_attention` and not synced, even with its earlier acceptance an
 details say **Not found in Garmin** rather than conflating a 404 with a transport/permission failure. Last sent remains
 historical; plan totals and existing MCP sync reads count this as `needs_attention`, not a current synced workout.
 
-#769 is reopened for explicit owner-reviewed recovery. **Create replacement Garmin copy** is an app-only workout
+#769 owner-account recovery is verified and closed. **Create replacement Garmin copy** is an explicitly reviewed workout
 action, not Check, Retry, ordinary Send, or automatic repair. The server offers a preview only after a complete,
 current, same-binding inspection found both retained Workout and Schedule absent. The inspection is at most 24 hours
 old, with a finite whole-millisecond timestamp and exactly the two expected artifact keys; malformed private
@@ -2592,10 +2624,21 @@ surface-free details, keyboard access and sign-out guards. Provider-delivery res
 MCP read impact: `get_training_sync_status` consumes the sanitized delivery projection; confirmed missing artifacts
 and observed missing Garmin Workouts no longer count as synced. Regression tests cover retained prior acceptance,
 `needs_attention`, zero synced count and private-evidence exclusion. No registered schema, scope, field or plugin
-metadata changes. The app-only `replace` action is explicitly rejected by registered v1 proposals; it must not widen
-Assistant/MCP authority via the shared app enum. The additive approval-gated MCP/Assistant replacement flow is tracked
-in #801 (real #583 subissue in Project 2), not silently deferred or routed through Send/Retry. Existing MCP reads need
-no new provider HTTP and never expose observed keys, review binding, journals or old/new provider IDs.
+metadata changes in the registered v1 reads. Registered v1 batch proposals still explicitly reject `replace`;
+the shared app enum does not widen them. #801 adds `preview_garmin_workout_replacement` under existing planning-read
+and delivery-write grants: one exact opaque workout reference and schedule/workout revisions, fresh paired not-found
+Check evidence, one duplicate-warning review, then existing native-approval Apply. The proposal binds the MCP
+grant/generation and private current-evidence digest for 15 minutes. Apply uses the same transaction fences and
+repair journal as the app; no provider HTTP occurs in preview/apply transactions, and no QS recipe or other-provider
+consent changes. Lost replies use existing proposal status/receipts. The Assistant is prepare-only and presents a
+dedicated app-owned replacement confirmation; stale, revoked, changed-account, Stop/completion, lock and Pro changes
+fail closed. An ineligible replacement review returns a fixed blocked explanation in the Assistant without a
+proposal, repeated preview, or Send/Retry fallback; strict malformed input remains separately correctable.
+Explicit replacement-eligibility preview requests select that same dedicated tool, including requests that forbid
+Apply or Send. Such a review is not Apply approval; ordinary status questions and negated previews do not select it.
+Existing MCP reads need no new provider HTTP and never expose observed keys, review binding, journals
+or old/new provider IDs. Separate deployment and registered-client refresh/rescan are required before advertising
+the additive tool as live; an older catalog must never substitute Send/Retry or a new authored workout.
 
 Diagnostics use `[TrainingVerification]` with allowlisted event/provider/category/coverage/latency fields and
 `[TrainingDelivery]` acceptance/recovery events. Example Cloud Logging filters:

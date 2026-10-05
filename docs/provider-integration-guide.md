@@ -24,7 +24,7 @@ The current providers are intentionally not identical:
 
 | Provider | Current primary role                                                    | Important distinction                                                                                               |
 | -------- | ----------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------- |
-| Garmin   | Activity/sleep import, production Health import/backfill, route delivery, and activity delivery to Suunto/Wahoo/COROS | Garmin Health uses one canonical Ping/Pull ingress for Sleep plus ten Health summary families; callback URLs are short-lived credentials. Every eligible connected Pro user's history request adds a durable, paced all-family Health cursor while the independent rollback switch is enabled. Summary Resender is reserved for bounded recovery. Garmin Connect route delivery requires Course Import permission. |
+| Garmin   | Activity/sleep import, production Health import/backfill, route delivery, and activity delivery to Suunto/Wahoo/COROS | Garmin Health uses one canonical Ping/Pull ingress for Sleep plus ten Health summary families; callback URLs are short-lived credentials. Every eligible connected Pro user's history request adds a durable, paced all-family Health cursor while the independent rollback switch is enabled. Summary Resender is reserved for bounded recovery. Activity-history requests show their active lease in Services. Garmin Connect route delivery requires Course Import permission. |
 | Suunto   | Activity/sleep/route import, production 24/7 Health, plus activity and saved-route source/destination workflows | Health independently reconciles Activity, daily statistics, and Recovery for active connected accounts in windows of at most 28 days using signed webhook refetches, bounded polling, and history work. Suunto receives GPX routes; activities can flow to Wahoo/COROS, while saved routes can flow to Garmin/Wahoo/COROS through shared queues. |
 | COROS    | Activity plus daily Health/Sleep import; asynchronous activity upload; activity delivery to/from supported providers; direct/saved GPX route delivery | Exactly one active COROS account is used. Daily Health reuses the Sleep poll/history queue, preserves aggregate Sleep through references, and stores bounded detailed HRV in Health. Activity upload is initialized then polled by 64-bit ID. Route push accepts bike/running GPX metadata and is available to eligible connected Pro users through one shared production-wide rollout gate. |
 | Wahoo    | Pro activity import, FIT activity delivery, direct/saved route delivery, and Training workout delivery | Wahoo imports only FIT-backed Wahoo-recorded workouts; retained FITs can sync to Suunto/COROS. Connected Pro users can explicitly deliver QS-authored workouts as separate app-owned Plans and dated Workouts within a saved-zone seven-day horizon; exact returned Workout/Plan/token evidence can link the imported activity, while Wahoo-owned plans remain out of scope. |
@@ -42,6 +42,15 @@ before any execution. Automatic connection backfill remains enhancement #681, no
 Suunto Health history adapts to item-count limits by halving oversized target windows and reapplying local-day context, rather than truncating responses or increasing parser caps. Subrequests remain sequential, lifecycle-fenced, and bounded by per-job HTTP/time/result budgets; irreducible or malformed responses remain failures. See [Suunto ingestion bounds](suunto-integration.md#ingestion-and-revision-flow). Do not treat repeated `response_item_limit` validation failures as transient upstream 500s during bulk backfill monitoring.
 
 Suunto Health failure logs retain allowlisted operation stages and error classifications before raw errors are sanitized for retry storage. Distinguish worker HTTP 500s from validated upstream status codes; RPC, transport, validation and unknown failures have separate safe diagnostics. See [backfill diagnostic fields](health-backfill-operations.md#verification). Do not add raw provider responses, exception messages, stacks, credential URLs or account identifiers to those fields.
+
+Suunto workout downloads, activity-history reads, and Health pulls allow one same-account forced token refresh and
+read retry after HTTP 401 or 403. Health shares that recovery budget across all feeds/subrequests in one invocation;
+its existing durable queue retry policy remains unchanged. Never select another connected account to recover old work.
+A workout still returning 403 moves to `SUUNTO_WORKOUT_ACCESS_DENIED` without fabricating a retry increment; legacy
+shared-account rows still try other matching owners, and transient failures or refresh contention remain retryable.
+403 is not proof of global token revocation or a deleted workout. Do not revoke credentials based on that response.
+An unexpired-token log proves only local expiry, not provider acceptance. See [Suunto integration](suunto-integration.md)
+for recovery, deployment targets, and rollback.
 
 The canonical `receiveSuunto247Data` webhook uses isolated owner-module entrypoint loading at 512 MiB while retaining
 its Gen 1 HTTP trigger, 60-second timeout and notification secret. See [entrypoint verification](functions-entrypoint-loading.md);
@@ -86,6 +95,15 @@ for the full policy, request accounting, privacy, diagnostics and rollout contra
 An explicitly reviewed Garmin replacement that finds the original pair again reuses its IDs and applies the reviewed
 prescription/date before claiming acceptance. Unchanged reappearance is a no-op; Schedule-only automatic repair still
 preserves provider-side recipe edits. Malformed private inspection timestamps or artifact lists cannot offer replacement.
+
+#801 adds a focused MCP replacement preview and prepare-only Assistant review using this same command/journal,
+not another adapter. Existing planning-read and delivery-write grants are required. The preview accepts one exact
+opaque workout reference and current revisions, identifies the workout/date and possible-duplicate risk, and never
+calls Garmin. Existing native/app approval consumes the 15-minute proposal and exact private evidence digest;
+Send/Retry cannot grant replacement authority. Apply revalidates current grants, account/connection/epoch, consent,
+revisions, Pro, locks, completion/past state and uncertainty. Existing status/receipts recover lost replies without
+another create. New tool deployment and client catalog refresh/rescan are separate release actions; existing v1
+batch actions and provider transport contracts remain unchanged.
 An edit against a retained Garmin pair that fails before any write-start journal retires only its provably unstarted
 attempt for a fresh inspection; started/legacy/partial sends remain protected and cannot authorize replacement.
 
@@ -813,7 +831,7 @@ in confirmation and status state.
 - Use the same queue format and processor as webhooks. Separate processing paths drift and create inconsistent duplicate or cleanup behavior.
 - Require the appropriate entitlement and connection state at request time, then re-check in the worker.
 - Use a per-user lease so duplicate browser clicks, tabs, or retried callables cannot run overlapping history scans.
-- Reflect an active history scan in the frontend using existing owner-readable server metadata. Wahoo uses the finite future `historyImportLeaseExpiresAt` value to show **Import already running** and block another submission across dialog reopenings. Clear that state when the lease is removed or expires, then apply the normal cooldown. Keep the server lease authoritative: metadata is only a display hint. Treat Wahoo callable `already-exists` contention as a normal wait status without a false success, error haptic, or frontend error report; preserve unexpected failure logging even after the dialog closes. Late completions must not update a destroyed dialog.
+- Reflect an active activity-history request in the frontend using existing owner-readable server metadata. Garmin and Wahoo use the finite future `historyImportLeaseExpiresAt` value to show **Import already running** and block another submission across dialog reopenings. Clear that state when the lease is removed or expires, then apply the normal cooldown. Keep the server lease authoritative: metadata is only a display hint. Treat Garmin/Wahoo callable `already-exists` contention as a normal wait status without a false success, error haptic, or frontend error report; preserve unexpected failure logging even after the dialog closes. Late completions must not update a destroyed dialog.
 - Record enough cursor/range state to make failures observable without exposing provider data.
 - For a multi-minute import, re-read and expiry-refresh the exact credential before every provider request while proving the original provider identity, credential generation, OAuth root generation, connection generation, and deletion state still own the work. Do not treat expiration of a token cached at worker startup as evidence that the user must reconnect.
 - When any terminal path removes a durable cursor, mark only its matching observable progress state terminal in the same guarded transaction as the DLQ move. Apply the same guarded progress transition when rollout or lifecycle removal skips the cursor. Never leave progress running after its final queue row is gone or overwrite progress owned by a newer import.
@@ -1102,7 +1120,7 @@ The Activity Sync queue view also breaks out historical sends (`deliveryMode: hi
 ### What to monitor after release
 
 - OAuth starts, callback failures, provider denial/cancel rates, duplicate or ambiguous provider identities, and token-refresh failures;
-- webhook authentication failures, accepted/skipped payloads, duplicate/superseded revisions, and history lease collisions (Wahoo contention remains observable at the callable boundary, while the frontend presents it as a wait status);
+- webhook authentication failures, accepted/skipped payloads, duplicate/superseded revisions, and history lease collisions (Garmin/Wahoo contention remains observable at the callable boundary, while the frontend presents it as a wait status);
 - queue depth, age/lag, retries, stuck work, DLQ growth, and Cloud Task dispatch failures;
 - provider 429s, pagination errors, signed-file download rejects, timeouts, parsing failures, and original-file retention failures;
 - disconnect-pending age, deauthorization failures, entitlement enforcement, and cleanup/deletion failures.

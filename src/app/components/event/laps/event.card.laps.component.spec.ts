@@ -8,18 +8,22 @@ import { MatSelectionListChange } from '@angular/material/list';
 import {
     ActivityInterface,
     ActivityTypes,
+    DataDistance,
     DataDuration,
     DataHeartRateMax,
     DataPaceAvg,
     DataSpeedAvg,
     DataSpeedMax,
     DataSpeedMin,
+    DistanceUnits,
     EventImporterJSON,
     EventInterface,
     FileType,
     LapInterface,
+    LapJSONInterface,
     LapTypes,
     Privacy,
+    SpeedUnits,
     UserUnitSettingsInterface
 } from '@sports-alliance/sports-lib';
 import { readFileSync } from 'node:fs';
@@ -30,6 +34,7 @@ import { AppEventColorService } from '../../../services/color/app.event.color.se
 import { AppUserSettingsQueryService } from '../../../services/app.user-settings-query.service';
 import { MatSnackBar } from '@angular/material/snack-bar';
 import { normalizeEventDetailsSettings } from '../../../helpers/event-lap-table-columns.helper';
+import { getDefaultUserUnitSettings } from '../../../../../shared/unit-aware-display';
 
 function createActivity(laps: LapInterface[]): ActivityInterface {
     return {
@@ -37,6 +42,15 @@ function createActivity(laps: LapInterface[]): ActivityInterface {
         getID: () => 'activity-1',
         getLaps: () => laps,
     } as ActivityInterface;
+}
+
+function createHydratedActivity(laps: LapJSONInterface[]): ActivityInterface {
+    return EventImporterJSON.getActivityFromJSON({
+        name: null, startDate: 0, endDate: 600_000, type: ActivityTypes.MountainBiking,
+        powerMeter: false, trainer: false, creator: { name: 'Test', devices: [] },
+        stats: { [DataDuration.type]: 600, [DataDistance.type]: 2000 },
+        laps, streams: [], intensityZones: [], events: [],
+    });
 }
 
 function createRenderableLap(type: LapTypes): LapInterface {
@@ -637,10 +651,12 @@ describe('EventCardLapsComponent', () => {
         expect(component.getDataSource(activity, LapTypes.Manual)?.data[0].Duration).toBe('0:12.85');
     });
 
-    it('should exclude session end laps from the rendered lap tables', () => {
-        const activity = createActivity([
-            { type: LapTypes.session_end } as LapInterface,
-        ]);
+    it('hides a sole lap that duplicates the whole activity', () => {
+        const activity = createHydratedActivity([{
+            lapId: 1, startDate: 0, endDate: 600_000, startIndex: null, endIndex: null,
+            type: LapTypes.session_end,
+            stats: { [DataDuration.type]: 600, [DataDistance.type]: 2000 },
+        }]);
         component.selectedActivities = [activity];
 
         component.ngOnChanges();
@@ -649,6 +665,79 @@ describe('EventCardLapsComponent', () => {
         expect(component.getDataSource(activity, LapTypes.session_end)).toBeUndefined();
         fixture.detectChanges();
         expect(fixture.nativeElement.querySelector('app-event-section-header')).toBeNull();
+    });
+
+    it('keeps a sole final lap visible when zero distance masks a missing duration', () => {
+        const activity = createHydratedActivity([{
+            lapId: 1, startDate: 0, endDate: 600_000, startIndex: null, endIndex: null,
+            type: LapTypes.session_end, stats: { [DataDistance.type]: 0 },
+        }]);
+        activity.setDistance(new DataDistance(0));
+        component.selectedActivities = [activity];
+        component.ngOnChanges();
+        fixture.detectChanges();
+
+        expect(component.availableLapTypes).toEqual([LapTypes.session_end]);
+        expect(component.getDataSource(activity, LapTypes.session_end)?.data).toHaveLength(1);
+        expect(component.lapColumnMenuGroups).toHaveLength(1);
+        expect(fixture.nativeElement.querySelector('app-event-section-header')).not.toBeNull();
+    });
+
+    it('renders and selects a final session end segment after earlier splits', () => {
+        const activity = createActivity([
+            createRenderableLap(LapTypes.Manual),
+            { ...createRenderableLap(LapTypes.session_end), getDuration: () => new DataDuration(480) } as LapInterface,
+        ]);
+        component.selectedActivities = [activity];
+        component.ngOnChanges();
+
+        expect(component.availableLapTypes).toEqual([LapTypes.Manual, LapTypes.session_end]);
+        expect(component.lapTableGroups).toHaveLength(2);
+        const table = component.lapTableGroups[1].tables[0];
+        expect(table.dataSource.data[0].Duration).toBe('8:00.00');
+        component.toggleLapSelection(table, table.dataSource.data[0]);
+        expect(table.selectedCount).toBe(1);
+        expect(table.selectedSummary.Duration).toContain('1/1');
+    });
+
+    it.each([
+        { distanceUnits: DistanceUnits.Kilometers, speedUnits: SpeedUnits.KilometersPerHour, distance: '1.70 Km', speed: '18.00 km/h' },
+        { distanceUnits: DistanceUnits.Miles, speedUnits: SpeedUnits.MilesPerHour, distance: '1.06 mi', speed: '11.19 mph' },
+    ])('formats a persisted final segment using $distanceUnits and $speedUnits', ({ distanceUnits, speedUnits, distance, speed }) => {
+        const activity = createHydratedActivity([
+            {
+                lapId: 1, startDate: 0, endDate: 120_000, startIndex: null, endIndex: null,
+                type: LapTypes.Manual, stats: { [DataDuration.type]: 120, [DataDistance.type]: 300 },
+            },
+            {
+                lapId: 2, startDate: 120_000, endDate: 600_000, startIndex: null, endIndex: null,
+                type: LapTypes.session_end,
+                stats: { [DataDuration.type]: 480, [DataDistance.type]: 1700, [DataSpeedAvg.type]: 5 },
+            },
+        ]);
+        component.selectedActivities = [activity];
+        component.unitSettings = { ...getDefaultUserUnitSettings(), distanceUnits, speedUnits: [speedUnits] };
+        component.ngOnChanges();
+
+        const row = component.getDataSource(activity, LapTypes.session_end)?.data.find(row => !row.isLapAverage);
+        expect(row).toMatchObject({ Duration: '8:00.00', [DataDistance.type]: distance, [DataSpeedAvg.type]: speed });
+    });
+
+    it('uses the same visibility rule when another activity offers the hidden lap type', () => {
+        const hidden = createHydratedActivity([{
+            lapId: 1, startDate: 0, endDate: 600_000, startIndex: null, endIndex: null,
+            type: LapTypes.session_end,
+            stats: { [DataDuration.type]: 600, [DataDistance.type]: 2000 },
+        }]);
+        hidden.setID('hidden');
+        const visible = createActivity([
+            createRenderableLap(LapTypes.Manual), createRenderableLap(LapTypes.session_end),
+        ]);
+        component.selectedActivities = [hidden, visible];
+        component.ngOnChanges();
+
+        expect(component.getDataSource(hidden, LapTypes.session_end)).toBeUndefined();
+        expect(component.getDataSource(visible, LapTypes.session_end)?.data).toHaveLength(1);
     });
 
     it('should exclude laps with a missing type from the rendered lap tables', () => {

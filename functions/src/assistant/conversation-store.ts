@@ -17,7 +17,7 @@ import {
 import { isAssistantContentProposal, validateAssistantConversation } from '../../../shared/assistant-response.contract';
 import { getUserDeletionGuardStateInTransaction } from '../shared/user-deletion-guard';
 import { TTL_CONFIG } from '../shared/ttl-config';
-import { TRAINING_WRITE_OUTPUTS } from '../mcp/training-plans.schemas';
+import { TRAINING_ASSISTANT_PREVIEW_OUTPUT } from '../mcp/training-plans.schemas';
 
 const ASSISTANT_CONVERSATION_COLLECTION = 'assistantConversations';
 const ASSISTANT_ACTIVE_CONVERSATION_DOC = 'active';
@@ -365,7 +365,7 @@ function parseStoredConversation(
         expiresAtMs: data.pendingTurn.expiresAtMs,
       }
       : null;
-  const parsedProposal = TRAINING_WRITE_OUTPUTS.preview_training_changes.safeParse(data.pendingTrainingProposal);
+  const parsedProposal = TRAINING_ASSISTANT_PREVIEW_OUTPUT.safeParse(data.pendingTrainingProposal);
   const pendingTrainingProposal = parsedProposal.success && parsedProposal.data.expiresAtMs > nowMs
     ? parsedProposal.data
     : null;

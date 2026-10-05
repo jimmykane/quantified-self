@@ -1,4 +1,5 @@
-import { ActivityTypes, DistanceUnits, PaceUnits, SwimPaceUnits, type UserUnitSettingsInterface } from '@sports-alliance/sports-lib';
+import { ActivityTypes, DataSpeed, DistanceUnits, DynamicDataLoader, PaceUnits, SpeedUnits, SwimPaceUnits, type UserUnitSettingsInterface } from '@sports-alliance/sports-lib';
+import { normalizeUserUnitSettings } from '@shared/unit-aware-display';
 import {
   formatWorkoutEndingV1,
   formatWorkoutStepV1,
@@ -17,7 +18,7 @@ import {
 
 export type ManualWorkoutSport = ManualWorkoutEditorSportV1 | ActivityTypes.StrengthTraining;
 export type ManualWorkoutEnding = 'time' | 'distance' | 'manual';
-export type ManualWorkoutTarget = 'none' | 'heart-rate' | 'power' | 'pace';
+export type ManualWorkoutTarget = 'none' | 'heart-rate' | 'power' | 'pace' | 'speed' | 'cadence';
 
 export interface ManualWorkoutEditorStep {
   kind: 'step';
@@ -41,6 +42,8 @@ export interface ManualWorkoutEditorStep {
     minimumMetersPerSecond: number;
     maximumMetersPerSecond: number;
   };
+  /** Preserve canonical m/s when the displayed speed range was not edited. */
+  sourceSpeed?: ManualWorkoutEditorStep['sourcePace'];
 }
 
 export interface ManualWorkoutEditorRepeat {
@@ -87,6 +90,26 @@ export function createManualWorkoutEditorValue(
 }
 
 const METERS_PER_MILE = 1609.344;
+
+function speedDisplay(units?: UserUnitSettingsInterface | null) {
+  const speed = new DataSpeed(1);
+  return DynamicDataLoader.getUnitBasedDataFromDataInstance(speed, normalizeUserUnitSettings(units))[0] ?? speed;
+}
+
+export function manualWorkoutEditorSpeedUnit(units?: UserUnitSettingsInterface | null): string {
+  return speedDisplay(units).getDisplayUnit();
+}
+
+/** Exact input conversions; Sports Lib's display conversions round some factors, including mph. */
+function speedScale(units?: UserUnitSettingsInterface | null): number {
+  switch (normalizeUserUnitSettings(units).speedUnits[0]) {
+    case SpeedUnits.MilesPerHour: return 3600 / METERS_PER_MILE;
+    case SpeedUnits.FeetPerSecond: return 1 / .3048;
+    case SpeedUnits.Knots: return 3600 / 1852;
+    case SpeedUnits.MetersPerSecond: return 1;
+    default: return 3.6;
+  }
+}
 
 function distanceScale(sport: ManualWorkoutSport, units?: UserUnitSettingsInterface | null): number {
   if (isSwimmingWorkoutSportV1(sport) || isRowingWorkoutSportV1(sport)) return 1;
@@ -203,12 +226,50 @@ function targetFromEditor(
     }];
   }
   if (minimum < 0 || maximum < 0) {
+    if (step.targetKind === 'speed') throw new Error('Speed target ranges cannot be negative.');
+    if (step.targetKind === 'cadence') throw new Error('Cadence target ranges cannot be negative.');
     throw new Error('Heart-rate and power target ranges cannot be negative.');
   }
   if (minimum > maximum) throw new Error('The target minimum must not exceed its maximum.');
+  if (step.targetKind === 'cadence') {
+    return [{ kind: 'cadence', mode: 'absolute', minimumRpm: minimum, maximumRpm: maximum }];
+  }
+  if (step.targetKind === 'speed') {
+    const source = step.sourceSpeed;
+    const scale = speedScale(units);
+    return [{ kind: 'speed', mode: 'absolute', presentation: 'speed',
+      minimumMetersPerSecond: source?.editorMinimum === minimum && source.editorMaximum === maximum
+        ? source.minimumMetersPerSecond : minimum / scale,
+      maximumMetersPerSecond: source?.editorMinimum === minimum && source.editorMaximum === maximum
+        ? source.maximumMetersPerSecond : maximum / scale }];
+  }
   return step.targetKind === 'heart-rate'
     ? [{ kind: 'heart-rate', mode: 'absolute', minimumBpm: minimum, maximumBpm: maximum }]
     : [{ kind: 'power', mode: 'absolute', minimumWatts: minimum, maximumWatts: maximum }];
+}
+
+/** Switching pace/speed changes presentation while preserving the physical target range. */
+export function changeManualWorkoutEditorStepTarget(
+  step: ManualWorkoutEditorStep, targetKind: ManualWorkoutTarget, sport: ManualWorkoutSport,
+  units?: UserUnitSettingsInterface | null,
+): ManualWorkoutEditorStep {
+  if (step.targetKind === targetKind) return step;
+  const next = { ...step, targetKind, sourcePace: undefined, sourceSpeed: undefined };
+  if (step.targetKind === 'cadence' || targetKind === 'cadence') {
+    return { ...next, targetMinimum: null, targetMaximum: null };
+  }
+  if ((step.targetKind === 'pace' || step.targetKind === 'speed') && (targetKind === 'pace' || targetKind === 'speed')) {
+    try {
+      const target = targetFromEditor(step, sport, units)[0];
+      if (target.kind !== 'speed' || target.mode !== 'absolute') return next;
+      // A zero-speed bound has no finite pace. Clear that draft instead of reinterpreting its units.
+      if (targetKind === 'pace' && target.minimumMetersPerSecond === 0) throw new Error('No finite pace range');
+      return { ...next, ...editorTarget({ ...target, presentation: targetKind }, sport, units) };
+    } catch {
+      return { ...next, targetMinimum: null, targetMaximum: null };
+    }
+  }
+  return next;
 }
 
 function stepFromEditor(
@@ -262,7 +323,7 @@ function editorTarget(
   units?: UserUnitSettingsInterface | null,
 ): Pick<
   ManualWorkoutEditorStep,
-  'targetKind' | 'targetMinimum' | 'targetMaximum' | 'sourcePace'
+  'targetKind' | 'targetMinimum' | 'targetMaximum' | 'sourcePace' | 'sourceSpeed'
 > {
   if (!target || target.mode !== 'absolute') {
     if (!target) return { targetKind: 'none', targetMinimum: null, targetMaximum: null };
@@ -283,7 +344,12 @@ function editorTarget(
       };
     case 'speed': {
       if (target.presentation !== 'pace') {
-        throw new Error('This workout uses a speed target that the first manual editor cannot change.');
+        const scale = speedScale(units);
+        const targetMinimum = roundEditorNumber(target.minimumMetersPerSecond * scale);
+        const targetMaximum = roundEditorNumber(target.maximumMetersPerSecond * scale);
+        return { targetKind: 'speed', targetMinimum, targetMaximum,
+          sourceSpeed: { editorMinimum: targetMinimum, editorMaximum: targetMaximum,
+            minimumMetersPerSecond: target.minimumMetersPerSecond, maximumMetersPerSecond: target.maximumMetersPerSecond } };
       }
       const targetMinimum = roundEditorNumber(paceDistanceMeters(sport, units) / target.maximumMetersPerSecond / 60);
       const targetMaximum = roundEditorNumber(paceDistanceMeters(sport, units) / target.minimumMetersPerSecond / 60);
@@ -300,7 +366,7 @@ function editorTarget(
       };
     }
     case 'cadence':
-      throw new Error('This workout uses a cadence target that the first manual editor cannot change.');
+      return { targetKind: 'cadence', targetMinimum: target.minimumRpm, targetMaximum: target.maximumRpm };
   }
 }
 

@@ -360,7 +360,7 @@ describe('tokens', () => {
             });
 
             expect(hoisted.logger.info).toHaveBeenCalledWith(
-                '[ServiceAuth] Provider token remains valid.',
+                '[ServiceAuth] Provider token is unexpired; provider access has not been verified.',
                 { serviceName: ServiceNames.SuuntoApp },
             );
             expect(JSON.stringify(hoisted.logger.info.mock.calls))

@@ -1,3 +1,6 @@
+import { XAxisTypes } from '@sports-alliance/sports-lib';
+import { getCanonicalEventXAxisInterval } from './event-echarts-xaxis.helper';
+
 const PACE_OUTLIER_MIN_SAMPLE_COUNT = 10;
 const PACE_OUTLIER_LOWER_QUANTILE = 0.02;
 const PACE_OUTLIER_UPPER_QUANTILE = 0.98;
@@ -8,6 +11,34 @@ export interface PaceAxisScalingResult {
   max: number | undefined;
   strictMinMax: boolean;
   extraMax: number;
+}
+
+/** Authored pace bounds are complete instructions, so none are treated as recorded-stream outliers. */
+export function buildPaceAxisConfig(values: readonly number[]): {
+  inverse: true; min: number; max: number; interval: number; tickValues: number[];
+} {
+  const finiteValues = values.filter(value => Number.isFinite(value) && value > 0);
+  if (!finiteValues.length) return { inverse: true, min: 60, max: 120, interval: 15, tickValues: [60, 75, 90, 105, 120] };
+  const minimum = Math.min(...finiteValues);
+  const maximum = Math.max(...finiteValues);
+  const span = maximum - minimum;
+  const padding = span > 0 ? span * .02 : Math.max(1, minimum * .05);
+  const lower = Math.max(minimum * .5, minimum - padding);
+  const upper = maximum + padding;
+  // Reuse Event Details' seconds/minutes intervals rather than decimal-number ticks such as 1,000 seconds.
+  const canonicalInterval = getCanonicalEventXAxisInterval(XAxisTypes.Duration, { start: lower, end: upper }) ?? 1;
+  const interval = canonicalInterval * Math.max(1, Math.ceil((upper - lower) / canonicalInterval / 8));
+  const snappedMinimum = Math.floor(lower / interval) * interval;
+  // A very broad authored range can snap below zero. Keep a positive, minute/second-aligned lower bound.
+  const lowerInterval = Math.min(interval, 60);
+  const positiveMinimum = Math.floor(lower / lowerInterval) * lowerInterval;
+  const min = snappedMinimum > 0 ? snappedMinimum : positiveMinimum > 0 ? positiveMinimum : lower;
+  const max = Math.ceil(upper / interval) * interval;
+  // ECharts anchors an explicit interval at min. Use shared tick/label positions so a positive lower bound
+  // does not offset every interior minute mark (e.g. 3, 13, 23 minutes instead of 3, 10, 20).
+  const tickValues = [min];
+  for (let tick = (Math.floor(min / interval) + 1) * interval; tick <= max; tick += interval) tickValues.push(tick);
+  return { inverse: true, min, max, interval, tickValues };
 }
 
 export function computePaceAxisScaling(values: number[], extraMaxForPace: number): PaceAxisScalingResult {

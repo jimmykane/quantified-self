@@ -63,6 +63,7 @@ export function duplicateManualWorkoutEditorNode(
     ...(step.sourceDuration ? { sourceDuration: { ...step.sourceDuration } } : {}),
     ...(step.sourceDistance ? { sourceDistance: { ...step.sourceDistance } } : {}),
     ...(step.sourcePace ? { sourcePace: { ...step.sourcePace } } : {}),
+    ...(step.sourceSpeed ? { sourceSpeed: { ...step.sourceSpeed } } : {}),
   });
   const copy: ManualWorkoutEditorNode = source.kind === 'repeat'
     ? { ...source, id: freshId('repeat'), steps: source.steps.map(copyStep) } : copyStep(source);

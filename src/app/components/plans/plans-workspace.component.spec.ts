@@ -10,9 +10,9 @@ import { MAT_ICON_DEFAULT_OPTIONS } from '@angular/material/icon';
 import { MatSnackBar } from '@angular/material/snack-bar';
 import { MatDatepickerInput } from '@angular/material/datepicker';
 import { MatSelect } from '@angular/material/select';
-import { MatFormField } from '@angular/material/form-field';
+import { MAT_FORM_FIELD_DEFAULT_OPTIONS, MatFormField } from '@angular/material/form-field';
 import { ActivatedRoute, Router, convertToParamMap, provideRouter, type Data, type ParamMap } from '@angular/router';
-import { ActivityTypes, AppThemes, DistanceUnits, PaceUnits, SwimPaceUnits, WeightUnits } from '@sports-alliance/sports-lib';
+import { ActivityTypes, AppThemes, DistanceUnits, PaceUnits, SpeedUnits, SwimPaceUnits, WeightUnits } from '@sports-alliance/sports-lib';
 import { normalizeUserUnitSettings } from '@shared/unit-aware-display';
 import { projectStrengthWorkoutToV1 } from '@shared/strength-workout';
 import type { ScheduledWorkoutV1 } from '@shared/training-plans';
@@ -470,6 +470,108 @@ describe('PlansWorkspaceComponent', () => {
     if (scope === 'library') expect(mutate).not.toHaveBeenCalled();
   });
 
+  it.each([
+    { scope: 'plans', unit: SpeedUnits.KilometersPerHour, label: 'km/h', minimum: 18, maximum: 36, mps: 5 },
+    { scope: 'standalone', unit: SpeedUnits.MilesPerHour, label: 'mph', minimum: 10, maximum: 20, mps: 4.4704 },
+    { scope: 'library', unit: SpeedUnits.KilometersPerHour, label: 'km/h', minimum: 18, maximum: 36, mps: 5 },
+  ] as const)('selects, plots and saves cycling speed in $label through real inputs in $scope', async ({ scope, unit, label, minimum, maximum, mps }) => {
+    const unitUser = { ...user, settings: { unitSettings: normalizeUserUnitSettings({ speedUnits: [unit] }) } };
+    TestBed.overrideProvider(AppUserService, { useValue: { user: signal(unitUser), user$: of(unitUser) } });
+    libraryMutate.mockResolvedValue({ mutationId: 'mutation-1', item: null });
+    setRouteState({ mode: scope === 'library' ? 'library-create' : 'create', scope: scope === 'standalone' ? 'standalone' : 'plans', date: '2026-10-05' });
+    const fixture = await renderPlans(); const component = fixture.componentInstance;
+    component.updateEditorField('title', 'Cycling speed intervals');
+    component.updateEditorField('sport', ActivityTypes.Cycling);
+    fixture.detectChanges(); await fixture.whenStable();
+    const target = fixture.debugElement.queryAll(By.directive(MatSelect))
+      .map(element => element.componentInstance as MatSelect).find(select => select.options.some(option => option.value === 'speed'))!;
+    expect(target).toBeDefined();
+    target.selectionChange.emit({ source: target, value: 'speed' });
+    fixture.detectChanges(); await fixture.whenStable(); fixture.detectChanges();
+    for (const [name, value] of [['Minimum', minimum], ['Maximum', maximum]] as const) {
+      const field = [...fixture.nativeElement.querySelectorAll('mat-form-field')]
+        .find((element: HTMLElement) => element.querySelector('mat-label')?.textContent === `${name} ${label}`) as HTMLElement;
+      expect(field).toBeDefined();
+      const input = field.querySelector('input')!;
+      input.value = String(value); input.dispatchEvent(new Event('input', { bubbles: true }));
+      fixture.detectChanges(); await fixture.whenStable(); fixture.detectChanges();
+    }
+    const profile = fixture.debugElement.query(By.directive(WorkoutProfileComponent)).componentInstance as WorkoutProfileComponent;
+    expect(profile.model()?.metrics).toEqual(['speed']);
+    expect(profile.metric()).toBe('speed');
+    expect(fixture.nativeElement.querySelectorAll('app-workout-time-input input[type="text"]').length).toBe(0);
+    await component.saveWorkout();
+    const operation = (scope === 'library' ? libraryMutate : mutate).mock.calls[0][0].operation;
+    expect(operation.structure.sport).toBe(ActivityTypes.Cycling);
+    expect(operation.structure.nodes[0].targets[0]).toMatchObject({ kind: 'speed', mode: 'absolute', presentation: 'speed' });
+    expect(operation.structure.nodes[0].targets[0].minimumMetersPerSecond).toBeCloseTo(mps, 10);
+    expect(operation.structure.nodes[0].targets[0].maximumMetersPerSecond).toBeCloseTo(mps * 2, 10);
+    expect(JSON.stringify(operation.structure)).not.toMatch(/sourceSpeed|sourcePace|targetKind/);
+  });
+
+  it.each([
+    { sport: ActivityTypes.Running, first: 'pace', cadence: true },
+    { sport: ActivityTypes.TrailRunning, first: 'pace', cadence: true },
+    { sport: ActivityTypes.Cycling, first: 'power', cadence: true },
+    { sport: ActivityTypes.IndoorCycling, first: 'power', cadence: true },
+    { sport: ActivityTypes.Swimming, first: 'pace', cadence: false },
+    { sport: ActivityTypes.OpenWaterSwimming, first: 'pace', cadence: false },
+    { sport: ActivityTypes.Rowing, first: 'pace', cadence: false },
+    { sport: ActivityTypes.IndoorRowing, first: 'pace', cadence: false },
+    { sport: ActivityTypes.Hiking, first: 'pace', cadence: false },
+  ])('orders $sport targets without replacing the selected target', async ({ sport, first, cadence }) => {
+    setRouteState({ mode: 'create', scope: 'standalone', date: '2026-10-05' });
+    const fixture = await renderPlans(); const component = fixture.componentInstance;
+    component.updateStep(0, null, 'targetKind', 'heart-rate');
+    component.updateStep(0, null, 'targetMinimum', 130); component.updateStep(0, null, 'targetMaximum', 150);
+    component.updateEditorField('sport', sport);
+    fixture.detectChanges(); await fixture.whenStable(); fixture.detectChanges();
+    const target = fixture.debugElement.queryAll(By.directive(MatSelect))
+      .map(element => element.componentInstance as MatSelect).find(select => select.options.some(option => option.value === 'speed'))!;
+    const choices = target.options.map(option => option.value);
+    expect(choices[0]).toBe('none'); expect(choices[1]).toBe(first);
+    expect(choices.includes('cadence')).toBe(cadence);
+    if (sport === ActivityTypes.Cycling || sport === ActivityTypes.IndoorCycling) expect(choices[2]).toBe('speed');
+    expect(target.value).toBe('heart-rate');
+    expect(component.editorProfile().nodes[0]).toMatchObject({ targets: [{ kind: 'heart-rate', minimumBpm: 130, maximumBpm: 150 }] });
+  });
+
+  it.each([
+    { sport: ActivityTypes.Running, scope: 'standalone', minimum: 170, maximum: 180 },
+    { sport: ActivityTypes.Cycling, scope: 'plans', minimum: 80, maximum: 95 },
+    { sport: ActivityTypes.IndoorCycling, scope: 'library', minimum: 85, maximum: 95 },
+  ] as const)('selects, plots and saves $sport cadence through real inputs in $scope', async ({ sport, scope, minimum, maximum }) => {
+    libraryMutate.mockResolvedValue({ mutationId: 'mutation-1', item: null });
+    setRouteState({ mode: scope === 'library' ? 'library-create' : 'create', scope: scope === 'standalone' ? 'standalone' : 'plans', date: '2026-10-05' });
+    const fixture = await renderPlans(); const component = fixture.componentInstance;
+    component.updateEditorField('title', 'Cadence intervals'); component.updateEditorField('sport', sport);
+    fixture.detectChanges(); await fixture.whenStable();
+    const target = fixture.debugElement.queryAll(By.directive(MatSelect))
+      .map(element => element.componentInstance as MatSelect).find(select => select.options.some(option => option.value === 'cadence'))!;
+    target.selectionChange.emit({ source: target, value: 'cadence' });
+    fixture.detectChanges(); await fixture.whenStable(); fixture.detectChanges();
+    for (const [name, value] of [['Minimum', minimum], ['Maximum', maximum]] as const) {
+      const field = [...fixture.nativeElement.querySelectorAll('mat-form-field')]
+        .find((element: HTMLElement) => element.querySelector('mat-label')?.textContent === `${name} rpm`) as HTMLElement;
+      const input = field.querySelector('input')!;
+      input.value = String(value); input.dispatchEvent(new Event('input', { bubbles: true }));
+      fixture.detectChanges(); await fixture.whenStable(); fixture.detectChanges();
+    }
+    const profile = fixture.debugElement.query(By.directive(WorkoutProfileComponent)).componentInstance as WorkoutProfileComponent;
+    expect(profile.metric()).toBe('cadence');
+    if (sport === ActivityTypes.Running) {
+      component.updateEditorField('sport', ActivityTypes.Swimming);
+      fixture.detectChanges(); await fixture.whenStable(); fixture.detectChanges();
+      expect(component.targetOptions().some(option => option.value === 'cadence')).toBe(false);
+      expect(target.options.some(option => option.value === 'cadence')).toBe(true);
+      expect(target.value).toBe('cadence');
+      component.updateEditorField('sport', sport);
+    }
+    await component.saveWorkout();
+    const operation = (scope === 'library' ? libraryMutate : mutate).mock.calls[0][0].operation;
+    expect(operation.structure.nodes[0].targets).toEqual([{ kind: 'cadence', mode: 'absolute', minimumRpm: minimum, maximumRpm: maximum }]);
+  });
+
   it('reopens and resaves exact timed prescriptions without numeric-input rounding', async () => {
     schedule.workouts[0].structure.nodes = [{ kind: 'step', id: 'precise-time', purpose: 'work',
       ending: { kind: 'time', seconds: 123.456789012345 }, targets: [] }];
@@ -557,6 +659,7 @@ describe('PlansWorkspaceComponent', () => {
 
   it('exports the real timing editor for optional isolated visual QA', async () => {
     if (!process.env.TRAINING_DELIVERY_QA_DIR) return;
+    TestBed.overrideProvider(MAT_FORM_FIELD_DEFAULT_OPTIONS, { useValue: { appearance: 'outline' } });
     setRouteState({ mode: 'create', scope: 'standalone', date: '2026-09-09' });
     const fixture = await renderPlans();
     const component = fixture.componentInstance;
@@ -572,6 +675,8 @@ describe('PlansWorkspaceComponent', () => {
       ['app-plans-workspace', 'src/app/components/plans/plans-workspace.component.scss'],
       ['app-compact-row', 'src/app/components/shared/compact-row/compact-row.component.scss'],
       ['app-workout-time-input', 'src/app/components/plans/workout-time-input.component.scss'],
+      ['app-page-header', 'src/app/components/shared/page-header/page-header.component.scss'],
+      ['app-workout-profile', 'src/app/components/plans/workout-profile.component.scss'],
     ].map(([host, file]) => sass.compileString(host + ' {' + readFileSync(file, 'utf8')
       .replace(/:host\(([^)]+)\)/g, '&$1').replace(/:host/g, '&') + '}').css).join('\n');
     const markup = fixture.nativeElement.cloneNode(true) as HTMLElement;
@@ -605,6 +710,58 @@ describe('PlansWorkspaceComponent', () => {
         .replace('</head>', menuStyles + '</head>')
         .replace('</body>', overlay.outerHTML + '</body>'));
     trigger.closeMenu(); fixture.detectChanges(); await fixture.whenStable();
+
+    const exportEditor = async (name: string) => {
+      fixture.detectChanges(); await fixture.whenStable(); fixture.detectChanges();
+      const view = fixture.nativeElement.cloneNode(true) as HTMLElement;
+      const values: HTMLInputElement[] = [...fixture.nativeElement.querySelectorAll('input')];
+      view.querySelectorAll('input').forEach((input, index) => input.setAttribute('value', values[index].value));
+      for (const dark of [false, true]) {
+        writeFileSync(join(process.env.TRAINING_DELIVERY_QA_DIR!, name + (dark ? '-dark' : '') + '.html'),
+          '<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">'
+          + '<link rel="stylesheet" href="styles.css">' + Array.from(document.head.querySelectorAll('style')).map(style => style.outerHTML).join('')
+          + '<style>' + css + '</style></head><body class="app-hydrated' + (dark ? ' dark-theme' : '')
+          + '"><app-plans-workspace>' + view.outerHTML + '</app-plans-workspace></body></html>');
+      }
+    };
+    await exportEditor('pace-editor');
+    const paceSession = component.editor()!;
+    component.updateEditorField('sport', ActivityTypes.Cycling);
+    const pacedIndex = component.editor()!.value.nodes.findIndex(node => node.kind === 'step' && node.targetKind === 'pace');
+    component.updateStep(pacedIndex, null, 'targetKind', 'speed');
+    component.updateStep(pacedIndex, null, 'targetMinimum', 18);
+    component.updateStep(pacedIndex, null, 'targetMaximum', 36);
+    await exportEditor('cycling-speed-editor');
+    writeFileSync(join(process.env.TRAINING_DELIVERY_QA_DIR!, 'cycling-speed-recipe.json'), JSON.stringify({
+      structure: manualWorkoutEditorToStructure(component.editor()!.value, component.editor()!.unitSettings),
+      units: component.editor()!.unitSettings,
+    }));
+    component.updateStep(pacedIndex, null, 'targetKind', 'cadence');
+    component.updateStep(pacedIndex, null, 'targetMinimum', 80);
+    component.updateStep(pacedIndex, null, 'targetMaximum', 95);
+    await exportEditor('cycling-cadence-editor');
+    writeFileSync(join(process.env.TRAINING_DELIVERY_QA_DIR!, 'cycling-cadence-recipe.json'), JSON.stringify({
+      structure: manualWorkoutEditorToStructure(component.editor()!.value, component.editor()!.unitSettings),
+      units: component.editor()!.unitSettings,
+    }));
+    component.editor.set(paceSession);
+    component.updateEditorField('sport', ActivityTypes.Swimming);
+    component.updateEditorField('title', 'Pool session with optional length');
+    await exportEditor('pool-editor');
+    component.updateEditorDestination(schedule.plans[0].id);
+    await exportEditor('plan-pool-editor');
+    component.updateEditorField('sport', ActivityTypes.StrengthTraining);
+    component.updateStrengthExerciseName(0, 'Squat with a long exercise name');
+    component.updateStrengthSet(0, 0, 'value', 5);
+    component.addStrengthSet(0);
+    component.updateStrengthSet(0, 1, 'kind', 'time');
+    component.updateStrengthSet(0, 1, 'value', 30);
+    await exportEditor('strength-editor');
+    setRouteState({ mode: 'library-create' }, true);
+    await fixture.whenStable(); fixture.detectChanges();
+    component.updateEditorField('sport', ActivityTypes.Swimming);
+    component.updateEditorField('title', 'Undated swim recipe');
+    await exportEditor('library-editor');
   });
 
   function setRouteState(options: {
@@ -1900,7 +2057,8 @@ describe('PlansWorkspaceComponent', () => {
     editor.updateStrengthSet(0, 1, 'value', 30);
     fixture.detectChanges();
     expect(fixture.nativeElement.textContent).toContain('Exercises and sets');
-    expect(fixture.nativeElement.textContent).toContain('External load (kg, optional)');
+    expect(fixture.nativeElement.textContent).toContain('Load (kg)');
+    expect(fixture.nativeElement.textContent).toContain('Optional external load');
     await editor.saveWorkout();
     expect(mutate).toHaveBeenCalledWith(expect.objectContaining({ operation: expect.objectContaining({
       kind: 'create-workout', strength: expect.objectContaining({ exercises: [expect.objectContaining({
@@ -1942,7 +2100,8 @@ describe('PlansWorkspaceComponent', () => {
     fixture.detectChanges();
     const editor = fixture.componentInstance;
     expect(editor.editorWeightUnit()).toBe('lb');
-    expect(fixture.nativeElement.textContent).toContain('External load (lb, optional)');
+    expect(fixture.nativeElement.textContent).toContain('Load (lb)');
+    expect(fixture.nativeElement.querySelector('input[aria-label="External load (lb, optional)"]')).toBeTruthy();
     expect(editor.strengthLoadInputValue(80)).toBe(176.4);
     unitUser.set({ ...unitUser(), settings: { unitSettings: normalizeUserUnitSettings({}) } });
     editor.updateEditorField('title', 'Edited strength');
@@ -2458,7 +2617,7 @@ describe('PlansWorkspaceComponent', () => {
     expect(haptics.selection).toHaveBeenCalledOnce();
     expect(fixture.nativeElement.querySelector('mat-expansion-panel')).toBeNull();
     if (process.env.TRAINING_DELIVERY_QA_DIR) {
-      const sass = createRequire(createRequire(import.meta.url).resolve('@angular/build/package.json'))('sass');
+      const sass = createRequire(createRequire(resolve('package.json')).resolve('@angular/build/package.json'))('sass');
       const css = [
         ['app-plans-workspace', 'src/app/components/plans/plans-workspace.component.scss'],
         ['app-compact-row', 'src/app/components/shared/compact-row/compact-row.component.scss'],

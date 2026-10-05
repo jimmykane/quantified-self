@@ -21,6 +21,7 @@ import {
     DataDepthFeet,
     DataHeartRate,
     DataSpeed,
+    DataDuration,
     DataStamina,
     LapTypes,
     ActivityTypeGroups,
@@ -688,7 +689,7 @@ describe('EventCardComponent', () => {
         expect(component.hasDurabilityFlag()).toBe(false);
     });
 
-    it('keeps the performance area available to explain missing durability output', () => {
+    it('does not render an empty performance area for missing durability output alone', () => {
         mockPerformanceCurveDataService.getAvailability.mockReturnValue({
             hasPowerCurve: false,
             hasDurability: false,
@@ -701,8 +702,8 @@ describe('EventCardComponent', () => {
 
         expect(component.hasDurabilityFlag()).toBe(false);
         expect(component.durabilityOutputUnavailableFlag()).toBe(true);
-        expect(component.hasPerformanceChartsFlag()).toBe(true);
-        expect(fixture.nativeElement.querySelector('app-event-performance-charts')).not.toBeNull();
+        expect(component.hasPerformanceChartsFlag()).toBe(false);
+        expect(fixture.nativeElement.querySelector('app-event-performance-charts')).toBeNull();
     });
 
     it('should compute hasCadencePowerFlag as false when no cadence-power data exists', () => {
@@ -887,10 +888,18 @@ describe('EventCardComponent', () => {
             expect(fixture.nativeElement.querySelector('app-event-card-laps')).toBeNull();
         });
 
-        it('should compute hasLapsFlag as false when only session end laps exist', () => {
+        it('should compute hasLapsFlag as false for a sole whole-activity duplicate', () => {
             const sessionEndOnlyActivity = {
                 ...activityWithData,
-                getLaps: () => [{ type: LapTypes.session_end }],
+                startDate: new Date(0),
+                endDate: new Date(600_000),
+                getDuration: () => new DataDuration(600),
+                getLaps: () => [{
+                    type: LapTypes.session_end,
+                    startDate: new Date(0),
+                    endDate: new Date(600_000),
+                    getDuration: () => new DataDuration(600),
+                }],
             } as unknown as ActivityInterface;
             const sessionEndOnlyEvent = {
                 ...eventWithData,
@@ -903,6 +912,23 @@ describe('EventCardComponent', () => {
             fixture.detectChanges();
 
             expect(component.hasLapsFlag()).toBe(false);
+        });
+
+        it('shows the lap section for a final session end segment with incomplete earlier lap data', () => {
+            component.selectedActivitiesInstant.set([{
+                ...activityWithData,
+                startDate: new Date(0),
+                endDate: new Date(600_000),
+                getLaps: () => [{
+                    type: LapTypes.session_end,
+                    startDate: new Date(120_000),
+                    endDate: new Date(600_000),
+                }],
+            } as unknown as ActivityInterface]);
+            fixture.detectChanges();
+
+            expect(component.hasLapsFlag()).toBe(true);
+            expect(fixture.nativeElement.querySelector('app-event-card-laps')).not.toBeNull();
         });
 
         it('should compute hasIntensityZonesFlag as true when zones exist', () => {

@@ -35,10 +35,10 @@ export const TRAINING_READ_TOOLS = ['list_training_plans', 'get_training_plan', 
 export type TrainingReadTool = typeof TRAINING_READ_TOOLS[number];
 export const TRAINING_PREVIEW_TOOLS = ['preview_create_planned_workout', 'preview_training_changes',
   'preview_strength_workout_change', 'preview_planned_workout_v2_change', 'preview_planned_workout_v3_change', 'preview_saved_workout_change', 'preview_saved_workout_v2_change',
-  'preview_training_deletion'] as const;
+  'preview_training_deletion', 'preview_garmin_workout_replacement'] as const;
 export const TRAINING_WRITE_TOOLS = [...TRAINING_PREVIEW_TOOLS, 'apply_training_changes', 'apply_saved_workout_change'] as const;
 export const TRAINING_WRITE_EXTENSION_TOOLS = ['preview_strength_workout_change', 'preview_planned_workout_v2_change', 'preview_planned_workout_v3_change',
-  'preview_saved_workout_change', 'preview_saved_workout_v2_change', 'apply_saved_workout_change', 'preview_training_deletion'] as const;
+  'preview_saved_workout_change', 'preview_saved_workout_v2_change', 'apply_saved_workout_change', 'preview_training_deletion', 'preview_garmin_workout_replacement'] as const;
 export type TrainingWriteTool = typeof TRAINING_WRITE_TOOLS[number];
 export const trainingDate = z.string().length(10).refine(value => {
   try { return normalizeTrainingLocalDate(value) === value; } catch { return false; }
@@ -404,6 +404,8 @@ const savedWorkoutChange = savedWorkoutChangeWithRecipe(TRAINING_RECIPE_WITH_POO
 const savedWorkoutV2Change = savedWorkoutChangeWithRecipe(TRAINING_RECIPE_WITH_EARLY_LAP_SCHEMA);
 
 export const TRAINING_WRITE_INPUTS = {
+  preview_garmin_workout_replacement: z.strictObject({ workoutRef: ref,
+    expectedScheduleRevision: count, expectedWorkoutRevision: count.positive() }),
   preview_training_deletion: z.strictObject({ expectedScheduleRevision: count,
     change: TRAINING_DELETION_CHANGE_SCHEMA }),
   preview_create_planned_workout: z.strictObject({
@@ -438,6 +440,12 @@ const trainingPreviewOutput = z.strictObject({ proposalRef: ref, expiresAtMs: co
     changes: z.array(proposedChange).min(1).max(25), providerPreviews: z.array(providerPreview).max(100) });
 
 export const TRAINING_WRITE_OUTPUTS = {
+  preview_garmin_workout_replacement: trainingPreviewOutput.extend({
+    permissionMode: z.literal('delivery'),
+    changes: z.array(proposedChange.extend({ index: z.literal(0), kind: z.literal('garmin-workout-replacement') })).length(1),
+    providerPreviews: z.array(providerPreview.extend({ index: z.literal(0), provider: z.literal('garmin'),
+      targetType: z.literal('workout'), action: z.literal('replace'), availability: z.literal('ready') })).length(1),
+  }),
   preview_training_deletion: trainingPreviewOutput,
   preview_create_planned_workout: trainingPreviewOutput,
   preview_training_changes: trainingPreviewOutput,
@@ -455,6 +463,18 @@ export const TRAINING_WRITE_OUTPUTS = {
     libraryRevision: count, scheduleRevision: count, savedWorkoutRef: ref.nullable(),
     workoutRefs: z.array(ref).max(100) }),
 };
+
+/** First-party review only; never widen the registered batch preview schema. */
+export const TRAINING_ASSISTANT_PREVIEW_OUTPUT = z.union([
+  TRAINING_WRITE_OUTPUTS.preview_training_changes,
+  TRAINING_WRITE_OUTPUTS.preview_garmin_workout_replacement,
+]).superRefine((value, context) => {
+  if ((value.changes.some(change => change.kind === 'garmin-workout-replacement')
+    || value.providerPreviews.some(preview => preview.action === 'replace'))
+    && !TRAINING_WRITE_OUTPUTS.preview_garmin_workout_replacement.safeParse(value).success) {
+    context.addIssue({ code: 'custom', message: 'A Garmin replacement requires its dedicated unmixed review.' });
+  }
+});
 
 /** Additive recovery read; registered preview/apply contracts remain unchanged. */
 export const TRAINING_CHANGE_STATUS_INPUT = TRAINING_WRITE_INPUTS.apply_training_changes;

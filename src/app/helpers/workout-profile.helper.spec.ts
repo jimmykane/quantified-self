@@ -8,6 +8,26 @@ const step = (id: string, seconds = 60): WorkoutStepV1 => ({ kind: 'step', id, p
 const recipe = (nodes: WorkoutStructureV1['nodes'], sport = ActivityTypes.Running): WorkoutStructureV1 => ({ version: 1, sport, nodes });
 
 describe('workout profile presentation', () => {
+  it.each([
+    { sport: ActivityTypes.Running, order: ['pace', 'heart-rate', 'power', 'cadence', 'speed'] },
+    { sport: ActivityTypes.Swimming, order: ['pace', 'heart-rate', 'power', 'cadence', 'speed'] },
+    { sport: ActivityTypes.Rowing, order: ['pace', 'power', 'heart-rate', 'speed', 'cadence'] },
+    { sport: ActivityTypes.Cycling, order: ['power', 'speed', 'heart-rate', 'cadence', 'pace'] },
+  ])('prioritizes $sport profile metrics without changing target order or bounds', ({ sport, order }) => {
+    const structure = recipe([
+      { ...step('hr-power'), targets: [{ kind: 'heart-rate', mode: 'absolute', minimumBpm: 130, maximumBpm: 145 },
+        { kind: 'power', mode: 'absolute', minimumWatts: 180, maximumWatts: 220 }] },
+      { ...step('cadence-speed'), targets: [{ kind: 'cadence', mode: 'absolute', minimumRpm: 80, maximumRpm: 95 },
+        { kind: 'speed', mode: 'absolute', presentation: 'speed', minimumMetersPerSecond: 5, maximumMetersPerSecond: 10 }] },
+      { ...step('pace'), targets: [{ kind: 'speed', mode: 'absolute', presentation: 'pace', minimumMetersPerSecond: 3, maximumMetersPerSecond: 4 }] },
+    ], sport);
+    const before = JSON.stringify(structure);
+    const model = buildWorkoutProfile(structure);
+    expect(model.metrics).toEqual(order);
+    expect(model.occurrences[0].targets.map(target => target.metric)).toEqual(['heart-rate', 'power']);
+    expect(JSON.stringify(structure)).toBe(before);
+  });
+
   it('preserves mixed kilometre / HR blocks and untargeted 60, 75 and 90 second efforts without estimating intensity or time', () => {
     const structure = recipe([{ ...step('hr-block'), ending: { kind: 'distance', meters: 1000 },
       targets: [{ kind: 'heart-rate', mode: 'absolute', minimumBpm: 130, maximumBpm: 145 }] },
@@ -28,7 +48,7 @@ describe('workout profile presentation', () => {
         { kind: 'heart-rate', mode: 'absolute', minimumBpm: 140, maximumBpm: 150 },
       ],
     }))));
-    expect(model.metrics).toEqual(['power', 'heart-rate']);
+    expect(model.metrics).toEqual(['heart-rate', 'power']);
     expect(model.occurrences.every(s => s.targets[0].minimum === 200 && s.targets[0].maximum === 200)).toBe(true);
   });
 

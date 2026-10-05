@@ -206,6 +206,11 @@ batch or replay a declined/cancelled call elsewhere. Finalized acceptance is not
 must retain the original native approval boundary. If status is unavailable, inspect current records before proposing
 only genuinely remaining changes for fresh approval.
 
+For an explicit Garmin replacement-copy request, route to the focused Training workflow's additive preview and
+separate native/app approval. Fresh paired not-found Check evidence is required, and the review warns of possible
+duplicates. Missing status, cross-domain evidence, Send, Retry or a lost reply never authorize replacement. If the
+tool is absent, explain release/catalog availability and use the app's review; do not create another authored workout.
+
 
 For a planned recipe with early Lap, route through the focused Training workflow and discover the latest full scheduled
 or saved recipe read and matching focused preview. Preserve unchanged fields, including absent, false and true

@@ -143,12 +143,20 @@ export function isAssistantTrainingProposal(value: unknown): value is AssistantT
     && Number.isSafeInteger(preview.index) && Number(preview.index) >= 0 && Number(preview.index) <= 24
     && ['garmin', 'coros', 'wahoo', 'suunto'].includes(`${preview.provider}`)
     && ['plan', 'workout'].includes(`${preview.targetType}`)
-    && ['enable', 'send', 'resume', 'stop', 'retry', 'check', 'approve'].includes(`${preview.action}`)
+    && ['enable', 'send', 'resume', 'stop', 'retry', 'check', 'approve', 'replace'].includes(`${preview.action}`)
     && ['ready', 'unavailable', 'reconnect_required', 'connection_repair', 'pro_required'].includes(`${preview.availability}`)
     && (preview.timeZone === null || isIanaTimeZone(preview.timeZone))
     && Number.isSafeInteger(preview.eligibleCount) && Number(preview.eligibleCount) >= 0 && Number(preview.eligibleCount) <= 400
     && Number.isSafeInteger(preview.warningCount) && Number(preview.warningCount) >= 0 && Number(preview.warningCount) <= 400
     && isBoundedString(preview.summary, 1, 500));
+  const replacement = value.providerPreviews.some(preview => isRecord(preview) && preview.action === 'replace')
+    || value.changes.some(change => isRecord(change) && change.kind === 'garmin-workout-replacement');
+  if (!changesValid || !providersValid) return false;
+  if (replacement && (value.permissionMode !== 'delivery' || value.changes.length !== 1 || value.providerPreviews.length !== 1
+    || value.changes[0].index !== 0 || value.changes[0].kind !== 'garmin-workout-replacement'
+    || value.providerPreviews[0].index !== 0 || value.providerPreviews[0].provider !== 'garmin'
+    || value.providerPreviews[0].targetType !== 'workout' || value.providerPreviews[0].action !== 'replace'
+    || value.providerPreviews[0].availability !== 'ready')) return false;
   return changesValid && providersValid && getUtf8ByteLength(value) <= 256 * 1024;
 }
 

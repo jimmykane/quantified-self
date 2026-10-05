@@ -13,6 +13,7 @@ import {
   AssistantMcpToolFailure,
   AssistantRecoverableMcpToolError,
   AssistantTrainingMetricsPreparingError,
+  ASSISTANT_GARMIN_REPLACEMENT_BLOCKED_GUIDANCE,
   createAssistantMcpSession,
 } from './mcp-session';
 import { MCP_OAUTH_SCOPES } from '../mcp/oauth.service';
@@ -21,7 +22,7 @@ import { createMcpServer } from '../mcp/server';
 
 function createTestServer(options: {
   errorTool?: typeof ASSISTANT_MCP_TOOL_NAMES[number];
-  errorCode?: 'query_too_large' | 'temporarily_unavailable';
+  errorCode?: 'query_too_large' | 'temporarily_unavailable' | 'invalid_request' | 'detail_not_available';
   metricQueryResponse?: (input: Record<string, unknown>) => Record<string, unknown>;
 } = {}): McpServer {
   const server = new McpServer({
@@ -168,6 +169,7 @@ describe('Assistant MCP session', () => {
       expect(session.tools.map(tool => tool.name)).toContain('preview_create_planned_workout');
       expect(session.tools.map(tool => tool.name)).toContain('preview_planned_workout_v2_change');
       expect(session.tools.map(tool => tool.name)).toContain('preview_training_deletion');
+      expect(session.tools.map(tool => tool.name)).toContain('preview_garmin_workout_replacement');
       expect(session.tools.map(tool => tool.name)).not.toContain('apply_training_changes' as never);
       expect(capturedAuth).toMatchObject({ connectionId: 'first-party-assistant-v1:conversation-123',
         scopes: expect.arrayContaining([MCP_OAUTH_SCOPES.TrainingPlansRead, MCP_OAUTH_SCOPES.TrainingPlansWrite,
@@ -181,6 +183,8 @@ describe('Assistant MCP session', () => {
     try {
       expect(session.tools.map(tool => tool.name)).toContain('preview_training_changes');
       expect(session.tools.map(tool => tool.name)).not.toContain('preview_training_deletion');
+      expect(session.tools.map(tool => tool.name)).not.toContain('preview_garmin_workout_replacement');
+      await expect(session.callTool('preview_garmin_workout_replacement', {})).rejects.toThrow('not available');
       await expect(session.callTool('preview_training_deletion', {})).rejects.toThrow('not available');
     } finally { await session.close(); }
   });
@@ -480,6 +484,44 @@ describe('Assistant MCP session', () => {
     } finally {
       await session.close();
     }
+  });
+
+  it.each(['invalid_request', 'detail_not_available'] as const)(
+    'closes a Garmin replacement review on %s without retaining server text', async errorCode => {
+      const session = await createAssistantMcpSession('user-1', 'https://quantified-self.io', {
+        createServer: () => createTestServer({ errorTool: 'preview_garmin_workout_replacement', errorCode }),
+      }, 'coordinate_free', false, true, false, true, 'conversation');
+      try {
+        await expect(session.callTool('preview_garmin_workout_replacement', {})).rejects.toMatchObject({
+          code: errorCode, retryable: false, guidance: ASSISTANT_GARMIN_REPLACEMENT_BLOCKED_GUIDANCE,
+        });
+      } finally { await session.close(); }
+    },
+  );
+
+  it('keeps ordinary preview rejections and strict replacement input failures correctable', async () => {
+    const session = await createAssistantMcpSession('user-1', 'https://quantified-self.io', {
+      createServer: () => createTestServer({ errorTool: 'preview_training_changes', errorCode: 'invalid_request' }),
+    }, 'coordinate_free', false, true, false, true, 'conversation');
+    try {
+      await expect(session.callTool('preview_training_changes', {})).rejects.toMatchObject({
+        code: 'invalid_request', retryable: true,
+      });
+      await expect(session.callTool('preview_garmin_workout_replacement', { query: 123 }))
+        .rejects.toMatchObject({ code: 'invalid_tool_input', retryable: true });
+    } finally { await session.close(); }
+  });
+
+  it('does not classify an unexpected replacement backend failure as an eligibility refusal', async () => {
+    const session = await createAssistantMcpSession('user-1', 'https://quantified-self.io', {
+      createServer: () => createTestServer({ errorTool: 'preview_garmin_workout_replacement',
+        errorCode: 'temporarily_unavailable' }),
+    }, 'coordinate_free', false, true, false, true, 'conversation');
+    try {
+      await expect(session.callTool('preview_garmin_workout_replacement', {})).rejects.toMatchObject({
+        name: 'AssistantMcpToolFailure', code: 'temporarily_unavailable', stage: 'tool_response',
+      });
+    } finally { await session.close(); }
   });
 
   it('returns fixed corrective guidance for strict input rejection without retaining rejected arguments', async () => {
