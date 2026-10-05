@@ -145,6 +145,7 @@ describe('Assistant MCP session', () => {
     try {
       expect(session.tools.map(tool => tool.name)).toEqual([...ASSISTANT_BASE_MCP_TOOL_NAMES, ...TRAINING_READ_TOOLS]);
       expect(session.tools.map(tool => tool.name)).toContain('get_planned_workout_v2');
+      expect(session.tools.map(tool => tool.name)).toContain('get_workout_prescription_analysis');
       expect(capturedAuth!.scopes).toContain(MCP_OAUTH_SCOPES.TrainingPlansRead);
       for (const scope of [MCP_OAUTH_SCOPES.TimelineNotesRead, MCP_OAUTH_SCOPES.TimelineNotesWrite,
         MCP_OAUTH_SCOPES.EventsWrite, MCP_OAUTH_SCOPES.HealthRead,

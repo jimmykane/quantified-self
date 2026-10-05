@@ -1,3 +1,5 @@
+import { analyzeWorkoutStructureV1 } from '../../../shared/planned-workout-analysis';
+import { ActivityTypes } from '@sports-alliance/sports-lib';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
   buildAssistantEvidence,
@@ -470,5 +472,28 @@ describe('Assistant evidence', () => {
       label: 'Open in Quantified Self',
       url: appUrl,
     }]);
+  });
+});
+
+
+describe('workout prescription analysis evidence', () => {
+  it('retains partial-duration caveats and counts without references, IDs, revisions or authored text', () => {
+    const value = { source: 'scheduled', reference: 'private-reference', revision: 2, scheduleRevision: 3,
+      libraryRevision: null, sport: ActivityTypes.Running,
+      analysis: analyzeWorkoutStructureV1({ version: 1, sport: ActivityTypes.Running, nodes: [
+        { kind: 'step', id: 'private-step-id', purpose: 'warmup', ending: { kind: 'time', seconds: 600 }, targets: [] },
+        { kind: 'step', id: 'private-rest-id', purpose: 'rest', ending: { kind: 'manual' }, targets: [] },
+      ] }), displaySummary: '10m timed subtotal + 1 step with unknown duration' };
+    const evidence = buildAssistantEvidence({ name: 'get_workout_prescription_analysis', title: 'Prescription analysis' }, value);
+    expect(evidence.summary).toBe(value.displaySummary);
+    expect(evidence.facts).toContainEqual({ label: 'Duration coverage', value: 'partial' });
+    expect(JSON.stringify(evidence)).not.toMatch(/private|revision|600/);
+    expect(evidence.links).toEqual([]);
+  });
+  it('fails closed when analysis contains an undeclared field', () => {
+    const evidence = buildAssistantEvidence({ name: 'get_workout_prescription_analysis', title: 'Analysis' },
+      { displaySummary: 'private text', providerId: 'private' });
+    expect(evidence.summary).toBe('Prescription analysis unavailable.');
+    expect(evidence.facts).toEqual([]);
   });
 });

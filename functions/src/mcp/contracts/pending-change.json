@@ -1,7 +1,7 @@
 {
   "formatVersion": 1,
-  "candidateSha256": "f5119c17efae7a6ca50d1eb285f607a41a2899b6c6dcd0db325e7d0e4796095f",
+  "candidateSha256": "99f7cea923f2fcc1a70360883a3628623e0bc5b1844eb793ef7f3007ccea0782",
   "lifecycleAction": "developer-refresh",
-  "summary": "Preserve prior Training, Health, Timeline, activity, OAuth/PKCE, event edits, Strength/pool reads, snapshots and identity-safe TSS impact. Add saved-workout reads/library preview/apply and independent measurements:write manual Health tools. Add read-only get_training_change_status under original proposal grants with lost-reply guidance; no new mutation, replay or consent. Keep strict outputs and native approval. Deploy separately, then refresh/rescan metadata and bundled guidance.",
+  "summary": "Preserve prior Training lifecycle/library/status recovery, Strength/pool, Health/manual measurements, Timeline/event/activity, snapshots/TSS impact and OAuth/PKCE changes. Add read-only get_workout_prescription_analysis under training-plans:read with exact subtotals, explicit speed ranges, unknown coverage and purpose/repeat counts. Keep existing schemas and native approval intact. Deploy separately, refresh/rescan metadata, then sync bundled guidance.",
   "rescanRequired": true
 }

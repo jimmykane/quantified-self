@@ -1,9 +1,11 @@
 import * as admin from 'firebase-admin';
+import { analyzeWorkoutStructureV1, WorkoutAnalysisArithmeticError } from '../../../shared/planned-workout-analysis';
+import { formatWorkoutAnalysisSummaryV1 } from '../../../shared/planned-workout-analysis-display';
 import { FieldPath } from 'firebase-admin/firestore';
 import { z } from 'zod';
 import type { UserUnitSettingsInterface } from '@sports-alliance/sports-lib';
 import { ActivityTypes } from '@sports-alliance/sports-lib';
-import { formatWorkoutStepV1, parseWorkoutStructureV1 } from '../../../shared/planned-workout';
+import { formatWorkoutStepV1, parseWorkoutStructureV1, type WorkoutStructureV1 } from '../../../shared/planned-workout';
 import { buildTrainingDeliverySummaries } from '../../../shared/training-delivery-summary';
 import { assessPlannedWorkoutProviderMappingV1, PLANNED_WORKOUT_PROVIDER_IDS,
   type PlannedWorkoutProviderId } from '../../../shared/planned-workout-providers';
@@ -224,9 +226,8 @@ export async function readTrainingPlans(input: TrainingReadInput, reads: Trainin
       },
     };
     const plans = new Map<string, Document>();
-    if (input.tool === 'get_saved_workout') {
-      const a = TRAINING_READ_INPUTS.get_saved_workout.parse(args.data);
-      const decoded = refSchema.safeParse(decode(a.savedWorkoutRef));
+    const resolveSavedWorkout = async (token: string) => {
+      const decoded = refSchema.safeParse(decode(token));
       if (!decoded.success || decoded.data.kind !== 'saved-workout') {
         throw new TrainingReadError('invalid_request', 'Invalid saved-workout reference.');
       }
@@ -234,6 +235,11 @@ export async function readTrainingPlans(input: TrainingReadInput, reads: Trainin
       if (!document) throw new TrainingReadError('invalid_request', 'This saved workout is no longer available.');
       const item = parseWorkoutLibraryItemV1({ ...document.data, id: document.id });
       if (item.createdAtMs !== decoded.data.createdAtMs) throw unavailable();
+      return item;
+    };
+    if (input.tool === 'get_saved_workout') {
+      const a = TRAINING_READ_INPUTS.get_saved_workout.parse(args.data);
+      const item = await resolveSavedWorkout(a.savedWorkoutRef);
       return { libraryRevision: state.libraryRevision ?? 0, savedWorkout: {
         savedWorkoutRef: a.savedWorkoutRef, title: item.title, status: item.status,
         revision: item.revision, createdAtMs: item.createdAtMs, updatedAtMs: item.updatedAtMs,
@@ -322,6 +328,38 @@ export async function readTrainingPlans(input: TrainingReadInput, reads: Trainin
         workoutChangedSinceCompletion: completion.workoutRevisionAtLink !== workout.revision,
         activityStartAtMs: completion.activityStartAtMs, linkedAtMs: completion.linkedAtMs, activityRef };
     };
+    if (input.tool === 'get_workout_prescription_analysis') {
+      const a = TRAINING_READ_INPUTS.get_workout_prescription_analysis.parse(args.data);
+      let structure: WorkoutStructureV1;
+      let revision: number;
+      if (a.source === 'saved') {
+        const item = await resolveSavedWorkout(a.reference);
+        structure = item.structure;
+        revision = item.revision;
+      } else {
+        const doc = await resolve(a.reference, 'workout', true);
+        revision = (await projectWorkout(doc)).revision;
+        structure = parseWorkoutStructureV1(doc.data.structure);
+        if (structure.sport === ActivityTypes.StrengthTraining) {
+          const companion = await view.getStrengthDetails?.(doc.id);
+          if (!companion) throw unavailable();
+          const details = parseStrengthWorkoutDetailsV1(companion.data);
+          if (details.workoutId !== doc.id || !strengthProjectionMatchesDetails(structure, details)) throw unavailable();
+        }
+      }
+      try {
+        const analysis = analyzeWorkoutStructureV1(structure);
+        const units = await view.units();
+        return { source: a.source, reference: a.reference, revision,
+          scheduleRevision: a.source === 'scheduled' ? state.revision : null,
+          libraryRevision: a.source === 'saved' ? state.libraryRevision ?? 0 : null,
+          sport: structure.sport, analysis,
+          displaySummary: formatWorkoutAnalysisSummaryV1(analysis.summary, units, structure.sport) };
+      } catch (error) {
+        if (error instanceof WorkoutAnalysisArithmeticError) throw unavailable();
+        throw error;
+      }
+    }
     if (input.tool === 'get_training_plan') {
       const a = TRAINING_READ_INPUTS.get_training_plan.parse(args.data);
       return { scheduleRevision: state.revision, plan: projectPlan(await resolve(a.planRef, 'plan')) };

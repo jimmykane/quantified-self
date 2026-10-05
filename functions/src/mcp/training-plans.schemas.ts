@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { WORKOUT_PRESCRIPTION_ANALYSIS_SCHEMA } from './workout-prescription-analysis.schemas';
 import { ActivityTypesHelper } from '@sports-alliance/sports-lib';
 import {
   WORKOUT_STEP_PURPOSES,
@@ -27,7 +28,7 @@ export const TRAINING_PLANS_WRITE_SCOPE = 'training-plans:write';
 export const TRAINING_DELIVERY_WRITE_SCOPE = 'training-delivery:write';
 export const TRAINING_READ_EXTENSION_TOOLS = ['query_planned_workouts_by_date',
   'get_planned_workout_completions', 'assess_planned_workout_compatibility', 'get_strength_workout_details',
-  'get_planned_workout_v2', 'list_saved_workouts', 'get_saved_workout'] as const;
+  'get_planned_workout_v2', 'list_saved_workouts', 'get_saved_workout', 'get_workout_prescription_analysis'] as const;
 export const TRAINING_READ_TOOLS = ['list_training_plans', 'get_training_plan', 'query_planned_workouts',
   'get_planned_workout', 'get_training_sync_status', 'get_planned_workout_completion',
   ...TRAINING_READ_EXTENSION_TOOLS] as const;
@@ -69,6 +70,7 @@ export const TRAINING_READ_INPUTS = {
     status: z.enum(['active', 'archived']).optional(), limit: z.number().int().min(1).max(25).default(25),
     cursor: z.string().min(1).max(8192).optional() }),
   get_saved_workout: z.strictObject({ savedWorkoutRef: ref }),
+  get_workout_prescription_analysis: z.strictObject({ source: z.enum(['scheduled', 'saved']), reference: ref }),
 };
 
 type WorkoutTargetVariantKey<T extends WorkoutTargetV1 = WorkoutTargetV1> = T extends WorkoutTargetV1
@@ -214,6 +216,10 @@ export const TRAINING_STRENGTH_DETAILS_SCHEMA = z.strictObject({ version: z.lite
 export const TRAINING_STRENGTH_DRAFT_SCHEMA = TRAINING_STRENGTH_DETAILS_SCHEMA.omit({ workoutId: true, revision: true })
   .refine(value => { try { parseStrengthWorkoutDraftV1(value); return true; } catch { return false; } });
 export const TRAINING_READ_OUTPUTS = {
+  get_workout_prescription_analysis: z.strictObject({ source: z.enum(['scheduled', 'saved']), reference: ref,
+    revision: count, scheduleRevision: count.nullable(), libraryRevision: count.nullable(),
+    sport: z.enum(ActivityTypesHelper.getActivityTypesAsUniqueArray()),
+    analysis: WORKOUT_PRESCRIPTION_ANALYSIS_SCHEMA, displaySummary: z.string().max(2000) }),
   list_training_plans: z.strictObject({ ...envelope, plans: z.array(plan).max(100) }),
   list_saved_workouts: z.strictObject({ libraryRevision: count, scanComplete: z.boolean(),
     recordsScanned: count.max(200), nextCursor: ref.nullable(),
