@@ -14,6 +14,13 @@ import {
 } from './policies.content';
 
 describe('help.content', () => {
+  it('explains accessible interval moves, independent copies, parent boundaries and saving', () => {
+    const copy = HELP_SECTIONS.find(section => section.id === 'training-plans')!.content;
+    for (const phrase of ['**drag handle**', '**Move up**', '**Move down**', '**Duplicate step**',
+      '**Duplicate repeat block**', 'move only within that repeat', 'immediately after the original',
+      'Plans, Standalone and the Workout library', 'saved only when you save the editor',
+      'counting repeat blocks and their steps', 'Strength exercises use their separate editor']) expect(copy).toContain(phrase);
+  });
   it('explains explicit duration parts and colon pace without changing canonical units or provider capabilities', () => {
     const copy = HELP_SECTIONS.find(section => section.id === 'training-plans')!.content;
     for (const phrase of ['**Hours**, **Minutes**, and **Seconds**', '0 / 1 / 15', '0 / 1 / 30',

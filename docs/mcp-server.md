@@ -42,6 +42,15 @@ once per fetch. It is bounded to 2 MiB, an individual record to 128 KiB and comp
 256 KiB. Oversized records fail without truncating instructions. Canonical values remain alongside Sports Lib display;
 manual/mixed-ending recipes receive no invented duration estimate.
 
+Interval editor ordering/duplication uses the same canonical ordered arrays: moves retain structural IDs, copies receive
+fresh IDs for the copied node and every repeat child. Planned-workout reads (v1/v2), their ordered display steps and full
+saved-recipe reads preserve that resulting prescription. Existing complete-recipe create/update proposals cover these
+edits through the unchanged scope, revision, preview/native-approval and idempotent-apply boundaries. This adds no tool,
+schema, consent, provider action or permission; editor-only exact-value caches never enter a saved or exposed recipe.
+Focused read/schema fixtures verify copied/reordered repeats, notes, fractional seconds, exact metres/m/s, fresh IDs,
+scope/reference fences and unknown-field rejection. No migration, registered contract update or local-plugin rebuild/
+refresh is needed; the existing focused Training, Activity and cross-domain workflows still discover runtime contracts.
+
 The bulk completion read accepts 1–25 unique opaque workout references and returns the same exact linked/unlinked
 projection as the single-workout tool in input order. It does not scan for similar activities. Completed-activity
 references remain independently gated by `activity-details:read`; provider/event/activity identities never leak when that
