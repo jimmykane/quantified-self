@@ -14,6 +14,12 @@ import {
 } from '@sports-alliance/sports-lib';
 import { normalizeUserUnitSettings } from '@shared/unit-aware-display';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { init, use } from 'echarts/core';
+import { BarChart, CustomChart, LineChart } from 'echarts/charts';
+import {
+  AxisPointerComponent, GraphicComponent, GridComponent, LegendComponent, TooltipComponent
+} from 'echarts/components';
+import { SVGRenderer } from 'echarts/renderers';
 import { ChartsColumnsComponent } from './charts.columns.component';
 import { EChartsLoaderService } from '../../../services/echarts-loader.service';
 import { AppEventColorService } from '../../../services/color/app.event.color.service';
@@ -34,6 +40,11 @@ type ResizeObserverRecord = {
   observe: ReturnType<typeof vi.fn>;
   disconnect: ReturnType<typeof vi.fn>;
 };
+
+use([
+  BarChart, CustomChart, LineChart, AxisPointerComponent, GraphicComponent,
+  GridComponent, LegendComponent, TooltipComponent, SVGRenderer
+]);
 
 describe('ChartsColumnsComponent', () => {
   let fixture: ComponentFixture<ChartsColumnsComponent>;
@@ -190,6 +201,34 @@ describe('ChartsColumnsComponent', () => {
     expect(option.yAxis.axisLabel.hideOverlap).toBe(false);
     expect(option.grid.left).toBe(0);
     expect(option.grid.right).toBe(12);
+  });
+
+  it.each([false, true])('renders horizontal date activity columns through ECharts with lazyUpdate=%s', async (lazyUpdate) => {
+    component.vertical = false;
+    component.chartDataCategoryType = ChartDataCategoryTypes.DateType;
+    component.data = [
+      { time: Date.UTC(2024, 0, 1), [ChartDataValueTypes.Total]: 100, count: 2, Running: 80, Cycling: 20 },
+      { time: Date.UTC(2024, 0, 2), [ChartDataValueTypes.Total]: 50, count: 1, Running: 10, Cycling: 40 },
+    ];
+    fixture.detectChanges();
+    await waitForChartStabilization();
+
+    // Exercise ECharts' real axis-pointer models; mocked setOption cannot detect this failure.
+    const measureText = vi.spyOn(HTMLCanvasElement.prototype, 'getContext').mockReturnValue({
+      measureText: (text: string) => ({ width: text.length * 8 }),
+    } as unknown as CanvasRenderingContext2D);
+    const chart = init(null, undefined, { renderer: 'svg', ssr: true, width: 640, height: 320 });
+    try {
+      const option = getLastOption();
+      expect(option.tooltip.trigger).toBe('axis');
+      const settings = mockLoader.setOption.mock.calls.at(-1)?.[2];
+      expect(() => chart.setOption(option, { ...settings, lazyUpdate })).not.toThrow();
+      expect(() => chart.resize({ width: 480, height: 240 })).not.toThrow();
+      expect(chart.renderToSVGString()).toContain('<svg');
+    } finally {
+      chart.dispose();
+      measureText.mockRestore();
+    }
   });
 
   it('should snap value axis max to a logical grid boundary', async () => {

@@ -269,7 +269,8 @@ export class ChartsXYComponent implements AfterViewInit, OnChanges, OnDestroy {
           label: { show: false },
           handle: mobileAxisPointerHandle,
         }
-        : undefined,
+        // ECharts writes tooltip-inherited pointer state here; undefined removes its default object.
+        : {},
       axisLine: {
         lineStyle: { color: axisColor }
       },
