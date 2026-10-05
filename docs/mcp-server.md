@@ -251,6 +251,14 @@ Suunto Guide delivery (#650) uses these existing local sync projections without 
 schema. Read tests cover delivered, scheduled-for-later and needs-attention Suunto states, truthful workout-derived plan
 counts, and strict rejection of private evidence injected into a public status. No Guide/account IDs, FIT completion
 evidence, watch receipts, live checks or write actions are exposed; consent and bundled skill routing remain unchanged.
+Sport/prescription-specific Suunto v5 screens add no wire impact: current HR and manual-lap-average pace,
+cycling power and swimming stroke rate are private Guide presentation fields. Countdown, authored targets/notes,
+recipe units, completion and safe sync projections remain unchanged. Strict read/write round-trip tests cover
+running/cycling/swimming target variants; negative fixtures reject averaging windows, aggregates, lap commands,
+stroke-rate fields, mapping versions and approval/recovery evidence. Source-recorded laps can appear through the
+existing independently granted activity-lap read, with unchanged schema and bounds. No tool, scope, consent,
+mutation, provider action, Assistant routing or bundled-plugin change; no catalog refresh or plugin rebuild is needed.
+Watch support/sensors, alerts and adherence cannot be inferred from delivery acceptance or these read projections.
 The manual editor's additional canonical running/cycling profiles also require no MCP contract change: the existing
 recipe schema already accepts the complete Sports Lib activity-type enum, and focused coverage proves an exact Mountain
 Biking sport survives the read projection. Suunto numeric activity recommendations and Garmin's broad

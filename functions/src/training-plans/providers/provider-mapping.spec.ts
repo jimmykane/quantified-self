@@ -24,6 +24,7 @@ import expectedGarminPoolFixture from './fixtures/garmin-pool-swimming-v1.json';
 import expectedSuuntoFixture from './fixtures/suunto-running-v1.json';
 import legacySuuntoFixture from './fixtures/suunto-running-v2-recovery.json';
 import suuntoV3Fixture from './fixtures/suunto-running-v3-recovery.json';
+import suuntoV4Fixture from './fixtures/suunto-running-v4-recovery.json';
 import expectedWahooFixture from './fixtures/wahoo-running-v1.json';
 import { serializeCorosTrainingPlanV1 } from './coros-training-plan.serializer';
 import {
@@ -35,7 +36,7 @@ import {
     createStableProviderExternalId,
     createStableProviderIntegerId,
 } from './provider-mapping';
-import { serializeSuuntoGuideJsonV1, serializeSuuntoGuideV2ForRecovery, serializeSuuntoGuideV3ForRecovery } from './suunto-guide.serializer';
+import { serializeSuuntoGuideJsonV1, serializeSuuntoGuideV2ForRecovery, serializeSuuntoGuideV3ForRecovery, serializeSuuntoGuideV4ForRecovery } from './suunto-guide.serializer';
 import { serializeWahooPlanJsonV1 } from './wahoo-plan.serializer';
 import { wahooDurationSeconds } from '../delivery/wahoo/mapping';
 
@@ -259,6 +260,11 @@ describe('planned-workout provider proof fixtures', () => {
         expect(result.level).toBe('exact');
         expect(result.issues).toEqual([]);
         expect(result.artifact).toEqual(expectedSuuntoFixture);
+        expect(serializeSuuntoGuideV4ForRecovery(RUNNING_FIXTURE, {
+            name: 'Fixture intervals', description: 'Redacted provider contract fixture.',
+            owner: 'Quantified Self', url: 'https://quantified-self.io/training/plans',
+            localDate: '2026-09-03', sourceWorkoutId: 'fixture-workout-001', allowDegraded: false,
+        }).artifact).toEqual(suuntoV4Fixture);
         expect(serializeSuuntoGuideV3ForRecovery(RUNNING_FIXTURE, {
             name: 'Fixture intervals', description: 'Redacted provider contract fixture.',
             owner: 'Quantified Self', url: 'https://quantified-self.io/training/plans',

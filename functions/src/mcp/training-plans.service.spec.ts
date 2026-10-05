@@ -88,9 +88,9 @@ describe('Training plan MCP reads', () => {
     }));
   });
 
-  it('keeps generated Suunto duration notification text out of the unchanged no-note recipe/completion reads', async () => {
+  it.each([ActivityTypes.Running, ActivityTypes.Cycling, ActivityTypes.Swimming])('keeps %s screen readings out of unchanged no-note recipe/completion reads', async sport => {
     const f = fixture(); f.collections.scheduledWorkouts = { w1: workout('p1') };
-    const recipe = { version: 1, sport: ActivityTypes.Cycling, nodes: [{ kind: 'step', id: 'step1', purpose: 'work',
+    const recipe = { version: 1, sport, nodes: [{ kind: 'step', id: 'step1', purpose: 'work',
       ending: { kind: 'time', seconds: 90 }, targets: [] }] };
     f.structures.w1 = recipe;
     const list = TRAINING_READ_OUTPUTS.query_planned_workouts.parse(await f.run('query_planned_workouts', {
@@ -110,9 +110,9 @@ describe('Training plan MCP reads', () => {
     expect(after).toEqual({ ...before, workout: { ...before.workout,
       workoutRef: expect.any(String), planRef: expect.any(String) } });
     expect(await f.run('get_planned_workout_completion', args)).toMatchObject({ state: 'unlinked' });
-    expect(JSON.stringify(before)).not.toMatch(/notification|For 01m 30s/);
+    expect(JSON.stringify(before)).not.toMatch(/notification|For 01m 30s|createManualLap|aggregate|window|strokeRate|Avg pace|Avg pwr|Avg strk/);
   });
-  it('keeps Suunto v3 screens private and leaves recipes, completion and safe delivery contracts unchanged', async () => {
+  it('keeps Suunto v5 screens private and leaves recipes, completion and safe delivery contracts unchanged', async () => {
     const f = fixture(); f.collections.scheduledWorkouts = { w1: workout('p1') };
     const list = TRAINING_READ_OUTPUTS.query_planned_workouts.parse(await f.run('query_planned_workouts', {
       startDate: '2026-09-01', endDate: '2026-09-30',
@@ -136,9 +136,11 @@ describe('Training plan MCP reads', () => {
     expect(linked).toMatchObject({ state: 'linked', provider: 'suunto', workoutChangedSinceCompletion: false });
     expect(JSON.stringify(linked)).not.toMatch(/private-event|private-activity|notification|Guide complete/);
     for (const fields of [{ guide }, { notification: { title: 'Complete', text: 'Guide complete' } },
-      { fields: [{ type: 'heartRate' }] }, { mappingVersion: 'suunto-guides-v3' }, { compatibleApprovalDigest: 'private' },
+      { fields: [{ type: 'strokeRate', title: 'Avg strk', window: 'manualLap', aggregate: 'average' }] },
+      { createManualLap: true }, { window: 'manualLap' }, { aggregate: 'average' }, { strokeRate: 40 },
+      { compatibleApprovalDigests: ['private-v4'] }, { mappingVersion: 'suunto-guides-v5' }, { compatibleApprovalDigest: 'private' },
       { mappingApprovalProof: { approvedDigest: 'private', mappingDigest: 'private', contentDigest: 'private' } },
-      { guideMappingVersion: 'suunto-guides-v3' }, { deliveryPhase: 'recover' }]) {
+      { guideMappingVersion: 'suunto-guides-v5' }, { deliveryPhase: 'recover' }]) {
       expect(TRAINING_RECIPE_SCHEMA.safeParse({ ...before.workout.structure, ...fields }).success).toBe(false);
     }
     f.collections.trainingDeliverySettings.suunto = { scope: 'plan', scopeId: 'p1', provider: 'suunto', enabled: true,
@@ -157,7 +159,8 @@ describe('Training plan MCP reads', () => {
     f.collections.trainingDeliveryStatuses[id].mappingApprovalProof = { approvedDigest: 'private', mappingDigest: 'private', contentDigest: 'private' };
     await expect(f.run('get_training_sync_status', args)).rejects.toThrow();
     delete f.collections.trainingDeliveryStatuses[id].mappingApprovalProof;
-    for (const [key, value] of [['guideMappingVersion', 'suunto-guides-v3'], ['deliveryPhase', 'recover']]) {
+    for (const [key, value] of [['guideMappingVersion', 'suunto-guides-v5'], ['deliveryPhase', 'recover'], ['createManualLap', true],
+      ['window', 'manualLap'], ['aggregate', 'average'], ['strokeRate', 40]]) {
       f.collections.trainingDeliveryStatuses[id][key] = value;
       await expect(f.run('get_training_sync_status', args)).rejects.toThrow();
       delete f.collections.trainingDeliveryStatuses[id][key];
@@ -504,7 +507,7 @@ describe('Training plan MCP reads', () => {
     expect(JSON.stringify(result)).not.toContain('estimated');
     expect(TRAINING_RECIPE_SCHEMA.safeParse({ ...structure, providerId: 'private' }).success).toBe(false);
     for (const privateField of [{ createManualLap: true }, { window: 'manualLap', aggregate: 'average' },
-      { guideMappingVersion: 'suunto-guides-v4' }, { compatibleApprovalDigests: ['private'] }]) {
+      { guideMappingVersion: 'suunto-guides-v5' }, { compatibleApprovalDigests: ['private'] }]) {
       expect(TRAINING_RECIPE_SCHEMA.safeParse({ ...structure,
         nodes: [{ ...structure.nodes[0], ...privateField }] }).success).toBe(false);
       expect(TRAINING_READ_OUTPUTS.get_planned_workout.safeParse({ ...result,
