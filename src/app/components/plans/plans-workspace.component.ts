@@ -50,6 +50,8 @@ import { CompactRowComponent } from '../shared/compact-row/compact-row.component
 import { PlanScheduleCalendarComponent } from './plan-schedule-calendar.component';
 import { TrainingDeliveryButtonComponent } from './training-delivery-button.component';
 import { WorkoutTimeInputComponent } from './workout-time-input.component';
+import { WorkoutProfileComponent } from './workout-profile.component';
+import type { WorkoutProfileSelection } from '../../helpers/workout-profile.helper';
 import { resolvePlanScheduleDate } from '../../helpers/plan-schedule-calendar.helper';
 import { TRAINING_PLAN_COLOR_OPTIONS, trainingPlanAppearance } from '../../helpers/training-plan-appearance.helper';
 import {
@@ -174,7 +176,7 @@ const EMPTY_SCHEDULE: CurrentTrainingScheduleV1 = {
 @Component({
   selector: 'app-plans-workspace',
   standalone: true,
-  imports: [SharedModule, DragDropModule, CompactRowComponent, PlanScheduleCalendarComponent, TrainingDeliveryButtonComponent, WorkoutTimeInputComponent],
+  imports: [SharedModule, DragDropModule, CompactRowComponent, PlanScheduleCalendarComponent, TrainingDeliveryButtonComponent, WorkoutTimeInputComponent, WorkoutProfileComponent],
   templateUrl: './plans-workspace.component.html',
   styleUrls: ['./plans-workspace.component.scss'],
   changeDetection: ChangeDetectionStrategy.OnPush,
@@ -398,6 +400,18 @@ export class PlansWorkspaceComponent {
   readonly deleteDisposition = signal<DeleteTrainingPlanRequestV1['workoutDisposition']>('convert-to-standalone');
   readonly removePastProviderCopies = signal(false);
   readonly editor = signal<WorkoutEditorSession | null>(null);
+  readonly editorProfileSelection = signal<WorkoutProfileSelection | null>(null);
+  readonly editorProfileContext = computed(() => this.editor()
+    ? `${this.currentUser()?.uid}/${this.editorGeneration}` : '');
+  readonly editorProfile = computed(() => {
+    const session = this.editor();
+    if (!session || this.editorIsStrength()) return null;
+    try { return this.editorStructure(session); } catch { return null; }
+  });
+  readonly editorProfileStepId = computed(() => {
+    const id = this.editorProfileSelection()?.stepId;
+    return this.editorProfile()?.nodes.some(node => node.kind === 'step' ? node.id === id : node.steps.some(step => step.id === id)) ? id : null;
+  });
   readonly workoutDatePickerValue = computed(() => workoutDatePickerInput(this.editor()?.value.localDate ?? ''));
   readonly workoutDateInputInvalid = signal(false);
   readonly busyAction = signal<string | null>(null);
@@ -1248,6 +1262,7 @@ export class PlansWorkspaceComponent {
 
   private advanceEditorGeneration(): void {
     this.editorGeneration += 1;
+    this.editorProfileSelection.set(null);
     this.editorDrag = null;
     this.editorMenuFocus = null;
     this.pendingEditorNodeFocus.set(null);
@@ -1344,7 +1359,7 @@ export class PlansWorkspaceComponent {
       if (!session) return null;
       const nodes = session.value.nodes.map((node, index) => {
         if (index !== nodeIndex) return node;
-        const isSelection = ['purpose', 'endingKind', 'targetKind'].includes(field);
+        const isSelection = ['purpose', 'endingKind', 'targetKind', 'allowEarlyLap'].includes(field);
         if (stepIndex === null && node.kind === 'step') {
           if (isSelection && node[field as keyof ManualWorkoutEditorStep] !== value) this.haptics.selection();
           if (field === 'endingKind') {

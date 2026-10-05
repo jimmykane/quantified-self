@@ -14,6 +14,7 @@ import {
   TRAINING_READ_OUTPUTS,
   TRAINING_RECIPE_SCHEMA,
   TRAINING_RECIPE_WITH_POOL_SCHEMA,
+  TRAINING_RECIPE_WITH_EARLY_LAP_SCHEMA,
   TRAINING_WRITE_INPUTS,
 } from './training-plans.schemas';
 
@@ -349,5 +350,48 @@ describe('Strict Training write proposal contract', () => {
         draft.exercises[0].sets[0], draft.exercises[0].sets[0] ] }] } } }).success).toBe(false);
     expect(TRAINING_WRITE_INPUTS.preview_training_changes.safeParse({ expectedScheduleRevision: 1,
       changes: [{ ...input.change, structure: recipe({ kind: 'manual' }) }] }).success).toBe(false);
+  });
+});
+
+
+describe('additive early Lap recipe contract', () => {
+  it.each(WORKOUT_STEP_PURPOSES)('round-trips exact time/distance settings for %s, including repeat children and pool length', purpose => {
+    for (const allowEarlyLap of [undefined, false, true]) for (const numeric of [
+      { kind: 'time' as const, seconds: 90.123 }, { kind: 'distance' as const, meters: 1609.344 },
+    ]) {
+      const ending = { ...numeric, ...(allowEarlyLap === undefined ? {} : { allowEarlyLap }) };
+      const step = { kind: 'step' as const, id: 'top', purpose, ending, targets: [] };
+      const input = { version: 1, sport: ActivityTypes.Swimming, poolLength: { meters: 22.86, presentation: 'yards' },
+        nodes: [step, { kind: 'repeat', id: 'repeat', count: 3, steps: [{ ...step, id: 'child' }] }] };
+      const wire = JSON.parse(JSON.stringify(input));
+      expect(TRAINING_RECIPE_WITH_EARLY_LAP_SCHEMA.parse(wire)).toEqual(input);
+      const scheduled = TRAINING_READ_OUTPUTS.get_planned_workout_v3.parse({ scheduleRevision: 1, workout: {
+        workoutRef: 'opaque', planRef: null, title: 'Swim', localDate: '2026-10-05', lifecycle: 'planned',
+        revision: 1, createdAtMs: 1, updatedAtMs: 1, structure: wire, displaySteps: [] } });
+      expect(scheduled.workout.structure).toEqual(input);
+      const saved = TRAINING_READ_OUTPUTS.get_saved_workout_v2.parse({ libraryRevision: 1, savedWorkout: {
+        savedWorkoutRef: 'opaque', title: 'Swim', status: 'active', revision: 1, createdAtMs: 1, updatedAtMs: 1, structure: wire } });
+      expect(saved.savedWorkout.structure).toEqual(input);
+      const planned = TRAINING_WRITE_INPUTS.preview_planned_workout_v3_change.parse({ expectedScheduleRevision: 1,
+        change: { kind: 'create-workout', localKey: 'swim', title: 'Swim', plan: null, localDate: '2026-10-05', structure: wire } });
+      expect(planned.change).toMatchObject({ structure: input });
+      const library = TRAINING_WRITE_INPUTS.preview_saved_workout_v2_change.parse({ expectedScheduleRevision: 1,
+        expectedLibraryRevision: 1, change: { kind: 'create', title: 'Swim', structure: wire } });
+      expect(library.change).toMatchObject({ structure: input });
+      expect(TRAINING_RECIPE_WITH_POOL_SCHEMA.safeParse(wire).success).toBe(allowEarlyLap === undefined);
+    }
+  });
+  it('keeps the ending-field coverage gate exhaustive', () => {
+    expect(MCP_WORKOUT_RECIPE_VARIANT_COVERAGE.endingFields).toEqual({
+      time: { kind: true, seconds: true, allowEarlyLap: true },
+      distance: { kind: true, meters: true, allowEarlyLap: true },
+      kilojoules: { kind: true, kilojoules: true }, repetitions: { kind: true, repetitions: true }, manual: { kind: true },
+    });
+  });
+  it.each([null, 1, 'true', {}, undefined])('rejects an explicitly invalid numeric flag %s', allowEarlyLap => {
+    expect(TRAINING_RECIPE_WITH_EARLY_LAP_SCHEMA.safeParse(recipe({ kind: 'time', seconds: 60, allowEarlyLap } as never)).success).toBe(false);
+  });
+  it.each(['manual', 'kilojoules', 'repetitions'])('rejects early Lap on %s, including false', kind => {
+    expect(TRAINING_RECIPE_WITH_EARLY_LAP_SCHEMA.safeParse(recipe({ ...endingFixtures[kind as keyof typeof endingFixtures], allowEarlyLap: false } as never)).success).toBe(false);
   });
 });

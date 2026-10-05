@@ -20,7 +20,7 @@ import {
   type TrainingPlanV1,
   type TrainingScheduleMutationOperationV1,
 } from '../../../shared/training-plans';
-import { formatWorkoutEndingV1, parseWorkoutStructureV1 } from '../../../shared/planned-workout';
+import { formatWorkoutEndingV1, parseWorkoutStructureV1, hasAuthoredEarlyLapV1 } from '../../../shared/planned-workout';
 import { parseStrengthWorkoutDetailsV1, projectStrengthWorkoutToV1,
   strengthProjectionMatchesDetails, type StrengthWorkoutDetailsV1 } from '../../../shared/strength-workout';
 import { PLANNED_WORKOUT_PROVIDER_CAPABILITIES_V1, PLANNED_WORKOUT_PROVIDER_IDS,
@@ -46,7 +46,7 @@ import {
   TRAINING_CHANGE_SCHEMA,
   TRAINING_DELETION_CHANGE_SCHEMA,
   TRAINING_STRENGTH_INTERNAL_CHANGE_SCHEMA,
-  TRAINING_WORKOUT_V2_CHANGE_SCHEMA,
+  TRAINING_WORKOUT_V2_CHANGE_SCHEMA, TRAINING_WORKOUT_V3_CHANGE_SCHEMA,
   TRAINING_DELIVERY_WRITE_SCOPE,
   TRAINING_PLANS_SCOPE,
   TRAINING_PLANS_WRITE_SCOPE,
@@ -68,7 +68,7 @@ const proposalPayload = z.strictObject({ kind: z.literal('proposal'), id: entity
   createdAtMs: z.number().int().nonnegative().safe() });
 
 type TrainingChange = z.infer<typeof TRAINING_CHANGE_SCHEMA> | z.infer<typeof TRAINING_STRENGTH_INTERNAL_CHANGE_SCHEMA>
-  | z.infer<typeof TRAINING_WORKOUT_V2_CHANGE_SCHEMA> | z.infer<typeof TRAINING_DELETION_CHANGE_SCHEMA>;
+  | z.infer<typeof TRAINING_WORKOUT_V2_CHANGE_SCHEMA> | z.infer<typeof TRAINING_WORKOUT_V3_CHANGE_SCHEMA> | z.infer<typeof TRAINING_DELETION_CHANGE_SCHEMA>;
 type PreviewResult = z.infer<typeof TRAINING_WRITE_OUTPUTS.preview_training_changes>;
 type ApplyResult = z.infer<typeof TRAINING_WRITE_OUTPUTS.apply_training_changes>;
 
@@ -480,6 +480,28 @@ function describeScheduleEffects(
   return [describeOperation(operation), ...details].join(' ');
 }
 
+export function describeEarlyLapRecipeEffect(
+  previous: import('../../../shared/planned-workout').WorkoutStructureV1 | undefined,
+  current: import('../../../shared/planned-workout').WorkoutStructureV1,
+): string {
+  const enabled = (structure: typeof previous) => structure?.nodes
+    .flatMap(node => node.kind === 'step' ? [node] : node.steps)
+    .filter(step => (step.ending.kind === 'time' || step.ending.kind === 'distance') && step.ending.allowEarlyLap === true)
+    .map(step => step.id) ?? [];
+  const prior = enabled(previous), next = enabled(current);
+  const removed = prior.filter(id => !next.includes(id)).length;
+  // Keep the permission review visible within the public proposal's 500-character bound.
+  return `Early Lap: ${next.length ? `enabled on ${next.length} timed/distance step${next.length === 1 ? '' : 's'}` : 'disabled on all steps'}.`
+    + (removed ? ` Removed from ${removed} previously enabled step${removed === 1 ? '' : 's'}.` : '');
+}
+
+export function describeEarlyLapEffect(operation: TrainingScheduleMutationOperationV1,
+  before: TrainingScheduleSnapshotV1, after: TrainingScheduleSnapshotV1): string {
+  if (operation.kind !== 'create-workout' && operation.kind !== 'update-workout') return '';
+  const current = after.workouts.get(operation.workoutId)?.structure;
+  return current ? ` ${describeEarlyLapRecipeEffect(before.workouts.get(operation.workoutId)?.structure, current)}` : '';
+}
+
 function describePoolLengthEffect(
   operation: TrainingScheduleMutationOperationV1,
   before: TrainingScheduleSnapshotV1,
@@ -743,16 +765,16 @@ function decodeProposalRef(value: string, uid: string, connectionId: string): { 
 export async function previewTrainingChanges(
   input: TrainingWriteInput,
   provided?: TrainingWriteDependencies,
-  recipeMode: 'legacy' | 'strength' | 'v2' | 'deletion' = 'legacy',
+  recipeMode: 'legacy' | 'strength' | 'v2' | 'v3' | 'deletion' = 'legacy',
 ): Promise<PreviewResult> {
   const deps = provided ?? defaultDependencies();
   assertBytes(input.arguments);
   const parsed = recipeMode === 'strength'
     ? z.strictObject({ expectedScheduleRevision: z.number().int().nonnegative().safe(),
       changes: z.array(TRAINING_STRENGTH_INTERNAL_CHANGE_SCHEMA).length(1) }).safeParse(input.arguments)
-    : recipeMode === 'v2'
+    : (recipeMode === 'v2' || recipeMode === 'v3')
       ? z.strictObject({ expectedScheduleRevision: z.number().int().nonnegative().safe(),
-        changes: z.array(TRAINING_WORKOUT_V2_CHANGE_SCHEMA).length(1) }).safeParse(input.arguments)
+        changes: z.array(recipeMode === 'v3' ? TRAINING_WORKOUT_V3_CHANGE_SCHEMA : TRAINING_WORKOUT_V2_CHANGE_SCHEMA).length(1) }).safeParse(input.arguments)
       : recipeMode === 'deletion'
         ? z.strictObject({ expectedScheduleRevision: z.number().int().nonnegative().safe(),
           changes: z.array(TRAINING_DELETION_CHANGE_SCHEMA).length(1) }).safeParse(input.arguments)
@@ -806,6 +828,12 @@ export async function previewTrainingChanges(
         summary: `Permanently delete plan “${plan.name}” and its revision history. ${workoutEffect} ${describeProviderDeletion(request.removePastProviderCopies === true)}` });
       return;
     }
+    if (recipeMode !== 'v3' && change.kind === 'update-workout') {
+      const workoutId = resolveReference(change.workout, 'workout', input, simulated, locals);
+      if (hasAuthoredEarlyLapV1(simulated.workouts.get(workoutId)!.structure)) {
+        invalid('Read the v3 recipe and use the v3 preview to preserve or explicitly change early Lap permission.');
+      }
+    }
     if (recipeMode === 'legacy' && change.kind === 'update-workout') {
       const workoutId = resolveReference(change.workout, 'workout', input, simulated, locals);
       if (simulated.workouts.get(workoutId)?.structure.poolLength) {
@@ -823,7 +851,8 @@ export async function previewTrainingChanges(
       ? before.workouts.get(operation.workoutId) : null;
     publicChanges.push({ index, kind: operation.kind, summary: (deletionTarget
       ? `Delete “${deletionTarget.title}” on ${deletionTarget.localDate}. ` : '') + describeScheduleEffects(operation, before, simulated)
-      + (recipeMode === 'v2' ? describePoolLengthEffect(operation, before, simulated) : '') });
+      + (['v2', 'v3'].includes(recipeMode) ? describePoolLengthEffect(operation, before, simulated) : '')
+      + (recipeMode === 'v3' ? describeEarlyLapEffect(operation, before, simulated) : '') });
   });
 
   const providerOperations: StoredProviderOperation[] = [];
@@ -967,6 +996,16 @@ export async function previewPlannedWorkoutV2Change(
   }
   return previewTrainingChanges({ ...input, arguments: { expectedScheduleRevision: parsed.data.expectedScheduleRevision,
     changes: [parsed.data.change] } }, provided, 'v2');
+}
+
+/** Additive early-Lap recipe, same approved authoring lifecycle and grants. */
+export async function previewPlannedWorkoutV3Change(input: TrainingWriteInput, provided?: TrainingWriteDependencies): Promise<PreviewResult> {
+  assertBytes(input.arguments);
+  const parsed = TRAINING_WRITE_INPUTS.preview_planned_workout_v3_change.safeParse(input.arguments);
+  if (!parsed.success) invalid('Provide one complete, valid planned workout v3 create or update.');
+  if (parsed.data.change.structure.sport === ActivityTypes.StrengthTraining) invalid('Use the complete strength workout preview.');
+  return previewTrainingChanges({ ...input, arguments: { expectedScheduleRevision: parsed.data.expectedScheduleRevision,
+    changes: [parsed.data.change] } }, provided, 'v3');
 }
 
 /**

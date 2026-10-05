@@ -12,7 +12,7 @@ import { MatDatepickerInput } from '@angular/material/datepicker';
 import { MatSelect } from '@angular/material/select';
 import { MatFormField } from '@angular/material/form-field';
 import { ActivatedRoute, Router, convertToParamMap, provideRouter, type Data, type ParamMap } from '@angular/router';
-import { ActivityTypes, DistanceUnits, PaceUnits, SwimPaceUnits, WeightUnits } from '@sports-alliance/sports-lib';
+import { ActivityTypes, AppThemes, DistanceUnits, PaceUnits, SwimPaceUnits, WeightUnits } from '@sports-alliance/sports-lib';
 import { normalizeUserUnitSettings } from '@shared/unit-aware-display';
 import { projectStrengthWorkoutToV1 } from '@shared/strength-workout';
 import type { ScheduledWorkoutV1 } from '@shared/training-plans';
@@ -21,6 +21,9 @@ import dayjs from 'dayjs';
 import { BehaviorSubject, Subject, concat, defer, of, type Observable } from 'rxjs';
 import { AppUserService } from '../../services/app.user.service';
 import { AppHapticsService } from '../../services/app.haptics.service';
+import { AppThemeService } from '../../services/app.theme.service';
+import { EChartsLoaderService } from '../../services/echarts-loader.service';
+import { WorkoutProfileComponent } from './workout-profile.component';
 import { TrainingDeliveryService } from '../../services/training-delivery.service';
 import { TrainingWorkoutDuplicateService } from '../../services/training-workout-duplicate.service';
 import { WorkoutLibraryService } from '../../services/workout-library.service';
@@ -116,6 +119,8 @@ describe('PlansWorkspaceComponent', () => {
     await TestBed.configureTestingModule({
       imports: [PlansWorkspaceComponent],
       providers: [
+        { provide: AppThemeService, useValue: { appTheme: signal(AppThemes.Normal) } },
+        { provide: EChartsLoaderService, useValue: { init: vi.fn().mockResolvedValue(null), dispose: vi.fn() } },
         provideRouter([]),
         { provide: MAT_ICON_DEFAULT_OPTIONS, useValue: { fontSet: 'material-symbols-rounded' } },
         { provide: ActivatedRoute, useValue: route },
@@ -156,6 +161,50 @@ describe('PlansWorkspaceComponent', () => {
   });
 
   afterEach(() => vi.useRealTimers());
+
+  it('previews exact live canonical steps, preserves selection when reordered and hides an invalid draft without writes', async () => {
+    setRouteState({ mode: 'create', scope: 'standalone', date: '2026-09-09' });
+    const fixture = await renderPlans();
+    const component = fixture.componentInstance;
+    component.updateStep(0, null, 'endingValue', 1.25, 75);
+    component.addEditorStep(); fixture.detectChanges(); await fixture.whenStable();
+    const profile = fixture.debugElement.query(By.directive(WorkoutProfileComponent)).componentInstance as WorkoutProfileComponent;
+    expect(component.editorProfile().nodes[0]).toMatchObject({ ending: { kind: 'time', seconds: 75 } });
+    const selected = profile.steps()[0];
+    profile.selectStep(selected); fixture.detectChanges();
+    expect(component.editorProfileStepId()).toBe(selected.stepId);
+    component.moveEditorNode(selected.stepId, 1); fixture.detectChanges(); await fixture.whenStable();
+    expect(profile.selected()).toMatchObject({ stepId: selected.stepId, ordinal: 2 });
+    expect(component.editorProfileStepId()).toBe(selected.stepId);
+    expect(fixture.nativeElement.querySelector('.workout-node-row.profile-selected')).not.toBeNull();
+    component.updateStep(1, null, 'endingValue', 0); fixture.detectChanges();
+    expect(component.editorProfile()).toBeNull();
+    expect(fixture.nativeElement.querySelector('.profile-chart')).toBeNull();
+    expect(component.editorProfileStepId()).toBeNull();
+    expect(mutate).not.toHaveBeenCalled(); expect(libraryMutate).not.toHaveBeenCalled();
+  });
+
+  it('profiles a full saved library recipe independently of the narrower interval editor', async () => {
+    const full = { ...schedule.workouts[0].structure, nodes: [{ kind: 'step' as const, id: 'full', purpose: 'work' as const,
+      ending: { kind: 'kilojoules' as const, kilojoules: 50 }, targets: [
+        { kind: 'power' as const, mode: 'relative' as const, minimumPercent: 80, maximumPercent: 90,
+          reference: { kind: 'functional-threshold-power' as const, watts: 250 } },
+        { kind: 'cadence' as const, mode: 'absolute' as const, minimumRpm: 80, maximumRpm: 90 },
+      ] }] };
+    libraryItems.next([{ schemaVersion: 1, id: 'full-recipe', title: 'Full saved recipe', structure: full,
+      status: 'active', revision: 1, createdAtMs: 1, updatedAtMs: 1 }]);
+    setRouteState({ mode: 'library-browse' });
+    const fixture = await renderPlans();
+    const profile = fixture.debugElement.query(By.directive(WorkoutProfileComponent)).componentInstance as WorkoutProfileComponent;
+    expect(profile.expanded()).toBe(false);
+    profile.toggleExpanded(); fixture.detectChanges(); await fixture.whenStable();
+    expect(profile.model().metrics).toEqual(['power', 'cadence']);
+    expect(profile.steps()[0].ending).toBe('50 kJ');
+    expect(profile.steps()[0].targets[0].text).toContain('saved reference');
+    expect(fixture.componentInstance.editor()).toBeNull();
+    expect(mutate).not.toHaveBeenCalled(); expect(libraryMutate).not.toHaveBeenCalled();
+    expect(libraryItems.value[0].structure).toEqual(full);
+  });
 
   it.each(['plans', 'standalone', 'library'] as const)('saves ordered independent copies through the existing %s boundary', async scope => {
     libraryMutate.mockResolvedValue({ mutationId: 'mutation-1', item: null });
@@ -1710,6 +1759,42 @@ describe('PlansWorkspaceComponent', () => {
       operation: expect.objectContaining({ kind: 'update-workout', workoutId: 'plan-workout',
         structure: schedule.workouts[0].structure }),
     }));
+  });
+
+  it.each([false, true])('wires early Lap through the checkbox, save and library copy for repeat=%s', async repeat => {
+    const step = { kind: 'step' as const, id: 'exact', purpose: 'work' as const,
+      ending: { kind: 'distance' as const, meters: 1609.344 }, targets: [] };
+    schedule.workouts[0].structure = { version: 1, sport: ActivityTypes.Running,
+      nodes: repeat ? [{ kind: 'repeat', id: 'repeat', count: 2, steps: [step] }] : [step] };
+    setRouteState({ mode: 'edit', workoutId: 'plan-workout' });
+    const fixture = await renderPlans(); const component = fixture.componentInstance;
+    haptics.selection.mockClear();
+    const checkbox = fixture.nativeElement.querySelector('.early-lap-option input[type="checkbox"]') as HTMLInputElement;
+    expect(checkbox.checked).toBe(false);
+    expect(haptics.selection).not.toHaveBeenCalled();
+    checkbox.click(); fixture.detectChanges();
+    expect(checkbox.checked).toBe(true);
+    expect(haptics.selection).toHaveBeenCalledOnce();
+    component.updateStep(0, repeat ? 0 : null, 'allowEarlyLap', true);
+    expect(haptics.selection).toHaveBeenCalledOnce();
+    await component.saveEditorCopyToLibrary();
+    expect(libraryMutate).toHaveBeenCalledWith(expect.objectContaining({ operation: expect.objectContaining({
+      kind: 'create', structure: expect.objectContaining({ nodes: repeat ? [expect.objectContaining({ steps: [
+        expect.objectContaining({ ending: { kind: 'distance', meters: 1609.344, allowEarlyLap: true } }),
+      ] })] : [expect.objectContaining({ ending: { kind: 'distance', meters: 1609.344, allowEarlyLap: true } })] }),
+    }) }));
+    component.busyAction.set('save-workout'); fixture.detectChanges();
+    expect(checkbox.disabled).toBe(true); checkbox.click();
+    expect(checkbox.checked).toBe(true);
+    component.busyAction.set(null); fixture.detectChanges();
+    haptics.selection.mockClear(); checkbox.click(); fixture.detectChanges();
+    expect(haptics.selection).toHaveBeenCalledOnce();
+    await component.saveWorkout();
+    expect(mutate).toHaveBeenCalledWith(expect.objectContaining({ operation: expect.objectContaining({
+      kind: 'update-workout', structure: expect.objectContaining({ nodes: repeat ? [expect.objectContaining({ steps: [
+        expect.objectContaining({ ending: { kind: 'distance', meters: 1609.344, allowEarlyLap: false } }),
+      ] })] : [expect.objectContaining({ ending: { kind: 'distance', meters: 1609.344, allowEarlyLap: false } })] }),
+    }) }));
   });
 
   it('keeps lap endings when copying an edited scheduled recipe to the library', async () => {

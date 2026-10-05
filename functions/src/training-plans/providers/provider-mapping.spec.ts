@@ -1049,3 +1049,19 @@ describe('planned-workout provider proof fixtures', () => {
         expect(integerId).toBeLessThanOrEqual(2_147_483_647);
     });
 });
+
+
+describe('explicit early-Lap provider contract', () => {
+  it.each([
+    ['Garmin', serializeGarminWorkoutV1], ['COROS', serializeCorosTrainingPlanV1], ['Wahoo', serializeWahooPlanJsonV1],
+  ] as const)('rejects true and preserves absent/false artifacts for %s', (_name, serializer) => {
+    const step = { kind: 'step', id: 'work', purpose: 'work', ending: { kind: 'time', seconds: 90 }, targets: [] };
+    const recipe = { version: 1, sport: ActivityTypes.Running, nodes: [step] };
+    const options = { sourceWorkoutId: 'test', name: 'Test', title: 'Test', location: 'outdoor' as const,
+      localDate: '2026-10-06', lastModifiedDate: '2026-10-06T12:00:00', athleteId: 1, workoutId: 2, allowDegraded: true };
+    const withPermission = (allowEarlyLap: boolean) => ({ ...recipe,
+      nodes: [{ ...step, ending: { ...step.ending, allowEarlyLap } }] });
+    expect(() => serializer(withPermission(true), options)).toThrow(expect.objectContaining({ code: 'unsupported' }));
+    expect(serializer(withPermission(false), options).artifact).toEqual(serializer(recipe, options).artifact);
+  });
+});

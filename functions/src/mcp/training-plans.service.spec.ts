@@ -56,6 +56,42 @@ function fixture() {
 }
 
 describe('Training plan MCP reads', () => {
+  it('round-trips mixed profile fixtures with exact IDs, untargeted durations and two saved-reference targets', async () => {
+    const f = fixture();
+    const recipe: WorkoutStructureV1 = { version: 1, sport: ActivityTypes.Running, nodes: [
+      { kind: 'step', id: 'hr-kilometre', purpose: 'warmup', ending: { kind: 'distance', meters: 1000 },
+        targets: [{ kind: 'heart-rate', mode: 'absolute', minimumBpm: 130, maximumBpm: 145 }] },
+      { kind: 'repeat', id: 'changes', count: 4, steps: [60, 75, 90].map(seconds => ({
+        kind: 'step', id: `effort-${seconds}`, purpose: 'work', ending: { kind: 'time', seconds }, targets: [],
+      })) },
+      { kind: 'step', id: 'two-targets', purpose: 'work', ending: { kind: 'manual' }, targets: [
+        { kind: 'power', mode: 'relative', minimumPercent: 80, maximumPercent: 90,
+          reference: { kind: 'functional-threshold-power', watts: 250 } },
+        { kind: 'cadence', mode: 'relative', minimumPercent: 90, maximumPercent: 100,
+          reference: { kind: 'preferred-cadence', rpm: 180 } },
+      ] },
+      { kind: 'step', id: 'open-pace', purpose: 'recovery', ending: { kind: 'manual' }, targets: [
+        { kind: 'speed', mode: 'relative', presentation: 'pace', minimumPercent: 0, maximumPercent: 100,
+          reference: { kind: 'threshold-speed', metersPerSecond: 4 } },
+      ] },
+    ] };
+    f.structures.w1 = recipe;
+    const before = JSON.stringify(recipe);
+    const workoutRef = f.codec.encode({ kind: 'workout', id: 'w1', createdAtMs: 1 }, 'owner', 'connection');
+    for (const tool of ['get_planned_workout', 'get_planned_workout_v2'] as const) {
+      const result = TRAINING_READ_OUTPUTS[tool].parse(await f.run(tool, { workoutRef }));
+      expect(JSON.parse(JSON.stringify(result.workout.structure))).toEqual(JSON.parse(before));
+      expect(result.workout.displaySteps.map(step => step.nodeId)).toEqual([
+        'hr-kilometre', 'changes', 'effort-60', 'effort-75', 'effort-90', 'two-targets', 'open-pace',
+      ]);
+      expect(result.workout.displaySteps.map(step => step.text).join(' ')).toContain('01m 15s');
+      expect(JSON.stringify(result)).not.toMatch(/occurrenceKey|selectedMetric|repeatPasses|estimatedDuration|chartWidth/);
+      await expect(f.run(tool, { workoutRef }, [])).rejects.toThrow();
+      await expect(f.run(tool, { workoutRef }, [TRAINING_PLANS_SCOPE], 'foreign-connection')).rejects.toThrow();
+    }
+    expect(JSON.stringify(f.structures.w1)).toBe(before);
+  });
+
   it('projects saved ordering and duplicated repeat children in canonical and display order', async () => {
     const f = fixture();
     const work = { kind: 'step' as const, id: 'work', purpose: 'work' as const,
@@ -864,4 +900,39 @@ describe('Training plan MCP reads', () => {
     const incomplete = TRAINING_READ_OUTPUTS.get_training_sync_status.parse(await f.run('get_training_sync_status', args));
     expect(incomplete.scanComplete).toBe(false); expect(incomplete.services.every(s => s.syncedWorkouts === null)).toBe(true);
   });
+});
+
+
+describe('complete early Lap reads', () => {
+  it.each([true, false])('preserves %s exactly and fails closed on older full-recipe reads', async allowEarlyLap => {
+    const f = fixture(); f.collections.scheduledWorkouts = { w1: workout(null) };
+    const input = { version: 1, sport: ActivityTypes.Running, nodes: [{ kind: 'repeat', id: 'repeat', count: 2,
+      steps: [{ kind: 'step', id: 'time', purpose: 'work', ending: { kind: 'time', seconds: 90.123, allowEarlyLap }, targets: [] },
+        { kind: 'step', id: 'distance', purpose: 'recovery', ending: { kind: 'distance', meters: 400.125, allowEarlyLap }, targets: [] }] }] };
+    f.structures.w1 = input;
+    const ref = f.codec.encode({ kind: 'workout', id: 'w1', createdAtMs: 1 }, 'owner', 'connection');
+    const result = TRAINING_READ_OUTPUTS.get_planned_workout_v3.parse(await f.run('get_planned_workout_v3', { workoutRef: ref }));
+    expect(JSON.parse(JSON.stringify(result.workout.structure))).toEqual(input);
+    expect(JSON.stringify(result.workout.displaySteps).includes('or Lap')).toBe(allowEarlyLap);
+    for (const tool of ['get_planned_workout', 'get_planned_workout_v2'] as const)
+      await expect(f.run(tool, { workoutRef: ref })).rejects.toThrow('get_planned_workout_v3');
+    await expect(f.run('get_planned_workout_v3', { workoutRef: ref }, ['metrics:read'])).rejects.toThrow('permission');
+    await expect(f.run('get_planned_workout_v3', { workoutRef: ref }, undefined, 'foreign')).rejects.toThrow();
+    expect(JSON.stringify(result)).not.toContain('qs-boundary');
+  });
+  it.each([true, false])('reads a saved %s flag with strict projection and blocks lossy legacy reads', async allowEarlyLap => {
+    const f = fixture();
+    const structure = { version: 1, sport: ActivityTypes.Swimming, poolLength: { meters: 22.86, presentation: 'yards' },
+      nodes: [{ kind: 'step', id: 'saved-step', purpose: 'work', ending: { kind: 'distance', meters: 400.125, allowEarlyLap }, targets: [] }] };
+    f.collections.workoutLibrary = { library: { schemaVersion: 1, id: 'library', title: 'Swim', status: 'active',
+      revision: 1, createdAtMs: 1, updatedAtMs: 1 } };
+    f.structures.library = structure;
+    const ref = f.codec.encode({ kind: 'saved-workout', id: 'library', createdAtMs: 1 }, 'owner', 'connection');
+    const result = TRAINING_READ_OUTPUTS.get_saved_workout_v2.parse(await f.run('get_saved_workout_v2', { savedWorkoutRef: ref }));
+    expect(JSON.parse(JSON.stringify(result.savedWorkout.structure))).toEqual(structure);
+    expect(result.savedWorkout).not.toHaveProperty('id');
+    await expect(f.run('get_saved_workout', { savedWorkoutRef: ref })).rejects.toThrow('get_saved_workout_v2');
+    await expect(f.run('get_saved_workout_v2', { savedWorkoutRef: ref }, ['metrics:read'])).rejects.toThrow('permission');
+  });
+
 });

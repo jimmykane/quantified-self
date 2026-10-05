@@ -1,0 +1,59 @@
+<button mat-button type="button" (click)="toggleExpanded()" [attr.aria-expanded]="expanded()" [attr.aria-controls]="regionId">
+  <mat-icon aria-hidden="true">{{ expanded() ? 'expand_less' : 'expand_more' }}</mat-icon>
+  {{ expanded() ? 'Hide profile' : 'Show profile' }}
+</button>
+<section [id]="regionId" [hidden]="!expanded()" aria-label="Workout profile">
+  @if (expanded()) {
+    @if (isStrength()) {
+      <p class="profile-hint">Exercise details are shown in the strength editor.</p>
+    } @else if (model(); as profile) {
+      @if (profile.pool) { <p class="profile-hint">Pool length · {{ profile.pool }}</p> }
+      <p class="profile-hint">Equal widths show step order, not time or distance. Empty target spaces have no finite range for the selected metric.</p>
+      @if (profile.metrics.length > 0) {
+        <mat-form-field appearance="outline" subscriptSizing="dynamic" class="profile-metric">
+          <mat-label>Target view</mat-label>
+          <mat-select [value]="metric()" (selectionChange)="selectMetric($event.value)">
+            @for (value of profile.metrics; track value) { <mat-option [value]="value">{{ metricLabels[value] }}</mat-option> }
+          </mat-select>
+        </mat-form-field>
+      }
+      @if (profile.grouped) {
+        <p class="profile-hint">{{ profile.occurrenceCount | number }} step occurrences. Repeat blocks are shown once; choose a pass to inspect every occurrence.</p>
+        <div class="profile-repeat-selectors">
+          @for (repeat of profile.repeats; track repeat.id; let index = $index) {
+            <mat-form-field appearance="outline" subscriptSizing="dynamic">
+              <mat-label>Repeat {{ index + 1 }} · {{ repeat.count }} passes</mat-label>
+              <mat-select [value]="repeat.iteration" (selectionChange)="selectRepeatPass(repeat.id, $event.value)">
+                @for (pass of repeat.passes; track pass) { <mat-option [value]="pass">Pass {{ pass }} of {{ repeat.count }}</mat-option> }
+              </mat-select>
+            </mat-form-field>
+          }
+        </div>
+      }
+      <div class="profile-chart-scroll" tabindex="0" aria-label="Scrollable workout profile; step buttons below provide keyboard selection">
+        <div #chart class="profile-chart" [class.purpose-only]="!metric()" [style.width.px]="chartWidth()" role="img" [attr.aria-label]="summary()"></div>
+      </div>
+      <p class="profile-hint">WU warm-up · W work · R recovery · CD cool-down · Rest · O other. Dashed target borders use saved relative references. Select a step for details.</p>
+      <ol class="profile-steps" aria-label="Workout step details">
+        @for (step of steps(); track step.occurrenceKey; let index = $index) {
+          <li>
+            <button mat-button type="button" [attr.data-profile-index]="index" [attr.aria-pressed]="selectedKey() === step.occurrenceKey"
+              [attr.aria-controls]="regionId + '-selection'" (click)="selectStep(step)" (keydown)="onStepKeydown($event, index)">
+              {{ step.label }} · {{ step.ending }}@if (step.changed) { · Changed }
+            </button>
+            <span class="profile-target-text">{{ step.targetsText }}</span>
+          </li>
+        }
+      </ol>
+      <div [id]="regionId + '-selection'" class="profile-selection" role="status" aria-live="polite" aria-atomic="true">
+        @if (selected(); as step) {
+          <strong>{{ step.label }}</strong>
+          <p>{{ step.ending }}@for (target of step.targets; track $index) { · {{ target.text }} }@if (step.targets.length === 0) { · No target prescribed }</p>
+          @if (step.note) { <p>{{ step.note }}</p> }
+        }
+      </div>
+    } @else {
+      <p class="profile-hint" role="status">{{ unavailableReason() }}</p>
+    }
+  }
+</section>

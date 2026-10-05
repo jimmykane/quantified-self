@@ -173,7 +173,7 @@ v1-only structure. The server derives that compatibility summary. Do not invent 
 full existing companion when editing. The same approval-gated apply remains mandatory. Prefer the focused
 single-workout preview when creating exactly one workout. When that new workout should also be sent, put the selected or
 all-connected providers and explicit IANA time zone in its advertised optional delivery object; do not synthesize a
-two-change batch. Use the batch preview only for edits, later delivery actions, or genuinely multi-change requests, and
+two-change batch. Use the latest focused full-recipe preview for one non-strength edit; use the batch preview only for later delivery actions or genuinely multi-change requests, and
 never retry rejected input unchanged. If the server refuses repeated malformed previews, stop and explain the validation
 failure; correctly formed previews remain available immediately, so do not describe all Training edits as paused.
 Translate the workout the user actually requested rather than silently prescribing a different session. Preserve an
@@ -220,3 +220,12 @@ repeat or bypass an approval, and do not call apply again after a client decline
 outcomes: a provider failure does not undo an authored workout. After a stale revision, expired proposal, changed grant
 or changed connection, reread state and prepare a fresh proposal rather than replaying guessed input. Never claim a live
 provider check, transport success, native-plan parity or watch receipt beyond the returned result.
+
+
+For a planned recipe with early Lap, route through the focused Training workflow and discover the latest full scheduled
+or saved recipe read and matching focused preview. Preserve unchanged fields, including absent, false and true
+`allowEarlyLap` values. Only time/distance endings accept this boolean: true means numeric limit OR Lap; manual remains
+indefinite. Enable it only on explicit athlete intent and review removal from previously enabled steps. Older tools may
+fail closed; refresh the catalog rather than omitting the field. Suunto supports it; other destinations reject it.
+Neither recorded laps nor comparison evidence authorizes editing a planned recipe or proves its completion. Existing
+independent grants and native client/app confirmation remain mandatory; the Assistant stays prepare-only.

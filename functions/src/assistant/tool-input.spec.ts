@@ -192,4 +192,16 @@ describe('Assistant tool input boundary', () => {
       limit: 1,
     }, 'Europe/Helsinki')).toEqual({ limit: 1 });
   });
+  it.each(['preview_planned_workout_v3_change', 'preview_saved_workout_v2_change'] as const)('preserves athlete intent when normalizing %s', name => {
+    for (const allowEarlyLap of [undefined, false, true]) {
+      const structure = { version: 1, sport: 'running', nodes: [{ kind: 'repeat', id: 'repeat', count: 2, steps: [
+        { kind: 'step', id: 'step', purpose: 'work', ending: { kind: 'distance', meters: 1609.344,
+          ...(allowEarlyLap === undefined ? {} : { allowEarlyLap }) }, targets: [] },
+      ] }] };
+      const input = { expectedScheduleRevision: 1, change: { kind: 'create', structure } };
+      expect(normalizeAssistantToolInput(name, input, 'Europe/Helsinki')).toEqual({ ...input,
+        change: { ...input.change, structure: { ...structure, sport: 'Running' } } });
+    }
+  });
+
 });
