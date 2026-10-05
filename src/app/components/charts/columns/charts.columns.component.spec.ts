@@ -214,20 +214,20 @@ describe('ChartsColumnsComponent', () => {
     await waitForChartStabilization();
 
     // Exercise ECharts' real axis-pointer models; mocked setOption cannot detect this failure.
-    const measureText = vi.spyOn(HTMLCanvasElement.prototype, 'getContext').mockReturnValue({
-      measureText: (text: string) => ({ width: text.length * 8 }),
-    } as unknown as CanvasRenderingContext2D);
-    const chart = init(null, undefined, { renderer: 'svg', ssr: true, width: 640, height: 320 });
+    // Use its headless text fallback; a fake context is cached even after getContext is restored.
+    const canvasContext = vi.spyOn(HTMLCanvasElement.prototype, 'getContext').mockReturnValue(null);
+    let chart: ReturnType<typeof init> | undefined;
     try {
+      chart = init(null, undefined, { renderer: 'svg', ssr: true, width: 640, height: 320 });
       const option = getLastOption();
       expect(option.tooltip.trigger).toBe('axis');
       const settings = mockLoader.setOption.mock.calls.at(-1)?.[2];
       expect(() => chart.setOption(option, { ...settings, lazyUpdate })).not.toThrow();
       expect(() => chart.resize({ width: 480, height: 240 })).not.toThrow();
-      expect(chart.renderToSVGString()).toContain('<svg');
+      expect(chart.renderToSVGString()).toMatch(/<path[^>]*fill="#16B4EA"/i);
     } finally {
-      chart.dispose();
-      measureText.mockRestore();
+      chart?.dispose();
+      canvasContext.mockRestore();
     }
   });
 
