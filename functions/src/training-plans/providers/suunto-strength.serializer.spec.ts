@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { serializeSuuntoStrengthGuideV1, serializeSuuntoStrengthGuideV2ForRecovery,
-  serializeSuuntoStrengthGuideV3ForRecovery } from './suunto-guide.serializer';
+  serializeSuuntoStrengthGuideV3ForRecovery, serializeSuuntoStrengthGuideV4ForRecovery } from './suunto-guide.serializer';
 import legacyFixture from './fixtures/suunto-strength-v2-recovery.json';
 import v3Fixture from './fixtures/suunto-strength-v3-recovery.json';
 
@@ -17,6 +17,7 @@ describe('Suunto Gym Guide strength mapping', () => {
   it('keeps v3 strength recovery byte-equivalent and does not add pace/laps to HR-only screens', () => {
     const legacy = serializeSuuntoStrengthGuideV3ForRecovery(details, { ...options, allowDegraded: false }).artifact;
     expect(legacy).toEqual(v3Fixture);
+    expect(serializeSuuntoStrengthGuideV4ForRecovery(details, { ...options, allowDegraded: false }).artifact).toEqual(v3Fixture);
     expect(serializeSuuntoStrengthGuideV1(details, { ...options, allowDegraded: false }).artifact).toEqual(v3Fixture);
     expect(JSON.stringify(legacy)).not.toMatch(/createManualLap|aggregate|window/);
   });

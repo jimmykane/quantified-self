@@ -25,7 +25,7 @@ export type SuuntoGuideConditionV1 =
 
 export type SuuntoGuideFieldV1 =
     | { type: SuuntoGuideLiveFieldType; title: string }
-    | { type: 'pace'; title: string; window: 'manualLap'; aggregate: 'average' }
+    | { type: 'pace' | 'power' | 'strokeRate'; title: string; window: 'manualLap'; aggregate: 'average' }
     | { type: 'text'; value: string }
     | { type: 'stepDurationCountdown'; value: number; title: string }
     | { type: 'stepDistanceCountdown'; value: number; title: string }
@@ -36,7 +36,8 @@ export type SuuntoGuideFieldV1 =
     | { type: 'targetCadence'; min: number; max: number; title: string };
 
 export type SuuntoGuideLiveFieldType = 'heartRate' | 'power' | 'pace' | 'speed' | 'cadence';
-type GuidePresentation = 'legacy-v2' | 'live-v3' | 'block-pace-v4';
+type SuuntoGuideReadingType = SuuntoGuideLiveFieldType | 'strokeRate';
+type GuidePresentation = 'legacy-v2' | 'live-v3' | 'block-pace-v4' | 'sport-screens-v5';
 
 export interface SuuntoGuideFieldsStepV1 {
     id?: string;
@@ -372,6 +373,40 @@ function measuredTarget(target: WorkoutTargetV1, sport: ActivityTypes): SuuntoGu
     }
 }
 
+function sportScreenReadings(sport: ActivityTypes): SuuntoGuideReadingType[] {
+    if (sportLiveFields(sport)[0] === 'power') return ['power', 'heartRate', 'cadence', 'speed'];
+    if ([ActivityTypes.Swimming, ActivityTypes.OpenWaterSwimming].includes(sport)) {
+        // Suunto documents swimming strokeRate separately from running/cycling
+        // cadence. It is contextual watch data, never a cadence-target mapping.
+        return ['pace', 'strokeRate', 'heartRate'];
+    }
+    return sportLiveFields(sport);
+}
+
+function sportReadingField(type: SuuntoGuideReadingType, sport: ActivityTypes): SuuntoGuideFieldV1 {
+    if (type === 'pace' || type === 'strokeRate' || (type === 'power' && sportLiveFields(sport)[0] === 'power')) {
+        return { type, title: type === 'pace' ? 'Avg pace' : type === 'power' ? 'Avg pwr' : 'Avg strk',
+            window: 'manualLap', aggregate: 'average' };
+    }
+    const titles: Record<SuuntoGuideLiveFieldType, string> = {
+        heartRate: 'HR', power: 'Power', pace: 'Pace', speed: 'Speed', cadence: 'Cadence',
+    };
+    return { type, title: titles[type] };
+}
+
+function sportStepReadings(step: WorkoutStepV1, sport: ActivityTypes, capacity: number): SuuntoGuideFieldV1[] {
+    const defaults = sportScreenReadings(sport);
+    const counterparts = step.targets.flatMap(target => {
+        const type = measuredTarget(target, sport);
+        return type ? [type] : [];
+    });
+    // Preserve primary/secondary prescription order ahead of contextual fields.
+    // Field support does not establish that a particular watch has a sensor.
+    const candidates = [...new Set<SuuntoGuideReadingType>(step.targets.length
+        ? [...counterparts, 'heartRate', ...defaults] : defaults)];
+    return candidates.slice(0, capacity).map(type => sportReadingField(type, sport));
+}
+
 function notificationText(step: WorkoutStepV1): string {
     // Authored instructions take priority; keep their existing font adaptation
     // and loss review. Generated text is not translated or unit-converted by the watch.
@@ -418,7 +453,9 @@ function stepToSuunto(step: WorkoutStepV1, sport: ActivityTypes, presentation: G
         const titles: Record<SuuntoGuideLiveFieldType, string> = {
             heartRate: 'HR', power: 'Power', pace: 'Pace', speed: 'Speed', cadence: 'Cadence',
         };
-        const live: SuuntoGuideFieldV1[] = candidates.slice(0, 5 - fields.length)
+        const live: SuuntoGuideFieldV1[] = presentation === 'sport-screens-v5'
+            ? sportStepReadings(step, sport, 5 - fields.length)
+            : candidates.slice(0, 5 - fields.length)
             .map(type => type === 'pace' && presentation === 'block-pace-v4'
                 ? { type, title: 'Avg pace', window: 'manualLap', aggregate: 'average' }
                 : { type, title: titles[type] });
@@ -465,11 +502,11 @@ function structureToSteps(structure: WorkoutStructureV1, presentation: GuidePres
         type: 'fields', title: 'Complete', fields: [{ type: 'text', value: 'Guide complete' }],
         notification: { title: 'Complete', text: 'Guide complete' },
     });
-    if (presentation !== 'block-pace-v4' || !steps.some(node =>
+    if (!['block-pace-v4', 'sport-screens-v5'].includes(presentation) || !steps.some(node =>
         (node.type === 'repeat' ? node.steps : [node]).some(step =>
-            step.fields.some(field => field.type === 'pace' && 'window' in field)))) return steps;
+            step.fields.some(field => 'window' in field && field.window === 'manualLap')))) return steps;
 
-    // Pace has no documented step window. Align its manual-lap window with the
+    // Align all selected manual-lap averages with the
     // prescription, without making another lap after a button-ended step. The
     // first screen starts with recording, so it needs no zero-length opening lap.
     const withBoundary = <T extends SuuntoGuideFieldsStepV1>(step: T, previous: WorkoutEndingV1 | null) => ({
@@ -507,6 +544,13 @@ function structureToSteps(structure: WorkoutStructureV1, presentation: GuidePres
 export function serializeSuuntoGuideJsonV1(
     structureValue: unknown,
     options: SerializeSuuntoGuideOptionsV1,
+): ProviderSerializationResultV1<SuuntoGuideJsonV1> {
+    return serializeGuide(structureValue, options, 'sport-screens-v5');
+}
+
+/** Recovery only: preserve Training 01's exact average-pace screens and lap boundaries. */
+export function serializeSuuntoGuideV4ForRecovery(
+    structureValue: unknown, options: SerializeSuuntoGuideOptionsV1,
 ): ProviderSerializationResultV1<SuuntoGuideJsonV1> {
     return serializeGuide(structureValue, options, 'block-pace-v4');
 }
@@ -587,6 +631,13 @@ function serializeGuide(structureValue: unknown, options: SerializeSuuntoGuideOp
 export function serializeSuuntoStrengthGuideV1(
     detailsValue: unknown,
     options: SerializeSuuntoGuideOptionsV1,
+): ProviderSerializationResultV1<SuuntoGuideJsonV1> {
+    return serializeStrength(detailsValue, options, 'sport-screens-v5');
+}
+
+/** Recovery only; v4 strength remains the exact current-HR instruction sequence. */
+export function serializeSuuntoStrengthGuideV4ForRecovery(
+    detailsValue: unknown, options: SerializeSuuntoGuideOptionsV1,
 ): ProviderSerializationResultV1<SuuntoGuideJsonV1> {
     return serializeStrength(detailsValue, options, 'block-pace-v4');
 }

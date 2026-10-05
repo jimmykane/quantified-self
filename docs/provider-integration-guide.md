@@ -350,18 +350,21 @@ owner and identity fields are not normalized. Authored title/instruction or expl
 review and counts Unicode code points. Remaining watch characters outside Suunto's guaranteed minimum set require
 approval because rendering is device-dependent; app-only description text is not subject to that watch-font check.
 See the [Training source of truth](training-workspace.md#suuntoplus-guide-delivery-650) for upgrade and recovery behavior.
-Mapping `suunto-guides-v4` retains v3's native watch readings and makes measured pace block-average: pace/HR for running, walking, hiking, swimming and rowing;
-power/HR/speed for supported cycling variants; HR for strength where instructions fit. A primary target's documented
-measured counterpart (power/cadence sensors for running/cycling only) has priority, with countdown, all targets and
-instructions reserved first and a maximum
-of five fields. Long manual text stays text-only. Measured pace uses documented `window: manualLap` and `aggregate: average`,
-labelled `Avg pace`, not an unsupported step window. Guides containing that field create recorded laps at automatic
-boundaries and final completion; button-ended predecessors already create a lap, so the successor omits the extra lap.
-No opening lap or automatic laps in HR-only/no-average-pace Guides. Native repeats split off the first pass only if its
-incoming boundary differs from subsequent wraps, preserving total passes and ID omissions without unbounded expansion.
-An extra Lap press during a timed/distance step resets the average but does not advance that step. These recorded laps
-are not adherence/completion evidence. Missing sensors are
-unavailable, not zero. Watch units are native, including rowing pace without an unverified /500 m label.
+Mapping `suunto-guides-v5` retains Training 01's reviewed lap boundaries and prioritizes sport/prescription readings:
+running uses lap-average pace/current HR; cycling uses lap-average power/current HR/cadence/speed;
+pool/open-water swimming uses lap-average pace/separate lap-average swimming `strokeRate`/current HR.
+Walking/Hiking/Rowing retain pace/HR; strength retains current HR where instructions fit. Both targets' documented
+counterparts take priority in authored order, followed by HR and sport defaults. Countdown, every target and instruction
+are reserved first within five fields; long manual text stays text-only. Authored untargeted steps stay untargeted.
+Average labels `Avg pace`, `Avg pwr` and `Avg strk` identify documented `manualLap`/`average` fields.
+Swimming stroke rate is contextual watch data, never a cadence target or rowing-stroke mapping. Only running/cycling
+receive documented power/cadence sensor counterparts; missing/unsupported sensors stay unavailable, not zero.
+Device capability is not inferred from a connected account. Native watch units apply, without an unverified rowing /500 m label.
+Guides containing any manual-lap average create recorded laps at automatic boundaries and final completion;
+button-ended predecessors already create a lap, so the successor omits the extra lap. No opening lap or automatic
+laps in HR-only/no-average Guides. Native repeats split off the first pass only if its incoming boundary differs
+from subsequent wraps, preserving total passes and ID omissions without unbounded expansion. An extra Lap press
+during a timed/distance step resets averages but does not advance that step. These laps are not adherence/completion evidence.
 Documented partner step-start notifications cover every phase/repeat/rest; a generated non-timed `Guide complete`
 screen requests the final alert without adding prescribed time, stopping recording or proving completion. Watch sound/
 vibration settings control alerts. Pre-end beeps and out-of-target alerts are not promised; approximately 20-second popups
@@ -371,19 +374,19 @@ Note-free timed steps use shared Sports Lib duration formatting with seconds (`F
 `Rest for 02m 00s`); distance/manual steps use `Follow distance countdown`/`Press lap when ready` without guessed units.
 Fractional/day-length durations use `Follow time countdown` rather than omitting fractions or seconds. Generated text
 is bounded to 54 code points without truncating a duration into another number. Text is static and does
-not inherit watch-unit preferences; native countdown/live fields do. This wording is retained in v4;
-the exact v2/v3 recovery JSON and public/MCP contracts are unchanged.
-New sends use v4 after separately approved deployment. Eligible consented future Guides update in place; past/completed
-copies remain protected. Started v2/v3 attempts recover only against their exact digest-verified old payload and retain IDs
-before any v4 update. Unknown acceptance never permits a speculative create. An exact approval for the same v2/v3
+not inherit watch-unit preferences; native countdown/live fields do. This wording is retained in v5;
+the exact v2/v3/v4 recovery JSON and public/MCP contracts are unchanged.
+New sends use v5 after separately approved deployment. Eligible consented future Guides update in place; past/completed
+copies remain protected. Started v2/v3/v4 attempts recover only against their exact digest-verified old payload and retain IDs
+before any v5 update. Unknown acceptance never permits a speculative create. An exact approval for the same v2/v3/v4
 prescription/losses can carry across this presentation-only upgrade; edits still require review. Verified equivalence is
 retained privately on the ledger so retiring a never-started/unaccepted v2 attempt does not lose it. That proof is bound
 to the saved approval, current mapping and full canonical content, and never asserts remote acceptance or grants consent.
 #784 tracks remaining
-account/watch evidence (model/firmware, sensors, all boundary/final alerts, muted settings, short intervals), separately
+account/watch evidence (model/firmware, sensors, sport-specific average resets, swimming stroke rate, sensor availability, all boundary/final alerts, muted settings, short intervals), separately
 from #773's additional-target/ZoneSense scope. API acceptance/readback is not watch receipt or behavior proof.
 Existing private delivery events add allowlisted `guideMappingVersion` and `deliveryPhase` labels to distinguish
-digest-verified v2/v3 recovery from v4 execution/failure. Unknown digests/classification failures stay labelled `unknown`;
+digest-verified v2/v3/v4 recovery from v5 execution/failure. Unknown digests/classification failures stay labelled `unknown`;
 removal has no recipe version (`not_applicable`). Classification is local, non-authorizing and never changes delivery.
 The labels are log-only, not Firestore/browser/MCP fields, and contain no identities, prescriptions, credentials or raw
 errors. See the Training source of truth above for exact values and Cloud Logging filters. Product Help needs no new

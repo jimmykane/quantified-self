@@ -104,6 +104,24 @@ describe('app-only Garmin replacement boundary', () => {
 });
 
 describe('Strict public Training recipe v1', () => {
+  it.each([ActivityTypes.Running, ActivityTypes.Cycling, ActivityTypes.Swimming, ActivityTypes.OpenWaterSwimming])(
+    'preserves %s canonical recipes through public read/write validation without watch fields', sport => {
+      for (const ending of [endingFixtures.time, endingFixtures.distance, endingFixtures.manual]) {
+        for (const targets of [[], ...Object.values(targetVariantFixtures).map(target => [target]),
+          [targetVariantFixtures['heart-rate:absolute'], targetVariantFixtures['power:absolute']]]) {
+          const input = { ...recipe(ending, targets), sport };
+          expectPublicReadWriteRoundTrip(input);
+          for (const fields of [{ createManualLap: true }, { window: 'manualLap', aggregate: 'average' },
+            { fields: [{ type: 'strokeRate', title: 'Avg strk' }] }, { mappingVersion: 'suunto-guides-v5' }]) {
+            const bad = { ...input, nodes: [{ ...input.nodes[0], ...fields }] };
+            expect(TRAINING_RECIPE_SCHEMA.safeParse(bad).success).toBe(false);
+            expect(TRAINING_WRITE_INPUTS.preview_create_planned_workout.safeParse({
+              expectedScheduleRevision: 1, localDate: '2026-09-18', title: 'Workout', structure: bad,
+            }).success).toBe(false);
+          }
+        }
+      }
+    });
   it.each([ActivityTypes.Walking, ActivityTypes.Hiking, ActivityTypes.Rowing, ActivityTypes.IndoorRowing])('round-trips %s through the frozen read and approval-gated proposal schema', sport => {
     expectPublicReadWriteRoundTrip({ ...recipe({ kind: 'distance', meters: 500 }), sport });
   });

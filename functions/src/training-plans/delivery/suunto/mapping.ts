@@ -4,14 +4,15 @@ import { ActivityTypes } from '@sports-alliance/sports-lib';
 import { strengthProjectionMatchesDetails, type StrengthWorkoutDetailsV1 } from '../../../../../shared/strength-workout';
 import { serializeSuuntoGuideJsonV1, serializeSuuntoStrengthGuideV1, serializeSuuntoGuideV2ForRecovery,
   serializeSuuntoStrengthGuideV2ForRecovery, serializeSuuntoGuideV3ForRecovery,
-  serializeSuuntoStrengthGuideV3ForRecovery } from '../../providers/suunto-guide.serializer';
+  serializeSuuntoStrengthGuideV3ForRecovery, serializeSuuntoGuideV4ForRecovery,
+  serializeSuuntoStrengthGuideV4ForRecovery } from '../../providers/suunto-guide.serializer';
 import { ProviderWorkoutMappingError } from '../../providers/provider-mapping';
 import { hashTrainingScheduleRequestPayload } from '../../persistence';
 import type { DeliveryAssessment, DeliveryOperation } from '../contracts';
 
 // Adding a previously unsupported sport must not churn digests for existing Guides.
-export const SUUNTO_MAPPING_VERSION = 'suunto-guides-v4';
-const LEGACY_MAPPING_VERSIONS = ['suunto-guides-v3', 'suunto-guides-v2'] as const;
+export const SUUNTO_MAPPING_VERSION = 'suunto-guides-v5';
+const LEGACY_MAPPING_VERSIONS = ['suunto-guides-v4', 'suunto-guides-v3', 'suunto-guides-v2'] as const;
 // Destination already incorporates Firebase UID + provider account. Do not reuse
 // a plain workout ID: two QS users may legitimately connect the same Suunto account.
 export function guideExternalId(destination: string, workoutId: string): string {
@@ -37,9 +38,11 @@ function mapGuide(workout: ScheduledWorkoutV1, destination: string, owner: strin
     url: 'https://quantified-self.io/training/plans', localDate: workout.localDate,
     sourceWorkoutId: workout.id, externalId: guideExternalId(destination, workout.id), allowDegraded: true };
   const recipeSerializer = version === 'suunto-guides-v2' ? serializeSuuntoGuideV2ForRecovery
-    : version === 'suunto-guides-v3' ? serializeSuuntoGuideV3ForRecovery : serializeSuuntoGuideJsonV1;
+    : version === 'suunto-guides-v3' ? serializeSuuntoGuideV3ForRecovery
+      : version === 'suunto-guides-v4' ? serializeSuuntoGuideV4ForRecovery : serializeSuuntoGuideJsonV1;
   const strengthSerializer = version === 'suunto-guides-v2' ? serializeSuuntoStrengthGuideV2ForRecovery
-    : version === 'suunto-guides-v3' ? serializeSuuntoStrengthGuideV3ForRecovery : serializeSuuntoStrengthGuideV1;
+    : version === 'suunto-guides-v3' ? serializeSuuntoStrengthGuideV3ForRecovery
+      : version === 'suunto-guides-v4' ? serializeSuuntoStrengthGuideV4ForRecovery : serializeSuuntoStrengthGuideV1;
   return strength
     ? strengthSerializer(strength, options) : recipeSerializer(workout.structure, options);
 }
@@ -65,6 +68,11 @@ export function assessSuuntoGuideV2ForRecovery(workout: ScheduledWorkoutV1, dest
 export function assessSuuntoGuideV3ForRecovery(workout: ScheduledWorkoutV1, destination: string, zone: string, owner: string,
   strength?: StrengthWorkoutDetailsV1 | null): DeliveryAssessment {
   return assessGuide(workout, destination, zone, owner, strength, 'suunto-guides-v3');
+}
+/** Recovery/approval equivalence only; never authors a new current delivery. */
+export function assessSuuntoGuideV4ForRecovery(workout: ScheduledWorkoutV1, destination: string, zone: string, owner: string,
+  strength?: StrengthWorkoutDetailsV1 | null): DeliveryAssessment {
+  return assessGuide(workout, destination, zone, owner, strength, 'suunto-guides-v4');
 }
 function digestBase(destination: string, zone: string, owner: string,
   strength: StrengthWorkoutDetailsV1 | null | undefined, version: string) {
