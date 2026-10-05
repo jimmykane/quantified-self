@@ -68,7 +68,7 @@ function speedScale(units?: UserUnitSettingsInterface | null): number {
 
 function roundInput(value: number): number {
   const rounded = Math.round(value * 1e6) / 1e6;
-  return rounded !== 0 || value === 0 ? rounded : value;
+  return Number.isFinite(rounded) && (rounded !== 0 || value === 0) ? rounded : value;
 }
 
 function toSpeed(value: number, presentation: 'pace' | 'speed', sport: ActivityTypes, units?: UserUnitSettingsInterface | null): number {
@@ -145,6 +145,9 @@ export function manualEditorTargetToWorkout(target: ManualWorkoutEditorTarget, s
     const input = target[field]!;
     const index = pace ? field === 'minimum' ? 1 : 0 : field === 'minimum' ? 0 : 1;
     if (saved && target.source?.[field] === input) return saved[index];
+    const other = field === 'minimum' ? 'maximum' : 'minimum';
+    // An edited bound matching the untouched displayed bound means the same exact prescription.
+    if (saved && input === target[other] && target.source?.[other] === target[other]) return saved[1 - index];
     return target.kind === 'speed' && target.mode === 'absolute' ? toSpeed(input, target.presentation, sport, units) : input;
   };
   const low = canonical(target.rangeMode === 'single' ? 'minimum' : pace ? 'maximum' : 'minimum');
@@ -179,9 +182,31 @@ export function changeManualEditorTargetPresentation(target: ManualWorkoutEditor
   try {
     const canonical = manualEditorTargetToWorkout(target, sport, units);
     if (canonical.kind === 'speed') return { ...workoutTargetToManualEditor({ ...canonical, presentation }, sport, units), rangeMode: target.rangeMode };
-  } catch { /* Unfinished drafts stay editable; changing presentation clears incompatible numeric fields. */ }
-  return { ...target, presentation, minimum: target.mode === 'relative' ? target.minimum : null,
-    maximum: target.mode === 'relative' ? target.maximum : null, referenceValue: null, source: undefined };
+  } catch { /* Convert completed fields independently while the prescription is unfinished. */ }
+  const previous = target.source?.target;
+  const source = previous?.kind === 'speed' && previous.mode === target.mode && previous.presentation === target.presentation
+    ? target.source : undefined;
+  const convertedSource = source && previous?.kind === 'speed'
+    ? workoutTargetToManualEditor({ ...previous, presentation }, sport, units).source : undefined;
+  const matches = (field: 'minimum' | 'maximum' | 'referenceValue') => source && source[field] === target[field]
+    && (field !== 'referenceValue' || (previous?.mode === 'relative' && previous.reference.kind === target.referenceKind));
+  const convert = (field: 'minimum' | 'maximum' | 'referenceValue', destination = field): number | null => {
+    const value = target[field];
+    if (value === null) return null;
+    if (matches(field) && convertedSource) return convertedSource[destination];
+    return fromSpeed(toSpeed(value, target.presentation, sport, units), presentation, sport, units);
+  };
+  const minimumField = target.mode === 'absolute' && target.rangeMode === 'range' ? 'maximum' : 'minimum';
+  const maximumField = 'minimum';
+  const minimum = target.mode === 'relative' ? target.minimum : convert(minimumField, 'minimum');
+  const maximum = target.mode === 'relative' ? target.maximum : convert(maximumField, 'maximum');
+  const ref = target.mode === 'relative' ? convert('referenceValue') : target.referenceValue;
+  return { ...target, presentation, minimum, maximum, referenceValue: ref,
+    source: convertedSource ? { ...convertedSource,
+      minimum: matches(target.mode === 'relative' ? 'minimum' : minimumField) ? minimum! : Number.NaN,
+      maximum: matches(target.mode === 'relative' ? 'maximum' : maximumField) ? maximum! : Number.NaN,
+      referenceValue: matches('referenceValue') ? ref : Number.NaN,
+    } : undefined };
 }
 
 export function changeManualEditorTargetSport(target: ManualWorkoutEditorTarget, from: ActivityTypes, to: ActivityTypes, units?: UserUnitSettingsInterface | null): ManualWorkoutEditorTarget {

@@ -587,6 +587,8 @@ duplicate kinds are disabled, and the strict shared parser remains the final sav
 controls serialize the same canonical bounds; single values have equal bounds. Switching kind or absolute/relative
 mode clears incompatible numeric inputs rather than assigning them new semantics. Speed/pace presentation switches
 convert valid prescriptions without changing canonical m/s; unfinished fields remain editable.
+An unfinished range or percentage does not clear another filled bound or speed reference when switching presentation:
+completed fields convert independently, absolute pace/speed bounds exchange positions, and saved references retain their exact m/s.
 
 Relative references are typed snapshots: maximum/threshold HR in bpm, FTP/critical power in watts, threshold speed
 in m/s, and preferred cadence in rpm. The current user settings model supplies units but no explicit athlete reference
@@ -599,7 +601,9 @@ those targets never acquire invented stroke-rate semantics or measured provider 
 
 Each target's local source snapshot tracks displayed bounds/reference independently. Editing one bound preserves the
 other exact canonical bound; percentage-only edits preserve the reference's exact saved m/s. Valid presentation/sport
-changes rehydrate those snapshots. Duration/distance caches remain independent, and an unchanged rounded yard pool
+changes rehydrate those snapshots. Setting an edited bound equal to the untouched displayed bound uses that bound's exact
+canonical value, avoiding rounding-induced inversion; an entirely untouched range still keeps both original bounds even
+when they display equally. Duration/distance caches remain independent, and an unchanged rounded yard pool
 length now preserves its exact saved metres. Source caches, range controls and reference input fields are never
 serialized into recipes or Firestore. New speed inputs invert the Sports Lib selected-unit numeric scale; pace/distance
 inputs retain the exact physical mile/yard denominators described above. Open editors capture normalized owner units.

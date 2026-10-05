@@ -59,6 +59,48 @@ describe('ordered manual workout targets', () => {
     }
   });
 
+  it.each(['pace', 'speed'] as const)('converts each completed %s field while another bound is unfinished', presentation => {
+    const next = presentation === 'pace' ? 'speed' : 'pace';
+    for (const units of preferences) {
+      const canonical: WorkoutTargetV1 = { kind: 'speed', mode: 'absolute', presentation,
+        minimumMetersPerSecond: 3.1234567890123, maximumMetersPerSecond: 4.9876543210987 };
+      const draft = workoutTargetToManualEditor(canonical, ActivityTypes.Running, units);
+      const switched = changeManualEditorTargetPresentation({ ...draft, maximum: null }, next, ActivityTypes.Running, units);
+      expect(switched.minimum).toBeNull();
+      expect(switched.maximum).toBe(workoutTargetToManualEditor({ ...canonical, presentation: next }, ActivityTypes.Running, units).maximum);
+      const returned = changeManualEditorTargetPresentation(switched, presentation, ActivityTypes.Running, units);
+      expect(returned.maximum).toBeNull();
+      expect(manualEditorTargetToWorkout({ ...returned, maximum: draft.maximum }, ActivityTypes.Running, units))
+        .toMatchObject(presentation === 'pace' ? { maximumMetersPerSecond: canonical.maximumMetersPerSecond }
+          : { minimumMetersPerSecond: canonical.minimumMetersPerSecond });
+
+      const relative: WorkoutTargetV1 = { kind: 'speed', mode: 'relative', presentation, minimumPercent: 80, maximumPercent: 120,
+        reference: { kind: 'threshold-speed', metersPerSecond: 3.1234567890123 } };
+      const relativeDraft = workoutTargetToManualEditor(relative, ActivityTypes.Running, units);
+      const changed = changeManualEditorTargetPresentation({ ...relativeDraft, maximum: Number.NaN }, next, ActivityTypes.Running, units);
+      expect(changed.minimum).toBe(80);
+      expect(changed.maximum).toBeNaN();
+      expect(manualEditorTargetToWorkout({ ...changed, maximum: 130 }, ActivityTypes.Running, units))
+        .toEqual({ ...relative, presentation: next, maximumPercent: 130 });
+    }
+  });
+
+  it('converts a manually entered reference while percentage bounds are still empty', () => {
+    const draft = { ...createManualWorkoutEditorTarget('speed'), mode: 'relative' as const, referenceValue: 5 };
+    const speed = changeManualEditorTargetPresentation(draft, 'speed', ActivityTypes.Running);
+    expect(speed.referenceValue).toBe(12);
+    expect(speed.minimum).toBeNull(); expect(speed.maximum).toBeNull();
+    expect(changeManualEditorTargetPresentation(speed, 'pace', ActivityTypes.Running).referenceValue).toBe(5);
+  });
+
+  it('does not overflow finite speed inputs when rounding their display precision', () => {
+    const canonical: WorkoutTargetV1 = { kind: 'speed', mode: 'absolute', presentation: 'speed',
+      minimumMetersPerSecond: 1e302, maximumMetersPerSecond: 1e302 };
+    const draft = workoutTargetToManualEditor(canonical, ActivityTypes.Running);
+    expect(Number.isFinite(draft.minimum)).toBe(true);
+    expect(manualEditorTargetToWorkout(draft, ActivityTypes.Running)).toEqual(canonical);
+  });
+
   it('accepts zero absolute speed, tiny speeds and single values', () => {
     for (const speed of [0, 1e-12, 3.1234567890123]) {
       const canonical: WorkoutTargetV1 = { kind: 'speed', mode: 'absolute', presentation: 'speed', minimumMetersPerSecond: speed, maximumMetersPerSecond: speed };
@@ -76,6 +118,21 @@ describe('ordered manual workout targets', () => {
       minimumMetersPerSecond: presentation === 'pace' ? canonical.maximumMetersPerSecond : canonical.minimumMetersPerSecond,
       maximumMetersPerSecond: presentation === 'pace' ? canonical.maximumMetersPerSecond : canonical.minimumMetersPerSecond,
     });
+  });
+
+  it.each(['pace', 'speed'] as const)('keeps an equal displayed %s range valid when one bound is set to the untouched bound', presentation => {
+    const canonical: WorkoutTargetV1 = { kind: 'speed', mode: 'absolute', presentation,
+      minimumMetersPerSecond: 3.1234567890123, maximumMetersPerSecond: 4.9876543210987 };
+    for (const units of preferences) for (const field of ['minimum', 'maximum'] as const) {
+      const draft = workoutTargetToManualEditor(canonical, ActivityTypes.Running, units);
+      const other = field === 'minimum' ? 'maximum' : 'minimum';
+      const target = manualEditorTargetToWorkout({ ...draft, [field]: draft[other] }, ActivityTypes.Running, units);
+      const value = (presentation === 'pace') === (other === 'minimum')
+        ? canonical.maximumMetersPerSecond : canonical.minimumMetersPerSecond;
+      expect(target).toEqual({ ...canonical, minimumMetersPerSecond: value, maximumMetersPerSecond: value });
+      expect(() => parseWorkoutStructureV1({ version: 1, sport: ActivityTypes.Running,
+        nodes: [{ kind: 'step', id: 'equal', purpose: 'work', ending: { kind: 'manual' }, targets: [target] }] })).not.toThrow();
+    }
   });
 
   it('preserves two mixed targets in order and enforces unique kinds and the two-target limit', () => {

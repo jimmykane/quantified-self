@@ -85,6 +85,22 @@ describe('WorkoutTargetsEditorComponent', () => {
     expect(manualEditorTargetToWorkout(host.targets()[0], host.sport, host.units)).toMatchObject({ minimumPercent: 130, maximumPercent: 130, reference: canonical.reference });
   });
 
+  it('keeps the saved speed reference through a presentation selection while a percentage is cleared', async () => {
+    const { fixture, host, settle } = await render();
+    const canonical = { kind: 'speed' as const, mode: 'relative' as const, presentation: 'pace' as const,
+      minimumPercent: 80, maximumPercent: 120, reference: { kind: 'threshold-speed' as const, metersPerSecond: 3.1234567890123 } };
+    host.targets.set([workoutTargetToManualEditor(canonical, host.sport, host.units)]); await settle();
+    const maximum = fixture.nativeElement.querySelector('input[aria-label="Maximum (%)"]') as HTMLInputElement;
+    maximum.value = ''; maximum.dispatchEvent(new Event('input', { bubbles: true })); await settle();
+    expect(host.targets()[0].maximum).toBeNull();
+    fixture.debugElement.queryAll(By.directive(MatSelect))[2].componentInstance.selectionChange.emit({ value: 'speed' }); await settle();
+    expect(fixture.nativeElement.textContent).toContain('Saved reference snapshot');
+    expect(fixture.nativeElement.querySelector('input[aria-label="Reference mph"]').value).not.toBe('');
+    maximum.value = '130'; maximum.dispatchEvent(new Event('input', { bubbles: true })); await settle();
+    expect(manualEditorTargetToWorkout(host.targets()[0], host.sport, host.units)).toEqual({ ...canonical, presentation: 'speed', maximumPercent: 130 });
+    expect(haptics.selection).toHaveBeenCalledOnce();
+  });
+
   it('ignores every action while saving and leaves the draft intact', async () => {
     const { child, host, settle } = await render();
     host.targets.set([{ ...createManualWorkoutEditorTarget('cadence'), minimum: 80, maximum: 90 }]); host.disabled.set(true); await settle();
