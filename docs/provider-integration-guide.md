@@ -807,6 +807,7 @@ in confirmation and status state.
 - Use the same queue format and processor as webhooks. Separate processing paths drift and create inconsistent duplicate or cleanup behavior.
 - Require the appropriate entitlement and connection state at request time, then re-check in the worker.
 - Use a per-user lease so duplicate browser clicks, tabs, or retried callables cannot run overlapping history scans.
+- Reflect an active history scan in the frontend using existing owner-readable server metadata. Wahoo uses the finite future `historyImportLeaseExpiresAt` value to show **Import already running** and block another submission across dialog reopenings. Clear that state when the lease is removed or expires, then apply the normal cooldown. Keep the server lease authoritative: metadata is only a display hint. Treat Wahoo callable `already-exists` contention as a normal wait status without a false success, error haptic, or frontend error report; preserve unexpected failure logging even after the dialog closes. Late completions must not update a destroyed dialog.
 - Record enough cursor/range state to make failures observable without exposing provider data.
 - For a multi-minute import, re-read and expiry-refresh the exact credential before every provider request while proving the original provider identity, credential generation, OAuth root generation, connection generation, and deletion state still own the work. Do not treat expiration of a token cached at worker startup as evidence that the user must reconnect.
 - When any terminal path removes a durable cursor, mark only its matching observable progress state terminal in the same guarded transaction as the DLQ move. Apply the same guarded progress transition when rollout or lifecycle removal skips the cursor. Never leave progress running after its final queue row is gone or overwrite progress owned by a newer import.
@@ -1095,7 +1096,7 @@ The Activity Sync queue view also breaks out historical sends (`deliveryMode: hi
 ### What to monitor after release
 
 - OAuth starts, callback failures, provider denial/cancel rates, duplicate or ambiguous provider identities, and token-refresh failures;
-- webhook authentication failures, accepted/skipped payloads, duplicate/superseded revisions, and history lease collisions;
+- webhook authentication failures, accepted/skipped payloads, duplicate/superseded revisions, and history lease collisions (Wahoo contention remains observable at the callable boundary, while the frontend presents it as a wait status);
 - queue depth, age/lag, retries, stuck work, DLQ growth, and Cloud Task dispatch failures;
 - provider 429s, pagination errors, signed-file download rejects, timeouts, parsing failures, and original-file retention failures;
 - disconnect-pending age, deauthorization failures, entitlement enforcement, and cleanup/deletion failures.
@@ -1134,7 +1135,7 @@ Add deterministic tests next to the code being changed. The minimum set for an a
 | File worker      | Allowed host/redirect checks, unsafe URL rejection, size/type/FIT validation, missing/expired URL detail recovery, metadata preservation, timeout, retry/DLQ behavior, and original-file persistence. |
 | Lifecycle        | Disconnect pending/retry, entitlement enforcement, cleanup ownership races, recursive deletion, and account deletion guards before every write.                                                 |
 | Rules            | Token/queue client denial, optional-mapping denial, and safe owner metadata read.                                                                                                               |
-| Frontend         | Provider navigation, query selection, server-verified connection states and retry behavior, focused tool dialog, Pro and keyboard-accessible upsell behavior, help, policies, integration page, route metadata, sitemap, and logo. |
+| Frontend         | Provider navigation, query selection, server-verified connection states and retry behavior, focused tool dialog, live history-lease reopen/clear/expiry/renewal and duplicate status, teardown feedback, Pro and keyboard-accessible upsell behavior, help, policies, integration page, route metadata, sitemap, and logo. |
 | Admin            | Queue stats inclusion, user filter/enrichment, labels/logos, and existing admin authorization.                                                                                                  |
 
 Run the narrowest tests after each edit round, then run the relevant builds before handoff:

@@ -87,6 +87,8 @@ activity launch checklist below as a requirement to create a sandbox or apply fo
 
 Webhook delivery and history are idempotent. The deterministic queue and event IDs use the Wahoo user and workout IDs; a newer workout-summary revision reopens the same queue item instead of creating a duplicate event.
 
+The history dialog reads the existing server-owned `historyImportLeaseExpiresAt` from the user's Wahoo service metadata. A finite future expiry shows **Import already running** and disables submission, including after the dialog is closed and reopened. Removing or expiring the lease resumes the normal form/cooldown rules; renewing it replaces the expiry timer. This lease covers the history scan that queues activities, not completion of background activity processing. Closing the dialog does not cancel accepted server work. Metadata is a UI hint, and the callable transaction remains authoritative. If a competing tab wins before metadata arrives, Wahoo `functions/already-exists` (or `already-exists`) shows a wait message without a success event, error haptic, or Sentry report. Unexpected failures remain logged; destroyed dialogs receive no late UI feedback, and expiry timers are cleared on teardown.
+
 ## Configuration
 
 Functions require:
@@ -127,3 +129,5 @@ Wahoo requires six composite indexes: one `tokens` collection-group index on `wa
 5. Deploy the Firestore indexes, Rules, queue TTL configuration, Functions, and Hosting artifacts through the normal release workflow.
 6. Exercise OAuth with activity, route, Plan and Workout scopes; webhook handling; edited-workout deduplication; history pagination/rate limiting; activity and route delivery; planned-workout create/update/reschedule/copy/Stop; duplicate recovery; saved-zone today/+6 behavior; disconnect; expired-Pro enforcement; and account deletion with authorized test accounts. Do not treat cloud acceptance as a device receipt.
 7. Monitor callable/webhook error rates, Training delivery outcomes and queue age/retries, reconnect prompts, skipped reasons, FIT download failures, Wahoo upload status failures, Wahoo 429 responses, and cleanup failures. Wahoo Training delivery is already live under approved enablement; #655 does not require code rollback work or disabling its source-controlled flag. Normal Stop, disconnect and deletion safeguards remain product behavior. Future deployment still needs separate approval.
+
+The running-history dialog fix requires only an approved frontend Hosting release. It adds no Functions, Rules, indexes, persisted fields, credentials, consent, provider requests, or MCP/Training contract changes. Verify dialog reopen, lease clear/expiry/renewal, completion cooldown, expected duplicate rejection, unexpected failure logging, and teardown with mocked calls before release. Rollback uses the previous frontend artifact; accepted server imports and their existing leases remain intact.

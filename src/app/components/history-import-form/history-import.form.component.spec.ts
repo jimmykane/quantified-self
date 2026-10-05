@@ -1,4 +1,4 @@
-import { vi, describe, it, expect, beforeEach } from 'vitest';
+import { vi, describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { HistoryImportFormComponent } from './history-import.form.component';
 import { MatDatepickerModule } from '@angular/material/datepicker';
@@ -18,6 +18,7 @@ import { AppAnalyticsService } from '../../services/app.analytics.service';
 import { LoggerService } from '../../services/logger.service';
 import { AppAuthService } from '../../authentication/app.auth.service';
 import { AppSleepService } from '../../services/app.sleep.service';
+import { AppHapticsService } from '../../services/app.haptics.service';
 import { APP_STORAGE } from '../../services/storage/app.storage.token';
 import { Firestore } from 'app/firebase/firestore';
 import { of } from 'rxjs';
@@ -57,8 +58,10 @@ describe('HistoryImportFormComponent', () => {
     let mockAuthService: any;
     let mockSleepService: any;
     let snackBar: MatSnackBar;
+    let haptics: { selection: ReturnType<typeof vi.fn>; success: ReturnType<typeof vi.fn>; error: ReturnType<typeof vi.fn> };
 
     beforeEach(async () => {
+        haptics = { selection: vi.fn(), success: vi.fn(), error: vi.fn() };
         mockEventService = {};
         mockUserService = {
             isPro: vi.fn().mockResolvedValue(true),
@@ -127,6 +130,7 @@ describe('HistoryImportFormComponent', () => {
                 { provide: LoggerService, useValue: mockLoggerService },
                 { provide: AppAuthService, useValue: mockAuthService },
                 { provide: AppSleepService, useValue: mockSleepService },
+                { provide: AppHapticsService, useValue: haptics },
                 { provide: Firestore, useValue: {} },
                 { provide: APP_STORAGE, useValue: localStorage },
             ]
@@ -145,6 +149,237 @@ describe('HistoryImportFormComponent', () => {
 
     it('should create', () => {
         expect(component).toBeTruthy();
+    });
+
+    describe('Wahoo running history imports', () => {
+        beforeEach(async () => {
+            await fixture.whenStable();
+            fixture.componentRef.setInput('serviceName', ServiceNames.WahooAPI);
+            fixture.componentRef.setInput('userMetaForService', {});
+            fixture.detectChanges();
+            component.formGroup.patchValue({ startDate: new Date(), endDate: new Date(), accepted: true });
+        });
+
+        afterEach(() => {
+            fixture.destroy();
+            vi.useRealTimers();
+        });
+
+        it('blocks a reopened dialog from submitting while its live history lease is active', async () => {
+            fixture.destroy();
+            fixture = TestBed.createComponent(HistoryImportFormComponent);
+            component = fixture.componentInstance;
+            fixture.componentRef.setInput('serviceName', ServiceNames.WahooAPI);
+            fixture.componentRef.setInput('userMetaForService', { historyImportLeaseExpiresAt: Date.now() + 60_000 });
+            fixture.detectChanges();
+            await Promise.resolve();
+            fixture.detectChanges();
+            component.formGroup.patchValue({ startDate: new Date(), endDate: new Date(), accepted: true });
+
+            expect(component.formGroup.disabled).toBe(true);
+            expect(fixture.nativeElement.textContent).toContain('A Wahoo history import is already running');
+            expect(fixture.nativeElement.querySelector('.history-import-form')).toBeNull();
+            await component.onSubmit(new Event('submit'));
+            expect(mockUserService.importServiceHistoryForCurrentUser).not.toHaveBeenCalled();
+            expect(haptics.selection).not.toHaveBeenCalled();
+        });
+
+        it.each(['clears', 'expires'] as const)('resumes the form when the live lease %s', async change => {
+            vi.useFakeTimers();
+            fixture.componentRef.setInput('userMetaForService', { historyImportLeaseExpiresAt: Date.now() + 5_000 });
+            fixture.detectChanges();
+            expect(component.formGroup.disabled).toBe(true);
+
+            if (change === 'clears') {
+                fixture.componentRef.setInput('userMetaForService', {});
+            } else {
+                await vi.advanceTimersByTimeAsync(5_000);
+            }
+            fixture.detectChanges();
+
+            expect(component.formGroup.enabled).toBe(true);
+            expect(fixture.nativeElement.querySelector('.history-import-form')).not.toBeNull();
+            expect(haptics.selection).not.toHaveBeenCalled();
+            expect(haptics.success).not.toHaveBeenCalled();
+        });
+
+        it('preserves the normal cooldown when a running import completes', () => {
+            fixture.componentRef.setInput('userMetaForService', { historyImportLeaseExpiresAt: Date.now() + 60_000 });
+            fixture.detectChanges();
+            fixture.componentRef.setInput('userMetaForService', {
+                didLastHistoryImport: Date.now(),
+                processedActivitiesFromLastHistoryImportCount: 100,
+            });
+            fixture.detectChanges();
+
+            expect(component.formGroup.disabled).toBe(true);
+            expect(component.isAllowedToDoHistoryImport).toBe(false);
+            expect(fixture.nativeElement.textContent).not.toContain('A Wahoo history import is already running');
+            expect(fixture.nativeElement.textContent).toContain('Cooldown active');
+        });
+
+        it('keeps a renewed lease active after the previous expiry passes', async () => {
+            vi.useFakeTimers();
+            fixture.componentRef.setInput('userMetaForService', { historyImportLeaseExpiresAt: Date.now() + 5_000 });
+            fixture.detectChanges();
+            await vi.advanceTimersByTimeAsync(1_000);
+            fixture.componentRef.setInput('userMetaForService', { historyImportLeaseExpiresAt: Date.now() + 10_000 });
+            fixture.detectChanges();
+            await vi.advanceTimersByTimeAsync(4_000);
+            fixture.detectChanges();
+
+            expect(component.formGroup.disabled).toBe(true);
+            expect(component.isWahooHistoryImportRunning()).toBe(true);
+            await vi.advanceTimersByTimeAsync(6_000);
+            fixture.detectChanges();
+            expect(component.formGroup.enabled).toBe(true);
+        });
+
+        it('cleans up the expiry timer when the dialog is closed', async () => {
+            vi.useFakeTimers();
+            fixture.componentRef.setInput('userMetaForService', { historyImportLeaseExpiresAt: Date.now() + 5_000 });
+            fixture.detectChanges();
+            const timerCount = vi.getTimerCount();
+            fixture.destroy();
+            expect(vi.getTimerCount()).toBeLessThan(timerCount);
+            await vi.advanceTimersByTimeAsync(5_000);
+            expect(component.isWahooHistoryImportRunning()).toBe(true);
+            expect(haptics.selection).not.toHaveBeenCalled();
+        });
+
+        it('does not initialize live import state after a dialog closes during authentication', async () => {
+            let resolveUser!: (value: { uid: string; stripeRole: string }) => void;
+            mockAuthService.getUser.mockReturnValueOnce(new Promise(resolve => { resolveUser = resolve; }));
+            fixture.destroy();
+            fixture = TestBed.createComponent(HistoryImportFormComponent);
+            component = fixture.componentInstance;
+            fixture.componentRef.setInput('serviceName', ServiceNames.WahooAPI);
+            fixture.componentRef.setInput('userMetaForService', { historyImportLeaseExpiresAt: Date.now() + 60_000 });
+            fixture.detectChanges();
+            fixture.destroy();
+            resolveUser({ uid: '123', stripeRole: 'pro' });
+            await Promise.resolve();
+
+            expect(component.isWahooHistoryImportRunning()).toBe(false);
+            expect(component.isAllowedToDoHistoryImport).toBe(false);
+            expect(haptics.selection).not.toHaveBeenCalled();
+        });
+
+        it('skips submission when live metadata becomes busy during the render delay', async () => {
+            vi.useFakeTimers();
+            const submission = component.onSubmit(new Event('submit'));
+            fixture.componentRef.setInput('userMetaForService', { historyImportLeaseExpiresAt: Date.now() + 5_000 });
+            fixture.detectChanges();
+            await vi.advanceTimersByTimeAsync(100);
+            await submission;
+
+            expect(mockUserService.importServiceHistoryForCurrentUser).not.toHaveBeenCalled();
+            expect(component.formGroup.disabled).toBe(true);
+            expect(component.isSubmitting).toBe(false);
+            expect(haptics.selection).toHaveBeenCalledTimes(1);
+            expect(haptics.success).not.toHaveBeenCalled();
+            expect(haptics.error).not.toHaveBeenCalled();
+        });
+
+        it('keeps submission disabled through metadata refresh and after success', async () => {
+            vi.useFakeTimers();
+            let resolveImport!: (value: boolean) => void;
+            mockUserService.importServiceHistoryForCurrentUser.mockReturnValueOnce(new Promise<boolean>(resolve => { resolveImport = resolve; }));
+            const submission = component.onSubmit(new Event('submit'));
+            await vi.advanceTimersByTimeAsync(100);
+            fixture.componentRef.setInput('userMetaForService', {});
+            fixture.detectChanges();
+            expect(component.formGroup.disabled).toBe(true);
+            await component.onSubmit(new Event('submit'));
+            resolveImport(true);
+            await submission;
+            await component.onSubmit(new Event('submit'));
+
+            expect(mockUserService.importServiceHistoryForCurrentUser).toHaveBeenCalledTimes(1);
+            expect(component.formGroup.disabled).toBe(true);
+            expect(component.isHistoryImportPending()).toBe(true);
+            expect(haptics.selection).toHaveBeenCalledTimes(1);
+            expect(haptics.success).toHaveBeenCalledTimes(1);
+            expect(haptics.error).not.toHaveBeenCalled();
+        });
+
+        it.each([undefined, null, Number.NaN, Number.POSITIVE_INFINITY, 0])('ignores an absent or invalid lease expiry %s', expiry => {
+            fixture.componentRef.setInput('userMetaForService', { historyImportLeaseExpiresAt: expiry });
+            fixture.detectChanges();
+            expect(component.formGroup.enabled).toBe(true);
+        });
+
+        it('does not apply the Wahoo lease to another provider', () => {
+            fixture.componentRef.setInput('serviceName', ServiceNames.COROSAPI);
+            fixture.componentRef.setInput('userMetaForService', { historyImportLeaseExpiresAt: Date.now() + 60_000 });
+            fixture.detectChanges();
+            expect(component.formGroup.enabled).toBe(true);
+        });
+
+        it.each(['functions/already-exists', 'already-exists'])('handles %s as a normal running status without a false success', async code => {
+            const error = Object.assign(new Error('A Wahoo history import is already running.'), { code });
+            mockUserService.importServiceHistoryForCurrentUser.mockRejectedValueOnce(error);
+            const emit = vi.spyOn(component.importInitiated, 'emit');
+
+            await component.onSubmit(new Event('submit'));
+
+            expect(mockLoggerService.error).not.toHaveBeenCalled();
+            expect(snackBar.open).toHaveBeenCalledWith(
+                'A Wahoo history import is already running. Please wait for it to finish.',
+                undefined,
+                { duration: 4000 },
+            );
+            expect(emit).not.toHaveBeenCalled();
+            expect(component.isHistoryImportPending()).toBe(false);
+            expect(component.pendingImportResult()).toBeNull();
+            expect(haptics.selection).toHaveBeenCalledTimes(1);
+            expect(haptics.success).not.toHaveBeenCalled();
+            expect(haptics.error).not.toHaveBeenCalled();
+        });
+
+        it.each([['Wahoo failure', ServiceNames.WahooAPI, 'functions/unavailable'], ['other provider', ServiceNames.SuuntoApp, 'functions/already-exists']] as const)(
+            'still reports an unexpected import error for %s', async (_case, service, code) => {
+                fixture.componentRef.setInput('serviceName', service);
+                fixture.detectChanges();
+                const error = Object.assign(new Error('Import failed'), { code });
+                mockUserService.importServiceHistoryForCurrentUser.mockRejectedValueOnce(error);
+
+                await component.onSubmit(new Event('submit'));
+
+                expect(mockLoggerService.error).toHaveBeenCalledWith(error);
+                expect(haptics.error).toHaveBeenCalledTimes(1);
+            },
+        );
+
+        it.each(['success', 'failure'] as const)('discards late %s feedback after the dialog is closed', async outcome => {
+            let resolveImport!: (value: boolean) => void;
+            let rejectImport!: (error: Error) => void;
+            mockUserService.importServiceHistoryForCurrentUser.mockReturnValueOnce(new Promise<boolean>((resolve, reject) => {
+                resolveImport = resolve;
+                rejectImport = reject;
+            }));
+            const emit = vi.spyOn(component.importInitiated, 'emit');
+            const submission = component.onSubmit(new Event('submit'));
+            await vi.waitFor(() => expect(mockUserService.importServiceHistoryForCurrentUser).toHaveBeenCalledTimes(1));
+            fixture.destroy();
+            const error = new Error('late failure');
+            if (outcome === 'success') {
+                resolveImport(true);
+            } else {
+                rejectImport(error);
+            }
+            await submission;
+
+            expect(emit).not.toHaveBeenCalled();
+            if (outcome === 'failure') {
+                expect(mockLoggerService.error).toHaveBeenCalledWith(error);
+            } else {
+                expect(mockLoggerService.error).not.toHaveBeenCalled();
+            }
+            expect(snackBar.open).not.toHaveBeenCalled();
+            expect(haptics.success).not.toHaveBeenCalled();
+            expect(haptics.error).not.toHaveBeenCalled();
+        });
     });
 
     it.each([

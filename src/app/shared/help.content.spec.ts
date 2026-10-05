@@ -1656,6 +1656,9 @@ describe('help.content', () => {
     const serviceConnectionsSection = HELP_SECTIONS.find(section => section.id === 'service-connections');
     expect(serviceConnectionsSection?.content).toContain('## Wahoo');
     expect(serviceConnectionsSection?.content).toContain('Workouts without a FIT file are skipped');
+    expect(serviceConnectionsSection?.content).toContain('Services shows **Import already running** and prevents another request');
+    expect(serviceConnectionsSection?.content).toContain('Closing the dialog does not cancel the import');
+    expect(serviceConnectionsSection?.content).toContain('queued activities continue processing in the background');
     expect(serviceConnectionsSection?.content).toContain('does **not** delete activities already imported');
     expect(serviceConnectionsSection?.content).toContain('send a FIT activity file directly to Wahoo');
     expect(serviceConnectionsSection?.content).toContain('checks that same upload instead of sending the FIT again');
