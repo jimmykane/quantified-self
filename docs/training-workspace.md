@@ -1116,6 +1116,20 @@ without horizontal page overflow. Selection haptics belong to explicit UI action
 the actual result, and hydration, typing, and unchanged choices stay silent. Phone emulation verifies layout and wiring,
 not physical vibration or a real mobile keyboard.
 
+The shared scheduled/library workout editor uses content-sized Material hint/error regions: wrapped pool-length help
+and validation messages reserve their real height instead of colliding with the next field or **Save to** legend.
+Controls align at the top of each grid row, with 16px row gaps and 24px between editor sections. Pool length and its
+unit stay together on a separate row; the undated library basics use two columns. Step/exercise inputs have space below
+their compact-row headings, and repeat controls are separated from the first repeated step.
+On wide screens, Hours/Minutes/Seconds share the ending row; at 1100px and below, they occupy their own full-width row.
+Strength sets switch to two columns at that same breakpoint, keep Remove beside the set number, and separate sets with
+a divider. Phones keep Set type and Rest full-width while pairing Reps/Seconds with Load. Short visual load/rest labels
+retain explicit units, optional hints and full accessible names. Existing Material touch targets, thin scrollbars,
+keyboard order, haptics and sticky save actions remain unchanged.
+MCP impact review: this spacing/label pass changes no recipe, canonical values, schedule/library mutations, read
+projections, scopes, consent, Assistant guidance, provider mapping or registered contract. App Help's existing
+step, pool-length, strength-unit and library instructions remain accurate; no help-content change is needed.
+
 A newly created plan remains selectable using the server-acknowledged record and revision until the independent live
 plan and state listeners catch up. This transient, user-scoped bridge prevents jumping back to a previously active plan
 or issuing the next mutation against the pre-creation revision; it does not replace the live schedule or persist a cache.

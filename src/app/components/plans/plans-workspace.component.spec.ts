@@ -10,7 +10,7 @@ import { MAT_ICON_DEFAULT_OPTIONS } from '@angular/material/icon';
 import { MatSnackBar } from '@angular/material/snack-bar';
 import { MatDatepickerInput } from '@angular/material/datepicker';
 import { MatSelect } from '@angular/material/select';
-import { MatFormField } from '@angular/material/form-field';
+import { MAT_FORM_FIELD_DEFAULT_OPTIONS, MatFormField } from '@angular/material/form-field';
 import { ActivatedRoute, Router, convertToParamMap, provideRouter, type Data, type ParamMap } from '@angular/router';
 import { ActivityTypes, AppThemes, DistanceUnits, PaceUnits, SwimPaceUnits, WeightUnits } from '@sports-alliance/sports-lib';
 import { normalizeUserUnitSettings } from '@shared/unit-aware-display';
@@ -557,6 +557,7 @@ describe('PlansWorkspaceComponent', () => {
 
   it('exports the real timing editor for optional isolated visual QA', async () => {
     if (!process.env.TRAINING_DELIVERY_QA_DIR) return;
+    TestBed.overrideProvider(MAT_FORM_FIELD_DEFAULT_OPTIONS, { useValue: { appearance: 'outline' } });
     setRouteState({ mode: 'create', scope: 'standalone', date: '2026-09-09' });
     const fixture = await renderPlans();
     const component = fixture.componentInstance;
@@ -572,6 +573,8 @@ describe('PlansWorkspaceComponent', () => {
       ['app-plans-workspace', 'src/app/components/plans/plans-workspace.component.scss'],
       ['app-compact-row', 'src/app/components/shared/compact-row/compact-row.component.scss'],
       ['app-workout-time-input', 'src/app/components/plans/workout-time-input.component.scss'],
+      ['app-page-header', 'src/app/components/shared/page-header/page-header.component.scss'],
+      ['app-workout-profile', 'src/app/components/plans/workout-profile.component.scss'],
     ].map(([host, file]) => sass.compileString(host + ' {' + readFileSync(file, 'utf8')
       .replace(/:host\(([^)]+)\)/g, '&$1').replace(/:host/g, '&') + '}').css).join('\n');
     const markup = fixture.nativeElement.cloneNode(true) as HTMLElement;
@@ -605,6 +608,38 @@ describe('PlansWorkspaceComponent', () => {
         .replace('</head>', menuStyles + '</head>')
         .replace('</body>', overlay.outerHTML + '</body>'));
     trigger.closeMenu(); fixture.detectChanges(); await fixture.whenStable();
+
+    const exportEditor = async (name: string) => {
+      fixture.detectChanges(); await fixture.whenStable(); fixture.detectChanges();
+      const view = fixture.nativeElement.cloneNode(true) as HTMLElement;
+      const values: HTMLInputElement[] = [...fixture.nativeElement.querySelectorAll('input')];
+      view.querySelectorAll('input').forEach((input, index) => input.setAttribute('value', values[index].value));
+      for (const dark of [false, true]) {
+        writeFileSync(join(process.env.TRAINING_DELIVERY_QA_DIR!, name + (dark ? '-dark' : '') + '.html'),
+          '<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">'
+          + '<link rel="stylesheet" href="styles.css">' + Array.from(document.head.querySelectorAll('style')).map(style => style.outerHTML).join('')
+          + '<style>' + css + '</style></head><body class="app-hydrated' + (dark ? ' dark-theme' : '')
+          + '"><app-plans-workspace>' + view.outerHTML + '</app-plans-workspace></body></html>');
+      }
+    };
+    await exportEditor('pace-editor');
+    component.updateEditorField('sport', ActivityTypes.Swimming);
+    component.updateEditorField('title', 'Pool session with optional length');
+    await exportEditor('pool-editor');
+    component.updateEditorDestination(schedule.plans[0].id);
+    await exportEditor('plan-pool-editor');
+    component.updateEditorField('sport', ActivityTypes.StrengthTraining);
+    component.updateStrengthExerciseName(0, 'Squat with a long exercise name');
+    component.updateStrengthSet(0, 0, 'value', 5);
+    component.addStrengthSet(0);
+    component.updateStrengthSet(0, 1, 'kind', 'time');
+    component.updateStrengthSet(0, 1, 'value', 30);
+    await exportEditor('strength-editor');
+    setRouteState({ mode: 'library-create' }, true);
+    await fixture.whenStable(); fixture.detectChanges();
+    component.updateEditorField('sport', ActivityTypes.Swimming);
+    component.updateEditorField('title', 'Undated swim recipe');
+    await exportEditor('library-editor');
   });
 
   function setRouteState(options: {
@@ -1900,7 +1935,8 @@ describe('PlansWorkspaceComponent', () => {
     editor.updateStrengthSet(0, 1, 'value', 30);
     fixture.detectChanges();
     expect(fixture.nativeElement.textContent).toContain('Exercises and sets');
-    expect(fixture.nativeElement.textContent).toContain('External load (kg, optional)');
+    expect(fixture.nativeElement.textContent).toContain('Load (kg)');
+    expect(fixture.nativeElement.textContent).toContain('Optional external load');
     await editor.saveWorkout();
     expect(mutate).toHaveBeenCalledWith(expect.objectContaining({ operation: expect.objectContaining({
       kind: 'create-workout', strength: expect.objectContaining({ exercises: [expect.objectContaining({
@@ -1942,7 +1978,8 @@ describe('PlansWorkspaceComponent', () => {
     fixture.detectChanges();
     const editor = fixture.componentInstance;
     expect(editor.editorWeightUnit()).toBe('lb');
-    expect(fixture.nativeElement.textContent).toContain('External load (lb, optional)');
+    expect(fixture.nativeElement.textContent).toContain('Load (lb)');
+    expect(fixture.nativeElement.querySelector('input[aria-label="External load (lb, optional)"]')).toBeTruthy();
     expect(editor.strengthLoadInputValue(80)).toBe(176.4);
     unitUser.set({ ...unitUser(), settings: { unitSettings: normalizeUserUnitSettings({}) } });
     editor.updateEditorField('title', 'Edited strength');
@@ -2458,7 +2495,7 @@ describe('PlansWorkspaceComponent', () => {
     expect(haptics.selection).toHaveBeenCalledOnce();
     expect(fixture.nativeElement.querySelector('mat-expansion-panel')).toBeNull();
     if (process.env.TRAINING_DELIVERY_QA_DIR) {
-      const sass = createRequire(createRequire(import.meta.url).resolve('@angular/build/package.json'))('sass');
+      const sass = createRequire(createRequire(resolve('package.json')).resolve('@angular/build/package.json'))('sass');
       const css = [
         ['app-plans-workspace', 'src/app/components/plans/plans-workspace.component.scss'],
         ['app-compact-row', 'src/app/components/shared/compact-row/compact-row.component.scss'],

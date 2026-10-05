@@ -425,14 +425,14 @@
     @if (editor(); as session) {
       <section class="workout-editor" aria-labelledby="plans-title">
           <fieldset class="editor-fields" [disabled]="busyAction() !== null" aria-label="Workout details">
-          <div class="workout-editor-basics">
-            <mat-form-field>
+          <div class="workout-editor-basics" [class.workout-editor-basics--library]="libraryView()">
+            <mat-form-field subscriptSizing="dynamic">
               <mat-label>Workout title</mat-label>
               <input #workoutTitleInput matInput maxlength="120" [ngModel]="session.value.title"
                 (ngModelChange)="updateEditorField('title', $event)">
             </mat-form-field>
             @if (!libraryView()) {
-            <mat-form-field>
+            <mat-form-field subscriptSizing="dynamic">
               <mat-label>Date</mat-label>
               <input matInput required [matDatepicker]="workoutDatePicker" [ngModel]="workoutDatePickerValue()"
                 (dateInput)="updateWorkoutDateInput($event.value)"
@@ -442,7 +442,7 @@
               <mat-error>Choose a valid date.</mat-error>
             </mat-form-field>
             }
-            <mat-form-field>
+            <mat-form-field subscriptSizing="dynamic">
               <mat-label>Sport</mat-label>
               <mat-select [value]="session.value.sport" [disabled]="busyAction() !== null"
                 (selectionChange)="updateEditorField('sport', $event.value)">
@@ -457,14 +457,15 @@
               </mat-select>
             </mat-form-field>
             @if (editorIsPoolSwimming()) {
-              <mat-form-field>
+            <div class="workout-pool-fields">
+              <mat-form-field subscriptSizing="dynamic">
                 <mat-label>Pool length (optional)</mat-label>
                 <input matInput type="number" min="1" max="1000" step="0.01"
                   [ngModel]="session.value.poolLengthValue ?? null"
                   (ngModelChange)="updateEditorField('poolLengthValue', $event === '' || $event === null ? null : +$event)">
                 <mat-hint>Leave empty for an unspecified pool size. Some Garmin devices need a specified length.</mat-hint>
               </mat-form-field>
-              <mat-form-field>
+              <mat-form-field subscriptSizing="dynamic">
                 <mat-label>Pool unit</mat-label>
                 <mat-select [value]="session.value.poolLengthUnit ?? 'meters'" [disabled]="busyAction() !== null"
                   (selectionChange)="updateEditorField('poolLengthUnit', $event.value)">
@@ -472,6 +473,7 @@
                   <mat-option value="yards">Yards</mat-option>
                 </mat-select>
               </mat-form-field>
+            </div>
             }
           </div>
 
@@ -538,7 +540,7 @@
                       @for (set of exercise.sets; track set.id; let setIndex = $index) {
                         <div class="strength-set-fields" [attr.aria-label]="exercise.name + ' set ' + (setIndex + 1)">
                           <span class="strength-set-number">Set {{ setIndex + 1 }}</span>
-                          <mat-form-field subscriptSizing="dynamic">
+                          <mat-form-field class="strength-set-type" subscriptSizing="dynamic">
                             <mat-label>Set type</mat-label>
                             <mat-select [value]="set.ending.kind"
                               (selectionChange)="updateStrengthSet(exerciseIndex, setIndex, 'kind', $event.value)">
@@ -553,14 +555,18 @@
                               (ngModelChange)="updateStrengthSet(exerciseIndex, setIndex, 'value', $event)">
                           </mat-form-field>
                           <mat-form-field subscriptSizing="dynamic">
-                            <mat-label>External load ({{ editorWeightUnit() }}, optional)</mat-label>
+                            <mat-label>Load ({{ editorWeightUnit() }})</mat-label>
                             <input matInput type="number" min="0" step="any" [ngModel]="strengthLoadInputValue(set.externalLoadKg)"
+                              [attr.aria-label]="'External load (' + editorWeightUnit() + ', optional)'"
                               (ngModelChange)="updateStrengthSet(exerciseIndex, setIndex, 'externalLoadKg', $event)">
+                            <mat-hint>Optional external load</mat-hint>
                           </mat-form-field>
-                          <mat-form-field subscriptSizing="dynamic">
-                            <mat-label>Rest after (seconds, optional)</mat-label>
+                          <mat-form-field class="strength-set-rest" subscriptSizing="dynamic">
+                            <mat-label>Rest after (s)</mat-label>
                             <input matInput type="number" min="1" step="1" [ngModel]="set.restAfterSeconds ?? null"
+                              aria-label="Rest after (seconds, optional)"
                               (ngModelChange)="updateStrengthSet(exerciseIndex, setIndex, 'restAfterSeconds', $event)">
+                            <mat-hint>Optional</mat-hint>
                           </mat-form-field>
                           <button appHapticTap mat-icon-button type="button" matTooltip="Remove set"
                             [attr.aria-label]="'Remove set ' + (setIndex + 1) + ' of ' + exercise.name"
