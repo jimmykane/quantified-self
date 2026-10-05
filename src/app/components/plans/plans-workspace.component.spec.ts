@@ -11,7 +11,7 @@ import { MatDatepickerInput } from '@angular/material/datepicker';
 import { MatSelect } from '@angular/material/select';
 import { MatFormField } from '@angular/material/form-field';
 import { ActivatedRoute, Router, convertToParamMap, provideRouter, type Data, type ParamMap } from '@angular/router';
-import { ActivityTypes, DistanceUnits, PaceUnits, SwimPaceUnits, WeightUnits } from '@sports-alliance/sports-lib';
+import { ActivityTypes, AppThemes, DistanceUnits, PaceUnits, SwimPaceUnits, WeightUnits } from '@sports-alliance/sports-lib';
 import { normalizeUserUnitSettings } from '@shared/unit-aware-display';
 import { projectStrengthWorkoutToV1 } from '@shared/strength-workout';
 import type { ScheduledWorkoutV1 } from '@shared/training-plans';
@@ -20,6 +20,9 @@ import dayjs from 'dayjs';
 import { BehaviorSubject, Subject, concat, defer, of, type Observable } from 'rxjs';
 import { AppUserService } from '../../services/app.user.service';
 import { AppHapticsService } from '../../services/app.haptics.service';
+import { AppThemeService } from '../../services/app.theme.service';
+import { EChartsLoaderService } from '../../services/echarts-loader.service';
+import { WorkoutProfileComponent } from './workout-profile.component';
 import { TrainingDeliveryService } from '../../services/training-delivery.service';
 import { TrainingWorkoutDuplicateService } from '../../services/training-workout-duplicate.service';
 import { WorkoutLibraryService } from '../../services/workout-library.service';
@@ -115,6 +118,8 @@ describe('PlansWorkspaceComponent', () => {
     await TestBed.configureTestingModule({
       imports: [PlansWorkspaceComponent],
       providers: [
+        { provide: AppThemeService, useValue: { appTheme: signal(AppThemes.Normal) } },
+        { provide: EChartsLoaderService, useValue: { init: vi.fn().mockResolvedValue(null), dispose: vi.fn() } },
         provideRouter([]),
         { provide: MAT_ICON_DEFAULT_OPTIONS, useValue: { fontSet: 'material-symbols-rounded' } },
         { provide: ActivatedRoute, useValue: route },
@@ -155,6 +160,50 @@ describe('PlansWorkspaceComponent', () => {
   });
 
   afterEach(() => vi.useRealTimers());
+
+  it('previews exact live canonical steps, preserves selection when reordered and hides an invalid draft without writes', async () => {
+    setRouteState({ mode: 'create', scope: 'standalone', date: '2026-09-09' });
+    const fixture = await renderPlans();
+    const component = fixture.componentInstance;
+    component.updateStep(0, null, 'endingValue', 1.25, 75);
+    component.addEditorStep(); fixture.detectChanges(); await fixture.whenStable();
+    const profile = fixture.debugElement.query(By.directive(WorkoutProfileComponent)).componentInstance as WorkoutProfileComponent;
+    expect(component.editorProfile().nodes[0]).toMatchObject({ ending: { kind: 'time', seconds: 75 } });
+    const selected = profile.steps()[0];
+    profile.selectStep(selected); fixture.detectChanges();
+    expect(component.editorProfileStepId()).toBe(selected.stepId);
+    component.moveEditorNode(selected.stepId, 1); fixture.detectChanges(); await fixture.whenStable();
+    expect(profile.selected()).toMatchObject({ stepId: selected.stepId, ordinal: 2 });
+    expect(component.editorProfileStepId()).toBe(selected.stepId);
+    expect(fixture.nativeElement.querySelector('.workout-node-row.profile-selected')).not.toBeNull();
+    component.updateStep(1, null, 'endingValue', 0); fixture.detectChanges();
+    expect(component.editorProfile()).toBeNull();
+    expect(fixture.nativeElement.querySelector('.profile-chart')).toBeNull();
+    expect(component.editorProfileStepId()).toBeNull();
+    expect(mutate).not.toHaveBeenCalled(); expect(libraryMutate).not.toHaveBeenCalled();
+  });
+
+  it('profiles a full saved library recipe independently of the narrower interval editor', async () => {
+    const full = { ...schedule.workouts[0].structure, nodes: [{ kind: 'step' as const, id: 'full', purpose: 'work' as const,
+      ending: { kind: 'kilojoules' as const, kilojoules: 50 }, targets: [
+        { kind: 'power' as const, mode: 'relative' as const, minimumPercent: 80, maximumPercent: 90,
+          reference: { kind: 'functional-threshold-power' as const, watts: 250 } },
+        { kind: 'cadence' as const, mode: 'absolute' as const, minimumRpm: 80, maximumRpm: 90 },
+      ] }] };
+    libraryItems.next([{ schemaVersion: 1, id: 'full-recipe', title: 'Full saved recipe', structure: full,
+      status: 'active', revision: 1, createdAtMs: 1, updatedAtMs: 1 }]);
+    setRouteState({ mode: 'library-browse' });
+    const fixture = await renderPlans();
+    const profile = fixture.debugElement.query(By.directive(WorkoutProfileComponent)).componentInstance as WorkoutProfileComponent;
+    expect(profile.expanded()).toBe(false);
+    profile.toggleExpanded(); fixture.detectChanges(); await fixture.whenStable();
+    expect(profile.model().metrics).toEqual(['power', 'cadence']);
+    expect(profile.steps()[0].ending).toBe('50 kJ');
+    expect(profile.steps()[0].targets[0].text).toContain('saved reference');
+    expect(fixture.componentInstance.editor()).toBeNull();
+    expect(mutate).not.toHaveBeenCalled(); expect(libraryMutate).not.toHaveBeenCalled();
+    expect(libraryItems.value[0].structure).toEqual(full);
+  });
 
   it.each(['plans', 'standalone', 'library'] as const)('saves ordered independent copies through the existing %s boundary', async scope => {
     libraryMutate.mockResolvedValue({ mutationId: 'mutation-1', item: null });
@@ -218,7 +267,7 @@ describe('PlansWorkspaceComponent', () => {
     expect(component.editor()!.value.nodes).toHaveLength(3);
     expect((document.activeElement as HTMLElement).dataset['editorNodeAction']).toBe(component.editor()!.value.nodes[1].id);
     expect(haptics.selection).toHaveBeenCalledOnce();
-    expect(fixture.nativeElement.querySelector('[role="status"]').textContent).toContain('Step copied to position 2 of 3');
+    expect(fixture.nativeElement.querySelector('.workout-nodes > [role="status"]').textContent).toContain('Step copied to position 2 of 3');
     const copiedTrigger = fixture.debugElement.queryAll(By.css('[data-editor-node-action]'))[1].injector.get(MatMenuTrigger);
     copiedTrigger.openMenu(); fixture.detectChanges(); await fixture.whenStable();
     document.querySelector('[role="menu"]')!.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', keyCode: 27, bubbles: true }));

@@ -56,6 +56,42 @@ function fixture() {
 }
 
 describe('Training plan MCP reads', () => {
+  it('round-trips mixed profile fixtures with exact IDs, untargeted durations and two saved-reference targets', async () => {
+    const f = fixture();
+    const recipe: WorkoutStructureV1 = { version: 1, sport: ActivityTypes.Running, nodes: [
+      { kind: 'step', id: 'hr-kilometre', purpose: 'warmup', ending: { kind: 'distance', meters: 1000 },
+        targets: [{ kind: 'heart-rate', mode: 'absolute', minimumBpm: 130, maximumBpm: 145 }] },
+      { kind: 'repeat', id: 'changes', count: 4, steps: [60, 75, 90].map(seconds => ({
+        kind: 'step', id: `effort-${seconds}`, purpose: 'work', ending: { kind: 'time', seconds }, targets: [],
+      })) },
+      { kind: 'step', id: 'two-targets', purpose: 'work', ending: { kind: 'manual' }, targets: [
+        { kind: 'power', mode: 'relative', minimumPercent: 80, maximumPercent: 90,
+          reference: { kind: 'functional-threshold-power', watts: 250 } },
+        { kind: 'cadence', mode: 'relative', minimumPercent: 90, maximumPercent: 100,
+          reference: { kind: 'preferred-cadence', rpm: 180 } },
+      ] },
+      { kind: 'step', id: 'open-pace', purpose: 'recovery', ending: { kind: 'manual' }, targets: [
+        { kind: 'speed', mode: 'relative', presentation: 'pace', minimumPercent: 0, maximumPercent: 100,
+          reference: { kind: 'threshold-speed', metersPerSecond: 4 } },
+      ] },
+    ] };
+    f.structures.w1 = recipe;
+    const before = JSON.stringify(recipe);
+    const workoutRef = f.codec.encode({ kind: 'workout', id: 'w1', createdAtMs: 1 }, 'owner', 'connection');
+    for (const tool of ['get_planned_workout', 'get_planned_workout_v2'] as const) {
+      const result = TRAINING_READ_OUTPUTS[tool].parse(await f.run(tool, { workoutRef }));
+      expect(JSON.parse(JSON.stringify(result.workout.structure))).toEqual(JSON.parse(before));
+      expect(result.workout.displaySteps.map(step => step.nodeId)).toEqual([
+        'hr-kilometre', 'changes', 'effort-60', 'effort-75', 'effort-90', 'two-targets', 'open-pace',
+      ]);
+      expect(result.workout.displaySteps.map(step => step.text).join(' ')).toContain('01m 15s');
+      expect(JSON.stringify(result)).not.toMatch(/occurrenceKey|selectedMetric|repeatPasses|estimatedDuration|chartWidth/);
+      await expect(f.run(tool, { workoutRef }, [])).rejects.toThrow();
+      await expect(f.run(tool, { workoutRef }, [TRAINING_PLANS_SCOPE], 'foreign-connection')).rejects.toThrow();
+    }
+    expect(JSON.stringify(f.structures.w1)).toBe(before);
+  });
+
   it('projects saved ordering and duplicated repeat children in canonical and display order', async () => {
     const f = fixture();
     const work = { kind: 'step' as const, id: 'work', purpose: 'work' as const,

@@ -338,6 +338,11 @@
             <ol class="workout-summary">
               @for (summary of row.summary; track $index) { <li>{{ summary }}</li> }
             </ol>
+            @if (row.item.structure.sport !== strengthSport) {
+              <app-workout-profile [structure]="row.item.structure" [unitSettings]="currentUser()?.settings?.unitSettings ?? null"
+                [contextKey]="currentUser()?.uid + '/library/' + row.item.id + '/' + row.item.revision" [initiallyExpanded]="false"
+                unavailableReason="This saved recipe cannot be profiled. Its original instructions remain above."></app-workout-profile>
+            }
             <div compactRowAction class="workout-row-actions">
               @if (row.item.status === 'active') {
                 <button mat-flat-button type="button" appHapticTap (click)="beginLibraryPlacement(row.item)"
@@ -576,6 +581,8 @@
               }
             </section>
           } @else {
+          <app-workout-profile [structure]="editorProfile()" [unitSettings]="session.unitSettings"
+            [contextKey]="editorProfileContext()" (stepSelected)="editorProfileSelection.set($event)"></app-workout-profile>
           <section class="workout-nodes" aria-labelledby="workout-steps-title">
             <div class="workout-nodes-heading">
               <div>
@@ -603,6 +610,7 @@
                 [cdkDragStartDelay]="editorDragDelay" cdkDragPreviewContainer="parent"
                 (cdkDragStarted)="startEditorDrag(node.id)"
                 class="workout-node-row" layout="stacked" density="compact"
+                [class.profile-selected]="editorProfileStepId() === node.id || (editorProfileStepId() && editorProfileSelection()?.repeatId === node.id)"
                 [title]="node.kind === 'step' ? 'Step ' + (nodeIndex + 1) : 'Repeat block ' + (nodeIndex + 1)"
                 [titleId]="'workout-node-' + node.id" [showDivider]="!lastNode">
                   <div compactRowAction class="workout-node-actions">
@@ -650,7 +658,8 @@
                       <div cdkDrag [cdkDragData]="step.id" [cdkDragDisabled]="busyAction() !== null"
                         [cdkDragStartDelay]="editorDragDelay" cdkDragPreviewContainer="parent"
                         (cdkDragStarted)="startEditorDrag(step.id, node.id)"
-                        class="workout-step-editor repeat-step-editor">
+                        class="workout-step-editor repeat-step-editor" [class.profile-selected]="editorProfileStepId() === step.id">
+                        <span class="cdk-visually-hidden">@if (editorProfileStepId() === step.id) { Selected in workout profile }</span>
                         <div class="step-index">{{ stepIndex + 1 }}</div>
                         <div class="repeat-step-actions">
                           <button cdkDragHandle mat-icon-button class="workout-drag-handle" type="button" [disabled]="busyAction() !== null"
@@ -876,6 +885,11 @@
                     <li>{{ summary }}</li>
                   }
                 </ol>
+                @if (row.workout.structure.sport !== strengthSport) {
+                  <app-workout-profile [structure]="row.workout.structure" [unitSettings]="currentUser()?.settings?.unitSettings ?? null"
+                    [contextKey]="currentUser()?.uid + '/workout/' + row.workout.id + '/' + row.workout.revision" [initiallyExpanded]="false"
+                    unavailableReason="This saved recipe cannot be profiled. Its original instructions remain above."></app-workout-profile>
+                }
                 <app-training-delivery-button scope="workout" [entityId]="row.workout.id" [title]="row.workout.title"
                   [summaryWorkouts]="[row.workout]" [summaryPlan]="view() === 'plans' ? selectedPlan() : null"
                   [summaryCompletions]="completions()"
