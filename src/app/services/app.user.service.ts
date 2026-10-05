@@ -1396,6 +1396,7 @@ export class AppUserService implements OnDestroy {
   public checkCurrentUserCOROSBindingState(
     userID: string,
     providerUserId: string,
+    connectionStateGeneration?: string | null,
   ): Promise<COROSBindingStateResult> {
     const normalizedUserID = `${userID || ''}`.trim();
     const normalizedProviderUserId = `${providerUserId || ''}`.trim();
@@ -1403,7 +1404,13 @@ export class AppUserService implements OnDestroy {
       return Promise.reject(new Error('Cannot check COROS binding state for an inactive account.'));
     }
 
-    const requestKey = `${normalizedUserID}:${normalizedProviderUserId}`;
+    // A same-account reconnect must not reuse an earlier connection's request.
+    // This generation is local coalescing context, never callable input.
+    const requestKey = JSON.stringify([
+      normalizedUserID,
+      normalizedProviderUserId,
+      connectionStateGeneration || null,
+    ]);
     const existingRequest = this.corosBindingStateRequests.get(requestKey);
     if (existingRequest) return existingRequest;
 

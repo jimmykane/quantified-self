@@ -1112,6 +1112,8 @@ COROS uses one active connected account for every import and delivery. New OAuth
 
 When you open the COROS connection overview, Quantified Self asks COROS whether that account is still bound. If COROS says it is unbound, the card changes to **Reconnect required** and related automatic activity and saved-route settings turn off. A temporary check failure shows **Retry** and does not mark the account disconnected.
 
+Connection checks pause while you connect or disconnect. Results from an earlier connection do not replace the current connection status.
+
 For imported activities, Quantified Self can recover a missing or expired COROS FIT download link from the workout identity. Imported event attribution preserves the COROS mode, submode, device, source timezones, training-plan workout ID, and multisport component when COROS supplies them; the expiring provider link is not kept on new events.
 
 COROS FIT activity uploads in Services are asynchronous and use per-file status, short provider upload pacing, and failed-file retry controls. Once COROS issues an upload ID, refresh or retry checks that same upload first instead of posting the FIT again. A duplicate is shown as a completed result.

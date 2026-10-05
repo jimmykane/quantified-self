@@ -289,11 +289,11 @@ export abstract class ServicesAbstractComponentDirective implements OnDestroy, O
     }
   }
 
-  async deauthorizeService(_event) {
-    if (this.connectionViewDestroyed || this.isConnecting || this.isDisconnecting || this.isLoading) return;
+  async deauthorizeService(_event): Promise<boolean> {
+    if (this.connectionViewDestroyed || this.isConnecting || this.isDisconnecting || this.isLoading) return false;
     if (!this.hasProAccess && !this.canDisconnectWithoutProAccess) {
       this.triggerUpsell();
-      return;
+      return false;
     }
     this.hapticsService.selection();
     const isCurrentView = this.captureConnectionView();
@@ -301,9 +301,9 @@ export abstract class ServicesAbstractComponentDirective implements OnDestroy, O
     this.isDisconnecting = true;
     try {
       const shouldContinue = await this.confirmDisconnectWithRouteImpact();
-      if (!isCurrentView() || !shouldContinue) return;
+      if (!isCurrentView() || !shouldContinue) return false;
       await this.userService.deauthorizeService(this.serviceName, isCurrentView);
-      if (!isCurrentView()) return;
+      if (!isCurrentView()) return false;
       this.forceConnected = false;
       this.emitConnectionState();
       this.snackBar.open(`Disconnected successfully`, undefined, {
@@ -311,8 +311,9 @@ export abstract class ServicesAbstractComponentDirective implements OnDestroy, O
       });
       this.hapticsService.success();
       this.analyticsService.logEvent('disconnected_from_service', { serviceName: this.serviceName });
+      return true;
     } catch (e: any) {
-      if (!isCurrentView()) return;
+      if (!isCurrentView()) return false;
       this.logger.error(e);
       const status = e?.status;
       let message: string;
@@ -328,6 +329,7 @@ export abstract class ServicesAbstractComponentDirective implements OnDestroy, O
         duration: 2000,
       });
       this.hapticsService.error();
+      return false;
     } finally {
       if (isCurrentView()) this.isDisconnecting = false;
     }
