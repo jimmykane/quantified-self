@@ -2632,7 +2632,9 @@ grant/generation and private current-evidence digest for 15 minutes. Apply uses 
 repair journal as the app; no provider HTTP occurs in preview/apply transactions, and no QS recipe or other-provider
 consent changes. Lost replies use existing proposal status/receipts. The Assistant is prepare-only and presents a
 dedicated app-owned replacement confirmation; stale, revoked, changed-account, Stop/completion, lock and Pro changes
-fail closed. Existing MCP reads need no new provider HTTP and never expose observed keys, review binding, journals
+fail closed. An ineligible replacement review returns a fixed blocked explanation in the Assistant without a
+proposal, repeated preview, or Send/Retry fallback; strict malformed input remains separately correctable.
+Existing MCP reads need no new provider HTTP and never expose observed keys, review binding, journals
 or old/new provider IDs. Separate deployment and registered-client refresh/rescan are required before advertising
 the additive tool as live; an older catalog must never substitute Send/Retry or a new authored workout.
 

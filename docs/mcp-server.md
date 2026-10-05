@@ -2371,6 +2371,10 @@ observation, retaining the historical accepted-send timestamp without private in
 Registered batch proposals still reject `replace` and client-supplied replacement authority. #801 implements a
 separate additive preview with the existing native Apply and Assistant prepare-only/app-confirmation path;
 do not emulate it with Send/Retry or let the broader app command enum grow the frozen registered contract.
+The Assistant treats the replacement preview's server-owned `invalid_request`/`detail_not_available` refusal as a
+terminal blocked review, not a request to force a successful preview. It emits fixed guidance without raw server text,
+creates no confirmation proposal, and does not substitute another provider action. Strict schema rejection remains
+correctable. This handling is private to the Assistant and changes no registered MCP schema or provider authority.
 
 Use the Functions emulator and local Angular app for the OAuth/consent flow. At minimum run:
 

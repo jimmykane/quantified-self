@@ -30,7 +30,8 @@ import type {
   AssistantMcpSession,
   AssistantMcpToolName,
 } from './mcp-session';
-import { AssistantMcpToolFailure, AssistantRecoverableMcpToolError } from './mcp-session';
+import { AssistantMcpToolFailure, AssistantRecoverableMcpToolError,
+  ASSISTANT_GARMIN_REPLACEMENT_BLOCKED_GUIDANCE } from './mcp-session';
 import { createAssistantContentProposal } from './content-proposal';
 
 function createSession() {
@@ -1768,6 +1769,49 @@ describe('Assistant runtime', () => {
     expect(generate.mock.calls[2]?.[0].tools).toHaveLength(1);
   });
 
+  it.each(['invalid_request', 'detail_not_available'] as const)(
+    'stops model continuation after a terminal Garmin replacement %s', async code => {
+      const preview: AssistantRuntimeTool = { name: 'preview_garmin_workout_replacement',
+        description: 'Review replacement.', inputJsonSchema: { type: 'object', properties: {} },
+        execute: vi.fn().mockResolvedValue({ assistantToolError: { code, retryable: false,
+          guidance: 'A private message must not be echoed.' } }),
+      };
+      const generate = vi.spyOn(assistantGenkit, 'generate').mockResolvedValueOnce({
+        toolRequests: [{ toolRequest: { name: preview.name, input: {}, ref: 'preview' } }], messages: [],
+      } as never);
+      await expect(generateAssistantModelAnswer({ currentTime: '2026-10-05T12:00:00Z', timeZone: 'Europe/Helsinki',
+        prompt: 'Create a replacement Garmin copy for my workout.', history: [], mcpInstructions: 'Use current data.',
+        tools: [preview], workflow: null, onBillableAttempt: vi.fn() })).resolves.toEqual({
+        answer: ASSISTANT_GARMIN_REPLACEMENT_BLOCKED_GUIDANCE, visualRequest: { chart: null, map: null },
+      });
+      expect(preview.execute).toHaveBeenCalledOnce();
+      expect(generate).toHaveBeenCalledOnce();
+    },
+  );
+
+  it('does not turn a rejected replacement into a proposal or replay its server request', async () => {
+    const { session, callTool } = createSession();
+    session.tools = [{ name: 'preview_garmin_workout_replacement', title: 'Replacement',
+      description: 'Review replacement.', inputSchema: { type: 'object', properties: {} } }];
+    callTool.mockRejectedValue(new AssistantRecoverableMcpToolError('invalid_request', 'private message', false));
+    const runtime = createAssistantRuntime({ createMcpSession: vi.fn().mockResolvedValue(session),
+      generateAnswer: async ({ tools }) => {
+        const first = await tools[0].execute({ workoutRef: 'current-ref' });
+        expect(await tools[0].execute({ workoutRef: 'current-ref' })).toEqual(first);
+        return { answer: 'The replacement was sent successfully.', visualRequest: { chart: null, map: null } };
+      },
+    });
+    const result = await runtime.answer({ uid: 'user-1', appBaseUrl: 'https://quantified-self.io',
+      prompt: 'Create a replacement Garmin copy for my workout.', timeZone: 'UTC', history: [],
+      trainingPlansEnabled: true, trainingDeliveryEnabled: true,
+      assertTrainingPlansAccess: vi.fn(), assertTrainingWriteAccess: vi.fn() });
+    expect(callTool).toHaveBeenCalledOnce();
+    expect(result).not.toHaveProperty('pendingTrainingProposal');
+    expect(result.toolNames).toEqual([]);
+    expect(result.answer).toBe(ASSISTANT_GARMIN_REPLACEMENT_BLOCKED_GUIDANCE);
+    expect(result.answer).not.toContain('private message');
+  });
+
   it('rejects non-JSON final model text without enabling provider JSON mode', async () => {
     const tool: AssistantRuntimeTool = {
       name: 'get_daily_report',
@@ -1876,6 +1920,9 @@ describe('Assistant runtime', () => {
     expect(getAssistantRuntimeErrorReason(
       new Error('The Assistant model returned invalid JSON.'),
     )).toBe('invalid_model_json');
+    expect(getAssistantRuntimeErrorReason(
+      new Error('The Assistant did not prepare the requested provider delivery preview.'),
+    )).toBe('missing_training_delivery_preview');
     expect(getAssistantRuntimeErrorReason(
       new Error('The Assistant did not complete the supported weight workflow.'),
     )).toBe('published_workflow_incomplete');

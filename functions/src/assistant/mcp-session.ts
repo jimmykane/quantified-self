@@ -145,11 +145,15 @@ export class AssistantRecoverableMcpToolError extends Error {
   constructor(
     readonly code: RecoverableAssistantToolErrorCode,
     readonly guidance: string,
+    readonly retryable = true,
   ) {
     super('The Assistant MCP tool needs corrected input.');
     this.name = 'AssistantRecoverableMcpToolError';
   }
 }
+
+export const ASSISTANT_GARMIN_REPLACEMENT_BLOCKED_GUIDANCE =
+  'Garmin replacement is blocked for this review. Open the workout’s Garmin sync details, run Check, and review its current status before requesting a replacement. Missing-copy evidence does not prove deletion. Nothing was applied or sent; Send and Retry were not used.';
 
 export class AssistantTrainingMetricsPreparingError extends Error {
   constructor(readonly retryAfterSeconds: number) {
@@ -218,10 +222,17 @@ function parseMcpToolErrorCode(message: string): McpDataErrorCode | 'internal_er
   return code as McpDataErrorCode | 'internal_error';
 }
 
-function recoverableAssistantToolError(message: string): AssistantRecoverableMcpToolError | null {
+function recoverableAssistantToolError(message: string, name: AssistantMcpToolName): AssistantRecoverableMcpToolError | null {
   const code = parseMcpToolErrorCode(message);
   if (!code || !RECOVERABLE_ASSISTANT_TOOL_ERROR_CODE_SET.has(code)) {
     return null;
+  }
+  // Strict input-validation failures remain correctable. A server rejection of
+  // a valid replacement request is instead a closed review, not another Send.
+  if (name === 'preview_garmin_workout_replacement'
+    && (code === 'invalid_request' || code === 'detail_not_available')) {
+    return new AssistantRecoverableMcpToolError(code,
+      ASSISTANT_GARMIN_REPLACEMENT_BLOCKED_GUIDANCE, false);
   }
   return new AssistantRecoverableMcpToolError(
     code as RecoverableAssistantToolErrorCode,
@@ -257,7 +268,7 @@ async function callAssistantMcpTool(
       .map(item => item.text)
       .join(' ')
       .trim();
-    const recoverableError = recoverableAssistantToolError(message);
+    const recoverableError = recoverableAssistantToolError(message, name);
     if (recoverableError) {
       throw recoverableError;
     }

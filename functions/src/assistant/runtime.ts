@@ -32,6 +32,7 @@ import {
   AssistantMcpToolFailure,
   AssistantRecoverableMcpToolError,
   AssistantTrainingMetricsPreparingError,
+  ASSISTANT_GARMIN_REPLACEMENT_BLOCKED_GUIDANCE,
   type AssistantMcpSession,
   type AssistantMcpToolName,
 } from './mcp-session';
@@ -922,6 +923,8 @@ export function getAssistantRuntimeErrorReason(error: unknown): string | null {
       return 'invalid_model_response';
     case 'The Assistant model did not select a grounding tool.':
       return 'missing_grounding_tool';
+    case 'The Assistant did not prepare the requested provider delivery preview.':
+      return 'missing_training_delivery_preview';
     case 'The Assistant model exceeded the initial tool-call budget.':
     case 'The Assistant model exceeded the cumulative tool-call budget.':
     case 'The Assistant model exceeded the continuation-turn budget.':
@@ -1098,6 +1101,18 @@ export const generateAssistantModelAnswer: AssistantRuntimeDependencies['generat
         throw new Error('The Assistant model selected an unavailable tool.');
       }
       const output = await tool.execute(asToolInput(request.toolRequest.input));
+      if (tool.name === 'preview_garmin_workout_replacement'
+        && typeof output === 'object' && output !== null && 'assistantToolError' in output) {
+        const rejection = output.assistantToolError;
+        if (typeof rejection === 'object' && rejection !== null && 'retryable' in rejection
+          && rejection.retryable === false && 'code' in rejection
+          && (rejection.code === 'invalid_request' || rejection.code === 'detail_not_available')) {
+          // A rejected review is not a proposal. Do not force a successful
+          // preview, continue model tool calls, or substitute another action.
+          return { answer: ASSISTANT_GARMIN_REPLACEMENT_BLOCKED_GUIDANCE,
+            visualRequest: { chart: null, map: null } };
+        }
+      }
       if (tool.name === requiredDeliveryPreview?.name
         && !(typeof output === 'object' && output !== null && 'assistantToolError' in output)) {
         deliveryPreviewCompleted = true;
@@ -1214,6 +1229,9 @@ export function createAssistantRuntime(
       let cumulativeToolOutputBytes = 0;
       let pendingTrainingProposal: AssistantTrainingProposalPreview | undefined;
       let pendingContentProposal: AssistantContentProposalPreview | undefined;
+      let blockedGarminReplacement: { assistantToolError: {
+        code: string; guidance: string; retryable: false;
+      } } | undefined;
       try {
         const currentTime = dependencies.now();
         const dailyWorkoutRequested = requestsDailyWorkoutContext(input.prompt, input.history);
@@ -1295,6 +1313,9 @@ export function createAssistantRuntime(
               throw new Error('The Assistant tool-call budget was exceeded.');
             }
             toolCallCount += 1;
+            if (tool.name === 'preview_garmin_workout_replacement' && blockedGarminReplacement) {
+              return blockedGarminReplacement;
+            }
             const workflowToolInput = applyAssistantWorkflowToolPolicy(
               workflow,
               tool.name,
@@ -1404,6 +1425,12 @@ export function createAssistantRuntime(
                 throw error;
               }
               if (error instanceof AssistantRecoverableMcpToolError) {
+                if (tool.name === 'preview_garmin_workout_replacement' && !error.retryable
+                  && (error.code === 'invalid_request' || error.code === 'detail_not_available')) {
+                  blockedGarminReplacement = { assistantToolError: { code: error.code,
+                    guidance: ASSISTANT_GARMIN_REPLACEMENT_BLOCKED_GUIDANCE, retryable: false } };
+                  return blockedGarminReplacement;
+                }
                 return {
                   assistantToolError: {
                     code: error.code,
@@ -1516,7 +1543,7 @@ export function createAssistantRuntime(
           && (incompleteDailyContext || !canPreviewDailyWorkout(input.prompt, dailyWorkoutContext))) {
           throw new Error('The Assistant cannot preview a daily workout without complete context and an explicit change request.');
         }
-        if (invocations.length === 0) {
+        if (invocations.length === 0 && !blockedGarminReplacement) {
           throw new Error('The Assistant response was not grounded in current account data.');
         }
         assertSupportedWorkflowCompleted(
@@ -1533,8 +1560,8 @@ export function createAssistantRuntime(
           throw new Error('The Assistant response included an internal visual source reference.');
         }
         const validatedOutput = AssistantModelOutputSchema.parse({
-          answer: generated.answer,
-          visuals: generated.visualRequest,
+          answer: blockedGarminReplacement ? ASSISTANT_GARMIN_REPLACEMENT_BLOCKED_GUIDANCE : generated.answer,
+          visuals: blockedGarminReplacement ? { chart: null, map: null } : generated.visualRequest,
         });
         const answer = dailyWorkoutContext
           ? (() => {
