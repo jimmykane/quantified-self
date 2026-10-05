@@ -18,6 +18,7 @@
 .training-notes-context { display: none; }
 .training-section-heading, .training-capacity-panel header { display: flex; align-items: center; justify-content: space-between; gap: 16px; }
 .training-page-header { margin-bottom: 32px; }
+.training-page-header:has(+ .training-update-details:not([hidden])) { margin-bottom: 8px; }
 .training-page-actions { display: flex; align-items: center; justify-content: flex-end; gap: 8px; flex-wrap: wrap; }
 .training-page-actions mat-icon { margin-right: 4px; }
 .training-destination-navigation { display: grid; gap: 8px; margin: -12px 0 0; padding-bottom: 18px; border-bottom: 1px solid var(--mat-sys-outline-variant); }
@@ -43,10 +44,15 @@
 .training-mobile-more-action { align-self: center; width: 48px; height: 48px; }
 .training-mobile-more-action mat-icon { margin: 0; }
 .training-section-heading p { margin: 0 0 4px; color: var(--mat-sys-on-surface-variant); font-size: var(--training-inter-caption-font-size); font-weight: 650; letter-spacing: 0; text-transform: uppercase; }
-.training-derived-metrics-status { display: flex; align-items: center; gap: 6px; min-width: 0; margin-bottom: 4px; color: var(--mat-sys-primary); font-size: var(--training-inter-caption-font-size); line-height: 1.2; }
-.training-derived-metrics-status > mat-icon { flex: 0 0 auto; width: 16px; height: 16px; font-size: 16px; line-height: 16px; }
-.training-derived-metrics-status > span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.training-derived-metrics-status.warning { color: var(--mat-sys-error); }
+.training-update-control { display: flex; align-items: center; width: 48px; height: 48px; }
+.training-update-toggle { color: var(--mat-sys-primary); }
+.training-update-toggle.warning { color: var(--mat-sys-error); }
+.training-update-spinning { animation: training-update-spin 1.6s linear infinite; }
+.training-update-details { margin: 0 0 24px; font: var(--mat-sys-body-small); color: var(--mat-sys-on-surface-variant); }
+.training-update-details strong { color: var(--mat-sys-on-surface); }
+.training-update-details p { margin: 4px 0 0; }
+@keyframes training-update-spin { to { transform: rotate(360deg); } }
+@media (prefers-reduced-motion: reduce) { .training-update-spinning { animation: none; } }
 h2, h3, p { margin-top: 0; }
 h2 { margin-bottom: 0; font-size: 22px; line-height: 1.2; }
 h3 { margin-bottom: 0; font-size: var(--training-card-title-font-size); line-height: 1.25; }

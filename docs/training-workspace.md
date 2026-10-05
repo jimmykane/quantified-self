@@ -428,7 +428,7 @@ Form history and canonical parent/activity join.
 - User help copy: `src/app/shared/help.content.ts`
 
 Training is available to signed-in users from the sidenav. Its route header uses the shared `app-page-header` route
-primitive for the title, data/status context, and conditional derived-metrics **Retry** action. Timeline notes, Feedback,
+primitive for the title, compact update disclosure, and conditional derived-metrics **Retry** action. Timeline notes, Feedback,
 Calendar, and Dashboard shortcuts are omitted from this header; use app navigation for Calendar and Dashboard and the
 Training help article's email action for feedback. This presentation changes no chart-note reads, Training calculations,
 planning/MCP contract, consent, or mutation. The Dashboard header does not duplicate the Training or Health navigation
@@ -3126,11 +3126,15 @@ semantic level-two heading because it is a Dashboard section. When the visible s
 training analysis` eyebrow remains above the title and a Dashboard-style `Data through <weekday, UTC date>` subtitle
 appears below it. The subtitle uses the validated `training_summary` snapshot's `asOfDayMs`; it
 represents the actual derived-data cutoff, never the browser clock. While any snapshot that backs a visible Training
-surface is missing, queued, processing, building, or stale, the projected status context replaces that eyebrow instead
-of inserting a banner into the analytical content. A stale snapshot says that any available last completed values
-remain visible while the replacement finishes. A failed visible snapshot takes precedence,
-uses the same line, and adds a Material Retry action that force-requests the complete Training metric scope. When the
-visible scope is healthy, the normal eyebrow returns. The status scope follows the selected destination: Overview
+surface is missing, queued, processing, building, or stale, an icon-only Material disclosure beside the title shows a
+spinning sync icon. The eyebrow and validated data cutoff remain visible. The 48 px title-action slot stays reserved
+when healthy to avoid a status-driven height change. The icon has a status-specific accessible label and tooltip;
+screen readers receive the full status through a live region. Activating it expands a surface-free explanation below
+the header using `aria-expanded`, `aria-controls`, and a hidden content region, with one selection haptic. Reduced motion
+disables the rotation. A stale snapshot explains that available last completed values remain visible while the replacement
+finishes. A failed visible snapshot takes precedence, uses a static warning icon, and adds a Material Retry action that
+force-requests the complete Training metric scope. Completion removes the icon and closes the explanation; account
+changes also reset disclosure state without haptics. The status scope follows the selected destination: Overview
 evaluates global surfaces, a sport evaluates only its summary/build and declared
 specialist capabilities, and Other power activities evaluates rolling power systems. The optional imported recovery
 snapshot participates only while its active `Recovery left` estimate is visible on Overview, so missing, failed, or

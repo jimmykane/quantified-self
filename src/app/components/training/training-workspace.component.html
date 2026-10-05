@@ -6,23 +6,33 @@
     title="Training"
     titleId="training-title"
     leadingIcon="monitoring"
-    [eyebrow]="derivedMetricsRouteStatus ? null : '28-day training analysis'"
-    [subtitle]="derivedMetricsRouteStatus ? null : trainingDataAsOfText">
-    @if (derivedMetricsRouteStatus) {
-      <div
-        pageHeaderContext
-        class="training-derived-metrics-status"
-        [class.warning]="derivedMetricsRouteStatus.type === 'warning'"
-        [attr.role]="derivedMetricsRouteStatus.type === 'warning' ? 'alert' : 'status'"
-        [attr.aria-label]="derivedMetricsRouteStatus.title + '. ' + derivedMetricsRouteStatus.description">
-        @if (derivedMetricsRouteStatus.type === 'pending') {
-          <mat-icon aria-hidden="true">sync</mat-icon>
-        } @else {
-          <mat-icon aria-hidden="true">error_outline</mat-icon>
-        }
-        <span><strong>{{ derivedMetricsRouteStatus.title }}</strong> · {{ derivedMetricsRouteStatus.description }}</span>
-      </div>
-    }
+    eyebrow="28-day training analysis"
+    [subtitle]="trainingDataAsOfText">
+    <div pageHeaderTitleActions class="training-update-control">
+      @if (derivedMetricsRouteStatus) {
+        <button
+          mat-icon-button
+          type="button"
+          class="training-update-toggle"
+          [class.warning]="derivedMetricsRouteStatus.type === 'warning'"
+          [attr.aria-label]="derivedMetricsRouteStatus.title + (derivedMetricsStatusExpanded() ? '. Hide details' : '. Show details')"
+          [attr.aria-expanded]="derivedMetricsStatusExpanded()"
+          aria-controls="training-update-details"
+          [matTooltip]="derivedMetricsRouteStatus.title"
+          (click)="toggleDerivedMetricsStatusDetails()">
+          <mat-icon
+            aria-hidden="true"
+            [class.training-update-spinning]="derivedMetricsRouteStatus.type === 'pending'">
+            {{ derivedMetricsRouteStatus.type === 'pending' ? 'sync' : 'error_outline' }}
+          </mat-icon>
+        </button>
+        <span
+          class="training-derived-metrics-status cdk-visually-hidden"
+          [attr.role]="derivedMetricsRouteStatus.type === 'warning' ? 'alert' : 'status'">
+          {{ derivedMetricsRouteStatus.title }}. {{ derivedMetricsRouteStatus.description }}
+        </span>
+      }
+    </div>
     @if (derivedMetricsRouteStatus?.showRetry) {
       <div pageHeaderActions class="training-page-actions">
         <button
@@ -38,6 +48,16 @@
       </div>
     }
   </app-page-header>
+
+  @if (derivedMetricsRouteStatus) {
+    <div
+      id="training-update-details"
+      class="training-update-details"
+      [hidden]="!derivedMetricsStatusExpanded()">
+      <strong>{{ derivedMetricsRouteStatus.title }}</strong>
+      <p>{{ derivedMetricsRouteStatus.description }}</p>
+    </div>
+  }
 
   <nav class="training-destination-navigation" aria-label="Training analysis destination">
     <div class="training-destination-desktop">

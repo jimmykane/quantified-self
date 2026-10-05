@@ -866,9 +866,9 @@ describe('help.content', () => {
     expect(trainingSection?.content).toContain('last 7 completed UTC Training days');
     expect(trainingSection?.content).toContain('exact number of completed parent activities');
     expect(trainingSection?.content).toContain('four consecutive 7-day blocks');
-    expect(trainingSection?.content).toContain('compact line above the **Training** title');
-    expect(trainingSection?.content).toContain('content does not shift');
-    expect(trainingSection?.content).toContain('failed update adds **Retry**');
+    expect(trainingSection?.content).toContain('**sync icon** beside the **Training** title');
+    expect(trainingSection?.content).toContain('Tap it to expand the update details');
+    expect(trainingSection?.content).toContain('warning icon and **Retry**');
     expect(trainingSection?.content).toContain('**Largest sport load change**');
     expect(trainingSection?.content).toContain('do not mean that the workspace is filtered');
     expect(trainingSection?.content).toContain('neutral higher/lower language');
