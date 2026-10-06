@@ -125,8 +125,12 @@ export class TrainingPlansService {
           // Even a server-acknowledged document/query watch can repeat a stale
           // missing state. Keep its live invalidation signal but independently
           // verify the exact state through uncached REST before publishing it.
-          docData(stateRef, { waitForServer: true }).pipe(switchMap(() => from(this.readCurrentState(uid)).pipe(
-            timeout({ first: TRAINING_SCHEDULE_STATE_READ_TIMEOUT_MS })))),
+          docData(stateRef, { waitForServer: true }).pipe(
+            timeout({ first: TRAINING_SCHEDULE_STATE_READ_TIMEOUT_MS }),
+            switchMap(() => from(this.readCurrentState(uid)).pipe(
+              timeout({ first: TRAINING_SCHEDULE_STATE_READ_TIMEOUT_MS }),
+            )),
+          ),
           collectionData(plansRef, { idField: 'id' }),
           collectionData(query(workoutsRef, where('lifecycle', 'in', ['planned', 'skipped'])), { idField: 'id' }),
         ]).pipe(
@@ -145,6 +149,7 @@ export class TrainingPlansService {
           // and reattach the inner listeners instead of stranding the page.
           retry({ count: 2, delay: 1000 }),
           catchError(error => from(getDoc(availabilityRef)).pipe(
+            timeout({ first: TRAINING_SCHEDULE_STATE_READ_TIMEOUT_MS }),
             switchMap(snapshot => snapshot.exists()
               ? of({ ...emptyTrainingSchedule(), restoreUnavailable: true as const })
               : throwError(() => error)),

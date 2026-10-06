@@ -136,6 +136,71 @@ describe('current Training schedule-state reads', () => {
     } finally { vi.useRealTimers(); }
   });
 
+  it('bounds a watch that never acknowledges the state instead of loading forever', async () => {
+    vi.useFakeTimers();
+    try {
+      vi.mocked(getCachedDoc).mockResolvedValue({ exists: () => false } as never);
+      const pending = firstValueFrom(service.watchSchedule('owner'));
+      const rejected = expect(pending).rejects.toMatchObject({ name: 'TimeoutError' });
+      availability.next(undefined);
+      await vi.advanceTimersByTimeAsync(3 * TRAINING_SCHEDULE_STATE_READ_TIMEOUT_MS + 2000);
+      await rejected;
+      expect(getDoc).not.toHaveBeenCalled();
+    } finally { vi.useRealTimers(); }
+  });
+
+  it('bounds the final restore-fence lookup after a failed verification', async () => {
+    vi.useFakeTimers();
+    try {
+      vi.mocked(docData).mockImplementation(ref => ref.path.endsWith('/availability/restore') ? availability : of(undefined));
+      vi.mocked(getDoc).mockRejectedValue(new Error('Unavailable'));
+      vi.mocked(getCachedDoc).mockReturnValue(new Promise(() => {}));
+      const pending = firstValueFrom(service.watchSchedule('owner'));
+      const rejected = expect(pending).rejects.toMatchObject({ name: 'TimeoutError' });
+      availability.next(undefined);
+      await vi.advanceTimersByTimeAsync(TRAINING_SCHEDULE_STATE_READ_TIMEOUT_MS + 2000);
+      await rejected;
+      expect(getCachedDoc).toHaveBeenCalledTimes(1);
+    } finally { vi.useRealTimers(); }
+  });
+
+  it('keeps a healthy acknowledged watch alive when the schedule is idle', async () => {
+    vi.useFakeTimers();
+    try {
+      const observed: CurrentTrainingScheduleV1[] = [];
+      const failed = vi.fn();
+      const subscription = service.watchSchedule('owner').subscribe({ next: value => observed.push(value), error: failed });
+      availability.next(undefined); stateSignals.next(undefined);
+      await vi.advanceTimersByTimeAsync(0);
+      expect(observed[0]?.state.revision).toBe(253);
+      await vi.advanceTimersByTimeAsync(2 * TRAINING_SCHEDULE_STATE_READ_TIMEOUT_MS);
+      expect(subscription.closed).toBe(false);
+      expect(failed).not.toHaveBeenCalled();
+      serverState = { ...state, revision: 254 }; stateSignals.next(undefined);
+      await vi.advanceTimersByTimeAsync(0);
+      expect(observed.map(value => value.state.revision)).toEqual([253, 254]);
+      subscription.unsubscribe();
+    } finally { vi.useRealTimers(); }
+  });
+
+  it('discards a pending state verification when a restore fence arrives', async () => {
+    let finish!: (value: Awaited<ReturnType<typeof getDoc>>) => void;
+    vi.mocked(getDoc).mockImplementationOnce(() => new Promise(resolve => { finish = resolve; }));
+    const observed: CurrentTrainingScheduleV1[] = [];
+    const subscription = service.watchSchedule('owner').subscribe(value => observed.push(value));
+    availability.next(undefined); stateSignals.next(undefined);
+    await vi.waitFor(() => expect(getDoc).toHaveBeenCalledTimes(1));
+    availability.next({ schemaVersion: 1, status: 'restoring' });
+    expect(observed).toHaveLength(1);
+    expect(observed[0].restoreUnavailable).toBe(true);
+    finish({ data: () => state } as Awaited<ReturnType<typeof getDoc>>); await Promise.resolve();
+    expect(observed).toHaveLength(1);
+    serverState = { ...state, revision: 254 }; availability.next(undefined); stateSignals.next(undefined);
+    await vi.waitFor(() => expect(observed[1]?.state.revision).toBe(254));
+    expect(observed[1].restoreUnavailable).toBeUndefined();
+    subscription.unsubscribe();
+  });
+
   it('makes no Firestore reads without an owner', async () => {
     expect((await firstValueFrom(service.watchSchedule(null))).state.revision).toBe(0);
     expect(collectionData).not.toHaveBeenCalled(); expect(docData).not.toHaveBeenCalled(); expect(getDoc).not.toHaveBeenCalled();
