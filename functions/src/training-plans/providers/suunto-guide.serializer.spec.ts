@@ -1,8 +1,9 @@
 import { ActivityTypes, DataDuration, DistanceUnits, WeightUnits } from '@sports-alliance/sports-lib';
 import { describe, expect, it } from 'vitest';
-import type { WorkoutEndingV1, WorkoutStructureV1, WorkoutStepV1 } from '../../../../shared/planned-workout';
+import { WorkoutStructureValidationError,
+    type WorkoutEndingV1, type WorkoutStructureV1, type WorkoutStepV1 } from '../../../../shared/planned-workout';
 import { packageGuide, readGuideArchive } from '../delivery/suunto/archive';
-import { serializeSuuntoGuideJsonV1, serializeSuuntoGuideV2ForRecovery, serializeSuuntoGuideV4ForRecovery, serializeSuuntoGuideV5ForRecovery,
+import { serializeSuuntoGuideJsonV1, serializeSuuntoGuideV2ForRecovery, serializeSuuntoGuideV3ForRecovery, serializeSuuntoGuideV4ForRecovery, serializeSuuntoGuideV5ForRecovery,
     type SuuntoGuideFieldsStepV1 } from './suunto-guide.serializer';
 import cyclingV4 from './fixtures/suunto-cycling-v4-recovery.json';
 import swimmingV4 from './fixtures/suunto-swimming-v4-recovery.json';
@@ -15,6 +16,60 @@ const step: WorkoutStepV1 = { kind: 'step', id: 'work', purpose: 'work', ending:
 function mappedStep(sport: ActivityTypes, changes: Partial<WorkoutStepV1> = {}): SuuntoGuideFieldsStepV1 {
     return serializeSuuntoGuideJsonV1({ version: 1, sport, nodes: [{ ...step, ...changes }] }, options).artifact.steps[0] as SuuntoGuideFieldsStepV1;
 }
+
+describe('Suunto authored-target contract boundary (#773)', () => {
+    it.each([
+        [{ kind: 'heart-rate', mode: 'absolute', minimumBpm: 130, maximumBpm: 150 }, 'targetHeartRate', 130, 150],
+        [{ kind: 'power', mode: 'absolute', minimumWatts: 180, maximumWatts: 220 }, 'targetPower', 180, 220],
+        [{ kind: 'speed', mode: 'absolute', minimumMetersPerSecond: 3, maximumMetersPerSecond: 4,
+            presentation: 'pace' }, 'targetPace', 3, 4],
+        [{ kind: 'speed', mode: 'absolute', minimumMetersPerSecond: 3, maximumMetersPerSecond: 4,
+            presentation: 'speed' }, 'targetSpeed', 3, 4],
+        [{ kind: 'cadence', mode: 'absolute', minimumRpm: 84, maximumRpm: 96 }, 'targetCadence', 1.4, 1.6],
+    ] satisfies Array<[WorkoutStepV1['targets'][number], string, number, number]>)(
+        'preserves the published %s field %s and wire units', (target, type, min, max) => {
+            const fields = mappedStep(ActivityTypes.Running, { targets: [target] }).fields;
+            expect(fields.filter(field => field.type.startsWith('target'))).toEqual([
+                expect.objectContaining({ type, min, max }),
+            ]);
+        });
+
+    it.each(['max-heart-rate', 'threshold-heart-rate'] as const)(
+        'freezes the saved %s snapshot into bpm, never a native watch percentage target', kind => {
+            const recipe: WorkoutStructureV1 = { version: 1, sport: ActivityTypes.Running, nodes: [{ ...step,
+                targets: [{ kind: 'heart-rate', mode: 'relative', minimumPercent: 60, maximumPercent: 80,
+                    reference: { kind, bpm: 200 } }] }] };
+            const before = JSON.stringify(recipe);
+            const result = serializeSuuntoGuideJsonV1(recipe, { ...options, allowDegraded: true });
+            const fields = (result.artifact.steps[0] as SuuntoGuideFieldsStepV1).fields;
+            expect(result.level).toBe('degraded');
+            expect(fields.filter(field => field.type.startsWith('target'))).toEqual([
+                { type: 'targetHeartRate', min: 120, max: 160, title: 'Tgt HR' },
+            ]);
+            expect(JSON.stringify(recipe)).toBe(before);
+        });
+
+    it.each(['stroke-rate', 'swolf', 'zone-sense', 'heart-rate-percentage'])(
+        'does not approve or silently discard an uncontracted %s target', kind => {
+            const invalidStep = { ...step, targets: [{ kind, mode: 'absolute', minimum: 30, maximum: 40 }] };
+            const serializers = [serializeSuuntoGuideJsonV1, serializeSuuntoGuideV2ForRecovery, serializeSuuntoGuideV3ForRecovery,
+                serializeSuuntoGuideV4ForRecovery, serializeSuuntoGuideV5ForRecovery];
+            for (const nodes of [[invalidStep], [{ kind: 'repeat', id: 'sets', count: 2, steps: [invalidStep] }]]) {
+                for (const serialize of serializers) {
+                    expect(() => serialize({ version: 1, sport: ActivityTypes.Swimming, nodes },
+                        { ...options, allowDegraded: true })).toThrow(WorkoutStructureValidationError);
+                }
+            }
+        });
+
+    it.each(['/Activity/ManualLap/0/StrokeRate/Average', '/Activity/Zones/ZoneSense/Zone1/Duration'])(
+        'refuses a resource escape hatch on an otherwise valid target: %s', resource => {
+            expect(() => serializeSuuntoGuideJsonV1({ version: 1, sport: ActivityTypes.Swimming,
+                nodes: [{ ...step, targets: [{ kind: 'heart-rate', mode: 'absolute', minimumBpm: 120,
+                    maximumBpm: 140, resource }] }] }, { ...options, allowDegraded: true }))
+                .toThrow(WorkoutStructureValidationError);
+        });
+});
 
 describe('Suunto sport and prescription screen matrix', () => {
     const hr = { kind: 'heart-rate', mode: 'absolute', minimumBpm: 120, maximumBpm: 140 } as const;

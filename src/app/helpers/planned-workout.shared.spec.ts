@@ -149,6 +149,26 @@ describe('planned workout v1 contract', () => {
     }, 'unknown_discriminant', '$.nodes[0].kind');
   });
 
+  it.each(['stroke-rate', 'swolf', 'zone-sense', 'heart-rate-percentage'])(
+    'rejects uncontracted %s targets in steps and repeat children without changing v1', kind => {
+      // Negative inputs, not proposed JSON formats for these targets.
+      const targets = [{ kind, mode: 'absolute', minimum: 30, maximum: 40 }];
+      const step = { kind: 'step', id: 'swim', purpose: 'work', ending: { kind: 'time', seconds: 90 }, targets };
+      const direct = { version: 1, sport: ActivityTypes.Swimming, nodes: [step] };
+      expectValidationIssue(direct, 'unknown_discriminant', '$.nodes[0].targets[0].kind');
+      expectValidationIssue({ ...direct, nodes: [{ kind: 'repeat', id: 'sets', count: 2, steps: [step] }] },
+        'unknown_discriminant', '$.nodes[0].steps[0].targets[0].kind');
+      expect(() => deserializeWorkoutStructureV1(JSON.stringify(direct))).toThrow(WorkoutStructureValidationError);
+      expect(() => toFirestoreWorkoutStructureV1(direct)).toThrow(WorkoutStructureValidationError);
+    });
+
+  it.each(['/Activity/ManualLap/0/StrokeRate/Average', '/Activity/Zones/ZoneSense/Zone1/Duration'])(
+    'rejects a provider resource attached to a valid canonical target: %s', resource => {
+      expectValidationIssue({ ...COMPLETE_STRUCTURE_INPUT, nodes: [{ ...COMPLETE_STRUCTURE_INPUT.nodes[0],
+        targets: [{ ...COMPLETE_STRUCTURE_INPUT.nodes[0].targets[0], resource }] }] },
+      'unknown_field', '$.nodes[0].targets[0].resource');
+    });
+
   it('rejects duplicate IDs and nested repeats', () => {
     expectValidationIssue({
       ...COMPLETE_STRUCTURE_INPUT,

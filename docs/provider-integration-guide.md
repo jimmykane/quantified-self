@@ -433,6 +433,19 @@ are reserved first within five fields; long manual text stays text-only. Authore
 Average labels `Avg pace`, `Avg pwr` and `Avg strk` identify documented `manualLap`/`average` fields.
 Swimming stroke rate is contextual watch data, never a cadence target or rowing-stroke mapping. Only running/cycling
 receive documented power/cadence sensor counterparts; missing/unsupported sensors stay unavailable, not zero.
+
+For additional authored targets, [#773](https://github.com/jimmykane/quantified-self/issues/773) records the
+6 October contract review. The published JSON reference defines only the existing HR, power, speed/pace and cadence
+target types. Its measured `strokeRate` and `swolf` examples are not native target examples. Suunto's partner resource
+list confirms watch-engine possibilities, not the exact partner-upload JSON or range units. Swimming stroke rate
+and pool-context SWOLF are the bounded next candidates; neither is currently an authored QS target. The engine's
+`/Activity/{Window}/{WindowIndex}/{Field}/{Aggregate}` target pattern excludes ZoneSense's `/Activity/Zones/...`
+resources. ZoneSense remains unsupported despite sport-mode availability; do not approximate it with fixed HR.
+The preparatory parser/serializer/MCP regressions reject guessed target types and resource injection even with
+mapping-loss approval. They change no v1 recipe, provider payload/version, recovery digest, permission or transport.
+See [the Training contract boundary](training-workspace.md#additional-suunto-targets-contract-boundary-773) for units,
+candidate semantics, the exact partner example still needed, versioning and separately approved watch-test criteria.
+
 Device capability is not inferred from a connected account. Native watch units apply, without an unverified rowing /500 m label.
 Guides containing any manual-lap average create recorded laps at automatic boundaries and final completion;
 button-ended predecessors already create a lap, so the successor omits the extra lap. No opening lap or automatic

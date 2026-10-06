@@ -2224,6 +2224,51 @@ create/update/reschedule, frozen v5 lost-ACK recovery and unchanged retries. Bef
 watch/firmware and inspect recorded lap boundaries and block-average resets for automatic, early, coincident,
 manual-only and repeat/final boundaries. Local OR fixtures do not prove watch behavior.
 
+##### Additional Suunto targets: contract boundary (#773)
+
+The 6 October 2026 investigation rechecked the public
+[Guide JSON reference](https://apizone.suunto.com/suuntoplus-guide-description) and
+[Guide Cloud API workflow](https://aspartnercontent.blob.core.windows.net/apizone/docs/SuuntoplusGuideCloudAPI.pdf).
+The published authored-target field types remain `targetHeartRate`, `targetPower`, `targetSpeed`, `targetPace`
+and `targetCadence`. Existing wire units remain bpm, watts, m/s for both speed and pace, and Hz for cadence
+(canonical rpm divided by 60). Relative targets resolve the explicit saved reference to those absolute units;
+native watch `HeartRatePercentage` is not an equivalent prescription.
+
+Suunto's partner clarification recorded in [#773](https://github.com/jimmykane/quantified-self/issues/773)
+distinguishes watch-engine resource feasibility from partner-upload support. The engine's target resource form is
+`/Activity/{Window}/{WindowIndex}/{Field}/{Aggregate}`. Its technically targetable field list is Altitude, Ascent,
+Cadence, ContactTimeRatio, Depth, Descent, Distance, DownhillGrade, Duration, Energy, FlightTime, HeartRate,
+HeartRatePercentage, Pace, Power, RecoveryTime, Speed, StrokeRate, Strokes, Swolf, Temperature and VerticalSpeed.
+This is not a JSON allowlist, an API promise or a QS target catalog. ZoneSense's `/Activity/Zones/...` resources do
+not match that form; a native sport-mode ZoneSense target does not establish Guide support. ZoneSense remains
+unsupported, with no fixed-HR approximation or instruction-only substitute described as native targeting.
+
+Prioritize only two additional swimming candidates when the missing partner-upload contract is supplied:
+
+| Candidate, not yet implemented | Intended semantics and model decision | Evidence still required |
+| --- | --- | --- |
+| Swimming stroke-rate range | Rate of stroke cycles, separate from running/cycling cadence. Consider a provider-neutral absolute target using Sports Lib's existing Stroke Rate semantics (cycles/minute); do not infer the Suunto target wire unit from cadence. | Exact supported target JSON, scalar/range units and limits, aggregation/window semantics, pool/open-water availability and watch/sensor behavior. |
+| Pool SWOLF range | Dimensionless swimming-efficiency score for a defined stroke/pool context, never an open-water or context-free performance comparison. Do not select a canonical representation before pool-length/stroke semantics are established. | Exact supported target JSON, units/range direction/limits, aggregation/window, supported pool lengths/strokes and real-watch behavior. |
+
+The public reference describes `strokeRate` and `swolf` **measured fields**, not native target representations for
+these candidates. QS already emits a swimming stroke-rate reading; this change does not add SWOLF screens or
+claim either new target is sendable. Other technically possible resources are not selected for this slice.
+No speculative `targetStrokeRate`, `targetSwolf` or arbitrary resource field is emitted.
+
+This preparatory slice preserves the v1 target union and every stored recipe, provider artifact, mapping version,
+approval digest and recovery payload. Strict parser/Firestore-codec, Suunto current/recovery serializer and MCP
+read/proposal regressions reject uncontracted target kinds and provider-resource escape hatches, including repeat
+children. Regression inputs are deliberately invalid, not a proposed contract. Existing target-unit and saved-HR
+snapshot fixtures remain valid. Runtime behavior, other-provider support and delivery consent are unchanged.
+
+MCP/Assistant/plugin review: no tool, schema, scope, exposed field, consent, mutation, provider action, server
+instruction or bundled guidance changes. Latest and frozen full reads/previews stay strict, including Workout
+library operations; no catalog refresh, plugin rebuild or baseline/pending-contract update is needed.
+New native targets require a deliberate recipe-version/additive MCP decision, complete read/proposal coverage,
+formatting and other-provider exact/degraded/unsupported rules in their implementation PR. #773 remains open for
+that contract/model/implementation and separately approved account/watch testing. HTTP acceptance cannot establish
+target gauge, averaging, alert, sensor or watch behavior. Do not ask an athlete to test a target we cannot yet encode.
+
 ##### Current readings and boundary notifications (#784)
 
 The v5 screen baseline (retained by v6 for absent/false early Lap) builds on Training 01's reviewed v4 boundary/recovery logic and independently implements the documented partner [Guide schema](https://apizone.suunto.com/suuntoplus-guide-description),

@@ -120,6 +120,15 @@ describe('help.content', () => {
       expect(content).toContain(phrase);
     }
   });
+  it('distinguishes authored Suunto targets, measured swimming readings and unsupported ZoneSense', () => {
+    const content = HELP_SECTIONS.find(section => section.id === 'training-plans')!.content;
+    for (const phrase of ['**Guide targets and readings are different.**',
+      'heart-rate, power, speed/pace and cadence targets', 'not an authored stroke-rate target',
+      'SWOLF targets are not supported yet', '**ZoneSense targets are not supported in SuuntoPlus Guides**',
+      'even if your watch offers ZoneSense in a sport mode', 'reference snapshot saved with your workout'])
+      expect(content).toContain(phrase);
+    expect(searchHelpSections(HELP_SECTIONS, 'ZoneSense').map(section => section.id)).toContain('training-plans');
+  });
   it('explains shared horizontal pinch zoom on Event details charts', () => {
     const content = HELP_SECTIONS.find(section => section.id === 'getting-started')!.content;
     expect(content).toContain('In **Zoom** chart mode, pinch with two fingers');
