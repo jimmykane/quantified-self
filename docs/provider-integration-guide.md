@@ -156,6 +156,13 @@ never infer input units from the account preference or convert a distance a seco
 metres, COROS applies its existing integer-metre mapping with approval for loss, and Wahoo's dated delivery continues
 to reject distance-ended recipes when a required total duration cannot be established.
 
+Suunto Gym Guide strength load instructions use the owner's independent kg/lb preference through Sports Lib, while
+the stored companion stays in kilograms. The private per-attempt unit snapshot and versioned strength mapping keep
+uncertain historical sends recoverable and update retained Guide identities after a unit-only change; interval
+payloads/digests stay unchanged. The existing reconciliation scan detects preference changes without wider consent,
+new provider actions, a migration or a watch-receipt claim. See
+[Suunto strength load display units](training-workspace.md#strength-load-display-units) for the detailed contract.
+
 The interval editor also exposes the existing canonical `{ kind: 'manual' }` as **Lap button press**, for every purpose
 and repeat child. It has no numeric limit and is not a time/distance-or-button combination. For supported sports,
 Garmin serializes `OPEN`, Suunto Guide transitions use `manualLap`, and COROS serializes `EndManually`; COROS delivery

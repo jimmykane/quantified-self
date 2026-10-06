@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { ActivityTypes, DistanceUnits } from '@sports-alliance/sports-lib';
+import { ActivityTypes, DistanceUnits, WeightUnits } from '@sports-alliance/sports-lib';
 import { normalizeUserUnitSettings } from '../../../shared/unit-aware-display';
 import { readTrainingPlans, TRAINING_READ_LIMITS, type TrainingReadCodec, type TrainingReads } from './training-plans.service';
 import { TRAINING_PLANS_SCOPE, TRAINING_READ_OUTPUTS, TRAINING_RECIPE_SCHEMA, type TrainingReadTool } from './training-plans.schemas';
@@ -16,7 +16,7 @@ const plan = (name: string, lifecycle = 'active', workoutCount = 1) => ({ schema
   startLocalDate: '2026-09-01', endLocalDate: '2027-01-01', revision: 1, workoutCount, createdAtMs: 1, updatedAtMs: 1 });
 const workout = (planId: string | null, localDate = '2026-09-15', lifecycle = 'planned') => ({ schemaVersion: 1, planId,
   localDate, lifecycle, title: 'Easy run', revision: 1, createdAtMs: 1, updatedAtMs: 1 });
-function fixture() {
+function fixture(weightUnits?: WeightUnits) {
   const collections: Record<string, Record<string, Record<string, unknown>>> = {
     trainingPlans: { p1: plan('Active'), p2: plan('Paused', 'paused'), p3: plan('Archived', 'archived') },
     scheduledWorkouts: { w1: workout('p1'), w2: workout(null), w3: workout('p2'), w4: workout('p3'), w5: workout('p1', undefined, 'skipped'), w6: workout('p1', undefined, 'deleted') },
@@ -47,7 +47,7 @@ function fixture() {
           && (!after || String(data.localDate) > after.localDate
             || (String(data.localDate) === after.localDate && key > after.id)))
         .slice(0, limit).map(([id, data]) => ({ id, data })),
-      units: async () => normalizeUserUnitSettings({ distanceUnits: DistanceUnits.Miles }),
+      units: async () => normalizeUserUnitSettings({ distanceUnits: DistanceUnits.Miles, weightUnits }),
     }),
   };
   const run = (tool: TrainingReadTool, args: unknown = {}, scopes = [TRAINING_PLANS_SCOPE], connectionId = 'connection', uid = 'owner') =>
@@ -442,8 +442,8 @@ describe('Training plan MCP reads', () => {
     await expect(f.run('get_planned_workout', { workoutRef },
       [TRAINING_PLANS_SCOPE], 'connection', 'foreign-owner')).rejects.toThrow();
   });
-  it('reads the complete strength companion under Training consent and fails closed on a mismatch', async () => {
-    const f = fixture();
+  it.each([WeightUnits.Kilograms, WeightUnits.Pounds])('reads canonical kg strength under %s display settings and fails closed on a mismatch', async weightUnits => {
+    const f = fixture(weightUnits);
     const details = { version: 1 as const, workoutId: 'w1', revision: 1,
       exercises: [{ id: 'squat', name: 'Squat', sets: [{ id: 'set-one',
         ending: { kind: 'repetitions' as const, repetitions: 5 }, externalLoadKg: 80, restAfterSeconds: 120 }] }] };
@@ -456,6 +456,7 @@ describe('Training plan MCP reads', () => {
     const result = TRAINING_READ_OUTPUTS.get_strength_workout_details.parse(await f.run('get_strength_workout_details', { workoutRef }));
     expect(result.details.exercises[0].sets[0]).toMatchObject({ externalLoadKg: 80, restAfterSeconds: 120 });
     expect(result.details).not.toHaveProperty('workoutId');
+    expect(result.details).not.toHaveProperty('suuntoWeightUnits');
     const compatibility = TRAINING_READ_OUTPUTS.assess_planned_workout_compatibility.parse(
       await f.run('assess_planned_workout_compatibility', { workoutRef, providers: ['suunto', 'garmin', 'wahoo', 'coros'] }));
     expect(compatibility.assessments.map(item => [item.provider, item.level])).toEqual([

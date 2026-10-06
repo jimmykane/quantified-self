@@ -131,6 +131,7 @@ export async function processTrainingDelivery(runtime: DeliveryRuntime, uid: str
         timeZone: intent.timeZone, digest: intent.digest, contentDigest: ledger.contentDigest,
         workout: kind === 'upsert' ? workout : null,
         ...(kind === 'upsert' && context.strength ? { strength: context.strength } : {}),
+        ...(kind === 'upsert' && context.suuntoWeightUnits !== undefined ? { suuntoWeightUnits: context.suuntoWeightUnits } : {}),
         artifact: ledger.actual ?? (kind === 'remove' ? ledger.repair?.original ?? null : null), progress: null,
         ...(kind === 'remove' && context.pastCleanup ? { allowPastRemoval: true } : {}),
         ...(ledger.provider === 'wahoo' ? { wahooPlanGeneration: wahooPlanGeneration(ledger.wahooPlanGeneration === undefined

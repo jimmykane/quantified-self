@@ -1,5 +1,5 @@
-import { ActivityTypes, DataDuration } from '@sports-alliance/sports-lib';
-import { resolveUnitAwareDisplayStat } from '../../../../shared/unit-aware-display';
+import { ActivityTypes, DataDuration, DataWeight, type WeightUnits } from '@sports-alliance/sports-lib';
+import { normalizeUserUnitSettings, resolveUnitAwareDisplayStat } from '../../../../shared/unit-aware-display';
 import { suuntoGuideWatchTextV1 as watchText, suuntoGuideLiveReadingsV1 as sportLiveFields,
     suuntoGuideMeasuredTargetV1 as measuredTarget, suuntoGuideOptionalReadingsV1, isSuuntoGuideManualLapAverageV1,
     type SuuntoGuideReadingTypeV1 as SuuntoGuideReadingType } from '../../../../shared/suunto-guide-presentation';
@@ -93,6 +93,8 @@ export interface SerializeSuuntoGuideOptionsV1 {
     sourceWorkoutId: string;
     externalId?: string;
     allowDegraded: boolean;
+    /** Private strength-instruction presentation; canonical external loads remain kg. */
+    weightUnits?: WeightUnits;
 }
 
 const SUUNTO_MINIMUM_SUPPORTED_CHARACTERS = new Set(Array.from(
@@ -634,6 +636,13 @@ export function serializeSuuntoStrengthGuideV1(
     detailsValue: unknown,
     options: SerializeSuuntoGuideOptionsV1,
 ): ProviderSerializationResultV1<SuuntoGuideJsonV1> {
+    return serializeStrength(detailsValue, options, 'sport-screens-v5', true);
+}
+
+/** Recovery only; v5–v7 strength instructions used literal canonical kilogram values. */
+export function serializeSuuntoStrengthGuideV7ForRecovery(
+    detailsValue: unknown, options: SerializeSuuntoGuideOptionsV1,
+): ProviderSerializationResultV1<SuuntoGuideJsonV1> {
     return serializeStrength(detailsValue, options, 'sport-screens-v5');
 }
 
@@ -659,13 +668,16 @@ export function serializeSuuntoStrengthGuideV2ForRecovery(
 }
 
 function serializeStrength(detailsValue: unknown, options: SerializeSuuntoGuideOptionsV1,
-    presentation: GuidePresentation): ProviderSerializationResultV1<SuuntoGuideJsonV1> {
+    presentation: GuidePresentation, unitAwareWeight = false): ProviderSerializationResultV1<SuuntoGuideJsonV1> {
     const details = parseStrengthWorkoutDetailsV1(detailsValue);
+    const unitSettings = normalizeUserUnitSettings({ weightUnits: options.weightUnits });
     const nodes: WorkoutStepV1[] = [];
     details.exercises.forEach(exercise => exercise.sets.forEach((set, index) => {
+        const load = set.externalLoadKg === undefined ? null : unitAwareWeight
+            ? resolveUnitAwareDisplayStat(new DataWeight(set.externalLoadKg), unitSettings)!.text
+            : `${set.externalLoadKg} kg`;
         const label = `${exercise.name} - set ${index + 1} - ${set.ending.kind === 'repetitions'
-            ? `${set.ending.repetitions} reps` : `${set.ending.seconds} seconds`}${set.externalLoadKg === undefined
-            ? '' : ` - ${set.externalLoadKg} kg`}`;
+            ? `${set.ending.repetitions} reps` : `${set.ending.seconds} seconds`}${load === null ? '' : ` - ${load}`}`;
         nodes.push({ kind: 'step', id: `set-${set.id}`, purpose: 'work',
             ending: set.ending.kind === 'repetitions' ? { kind: 'manual' } : set.ending,
             targets: [], note: label });

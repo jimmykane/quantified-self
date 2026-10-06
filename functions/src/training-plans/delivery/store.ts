@@ -1,6 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import { FieldPath, type Transaction } from 'firebase-admin/firestore';
-import { ActivityTypes } from '@sports-alliance/sports-lib';
+import { ActivityTypes, WeightUnits } from '@sports-alliance/sports-lib';
+import { normalizeUserUnitSettings } from '../../../../shared/unit-aware-display';
 import {
   STRENGTH_DETAILS_COLLECTION_ID, STRENGTH_DETAILS_DOCUMENT_ID,
   parseStrengthWorkoutDetailsV1, strengthProjectionMatchesDetails,
@@ -33,12 +34,21 @@ export async function readStrengthDetailsForDelivery(tx: Transaction,
   return details;
 }
 
+/** Only Suunto strength text depends on owner units; other delivery mappings stay canonical. */
+export async function readSuuntoStrengthWeightUnits(tx: Transaction, user: FirebaseFirestore.DocumentReference,
+  provider: PlannedWorkoutProviderId, workouts: readonly ScheduledWorkoutV1[]): Promise<WeightUnits | undefined> {
+  if (provider !== 'suunto' || !workouts.some(workout => workout.structure.sport === ActivityTypes.StrengthTraining)) return undefined;
+  const owner = await tx.get(user);
+  return normalizeUserUnitSettings(owner.get('settings.unitSettings')).weightUnits ?? WeightUnits.Kilograms;
+}
+
 export async function readDeliveryContext(runtime: DeliveryRuntime, tx: Transaction, uid: string,
   workout: ScheduledWorkoutV1 | null, provider: PlannedWorkoutProviderId, hasPro: boolean,
   retainedWorkoutId?: string, ledger?: DeliveryLedgerV1 | null): Promise<DeliveryContext> {
   const user = runtime.db.collection('users').doc(uid);
   const connection = await runtime.connection(tx, uid, provider);
   const strength = workout ? await readStrengthDetailsForDelivery(tx, user, workout) : null;
+  const suuntoWeightUnits = await readSuuntoStrengthWeightUnits(tx, user, provider, workout ? [workout] : []);
   const workoutId = workout?.id ?? retainedWorkoutId;
   const [overrideDoc, settingDoc, scopeDoc, planDoc] = workoutId ? await Promise.all([
     tx.get(user.collection(TRAINING_DELIVERY_SETTINGS).doc(deliverySettingsId('workout', workoutId, provider))),
@@ -48,7 +58,8 @@ export async function readDeliveryContext(runtime: DeliveryRuntime, tx: Transact
   ]) : [null, null, null, null];
   const override = (overrideDoc?.data() ?? null) as TrainingDeliverySettingsV1 | null;
   const pastCleanup = ledger ? await readPastCleanupAuthorization(tx, runtime.db, uid, ledger, workout) : null;
-  return { workout, strength, planActive: planDoc?.data()?.lifecycle === 'active',
+  return { workout, strength, ...(suuntoWeightUnits === undefined ? {} : { suuntoWeightUnits }),
+    planActive: planDoc?.data()?.lifecycle === 'active',
     setting: workout?.planId ? (settingDoc?.data() ?? null) as TrainingDeliverySettingsV1 | null : override,
     override, scopeGeneration: scopeDoc?.data()?.generation ?? 0, connection, hasPro,
     transport: runtime.transport(provider, uid), nowMs: runtime.now(), pastCleanup };

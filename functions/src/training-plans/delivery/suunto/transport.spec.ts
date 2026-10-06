@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import JSZip from 'jszip';
-import { ActivityTypes } from '@sports-alliance/sports-lib';
+import { ActivityTypes, DataWeight, WeightUnits } from '@sports-alliance/sports-lib';
+import { projectStrengthWorkoutToV1 } from '../../../../../shared/strength-workout';
 import type { ScheduledWorkoutV1 } from '../../../../../shared/training-plans';
 import type { WorkoutStepV1 } from '../../../../../shared/planned-workout';
 import type { DeliveryCheckpoint, DeliveryOperation } from '../contracts';
@@ -9,7 +10,8 @@ import { SuuntoGuideHttpError } from './http';
 import { SuuntoHttpFixture } from '../test-support/suunto-http-fixture';
 import { packageGuide, readGuideArchive } from './archive';
 import type { SuuntoGuideFieldsStepV1, SuuntoGuideJsonV1 } from '../../providers/suunto-guide.serializer';
-import { assessSuuntoGuideV2ForRecovery, assessSuuntoGuideV3ForRecovery, assessSuuntoGuideV4ForRecovery, assessSuuntoGuideV6ForRecovery, guideExternalId, guideMapping, guidePayloadForRecovery } from './mapping';
+import { assessSuuntoGuideV2ForRecovery, assessSuuntoGuideV3ForRecovery, assessSuuntoGuideV4ForRecovery, assessSuuntoGuideV6ForRecovery,
+  assessSuuntoGuideV7ForRecovery, guideExternalId, guideMapping, guidePayloadForRecovery } from './mapping';
 
 describe('Suunto Guide lifecycle — synthetic transport', () => {
   const now = Date.parse('2026-12-29T12:00:00Z'); const owner = 'Quantified Self';
@@ -19,7 +21,7 @@ describe('Suunto Guide lifecycle — synthetic transport', () => {
   const recover = () => transport.recover(op, checkpoint, guard);
   const next = (patch: Partial<ScheduledWorkoutV1> = {}) => {
     op = { ...op, id: `${op.id}-next`, generation: op.generation + 1, progress: null, workout: { ...op.workout!, ...patch } };
-    op.digest = transport.assess(op.workout!, op.destinationKey, op.timeZone).digest;
+    op.digest = transport.assess(op.workout!, op.destinationKey, op.timeZone, op.strength, op.suuntoWeightUnits).digest;
   };
   beforeEach(() => {
     guard.mockReset(); guard.mockResolvedValue(undefined);
@@ -55,6 +57,53 @@ describe('Suunto Guide lifecycle — synthetic transport', () => {
     expect(server.guides.get(changed.ids.guide)!.guide.localDate).toBe('2027-01-02');
     op = { ...op, kind: 'remove', workout: null, progress: null };
     expect(await execute()).toBeNull(); expect(server.guides.size).toBe(0);
+  });
+  const strengthOperation = () => {
+    op.strength = { version: 1, workoutId: op.workout!.id, revision: 1, exercises: [{ id: 'squat', name: 'Back squat', sets: [
+      { id: 'set', ending: { kind: 'repetitions', repetitions: 5 }, externalLoadKg: DataWeight.fromDisplayValue(100, WeightUnits.Pounds).getValue() },
+    ] }] };
+    op.suuntoWeightUnits = WeightUnits.Pounds;
+    next({ structure: projectStrengthWorkoutToV1(op.strength) });
+  };
+  it('uses the snapshotted strength units and updates the same Guide after a unit-only change', async () => {
+    strengthOperation();
+    expect(transport.diagnosticMappingVersion(op)).toBe('suunto-guides-v8');
+    const original = (await execute())!;
+    expect(JSON.stringify(server.guides.get(original.ids.guide)!.guide)).toContain('100.0 lb');
+    op.suuntoWeightUnits = WeightUnits.Kilograms;
+    // An edited snapshot cannot be delivered under its old digest.
+    await expect(execute()).rejects.toMatchObject({ kind: 'terminal' });
+    next(); await execute();
+    expect(JSON.stringify(server.guides.get(original.ids.guide)!.guide)).toContain('45.4 kg');
+    next(); await execute();
+    expect(server.guides.size).toBe(1);
+    expect(server.calls.filter(request => request.method === 'POST')).toHaveLength(1);
+    expect(server.calls.filter(request => request.method === 'PUT')).toHaveLength(1);
+    expect(op.strength!.exercises[0].sets[0].externalLoadKg).toBe(45.359237);
+  });
+  it('recovers a v7 kg strength create before updating its retained Guide to pounds', async () => {
+    strengthOperation();
+    op.digest = assessSuuntoGuideV7ForRecovery(op.workout!, op.destinationKey, op.timeZone, owner, op.strength).digest;
+    const oldGuide = guidePayloadForRecovery(op, owner)!;
+    expect(JSON.stringify(oldGuide)).toContain('45.359237 kg');
+    server.guides.set('legacy-strength', { guide: oldGuide, pinned: true });
+    op.artifact = null; op.progress = { version: 1, step: 'create', state: 'started' };
+    const recovered = await recover();
+    expect(recovered).toMatchObject({ kind: 'accepted', artifact: { ids: { guide: 'legacy-strength' } } });
+    if (recovered.kind !== 'accepted') throw new Error('Legacy strength was not recovered');
+    op.artifact = recovered.artifact;
+    expect(server.calls.every(request => request.method === 'GET')).toBe(true);
+    next(); await execute();
+    expect(JSON.stringify(server.guides.get('legacy-strength')!.guide)).toContain('100.0 lb');
+    expect(server.guides.get('legacy-strength')!.pinned).toBe(true);
+    expect(server.guides.size).toBe(1);
+    expect(server.calls.filter(request => request.method === 'POST')).toHaveLength(0);
+    expect(server.calls.filter(request => request.method === 'PUT')).toHaveLength(1);
+  });
+  it('keeps interval digests independent of weight settings and byte-equivalent to v7', () => {
+    const current = transport.assess(op.workout!, op.destinationKey, op.timeZone);
+    expect(current).toEqual(assessSuuntoGuideV7ForRecovery(op.workout!, op.destinationKey, op.timeZone, owner));
+    expect(transport.assess(op.workout!, op.destinationKey, op.timeZone, undefined, WeightUnits.Pounds)).toEqual(current);
   });
   it('recovers a frozen v6 pool create and adds SWOLF to the same Guide once', async () => {
     next({ structure: { ...op.workout!.structure, sport: ActivityTypes.Swimming } });

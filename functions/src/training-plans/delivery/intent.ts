@@ -56,7 +56,7 @@ export function resolveDeliveryIntent(context: DeliveryContext, ledger?: Deliver
   if (!transport) return result('preserve', 'provider_unavailable');
   const days = (Date.parse(`${workout!.localDate}T00:00:00Z`) - Date.parse(`${today}T00:00:00Z`)) / 86_400_000;
   if (days > transport.horizonDays) return result(transport.withdrawOutsideHorizon ? 'absent' : 'preserve', 'outside_horizon');
-  const assessment = transport.assess(workout!, connection.destinationKey, timeZone, context.strength);
+  const assessment = transport.assess(workout!, connection.destinationKey, timeZone, context.strength, context.suuntoWeightUnits);
   if (assessment.level === 'unsupported') return result('preserve', 'unsupported', assessment.digest, assessment.issues);
   const approval = override?.approvedDigest ?? setting?.approvedDigest;
   // A legacy payload digest can omit truncated authored text. Carry approval

@@ -6,6 +6,7 @@ import * as logger from 'firebase-functions/logger';
 import { HttpsError } from 'firebase-functions/v2/https';
 import { z } from 'zod';
 import { ActivityTypes } from '@sports-alliance/sports-lib';
+import { readSuuntoStrengthWeightUnits } from '../training-plans/delivery/store';
 import {
   TRAINING_PLAN_DELETION_LOCKS_COLLECTION_ID,
   parseMutateTrainingScheduleRequestV1,
@@ -717,8 +718,12 @@ async function previewSimulatedProviderAvailability(
   const workouts = operation.targetType === 'workout'
     ? [workout!]
     : [...snapshot.workouts.values()].filter(item => item.planId === operation.targetId);
+  const suuntoWeightUnits = operation.provider === 'suunto'
+    && workouts.some(item => item.structure.sport === ActivityTypes.StrengthTraining)
+    ? await deps.db.runTransaction(tx => readSuuntoStrengthWeightUnits(tx, user, operation.provider, workouts), { readOnly: true })
+    : undefined;
   const assessments = workouts.map(item => transport?.assess(item, connection.destinationKey, timeZone,
-    snapshot.strengthDetails?.get(item.id) ?? null));
+    snapshot.strengthDetails?.get(item.id) ?? null, suuntoWeightUnits));
   const warningCount = assessments.filter(item => item && item.level !== 'exact').length;
   const today = trainingDeliveryLocalDate(deps.now(), timeZone);
   const eligibleCount = workouts.filter(item => item.lifecycle === 'planned' && item.localDate >= today

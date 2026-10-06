@@ -2165,6 +2165,29 @@ implementation, not cloud acceptance, watch receipt or completed-activity proof.
 
 #### SuuntoPlus Guide delivery (#650)
 
+##### Strength load display units
+
+Suunto strength delivery uses `suunto-guides-v8` for exercise/load instructions. Loads remain canonical
+`externalLoadKg` in the companion; `DataWeight` and `resolveUnitAwareDisplayStat` format value and unit from the
+owner's normalized `settings.unitSettings.weightUnits`. Legacy or invalid preferences default to kg. Suunto receives
+instruction text, so its watch unit setting cannot convert a literal load label. Omitted loads stay omitted and
+explicit zero remains zero. Sports Lib's display precision applies without rewriting the stored prescription.
+
+Delivery commands, MCP simulated-plan previews, reconciliation and request guards use the same owner preference.
+Each new strength attempt privately snapshots `suuntoWeightUnits`; its mapping digest binds that snapshot and the
+full prescription. Later preference changes cannot reinterpret a started attempt. Exact historical v2–v7 recovery
+completes first, then the normal worker updates the retained Guide in place. Interval/swim payloads and digests
+remain v7. Unit-only settings changes are picked up by the existing 30-minute reconciliation scan; Stop, Pro,
+account/deletion, horizon, completion and additional text-loss approval checks remain authoritative. App/watch sync
+is provider-managed, and no watch receipt is inferred.
+
+MCP impact: no wire change. Strength input/output and recipe previews retain canonical kg. The unit snapshot stays
+outside owner-readable delivery projections and MCP output. No tool, schema, scope, consent, mutation kind, provider
+action, metric, plugin/skill rebuild, catalog refresh, migration or historical reparse is added. Regression reads cover
+canonical strength under kg/lb preferences; synthetic transport and demo-Firestore cases cover kg/lb/default display,
+standalone/active-plan delivery, unit-only updates and recovery during a preference change. Release and watch QA
+remain separate from local verification.
+
 ##### Optional early Lap on numeric endings (#784 Training 07)
 
 `WorkoutTimeEndingV1` and `WorkoutDistanceEndingV1` optionally carry `allowEarlyLap?: boolean`.

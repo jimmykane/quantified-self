@@ -1,6 +1,6 @@
 import { createHash, randomUUID } from 'node:crypto';
 import { Firestore } from 'firebase-admin/firestore';
-import { ActivityTypes } from '@sports-alliance/sports-lib';
+import { ActivityTypes, WeightUnits } from '@sports-alliance/sports-lib';
 import { GARMIN_GENERIC_WORKOUT_SPORTS_V1 } from '../../../shared/planned-workout-providers';
 import { afterAll, afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { DeliveryRuntime } from '../training-plans/delivery/contracts';
@@ -1376,15 +1376,17 @@ describe.skipIf(!process.env.FIRESTORE_EMULATOR_HOST)('Training MCP write propos
       .toMatchObject({ provider: 'suunto', status: 'delivered', hasRemoteCopy: true });
     expect(suunto.guides.size).toBe(1);
     expect([...suunto.guides.values()][0].guide.activities).toEqual([23]);
-    expect(JSON.stringify([...suunto.guides.values()][0].guide.steps)).toContain('80 kg');
+    expect(JSON.stringify([...suunto.guides.values()][0].guide.steps)).toContain('80.0 kg');
     expect(suunto.calls.filter(call => call.method === 'POST')).toHaveLength(1);
   });
 
   it('deduplicates informative strength warnings in a simulated multi-workout plan preview', async () => {
     const suunto = new SuuntoHttpFixture();
     const guideTransport = new SuuntoGuideTransport(suunto.request, 'Quantified Self', deps.now);
+    const assess = vi.spyOn(guideTransport, 'assess');
     deps.runtime.transport = provider => provider === 'suunto' ? guideTransport : null;
     const user = db.collection('users').doc(uid);
+    await user.update({ 'settings.unitSettings.weightUnits': WeightUnits.Pounds });
     const batch = db.batch();
     batch.update(user.collection('trainingPlanState').doc('current'), { activePlanId: 'strength-plan', currentWorkoutCount: 20 });
     batch.set(user.collection('trainingPlans').doc('strength-plan'), { schemaVersion: 1, id: 'strength-plan',
@@ -1412,6 +1414,8 @@ describe.skipIf(!process.env.FIRESTORE_EMULATOR_HOST)('Training MCP write propos
     expect(preview.providerPreviews[0]).toMatchObject({ availability: 'ready', warningCount: 20,
       summary: expect.stringContaining('No separate mapping approval is needed') });
     expect(preview.providerPreviews[0].summary.match(/manual transitions/g)).toHaveLength(1);
+    expect(assess).toHaveBeenCalledWith(expect.objectContaining({ structure: expect.objectContaining({ sport: ActivityTypes.StrengthTraining }) }),
+      expect.any(String), 'Europe/Helsinki', expect.objectContaining({ version: 1 }), WeightUnits.Pounds);
     expect((await user.collection('trainingDeliverySettings').get()).empty).toBe(true);
     expect(suunto.calls).toHaveLength(0);
   });

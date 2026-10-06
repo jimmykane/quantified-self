@@ -399,8 +399,12 @@ provider and optional opaque activity reference.
 Sports Lib 21.3.0 adds an optional kg/lb display preference, not a new MCP metric or wire unit. Existing
 `measurements:read` body-weight results and Training-derived `weightKg` fields remain canonical kilograms;
 the Health UI display may use pounds when selected. No tool, schema, scope, consent, provider action,
-or bundled skill changes. The separate Strength Training feature uses this preference only at its app editor boundary;
-its MCP read and preview continue to use canonical kilograms.
+or bundled skill changes. The Strength Training editor and Suunto Gym Guide load instructions use this preference
+for display; MCP strength input/output and recipe previews continue to use canonical kilograms. Suunto delivery
+previews, including simulated plan changes, use owner units when assessing instruction text. The private per-attempt
+unit snapshot is excluded from public projections. No registered tool, schema, scope, grant, mutation kind or provider
+action changes; no plugin rebuild or catalog refresh is needed. The
+[Training guide](training-workspace.md#strength-load-display-units) owns the mapping and recovery details.
 
 Garmin schedule-only remote repair and #769's explicit reviewed replacement preserve the registered v1 MCP contract.
 The existing sanitized delivery status stops a confirmed missing copy or a complete not-found Garmin Workout
