@@ -2,6 +2,7 @@ import { TestBed } from '@angular/core/testing';
 import { signal } from '@angular/core';
 import { firstValueFrom } from 'rxjs';
 import { Firestore, getDocFromServer } from 'app/firebase/firestore';
+import { getFirestore, getDoc } from 'firebase/firestore/lite';
 import type { TrainingDeliveryCommandV1 } from '@shared/training-provider-delivery';
 import { AppFunctionsService } from './app.functions.service';
 import { BrowserCompatibilityService } from './browser.compatibility.service';
@@ -12,6 +13,11 @@ vi.mock('app/firebase/firestore', async importOriginal => ({
   ...await importOriginal<typeof import('app/firebase/firestore')>(),
   doc: vi.fn((_db, ...path: string[]) => ({ path: path.join('/') })),
   getDocFromServer: vi.fn(),
+}));
+vi.mock('firebase/firestore/lite', () => ({
+  getFirestore: vi.fn(() => ({ transport: 'uncached' })),
+  doc: vi.fn((_db, ...path: string[]) => ({ path: path.join('/') })),
+  getDoc: vi.fn(),
 }));
 
 const state = { schemaVersion: 1, activePlanId: null, revision: 1, currentWorkoutCount: 1, updatedAtMs: 1 };
@@ -24,21 +30,22 @@ const settings = { schemaVersion: 1, scope: 'workout', scopeId: 'workout', provi
   associationPlanId: null, approvedDigest: null, updatedAtMs: 1 };
 const command: TrainingDeliveryCommandV1 = { schemaVersion: 1, scope: 'workout', scopeId: 'workout', provider: 'garmin',
   mutationId: 'request', action: 'stop', expectedScheduleRevision: 1, expectedScopeRevision: 1, expectedSettingsRevision: 0 };
-const snapshot = (data: unknown, metadata = { fromCache: false, hasPendingWrites: false }) =>
-  ({ exists: () => data !== undefined, data: () => data, metadata }) as Awaited<ReturnType<typeof getDocFromServer>>;
+const app = {};
+const snapshot = (data: unknown) =>
+  ({ exists: () => data !== undefined, data: () => data }) as Awaited<ReturnType<typeof getDoc>>;
 
 describe('TrainingDeliveryService boundary', () => {
   let documents: Map<string, unknown>;
   beforeEach(() => {
     vi.clearAllMocks();
     documents = new Map([['users/owner/trainingPlanState/current', state], ['users/owner/scheduledWorkouts/workout', workout]]);
-    vi.mocked(getDocFromServer).mockImplementation(async ref => snapshot(documents.get(ref.path)));
+    vi.mocked(getDoc).mockImplementation(async ref => snapshot(documents.get(ref.path)));
   });
   it('reacts to public provider readiness, account changes and sign-out without sending consent or delivery work', async () => {
     const call = vi.fn(async (_name: string, _payload: unknown, _options?: { canExecute: () => boolean }) => ({ data: { schemaVersion: 1 } }));
     const user = signal<{ uid: string } | null>(null);
     TestBed.configureTestingModule({ providers: [TrainingDeliveryService,
-      { provide: Firestore, useValue: {} }, { provide: AppFunctionsService, useValue: { call } },
+      { provide: Firestore, useValue: { app } }, { provide: AppFunctionsService, useValue: { call } },
       { provide: BrowserCompatibilityService, useValue: { createRandomUUID: () => 'mutation-id' } },
       { provide: AppUserService, useValue: { user } },
     ] });
@@ -76,7 +83,7 @@ describe('TrainingDeliveryService boundary', () => {
       const user = signal<{ uid: string } | null>({ uid: 'owner' });
       const call = vi.fn((_name: string, _payload: unknown, _options?: { canExecute: () => boolean }) => new Promise(() => {}));
       TestBed.configureTestingModule({ providers: [TrainingDeliveryService,
-        { provide: Firestore, useValue: {} }, { provide: AppFunctionsService, useValue: { call } },
+        { provide: Firestore, useValue: { app } }, { provide: AppFunctionsService, useValue: { call } },
         { provide: BrowserCompatibilityService, useValue: {} }, { provide: AppUserService, useValue: { user } },
       ] });
       const service = TestBed.inject(TrainingDeliveryService);
@@ -97,7 +104,7 @@ describe('TrainingDeliveryService boundary', () => {
     const user = signal<{ uid: string } | null>({ uid: 'owner' });
     const call = vi.fn(async (_name: string, _payload: unknown, _options?: { canExecute: () => boolean }) => ({ data: {} }));
     TestBed.configureTestingModule({ providers: [TrainingDeliveryService,
-      { provide: Firestore, useValue: {} }, { provide: AppFunctionsService, useValue: { call } },
+      { provide: Firestore, useValue: { app } }, { provide: AppFunctionsService, useValue: { call } },
       { provide: BrowserCompatibilityService, useValue: {} }, { provide: AppUserService, useValue: { user } },
     ] });
     return { service: TestBed.inject(TrainingDeliveryService), user, call };
@@ -108,7 +115,9 @@ describe('TrainingDeliveryService boundary', () => {
     documents.set('users/owner/trainingDeliverySettings/workout_workout_garmin', settings);
     const { service, call } = configure();
     await service.check({ ...command, action: 'check' });
-    expect(vi.mocked(getDocFromServer).mock.calls.map(([ref]) => ref.path)).toEqual([
+    expect(getFirestore).toHaveBeenCalledWith(app);
+    expect(getDocFromServer).not.toHaveBeenCalled();
+    expect(vi.mocked(getDoc).mock.calls.map(([ref]) => ref.path)).toEqual([
       'users/owner/trainingPlanState/current', 'users/owner/scheduledWorkouts/workout',
       'users/owner/trainingDeliverySettings/workout_workout_garmin',
     ]);
@@ -127,6 +136,8 @@ describe('TrainingDeliveryService boundary', () => {
     const { service, call } = configure();
     await service.mutate(command);
     expect(getDocFromServer).not.toHaveBeenCalled();
+    expect(getFirestore).not.toHaveBeenCalled();
+    expect(getDoc).not.toHaveBeenCalled();
     expect(call).toHaveBeenCalledWith('mutateTrainingProviderDelivery', command, expect.anything());
   });
   it('allows revision zero only for confirmed absent source/settings during retained-copy recovery', async () => {
@@ -145,48 +156,67 @@ describe('TrainingDeliveryService boundary', () => {
     const review: TrainingDeliveryCommandV1 = { ...command, scope: 'plan', scopeId: 'plan', action: 'configure',
       timeZone: 'UTC', expectedScopeRevision: 8, expectedSettingsRevision: 134 };
     await service.preview(review);
-    expect(vi.mocked(getDocFromServer).mock.calls.map(([ref]) => ref.path)).toContain('users/owner/trainingPlans/plan');
+    expect(vi.mocked(getDoc).mock.calls.map(([ref]) => ref.path)).toContain('users/owner/trainingPlans/plan');
     expect(call).toHaveBeenCalledWith('previewTrainingProviderDelivery', review, expect.anything());
   });
   it.each(['read failure', 'invalid document', 'wrong scope', 'wrong provider'] as const)('never invents revision zero after %s', async failure => {
     const { service, call } = configure();
-    if (failure === 'read failure') vi.mocked(getDocFromServer).mockRejectedValue(new Error('Offline'));
+    if (failure === 'read failure') vi.mocked(getDoc).mockRejectedValue(new Error('Offline'));
     else documents.set('users/owner/trainingDeliverySettings/workout_workout_garmin', failure === 'invalid document'
       ? { enabled: true } : { ...settings, ...(failure === 'wrong scope' ? { scopeId: 'another-workout' } : { provider: 'wahoo' }) });
     await expect(service.check({ ...command, action: 'check' })).rejects.toThrow();
     expect(call).not.toHaveBeenCalled();
   });
   it.each([
-    'trainingPlanState/current', 'scheduledWorkouts/workout', 'trainingDeliverySettings/workout_workout_garmin',
-  ])('does not use pending revisions or pending absence from %s', async suffix => {
+    { fromCache: false, hasPendingWrites: false },
+    { fromCache: false, hasPendingWrites: true },
+    { fromCache: true, hasPendingWrites: false },
+  ])('bypasses incorrect full-SDK absence and local overlays: %j', async metadata => {
+    documents.set('users/owner/trainingPlanState/current', { ...state, revision: 253 });
+    documents.set('users/owner/trainingDeliverySettings/workout_workout_garmin', settings);
+    vi.mocked(getDocFromServer).mockResolvedValue({ exists: () => false, data: () => undefined, metadata } as
+      Awaited<ReturnType<typeof getDocFromServer>>);
     const { service, call } = configure();
-    vi.mocked(getDocFromServer).mockImplementation(async ref => snapshot(documents.get(ref.path),
-      { fromCache: false, hasPendingWrites: ref.path.endsWith(suffix) }));
-    await expect(service.check({ ...command, action: 'check' })).rejects.toMatchObject({ code: 'unavailable' });
-    expect(call).not.toHaveBeenCalled();
+    await service.check({ ...command, action: 'check' });
+    expect(getDocFromServer).not.toHaveBeenCalled();
+    expect(call).toHaveBeenCalledWith('mutateTrainingProviderDelivery', { ...command, action: 'check',
+      expectedScheduleRevision: 253, expectedScopeRevision: 1, expectedSettingsRevision: 134 }, expect.anything());
   });
-  it('rejects a cache-only read rather than treating it as server-confirmed absence', async () => {
+  it('uses zero for an independently confirmed missing schedule state', async () => {
+    documents.delete('users/owner/trainingPlanState/current');
     const { service, call } = configure();
-    vi.mocked(getDocFromServer).mockResolvedValueOnce(snapshot(undefined, { fromCache: true, hasPendingWrites: false }));
-    await expect(service.preview(command)).rejects.toMatchObject({ code: 'unavailable' });
+    await service.check({ ...command, action: 'check' });
+    expect(call).toHaveBeenCalledWith('mutateTrainingProviderDelivery', { ...command, action: 'check',
+      expectedScheduleRevision: 0 }, expect.anything());
+  });
+  it.each(['account', 'view'] as const)('fences a %s change while the uncached reader loads', async change => {
+    const { service, user, call } = configure();
+    let viewOpen = true;
+    const pending = service.check({ ...command, action: 'check' }, () => viewOpen);
+    if (change === 'account') user.set({ uid: 'other' });
+    else viewOpen = false;
+    await expect(pending).rejects.toMatchObject({ code: 'cancelled' });
+    expect(getFirestore).not.toHaveBeenCalled();
+    expect(getDoc).not.toHaveBeenCalled();
     expect(call).not.toHaveBeenCalled();
   });
   it('fences an account change during a server read without reading the next owner or dispatching', async () => {
     const { service, user, call } = configure();
-    let finish!: (value: Awaited<ReturnType<typeof getDocFromServer>>) => void;
-    vi.mocked(getDocFromServer).mockImplementationOnce(() => new Promise(resolve => { finish = resolve; }));
+    let finish!: (value: Awaited<ReturnType<typeof getDoc>>) => void;
+    vi.mocked(getDoc).mockImplementationOnce(() => new Promise(resolve => { finish = resolve; }));
     const pending = service.check({ ...command, action: 'check' });
+    await vi.waitFor(() => expect(getDoc).toHaveBeenCalledTimes(3));
     user.set({ uid: 'other' }); finish(snapshot(state));
     await expect(pending).rejects.toMatchObject({ code: 'cancelled' });
     expect(call).not.toHaveBeenCalled();
-    expect(vi.mocked(getDocFromServer).mock.calls.every(([ref]) => ref.path.startsWith('users/owner/'))).toBe(true);
+    expect(vi.mocked(getDoc).mock.calls.every(([ref]) => ref.path.startsWith('users/owner/'))).toBe(true);
   });
   it('bounds server reads and prevents late dispatch after timeout', async () => {
     vi.useFakeTimers();
     try {
       const { service, call } = configure();
-      let finish!: (value: Awaited<ReturnType<typeof getDocFromServer>>) => void;
-      vi.mocked(getDocFromServer).mockImplementationOnce(() => new Promise(resolve => { finish = resolve; }));
+      let finish!: (value: Awaited<ReturnType<typeof getDoc>>) => void;
+      vi.mocked(getDoc).mockImplementationOnce(() => new Promise(resolve => { finish = resolve; }));
       const pending = service.preview(command);
       const rejected = expect(pending).rejects.toMatchObject({ name: 'TimeoutError' });
       await vi.advanceTimersByTimeAsync(TRAINING_DELIVERY_PREVIEW_TIMEOUT_MS); await rejected;

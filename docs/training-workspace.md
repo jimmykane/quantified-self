@@ -1534,18 +1534,26 @@ schedules also block reviews and confirmations rather than using their temporary
 
 Before Check or a delivery preview, the browser reads three exact owner documents from the server: schedule state,
 the addressed plan/workout, and that provider's scoped settings. Strict parsers validate the records and bind the
-source/settings identity to the addressed document. Only server-confirmed absence contributes revision zero. These reads
-reject cache-only snapshots and pending local writes even when requested with the server-only SDK method. Check
+source/settings identity to the addressed document. Only server-confirmed absence contributes revision zero. The three
+one-shot reads use lazily loaded Firestore Lite REST with the same Firebase app's Auth and App Check providers,
+not the full SDK's watch/local-store path: even `getDocFromServer` can repeat an incorrect persisted missing-document
+result. Lite has no local cache or pending-write overlay. The live schedule-state listener retains its server-confirmed
+watch as an invalidation signal, independently verifies the exact `current` state with Lite, and publishes only that
+validated result. This adds one uncached exact-document read per acknowledged state emission, shared across that owner's
+schedule consumers; there is no polling or history query. Each verification is bounded to 30 seconds and retains the
+schedule's existing two-retry policy. Cancelled, superseded or timed-out subscriptions cannot publish late results.
+A failed verification stays unavailable, never revision zero. Other live listeners remain unchanged. Check
 uses the current revisions without changing consent. A preview with stale displayed revisions fails with a readable
 conflict instead of silently reviewing new consent or rebasing a replacement approval. The server transaction still
 checks revisions because these three reads are not an atomic snapshot. A live settings/schedule/source revision change
 disables a not-yet-dispatched confirmation with explicit cancel/review guidance. Once dispatch has been attempted,
 an uncertain receipt replay still retains the exact reviewed command and mutation ID; they are never rewritten to
 current revisions. Account/view changes and
-timeouts fence dispatch after reads and during App Check readiness.
+timeouts fence dispatch before and after the lazy import, after reads and during App Check readiness. Failed reads
+never fall back to cached revisions or invented zeroes.
 
 Regression coverage lives in `training-delivery-reads.spec.ts`, `training-delivery.service.spec.ts`,
-`training-delivery-dialog.component.spec.ts` and the Firestore wrapper metadata tests. This is a browser-read/readiness
+`training-plans-state-reads.spec.ts`, `training-delivery-dialog.component.spec.ts` and the Firestore wrapper metadata tests. This is a browser-read/readiness
 fix, not evidence of a new provider send, deletion or device receipt. MCP impact: no wire change; existing server-side
 Training read/proposal/confirmation contracts, shared summaries, consent, replacement safeguards, provider transports
 and completed-activity totals are unchanged. No Rules, indexes or Functions deployment is required. Live UI Check

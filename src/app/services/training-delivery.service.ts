@@ -1,5 +1,5 @@
 import { Injectable, computed, inject } from '@angular/core';
-import { Firestore, collection, collectionData, doc, docData, getDocFromServer, query, where, limit, orderBy } from 'app/firebase/firestore';
+import { Firestore, collection, collectionData, doc, docData, query, where, limit, orderBy } from 'app/firebase/firestore';
 import { combineLatest, finalize, firstValueFrom, from, map, Observable, of, timeout } from 'rxjs';
 import { PLANNED_WORKOUT_PROVIDER_IDS, type PlannedWorkoutProviderId } from '@shared/planned-workout-providers';
 import { isTrainingProviderDeliveryEnabled } from '@shared/training-delivery-rollout';
@@ -139,7 +139,7 @@ export class TrainingDeliveryService {
       if (!current()) throw Object.assign(new Error('Sync review is no longer open.'), { code: 'cancelled' });
       let payload = request;
       if (name === 'previewTrainingProviderDelivery' || request.action === 'check') {
-        const revisions = await this.readCurrentRevisions(uid!, request);
+        const revisions = await this.readCurrentRevisions(uid!, request, current);
         if (!current()) throw Object.assign(new Error('Sync review is no longer open.'), { code: 'cancelled' });
         if (request.action === 'check') payload = { ...request, ...revisions };
         else if (Object.entries(revisions).some(([key, revision]) => request[key as keyof typeof revisions] !== revision)) {
@@ -152,18 +152,25 @@ export class TrainingDeliveryService {
     return result.data;
   }
 
-  private async readCurrentRevisions(uid: string, command: TrainingDeliveryCommandV1): Promise<Pick<TrainingDeliveryCommandV1,
+  private async readCurrentRevisions(uid: string, command: TrainingDeliveryCommandV1, current: () => boolean): Promise<Pick<TrainingDeliveryCommandV1,
     'expectedScheduleRevision' | 'expectedScopeRevision' | 'expectedSettingsRevision'>> {
+    const assertCurrent = () => {
+      if (!current()) throw Object.assign(new Error('Sync review is no longer open.'), { code: 'cancelled' });
+    };
+    assertCurrent();
+    // Full SDK server reads still use its watch/local-store path, which can
+    // repeat a persisted NoDocument result. Like profile verification, use
+    // uncached Lite REST reads with the same app's Auth and App Check providers.
+    // Keep this dependency lazy and the existing live listeners unchanged.
+    const { getFirestore, doc, getDoc } = await import('firebase/firestore/lite');
+    assertCurrent();
+    const firestore = getFirestore(this.firestore.app);
     const [state, scope, settings] = await Promise.all([
-      getDocFromServer(doc(this.firestore, 'users', uid, 'trainingPlanState', 'current')),
-      getDocFromServer(doc(this.firestore, 'users', uid, command.scope === 'plan' ? 'trainingPlans' : 'scheduledWorkouts', command.scopeId)),
-      getDocFromServer(doc(this.firestore, 'users', uid, TRAINING_DELIVERY_SETTINGS, deliverySettingsId(command.scope, command.scopeId, command.provider))),
+      getDoc(doc(firestore, 'users', uid, 'trainingPlanState', 'current')),
+      getDoc(doc(firestore, 'users', uid, command.scope === 'plan' ? 'trainingPlans' : 'scheduledWorkouts', command.scopeId)),
+      getDoc(doc(firestore, 'users', uid, TRAINING_DELIVERY_SETTINGS, deliverySettingsId(command.scope, command.scopeId, command.provider))),
     ]);
-    // Even a server-requested SDK read can contain latency-compensated local
-    // mutations. Such revisions (including a pending deletion) are not authority.
-    if ([state, scope, settings].some(snapshot => snapshot.metadata.fromCache || snapshot.metadata.hasPendingWrites)) {
-      throw Object.assign(new Error('Current sync settings are not available yet.'), { code: 'unavailable' });
-    }
+    assertCurrent();
     const record = scope.exists() ? (command.scope === 'plan' ? parseTrainingPlanV1(scope.data()) : parseScheduledWorkoutV1(scope.data())) : undefined;
     if (record && record.id !== command.scopeId) throw new Error('Sync source does not match its document.');
     const setting = parseScopeSettings(settings.exists() ? settings.data() : undefined, command.scope, command.scopeId, command.provider);

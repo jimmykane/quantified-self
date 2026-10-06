@@ -14,7 +14,7 @@ import {
   startAfter,
   where,
 } from 'app/firebase/firestore';
-import { catchError, combineLatest, from, map, Observable, of, retry, shareReplay, switchMap, throwError } from 'rxjs';
+import { catchError, combineLatest, from, map, Observable, of, retry, shareReplay, switchMap, throwError, timeout } from 'rxjs';
 import {
   SCHEDULED_WORKOUTS_COLLECTION_ID,
   DELETED_WORKOUT_RECOVERY_MS,
@@ -67,6 +67,7 @@ export interface DeletedTrainingWorkoutsPageV1 {
 }
 
 const DELETED_WORKOUT_PAGE_SIZE = 25;
+export const TRAINING_SCHEDULE_STATE_READ_TIMEOUT_MS = 30_000;
 
 function emptyTrainingSchedule(): CurrentTrainingScheduleV1 {
   return {
@@ -112,12 +113,7 @@ export class TrainingPlansService {
     if (existing) return existing;
 
     const userPath = ['users', uid] as const;
-    const stateRef = doc(
-      this.firestore,
-      ...userPath,
-      TRAINING_PLAN_STATE_COLLECTION_ID,
-      TRAINING_PLAN_STATE_DOCUMENT_ID,
-    );
+    const stateRef = doc(this.firestore, ...userPath, TRAINING_PLAN_STATE_COLLECTION_ID, TRAINING_PLAN_STATE_DOCUMENT_ID);
     const plansRef = collection(this.firestore, ...userPath, TRAINING_PLANS_COLLECTION_ID);
     const workoutsRef = collection(this.firestore, ...userPath, SCHEDULED_WORKOUTS_COLLECTION_ID);
     const availabilityRef = doc(this.firestore, ...userPath, TRAINING_PLAN_STATE_COLLECTION_ID,
@@ -126,7 +122,11 @@ export class TrainingPlansService {
       switchMap(availability => {
         if (availability !== undefined) return of({ ...emptyTrainingSchedule(), restoreUnavailable: true as const });
         return combineLatest([
-          docData(stateRef),
+          // Even a server-acknowledged document/query watch can repeat a stale
+          // missing state. Keep its live invalidation signal but independently
+          // verify the exact state through uncached REST before publishing it.
+          docData(stateRef, { waitForServer: true }).pipe(switchMap(() => from(this.readCurrentState(uid)).pipe(
+            timeout({ first: TRAINING_SCHEDULE_STATE_READ_TIMEOUT_MS })))),
           collectionData(plansRef, { idField: 'id' }),
           collectionData(query(workoutsRef, where('lifecycle', 'in', ['planned', 'skipped'])), { idField: 'id' }),
         ]).pipe(
@@ -155,6 +155,12 @@ export class TrainingPlansService {
     );
     this.scheduleStreams.set(uid, schedule$);
     return schedule$;
+  }
+
+  private async readCurrentState(uid: string): Promise<unknown> {
+    const { getFirestore, doc, getDoc } = await import('firebase/firestore/lite');
+    const firestore = getFirestore(this.firestore.app);
+    return (await getDoc(doc(firestore, 'users', uid, TRAINING_PLAN_STATE_COLLECTION_ID, TRAINING_PLAN_STATE_DOCUMENT_ID))).data();
   }
 
   async getDeletedWorkoutsPage(
