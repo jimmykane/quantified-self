@@ -371,6 +371,7 @@ describe('help.content', () => {
       'training-plans',
       'health',
       'training-analysis',
+      'post-workout-reflections',
       'ai-insights',
       'plans-and-billing',
       'uploads-and-imports',
@@ -380,8 +381,8 @@ describe('help.content', () => {
     ]);
   });
 
-  it('should define twelve unique sections with complete content', () => {
-    expect(HELP_SECTIONS).toHaveLength(12);
+  it('should define thirteen unique sections with complete content', () => {
+    expect(HELP_SECTIONS).toHaveLength(13);
 
     const uniqueIds = new Set(HELP_SECTIONS.map(section => section.id));
     expect(uniqueIds.size).toBe(HELP_SECTIONS.length);
@@ -399,6 +400,16 @@ describe('help.content', () => {
         expect(link.target.trim().length).toBeGreaterThan(0);
       });
     });
+  });
+
+  it('makes reflection help discoverable and explains its independent privacy and deletion boundaries', () => {
+    const section = HELP_SECTIONS.find(value => value.id === 'post-workout-reflections')!;
+    expect(searchHelpSections(HELP_SECTIONS, 'post-workout reflection').map(value => value.id)).toContain(section.id);
+    for (const phrase of ['**Skip** or **Cancel** writes nothing', 'private even when the recording is public',
+      '**Not reported** stays unknown', '**Delete permanently** removes effort and text',
+      'off for fresh and New chats', 'cannot erase text a client already received or quoted']) {
+      expect(section.content).toContain(phrase);
+    }
   });
 
   it('documents the source-separated Health workspace and its bounded metric explorer', () => {

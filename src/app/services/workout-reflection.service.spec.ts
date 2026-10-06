@@ -2,13 +2,15 @@ import { TestBed } from '@angular/core/testing';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { Auth } from 'app/firebase/auth';
 import { Firestore } from 'app/firebase/firestore';
-import { WorkoutReflectionService } from './workout-reflection.service';
-const mocks = vi.hoisted(() => ({ get: vi.fn(), set: vi.fn(), read: vi.fn(), links: vi.fn() }));
+import { WorkoutReflectionService, WORKOUT_REFLECTION_READ_TIMEOUT_MS } from './workout-reflection.service';
+const mocks = vi.hoisted(() => ({ get: vi.fn(), set: vi.fn(), read: vi.fn(), cachedRead: vi.fn(), links: vi.fn(), liteFirestore: vi.fn() }));
+vi.mock('firebase/firestore/lite', () => ({ getFirestore: mocks.liteFirestore,
+  doc: (_db: unknown, path: string) => path, getDoc: mocks.read }));
 vi.mock('app/firebase/firestore', async () => {
   const actual = await vi.importActual('app/firebase/firestore');
   return { ...actual, collection: (_db: unknown, ...path: string[]) => path.join('/'),
     query: (path: string, ...constraints: unknown[]) => ({ path, constraints }), where: (...args: unknown[]) => args,
-    limit: (value: number) => value, getDocsFromServer: mocks.links, doc: (_db: unknown, ...path: string[]) => path.join('/'), getDocFromServer: mocks.read,
+    limit: (value: number) => value, getDocsFromServer: mocks.links, doc: (_db: unknown, ...path: string[]) => ({ path: path.join('/') }), getDocFromServer: mocks.cachedRead,
     runTransaction: (_db: unknown, callback: (txn: unknown) => Promise<unknown>) => callback({ get: mocks.get, set: mocks.set }) };
 });
 const recording = { uid: 'owner', eventId: 'e', activityId: 'a', target: 'activity' as const };
@@ -18,16 +20,42 @@ describe('Private reflection transactions', () => {
   const auth = { currentUser: { uid: 'owner' } };
   beforeEach(() => {
     vi.clearAllMocks(); auth.currentUser = { uid: 'owner' };
-    TestBed.configureTestingModule({ providers: [{ provide: Firestore, useValue: {} }, { provide: Auth, useValue: auth }] });
+    mocks.liteFirestore.mockReturnValue({});
+    mocks.read.mockResolvedValue({ exists: () => false });
+    TestBed.configureTestingModule({ providers: [{ provide: Firestore, useValue: { app: 'reflection-app' } }, { provide: Auth, useValue: auth }] });
     service = TestBed.inject(WorkoutReflectionService);
-    mocks.get.mockImplementation(async (path: string) => ({ exists: () => !path.includes('workoutReflections'),
+    mocks.get.mockImplementation(async ({ path }: { path: string }) => ({ exists: () => !path.includes('workoutReflections'),
       data: () => path.includes('/activities/') ? { eventID: 'e' } : {} }));
   });
   it('writes only a private leaf and never event stats, completion or prescriptions', async () => {
     await service.save(recording, 0, id, { effort: 0, note: null });
     expect(mocks.set).toHaveBeenCalledOnce();
-    expect(mocks.set).toHaveBeenCalledWith('users/owner/events/e/workoutReflections/activity_a',
+    expect(mocks.set).toHaveBeenCalledWith({ path: 'users/owner/events/e/workoutReflections/activity_a' },
       expect.objectContaining({ effort: 0, revision: 1, note: null }));
+  });
+
+  it('reads the exact leaf through uncached Lite with the same Firebase app', async () => {
+    const saved = { schemaVersion: 1, revision: 4, deleted: false, mutationId: id, effort: 0, note: 'current' };
+    mocks.cachedRead.mockResolvedValue({ exists: () => false });
+    mocks.read.mockResolvedValue({ exists: () => true, data: () => saved });
+    expect(await service.read(recording)).toEqual(saved);
+    expect(mocks.liteFirestore).toHaveBeenCalledWith('reflection-app');
+    expect(mocks.read).toHaveBeenCalledWith('users/owner/events/e/workoutReflections/activity_a');
+    expect(mocks.cachedRead).not.toHaveBeenCalled();
+    mocks.read.mockResolvedValue({ exists: () => false });
+    expect(await service.read(recording)).toBeNull();
+  });
+
+  it('rejects an unavailable leaf instead of inventing revision zero or waiting indefinitely', async () => {
+    mocks.read.mockRejectedValueOnce(new Error('unavailable'));
+    await expect(service.read(recording)).rejects.toThrow('unavailable');
+    vi.useFakeTimers();
+    try {
+      mocks.read.mockImplementationOnce(() => new Promise(() => undefined));
+      const pending = expect(service.read(recording)).rejects.toThrow('Timeout');
+      await vi.advanceTimersByTimeAsync(WORKOUT_REFLECTION_READ_TIMEOUT_MS);
+      await pending;
+    } finally { vi.useRealTimers(); }
   });
   it('rejects cross-owner, changed activity membership and missing events before writing', async () => {
     auth.currentUser = { uid: 'other' }; await expect(service.read(recording)).rejects.toThrow('account');
@@ -61,5 +89,11 @@ describe('Private reflection transactions', () => {
       auth.currentUser = { uid: 'other' }; return { exists: () => false };
     });
     await expect(service.read(recording)).rejects.toThrow('account');
+  });
+  it('checks the owner again after lazy loading before issuing the read', async () => {
+    const pending = service.read(recording);
+    auth.currentUser = { uid: 'other' };
+    await expect(pending).rejects.toThrow('account');
+    expect(mocks.read).not.toHaveBeenCalled();
   });
 });

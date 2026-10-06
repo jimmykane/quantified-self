@@ -1,12 +1,14 @@
 import { Injectable, inject } from '@angular/core';
 import { Auth } from 'app/firebase/auth';
-import { Firestore, doc, getDocFromServer, runTransaction, collection, query, where, limit, getDocsFromServer } from 'app/firebase/firestore';
+import { Firestore, doc, runTransaction, collection, query, where, limit, getDocsFromServer } from 'app/firebase/firestore';
+import { firstValueFrom, from, timeout } from 'rxjs';
 import { isBenchmarkEvent } from '@shared/event-classification';
 import { WORKOUT_REFLECTION_COLLECTION, decodeWorkoutReflection, nextWorkoutReflection, reflectionDocumentId,
   type WorkoutReflectionFields, type WorkoutReflectionTarget } from '@shared/workout-reflection';
 import { parseTrainingWorkoutCompletionV1, TRAINING_WORKOUT_COMPLETIONS_COLLECTION_ID } from '@shared/training-workout-completion';
 
 export interface ReflectionRecording { uid: string; eventId: string; activityId: string; target: WorkoutReflectionTarget }
+export const WORKOUT_REFLECTION_READ_TIMEOUT_MS = 30_000;
 @Injectable({ providedIn: 'root' })
 export class WorkoutReflectionService {
   private readonly db = inject(Firestore);
@@ -21,7 +23,14 @@ export class WorkoutReflectionService {
       reflectionDocumentId(recording.target, recording.activityId));
   }
   async read(recording: ReflectionRecording) {
-    const snapshot = await getDocFromServer(this.ref(recording));
+    const reference = this.ref(recording);
+    // The full SDK's watch/local-store path can repeat a persisted missing leaf.
+    // Lite reads use the same app's Auth/App Check providers without that cache.
+    const snapshot = await firstValueFrom(from((async () => {
+      const { getFirestore, doc, getDoc } = await import('firebase/firestore/lite');
+      this.assertOwner(recording.uid);
+      return getDoc(doc(getFirestore(this.db.app), reference.path));
+    })()).pipe(timeout(WORKOUT_REFLECTION_READ_TIMEOUT_MS)));
     this.assertOwner(recording.uid);
     const reflection = snapshot.exists() ? decodeWorkoutReflection(snapshot.data()) : null;
     if (snapshot.exists() && !reflection) throw new Error('The saved reflection could not be read safely.');

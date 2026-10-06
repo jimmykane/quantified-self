@@ -10,6 +10,13 @@ export interface WorkoutReflection extends WorkoutReflectionFields {
   mutationId: string;
 }
 const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+function hasDisallowedControlCharacter(text: string): boolean {
+  for (let index = 0; index < text.length; index++) {
+    const code = text.charCodeAt(index);
+    if (code <= 8 || code === 11 || code === 12 || (code >= 14 && code <= 31) || code === 127) return true;
+  }
+  return false;
+}
 export function reflectionDocumentId(target: WorkoutReflectionTarget, activityId: string): string {
   if (!activityId || activityId.length > 1400 || activityId.includes('/') || /^\.+$/.test(activityId)) {
     throw new Error('The recording target is invalid.');
@@ -20,7 +27,7 @@ export function validateReflectionFields(value: WorkoutReflectionFields): Workou
   if (!value || Object.keys(value).some(key => !['effort', 'note'].includes(key))
     || !(value.effort === null || (Number.isInteger(value.effort) && value.effort >= 0 && value.effort <= 10))
     || !(value.note === null || (typeof value.note === 'string' && value.note.length <= WORKOUT_REFLECTION_NOTE_LIMIT
-      && !/[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]/.test(value.note)))) {
+      && !hasDisallowedControlCharacter(value.note)))) {
     throw new Error('Choose a whole-number effort from 0 to 10 and a note of at most 2000 characters.');
   }
   return { effort: value.effort, note: value.note?.trim() || null };

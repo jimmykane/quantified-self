@@ -27,11 +27,15 @@ limited to 2000 characters, rejects control characters except newline/tab, and i
 A save needs effort or nonblank text. The existing Feeling/RPE event-stat editor, imported RPE and planned step RPE
 stay independent. Item 13 may share deliberate Borg scale semantics, but not storage, consent or automatic copying.
 
-Owner SDK transactions read the current parent, target membership and leaf before writing. Rules additionally check
+The editor reads its exact leaf with lazily loaded Firestore Lite REST using the same app's Auth/App Check providers,
+avoiding the full SDK's persisted missing-document state. That read is bounded to 30 seconds and rechecks the owner
+after module loading and the response; failure never supplies revision zero. Owner SDK transactions read the current
+parent, target membership and leaf before writing. Rules additionally check
 active-account/deletion fences, benchmark exclusion, exact keys, effort/text bounds and monotonically increasing
 revisions. Public event access never grants reflection access; collection listing and descendants are denied.
 Unknown/corrupt leaves fail closed. Skip/Cancel and an unchanged draft never write. Concurrent revisions require reload;
-an uncertain unchanged retry preserves its mutation UUID. Account changes clear private dialog state and invalidate
+an uncertain unchanged retry preserves its mutation UUID. UUID creation uses the shared browser compatibility guard;
+an unavailable UUID reports a browser error and preserves the editable draft without writing. Account changes clear private dialog state and invalidate
 pending results. Accepted selection/effort changes own selection haptics; async saves own success/error feedback.
 
 Deletion overwrites effort/text with null in a content-free monotonic tombstone, preventing a stale create/edit retry

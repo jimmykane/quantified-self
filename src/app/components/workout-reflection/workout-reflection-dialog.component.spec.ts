@@ -7,18 +7,21 @@ import { DistanceUnits } from '@sports-alliance/sports-lib';
 import { AppAuthService } from '../../authentication/app.auth.service';
 import { AppHapticsService } from '../../services/app.haptics.service';
 import { WorkoutReflectionService } from '../../services/workout-reflection.service';
+import { BrowserCompatibilityService } from '../../services/browser.compatibility.service';
 import { WorkoutReflectionDialogComponent } from './workout-reflection-dialog.component';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 describe('Workout reflection editor', () => {
   const haptics = { selection: vi.fn(), success: vi.fn(), error: vi.fn() };
   const service = { read: vi.fn(), hasExactWorkoutLink: vi.fn(), save: vi.fn() };
+  const browser = { createRandomUUID: vi.fn() };
   const ref = { close: vi.fn(), disableClose: false };
   const auth$ = new Subject<{ uid: string }>();
   let component: WorkoutReflectionDialogComponent;
   let fixture: ReturnType<typeof TestBed.createComponent<WorkoutReflectionDialogComponent>>;
   beforeEach(async () => {
     vi.clearAllMocks();
+    browser.createRandomUUID.mockReturnValue('11111111-1111-4111-8111-111111111111');
     service.read.mockResolvedValue(null); service.hasExactWorkoutLink.mockResolvedValue(false); service.save.mockResolvedValue({});
     TestBed.configureTestingModule({ imports: [WorkoutReflectionDialogComponent, NoopAnimationsModule], providers: [
       { provide: MAT_DIALOG_DATA, useValue: { user: { uid: 'owner', settings: { unitSettings: { distanceUnits: DistanceUnits.Miles } } },
@@ -26,6 +29,7 @@ describe('Workout reflection editor', () => {
           { getID: () => 'run', type: 'Running' }, { getID: () => 'bike', type: 'Cycling' } ] } } },
       { provide: MatDialogRef, useValue: ref }, { provide: AppHapticsService, useValue: haptics },
       { provide: WorkoutReflectionService, useValue: service }, { provide: AppAuthService, useValue: { user$: auth$ } },
+      { provide: BrowserCompatibilityService, useValue: browser },
     ] });
     fixture = TestBed.createComponent(WorkoutReflectionDialogComponent);
     component = fixture.componentInstance; fixture.detectChanges(); await fixture.whenStable(); fixture.detectChanges();
@@ -64,7 +68,19 @@ describe('Workout reflection editor', () => {
     service.save.mockRejectedValueOnce(new Error('offline'));
     component.note.set('tired'); await component.apply(); await component.apply();
     expect(service.save.mock.calls[0][2]).toBe(service.save.mock.calls[1][2]);
+    expect(browser.createRandomUUID).toHaveBeenCalledOnce();
     expect(component.note()).toBe('tired'); expect(haptics.error).toHaveBeenCalledOnce();
+  });
+  it('keeps the draft editable and reports an unavailable browser UUID without writing', async () => {
+    browser.createRandomUUID.mockReturnValueOnce(null);
+    component.note.set('tired');
+    await component.apply();
+    expect(component.error()).toContain('supported browser');
+    expect(component.note()).toBe('tired'); expect(component.busy()).toBe(false);
+    expect(service.save).not.toHaveBeenCalled(); expect(haptics.error).toHaveBeenCalledOnce();
+    expect(haptics.success).not.toHaveBeenCalled();
+    await component.apply();
+    expect(service.save).toHaveBeenCalledOnce(); expect(haptics.success).toHaveBeenCalledOnce();
   });
   it('requires deletion review and allows cancellation without writes', async () => {
     component.saved.set({ schemaVersion: 1, revision: 4, deleted: false, mutationId: '11111111-1111-4111-8111-111111111111', effort: 5, note: 'private' });

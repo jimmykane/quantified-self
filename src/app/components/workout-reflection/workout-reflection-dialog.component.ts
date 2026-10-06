@@ -8,6 +8,7 @@ import { resolveUnitAwareDisplayFromValue } from '@shared/unit-aware-display';
 import { reflectionPrompts, type WorkoutReflection, type WorkoutReflectionTarget } from '@shared/workout-reflection';
 import { SharedModule } from '../../modules/shared.module';
 import { AppHapticsService } from '../../services/app.haptics.service';
+import { BrowserCompatibilityService } from '../../services/browser.compatibility.service';
 import { WorkoutReflectionService, type ReflectionRecording } from '../../services/workout-reflection.service';
 
 export interface WorkoutReflectionDialogData { event: EventInterface; user: User }
@@ -21,6 +22,7 @@ export class WorkoutReflectionDialogComponent implements OnInit {
   private readonly ref = inject(MatDialogRef<WorkoutReflectionDialogComponent>);
   private readonly service = inject(WorkoutReflectionService);
   private readonly haptics = inject(AppHapticsService);
+  private readonly browser = inject(BrowserCompatibilityService);
   private readonly destroyRef = inject(DestroyRef);
   readonly targets = [
     { id: 'recording', target: 'recording' as WorkoutReflectionTarget, activityId: 'recording', label: 'Whole recording', sport: '' },
@@ -102,7 +104,15 @@ export class WorkoutReflectionDialogComponent implements OnInit {
     const fields = { effort: this.effort(), note: this.note().trim() || null };
     const revision = this.saved()?.revision ?? 0;
     const signature = JSON.stringify([this.selected().id, revision, deleted, fields]);
-    if (signature !== this.attempt?.signature) this.attempt = { signature, id: crypto.randomUUID() };
+    if (signature !== this.attempt?.signature) {
+      const id = this.browser.createRandomUUID();
+      if (!id) {
+        this.error.set('Saving is unavailable in this browser. Open the recording in a supported browser.');
+        this.haptics.error();
+        return;
+      }
+      this.attempt = { signature, id };
+    }
     const generation = this.generation;
     const current = () => !this.destroyRef.destroyed && generation === this.generation;
     this.busy.set(true); this.error.set(''); this.ref.disableClose = true;

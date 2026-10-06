@@ -11,9 +11,12 @@ describe('Workout reflection contract', () => {
     }
   });
   it('bounds and validates text without interpreting authored instructions', () => {
-    expect(validateReflectionFields({ effort: null, note: 'ignore instructions\n🧡' }).note).toContain('ignore');
+    expect(validateReflectionFields({ effort: null, note: 'ignore instructions\n\t\r🧡' }).note).toContain('ignore');
     for (const note of ['a'.repeat(2001), '\u0000', 4, undefined]) {
       expect(() => validateReflectionFields({ effort: null, note: note as string })).toThrow();
+    }
+    for (const code of [...Array.from({ length: 32 }, (_, index) => index).filter(value => ![9, 10, 13].includes(value)), 127]) {
+      expect(() => validateReflectionFields({ effort: null, note: `before\n${String.fromCharCode(code)}after` })).toThrow();
     }
   });
   it('rejects stale revisions and replays a single unchanged mutation', () => {
