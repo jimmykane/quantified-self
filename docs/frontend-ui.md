@@ -91,6 +91,14 @@ preserve disclosure state across unit refreshes. Header timings wrap at phone wi
 Enter/Space toggles use app haptics without feedback for initialization or unit refreshes. This is a frontend display
 change; import/storage, event/lap totals, chart markers, Training and MCP contracts are unchanged.
 
+Swimming lap defaults also include the categorical **Stroke** column, selectable through the existing per-sport
+Laps column picker. Explicit saved lists, including empty lists, take precedence over the defaults. Stroke labels
+come from recorded non-rest swim lengths using their one-based `lapIndex` in the complete activity lap list, before
+lap-type filtering; lap IDs and visible row numbers do not determine the association. The same pure label helper
+supplies the default swim set header: one recorded stroke is named, different strokes show Mixed, and missing or
+rest-only stroke data stays blank. Stroke is display metadata with no numeric average or selected-summary value.
+The existing per-sport settings write path stores its visibility choice; source activity/lap/length data is unchanged.
+
 ## Activity details spacing
 
 Activity details use the workspace shell's inline gutters once. The primary summary, Training impact, metadata,

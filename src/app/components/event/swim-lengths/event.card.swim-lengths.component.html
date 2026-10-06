@@ -28,6 +28,9 @@
             <span class="swim-length-header-title mat-label-large">{{ group.label }}</span>
             <span class="swim-length-summary mat-label-medium">
               <span>{{ group.summaryRow.Type }}</span>
+              @if (group.summaryRow.Stroke) {
+              <span>Stroke: {{ group.summaryRow.Stroke }}</span>
+              }
               <span>
                 <span class="swim-length-number">{{ group.rows.length }}</span>
                 {{ group.rows.length === 1 ? 'length' : 'lengths' }}

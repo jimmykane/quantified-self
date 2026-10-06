@@ -8,6 +8,7 @@ import {
   DataSpeed,
   DataStrokeRate,
   DataSwimDistance,
+  LapInterface,
 } from '@sports-alliance/sports-lib';
 
 export interface AppSwimLength {
@@ -145,6 +146,43 @@ export function getActivitySwimLengths(activity: ActivityInterface | null | unde
   return rawSwimLengths
     .map(normalizeSwimLength)
     .filter((swimLength): swimLength is AppSwimLength => swimLength !== null);
+}
+
+export function isRestSwimLength(swimLength: AppSwimLength | null | undefined): boolean {
+  const type = `${swimLength?.type || ''}`.trim().toLowerCase();
+  return type === 'idle' || type === 'rest';
+}
+
+/** A categorical label from recorded non-rest lengths; never infer stroke from numeric metrics. */
+export function getSwimStrokeLabel(swimLengths: readonly AppSwimLength[]): string {
+  const strokes = new Set(swimLengths
+    .filter(length => !isRestSwimLength(length))
+    .map(length => length.stroke?.trim().toLowerCase())
+    .filter((stroke): stroke is string => !!stroke));
+  if (strokes.size === 0) {
+    return '';
+  }
+  if (strokes.size > 1) {
+    return 'Mixed';
+  }
+  return [...strokes][0].replace(/[_-]+/g, ' ').replace(/\s+/g, ' ')
+    .replace(/\b\w/g, match => match.toUpperCase());
+}
+
+/** lapIndex is one-based in the complete activity lap list, before filtering by lap type. */
+export function getSwimLapStrokeLabels(activity: ActivityInterface): Map<LapInterface, string> {
+  const lengthsByLapIndex = new Map<number, AppSwimLength[]>();
+  for (const length of getActivitySwimLengths(activity)) {
+    if (!Number.isInteger(length.lapIndex) || length.lapIndex < 1) {
+      continue;
+    }
+    const lengths = lengthsByLapIndex.get(length.lapIndex) || [];
+    lengths.push(length);
+    lengthsByLapIndex.set(length.lapIndex, lengths);
+  }
+  return new Map((activity.getLaps?.() || []).map((lap, index) => [
+    lap, getSwimStrokeLabel(lengthsByLapIndex.get(index + 1) || []),
+  ]));
 }
 
 export function hasVisibleSwimLengths(activities: ActivityInterface[] | null | undefined): boolean {

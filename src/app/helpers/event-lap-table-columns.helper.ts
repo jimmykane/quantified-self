@@ -135,6 +135,8 @@ interface OrderedEventLapMetricOptionGroup extends EventLapMetricOptionGroup {
 }
 
 const EVENT_LAP_METRIC_TYPES = new Set<string>();
+/** Recorded categorical metadata, derived from the lap's swim lengths. */
+export const EVENT_LAP_STROKE_COLUMN = 'Stroke';
 const EVENT_LAP_CATALOG_METRICS: EventLapCatalogMetric[] = [];
 
 const resolveEventLapMetricVariant = (type: string): EventLapMetricVariant | null => {
@@ -181,6 +183,7 @@ EVENT_SUMMARY_METRIC_GROUPS.forEach((summaryGroup) => {
   DataSpeedMax.type,
   DataPaceMin.type,
   DataPaceMax.type,
+  EVENT_LAP_STROKE_COLUMN,
 ].forEach((type) => {
   if (EXCLUDED_EVENT_LAP_METRIC_TYPES.has(type) || EVENT_LAP_METRIC_TYPES.has(type)) {
     return;
@@ -326,6 +329,7 @@ export const getDefaultEventLapMetricTypes = (
     DataDuration.type,
     DataDistance.type,
     effortType,
+    ...(family === 'swimming' ? [EVENT_LAP_STROKE_COLUMN] : []),
     ...CORE_LAP_METRIC_TYPES.filter((type) => type !== DataDuration.type && type !== DataDistance.type),
   ].filter((type, index, values) => values.indexOf(type) === index);
 };
@@ -429,6 +433,9 @@ export const getEventLapMetricStat = (
   lap: LapInterface,
   metricType: string,
 ): DataInterface | null => {
+  if (metricType === EVENT_LAP_STROKE_COLUMN) {
+    return null;
+  }
   try {
     if (metricType === DataDuration.type) {
       return lap.getDuration?.() || null;

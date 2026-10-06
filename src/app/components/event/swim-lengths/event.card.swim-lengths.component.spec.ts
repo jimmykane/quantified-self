@@ -421,8 +421,30 @@ describe('EventCardSwimLengthsComponent', () => {
 
     component.selectedActivities = [activity];
     component.ngOnChanges();
+    fixture.detectChanges();
 
     expect(component.swimLengthViews[0].groups[0].summaryRow.Stroke).toBe('Mixed');
+    expect(fixture.nativeElement.querySelector('mat-expansion-panel-header').textContent).toContain('Stroke: Mixed');
+  });
+
+  it('shows stroke in each set header by default without borrowing stroke from rest rows', () => {
+    component.selectedActivities = [createActivity([
+      createSwimLength({ index: 1, stroke: 'freestyle' }),
+      createSwimLength({ index: 2, type: 'idle', stroke: 'backstroke' }),
+      createSwimLength({ index: 3, stroke: 'breaststroke' }),
+      createSwimLength({ index: 4, type: 'rest', stroke: 'freestyle' }),
+      createSwimLength({ index: 5, type: 'idle', stroke: 'freestyle' }),
+      createSwimLength({ index: 6, stroke: null }),
+    ])];
+    component.ngOnChanges();
+    fixture.detectChanges();
+    const headers = [...fixture.nativeElement.querySelectorAll('mat-expansion-panel-header')] as HTMLElement[];
+    expect(headers[0].textContent).toContain('Stroke: Freestyle');
+    expect(headers[1].textContent).toContain('Stroke: Breaststroke');
+    expect(headers[2].textContent).not.toContain('Stroke:');
+    expect(headers[3].textContent).not.toContain('Stroke:');
+    expect(component.swimLengthViews[0].groups.flatMap(group => group.rows).map(row => row['#']))
+      .toEqual([1, 2, 3, 4, 5, 6]);
   });
 
   it('should hide the section when no selected activity has swim lengths', () => {

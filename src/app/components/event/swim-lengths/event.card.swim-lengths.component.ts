@@ -12,7 +12,9 @@ import {
   EventInterface,
   UserUnitSettingsInterface,
 } from '@sports-alliance/sports-lib';
-import { AppSwimLength, getActivitySwimLengths } from '../../../helpers/event-swim-length.helper';
+import {
+  AppSwimLength, getActivitySwimLengths, getSwimStrokeLabel, isRestSwimLength,
+} from '../../../helpers/event-swim-length.helper';
 import { isMergeOrBenchmarkEvent } from '../../../helpers/event-visibility.helper';
 import { createSwimDistanceDisplayStat, resolveUnitAwareDisplayStat } from '@shared/unit-aware-display';
 import { AppHapticsService } from '../../../services/app.haptics.service';
@@ -264,7 +266,7 @@ export class EventCardSwimLengthsComponent implements OnChanges {
       Duration: this.formatDurationValue(totalDuration),
       Distance: this.formatSwimDistanceValue(totalDistance),
       Type: activeSwimLengths.length === 0 ? 'Rest' : this.isIdleOrRestSwimLength(lastSwimLength) ? 'Set + Rest' : 'Set',
-      Stroke: this.getGroupStrokeLabel(swimLengths),
+      Stroke: getSwimStrokeLabel(swimLengths),
       Strokes: this.formatOptionalInteger(totalStrokes),
       'Swim Pace': this.formatGroupSwimPace(activeDuration, activeDistance),
       'Average Stroke Rate': avgCadence === null ? '' : this.formatStrokeRate(new DataStrokeRate(avgCadence)),
@@ -433,34 +435,8 @@ export class EventCardSwimLengthsComponent implements OnChanges {
     }
   }
 
-  private getGroupStrokeLabel(swimLengths: AppSwimLength[]): string {
-    const activeStrokes = swimLengths
-      .filter(swimLength => !this.isIdleOrRestSwimLength(swimLength))
-      .map(swimLength => swimLength.stroke)
-      .filter((stroke): stroke is string => !!stroke && stroke.trim().length > 0);
-
-    const strokeLabels = new Map<string, string>();
-    activeStrokes.forEach((stroke) => {
-      const normalizedStroke = stroke.trim().toLowerCase();
-      if (!strokeLabels.has(normalizedStroke)) {
-        strokeLabels.set(normalizedStroke, this.formatLabel(stroke));
-      }
-    });
-
-    if (strokeLabels.size === 0) {
-      return '';
-    }
-
-    if (strokeLabels.size === 1) {
-      return [...strokeLabels.values()][0];
-    }
-
-    return 'Mixed';
-  }
-
   private isIdleOrRestSwimLength(swimLength: AppSwimLength | null | undefined): boolean {
-    const normalizedType = `${swimLength?.type || ''}`.trim().toLowerCase();
-    return normalizedType === 'idle' || normalizedType === 'rest';
+    return isRestSwimLength(swimLength);
   }
 
   private sumDataValues(

@@ -33,8 +33,10 @@ import { EventCardLapsComponent } from './event.card.laps.component';
 import { AppEventColorService } from '../../../services/color/app.event.color.service';
 import { AppUserSettingsQueryService } from '../../../services/app.user-settings-query.service';
 import { MatSnackBar } from '@angular/material/snack-bar';
-import { normalizeEventDetailsSettings } from '../../../helpers/event-lap-table-columns.helper';
+import { EVENT_LAP_STROKE_COLUMN, normalizeEventDetailsSettings } from '../../../helpers/event-lap-table-columns.helper';
 import { getDefaultUserUnitSettings } from '../../../../../shared/unit-aware-display';
+import { AppHapticsService } from '../../../services/app.haptics.service';
+import { HapticTapDirective } from '../../../directives/haptic-tap.directive';
 
 function createActivity(laps: LapInterface[]): ActivityInterface {
     return {
@@ -80,14 +82,16 @@ describe('EventCardLapsComponent', () => {
     let eventDetailsSettings: ReturnType<typeof signal>;
     let updateLapTableColumns: ReturnType<typeof vi.fn>;
     let snackBar: { open: ReturnType<typeof vi.fn> };
+    let haptics: { selection: ReturnType<typeof vi.fn>; success: ReturnType<typeof vi.fn>; error: ReturnType<typeof vi.fn> };
 
     beforeEach(async () => {
         eventDetailsSettings = signal(normalizeEventDetailsSettings(null));
         updateLapTableColumns = vi.fn().mockResolvedValue(undefined);
         snackBar = { open: vi.fn() };
+        haptics = { selection: vi.fn(), success: vi.fn(), error: vi.fn() };
         await TestBed.configureTestingModule({
             imports: [CommonModule, MatCheckboxModule, MatMenuModule, MatTableModule],
-            declarations: [EventCardLapsComponent],
+            declarations: [EventCardLapsComponent, HapticTapDirective],
             providers: [
                 { provide: AppEventColorService, useValue: {} },
                 { provide: ChangeDetectorRef, useValue: { markForCheck: vi.fn(), detectChanges: vi.fn() } },
@@ -96,6 +100,7 @@ describe('EventCardLapsComponent', () => {
                     useValue: { eventDetailsSettings, updateLapTableColumns },
                 },
                 { provide: MatSnackBar, useValue: snackBar },
+                { provide: AppHapticsService, useValue: haptics },
             ],
             schemas: [NO_ERRORS_SCHEMA],
         }).compileComponents();
@@ -110,6 +115,124 @@ describe('EventCardLapsComponent', () => {
 
     it('should create', () => {
         expect(component).toBeTruthy();
+    });
+
+    it('shows stroke in swimming defaults and preserves per-lap metadata across filtered lap types', () => {
+        const laps = [createRenderableLap(LapTypes.Manual), createRenderableLap(LapTypes.Interval), createRenderableLap(LapTypes.Manual)];
+        const activity = {
+            ...createActivity(laps), type: 'Swimming',
+            getSwimLengths: () => [
+                { index: 1, lapIndex: 1, type: 'active', stroke: 'freestyle', startDate: 0, endDate: 25_000 },
+                { index: 2, lapIndex: 1, type: 'idle', stroke: 'backstroke', startDate: 25_000, endDate: 35_000 },
+                { index: 3, lapIndex: 2, type: 'active', stroke: 'backstroke', startDate: 35_000, endDate: 60_000 },
+                { index: 4, lapIndex: 3, type: 'active', stroke: 'breaststroke', startDate: 60_000, endDate: 85_000 },
+                { index: 5, lapIndex: 3, type: 'active', stroke: 'butterfly', startDate: 85_000, endDate: 110_000 },
+            ],
+        } as unknown as ActivityInterface;
+        component.canCustomize = true;
+        component.selectedActivities = [activity];
+        component.ngOnChanges();
+        fixture.detectChanges();
+        const manual = component.getDataSource(activity, LapTypes.Manual)?.data;
+        const interval = component.getDataSource(activity, LapTypes.Interval)?.data;
+        expect(manual?.map(row => row[EVENT_LAP_STROKE_COLUMN])).toEqual(['Freestyle', 'Mixed']);
+        expect(interval?.map(row => row[EVENT_LAP_STROKE_COLUMN])).toEqual(['Backstroke']);
+        expect(component.getColumns(activity, LapTypes.Manual)).toContain(EVENT_LAP_STROKE_COLUMN);
+        expect(fixture.nativeElement.textContent).toContain('Freestyle');
+        const table = component.lapTableGroups.find(group => group.lapType === LapTypes.Manual)!.tables[0];
+        const footer = fixture.nativeElement.querySelector('.lap-selected-summary-row') as HTMLElement;
+        expect(footer.getAttribute('hidden')).toBe('');
+        expect(haptics.selection).not.toHaveBeenCalled();
+        component.toggleAllLapSelections(table);
+        fixture.detectChanges();
+        expect(footer.getAttribute('hidden')).toBeNull();
+        expect(haptics.selection).toHaveBeenCalledTimes(1);
+        expect(table.selectedSummary[EVENT_LAP_STROKE_COLUMN]).toBeUndefined();
+    });
+
+    it('lets owners hide and restore the default Stroke column without overwriting other saved sport layouts', async () => {
+        const activity = {
+            ...createActivity([createRenderableLap(LapTypes.Manual)]), type: 'Swimming',
+            getSwimLengths: () => [{ index: 1, lapIndex: 1, type: 'active', stroke: 'freestyle', startDate: 0, endDate: 25_000 }],
+        } as unknown as ActivityInterface;
+        component.canCustomize = true;
+        component.selectedActivities = [activity];
+        eventDetailsSettings.set(normalizeEventDetailsSettings({ lapTableColumnsBySportFamily: { running: [] } }));
+        fixture.detectChanges();
+        component.ngOnChanges();
+        expect(component.getColumns(activity, LapTypes.Manual)).toContain(EVENT_LAP_STROKE_COLUMN);
+        await component.onLapColumnSelectionChange('swimming', createLapColumnSelectionChange([EVENT_LAP_STROKE_COLUMN], false));
+        expect(component.getColumns(activity, LapTypes.Manual)).not.toContain(EVENT_LAP_STROKE_COLUMN);
+        expect(component.getColumnsToDisplay('Running')).toEqual(['#']);
+        expect(updateLapTableColumns.mock.calls[0][1]).not.toContain(EVENT_LAP_STROKE_COLUMN);
+        await component.onLapColumnSelectionChange('swimming', createLapColumnSelectionChange([EVENT_LAP_STROKE_COLUMN]));
+        expect(component.getColumns(activity, LapTypes.Manual)).toContain(EVENT_LAP_STROKE_COLUMN);
+        expect(updateLapTableColumns.mock.calls[1][1]).toContain(EVENT_LAP_STROKE_COLUMN);
+    });
+
+    it('keeps custom swim choices and hides stroke when no recorded stroke is available', () => {
+        const activity = { ...createActivity([createRenderableLap(LapTypes.Manual)]), type: 'Swimming' } as ActivityInterface;
+        component.canCustomize = true;
+        component.selectedActivities = [activity];
+        component.ngOnChanges();
+        expect(component.getColumnsToDisplay('Swimming')).toContain(EVENT_LAP_STROKE_COLUMN);
+        expect(component.getColumns(activity, LapTypes.Manual)).not.toContain(EVENT_LAP_STROKE_COLUMN);
+        const group = component.lapColumnMenuGroups[0];
+        expect(group.metricAvailability[EVENT_LAP_STROKE_COLUMN].label).toContain('No data');
+        eventDetailsSettings.set(normalizeEventDetailsSettings({ lapTableColumnsBySportFamily: { swimming: [DataDuration.type] } }));
+        fixture.detectChanges();
+        expect(component.getColumnsToDisplay('Swimming')).toEqual(['#', DataDuration.type]);
+    });
+
+    it('gives column feedback only for accepted changes and confirmed saves, keeping initialization and no-ops silent', async () => {
+        component.canCustomize = true;
+        component.selectedActivities = [createActivity([createRenderableLap(LapTypes.Manual)])];
+        component.ngOnChanges();
+        fixture.detectChanges();
+        expect(haptics.selection).not.toHaveBeenCalled();
+        await component.onLapColumnSelectionChange('running', createLapColumnSelectionChange([DataPaceAvg.type]));
+        expect(haptics.selection).not.toHaveBeenCalled();
+        expect(updateLapTableColumns).not.toHaveBeenCalled();
+        let finishSave: (() => void) | undefined;
+        updateLapTableColumns.mockImplementationOnce(() => new Promise<void>(resolve => { finishSave = resolve; }));
+        const saving = component.onLapColumnSelectionChange('running', createLapColumnSelectionChange([DataSpeedMin.type]));
+        expect(haptics.selection).toHaveBeenCalledTimes(1);
+        expect(haptics.success).not.toHaveBeenCalled();
+        await component.onLapColumnSelectionChange('running', createLapColumnSelectionChange([DataSpeedMax.type]));
+        expect(haptics.selection).toHaveBeenCalledTimes(1);
+        finishSave!();
+        await saving;
+        expect(haptics.success).toHaveBeenCalledTimes(1);
+        updateLapTableColumns.mockRejectedValueOnce(new Error('save failed'));
+        await component.onLapColumnSelectionChange('running', createLapColumnSelectionChange([DataSpeedMax.type]));
+        expect(haptics.selection).toHaveBeenCalledTimes(2);
+        expect(haptics.error).toHaveBeenCalledTimes(1);
+        expect(haptics.success).toHaveBeenCalledTimes(1);
+    });
+
+    it('keeps typing and unchanged column-menu selections silent with feedback for menu actions', () => {
+        component.canCustomize = true;
+        component.selectedActivities = [
+            createActivity([createRenderableLap(LapTypes.Manual)]),
+            { ...createActivity([createRenderableLap(LapTypes.Manual)]), type: 'Cycling', getID: () => 'activity-2' } as ActivityInterface,
+        ];
+        component.ngOnChanges();
+        fixture.detectChanges();
+        const group = component.activeLapColumnMenuGroup!;
+        component.onLapColumnMenuSportFamilyChange('running');
+        component.onLapColumnMetricSearchInput(group, { target: { value: 'stroke' } } as unknown as Event);
+        expect(haptics.selection).not.toHaveBeenCalled();
+        component.clearLapColumnMetricSearch(group);
+        expect(haptics.selection).toHaveBeenCalledTimes(1);
+        component.clearLapColumnMetricSearch(group);
+        component.onLapColumnMenuSportFamilyChange('invalid');
+        expect(haptics.selection).toHaveBeenCalledTimes(1);
+        component.onLapColumnMenuSportFamilyChange('cycling');
+        expect(haptics.selection).toHaveBeenCalledTimes(2);
+        component.onLapColumnMenuSportFamilyChange('cycling');
+        expect(haptics.selection).toHaveBeenCalledTimes(2);
+        fixture.nativeElement.querySelector('button[aria-label="Choose lap columns"]').click();
+        expect(haptics.selection).toHaveBeenCalledTimes(3);
     });
 
     it('should resolve renderable lap types when visible laps exist', () => {
@@ -630,7 +753,7 @@ describe('EventCardLapsComponent', () => {
 
         await component.onLapColumnSelectionChange(
             'running',
-            createLapColumnSelectionChange([DataPaceAvg.type]),
+            createLapColumnSelectionChange([DataSpeedMin.type]),
         );
 
         expect(component.getColumnsToDisplay('Running')).toContain(DataDuration.type);
@@ -815,7 +938,7 @@ describe('EventCardLapsComponent', () => {
         component.toggleAllLapSelections(table);
         fixture.detectChanges();
         expect(table.selectedCount).toBe(0);
-        expect(fixture.nativeElement.querySelector('.lap-selected-summary-row')?.getAttribute('hidden')).toBe('');
+        expect(fixture.nativeElement.querySelector('.lap-selected-summary-row').getAttribute('hidden')).toBe('');
     });
 
     it('keeps lap selections isolated per table and preserves them across column refreshes', async () => {

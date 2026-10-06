@@ -109,6 +109,10 @@
   background: var(--mat-sys-surface-container);
 }
 
+.lap-selected-summary-row[hidden] {
+  display: none;
+}
+
 .lap-selected-summary-row mat-footer-cell,
 .lap-selected-summary-row .mat-mdc-footer-cell {
   color: var(--mat-sys-on-surface);

@@ -32,6 +32,7 @@ import {
 } from '@sports-alliance/sports-lib';
 import {
   EVENT_LAP_TABLE_FIXED_COLUMN,
+  EVENT_LAP_STROKE_COLUMN,
   formatEventLapMetric,
   getAverageEventLapMetrics,
   getDefaultEventLapMetricTypes,
@@ -65,6 +66,10 @@ describe('event lap table columns helper', () => {
     expect(getDefaultEventLapMetricTypes('cycling')).toContain(DataSpeedAvg.type);
     expect(getDefaultEventLapMetricTypes('swimming')).toContain(DataSwimPaceAvg.type);
     expect(getDefaultEventLapMetricTypes('swimming')).toContain(DataStrokeRateAvg.type);
+    expect(getDefaultEventLapMetricTypes('swimming')).toContain(EVENT_LAP_STROKE_COLUMN);
+    expect(getDefaultEventLapMetricTypes('running')).not.toContain(EVENT_LAP_STROKE_COLUMN);
+    expect(getDefaultEventLapMetricTypes('cycling')).not.toContain(EVENT_LAP_STROKE_COLUMN);
+    expect(getDefaultEventLapMetricTypes('other')).not.toContain(EVENT_LAP_STROKE_COLUMN);
     expect(getDefaultEventLapMetricTypes('other')).toContain(DataSpeedAvg.type);
     expect(EVENT_LAP_TABLE_FIXED_COLUMN).toBe('#');
   });
@@ -73,6 +78,16 @@ describe('event lap table columns helper', () => {
     expect(isEventLapSportFamily('running')).toBe(true);
     expect(isEventLapSportFamily('rowing')).toBe(false);
     expect(isEventLapSportFamily(null)).toBe(false);
+  });
+
+  it('offers stroke as a selectable column while respecting existing saved swim layouts', () => {
+    expect(getEventLapMetricOptionGroups().flatMap(group => group.metrics))
+      .toContainEqual({ type: EVENT_LAP_STROKE_COLUMN, label: 'Stroke' });
+    expect(normalizeEventLapMetricTypes([EVENT_LAP_STROKE_COLUMN, DataDuration.type]))
+      .toEqual([EVENT_LAP_STROKE_COLUMN, DataDuration.type]);
+    expect(getSelectedEventLapMetricTypes({ lapTableColumnsBySportFamily: { swimming: [DataDuration.type] } }, 'swimming'))
+      .toEqual([DataDuration.type]);
+    expect(getSelectedEventLapMetricTypes({ lapTableColumnsBySportFamily: { swimming: [] } }, 'swimming')).toEqual([]);
   });
 
   it('normalizes saved choices while preserving an intentional empty layout', () => {

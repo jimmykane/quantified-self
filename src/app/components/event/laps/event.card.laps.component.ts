@@ -24,6 +24,7 @@ import { AppUserSettingsQueryService } from '../../../services/app.user-settings
 import { getVisibleEventLaps } from '../../../helpers/event-lap-type.helper';
 import {
   EventLapMetricOptionGroup,
+  EVENT_LAP_STROKE_COLUMN,
   formatEventLapMetric,
   getAverageEventLapMetrics,
   getEventLapMetricOptionGroups,
@@ -38,6 +39,8 @@ import {
   AppEventDetailsSettingsInterface,
   AppEventLapSportFamily,
 } from '../../../models/app-user.interface';
+import { getSwimLapStrokeLabels } from '../../../helpers/event-swim-length.helper';
+import { AppHapticsService } from '../../../services/app.haptics.service';
 
 interface LapTableRow extends Record<string, string | number | boolean | LapInterface | undefined> {
   '#': string | number;
@@ -138,6 +141,7 @@ export class EventCardLapsComponent extends DataTableAbstractDirective implement
   private eventDetailsSettings: AppEventDetailsSettingsInterface = normalizeEventDetailsSettings(null);
   private readonly userSettingsQuery = inject(AppUserSettingsQueryService);
   private readonly snackBar = inject(MatSnackBar);
+  private readonly hapticsService = inject(AppHapticsService);
 
   constructor(protected changeDetectorRef: ChangeDetectorRef) {
     super(changeDetectorRef);
@@ -241,6 +245,7 @@ export class EventCardLapsComponent extends DataTableAbstractDirective implement
   private generateLapData(activity: ActivityInterface, lapType: LapTypes): LapTableRow[] {
     const laps = getVisibleEventLaps(activity).filter(lap => lap.type === lapType);
     const metricTypes = this.getColumnsToDisplay(activity.type).filter((column) => column !== '#');
+    const lapStrokeLabels = metricTypes.includes(EVENT_LAP_STROKE_COLUMN) ? getSwimLapStrokeLabels(activity) : null;
     const lapRows = laps.reduce<LapTableRow[]>((lapDataArray, lap, index) => {
       const row: LapTableRow = {
         '#': index + 1,
@@ -256,7 +261,7 @@ export class EventCardLapsComponent extends DataTableAbstractDirective implement
       });
 
       metricTypes.forEach((metricType) => {
-        row[metricType] = formatEventLapMetric(
+        row[metricType] = metricType === EVENT_LAP_STROKE_COLUMN ? lapStrokeLabels?.get(lap) || '' : formatEventLapMetric(
           getEventLapMetricStat(lap, metricType),
           metricType,
           this.unitSettings,
@@ -328,17 +333,22 @@ export class EventCardLapsComponent extends DataTableAbstractDirective implement
       return;
     }
     table.selection.toggle(row);
+    this.hapticsService.selection();
     this.refreshSelectedSummary(table);
     this.changeDetectorRef.markForCheck();
   }
 
   public toggleAllLapSelections(table: LapTableView): void {
     const selectableRows = table.dataSource.data.filter((row) => !row.isLapAverage);
+    if (selectableRows.length === 0) {
+      return;
+    }
     if (table.allLapRowsSelected) {
       table.selection.clear();
     } else {
       table.selection.select(...selectableRows);
     }
+    this.hapticsService.selection();
     this.refreshSelectedSummary(table);
     this.changeDetectorRef.markForCheck();
   }
@@ -351,9 +361,8 @@ export class EventCardLapsComponent extends DataTableAbstractDirective implement
       return;
     }
 
-    const selectedMetricTypes = new Set(
-      getSelectedEventLapMetricTypes(this.eventDetailsSettings, sportFamily),
-    );
+    const currentMetricTypes = getSelectedEventLapMetricTypes(this.eventDetailsSettings, sportFamily);
+    const selectedMetricTypes = new Set(currentMetricTypes);
     event.options.forEach((option) => {
       if (typeof option.value !== 'string') {
         return;
@@ -372,16 +381,24 @@ export class EventCardLapsComponent extends DataTableAbstractDirective implement
         [sportFamily]: nextSelectedMetricTypes,
       },
     });
+    const normalizedMetricTypes = getSelectedEventLapMetricTypes(nextSettings, sportFamily);
+    if (normalizedMetricTypes.length === currentMetricTypes.length
+      && normalizedMetricTypes.every((type, index) => type === currentMetricTypes[index])) {
+      return;
+    }
+    this.hapticsService.selection();
     this.eventDetailsSettings = nextSettings;
     this.updateData();
     this.setSportFamilySaving(sportFamily, true);
 
     try {
-      await this.userSettingsQuery.updateLapTableColumns(sportFamily, nextSelectedMetricTypes);
+      await this.userSettingsQuery.updateLapTableColumns(sportFamily, normalizedMetricTypes);
+      this.hapticsService.success();
     } catch {
       this.eventDetailsSettings = previousSettings;
       this.updateData();
       this.snackBar.open('Could not save lap columns. Please try again.', 'Close');
+      this.hapticsService.error();
     } finally {
       this.setSportFamilySaving(sportFamily, false);
     }
@@ -393,7 +410,11 @@ export class EventCardLapsComponent extends DataTableAbstractDirective implement
   }
 
   public clearLapColumnMetricSearch(group: LapColumnMenuGroup): void {
+    if (!group.searchTerm) {
+      return;
+    }
     this.setLapColumnMetricSearchTerm(group, '');
+    this.hapticsService.selection();
   }
 
   public onLapColumnMenuSportFamilyChange(family: string): void {
@@ -402,6 +423,7 @@ export class EventCardLapsComponent extends DataTableAbstractDirective implement
       return;
     }
     this.activeLapColumnMenuGroup = nextGroup;
+    this.hapticsService.selection();
     this.changeDetectorRef.markForCheck();
   }
 
@@ -510,6 +532,7 @@ export class EventCardLapsComponent extends DataTableAbstractDirective implement
     const selectedCount = selectedLaps.length;
     const metricTypes = table.columns.filter((column) => (
       column !== LAP_TABLE_SELECTION_COLUMN && column !== '#'
+      && column !== EVENT_LAP_STROKE_COLUMN
     ));
     const summary = Object.fromEntries(metricTypes.map((metricType) => [
       metricType,

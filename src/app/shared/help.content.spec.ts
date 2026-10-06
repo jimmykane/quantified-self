@@ -1106,6 +1106,10 @@ describe('help.content', () => {
     expect(gettingStartedSection?.content).toContain('falling back to elapsed time when timer time is missing');
     expect(gettingStartedSection?.content).toContain('unrecorded rest is not inferred');
     expect(gettingStartedSection?.content).toContain('Open sets stay open when unit preferences change');
+    expect(gettingStartedSection?.content).toContain('Each swim set header shows its recorded **Stroke** automatically');
+    expect(gettingStartedSection?.content).toContain('**Laps -> Columns -> Swimming -> Stroke**');
+    expect(gettingStartedSection?.content).toContain('Existing saved column choices stay as you selected them');
+    expect(gettingStartedSection?.content).toContain('Missing stroke data and rest-only laps stay blank');
   });
 
   it('should document sport-specific event lap table columns', () => {
