@@ -15,6 +15,8 @@ const loadDashboardDerivedMetricsTriggers = (): FunctionModule =>
   module.require('./derived-metrics/derived-metrics.trigger') as FunctionModule;
 const loadSleepPolling = (): FunctionModule =>
   module.require('./sleep/polling') as FunctionModule;
+const loadServiceConnectionAccountProjection = (): FunctionModule =>
+  module.require('./service-connection-account-projection') as FunctionModule;
 
 const TARGET_LOADERS: Readonly<Record<string, ModuleLoader>> = Object.freeze({
   mcpApi: () => module.require('./mcp/server') as FunctionModule,
@@ -24,6 +26,10 @@ const TARGET_LOADERS: Readonly<Record<string, ModuleLoader>> = Object.freeze({
     () => module.require('./suunto/auth/wrapper') as FunctionModule,
   receiveSuunto247Data:
     () => module.require('./sleep/webhooks') as FunctionModule,
+  receiveGarminAPIHealthData:
+    () => module.require('./sleep/webhooks') as FunctionModule,
+  projectSuuntoConnectionOnTokenWrite: loadServiceConnectionAccountProjection,
+  projectGarminConnectionOnTokenWrite: loadServiceConnectionAccountProjection,
   processSleepSyncTask:
     () => module.require('./tasks/sleep-sync-worker') as FunctionModule,
   processWorkoutTask:

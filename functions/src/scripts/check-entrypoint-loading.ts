@@ -31,6 +31,14 @@ const MARKETING_SECRET_TARGETS = new Set([
   'dispatchMarketingCampaigns',
   'marketingUnsubscribe',
 ]);
+const CONNECTION_PROJECTION_TARGET_DOCUMENTS: Readonly<Record<string, string>> = {
+  projectSuuntoConnectionOnTokenWrite: 'suuntoAppAccessTokens/{userID}/tokens/{tokenID}',
+  projectGarminConnectionOnTokenWrite: 'garminAPITokens/{userID}/tokens/{tokenID}',
+};
+const PROVIDER_CONNECTION_AND_HEALTH_TARGETS = [
+  ...Object.keys(CONNECTION_PROJECTION_TARGET_DOCUMENTS),
+  'receiveGarminAPIHealthData',
+];
 const INGESTION_TARGET_METADATA: Readonly<Record<string, {
   memoryMb: number;
   timeoutSeconds: number;
@@ -314,19 +322,22 @@ async function check(): Promise<void> {
   const canaryTarget = OPTIMIZED_FUNCTION_TARGETS[0];
   assert(canaryTarget, 'The optimized target registry is empty.');
   for (const target of [
+    ...PROVIDER_CONNECTION_AND_HEALTH_TARGETS,
     ...Object.keys(INGESTION_TARGET_METADATA),
     ...Object.keys(SCHEDULED_MAINTENANCE_TARGET_METADATA),
     ...Object.keys(TRAINING_TARGET_METADATA),
   ]) {
     assert(OPTIMIZED_FUNCTION_TARGETS.includes(target), `${target} is missing its isolated loader.`);
   }
-  for (const discoveryMode of ['control-api', 'manifest-output'] as const) {
-    const guardedDiscovery = runProbe(canaryTarget, discoveryMode);
-    assert(
-      guardedDiscovery.matchesFullEntrypoint
-        && arraysEqual(discovery.exports, guardedDiscovery.exports),
-      `Firebase ${discoveryMode} discovery honored an inherited FUNCTION_TARGET.`,
-    );
+  for (const target of [canaryTarget, ...PROVIDER_CONNECTION_AND_HEALTH_TARGETS]) {
+    for (const discoveryMode of ['control-api', 'manifest-output'] as const) {
+      const guardedDiscovery = runProbe(target, discoveryMode);
+      assert(
+        guardedDiscovery.matchesFullEntrypoint
+          && arraysEqual(discovery.exports, guardedDiscovery.exports),
+        `Firebase ${discoveryMode} discovery honored an inherited FUNCTION_TARGET=${target}.`,
+      );
+    }
   }
 
   for (const target of OPTIMIZED_FUNCTION_TARGETS) {
@@ -344,6 +355,7 @@ async function check(): Promise<void> {
   }
 
   for (const target of [
+    ...PROVIDER_CONNECTION_AND_HEALTH_TARGETS,
     ...Object.keys(INGESTION_TARGET_METADATA),
     ...Object.keys(SCHEDULED_MAINTENANCE_TARGET_METADATA),
   ]) {
@@ -371,7 +383,8 @@ async function check(): Promise<void> {
 
   for (const target of OPTIMIZED_FUNCTION_TARGETS) {
     const endpoint = stack.endpoints[target];
-    const expectedPlatform = target === 'receiveSuunto247Data' ? 'gcfv1' : 'gcfv2';
+    const expectedPlatform = target === 'receiveSuunto247Data' || target === 'receiveGarminAPIHealthData'
+      ? 'gcfv1' : 'gcfv2';
     assert(endpoint?.platform === expectedPlatform, `${target} runtime generation changed.`);
     assert(endpoint.entryPoint === target, `${target} entrypoint metadata changed.`);
     assert(
@@ -409,6 +422,39 @@ async function check(): Promise<void> {
         && endpoint.taskQueueTrigger === undefined
         && endpoint.scheduleTrigger === undefined,
       `${target} HTTP trigger changed.`);
+    } else if (target === 'receiveGarminAPIHealthData') {
+      assert(endpoint.availableMemoryMb === 1024, `${target} memory configuration changed.`);
+      assert(endpoint.timeoutSeconds === 60, `${target} timeout configuration changed.`);
+      assert(endpoint.cpu === undefined
+        && JSON.stringify(endpoint.minInstances) === 'null'
+        && JSON.stringify(endpoint.maxInstances) === 'null'
+        && endpoint.concurrency === undefined,
+      `${target} CPU or instance settings changed.`);
+      assert(arraysEqual(secretKeys, ['GARMINAPI_WEBHOOK_SECRET']), `${target} secret bindings changed.`);
+      assert(JSON.stringify(endpoint.httpsTrigger) === '{}'
+        && endpoint.callableTrigger === undefined
+        && endpoint.eventTrigger === undefined
+        && endpoint.taskQueueTrigger === undefined
+        && endpoint.scheduleTrigger === undefined,
+      `${target} HTTP trigger or invoker configuration changed.`);
+    } else if (CONNECTION_PROJECTION_TARGET_DOCUMENTS[target]) {
+      assert(endpoint.availableMemoryMb === 512, `${target} memory configuration changed.`);
+      assert(JSON.stringify(endpoint.timeoutSeconds) === 'null', `${target} timeout configuration changed.`);
+      assert(endpoint.cpu === undefined
+        && endpoint.concurrency === 10
+        && endpoint.maxInstances === 20
+        && JSON.stringify(endpoint.minInstances) === 'null',
+      `${target} CPU or instance settings changed.`);
+      assert(secretKeys.length === 0, `${target} secret bindings changed.`);
+      assert(endpoint.eventTrigger?.eventType === 'google.cloud.firestore.document.v1.written'
+        && endpoint.eventTrigger.eventFilterPathPatterns?.document === CONNECTION_PROJECTION_TARGET_DOCUMENTS[target]
+        && endpoint.eventTrigger.retry === true,
+      `${target} Firestore trigger or retry configuration changed.`);
+      assert(endpoint.callableTrigger === undefined
+        && endpoint.httpsTrigger === undefined
+        && endpoint.taskQueueTrigger === undefined
+        && endpoint.scheduleTrigger === undefined,
+      `${target} trigger kind changed.`);
     } else if (INGESTION_TARGET_METADATA[target]) {
       const expected = INGESTION_TARGET_METADATA[target];
       assert(endpoint.availableMemoryMb === expected.memoryMb, `${target} memory configuration changed.`);

@@ -80,6 +80,27 @@ retry job binds secrets: the existing client ID and client secret for COROS, Gar
 cursor progression, correction/reconciliation coverage, cleanup and disconnect recovery continue through the same
 handlers. The internal loading change has no MCP, Training planning or user-facing help impact.
 
+## Connection projection and Garmin Health isolation
+
+Three more existing functions load directly from their owner modules:
+
+| Target | Owner module | Preserved runtime and trigger |
+| --- | --- | --- |
+| `projectSuuntoConnectionOnTokenWrite` | `service-connection-account-projection` | Gen 2, 512 MiB, Firestore document written, concurrency 10, max instances 20 |
+| `projectGarminConnectionOnTokenWrite` | `service-connection-account-projection` | Gen 2, 512 MiB, Firestore document written, concurrency 10, max instances 20 |
+| `receiveGarminAPIHealthData` | `sleep/webhooks` | Gen 1, 1 GiB, 60 seconds, HTTP |
+
+All three retain `europe-west2` and their original Firebase handler objects. The token projections retain retries and
+their respective `suuntoAppAccessTokens/{userID}/tokens/{tokenID}` and `garminAPITokens/{userID}/tokens/{tokenID}` paths.
+Their timeout, CPU and minimum-instance options remain unspecified; neither binds secrets. Projection bounds, revision
+ordering, safe account fields and transaction-owned account-deletion checks continue through the same implementation.
+The shared COROS projection remains on its previous loading path.
+
+The Garmin receiver retains only `GARMINAPI_WEBHOOK_SECRET`, its existing instance defaults, webhook authentication,
+payload validation and durable queue staging. Its generation and registered webhook URL are unchanged. No provider
+request, feed selection, reconciliation, retry, write, telemetry or MCP contract changes are introduced. The app help
+and connected-service content were reviewed; this internal startup change has no user-facing or Training planning impact.
+
 ## Verification
 
 Run the routing and discovery contract:
@@ -110,6 +131,9 @@ The check builds the Functions package and verifies:
   memory, timeout, concurrency, instance settings, secrets, trigger kinds, retry options and task rate limits;
 - the four scheduled maintenance targets avoid those unrelated modules, preserve their complete scheduled-handler
   contracts and allow standalone secret validation with any of their targets inherited;
+- the two token projections and Garmin Health receiver avoid those unrelated modules, preserve their original trigger,
+  generation, resource and secret settings, and allow complete discovery and standalone secret validation with each
+  of their targets inherited;
 - retired event-tag catalog and Garmin probe endpoints remain excluded from discovery.
 
 CI runs the compiled check after the Functions build. Firebase Functions predeploy first rejects forbidden local
@@ -241,6 +265,40 @@ deploy only these four functions from the verified revision:
 ```bash
 firebase deploy --project quantified-self-io \
   --only functions:scheduleSuuntoHealthSync,functions:scheduleSuuntoSleepSync,functions:redriveRejectedRouteOriginalCleanup,functions:retryPendingServiceDisconnects
+```
+
+## Connection projection and Garmin Health benchmark and verification (2026-10-06)
+
+Three isolated Node 22.23.3 runs per target used the compiled benchmark's `--probe` mode, `--expose-gc`, the matching
+`FUNCTION_TARGET` and neither Firebase discovery flag. The baseline was `c7ac8e0af`, with the same machine and
+dependencies before and after the loader change.
+
+| Target | Import before | Import after | RSS before | RSS after | Modules before | Modules after |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: |
+| `projectSuuntoConnectionOnTokenWrite` | 945 ms | 170 ms | 236.9 MiB | 87.0 MiB | 3,141 | 753 |
+| `projectGarminConnectionOnTokenWrite` | 932 ms | 154 ms | 238.2 MiB | 86.8 MiB | 3,141 | 753 |
+| `receiveGarminAPIHealthData` | 947 ms | 368 ms | 237.5 MiB | 130.2 MiB | 3,141 | 1,468 |
+| Complete entrypoint control | 945 ms | 937 ms | 238.2 MiB | 237.3 MiB | 3,141 | 3,141 |
+
+Each runtime target exports one handler; discovery still exports 168. Local imports are about 82–83% faster for the
+projections and 61% faster for Garmin Health, with 107–151 MiB less startup RSS. These are module-import measurements,
+not production memory guarantees or billing savings. After a separately approved deployment, compare production
+startup latency, memory, billable time per request, failures and retry outcomes over comparable complete days.
+
+Verification passed:
+
+- 78 tests across the loader, Firebase bootstrap, secret policy, account projection and Sleep/Health webhook specs;
+- Functions TypeScript build and compiled entrypoint check: 168 endpoints and 52 isolated targets;
+- complete Firebase endpoint descriptors for all 168 exports matched the pre-change baseline;
+- deployment-source safety and secret-binding validation: 69 secret-bound endpoints, including inherited targets;
+- scoped ESLint for the three changed TypeScript files and `git diff --check`.
+
+The documentation-only changes have no separate automated tests. This change is prepared locally; deployment requires
+separate explicit approval. Deploy only these three functions from the verified revision:
+
+```bash
+firebase deploy --project quantified-self-io \
+  --only functions:projectSuuntoConnectionOnTokenWrite,functions:projectGarminConnectionOnTokenWrite,functions:receiveGarminAPIHealthData
 ```
 
 ## Adding another optimized target

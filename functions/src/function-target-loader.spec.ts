@@ -6,12 +6,15 @@ import {
 } from './function-target-loader';
 
 describe('function target loader', () => {
-  it('optimizes the MCP, ingestion, scheduled maintenance, Suunto OAuth/webhook, marketing, and Training endpoints', () => {
+  it('optimizes the MCP, ingestion, maintenance, provider connection/webhook, marketing, and Training endpoints', () => {
     expect(OPTIMIZED_FUNCTION_TARGETS).toEqual([
       'mcpApi',
       'getSuuntoAPIAuthRequestTokenRedirectURI',
       'requestAndSetSuuntoAPIAccessToken',
       'receiveSuunto247Data',
+      'receiveGarminAPIHealthData',
+      'projectSuuntoConnectionOnTokenWrite',
+      'projectGarminConnectionOnTokenWrite',
       'processSleepSyncTask',
       'processWorkoutTask',
       'uploadActivity',
