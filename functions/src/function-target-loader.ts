@@ -13,6 +13,8 @@ const loadTrainingDeliveryLifecycle = (): FunctionModule =>
   module.require('./training-plans/delivery/lifecycle') as FunctionModule;
 const loadDashboardDerivedMetricsTriggers = (): FunctionModule =>
   module.require('./derived-metrics/derived-metrics.trigger') as FunctionModule;
+const loadSleepPolling = (): FunctionModule =>
+  module.require('./sleep/polling') as FunctionModule;
 
 const TARGET_LOADERS: Readonly<Record<string, ModuleLoader>> = Object.freeze({
   mcpApi: () => module.require('./mcp/server') as FunctionModule,
@@ -30,6 +32,12 @@ const TARGET_LOADERS: Readonly<Record<string, ModuleLoader>> = Object.freeze({
     () => module.require('./events/upload-activity') as FunctionModule,
   fanOutSuuntoHealthWebhookIngress:
     () => module.require('./suunto/health-webhook-ingress') as FunctionModule,
+  scheduleSuuntoHealthSync: loadSleepPolling,
+  scheduleSuuntoSleepSync: loadSleepPolling,
+  redriveRejectedRouteOriginalCleanup:
+    () => module.require('./routes/rejected-original-cleanup') as FunctionModule,
+  retryPendingServiceDisconnects:
+    () => module.require('./schedule/retry-pending-service-disconnects') as FunctionModule,
   listMarketingCampaigns: loadMarketingHandlers,
   saveMarketingCampaign: loadMarketingHandlers,
   cloneMarketingCampaign: loadMarketingHandlers,
