@@ -3,6 +3,7 @@ import { ActivityTypes } from '@sports-alliance/sports-lib';
 import { resolveDeliveryIntent, deliveryIdentity, deliveryContentDigest } from './intent';
 import type { DeliveryContext, DeliveryLedgerV1 } from './contracts';
 import { FakeTrainingTransport } from './test-support/fake-transport';
+import { GarminTrainingTransport } from './garmin/transport';
 import { SuuntoGuideTransport } from './suunto/transport';
 import { assessSuuntoGuideV2ForRecovery, assessSuuntoGuideV3ForRecovery, assessSuuntoGuideV4ForRecovery, assessSuuntoGuideV5ForRecovery } from './suunto/mapping';
 
@@ -17,6 +18,28 @@ const base: DeliveryContext = {
   connection: { state: 'connected', destinationKey: 'account-a', epoch: 0, generation: 'g1' }, transport: new FakeTrainingTransport(),
 };
 describe('delivery intent', () => {
+  it.each([
+    ['year boundary', '2026-12-31T22:30:00Z', 'Europe/Helsinki', '2027-01-01', '2028-01-01', '2028-01-02', '2026-12-31'],
+    ['leap year', '2027-12-31T22:30:00Z', 'Europe/Helsinki', '2028-01-01', '2028-12-31', '2029-01-01', '2027-12-31'],
+    ['DST start', '2026-03-28T22:30:00Z', 'Europe/Helsinki', '2026-03-29', '2027-03-29', '2027-03-30', '2026-03-28'],
+    ['DST end', '2026-10-24T21:30:00Z', 'Europe/Helsinki', '2026-10-25', '2027-10-25', '2027-10-26', '2026-10-24'],
+    ['western saved zone', '2026-12-31T22:30:00Z', 'America/Los_Angeles', '2026-12-31', '2027-12-31', '2028-01-01', '2026-12-30'],
+  ])('enforces QS\'s inclusive 365-calendar-day Garmin horizon at %s', (_label, instant, timeZone, today, last, outside, past) => {
+    const nowMs = Date.parse(instant);
+    const request = vi.fn(async () => { throw new Error('No HTTP during intent assessment'); });
+    const transport = new GarminTrainingTransport(request, () => nowMs);
+    expect(transport.horizonDays).toBe(365);
+    const context: DeliveryContext = { ...base, nowMs, transport, setting: { ...base.setting!, timeZone } };
+    for (const localDate of [today, last]) {
+      expect(resolveDeliveryIntent({ ...context, workout: { ...base.workout!, localDate } }))
+        .toMatchObject({ desired: 'present', status: 'pending' });
+    }
+    expect(resolveDeliveryIntent({ ...context, workout: { ...base.workout!, localDate: outside } }))
+      .toMatchObject({ desired: 'preserve', status: 'outside_horizon' });
+    expect(resolveDeliveryIntent({ ...context, workout: { ...base.workout!, localDate: past } }))
+      .toMatchObject({ desired: 'preserve', status: 'past' });
+    expect(request).not.toHaveBeenCalled();
+  });
   it('withdraws a moved upcoming Suunto copy, retains consent and delivers when the date enters its window', () => {
     const transport = new FakeTrainingTransport(); transport.horizonDays = 6;
     const policy = Object.assign(transport, { withdrawOutsideHorizon: true });

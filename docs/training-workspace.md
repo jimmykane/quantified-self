@@ -2304,8 +2304,20 @@ This is a documentation/checklist decision, not a change to the source-controlle
 Future deployments and availability changes still require explicit approval. Connecting or deploying alone grants no
 workout consent. Use the normal owner-selected Stop/disconnect/deletion workflows for their documented effects;
 they are not deployment rollback mechanisms. Completed Garmin adapter, pool, strength, exact-completion and schedule-repair
-evidence is retained in #647, #733, #782, #651 and #703. Remaining monitoring/release operations stay in #655 and neutral
-Sports Lib extraction in #654.
+evidence is retained in #647, #733, #782, #651 and #703. Production monitoring, opened/closed alert-email delivery and
+the lifecycle/retention regression-evidence audit are complete in #655. Current browser sync-settings release/Check
+verification remains #812; COROS and additional Suunto strength proof remain #648/#741, and neutral Sports Lib
+extraction remains #654.
+
+The release audit reuses recorded account/device observations rather than inducing production failures. Shared and
+provider-shaped Firestore-emulator tests cover Pro expiry, explicit disconnect, same/different-account reconnect,
+permission changes, duplicate dispatch, lost/partial responses, interrupted edits/removals, plan lifecycle and
+account-deletion fencing. Cleanup regressions cover 90-day recovery, recursive history/companion/reverse-link removal,
+bounded continuation beyond blocked prefixes and idempotent retries. Explicit Garmin intent tests use its actual
+transport policy to check the inclusive 365-calendar-day QS horizon across DST, year and leap-year boundaries without
+HTTP. #769/#801's reviewed paired-not-found replacement is separate from automatic Schedule-only repair: ordinary
+Check/Send/Retry cannot recreate a missing Workout, uncertain first creates stay blocked, and a surviving old Schedule
+does not authorize root replacement. Automated fault cases are not claims of live induced provider faults.
 
 Documentation maintenance for #655 changes Help and capability-limit text only. It does not change provider flags,
 mapping rules or digests, persisted recipes, MCP tools/strict schemas/scopes, consent, Assistant permissions or bundled
@@ -4936,8 +4948,8 @@ user-visible delivery projections or provider actions.
 
 ### Training delivery production monitoring
 
-Ticket #655 tracks production activation and email-delivery verification. Repository definitions live in
-`tools/training-monitoring/definitions.mjs`; this is operational configuration, not a second Training architecture
+Production activation and email-delivery verification were completed on 6 October 2026 under #655. Repository
+definitions live in `tools/training-monitoring/definitions.mjs`; this is operational configuration, not a second Training architecture
 or a replacement for `/admin/queues/training-delivery`. No product enablement, UID gate, provider behavior, retention
 limit, schedule or rollback switch changes. Garmin/Wahoo/Suunto remain live; COROS new sends remain Coming soon.
 
@@ -5043,11 +5055,20 @@ The preflight treats an omitted label value type as the API's default `STRING`, 
 explicitly different label types are still rejected before any write.
 Malformed API JSON is reported generically: parser error text must not expose private notification-channel data.
 
-Before #655's alert criterion can be checked, record the approved activation, metric/dashboard/policy resource identities
+For a new approved activation, record the metric/dashboard/policy resource identities
 privately, first idle and due-job samples, active notification-channel evidence, and a controlled incident-opened/closed
 email check. Do not synthesize provider failures, mutate customer jobs or bulk resend just to trigger alerts. Validate
-any temporary cloud test policy separately with an approved exact target and removal scope. Retain other open #655
+any temporary cloud test policy separately with an approved exact target and removal scope. Retain the applicable
 lifecycle/epic checklist obligations; source definitions alone do not prove that an email arrived.
+
+The approved production activation installed all fourteen metrics, the dedicated dashboard and six enabled policies
+using the existing **Alerts** email channel. Readback verified the configuration and all sixteen chart queries; live
+idle and due-job samples arrived. A separately approved temporary heartbeat policy opened and closed an incident,
+and the owner confirmed receipt of both notification emails. Only that temporary policy was subsequently removed;
+the permanent policies, existing OOM alert, dashboard, metrics and channel were preserved. See the
+[activation and email evidence](https://github.com/jimmykane/quantified-self/issues/655#issuecomment-6011349414).
+Resource identities are retained privately rather than embedding notification-channel details here. Future
+reconfiguration or another smoke test still requires separate approval; completed activation does not authorize it.
 
 Verification: `npm run test:training-monitoring`, Functions `monitoring.spec.ts`/`tasks.spec.ts`, and isolated demo
 Firestore `monitoring.emulator.spec.ts` in the CI **delivery** group. Configuration tests use injected synthetic HTTP
