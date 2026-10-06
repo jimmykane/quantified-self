@@ -226,7 +226,7 @@
           <div class="training-proposal-heading">
             <mat-icon aria-hidden="true">{{ trainingDeletionReview() ? 'delete_outline' : 'edit_calendar' }}</mat-icon>
             <div>
-              <h2 id="training-proposal-title">{{ trainingDeletionReview()?.title ?? (pendingSavedWorkoutProposal() ? 'Review saved workout change' : 'Review Training changes') }}</h2>
+              <h2 id="training-proposal-title">{{ trainingDeletionReview()?.title ?? (pendingGarminReplacement() ? 'Review Garmin replacement copy' : pendingSavedWorkoutProposal() ? 'Review saved workout change' : 'Review Training changes') }}</h2>
               <p>{{ proposal.summary }}</p>
             </div>
           </div>
@@ -247,6 +247,8 @@
           <p class="training-proposal-disclosure">
             @if (trainingDeletionReview(); as deletionReview) {
               {{ deletionReview.disclosure }}
+            } @else if (pendingGarminReplacement()) {
+              The original Garmin copy may reappear and leave a duplicate. Creating a replacement requires your explicit confirmation. QS rechecks before sending; this does not edit your workout, other providers or completed activities.
             } @else if (pendingSavedWorkoutProposal()) {
               Nothing changes until you apply. A saved recipe has no sync setting; planned copies follow the plan's existing setting, while Standalone copies need their own Send action.
             } @else {
@@ -256,7 +258,7 @@
           <div class="training-proposal-actions">
             <button mat-flat-button type="button" [disabled]="proposalActionInProgress()"
               (click)="applyPendingTrainingProposal()">
-              @if (applyingTrainingProposal()) { <mat-spinner diameter="18"></mat-spinner> } @else { {{ trainingDeletionReview()?.applyLabel ?? 'Apply changes' }} }
+              @if (applyingTrainingProposal()) { <mat-spinner diameter="18"></mat-spinner> } @else { {{ trainingDeletionReview()?.applyLabel ?? (pendingGarminReplacement() ? 'Create replacement Garmin copy' : 'Apply changes') }} }
             </button>
             <button mat-button type="button" [disabled]="proposalActionInProgress()"
               (click)="dismissPendingTrainingProposal()">Dismiss</button>

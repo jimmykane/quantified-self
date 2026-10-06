@@ -196,6 +196,8 @@ export class AssistantPageComponent implements OnInit, OnDestroy {
   readonly trainingDeliveryEnabled = signal(false);
   readonly pendingTrainingProposal = signal<AssistantTrainingProposalPreview | null>(null);
   readonly trainingDeletionReview = computed(() => assistantTrainingDeletionReview(this.pendingTrainingProposal()));
+  readonly pendingGarminReplacement = computed(() =>
+    this.pendingTrainingProposal()?.changes[0]?.kind === 'garmin-workout-replacement');
   readonly pendingSavedWorkoutProposal = computed(() => {
     const proposal = this.pendingTrainingProposal();
     return proposal !== null && isSavedWorkoutProposal(proposal);
@@ -704,6 +706,16 @@ export class AssistantPageComponent implements OnInit, OnDestroy {
         confirm: true,
       });
       this.pendingTrainingProposal.set(null);
+      if (proposal.changes[0]?.kind === 'garmin-workout-replacement') {
+        const provider = result.providers.length === 1 && result.providers[0].index === 0
+          && result.providers[0].provider === 'garmin' ? result.providers[0] : null;
+        const accepted = result.status === 'applied' && !result.changes.length && provider
+          && ['applied', 'already_applied', 'queued'].includes(provider.status);
+        this.trainingProposalResult.set(provider?.message
+          ?? 'No Garmin replacement result was returned. Read the current sync status before trying again.');
+        if (accepted) this.hapticsService.success(); else this.hapticsService.error();
+        return;
+      }
       if (assistantTrainingDeletionReview(proposal)) {
         this.trainingProposalResult.set(result.changes.map(change => change.message).join(' ')
           || 'No deletion result was returned. Check the current Training schedule before trying again.');

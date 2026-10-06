@@ -1,3 +1,4 @@
+import { formatWorkoutPrescriptionSummaryV1 } from '@shared/planned-workout-analysis-display';
 import {
   ChangeDetectionStrategy,
   Component,
@@ -139,6 +140,7 @@ interface WorkoutRow {
   workout: ScheduledWorkoutV1;
   completion: TrainingWorkoutCompletionV1 | null;
   summary: string[];
+  prescriptionSummary: string;
   actionBusy: boolean;
   historyScope: TrainingScheduleRevisionScope;
 }
@@ -288,6 +290,8 @@ export class PlansWorkspaceComponent {
   ), { initialValue: { status: 'loading', items: [], message: null } as LibraryLoadState });
   readonly libraryItems = computed(() => this.libraryState().items);
   readonly libraryRows = computed(() => this.libraryItems().map(item => ({ item,
+    prescriptionSummary: formatWorkoutPrescriptionSummaryV1(item.structure,
+      this.currentUser()?.settings?.unitSettings ?? null, item.structure.sport, this.locale),
     summary: formatManualWorkoutStructure(item.structure,
       this.currentUser()?.settings?.unitSettings ?? null, this.locale) })));
   readonly libraryEditorItem = signal<WorkoutLibraryItemV1 | null>(null);
@@ -454,6 +458,8 @@ export class PlansWorkspaceComponent {
         : workout.planId === selectedPlanId)
       .map(workout => ({
         workout,
+        prescriptionSummary: formatWorkoutPrescriptionSummaryV1(workout.structure,
+          this.currentUser()?.settings?.unitSettings ?? null, workout.structure.sport, this.locale),
         completion: this.completions().find(completion => completion.workoutId === workout.id) ?? null,
         summary: formatManualWorkoutStructure(
           workout.structure,
@@ -481,6 +487,8 @@ export class PlansWorkspaceComponent {
   readonly addWorkoutDate = computed(() => this.view() === 'plans' ? this.planScheduleDate() ?? undefined : undefined);
   readonly deletedWorkoutRows = computed<WorkoutRow[]>(() => (this.deletedWorkoutPanel()?.workouts ?? []).map(workout => ({
     workout,
+    prescriptionSummary: formatWorkoutPrescriptionSummaryV1(workout.structure,
+      this.currentUser()?.settings?.unitSettings ?? null, workout.structure.sport, this.locale),
     completion: null,
     summary: formatManualWorkoutStructure(
       workout.structure,

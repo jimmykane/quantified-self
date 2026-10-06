@@ -1,6 +1,6 @@
 import {
-  ActivityTypes, PaceUnits, SwimPaceUnits, DataCadence, DataHeartRate, DataPace, DataPower, DataSpeed, DataSwimDistance, DataSwimPace,
-  DynamicDataLoader, type DataInterface, type UserUnitSettingsInterface,
+  ActivityTypes, PaceUnits, SpeedUnits, SwimPaceUnits, DataCadence, DataHeartRate, DataPace, DataPower, DataSpeed, DataSwimDistance, DataSwimPace,
+  type DataInterface, type UserUnitSettingsInterface,
 } from '@sports-alliance/sports-lib';
 import {
   formatWorkoutTargetV1, isRowingWorkoutSportV1, isSwimmingWorkoutSportV1,
@@ -59,10 +59,6 @@ export function createManualWorkoutEditorTarget(kind: WorkoutTargetKindV1 = 'hea
     referenceKind: WORKOUT_EDITOR_REFERENCE_OPTIONS[kind][0].value, referenceValue: null };
 }
 
-function selectedData(data: DataInterface, units?: UserUnitSettingsInterface | null): DataInterface {
-  return DynamicDataLoader.getUnitBasedDataFromDataInstance(data, normalizeUserUnitSettings(units))[0] ?? data;
-}
-
 function paceDistance(sport: ActivityTypes, units?: UserUnitSettingsInterface | null): number {
   if (isRowingWorkoutSportV1(sport)) return 500;
   const selected = normalizeUserUnitSettings(units);
@@ -73,7 +69,14 @@ function paceDistance(sport: ActivityTypes, units?: UserUnitSettingsInterface | 
 }
 
 function speedScale(units?: UserUnitSettingsInterface | null): number {
-  return Number(selectedData(new DataSpeed(1), units).getValue());
+  // Exact inverse factors for authored inputs; Sports Lib rounds some display conversions.
+  switch (normalizeUserUnitSettings(units).speedUnits[0]) {
+    case SpeedUnits.MilesPerHour: return 3600 / 1609.344;
+    case SpeedUnits.FeetPerSecond: return 1 / .3048;
+    case SpeedUnits.Knots: return 3600 / 1852;
+    case SpeedUnits.MetersPerSecond: return 1;
+    default: return 3.6;
+  }
 }
 
 function roundInput(value: number): number {
@@ -235,6 +238,7 @@ function convertPartialSpeedTarget(target: ManualWorkoutEditorTarget, from: Acti
     if (speed === undefined && typeof value === 'number' && Number.isFinite(value) && value >= 0
       && (target.presentation !== 'pace' || value > 0)) speed = toSpeed(value, target.presentation, from, units);
     if (speed === undefined || !Number.isFinite(speed) || speed < 0 || (field === 'referenceValue' && speed === 0)) return { value };
+    if (speed === 0 && presentation === 'pace') return { value: null };
     const converted = fromSpeed(speed, presentation, to, units);
     return { value: converted, snapshot: { editorValue: converted, metersPerSecond: speed } };
   };
@@ -262,6 +266,10 @@ export function changeManualEditorTargetPresentation(target: ManualWorkoutEditor
   if (target.kind !== 'speed' || target.presentation === presentation) return target;
   try {
     const canonical = manualEditorTargetToWorkout(target, sport, units);
+    if (canonical.kind === 'speed' && canonical.mode === 'absolute' && presentation === 'pace'
+      && canonical.minimumMetersPerSecond === 0) {
+      return { ...target, presentation, minimum: null, maximum: null, source: undefined, speedSource: undefined };
+    }
     if (canonical.kind === 'speed') return rehydrateConvertedTarget({ ...canonical, presentation }, target, sport, units);
   } catch { /* Unfinished prescriptions retain only their completed fields. */ }
   return convertPartialSpeedTarget(target, sport, sport, presentation, units);

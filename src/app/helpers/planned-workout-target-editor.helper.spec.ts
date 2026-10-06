@@ -151,6 +151,19 @@ describe('ordered manual workout targets', () => {
     }
   });
 
+  it('does not turn a zero speed in an unfinished range into an infinite pace input', () => {
+    const canonical: WorkoutTargetV1 = { kind: 'speed', mode: 'absolute', presentation: 'speed',
+      minimumMetersPerSecond: 0, maximumMetersPerSecond: 5 };
+    for (const saved of [false, true]) {
+      const draft = saved ? workoutTargetToManualEditor(canonical, ActivityTypes.Cycling)
+        : { ...createManualWorkoutEditorTarget('speed'), presentation: 'speed' as const, minimum: 0 };
+      const pace = changeManualEditorTargetPresentation({ ...draft, maximum: null }, 'pace', ActivityTypes.Cycling);
+      expect(pace.minimum).toBeNull(); expect(pace.maximum).toBeNull();
+      expect(pace.speedSource?.minimum).toBeUndefined(); expect(pace.speedSource?.maximum).toBeUndefined();
+      expect(() => manualEditorTargetToWorkout(pace, ActivityTypes.Cycling)).toThrow('numeric values');
+    }
+  });
+
   it.each(['pace', 'speed'] as const)('collapses close rounded %s bounds to one exact canonical value when Single is chosen', presentation => {
     const canonical: WorkoutTargetV1 = { kind: 'speed', mode: 'absolute', presentation, minimumMetersPerSecond: 3.123456781, maximumMetersPerSecond: 3.123456789 };
     const draft = workoutTargetToManualEditor(canonical, ActivityTypes.Running);

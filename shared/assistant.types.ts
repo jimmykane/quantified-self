@@ -238,7 +238,7 @@ export interface AssistantTrainingProposalPreview {
     index: number;
     provider: 'garmin' | 'coros' | 'wahoo' | 'suunto';
     targetType: 'plan' | 'workout';
-    action: 'enable' | 'send' | 'resume' | 'stop' | 'retry' | 'check' | 'approve';
+    action: 'enable' | 'send' | 'resume' | 'stop' | 'retry' | 'check' | 'approve' | 'replace';
     availability: 'ready' | 'unavailable' | 'reconnect_required' | 'connection_repair' | 'pro_required';
     timeZone: string | null;
     eligibleCount: number;

@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { WORKOUT_PRESCRIPTION_ANALYSIS_SCHEMA } from './workout-prescription-analysis.schemas';
 import { ActivityTypesHelper } from '@sports-alliance/sports-lib';
 import {
   WORKOUT_STEP_PURPOSES,
@@ -28,17 +29,17 @@ export const TRAINING_PLANS_WRITE_SCOPE = 'training-plans:write';
 export const TRAINING_DELIVERY_WRITE_SCOPE = 'training-delivery:write';
 export const TRAINING_READ_EXTENSION_TOOLS = ['query_planned_workouts_by_date',
   'get_planned_workout_completions', 'assess_planned_workout_compatibility', 'get_strength_workout_details',
-  'get_planned_workout_v2', 'get_planned_workout_v3', 'list_saved_workouts', 'get_saved_workout', 'get_saved_workout_v2'] as const;
+  'get_planned_workout_v2', 'get_planned_workout_v3', 'list_saved_workouts', 'get_saved_workout', 'get_saved_workout_v2', 'get_workout_prescription_analysis'] as const;
 export const TRAINING_READ_TOOLS = ['list_training_plans', 'get_training_plan', 'query_planned_workouts',
   'get_planned_workout', 'get_training_sync_status', 'get_planned_workout_completion',
   ...TRAINING_READ_EXTENSION_TOOLS] as const;
 export type TrainingReadTool = typeof TRAINING_READ_TOOLS[number];
 export const TRAINING_PREVIEW_TOOLS = ['preview_create_planned_workout', 'preview_training_changes',
   'preview_strength_workout_change', 'preview_planned_workout_v2_change', 'preview_planned_workout_v3_change', 'preview_saved_workout_change', 'preview_saved_workout_v2_change',
-  'preview_training_deletion'] as const;
+  'preview_training_deletion', 'preview_garmin_workout_replacement'] as const;
 export const TRAINING_WRITE_TOOLS = [...TRAINING_PREVIEW_TOOLS, 'apply_training_changes', 'apply_saved_workout_change'] as const;
 export const TRAINING_WRITE_EXTENSION_TOOLS = ['preview_strength_workout_change', 'preview_planned_workout_v2_change', 'preview_planned_workout_v3_change',
-  'preview_saved_workout_change', 'preview_saved_workout_v2_change', 'apply_saved_workout_change', 'preview_training_deletion'] as const;
+  'preview_saved_workout_change', 'preview_saved_workout_v2_change', 'apply_saved_workout_change', 'preview_training_deletion', 'preview_garmin_workout_replacement'] as const;
 export type TrainingWriteTool = typeof TRAINING_WRITE_TOOLS[number];
 export const trainingDate = z.string().length(10).refine(value => {
   try { return normalizeTrainingLocalDate(value) === value; } catch { return false; }
@@ -73,6 +74,7 @@ export const TRAINING_READ_INPUTS = {
     cursor: z.string().min(1).max(8192).optional() }),
   get_saved_workout: z.strictObject({ savedWorkoutRef: ref }),
   get_saved_workout_v2: z.strictObject({ savedWorkoutRef: ref }),
+  get_workout_prescription_analysis: z.strictObject({ source: z.enum(['scheduled', 'saved']), reference: ref }),
 };
 
 type WorkoutTargetVariantKey<T extends WorkoutTargetV1 = WorkoutTargetV1> = T extends WorkoutTargetV1
@@ -238,6 +240,10 @@ export const TRAINING_STRENGTH_DETAILS_SCHEMA = z.strictObject({ version: z.lite
 export const TRAINING_STRENGTH_DRAFT_SCHEMA = TRAINING_STRENGTH_DETAILS_SCHEMA.omit({ workoutId: true, revision: true })
   .refine(value => { try { parseStrengthWorkoutDraftV1(value); return true; } catch { return false; } });
 export const TRAINING_READ_OUTPUTS = {
+  get_workout_prescription_analysis: z.strictObject({ source: z.enum(['scheduled', 'saved']), reference: ref,
+    revision: count, scheduleRevision: count.nullable(), libraryRevision: count.nullable(),
+    sport: z.enum(ActivityTypesHelper.getActivityTypesAsUniqueArray()),
+    analysis: WORKOUT_PRESCRIPTION_ANALYSIS_SCHEMA, displaySummary: z.string().max(2000) }),
   list_training_plans: z.strictObject({ ...envelope, plans: z.array(plan).max(100) }),
   list_saved_workouts: z.strictObject({ libraryRevision: count, scanComplete: z.boolean(),
     recordsScanned: count.max(200), nextCursor: ref.nullable(),
@@ -404,6 +410,8 @@ const savedWorkoutChange = savedWorkoutChangeWithRecipe(TRAINING_RECIPE_WITH_POO
 const savedWorkoutV2Change = savedWorkoutChangeWithRecipe(TRAINING_RECIPE_WITH_EARLY_LAP_SCHEMA);
 
 export const TRAINING_WRITE_INPUTS = {
+  preview_garmin_workout_replacement: z.strictObject({ workoutRef: ref,
+    expectedScheduleRevision: count, expectedWorkoutRevision: count.positive() }),
   preview_training_deletion: z.strictObject({ expectedScheduleRevision: count,
     change: TRAINING_DELETION_CHANGE_SCHEMA }),
   preview_create_planned_workout: z.strictObject({
@@ -438,6 +446,12 @@ const trainingPreviewOutput = z.strictObject({ proposalRef: ref, expiresAtMs: co
     changes: z.array(proposedChange).min(1).max(25), providerPreviews: z.array(providerPreview).max(100) });
 
 export const TRAINING_WRITE_OUTPUTS = {
+  preview_garmin_workout_replacement: trainingPreviewOutput.extend({
+    permissionMode: z.literal('delivery'),
+    changes: z.array(proposedChange.extend({ index: z.literal(0), kind: z.literal('garmin-workout-replacement') })).length(1),
+    providerPreviews: z.array(providerPreview.extend({ index: z.literal(0), provider: z.literal('garmin'),
+      targetType: z.literal('workout'), action: z.literal('replace'), availability: z.literal('ready') })).length(1),
+  }),
   preview_training_deletion: trainingPreviewOutput,
   preview_create_planned_workout: trainingPreviewOutput,
   preview_training_changes: trainingPreviewOutput,
@@ -455,6 +469,18 @@ export const TRAINING_WRITE_OUTPUTS = {
     libraryRevision: count, scheduleRevision: count, savedWorkoutRef: ref.nullable(),
     workoutRefs: z.array(ref).max(100) }),
 };
+
+/** First-party review only; never widen the registered batch preview schema. */
+export const TRAINING_ASSISTANT_PREVIEW_OUTPUT = z.union([
+  TRAINING_WRITE_OUTPUTS.preview_training_changes,
+  TRAINING_WRITE_OUTPUTS.preview_garmin_workout_replacement,
+]).superRefine((value, context) => {
+  if ((value.changes.some(change => change.kind === 'garmin-workout-replacement')
+    || value.providerPreviews.some(preview => preview.action === 'replace'))
+    && !TRAINING_WRITE_OUTPUTS.preview_garmin_workout_replacement.safeParse(value).success) {
+    context.addIssue({ code: 'custom', message: 'A Garmin replacement requires its dedicated unmixed review.' });
+  }
+});
 
 /** Additive recovery read; registered preview/apply contracts remain unchanged. */
 export const TRAINING_CHANGE_STATUS_INPUT = TRAINING_WRITE_INPUTS.apply_training_changes;

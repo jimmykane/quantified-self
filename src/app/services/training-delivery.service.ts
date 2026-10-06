@@ -1,5 +1,5 @@
 import { Injectable, computed, inject } from '@angular/core';
-import { Firestore, collection, collectionData, doc, docData, query, where, limit, orderBy } from 'app/firebase/firestore';
+import { Firestore, collection, collectionData, doc, docData, getDocFromServer, query, where, limit, orderBy } from 'app/firebase/firestore';
 import { combineLatest, finalize, firstValueFrom, from, map, Observable, of, timeout } from 'rxjs';
 import { PLANNED_WORKOUT_PROVIDER_IDS, type PlannedWorkoutProviderId } from '@shared/planned-workout-providers';
 import { isTrainingProviderDeliveryEnabled } from '@shared/training-delivery-rollout';
@@ -9,7 +9,7 @@ import { deliverySettingsId, parseTrainingDeliverySettingsV1, parseTrainingDeliv
 import { AppFunctionsService } from './app.functions.service';
 import { BrowserCompatibilityService } from './browser.compatibility.service';
 import { AppUserService } from './app.user.service';
-import { TRAINING_PLAN_MAX_CURRENT_WORKOUTS } from '@shared/training-plans';
+import { parseScheduledWorkoutV1, parseTrainingPlanStateV1, parseTrainingPlanV1, TRAINING_PLAN_MAX_CURRENT_WORKOUTS } from '@shared/training-plans';
 import { TRAINING_DELIVERY_VERIFICATIONS, parseTrainingVerificationV1,
   type TrainingVerificationReceiptV1, type TrainingVerificationV1 } from '@shared/training-provider-verification';
 
@@ -28,6 +28,19 @@ export const TRAINING_DELIVERY_SAVE_TIMEOUT_MS = 70_000;
 // One look-ahead beyond the current 400-workout/four-provider bound. Historical
 // identities can exceed it; summaries must then explicitly withhold complete totals.
 export const TRAINING_DELIVERY_SUMMARY_LIMIT = TRAINING_PLAN_MAX_CURRENT_WORKOUTS * PLANNED_WORKOUT_PROVIDER_IDS.length + 1;
+// Cached missing documents are not proof of disabled consent. Metadata-only
+// server acknowledgements must also unblock the initial read.
+const SERVER_CONFIRMED = { waitForServer: true } as const;
+
+function parseScopeSettings(value: unknown, scope: TrainingDeliveryScope, id: string,
+  provider: PlannedWorkoutProviderId): TrainingDeliverySettingsV1 | undefined {
+  if (value === undefined) return undefined;
+  const setting = parseTrainingDeliverySettingsV1(value);
+  if (setting.scope !== scope || setting.scopeId !== id || setting.provider !== provider) {
+    throw new Error('Sync settings do not match their document.');
+  }
+  return setting;
+}
 
 /** Browser setup follows the shared provider-admission boundary. */
 export function isTrainingDeliverySetupAvailableInApp(
@@ -59,28 +72,31 @@ export class TrainingDeliveryService {
     if (!visibleProviders.length) return of(false);
     if (scope === 'history') return combineLatest(visibleProviders.map(provider => collectionData(query(
       collection(this.firestore, 'users', uid, TRAINING_DELIVERY_STATUSES), where('provider', '==', provider), limit(1)),
-    ))).pipe(map(results => results.some(rows => rows.length > 0)));
+      SERVER_CONFIRMED))).pipe(timeout({ first: TRAINING_DELIVERY_PREVIEW_TIMEOUT_MS }), map(results => results.some(rows => rows.length > 0)));
     return combineLatest([
       collectionData(query(collection(this.firestore, 'users', uid, TRAINING_DELIVERY_STATUSES),
-        where(scope === 'plan' ? 'planId' : 'workoutId', '==', id), limit(TRAINING_DELIVERY_SUMMARY_LIMIT))),
+        where(scope === 'plan' ? 'planId' : 'workoutId', '==', id), limit(TRAINING_DELIVERY_SUMMARY_LIMIT)), SERVER_CONFIRMED),
       collectionData(query(collection(this.firestore, 'users', uid, TRAINING_DELIVERY_SETTINGS),
-        where('scope', '==', scope), where('scopeId', '==', id), limit(PLANNED_WORKOUT_PROVIDER_IDS.length))),
-    ]).pipe(map(values => values.some(rows => rows.some(row => visibleProviders.includes(row['provider'] as PlannedWorkoutProviderId)))));
+        where('scope', '==', scope), where('scopeId', '==', id), limit(PLANNED_WORKOUT_PROVIDER_IDS.length)), SERVER_CONFIRMED),
+    ]).pipe(timeout({ first: TRAINING_DELIVERY_PREVIEW_TIMEOUT_MS }),
+      map(values => values.some(rows => rows.some(row => visibleProviders.includes(row['provider'] as PlannedWorkoutProviderId)))));
   }
   watchScope(uid: string, scope: TrainingDeliveryViewScope, id: string,
     statusLimit = TRAINING_DELIVERY_PAGE_SIZE, includeVerification = true): Observable<TrainingDeliveryView> {
     if (!uid) return of(EMPTY_TRAINING_DELIVERY_VIEW);
     const settings$ = scope === 'history' ? of([] as TrainingDeliverySettingsV1[]) : combineLatest(PLANNED_WORKOUT_PROVIDER_IDS.map(provider => docData(doc(this.firestore,
-      'users', uid, TRAINING_DELIVERY_SETTINGS, deliverySettingsId(scope, id, provider))))).pipe(
-      map(values => values.filter(value => value !== undefined).map(parseTrainingDeliverySettingsV1)));
+      'users', uid, TRAINING_DELIVERY_SETTINGS, deliverySettingsId(scope, id, provider)), SERVER_CONFIRMED))).pipe(
+      map(values => values.map((value, index) => parseScopeSettings(value, scope, id, PLANNED_WORKOUT_PROVIDER_IDS[index]))
+        .filter((value): value is TrainingDeliverySettingsV1 => value !== undefined)));
     const statuses$ = collectionData(query(collection(this.firestore, 'users', uid, TRAINING_DELIVERY_STATUSES),
       ...(scope === 'history' ? [] : [where(scope === 'plan' ? 'planId' : 'workoutId', '==', id)]),
-      orderBy('__name__'), limit(statusLimit))).pipe(
+      orderBy('__name__'), limit(statusLimit)), SERVER_CONFIRMED).pipe(
       map(values => values.map(parseTrainingDeliveryStatusV1)));
     const verifications$ = includeVerification ? collectionData(query(collection(this.firestore, 'users', uid, TRAINING_DELIVERY_VERIFICATIONS),
       ...(scope === 'history' ? [] : [where(scope === 'plan' ? 'planId' : 'workoutId', '==', id)]),
-      orderBy('__name__'), limit(statusLimit))).pipe(map(values => values.map(parseTrainingVerificationV1))) : of([]);
-    return combineLatest([settings$, statuses$, verifications$]).pipe(map(([settings, statuses, verifications]) => ({ settings, statuses, verifications })));
+      orderBy('__name__'), limit(statusLimit)), SERVER_CONFIRMED).pipe(map(values => values.map(parseTrainingVerificationV1))) : of([]);
+    return combineLatest([settings$, statuses$, verifications$]).pipe(timeout({ first: TRAINING_DELIVERY_PREVIEW_TIMEOUT_MS }),
+      map(([settings, statuses, verifications]) => ({ settings, statuses, verifications })));
   }
   watchSummaryScope(uid: string, scope: 'plan' | 'workout', id: string, parentPlanId: string | null): Observable<TrainingDeliveryView> {
     // A single workout can show its latest remote check beside the accepted-send status.
@@ -89,16 +105,18 @@ export class TrainingDeliveryService {
     if (!uid) return view$;
     if (scope === 'plan') {
       const overrides$ = collectionData(query(collection(this.firestore, 'users', uid, TRAINING_DELIVERY_SETTINGS),
-        where('scope', '==', 'workout'), where('associationPlanId', '==', id), limit(TRAINING_DELIVERY_SUMMARY_LIMIT))).pipe(
+        where('scope', '==', 'workout'), where('associationPlanId', '==', id), limit(TRAINING_DELIVERY_SUMMARY_LIMIT)), SERVER_CONFIRMED).pipe(
         map(values => values.map(parseTrainingDeliverySettingsV1)));
-      return combineLatest([view$, overrides$]).pipe(map(([view, overrides]) => ({ ...view,
+      return combineLatest([view$, overrides$]).pipe(timeout({ first: TRAINING_DELIVERY_PREVIEW_TIMEOUT_MS }), map(([view, overrides]) => ({ ...view,
         settings: [...view.settings, ...overrides], summaryComplete: overrides.length < TRAINING_DELIVERY_SUMMARY_LIMIT })));
     }
     if (!parentPlanId) return view$;
     const parent$ = combineLatest(PLANNED_WORKOUT_PROVIDER_IDS.map(provider => docData(doc(this.firestore,
-      'users', uid, TRAINING_DELIVERY_SETTINGS, deliverySettingsId('plan', parentPlanId, provider))))).pipe(
-      map(values => values.filter(value => value !== undefined).map(parseTrainingDeliverySettingsV1)));
-    return combineLatest([view$, parent$]).pipe(map(([view, parent]) => ({ ...view, settings: [...view.settings, ...parent] })));
+      'users', uid, TRAINING_DELIVERY_SETTINGS, deliverySettingsId('plan', parentPlanId, provider)), SERVER_CONFIRMED))).pipe(
+      map(values => values.map((value, index) => parseScopeSettings(value, 'plan', parentPlanId, PLANNED_WORKOUT_PROVIDER_IDS[index]))
+        .filter((value): value is TrainingDeliverySettingsV1 => value !== undefined)));
+    return combineLatest([view$, parent$]).pipe(timeout({ first: TRAINING_DELIVERY_PREVIEW_TIMEOUT_MS }),
+      map(([view, parent]) => ({ ...view, settings: [...view.settings, ...parent] })));
   }
   async preview(command: TrainingDeliveryCommandV1, canExecute: () => boolean = () => true): Promise<TrainingDeliveryPreviewV1> {
     return this.invoke<TrainingDeliveryPreviewV1>('previewTrainingProviderDelivery', command, canExecute, TRAINING_DELIVERY_PREVIEW_TIMEOUT_MS);
@@ -113,11 +131,43 @@ export class TrainingDeliveryService {
     command: TrainingDeliveryCommandV1, canExecute: () => boolean, timeoutMs: number): Promise<T> {
     const uid = this.users.user()?.uid;
     let active = true;
-    // Bound App Check/token readiness as well as HTTP. A timeout cannot undo an
-    // in-flight write: the dialog retains its mutation ID for a safe receipt replay.
-    const result = await firstValueFrom(from(this.functions.call<TrainingDeliveryCommandV1, T>(name, command, {
-      canExecute: () => active && !!uid && this.users.user()?.uid === uid && canExecute(),
-    })).pipe(timeout(timeoutMs), finalize(() => { active = false; })));
+    const current = () => active && !!uid && this.users.user()?.uid === uid && canExecute();
+    const request = { ...command };
+    // Bound server reads, App Check/token readiness and HTTP together. A timeout
+    // cannot undo an in-flight write; keep approved commands/receipt replays exact.
+    const result = await firstValueFrom(from((async () => {
+      if (!current()) throw Object.assign(new Error('Sync review is no longer open.'), { code: 'cancelled' });
+      let payload = request;
+      if (name === 'previewTrainingProviderDelivery' || request.action === 'check') {
+        const revisions = await this.readCurrentRevisions(uid!, request);
+        if (!current()) throw Object.assign(new Error('Sync review is no longer open.'), { code: 'cancelled' });
+        if (request.action === 'check') payload = { ...request, ...revisions };
+        else if (Object.entries(revisions).some(([key, revision]) => request[key as keyof typeof revisions] !== revision)) {
+          // Never silently turn a stale "off" view into a fresh consent review.
+          throw Object.assign(new Error('The schedule or sync settings changed.'), { code: 'aborted' });
+        }
+      }
+      return this.functions.call<TrainingDeliveryCommandV1, T>(name, payload, { canExecute: current });
+    })()).pipe(timeout(timeoutMs), finalize(() => { active = false; })));
     return result.data;
+  }
+
+  private async readCurrentRevisions(uid: string, command: TrainingDeliveryCommandV1): Promise<Pick<TrainingDeliveryCommandV1,
+    'expectedScheduleRevision' | 'expectedScopeRevision' | 'expectedSettingsRevision'>> {
+    const [state, scope, settings] = await Promise.all([
+      getDocFromServer(doc(this.firestore, 'users', uid, 'trainingPlanState', 'current')),
+      getDocFromServer(doc(this.firestore, 'users', uid, command.scope === 'plan' ? 'trainingPlans' : 'scheduledWorkouts', command.scopeId)),
+      getDocFromServer(doc(this.firestore, 'users', uid, TRAINING_DELIVERY_SETTINGS, deliverySettingsId(command.scope, command.scopeId, command.provider))),
+    ]);
+    // Even a server-requested SDK read can contain latency-compensated local
+    // mutations. Such revisions (including a pending deletion) are not authority.
+    if ([state, scope, settings].some(snapshot => snapshot.metadata.fromCache || snapshot.metadata.hasPendingWrites)) {
+      throw Object.assign(new Error('Current sync settings are not available yet.'), { code: 'unavailable' });
+    }
+    const record = scope.exists() ? (command.scope === 'plan' ? parseTrainingPlanV1(scope.data()) : parseScheduledWorkoutV1(scope.data())) : undefined;
+    if (record && record.id !== command.scopeId) throw new Error('Sync source does not match its document.');
+    const setting = parseScopeSettings(settings.exists() ? settings.data() : undefined, command.scope, command.scopeId, command.provider);
+    return { expectedScheduleRevision: state.exists() ? parseTrainingPlanStateV1(state.data()).revision : 0,
+      expectedScopeRevision: record?.revision ?? 0, expectedSettingsRevision: setting?.revision ?? 0 };
   }
 }

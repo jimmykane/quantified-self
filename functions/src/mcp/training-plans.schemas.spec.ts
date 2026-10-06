@@ -1,3 +1,4 @@
+import { analyzeWorkoutStructureV1 } from '../../../shared/planned-workout-analysis';
 import { describe, expect, it } from 'vitest';
 import { ActivityTypes } from '@sports-alliance/sports-lib';
 import {
@@ -12,10 +13,13 @@ import {
   MCP_WORKOUT_RECIPE_VARIANT_COVERAGE,
   TRAINING_CHANGE_SCHEMA,
   TRAINING_READ_OUTPUTS,
+  TRAINING_READ_INPUTS,
   TRAINING_RECIPE_SCHEMA,
   TRAINING_RECIPE_WITH_POOL_SCHEMA,
   TRAINING_RECIPE_WITH_EARLY_LAP_SCHEMA,
   TRAINING_WRITE_INPUTS,
+  TRAINING_WRITE_OUTPUTS,
+  TRAINING_ASSISTANT_PREVIEW_OUTPUT,
 } from './training-plans.schemas';
 
 const recipe = (ending: WorkoutEndingV1, targets: WorkoutTargetV1[] = []): WorkoutStructureV1 => ({ version: 1, sport: ActivityTypes.Running,
@@ -95,7 +99,29 @@ function expectPublicReadWriteRoundTrip(input: WorkoutStructureV1): void {
   expect(write).toMatchObject({ structure: input });
 }
 
-describe('app-only Garmin replacement boundary', () => {
+describe('additive Garmin replacement boundary', () => {
+  const input = { workoutRef: 'owner-bound-ref', expectedScheduleRevision: 2, expectedWorkoutRevision: 1 };
+  const preview = { proposalRef: 'opaque-proposal', expiresAtMs: 1000, permissionMode: 'delivery', scheduleRevision: 2,
+    requiresConfirmation: true, summary: 'The original may reappear and leave a duplicate.',
+    changes: [{ index: 0, kind: 'garmin-workout-replacement', summary: 'Easy run on 2026-10-06.' }],
+    providerPreviews: [{ index: 0, provider: 'garmin', targetType: 'workout', action: 'replace', availability: 'ready',
+      timeZone: 'Europe/Helsinki', eligibleCount: 1, warningCount: 1, summary: 'Approval queues recovery, not receipt.' }] };
+  it('accepts only exact references/revisions and a single dedicated ready Garmin replacement review', () => {
+    expect(TRAINING_WRITE_INPUTS.preview_garmin_workout_replacement.parse(input)).toEqual(input);
+    expect(TRAINING_WRITE_OUTPUTS.preview_garmin_workout_replacement.parse(preview)).toEqual(preview);
+    expect(TRAINING_WRITE_OUTPUTS.preview_training_changes.safeParse(preview).success).toBe(false);
+    expect(TRAINING_ASSISTANT_PREVIEW_OUTPUT.safeParse({ ...preview, providerPreviews: [] }).success).toBe(false);
+    for (const extra of [{ uid: 'other' }, { provider: 'garmin' }, { approvalDigest: 'private' },
+      { timeZone: 'Europe/Helsinki' }, { workoutId: 'raw' }, { expectedWorkoutRevision: 0 },
+      { expectedScheduleRevision: -1 }, { expectedScheduleRevision: Number.MAX_SAFE_INTEGER + 1 }]) {
+      expect(TRAINING_WRITE_INPUTS.preview_garmin_workout_replacement.safeParse({ ...input, ...extra }).success).toBe(false);
+    }
+    for (const extra of [{ provider: 'wahoo' }, { action: 'retry' }, { targetType: 'plan' },
+      { availability: 'unavailable' }, { index: 1 }, { approvalDigest: 'private' }]) {
+      expect(TRAINING_WRITE_OUTPUTS.preview_garmin_workout_replacement.safeParse({ ...preview,
+        providerPreviews: [{ ...preview.providerPreviews[0], ...extra }] }).success).toBe(false);
+    }
+  });
   it('does not silently widen the registered v1 provider delivery action enum', () => {
     const change = { kind: 'provider-delivery', targetType: 'workout', target: { ref: 'owner-bound-ref' }, providers: ['garmin'] };
     expect(TRAINING_CHANGE_SCHEMA.safeParse({ ...change, action: 'retry' }).success).toBe(true);
@@ -414,5 +440,32 @@ describe('complete manual target editor coverage', () => {
       expect(TRAINING_RECIPE_SCHEMA.safeParse(leaked).success).toBe(false);
     }
     expect(TRAINING_RECIPE_SCHEMA.safeParse(recipe(step.ending, [target, target])).success).toBe(false);
+  });
+});
+
+describe('strict additive workout prescription analysis', () => {
+  it('requires a bounded reference and explicit source without accepting extra fields', () => {
+    const schema = TRAINING_READ_INPUTS.get_workout_prescription_analysis;
+    expect(schema.safeParse({ source: 'saved', reference: 'opaque' }).success).toBe(true);
+    for (const input of [{ reference: 'opaque' }, { source: 'scheduled', reference: '' },
+      { source: 'scheduled', reference: 'opaque', uid: 'foreign' }, { source: 'activity', reference: 'opaque' }])
+      expect(schema.safeParse(input).success).toBe(false);
+  });
+  it.each(Object.values(endingFixtures))('validates every ending analysis and recursively rejects private neighboring fields for %j', ending => {
+    const schema = TRAINING_READ_OUTPUTS.get_workout_prescription_analysis;
+    const value = { source: 'scheduled', reference: 'opaque', revision: 1, scheduleRevision: 1, libraryRevision: null,
+      sport: ActivityTypes.Running, analysis: analyzeWorkoutStructureV1(recipe(ending)), displaySummary: 'Summary' };
+    expect(schema.parse(value)).toEqual(value);
+    const canaries = [ { ...value, providerId: 'secret' },
+      { ...value, analysis: { ...value.analysis, sourceFile: 'secret' } },
+      { ...value, analysis: { ...value.analysis, summary: { ...value.analysis.summary, privateId: 'secret' } } },
+      { ...value, analysis: { ...value.analysis, steps: [{ ...value.analysis.steps[0], note: 'private' }] } },
+    ];
+    canaries.forEach(canary => expect(schema.safeParse(canary).success).toBe(false));
+  });
+  it.each([targetVariantFixtures['speed:absolute'], targetVariantFixtures['speed:relative']])('validates speed estimate basis %j', target => {
+    const analysis = analyzeWorkoutStructureV1(recipe({ kind: 'distance', meters: 1000 }, [target]));
+    expect(TRAINING_READ_OUTPUTS.get_workout_prescription_analysis.parse({ source: 'saved', reference: 'opaque', revision: 1,
+      scheduleRevision: null, libraryRevision: 1, sport: ActivityTypes.Running, analysis, displaySummary: 'Estimated' }).analysis).toEqual(analysis);
   });
 });

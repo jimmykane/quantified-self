@@ -14,6 +14,7 @@ grant. HTTP prechecks, tool registration and data reads enforce it. Revocation c
 | --- | --- |
 | `list_training_plans` | Optional name/lifecycle filters; active, paused and archived metadata |
 | `list_saved_workouts` | Up to 25 undated owner-owned workout recipes per page, with optional title/status filters |
+| `get_workout_prescription_analysis` | Exact prescribed subtotals, explicit speed-based duration ranges, unknown contributions, authored purpose totals and repeat counts for one scheduled or saved recipe |
 | `get_saved_workout` | One full saved recipe, including complete Strength Training exercises when present |
 | `get_training_plan` | Metadata, range, revision and current workout count, without loading workouts |
 | `query_planned_workouts` | Legacy document-ordered inclusive-date query retained for registered-client compatibility |
@@ -387,14 +388,30 @@ the Health UI display may use pounds when selected. No tool, schema, scope, cons
 or bundled skill changes. The separate Strength Training feature uses this preference only at its app editor boundary;
 its MCP read and preview continue to use canonical kilograms.
 
-Garmin schedule-only remote repair and #769's explicit app-only replacement preserve the registered MCP contract.
+Garmin schedule-only remote repair and #769's explicit reviewed replacement preserve the registered v1 MCP contract.
 The existing sanitized delivery status stops a confirmed missing copy or a complete not-found Garmin Workout
 observation from counting as synced, using existing non-success outcomes rather than new fields.
 Artifact-specific inspection authority, retained provider IDs and repair evidence remain private; MCP sync reads
 perform no live provider check or repair and gain no tool, field, scope, consent or write authority. In particular, a
 `synced` MCP delivery outcome records the last accepted send, not a fresh Garmin cloud read; an unproved negative
 cannot be promoted to `confirmed_missing` and the frozen v1 tool exposes no verification-state field. The additive
-MCP replacement action is tracked in #801, not implemented through the v1 Send or Retry action.
+MCP replacement preview is implemented separately in #801, never through the v1 Send or Retry action.
+
+`preview_garmin_workout_replacement` is an additive, strict delivery preview under existing
+`training-plans:read` plus `training-delivery:write`. It accepts only an owner/connection-bound `workoutRef`,
+`expectedScheduleRevision` and `expectedWorkoutRevision`. A fresh same-account paired not-found Check is required;
+not-found does not prove deletion. It returns one Garmin workout replacement review identifying the workout/date,
+warning of possible duplicates, and an opaque 15-minute proposal. It performs no provider HTTP or delivery write.
+Private account/inspection identities, digests, old/new artifact IDs and repair journals never enter the output.
+The existing destructive, native-approval-gated `apply_training_changes` accepts that exact proposal in `delivery`
+mode; the registered batch action enum remains unchanged. Apply rechecks grants/generation, exact revisions,
+connection/account/epoch, inspection evidence, consent, Pro, locks, past/completion and uncertainty fences in the
+shared command transaction. It queues the existing journaled recovery, not receipt. The worker checks the original
+again, reuses a reappearing pair and never blindly repeats an uncertain root POST. Lost replies recover through
+`get_training_change_status` with the original reference; repeat Apply replays receipts, not a new replacement.
+The built-in Assistant exposes preparation only with its independent delivery toggle and an app-owned duplicate
+warning/confirmation. No new scope or v1 input/output field is introduced. Deployment and registered-client catalog
+refresh/rescan remain separate release actions; an older catalog must not substitute Send, Retry or a new workout.
 
 COROS Training delivery (#648) uses the shared provider-readiness boundary with no wire-contract change. COROS is
 currently disabled there for the app, Functions runtime and MCP; explicit COROS proposals report unavailable and
@@ -467,6 +484,42 @@ Registered recipe schemas/baselines/history remain frozen. Deploy compatible bac
 then perform the exact pending developer refresh/rescan and client/plugin tool-catalog refresh before the updated UI.
 No activity reparse, persisted-data migration, wider consent or automatic provider requeue is needed. Detailed product,
 mapping and recovery rules live in [Training workspace](training-workspace.md#optional-early-lap-on-numeric-endings-784-training-07).
+
+### Workout prescription analysis (Training 04)
+
+The additive `get_workout_prescription_analysis` read accepts an explicit `source` (`scheduled` or `saved`) and its
+opaque `reference`. It requires only independent `training-plans:read`; metrics/activity access and provider connections
+never substitute. It returns record `revision`, applicable nullable `scheduleRevision` / `libraryRevision`, canonical
+`sport`, a recursively strict `analysis`, and owner-unit `displaySummary`. The shared calculation and complete field
+semantics live in [Training prescription analysis](training-workspace.md#shared-workout-prescription-analysis-training-04).
+
+Exact prescribed time/distance subtotals are distinct from complete exact totals. Distance with an explicit positive
+speed range permits an estimated duration range; relative speed uses only an authored saved threshold-speed reference.
+No athlete default, midpoint estimate, HR/power/cadence-to-speed inference, TSS, completed-activity evidence or provider
+transport enters the result. Manual/Lap, repetitions, energy, missing speed and unbounded speed remain explicit unknowns.
+A partial covered subtotal is never a complete duration. Counts distinguish stored nodes, leaf definitions and repeat
+executions; at most 100 definition rows are returned without expanding up to 9,900 executions. Purpose totals retain
+all six authored labels. No notes, titles, target/reference snapshot objects or private transport fields are echoed.
+Numeric totals describe nominal prescribed limits. Per-definition `allowEarlyLap` and multiplied summary
+`earlyLapSteps` preserve the allowance to end numeric steps sooner; display and Assistant guidance retain this caveat.
+Complete prescription coverage does not guarantee an athlete's actual elapsed time or distance.
+
+The read shares current recipe/library validation and complete matching strength-companion fences. Strength analysis
+covers only its compatibility projection's timing/counts; full exercise discussion still needs the strength-details
+read. Owner/connection and reference-kind checks, creation identity, account deletion, bulk-operation locks, current
+grant generation, schedule/library revision and complete-result byte limits remain enforced. Arithmetic beyond finite
+representation returns safe unavailability rather than a partial or non-finite total. No Firestore write, new Function,
+Rules, index, migration, derived schema or stored analysis cache is introduced.
+
+The registered recipe/library read and write schemas are unchanged. The Assistant admits this read only with its
+existing per-chat Training choice, preserves uncertainty in compact evidence and excludes reference/step identity from
+stored evidence. Training and cross-domain bundled skills prefer the discovered analysis capability for totals rather
+than calculating their own estimates. Contract fixtures cover every ending and both speed bases, strict neighboring-field
+rejection, permission/reference/revision/deletion fences and equivalent structured/JSON-text results on all transports.
+Release requires separately approved deployment, registered-app refresh/rescan and exact pending-digest verification;
+bundled guidance requires later local plugin sync. Prior pending changes are preserved and the registered baseline/history
+are not edited. Fixture validation does not install a real profile or prove deployed availability.
+
 
 ## Purpose and boundary
 
@@ -1007,6 +1060,7 @@ The analytics and map entries follow the
 | `preview_create_planned_workout` | `training-plans:read` + `training-plans:write`; optional delivery also requires `training-delivery:write` | Focused one-workout proposal with optional atomic initial send; server-owned local key |
 | `preview_training_changes` | `training-plans:read` plus the relevant Training write scope(s) | Strict bounded proposal with authored and per-provider effects; no authored mutation |
 | `preview_training_deletion` | `training-plans:read` + `training-plans:write` + `training-delivery:write` | One deletion with explicit older uncompleted service-copy cleanup choice; existing approval-gated apply |
+| `preview_garmin_workout_replacement` | `training-plans:read` + `training-delivery:write` | One explicit duplicate-warning recovery review after fresh paired not-found Check; existing approval-gated apply |
 | `preview_saved_workout_change` | `training-plans:read` + `training-plans:write` | One revision-bound library edit or 1–100-date placement preview; no provider consent or authored mutation |
 | `apply_training_changes` | Same scopes bound into the proposal; native client approval gate | Idempotently applies a preview-created proposal and returns independent authored/provider outcomes |
 | `get_training_change_status` | Same original Training read and child-write grants bound into the proposal | Read-only retained apply result or lower-bound checkpoints after an uncertain reply; never applies or resumes |
@@ -2348,12 +2402,18 @@ after validation, but no additional server deployment or registered-app rescan o
 
 ## Local verification and release
 
-Garmin app-only missing-copy recovery (#769) does not widen registered v1 Training provider actions. Existing
+Garmin missing-copy recovery (#769) does not widen registered v1 Training provider actions. Existing
 `get_training_sync_status` reports `needs_attention` and zero synced workouts after a complete not-found Workout
 observation, retaining the historical accepted-send timestamp without private inspection or provider identities.
-Registered proposals still reject `replace` and client-supplied replacement authority. A focused additive MCP preview,
-approval and Assistant prepare-only integration is tracked in #801 under #583 / Project 2; do not emulate it with
-Send/Retry or let the broader app command enum grow the frozen registered contract.
+Registered batch proposals still reject `replace` and client-supplied replacement authority. #801 implements a
+separate additive preview with the existing native Apply and Assistant prepare-only/app-confirmation path;
+do not emulate it with Send/Retry or let the broader app command enum grow the frozen registered contract.
+The Assistant treats the replacement preview's server-owned `invalid_request`/`detail_not_available` refusal as a
+terminal blocked review, not a request to force a successful preview. It emits fixed guidance without raw server text,
+creates no confirmation proposal, and does not substitute another provider action. Strict schema rejection remains
+correctable. This handling is private to the Assistant and changes no registered MCP schema or provider authority.
+Explicit eligibility-only replacement previews use that dedicated tool rather than the ordinary delivery preview.
+Forbidding Apply or Send does not cancel the requested review, and the review never supplies Apply authority.
 
 Use the Functions emulator and local Angular app for the OAuth/consent flow. At minimum run:
 

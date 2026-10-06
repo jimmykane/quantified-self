@@ -134,6 +134,7 @@ vi.mock('./shared/user-deletion-guard', () => ({
 describe('history', () => {
     beforeEach(() => {
         vi.clearAllMocks();
+        vi.mocked(tokens.getTokenData).mockReset().mockResolvedValue({ accessToken: 'testToken', userName: 'testUser' } as any);
         hoisted.batchSetMock.mockReset();
         hoisted.batchCommitMock.mockReset();
         hoisted.batchCommitMock.mockResolvedValue({});
@@ -309,6 +310,85 @@ describe('history', () => {
     });
 
     describe('addHistoryToQueue', () => {
+        it.each([401, 403])('refreshes the same Suunto token once after history HTTP %s', async statusCode => {
+            vi.mocked(tokens.getTokenData)
+                .mockResolvedValueOnce({ accessToken: 'old-token', userName: 'testUser' } as any)
+                .mockResolvedValueOnce({ accessToken: 'refreshed-token', userName: 'testUser' } as any);
+            vi.mocked(requestHelper.get).mockReset()
+                .mockRejectedValueOnce({ statusCode })
+                .mockResolvedValueOnce(JSON.stringify({ payload: [{ workoutKey: 'w1' }] }));
+
+            const result = await history.addHistoryToQueue('uid', ServiceNames.SuuntoApp, new Date(), new Date());
+
+            expect(result.successCount).toBe(1);
+            expect(tokens.getTokenData).toHaveBeenNthCalledWith(2,
+                vi.mocked(tokens.getTokenData).mock.calls[0][0], ServiceNames.SuuntoApp, true);
+            expect(requestHelper.get).toHaveBeenCalledTimes(2);
+            expect(requestHelper.get).toHaveBeenLastCalledWith(expect.objectContaining({
+                headers: expect.objectContaining({ Authorization: 'Bearer refreshed-token' }),
+            }));
+        });
+
+        it('does not loop or enqueue after a persistent Suunto history 403', async () => {
+            vi.mocked(requestHelper.get).mockReset().mockRejectedValue({ statusCode: 403 });
+
+            await expect(history.addHistoryToQueue('uid', ServiceNames.SuuntoApp, new Date(), new Date()))
+                .rejects.toMatchObject({ statusCode: 403 });
+
+            expect(tokens.getTokenData).toHaveBeenCalledTimes(2);
+            expect(requestHelper.get).toHaveBeenCalledTimes(2);
+            expect(hoisted.runTransactionMock).not.toHaveBeenCalled();
+        });
+
+        it('never retries history with a different Suunto account', async () => {
+            vi.mocked(requestHelper.get).mockReset().mockRejectedValueOnce({ statusCode: 403 });
+            vi.mocked(tokens.getTokenData)
+                .mockResolvedValueOnce({ accessToken: 'old-token', userName: 'testUser' } as any)
+                .mockResolvedValueOnce({ accessToken: 'new-token', userName: 'different-account' } as any);
+
+            await expect(history.addHistoryToQueue('uid', ServiceNames.SuuntoApp, new Date(), new Date()))
+                .rejects.toThrow('Suunto history account changed during token refresh.');
+
+            expect(requestHelper.get).toHaveBeenCalledTimes(1);
+            expect(hoisted.runTransactionMock).not.toHaveBeenCalled();
+        });
+
+        it('propagates a disconnect-blocked history refresh without another provider read', async () => {
+            const error = Object.assign(new Error('disconnect pending'), { name: 'TokenUseSkippedForPendingDisconnectError' });
+            vi.mocked(requestHelper.get).mockReset().mockRejectedValueOnce({ statusCode: 403 });
+            vi.mocked(tokens.getTokenData)
+                .mockResolvedValueOnce({ accessToken: 'old-token', userName: 'testUser' } as any)
+                .mockRejectedValueOnce(error);
+
+            await expect(history.addHistoryToQueue('uid', ServiceNames.SuuntoApp, new Date(), new Date())).rejects.toBe(error);
+
+            expect(requestHelper.get).toHaveBeenCalledTimes(1);
+            expect(hoisted.runTransactionMock).not.toHaveBeenCalled();
+        });
+
+        it('checks deletion again before the refreshed Suunto history request', async () => {
+            vi.mocked(requestHelper.get).mockReset().mockRejectedValueOnce({ statusCode: 403 });
+            hoisted.getUserDeletionGuardState
+                .mockResolvedValueOnce({ shouldSkip: false })
+                .mockResolvedValueOnce({ shouldSkip: false })
+                .mockResolvedValueOnce({ shouldSkip: true });
+
+            await expect(history.addHistoryToQueue('uid', ServiceNames.SuuntoApp, new Date(), new Date()))
+                .rejects.toMatchObject({ name: 'HistoryImportSkippedForDeletedUserError' });
+
+            expect(requestHelper.get).toHaveBeenCalledTimes(1);
+            expect(hoisted.runTransactionMock).not.toHaveBeenCalled();
+        });
+
+        it.each([404, 429, 500])('does not refresh Suunto history for HTTP %s', async statusCode => {
+            vi.mocked(requestHelper.get).mockReset().mockRejectedValueOnce({ statusCode });
+
+            await expect(history.addHistoryToQueue('uid', ServiceNames.SuuntoApp, new Date(), new Date()))
+                .rejects.toMatchObject({ statusCode });
+            expect(tokens.getTokenData).toHaveBeenCalledTimes(1);
+            expect(requestHelper.get).toHaveBeenCalledTimes(1);
+        });
+
         it('should fetch workouts and commit in batches', async () => {
             const firestore = admin.firestore();
             (requestHelper.get as any).mockResolvedValue(JSON.stringify({

@@ -5,7 +5,7 @@ import type { Request, Response } from 'express';
 import { JSDOM } from 'jsdom';
 import { handleMarketingUnsubscribe } from './handlers';
 import { cleanupMarketingCampaignRecipients } from './cleanup';
-import { completeCampaignIfDrained, dispatchCampaigns, listCampaigns, makeUnsubscribeToken, optOut, prepareCampaign, recordMailDelivery, reserveMail, saveCampaign, sendTest, setCampaignStatus, verifyUnsubscribeToken } from './service';
+import { cloneCampaign, completeCampaignIfDrained, dispatchCampaigns, listCampaigns, makeUnsubscribeToken, optOut, prepareCampaign, recordMailDelivery, reserveMail, saveCampaign, sendTest, setCampaignStatus, verifyUnsubscribeToken } from './service';
 import { utcDay } from './core';
 
 vi.unmock('firebase-admin');
@@ -28,6 +28,31 @@ describe.skipIf(!enabled)('marketing campaign durability (emulators)', () => {
     db = admin.firestore();
   });
   afterAll(async () => { await admin.app().delete(); });
+
+  async function isolateWorker(): Promise<void> {
+    const running = await db.collection('marketingCampaigns').where('status', '==', 'running').get();
+    const batch = db.batch();
+    for (const doc of running.docs) batch.update(doc.ref, { status: 'paused' });
+    await batch.commit();
+  }
+  async function readyScheduledCampaign(count: number, schedule: { time: string; timeZone: string } | null) {
+    const campaign = await saveCampaign(null, { ...draft, schedule }, 'admin');
+    const ref = db.collection('marketingCampaigns').doc(campaign.id);
+    const users = await Promise.all(Array.from({ length: count }, () =>
+      admin.auth().createUser({ email: `schedule-${randomUUID()}@example.com`, emailVerified: false })));
+    const batch = db.batch();
+    for (const user of users) {
+      batch.set(db.doc(`users/${user.uid}`), { test: true });
+      batch.set(db.doc(`users/${user.uid}/legal/agreements`), { acceptedMarketingPolicy: true });
+      batch.set(ref.collection('recipients').doc(user.uid), { uid: user.uid, status: 'pending', attempt: 0 });
+    }
+    const testId = `marketing_test_${campaign.id}_accepted`;
+    batch.set(db.collection('mail').doc(testId), { delivery: { state: 'SUCCESS' } });
+    batch.update(ref, { status: 'ready', lastTestMailId: testId,
+      stats: { eligible: count, pending: count, queued: 0, accepted: 0, failed: 0, skipped: 0 } });
+    await batch.commit();
+    return { campaign, ref, users, testId };
+  }
 
   it('freezes consent-only recipients and rechecks opt-outs before submission', async () => {
     const prefix = randomUUID().slice(0, 8);
@@ -576,4 +601,198 @@ describe.skipIf(!enabled)('marketing campaign durability (emulators)', () => {
     expect((await targetRef.collection('recipients').doc(user.uid).get()).get('status')).toBe('queued');
     expect((await listCampaigns()).campaigns.some(item => item.id === oldestCampaignId)).toBe(true);
   });
+  it('waits for daily time without blocking immediate campaigns, sharing the cap through rollover and cap changes', async () => {
+    await isolateWorker();
+    const scheduled = await readyScheduledCampaign(4, { time: '09:00', timeZone: 'UTC' });
+    const immediate = await readyScheduledCampaign(1, null);
+    await scheduled.ref.update({ createdAt: '1990-01-01T00:00:00Z' });
+    let now = new Date('2026-10-05T08:00:00Z');
+    const clock = () => now;
+    await db.doc('marketingControl/global').set({ dailyCap: 2 });
+    await db.doc('marketingDispatchDays/2026-10-05').set({ used: 0 });
+    const started = await setCampaignStatus(scheduled.campaign.id, 'start', { ...draft, schedule: { time: '09:00', timeZone: 'UTC' } }, clock);
+    expect(started.nextScheduledSendAt).toBe('2026-10-05T09:00:00.000Z');
+    await setCampaignStatus(immediate.campaign.id, 'start', undefined, clock);
+    expect(await dispatchCampaigns(secret, clock)).toBe(1);
+    expect((await scheduled.ref.get()).get('stats.pending')).toBe(4);
+    now = new Date('2026-10-05T09:03:00Z');
+    const concurrent = await Promise.all([dispatchCampaigns(secret, clock), dispatchCampaigns(secret, clock)]);
+    expect(concurrent.reduce((a, b) => a + b, 0)).toBe(1);
+    expect((await db.doc('marketingDispatchDays/2026-10-05').get()).get('used')).toBe(2);
+    await db.doc('marketingControl/global').update({ dailyCap: 1 });
+    expect(await dispatchCampaigns(secret, clock)).toBe(0);
+    await db.doc('marketingControl/global').update({ dailyCap: 3 });
+    now = new Date('2026-10-05T15:00:00Z');
+    expect(await dispatchCampaigns(secret, clock)).toBe(1);
+    now = new Date('2026-10-06T00:00:00Z');
+    expect(await dispatchCampaigns(secret, clock)).toBe(0);
+    expect((await scheduled.ref.get()).get('stats.pending')).toBe(2);
+    now = new Date('2026-10-06T09:00:00Z');
+    expect(await dispatchCampaigns(secret, clock)).toBe(2);
+    expect((await db.doc('marketingDispatchDays/2026-10-06').get()).get('used')).toBe(2);
+    expect((await scheduled.ref.get()).get('stats')).toMatchObject({ eligible: 4, pending: 0, queued: 4 });
+    const mails = await db.collection('mail').where('marketing.campaignId', '==', scheduled.campaign.id).get();
+    expect(mails.size).toBe(4);
+    expect(new Set(mails.docs.map(doc => doc.get('to'))).size).toBe(4);
+  }, 20_000);
+
+  it('continues a scheduled batch beyond 25 submissions and preserves progress through pause/resume', async () => {
+    await isolateWorker();
+    const { campaign, ref } = await readyScheduledCampaign(26, { time: '09:00', timeZone: 'Europe/Helsinki' });
+    const clock = () => new Date('2026-10-07T06:00:00Z');
+    await db.doc('marketingControl/global').set({ dailyCap: 30 });
+    await db.doc('marketingDispatchDays/2026-10-07').set({ used: 0 });
+    await setCampaignStatus(campaign.id, 'start', undefined, clock);
+    expect(await dispatchCampaigns(secret, clock)).toBe(25);
+    await setCampaignStatus(campaign.id, 'pause', undefined, clock);
+    expect(await dispatchCampaigns(secret, clock)).toBe(0);
+    expect((await setCampaignStatus(campaign.id, 'resume', undefined, clock)).status).toBe('running');
+    expect((await ref.get()).get('stats')).toMatchObject({ pending: 1, queued: 25 });
+    expect(await dispatchCampaigns(secret, clock)).toBe(1);
+    expect((await ref.get()).get('nextScheduledSendAt')).toBe('2026-10-08T06:00:00.000Z');
+  });
+
+  it('keeps tests immediate, preserves legacy saves and clones the schedule without a running cursor', async () => {
+    await isolateWorker();
+    const schedule = { time: '09:00', timeZone: 'Europe/Helsinki' };
+    const { campaign, ref, users } = await readyScheduledCampaign(1, schedule);
+    const clock = () => new Date('2026-10-08T06:00:00Z');
+    await setCampaignStatus(campaign.id, 'start', undefined, clock);
+    await setCampaignStatus(campaign.id, 'pause', undefined, clock);
+    await ref.update({ scheduledDispatchUtcDate: '2026-10-08' });
+    const saved = await saveCampaign(campaign.id, { ...draft, subject: 'Changed message' }, 'admin');
+    expect(saved.schedule).toEqual(schedule);
+    expect(saved.nextScheduledSendAt).toBe('2026-10-08T06:00:00.000Z');
+    expect(saved.lastTestMailId).toBeNull();
+    const clone = await cloneCampaign(campaign.id, 'admin');
+    expect(clone.schedule).toEqual(schedule);
+    expect(clone.nextScheduledSendAt).toBeNull();
+    expect(clone.stats.eligible).toBe(0);
+    const changedSchedule = { time: '14:00', timeZone: 'Europe/Helsinki' };
+    const changed = await saveCampaign(campaign.id, { ...draft, schedule: changedSchedule }, 'admin');
+    expect(changed.nextScheduledSendAt).toBeNull();
+    expect((await ref.get()).get('scheduledDispatchUtcDate')).toBeNull();
+    expect(changed.stats).toEqual(saved.stats);
+    await db.doc('marketingControl/global').set({ dailyCap: 10 });
+    await db.doc(`marketingDispatchDays/${utcDay(new Date())}`).set({ used: 0 });
+    const test = await sendTest(campaign.id, users[0].uid, secret, 'preview@example.com', { ...draft, schedule: changedSchedule });
+    expect(test.submitted).toBe(true);
+    expect((await db.collection('mail').doc(test.mailId).get()).get('to')).toBe('preview@example.com');
+    expect((await ref.get()).get('nextScheduledSendAt')).toBeNull();
+    await db.collection('mail').doc(test.mailId).update({ 'delivery.state': 'SUCCESS' });
+    await expect(setCampaignStatus(campaign.id, 'resume', { ...draft, schedule }, clock)).rejects.toThrow('saved message changed');
+    const resumed = await setCampaignStatus(campaign.id, 'resume', { ...draft, schedule: changedSchedule }, () => new Date('2026-10-08T12:00:00Z'));
+    expect(resumed.nextScheduledSendAt).toBe('2026-10-09T11:00:00.000Z');
+    expect((await ref.collection('recipients').get()).size).toBe(1);
+  });
+
+  it.each(['eligible', 'disabled', 'deleting'] as const)('stops scanning a paused audience during an in-flight %s account lookup', async accountState => {
+    await isolateWorker();
+    const older = await readyScheduledCampaign(3, null);
+    const newer = await readyScheduledCampaign(1, null);
+    await older.ref.update({ createdAt: '1990-01-01T00:00:00Z' });
+    const firstUid = older.users.map(user => user.uid).sort()[0];
+    if (accountState === 'deleting') await db.doc(`userDeletionTombstones/${firstUid}`).set({ active: true });
+    const clock = () => new Date('2026-10-10T08:00:00Z');
+    await setCampaignStatus(older.campaign.id, 'start', undefined, clock);
+    await setCampaignStatus(newer.campaign.id, 'start', undefined, clock);
+    await db.doc('marketingControl/global').set({ dailyCap: 10 });
+    await db.doc('marketingDispatchDays/2026-10-10').set({ used: 0 });
+    const auth = admin.auth();
+    const originalGetUser = auth.getUser.bind(auth);
+    let lookupStarted!: () => void;
+    let releaseLookup!: () => void;
+    const started = new Promise<void>(resolve => { lookupStarted = resolve; });
+    const released = new Promise<void>(resolve => { releaseLookup = resolve; });
+    const lookup = vi.spyOn(auth, 'getUser').mockImplementation(async uid => {
+      if (uid === firstUid) { lookupStarted(); await released; }
+      const user = await originalGetUser(uid);
+      return uid === firstUid && accountState === 'disabled' ? { ...user, disabled: true } : user;
+    });
+    const worker = dispatchCampaigns(secret, clock);
+    try {
+      await started;
+      await setCampaignStatus(older.campaign.id, 'pause', undefined, clock);
+      releaseLookup();
+      expect(await worker).toBe(1);
+      const audience = new Set(older.users.map(user => user.uid));
+      expect(lookup.mock.calls.filter(([uid]) => audience.has(uid))).toHaveLength(1);
+      expect((await older.ref.get()).get('stats')).toMatchObject({ pending: 3, queued: 0, skipped: 0 });
+      expect((await newer.ref.get()).get('stats.queued')).toBe(1);
+    } finally { releaseLookup(); await worker; lookup.mockRestore(); }
+  });
+
+  it.each(['disabled', 'deleting'] as const)('waits before skipping an in-flight %s account after the schedule changes', async accountState => {
+    await isolateWorker();
+    const { campaign, ref, users, testId } = await readyScheduledCampaign(1, null);
+    const uid = users[0].uid;
+    if (accountState === 'deleting') await db.doc(`userDeletionTombstones/${uid}`).set({ active: true });
+    const clock = () => new Date('2026-10-10T08:00:00Z');
+    await setCampaignStatus(campaign.id, 'start', undefined, clock);
+    await db.doc('marketingControl/global').set({ dailyCap: 10 });
+    await db.doc('marketingDispatchDays/2026-10-10').set({ used: 0 });
+    const auth = admin.auth();
+    const originalGetUser = auth.getUser.bind(auth);
+    let lookupStarted!: () => void;
+    let releaseLookup!: () => void;
+    const started = new Promise<void>(resolve => { lookupStarted = resolve; });
+    const released = new Promise<void>(resolve => { releaseLookup = resolve; });
+    const lookup = vi.spyOn(auth, 'getUser').mockImplementation(async accountUid => {
+      if (accountUid === uid) { lookupStarted(); await released; }
+      const user = await originalGetUser(accountUid);
+      return accountUid === uid && accountState === 'disabled' ? { ...user, disabled: true } : user;
+    });
+    const worker = dispatchCampaigns(secret, clock);
+    try {
+      await started;
+      await setCampaignStatus(campaign.id, 'pause', undefined, clock);
+      await saveCampaign(campaign.id, { ...draft, schedule: { time: '09:00', timeZone: 'UTC' } }, 'admin');
+      await ref.update({ lastTestMailId: testId });
+      await setCampaignStatus(campaign.id, 'resume', undefined, clock);
+      releaseLookup();
+      expect(await worker).toBe(0);
+      expect((await ref.get()).get('stats')).toMatchObject({ pending: 1, queued: 0, skipped: 0 });
+      expect((await ref.collection('recipients').doc(uid).get()).get('status')).toBe('pending');
+      expect((await db.doc('marketingDispatchDays/2026-10-10').get()).get('used')).toBe(0);
+      lookup.mockImplementation(originalGetUser);
+      if (accountState === 'deleting') await db.doc(`userDeletionTombstones/${uid}`).update({ expireAt: admin.firestore.Timestamp.fromMillis(0) });
+      expect(await dispatchCampaigns(secret, () => new Date('2026-10-10T09:00:00Z'))).toBe(1);
+      expect((await ref.get()).get('stats')).toMatchObject({ pending: 0, queued: 1, skipped: 0 });
+      expect((await db.doc('marketingDispatchDays/2026-10-10').get()).get('used')).toBe(1);
+    } finally { releaseLookup(); await worker; lookup.mockRestore(); }
+  });
+
+  it('rechecks a changed schedule inside an in-flight mail reservation', async () => {
+    await isolateWorker();
+    const { campaign, ref, users, testId } = await readyScheduledCampaign(1, null);
+    const clock = () => new Date('2026-10-10T08:00:00Z');
+    await setCampaignStatus(campaign.id, 'start', undefined, clock);
+    await db.doc('marketingControl/global').set({ dailyCap: 10 });
+    await db.doc('marketingDispatchDays/2026-10-10').set({ used: 0 });
+    const auth = admin.auth();
+    const originalGetUser = auth.getUser.bind(auth);
+    let lookupStarted!: () => void;
+    let releaseLookup!: () => void;
+    const started = new Promise<void>(resolve => { lookupStarted = resolve; });
+    const released = new Promise<void>(resolve => { releaseLookup = resolve; });
+    const lookup = vi.spyOn(auth, 'getUser').mockImplementation(async uid => {
+      if (uid === users[0].uid) { lookupStarted(); await released; }
+      return originalGetUser(uid);
+    });
+    const worker = dispatchCampaigns(secret, clock);
+    try {
+      await started;
+      await setCampaignStatus(campaign.id, 'pause', undefined, clock);
+      await saveCampaign(campaign.id, { ...draft, schedule: { time: '09:00', timeZone: 'UTC' } }, 'admin');
+      await ref.update({ lastTestMailId: testId });
+      await setCampaignStatus(campaign.id, 'resume', undefined, clock);
+      releaseLookup();
+      expect(await worker).toBe(0);
+      expect((await ref.get()).get('stats.pending')).toBe(1);
+      expect((await db.doc('marketingDispatchDays/2026-10-10').get()).get('used')).toBe(0);
+      expect((await db.collection('mail').where('marketing.campaignId', '==', campaign.id).get()).empty).toBe(true);
+    } finally { releaseLookup(); await worker; lookup.mockRestore(); }
+  });
+
+
 });

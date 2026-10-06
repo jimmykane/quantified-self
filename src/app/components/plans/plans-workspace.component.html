@@ -335,6 +335,7 @@
               <span>{{ row.item.structure.sport }}</span>
               @if (row.item.status === 'archived') { <span> · Archived</span> }
             </div>
+            <div class="workout-row-meta workout-prescription-summary">{{ row.prescriptionSummary }}</div>
             <ol class="workout-summary">
               @for (summary of row.summary; track $index) { <li>{{ summary }}</li> }
             </ol>
@@ -862,6 +863,7 @@
                 </span>
                 }
               </div>
+                <div class="workout-row-meta workout-prescription-summary">{{ row.prescriptionSummary }}</div>
                 <ol class="workout-summary">
                   @for (summary of row.summary; track $index) {
                     <li>{{ summary }}</li>

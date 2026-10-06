@@ -31,7 +31,7 @@
       @if (row.target.kind === 'speed') {
         <mat-form-field subscriptSizing="dynamic"><mat-label>Presentation</mat-label>
           <mat-select [value]="row.target.presentation" [disabled]="disabled()" (selectionChange)="select(index, 'presentation', $event.value)">
-            <mat-option value="pace">Pace</mat-option><mat-option value="speed">Speed</mat-option>
+            <mat-option value="pace">{{ paceLabel() }}</mat-option><mat-option value="speed">Speed</mat-option>
           </mat-select>
         </mat-form-field>
       }

@@ -71,13 +71,14 @@ type TrainingChange = z.infer<typeof TRAINING_CHANGE_SCHEMA> | z.infer<typeof TR
   | z.infer<typeof TRAINING_WORKOUT_V2_CHANGE_SCHEMA> | z.infer<typeof TRAINING_WORKOUT_V3_CHANGE_SCHEMA> | z.infer<typeof TRAINING_DELETION_CHANGE_SCHEMA>;
 type PreviewResult = z.infer<typeof TRAINING_WRITE_OUTPUTS.preview_training_changes>;
 type ApplyResult = z.infer<typeof TRAINING_WRITE_OUTPUTS.apply_training_changes>;
+type ReplacementPreviewResult = z.infer<typeof TRAINING_WRITE_OUTPUTS.preview_garmin_workout_replacement>;
 
 interface StoredProviderOperation {
   index: number;
   provider: PlannedWorkoutProviderId;
   targetType: 'plan' | 'workout';
   targetId: string;
-  action: 'enable' | 'send' | 'resume' | 'stop' | 'retry' | 'check' | 'approve';
+  action: 'enable' | 'send' | 'resume' | 'stop' | 'retry' | 'check' | 'approve' | 'replace';
   timeZone?: string;
   expectedScheduleRevision: number;
   expectedScopeRevision: number;
@@ -87,6 +88,7 @@ interface StoredProviderOperation {
 
 type ProviderOperationDraft = Omit<StoredProviderOperation,
   'expectedScheduleRevision' | 'expectedScopeRevision' | 'expectedSettingsRevision'>;
+type RegularProviderOperationDraft = ProviderOperationDraft & { action: Exclude<StoredProviderOperation['action'], 'replace'> };
 
 interface StoredScheduleOperation {
   index: number;
@@ -114,7 +116,7 @@ interface StoredProposal {
   planDeletion?: StoredPlanDeletion;
   providerOperations: StoredProviderOperation[];
   localEntities: Array<{ localKey: string; kind: 'plan' | 'workout'; id: string }>;
-  preview: PreviewResult;
+  preview: PreviewResult | ReplacementPreviewResult;
   changeResults: ApplyResult['changes'];
   providerResults: ApplyResult['providers'];
   result?: ApplyResult;
@@ -645,7 +647,7 @@ function providerSummary(provider: PlannedWorkoutProviderId,
 async function previewProviderOperation(
   deps: TrainingWriteDependencies,
   uid: string,
-  operation: ProviderOperationDraft,
+  operation: RegularProviderOperationDraft,
   scheduleRevision: number,
   snapshot: TrainingScheduleSnapshotV1,
 ): Promise<{ preview: TrainingDeliveryPreviewV1; publicPreview: PreviewResult['providerPreviews'][number] }> {
@@ -683,7 +685,7 @@ async function previewProviderOperation(
 async function previewSimulatedProviderAvailability(
   deps: TrainingWriteDependencies,
   uid: string,
-  operation: ProviderOperationDraft,
+  operation: RegularProviderOperationDraft,
   snapshot: TrainingScheduleSnapshotV1,
 ): Promise<{ ready: boolean; unsupported: boolean; settingsRevision: number; approvalDigest: string | null;
   publicPreview: PreviewResult['providerPreviews'][number] }> {
@@ -760,6 +762,84 @@ function decodeProposalRef(value: string, uid: string, connectionId: string): { 
   const parsed = proposalPayload.safeParse(decoded!);
   if (!parsed.success) invalid('This Training proposal is invalid.');
   return { id: parsed.data.id, createdAtMs: parsed.data.createdAtMs };
+}
+
+/** Explicit recovery only. No registered batch action or provider HTTP is added. */
+export async function previewGarminWorkoutReplacement(
+  input: TrainingWriteInput, provided?: TrainingWriteDependencies,
+): Promise<ReplacementPreviewResult> {
+  const deps = provided ?? defaultDependencies();
+  const required = [TRAINING_PLANS_SCOPE, TRAINING_DELIVERY_WRITE_SCOPE];
+  assertScopes(input.scopes, required);
+  assertBytes(input.arguments);
+  const parsed = TRAINING_WRITE_INPUTS.preview_garmin_workout_replacement.safeParse(input.arguments);
+  if (!parsed.success) invalid('Use one current workout reference and its exact schedule and workout revisions.');
+  let decoded: Record<string, unknown>;
+  try { decoded = decodeOpaqueValue('training_read', parsed.data.workoutRef, input.uid, input.connectionId, 'Training reference'); }
+  catch { invalid('A Training reference is invalid for this connection.'); }
+  const reference = referencePayload.safeParse(decoded!);
+  if (!reference.success || reference.data.kind !== 'workout') invalid('A current planned workout reference is required.');
+  const user = deps.db.collection('users').doc(input.uid);
+  const workoutRef = user.collection('scheduledWorkouts').doc(reference.data.id);
+  const stateRef = user.collection('trainingPlanState').doc('current');
+  const settingRef = user.collection('trainingDeliverySettings').doc(deliverySettingsId('workout', reference.data.id, 'garmin'));
+  const loaded = await deps.db.runTransaction(async tx => {
+    const generation = await assertAuthorityInTransaction(deps, tx, input.uid, input.connectionId, required);
+    const [state, doc, setting] = await tx.getAll(stateRef, workoutRef, settingRef);
+    if (!doc.exists) invalid('This planned workout is unavailable.');
+    const workout = parseScheduledWorkoutV1(doc.data());
+    if (workout.id !== doc.id || workout.createdAtMs !== reference.data.createdAtMs || workout.lifecycle !== 'planned'
+      || workout.revision !== parsed.data.expectedWorkoutRevision
+      || state.get('revision') !== parsed.data.expectedScheduleRevision) {
+      invalid('The workout or schedule changed. Read it again before reviewing replacement.');
+    }
+    return { generation, workout, settingsRevision: setting.get('revision') ?? 0 };
+  }, { readOnly: true });
+  const operation: StoredProviderOperation = { index: 0, provider: 'garmin', targetType: 'workout',
+    targetId: loaded.workout.id, action: 'replace', expectedScheduleRevision: parsed.data.expectedScheduleRevision,
+    expectedScopeRevision: loaded.workout.revision, expectedSettingsRevision: loaded.settingsRevision };
+  let delivery: TrainingDeliveryPreviewV1;
+  try {
+    delivery = await trainingDeliveryCommand(deps.runtime, input.uid, { schemaVersion: 1,
+      mutationId: 'mcp-replacement-preview', scope: 'workout', scopeId: operation.targetId, provider: 'garmin', action: 'replace',
+      expectedScheduleRevision: operation.expectedScheduleRevision, expectedScopeRevision: operation.expectedScopeRevision,
+      expectedSettingsRevision: operation.expectedSettingsRevision }, true,
+    tx => assertAuthorityInTransaction(deps, tx, input.uid, input.connectionId, required, loaded.generation).then(() => undefined)) as TrainingDeliveryPreviewV1;
+  } catch (error) {
+    invalid(publicErrorMessage(error) ?? 'Garmin replacement cannot be reviewed safely. Use Check in the app, then read the current workout again.');
+  }
+  if (deliveryAvailability(delivery!, operation) !== 'ready' || !delivery!.approvalDigest) {
+    invalid('Garmin replacement is unavailable. Check the current workout, connection and Pro access.');
+  }
+  operation.approvalDigest = delivery!.approvalDigest;
+  const createdAtMs = deps.now(), expiresAtMs = createdAtMs + PROPOSAL_LIFETIME_MS;
+  const id = `proposal-${deps.randomId().replace(/[^A-Za-z0-9_-]/g, '')}`.slice(0, 128);
+  const preview: ReplacementPreviewResult = {
+    proposalRef: proposalRef(id, createdAtMs, input.uid, input.connectionId), expiresAtMs,
+    permissionMode: 'delivery', scheduleRevision: operation.expectedScheduleRevision, requiresConfirmation: true,
+    summary: 'Review creating a replacement Garmin copy. Garmin not-found responses do not prove deletion: the original may reappear and leave a duplicate. Nothing changes before explicit approval.',
+    changes: [{ index: 0, kind: 'garmin-workout-replacement',
+      summary: `Review Garmin replacement for “${loaded.workout.title}” on ${loaded.workout.localDate}. The QS workout, other providers and completed activities stay unchanged.` }],
+    providerPreviews: [{ index: 0, provider: 'garmin', targetType: 'workout', action: 'replace', availability: 'ready',
+      timeZone: delivery!.timeZone, eligibleCount: delivery!.eligibleCount, warningCount: delivery!.warningCount,
+      summary: 'Garmin will be checked again before sending. A reappearing original is reused; uncertain acceptance blocks another create. Existing sync consent and mapping approval are preserved. Approval queues recovery, not provider or watch receipt.' }],
+  };
+  TRAINING_WRITE_OUTPUTS.preview_garmin_workout_replacement.parse(preview);
+  const stored: StoredProposal = { schemaVersion: 1, uid: input.uid, connectionId: input.connectionId,
+    accessGeneration: loaded.generation, requiredScopes: required, createdAtMs, expiresAtMs,
+    expireAt: Timestamp.fromMillis(expiresAtMs), status: 'pending', leaseUntilMs: null, nextScheduleOperation: 0,
+    scheduleRequests: [], providerOperations: [operation], localEntities: [], preview, changeResults: [], providerResults: [] };
+  await deps.db.runTransaction(async tx => {
+    await assertAuthorityInTransaction(deps, tx, input.uid, input.connectionId, required, loaded.generation);
+    const [state, workout, setting] = await tx.getAll(stateRef, workoutRef, settingRef);
+    if (state.get('revision') !== operation.expectedScheduleRevision || workout.get('revision') !== operation.expectedScopeRevision
+      || workout.get('createdAtMs') !== loaded.workout.createdAtMs || workout.get('lifecycle') !== 'planned'
+      || (setting.get('revision') ?? 0) !== operation.expectedSettingsRevision) {
+      invalid('The workout or delivery settings changed. Review replacement again.');
+    }
+    tx.create(user.collection(PROPOSALS).doc(id), stored);
+  });
+  return preview;
 }
 
 export async function previewTrainingChanges(
@@ -883,7 +963,7 @@ export async function previewTrainingChanges(
     let readyCount = 0;
     let unsupportedSummary: string | null = null;
     for (const provider of selected) {
-      const operation: ProviderOperationDraft = { index: template.index, provider,
+      const operation: RegularProviderOperationDraft = { index: template.index, provider,
         targetType: template.change.targetType, targetId, action: template.change.action,
         ...(normalizedTimeZone ? { timeZone: normalizedTimeZone } : {}) };
       const destination = `${operation.targetType}:${operation.targetId}:${provider}`;
@@ -1165,7 +1245,7 @@ async function currentDeliveryCommand(
     provider: operation.provider, action, expectedScheduleRevision: operation.expectedScheduleRevision,
     expectedScopeRevision: operation.expectedScopeRevision, expectedSettingsRevision: operation.expectedSettingsRevision,
     ...(operation.timeZone ? { timeZone: operation.timeZone } : {}),
-    ...((action === 'approve' || action === 'send') && operation.approvalDigest
+    ...((action === 'approve' || action === 'send' || action === 'replace') && operation.approvalDigest
       ? { approvalDigest: operation.approvalDigest } : {}) };
   if (action === 'check') {
     return await trainingDeliveryCommand(deps.runtime, uid, base, false,
@@ -1508,7 +1588,9 @@ async function applyTrainingChangesInternal(
           proposal.accessGeneration, current.ref, operation, `mcp-${current.id}-${index}`.slice(0, 128));
         providerResults.push({ index: operation.index, provider: operation.provider,
           status: operation.action === 'check' ? 'queued' : 'applied',
-          message: operation.action === 'check' ? 'Remote-copy verification was queued.'
+          message: operation.action === 'replace'
+            ? 'The reviewed Garmin replacement was queued. Provider or watch receipt is not yet confirmed; the original may reappear.'
+            : operation.action === 'check' ? 'Remote-copy verification was queued.'
             : operation.action === 'send' && operation.approvalDigest
               ? 'Delivery and the previewed mapping adjustment were approved; reconciliation was queued. Provider receipt is not yet confirmed.'
               : 'Delivery preferences were updated and reconciliation was queued.' });

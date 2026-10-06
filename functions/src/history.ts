@@ -198,7 +198,24 @@ export async function addHistoryToQueue(
 
     let workoutQueueItems: any;
     try {
-      workoutQueueItems = await getWorkoutQueueItems(serviceName, serviceToken as any, startDate, endDate);
+      try {
+        workoutQueueItems = await getWorkoutQueueItems(serviceName,
+          serviceToken as COROSAPIAuth2ServiceTokenInterface | SuuntoAPIAuth2ServiceTokenInterface, startDate, endDate);
+      } catch (error: unknown) {
+        const statusCode = (error as { statusCode?: unknown } | null)?.statusCode;
+        if (serviceName !== ServiceNames.SuuntoApp || (statusCode !== 401 && statusCode !== 403)) {
+          throw error;
+        }
+        // Reuse only this account's credential; never select a replacement account.
+        const refreshedToken = await getTokenData(tokenQueryDocumentSnapshot, serviceName, true);
+        if ((refreshedToken as SuuntoAPIAuth2ServiceTokenInterface).userName
+          !== (serviceToken as SuuntoAPIAuth2ServiceTokenInterface).userName) {
+          throw new Error('Suunto history account changed during token refresh.');
+        }
+        await assertHistoryImportUserActive(userID, 'before_refreshed_provider_request');
+        workoutQueueItems = await getWorkoutQueueItems(serviceName,
+          refreshedToken as SuuntoAPIAuth2ServiceTokenInterface, startDate, endDate);
+      }
     } catch (e: any) {
       logger.warn('[HistoryImport] Could not retrieve provider history.', {
         serviceName,

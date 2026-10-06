@@ -1,6 +1,7 @@
 import { ChangeDetectionStrategy, Component, LOCALE_ID, computed, inject, input, output } from '@angular/core';
 import { ActivityTypes, type UserUnitSettingsInterface } from '@sports-alliance/sports-lib';
-import { WORKOUT_STRUCTURE_MAX_TARGETS_PER_STEP, type WorkoutTargetKindV1 } from '@shared/planned-workout';
+import { MANUAL_WORKOUT_EDITOR_CYCLING_SPORTS_V1, MANUAL_WORKOUT_EDITOR_RUNNING_SPORTS_V1,
+  WORKOUT_STRUCTURE_MAX_TARGETS_PER_STEP, type WorkoutTargetKindV1 } from '@shared/planned-workout';
 import {
   WORKOUT_EDITOR_REFERENCE_OPTIONS, changeManualEditorTargetPresentation, createManualWorkoutEditorTarget,
   manualEditorTargetHasSavedReference, manualEditorTargetPreview, workoutEditorTargetUnit, type ManualWorkoutEditorTarget,
@@ -8,6 +9,7 @@ import {
 import { SharedModule } from '../../modules/shared.module';
 import { AppHapticsService } from '../../services/app.haptics.service';
 import { WorkoutTimeInputComponent } from './workout-time-input.component';
+import { workoutProfileMetricLabels, workoutProfileMetricOrder } from '../../helpers/workout-profile.helper';
 
 @Component({
   selector: 'app-workout-targets-editor', standalone: true,
@@ -24,16 +26,24 @@ export class WorkoutTargetsEditorComponent {
   readonly targetsChange = output<ManualWorkoutEditorTarget[]>();
   private readonly haptics = inject(AppHapticsService);
   private readonly locale = inject(LOCALE_ID);
-  readonly kinds: readonly { value: WorkoutTargetKindV1; label: string }[] = [
-    { value: 'heart-rate', label: 'Heart rate' }, { value: 'power', label: 'Power' },
-    { value: 'speed', label: 'Speed / pace' }, { value: 'cadence', label: 'Cadence' },
-  ];
+  readonly paceLabel = computed(() => workoutProfileMetricLabels(this.sport()).pace);
+  readonly speedFirst = computed(() => (MANUAL_WORKOUT_EDITOR_CYCLING_SPORTS_V1 as readonly ActivityTypes[]).includes(this.sport()));
+  readonly supportsCadence = computed(() => ([...MANUAL_WORKOUT_EDITOR_RUNNING_SPORTS_V1,
+    ...MANUAL_WORKOUT_EDITOR_CYCLING_SPORTS_V1] as readonly ActivityTypes[]).includes(this.sport()));
+  readonly kinds = computed(() => {
+    const labels = workoutProfileMetricLabels(this.sport());
+    const order = workoutProfileMetricOrder(this.sport()).filter(value => value !== (this.speedFirst() ? 'pace' : 'speed'));
+    return order.filter(value => value !== 'cadence' || this.supportsCadence())
+      .map(value => ({ value: (value === 'pace' ? 'speed' : value) as WorkoutTargetKindV1,
+        label: value === 'pace' || value === 'speed' ? `${labels[value]} / ${labels[value === 'pace' ? 'speed' : 'pace']}` : labels[value] }));
+  });
   readonly canAdd = computed(() => this.targets().length < WORKOUT_STRUCTURE_MAX_TARGETS_PER_STEP);
   readonly rows = computed(() => this.targets().map(target => {
     const unit = workoutEditorTargetUnit(target, this.sport(), this.unitSettings());
     const pace = target.kind === 'speed' && target.mode === 'absolute' && target.presentation === 'pace';
     return { target, unit, pace, references: WORKOUT_EDITOR_REFERENCE_OPTIONS[target.kind],
-      kinds: this.kinds.map(option => ({ ...option, disabled: option.value !== target.kind && this.targets().some(other => other.kind === option.value) })),
+      kinds: [...this.kinds(), ...(target.kind === 'cadence' && !this.supportsCadence() ? [{ value: 'cadence' as const, label: 'Cadence' }] : [])]
+        .map(option => ({ ...option, disabled: option.value !== target.kind && this.targets().some(other => other.kind === option.value) })),
       minimumLabel: target.rangeMode === 'single' ? `Value ${target.mode === 'relative' ? '(%)' : unit}`
         : pace ? `Faster ${unit}` : `Minimum (${target.mode === 'relative' ? '%' : unit})`,
       maximumLabel: pace ? `Slower ${unit}` : `Maximum (${target.mode === 'relative' ? '%' : unit})`,
@@ -44,10 +54,10 @@ export class WorkoutTargetsEditorComponent {
 
   add(): void {
     if (this.disabled() || !this.canAdd()) return;
-    const kind = this.kinds.find(option => !this.targets().some(target => target.kind === option.value))?.value;
+    const kind = this.kinds().find(option => !this.targets().some(target => target.kind === option.value))?.value;
     if (!kind) return;
     this.haptics.selection();
-    this.targetsChange.emit([...this.targets(), createManualWorkoutEditorTarget(kind)]);
+    this.targetsChange.emit([...this.targets(), this.newTarget(kind)]);
   }
   remove(index: number): void {
     if (this.disabled() || !this.targets()[index]) return;
@@ -66,8 +76,8 @@ export class WorkoutTargetsEditorComponent {
     if (this.disabled() || !target || target[field] === value) return;
     let changed: ManualWorkoutEditorTarget;
     if (field === 'kind') {
-      if (!this.kinds.some(option => option.value === value) || this.targets().some(other => other.kind === value)) return;
-      changed = createManualWorkoutEditorTarget(value as WorkoutTargetKindV1);
+      if (!this.kinds().some(option => option.value === value) || this.targets().some(other => other.kind === value)) return;
+      changed = this.newTarget(value as WorkoutTargetKindV1);
     } else if (field === 'presentation' && (value === 'pace' || value === 'speed')) {
       changed = changeManualEditorTargetPresentation(target, value, this.sport(), this.unitSettings());
     } else if (field === 'mode' && (value === 'absolute' || value === 'relative')) {
@@ -89,5 +99,8 @@ export class WorkoutTargetsEditorComponent {
   }
   private replace(index: number, target: ManualWorkoutEditorTarget): void {
     this.targetsChange.emit(this.targets().map((original, candidate) => candidate === index ? target : original));
+  }
+  private newTarget(kind: WorkoutTargetKindV1): ManualWorkoutEditorTarget {
+    return { ...createManualWorkoutEditorTarget(kind), presentation: this.speedFirst() ? 'speed' : 'pace' };
   }
 }

@@ -79,7 +79,8 @@ export class HistoryImportFormComponent implements OnInit, OnDestroy, OnChanges 
   public garminHistoryLimitYears = GARMIN_HISTORY_IMPORT_LIMIT_YEARS;
   /** Optimistic UI flag - blocks re-submission immediately after success */
   public isHistoryImportPending = signal(false);
-  public isWahooHistoryImportRunning = signal(false);
+  public isActivityHistoryImportRunning = signal(false);
+  public historyImportRunningMessage = '';
   /** Stores the actual backend response for display (COROS/Suunto/Wahoo only). */
   public pendingImportResult = signal<HistoryImportResult | null>(null);
   public isSleepBackfillSubmitting = signal(false);
@@ -107,7 +108,7 @@ export class HistoryImportFormComponent implements OnInit, OnDestroy, OnChanges 
   private sleepService = inject(AppSleepService);
   private hapticsService = inject(AppHapticsService);
   private isDestroyed = false;
-  private wahooHistoryLeaseTimer: ReturnType<typeof globalThis.setTimeout> | null = null;
+  private activityHistoryLeaseTimer: ReturnType<typeof globalThis.setTimeout> | null = null;
   private currentUserID: string | null = null;
   private sleepSyncStateSubscription: Subscription | null = null;
   private sleepSyncStateKey: string | null = null;
@@ -183,7 +184,7 @@ export class HistoryImportFormComponent implements OnInit, OnDestroy, OnChanges 
   }
 
   private processChanges() {
-    this.syncWahooHistoryImportRunning();
+    this.syncActivityHistoryImportRunning();
     this.checksHealthBackfillAvailability = this.serviceName === ServiceNames.SuuntoApp
       || this.serviceName === ServiceNames.GarminAPI;
     this.syncHealthAvailability();
@@ -228,33 +229,38 @@ export class HistoryImportFormComponent implements OnInit, OnDestroy, OnChanges 
 
   private updateActivityHistoryFormState(): void {
     if (this.isAllowedToDoHistoryImport && !this.isMissingGarminPermissions
-      && !this.isSubmitting && !this.isHistoryImportPending() && !this.isWahooHistoryImportRunning()) {
+      && !this.isSubmitting && !this.isHistoryImportPending() && !this.isActivityHistoryImportRunning()) {
       this.formGroup.enable();
     } else {
       this.formGroup.disable();
     }
   }
 
-  private syncWahooHistoryImportRunning(): void {
-    this.clearWahooHistoryLeaseTimer();
-    const expiresAt = this.serviceName === ServiceNames.WahooAPI
+  private syncActivityHistoryImportRunning(): void {
+    this.clearActivityHistoryLeaseTimer();
+    const providerName = this.serviceName === ServiceNames.GarminAPI ? 'Garmin'
+      : this.serviceName === ServiceNames.WahooAPI ? 'Wahoo' : null;
+    this.historyImportRunningMessage = providerName
+      ? `A ${providerName} history import is already running. Please wait for it to finish.`
+      : '';
+    const expiresAt = providerName
       ? this.userMetaForService?.historyImportLeaseExpiresAt
       : undefined;
     const remainingMs = typeof expiresAt === 'number' && Number.isFinite(expiresAt)
       ? expiresAt - Date.now()
       : 0;
-    this.isWahooHistoryImportRunning.set(remainingMs > 0);
+    this.isActivityHistoryImportRunning.set(remainingMs > 0);
     if (remainingMs <= 0 || this.isDestroyed) return;
-    this.wahooHistoryLeaseTimer = globalThis.setTimeout(() => {
-      this.wahooHistoryLeaseTimer = null;
+    this.activityHistoryLeaseTimer = globalThis.setTimeout(() => {
+      this.activityHistoryLeaseTimer = null;
       if (!this.isDestroyed) this.processChanges();
     }, Math.min(remainingMs, 2_147_483_647));
   }
 
-  private clearWahooHistoryLeaseTimer(): void {
-    if (this.wahooHistoryLeaseTimer !== null) {
-      globalThis.clearTimeout(this.wahooHistoryLeaseTimer);
-      this.wahooHistoryLeaseTimer = null;
+  private clearActivityHistoryLeaseTimer(): void {
+    if (this.activityHistoryLeaseTimer !== null) {
+      globalThis.clearTimeout(this.activityHistoryLeaseTimer);
+      this.activityHistoryLeaseTimer = null;
     }
   }
 
@@ -277,8 +283,8 @@ export class HistoryImportFormComponent implements OnInit, OnDestroy, OnChanges 
   async onSubmit(event: Event) {
     event.preventDefault();
     if (this.isDestroyed || !this.formGroup) return;
-    this.syncWahooHistoryImportRunning();
-    if (this.isSubmitting || this.formGroup.disabled || this.isHistoryImportPending() || this.isWahooHistoryImportRunning()) return;
+    this.syncActivityHistoryImportRunning();
+    if (this.isSubmitting || this.formGroup.disabled || this.isHistoryImportPending() || this.isActivityHistoryImportRunning()) return;
     if (!this.formGroup.valid) {
       this.validateAllFormFields(this.formGroup);
       return;
@@ -302,8 +308,8 @@ export class HistoryImportFormComponent implements OnInit, OnDestroy, OnChanges 
 
     try {
       if (this.isDestroyed) return;
-      this.syncWahooHistoryImportRunning();
-      if (this.isWahooHistoryImportRunning()) return;
+      this.syncActivityHistoryImportRunning();
+      if (this.isActivityHistoryImportRunning()) return;
 
       // Normalize dates: start = 00:00, end = 23:59
       const startDate = dayjs(this.formGroup.get('startDate')?.value).startOf('day').toDate();
@@ -340,10 +346,10 @@ export class HistoryImportFormComponent implements OnInit, OnDestroy, OnChanges 
       }
       this.hapticsService.success();
     } catch (e: any) {
-      if (this.serviceName === ServiceNames.WahooAPI
+      if ((this.serviceName === ServiceNames.WahooAPI || this.serviceName === ServiceNames.GarminAPI)
         && (e?.code === 'functions/already-exists' || e?.code === 'already-exists')) {
         if (this.isDestroyed) return;
-        this.snackBar.open('A Wahoo history import is already running. Please wait for it to finish.', undefined, {
+        this.snackBar.open(this.historyImportRunningMessage, undefined, {
           duration: 4000,
         });
         return;
@@ -378,7 +384,7 @@ export class HistoryImportFormComponent implements OnInit, OnDestroy, OnChanges 
 
   ngOnDestroy(): void {
     this.isDestroyed = true;
-    this.clearWahooHistoryLeaseTimer();
+    this.clearActivityHistoryLeaseTimer();
     this.sleepSyncStateSubscription?.unsubscribe();
     this.healthAvailabilityRequestGeneration += 1;
   }

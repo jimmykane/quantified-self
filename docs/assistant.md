@@ -189,6 +189,14 @@ Changed mappings fail closed, and a queued Send is not a provider or watch recei
 Source support does not deploy or promote an app. See the
 [MCP planning contract](mcp-server.md#training-plans-and-planned-workouts-690).
 
+For an explicit request to replace a missing Garmin copy, the delivery-change toggle exposes the focused additive
+replacement preview. The model supplies only the exact current opaque workout reference and revisions, not private
+artifact IDs or an approval digest. A fresh paired not-found Check is required. The app reviews the exact workout/date
+and warns that the original may reappear and leave a duplicate; **Create replacement Garmin copy** is the app-owned
+confirmation. It queues existing journaled recovery, never confirms provider/watch receipt or rewrites the workout.
+Send, Retry, missing status and lost replies do not authorize replacement. Stale evidence, changed grants/accounts,
+Stop/completion and other shared delivery fences reject Apply; malformed/mixed replacement reviews are rejected.
+
 The page keeps a compact Training read/change indicator beside **Examples & data access** while Training reads are enabled, so
 closing the access sheet does not hide the current state. The sheet presents Training read, schedule-change and delivery-
 change permissions as compact rows, explains the read dependency before enabling either child permission and keeps every

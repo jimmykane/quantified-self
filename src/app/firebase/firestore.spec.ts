@@ -264,6 +264,18 @@ describe('Firebase firestore observables', () => {
     });
     expect(emittedValues).toEqual([{ name: 'Authoritative value' }]);
 
+    // A later cached miss must not turn already confirmed settings into "off".
+    nextListener?.({
+      id: 'doc-cached-missing', exists: () => false, data: () => undefined,
+      metadata: { fromCache: true, hasPendingWrites: false }
+    });
+    expect(emittedValues).toEqual([{ name: 'Authoritative value' }]);
+    nextListener?.({
+      id: 'doc-server-missing', exists: () => false, data: () => undefined,
+      metadata: { fromCache: false, hasPendingWrites: false }
+    });
+    expect(emittedValues).toEqual([{ name: 'Authoritative value' }, undefined]);
+
     subscription.unsubscribe();
   });
 

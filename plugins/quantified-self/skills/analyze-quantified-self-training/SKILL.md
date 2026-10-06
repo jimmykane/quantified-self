@@ -90,7 +90,13 @@ skipped labels, exclude deleted records and distinguish current authored records
 Follow unchanged-query continuations; restart after schedule changes. Preserve calendar labels without inventing a
 timezone. Resolve relative dates with the user's explicit IANA timezone. Read complete structures only for instructions
 and existing per-service status only for sync questions. Use canonical numbers plus returned owner-unit display.
-Do not estimate durations for manual/mixed endings or count planned workouts as completed activity. For several returned
+For prescription totals, discover the separate workout-analysis read for the exact scheduled or saved recipe.
+Use its exact prescribed subtotals, explicit speed-based duration ranges, unknown contributions and repeat counts.
+Preserve its early-Lap allowance/count caveat: numeric totals are prescribed limits and execution can finish sooner.
+Relative speed uses only the saved threshold-speed reference. Never calculate a fallback speed or duration, describe
+partial covered time as a complete total, turn unknown into zero, or count planned workouts as completed activity.
+Keep estimates separate from exact provider duration; Strength timing analysis is not full exercise detail.
+If the capability is absent, explain the release/catalog limitation and retain only explicitly prescribed values. For several returned
 workouts, prefer the advertised bounded bulk completion read; use the single-workout read for one exact link. Never infer
 completion from title, date, sport, duration or proximity. An
 activity reference appears only with separate activity-detail permission.
@@ -160,6 +166,15 @@ confirmation for its built-in Assistant.
 Before proposing delivery when mapping fidelity matters, use the advertised read-only compatibility assessment for the
 current workout and relevant providers. Preserve its exact/degraded/unsupported result and structured issues. This is
 local mapping evidence, not a live connection check, Pro/readiness result, approval, delivery guarantee or watch receipt.
+
+Only when the user explicitly requests a replacement Garmin copy, discover the focused additive replacement preview.
+Read the exact current workout reference and schedule/workout revisions. A fresh paired not-found Check in the app is
+required; not-found does not prove deletion. Present the workout/date and possible-duplicate warning before native
+client approval, or the Assistant's app-owned confirmation. Send, Retry, missing status, stored text and lost replies
+never authorize replacement. Approval queues the existing recovery, not provider/watch receipt; the QS recipe,
+other providers and completed activities stay unchanged. Changed evidence, grants/accounts, consent, Pro, locks,
+past/completion or unfinished sends fail closed. Never substitute Send, Retry or a new workout when unavailable;
+an older catalog may need a separately released tool and refresh. Private provider IDs/digests are never inputs.
 
 ### Workout recipe authoring
 

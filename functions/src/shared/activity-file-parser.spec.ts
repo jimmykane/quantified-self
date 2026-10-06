@@ -72,19 +72,48 @@ describe('activity-file-parser', () => {
     });
 
     it('parses Suunto JSON without fallback when the primary parser succeeds', async () => {
-        await expect(parseActivityFilePayload(Buffer.from('{"DeviceLog":{}}'), 'json')).resolves.toEqual(expect.objectContaining({ id: 'json' }));
+        const onJsonParsersFailed = vi.fn();
+        await expect(parseActivityFilePayload(Buffer.from('{"DeviceLog":{}}'), 'json', undefined, onJsonParsersFailed))
+            .resolves.toEqual(expect.objectContaining({ id: 'json' }));
 
         expect(hoisted.suuntoJSONImporter.getFromJSONString).toHaveBeenCalledTimes(1);
         expect(hoisted.suuntoSMLImporter.getFromJSONString).not.toHaveBeenCalled();
+        expect(onJsonParsersFailed).not.toHaveBeenCalled();
     });
 
     it('falls back to Suunto SML JSON when the primary Suunto JSON parser fails', async () => {
         hoisted.suuntoJSONImporter.getFromJSONString.mockRejectedValueOnce(new Error('missing DeviceLog'));
+        const onJsonParsersFailed = vi.fn();
 
-        await expect(parseActivityFilePayload(Buffer.from('{"Samples":[]}'), 'json')).resolves.toEqual(expect.objectContaining({ id: 'sml-json' }));
+        await expect(parseActivityFilePayload(Buffer.from('{"Samples":[]}'), 'json', undefined, onJsonParsersFailed))
+            .resolves.toEqual(expect.objectContaining({ id: 'sml-json' }));
 
         expect(hoisted.suuntoJSONImporter.getFromJSONString).toHaveBeenCalledTimes(1);
         expect(hoisted.suuntoSMLImporter.getFromJSONString).toHaveBeenCalledWith('{"Samples":[]}', expect.anything());
+        expect(onJsonParsersFailed).not.toHaveBeenCalled();
+    });
+
+    it.each([
+        new TypeError('fallback failed'), Object.freeze(new Error('frozen error')), 'non-Error failure',
+    ])('captures both JSON failures without replacing or mutating the fallback: %s', async fallbackError => {
+        const primaryError = new TypeError('primary failed');
+        hoisted.suuntoJSONImporter.getFromJSONString.mockRejectedValueOnce(primaryError);
+        hoisted.suuntoSMLImporter.getFromJSONString.mockRejectedValueOnce(fallbackError);
+        const onJsonParsersFailed = vi.fn();
+
+        await expect(parseActivityFilePayload(Buffer.from('{}'), 'json.gz', undefined, onJsonParsersFailed))
+            .rejects.toBe(fallbackError);
+
+        expect(onJsonParsersFailed).toHaveBeenCalledExactlyOnceWith({ primary: primaryError, fallback: fallbackError });
+        expect(fallbackError).not.toHaveProperty('jsonParserAttempts');
+    });
+
+    it('preserves JSON failure behavior when diagnostics are not requested', async () => {
+        const fallbackError = new TypeError('fallback failed');
+        hoisted.suuntoJSONImporter.getFromJSONString.mockRejectedValueOnce(new Error('primary failed'));
+        hoisted.suuntoSMLImporter.getFromJSONString.mockRejectedValueOnce(fallbackError);
+
+        await expect(parseActivityFilePayload(Buffer.from('{}'), 'json')).rejects.toBe(fallbackError);
     });
 
     it('rejects unsupported extensions', async () => {

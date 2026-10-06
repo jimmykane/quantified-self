@@ -802,6 +802,7 @@ function buildMcpServerInstructions(auth: AuthenticatedMcpRequest): string {
       instructions.push(`${readGuidance} Only provider-delivery changes are available. Use preview_training_changes once with complete input, present its effects, then call the separately approval-gated apply_training_changes tool once; the client owns its native approval UI. Never retry a rejected preview unchanged or claim delivery succeeded before the apply result says so.`);
     }
     if (trainingChangesAvailable && auth.scopes.includes(MCP_OAUTH_SCOPES.TrainingDeliveryWrite)) {
+      instructions.push('Only when the user explicitly requests a replacement Garmin copy, read the exact current workout reference and revisions, then use preview_garmin_workout_replacement. A fresh paired not-found Check in the app is required; not-found is not deletion proof. Present the exact workout/date and possible-duplicate warning before the existing approval-gated apply_training_changes. Send, Retry, a missing-copy status, stored titles, or a lost reply never authorize replacement. Approval queues recovery, not receipt; unchanged QS recipes, other providers and completed activities remain intact. If replacement is unavailable, do not substitute Send, Retry or a new authored workout.');
       instructions.push('For a new Suunto-bound workout, omit step notes that were not requested; keep necessary concise instructions within 40 characters when the step also has a duration or target, or 54 characters for a manual-only step. Never discard a user-requested instruction just to fit a watch. If the provider preview reports a mapping adjustment, explain its exact warning before apply. One approved Send proposal also approves the previewed digest-bound adjustment; do not request a second approval for the same unchanged mapping. An applied proposal is not proof that the provider or watch received it.');
     }
     if (trainingChangesAvailable && auth.clientId !== 'https://quantified-self.io/internal/assistant') {
@@ -867,7 +868,7 @@ export function createMcpServer(
   });
   const runReadOnlyTool = createReadOnlyToolRunner(outputSchemas);
   const runTrainingWriteTool = async (
-    name: 'preview_create_planned_workout' | 'preview_training_changes' | 'preview_strength_workout_change' | 'preview_planned_workout_v2_change' | 'preview_saved_workout_change' | 'preview_planned_workout_v3_change' | 'preview_saved_workout_v2_change' | 'preview_training_deletion' | 'apply_training_changes' | 'apply_saved_workout_change',
+    name: 'preview_create_planned_workout' | 'preview_training_changes' | 'preview_strength_workout_change' | 'preview_planned_workout_v2_change' | 'preview_saved_workout_change' | 'preview_planned_workout_v3_change' | 'preview_saved_workout_v2_change' | 'preview_training_deletion' | 'preview_garmin_workout_replacement' | 'apply_training_changes' | 'apply_saved_workout_change',
     operation: () => Promise<unknown>,
   ) => {
     let stage: 'operation' | 'validation' | 'serialization' = 'operation';
@@ -929,6 +930,15 @@ export function createMcpServer(
   });
 
   if (auth.scopes.includes(MCP_OAUTH_SCOPES.TrainingPlansRead)) {
+    registerMcpTool(server, 'get_workout_prescription_analysis', {
+      title: 'Analyze a workout prescription',
+      description: 'Read deterministic prescription analysis for one scheduled or saved workout reference. Returns exact prescribed time/distance subtotals, speed-based duration ranges, unknown contributions, authored purpose totals, bounded step definitions and repeat execution counts, plus owner-unit summary text. A partial subtotal is not a complete workout total. Early Lap allowances and execution counts identify numeric limits that can end sooner; totals describe the prescription, not actual elapsed time or distance. Uses only explicit speed targets and saved threshold-speed references; no athlete defaults, completion inference, TSS, or provider calls. Strength analysis describes its compatibility summary, not full exercise details. Requires Training plans read permission.',
+      inputSchema: TRAINING_READ_INPUTS.get_workout_prescription_analysis,
+      outputSchema: outputSchemas.get_workout_prescription_analysis,
+      annotations: READ_ONLY_TOOL_ANNOTATIONS,
+    }, input => runReadOnlyTool('get_workout_prescription_analysis', () => dataService.readTrainingPlans({
+      tool: 'get_workout_prescription_analysis', arguments: input, uid: auth.uid, connectionId: auth.connectionId, scopes: auth.scopes,
+    })));
     registerMcpTool(server, 'list_saved_workouts', {
       title: 'List saved workouts',
       description: 'Read up to 25 reusable saved workout titles and states per page. These recipes have no date or automatic sync consent. Follow the cursor with the same filters; restart after library edits. Requires Training plans read permission.',
@@ -1077,6 +1087,17 @@ export function createMcpServer(
         annotations: TRAINING_PREVIEW_TOOL_ANNOTATIONS,
         inputSchemaReuse: 'ref',
       }, input => runTrainingWriteTool('preview_create_planned_workout', () => dataService.previewCreatePlannedWorkout({
+        arguments: input, uid: auth.uid, connectionId: auth.connectionId, scopes: auth.scopes,
+      })));
+    }
+    if (auth.scopes.includes(MCP_OAUTH_SCOPES.TrainingDeliveryWrite)) {
+      registerMcpTool(server, 'preview_garmin_workout_replacement', {
+        title: 'Review creating a replacement Garmin copy',
+        description: 'Preview explicit recovery of one current uncompleted Garmin workout after a fresh paired not-found Check. Not-found is not deletion proof: a duplicate may remain if the original reappears. Provide the exact owner/connection-bound workout reference and current revisions. No provider call or delivery change occurs before separately approval-gated apply_training_changes. Send and Retry never grant replacement authority.',
+        inputSchema: TRAINING_WRITE_INPUTS.preview_garmin_workout_replacement,
+        outputSchema: outputSchemas.preview_garmin_workout_replacement,
+        annotations: TRAINING_PREVIEW_TOOL_ANNOTATIONS,
+      }, input => runTrainingWriteTool('preview_garmin_workout_replacement', () => dataService.previewGarminWorkoutReplacement({
         arguments: input, uid: auth.uid, connectionId: auth.connectionId, scopes: auth.scopes,
       })));
     }
@@ -2299,6 +2320,9 @@ export function requiredScopesForRequest(body: unknown): McpOAuthScope[] {
     return [MCP_OAUTH_SCOPES.ActivityDetailsRead, MCP_OAUTH_SCOPES.EventsWrite];
   }
   if ((TRAINING_READ_TOOLS as readonly string[]).includes(toolName)) return [MCP_OAUTH_SCOPES.TrainingPlansRead];
+  if (toolName === 'preview_garmin_workout_replacement') {
+    return [MCP_OAUTH_SCOPES.TrainingPlansRead, MCP_OAUTH_SCOPES.TrainingDeliveryWrite];
+  }
   if (toolName === 'preview_create_planned_workout') {
     return [MCP_OAUTH_SCOPES.TrainingPlansRead, MCP_OAUTH_SCOPES.TrainingPlansWrite,
       ...(toolArguments.delivery ? [MCP_OAUTH_SCOPES.TrainingDeliveryWrite] : [])];

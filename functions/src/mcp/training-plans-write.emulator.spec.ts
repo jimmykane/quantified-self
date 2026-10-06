@@ -17,6 +17,8 @@ import { GarminTrainingTransport } from '../training-plans/delivery/garmin/trans
 import { GarminHttpFixture } from '../training-plans/delivery/test-support/garmin-http-fixture';
 import { reconcileTrainingDeliveryPage } from '../training-plans/delivery/store';
 import { processTrainingDelivery } from '../training-plans/delivery/worker';
+import { processTrainingVerification } from '../training-plans/delivery/verification-worker';
+import { trainingDeliveryCommand } from '../training-plans/delivery/commands';
 import { parseStrengthWorkoutDetailsV1, projectStrengthWorkoutToV1 } from '../../../shared/strength-workout';
 import { encodeOpaqueValue } from './data.service';
 import { processTrainingBulkShift, reconcileTrainingBulkShifts } from '../training-plans/bulk-shift-worker';
@@ -24,6 +26,7 @@ import { mutateTrainingScheduleForUser } from '../training-plans/persistence';
 import { BULK_SHIFT_LEASE_MS } from '../training-plans/staged-shift';
 import { applyTrainingChanges, getTrainingChangeStatus, previewCreatePlannedWorkout, previewTrainingChanges,
   previewStrengthWorkoutChange, previewPlannedWorkoutV2Change, previewPlannedWorkoutV3Change, previewTrainingDeletion,
+  previewGarminWorkoutReplacement,
   type TrainingWriteDependencies } from './training-plans-write.service';
 import { TRAINING_DELIVERY_WRITE_SCOPE, TRAINING_PLANS_SCOPE, TRAINING_PLANS_WRITE_SCOPE } from './training-plans.schemas';
 import { createAssistantConversationStore } from '../assistant/conversation-store';
@@ -113,6 +116,155 @@ describe.skipIf(!process.env.FIRESTORE_EMULATOR_HOST)('Training MCP write propos
     expect((await saved.ref.collection('revisions').get()).docs.map(doc => doc.get('snapshot.structure'))).toContainEqual(recipe);
     expect(JSON.stringify((await saved.ref.get()).get('structure'))).not.toMatch(/source|rangeMode|referenceValue/);
   });
+
+  const missingGarminReplacementFixture = async () => {
+    const garmin = new GarminHttpFixture();
+    const synthetic = new GarminTrainingTransport(garmin.request, () => deps.now());
+    const policy = productionDeliveryRuntime(db).transport('garmin', uid)!;
+    deps.runtime.transport = provider => provider !== 'garmin' ? null : { ...policy,
+      inspection: synthetic.inspection, execute: synthetic.execute.bind(synthetic), recover: synthetic.recover.bind(synthetic) };
+    const created = await previewCreateAndSend();
+    const applied = await applyTrainingChanges(statusInput(created.proposalRef), deps);
+    const user = db.collection('users').doc(uid);
+    const drain = async () => {
+      for (let page = 0; page < 20; page++) if (!await reconcileTrainingDeliveryPage(deps.runtime, uid)) return;
+      throw new Error('Unbounded fixture scan');
+    };
+    await drain();
+    const ledger = (await user.collection('trainingDeliveryLedger').get()).docs[0].ref;
+    await processTrainingDelivery(deps.runtime, uid, ledger.id); await drain();
+    const original = (await ledger.get()).get('actual');
+    expect(original).not.toBeNull();
+    garmin.workouts.delete(original.ids.workout); garmin.schedules.delete(original.ids.schedule);
+    const workout = (await user.collection('scheduledWorkouts').get()).docs[0].ref;
+    const setting = (await user.collection('trainingDeliverySettings').get()).docs[0].ref;
+    await trainingDeliveryCommand(deps.runtime, uid, { schemaVersion: 1, mutationId: randomUUID(), scope: 'workout',
+      scopeId: workout.id, provider: 'garmin', action: 'check', expectedScheduleRevision: applied.scheduleRevision,
+      expectedScopeRevision: 1, expectedSettingsRevision: (await setting.get()).get('revision') }, false);
+    await drain(); await processTrainingVerification(deps.runtime, uid, ledger.id);
+    expect((await ledger.get()).get('status')).toBe('needs_attention');
+    const input = { uid, connectionId: 'connection', scopes: [TRAINING_PLANS_SCOPE, TRAINING_DELIVERY_WRITE_SCOPE], arguments: {
+      workoutRef: applied.createdReferences.find(item => item.kind === 'workout')!.reference,
+      expectedScheduleRevision: applied.scheduleRevision, expectedWorkoutRevision: 1 } };
+    return { garmin, user, workout, setting, ledger, original, input, drain };
+  };
+
+  it('previews explicit Garmin replacement without HTTP, replays lost Apply replies, and creates only one replacement pair', async () => {
+    const fixture = await missingGarminReplacementFixture();
+    const before = fixture.garmin.calls.length;
+    const originalWorkout = (await fixture.workout.get()).data();
+    const preview = await previewGarminWorkoutReplacement(fixture.input, deps);
+    expect(preview).toMatchObject({ permissionMode: 'delivery', requiresConfirmation: true,
+      providerPreviews: [{ provider: 'garmin', action: 'replace', availability: 'ready' }] });
+    expect(preview.summary).toContain('duplicate');
+    expect(JSON.stringify(preview)).not.toContain(fixture.original.ids.workout);
+    expect(JSON.stringify(preview)).not.toContain('fixture-account');
+    expect(fixture.garmin.calls).toHaveLength(before);
+    const applyInput = { ...fixture.input, arguments: { proposalRef: preview.proposalRef, permissionMode: 'delivery' } };
+    // Discard the first reply, then recover through the public status tool.
+    await applyTrainingChanges(applyInput, deps);
+    const recovered = await getTrainingChangeStatus(applyInput, deps);
+    expect(recovered).toMatchObject({ state: 'applied', result: { changes: [], providers: [{ provider: 'garmin', status: 'applied' }] } });
+    await expect(applyTrainingChanges(applyInput, deps)).resolves.toEqual(recovered.result);
+    expect(fixture.garmin.calls).toHaveLength(before);
+    await fixture.drain();
+    await Promise.all([processTrainingDelivery(deps.runtime, uid, fixture.ledger.id), processTrainingDelivery(deps.runtime, uid, fixture.ledger.id)]);
+    await fixture.drain();
+    expect(fixture.garmin.calls.filter(call => call.method === 'POST' && call.path.includes('workout'))).toHaveLength(2);
+    expect(fixture.garmin.workouts.size).toBe(1); expect(fixture.garmin.schedules.size).toBe(1);
+    expect((await fixture.workout.get()).data()).toEqual(originalWorkout);
+    expect((await fixture.ledger.get()).get('status')).toBe('delivered');
+  });
+
+  it.each([true, false])('keeps Assistant replacement %s app-confirmed with delivery-only permission and no HTTP', async confirm => {
+    const fixture = await missingGarminReplacementFixture();
+    const store = createAssistantConversationStore({ db: () => db, now: () => new Date(deps.now()),
+      createId: () => `assistant-${++sequence}` });
+    const chat = await store.resetConversation(uid, 'coordinate_free', false, null, true, false, true);
+    const begun = await store.beginTurn(uid, chat.conversationId, undefined, undefined,
+      'coordinate_free', false, true, false, true);
+    if (begun.kind !== 'started') throw new Error('Expected an Assistant turn.');
+    const connectionId = `first-party-assistant-v1:${chat.conversationId}`;
+    const preview = await previewGarminWorkoutReplacement({ ...fixture.input, connectionId, arguments: {
+      ...fixture.input.arguments, workoutRef: encodeOpaqueValue('training_read', { kind: 'workout',
+        id: fixture.workout.id, createdAtMs: (await fixture.workout.get()).get('createdAtMs') }, uid, connectionId) } }, deps);
+    const createdAt = new Date(deps.now()).toISOString();
+    await store.completeTurn(uid, begun, { id: 'request', role: 'user', createdAt,
+      text: 'Create a replacement Garmin copy for my missing workout.' },
+    { id: 'preview', role: 'assistant', createdAt, text: 'Review possible duplicates before confirming.' }, preview);
+    const before = fixture.garmin.calls.length;
+    const apply = vi.fn(input => applyTrainingChanges(input, deps));
+    const result = await runApplyAssistantTrainingProposal({ proposalRef: preview.proposalRef,
+      permissionMode: 'delivery', conversationId: chat.conversationId, confirm },
+    { auth: { uid }, app: { appId: 'synthetic-emulator-app' } }, store, apply);
+    expect(result.status).toBe(confirm ? 'applied' : 'dismissed');
+    expect(apply).toHaveBeenCalledTimes(confirm ? 1 : 0);
+    expect(fixture.garmin.calls).toHaveLength(before);
+    expect((await fixture.ledger.get()).get('repair.manualReplacement')).toBe(confirm ? true : undefined);
+  });
+
+  it('cannot authorize two replacements from competing reviews of the same evidence', async () => {
+    const fixture = await missingGarminReplacementFixture();
+    const first = await previewGarminWorkoutReplacement(fixture.input, deps);
+    const second = await previewGarminWorkoutReplacement(fixture.input, deps);
+    const apply = (proposalRef: string) => applyTrainingChanges({ ...fixture.input,
+      arguments: { proposalRef, permissionMode: 'delivery' } }, deps);
+    expect((await apply(first.proposalRef)).providers[0].status).toBe('applied');
+    expect((await apply(second.proposalRef)).providers[0].status).toBe('blocked');
+    await fixture.drain(); await processTrainingDelivery(deps.runtime, uid, fixture.ledger.id);
+    expect(fixture.garmin.calls.filter(call => call.method === 'POST' && call.path.includes('workout'))).toHaveLength(2);
+  });
+
+  it('does not preview expired Check evidence or a past workout', async () => {
+    const fixture = await missingGarminReplacementFixture();
+    const later = deps.now() + 2 * 86_400_000; deps.now = deps.runtime.now = () => later;
+    const before = fixture.garmin.calls.length;
+    await expect(previewGarminWorkoutReplacement(fixture.input, deps)).rejects.toThrow();
+    expect(fixture.garmin.calls).toHaveLength(before);
+  });
+
+  it.each(['owner', 'connection', 'read-grant', 'delivery-grant', 'schedule-revision', 'workout-revision'] as const)(
+    'rejects replacement preview with mismatched %s authority', async changed => {
+      const fixture = await missingGarminReplacementFixture();
+      const input = { ...fixture.input, arguments: { ...fixture.input.arguments } };
+      if (changed === 'owner') input.uid = 'another-synthetic-owner';
+      if (changed === 'connection') input.connectionId = 'another-connection';
+      if (changed === 'read-grant') input.scopes = [TRAINING_DELIVERY_WRITE_SCOPE];
+      if (changed === 'delivery-grant') input.scopes = [TRAINING_PLANS_SCOPE];
+      if (changed === 'schedule-revision') input.arguments.expectedScheduleRevision++;
+      if (changed === 'workout-revision') input.arguments.expectedWorkoutRevision++;
+      const before = fixture.garmin.calls.length;
+      await expect(previewGarminWorkoutReplacement(input, deps)).rejects.toThrow();
+      expect(fixture.garmin.calls).toHaveLength(before);
+    });
+
+  it.each(['grant', 'evidence', 'account', 'epoch', 'generation', 'expired', 'stop', 'completion', 'restore', 'pro'] as const)(
+    'rejects stale replacement Apply when %s changes after review without HTTP', async changed => {
+      const fixture = await missingGarminReplacementFixture();
+      const preview = await previewGarminWorkoutReplacement(fixture.input, deps);
+      if (changed === 'grant') await fixture.user.collection('mcpConnections').doc('connection').update({ grantId: 'changed-grant' });
+      if (changed === 'evidence') await fixture.ledger.update({ 'verification.checkedAtMs': deps.now() + 1 });
+      if (['account', 'epoch', 'generation'].includes(changed)) deps.runtime.connection = async () => ({ state: 'connected',
+        destinationKey: changed === 'account' ? 'new-account' : 'fixture-account', epoch: changed === 'epoch' ? 1 : 0,
+        generation: changed === 'generation' ? 'new-generation' : 'connection-1' });
+      if (changed === 'expired') { const later = deps.now() + 16 * 60_000; deps.now = deps.runtime.now = () => later; }
+      if (changed === 'stop') await trainingDeliveryCommand(deps.runtime, uid, { schemaVersion: 1, mutationId: randomUUID(),
+        scope: 'workout', scopeId: fixture.workout.id, provider: 'garmin', action: 'stop',
+        expectedScheduleRevision: fixture.input.arguments.expectedScheduleRevision, expectedScopeRevision: 1,
+        expectedSettingsRevision: (await fixture.setting.get()).get('revision') }, false);
+      if (changed === 'completion') await fixture.workout.update({ lifecycle: 'completed' });
+      if (changed === 'restore') await fixture.user.collection('trainingPlanState').doc('current')
+        .collection('planDeletionLocks').doc('synthetic-lock').set({ test: true });
+      if (changed === 'pro') deps.runtime.hasPro = async () => false;
+      const before = fixture.garmin.calls.length;
+      const outcome = await applyTrainingChanges({ ...fixture.input,
+        arguments: { proposalRef: preview.proposalRef, permissionMode: 'delivery' } }, deps)
+        .then(result => ({ result, error: null }), error => ({ result: null, error }));
+      if (outcome.result) expect(outcome.result.providers[0]?.status).toBe('blocked');
+      else expect(outcome.error).toBeInstanceOf(Error);
+      expect(fixture.garmin.calls).toHaveLength(before);
+      expect((await fixture.ledger.get()).get('repair.manualReplacement')).toBeUndefined();
+    });
 
   it.each([true, false])('retains the confirmed %s Assistant outcome through a concurrent follow-up without transport calls', async confirm => {
     const store = createAssistantConversationStore({ db: () => db, now: () => new Date(deps.now()),

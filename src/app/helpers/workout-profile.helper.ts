@@ -1,10 +1,12 @@
-import type { UserUnitSettingsInterface } from '@sports-alliance/sports-lib';
+import { DataPace, DataSpeed, DataSwimPace, DynamicDataLoader, type ActivityTypes, type UserUnitSettingsInterface } from '@sports-alliance/sports-lib';
+import { normalizeUserUnitSettings } from '@shared/unit-aware-display';
 import {
   formatWorkoutEndingV1,
   formatWorkoutTargetV1,
   parseWorkoutStructureV1,
   isRowingWorkoutSportV1,
   isSwimmingWorkoutSportV1,
+  MANUAL_WORKOUT_EDITOR_CYCLING_SPORTS_V1,
   type WorkoutStructureV1,
   type WorkoutStepV1,
   type WorkoutTargetV1,
@@ -16,6 +18,18 @@ export type WorkoutProfileMetric = 'heart-rate' | 'power' | 'pace' | 'speed' | '
 export const WORKOUT_PROFILE_METRIC_LABELS: Record<WorkoutProfileMetric, string> = {
   'heart-rate': 'Heart rate', power: 'Power', pace: 'Pace', speed: 'Speed', cadence: 'Cadence',
 };
+
+export function workoutProfileMetricLabels(sport?: ActivityTypes): Record<WorkoutProfileMetric, string> {
+  return { ...WORKOUT_PROFILE_METRIC_LABELS, pace: isSwimmingWorkoutSportV1(sport) ? 'Swim pace'
+    : isRowingWorkoutSportV1(sport) ? 'Rowing pace' : 'Pace' };
+}
+
+export function workoutProfileMetricOrder(sport?: ActivityTypes): readonly WorkoutProfileMetric[] {
+  return (MANUAL_WORKOUT_EDITOR_CYCLING_SPORTS_V1 as readonly ActivityTypes[]).includes(sport)
+    ? ['power', 'speed', 'heart-rate', 'cadence', 'pace']
+    : isRowingWorkoutSportV1(sport) ? ['pace', 'power', 'heart-rate', 'speed', 'cadence']
+      : ['pace', 'heart-rate', 'power', 'cadence', 'speed'];
+}
 export const WORKOUT_PROFILE_PURPOSE_LABELS: Record<WorkoutStepV1['purpose'], string> = {
   warmup: 'Warm-up', work: 'Work', recovery: 'Recovery', cooldown: 'Cool-down', rest: 'Rest', other: 'Other',
 };
@@ -74,6 +88,24 @@ export function workoutProfileAbsoluteTarget(target: WorkoutTargetV1): WorkoutTa
 
 function paceDistance(structure: WorkoutStructureV1): number {
   return isSwimmingWorkoutSportV1(structure.sport) ? 100 : isRowingWorkoutSportV1(structure.sport) ? 500 : 1000;
+}
+
+/** Plot and choose time-based ticks in the owner's pace denominator, just like converted Event Details streams. */
+export function workoutProfilePaceUnitFactor(structure: WorkoutStructureV1, units?: UserUnitSettingsInterface | null): number {
+  if (isRowingWorkoutSportV1(structure.sport)) return 1;
+  const pace = isSwimmingWorkoutSportV1(structure.sport) ? new DataSwimPace(1) : new DataPace(1);
+  const converted = DynamicDataLoader.getUnitBasedDataFromDataInstance(pace, normalizeUserUnitSettings(units))[0] ?? pace;
+  const factor = converted.getValue();
+  return typeof factor === 'number' && Number.isFinite(factor) && factor > 0 ? factor : 1;
+}
+
+/** Choose numeric ticks after conversion, so speed labels land on round display-unit values. */
+export function workoutProfileSpeedUnitFactor(units?: UserUnitSettingsInterface | null): number {
+  const speed = new DataSpeed(1);
+  const converted = units
+    ? DynamicDataLoader.getUnitBasedDataFromDataInstance(speed, normalizeUserUnitSettings(units))[0] ?? speed : speed;
+  const factor = converted.getValue();
+  return typeof factor === 'number' && Number.isFinite(factor) && factor > 0 ? factor : 1;
 }
 
 function bandForTarget(target: WorkoutTargetV1, structure: WorkoutStructureV1,
@@ -149,14 +181,15 @@ export function buildWorkoutProfile(structure: WorkoutStructureV1,
     }
     ordinal += node.count * node.steps.length;
   }
-  const metrics = [...new Set(occurrences.flatMap(step => step.targets
-    .filter(target => target.minimum !== null && target.maximum !== null).map(target => target.metric)))];
+  const availableMetrics = new Set(occurrences.flatMap(step => step.targets
+    .filter(target => target.minimum !== null && target.maximum !== null).map(target => target.metric)));
+  const metrics = workoutProfileMetricOrder(parsed.sport).filter(metric => availableMetrics.has(metric));
   const pool = parsed.poolLength
     ? formatWorkoutEndingV1({ kind: 'distance', meters: parsed.poolLength.meters }, units, locale, parsed.sport) : null;
   return { structure: parsed, occurrences, occurrenceCount, grouped, repeats, metrics, pool };
 }
 
-/** Axis values use the same canonical formatter as details and tooltips, including swim/rowing pace. */
+/** Axis values use Sports Lib's unit formatters, including swim/rowing pace. */
 export function formatWorkoutProfileAxis(value: number, metric: WorkoutProfileMetric, structure: WorkoutStructureV1,
   units?: UserUnitSettingsInterface | null, locale?: string): string {
   if (!Number.isFinite(value) || value < 0) return '';
@@ -164,12 +197,22 @@ export function formatWorkoutProfileAxis(value: number, metric: WorkoutProfileMe
     case 'heart-rate': return formatWorkoutTargetV1({ kind: metric, mode: 'absolute', minimumBpm: value, maximumBpm: value }, units, locale, structure.sport);
     case 'power': return formatWorkoutTargetV1({ kind: metric, mode: 'absolute', minimumWatts: value, maximumWatts: value }, units, locale, structure.sport);
     case 'cadence': return formatWorkoutTargetV1({ kind: metric, mode: 'absolute', minimumRpm: value, maximumRpm: value }, units, locale, structure.sport);
-    case 'pace':
+    case 'pace': {
+      if (value === 0) return '';
+      const rowing = isRowingWorkoutSportV1(structure.sport);
+      const pace = isSwimmingWorkoutSportV1(structure.sport) ? new DataSwimPace(value) : new DataPace(value);
+      const converted = rowing ? pace
+        : DynamicDataLoader.getUnitBasedDataFromDataInstance(pace, normalizeUserUnitSettings(units))[0] ?? pace;
+      // A converted whole-second tick can be just below its integer due to floating point arithmetic.
+      // Avoid both that truncation and the target formatter's intermediate speed round-trip.
+      converted.setValue(Math.round(Number(converted.getValue()) * 1e6) / 1e6);
+      return `${converted.getDisplayValue()} ${rowing ? 'min/500m' : converted.getDisplayUnit()}`;
+    }
     case 'speed': {
-      if (value === 0 && metric === 'pace') return '';
-      const speed = metric === 'pace' ? paceDistance(structure) / value : value;
-      return formatWorkoutTargetV1({ kind: 'speed', mode: 'absolute', presentation: metric,
-        minimumMetersPerSecond: speed, maximumMetersPerSecond: speed }, units, locale, structure.sport);
+      const speed = new DataSpeed(value);
+      const converted = units
+        ? DynamicDataLoader.getUnitBasedDataFromDataInstance(speed, normalizeUserUnitSettings(units))[0] ?? speed : speed;
+      return `${new Intl.NumberFormat(locale, { maximumFractionDigits: 2 }).format(Number(converted.getValue()))} ${converted.getDisplayUnit()}`;
     }
   }
 }

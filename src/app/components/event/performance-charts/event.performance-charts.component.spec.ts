@@ -68,7 +68,7 @@ describe('EventPerformanceChartsComponent', () => {
     expect(nativeElement.querySelector('app-event-durability-curve')).not.toBeNull();
   });
 
-  it('replaces a missing-output durability tab with a compact availability notice', () => {
+  it('hides the missing-output durability notice when no performance tabs exist', () => {
     component.hasIntensity = false;
     component.hasPowerCurve = false;
     component.hasDurability = false;
@@ -81,8 +81,45 @@ describe('EventPerformanceChartsComponent', () => {
 
     expect(nativeElement.querySelector('mat-tab-group')).toBeNull();
     expect(nativeElement.querySelector('app-event-durability-curve')).toBeNull();
-    expect(nativeElement.querySelector('.performance-durability-notice')?.textContent)
+    expect(nativeElement.querySelector('.performance-durability-notice')).toBeNull();
+  });
+
+  it('hides the missing-output notice beside a single direct chart', () => {
+    component.hasIntensity = true;
+    component.durabilityOutputUnavailable = true;
+    fixture.detectChanges();
+
+    expect(fixture.nativeElement.querySelector('mat-tab-group')).toBeNull();
+    expect(fixture.nativeElement.querySelector('app-event-intensity-zones')).not.toBeNull();
+    expect(fixture.nativeElement.querySelector('.performance-durability-notice')).toBeNull();
+  });
+
+  it('shows the missing-output notice only while multiple performance tabs are visible', () => {
+    component.hasIntensity = true;
+    component.hasPowerCurve = true;
+    component.durabilityOutputUnavailable = true;
+    fixture.detectChanges();
+
+    expect(fixture.nativeElement.querySelector('mat-tab-group')).not.toBeNull();
+    expect(component.availableTabs).toEqual(['intensity', 'powerCurve']);
+    expect(fixture.nativeElement.querySelector('.performance-durability-notice')?.textContent)
       .toContain('No selected activity has supported output data');
+
+    fixture.componentRef.setInput('hasPowerCurve', false);
+    fixture.detectChanges();
+    expect(fixture.nativeElement.querySelector('mat-tab-group')).toBeNull();
+    expect(fixture.nativeElement.querySelector('.performance-durability-notice')).toBeNull();
+  });
+
+  it('does not claim durability is missing when its tab is available', () => {
+    component.hasIntensity = true;
+    component.hasDurability = true;
+    component.durabilityOutputUnavailable = true;
+    fixture.detectChanges();
+
+    expect(fixture.nativeElement.querySelector('mat-tab-group')).not.toBeNull();
+    expect(component.availableTabs).toContain('durability');
+    expect(fixture.nativeElement.querySelector('.performance-durability-notice')).toBeNull();
   });
 
   it('should render direct cadence-power chart without tabs when only cadence-power is available', () => {

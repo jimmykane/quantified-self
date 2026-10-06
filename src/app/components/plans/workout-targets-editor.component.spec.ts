@@ -14,7 +14,7 @@ import { WorkoutTargetsEditorComponent } from './workout-targets-editor.componen
 class Host {
   readonly targets = signal<ManualWorkoutEditorTarget[]>([]);
   readonly disabled = signal(false);
-  readonly sport = ActivityTypes.Cycling;
+  sport: ActivityTypes = ActivityTypes.Cycling;
   readonly units = normalizeUserUnitSettings({ speedUnits: [SpeedUnits.MilesPerHour] });
 }
 
@@ -34,9 +34,9 @@ describe('WorkoutTargetsEditorComponent', () => {
     const { fixture, child, host, settle } = await render();
     expect(haptics.selection).not.toHaveBeenCalled();
     (fixture.nativeElement.querySelector('.targets-heading button') as HTMLButtonElement).click(); await settle();
-    child.add(); await settle(); child.add(); child.select(1, 'kind', 'heart-rate'); child.select(0, 'kind', 'heart-rate');
-    expect(host.targets().map(t => t.kind)).toEqual(['heart-rate', 'power']);
-    expect(child.rows()[1].kinds.find(k => k.value === 'heart-rate')?.disabled).toBe(true);
+    child.add(); await settle(); child.add(); child.select(1, 'kind', 'power'); child.select(0, 'kind', 'speed');
+    expect(host.targets().map(t => t.kind)).toEqual(['power', 'speed']);
+    expect(child.rows()[1].kinds.find(k => k.value === 'power')?.disabled).toBe(true);
     expect(fixture.nativeElement.querySelector('.targets-heading button').disabled).toBe(true);
     child.move(0, 1); await settle(); child.remove(1); await settle(); child.remove(0); await settle();
     expect(host.targets()).toEqual([]);
@@ -63,13 +63,42 @@ describe('WorkoutTargetsEditorComponent', () => {
 
   it('accepts a keyboard kind selection once and clears the old numeric draft', async () => {
     const { fixture, host, settle } = await render();
-    host.targets.set([{ ...createManualWorkoutEditorTarget('heart-rate'), minimum: 150, maximum: 170 }]); await settle();
+    host.targets.set([{ ...createManualWorkoutEditorTarget('power'), minimum: 150, maximum: 170 }]); await settle();
     const select = fixture.debugElement.query(By.directive(MatSelect));
     const trigger = select.nativeElement as HTMLElement;
     trigger.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowDown', keyCode: 40, bubbles: true })); await settle();
-    expect(host.targets()[0].kind).toBe('power');
+    expect(host.targets()[0].kind).toBe('speed');
     expect(host.targets()[0].minimum).toBeNull();
     expect(haptics.selection).toHaveBeenCalledOnce();
+  });
+
+  it('clears incompatible bounds and snapshots when switching to or from cadence', async () => {
+    const { child, host, settle } = await render();
+    host.targets.set([workoutTargetToManualEditor({ kind: 'speed', mode: 'absolute', presentation: 'pace',
+      minimumMetersPerSecond: 3, maximumMetersPerSecond: 4 }, host.sport, host.units)]); await settle();
+    child.select(0, 'kind', 'cadence'); await settle();
+    expect(host.targets()[0]).toMatchObject({ kind: 'cadence', minimum: null, maximum: null });
+    expect(host.targets()[0].source).toBeUndefined();
+    child.number(0, 'minimum', 80); await settle(); child.number(0, 'maximum', 90); await settle();
+    child.select(0, 'kind', 'speed'); await settle();
+    expect(host.targets()[0]).toMatchObject({ kind: 'speed', presentation: 'speed', minimum: null, maximum: null });
+    expect(haptics.selection).toHaveBeenCalledTimes(2);
+  });
+
+  it.each([
+    [ActivityTypes.Swimming, 'Swim pace'], [ActivityTypes.OpenWaterSwimming, 'Swim pace'],
+    [ActivityTypes.Rowing, 'Rowing pace'], [ActivityTypes.IndoorRowing, 'Rowing pace'],
+  ] as const)('uses the %s pace label and preserves authored cadence without offering a new stroke target', async (sport, label) => {
+    const { fixture, child, host, settle } = await render();
+    host.sport = sport; await settle(); child.add(); await settle();
+    expect(host.targets()[0]).toMatchObject({ kind: 'speed', presentation: 'pace' });
+    const presentation = fixture.debugElement.queryAll(By.directive(MatSelect))[2].componentInstance as MatSelect;
+    expect(presentation.options.find(option => option.value === 'pace')?.viewValue).toBe(label);
+    expect(child.kinds().some(option => option.value === 'cadence')).toBe(false);
+    host.targets.set([{ ...createManualWorkoutEditorTarget('cadence'), minimum: 80, maximum: 90 }]); await settle();
+    expect(child.rows()[0].kinds.some(option => option.value === 'cadence')).toBe(true);
+    const original = host.targets(); child.select(0, 'kind', 'cadence');
+    expect(host.targets()).toBe(original); expect(haptics.selection).toHaveBeenCalledOnce();
   });
 
   it('keeps saved references without settings defaults and edits single values consistently', async () => {

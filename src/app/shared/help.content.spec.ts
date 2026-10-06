@@ -14,6 +14,14 @@ import {
 } from './policies.content';
 
 describe('help.content', () => {
+  it('explains exact prescription subtotals, bounded estimates and unknown duration without changing delivery or recorded totals', () => {
+    const copy = HELP_SECTIONS.find(section => section.id === 'training-plans')!.content;
+    for (const phrase of ['## Understand workout totals', '**estimated duration range**', 'threshold-speed reference saved',
+      'four steps with unknown duration', 'Missing information never counts as zero', 'HR, power, and cadence targets do not establish speed',
+      'exact timed-duration requirement', 'separate **workout prescription analysis**', 'client tool-catalog refresh'])
+      expect(copy).toContain(phrase);
+  });
+
   it('explains dated follow-ups, fresh evidence and confirmed Training outcomes without promising cross-chat memory', () => {
     const copy = HELP_SECTIONS.find(section => section.id === 'ai-insights')!.content;
     for (const phrase of ['message dates and confirmed Training changes', 'Freshly checked records take precedence',
@@ -228,6 +236,11 @@ describe('help.content', () => {
     expect(content).toContain('**Sync plan with Garmin**');
     expect(content).toContain('**Enable plan sync**');
     expect(content).toContain('**Workout sync status**');
+    expect(content).toContain('**Loading sync settings** is not **Sync off**');
+    expect(content).toContain('do not enable sync again just to refresh the display');
+    expect(content).toContain('reads the latest saved revisions without changing consent');
+    expect(content).toContain('confirmation is disabled; cancel and review the latest version');
+    expect(content).toContain('retry that same confirmation to check the original request');
     expect(content).toContain("each service's logo and a compact sent/total count for Suunto");
     expect(content).toContain('**No workouts due for sync** instead of showing dashes');
     expect(content).toContain('small **View** action');
@@ -1045,6 +1058,9 @@ describe('help.content', () => {
     const gettingStartedSection = HELP_SECTIONS.find(section => section.id === 'getting-started');
 
     expect(gettingStartedSection?.content).toContain('Event lap tables');
+    expect(gettingStartedSection?.content).toContain('A sole lap that repeats the whole activity is hidden');
+    expect(gettingStartedSection?.content).toContain('If the lap and activity totals cannot be compared reliably, the lap stays visible');
+    expect(gettingStartedSection?.content).toContain('including Garmin **Session end** laps and Suunto final partial laps');
     expect(gettingStartedSection?.content).toContain('**Laps -> Columns**');
     expect(gettingStartedSection?.content).toContain('typed metric search');
     expect(gettingStartedSection?.content).toContain('Running, Cycling, Swimming, or Other activities');
@@ -1468,6 +1484,9 @@ describe('help.content', () => {
     expect(serviceConnectionsSection?.content).toContain('one-time dashboard prompt');
     expect(serviceConnectionsSection?.content).toContain('only the latest rolling **5 years** of activity data');
     expect(serviceConnectionsSection?.content).toContain('does not support an arbitrary older five-year period');
+    expect(serviceConnectionsSection?.content).toContain('While Garmin activity history is being requested, Services shows **Import already running**');
+    expect(serviceConnectionsSection?.content).toContain('Closing the dialog does not cancel the request');
+    expect(serviceConnectionsSection?.content).toContain('usual **30-day cooldown** applies while activities continue arriving from Garmin');
     expect(serviceConnectionsSection?.content).toContain('Garmin Sleep and Health history import is separate from activity history import');
     expect(serviceConnectionsSection?.content).toContain('If Garmin Health is temporarily disabled, the control falls back to **Import Sleep history**');
     expect(serviceConnectionsSection?.content).toContain('COROS to Suunto activity sync requires');
