@@ -31,6 +31,31 @@ const MARKETING_SECRET_TARGETS = new Set([
   'dispatchMarketingCampaigns',
   'marketingUnsubscribe',
 ]);
+const INGESTION_TARGET_METADATA: Readonly<Record<string, {
+  memoryMb: number;
+  timeoutSeconds: number;
+  trigger: 'http' | 'event' | 'task';
+  secrets?: readonly string[];
+  eventDocument?: string;
+  concurrency?: number;
+  maxInstances?: number;
+  cpu?: number;
+}>> = {
+  processSleepSyncTask: { memoryMb: 1024, timeoutSeconds: 540, trigger: 'task', secrets: [
+    'COROSAPI_CLIENT_ID', 'COROSAPI_CLIENT_SECRET', 'GARMINAPI_CLIENT_ID', 'GARMINAPI_CLIENT_SECRET',
+    'SUUNTOAPP_CLIENT_ID', 'SUUNTOAPP_CLIENT_SECRET', 'SUUNTOAPP_SUBSCRIPTION_KEY',
+  ] },
+  processWorkoutTask: { memoryMb: 1024, timeoutSeconds: 540, trigger: 'task', secrets: [
+    'COROSAPI_CLIENT_ID', 'COROSAPI_CLIENT_SECRET', 'GARMINAPI_CLIENT_ID', 'GARMINAPI_CLIENT_SECRET',
+    'SUUNTOAPP_CLIENT_ID', 'SUUNTOAPP_CLIENT_SECRET', 'SUUNTOAPP_SUBSCRIPTION_KEY',
+    'WAHOOAPI_ALLOWED_FILE_HOSTS',
+  ] },
+  uploadActivity: { memoryMb: 4096, timeoutSeconds: 3600, trigger: 'http', cpu: 2, concurrency: 1, maxInstances: 20 },
+  fanOutSuuntoHealthWebhookIngress: {
+    memoryMb: 512, timeoutSeconds: 120, trigger: 'event', concurrency: 1, maxInstances: 50,
+    eventDocument: 'suuntoHealthWebhookIngress/{ingressID}',
+  },
+};
 const TRAINING_TARGET_METADATA: Readonly<Record<string, {
   memoryMb: number;
   timeoutSeconds: number | null;
@@ -219,6 +244,21 @@ function assert(condition: unknown, message: string): asserts condition {
   if (!condition) throw new Error(message);
 }
 
+function checkSecretBindingsWithInheritedTarget(target: string): void {
+  const env: NodeJS.ProcessEnv = { ...process.env, FUNCTION_TARGET: target };
+  // Exercise the standalone predeploy check without letting the caller's
+  // discovery mode hide an inherited-target regression.
+  delete env.FUNCTIONS_CONTROL_API;
+  delete env.FUNCTIONS_MANIFEST_OUTPUT_PATH;
+  const child = spawnSync(process.execPath, [resolve(__dirname, 'check-secret-bindings.js')], {
+    cwd: resolve(__dirname, '..', '..', '..', '..'),
+    env,
+    encoding: 'utf8',
+  });
+  assert(child.status === 0,
+    `Secret-binding validation failed with inherited ${target}: ${child.stderr || child.stdout}`);
+}
+
 async function loadFirebaseManifest(): Promise<DiscoveredStack> {
   delete process.env.FUNCTION_TARGET;
   delete process.env.FUNCTIONS_MANIFEST_OUTPUT_PATH;
@@ -260,7 +300,7 @@ async function check(): Promise<void> {
 
   const canaryTarget = OPTIMIZED_FUNCTION_TARGETS[0];
   assert(canaryTarget, 'The optimized target registry is empty.');
-  for (const target of Object.keys(TRAINING_TARGET_METADATA)) {
+  for (const target of [...Object.keys(INGESTION_TARGET_METADATA), ...Object.keys(TRAINING_TARGET_METADATA)]) {
     assert(OPTIMIZED_FUNCTION_TARGETS.includes(target), `${target} is missing its isolated loader.`);
   }
   for (const discoveryMode of ['control-api', 'manifest-output'] as const) {
@@ -284,6 +324,10 @@ async function check(): Promise<void> {
       optimized.forbiddenModules.length === 0,
       `${target} loaded unrelated modules: ${optimized.forbiddenModules.join(', ')}`,
     );
+  }
+
+  for (const target of Object.keys(INGESTION_TARGET_METADATA)) {
+    checkSecretBindingsWithInheritedTarget(target);
   }
 
   const stack = await loadFirebaseManifest();
@@ -345,6 +389,45 @@ async function check(): Promise<void> {
         && endpoint.taskQueueTrigger === undefined
         && endpoint.scheduleTrigger === undefined,
       `${target} HTTP trigger changed.`);
+    } else if (INGESTION_TARGET_METADATA[target]) {
+      const expected = INGESTION_TARGET_METADATA[target];
+      assert(endpoint.availableMemoryMb === expected.memoryMb, `${target} memory configuration changed.`);
+      assert(endpoint.timeoutSeconds === expected.timeoutSeconds, `${target} timeout configuration changed.`);
+      assert(endpoint.cpu === expected.cpu, `${target} CPU configuration changed.`);
+      assert(JSON.stringify(endpoint.concurrency) === JSON.stringify(expected.concurrency ?? null)
+        && JSON.stringify(endpoint.maxInstances) === JSON.stringify(expected.maxInstances ?? null)
+        && JSON.stringify(endpoint.minInstances) === 'null',
+      `${target} instance settings changed.`);
+      assert(arraysEqual(secretKeys, [...(expected.secrets || [])].sort()), `${target} secret bindings changed.`);
+      const triggers = {
+        http: endpoint.httpsTrigger,
+        event: endpoint.eventTrigger,
+        task: endpoint.taskQueueTrigger,
+        callable: endpoint.callableTrigger,
+        schedule: endpoint.scheduleTrigger,
+      };
+      assert(arraysEqual(Object.entries(triggers)
+        .filter(([, trigger]) => trigger !== undefined)
+        .map(([kind]) => kind), [expected.trigger]),
+      `${target} trigger kind changed.`);
+      if (expected.trigger === 'http') {
+        assert(JSON.stringify(endpoint.httpsTrigger) === '{}', `${target} HTTP invoker configuration changed.`);
+      } else if (expected.trigger === 'event') {
+        assert(endpoint.eventTrigger?.eventType === 'google.cloud.firestore.document.v1.created'
+          && endpoint.eventTrigger.eventFilterPathPatterns?.document === expected.eventDocument
+          && endpoint.eventTrigger.retry === true,
+        `${target} Firestore trigger changed.`);
+      } else {
+        assert(endpoint.taskQueueTrigger?.retryConfig?.maxAttempts === 10
+          && endpoint.taskQueueTrigger.retryConfig.maxDoublings === 4
+          && JSON.stringify(endpoint.taskQueueTrigger.retryConfig.maxRetrySeconds) === 'null'
+          && endpoint.taskQueueTrigger.retryConfig.minBackoffSeconds === 900
+          && endpoint.taskQueueTrigger.retryConfig.maxBackoffSeconds === 14_400,
+        `${target} task retry configuration changed.`);
+        assert(JSON.stringify(endpoint.taskQueueTrigger?.rateLimits?.maxConcurrentDispatches) === 'null'
+          && JSON.stringify(endpoint.taskQueueTrigger?.rateLimits?.maxDispatchesPerSecond) === 'null',
+        `${target} task rate limits changed.`);
+      }
     } else if (target === 'reconcileTrainingPlanCleanup'
       || target === 'reconcileTrainingWorkoutExpiry' || target === 'reconcileTrainingBulkShift') {
       assert(endpoint.availableMemoryMb === 512, `${target} memory configuration changed.`);

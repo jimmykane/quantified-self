@@ -36,15 +36,32 @@ Its deployment does not migrate the endpoint to Gen 2 or change the provider's r
 The target map also isolates all 11 exports from `functions/src/admin/marketing/handlers.ts`, including the
 `trackMarketingDelivery` Firestore trigger. That trigger observes updates to the shared `mail/{mailId}` collection even
 when the updated email is not part of a marketing campaign. Its existing 256 MiB memory limit is unchanged; this routing
-change needs a separately approved deployment and production memory check. The map also isolates
-`projectEventTagCatalog` directly from its event-tag trigger module, preserving its `users/{uid}/events/{eventId}`
-Firestore written-event trigger, retry behavior and 256 MiB limit. Other functions continue through the complete
-entrypoint.
+change needs a separately approved deployment and production memory check. The former `projectEventTagCatalog` endpoint
+has since been retired and is excluded from discovery. Targets absent from the map use the complete entrypoint.
 
 `mcpApi` loads directly from `mcp/server`, without the full entrypoint, Genkit, BigQuery or unrelated admin handlers.
 Its existing Gen 2 HTTP endpoint remains in `europe-west2` with 1 GiB memory, a 120-second timeout, concurrency 4,
 unchanged instance settings and only `MAPBOX_ACCESS_TOKEN` / `SUUNTOAPP_GUIDE_OWNER` secrets. This isolates startup;
 it does not change MCP/OAuth behavior or keep a paid instance warm. Production deployment remains separately approved.
+
+## Ingestion worker isolation
+
+The loader also routes these existing Gen 2 functions directly to their owner modules:
+
+| Target | Owner module | Preserved runtime and trigger |
+| --- | --- | --- |
+| `processSleepSyncTask` | `tasks/sleep-sync-worker` | 1 GiB, 540 seconds, Cloud Tasks |
+| `processWorkoutTask` | `tasks/workout-processor` | 1 GiB, 540 seconds, Cloud Tasks |
+| `uploadActivity` | `events/upload-activity` | 4 GiB, 2 CPUs, 3,600 seconds, HTTP, concurrency 1, max instances 20 |
+| `fanOutSuuntoHealthWebhookIngress` | `suunto/health-webhook-ingress` | 512 MiB, 120 seconds, Firestore document created, concurrency 1, max instances 50 |
+
+All four retain `europe-west2`, their original Firebase handler objects and their secret bindings. Both task workers
+retain 10 attempts, 4 doublings, 900–14,400-second backoff, and unspecified task rate limits. The fan-out trigger retains
+`suuntoHealthWebhookIngress/{ingressID}` and retries. Authentication, provider requests, correction/reconciliation
+coverage, queue processing, writes and telemetry continue through the existing handlers.
+
+This internal import change has no effect on MCP contracts, Training planning or user-facing help. No additional
+instances are kept warm and runtime resources are unchanged.
 
 ## Verification
 
@@ -56,8 +73,9 @@ npm --prefix functions run entrypoint:check
 
 The check builds the Functions package and verifies:
 
-- discovery exposes all 164 application exports;
+- discovery exposes all 168 application exports;
 - both Firebase discovery modes ignore an inherited optimized `FUNCTION_TARGET`;
+- standalone secret-binding validation forces complete discovery even with an inherited ingestion `FUNCTION_TARGET`;
 - an unknown target exposes the same complete export set;
 - a non-optimized Gen 1 target retains the complete entrypoint fallback;
 - each optimized target exposes only its requested handler;
@@ -70,9 +88,10 @@ The check builds the Functions package and verifies:
 - the isolated Suunto 24/7 receiver remains Gen 1 HTTP in `europe-west2`, with 512 MiB, a 60-second timeout,
   unchanged instance settings and only the notification secret;
 - optimized marketing endpoints retain their callable, schedule, Firestore or HTTP triggers, existing memory limits,
-  region and secret bindings.
-- the isolated event-tag catalog endpoint retains its Firestore trigger path and type, retry setting, region, 256 MiB
-  memory limit and absence of secrets.
+  region and secret bindings;
+- the four ingestion targets avoid the full entrypoint, Genkit, BigQuery, MCP and admin modules, while retaining CPU,
+  memory, timeout, concurrency, instance settings, secrets, trigger kinds, retry options and task rate limits;
+- retired event-tag catalog and Garmin probe endpoints remain excluded from discovery.
 
 CI runs the compiled check after the Functions build. Firebase Functions predeploy first rejects forbidden local
 credential, environment and operational files, then runs the compiled entrypoint check and secret-binding validation.
@@ -124,6 +143,48 @@ Three isolated Node 22.23.3 runs on 2026-10-03 measured 234.9 MiB median RSS, 90
 for the complete entrypoint, versus 127.6 MiB RSS, 339 ms and 1,467 modules for `receiveSuunto247Data` with one export.
 The approximately 107 MiB local startup reduction is not a production memory guarantee; the receiver also uses 512 MiB
 to leave room for validated webhook admission and durable staging.
+
+## Ingestion benchmark and verification (2026-10-06)
+
+Three isolated Node 22.23.3 runs per target, with the same machine and dependencies before and after the ingestion
+loader change, produced these medians. The baseline was `cc4bc8497`, where each target loaded the complete entrypoint.
+Samples used the compiled benchmark's `--probe` mode with `--expose-gc`, the matching `FUNCTION_TARGET`, and neither
+Firebase discovery environment variable set.
+
+| Target | Import before | Import after | RSS before | RSS after | Modules before | Modules after |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: |
+| `processSleepSyncTask` | 980 ms | 342 ms | 236.8 MiB | 120.3 MiB | 3,141 | 1,433 |
+| `processWorkoutTask` | 944 ms | 371 ms | 237.7 MiB | 130.9 MiB | 3,141 | 1,513 |
+| `uploadActivity` | 1,135 ms | 278 ms | 237.6 MiB | 110.8 MiB | 3,141 | 1,246 |
+| `fanOutSuuntoHealthWebhookIngress` | 972 ms | 347 ms | 238.0 MiB | 121.3 MiB | 3,141 | 1,438 |
+| Complete entrypoint control | 942 ms | 962 ms | 237.6 MiB | 236.6 MiB | 3,141 | 3,141 |
+
+Each isolated target now exports one handler; discovery still exports 168. The local import reductions are about
+61–75%, with 107–127 MiB less startup RSS. These measurements cover module import, and daily billing savings depend
+on production container starts and their CPU time. Compare production startup latency, billable CPU, CPU per request,
+memory, request volume, errors and retry/dead-letter outcomes over comparable complete days after deployment.
+
+Verification passed:
+
+- 129 tests across the loader, Firebase bootstrap, secret policy, deployment safety, Sleep worker, workout worker,
+  upload and Suunto ingress specs;
+- Functions TypeScript build and compiled entrypoint check: 168 endpoints and 45 isolated targets;
+- complete Firebase endpoint descriptors for all four targets matched the pre-change baseline;
+- deployment-source safety and secret-binding check: 69 secret-bound endpoints.
+
+Review reproduced a predeploy failure when `FUNCTION_TARGET=processSleepSyncTask` was inherited: standalone secret
+validation loaded only that worker and reported the other policy endpoints as missing. The secret-check script now
+sets `FUNCTIONS_CONTROL_API=true` before loading the index so it always validates the complete registry. The compiled
+entrypoint check runs standalone secret validation with each of the four ingestion targets inherited and discovery
+flags cleared. Deployment safety also passed with an inherited `FUNCTION_TARGET=uploadActivity`.
+
+The documentation-only changes were checked with `git diff --check`; they have no separate automated tests.
+After separate explicit deployment approval, deploy the selected functions from this verified revision:
+
+```bash
+firebase deploy --project quantified-self-io \
+  --only functions:processSleepSyncTask,functions:processWorkoutTask,functions:uploadActivity,functions:fanOutSuuntoHealthWebhookIngress
+```
 
 ## Adding another optimized target
 
