@@ -119,6 +119,7 @@ export class TrainingPlansService {
     const availabilityRef = doc(this.firestore, ...userPath, TRAINING_PLAN_STATE_COLLECTION_ID,
       TRAINING_PLAN_STATE_DOCUMENT_ID, 'availability', 'restore');
     const schedule$ = docData(availabilityRef).pipe(
+      timeout({ first: TRAINING_SCHEDULE_STATE_READ_TIMEOUT_MS }),
       switchMap(availability => {
         if (availability !== undefined) return of({ ...emptyTrainingSchedule(), restoreUnavailable: true as const });
         return combineLatest([
@@ -131,8 +132,12 @@ export class TrainingPlansService {
               timeout({ first: TRAINING_SCHEDULE_STATE_READ_TIMEOUT_MS }),
             )),
           ),
-          collectionData(plansRef, { idField: 'id' }),
-          collectionData(query(workoutsRef, where('lifecycle', 'in', ['planned', 'skipped'])), { idField: 'id' }),
+          collectionData(plansRef, { idField: 'id' }).pipe(
+            timeout({ first: TRAINING_SCHEDULE_STATE_READ_TIMEOUT_MS }),
+          ),
+          collectionData(query(workoutsRef, where('lifecycle', 'in', ['planned', 'skipped'])), { idField: 'id' }).pipe(
+            timeout({ first: TRAINING_SCHEDULE_STATE_READ_TIMEOUT_MS }),
+          ),
         ]).pipe(
           map(([stateValue, planValues, workoutValues]) => {
             const plans = (planValues as unknown[]).map(parseTrainingPlanV1)

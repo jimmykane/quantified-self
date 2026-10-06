@@ -1540,11 +1540,12 @@ not the full SDK's watch/local-store path: even `getDocFromServer` can repeat an
 result. Lite has no local cache or pending-write overlay. The live schedule-state listener retains its server-confirmed
 watch as an invalidation signal, independently verifies the exact `current` state with Lite, and publishes only that
 validated result. This adds one uncached exact-document read per acknowledged state emission, shared across that owner's
-schedule consumers; there is no polling or history query. The initial state-watch acknowledgement, each REST verification
-and the final restore-fence fallback lookup are each bounded to 30 seconds, retaining the schedule's existing two-retry
-policy. The watch timeout applies only to its first acknowledgement, not idle time between later changes. Cancelled,
-superseded or timed-out subscriptions cannot publish late results.
-A failed verification stays unavailable, never revision zero. Other live listeners remain unchanged. Check
+schedule consumers; there is no polling or history query. The initial restore-status, plan-list and workout-list results,
+state-watch acknowledgement, each REST verification and final restore-fence fallback lookup are each bounded to 30 seconds.
+The schedule's existing two-retry policy still covers its inner state/list reads. Listener deadlines apply only to their
+first result, not idle time between later changes or the duration of an acknowledged restore. Cancelled, superseded or
+timed-out subscriptions cannot publish late results. A failed verification stays unavailable, never revision zero.
+Plan/workout listeners retain their existing query and cache semantics. Check
 uses the current revisions without changing consent. A preview with stale displayed revisions fails with a readable
 conflict instead of silently reviewing new consent or rebasing a replacement approval. The server transaction still
 checks revisions because these three reads are not an atomic snapshot. A live settings/schedule/source revision change

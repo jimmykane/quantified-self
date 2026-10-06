@@ -149,6 +149,74 @@ describe('current Training schedule-state reads', () => {
     } finally { vi.useRealTimers(); }
   });
 
+  it.each(['availability', 'plans', 'workouts'] as const)('bounds a stalled initial %s read', async source => {
+    vi.useFakeTimers();
+    try {
+      vi.mocked(getCachedDoc).mockResolvedValue({ exists: () => false } as never);
+      if (source !== 'availability') {
+        vi.mocked(docData).mockImplementation(ref => ref.path.endsWith('/availability/restore') ? availability : of(undefined));
+        const stalled$ = new Subject<Record<string, unknown>[]>();
+        vi.mocked(collectionData).mockImplementation(ref => {
+          const path = typeof ref === 'string' ? ref : (ref as unknown as { path: string }).path;
+          return path.endsWith(source === 'plans' ? '/trainingPlans' : '/scheduledWorkouts') ? stalled$ : of([]);
+        });
+      }
+      const pending = firstValueFrom(service.watchSchedule('owner'));
+      const rejected = expect(pending).rejects.toMatchObject({ name: 'TimeoutError' });
+      if (source !== 'availability') availability.next(undefined);
+      await vi.advanceTimersByTimeAsync(source === 'availability'
+        ? TRAINING_SCHEDULE_STATE_READ_TIMEOUT_MS : 3 * TRAINING_SCHEDULE_STATE_READ_TIMEOUT_MS + 2000);
+      await rejected;
+      if (source === 'availability') {
+        expect(collectionData).not.toHaveBeenCalled();
+        expect(getDoc).not.toHaveBeenCalled();
+      }
+    } finally { vi.useRealTimers(); }
+  });
+
+  it('does not time out an acknowledged restore that takes longer than the read deadline', async () => {
+    vi.useFakeTimers();
+    try {
+      const observed: CurrentTrainingScheduleV1[] = [];
+      const failed = vi.fn();
+      const subscription = service.watchSchedule('owner').subscribe({ next: value => observed.push(value), error: failed });
+      availability.next({ schemaVersion: 1, status: 'restoring' });
+      await vi.advanceTimersByTimeAsync(3 * TRAINING_SCHEDULE_STATE_READ_TIMEOUT_MS);
+      expect(subscription.closed).toBe(false);
+      expect(failed).not.toHaveBeenCalled();
+      expect(observed).toHaveLength(1);
+      expect(observed[0].restoreUnavailable).toBe(true);
+      expect(getDoc).not.toHaveBeenCalled();
+      availability.next(undefined); stateSignals.next(undefined);
+      await vi.advanceTimersByTimeAsync(0);
+      expect(observed[1]?.state.revision).toBe(253);
+      subscription.unsubscribe();
+    } finally { vi.useRealTimers(); }
+  });
+
+  it('recovers a stalled list on retry and keeps its later idle subscription alive', async () => {
+    vi.useFakeTimers();
+    try {
+      const workouts$ = new Subject<Record<string, unknown>[]>();
+      vi.mocked(docData).mockImplementation(ref => ref.path.endsWith('/availability/restore') ? availability : of(undefined));
+      vi.mocked(collectionData).mockImplementation(ref => typeof ref === 'string' ? of([]) : workouts$);
+      const observed: CurrentTrainingScheduleV1[] = [];
+      const failed = vi.fn();
+      const subscription = service.watchSchedule('owner').subscribe({ next: value => observed.push(value), error: failed });
+      availability.next(undefined);
+      await vi.advanceTimersByTimeAsync(TRAINING_SCHEDULE_STATE_READ_TIMEOUT_MS + 1000);
+      expect(observed).toEqual([]);
+      expect(getDoc).toHaveBeenCalledTimes(2);
+      workouts$.next([]); await vi.advanceTimersByTimeAsync(0);
+      expect(observed[0]?.state.revision).toBe(253);
+      await vi.advanceTimersByTimeAsync(2 * TRAINING_SCHEDULE_STATE_READ_TIMEOUT_MS);
+      expect(subscription.closed).toBe(false);
+      expect(failed).not.toHaveBeenCalled();
+      expect(getCachedDoc).not.toHaveBeenCalled();
+      subscription.unsubscribe();
+    } finally { vi.useRealTimers(); }
+  });
+
   it('bounds the final restore-fence lookup after a failed verification', async () => {
     vi.useFakeTimers();
     try {
