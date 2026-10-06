@@ -58,6 +58,8 @@ Settings separates **Appearance** (theme) from **Privacy** (usage analytics and 
 section is addressable at `/settings?section=privacy`; its switches retain the existing legal-consent form controls
 and require **Save changes**. Explicit off choices persist as false booleans, while untouched consent fields are
 omitted from updates. Section navigation preserves unsaved form edits and emits selection feedback only for a change.
+Background profile updates refresh untouched consent switches while preserving explicit local edits. Privacy switches
+are disabled during saving, duplicate submissions are ignored, and failed saves retain the user's choice for retry.
 
 ## Activity details spacing
 

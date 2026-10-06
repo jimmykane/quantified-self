@@ -295,6 +295,12 @@ export class UserSettingsComponent implements OnChanges, OnDestroy, OnInit {
       && this.initializedUserUID === this.user.uid
       && this.userSettingsFormGroup.dirty;
     if (shouldPreserveDirtyFormState) {
+      // Consent may change in another tab or through an email unsubscribe link.
+      // Refresh untouched switches without discarding an explicit local choice.
+      for (const field of ['acceptedTrackingPolicy', 'acceptedMarketingPolicy'] as const) {
+        const control = this.userSettingsFormGroup.get(field);
+        if (control.pristine) control.setValue(this.user[field] === true, { emitEvent: false });
+      }
       const linePatternsControl = this.userSettingsFormGroup.get('useDistinctComparisonLinePatterns');
       if (linePatternsControl.pristine) {
         const savedChartSettings = this.user.settings?.chartSettings as AppChartSettingsInterface | undefined;
@@ -504,6 +510,7 @@ export class UserSettingsComponent implements OnChanges, OnDestroy, OnInit {
 
   async onSubmit(event) {
     event.preventDefault();
+    if (this.isSaving || this.isDeleting) return;
     if (!this.userSettingsFormGroup.valid) {
       const invalidControls = this.invalidControlDiagnostics;
       this.logger.warn('[UserSettingsComponent] Save blocked by invalid form controls', {
@@ -516,7 +523,10 @@ export class UserSettingsComponent implements OnChanges, OnDestroy, OnInit {
 
     this.isSaving = true;
     const linePatternsControl = this.userSettingsFormGroup.get('useDistinctComparisonLinePatterns');
-    linePatternsControl.disable({ emitEvent: false });
+    const lockedControls = [linePatternsControl,
+      this.userSettingsFormGroup.get('acceptedTrackingPolicy'),
+      this.userSettingsFormGroup.get('acceptedMarketingPolicy')];
+    lockedControls.forEach(control => control.disable({ emitEvent: false }));
     try {
       const dataTypesToUseValue = this.userSettingsFormGroup.get('dataTypesToUse').value as string[];
 
@@ -663,7 +673,7 @@ export class UserSettingsComponent implements OnChanges, OnDestroy, OnInit {
       this.hapticsService.error();
     } finally {
       this.isSaving = false;
-      linePatternsControl.enable({ emitEvent: false });
+      lockedControls.forEach(control => control.enable({ emitEvent: false }));
     }
   }
 

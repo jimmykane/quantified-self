@@ -590,6 +590,70 @@ describe('UserSettingsComponent', () => {
         expect(component.activeSection).toBe('profile');
     });
 
+    it.each(['acceptedTrackingPolicy', 'acceptedMarketingPolicy'])('refreshes untouched %s while preserving unrelated edits', (field) => {
+        component.user = { ...component.user, [field]: true };
+        component.ngOnChanges();
+        const form = component.userSettingsFormGroup;
+        const name = form.get('displayName');
+        name.setValue('Unsaved name');
+        name.markAsDirty();
+        component.user = { ...component.user, [field]: false };
+        component.ngOnChanges();
+
+        expect(component.userSettingsFormGroup).toBe(form);
+        expect(name.value).toBe('Unsaved name');
+        expect(name.dirty).toBe(true);
+        expect(form.get(field).value).toBe(false);
+        expect(form.get(field).pristine).toBe(true);
+        expect(hapticsServiceMock.selection).not.toHaveBeenCalled();
+    });
+
+    it.each(['acceptedTrackingPolicy', 'acceptedMarketingPolicy'])('preserves an explicit %s edit during a background update', (field) => {
+        component.user = { ...component.user, [field]: true };
+        component.ngOnChanges();
+        const control = component.userSettingsFormGroup.get(field);
+        control.setValue(false);
+        control.markAsDirty();
+        component.user = { ...component.user, [field]: true, displayName: 'Remote name' };
+        component.ngOnChanges();
+
+        expect(control.value).toBe(false);
+        expect(control.dirty).toBe(true);
+        expect(hapticsServiceMock.selection).not.toHaveBeenCalled();
+    });
+
+    it.each([false, true])('locks privacy switches during save and restores them after failure=%s', async (fail) => {
+        component.user = { ...component.user, acceptedTrackingPolicy: true, acceptedMarketingPolicy: true };
+        component.ngOnChanges();
+        queryParamMapSubject.next(convertToParamMap({ section: 'privacy' }));
+        fixture.detectChanges();
+        const marketing = component.userSettingsFormGroup.get('acceptedMarketingPolicy');
+        marketing.setValue(false);
+        marketing.markAsDirty();
+        let finishSave!: () => void;
+        const update = vi.mocked(TestBed.inject(AppUserService).updateUserProperties).mockImplementationOnce(() => new Promise<[]>(
+            (resolve, reject) => { finishSave = () => fail ? reject(new Error('offline')) : resolve([]); }
+        ));
+        const save = component.onSubmit(new Event('submit'));
+        fixture.detectChanges();
+        const switches = Array.from(fixture.nativeElement.querySelectorAll('[aria-labelledby="settings-privacy-title"] button[role="switch"]')) as HTMLButtonElement[];
+        expect(switches).toHaveLength(2);
+        expect(switches.every(button => button.disabled)).toBe(true);
+        switches.forEach(button => button.click());
+        await component.onSubmit(new Event('submit'));
+        expect(update).toHaveBeenCalledTimes(1);
+        expect(marketing.value).toBe(false);
+        finishSave();
+        await save;
+        fixture.detectChanges();
+
+        expect(switches.every(button => !button.disabled)).toBe(true);
+        expect(marketing.value).toBe(false);
+        expect(marketing.dirty).toBe(fail);
+        expect(hapticsServiceMock.selection).not.toHaveBeenCalled();
+        expect(hapticsServiceMock[fail ? 'error' : 'success']).toHaveBeenCalledTimes(1);
+    });
+
     it('should initialize acceptedMarketingPolicy from user data', () => {
         component.user.acceptedMarketingPolicy = true;
         component.ngOnChanges();
