@@ -55,7 +55,8 @@ Routine ignored calls are independently sampled. `sampleWeight=20` for 5% sample
 a stale or failed marker transition. It is not a unique newly created task count. Confirmed calls are logged in full.
 An unsampled delete does not decode its before snapshot. Sampled deletes use before fields for workload attribution.
 `queueAgeMs` is relative to `dateCreated`; invalid/future timestamps produce `null`. `durationMs` measures handler
-wall time, rounded to milliseconds; submillisecond ignored calls may report zero. It excludes module import/framework
+wall time in fractional milliseconds. The clock stops before sampling, diagnostic snapshot decoding and log payload
+construction, so sample-specific work is not extrapolated to unsampled calls. It excludes module import/framework
 startup and is not billed CPU or billable instance time.
 
 For each UTC day and outcome/workload, estimate invocations with `sum(sampleWeight)`. Estimate total handler duration
@@ -67,7 +68,11 @@ that a category never occurred. Do not infer a precise avoidable percentage from
 
 The existing `[SleepSyncDispatcher] Reconciliation completed` log keeps `inspected`, `dispatched` and `skippedRecent`.
 One aggregate per successful reconciliation adds `telemetryVersion=1`, `dispatchSource=scheduled`, `durationMs` and
-`workloads`. Each workload uses the same bounded provider/type categories; there are no per-document diagnostic logs.
+`workloads` and `scannedTaskClasses`. Each workload uses the same bounded provider/type categories; there are no
+per-document diagnostic logs. `scannedTaskClasses.sleepSync` and `.garminHealthBackfill` indicate which classes the
+existing scans examined. A false flag means that class was skipped because it had no available task slots; its empty
+workload/counts are not evidence of an empty queue. A true flag still describes the existing bounded scan, not the
+entire queue. Summaries are emitted only after all selected scans complete; scan failures retain the existing errors.
 
 | Per-workload field | Meaning |
 | --- | --- |

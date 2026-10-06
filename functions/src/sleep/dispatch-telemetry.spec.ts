@@ -1,5 +1,4 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { performance } from 'node:perf_hooks';
 
 const { loggerInfo } = vi.hoisted(() => ({ loggerInfo: vi.fn() }));
 vi.mock('firebase-functions/logger', () => ({ info: loggerInfo }));
@@ -20,7 +19,7 @@ describe('temporary Garmin dispatch telemetry', () => {
 
     function log(outcome: GarminDispatchOutcome, queueItem: unknown = {}) {
         logGarminDispatchSummary({
-            queueItem: () => queueItem, outcome, writeKind: 'update', startedAtMs: performance.now() - 5,
+            queueItem: () => queueItem, outcome, writeKind: 'update', durationMs: 5,
             enqueueConfirmed: false,
         });
         return loggerInfo.mock.calls.at(-1)?.[1];
@@ -40,7 +39,7 @@ describe('temporary Garmin dispatch telemetry', () => {
         vi.mocked(Math.random).mockReturnValue(0.99);
         const queueItem = vi.fn(() => { throw new Error('snapshot must not be decoded'); });
         logGarminDispatchSummary({
-            queueItem, outcome: 'deleted_write', writeKind: 'delete', startedAtMs: performance.now(),
+            queueItem, outcome: 'deleted_write', writeKind: 'delete', durationMs: 0,
             enqueueConfirmed: false,
         });
         expect(queueItem).not.toHaveBeenCalled();
@@ -98,6 +97,7 @@ describe('temporary Garmin dispatch telemetry', () => {
 
     it('aggregates reconciliation by safe workload dimensions without exposing documents', () => {
         const telemetry = new SleepDispatchReconciliationTelemetry();
+        telemetry.setScannedTaskClasses({ sleepSync: true, garminHealthBackfill: false });
         const counts = telemetry.inspect({
             provider: 'GarminAPI', type: 'garmin_ping_batch', dateCreated: 100,
             userID: 'private-user', garminCallbackURLs: ['private-url'],
@@ -111,6 +111,7 @@ describe('temporary Garmin dispatch telemetry', () => {
         const fields = loggerInfo.mock.calls[0][1];
         expect(fields).toMatchObject({
             ...totals, dispatchSource: 'scheduled', telemetryVersion: 1,
+            scannedTaskClasses: { sleepSync: true, garminHealthBackfill: false },
             workloads: [
                 expect.objectContaining({
                     provider: 'GarminAPI', queueType: 'garmin_ping_batch', inspected: 2,

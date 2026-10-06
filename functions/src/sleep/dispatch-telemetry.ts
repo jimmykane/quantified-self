@@ -54,7 +54,7 @@ export function logGarminDispatchSummary(params: {
     outcome: GarminDispatchOutcome;
     writeKind: QueueWriteKind;
     enqueueConfirmed: boolean;
-    startedAtMs: number;
+    durationMs: number;
 }): void {
     try {
         const sampleRate = IGNORED_OUTCOMES.has(params.outcome)
@@ -71,7 +71,7 @@ export function logGarminDispatchSummary(params: {
             enqueueConfirmed: params.enqueueConfirmed,
             sampleRate,
             sampleWeight: 1 / sampleRate,
-            durationMs: Math.max(0, Math.round(performance.now() - params.startedAtMs)),
+            durationMs: Math.max(0, params.durationMs),
             queueAgeMs: queueAgeMs(queueItem, Date.now()),
         });
     } catch {
@@ -109,6 +109,11 @@ interface WorkloadCounts {
 export class SleepDispatchReconciliationTelemetry {
     private readonly startedAtMs = performance.now();
     private readonly workloads = new Map<string, WorkloadCounts>();
+    private scannedTaskClasses = { sleepSync: false, garminHealthBackfill: false };
+
+    setScannedTaskClasses(scanned: { sleepSync: boolean; garminHealthBackfill: boolean }): void {
+        this.scannedTaskClasses = { ...scanned };
+    }
 
     inspect(queueItem: unknown, nowMs: number): WorkloadCounts {
         const fields = safeWorkloadFields(queueItem);
@@ -136,7 +141,8 @@ export class SleepDispatchReconciliationTelemetry {
                 ...totals,
                 telemetryVersion: TELEMETRY_VERSION,
                 dispatchSource: 'scheduled',
-                durationMs: Math.max(0, Math.round(performance.now() - this.startedAtMs)),
+                durationMs: Math.max(0, performance.now() - this.startedAtMs),
+                scannedTaskClasses: this.scannedTaskClasses,
                 workloads: [...this.workloads.values()],
             });
         } catch {

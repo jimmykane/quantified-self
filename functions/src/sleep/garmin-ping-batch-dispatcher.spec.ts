@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type * as admin from 'firebase-admin';
+import { performance } from 'node:perf_hooks';
 import { QueueDispatchMarkerResult } from '../queue/dispatch-marker';
 import { SleepSyncQueueItemInterface } from '../queue/queue-item.interface';
 
@@ -137,6 +138,19 @@ describe('Garmin Ping batch Firestore dispatcher', () => {
         await run();
         expect(beforeData).not.toHaveBeenCalled();
         expect(hoisted.loggerInfo).not.toHaveBeenCalled();
+    });
+
+    it('excludes sampled snapshot decoding from duration and retains submillisecond handler time', async () => {
+        vi.mocked(Math.random).mockReturnValue(0);
+        vi.spyOn(performance, 'now').mockReturnValueOnce(100).mockReturnValue(100.375);
+        const { run, event } = writeEvent(queueItem(), undefined);
+        event.data.before.data = () => {
+            vi.mocked(performance.now).mockReturnValue(10_000);
+            return queueItem();
+        };
+        await run();
+        expect(hoisted.loggerInfo).toHaveBeenCalledWith('[GarminPingBatchDispatcher] Invocation summary',
+            expect.objectContaining({ outcome: 'deleted_write', durationMs: 0.375, sampleWeight: 20 }));
     });
 
     it('records a current newly durable revision and preserves revision-bound task identity', async () => {

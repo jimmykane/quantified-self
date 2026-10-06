@@ -238,6 +238,10 @@ export async function reconcileSleepSyncQueueDispatches(nowMs = Date.now()): Pro
             ? await scanSleepSyncQueueTaskClass('garmin_health_backfill')
             : []),
     ];
+    telemetry.setScannedTaskClasses({
+        sleepSync: availableSleepSlots > 0,
+        garminHealthBackfill: availableGarminHealthBackfillSlots > 0,
+    });
 
     if (!scannedDocs.length) {
         return telemetry.complete({

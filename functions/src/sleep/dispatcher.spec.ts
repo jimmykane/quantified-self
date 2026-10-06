@@ -316,7 +316,49 @@ describe('sleep/dispatcher', () => {
         });
         expect(mockLoggerInfo).toHaveBeenCalledOnce();
         expect(mockLoggerInfo).toHaveBeenCalledWith('[SleepSyncDispatcher] Reconciliation completed',
-            expect.objectContaining({ workloads: [] }));
+            expect.objectContaining({ workloads: [], scannedTaskClasses: { sleepSync: true, garminHealthBackfill: true } }));
+    });
+
+    it('distinguishes a scan skipped for capacity from an empty scan of the other task class', async () => {
+        mockGetCloudTaskQueueDepthForQueue.mockImplementation(async (queue: string) =>
+            queue === 'processSleepSyncTask' ? MAX_PENDING_TASKS : 0);
+        await expect(reconcileSleepSyncQueueDispatches()).resolves.toEqual({
+            inspected: 0, dispatched: 0, skippedRecent: 0,
+        });
+        expect(mockLoggerInfo).toHaveBeenCalledWith('[SleepSyncDispatcher] Reconciliation completed',
+            expect.objectContaining({
+                workloads: [], scannedTaskClasses: { sleepSync: false, garminHealthBackfill: true },
+            }));
+        expect(mockQueueGet).toHaveBeenCalledOnce();
+        expect(mockQueueWhere).toHaveBeenCalledWith('type', '==', 'garmin_health_backfill');
+    });
+
+    it('counts scanned candidates separately from candidates reached before capacity ends', async () => {
+        mockGetCloudTaskQueueDepthForQueue.mockImplementation(async (queue: string) =>
+            queue === 'processSleepSyncTask' ? MAX_PENDING_TASKS - 1 : MAX_PENDING_TASKS);
+        mockQueueGet.mockResolvedValue({
+            empty: false,
+            docs: [1, 2].map(index => ({
+                id: `batch-${index}`, ref: { update: vi.fn().mockResolvedValue(undefined) },
+                data: () => ({
+                    provider: 'GarminAPI', type: 'garmin_ping_batch', userID: 'uid',
+                    providerUserId: 'provider-user', dateCreated: Date.now(), dispatchedToCloudTask: null,
+                }),
+            })),
+        });
+        await expect(reconcileSleepSyncQueueDispatches()).resolves.toEqual({
+            inspected: 2, dispatched: 1, skippedRecent: 0,
+        });
+        expect(mockLoggerInfo).toHaveBeenCalledWith('[SleepSyncDispatcher] Reconciliation completed',
+            expect.objectContaining({
+                scannedTaskClasses: { sleepSync: true, garminHealthBackfill: false },
+                workloads: [expect.objectContaining({
+                    provider: 'GarminAPI', queueType: 'garmin_ping_batch',
+                    inspected: 2, considered: 1, enqueueConfirmed: 1, markedDispatched: 1,
+                })],
+            }));
+        expect(mockQueueGet).toHaveBeenCalledOnce();
+        expect(mockEnqueueSleepSyncTask).toHaveBeenCalledOnce();
     });
 
     it('does not retry a successful scheduled dispatch when aggregate logging fails', async () => {
@@ -350,6 +392,10 @@ describe('sleep/dispatcher', () => {
             skippedRecent: 0,
         });
         expect(mockQueueCollection).not.toHaveBeenCalled();
+        expect(mockLoggerInfo).toHaveBeenCalledWith('[SleepSyncDispatcher] Reconciliation completed',
+            expect.objectContaining({
+                workloads: [], scannedTaskClasses: { sleepSync: false, garminHealthBackfill: false },
+            }));
     });
 
     it('dispatches undispatched and stale queue items while skipping recently dispatched ones', async () => {

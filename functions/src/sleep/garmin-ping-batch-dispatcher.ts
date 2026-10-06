@@ -228,10 +228,12 @@ export const dispatchGarminPingBatchOnWrite = onDocumentWritten({
         outcome = result === 'ignored' ? 'stale' : result;
     } finally {
         try {
+            // Stop the handler timer before sampling and diagnostic snapshot decoding.
+            const durationMs = Math.max(0, performance.now() - startedAtMs);
             // Decode a deleted write's before snapshot only when it is sampled; no I/O.
             logGarminDispatchSummary({
                 queueItem: () => queueItem ?? (event.data?.before?.exists ? event.data.before.data() : undefined),
-                outcome, writeKind, startedAtMs, enqueueConfirmed: observation.enqueueConfirmed,
+                outcome, writeKind, durationMs, enqueueConfirmed: observation.enqueueConfirmed,
             });
         } catch {
             // Even malformed diagnostic snapshots must not change delivery behavior.
