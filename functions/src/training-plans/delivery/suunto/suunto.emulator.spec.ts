@@ -284,17 +284,69 @@ describe.skipIf(!process.env.FIRESTORE_EMULATOR_HOST)('Suunto worker with real F
     expect(projection).not.toHaveProperty('suuntoWeightUnits');
     expect(projection).not.toHaveProperty('attempt');
   });
-  it('recovers a pounds strength attempt with its original unit snapshot after owner settings change', async () => {
+  it.each([null, 'invalid-unit'])('defaults malformed strength weight preferences (%s) to kg without rewriting settings', async units => {
+    const details = { version: 1 as const, workoutId: 'w', revision: 1, exercises: [{ id: 'squat', name: 'Back squat', sets: [
+      { id: 'set', ending: { kind: 'repetitions' as const, repetitions: 5 }, externalLoadKg: 80 },
+    ] }] };
+    await user().update({ 'settings.unitSettings.weightUnits': units });
+    await user().collection('scheduledWorkouts').doc('w').update({ structure: projectStrengthWorkoutToV1(details) });
+    await user().collection('scheduledWorkouts').doc('w').collection('strengthDetails').doc('current').set(details);
+    const row = await send();
+    expect(row.status).toBe('delivered');
+    expect(JSON.stringify([...server.guides.values()][0].guide)).toContain('80.0 kg');
+    expect((await user().get()).get('settings.unitSettings.weightUnits')).toBe(units);
+    const attempts = await user().collection(DELIVERY_LEDGER).doc(row.id).collection('attempts').get();
+    expect(attempts.docs[0].get('operation.suuntoWeightUnits')).toBe(WeightUnits.Kilograms);
+  });
+  it('suppresses stale strength units when preferences change immediately before the provider write', async () => {
     const details = { version: 1 as const, workoutId: 'w', revision: 1, exercises: [{ id: 'squat', name: 'Back squat', sets: [
       { id: 'set', ending: { kind: 'repetitions' as const, repetitions: 5 }, externalLoadKg: 45.359237 },
     ] }] };
     await user().update({ 'settings.unitSettings.weightUnits': WeightUnits.Pounds });
     await user().collection('scheduledWorkouts').doc('w').update({ structure: projectStrengthWorkoutToV1(details) });
     await user().collection('scheduledWorkouts').doc('w').collection('strengthDetails').doc('current').set(details);
+    let changed = false;
+    const transport = new SuuntoGuideTransport(async (request, beforeSend) => {
+      if (request.method === 'POST' && !changed) {
+        changed = true;
+        await user().update({ 'settings.unitSettings.weightUnits': WeightUnits.Kilograms });
+      }
+      return server.request(request, beforeSend);
+    }, 'Quantified Self', () => now);
+    runtime.transport = provider => provider === 'suunto' ? transport : null;
+    await command('send'); await drain(); const queued = await ledger();
+    await processTrainingDelivery(runtime, uid, queued.id);
+    const stale = await ledger();
+    expect(stale.attempt).toMatchObject({ suuntoWeightUnits: WeightUnits.Pounds, progress: { step: 'create', state: 'ready' } });
+    expect(server.calls.filter(call => call.method === 'POST')).toHaveLength(0);
+    now = stale.retryAtMs + 1; await mark();
+    // Retire the definitely unaccepted old operation before creating a new one.
+    await processTrainingDelivery(runtime, uid, queued.id); await drain();
+    expect((await ledger()).attempt).toBeNull();
+    await processTrainingDelivery(runtime, uid, queued.id); await drain();
+    expect((await ledger()).status).toBe('delivered');
+    expect(JSON.stringify([...server.guides.values()][0].guide)).toContain('45.4 kg');
+    expect(server.guides.size).toBe(1);
+    expect(server.calls.filter(call => call.method === 'POST')).toHaveLength(1);
+    expect((await user().collection('scheduledWorkouts').doc('w').collection('strengthDetails').doc('current').get()).data()).toEqual(details);
+  });
+  it.each(['create', 'update'])('recovers a pounds strength %s with its original unit snapshot after owner settings change', async kind => {
+    const details = { version: 1 as const, workoutId: 'w', revision: 1, exercises: [{ id: 'squat', name: 'Back squat', sets: [
+      { id: 'set', ending: { kind: 'repetitions' as const, repetitions: 5 }, externalLoadKg: 45.359237 },
+    ] }] };
+    await user().update({ 'settings.unitSettings.weightUnits': kind === 'create' ? WeightUnits.Pounds : WeightUnits.Kilograms });
+    await user().collection('scheduledWorkouts').doc('w').update({ structure: projectStrengthWorkoutToV1(details) });
+    await user().collection('scheduledWorkouts').doc('w').collection('strengthDetails').doc('current').set(details);
     await command('send'); await drain();
     const queued = await ledger();
+    if (kind === 'update') {
+      await processTrainingDelivery(runtime, uid, queued.id); await drain();
+      await user().update({ 'settings.unitSettings.weightUnits': WeightUnits.Pounds }); await mark();
+    }
     server.afterHandle = async request => {
-      if (request.method === 'POST') { server.afterHandle = null; throw new SuuntoGuideHttpError('uncertain', false); }
+      if (request.method === (kind === 'create' ? 'POST' : 'PUT')) {
+        server.afterHandle = null; throw new SuuntoGuideHttpError('uncertain', false);
+      }
     };
     await processTrainingDelivery(runtime, uid, queued.id);
     const interrupted = await ledger();
@@ -310,7 +362,7 @@ describe.skipIf(!process.env.FIRESTORE_EMULATOR_HOST)('Suunto worker with real F
     expect(JSON.stringify([...server.guides.values()][0].guide)).toContain('45.4 kg');
     expect(server.guides.size).toBe(1);
     expect(server.calls.filter(call => call.method === 'POST')).toHaveLength(1);
-    expect(server.calls.filter(call => call.method === 'PUT')).toHaveLength(1);
+    expect(server.calls.filter(call => call.method === 'PUT')).toHaveLength(kind === 'create' ? 1 : 2);
   });
   it('requires review for strength losses and retains that exact approval across kg/lb updates', async () => {
     useProductionPolicy();

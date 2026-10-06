@@ -2193,7 +2193,9 @@ MCP impact: no wire change. Strength input/output and recipe previews retain can
 outside owner-readable delivery projections and MCP output. No tool, schema, scope, consent, mutation kind, provider
 action, metric, plugin/skill rebuild, catalog refresh, migration or historical reparse is added. Regression reads cover
 canonical strength under kg/lb preferences; synthetic transport and demo-Firestore cases cover kg/lb/default display,
-standalone/active-plan delivery, unit-only updates and recovery during a preference change. Release and watch QA
+standalone/active-plan delivery and unit-only updates. They also cover malformed preferences without rewriting
+settings, a preference change immediately before the provider write, and lost create/update acknowledgements
+followed by a preference change. These coverage additions change no runtime or MCP contract. Release and watch QA
 remain separate from local verification.
 
 ##### Optional early Lap on numeric endings (#784 Training 07)
