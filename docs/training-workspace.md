@@ -2294,11 +2294,16 @@ synthetic HTTP and isolated Firestore-emulator tests cover retained identity, lo
 rescheduling, Stop and the five-field limit.
 
 The athlete confirmed the separately authorized 6 October stroke-rate QA Guide's instructions, `Avg strk` display
-and lap-average behavior. That evidence does not verify the new SWOLF field or a native target. No SWOLF account
-send or deployment accompanies this code change. After a separately approved Functions release, verify actual
-pool-swim SWOLF readings/reset behavior on the watch; API acceptance alone is not that evidence. Keep #773 open
-for that proof and the missing native-target partner contract. MCP has no wire impact: private `swolf`/`guideFields`
-injections are rejected by scheduled/saved recipe reads and proposals, while canonical v1 recipes round-trip unchanged.
+and lap-average behavior. A subsequent separately approved, Guide-only SWOLF test uploaded one synthetic five-minute
+pool Guide directly from the local v7 implementation without deployment. Suunto accepted it and its downloaded
+`guide.json` matched the expected payload, apart from the documented notification default enrichment. The athlete
+then confirmed that it works in response to the requested watch-field and real pool-data check with a 25 m watch
+setting. This is user-confirmed measured-field watch evidence, not native targeting; no numeric series or separate
+SWOLF-reset measurements were captured. The QA created no QS calendar workout or completion link and changed no
+existing workouts. Normal QS deliveries still require merge and a separately approved Functions release. Keep #773
+open for the missing native-target partner contract and its implementation. MCP has no wire impact: private
+`swolf`/`guideFields` injections are rejected by scheduled/saved recipe reads and proposals, while canonical v1
+recipes round-trip unchanged. Do not treat API acceptance alone as watch evidence.
 
 ##### Current readings and boundary notifications (#784)
 

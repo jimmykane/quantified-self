@@ -440,8 +440,10 @@ stroke rate, SWOLF, then optional HR after countdowns/targets/notes; authored ta
 Open water and all non-pool layouts are unchanged. Native pool length and stroke determine the reading; QS does
 not transmit pool length or fabricate unavailable values. Existing lap boundaries and early-Lap behavior stay
 unchanged. The exact v6 recovery serializer and synthetic golden pool fixture preserve historical operation
-digests; lost v2-v6 ACKs recover before updating the same Guide. Deployment and new SWOLF watch proof remain
-separate approvals. See [measured SWOLF behavior](training-workspace.md#pool-swim-measured-swolf-773).
+digests; lost v2-v6 ACKs recover before updating the same Guide. The separately approved 6 October Guide-only v7
+upload passed exact readback, and the athlete confirmed the requested SWOLF watch check. That is measured-field
+evidence, not native targeting or QS completion-link proof. Normal delivery still needs merge and separately approved
+Functions deployment. See [measured SWOLF behavior](training-workspace.md#pool-swim-measured-swolf-773).
 
 For additional authored targets, [#773](https://github.com/jimmykane/quantified-self/issues/773) records the
 6 October contract review. The published JSON reference defines only the existing HR, power, speed/pace and cadence
