@@ -15,16 +15,32 @@ acknowledge failed work.
 
 ## Deployment scope
 
-The instrumentation is prepared locally. After explicit approval, deploy both owners from the verified commit:
+The instrumentation was deployed with explicit approval on October 6, 2026 from reviewed source commit
+`3edb6527e54adff44495dbbe42ecf30122727f11`, using a fixed clean snapshot. Both updates are ACTIVE:
+
+| Function | Generation | Update time (UTC) | Deployed version |
+| --- | --- | --- | --- |
+| `dispatchGarminPingBatchOnWrite` | Gen 2 | 2026-10-06 16:07:59 | `dispatchgarminpingbatchonwrite-00042-roc` |
+| `dispatchSleepSyncQueue` | Gen 1 | 2026-10-06 16:08:31 | 119 |
+
+The Garmin revision is ready and serves 100% of traffic. Before/after checks preserved runtime, triggers, resources,
+retry policy, secret bindings and the enabled 30-minute reconciliation schedule. Both uploaded source archives matched
+the reviewed compiled owners and contained no forbidden local configuration files. Initial Garmin summaries are visible;
+the first post-update scheduled reconciliation is due at 16:30 UTC and remains to be observed.
+
+The first complete collection day is October 7 UTC. Use 2–3 complete days for category attribution and at least a week
+of comparable complete days for cost conclusions, extending the window when starts are sparse or billing is incomplete.
+Deployment evidence is recorded in #759; removal remains tracked in #825. These local commits have not been pushed.
+
+For a later approved instrumentation rollout, deploy both owners from its verified commit:
 
 ```sh
 firebase deploy --project quantified-self-io \
   --only functions:dispatchGarminPingBatchOnWrite,functions:dispatchSleepSyncQueue
 ```
 
-The Garmin dispatcher stays Gen 2 and the scheduled dispatcher stays Gen 1. Record the deployment time and source
-commit in #759; begin daily comparisons with the next complete UTC day after both updates succeed. Deploying only
-the first function leaves the recovery breakdown unavailable.
+Record each rollout's deployment time and source commit in #759; begin daily comparisons with the next complete UTC
+day after both updates succeed. Deploying only the first function leaves the recovery breakdown unavailable.
 
 ## Garmin Firestore dispatcher
 
