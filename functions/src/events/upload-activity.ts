@@ -31,6 +31,7 @@ import {
   MAX_ACTIVITY_UPLOAD_BYTES_LABEL,
 } from '../shared/activity-processing-config';
 import { parseActivityFilePayload } from '../shared/activity-file-parser';
+import type { JsonParserFailures } from '../shared/activity-file-parser';
 import { getActivityParserDiagnostics } from '../shared/activity-parser-diagnostics';
 import { inspectFitPayload } from '../shared/fit-payload';
 import { isSupportedActivityFileBaseExtension } from '../../../shared/activity-file-formats';
@@ -440,8 +441,11 @@ export const uploadActivity = onRequest({
     }
 
     let event: EventInterface;
+    let jsonParserFailures: JsonParserFailures | undefined;
     try {
-      event = await parseActivityFilePayload(payloadForParsing, resolvedExtension);
+      event = await parseActivityFilePayload(payloadForParsing, resolvedExtension, undefined, failures => {
+        jsonParserFailures = failures;
+      });
     } catch (error) {
       if (error instanceof HttpStatusError) {
         throw error;
@@ -455,7 +459,7 @@ export const uploadActivity = onRequest({
         throw new HttpStatusError(400, ROUTE_OR_COURSE_ACTIVITY_UPLOAD_ERROR_MESSAGE, 'route_file_in_activity_upload');
       }
       logger.warn('[uploadActivity] Activity parsing failed', {
-        ...getActivityParserDiagnostics(error, payloadForParsing, resolvedExtension),
+        ...getActivityParserDiagnostics(error, payloadForParsing, resolvedExtension, jsonParserFailures),
         ...getRejectedUploadContext(userID, payloadForParsing, resolvedExtension),
       });
       throw new HttpStatusError(400, 'Could not parse uploaded payload.');

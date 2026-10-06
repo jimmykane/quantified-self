@@ -875,6 +875,39 @@ describe('uploadActivity', () => {
     ]);
   });
 
+  it('logs both failed JSON attempts in one warning while retaining the 400 response', async () => {
+    const primary = new TypeError("Cannot read properties of undefined (reading 'Device')");
+    primary.stack = 'TypeError\n at parse (/private/node_modules/@sports-alliance/sports-lib/lib/cjs/events/adapters/importers/suunto/importer.suunto.json.js:129:134)';
+    const fallback = new TypeError("Cannot read properties of undefined (reading 'filter')");
+    fallback.stack = 'TypeError\n at parse (/private/node_modules/@sports-alliance/sports-lib/lib/cjs/events/adapters/importers/suunto/importer.suunto.sml.js:81:36)';
+    hoisted.mockSuuntoJSONImporter.getFromJSONString.mockRejectedValueOnce(primary);
+    hoisted.mockSuuntoSMLImporter.getFromJSONString.mockRejectedValueOnce(fallback);
+    const rawBody = Buffer.from('{"name":"Private-place-name"}');
+    const response = makeResponse();
+    await invokeUploadActivity(makeRequest({
+      headers: {
+        Authorization: 'Bearer token', 'X-Firebase-AppCheck': 'app-check',
+        'X-File-Extension': 'json', 'X-Original-Filename': 'Private-place-name.json',
+      },
+      rawBody,
+    }), response);
+
+    expect(response.status).toHaveBeenCalledWith(400);
+    expect(response.json).toHaveBeenCalledWith({ error: 'Could not parse uploaded payload.' });
+    expect(logger.warn).toHaveBeenCalledExactlyOnceWith('[uploadActivity] Activity parsing failed', expect.objectContaining({
+      userID: 'user-1', format: 'json', payloadBytes: rawBody.length,
+      payloadSha256: createHash('sha256').update(rawBody).digest('hex'),
+      jsonParserAttempts: [
+        expect.objectContaining({ parser: 'suunto_json', stage: 'primary', reason: 'missing_device_log', errorMessageFingerprint: expect.any(String) }),
+        expect.objectContaining({ parser: 'suunto_sml_json', stage: 'fallback', reason: 'missing_top_level_samples', errorMessageFingerprint: expect.any(String) }),
+      ],
+    }));
+    expect(JSON.stringify(vi.mocked(logger.warn).mock.calls)).not.toContain('Private-place-name');
+    expect(logger.error).not.toHaveBeenCalled();
+    expect(hoisted.mockWriteAllEventData).not.toHaveBeenCalled();
+    expect(hoisted.mockStorageSave).not.toHaveBeenCalled();
+  });
+
   it('should reject route-only GPX files before writing event data', async () => {
     hoisted.mockGPXImporter.getFromString.mockRejectedValueOnce(
       new Error('No activities found in GPX; use importRoutesFromGPX for routes'),
@@ -1316,6 +1349,8 @@ describe('uploadActivity', () => {
 
     expect(hoisted.mockSuuntoJSONImporter.getFromJSONString).toHaveBeenCalledTimes(1);
     expect(hoisted.mockSuuntoSMLImporter.getFromJSONString).toHaveBeenCalledTimes(1);
+    expect(logger.warn).not.toHaveBeenCalled();
+    expect(logger.error).not.toHaveBeenCalled();
     expect(response.status).toHaveBeenCalledWith(200);
   });
 
