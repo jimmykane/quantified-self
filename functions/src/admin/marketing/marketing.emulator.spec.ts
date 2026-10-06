@@ -609,7 +609,9 @@ describe.skipIf(!enabled)('marketing campaign durability (emulators)', () => {
     let now = new Date('2026-10-05T08:00:00Z');
     const clock = () => now;
     await db.doc('marketingControl/global').set({ dailyCap: 2 });
+    // Earlier cases use the wall clock, which can match either simulated day.
     await db.doc('marketingDispatchDays/2026-10-05').set({ used: 0 });
+    await db.doc('marketingDispatchDays/2026-10-06').set({ used: 0 });
     const started = await setCampaignStatus(scheduled.campaign.id, 'start', { ...draft, schedule: { time: '09:00', timeZone: 'UTC' } }, clock);
     expect(started.nextScheduledSendAt).toBe('2026-10-05T09:00:00.000Z');
     await setCampaignStatus(immediate.campaign.id, 'start', undefined, clock);
