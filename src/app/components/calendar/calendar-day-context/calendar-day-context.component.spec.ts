@@ -360,6 +360,24 @@ describe('CalendarDayContextComponent', () => {
     expect(fixture.nativeElement.querySelectorAll('app-training-impact')).toHaveLength(2);
     expect(fixture.nativeElement.textContent).toContain('+1 CTL · +6 ATL · −5 Form');
 
+    fixture.componentRef.setInput('showActivityTotals', true);
+    fixture.componentRef.setInput('data', {
+      ...data('2026-09-13'), day: trainingDay,
+      activities: signal({ status: 'ready' as const, day: trainingDay, complete: false }),
+      trainingImpact: signal({ status: 'ready' as const, formPoints }),
+      plannedWorkoutsCompleteSource: () => false,
+    });
+    fixture.detectChanges();
+    expect(fixture.componentInstance.activityGroups()).toEqual([]);
+    expect(fixture.componentInstance.activityTotals().every(metric => metric.value === '--')).toBe(true);
+    expect(fixture.nativeElement.querySelectorAll('app-training-impact')).toHaveLength(1);
+    expect(fixture.nativeElement.textContent).toContain('Day totals are unknown');
+    expect(fixture.nativeElement.textContent).not.toContain('Nothing recorded yet');
+    fixture.componentRef.setInput('data', {
+      ...data('2026-09-13'), day: trainingDay,
+      trainingImpact: signal({ status: 'ready' as const, formPoints }),
+    });
+
     fixture.componentRef.setInput('calmMonth', false);
     fixture.componentRef.setInput('standaloneDayPage', true);
     fixture.componentInstance.healthState.set({

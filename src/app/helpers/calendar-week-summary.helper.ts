@@ -35,6 +35,35 @@ export interface CalendarWeekSummary {
   loading: boolean;
 }
 
+/** The week summary and calendar markers must use the same exact-link validity rules. */
+export function resolveCalendarCompletionCoverage(
+  workouts: readonly ScheduledWorkoutV1[],
+  completions: CalendarWeekSource<readonly TrainingWorkoutCompletionV1[]>,
+): { complete: boolean; linkedWorkoutIds: string[]; changedSinceCompletionCount: number } {
+  if (completions.status !== 'ready') return { complete: false, linkedWorkoutIds: [], changedSinceCompletionCount: 0 };
+  const links = new Map<string, TrainingWorkoutCompletionV1>();
+  const ambiguous = new Set<string>();
+  for (const link of completions.data) {
+    if (links.has(link.workoutId)) ambiguous.add(link.workoutId);
+    links.set(link.workoutId, link);
+  }
+  let complete = completions.complete;
+  const linkedWorkoutIds: string[] = [];
+  let changedSinceCompletionCount = 0;
+  for (const workout of workouts) {
+    const link = links.get(workout.id);
+    if (ambiguous.has(workout.id) || (link && (link.workoutRevisionAtLink > workout.revision
+      || (link.workoutRevisionAtLink === workout.revision && link.planId !== workout.planId)))) {
+      complete = false;
+      continue;
+    }
+    if (!link) continue;
+    linkedWorkoutIds.push(workout.id);
+    if (link.workoutRevisionAtLink !== workout.revision) changedSinceCompletionCount++;
+  }
+  return { complete, linkedWorkoutIds, changedSinceCompletionCount };
+}
+
 /** Calendar-local week volume. Completion is stored evidence, never inferred adherence. */
 export function buildCalendarWeekSummary(input: {
   window: ActivityCalendarQueryWindow;
@@ -81,28 +110,15 @@ export function buildCalendarWeekSummary(input: {
   }
   if (schedule.status === 'error') warnings.push('Scheduled workouts could not be loaded. Prescription totals are unavailable.');
   else if (schedule.status === 'ready' && !schedule.complete) warnings.push('Schedule coverage is incomplete. Counts and prescriptions show only observed workouts.');
-  const links = new Map<string, TrainingWorkoutCompletionV1>();
-  const ambiguous = new Set<string>();
-  for (const link of completions.data) {
-    if (links.has(link.workoutId)) ambiguous.add(link.workoutId);
-    links.set(link.workoutId, link);
-  }
-  let completedCount = 0;
+  const coverage = resolveCalendarCompletionCoverage([...workouts.values()], completions);
+  const linkedIds = new Set(coverage.linkedWorkoutIds);
+  const completedCount = linkedIds.size;
   let skippedCount = 0;
-  let changedSinceCompletionCount = 0;
-  let completionComplete = completions.status === 'ready' && completions.complete;
+  const { complete: completionComplete, changedSinceCompletionCount } = coverage;
   const remainingWorkouts: ScheduledWorkoutV1[] = [];
   for (const workout of workouts.values()) {
-    const link = links.get(workout.id);
-    if (ambiguous.has(workout.id) || (link && (link.workoutRevisionAtLink > workout.revision
-      || (link.workoutRevisionAtLink === workout.revision && link.planId !== workout.planId)))) {
-      completionComplete = false;
-      continue;
-    }
-    if (link) {
-      completedCount++;
-      if (link.workoutRevisionAtLink !== workout.revision) changedSinceCompletionCount++;
-    } else if (workout.lifecycle === 'skipped') skippedCount++;
+    if (linkedIds.has(workout.id)) continue;
+    if (workout.lifecycle === 'skipped') skippedCount++;
     else remainingWorkouts.push(workout);
   }
   if (!completionComplete && schedule.status === 'ready') warnings.push(completions.status === 'loading'
@@ -119,7 +135,8 @@ export function buildCalendarWeekSummary(input: {
   const planned = scheduleReady ? analyze(plannedWorkouts) : null;
   const remaining = scheduleReady && completionComplete ? analyze(remainingWorkouts) : null;
   const analysisText = (analysis: WorkoutAnalysisAggregateV1 | null) => analysis === null ? 'Unavailable'
-    : analysis.workoutCount === 0 ? 'No prescriptions' : formatWorkoutAnalysisSummaryV1(analysis.summary, unitSettings, undefined, locale);
+    : analysis.workoutCount === 0 ? analysis.sourceComplete ? 'No prescriptions' : 'No prescriptions in observed records; complete total unknown'
+      : formatWorkoutAnalysisSummaryV1(analysis.summary, unitSettings, undefined, locale);
   return {
     recordedCount: events.status === 'ready' ? recorded.size : null,
     recordedComplete: events.status === 'ready' && events.complete,

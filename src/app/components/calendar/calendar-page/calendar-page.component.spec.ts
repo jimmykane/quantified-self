@@ -155,6 +155,57 @@ describe('CalendarPageComponent', () => {
     expect(haptics.selection).toHaveBeenCalledTimes(1);
   });
 
+  it('withholds completed markers for conflicting links and labels failed completion reads unknown', async () => {
+    queryParams.next(convertToParamMap({ view: 'week', date: '2026-08-04' }));
+    const schedule = trainingSchedule();
+    const workout = schedule.workouts.find(workout => workout.id === 'active-workout')!;
+    watchSchedule.mockReturnValue(of(schedule));
+    const links = new Subject<{ workoutId: string; planId: string | null; workoutRevisionAtLink: number }[]>();
+    watchWorkoutCompletions.mockReturnValue(links);
+    const fixture = TestBed.createComponent(CalendarPageComponent);
+    fixture.detectChanges(); await fixture.whenStable(); fixture.detectChanges();
+    links.next([{ workoutId: workout.id, planId: workout.planId, workoutRevisionAtLink: workout.revision }]);
+    fixture.detectChanges(); await fixture.whenStable(); fixture.detectChanges();
+    expect(fixture.componentInstance.weekSummary().completedCount).toBe(1);
+    expect(fixture.nativeElement.querySelector('.planned-workout-marker--completed')).not.toBeNull();
+    links.next([{ workoutId: workout.id, planId: 'wrong-plan', workoutRevisionAtLink: workout.revision }]);
+    fixture.detectChanges(); await fixture.whenStable(); fixture.detectChanges();
+    expect(fixture.componentInstance.weekSummary().completedCount).toBeNull();
+    expect(fixture.nativeElement.querySelector('.planned-workout-marker--completed')).toBeNull();
+    expect(fixture.nativeElement.textContent).toContain('completion unknown');
+    links.error(new Error('failed'));
+    fixture.detectChanges(); await fixture.whenStable(); fixture.detectChanges();
+    expect(fixture.componentInstance.selectedDayPlanned().every(entry => entry.completionKnown === false)).toBe(true);
+    expect(fixture.nativeElement.textContent).toContain('completion unknown');
+  });
+
+  it.each([false, true])('keeps partial week activity and schedule coverage explicit with observed activities=%s', async observed => {
+    queryParams.next(convertToParamMap({ view: 'week', date: '2026-08-03' }));
+    const events = new Subject<{ events: EventInterface[]; complete: boolean }>();
+    vi.mocked(TestBed.inject(ActivityCalendarService).watchWeekEvents).mockReturnValue(events);
+    watchSchedule.mockReturnValue(of({ ...emptySchedule(), workoutsComplete: false }));
+    const fixture = TestBed.createComponent(CalendarPageComponent);
+    fixture.detectChanges(); await fixture.whenStable(); fixture.detectChanges();
+    events.next({ events: observed ? [createEvent()] : [], complete: false });
+    fixture.detectChanges(); await fixture.whenStable(); fixture.detectChanges();
+    const page = fixture.componentInstance;
+    expect(page.familyVolumeRows()).toEqual([]);
+    expect(page.selectedDayActivities().complete).toBe(false);
+    expect(fixture.nativeElement.textContent).toContain('Day totals are unknown');
+    expect(fixture.nativeElement.textContent).toContain('Only observed workouts are shown');
+    expect(fixture.nativeElement.textContent).not.toContain('No completed activities');
+    expect(fixture.nativeElement.textContent).not.toContain('No planned workouts for this day');
+    expect([...fixture.nativeElement.querySelectorAll('.calendar-day-context-totals strong')].map((element: HTMLElement) => element.textContent))
+      .toEqual(['--', '--', '--']);
+    const days = [...fixture.nativeElement.querySelectorAll('.activity-calendar-day-button')] as HTMLElement[];
+    expect(days.every(day => day.getAttribute('aria-label')?.includes('Activity coverage unknown'))).toBe(true);
+    expect(days.every(day => day.getAttribute('aria-label')?.includes('Planned workout coverage unknown'))).toBe(true);
+    expect(days.some(day => day.getAttribute('aria-label')?.includes('No activities'))).toBe(false);
+    events.next({ events: [], complete: true });
+    fixture.detectChanges(); await fixture.whenStable(); fixture.detectChanges();
+    expect(fixture.nativeElement.textContent).toContain('No completed activities');
+  });
+
   it('cancels a late week read on navigation and clears the new summary while it loads', async () => {
     queryParams.next(convertToParamMap({ view: 'week', date: '2026-08-03' }));
     const first = new Subject<{ events: EventInterface[]; complete: boolean }>();

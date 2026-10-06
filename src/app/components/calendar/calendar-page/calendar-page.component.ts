@@ -53,7 +53,7 @@ import {
   type PlannedWorkoutCalendarOverlay,
 } from '../../../helpers/planned-workout-calendar.helper';
 import { CalendarWeekSummaryComponent } from '../calendar-week-summary/calendar-week-summary.component';
-import { buildCalendarWeekSummary, type CalendarWeekSource } from '../../../helpers/calendar-week-summary.helper';
+import { buildCalendarWeekSummary, resolveCalendarCompletionCoverage, type CalendarWeekSource } from '../../../helpers/calendar-week-summary.helper';
 import type { TrainingWorkoutCompletionV1 } from '@shared/training-workout-completion';
 import { AppHapticsService } from '../../../services/app.haptics.service';
 import { TrainingImpactService, type TrainingImpactSnapshotState } from '../../../services/training-impact.service';
@@ -237,14 +237,19 @@ export class CalendarPageComponent {
   });
   readonly canRetryWeek = computed(() => this.eventState().status === 'error' || this.plansState().status === 'error'
     || this.completionState().status === 'error');
+  readonly activitiesComplete = computed(() => this.eventState().status === 'ready' && this.eventState().complete !== false);
+  readonly plannedWorkoutsComplete = computed(() => this.plansState().status === 'ready' && this.plansState().schedule?.workoutsComplete !== false);
   readonly plannedWorkoutsByDate = computed<PlannedWorkoutCalendarOverlay>(() => {
     const schedule = this.plansState().schedule;
     if (!this.hasTrainingPlanningUIAccess() || !schedule) return {};
+    const workouts = selectCalendarVisibleScheduledWorkouts(schedule);
+    const coverage = resolveCalendarCompletionCoverage(workouts, this.currentCompletions());
     return buildPlannedWorkoutCalendarOverlay(
-      selectCalendarVisibleScheduledWorkouts(schedule),
+      workouts,
       schedule.plans,
       schedule.state.activePlanId,
-      this.workoutCompletions().map(completion => completion.workoutId),
+      coverage.linkedWorkoutIds,
+      coverage.complete,
     );
   });
   readonly calendarModel = computed(() => {
@@ -256,6 +261,7 @@ export class CalendarPageComponent {
       summariesSettings: this.currentUser()?.settings?.summariesSettings,
       locale: this.locale,
       now: this.today(),
+      activitiesComplete: this.activitiesComplete(),
     });
   });
   readonly primaryActivityRange = computed(() => this.isDayRoute
@@ -279,7 +285,7 @@ export class CalendarPageComponent {
     this.currentUser()?.settings?.unitSettings, this.locale,
   ));
   readonly familyVolumeRows = computed(() => {
-    if (this.eventState().status !== 'ready') {
+    if (!this.activitiesComplete()) {
       return [];
     }
 
@@ -326,10 +332,11 @@ export class CalendarPageComponent {
     const dateKey = formatActivityCalendarDateParam(this.routeState().selectedDate);
     return this.calendarModel().months.flatMap(month => month.days)
       .find(day => day.dateKey === dateKey)
-      ?? buildActivityCalendarSelectedDay(this.eventState().events, this.routeState().selectedDate, this.locale, this.today());
+      ?? buildActivityCalendarSelectedDay(this.eventState().events, this.routeState().selectedDate, this.locale, this.today(), this.activitiesComplete());
   });
   readonly selectedDayActivities = computed(() => ({
     day: this.selectedDay()!, status: this.eventState().status,
+    complete: this.activitiesComplete(),
   }));
   readonly selectedDayNotes = computed(() => this.notesByDate().get(this.selectedDay()?.dateKey || '')?.notes ?? []);
   readonly selectedDayPlanned = computed(() => this.plannedWorkoutsByDate()[this.selectedDay()?.dateKey || '']?.entries ?? []);
@@ -352,6 +359,7 @@ export class CalendarPageComponent {
       activities: this.selectedDayActivities,
       plannedWorkoutsSource: this.selectedDayPlanned,
       plannedWorkoutsStatusSource: () => this.plansState().status,
+      plannedWorkoutsCompleteSource: this.plannedWorkoutsComplete,
       scheduleSource: () => this.currentUser()?.uid === user.uid ? this.plansState().schedule : null,
       trainingImpact: this.trainingImpactState,
     };

@@ -99,7 +99,7 @@
     </button>
   </section>
   }
-    @if (eventState().status === 'ready' && !hasEvents()) {
+    @if (activitiesComplete() && !hasEvents()) {
     <span class="calendar-status-announcement" role="status">{{ emptyStateLabel() }}</span>
     }
     @if (hasTrainingPlanningUIAccess() && plansState().status === 'error') {
@@ -120,6 +120,7 @@
       [selectedDateKey]="selectedDay()?.dateKey ?? null"
       [timelineNotesByDate]="notesByDate()"
       [plannedWorkoutsByDate]="hasTrainingPlanningUIAccess() ? plannedWorkoutsByDate() : null"
+      [plannedWorkoutsComplete]="plannedWorkoutsComplete()"
       (daySelected)="openDay($event)">
     </app-activity-calendar-grid>
     @if (selectedDayData(); as dayData) {

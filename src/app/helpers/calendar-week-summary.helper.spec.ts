@@ -1,7 +1,7 @@
 import { ActivityTypes, DataDistance, DataDuration, DistanceUnits, type EventInterface } from '@sports-alliance/sports-lib';
 import type { ScheduledWorkoutV1 } from '@shared/training-plans';
 import type { TrainingWorkoutCompletionV1 } from '@shared/training-workout-completion';
-import { buildCalendarWeekSummary } from './calendar-week-summary.helper';
+import { buildCalendarWeekSummary, resolveCalendarCompletionCoverage } from './calendar-week-summary.helper';
 import { DASHBOARD_FORM_LEGACY_TRAINING_STRESS_SCORE_TYPE, DASHBOARD_FORM_TRAINING_STRESS_SCORE_TYPE } from './dashboard-form.helper';
 
 const start = new Date(2026, 9, 5);
@@ -81,6 +81,21 @@ describe('Calendar weekly summaries', () => {
     expect(summary.planned?.summary.duration.completeExactSeconds).toBeNull();
     expect(summary.plannedText).toContain('partial source');
     expect(summary.warnings.join(' ')).toContain('incomplete');
+  });
+  it('does not claim there are no prescriptions when an incomplete scan found no eligible workouts', () => {
+    const value = input(); value.schedule.complete = false;
+    value.schedule.data.workouts = [workout('inactive', { planId: 'paused' })];
+    const summary = buildCalendarWeekSummary(value);
+    expect(summary.plannedText).toContain('complete total unknown');
+    expect(summary.remainingText).toContain('complete total unknown');
+  });
+  it('uses one validity boundary for completion counts and calendar markers', () => {
+    const workouts = [workout('valid'), workout('future'), workout('conflicting'), workout('ambiguous')];
+    const data = [link('valid'), link('future', { workoutRevisionAtLink: 3 }),
+      link('conflicting', { workoutRevisionAtLink: 2, planId: 'other' }), link('ambiguous'), link('ambiguous')];
+    expect(resolveCalendarCompletionCoverage(workouts, { status: 'ready', complete: true, data }))
+      .toEqual({ complete: false, linkedWorkoutIds: ['valid'], changedSinceCompletionCount: 1 });
+    expect(resolveCalendarCompletionCoverage(workouts, { status: 'error', complete: false, data }).linkedWorkoutIds).toEqual([]);
   });
   it('distinguishes ready empty from failed reads and never treats missing metrics as zero', () => {
     const empty = buildCalendarWeekSummary(input());

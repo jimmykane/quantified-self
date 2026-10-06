@@ -871,6 +871,8 @@ at-link scheduled date is never used to select current-week completion evidence.
 week even if linked to a prescription scheduled elsewhere. Changed linked revisions are disclosed, because a link does
 not prove the current edited prescription was performed. Future-revision, conflicting-plan-at-the-same-revision and
 ambiguous links make completion coverage unknown rather than making a workout appear unlinked.
+The summary and day markers share this validity boundary. Invalid links never create a completed marker; unavailable
+completion coverage labels unlinked observations as **completion unknown** and suppresses unlinked-workout highlights.
 
 Owner-scoped reads are bounded: recorded events have a 1,000-parent cap plus one lookahead; scheduled records have a
 400-record cap plus one lookahead, with only the exact active-plan document read for presentation. Deleted and inactive
@@ -880,6 +882,10 @@ The restore-availability fence remains authoritative. These readers wait for ser
 writes cannot establish an empty/complete week. Loading, errors and incomplete reads stay distinct. Account/range/retry
 changes clear source state, and completion results bind to the current owner and selection before use. Independent live
 listeners are not a transactional schedule/completion snapshot. The retry action resubscribes all weekly sources.
+Incomplete scans with no eligible prescriptions do not establish **No prescriptions**. Activity coverage also follows
+the bounded read into the grid and selected-day panel: observed activities remain navigable, but day totals, aggregate
+day training impact and period sport-volume totals are withheld. Accessible day labels and empty states do not claim
+there are no activities or planned workouts without complete coverage. Opening **Full day** loads that date independently.
 
 MCP impact review: **no wire impact**. The existing chronological date query provides calendar-visible lifecycle and
 bounded scan coverage; exact bulk completion reads preserve out-of-week links and changed revisions; the additive
