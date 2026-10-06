@@ -835,6 +835,20 @@ No live provider acceptance, app/watch receipt or completed-activity link is cla
 emulator tests. The additive MCP strength read and preview use existing independent Training permissions; the registered
 v1 recipe tool remains only a compatibility summary. See `docs/mcp-server.md` for the exact wire boundary.
 
+The 6 October 2026 #741 evidence reconciliation reuses the completed #784 Suunto strength QA rather than repeating
+provider calls. Its [initial create/readback](https://github.com/jimmykane/quantified-self/issues/784#issuecomment-5992787121)
+verified a Gym (`23`) Guide with two five-repetition Squat sets, a timed Plank and rests. Its
+[5 October lifecycle checks](https://github.com/jimmykane/quantified-self/issues/784#issuecomment-5994088069) edited the
+complete strength companion, rescheduled and restored the workout, and applied explicit Retry. Independent Guide-file
+GETs and complete bounded inventories confirmed the expected content/date, the same Guide ID and exactly one copy.
+The owner's positive strength report in #741 and [final functional sign-off in #784](https://github.com/jimmykane/quantified-self/issues/784#issuecomment-5994494394)
+are retained as app/watch evidence, not universal device certification. This live fixture had no external load;
+load handling remains covered by the existing companion/serializer/emulator tests, not a new live load-edit claim.
+The current authorized full-strength read and stored Suunto delivery evidence remain consistent, but the strength QA
+completion read is unlinked: #784's recorded running completion must not be attributed to strength. #741 therefore
+retains COROS entitlement, account-side strength lifecycle and app/watch proof only. This reconciliation changes no
+MCP tools, schemas, permissions, consent, provider actions, recipe or completion semantics and enables no provider.
+
 Production delivery wrappers bind the complete provider policy methods instead of forwarding a fixed argument list.
 This preserves the strength companion in compatibility assessment and the existing explicit past-removal opt-in.
 A valid Suunto strength companion is degraded, not unsupported; missing, foreign or mismatched details still fail
@@ -2553,7 +2567,7 @@ workout consent. Use the normal owner-selected Stop/disconnect/deletion workflow
 they are not deployment rollback mechanisms. Completed Garmin adapter, pool, strength, exact-completion and schedule-repair
 evidence is retained in #647, #733, #782, #651 and #703. Production monitoring, opened/closed alert-email delivery and
 the lifecycle/retention regression-evidence audit are complete in #655. Current browser sync-settings release/Check
-verification remains #812; COROS and additional Suunto strength proof remain #648/#741, and neutral Sports Lib
+verification is recorded in completed #812; COROS entitlement and strength live proof remain #648/#741, and neutral Sports Lib
 extraction remains #654.
 
 The release audit reuses recorded account/device observations rather than inducing production failures. Shared and

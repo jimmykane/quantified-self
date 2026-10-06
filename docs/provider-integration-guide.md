@@ -301,9 +301,15 @@ Synthetic fixtures alone do not establish that live evidence. Wahoo #783 accepts
 indoor Workout type `42`, using the validated complete companion. Repetition sets remain unsupported. Exercise/load
 instructions are degraded, not native tracking; loads use the Sports Lib kilogram display, and actual rounding requires
 mapping approval. The QS editor/MCP details keep the exact canonical load and owner kg/lb display preference.
-Suunto strength has recorded positive owner app/watch behavior in #741, in addition to synthetic tests and tester
-cloud acceptance. Do not claim the entire strength CRUD/device matrix from that observation; remaining Suunto strength
-lifecycle and COROS live proof stay in #741. Strength authoring is complete in #740.
+Suunto strength's create/readback, complete-companion update, reschedule/restore, explicit Retry and no-duplicate
+evidence is recorded in completed #784 and reconciled into #741 on 6 October. Independent exact Guide-file reads and
+bounded inventories retained the same Gym Guide identity and one copy; see its
+[live lifecycle proof](https://github.com/jimmykane/quantified-self/issues/784#issuecomment-5994088069).
+The owner's positive strength report and #784 functional watch sign-off are reused without implying every device,
+exercise or load was tested. The live fixture had no external load, and its current strength completion remains unlinked;
+#784's running completion is not strength completion evidence. COROS entitlement and strength account/app/watch proof
+remain outstanding in #741. Strength authoring is complete in #740. This evidence-only reconciliation changes no
+provider availability, API, consent or MCP contract.
 
 Runtime wrappers must preserve the entire pure policy interface, including the optional strength companion in
 `assess` and the explicit past-removal opt-in in `canRemove`; bind the policy method rather than copying a fixed
