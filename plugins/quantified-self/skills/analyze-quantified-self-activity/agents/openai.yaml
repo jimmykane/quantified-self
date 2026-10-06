@@ -1,12 +1,12 @@
 interface:
   display_name: "Analyze Activity Performance"
-  short_description: "Inspect workout metrics, samples, and descriptions"
-  default_prompt: "Use $analyze-quantified-self-activity to summarize my latest run using its metrics and description when authorized."
+  short_description: "Inspect metrics and optional workout reflections"
+  default_prompt: "Use $analyze-quantified-self-activity to summarize my latest run using its metrics and optional reflection when authorized."
 dependencies:
   tools:
     - type: "mcp"
       value: "quantified-self"
-      description: "Permission-scoped Quantified Self activity details, metrics, identity-safe Training impact, charts, samples, descriptions, and optional parent-event tag/title/description changes"
+      description: "Permission-scoped Quantified Self activity details, metrics, identity-safe Training impact, charts, samples, descriptions, optional parent-event changes, and independently consented private reflections"
       transport: "streamable_http"
       url: "https://quantified-self.io/mcp"
 policy:

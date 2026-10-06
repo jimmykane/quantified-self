@@ -1,3 +1,5 @@
+import { DataRPE } from '@sports-alliance/sports-lib';
+import { resolveUnitAwareDisplayFromValue } from '../../../shared/unit-aware-display';
 import type {
   AssistantEvidence,
   AssistantEvidenceFact,
@@ -402,6 +404,17 @@ export function buildAssistantEvidence(
   tool: Pick<AssistantMcpToolDefinition, 'name' | 'title'>,
   structuredContent: Record<string, unknown>,
 ): AssistantEvidence {
+  if (tool.name === 'get_workout_reflection') {
+    const effort = structuredContent.effort;
+    const reported = typeof effort === 'number' && Number.isInteger(effort) && effort >= 0 && effort <= 10
+      ? resolveUnitAwareDisplayFromValue(DataRPE.type, effort)?.text ?? 'Unavailable' : 'Not reported';
+    const textLength = typeof structuredContent.note === 'string' ? structuredContent.note.length : 0;
+    return { toolName: tool.name, title: tool.title,
+      summary: 'Athlete-reported context; no Training calculations or plans changed.',
+      facts: [{ label: 'Target', value: structuredContent.target === 'recording' ? 'Whole recording' : 'Selected activity' },
+        { label: 'Reported effort · Borg CR10', value: reported },
+        { label: 'Reflection text', value: textLength ? `${textLength} characters of private context` : 'None' }], links: [] };
+  }
   if (tool.name === 'get_manual_measurement' || tool.name === 'query_manual_measurements') {
     const raw = tool.name === 'get_manual_measurement' ? [structuredContent.measurement] : structuredContent.measurements;
     const rows = Array.isArray(raw) ? raw.flatMap(item => {

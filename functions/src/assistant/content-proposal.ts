@@ -1,3 +1,4 @@
+import { MCP_WORKOUT_REFLECTION_INPUTS } from '../mcp/workout-reflections.schemas';
 import { randomUUID } from 'node:crypto';
 import { z } from 'zod';
 import type {
@@ -12,6 +13,7 @@ export const ASSISTANT_CONTENT_PROPOSAL_TTL_MS = 10 * 60 * 1_000;
 
 export const ASSISTANT_CONTENT_PROPOSAL_TOOLS = [
   'prepare_manual_measurement_create', 'prepare_manual_measurement_update', 'prepare_manual_measurement_delete',
+  'prepare_workout_reflection_save', 'prepare_workout_reflection_delete',
   'prepare_activity_tag_change',
   'prepare_timeline_note_create',
   'prepare_timeline_note_update',
@@ -21,6 +23,8 @@ export const ASSISTANT_CONTENT_PROPOSAL_TOOLS = [
 export type AssistantContentProposalTool = typeof ASSISTANT_CONTENT_PROPOSAL_TOOLS[number];
 
 const TOOL_TO_KIND = {
+  prepare_workout_reflection_save: 'save_workout_reflection',
+  prepare_workout_reflection_delete: 'delete_workout_reflection',
   prepare_manual_measurement_create: 'create_manual_measurement',
   prepare_manual_measurement_update: 'update_manual_measurement',
   prepare_manual_measurement_delete: 'delete_manual_measurement',
@@ -31,6 +35,8 @@ const TOOL_TO_KIND = {
 } as const satisfies Record<AssistantContentProposalTool, AssistantContentProposalKind>;
 
 export const ASSISTANT_CONTENT_PROPOSAL_INPUTS = {
+  prepare_workout_reflection_save: MCP_WORKOUT_REFLECTION_INPUTS.save_workout_reflection,
+  prepare_workout_reflection_delete: MCP_WORKOUT_REFLECTION_INPUTS.delete_workout_reflection,
   prepare_manual_measurement_create: MCP_MANUAL_MEASUREMENT_INPUTS.create_manual_measurement,
   prepare_manual_measurement_update: MCP_MANUAL_MEASUREMENT_INPUTS.update_manual_measurement,
   prepare_manual_measurement_delete: MCP_MANUAL_MEASUREMENT_INPUTS.delete_manual_measurement,
@@ -52,6 +58,8 @@ const defaultDependencies: AssistantContentProposalDependencies = {
 
 function summaryFor(kind: AssistantContentProposalKind, args: Record<string, unknown>): string {
   switch (kind) {
+    case 'save_workout_reflection': return 'Save the athlete-reported reflection for the selected recording.';
+    case 'delete_workout_reflection': return 'Permanently delete the selected reflection text and effort.';
     case 'create_manual_measurement': return 'Create the reviewed manual Health measurement.';
     case 'update_manual_measurement': return 'Update the selected manual Health measurement.';
     case 'delete_manual_measurement': return 'Permanently delete the selected manual Health measurement.';

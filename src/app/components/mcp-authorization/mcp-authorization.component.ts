@@ -96,7 +96,16 @@ export class McpAuthorizationComponent implements OnInit {
           ? scopes
           : [...new Set([...scopes, scope])];
       }
-      return scopes.filter(current => current !== scope && MCP_SCOPE_PARENTS[current] !== scope);
+      const removed = new Set<McpScope>([scope]);
+      // Dependencies can form a chain (reflection write → reflection read → activity read).
+      for (let changed = true; changed;) {
+        changed = false;
+        for (const current of scopes) {
+          const parent = MCP_SCOPE_PARENTS[current];
+          if (parent && removed.has(parent) && !removed.has(current)) { removed.add(current); changed = true; }
+        }
+      }
+      return scopes.filter(current => !removed.has(current));
     });
     const current = this.selectedScopes();
     if (current.length !== previous.length || current.some(value => !previous.includes(value))) {

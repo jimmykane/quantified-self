@@ -1,0 +1,7 @@
+:host .mat-mdc-dialog-content { display: flex; flex-direction: column; gap: 1rem; }
+mat-form-field { width: 100%; }
+p, ul { margin: 0; }
+li + li { margin-top: .5rem; }
+.action-content { display: flex; align-items: center; justify-content: center; gap: .5rem; }
+.action-content mat-icon, .action-content mat-spinner { width: 24px; height: 24px; }
+mat-dialog-actions { flex-wrap: wrap; gap: .5rem; }

@@ -26,6 +26,7 @@ import {
 import { vi, describe, it, expect, beforeEach } from 'vitest';
 import { AppBenchmarkFlowService } from '../../services/app.benchmark-flow.service';
 import { EventTagService } from '../../services/event-tag.service';
+import { WorkoutReflectionDialogComponent } from '../workout-reflection/workout-reflection-dialog.component';
 import { EventTagsDialogComponent } from '../event-tags/event-tags-dialog.component';
 import { AppHapticsService } from '../../services/app.haptics.service';
 import { from, of, Subject } from 'rxjs';
@@ -380,6 +381,19 @@ describe('EventSummaryComponent', () => {
             expect(mockDialog.open).not.toHaveBeenCalled();
             expect(mockHaptics.selection).not.toHaveBeenCalled();
         });
+    });
+
+    it('offers reflection editing only for a saved owner recording and gives one accepted-action haptic', () => {
+        component.isOwner = false; component.openReflection();
+        expect(mockDialog.open).not.toHaveBeenCalled(); expect(mockHaptics.selection).not.toHaveBeenCalled();
+        component.isOwner = true;
+        component.event = { ...mockEvent, mergeType: 'benchmark' } as any;
+        component.openReflection(); expect(mockDialog.open).not.toHaveBeenCalled();
+        component.event = mockEvent; component.openReflection();
+        expect(mockDialog.open).toHaveBeenCalledWith(WorkoutReflectionDialogComponent, expect.objectContaining({
+            data: { event: mockEvent, user: mockUser },
+        }));
+        expect(mockHaptics.selection).toHaveBeenCalledOnce();
     });
 
     describe('Getters', () => {

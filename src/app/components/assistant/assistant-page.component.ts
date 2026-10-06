@@ -1,3 +1,4 @@
+import { assistantReflectionReviewDetails } from '../../helpers/assistant-reflection-review.helper';
 import { CommonModule } from '@angular/common';
 import {
   ChangeDetectionStrategy,
@@ -85,6 +86,8 @@ interface AssistantContentProposalReview {
 }
 
 function contentProposalTitle(kind: AssistantContentProposalKind): string {
+  if (kind === 'save_workout_reflection') return 'Review workout reflection';
+  if (kind === 'delete_workout_reflection') return 'Review permanent reflection deletion';
   if (kind === 'create_manual_measurement') return 'Review new manual measurement';
   if (kind === 'update_manual_measurement') return 'Review manual measurement changes';
   if (kind === 'delete_manual_measurement') return 'Review permanent measurement deletion';
@@ -191,6 +194,7 @@ export class AssistantPageComponent implements OnInit, OnDestroy {
   readonly activityTagChangesEnabled = signal(false);
   readonly timelineNoteChangesEnabled = signal(false);
   readonly measurementChangesEnabled = signal(true);
+  readonly reflectionChangesEnabled = signal(false);
   readonly trainingPlansEnabled = signal(false);
   readonly trainingPlanChangesEnabled = signal(false);
   readonly trainingDeliveryEnabled = signal(false);
@@ -216,7 +220,9 @@ export class AssistantPageComponent implements OnInit, OnDestroy {
       proposal,
       title: contentProposalTitle(proposal.kind),
       details: proposal.kind.endsWith('_manual_measurement')
-        ? assistantMeasurementReviewDetails(proposal, this.userSettings.unitSettings()) : contentProposalDetails(proposal),
+        ? assistantMeasurementReviewDetails(proposal, this.userSettings.unitSettings())
+        : proposal.kind.endsWith('_workout_reflection') ? assistantReflectionReviewDetails(proposal, this.userSettings.unitSettings())
+        : contentProposalDetails(proposal),
     };
   });
   readonly preciseActivityLocationsEnabled = computed(
@@ -233,6 +239,7 @@ export class AssistantPageComponent implements OnInit, OnDestroy {
   readonly contentAccessStatus = computed(() => {
     const labels = [
       ...(this.measurementChangesEnabled() ? ['Manual measurements'] : []),
+      ...(this.reflectionChangesEnabled() ? ['Private workout reflections'] : []),
       ...(this.activityTagChangesEnabled() ? ['Tag changes'] : []),
       ...(this.timelineNotesEnabled()
         ? [this.timelineNoteChangesEnabled() ? 'Notes read/change' : 'Notes read']
@@ -322,6 +329,7 @@ export class AssistantPageComponent implements OnInit, OnDestroy {
       this.timelineNoteChangesEnabled.set(state.timelineNoteChangesEnabled === true);
       this.measurementChangesEnabled.set(state.conversation ? state.measurementChangesEnabled === true
         : rememberedRequest ? 'measurementChangesEnabled' in rememberedRequest && rememberedRequest.measurementChangesEnabled === true : true);
+      this.reflectionChangesEnabled.set(state.conversation ? state.reflectionChangesEnabled === true : rememberedRequest ? 'reflectionChangesEnabled' in rememberedRequest && rememberedRequest.reflectionChangesEnabled === true : false);
       this.trainingPlansEnabled.set(state.trainingPlansEnabled === true);
       this.trainingPlanChangesEnabled.set(state.trainingPlanChangesEnabled === true);
       this.trainingDeliveryEnabled.set(state.trainingDeliveryEnabled === true);
@@ -411,6 +419,7 @@ export class AssistantPageComponent implements OnInit, OnDestroy {
         activityTagChangesEnabled: this.activityTagChangesEnabled(),
         timelineNoteChangesEnabled: this.timelineNoteChangesEnabled(),
         measurementChangesEnabled: this.measurementChangesEnabled(),
+        reflectionChangesEnabled: this.reflectionChangesEnabled(),
         trainingPlansEnabled: this.trainingPlansEnabled(), trainingPlanChangesEnabled: this.trainingPlanChangesEnabled(),
         trainingDeliveryEnabled: this.trainingDeliveryEnabled() },
     })
@@ -450,6 +459,10 @@ export class AssistantPageComponent implements OnInit, OnDestroy {
           void this.replaceConversation(this.locationAccess(), true, result.enabled || this.timelineNotesEnabled(),
             this.trainingPlansEnabled(), this.trainingPlanChangesEnabled(), this.trainingDeliveryEnabled(),
             this.activityTagChangesEnabled(), result.enabled);
+        } else if (result?.kind === 'reflection_changes' && result.enabled !== this.reflectionChangesEnabled()) {
+          void this.replaceConversation(this.locationAccess(), true, this.timelineNotesEnabled(),
+            this.trainingPlansEnabled(), this.trainingPlanChangesEnabled(), this.trainingDeliveryEnabled(),
+            this.activityTagChangesEnabled(), this.timelineNoteChangesEnabled(), this.measurementChangesEnabled(), result.enabled);
         } else if (result?.kind === 'measurement_changes') {
           void this.replaceConversation(this.locationAccess(), true, this.timelineNotesEnabled(),
             this.trainingPlansEnabled(), this.trainingPlanChangesEnabled(), this.trainingDeliveryEnabled(),
@@ -527,6 +540,7 @@ export class AssistantPageComponent implements OnInit, OnDestroy {
       && (retryRequest.activityTagChangesEnabled === true) === this.activityTagChangesEnabled()
       && (retryRequest.timelineNoteChangesEnabled === true) === this.timelineNoteChangesEnabled()
       && (retryRequest.measurementChangesEnabled === true) === this.measurementChangesEnabled()
+      && (retryRequest.reflectionChangesEnabled === true) === this.reflectionChangesEnabled()
       && (retryRequest.trainingPlansEnabled === true) === this.trainingPlansEnabled()
       && (retryRequest.trainingPlanChangesEnabled === true) === this.trainingPlanChangesEnabled()
       && (retryRequest.trainingDeliveryEnabled === true) === this.trainingDeliveryEnabled()
@@ -548,6 +562,7 @@ export class AssistantPageComponent implements OnInit, OnDestroy {
         ...(this.activityTagChangesEnabled() ? { activityTagChangesEnabled: true } : {}),
         ...(this.timelineNoteChangesEnabled() ? { timelineNoteChangesEnabled: true } : {}),
         ...(this.measurementChangesEnabled() ? { measurementChangesEnabled: true } : {}),
+        ...(this.reflectionChangesEnabled() ? { reflectionChangesEnabled: true } : {}),
         ...(this.trainingPlansEnabled() ? { trainingPlansEnabled: true } : {}),
         ...(this.trainingPlanChangesEnabled() ? { trainingPlanChangesEnabled: true } : {}),
         ...(this.trainingDeliveryEnabled() ? { trainingDeliveryEnabled: true } : {}),
@@ -579,6 +594,7 @@ export class AssistantPageComponent implements OnInit, OnDestroy {
         ...(request.activityTagChangesEnabled ? { activityTagChangesEnabled: true } : {}),
         ...(request.timelineNoteChangesEnabled ? { timelineNoteChangesEnabled: true } : {}),
         ...(request.measurementChangesEnabled ? { measurementChangesEnabled: true } : {}),
+        ...(request.reflectionChangesEnabled ? { reflectionChangesEnabled: true } : {}),
         ...(request.trainingPlansEnabled ? { trainingPlansEnabled: true } : {}),
         ...(request.trainingPlanChangesEnabled ? { trainingPlanChangesEnabled: true } : {}),
         ...(request.trainingDeliveryEnabled ? { trainingDeliveryEnabled: true } : {}),
@@ -614,6 +630,7 @@ export class AssistantPageComponent implements OnInit, OnDestroy {
         this.activityTagChangesEnabled.set(refreshedState.activityTagChangesEnabled === true);
         this.timelineNoteChangesEnabled.set(refreshedState.timelineNoteChangesEnabled === true);
         this.measurementChangesEnabled.set(refreshedState.conversation ? refreshedState.measurementChangesEnabled === true : true);
+        this.reflectionChangesEnabled.set(refreshedState.reflectionChangesEnabled === true);
         this.trainingPlansEnabled.set(refreshedState.trainingPlansEnabled === true);
         this.trainingPlanChangesEnabled.set(refreshedState.trainingPlanChangesEnabled === true);
         this.trainingDeliveryEnabled.set(refreshedState.trainingDeliveryEnabled === true);
@@ -689,7 +706,7 @@ export class AssistantPageComponent implements OnInit, OnDestroy {
   }
 
   async resetConversation(): Promise<void> {
-    await this.replaceConversation('coordinate_free', false, false, false, false, false, false, false, true);
+    await this.replaceConversation('coordinate_free', false, false, false, false, false, false, false, true, false);
   }
 
   async applyPendingTrainingProposal(): Promise<void> {
@@ -834,6 +851,7 @@ export class AssistantPageComponent implements OnInit, OnDestroy {
     activityTagChangesEnabled = false,
     timelineNoteChangesEnabled = false,
     measurementChangesEnabled = this.measurementChangesEnabled(),
+    reflectionChangesEnabled = this.reflectionChangesEnabled(),
   ): Promise<void> {
     if (this.loadingConversation()
       || this.conversationLoadError()
@@ -851,7 +869,7 @@ export class AssistantPageComponent implements OnInit, OnDestroy {
     try {
       const conversation = await this.assistantService.resetConversation(
         locationAccess, timelineNotesEnabled, this.conversation()?.conversationId ?? null, trainingPlansEnabled,
-        trainingPlanChangesEnabled, trainingDeliveryEnabled, activityTagChangesEnabled, timelineNoteChangesEnabled, measurementChangesEnabled,
+        trainingPlanChangesEnabled, trainingDeliveryEnabled, activityTagChangesEnabled, timelineNoteChangesEnabled, measurementChangesEnabled, reflectionChangesEnabled,
       );
       if (!this.canApplyAccountResult(currentUid)) return;
       this.conversation.set(conversation);
@@ -860,6 +878,7 @@ export class AssistantPageComponent implements OnInit, OnDestroy {
       this.activityTagChangesEnabled.set(activityTagChangesEnabled);
       this.timelineNoteChangesEnabled.set(timelineNoteChangesEnabled);
       this.measurementChangesEnabled.set(measurementChangesEnabled);
+      this.reflectionChangesEnabled.set(reflectionChangesEnabled);
       this.trainingPlansEnabled.set(trainingPlansEnabled);
       this.trainingPlanChangesEnabled.set(trainingPlanChangesEnabled);
       this.trainingDeliveryEnabled.set(trainingDeliveryEnabled);
@@ -886,6 +905,7 @@ export class AssistantPageComponent implements OnInit, OnDestroy {
           this.activityTagChangesEnabled.set(state.activityTagChangesEnabled === true);
           this.timelineNoteChangesEnabled.set(state.timelineNoteChangesEnabled === true);
           this.measurementChangesEnabled.set(state.conversation ? state.measurementChangesEnabled === true : true);
+      this.reflectionChangesEnabled.set(state.reflectionChangesEnabled === true);
           this.trainingPlansEnabled.set(state.trainingPlansEnabled === true);
           this.trainingPlanChangesEnabled.set(state.trainingPlanChangesEnabled === true);
           this.trainingDeliveryEnabled.set(state.trainingDeliveryEnabled === true);
@@ -979,6 +999,7 @@ export class AssistantPageComponent implements OnInit, OnDestroy {
       this.activityTagChangesEnabled.set(state.activityTagChangesEnabled === true);
       this.timelineNoteChangesEnabled.set(state.timelineNoteChangesEnabled === true);
       this.measurementChangesEnabled.set(state.conversation ? state.measurementChangesEnabled === true : true);
+      this.reflectionChangesEnabled.set(state.reflectionChangesEnabled === true);
       this.trainingPlansEnabled.set(state.trainingPlansEnabled === true);
       this.trainingPlanChangesEnabled.set(state.trainingPlanChangesEnabled === true);
       this.trainingDeliveryEnabled.set(state.trainingDeliveryEnabled === true);
@@ -1084,6 +1105,7 @@ export class AssistantPageComponent implements OnInit, OnDestroy {
     this.activityTagChangesEnabled.set(false);
     this.timelineNoteChangesEnabled.set(false);
     this.measurementChangesEnabled.set(false);
+    this.reflectionChangesEnabled.set(false);
     this.trainingPlansEnabled.set(false);
     this.trainingPlanChangesEnabled.set(false);
     this.trainingDeliveryEnabled.set(false);
@@ -1230,6 +1252,9 @@ export class AssistantPageComponent implements OnInit, OnDestroy {
         this.clearRememberedPendingRequest();
         return null;
       }
+      if (data.reflectionChangesEnabled !== undefined && typeof data.reflectionChangesEnabled !== 'boolean') {
+        this.clearRememberedPendingRequest(); return null;
+      }
       if (data.measurementChangesEnabled !== undefined && typeof data.measurementChangesEnabled !== 'boolean') {
         this.clearRememberedPendingRequest();
         return null;
@@ -1262,6 +1287,7 @@ export class AssistantPageComponent implements OnInit, OnDestroy {
         ...(data.activityTagChangesEnabled ? { activityTagChangesEnabled: true } : {}),
         ...(data.timelineNoteChangesEnabled ? { timelineNoteChangesEnabled: true } : {}),
         ...(data.measurementChangesEnabled ? { measurementChangesEnabled: true } : {}),
+        ...(data.reflectionChangesEnabled ? { reflectionChangesEnabled: true } : {}),
         ...(data.trainingPlansEnabled ? { trainingPlansEnabled: true } : {}),
         ...(data.trainingPlanChangesEnabled ? { trainingPlanChangesEnabled: true } : {}),
         ...(data.trainingDeliveryEnabled ? { trainingDeliveryEnabled: true } : {}),
@@ -1312,6 +1338,7 @@ export class AssistantPageComponent implements OnInit, OnDestroy {
       || (request.activityTagChangesEnabled === true) !== this.activityTagChangesEnabled()
       || (request.timelineNoteChangesEnabled === true) !== this.timelineNoteChangesEnabled()
       || (request.measurementChangesEnabled === true) !== this.measurementChangesEnabled()
+      || (request.reflectionChangesEnabled === true) !== this.reflectionChangesEnabled()
       || (request.trainingPlansEnabled === true) !== this.trainingPlansEnabled()
       || (request.trainingPlanChangesEnabled === true) !== this.trainingPlanChangesEnabled()
       || (request.trainingDeliveryEnabled === true) !== this.trainingDeliveryEnabled()

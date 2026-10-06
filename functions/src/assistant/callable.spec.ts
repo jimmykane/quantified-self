@@ -149,6 +149,30 @@ describe('Assistant callable', () => {
     }
     expect(manualMeasurement).not.toHaveBeenCalled();
   });
+  it.each(['save_workout_reflection', 'delete_workout_reflection'] as const)('applies %s only with current independent access and review', async kind => {
+    const { store, conversation } = createDependencies();
+    const args = { activityRef: 'reflection-activity', target: 'activity', expectedRevision: 1,
+      mutationId: '11111111-1111-4111-8111-111111111111',
+      ...(kind === 'save_workout_reflection' ? { effort: 0, note: 'Felt easy' } : {}) };
+    const proposal = { proposalRef: 'reflection-proposal', kind, expiresAtMs: Date.now() + 60000,
+      summary: 'Review Running reflection', requiresConfirmation: true as const, arguments: args,
+      reflectionReview: { before: { effort: null, note: 'Private text' } } };
+    const state = { conversation, pendingRequestId: null, reflectionChangesEnabled: true, pendingContentProposal: proposal };
+    vi.mocked(store.getActiveConversationState).mockResolvedValue(state as never);
+    const workoutReflection = vi.fn().mockResolvedValue({ deleted: true });
+    const request = { conversationId: conversation.conversationId, proposalRef: proposal.proposalRef, confirm: true };
+    await expect(runApplyAssistantContentProposal(request, context, store, { workoutReflection } as never)).resolves.toMatchObject({ status: 'applied', kind });
+    expect(workoutReflection).toHaveBeenCalledWith(kind, expect.objectContaining({
+      scopes: ['activity-details:read', 'workout-reflections:read', 'workout-reflections:write'], arguments: args,
+      assistantConversationId: conversation.conversationId, assistantProposalRef: proposal.proposalRef }));
+    workoutReflection.mockClear();
+    for (const changed of [{ reflectionChangesEnabled: false }, { pendingContentProposal: { ...proposal, reflectionReview: undefined } }]) {
+      vi.mocked(store.getActiveConversationState).mockResolvedValue({ ...state, ...changed } as never);
+      await expect(runApplyAssistantContentProposal(request, context, store, { workoutReflection } as never)).rejects.toMatchObject({ code: 'aborted' });
+    }
+    expect(workoutReflection).not.toHaveBeenCalled();
+  });
+
   it('applies a current content proposal through the existing mutation service and clears it', async () => {
     const { store, conversation } = createDependencies();
     const proposal = {
@@ -532,7 +556,7 @@ describe('Assistant callable', () => {
       REQUEST_ID,
       createAssistantRequestFingerprint(REQUEST_ID, 'How am I today?'),
       'coordinate_free',
-      false, false, false, false, false, false, false);
+      false, false, false, false, false, false, false, false);
     expect(dependencies.finalizeQuota).toHaveBeenCalledWith(reservation);
     expect(dependencies.answer).toHaveBeenCalledWith(expect.objectContaining({
       uid: 'user-1',
@@ -654,7 +678,7 @@ describe('Assistant callable', () => {
         'precise_activity',
       ),
       'precise_activity',
-      false, false, false, false, false, false, false);
+      false, false, false, false, false, false, false, false);
     expect(dependencies.answer).toHaveBeenCalledWith(expect.objectContaining({
       prompt: 'Where was my biggest jump?',
       locationAccess: 'precise_activity',
@@ -678,7 +702,7 @@ describe('Assistant callable', () => {
     expect(await runAssistantChat(request, context, dependencies)).toMatchObject({ timelineNotesEnabled: true });
     expect(store.beginTurn).toHaveBeenCalledWith('user-1', 'conversation-1', REQUEST_ID,
       createAssistantRequestFingerprint(REQUEST_ID, request.message, 'coordinate_free', true), 'coordinate_free', true,
-      false, false, false, false, false, false);
+      false, false, false, false, false, false, false);
     vi.mocked(store.getActiveConversationState).mockResolvedValue({ conversation: { ...conversation, conversationId: 'new-chat' },
       pendingRequestId: null, locationAccess: 'coordinate_free', timelineNotesEnabled: false });
     await expect(runAssistantChat(request, context, dependencies)).rejects.toMatchObject({ code: 'aborted' });
@@ -697,7 +721,7 @@ describe('Assistant callable', () => {
     await expect(runResetAssistantConversation({ locationAccess: 'precise_activity', timelineNotesEnabled: true, conversationId: null }, context, store))
       .resolves.toMatchObject({ timelineNotesEnabled: true });
     expect(store.resetConversation).toHaveBeenLastCalledWith('user-1', 'precise_activity', true, null,
-      false, false, false, false, false, false);
+      false, false, false, false, false, false, false);
   });
 
   it.each([undefined, '', ' ', 42, 'x'.repeat(121)])('rejects an unbound or malformed notes reset generation: %j', async conversationId => {
@@ -713,7 +737,7 @@ describe('Assistant callable', () => {
     await expect(runResetAssistantConversation({ timelineNotesEnabled: true, conversationId: 'old-chat' }, context, store))
       .rejects.toMatchObject({ code: 'aborted' });
     expect(store.resetConversation).toHaveBeenCalledWith('user-1', 'coordinate_free', true, 'old-chat',
-      false, false, false, false, false, false);
+      false, false, false, false, false, false, false);
   });
 
   it('persists bounded server-owned visuals with the assistant message', async () => {
@@ -1362,7 +1386,7 @@ describe('Assistant callable', () => {
       'user-1',
       'precise_activity',
       false,
-      undefined, false, false, false, false, false, false);
+      undefined, false, false, false, false, false, false, false);
   });
 
   it('rejects an unknown reset location boundary without replacing the conversation', async () => {

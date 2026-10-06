@@ -37,6 +37,7 @@ describe('manual measurement review boundary', () => {
 
   it('accepts an exact server-owned measurement review', () => {
     expect(isAssistantContentProposal(proposal)).toBe(true);
+    expect(isAssistantContentProposal({ ...proposal, reflectionReview: { before: null } })).toBe(false);
   });
 
   it.each([
@@ -46,6 +47,31 @@ describe('manual measurement review boundary', () => {
   ])('rejects a review date that cannot be displayed safely: %j', date => {
     expect(isAssistantContentProposal({ ...proposal,
       measurementReview: { before: null, after: { ...fields, ...date } } })).toBe(false);
+  });
+});
+
+describe('private workout reflection review boundary', () => {
+  const proposal = { proposalRef: 'reflection', kind: 'save_workout_reflection', expiresAtMs: 1000,
+    summary: 'Save Run reflection on Oct 6 · activity', requiresConfirmation: true,
+    arguments: { activityRef: 'opaque-activity', target: 'activity', expectedRevision: 0,
+      mutationId: '11111111-1111-4111-8111-111111111111', effort: 0, note: 'Reported context' },
+    reflectionReview: { before: null } };
+  it('requires explicit current review and strict target/effort/text fields', () => {
+    expect(isAssistantContentProposal(proposal)).toBe(true);
+    expect(isAssistantContentProposal({ ...proposal, reflectionReview: undefined })).toBe(false);
+    for (const patch of [{ effort: 0.5 }, { effort: 11 }, { target: 'plan' }, { note: 'safe\n\u0000' },
+      { note: 'a'.repeat(2001) }, { provider: 'PRIVATE' }, { effort: null, note: null }]) {
+      expect(isAssistantContentProposal({ ...proposal, arguments: { ...proposal.arguments, ...patch } })).toBe(false);
+    }
+    expect(isAssistantContentProposal({ ...proposal, reflectionReview: { before: { effort: 1, note: 'Current', provider: 'PRIVATE' } } })).toBe(false);
+  });
+  it('requires nonzero current revision and present content for permanent deletion', () => {
+    const { effort, note, ...args } = proposal.arguments;
+    const deletion = { ...proposal, kind: 'delete_workout_reflection', arguments: { ...args, expectedRevision: 1 },
+      reflectionReview: { before: { effort, note } } };
+    expect(isAssistantContentProposal(deletion)).toBe(true);
+    expect(isAssistantContentProposal({ ...deletion, arguments: args })).toBe(false);
+    expect(isAssistantContentProposal({ ...deletion, reflectionReview: { before: null } })).toBe(false);
   });
 });
 

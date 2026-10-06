@@ -1,3 +1,5 @@
+import { WorkoutReflectionDialogComponent } from '../workout-reflection/workout-reflection-dialog.component';
+import { isBenchmarkEvent } from '@shared/event-classification';
 import { ChangeDetectionStrategy, Component, Input, OnChanges, SimpleChanges, ChangeDetectorRef, inject } from '@angular/core';
 import { AppEventInterface } from '@shared/app-event.interface';
 import {
@@ -84,6 +86,20 @@ export class EventSummaryComponent implements OnChanges {
     if (changes['event'] || changes['selectedActivities']) {
       this.rebuildTemplateState();
     }
+  }
+
+  get canReflect(): boolean {
+    return this.isOwner && !!this.user && !!this.event?.getID?.()
+      && !isBenchmarkEvent(this.event as unknown as Record<string, unknown>);
+  }
+
+  openReflection(): void {
+    if (!this.canReflect) return;
+    this.hapticsService.selection();
+    this.dialog.open(WorkoutReflectionDialogComponent, {
+      width: 'min(38rem, calc(100vw - 32px))', maxWidth: 'calc(100vw - 32px)',
+      data: { event: this.event, user: this.user },
+    });
   }
 
   openEditDetails() {

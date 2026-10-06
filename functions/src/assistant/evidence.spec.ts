@@ -23,6 +23,17 @@ const evidenceTools = [
 ] satisfies AssistantMcpToolDefinition[];
 
 describe('Assistant evidence', () => {
+  it.each([null, 0])('labels reflection evidence as reported context and preserves unknown versus zero (%s)', effort => {
+    const evidence = buildAssistantEvidence({ name: 'get_workout_reflection', title: 'Workout reflection' }, {
+      activityRef: 'PRIVATE-REF', revision: 2, target: 'activity', effort, note: 'PRIVATE-TEXT',
+      provider: 'PRIVATE-PROVIDER', effortScale: 'borg_cr10', present: true,
+    });
+    expect(evidence.summary).toContain('Athlete-reported context');
+    expect(evidence.facts[1].value).toContain(effort === null ? 'Not reported' : 'No exertion');
+    expect(evidence.facts[2].value).toContain('characters of private context');
+    expect(JSON.stringify(evidence)).not.toMatch(/PRIVATE|revision/);
+  });
+
   it('pairs manual measurement display values and units without references or revision internals', () => {
     const evidence = buildAssistantEvidence({ name: 'get_manual_measurement', title: 'Manual measurement' }, {
       measurement: { measurementRef: 'private-ref', revision: 1, metricId: 'body_weight', canonicalValue: 80,

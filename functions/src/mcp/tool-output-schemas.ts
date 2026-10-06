@@ -1,3 +1,4 @@
+import { MCP_WORKOUT_REFLECTION_TOOLS, MCP_WORKOUT_REFLECTION_OUTPUTS } from './workout-reflections.schemas';
 import { calculateReadinessScore as calculateCurrentReadinessScore, resolveReadinessConfidence } from '../../../shared/readiness';
 import { isReadinessHrvRangeValidAt, normalizeReadinessHrvPersonalRange } from '../../../shared/readiness-hrv-validation';
 import { currentHrvRangeSchema, currentReadinessHistorySchema } from './readiness-output-schemas';
@@ -56,6 +57,7 @@ import {
 } from './content-write.schemas';
 
 export const PUBLIC_MCP_TOOL_NAMES = [
+  ...MCP_WORKOUT_REFLECTION_TOOLS,
   ...MCP_MANUAL_MEASUREMENT_TOOLS,
   ...TRAINING_READ_TOOLS,
   ...TRAINING_WRITE_TOOLS,
@@ -1578,6 +1580,7 @@ export function createMcpOutputSchemaRegistry(scope: McpOutputSchemaScope) {
     }),
     query_timeline_notes: MCP_TIMELINE_NOTES_SCHEMA,
     ...MCP_CONTENT_WRITE_OUTPUTS,
+    ...MCP_WORKOUT_REFLECTION_OUTPUTS,
     ...MCP_MANUAL_MEASUREMENT_OUTPUTS,
     ...TRAINING_READ_OUTPUTS,
     ...TRAINING_WRITE_OUTPUTS,

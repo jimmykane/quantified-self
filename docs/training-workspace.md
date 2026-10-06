@@ -1,5 +1,67 @@
 # Training Workspace Architecture and Maintenance Guide
 
+## Optional post-workout reflection (Item 10)
+
+The owner action on a saved event summary opens a text-first Material dialog. No auto-prompt interrupts recording
+import. The user explicitly chooses the whole recording or a real activity in that event, including multi-activity
+recordings; benchmark/ambiguous merged events are excluded. Three optional prompts cover overall feel, sport-relevant
+conditions/technique, and fatigue/recovery. One bounded exact completion-link lookup can replace the last prompt with
+planned-versus-felt context, only for one exact matching target. It does not infer a completion, match another activity,
+fetch a provider prescription, or establish that the current authored workout matches the historical recording.
+
+The inspiration is the question progression in OpenAthlete's post-activity feedback agent at pinned commit
+`33e22980043640a132c670d3ca8ccbe26d588db5`
+([source](https://github.com/openathleteorg/openathlete/blob/33e22980043640a132c670d3ca8ccbe26d588db5/apps/api/src/mastra/agents/post-activity-feedback.agent.ts)).
+QS uses optional athlete-authored context, without copying an adaptation pipeline or voice transport. Voice entry,
+automatic plan adaptation, injury diagnosis and provider feedback delivery remain outside this implementation.
+
+### Model, ownership and retention
+
+`shared/workout-reflection.ts` owns validation and optimistic/retry semantics. Private fixed leaves live under
+`users/{uid}/events/{eventId}/workoutReflections`: `recording` or `activity_{actualActivityId}`. Each leaf contains exactly
+`schemaVersion: 1`, monotonic `revision`, UUID `mutationId`, `deleted`, nullable `effort`, and nullable `note`.
+Effort is an explicitly reported integer 0–10 on Borg CR10; null is unknown, zero is no exertion. Text is trimmed,
+limited to 2000 characters, rejects control characters except newline/tab, and is untrusted athlete context.
+A save needs effort or nonblank text. The existing Feeling/RPE event-stat editor, imported RPE and planned step RPE
+stay independent. Item 13 may share deliberate Borg scale semantics, but not storage, consent or automatic copying.
+
+Owner SDK transactions read the current parent, target membership and leaf before writing. Rules additionally check
+active-account/deletion fences, benchmark exclusion, exact keys, effort/text bounds and monotonically increasing
+revisions. Public event access never grants reflection access; collection listing and descendants are denied.
+Unknown/corrupt leaves fail closed. Skip/Cancel and an unchanged draft never write. Concurrent revisions require reload;
+an uncertain unchanged retry preserves its mutation UUID. Account changes clear private dialog state and invalidate
+pending results. Accepted selection/effort changes own selection haptics; async saves own success/error feedback.
+
+Deletion overwrites effort/text with null in a content-free monotonic tombstone, preventing a stale create/edit retry
+from resurrecting that deleted reflection. There is no recoverable reflection history. Current content remains until
+reflection, recording or account deletion. The event cleanup hook deletes fixed leaves in transactions of at most 200,
+checking event absence on every page so recreated deterministic event IDs are protected. Account recursive cleanup
+covers the same subtree. No independent user-data root or queue is added. Reparse leaves exact attachments untouched
+and does not remap new activity IDs by similarity; a reflection whose original activity ID no longer exists is
+inaccessible until parent cleanup. No event reparse or derived schema bump is required for this private context.
+
+### MCP and Assistant impact review
+
+The additive surface is `get_workout_reflection`, `save_workout_reflection`, and `delete_workout_reflection` under
+independent `workout-reflections:read` / `workout-reflections:write`, both dependent on `activity-details:read`; writes
+also require reflection read. Existing activity, event, Training, Health, measurement, description and Timeline grants
+never authorize this content. Strict inputs select an existing owner/connection-bound activity reference and explicit
+recording/activity target. Outputs expose only that reference/target, revision/presence, explicitly labelled Borg CR10
+and selected effort/text; never whole events, links, provider data, raw IDs or receipts. Admin transactions recheck
+stored grant/Assistant generation and account deletion. External writes use native host approval; server code cannot
+inspect automatic approval settings. Built-in Gemini sees current reads and local prepare-only tools after an independent
+default-off chat choice. Preparation requires current-turn activity/date discovery and an exact target/revision read;
+QS shows the target and current/new effort/text, with explicit permanent deletion, before app Apply. Permission changes,
+New chat, expiry, stale proposals/revisions and deletion fences fail closed. At most one current content proposal is kept.
+
+Planning review: recipes, planning mutation kinds, completion/link lifecycle and provider delivery are unchanged.
+Reflection context never marks completion or enters readiness/load/durability calculations, and does not authorize
+adaptation. Exact-link reads are already covered by the current planning surface; no relevant plan-read extension is
+missing. Separate reflection coverage is implemented in this change, so no #583 deferral is required. Public contract,
+help/policies/feature page and Activity, Training and cross-domain bundled guidance are updated together. Source support
+requires a separate server/Rules release, registered app developer refresh/rescan and plugin sync; none are authorized
+by implementation or PR creation.
+
 ## Planning access through MCP and the Assistant
 
 The #690 planning surface exposes current plans, standalone/associated workouts, complete v1 instructions, chronological

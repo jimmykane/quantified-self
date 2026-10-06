@@ -184,6 +184,16 @@ describe('AssistantExploreBottomSheetComponent', () => {
     expect(bottomSheetRef.dismiss).toHaveBeenLastCalledWith({ kind: 'timeline_note_changes', enabled: true });
   });
 
+  it('offers independent default-off reflection access and ignores no-op choices', () => {
+    expect(component.data.reflectionChangesEnabled ?? false).toBe(false);
+    const toggle = fixture.nativeElement.querySelector('[aria-label^="Private workout reflections"]');
+    expect(toggle).not.toBeNull();
+    expect(fixture.nativeElement.textContent).toContain('Private workout reflections');
+    component.setReflectionChanges(false); expect(bottomSheetRef.dismiss).not.toHaveBeenCalled();
+    component.setReflectionChanges(true);
+    expect(bottomSheetRef.dismiss).toHaveBeenCalledExactlyOnceWith({ kind: 'reflection_changes', enabled: true });
+  });
+
   it('closes without a prompt when dismissed explicitly', () => {
     component.close();
 

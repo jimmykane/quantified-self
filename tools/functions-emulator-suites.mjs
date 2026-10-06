@@ -29,6 +29,7 @@ export const EMULATOR_SUITES = {
     'src/mcp/training-plans-write.emulator.spec.ts',
     'src/mcp/workout-library-write.emulator.spec.ts',
     'src/mcp/content-write.emulator.spec.ts',
+    'src/mcp/workout-reflections.emulator.spec.ts',
     'src/mcp/manual-measurements.emulator.spec.ts',
     'src/derived-metrics/derived-metrics-reuse.emulator.spec.ts',
     'src/events/event-tag-catalog.emulator.spec.ts',
