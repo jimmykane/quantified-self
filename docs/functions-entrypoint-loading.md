@@ -39,6 +39,28 @@ when the updated email is not part of a marketing campaign. Its existing 256 MiB
 change needs a separately approved deployment and production memory check. The former `projectEventTagCatalog` endpoint
 has since been retired and is excluded from discovery. Targets absent from the map use the complete entrypoint.
 
+## Admin handler isolation
+
+The remaining 16 exports from `functions/src/admin/index.ts` now load from their direct owner modules: users, queues,
+reparse settings, dashboard history, trends, maintenance, impersonation, financials and subscription gifts. Together with
+the 11 already isolated marketing exports, every admin export has a target-aware loader. The dynamically named
+`retrySportsLibReparseHeavyJob` export retains its existing Firebase name and handler object. No callable behavior,
+admin authorization, App Check, scheduled work or resource limit changes.
+
+The users module legitimately imports MCP OAuth account helpers, and `getFinancialStats` legitimately imports BigQuery
+for the admin billing view. The entrypoint check permits those dependencies only for their respective owners, while
+rejecting unrelated admin modules, Genkit and the complete entrypoint. It also checks every admin export for loader
+coverage and verifies each of the 16 newly routed endpoints' generation, region, trigger, memory, timeout, instance
+settings and secret bindings. The dashboard snapshot retains its `10 0 * * *` UTC schedule and retry configuration;
+financials retains `STRIPE_SECRET_KEY`, and both subscription-gift callables retain `STRIPE_ADMIN_BILLING_KEY`.
+
+On 2026-10-06, three isolated Node 22.23.3 cold-import runs per target measured a 1,015 ms, 245.7 MiB RSS median
+for the full entrypoint. Across the 16 new admin targets, the median of their three-run medians was 303 ms and
+111.4 MiB RSS; `getFinancialStats`, which needs BigQuery, measured 406 ms and 135.4 MiB. Discovery still exposes
+168 endpoints, and all 16 Firebase endpoint descriptors matched a pre-change snapshot byte-for-byte. These are local
+import measurements, not production latency or billing savings. After a separately approved deployment, compare
+production startup latency, billable CPU, memory, invocation counts and errors over matched complete days.
+
 `mcpApi` loads directly from `mcp/server`, without the full entrypoint, Genkit, BigQuery or unrelated admin handlers.
 Its existing Gen 2 HTTP endpoint remains in `europe-west2` with 1 GiB memory, a 120-second timeout, concurrency 4,
 unchanged instance settings and only `MAPBOX_ACCESS_TOKEN` / `SUUNTOAPP_GUIDE_OWNER` secrets. This isolates startup;
