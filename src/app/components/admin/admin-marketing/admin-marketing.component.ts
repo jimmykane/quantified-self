@@ -1,4 +1,4 @@
-import { Component, ElementRef, OnDestroy, OnInit, ViewChild, inject } from '@angular/core';
+import { Component, ElementRef, OnDestroy, OnInit, ViewChild, inject, signal } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { MatButtonModule } from '@angular/material/button';
@@ -46,6 +46,7 @@ export class AdminMarketingComponent implements OnInit, OnDestroy {
   private previewSequence = 0;
   private refreshSequence = 0;
   private destroyed = false;
+  readonly loading = signal(true);
   list: MarketingCampaignListResponse | null = null;
   selected: MarketingCampaignView | null = null;
   draft = emptyDraft();
@@ -119,11 +120,13 @@ export class AdminMarketingComponent implements OnInit, OnDestroy {
   get counts() { return this.selected?.stats; }
   get exclusions() { return this.selected?.exclusions; }
 
-  async refresh(): Promise<void> {
+  async refresh(): Promise<'loaded' | 'failed' | 'stale'> {
     const sequence = ++this.refreshSequence;
+    this.loading.set(true);
+    this.error = '';
     try {
       const result = await this.functions.call<undefined, MarketingCampaignListResponse>('listMarketingCampaigns');
-      if (this.destroyed || sequence !== this.refreshSequence) return;
+      if (this.destroyed || sequence !== this.refreshSequence) return 'stale';
       this.list = result.data;
       this.error = '';
       this.cap = result.data.dailyCap;
@@ -131,8 +134,13 @@ export class AdminMarketingComponent implements OnInit, OnDestroy {
         const fresh = result.data.campaigns.find(item => item.id === this.selected?.id);
         if (fresh) this.updateSelected(fresh);
       }
+      return 'loaded';
     } catch (error) {
-      if (!this.destroyed && sequence === this.refreshSequence) this.error = this.message(error);
+      if (this.destroyed || sequence !== this.refreshSequence) return 'stale';
+      this.error = this.message(error);
+      return 'failed';
+    } finally {
+      if (!this.destroyed && sequence === this.refreshSequence) this.loading.set(false);
     }
   }
   choose(campaign: MarketingCampaignView, feedback = true): void {
@@ -232,6 +240,7 @@ export class AdminMarketingComponent implements OnInit, OnDestroy {
     // A read started before this mutation must not restore its older saved
     // message or test result while the mutation is pending or after it completes.
     this.refreshSequence++;
+    this.loading.set(false);
     this.busy = label; this.error = ''; this.notice = '';
     try { success(await request()); await this.refresh(); this.haptics.success(); }
     catch (error) { this.error = this.message(error); this.haptics.error(); }
@@ -328,8 +337,10 @@ export class AdminMarketingComponent implements OnInit, OnDestroy {
       campaign => { this.choose(campaign, false); this.notice = message; });
   }
   async manualRefresh(): Promise<void> {
-    await this.refresh();
-    if (!this.error) this.haptics.success(); else this.haptics.error();
+    if (this.busy || this.loading()) return;
+    const result = await this.refresh();
+    if (result === 'loaded') this.haptics.success();
+    else if (result === 'failed') this.haptics.error();
   }
   async changeCap(): Promise<void> {
     await this.run('Updating limit', async () => (await this.functions.call('setMarketingDailyCap',

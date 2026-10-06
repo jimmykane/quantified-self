@@ -25,7 +25,147 @@ function setup(call = vi.fn(async () => ({ data: listing }))) {
   return { component: TestBed.runInInjectionContext(() => new AdminMarketingComponent()), haptics, call };
 }
 
-describe('AdminMarketingComponent haptics', () => {
+describe('AdminMarketingComponent', () => {
+  it('shows initial loading instead of an empty workspace or a default limit until the list arrives', async () => {
+    let release!: (value: { data: MarketingCampaignListResponse }) => void;
+    const pending = new Promise<{ data: MarketingCampaignListResponse }>(resolve => { release = resolve; });
+    const { call, haptics } = setup(vi.fn(() => pending));
+    const fixture = TestBed.createComponent(AdminMarketingComponent);
+    fixture.detectChanges();
+    const root = fixture.nativeElement as HTMLElement;
+    expect(root.querySelector('.initial-loading')?.textContent).toContain('Loading campaigns');
+    expect(root.querySelector('main')?.getAttribute('aria-busy')).toBe('true');
+    expect(root.querySelector('.workspace')).toBeNull();
+    expect(root.querySelector('input')).toBeNull();
+    expect(call).toHaveBeenCalledWith('listMarketingCampaigns');
+    release({ data: { ...listing, dailyCap: 37, campaigns: [pausedCampaign] } });
+    await fixture.whenStable();
+    fixture.detectChanges();
+    await fixture.whenStable();
+    fixture.detectChanges();
+    expect(root.querySelector('.initial-loading')).toBeNull();
+    expect(root.querySelector('main')?.getAttribute('aria-busy')).toBe('false');
+    expect(root.querySelector('.campaign-row')?.textContent).toContain(pausedCampaign.name);
+    expect(root.querySelector<HTMLInputElement>('.limit-card input')?.value).toBe('37');
+    expect(haptics.success).not.toHaveBeenCalled();
+    expect(haptics.error).not.toHaveBeenCalled();
+    fixture.destroy();
+  });
+  it('shows an initial failure with a working retry and distinguishes a loaded empty campaign list', async () => {
+    let reject!: (error: Error) => void;
+    let releaseRetry!: (value: { data: MarketingCampaignListResponse }) => void;
+    const first = new Promise<never>((_resolve, fail) => { reject = fail; });
+    const retry = new Promise<{ data: MarketingCampaignListResponse }>(resolve => { releaseRetry = resolve; });
+    const call = vi.fn().mockReturnValueOnce(first).mockReturnValueOnce(retry);
+    const { haptics } = setup(call);
+    const fixture = TestBed.createComponent(AdminMarketingComponent);
+    fixture.detectChanges();
+    reject(new Error('Unable to load campaigns'));
+    await fixture.whenStable();
+    fixture.detectChanges();
+    const root = fixture.nativeElement as HTMLElement;
+    expect(root.querySelector('[role="alert"]')?.textContent).toContain('Unable to load campaigns');
+    expect(root.querySelector('.initial-loading')).toBeNull();
+    expect(root.querySelector('.workspace')).toBeNull();
+    expect(haptics.error).not.toHaveBeenCalled();
+    const manualRefresh = vi.spyOn(fixture.componentInstance, 'manualRefresh');
+    root.querySelector<HTMLButtonElement>('.initial-load-error button')!.click();
+    fixture.detectChanges();
+    expect(root.querySelector('.initial-loading')).not.toBeNull();
+    expect(root.querySelector('[role="alert"]')).toBeNull();
+    expect(call).toHaveBeenCalledTimes(2);
+    releaseRetry({ data: listing });
+    await manualRefresh.mock.results[0].value;
+    await fixture.whenStable();
+    fixture.detectChanges();
+    expect(root.querySelector('.campaign-empty')?.textContent).toContain('No campaigns yet');
+    expect(root.querySelector('.workspace')).not.toBeNull();
+    expect(root.querySelector('.initial-load-error')).toBeNull();
+    expect(haptics.success).toHaveBeenCalledTimes(1);
+    fixture.destroy();
+  });
+  it('keeps the editor and unsaved text in place while refreshing and disables duplicate refreshes', async () => {
+    let release!: (value: { data: MarketingCampaignListResponse }) => void;
+    const pending = new Promise<{ data: MarketingCampaignListResponse }>(resolve => { release = resolve; });
+    let lists = 0;
+    const call = vi.fn((name: string) => {
+      if (name === 'listMarketingCampaigns') return ++lists === 1
+        ? Promise.resolve({ data: { ...listing, campaigns: [pausedCampaign] } }) : pending;
+      return Promise.resolve({ data: { subject: pausedCampaign.subject, html: '<p>Preview</p>', text: 'Preview' } });
+    });
+    const { haptics } = setup(call);
+    const fixture = TestBed.createComponent(AdminMarketingComponent);
+    const component = fixture.componentInstance;
+    component.choose(pausedCampaign, false);
+    fixture.detectChanges();
+    await fixture.whenStable();
+    fixture.detectChanges();
+    await fixture.whenStable();
+    component.draft.subject = 'My unsaved subject';
+    component.dirty = true;
+    fixture.detectChanges();
+    await fixture.whenStable();
+    fixture.detectChanges();
+    const root = fixture.nativeElement as HTMLElement;
+    const editor = root.querySelector('app-marketing-rich-editor');
+    const refresh = component.refresh();
+    fixture.detectChanges();
+    expect(root.querySelector('.refresh-status')?.textContent).toContain('Refreshing campaigns');
+    expect(root.querySelector('app-marketing-rich-editor')).toBe(editor);
+    expect(root.querySelector<HTMLInputElement>('input[maxlength="180"]')?.value).toBe('My unsaved subject');
+    const refreshButton = root.querySelector<HTMLButtonElement>('button[aria-label="Refresh status"]');
+    expect(refreshButton?.disabled).toBe(true);
+    expect(refreshButton?.textContent).toContain('Refreshing');
+    expect(refreshButton?.querySelector('mat-spinner')).not.toBeNull();
+    await component.manualRefresh();
+    expect(lists).toBe(2);
+    release({ data: { ...listing, campaigns: [{ ...pausedCampaign, stats: { ...pausedCampaign.stats, accepted: 3 } }] } });
+    await refresh;
+    fixture.detectChanges();
+    expect(root.querySelector('.refresh-status')).toBeNull();
+    expect(root.querySelector('app-marketing-rich-editor')).toBe(editor);
+    expect(component.draft.subject).toBe('My unsaved subject');
+    expect(component.counts?.accepted).toBe(3);
+    expect(haptics.success).not.toHaveBeenCalled();
+    fixture.destroy();
+  });
+  it('keeps loading active when an older response arrives while the latest refresh is pending', async () => {
+    let releaseOld!: (value: { data: MarketingCampaignListResponse }) => void;
+    let releaseLatest!: (value: { data: MarketingCampaignListResponse }) => void;
+    const old = new Promise<{ data: MarketingCampaignListResponse }>(resolve => { releaseOld = resolve; });
+    const latest = new Promise<{ data: MarketingCampaignListResponse }>(resolve => { releaseLatest = resolve; });
+    const { component } = setup(vi.fn().mockReturnValueOnce(old).mockReturnValueOnce(latest));
+    const olderRefresh = component.refresh();
+    const newerRefresh = component.refresh();
+    releaseOld({ data: { ...listing, dailyCap: 1 } });
+    await olderRefresh;
+    expect(component.loading()).toBe(true);
+    expect(component.list).toBeNull();
+    releaseLatest({ data: { ...listing, dailyCap: 25 } });
+    await newerRefresh;
+    expect(component.loading()).toBe(false);
+    expect(component.cap).toBe(25);
+    component.ngOnDestroy();
+  });
+  it('clears the loading state when a failed mutation invalidates an earlier refresh', async () => {
+    let releaseOld!: (value: { data: MarketingCampaignListResponse }) => void;
+    const old = new Promise<{ data: MarketingCampaignListResponse }>(resolve => { releaseOld = resolve; });
+    const call = vi.fn().mockResolvedValueOnce({ data: listing }).mockReturnValueOnce(old).mockRejectedValueOnce(new Error('Limit update failed'));
+    const { component, haptics } = setup(call);
+    await component.refresh();
+    const refresh = component.manualRefresh();
+    expect(component.loading()).toBe(true);
+    component.cap = 20;
+    await component.changeCap();
+    expect(component.loading()).toBe(false);
+    expect(component.error).toBe('Limit update failed');
+    releaseOld({ data: { ...listing, dailyCap: 1 } });
+    await refresh;
+    expect(component.loading()).toBe(false);
+    expect(component.error).toBe('Limit update failed');
+    expect(haptics.error).toHaveBeenCalledTimes(1);
+    component.ngOnDestroy();
+  });
   it('defaults to immediate sending and gives selection feedback only for accepted schedule changes', () => {
     const { component, haptics } = setup();
     expect(component.scheduleMode).toBe('now');
@@ -203,6 +343,8 @@ describe('AdminMarketingComponent haptics', () => {
     fixture.detectChanges();
     await fixture.whenStable();
     fixture.detectChanges();
+    await fixture.whenStable();
+    fixture.detectChanges();
     const root = fixture.nativeElement as HTMLElement;
     const action = (label: string) => Array.from(root.querySelectorAll<HTMLButtonElement>('.actions button'))
       .find(button => button.textContent?.trim() === label)!;
@@ -325,17 +467,21 @@ describe('AdminMarketingComponent haptics', () => {
     expect(call).not.toHaveBeenCalledWith('saveMarketingCampaign', expect.anything());
     expect(component.notice).toContain('Check that inbox');
   });
-  it('shows the test recipient field before a campaign is saved', () => {
+  it('shows the test recipient field before a campaign is saved', async () => {
     setup();
     const fixture = TestBed.createComponent(AdminMarketingComponent);
+    fixture.detectChanges();
+    await fixture.whenStable();
     fixture.detectChanges();
     expect(fixture.nativeElement.querySelector('.writing-column input[type="email"]')).not.toBeNull();
     fixture.destroy();
   });
-  it('keeps Send test disabled until the recipient address is valid', () => {
+  it('keeps Send test disabled until the recipient address is valid', async () => {
     setup();
     const fixture = TestBed.createComponent(AdminMarketingComponent);
     fixture.componentInstance.preview = { subject: 'A note', html: '<p>Hello</p>', text: 'Hello' };
+    fixture.detectChanges();
+    await fixture.whenStable();
     fixture.detectChanges();
     const input = fixture.nativeElement.querySelector('.test-send input[type="email"]') as HTMLInputElement;
     const button = fixture.nativeElement.querySelector('.test-send button') as HTMLButtonElement;

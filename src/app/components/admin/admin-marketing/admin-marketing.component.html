@@ -1,8 +1,26 @@
-<main class="marketing-page qs-workspace-page" aria-labelledby="marketing-title">
+<main class="marketing-page qs-workspace-page" aria-labelledby="marketing-title" [attr.aria-busy]="loading()">
   <app-page-header title="Marketing campaigns" titleId="marketing-title" eyebrow="Administration" leadingIcon="campaign"
     subtitle="Create founder-style emails for people who opted in to marketing updates."></app-page-header>
   @if (error) { <p class="feedback error" role="alert">{{ error }}</p> }
   @if (notice) { <p class="feedback" role="status">{{ notice }}</p> }
+  @if (!list) {
+    @if (loading()) {
+      <div class="initial-loading" role="status">
+        <mat-spinner diameter="36" aria-label="Loading campaigns"></mat-spinner>
+        <span>Loading campaigns…</span>
+      </div>
+    } @else {
+      <div class="initial-load-error">
+        <button mat-stroked-button type="button" (click)="manualRefresh()">Retry loading campaigns</button>
+      </div>
+    }
+  } @else {
+  @if (loading()) {
+    <div class="refresh-status" role="status">
+      <mat-spinner diameter="20" aria-label="Refreshing campaigns"></mat-spinner>
+      <span>Refreshing campaigns…</span>
+    </div>
+  }
   <div class="workspace">
     <aside class="sidebar">
       <mat-card>
@@ -16,6 +34,7 @@
               </button>
             }
           </nav>
+          @if (!list.campaigns.length) { <p class="campaign-empty">No campaigns yet.</p> }
         </mat-card-content>
       </mat-card>
     </aside>
@@ -135,7 +154,15 @@
               <button mat-stroked-button type="button" [disabled]="!!busy || !selected?.stats?.failed" (click)="change('retry')">Retry failed</button>
             }
             @if (selected) { <button mat-stroked-button type="button" [disabled]="!!busy" (click)="clone()">Clone</button> }
-            <button mat-button type="button" [disabled]="!!busy" (click)="manualRefresh()">Refresh status</button>
+            <button mat-button type="button" aria-label="Refresh status" [disabled]="!!busy || loading()" (click)="manualRefresh()">
+              <span class="refresh-button-content">
+                <span class="refresh-button-icon">
+                  @if (loading()) { <mat-spinner diameter="18" aria-hidden="true"></mat-spinner> }
+                  @else { <mat-icon>refresh</mat-icon> }
+                </span>
+                <span>{{ loading() ? 'Refreshing…' : 'Refresh status' }}</span>
+              </span>
+            </button>
             @if (busy) { <mat-spinner diameter="24" aria-label="Working"></mat-spinner> }
           </div>
         </mat-card-content>
@@ -171,4 +198,5 @@
       </mat-card-content>
     </mat-card>
   </div>
+  }
 </main>
