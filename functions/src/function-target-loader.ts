@@ -20,6 +20,8 @@ const loadServiceConnectionAccountProjection = (): FunctionModule =>
 
 const TARGET_LOADERS: Readonly<Record<string, ModuleLoader>> = Object.freeze({
   mcpApi: () => module.require('./mcp/server') as FunctionModule,
+  impersonateUser:
+    () => module.require('./admin/handlers/impersonation.handlers') as FunctionModule,
   getSuuntoAPIAuthRequestTokenRedirectURI:
     () => module.require('./suunto/auth/wrapper') as FunctionModule,
   requestAndSetSuuntoAPIAccessToken:

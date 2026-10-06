@@ -239,6 +239,9 @@ function probe(targetArgument: string): void {
       || (path.includes('/lib/functions/src/mcp/') && !assistantProposalTarget && !derivedRefreshTarget && !mcpTarget)
     ) return true;
     if (!path.includes('/lib/functions/src/admin/')) return false;
+    if (runtimeTarget === 'impersonateUser') {
+      return !path.endsWith('/lib/functions/src/admin/handlers/impersonation.handlers.js');
+    }
     return !marketingTarget || !(
       path.includes('/lib/functions/src/admin/marketing/')
       || path.endsWith('/lib/functions/src/admin/shared/subscription.constants.js')
@@ -354,6 +357,7 @@ async function check(): Promise<void> {
   const canaryTarget = OPTIMIZED_FUNCTION_TARGETS[0];
   assert(canaryTarget, 'The optimized target registry is empty.');
   for (const target of [
+    'impersonateUser',
     ...PROVIDER_CONNECTION_AND_HEALTH_TARGETS,
     ...Object.keys(INGESTION_TARGET_METADATA),
     ...Object.keys(SCHEDULED_MAINTENANCE_TARGET_METADATA),
@@ -361,7 +365,7 @@ async function check(): Promise<void> {
   ]) {
     assert(OPTIMIZED_FUNCTION_TARGETS.includes(target), `${target} is missing its isolated loader.`);
   }
-  for (const target of [canaryTarget, ...PROVIDER_CONNECTION_AND_HEALTH_TARGETS, ...QUEUE_AND_CLEANUP_TARGETS]) {
+  for (const target of [canaryTarget, 'impersonateUser', ...PROVIDER_CONNECTION_AND_HEALTH_TARGETS, ...QUEUE_AND_CLEANUP_TARGETS]) {
     for (const discoveryMode of ['control-api', 'manifest-output'] as const) {
       const guardedDiscovery = runProbe(target, discoveryMode);
       assert(
@@ -440,6 +444,21 @@ async function check(): Promise<void> {
         && endpoint.taskQueueTrigger === undefined
         && endpoint.scheduleTrigger === undefined,
       `${target} HTTP trigger changed.`);
+    } else if (target === 'impersonateUser') {
+      assert(endpoint.availableMemoryMb === 256, `${target} memory configuration changed.`);
+      assert(JSON.stringify(endpoint.timeoutSeconds) === 'null', `${target} timeout configuration changed.`);
+      assert(endpoint.cpu === undefined
+        && JSON.stringify(endpoint.concurrency) === 'null'
+        && JSON.stringify(endpoint.minInstances) === 'null'
+        && JSON.stringify(endpoint.maxInstances) === 'null',
+      `${target} CPU or instance settings changed.`);
+      assert(secretKeys.length === 0, `${target} secret bindings changed.`);
+      assert(endpoint.callableTrigger !== undefined
+        && endpoint.httpsTrigger === undefined
+        && endpoint.eventTrigger === undefined
+        && endpoint.taskQueueTrigger === undefined
+        && endpoint.scheduleTrigger === undefined,
+      `${target} callable trigger changed.`);
     } else if (target === 'receiveSuunto247Data') {
       assert(endpoint.availableMemoryMb === 512, `${target} memory configuration changed.`);
       assert(endpoint.timeoutSeconds === 60, `${target} timeout configuration changed.`);
