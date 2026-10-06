@@ -61,6 +61,19 @@ describe('CalendarDayDetailsNavigationService', () => {
     expect(service.restorationFor('/dashboard')).toBeNull();
   });
 
+  it('retains the selected Calendar period across a library visit and recipe editor until Back', () => {
+    const calendarReturn = { view: 'month' as const, anchor: '2026-10-01' };
+    service.prepareReturn('/calendar', '2026-10-25', undefined, calendarReturn);
+    for (const [index, url] of ['/training/plans/library?date=2026-10-25',
+      '/training/plans/library/saved-run?date=2026-10-25', '/training/plans/library?date=2026-10-25'].entries()) {
+      routerEvents.next(new NavigationStart(index + 1, url, 'imperative'));
+      routerEvents.next(new NavigationEnd(index + 1, url, url));
+    }
+    routerEvents.next(new NavigationStart(4, '/calendar', 'popstate'));
+    routerEvents.next(new NavigationEnd(4, '/calendar', '/calendar'));
+    expect(service.restorationFor('/calendar')).toEqual({ sourceUrl: '/calendar', dateKey: '2026-10-25', calendarReturn });
+  });
+
   it('publishes the return only after the destination URL and its components are active', () => {
     service.prepareReturn('/dashboard', '2026-09-17', undefined, { view: 'month', anchor: '2026-09-01' });
     routerEvents.next(new NavigationStart(1, '/dashboard', 'imperative'));

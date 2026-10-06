@@ -210,12 +210,17 @@ describe('CalendarDayDetailsComponent', () => {
     expect(actions.map(action => action.getAttribute('href'))).toEqual([
       '/training/plans/new?date=2026-08-03',
       '/training/plans/standalone/new?date=2026-08-03',
+      '/training/plans/library?date=2026-08-03',
     ]);
     const prepareReturn = vi.spyOn(TestBed.inject(CalendarDayDetailsNavigationService), 'prepareReturn');
     vi.spyOn(TestBed.inject(Router), 'navigateByUrl').mockResolvedValue(true);
-    actions[0].click();
+    expect(actions[2].textContent).toContain('Add from library');
+    const haptics = TestBed.inject(AppHapticsService).selection;
+    vi.mocked(haptics).mockClear();
+    actions[2].click();
     expect(prepareReturn).toHaveBeenCalledWith('/', '2026-08-03', undefined, undefined);
     expect(TestBed.inject(MatBottomSheetRef).dismiss).toHaveBeenCalledOnce();
+    expect(haptics).toHaveBeenCalledOnce();
     expect(fixture.nativeElement.textContent).not.toContain('No completed activities for this day.');
     expect(fixture.nativeElement.querySelector('.calendar-day-total')).toBeNull();
     expect(fixture.nativeElement.querySelector('[aria-labelledby="calendar-day-family-title"]')).toBeNull();

@@ -101,6 +101,8 @@
               [queryParams]="{ date: data().day.dateKey }" (click)="prepareNavigation()">Plan workout</a>
             <a mat-menu-item appHapticTap [routerLink]="['/training/plans/standalone/new']"
               [queryParams]="{ date: data().day.dateKey }" (click)="prepareNavigation()">Standalone workout</a>
+            <a mat-menu-item appHapticTap [routerLink]="['/training/plans/library']"
+              [queryParams]="{ date: data().day.dateKey }" (click)="prepareNavigation()">Add from library</a>
           </mat-menu>
         }
       </div>
@@ -173,6 +175,8 @@
       [queryParams]="{ date: data().day.dateKey }" (click)="prepareNavigation()">Plan workout</a>
     <a mat-menu-item appHapticTap [routerLink]="['/training/plans/standalone/new']"
       [queryParams]="{ date: data().day.dateKey }" (click)="prepareNavigation()">Standalone workout</a>
+    <a mat-menu-item appHapticTap [routerLink]="['/training/plans/library']"
+      [queryParams]="{ date: data().day.dateKey }" (click)="prepareNavigation()">Add from library</a>
   </mat-menu>
   @if (dashboardDayIsEmpty()) {
     <div class="calendar-day-context-empty">
@@ -303,6 +307,7 @@
             <mat-icon aria-hidden="true">add</mat-icon>Add workout
           </a>
           <a mat-button appHapticTap [routerLink]="['/training/plans/standalone/new']" [queryParams]="{ date: data().day.dateKey }" (click)="prepareNavigation()">Standalone</a>
+          <a mat-button appHapticTap [routerLink]="['/training/plans/library']" [queryParams]="{ date: data().day.dateKey }" (click)="prepareNavigation()">Add from library</a>
         </div>
       </div>
       @if (plannedStatus() === 'loading') { <p role="status">Loading planned workouts…</p> }

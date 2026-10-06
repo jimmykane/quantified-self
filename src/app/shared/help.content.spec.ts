@@ -70,6 +70,14 @@ describe('help.content', () => {
     expect(copy).toContain('never deletes recorded activities');
     expect(copy).not.toContain('MCP plan and workout deletion do not select this option');
   });
+  it('makes selected-day library discovery and safe placement retry findable in Training Help', () => {
+    const copy = HELP_SECTIONS.find(section => section.id === 'training-plans')!.content;
+    for (const phrase of ['**Add from library**', '**Active**', '**Archived**', '**Show prescription**',
+      'exact sport', '**Retry exact placement**', 'keep the review open', 'outside the active plan']) {
+      expect(copy).toContain(phrase);
+    }
+    expect(searchHelpSections(HELP_SECTIONS, 'Add from library').map(section => section.id)).toContain('training-plans');
+  });
   it('explains uncertain MCP apply replies without authorizing replacement workouts or approval bypass', () => {
     const copy = HELP_SECTIONS.find(section => section.id === 'training-plans')!.content;
     expect(copy).toContain('it may already have applied');
