@@ -196,9 +196,7 @@ describe('PlansWorkspaceComponent', () => {
     component.addEditorRepeat();
     component.updateStep(1, 0, 'endingKind', 'distance');
     component.updateStep(1, 0, 'endingValue', 1);
-    component.updateStep(1, 0, 'targetKind', 'pace');
-    component.updateStep(1, 0, 'targetMinimum', 4);
-    component.updateStep(1, 0, 'targetMaximum', 5);
+    component.updateStep(1, 0, 'targets', [{ ...createManualWorkoutEditorTarget('speed'), minimum: 4, maximum: 5 }]);
     component.updateStep(1, 1, 'endingKind', 'manual');
     fixture.detectChanges();
     const summary = () => fixture.nativeElement.querySelector('.editor-prescription-summary p')?.textContent;
@@ -211,7 +209,7 @@ describe('PlansWorkspaceComponent', () => {
     component.updateStep(1, 1, 'endingValue', 1); fixture.detectChanges();
     expect(summary()).toContain('30m 00s–34m 00s estimated');
     expect(summary()).not.toContain('unknown duration');
-    component.updateStep(1, 0, 'targetKind', 'none'); fixture.detectChanges();
+    component.updateStep(1, 0, 'targets', []); fixture.detectChanges();
     expect(summary()).toContain('4 steps with unknown duration'); expect(summary()).not.toContain('estimated');
     expect(mutate).not.toHaveBeenCalled();
   });
