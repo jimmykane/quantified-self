@@ -9,7 +9,7 @@ import { SuuntoGuideHttpError } from './http';
 import { SuuntoHttpFixture } from '../test-support/suunto-http-fixture';
 import { packageGuide, readGuideArchive } from './archive';
 import type { SuuntoGuideFieldsStepV1, SuuntoGuideJsonV1 } from '../../providers/suunto-guide.serializer';
-import { assessSuuntoGuideV2ForRecovery, assessSuuntoGuideV3ForRecovery, assessSuuntoGuideV4ForRecovery, guideExternalId, guideMapping } from './mapping';
+import { assessSuuntoGuideV2ForRecovery, assessSuuntoGuideV3ForRecovery, assessSuuntoGuideV4ForRecovery, assessSuuntoGuideV6ForRecovery, guideExternalId, guideMapping, guidePayloadForRecovery } from './mapping';
 
 describe('Suunto Guide lifecycle — synthetic transport', () => {
   const now = Date.parse('2026-12-29T12:00:00Z'); const owner = 'Quantified Self';
@@ -32,7 +32,7 @@ describe('Suunto Guide lifecycle — synthetic transport', () => {
   });
   it('classifies only exact journal digests without changing the operation or making HTTP calls', () => {
     const before = structuredClone(op);
-    expect(transport.diagnosticMappingVersion(op)).toBe('suunto-guides-v6');
+    expect(transport.diagnosticMappingVersion(op)).toBe('suunto-guides-v7');
     expect(op).toEqual(before);
     op.digest = assessSuuntoGuideV2ForRecovery(op.workout!, op.destinationKey, op.timeZone, owner).digest;
     expect(transport.diagnosticMappingVersion(op)).toBe('suunto-guides-v2');
@@ -40,6 +40,8 @@ describe('Suunto Guide lifecycle — synthetic transport', () => {
     expect(transport.diagnosticMappingVersion(op)).toBe('suunto-guides-v3');
     op.digest = assessSuuntoGuideV4ForRecovery(op.workout!, op.destinationKey, op.timeZone, owner).digest;
     expect(transport.diagnosticMappingVersion(op)).toBe('suunto-guides-v4');
+    op.digest = assessSuuntoGuideV6ForRecovery(op.workout!, op.destinationKey, op.timeZone, owner).digest;
+    expect(transport.diagnosticMappingVersion(op)).toBe('suunto-guides-v6');
     op.digest = 'unknown-version';
     expect(transport.diagnosticMappingVersion(op)).toBeNull();
     expect(transport.diagnosticMappingVersion({ ...op, kind: 'remove', workout: null })).toBeNull();
@@ -53,6 +55,27 @@ describe('Suunto Guide lifecycle — synthetic transport', () => {
     expect(server.guides.get(changed.ids.guide)!.guide.localDate).toBe('2027-01-02');
     op = { ...op, kind: 'remove', workout: null, progress: null };
     expect(await execute()).toBeNull(); expect(server.guides.size).toBe(0);
+  });
+  it('recovers a frozen v6 pool create and adds SWOLF to the same Guide once', async () => {
+    next({ structure: { ...op.workout!.structure, sport: ActivityTypes.Swimming } });
+    op.digest = assessSuuntoGuideV6ForRecovery(op.workout!, op.destinationKey, op.timeZone, owner).digest;
+    const oldGuide = guidePayloadForRecovery(op, owner)!;
+    expect(JSON.stringify(oldGuide)).not.toContain('swolf');
+    server.guides.set('legacy-pool', { guide: oldGuide, pinned: true });
+    op.progress = { version: 1, step: 'create', state: 'started' };
+    const recovered = await recover();
+    expect(recovered).toMatchObject({ kind: 'accepted', artifact: { ids: { guide: 'legacy-pool' } } });
+    if (recovered.kind !== 'accepted') throw new Error('Legacy identity was not recovered');
+    op.artifact = recovered.artifact;
+    expect(server.calls.every(request => request.method === 'GET')).toBe(true);
+    next();
+    expect((await execute())!.ids.guide).toBe('legacy-pool');
+    expect(server.guides.get('legacy-pool')).toMatchObject({ pinned: true });
+    expect(JSON.stringify(server.guides.get('legacy-pool')!.guide)).toContain('swolf');
+    next(); await execute();
+    expect(server.calls.filter(request => request.method === 'POST')).toHaveLength(0);
+    expect(server.calls.filter(request => request.method === 'PUT')).toHaveLength(1);
+    expect(server.guides.size).toBe(1);
   });
   it('removes an exactly owned past Guide after explicit authorization', async () => {
     const artifact = (await execute())!;
