@@ -22,7 +22,7 @@ import { toObservable, toSignal } from '@angular/core/rxjs-interop';
 import { MatDialog } from '@angular/material/dialog';
 import { MatSnackBar } from '@angular/material/snack-bar';
 import { ActivatedRoute, Router, type NavigationExtras } from '@angular/router';
-import { ActivityTypes, DataWeight, DistanceUnits, PaceUnits, SwimPaceUnits, WeightUnits, type UserUnitSettingsInterface } from '@sports-alliance/sports-lib';
+import { ActivityTypes, DataWeight, DistanceUnits, WeightUnits, type UserUnitSettingsInterface } from '@sports-alliance/sports-lib';
 import {
   MANUAL_WORKOUT_EDITOR_CYCLING_SPORTS_V1,
   MANUAL_WORKOUT_EDITOR_RUNNING_SPORTS_V1,
@@ -50,9 +50,10 @@ import { ConfirmationDialogComponent, type ConfirmationWithPastProviderCleanup }
 import { CompactRowComponent } from '../shared/compact-row/compact-row.component';
 import { PlanScheduleCalendarComponent } from './plan-schedule-calendar.component';
 import { TrainingDeliveryButtonComponent } from './training-delivery-button.component';
+import { WorkoutTargetsEditorComponent } from './workout-targets-editor.component';
 import { WorkoutTimeInputComponent } from './workout-time-input.component';
 import { WorkoutProfileComponent } from './workout-profile.component';
-import { workoutProfileMetricLabels, workoutProfileMetricOrder, type WorkoutProfileSelection } from '../../helpers/workout-profile.helper';
+import type { WorkoutProfileSelection } from '../../helpers/workout-profile.helper';
 import { resolvePlanScheduleDate } from '../../helpers/plan-schedule-calendar.helper';
 import { TRAINING_PLAN_COLOR_OPTIONS, trainingPlanAppearance } from '../../helpers/training-plan-appearance.helper';
 import {
@@ -69,8 +70,6 @@ import {
   createManualWorkoutEditorValue,
   changeManualWorkoutEditorSport,
   changeManualWorkoutEditorStepEnding,
-  changeManualWorkoutEditorStepTarget,
-  manualWorkoutEditorSpeedUnit,
   formatManualWorkoutStructure,
   manualWorkoutEditorToStructure,
   workoutStructureToManualEditor,
@@ -79,7 +78,6 @@ import {
   type ManualWorkoutEditorValue,
   type ManualWorkoutEnding,
   type ManualWorkoutSport,
-  type ManualWorkoutTarget,
 } from '../../helpers/planned-workout-editor.helper';
 import {
   duplicateManualWorkoutEditorNode,
@@ -180,7 +178,7 @@ const EMPTY_SCHEDULE: CurrentTrainingScheduleV1 = {
 @Component({
   selector: 'app-plans-workspace',
   standalone: true,
-  imports: [SharedModule, DragDropModule, CompactRowComponent, PlanScheduleCalendarComponent, TrainingDeliveryButtonComponent, WorkoutTimeInputComponent, WorkoutProfileComponent],
+  imports: [SharedModule, DragDropModule, CompactRowComponent, PlanScheduleCalendarComponent, TrainingDeliveryButtonComponent, WorkoutTimeInputComponent, WorkoutProfileComponent, WorkoutTargetsEditorComponent],
   templateUrl: './plans-workspace.component.html',
   styleUrls: ['./plans-workspace.component.scss'],
   changeDetection: ChangeDetectionStrategy.OnPush,
@@ -272,23 +270,6 @@ export class PlansWorkspaceComponent {
     { value: 'distance', label: 'Distance' },
     { value: 'manual', label: 'Lap button press' },
   ];
-  readonly editorSupportsCadence = computed(() => ([...MANUAL_WORKOUT_EDITOR_RUNNING_SPORTS_V1,
-    ...MANUAL_WORKOUT_EDITOR_CYCLING_SPORTS_V1] as readonly ActivityTypes[]).includes(this.editor()?.value.sport));
-  readonly targetOptions = computed<ReadonlyArray<{ value: ManualWorkoutTarget; label: string }>>(() => {
-    const sport = this.editor()?.value.sport;
-    const labels = workoutProfileMetricLabels(sport);
-    return [{ value: 'none', label: 'No target' }, ...workoutProfileMetricOrder(sport)
-      .filter(value => value !== 'cadence' || this.editorSupportsCadence())
-      .map(value => ({ value, label: labels[value] }))];
-  });
-
-  targetOptionsForStep(step: ManualWorkoutEditorStep): ReadonlyArray<{ value: ManualWorkoutTarget; label: string }> {
-    const options = this.targetOptions();
-    // Keep an authored cadence selectable after a sport change without treating it as stroke rate.
-    return step.targetKind === 'cadence' && !this.editorSupportsCadence()
-      ? [...options, { value: 'cadence', label: 'Cadence' }] : options;
-  }
-
   readonly currentUser = computed(() => this.userService.user() as AppUserInterface | null);
   readonly editorIsSwimming = computed(() => isSwimmingWorkoutSportV1(this.editor()?.value.sport));
   readonly editorIsStrength = computed(() => this.editor()?.value.sport === ActivityTypes.StrengthTraining);
@@ -298,12 +279,6 @@ export class PlansWorkspaceComponent {
   readonly editorDistanceUnit = computed(() => this.editorIsSwimming() || this.editorIsRowing()
     ? 'Metres'
     : this.editor()?.unitSettings.distanceUnits === DistanceUnits.Miles ? 'Miles' : 'Kilometres');
-  readonly editorPaceUnit = computed(() => this.editorIsSwimming()
-    ? this.editor()?.unitSettings.swimPaceUnits[0] === SwimPaceUnits.MinutesPer100Yard
-      ? 'min/100yd' : 'min/100m'
-    : this.editorIsRowing() ? 'min/500m'
-      : this.editor()?.unitSettings.paceUnits[0] === PaceUnits.MinutesPerMile ? 'min/mi' : 'min/km');
-  readonly editorSpeedUnit = computed(() => manualWorkoutEditorSpeedUnit(this.editor()?.unitSettings));
   readonly hasTrainingPlanningUIAccess = computed(() => !!this.currentUser()?.uid);
   readonly libraryView = computed(() => this.routeState().mode.startsWith('library-'));
   readonly libraryState = toSignal(combineLatest([this.userService.user$, toObservable(this.libraryView)]).pipe(
@@ -1387,20 +1362,15 @@ export class PlansWorkspaceComponent {
       if (!session) return null;
       const nodes = session.value.nodes.map((node, index) => {
         if (index !== nodeIndex) return node;
-        const isSelection = ['purpose', 'endingKind', 'targetKind', 'allowEarlyLap'].includes(field);
+        const isSelection = ['purpose', 'endingKind', 'allowEarlyLap'].includes(field);
         if (stepIndex === null && node.kind === 'step') {
           if (isSelection && node[field as keyof ManualWorkoutEditorStep] !== value) this.haptics.selection();
           if (field === 'endingKind') {
             return changeManualWorkoutEditorStepEnding(node, value as ManualWorkoutEnding, session.value.sport, session.unitSettings);
           }
-          if (field === 'targetKind') {
-            return changeManualWorkoutEditorStepTarget(node, value as ManualWorkoutTarget, session.value.sport, session.unitSettings);
-          }
           return { ...node, [field]: value,
             ...(field === 'endingValue' && value !== node[field]
               ? { sourceDistance: undefined, sourceDuration: node.endingKind === 'time' ? sourceDuration : undefined } : {}),
-            ...((field === 'targetKind' || field === 'targetMinimum' || field === 'targetMaximum') && value !== node[field]
-              ? { sourcePace: undefined, sourceSpeed: undefined } : {}),
           } as ManualWorkoutEditorStep;
         }
         if (stepIndex !== null && node.kind === 'repeat') {
@@ -1412,14 +1382,9 @@ export class PlansWorkspaceComponent {
               if (field === 'endingKind') {
                 return changeManualWorkoutEditorStepEnding(step, value as ManualWorkoutEnding, session.value.sport, session.unitSettings);
               }
-              if (field === 'targetKind') {
-                return changeManualWorkoutEditorStepTarget(step, value as ManualWorkoutTarget, session.value.sport, session.unitSettings);
-              }
               return { ...step, [field]: value,
                 ...(field === 'endingValue' && value !== step[field]
                   ? { sourceDistance: undefined, sourceDuration: step.endingKind === 'time' ? sourceDuration : undefined } : {}),
-                ...((field === 'targetKind' || field === 'targetMinimum' || field === 'targetMaximum') && value !== step[field]
-                  ? { sourcePace: undefined, sourceSpeed: undefined } : {}),
               } as ManualWorkoutEditorStep;
             }),
           };

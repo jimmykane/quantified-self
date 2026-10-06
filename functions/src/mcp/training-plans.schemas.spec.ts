@@ -422,6 +422,27 @@ describe('additive early Lap recipe contract', () => {
   });
 });
 
+describe('complete manual target editor coverage', () => {
+  it.each(Object.entries(targetVariantFixtures))('round-trips precise ordered pairs containing %s through scheduled/library reads and proposals', (_, fixture) => {
+    const target = JSON.parse(JSON.stringify(fixture), (key, value) => typeof value === 'number' ? value + 0.1234567890123 : value);
+    const companion = fixture.kind === 'power' ? targetReferenceFixtures['heart-rate:threshold-heart-rate'] : targetReferenceFixtures['power:functional-threshold-power'];
+    const input = recipe({ kind: 'time', seconds: 61.1234567890123 }, [target, { ...companion, minimumPercent: 0, maximumPercent: 130.123456789 }]);
+    input.nodes = [{ kind: 'repeat', id: 'repeat', count: 3, steps: [input.nodes[0] as Extract<WorkoutStructureV1['nodes'][number], { kind: 'step' }>] }];
+    expectPublicReadWriteRoundTrip(input);
+    expect(TRAINING_READ_OUTPUTS.get_saved_workout.parse({ libraryRevision: 1, savedWorkout: {
+      savedWorkoutRef: 'opaque-library', title: 'Mixed targets', status: 'active', revision: 1, createdAtMs: 1, updatedAtMs: 1, structure: input,
+    } }).savedWorkout.structure).toEqual(input);
+    expect(TRAINING_WRITE_INPUTS.preview_saved_workout_change.parse({ expectedScheduleRevision: 1, expectedLibraryRevision: 1,
+      change: { kind: 'create', title: 'Mixed targets', structure: input } }).change).toMatchObject({ structure: input });
+    const step = input.nodes[0].kind === 'repeat' ? input.nodes[0].steps[0] : input.nodes[0];
+    for (const field of ['source', 'speedSource', 'referenceSaved', 'rangeMode', 'referenceValue', 'editorMinimum', 'providerWorkoutId']) {
+      const leaked = recipe(step.ending, [{ ...target, [field]: 'private' }, companion] as WorkoutTargetV1[]);
+      expect(TRAINING_RECIPE_SCHEMA.safeParse(leaked).success).toBe(false);
+    }
+    expect(TRAINING_RECIPE_SCHEMA.safeParse(recipe(step.ending, [target, target])).success).toBe(false);
+  });
+});
+
 describe('strict additive workout prescription analysis', () => {
   it('requires a bounded reference and explicit source without accepting extra fields', () => {
     const schema = TRAINING_READ_INPUTS.get_workout_prescription_analysis;
