@@ -138,6 +138,7 @@ export class EventCardLapsComponent extends DataTableAbstractDirective implement
   public activeLapColumnMenuGroup: LapColumnMenuGroup | null = null;
   public hasMultipleEventActivities = false;
   public savingLapColumnSportFamilies = signal(new Set<AppEventLapSportFamily>());
+  private readonly pendingLapColumnMetricTypes = new Map<AppEventLapSportFamily, string[]>();
   private eventDetailsSettings: AppEventDetailsSettingsInterface = normalizeEventDetailsSettings(null);
   private readonly userSettingsQuery = inject(AppUserSettingsQueryService);
   private readonly snackBar = inject(MatSnackBar);
@@ -146,7 +147,13 @@ export class EventCardLapsComponent extends DataTableAbstractDirective implement
   constructor(protected changeDetectorRef: ChangeDetectorRef) {
     super(changeDetectorRef);
     effect(() => {
-      this.eventDetailsSettings = this.userSettingsQuery.eventDetailsSettings();
+      const persistedSettings = this.userSettingsQuery.eventDetailsSettings();
+      this.eventDetailsSettings = normalizeEventDetailsSettings({
+        lapTableColumnsBySportFamily: {
+          ...persistedSettings.lapTableColumnsBySportFamily,
+          ...Object.fromEntries(this.pendingLapColumnMetricTypes),
+        },
+      });
       this.updateData();
     });
   }
@@ -386,6 +393,7 @@ export class EventCardLapsComponent extends DataTableAbstractDirective implement
       && normalizedMetricTypes.every((type, index) => type === currentMetricTypes[index])) {
       return;
     }
+    this.pendingLapColumnMetricTypes.set(sportFamily, normalizedMetricTypes);
     this.hapticsService.selection();
     this.eventDetailsSettings = nextSettings;
     this.updateData();
@@ -395,11 +403,18 @@ export class EventCardLapsComponent extends DataTableAbstractDirective implement
       await this.userSettingsQuery.updateLapTableColumns(sportFamily, normalizedMetricTypes);
       this.hapticsService.success();
     } catch {
-      this.eventDetailsSettings = previousSettings;
+      // Another sport's layout may have changed while this save was pending.
+      this.eventDetailsSettings = normalizeEventDetailsSettings({
+        lapTableColumnsBySportFamily: {
+          ...this.eventDetailsSettings.lapTableColumnsBySportFamily,
+          [sportFamily]: previousSettings.lapTableColumnsBySportFamily?.[sportFamily],
+        },
+      });
       this.updateData();
       this.snackBar.open('Could not save lap columns. Please try again.', 'Close');
       this.hapticsService.error();
     } finally {
+      this.pendingLapColumnMetricTypes.delete(sportFamily);
       this.setSportFamilySaving(sportFamily, false);
     }
   }

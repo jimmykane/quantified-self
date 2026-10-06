@@ -210,6 +210,67 @@ describe('EventCardLapsComponent', () => {
         expect(haptics.success).toHaveBeenCalledTimes(1);
     });
 
+    it('rolls back only a failed swimming layout without discarding another sport save or lap selection', async () => {
+        const swimming = {
+            ...createActivity([createRenderableLap(LapTypes.Manual)]), type: 'Swimming',
+            getSwimLengths: () => [{ index: 1, lapIndex: 1, type: 'active', stroke: 'freestyle', startDate: 0, endDate: 25_000 }],
+        } as unknown as ActivityInterface;
+        const running = { ...createActivity([createRenderableLap(LapTypes.Manual)]), getID: () => 'running-activity' } as ActivityInterface;
+        component.canCustomize = true;
+        component.selectedActivities = [swimming, running];
+        eventDetailsSettings.set(normalizeEventDetailsSettings({ lapTableColumnsBySportFamily: { running: [] } }));
+        fixture.detectChanges();
+        component.ngOnChanges();
+        const swimTable = component.lapTableGroups[0].tables.find(table => table.activity === swimming)!;
+        component.toggleAllLapSelections(swimTable);
+        let rejectSwimSave!: (error: Error) => void;
+        updateLapTableColumns.mockImplementationOnce(() => new Promise<void>((_resolve, reject) => { rejectSwimSave = reject; }));
+        const savingSwimming = component.onLapColumnSelectionChange(
+            'swimming', createLapColumnSelectionChange([EVENT_LAP_STROKE_COLUMN], false),
+        );
+        await component.onLapColumnSelectionChange('running', createLapColumnSelectionChange([DataDuration.type]));
+        rejectSwimSave(new Error('swimming save failed'));
+        await savingSwimming;
+        fixture.detectChanges();
+
+        expect(component.getColumnsToDisplay('Running')).toEqual(['#', DataDuration.type]);
+        expect(component.getColumns(swimming, LapTypes.Manual)).toContain(EVENT_LAP_STROKE_COLUMN);
+        expect(component.lapTableGroups[0].tables.find(table => table.activity === swimming)?.selectedCount).toBe(1);
+        expect(component.savingLapColumnSportFamilies().size).toBe(0);
+        expect(haptics.success).toHaveBeenCalledTimes(1);
+        expect(haptics.error).toHaveBeenCalledTimes(1);
+    });
+
+    it('keeps a pending Stroke choice when another sport preference refreshes', async () => {
+        const swimming = {
+            ...createActivity([createRenderableLap(LapTypes.Manual)]), type: 'Swimming',
+            getSwimLengths: () => [{ index: 1, lapIndex: 1, type: 'active', stroke: 'freestyle', startDate: 0, endDate: 25_000 }],
+        } as unknown as ActivityInterface;
+        component.canCustomize = true;
+        component.selectedActivities = [swimming];
+        component.ngOnChanges();
+        let finishSave!: () => void;
+        updateLapTableColumns.mockImplementationOnce(() => new Promise<void>(resolve => { finishSave = resolve; }));
+        const saving = component.onLapColumnSelectionChange(
+            'swimming', createLapColumnSelectionChange([EVENT_LAP_STROKE_COLUMN], false),
+        );
+        eventDetailsSettings.set(normalizeEventDetailsSettings({ lapTableColumnsBySportFamily: { running: [DataDuration.type] } }));
+        fixture.detectChanges();
+        const group = component.lapColumnMenuGroups[0];
+        const strokeStillHidden = !component.getColumns(swimming, LapTypes.Manual).includes(EVENT_LAP_STROKE_COLUMN);
+        const strokeStillUnchecked = !group.selectedMetricTypes.includes(EVENT_LAP_STROKE_COLUMN);
+        finishSave();
+        await saving;
+
+        expect(strokeStillHidden).toBe(true);
+        expect(strokeStillUnchecked).toBe(true);
+        expect(component.getColumnsToDisplay('Running')).toEqual(['#', DataDuration.type]);
+        expect(component.getColumns(swimming, LapTypes.Manual)).not.toContain(EVENT_LAP_STROKE_COLUMN);
+        expect(haptics.selection).toHaveBeenCalledTimes(1);
+        expect(haptics.success).toHaveBeenCalledTimes(1);
+        expect(haptics.error).not.toHaveBeenCalled();
+    });
+
     it('keeps typing and unchanged column-menu selections silent with feedback for menu actions', () => {
         component.canCustomize = true;
         component.selectedActivities = [

@@ -98,6 +98,8 @@ lap-type filtering; lap IDs and visible row numbers do not determine the associa
 supplies the default swim set header: one recorded stroke is named, different strokes show Mixed, and missing or
 rest-only stroke data stays blank. Stroke is display metadata with no numeric average or selected-summary value.
 The existing per-sport settings write path stores its visibility choice; source activity/lap/length data is unchanged.
+Pending column choices survive background preference refreshes. A failed save restores only that sport's previous
+layout, preserving changes to other sport layouts and the temporary lap selection.
 
 ## Activity details spacing
 
