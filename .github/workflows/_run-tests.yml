@@ -55,6 +55,9 @@ jobs:
       - name: Check CI trigger and required-result contracts
         run: npm run test:workflows
 
+      - name: Check Training monitoring definitions and safe provisioning
+        run: npm run test:training-monitoring
+
       - name: Validate local Quantified Self plugin
         env:
           QS_CHATGPT_APP_ID: plugin_asdk_app_ci_fixture

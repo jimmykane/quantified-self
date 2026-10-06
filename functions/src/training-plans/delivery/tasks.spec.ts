@@ -25,11 +25,13 @@ vi.mock('./store', () => ({ reconcileTrainingDeliveryPage: vi.fn() }));
 vi.mock('./worker', () => ({ processTrainingDelivery: vi.fn() }));
 
 vi.mock('./verification-worker', () => ({ processTrainingVerification: vi.fn() }));
+vi.mock('./monitoring', () => ({ observeTrainingQueueHealth: vi.fn() }));
 
 import { dispatchTrainingDelivery, onTrainingDeliveryQueued } from './tasks';
 import { productionDeliveryRuntime } from './runtime';
 import { enqueueTrainingDeliveryTask, getCloudTaskQueueDepthForQueue } from '../../shared/cloud-tasks';
 import { getUserDeletionGuardStateInTransaction } from '../../shared/user-deletion-guard';
+import { observeTrainingQueueHealth } from './monitoring';
 
 describe('Training delivery queue trigger', () => {
   beforeEach(() => { vi.clearAllMocks(); });
@@ -73,6 +75,9 @@ describe('Training delivery queue trigger', () => {
       db: { collection, runTransaction: vi.fn().mockResolvedValue(false) },
     } as unknown as ReturnType<typeof productionDeliveryRuntime>);
     await (dispatchTrainingDelivery as unknown as () => Promise<void>)();
+    expect(observeTrainingQueueHealth).toHaveBeenCalledWith(
+      vi.mocked(productionDeliveryRuntime).mock.results.at(-1)!.value.db, 100,
+    );
     expect(scans.map(scan => scan.limit)).toEqual(depth === 100 ? [] : [25, 25, 25]);
     if (depth < 100) {
       expect(scans[0].filters[0]).toEqual(['kind', 'in', ['delivery', 'reconcile']]);

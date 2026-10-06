@@ -4883,9 +4883,138 @@ The admin callable uses only
 bounded Firestore aggregate queries, never returns ledger evidence, remote IDs, credentials or raw rejection bodies,
 and keeps the other queues available if Training indexes are missing. The collection-group status indexes in
 `firestore.indexes.json` must be deployed before outcome counts become available. Queue monitoring is read-only;
-it neither retries deliveries nor enables a provider. Production dashboards and alerts remain a separate rollout
-concern. MCP impact: none—the new counts are admin-only and do not change Training reads, mutations, scopes, consent,
+it neither retries deliveries nor enables a provider. Production dashboard/alert definitions and activation are described
+below. MCP impact: none—the counts are admin-only and do not change Training reads, mutations, scopes, consent,
 user-visible delivery projections or provider actions.
+
+### Training delivery production monitoring
+
+Ticket #655 tracks production activation and email-delivery verification. Repository definitions live in
+`tools/training-monitoring/definitions.mjs`; this is operational configuration, not a second Training architecture
+or a replacement for `/admin/queues/training-delivery`. No product enablement, UID gate, provider behavior, retention
+limit, schedule or rollback switch changes. Garmin/Wahoo/Suunto remain live; COROS new sends remain Coming soon.
+
+The existing **512 MiB** `dispatchTrainingDelivery` minute scheduler emits a versioned aggregate `queue_health`
+log before checking Cloud Tasks capacity, including on idle or saturated runs. It executes one Firestore index-count
+query for `dueAtMs <= now` and two field-masked, single-document queries (oldest positive due date and one immediate
+marker). Results stay bounded in memory; count-query billing scales with matching index entries, so this is not a
+promise of three billed document reads. The probe has a five-second deadline, no writes and no owner/ledger reads.
+Failed reads, deadlines and invalid negative markers produce `queue_health_unavailable`, never a fake zero backlog,
+and cannot prevent the dispatcher from continuing. The deadline bounds waiting, not cancellation of an already-sent
+Firestore RPC. Those outstanding reads remain bounded to the same three queries.
+
+`dueAgeLowerBoundMs` is deliberately a **lower bound** on dispatch delay, not end-to-end acceptance latency. Immediate
+jobs use `dueAtMs=0`; this is a marker, not the Unix epoch. Their sampled document's last-write time supplies conservative
+elapsed age. Reconciliation documents persist through horizon polling and can be reset to immediate work, so creation
+time would incorrectly age a fresh request from an older queue record. Later writes can understate age, never prove an
+older pending request. Immediate work written during the five-second probe window has age clamped to zero, not an
+incomplete-telemetry error.
+Zero-marker IDs are not chronological, so one such sample can understate the oldest immediate job. The oldest positive
+due date is queried independently so zero markers cannot hide it. Retries/reservations change due dates; this is not
+time since consent. The count and samples are not transactional, and a zero count forces age to zero if jobs disappeared
+between reads. Unknown immediate last-write time is explicitly flagged as incomplete telemetry. Future horizon jobs and
+documents without a numeric due date do not establish backlog age. No exact-oldest or watch-receipt claim is made.
+
+Google Cloud Logging supplies fourteen versioned `qs_training_*_v1` metrics for second-generation Function
+`cloud_run_revision` resources in the selected project; numeric samples are **DELTA distributions**,
+not gauges or cumulative counts. Only fixed provider/event/category labels are extracted. Existing worker logs provide
+acceptance/failure, worker-attempt latency, retry-related failures and stale suppression; verification logs provide check
+outcomes/latency; cleanup logs provide failure observations. Retry-related failures are not scheduled-retry counts,
+stale suppression is expected version protection, and COROS batch events count batches rather than individual workouts.
+Recovered acceptance and COROS batches do not currently carry comparable worker latency and are excluded from that chart.
+Cloud Tasks HTTP success can occur after the worker persisted a provider failure; it is not provider acceptance.
+
+The dedicated **QS Training Delivery** Cloud Monitoring dashboard charts these signals plus native queue depth, HTTP
+attempts and dispatch delay for `processTrainingDeliveryTask` in `europe-west2`. Latency percentiles use explicit
+buckets and are approximate. Queue charts instead reduce the distributions to mean observations, preserving a true
+zero for idle samples instead of an interpolated bucket percentile; these are not current synced-workout totals.
+Cross-service p95 latency is displayed as the maximum service p95, not claimed as a pooled global percentile.
+
+Initial alert thresholds (tune after observing actual volume):
+
+| Policy | Condition | Severity |
+| --- | --- | --- |
+| Sustained dispatch backlog | At least four samples per 5 minutes with due work delayed ≥15 minutes, sustained for 10 minutes | Error |
+| Repeated dispatch failures | At least three dispatch failures in 10 minutes | Error |
+| Provider failure surge | At least ten retryable/terminal/uncertain failures in 10 minutes across live providers | Error |
+| Provider access or scope failures | At least five permission/provider-access failures in 10 minutes across live providers | Warning |
+| Training cleanup failures | At least one cleanup failure observation in 10 minutes | Warning |
+| Queue telemetry unavailable | At least two failed/incomplete samples in 10 minutes, or no queue-health sample for 30 minutes | Warning |
+
+Single-user disconnects and expected horizon deferrals do not page through the provider-failure policy. COROS is excluded
+from the two provider policies while its new-send UI remains blocked; global dispatch health still includes any retained
+queue work. Missing threshold data evaluates inactive, not healthy evidence; a separate heartbeat-absence condition
+detects missing telemetry after a time series exists. Initial activation must explicitly verify the first sample.
+Log ingestion can lag by several minutes; alerts are not instantaneous and thresholds use multi-minute windows.
+No historical backfill is provided by new log metrics.
+
+#### Preview and separately approved activation
+
+The CLI previews JSON **offline by default**, without auth, network, files or cloud changes:
+
+```sh
+node tools/training-monitoring/cli.mjs --project=quantified-self-io
+```
+
+After separate approval, select an existing enabled **email** channel through Cloud Monitoring → Alerting → Notification
+channels. Do not store the email address or channel ID in the repository. The read-only inventory command is:
+
+```sh
+gcloud alpha monitoring channels list --project=quantified-self-io --format='table(name,displayName,type,enabled)'
+```
+
+Cloud Monitoring sends incident-opened and incident-closed emails through that channel. QS does not send these emails,
+add an SMTP integration or create a mail Function. Documentation subjects and incident text link to this runbook; the
+Google email layout itself is managed by Google. A closed incident means the configured condition cleared, not proof
+of a watch receipt or a completed workout. Existing Essentials dashboards and OOM alerts remain intact.
+
+Activation requires explicit approval covering deployment of the affected `dispatchTrainingDelivery` Function
+and application of cloud monitoring configuration with a selected channel. Neither is performed by ordinary tests or CI.
+After approval, substitute the selected channel resource in the following command (never use a made-up placeholder):
+
+```sh
+node tools/training-monitoring/cli.mjs --project=quantified-self-io \
+  --notification-channel=projects/quantified-self-io/notificationChannels/SELECTED_ID \
+  --apply --confirm-project=quantified-self-io
+```
+
+The operator needs log-metric read/update, dashboard read/create/update, alert-policy read/create/update and
+notification-channel read permissions; an existing authenticated `gcloud` account supplies the token without printing
+or saving it. The CLI verifies an enabled email channel, performs ownership/schema preflight, then upserts only its
+versioned metrics and owned dashboard/policies. The dashboard uses an empty-valued `qs-training-monitoring-v1` label
+as required by dashboard tag semantics; policies use `managed_by`/`policy_id` user labels. It never creates/deletes
+notification channels, deletes resources or
+overwrites unrelated configuration. Dashboard updates retain the API concurrency token and alert updates retain
+matching condition IDs. Run only one apply at a time: create APIs allocate IDs and concurrent first applies can race.
+If an API call fails, the CLI stops; inspect the safe HTTP status and retry the same command after fixing the cause.
+It is not a cloud transaction, so successful earlier writes remain. Ownership-tagged reapplication avoids duplicate
+resources; conflicting names/owners or immutable metric schema changes fail closed rather than overwrite.
+The preflight treats an omitted label value type as the API's default `STRING`, not an immutable schema change;
+explicitly different label types are still rejected before any write.
+Malformed API JSON is reported generically: parser error text must not expose private notification-channel data.
+
+Before #655's alert criterion can be checked, record the approved activation, metric/dashboard/policy resource identities
+privately, first idle and due-job samples, active notification-channel evidence, and a controlled incident-opened/closed
+email check. Do not synthesize provider failures, mutate customer jobs or bulk resend just to trigger alerts. Validate
+any temporary cloud test policy separately with an approved exact target and removal scope. Retain other open #655
+lifecycle/epic checklist obligations; source definitions alone do not prove that an email arrived.
+
+Verification: `npm run test:training-monitoring`, Functions `monitoring.spec.ts`/`tasks.spec.ts`, and isolated demo
+Firestore `monitoring.emulator.spec.ts` in the CI **delivery** group. Configuration tests use injected synthetic HTTP
+responses, including initial creation, reapplication, ownership collisions, duplicate detection and failures; they
+never authenticate or provision real alerts. Review app Help's existing delivery-state explanations; no user-facing
+behavior or help change is required for admin-only operational monitoring.
+
+MCP impact: **no wire impact**. These aggregate logs/cloud definitions do not add a tool, metric exposed to users,
+scope, consent, projection, proposal, mutation, provider action or Assistant permission. Existing Training reads and
+approval-gated writes are unchanged. No provider runtime or transport contract changes.
+
+Official API references: [log metric update](https://docs.cloud.google.com/logging/docs/reference/v2/rest/v2/projects.metrics/update),
+[distribution log metrics](https://docs.cloud.google.com/logging/docs/logs-based-metrics/distribution-metrics),
+[dashboard layouts](https://docs.cloud.google.com/monitoring/dashboards/api-examples),
+[alert policies](https://docs.cloud.google.com/monitoring/api/ref_v3/rest/v3/projects.alertPolicies),
+[Cloud Tasks monitoring](https://docs.cloud.google.com/tasks/docs/monitor), and
+[log metric latency/limitations](https://docs.cloud.google.com/logging/docs/logs-based-metrics/troubleshooting).
 
 ### Sports-lib reparse observability
 

@@ -14,6 +14,7 @@ import { productionDeliveryRuntime } from './runtime';
 import { reconcileTrainingDeliveryPage } from './store';
 import { processTrainingDelivery } from './worker';
 import { processTrainingVerification } from './verification-worker';
+import { observeTrainingQueueHealth } from './monitoring';
 
 const region = FUNCTIONS_MANIFEST.processTrainingDeliveryTask.region;
 const RECOVERY_DISPATCH_PAGE_SIZE = 25;
@@ -72,6 +73,8 @@ export const onTrainingDeliveryQueued = onDocumentWritten({
 export const dispatchTrainingDelivery = onSchedule({ schedule: '* * * * *', region, timeoutSeconds: 120,
   memory: '512MiB' }, async () => {
   const runtime = productionDeliveryRuntime();
+  // Also sample at capacity: an early dispatch return must not hide a backlog.
+  await observeTrainingQueueHealth(runtime.db, runtime.now());
   const pending = await getCloudTaskQueueDepthForQueue(config.cloudtasks.trainingDeliveryQueue, true);
   if (pending >= MAX_PENDING_TASKS) return;
   const capacity = Math.min(25, MAX_PENDING_TASKS - pending);
