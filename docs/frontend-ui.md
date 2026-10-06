@@ -61,6 +61,19 @@ omitted from updates. Section navigation preserves unsaved form edits and emits 
 Background profile updates refresh untouched consent switches while preserving explicit local edits. Privacy switches
 are disabled during saving, duplicate submissions are ignored, and failed saves retain the user's choice for retry.
 
+## Recorded swim distance units
+
+`createSwimDistanceDisplayStat` in `shared/unit-aware-display.ts` selects Sports Lib's display-only
+`SwimDistanceUnits` from the first normalized swim-pace preference. Recorded swim length rows, splits, set totals,
+homogeneous swimming summaries, swim lap tables, detailed statistics and length/lap chart tooltips use this instance
+before resolving the shared unit-aware display. General distance preferences do not override swim units; missing or
+invalid swim preferences retain meters. Mixed-sport summaries keep general distance units. Source values and JSON
+remain canonical meters. This needs Sports Lib's optional `DataSwimDistance` display-unit constructor; local testing
+uses the packed library build in both root and Functions. Adopt the released package in both manifests and lockfiles
+before shipping. No activity/route reparse, data migration or derived recomputation is required. MCP numeric metrics,
+`distanceMeters`/`poolLengthMeters`, scopes and strict schemas are unchanged; this does not alter planned-workout
+display or delivery. Existing Settings interaction/save behavior supplies the unit preference.
+
 ## Activity details spacing
 
 Activity details use the workspace shell's inline gutters once. The primary summary, Training impact, metadata,

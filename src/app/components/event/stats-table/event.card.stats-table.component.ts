@@ -1,6 +1,6 @@
 import { ChangeDetectionStrategy, Component, Input, OnChanges } from '@angular/core';
 import { MatTableDataSource } from '@angular/material/table';
-import { ActivityInterface, DataInterface, EventInterface, ServiceNames, User } from '@sports-alliance/sports-lib';
+import { ActivityInterface, DataDistance, DataInterface, EventInterface, ServiceNames, User } from '@sports-alliance/sports-lib';
 import { AppColors } from '../../../services/color/app.colors';
 import { DynamicDataLoader } from '@sports-alliance/sports-lib';
 import { UserUnitSettingsInterface } from '@sports-alliance/sports-lib';
@@ -20,6 +20,7 @@ import { buildSourceProviderPresentation } from '../../../helpers/provider-prese
 import { normalizeProviderServiceName, ProviderPresentation } from '@shared/provider-presentation';
 import { AppEventService } from '../../../services/app.event.service';
 import { take } from 'rxjs/operators';
+import { resolvePrimaryUnitAwareDisplayStat } from '../../../helpers/summary-display.helper';
 
 @Component({
   selector: 'app-event-stats-table',
@@ -140,8 +141,11 @@ export class EventCardStatsTableComponent implements OnChanges {
         if (!activityStat) {
           return rowObj;
         }
-        const displayValue = activityStat.getDisplayValue();
-        const displayUnit = activityStat.getDisplayUnit();
+        const distanceDisplay = stat.getType() === DataDistance.type
+          ? resolvePrimaryUnitAwareDisplayStat(activityStat, this.userUnitSettings, DataDistance.type, [activity.type])
+          : null;
+        const displayValue = distanceDisplay?.value ?? activityStat.getDisplayValue();
+        const displayUnit = distanceDisplay?.unit ?? activityStat.getDisplayUnit();
 
         // Check if any activity has a value that renders as [object Object]
         if (String(displayValue).includes('[object Object]')) {

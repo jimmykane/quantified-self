@@ -8,6 +8,8 @@ import { vi, describe, it, expect, beforeEach } from 'vitest';
 import {
     ActivityInterface,
     DataBeginningPotentialStamina,
+    DataDistance,
+    SwimPaceUnits,
     DataPace,
     DataPaceAvg,
     DataPaceMax,
@@ -99,6 +101,24 @@ describe('EventCardStatsTableComponent', () => {
 
     it('should create', () => {
         expect(component).toBeTruthy();
+    });
+
+    it('shows swimming distances in yards in detailed statistics and copied rows', () => {
+        const distance = new DataDistance(22.86);
+        component.userUnitSettings = { ...mockUserUnitSettings, swimPaceUnits: [SwimPaceUnits.MinutesPer100Yard] };
+        component.selectedActivities = [{
+            ...mockActivity,
+            type: 'Swimming',
+            getStatsAsArray: () => [distance],
+            getStat: (type: string) => type === DataDistance.type ? distance : undefined,
+        } as ActivityInterface];
+        component.ngOnChanges({});
+        const row = component.data.data.find(item => item.Name === DataDistance.type);
+        expect(row[component.columns[1]]).toBe('25 yd');
+        component.selection.select(row);
+        component.copyToSheets();
+        expect(mockDataExportService.copyToSheets).toHaveBeenCalledWith([row], component.columns, undefined);
+        expect(distance.getValue()).toBe(22.86);
     });
 
     it('should toggle row selection', () => {

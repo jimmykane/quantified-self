@@ -1040,7 +1040,8 @@ describe('UserSettingsComponent', () => {
         expect(fixture.nativeElement.querySelector('mat-expansion-panel')).toBeFalsy();
         expect(fixture.nativeElement.textContent).toContain('Fine-tune units');
         expect(fixture.nativeElement.textContent).toContain('Health and Training body weight');
-        expect(fixture.nativeElement.textContent).toContain('first preference also selects dive depth and rate units');
+        expect(fixture.nativeElement.textContent).toContain('first preference selects swim distance in meters or yards');
+        expect(fixture.nativeElement.textContent).toContain('dive depth and rate units');
         expect(formFields.length).toBeGreaterThanOrEqual(5);
         expect(fixture.nativeElement.querySelector('.unit-simple-settings')).toBeFalsy();
         expect(fixture.nativeElement.querySelector('.unit-advanced-settings')).toBeFalsy();

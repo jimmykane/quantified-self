@@ -5,11 +5,11 @@ import {
   DataDistance,
   DataDuration,
   DataInterface,
-  DataSwimDistance,
   UserUnitSettingsInterface,
 } from '@sports-alliance/sports-lib';
 import {
   type UnitAwareStatDisplay,
+  createSwimDistanceDisplayStat,
   resolveUnitAwareDisplayStat as resolveSharedUnitAwareDisplayStat,
 } from '@shared/unit-aware-display';
 import { SummaryPrimaryInfoMetric } from '../components/shared/summary-primary-info/summary-primary-info.component';
@@ -23,7 +23,7 @@ export const isSwimmingActivityType = (activityType: unknown): boolean => {
   return ActivityTypesHelper.getActivityGroupForActivityType(resolvedActivityType) === ActivityTypeGroups.SwimmingGroup;
 };
 
-export const shouldDisplayDistanceAsSwimMeters = (activityTypes?: readonly unknown[] | null): boolean => {
+export const shouldDisplayDistanceAsSwimming = (activityTypes?: readonly unknown[] | null): boolean => {
   if (!activityTypes?.length) {
     return false;
   }
@@ -35,6 +35,7 @@ export const resolveSummaryDisplayStat = (
   stat: DataInterface | void | null | undefined,
   preferredType?: string | null,
   activityTypes?: readonly unknown[] | null,
+  unitSettings?: UserUnitSettingsInterface | null,
 ): DataInterface | null => {
   if (!stat) {
     return null;
@@ -43,11 +44,11 @@ export const resolveSummaryDisplayStat = (
   const statType = stat.getType?.();
   if (
     (preferredType === DataDistance.type || statType === DataDistance.type)
-    && shouldDisplayDistanceAsSwimMeters(activityTypes)
+    && shouldDisplayDistanceAsSwimming(activityTypes)
   ) {
     const distance = stat.getValue?.();
     if (typeof distance === 'number' && Number.isFinite(distance)) {
-      return new DataSwimDistance(distance);
+      return createSwimDistanceDisplayStat(distance, unitSettings);
     }
   }
 
@@ -60,7 +61,7 @@ export const resolvePrimaryUnitAwareDisplayStat = (
   preferredType?: string | null,
   activityTypes?: readonly unknown[] | null,
 ): UnitAwareStatDisplay | null => {
-  const displayStat = resolveSummaryDisplayStat(stat, preferredType, activityTypes);
+  const displayStat = resolveSummaryDisplayStat(stat, preferredType, activityTypes, unitSettings);
 
   return resolveSharedUnitAwareDisplayStat(displayStat, unitSettings, {
     preferredType,

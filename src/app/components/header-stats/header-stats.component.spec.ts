@@ -227,6 +227,16 @@ describe('HeaderStatsComponent', () => {
     expect(component.getCompositeDeltaDisplay('10', 'W')).toBe('10');
   });
 
+  it('shows swimming header cards in yards with the first swim-pace preference', () => {
+    component.layout = 'grid';
+    component.activityTypes = [ActivityTypes.Swimming];
+    component.unitSettings = { swimPaceUnits: [SwimPaceUnits.MinutesPer100Yard] } as any;
+    component.statsToShow = [DataDistance.type];
+    component.stats = [new DataDistance(91.44)];
+    applyChanges(component);
+    expect(component.displayedStatCards[0].valueItems[0]).toMatchObject({ displayValue: '100', displayUnit: 'yd' });
+  });
+
   it('should keep swimming distance summary cards in meters with miles distance preference', () => {
     component.layout = 'grid';
     component.activityTypes = [ActivityTypes.Swimming];

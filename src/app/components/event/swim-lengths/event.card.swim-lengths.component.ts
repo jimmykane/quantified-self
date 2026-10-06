@@ -8,13 +8,13 @@ import {
   DataHeartRate,
   DataInterface,
   DataSwimPace,
-  DataSwimDistance,
   DynamicDataLoader,
   EventInterface,
   UserUnitSettingsInterface,
 } from '@sports-alliance/sports-lib';
 import { AppSwimLength, getActivitySwimLengths } from '../../../helpers/event-swim-length.helper';
 import { isMergeOrBenchmarkEvent } from '../../../helpers/event-visibility.helper';
+import { createSwimDistanceDisplayStat, resolveUnitAwareDisplayStat } from '@shared/unit-aware-display';
 
 interface SwimLengthTableRow {
   '#': number;
@@ -285,7 +285,9 @@ export class EventCardSwimLengthsComponent implements OnChanges {
   }
 
   private formatSwimDistanceValue(distance: number | null): string {
-    return distance === null ? '' : this.formatUnitAwareStat(new DataSwimDistance(distance));
+    return distance === null ? '' : resolveUnitAwareDisplayStat(
+      createSwimDistanceDisplayStat(distance, this.unitSettings), this.unitSettings,
+    )?.text ?? '';
   }
 
   private formatEnergy(calories: AppSwimLength['calories']): string {

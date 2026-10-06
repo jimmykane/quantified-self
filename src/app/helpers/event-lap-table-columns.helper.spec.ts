@@ -151,6 +151,11 @@ describe('event lap table columns helper', () => {
       .toBe('01:22 min/100yd');
   });
 
+  it('formats swimming lap distance in yards while retaining running distance preferences', () => {
+    expect(formatEventLapMetric(new DataDistance(91.44), DataDistance.type, unitSettings, 'Swimming')).toBe('100 yd');
+    expect(formatEventLapMetric(new DataDistance(1609.344), DataDistance.type, unitSettings, 'Running')).toBe('1.61 Km');
+  });
+
   it('formats averages with saved units while excluding accumulated lap totals', () => {
     const laps = [
       { duration: 120, distance: 1000, energy: 300, pace: 300 },

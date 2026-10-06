@@ -1974,6 +1974,35 @@ describe('event-echarts-data.helper', () => {
     expect(markers[0].xValue).toBe(250);
   });
 
+  it('uses swim units in lap tooltips without changing marker positions or canonical distance', () => {
+    const distance = new DataDistance(91.44);
+    const lap = {
+      type: LapTypes.Manual,
+      endDate: new Date('2024-01-01T00:00:25.000Z'),
+      getDistance: () => distance,
+      getStat: () => null,
+    };
+    const activity = {
+      startDate: new Date('2024-01-01T00:00:00.000Z'),
+      type: 'Swimming',
+      creator: { name: 'Garmin' },
+      getID: () => 'swim-laps',
+      getAllStreams: () => [],
+      getStream: () => null,
+      getLaps: () => [lap, { ...lap, endDate: new Date('2024-01-01T00:00:50.000Z') }],
+    } as any;
+    const markers = buildEventLapMarkers({
+      selectedActivities: [activity], allActivities: [activity],
+      xAxisType: XAxisTypes.Duration, lapTypes: [LapTypes.Manual],
+      userUnitSettings: { swimPaceUnits: [SwimPaceUnits.MinutesPer100Yard] } as any,
+      eventColorService: { getActivityColor: () => '#00aaff' } as any,
+    });
+    expect(markers).toHaveLength(1);
+    expect(markers[0].xValue).toBe(25);
+    expect(markers[0].tooltipDetails).toContainEqual({ label: 'Distance', value: '100 yd' });
+    expect(distance.getValue()).toBe(91.44);
+  });
+
   it('builds swim length chart markers for active and idle lengths including the final row', () => {
     const activity = {
       startDate: new Date('2024-01-01T00:00:00.000Z'),
@@ -2145,7 +2174,7 @@ describe('event-echarts-data.helper', () => {
       .toBe(`${expectedDistance.getDisplayValue()} ${expectedDistance.getDisplayUnit()}`);
   });
 
-  it('formats swim length pace with preferred 100-yard units', () => {
+  it('formats swim length distance and pace with preferred 100-yard units', () => {
     const speedGetValueSpy = vi.spyOn(DataSpeed.prototype, 'getValue');
     const activity = {
       startDate: new Date('2024-01-01T00:00:00.000Z'),
@@ -2158,6 +2187,7 @@ describe('event-echarts-data.helper', () => {
           endDate: new Date('2024-01-01T00:00:25.000Z'),
           type: 'active',
           avgSpeed: 1,
+          distance: 22.86,
         },
       ],
     } as any;
@@ -2175,6 +2205,7 @@ describe('event-echarts-data.helper', () => {
     });
 
     const swimPace = markers[0].tooltipDetails.find((detail) => detail.label === 'Swim Pace')?.value;
+    expect(markers[0].tooltipDetails.find((detail) => detail.label === 'Distance')?.value).toBe('25 yd');
     expect(swimPace).toContain('01:31');
     expect(swimPace).toContain('/100yd');
     expect(speedGetValueSpy).not.toHaveBeenCalledWith(DataSwimPace.type);

@@ -1096,6 +1096,9 @@ describe('help.content', () => {
     expect(gettingStartedSection?.content).toContain('lap index, split progress, duration, distance, length type, stroke, strokes, swim pace, stroke rate, heart rate, SWOLF, and energy');
     expect(gettingStartedSection?.content).toContain('use **Stroke Rate** rather than Cadence');
     expect(gettingStartedSection?.content).toContain('25 m, 50 m, 75 m, and 100 m splits before the rest row');
+    expect(gettingStartedSection?.content).toContain('**Settings -> Units -> Swim pace**');
+    expect(gettingStartedSection?.content).toContain('25 yd, 50 yd, 75 yd, and 100 yd splits before the rest row');
+    expect(gettingStartedSection?.content).toContain('Stored distances remain in meters');
   });
 
   it('should document sport-specific event lap table columns', () => {

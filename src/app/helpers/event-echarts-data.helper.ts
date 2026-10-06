@@ -51,7 +51,8 @@ import {
 } from './event-echarts-style.helper';
 import { EventChartRange, normalizeEventRange } from './event-chart-range.helper';
 import { normalizeUnitDerivedTypeLabel } from './stat-label.helper';
-import { resolveUnitAwareDisplayStat } from '@shared/unit-aware-display';
+import { createSwimDistanceDisplayStat, resolveUnitAwareDisplayStat } from '@shared/unit-aware-display';
+import { resolveSummaryDisplayStat } from './summary-display.helper';
 import { AppSwimLength, getActivitySwimLengths } from './event-swim-length.helper';
 import { getAppCanonicalChartDataTypes } from './app-chart-data-types.helper';
 import type {
@@ -1048,7 +1049,7 @@ export function buildEventLapMarkers(input: {
         activityID: activity.getID() || '',
         activityName: activity.creator?.name || 'Activity',
         tooltipTitle: `Lap ${index + 1}`,
-        tooltipDetails: buildLapTooltipDetails(lap, input.userUnitSettings),
+        tooltipDetails: buildLapTooltipDetails(lap, input.userUnitSettings, activity.type),
       });
     });
   });
@@ -1797,7 +1798,8 @@ function createActivityNumericCache(
 
 function buildLapTooltipDetails(
   lap: LapInterface,
-  unitSettings?: UserUnitSettingsInterface | null
+  unitSettings?: UserUnitSettingsInterface | null,
+  activityType?: unknown,
 ): EventChartMarkerTooltipDetail[] {
   const details: EventChartMarkerTooltipDetail[] = [];
 
@@ -1807,7 +1809,8 @@ function buildLapTooltipDetails(
     details.push({ label: 'Duration', value: durationValue });
   }
 
-  const distanceValue = formatLapDataValue(lap.getDistance?.(), undefined, unitSettings);
+  const distanceStat = resolveSummaryDisplayStat(lap.getDistance?.(), DataDistance.type, [activityType], unitSettings);
+  const distanceValue = formatLapDataValue(distanceStat, undefined, unitSettings);
   if (distanceValue) {
     details.push({ label: 'Distance', value: distanceValue });
   }
@@ -1843,7 +1846,7 @@ function buildSwimLengthTooltipDetails(
 
   appendTextDetail(details, 'Lap', formatNullableInteger(swimLength.lapIndex));
   appendLapDetail(details, 'Duration', swimLength.timerTime ?? swimLength.elapsedTime, unitSettings, { compactDuration: true });
-  appendLapDetail(details, 'Distance', getSwimLengthDistance(swimLength), unitSettings);
+  appendLapDetail(details, 'Distance', getSwimLengthDistance(swimLength, unitSettings), unitSettings);
   appendTextDetail(details, 'Type', formatSwimLengthLabel(swimLength.type));
   appendTextDetail(details, 'Stroke', formatSwimLengthLabel(swimLength.stroke));
   appendTextDetail(details, 'Strokes', formatNullableInteger(swimLength.strokes));
@@ -1941,13 +1944,13 @@ function getSwimLengthPace(swimLength: AppSwimLength): DataSwimPace | null {
   return new DataSwimPace(convertSpeedToSwimPace(speedValue));
 }
 
-function getSwimLengthDistance(swimLength: AppSwimLength): DataSwimDistance | null {
+function getSwimLengthDistance(swimLength: AppSwimLength, unitSettings?: UserUnitSettingsInterface | null): DataSwimDistance | null {
   const distanceValue = swimLength.distance?.getValue?.();
   if (typeof distanceValue !== 'number' || !Number.isFinite(distanceValue)) {
     return null;
   }
 
-  return new DataSwimDistance(distanceValue);
+  return createSwimDistanceDisplayStat(distanceValue, unitSettings);
 }
 
 function formatNullableInteger(value: number | null | undefined): string {

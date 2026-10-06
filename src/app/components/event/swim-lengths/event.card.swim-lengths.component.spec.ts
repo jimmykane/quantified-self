@@ -213,6 +213,38 @@ describe('EventCardSwimLengthsComponent', () => {
     expect(group.summaryRow.Distance).toBe(expectedDistance);
   });
 
+  it('shows yard lengths, cumulative splits and set totals, and refreshes when units change', () => {
+    const lengths = [1, 2, 3, 4].map(index => createSwimLength({ index, distance: 22.86, poolLength: 22.86 }));
+    lengths.push(createSwimLength({ index: 5, type: 'idle', distance: null, timerTime: 10, elapsedTime: 10 }));
+    component.selectedActivities = [createActivity(lengths)];
+    component.unitSettings = { swimPaceUnits: [SwimPaceUnits.MinutesPer100Yard, SwimPaceUnits.MinutesPer100Meter] } as UserUnitSettingsInterface;
+    component.ngOnChanges();
+    const group = component.swimLengthViews[0].groups[0];
+    expect(group.rows.map(row => row.Split)).toEqual(['25 yd', '50 yd', '75 yd', '100 yd', 'Rest']);
+    expect(group.rows.slice(0, 4).map(row => row.Distance)).toEqual(['25 yd', '25 yd', '25 yd', '25 yd']);
+    expect(group.rows[4].Distance).toBe('');
+    expect(group.summaryRow.Distance).toBe('100 yd');
+    const duration = group.summaryRow.Duration;
+    component.unitSettings = { swimPaceUnits: [SwimPaceUnits.MinutesPer100Meter] } as UserUnitSettingsInterface;
+    component.ngOnChanges();
+    expect(component.swimLengthViews[0].groups[0].summaryRow.Distance).toBe('91.44 m');
+    expect(component.swimLengthViews[0].groups[0].summaryRow.Duration).toBe(duration);
+    expect(lengths[0].distance).toBe(22.86);
+  });
+
+  it('uses yard pool lengths for fallback splits and keeps long totals in yards', () => {
+    component.unitSettings = { swimPaceUnits: [SwimPaceUnits.MinutesPer100Yard] } as UserUnitSettingsInterface;
+    component.selectedActivities = [createActivity([
+      createSwimLength({ index: 1, distance: null, poolLength: 22.86 }),
+      createSwimLength({ index: 2, distance: null, poolLength: 22.86 }),
+    ])];
+    component.ngOnChanges();
+    expect(component.swimLengthViews[0].groups[0].rows.map(row => row.Split)).toEqual(['25 yd', '50 yd']);
+    component.selectedActivities = [createActivity([createSwimLength({ distance: 1508.76 })])];
+    component.ngOnChanges();
+    expect(component.swimLengthViews[0].groups[0].summaryRow.Distance).toBe('1.650 yd');
+  });
+
   it('should create rest-only groups for consecutive idle rows', () => {
     const activity = createActivity([
       createSwimLength({ index: 1 }),

@@ -21,6 +21,7 @@ import {
     EventInterface,
     Feelings,
     Privacy,
+    SwimPaceUnits,
     User
 } from '@sports-alliance/sports-lib';
 import { vi, describe, it, expect, beforeEach } from 'vitest';
@@ -443,6 +444,19 @@ describe('EventSummaryComponent', () => {
             expect(component.getStatUnit(DataPaceAvg.type)).toBe('min/km');
             expect(dynamicSpy).toHaveBeenCalled();
             dynamicSpy.mockRestore();
+        });
+
+        it('shows swimming hero and summary distances in yards when selected', () => {
+            component.unitSettings = { swimPaceUnits: [SwimPaceUnits.MinutesPer100Yard] } as any;
+            component.event = {
+                ...mockEvent,
+                getActivities: () => [{ type: ActivityTypes.Swimming }],
+                getStat: (type: string) => type === DataDistance.type ? new DataDistance(91.44) : null,
+            } as any;
+            fixture.detectChanges();
+            expect(component.getStatValue(DataDistance.type)).toBe('100');
+            expect(component.getStatUnit(DataDistance.type)).toBe('yd');
+            expect(component.heroSummaryMetrics[1]).toEqual({ value: '100', label: 'yd' });
         });
 
         it('should keep swimming summary distance in meters with miles distance preference', () => {

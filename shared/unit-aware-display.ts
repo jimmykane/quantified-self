@@ -2,6 +2,7 @@ import {
   DataAscent,
   DataDescent,
   DataDuration,
+  DataSwimDistance,
   type DataInterface,
   DaysOfTheWeek,
   DistanceUnits,
@@ -13,6 +14,7 @@ import {
   SpeedUnits,
   SpeedUnitsToGradeAdjustedSpeedUnits,
   SwimPaceUnits,
+  SwimDistanceUnits,
   type UserUnitSettingsInterface,
   VerticalSpeedUnits,
   WeightUnits,
@@ -208,6 +210,18 @@ export interface ResolveUnitAwareDisplayOptions {
   compactAscentDescent?: boolean;
   compactDuration?: boolean;
   locale?: string | null;
+}
+
+/** Recorded swimming distance: the first swim-pace preference selects display units only. */
+export function createSwimDistanceDisplayStat(
+  meters: number,
+  unitSettings?: UserUnitSettingsInterface | null,
+): DataSwimDistance {
+  const settings = normalizeUserUnitSettings(unitSettings);
+  const units = settings.swimPaceUnits[0] === SwimPaceUnits.MinutesPer100Yard
+    ? SwimDistanceUnits.Yards
+    : SwimDistanceUnits.Meters;
+  return new DataSwimDistance(meters, units);
 }
 
 function resolveAscentDescentDisplayValue(
