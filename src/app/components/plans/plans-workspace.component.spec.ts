@@ -1693,6 +1693,23 @@ describe('PlansWorkspaceComponent', () => {
     expect(haptics.success).toHaveBeenCalledOnce();
   });
 
+  it('shows a partial prescription subtotal with untimed recoveries while retaining ordered instructions', async () => {
+    schedule.workouts[0].structure = { version: 1, sport: ActivityTypes.Running, nodes: [
+      { kind: 'step', id: 'warm', purpose: 'warmup', ending: { kind: 'time', seconds: 600 }, targets: [] },
+      { kind: 'repeat', id: 'main', count: 4, steps: [
+        { kind: 'step', id: 'work', purpose: 'work', ending: { kind: 'distance', meters: 1000 }, targets: [
+          { kind: 'speed', mode: 'absolute', presentation: 'pace', minimumMetersPerSecond: 1000 / 300, maximumMetersPerSecond: 1000 / 240 }] },
+        { kind: 'step', id: 'recover', purpose: 'recovery', ending: { kind: 'manual' }, targets: [] },
+      ] },
+    ] };
+    const fixture = await renderPlans();
+    const summary = fixture.nativeElement.querySelector('.workout-prescription-summary')?.textContent;
+    expect(summary).toContain('estimated + 4 steps with unknown duration');
+    expect(summary).toContain('distance subtotal');
+    expect(fixture.nativeElement.querySelector('.workout-summary')?.textContent).toContain('Manual transition');
+    expect(mutate).not.toHaveBeenCalled();
+  });
+
   it('keeps the color submenu backdrop off so sibling plan actions remain pointer-interactive', () => {
     const template = readFileSync(
       resolve(process.cwd(), 'src/app/components/plans/plans-workspace.component.html'),

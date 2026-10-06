@@ -14,6 +14,7 @@ grant. HTTP prechecks, tool registration and data reads enforce it. Revocation c
 | --- | --- |
 | `list_training_plans` | Optional name/lifecycle filters; active, paused and archived metadata |
 | `list_saved_workouts` | Up to 25 undated owner-owned workout recipes per page, with optional title/status filters |
+| `get_workout_prescription_analysis` | Exact prescribed subtotals, explicit speed-based duration ranges, unknown contributions, authored purpose totals and repeat counts for one scheduled or saved recipe |
 | `get_saved_workout` | One full saved recipe, including complete Strength Training exercises when present |
 | `get_training_plan` | Metadata, range, revision and current workout count, without loading workouts |
 | `query_planned_workouts` | Legacy document-ordered inclusive-date query retained for registered-client compatibility |
@@ -483,6 +484,42 @@ Registered recipe schemas/baselines/history remain frozen. Deploy compatible bac
 then perform the exact pending developer refresh/rescan and client/plugin tool-catalog refresh before the updated UI.
 No activity reparse, persisted-data migration, wider consent or automatic provider requeue is needed. Detailed product,
 mapping and recovery rules live in [Training workspace](training-workspace.md#optional-early-lap-on-numeric-endings-784-training-07).
+
+### Workout prescription analysis (Training 04)
+
+The additive `get_workout_prescription_analysis` read accepts an explicit `source` (`scheduled` or `saved`) and its
+opaque `reference`. It requires only independent `training-plans:read`; metrics/activity access and provider connections
+never substitute. It returns record `revision`, applicable nullable `scheduleRevision` / `libraryRevision`, canonical
+`sport`, a recursively strict `analysis`, and owner-unit `displaySummary`. The shared calculation and complete field
+semantics live in [Training prescription analysis](training-workspace.md#shared-workout-prescription-analysis-training-04).
+
+Exact prescribed time/distance subtotals are distinct from complete exact totals. Distance with an explicit positive
+speed range permits an estimated duration range; relative speed uses only an authored saved threshold-speed reference.
+No athlete default, midpoint estimate, HR/power/cadence-to-speed inference, TSS, completed-activity evidence or provider
+transport enters the result. Manual/Lap, repetitions, energy, missing speed and unbounded speed remain explicit unknowns.
+A partial covered subtotal is never a complete duration. Counts distinguish stored nodes, leaf definitions and repeat
+executions; at most 100 definition rows are returned without expanding up to 9,900 executions. Purpose totals retain
+all six authored labels. No notes, titles, target/reference snapshot objects or private transport fields are echoed.
+Numeric totals describe nominal prescribed limits. Per-definition `allowEarlyLap` and multiplied summary
+`earlyLapSteps` preserve the allowance to end numeric steps sooner; display and Assistant guidance retain this caveat.
+Complete prescription coverage does not guarantee an athlete's actual elapsed time or distance.
+
+The read shares current recipe/library validation and complete matching strength-companion fences. Strength analysis
+covers only its compatibility projection's timing/counts; full exercise discussion still needs the strength-details
+read. Owner/connection and reference-kind checks, creation identity, account deletion, bulk-operation locks, current
+grant generation, schedule/library revision and complete-result byte limits remain enforced. Arithmetic beyond finite
+representation returns safe unavailability rather than a partial or non-finite total. No Firestore write, new Function,
+Rules, index, migration, derived schema or stored analysis cache is introduced.
+
+The registered recipe/library read and write schemas are unchanged. The Assistant admits this read only with its
+existing per-chat Training choice, preserves uncertainty in compact evidence and excludes reference/step identity from
+stored evidence. Training and cross-domain bundled skills prefer the discovered analysis capability for totals rather
+than calculating their own estimates. Contract fixtures cover every ending and both speed bases, strict neighboring-field
+rejection, permission/reference/revision/deletion fences and equivalent structured/JSON-text results on all transports.
+Release requires separately approved deployment, registered-app refresh/rescan and exact pending-digest verification;
+bundled guidance requires later local plugin sync. Prior pending changes are preserved and the registered baseline/history
+are not edited. Fixture validation does not install a real profile or prove deployed availability.
+
 
 ## Purpose and boundary
 

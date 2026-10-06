@@ -1,7 +1,8 @@
+import { analyzeWorkoutStructureV1 } from '../../../shared/planned-workout-analysis';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { GenkitError } from 'genkit';
 import { retry } from 'genkit/model/middleware';
-import { ChartDataCategoryTypes, DataDuration, TimeIntervals } from '@sports-alliance/sports-lib';
+import { ActivityTypes, ChartDataCategoryTypes, DataDuration, TimeIntervals } from '@sports-alliance/sports-lib';
 import {
   ASSISTANT_ANALYTICAL_PROMPT_WORKFLOWS,
   ASSISTANT_CREATE_TODAYS_WORKOUT_PROMPT,
@@ -289,6 +290,36 @@ describe('Training preview model-tool selection', () => {
       { role: 'user' as const, text: 'Yes, remove those copies.' },
       { role: 'assistant' as const, text: 'Keep its workouts as standalone, or permanently delete them?' }];
     expect(selectAssistantTrainingPreviewTool('Keep workouts as standalone.', history)).toBe('preview_training_deletion');
+  });
+
+  it.each([
+    { source: 'scheduled', prompt: 'How long is tomorrow’s planned workout?' },
+    { source: 'saved', prompt: 'How long is my saved interval workout?' },
+  ] as const)('uses shared prescription analysis for $source workout timing with independent Training consent', async ({ source, prompt }) => {
+    const { session, callTool } = createSession();
+    session.tools = [{ name: 'get_workout_prescription_analysis', title: 'Prescription analysis',
+      description: 'Read exact subtotals and unknown coverage.', inputSchema: { type: 'object', properties: {} } }];
+    const analysis = analyzeWorkoutStructureV1({ version: 1, sport: ActivityTypes.Running, nodes: [
+      { kind: 'step', id: 'warm', purpose: 'warmup', ending: { kind: 'time', seconds: 600 }, targets: [] },
+      { kind: 'step', id: 'recover', purpose: 'recovery', ending: { kind: 'manual' }, targets: [] },
+    ] });
+    callTool.mockResolvedValue({ structuredContent: { source, reference: 'opaque-workout', revision: 1,
+      scheduleRevision: source === 'scheduled' ? 1 : null, libraryRevision: source === 'saved' ? 1 : null,
+      sport: ActivityTypes.Running, analysis, displaySummary: '10m timed subtotal + 1 step with unknown duration' } });
+    const access = vi.fn().mockResolvedValue(undefined);
+    const runtime = createAssistantRuntime({ createMcpSession: vi.fn().mockResolvedValue(session),
+      generateAnswer: async input => {
+        await input.tools.find(tool => tool.name === 'get_workout_prescription_analysis')!.execute({ source, reference: 'opaque-workout' });
+        return { answer: 'The timed subtotal is ten minutes, plus one recovery with unknown duration.',
+          visualRequest: { chart: null, map: null } };
+      } });
+    const result = await runtime.answer({ uid: 'owner', appBaseUrl: 'https://quantified-self.io', prompt,
+      timeZone: 'Europe/Helsinki', history: [], trainingPlansEnabled: true, assertTrainingPlansAccess: access });
+    expect(callTool).toHaveBeenCalledWith('get_workout_prescription_analysis', { source, reference: 'opaque-workout' });
+    expect(access).toHaveBeenCalled();
+    expect(result.evidence[0].summary).toContain('unknown duration');
+    expect(JSON.stringify(result.evidence)).not.toContain('opaque-workout');
+    expect(ASSISTANT_SYSTEM_INSTRUCTIONS).toContain('never describe a partial subtotal as the complete duration');
   });
 
   it('advertises only the selected preview to Gemini while retaining authorized MCP tools', async () => {

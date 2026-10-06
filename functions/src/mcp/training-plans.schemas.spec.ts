@@ -1,3 +1,4 @@
+import { analyzeWorkoutStructureV1 } from '../../../shared/planned-workout-analysis';
 import { describe, expect, it } from 'vitest';
 import { ActivityTypes } from '@sports-alliance/sports-lib';
 import {
@@ -12,6 +13,7 @@ import {
   MCP_WORKOUT_RECIPE_VARIANT_COVERAGE,
   TRAINING_CHANGE_SCHEMA,
   TRAINING_READ_OUTPUTS,
+  TRAINING_READ_INPUTS,
   TRAINING_RECIPE_SCHEMA,
   TRAINING_RECIPE_WITH_POOL_SCHEMA,
   TRAINING_RECIPE_WITH_EARLY_LAP_SCHEMA,
@@ -417,5 +419,32 @@ describe('additive early Lap recipe contract', () => {
   });
   it.each(['manual', 'kilojoules', 'repetitions'])('rejects early Lap on %s, including false', kind => {
     expect(TRAINING_RECIPE_WITH_EARLY_LAP_SCHEMA.safeParse(recipe({ ...endingFixtures[kind as keyof typeof endingFixtures], allowEarlyLap: false } as never)).success).toBe(false);
+  });
+});
+
+describe('strict additive workout prescription analysis', () => {
+  it('requires a bounded reference and explicit source without accepting extra fields', () => {
+    const schema = TRAINING_READ_INPUTS.get_workout_prescription_analysis;
+    expect(schema.safeParse({ source: 'saved', reference: 'opaque' }).success).toBe(true);
+    for (const input of [{ reference: 'opaque' }, { source: 'scheduled', reference: '' },
+      { source: 'scheduled', reference: 'opaque', uid: 'foreign' }, { source: 'activity', reference: 'opaque' }])
+      expect(schema.safeParse(input).success).toBe(false);
+  });
+  it.each(Object.values(endingFixtures))('validates every ending analysis and recursively rejects private neighboring fields for %j', ending => {
+    const schema = TRAINING_READ_OUTPUTS.get_workout_prescription_analysis;
+    const value = { source: 'scheduled', reference: 'opaque', revision: 1, scheduleRevision: 1, libraryRevision: null,
+      sport: ActivityTypes.Running, analysis: analyzeWorkoutStructureV1(recipe(ending)), displaySummary: 'Summary' };
+    expect(schema.parse(value)).toEqual(value);
+    const canaries = [ { ...value, providerId: 'secret' },
+      { ...value, analysis: { ...value.analysis, sourceFile: 'secret' } },
+      { ...value, analysis: { ...value.analysis, summary: { ...value.analysis.summary, privateId: 'secret' } } },
+      { ...value, analysis: { ...value.analysis, steps: [{ ...value.analysis.steps[0], note: 'private' }] } },
+    ];
+    canaries.forEach(canary => expect(schema.safeParse(canary).success).toBe(false));
+  });
+  it.each([targetVariantFixtures['speed:absolute'], targetVariantFixtures['speed:relative']])('validates speed estimate basis %j', target => {
+    const analysis = analyzeWorkoutStructureV1(recipe({ kind: 'distance', meters: 1000 }, [target]));
+    expect(TRAINING_READ_OUTPUTS.get_workout_prescription_analysis.parse({ source: 'saved', reference: 'opaque', revision: 1,
+      scheduleRevision: null, libraryRevision: 1, sport: ActivityTypes.Running, analysis, displaySummary: 'Estimated' }).analysis).toEqual(analysis);
   });
 });

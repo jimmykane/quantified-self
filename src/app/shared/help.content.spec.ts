@@ -14,6 +14,14 @@ import {
 } from './policies.content';
 
 describe('help.content', () => {
+  it('explains exact prescription subtotals, bounded estimates and unknown duration without changing delivery or recorded totals', () => {
+    const copy = HELP_SECTIONS.find(section => section.id === 'training-plans')!.content;
+    for (const phrase of ['## Understand workout totals', '**estimated duration range**', 'threshold-speed reference saved',
+      'four steps with unknown duration', 'Missing information never counts as zero', 'HR, power, and cadence targets do not establish speed',
+      'exact timed-duration requirement', 'separate **workout prescription analysis**', 'client tool-catalog refresh'])
+      expect(copy).toContain(phrase);
+  });
+
   it('explains dated follow-ups, fresh evidence and confirmed Training outcomes without promising cross-chat memory', () => {
     const copy = HELP_SECTIONS.find(section => section.id === 'ai-insights')!.content;
     for (const phrase of ['message dates and confirmed Training changes', 'Freshly checked records take precedence',

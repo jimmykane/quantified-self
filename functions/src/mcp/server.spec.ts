@@ -929,6 +929,7 @@ describe('MCP HTTP scope enforcement', () => {
       'get_training_change_status',
       'get_training_plan',
       'get_training_sync_status',
+      'get_workout_prescription_analysis',
       'list_activity_types',
       'list_saved_workouts',
       'list_training_plans',

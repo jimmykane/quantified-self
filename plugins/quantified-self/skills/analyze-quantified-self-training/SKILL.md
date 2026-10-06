@@ -90,7 +90,13 @@ skipped labels, exclude deleted records and distinguish current authored records
 Follow unchanged-query continuations; restart after schedule changes. Preserve calendar labels without inventing a
 timezone. Resolve relative dates with the user's explicit IANA timezone. Read complete structures only for instructions
 and existing per-service status only for sync questions. Use canonical numbers plus returned owner-unit display.
-Do not estimate durations for manual/mixed endings or count planned workouts as completed activity. For several returned
+For prescription totals, discover the separate workout-analysis read for the exact scheduled or saved recipe.
+Use its exact prescribed subtotals, explicit speed-based duration ranges, unknown contributions and repeat counts.
+Preserve its early-Lap allowance/count caveat: numeric totals are prescribed limits and execution can finish sooner.
+Relative speed uses only the saved threshold-speed reference. Never calculate a fallback speed or duration, describe
+partial covered time as a complete total, turn unknown into zero, or count planned workouts as completed activity.
+Keep estimates separate from exact provider duration; Strength timing analysis is not full exercise detail.
+If the capability is absent, explain the release/catalog limitation and retain only explicitly prescribed values. For several returned
 workouts, prefer the advertised bounded bulk completion read; use the single-workout read for one exact link. Never infer
 completion from title, date, sport, duration or proximity. An
 activity reference appears only with separate activity-detail permission.
