@@ -244,6 +244,21 @@ function assert(condition: unknown, message: string): asserts condition {
   if (!condition) throw new Error(message);
 }
 
+function checkSecretBindingsWithInheritedTarget(target: string): void {
+  const env: NodeJS.ProcessEnv = { ...process.env, FUNCTION_TARGET: target };
+  // Exercise the standalone predeploy check without letting the caller's
+  // discovery mode hide an inherited-target regression.
+  delete env.FUNCTIONS_CONTROL_API;
+  delete env.FUNCTIONS_MANIFEST_OUTPUT_PATH;
+  const child = spawnSync(process.execPath, [resolve(__dirname, 'check-secret-bindings.js')], {
+    cwd: resolve(__dirname, '..', '..', '..', '..'),
+    env,
+    encoding: 'utf8',
+  });
+  assert(child.status === 0,
+    `Secret-binding validation failed with inherited ${target}: ${child.stderr || child.stdout}`);
+}
+
 async function loadFirebaseManifest(): Promise<DiscoveredStack> {
   delete process.env.FUNCTION_TARGET;
   delete process.env.FUNCTIONS_MANIFEST_OUTPUT_PATH;
@@ -309,6 +324,10 @@ async function check(): Promise<void> {
       optimized.forbiddenModules.length === 0,
       `${target} loaded unrelated modules: ${optimized.forbiddenModules.join(', ')}`,
     );
+  }
+
+  for (const target of Object.keys(INGESTION_TARGET_METADATA)) {
+    checkSecretBindingsWithInheritedTarget(target);
   }
 
   const stack = await loadFirebaseManifest();

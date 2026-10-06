@@ -75,6 +75,7 @@ The check builds the Functions package and verifies:
 
 - discovery exposes all 168 application exports;
 - both Firebase discovery modes ignore an inherited optimized `FUNCTION_TARGET`;
+- standalone secret-binding validation forces complete discovery even with an inherited ingestion `FUNCTION_TARGET`;
 - an unknown target exposes the same complete export set;
 - a non-optimized Gen 1 target retains the complete entrypoint fallback;
 - each optimized target exposes only its requested handler;
@@ -165,10 +166,17 @@ memory, request volume, errors and retry/dead-letter outcomes over comparable co
 
 Verification passed:
 
-- 114 tests across the loader, Sleep worker, workout worker, upload and Suunto ingress specs;
+- 129 tests across the loader, Firebase bootstrap, secret policy, deployment safety, Sleep worker, workout worker,
+  upload and Suunto ingress specs;
 - Functions TypeScript build and compiled entrypoint check: 168 endpoints and 45 isolated targets;
 - complete Firebase endpoint descriptors for all four targets matched the pre-change baseline;
 - deployment-source safety and secret-binding check: 69 secret-bound endpoints.
+
+Review reproduced a predeploy failure when `FUNCTION_TARGET=processSleepSyncTask` was inherited: standalone secret
+validation loaded only that worker and reported the other policy endpoints as missing. The secret-check script now
+sets `FUNCTIONS_CONTROL_API=true` before loading the index so it always validates the complete registry. The compiled
+entrypoint check runs standalone secret validation with each of the four ingestion targets inherited and discovery
+flags cleared. Deployment safety also passed with an inherited `FUNCTION_TARGET=uploadActivity`.
 
 The documentation-only changes were checked with `git diff --check`; they have no separate automated tests.
 After separate explicit deployment approval, deploy the selected functions from this verified revision:
