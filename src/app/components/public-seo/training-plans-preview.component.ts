@@ -1,10 +1,17 @@
-import { ChangeDetectionStrategy, Component, LOCALE_ID, computed, inject, signal } from '@angular/core';
+import { ChangeDetectionStrategy, Component, LOCALE_ID, computed, inject, input, signal } from '@angular/core';
+import type { UserUnitSettingsInterface } from '@sports-alliance/sports-lib';
 import { MatIconModule } from '@angular/material/icon';
+import { MatButtonToggleModule } from '@angular/material/button-toggle';
+import { MatFormFieldModule } from '@angular/material/form-field';
+import { MatSelectModule } from '@angular/material/select';
 import type { ScheduledWorkoutV1 } from '@shared/training-plans';
+import { formatWorkoutPrescriptionSummaryV1 } from '@shared/planned-workout-analysis-display';
 import { formatManualWorkoutStructure } from '../../helpers/planned-workout-editor.helper';
 import { trainingPlanAppearance } from '../../helpers/training-plan-appearance.helper';
 import { resolveActivityTypeMaterialIcon } from '../../helpers/activity-type-presentation.helper';
 import { PlanScheduleCalendarComponent } from '../plans/plan-schedule-calendar.component';
+import { WorkoutProfileComponent } from '../plans/workout-profile.component';
+import { AppHapticsService } from '../../services/app.haptics.service';
 import { getDateTimeFormatter } from '../../helpers/date-time-format.helper';
 import {
   buildTrainingPlansPreviewFixture,
@@ -16,19 +23,24 @@ interface TrainingPlansPreviewWorkoutRow {
   icon: string;
   completed: boolean;
   summary: readonly string[];
+  totals: string;
 }
 
 /** Public fixture adapter only. It never loads authentication, account data, schedule writes, or provider delivery. */
 @Component({
   selector: 'app-training-plans-preview',
   standalone: true,
-  imports: [MatIconModule, PlanScheduleCalendarComponent],
+  imports: [MatIconModule, MatButtonToggleModule, MatFormFieldModule, MatSelectModule,
+    PlanScheduleCalendarComponent, WorkoutProfileComponent],
   templateUrl: './training-plans-preview.component.html',
   styleUrls: ['./training-plans-preview.component.scss'],
   changeDetection: ChangeDetectionStrategy.OnPush,
 })
 export class TrainingPlansPreviewComponent {
   private readonly locale = inject(LOCALE_ID);
+  private readonly haptics = inject(AppHapticsService);
+  readonly unitSettings = input<UserUnitSettingsInterface | null>(null);
+  readonly selectedView = signal<'calendar' | 'profile'>('calendar');
   readonly preview = buildTrainingPlansPreviewFixture();
   readonly plan = this.preview.plan;
   readonly workouts = this.preview.workouts;
@@ -44,15 +56,32 @@ export class TrainingPlansPreviewComponent {
   readonly selectedDateLabel = computed(() => this.formatDate(this.selectedDate(), {
     weekday: 'long', day: 'numeric', month: 'long',
   }));
-  readonly selectedWorkoutRows = computed<readonly TrainingPlansPreviewWorkoutRow[]>(() => this.workouts
-    .filter(workout => workout.localDate === this.selectedDate())
+  readonly workoutRows = computed<readonly TrainingPlansPreviewWorkoutRow[]>(() => this.workouts
     .map(workout => ({
       workout,
       sport: this.formatSport(workout.structure.sport),
       icon: resolveActivityTypeMaterialIcon(workout.structure.sport),
       completed: this.completedWorkoutIdSet.has(workout.id),
-      summary: formatManualWorkoutStructure(workout.structure, null, this.locale),
+      summary: formatManualWorkoutStructure(workout.structure, this.unitSettings(), this.locale),
+      totals: formatWorkoutPrescriptionSummaryV1(workout.structure, this.unitSettings(), workout.structure.sport, this.locale),
     })));
+  readonly selectedWorkoutRows = computed(() => this.workoutRows()
+    .filter(row => row.workout.localDate === this.selectedDate()));
+  readonly profileWorkout = computed(() => this.workoutRows()
+    .find(row => row.workout.id === this.selectedWorkoutId()) ?? null);
+
+  selectView(view: 'calendar' | 'profile'): void {
+    if ((view !== 'calendar' && view !== 'profile') || view === this.selectedView()) return;
+    this.selectedView.set(view);
+    this.haptics.selection();
+  }
+
+  selectProfileWorkout(id: string): void {
+    const workout = this.workouts.find(candidate => candidate.id === id);
+    if (!workout || id === this.selectedWorkoutId()) return;
+    this.selectWorkout(workout);
+    this.haptics.selection();
+  }
 
   selectDate(localDate: string): void {
     this.selectedDate.set(localDate);

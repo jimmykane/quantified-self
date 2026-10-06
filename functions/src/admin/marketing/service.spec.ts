@@ -48,6 +48,8 @@ describe('marketing audience and content', () => {
     expect(body?.querySelector('a[style*="background"]')?.textContent).toBe('Open Quantified Self');
     expect(footer?.textContent).toContain('You received this product update');
     expect(footer?.querySelector('a[href*="unsubscribe"]')).not.toBeNull();
+    expect(footer?.querySelector('a[href*="settings"]')?.getAttribute('href')).toBe('https://quantified-self.io/settings?section=privacy');
+    expect(message.text).toContain('Email preferences: https://quantified-self.io/settings?section=privacy');
   });
   it('escapes body markup before the admin preview trusts the rendered template', () => {
     const hostile = previewCampaign({ ...draft, content: { type: 'doc', content: [

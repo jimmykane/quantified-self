@@ -1,12 +1,12 @@
 import { ChangeDetectionStrategy, Component, DestroyRef, ElementRef, LOCALE_ID, afterRenderEffect, computed, effect, inject, input, output, signal, untracked, viewChild } from '@angular/core';
-import { ActivityTypes, AppThemes, type UserUnitSettingsInterface } from '@sports-alliance/sports-lib';
+import { ActivityTypes, type UserUnitSettingsInterface } from '@sports-alliance/sports-lib';
 import type { WorkoutStructureV1 } from '@shared/planned-workout';
 import { CommonModule } from '@angular/common';
 import { MatButtonModule } from '@angular/material/button';
 import { MatIconModule } from '@angular/material/icon';
 import { MatFormFieldModule } from '@angular/material/form-field';
 import { MatSelectModule } from '@angular/material/select';
-import { AppThemeService } from '../../services/app.theme.service';
+import { RenderedThemeService } from '../../services/rendered-theme.service';
 import { AppHapticsService } from '../../services/app.haptics.service';
 import { LoggerService } from '../../services/logger.service';
 import { EChartsLoaderService } from '../../services/echarts-loader.service';
@@ -73,7 +73,7 @@ export class WorkoutProfileComponent {
     return `${this.model()?.occurrenceCount ?? 0} step occurrences. Equal widths show step order, not time or distance. ${targets} Use the step buttons for details.`;
   });
 
-  private readonly theme = inject(AppThemeService);
+  private readonly theme = inject(RenderedThemeService);
   private readonly haptics = inject(AppHapticsService);
   private readonly locale = inject(LOCALE_ID);
   private readonly element = inject<ElementRef<HTMLElement>>(ElementRef);
@@ -101,7 +101,7 @@ export class WorkoutProfileComponent {
       const selectedKey = this.selectedKey();
       const changed = this.changedStepIds();
       const units = this.unitSettings();
-      const dark = this.theme.appTheme() === AppThemes.Dark;
+      const dark = this.theme.darkTheme();
       const context = this.contextKey();
       const generation = ++this.renderGeneration;
       if (!host || !model) { this.chartHost.dispose(); this.renderedScene = null; return; }

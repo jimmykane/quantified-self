@@ -47,7 +47,7 @@
               [hidden]="activeSection !== 'app'">
               <header class="settings-panel-header">
                 <h2 id="settings-general-title">Appearance</h2>
-                <p>Choose how Quantified Self looks and behaves.</p>
+                <p>Choose how Quantified Self looks.</p>
               </header>
               <mat-divider></mat-divider>
               <div class="settings-panel-body">
@@ -65,17 +65,27 @@
                     </mat-select>
                   </mat-form-field>
                 </div>
-
-                <mat-divider></mat-divider>
-
+              </div>
+            </section>
+            <section
+              class="settings-panel-section"
+              aria-labelledby="settings-privacy-title"
+              [hidden]="activeSection !== 'privacy'">
+              <header class="settings-panel-header">
+                <h2 id="settings-privacy-title">Privacy</h2>
+                <p>Choose whether to share usage analytics or receive marketing emails. Turn a switch off, then select Save changes to apply your choice.</p>
+              </header>
+              <mat-divider></mat-divider>
+              <div class="settings-panel-body">
                 <div class="settings-toggle-block">
                   <div>
-                    <h3>Anonymous usage statistics</h3>
-                    <p>Help us improve Quantified Self by sharing anonymous usage data.</p>
+                    <h3>Usage analytics</h3>
+                    <p>Share anonymous usage statistics to help us improve Quantified Self.</p>
                   </div>
                   <mat-slide-toggle
-                    aria-label="Anonymous usage statistics"
-                    formControlName="acceptedTrackingPolicy">
+                    aria-label="Usage analytics"
+                    formControlName="acceptedTrackingPolicy"
+                    (change)="onPrivacyPreferenceChange()">
                   </mat-slide-toggle>
                 </div>
 
@@ -83,12 +93,13 @@
 
                 <div class="settings-toggle-block">
                   <div>
-                    <h3>Product updates by email</h3>
-                    <p>Receive occasional founder emails about new features, product updates, and offers. You can turn this off here or use the unsubscribe link in any marketing email without signing in.</p>
+                    <h3>Marketing emails</h3>
+                    <p>Receive occasional founder emails about new features, product updates, and offers. Turn this off here or use the unsubscribe link in any marketing email without signing in. Account and billing emails will still be sent.</p>
                   </div>
                   <mat-slide-toggle
-                    aria-label="Product updates by email"
-                    formControlName="acceptedMarketingPolicy">
+                    aria-label="Marketing emails"
+                    formControlName="acceptedMarketingPolicy"
+                    (change)="onPrivacyPreferenceChange()">
                   </mat-slide-toggle>
                 </div>
               </div>

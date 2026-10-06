@@ -5,7 +5,7 @@ import { MatSelect } from '@angular/material/select';
 import { ActivityTypes, AppThemes } from '@sports-alliance/sports-lib';
 import type { WorkoutStructureV1 } from '@shared/planned-workout';
 import { EChartsLoaderService } from '../../services/echarts-loader.service';
-import { AppThemeService } from '../../services/app.theme.service';
+import { RenderedThemeService } from '../../services/rendered-theme.service';
 import { AppHapticsService } from '../../services/app.haptics.service';
 import { LoggerService } from '../../services/logger.service';
 import { WorkoutProfileComponent } from './workout-profile.component';
@@ -30,7 +30,7 @@ describe('WorkoutProfileComponent', () => {
     loader = { init: vi.fn().mockResolvedValue(chart), setOption: vi.fn(), dispose: vi.fn(), resize: vi.fn(),
       attachMobileSeriesTapFeedback: vi.fn(() => () => undefined), subscribeToViewportResize: vi.fn(() => () => undefined) };
     await TestBed.configureTestingModule({ imports: [WorkoutProfileComponent], providers: [
-      { provide: AppThemeService, useValue: { appTheme: theme } }, { provide: AppHapticsService, useValue: haptics },
+      { provide: RenderedThemeService, useValue: { darkTheme: () => theme() === AppThemes.Dark } }, { provide: AppHapticsService, useValue: haptics },
       { provide: EChartsLoaderService, useValue: loader }, { provide: LoggerService, useValue: { error: vi.fn() } },
     ] }).compileComponents();
   });

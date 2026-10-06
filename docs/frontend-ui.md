@@ -54,6 +54,13 @@ alongside the route-specific class; do not add another outer width, margin, or p
 Settings intentionally retains its centered 760 px form column, including its aligned fixed save action, rather than
 stretching a form workflow across the workspace width.
 
+Settings separates **Appearance** (theme) from **Privacy** (usage analytics and marketing emails). The Privacy
+section is addressable at `/settings?section=privacy`; its switches retain the existing legal-consent form controls
+and require **Save changes**. Explicit off choices persist as false booleans, while untouched consent fields are
+omitted from updates. Section navigation preserves unsaved form edits and emits selection feedback only for a change.
+Background profile updates refresh untouched consent switches while preserving explicit local edits. Privacy switches
+are disabled during saving, duplicate submissions are ignored, and failed saves retain the user's choice for retry.
+
 ## Activity details spacing
 
 Activity details use the workspace shell's inline gutters once. The primary summary, Training impact, metadata,

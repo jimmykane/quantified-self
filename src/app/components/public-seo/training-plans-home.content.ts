@@ -12,7 +12,7 @@ interface TrainingPlansHomeRow {
 /** Compact Training Plans discovery content rendered on the public homepage. */
 export const TRAINING_PLANS_HOME_CONTENT = {
   title: 'Plan What Comes Next',
-  intro: 'Build structured running, cycling, swimming, walking, hiking, rowing, or strength workouts, organize them into dated plans or keep them standalone, and choose how you want to manage and deliver them.',
+  intro: 'Build your next workout, save your favorites, and put them on the calendar. Plan for running, cycling, swimming, walking, hiking, rowing, or strength.',
   mcpExample: {
     title: 'Create Today\'s Workout with Your Training Data and Notes',
     prompt: 'Propose one standalone workout for today using my available HRV, sleep, overnight heart rate, readiness, and recent training load. Check my Timeline notes for illness, injury, stress, travel, or vacation. Consider my usual training pattern for this day of the week, alongside recent completed activities and planned workouts, so the session fits my routine without duplicating training. Explain why it suits today, flag missing information, and show me the duration, intensity, and workout steps before adding anything. If recovery or rest is more appropriate, say so.',
@@ -33,8 +33,14 @@ export const TRAINING_PLANS_HOME_CONTENT = {
     {
       icon: 'repeat',
       iconTone: 'secondary',
-      title: 'Structured Workouts',
-      copy: 'Build running, cycling, swimming, walking, hiking, or rowing sessions with intervals, or strength sessions with named exercises, sets, reps or timed holds, optional load, and rest.',
+      title: 'Build and See Your Workout',
+      copy: 'See your interval profile as you build. Set time, distance, or lap-ended steps, add repeats and heart-rate, power, pace, or cadence targets, then reorder or duplicate blocks. For strength, build exercises, sets, reps or holds, load, and rest.',
+    },
+    {
+      icon: 'library_books',
+      iconTone: 'tertiary',
+      title: 'Save It. Use It Again.',
+      copy: 'Keep favorite sessions in your Workout Library. Add a saved workout to one date or repeat it across selected days, in a plan or on its own. Each scheduled copy stays independent.',
     },
     {
       icon: 'devices',

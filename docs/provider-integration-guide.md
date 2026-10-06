@@ -64,6 +64,27 @@ Garmin Sleep and Health history recovery must account for a moving provider mini
 
 Garmin stress-validation diagnostics use the existing WARNING with allowlisted family/field/reason, summary index, type, and bounded numeric-only values; never log raw provider strings or objects. Stress sample zeroes are numeric readings; daily average -2 is retained as a native-only availability code because its daily semantics are undocumented. Do not transfer sentinel meanings between summary families or let a recognized non-measurement code discard unrelated valid metrics. Garmin workout, Sleep, and Health failed jobs retain original callback URLs under the existing admin-only 30-day expiry for separately authorized recovery; successful/skipped queue rows still clear them. Never log or project those credentials. Legacy DLQ callbacks with removed credentials or expired URLs require bounded Summary Resender recovery. Verify actual ingestion, not merely replay submission. See [Garmin delivery diagnostics](garmin-integration.md#delivery-and-trust-boundary) for the exact bound and metadata contract.
 
+### Inbound prescription access is separate from delivery (#708)
+
+The October 6, 2026 investigation does **not** approve a cloud workout-library importer. See the
+[dated evidence matrix, source contracts, proposed lifecycle and test gates](training-workspace.md#inbound-workout-import-feasibility-708)
+for the detailed Training source of truth. Do not infer incoming recipe access from recorded-activity history, an OAuth
+scope, a known-ID read or successful delivery of a QS workout.
+
+| Provider | Decision for non-QS prescriptions |
+| --- | --- |
+| Garmin | Scheduled import blocked pending ownership/coverage proof; undated library no-go without documented enumeration. |
+| Suunto | Current Guide contract is creator-application-only, not another partner's or the full consumer library. |
+| COROS | Reviewed Training Plan contract has no planned-recipe/schedule read or discovery operation. |
+| Wahoo | Restricted entitlement path; content-use and coverage proof required before an import commitment. |
+
+Keep recipes, schedule occurrences and completed recordings separate. Proposed imports would create reviewed local
+snapshots with private owner-scoped provenance, not adopt destructive remote ownership or create two-way sync. The
+independent structured-FIT-file candidate also needs an explicitly accepted #583 implementation issue and rights-cleared
+fixtures; current activity upload support is not prescription import. Neither proposal permits new access requests,
+provider contact, live tests, broader consent or deployment. Importing into an active syncing plan would otherwise inherit
+its Send opt-in, so the proposed first slice is undated-library/Standalone-only, with no automatic outbound delivery.
+
 ### Structured-workout remote verification evidence
 
 Garmin completed-activity correlation is separate from remote Workout/Schedule verification. Its imported FIT
@@ -280,9 +301,15 @@ Synthetic fixtures alone do not establish that live evidence. Wahoo #783 accepts
 indoor Workout type `42`, using the validated complete companion. Repetition sets remain unsupported. Exercise/load
 instructions are degraded, not native tracking; loads use the Sports Lib kilogram display, and actual rounding requires
 mapping approval. The QS editor/MCP details keep the exact canonical load and owner kg/lb display preference.
-Suunto strength has recorded positive owner app/watch behavior in #741, in addition to synthetic tests and tester
-cloud acceptance. Do not claim the entire strength CRUD/device matrix from that observation; remaining Suunto strength
-lifecycle and COROS live proof stay in #741. Strength authoring is complete in #740.
+Suunto strength's create/readback, complete-companion update, reschedule/restore, explicit Retry and no-duplicate
+evidence is recorded in completed #784 and reconciled into #741 on 6 October. Independent exact Guide-file reads and
+bounded inventories retained the same Gym Guide identity and one copy; see its
+[live lifecycle proof](https://github.com/jimmykane/quantified-self/issues/784#issuecomment-5994088069).
+The owner's positive strength report and #784 functional watch sign-off are reused without implying every device,
+exercise or load was tested. The live fixture had no external load, and its current strength completion remains unlinked;
+#784's running completion is not strength completion evidence. COROS entitlement and strength account/app/watch proof
+remain outstanding in #741. Strength authoring is complete in #740. This evidence-only reconciliation changes no
+provider availability, API, consent or MCP contract.
 
 Runtime wrappers must preserve the entire pure policy interface, including the optional strength companion in
 `assess` and the explicit past-removal opt-in in `canRemove`; bind the policy method rather than copying a fixed

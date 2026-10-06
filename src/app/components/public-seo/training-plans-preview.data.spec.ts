@@ -28,7 +28,8 @@ describe('training plans public preview data', () => {
     expect(nodes.some(node => node.kind === 'repeat')).toBe(true);
     const steps = nodes.flatMap(node => node.kind === 'step' ? [node] : node.steps);
     expect(new Set(steps.flatMap(step => step.targets.map(target => target.kind))))
-      .toEqual(new Set(['heart-rate', 'power', 'speed']));
+      .toEqual(new Set(['heart-rate', 'power', 'speed', 'cadence']));
+    expect(steps.some(step => step.targets.length === 2)).toBe(true);
     expect(fixture.workouts.some(workout => workout.localDate === fixture.emptyDate))
       .toBe(false);
   });

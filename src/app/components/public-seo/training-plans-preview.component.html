@@ -6,8 +6,14 @@
       <h3>{{ plan.name }}</h3>
       <p>{{ dateRangeLabel }} · {{ plan.workoutCount }} workouts</p>
     </div>
+    <mat-button-toggle-group hideSingleSelectionIndicator [value]="selectedView()" (change)="selectView($event.value)"
+      aria-label="Training Plans sample view">
+      <mat-button-toggle value="calendar">Calendar</mat-button-toggle>
+      <mat-button-toggle value="profile">Workout profile</mat-button-toggle>
+    </mat-button-toggle-group>
   </header>
 
+  @if (selectedView() === 'calendar') {
   <app-plan-schedule-calendar
     [plan]="plan"
     [workouts]="workouts"
@@ -50,4 +56,26 @@
         This date is open. A standalone workout could be added here without creating another plan.</p>
     }
   </section>
+  } @else {
+    <section class="workout-profile-preview" aria-label="Sample workout profile">
+      <p class="profile-preview-hint">Inspect the same profile used by the workout editor. This sample is read-only; nothing is saved.</p>
+      <mat-form-field appearance="outline" subscriptSizing="dynamic" class="preview-workout-picker">
+        <mat-label>Sample workout</mat-label>
+        <mat-select [value]="selectedWorkoutId()" (selectionChange)="selectProfileWorkout($event.value)">
+          @for (row of workoutRows(); track row.workout.id) {
+            <mat-option [value]="row.workout.id">{{ row.workout.title }}</mat-option>
+          }
+        </mat-select>
+      </mat-form-field>
+      @if (profileWorkout(); as row) {
+        <h4>{{ row.workout.title }}</h4>
+        <p class="profile-preview-hint">{{ row.sport }} · {{ selectedDateLabel() }}{{ row.workout.lifecycle === 'skipped' ? ' · Skipped' : row.completed ? ' · Completed · activity linked' : ' · Planned' }}</p>
+        <p class="profile-preview-totals" aria-label="Workout totals"><strong>Workout totals</strong> · {{ row.totals }}</p>
+        <app-workout-profile [structure]="row.workout.structure" [unitSettings]="unitSettings()"
+          [contextKey]="'public-preview/' + row.workout.id"></app-workout-profile>
+      } @else {
+        <p class="profile-preview-hint" role="status">Choose a sample workout to inspect its steps and targets.</p>
+      }
+    </section>
+  }
 </section>

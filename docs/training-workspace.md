@@ -505,18 +505,28 @@ and Sports Lib-backed workout formatters through a deterministic synthetic recip
 when the deferred component is created; the fixed workout offsets then keep the selected month current for the visitor
 without reading account state or changing during that render. Tests inject an explicit reference date. The generated
 fixture spans multiple weeks and months, includes Running and Cycling recipes, fixed repeats, time/distance endings,
-heart-rate/power/pace targets, a skipped workout, an exact synthetic completed-workout marker on the selected date and
+heart-rate/power/pace/cadence targets, including a two-target step, a skipped workout, an exact synthetic completed-workout marker on the selected date and
 an empty selectable date. The deferred preview stays inside a native `data-nosnippet` boundary and
 has an SSR-stable placeholder. It may add presentation-only calendar inputs with authenticated defaults, but it must not
 inject authentication, Firestore, Functions, delivery services or account state. Planned examples never contribute to
 completed totals or Training analysis.
+
+The same deferred sample offers **Calendar** and **Workout profile** views. Profile inspection reuses
+`WorkoutProfileComponent` and the shared prescription-total formatter over the same validated synthetic recipes;
+visitors can choose a workout and inspect its steps and target ranges locally. It is explicitly read-only, not a
+public editor or saved-workout action. Empty calendar selections remain empty until a sample workout is chosen.
+The shared profile reads the applied CSS theme through `RenderedThemeService`, a read-only, browser-only class observer
+with destruction cleanup; this avoids bringing authentication, Firebase or account settings into its public import graph.
+Homepage discovery highlights live editor profiles, step reordering/duplication, richer targets and the Workout Library
+without duplicating the authenticated workspace or importing account/provider runtimes. Help's existing editor,
+profile and library instructions remain applicable; its overview link also describes the read-only profile sample.
 
 The homepage and public feature page keep their composition separate. Compact homepage rows live in
 `training-plans-home.content.ts`; SEO metadata and long-form route-only sections live in
 `training-plans-page.content.ts`. Keep these modules physically separate so route-only copy cannot enter homepage
 startup, and keep page-only detail, FAQ and launch-boundary sections out of a generic homepage configuration renderer.
 
-This discovery surface and its relative-date/completion presentation have no MCP wire impact: its copy makes the existing separately permissioned planning surface
+This discovery surface and its relative-date/completion/profile presentation have no MCP wire impact: its copy makes the existing separately permissioned planning surface
 discoverable but adds no tool, schema, field, scope, consent, projection, Assistant authority, provider action or
 bundled-skill behavior. It reads canonical frontend types only to validate and render synthetic data; the existing
 Training plan read/write contract, release lifecycle, and independent consent remain unchanged.
@@ -824,6 +834,20 @@ completion link and completed-copy Stop protection are recorded in #783; this is
 No live provider acceptance, app/watch receipt or completed-activity link is claimed from isolated
 emulator tests. The additive MCP strength read and preview use existing independent Training permissions; the registered
 v1 recipe tool remains only a compatibility summary. See `docs/mcp-server.md` for the exact wire boundary.
+
+The 6 October 2026 #741 evidence reconciliation reuses the completed #784 Suunto strength QA rather than repeating
+provider calls. Its [initial create/readback](https://github.com/jimmykane/quantified-self/issues/784#issuecomment-5992787121)
+verified a Gym (`23`) Guide with two five-repetition Squat sets, a timed Plank and rests. Its
+[5 October lifecycle checks](https://github.com/jimmykane/quantified-self/issues/784#issuecomment-5994088069) edited the
+complete strength companion, rescheduled and restored the workout, and applied explicit Retry. Independent Guide-file
+GETs and complete bounded inventories confirmed the expected content/date, the same Guide ID and exactly one copy.
+The owner's positive strength report in #741 and [final functional sign-off in #784](https://github.com/jimmykane/quantified-self/issues/784#issuecomment-5994494394)
+are retained as app/watch evidence, not universal device certification. This live fixture had no external load;
+load handling remains covered by the existing companion/serializer/emulator tests, not a new live load-edit claim.
+The current authorized full-strength read and stored Suunto delivery evidence remain consistent, but the strength QA
+completion read is unlinked: #784's recorded running completion must not be attributed to strength. #741 therefore
+retains COROS entitlement, account-side strength lifecycle and app/watch proof only. This reconciliation changes no
+MCP tools, schemas, permissions, consent, provider actions, recipe or completion semantics and enables no provider.
 
 Production delivery wrappers bind the complete provider policy methods instead of forwarding a fixed argument list.
 This preserves the strength companion in compatibility assessment and the existing explicit past-removal opt-in.
@@ -1377,6 +1401,195 @@ flags and delivery entitlement enforcement are unchanged. #655 tracks deployment
 MCP impact: none. `training-plans:read` already applied to every consenting owner without a UID or Pro gate, so this
 presentation rollout changes no MCP tool, scope, consent, projection, schema, provider action or registered contract.
 The sidenav Beta label is presentation-only and does not change access, routing, lifecycle semantics or MCP behavior.
+
+### Inbound workout import feasibility (#708)
+
+**Investigation completed October 6, 2026; no importer implemented or approved.** Reading back a QS delivery is not
+evidence that QS can discover another author's prescription. An undated recipe, a dated occurrence and a completed
+recording are three different resources. This decision does not expand the outbound milestone, #650 or activity backfill.
+
+#### Evidence and provider decisions
+
+The following is a documentation/code investigation, not a new account test. `Restricted` means an explicit ownership
+or access restriction; `unproven` means the contract does not establish the requested capability; `unavailable` means no
+such operation is documented in the reviewed contract. These classifications concern inbound access, not outbound support.
+
+| Provider | Recipe discovery/fetch | Scheduled occurrences and history coverage | Inbound decision |
+| --- | --- | --- | --- |
+| Garmin | Training API v2 §3.2.4 fetches a known workout ID. No undated-library enumeration is documented. | §3.3.7 lists schedules between dates, referencing workout IDs; §3.3.4 fetches a known schedule. Ownership coverage, date-span/retention limits, inclusivity, pagination and completeness are unspecified. | **Scheduled: blocked/unproven** for non-QS content. **Undated: no-go** under this contract without a documented discovery mechanism. |
+| Suunto | Guide listing and ZIP download are **restricted to the creating application**. | Guide metadata can contain a local date, not a separate native plan/calendar occurrence. Listing uses offset/limit (default 50) and optional inclusive `fileSince`; no complete historical-library guarantee. | **No-go** for non-QS Guide/library backfill; QS-owned readback is not that feature. |
+| COROS | The February 2026 Training Plan chapter has push/delete, not recipe or schedule discovery/read. | Its today/next-year range and 30-workout batch are outbound constraints, not inbound history access. Recorded-workout reads/`planWorkoutId` do not supply a prescription. | **Unavailable** in the reviewed partner contract. |
+| Wahoo | App-owned Plan lookup/list/Workout associations require `plans_read`; Wahoo-authored content needs a separate entitlement. | Dated Workout reads are distinct from Plan recipes. Wahoo file access additionally needs an active subscription and permits three days before through one day after the scheduled start. | **Restricted**; entitlement and content-use rights block an inbound MVP. No established arbitrary third-party/full-library access. |
+
+Sources, reviewed on the investigation date:
+
+- Local confidential `docs/garmin/Training_API_V2.pdf`, revision 1.0 (May 26, 2025), §§2.1–2.6, 3.1, 3.2.1, 3.2.4,
+  3.3.1–3.3.8. This is the latest Training contract available in this checkout, not a claim that Garmin has no newer one.
+  Its purpose is third-party delivery into Garmin. `WORKOUT_IMPORT` and a user-granted token do not establish access to
+  Garmin-created, Garmin-provided or other partners' recipes. `workoutProvider`/`workoutSourceId` describe origin, not
+  permission. Its workout `ownerId` is not a substitute for the connected account binding. Preserve Long IDs as decimal
+  strings. Documented evaluation quotas are 100 partner requests/minute and
+  200 user requests/day; production quotas are 3,000 and 1,000 respectively. Actual grants/quota responses remain authoritative.
+- Local confidential `docs/coros/COROS API Reference V2.0.6 (Updated February 2026).pdf`, chapter 6, checked against
+  chapters 4/5 and 7/8 so activity/route endpoints are not mistaken for prescription access. Neither a completion marker
+  nor the recorded-activity three-month query window establishes planned-workout history. Do not publish either partner PDF.
+- [Suunto Guide API usage](https://apizone.suunto.com/how-to-use-suuntoplus-guides-api) and
+  [Guide Cloud API, List/Download sections](https://aspartnercontent.blob.core.windows.net/apizone/docs/SuuntoplusGuideCloudAPI.pdf).
+  OAuth user authority plus the application subscription key are required; manifest owner matches the application name.
+  Missing and foreign Guide responses cannot prove source deletion. No separately documented partner mechanism for other
+  applications' Guides was found; consumer/private endpoints are excluded, not an alternative implementation.
+- [Wahoo Plan access](https://cloud-api.wahooligan.com/#get-a-plan),
+  [associations](https://cloud-api.wahooligan.com/#get-plans-for-workout) and
+  [Wahoo Plans restrictions](https://cloud-api.wahooligan.com/#wahoo-plans). Workout enumeration is paginated; Plan-list
+  pagination/completeness is not specified. Entitlement permits reading Wahoo intellectual property, not established
+  rights to retain, edit or redeliver it. Require written clarification before such use.
+
+**Evidence separation:** the source contracts above establish only their documented interfaces/restrictions. Existing
+synthetic tests and prior approved live tests in #647/#649/#650/#703 establish QS-owned delivery/readback, not foreign
+discovery. No new live request, provider confirmation, entitlement inspection or partner contact was performed for #708.
+Do not upgrade an unproven row using a fixture or an existing Send success.
+
+Garmin questions required before reconsidering scheduled import: does the approved application/token see user-created
+workouts, Garmin-authored training content and other partners' workouts, individually? Can discovered IDs be fetched
+with complete instructions, and which content may QS persist/edit/send elsewhere? What are supported date limits,
+inclusivity, pagination, ordering, retention and change/deletion signals? Ask separately whether any approved operation
+enumerates unscheduled recipes. Only separately authorized contract clarification and bounded same-account tests can
+answer this; do not try guessed IDs or website endpoints. For Suunto/COROS, obtain an actual approved read contract before
+implementation. For Wahoo, establish the entitlement, permitted content uses, enumeration coverage and association/date
+semantics. Access failures, incomplete lists and missing files are not empty successful imports.
+
+#### File fallback and proposed MVP/order
+
+There is **no go decision for a general cloud-library importer** today. Do not expose a provider Import button or silently
+request new permissions. The most useful independent candidate is **user-supplied structured FIT workout files into the
+undated library**, initially running/cycling, with a lossless subset and explicit confirmation. This is a proposed next
+slice, not existing upload support, not Garmin Connect library access, and not a commitment to every FIT prescription.
+
+[Garmin's FIT workout format](https://developer.garmin.com/fit/articles/file-types/workout.html) distinguishes workout
+files (`file_id.type = 5`, Workout and Workout Step messages) from activity recordings. It documents indexed fixed
+repeats and dynamic target/duration encodings; copying raw numbers into canonical units is invalid.
+[TrainingPeaks structured export](https://help.trainingpeaks.com/hc/en-us/articles/115001076908-Manual-Structured-Workout-Export-for-Garmin-Devices)
+and its [export-format explanation](https://www.trainingpeaks.com/blog/export-workouts-import-fitness-the-benefits-of-structured-workout-exports/)
+establish that structured exports exist, including FIT; they do not grant QS rights over purchased/third-party content.
+Only accept user-authored or otherwise authorized files, disclose private storage and prohibit public redistribution.
+Confirm usage rights for each supported source; never fetch licensed content indirectly to bypass its API restrictions.
+
+Start with FIT, not simultaneous ZWO/ERG/MRC/Guide ZIP parsers. Require exact type/CRC/message-index/count validation,
+bounded decoding and proof from rights-cleared fixtures before approving an implementation. Reject activity FIT/GPX/TCX
+recordings as prescriptions; never derive the workout from laps. Current event-import behavior must stay unchanged.
+Use the existing licensed parser stack or a separately reviewed extension; never add or vendor the official Garmin FIT
+SDK. It may only be used for standalone investigation outside these repositories. Guide ZIP and Wahoo JSON are
+documented transport formats, not evidence of unrestricted user export or permission to import other authors' content.
+
+Candidate delivery order: (1) approve a focused FIT-to-library slice dependent on completed #653; (2) reconsider Garmin
+dated import after #645-style ownership/access proof; (3) consider Wahoo only after entitlement/content rights are settled;
+(4) Suunto/COROS only if a new approved discovery contract exists. Recovering lost QS-owned artifacts is a separate
+repair/recovery scope, not the promised user-library import. Neutral recipe extraction #654 is not a prerequisite.
+No implementation slice has yet been accepted, so none is declared implemented or deferred to an untracked TODO.
+Before accepting any of these candidates, search duplicates, create/reuse a focused #583 subissue, add it to Project 2,
+verify both relationships and put that slice's unresolved proof/tests/Help requirements there.
+
+#### Proposed domain and loss boundary
+
+Reuse `shared/planned-workout.ts`, `shared/strength-workout.ts` and `shared/workout-library.ts`; this investigation adds
+no field to those strict contracts. A normalized, undated recipe becomes a library snapshot; a separately selected dated
+occurrence becomes a new Standalone workout. One source recipe may have several independently identified occurrences.
+Do not infer a QS plan or a date from a recipe title, file creation timestamp or completed recording. Preserve provider
+calendar dates as dates; for instants require documented timezone semantics and preview the resulting date. Ambiguous
+timezones or conflicting date fields require correction, not the browser's implicit timezone.
+
+Map ordered steps/fixed repeats into stable QS node IDs, purposes and canonical seconds/metres/bpm/watts/m/s/cadence;
+preserve both target order and applicable pool length. Relative targets require the actual saved reference value and
+meaning. Zone numbers/current account settings cannot recreate an original reference snapshot; block the import or
+request an explicit user-authored correction. Sport folds cannot recover the original sport: ask instead of inventing
+it. Strength needs the full validated exercise companion and server-derived projection, never just the v1 summary.
+Respect 100 nodes, repeats up to 100, no nested repeats, two targets, title/notes limits and current library/schedule
+capacity rules. Multisport, conditional repeats/endings, unsupported stroke/drill/equipment, ramps, dynamic Guide logic,
+missing references and over-limit data are explicit blocked items, not flattened/truncated approximations. A calorie
+ending is not canonical mechanical work in kJ; a numeric energy conversion cannot repair that semantic mismatch.
+
+Preview each accepted item and every rejected field with safe, non-executable source labels. If the user wants a simpler
+version, require a separate explicitly edited recipe and preview; do not call it a faithful import. Valid broader v1
+recipes remain inspectable without offering a lossy narrow editor. Sports Lib owns units/display, not provider identity.
+
+Keep provenance and receipts in proposed **server-private owner-scoped companion records**, outside both the recipe and
+the strict public library item. Retain only normalized source identity, recipe/occurrence relationship, source version
+or content hash, mapping version, last-imported QS revision/hash and rights/source classification; no tokens, remote
+download URLs or raw exports in public records, logs, MCP or repository docs. Exact collection names, retention and TTL
+need approval in the implementation issue. Copies create independent QS snapshots, without remote ownership/completion.
+
+#### Explicit consent, deduplication and lifecycle design
+
+The proposed flow is **select source and bounded scope → discover → normalize → inspect differences/errors → confirm
+Import into QS**. Connection permission is not import consent. Preview changes nothing and cancellation leaves nothing
+authored. A library import has no date. For dated import, default to Standalone with all Send choices off. Critically,
+existing `placeWorkoutLibraryForUser` creates plan workouts that follow an active plan's existing delivery opt-in: **do not
+reuse that path to attach imports to a syncing plan without a new atomic delivery-suppression contract**. Defer plan
+association from the first slice; a later explicit attachment must disclose the plan's existing sync behavior or preserve
+an approved import-specific exclusion. Saving an imported workout must never echo it back to its source.
+
+Proposed import bounds (not provider quotas or implemented configuration): the file candidate starts with one recipe
+per file, at most 2 MiB per file and 25 selected items per approved import. For a later separately approved cloud slice,
+use 25-record discovery pages, 1,000 scanned records per job and a selected date window no longer than 366 days. Also
+enforce destination capacity and response limits; stop with explicit partial coverage, never claim full backfill.
+Default a cloud preview to a short upcoming range, not all history. No scheduled polling or automatic reimport.
+
+- Server-derived identity keys bind QS owner, provider, stable provider-account identity and source recipe ID. Occurrences
+  additionally use the stable schedule ID, not just recipe/date. Reconnect generations fence jobs but do not change the
+  deduplication namespace for the same account. Missing stable occurrence identity prevents automatic reschedule/update.
+  File identity uses an owner-bound digest of exact file bytes; parser/mapper versions belong in receipts and diffs,
+  not that identity, so an upgrade cannot create a duplicate. Explicit independent copies remain
+  possible. Do not merge different source IDs because titles or canonical content happen to match.
+- Check existing private outbound IDs/markers and provenance before import. A recognized QS delivery is **already in QS**,
+  not a new recipe. Uncertain ownership cannot authorize adoption, replacement or deletion of a provider artifact. An
+  imported record has no delivery ledger or destructive remote authority; a subsequent explicit Send creates a new
+  QS-owned delivery and does not commandeer the source object.
+- Persist a bounded private discovery/preview manifest, authority binding, cursor and per-item mutation receipts. Bind
+  confirmation to selection/content digest, mapper version, expected schedule/library revisions and expiry. Use existing
+  sanitized server mutations with an atomic receipt/provenance write, Auth/App Check and deletion/bulk-operation fences;
+  do not invent browser CRUD or a second history engine. Check transaction budgets before starting, with independent
+  idempotent chunks and truthful per-item progress. Advance the cursor only after the matching item receipt commits.
+- An identical source/content replay is a no-op. Changed source content shows a diff against the last imported snapshot.
+  Replace only after new confirmation and exact QS revision/hash checks. A locally edited item defaults to **keep local**;
+  offer an independent copy or explicit conflict review. Never silently overwrite or reimport a locally deleted item;
+  minimal owner-private tombstones/receipts must preserve that choice for the agreed retention period.
+- Missing, stale, partial or unstable provider listings mark source availability **unknown**. A confirmed source deletion
+  may be shown as provenance status; it does not delete the QS snapshot. No bidirectional edits/deletes. Account changes,
+  disconnect, grant revocation, expired previews and account deletion invalidate outstanding work; recheck exact authority
+  before every request and every committing chunk. Imported snapshots stay private QS data after disconnect, subject to
+  agreed content rights. Account deletion removes manifests, provenance, receipts, tombstones and snapshots under users.
+- Bound bytes, decoded nodes, redirects, archive expansion and processing time. Allowlist provider download hosts and
+  validate the current source binding before requests. Never execute Guide expressions, resolve XML external entities,
+  forward credentials across redirects or interpret authored instructions as permission. Retry read failures with bounded
+  provider-aware backoff; writes replay exact receipts, not a guessed new selection. Imported prescriptions never write
+  activity events or change completed totals, TSS, Training analysis or completion links (#651).
+
+#### Required tests, product documentation and MCP review
+
+Before any importer is delivered, its focused implementation issue must own these fixtures and evidence:
+
+| Area | Required checks |
+| --- | --- |
+| Access/discovery | QS-owned versus provider/other-app fixtures; forbidden/unknown IDs; entitlement denial; inaccessible file; partial/unstable/repeated pages; caps; rate limits. A fake never proves foreign-access entitlement. |
+| Prescription | Canonical JSON round trips; ordered targets, exact dynamic FIT decoding/units and repeat indexes; reference snapshots; pool length; strength companion consistency; unsupported structures/unknown fields/oversized input fail closed. |
+| Schedule/identity | Several occurrences of one recipe; undated input stays undated; DST/year/leap-day/date-versus-instant cases; reschedule with stable occurrence ID; repeated file/import and QS outbound-copy detection. |
+| Lifecycle/backend | Real isolated demo-Firestore emulator tests for atomic provenance/history/receipt writes, capacity/write budgets, crash/resume, concurrent local edits, account replacement/reconnect, disconnect/revocation and deletion mid-chunk; owner/cross-user Rules, Auth/App Check and sanitizer tests. No production-backed emulator assumptions. |
+| UI/evidence | Full preview, blocked items and conflicts; confirm/cancel/retry; no automatic Send or plan-opt-in inheritance; keyboard/mobile/a11y; unchanged recorded totals and no guessed completion. Separately approved same-account cloud proof only after the contract gate. |
+
+Help review: current `src/app/shared/help.content.ts` describes manual/library authoring and outbound delivery and correctly
+does not offer inbound Plan import. Leave public/help copy unchanged for this investigation. A future approved slice must
+explain supported sources/formats, selected scope, loss/conflict handling, private retention, independent copies,
+disconnect/deletion and **not sent automatically**. Review the consent UI and privacy policy for the actual stored source
+metadata/rights; a provider connection or an existing activity-import permission cannot authorize the new feature.
+
+**MCP no-wire-impact rationale:** documentation only; no tool, exposed field, scope, consent, mutation, provider action,
+Assistant instruction, registered contract or bundled skill changes. Future imports become ordinary validated owner
+recipes readable only through deliberate `training-plans:read` projections; strength/pool/early-Lap use their applicable
+full-prescription reads, not a lossy legacy summary. Source metadata remains private unless a separately reviewed bounded
+projection is approved. Existing library/Training writes do not acquire source-fetch, import or Send authority. If MCP
+import is later accepted, specify additive strict owner/connection/grant/revision/digest-bound preview and native-approved
+apply, safe opaque references, expiry/idempotency and independent provider consent; never expose raw provider IDs/payloads
+or auto-enable `training-delivery:write`. Review Assistant routing, consent and contract fixtures in that same PR.
 
 ### Provider delivery foundation (#646)
 
@@ -2354,7 +2567,7 @@ workout consent. Use the normal owner-selected Stop/disconnect/deletion workflow
 they are not deployment rollback mechanisms. Completed Garmin adapter, pool, strength, exact-completion and schedule-repair
 evidence is retained in #647, #733, #782, #651 and #703. Production monitoring, opened/closed alert-email delivery and
 the lifecycle/retention regression-evidence audit are complete in #655. Current browser sync-settings release/Check
-verification remains #812; COROS and additional Suunto strength proof remain #648/#741, and neutral Sports Lib
+verification is recorded in completed #812; COROS entitlement and strength live proof remain #648/#741, and neutral Sports Lib
 extraction remains #654.
 
 The release audit reuses recorded account/device observations rather than inducing production failures. Shared and
