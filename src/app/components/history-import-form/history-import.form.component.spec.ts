@@ -151,10 +151,13 @@ describe('HistoryImportFormComponent', () => {
         expect(component).toBeTruthy();
     });
 
-    describe('Wahoo running history imports', () => {
+    describe.each([
+        [ServiceNames.WahooAPI, 'Wahoo'],
+        [ServiceNames.GarminAPI, 'Garmin'],
+    ] as const)('%s running activity history imports', (serviceName, providerName) => {
         beforeEach(async () => {
             await fixture.whenStable();
-            fixture.componentRef.setInput('serviceName', ServiceNames.WahooAPI);
+            fixture.componentRef.setInput('serviceName', serviceName);
             fixture.componentRef.setInput('userMetaForService', {});
             fixture.detectChanges();
             component.formGroup.patchValue({ startDate: new Date(), endDate: new Date(), accepted: true });
@@ -169,7 +172,7 @@ describe('HistoryImportFormComponent', () => {
             fixture.destroy();
             fixture = TestBed.createComponent(HistoryImportFormComponent);
             component = fixture.componentInstance;
-            fixture.componentRef.setInput('serviceName', ServiceNames.WahooAPI);
+            fixture.componentRef.setInput('serviceName', serviceName);
             fixture.componentRef.setInput('userMetaForService', { historyImportLeaseExpiresAt: Date.now() + 60_000 });
             fixture.detectChanges();
             await Promise.resolve();
@@ -177,7 +180,7 @@ describe('HistoryImportFormComponent', () => {
             component.formGroup.patchValue({ startDate: new Date(), endDate: new Date(), accepted: true });
 
             expect(component.formGroup.disabled).toBe(true);
-            expect(fixture.nativeElement.textContent).toContain('A Wahoo history import is already running');
+            expect(fixture.nativeElement.textContent).toContain(`A ${providerName} history import is already running`);
             expect(fixture.nativeElement.querySelector('.history-import-form')).toBeNull();
             await component.onSubmit(new Event('submit'));
             expect(mockUserService.importServiceHistoryForCurrentUser).not.toHaveBeenCalled();
@@ -214,8 +217,8 @@ describe('HistoryImportFormComponent', () => {
 
             expect(component.formGroup.disabled).toBe(true);
             expect(component.isAllowedToDoHistoryImport).toBe(false);
-            expect(fixture.nativeElement.textContent).not.toContain('A Wahoo history import is already running');
-            expect(fixture.nativeElement.textContent).toContain('Cooldown active');
+            expect(fixture.nativeElement.textContent).not.toContain(`A ${providerName} history import is already running`);
+            expect(component.nextImportAvailableDate.getTime()).toBeGreaterThan(Date.now());
         });
 
         it('keeps a renewed lease active after the previous expiry passes', async () => {
@@ -229,7 +232,7 @@ describe('HistoryImportFormComponent', () => {
             fixture.detectChanges();
 
             expect(component.formGroup.disabled).toBe(true);
-            expect(component.isWahooHistoryImportRunning()).toBe(true);
+            expect(component.isActivityHistoryImportRunning()).toBe(true);
             await vi.advanceTimersByTimeAsync(6_000);
             fixture.detectChanges();
             expect(component.formGroup.enabled).toBe(true);
@@ -237,13 +240,17 @@ describe('HistoryImportFormComponent', () => {
 
         it('cleans up the expiry timer when the dialog is closed', async () => {
             vi.useFakeTimers();
+            const setTimer = vi.spyOn(globalThis, 'setTimeout');
+            const clearTimer = vi.spyOn(globalThis, 'clearTimeout');
             fixture.componentRef.setInput('userMetaForService', { historyImportLeaseExpiresAt: Date.now() + 5_000 });
             fixture.detectChanges();
-            const timerCount = vi.getTimerCount();
+            const timerIndex = setTimer.mock.calls.findIndex(([, delay]) => delay === 5_000);
+            expect(timerIndex).toBeGreaterThanOrEqual(0);
+            const expiryTimer = setTimer.mock.results[timerIndex].value;
             fixture.destroy();
-            expect(vi.getTimerCount()).toBeLessThan(timerCount);
+            expect(clearTimer).toHaveBeenCalledWith(expiryTimer);
             await vi.advanceTimersByTimeAsync(5_000);
-            expect(component.isWahooHistoryImportRunning()).toBe(true);
+            expect(component.isActivityHistoryImportRunning()).toBe(true);
             expect(haptics.selection).not.toHaveBeenCalled();
         });
 
@@ -253,14 +260,14 @@ describe('HistoryImportFormComponent', () => {
             fixture.destroy();
             fixture = TestBed.createComponent(HistoryImportFormComponent);
             component = fixture.componentInstance;
-            fixture.componentRef.setInput('serviceName', ServiceNames.WahooAPI);
+            fixture.componentRef.setInput('serviceName', serviceName);
             fixture.componentRef.setInput('userMetaForService', { historyImportLeaseExpiresAt: Date.now() + 60_000 });
             fixture.detectChanges();
             fixture.destroy();
             resolveUser({ uid: '123', stripeRole: 'pro' });
             await Promise.resolve();
 
-            expect(component.isWahooHistoryImportRunning()).toBe(false);
+            expect(component.isActivityHistoryImportRunning()).toBe(false);
             expect(component.isAllowedToDoHistoryImport).toBe(false);
             expect(haptics.selection).not.toHaveBeenCalled();
         });
@@ -309,7 +316,7 @@ describe('HistoryImportFormComponent', () => {
             expect(component.formGroup.enabled).toBe(true);
         });
 
-        it('does not apply the Wahoo lease to another provider', () => {
+        it('does not apply an activity-history lease to COROS', () => {
             fixture.componentRef.setInput('serviceName', ServiceNames.COROSAPI);
             fixture.componentRef.setInput('userMetaForService', { historyImportLeaseExpiresAt: Date.now() + 60_000 });
             fixture.detectChanges();
@@ -317,7 +324,7 @@ describe('HistoryImportFormComponent', () => {
         });
 
         it.each(['functions/already-exists', 'already-exists'])('handles %s as a normal running status without a false success', async code => {
-            const error = Object.assign(new Error('A Wahoo history import is already running.'), { code });
+            const error = Object.assign(new Error(`A ${providerName} history import is already running.`), { code });
             mockUserService.importServiceHistoryForCurrentUser.mockRejectedValueOnce(error);
             const emit = vi.spyOn(component.importInitiated, 'emit');
 
@@ -325,7 +332,7 @@ describe('HistoryImportFormComponent', () => {
 
             expect(mockLoggerService.error).not.toHaveBeenCalled();
             expect(snackBar.open).toHaveBeenCalledWith(
-                'A Wahoo history import is already running. Please wait for it to finish.',
+                `A ${providerName} history import is already running. Please wait for it to finish.`,
                 undefined,
                 { duration: 4000 },
             );
@@ -337,7 +344,7 @@ describe('HistoryImportFormComponent', () => {
             expect(haptics.error).not.toHaveBeenCalled();
         });
 
-        it.each([['Wahoo failure', ServiceNames.WahooAPI, 'functions/unavailable'], ['other provider', ServiceNames.SuuntoApp, 'functions/already-exists']] as const)(
+        it.each([['provider failure', serviceName, 'functions/unavailable'], ['permission failure', serviceName, 'functions/permission-denied'], ['other provider', ServiceNames.SuuntoApp, 'functions/already-exists']] as const)(
             'still reports an unexpected import error for %s', async (_case, service, code) => {
                 fixture.componentRef.setInput('serviceName', service);
                 fixture.detectChanges();

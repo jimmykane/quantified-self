@@ -796,7 +796,7 @@
         <mat-form-field subscriptSizing="dynamic">
           <mat-label>Target</mat-label>
           <mat-select [value]="step.targetKind" [disabled]="busyAction() !== null" (selectionChange)="updateStep(nodeIndex, stepIndex, 'targetKind', $event.value)">
-            @for (target of targetOptions; track target.value) {
+            @for (target of targetOptionsForStep(step); track target.value) {
               <mat-option [value]="target.value">{{ target.label }}</mat-option>
             }
           </mat-select>
@@ -810,12 +810,12 @@
             (valueChange)="updateStep(nodeIndex, stepIndex, 'targetMaximum', $event)"></app-workout-time-input>
         } @else if (step.targetKind !== 'none') {
           <mat-form-field subscriptSizing="dynamic">
-            <mat-label>Minimum</mat-label>
+            <mat-label>{{ step.targetKind === 'speed' ? 'Minimum ' + editorSpeedUnit() : step.targetKind === 'cadence' ? 'Minimum rpm' : 'Minimum' }}</mat-label>
             <input matInput type="number" min="0" step="0.01" [ngModel]="step.targetMinimum"
               (ngModelChange)="updateStep(nodeIndex, stepIndex, 'targetMinimum', $event)">
           </mat-form-field>
           <mat-form-field subscriptSizing="dynamic">
-            <mat-label>Maximum</mat-label>
+            <mat-label>{{ step.targetKind === 'speed' ? 'Maximum ' + editorSpeedUnit() : step.targetKind === 'cadence' ? 'Maximum rpm' : 'Maximum' }}</mat-label>
             <input matInput type="number" min="0" step="0.01" [ngModel]="step.targetMaximum"
               (ngModelChange)="updateStep(nodeIndex, stepIndex, 'targetMaximum', $event)">
           </mat-form-field>

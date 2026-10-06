@@ -26,6 +26,82 @@ function setup(call = vi.fn(async () => ({ data: listing }))) {
 }
 
 describe('AdminMarketingComponent haptics', () => {
+  it('defaults to immediate sending and gives selection feedback only for accepted schedule changes', () => {
+    const { component, haptics } = setup();
+    expect(component.scheduleMode).toBe('now');
+    component.setScheduleMode('now');
+    expect(haptics.selection).not.toHaveBeenCalled();
+    component.setScheduleMode('daily');
+    expect(component.dirty).toBe(true);
+    component.setScheduleTimeZone('Pacific/Auckland');
+    component.setScheduleTimeZone('Pacific/Auckland');
+    expect(haptics.selection).toHaveBeenCalledTimes(2);
+    component.busy = 'Saving';
+    component.setScheduleMode('now');
+    component.setScheduleTimeZone('UTC');
+    expect(component.scheduleMode).toBe('daily');
+    expect(component.scheduleTimeZone).toBe('Pacific/Auckland');
+    expect(haptics.selection).toHaveBeenCalledTimes(2);
+    component.ngOnDestroy();
+  });
+  it('saves daily settings, guards invalid times, and lets unsaved email tests bypass the schedule', async () => {
+    const scheduled = { ...pausedCampaign, status: 'draft' as const, schedule: { time: '14:30', timeZone: 'UTC' } };
+    const call = vi.fn(async (name: string) => ({ data: name === 'saveMarketingCampaign' ? scheduled : listing }));
+    const { component } = setup(call);
+    component.draft.subject = 'A note';
+    component.setScheduleMode('daily');
+    component.scheduleTime = '';
+    expect(component.scheduleError).toContain('daily time');
+    await component.save();
+    expect(call).not.toHaveBeenCalled();
+    component.scheduleTime = '14:30';
+    component.setScheduleTimeZone('UTC');
+    await component.save();
+    expect(call).toHaveBeenCalledWith('saveMarketingCampaign', { id: null,
+      draft: expect.objectContaining({ schedule: { time: '14:30', timeZone: 'UTC' } }) });
+    component.scheduleTime = '';
+    component.dirty = true;
+    component.testTo = 'qa@example.org';
+    await component.sendTest();
+    expect(call).toHaveBeenCalledWith('sendMarketingTest', { id: null, to: 'qa@example.org',
+      draft: expect.objectContaining({ schedule: null }) });
+    component.newDraft();
+    expect(component.scheduleMode).toBe('now');
+    component.ngOnDestroy();
+  });
+  it('reloads saved scheduling settings silently, includes them on resume and locks running controls', async () => {
+    const campaign = { ...pausedCampaign, schedule: { time: '09:00', timeZone: 'Europe/Helsinki' },
+      nextScheduledSendAt: new Date(Date.now() + 86_400_000).toISOString() };
+    const call = vi.fn(async (name: string) => ({ data: name === 'changeMarketingCampaignStatus'
+      ? { ...campaign, status: 'running' } : listing }));
+    const { haptics } = setup(call);
+    const fixture = TestBed.createComponent(AdminMarketingComponent);
+    const component = fixture.componentInstance;
+    component.choose(campaign, false);
+    fixture.detectChanges();
+    await fixture.whenStable();
+    fixture.detectChanges();
+    const root = fixture.nativeElement as HTMLElement;
+    expect(component.scheduleMode).toBe('daily');
+    expect(component.scheduleTimeZone).toBe('Europe/Helsinki');
+    expect(haptics.selection).not.toHaveBeenCalled();
+    expect(root.querySelector<HTMLInputElement>('input[type="time"]')?.disabled).toBe(false);
+    await component.change('resume');
+    fixture.detectChanges();
+    await fixture.whenStable();
+    fixture.detectChanges();
+    expect(call).toHaveBeenCalledWith('changeMarketingCampaignStatus', { id: campaign.id, action: 'resume',
+      draft: expect.objectContaining({ schedule: campaign.schedule }) });
+    expect(root.querySelector<HTMLInputElement>('input[type="time"]')?.disabled).toBe(true);
+    expect(root.querySelector('mat-select')?.getAttribute('aria-disabled')).toBe('true');
+    expect(root.textContent).toContain('Next daily batch:');
+    component.selected = { ...component.selected!, nextScheduledSendAt: '2000-01-01T09:00:00.000Z' };
+    expect(component.nextDailyBatch).toBeNull();
+    component.setScheduleMode('now');
+    expect(component.scheduleMode).toBe('daily');
+    expect(haptics.selection).not.toHaveBeenCalled();
+    fixture.destroy();
+  });
   it('ignores an older status response that arrives after saving paused edits', async () => {
     let releaseOldRefresh!: (value: { data: MarketingCampaignListResponse }) => void;
     const oldRefresh = new Promise<{ data: MarketingCampaignListResponse }>(resolve => { releaseOldRefresh = resolve; });

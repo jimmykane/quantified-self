@@ -14,7 +14,7 @@ import { ECHARTS_CARTESIAN_IMMEDIATE_UPDATE_SETTINGS, EChartsHostController } fr
 import { resolveEChartsThemeName } from '../../helpers/echarts-theme.helper';
 import { isEChartsMobileTooltipViewport } from '../../helpers/echarts-tooltip-interaction.helper';
 import { buildWorkoutProfileChartOption } from '../../helpers/workout-profile-chart.helper';
-import { buildWorkoutProfile, workoutProfileOccurrenceCount, WORKOUT_PROFILE_EXPANSION_BUDGET, WORKOUT_PROFILE_METRIC_LABELS, type WorkoutProfileMetric, type WorkoutProfileOccurrence, type WorkoutProfileSelection } from '../../helpers/workout-profile.helper';
+import { buildWorkoutProfile, workoutProfileOccurrenceCount, workoutProfileMetricLabels, WORKOUT_PROFILE_EXPANSION_BUDGET, type WorkoutProfileMetric, type WorkoutProfileOccurrence, type WorkoutProfileSelection } from '../../helpers/workout-profile.helper';
 
 let nextProfileId = 0;
 
@@ -49,7 +49,7 @@ export class WorkoutProfileComponent {
       return [[node.id, pass]];
     }));
   }, { equal: (a, b) => Object.keys(a).length === Object.keys(b).length && Object.keys(a).every(id => a[id] === b[id]) });
-  readonly metricLabels = WORKOUT_PROFILE_METRIC_LABELS;
+  readonly metricLabels = computed(() => workoutProfileMetricLabels(this.structure()?.sport));
   readonly isStrength = computed(() => this.structure()?.sport === ActivityTypes.StrengthTraining);
   readonly model = computed(() => {
     if (!this.expanded() || !this.structure() || this.isStrength()) return null;
@@ -68,7 +68,7 @@ export class WorkoutProfileComponent {
     targetsText: step.targets.map(t => t.text).join(' · ') || 'No target prescribed' })) ?? []);
   readonly chartWidth = computed(() => Math.max(320, (this.model()?.occurrences.length ?? 0) * 46 + (this.metric() ? 96 : 16)));
   readonly summary = computed(() => {
-    const targets = this.metric() ? `${this.metricLabels[this.metric()]} target ranges.`
+    const targets = this.metric() ? `${this.metricLabels()[this.metric()]} target ranges.`
       : this.steps().some(step => step.targets.length) ? 'No finite target ranges to plot.' : 'No targets prescribed.';
     return `${this.model()?.occurrenceCount ?? 0} step occurrences. Equal widths show step order, not time or distance. ${targets} Use the step buttons for details.`;
   });

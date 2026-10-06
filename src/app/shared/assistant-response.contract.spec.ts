@@ -2,9 +2,29 @@ import { describe, expect, it } from 'vitest';
 import type { AssistantChatResponse } from '@shared/assistant.types';
 import {
   isAssistantContentProposal,
+  isAssistantTrainingProposal,
   validateAssistantChatResponse,
   validateAssistantConversation,
 } from '@shared/assistant-response.contract';
+
+describe('dedicated Garmin replacement review boundary', () => {
+  const preview = { proposalRef: 'opaque', expiresAtMs: 1000, permissionMode: 'delivery', scheduleRevision: 2,
+    requiresConfirmation: true, summary: 'Possible duplicate.',
+    changes: [{ index: 0, kind: 'garmin-workout-replacement', summary: 'Run on 2026-10-06.' }],
+    providerPreviews: [{ index: 0, provider: 'garmin', targetType: 'workout', action: 'replace', availability: 'ready',
+      timeZone: 'Europe/Helsinki', eligibleCount: 1, warningCount: 1, summary: 'Queue, not receipt.' }] };
+  it('accepts only a complete unmixed Garmin replacement review and rejects malformed rows without throwing', () => {
+    expect(isAssistantTrainingProposal(preview)).toBe(true);
+    for (const changes of [[], [null], [{ ...preview.changes[0], kind: 'update-workout' }],
+      [...preview.changes, { index: 1, kind: 'update-workout', summary: 'Unrelated edit.' }]]) {
+      expect(isAssistantTrainingProposal({ ...preview, changes })).toBe(false);
+    }
+    for (const extra of [{ provider: 'suunto' }, { targetType: 'plan' }, { action: 'retry' }, { index: 1 },
+      { availability: 'unavailable' }, { evidence: 'PRIVATE' }]) {
+      expect(isAssistantTrainingProposal({ ...preview, providerPreviews: [{ ...preview.providerPreviews[0], ...extra }] })).toBe(false);
+    }
+  });
+});
 
 describe('manual measurement review boundary', () => {
   const fields = { metricId: 'body_weight', canonicalValue: 80,

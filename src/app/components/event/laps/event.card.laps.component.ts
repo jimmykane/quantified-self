@@ -21,7 +21,7 @@ import {
 import { DataTableAbstractDirective } from '../../data-table/data-table-abstract.directive';
 import { MatSnackBar } from '@angular/material/snack-bar';
 import { AppUserSettingsQueryService } from '../../../services/app.user-settings-query.service';
-import { isEventLapTypeAllowed } from '../../../helpers/event-lap-type.helper';
+import { getVisibleEventLaps } from '../../../helpers/event-lap-type.helper';
 import {
   EventLapMetricOptionGroup,
   formatEventLapMetric,
@@ -157,17 +157,12 @@ export class EventCardLapsComponent extends DataTableAbstractDirective implement
     this.availableLapTypes = [];
     if (this.selectedActivities) {
       this.selectedActivities.forEach(activity => {
-        const laps = activity.getLaps?.() || [];
+        const laps = getVisibleEventLaps(activity);
         this.availableLapTypes = [...new Set(this.availableLapTypes.concat(
           laps.map(lap => lap.type)
-            .filter(lapType => this.shouldShowLapType(lapType))
         ))];
       });
     }
-  }
-
-  private shouldShowLapType(lapType: LapTypes): boolean {
-    return isEventLapTypeAllowed(lapType, []);
   }
 
   private updateData() {
@@ -244,7 +239,7 @@ export class EventCardLapsComponent extends DataTableAbstractDirective implement
   }
 
   private generateLapData(activity: ActivityInterface, lapType: LapTypes): LapTableRow[] {
-    const laps = (activity.getLaps?.() || []).filter(lap => lap.type === lapType);
+    const laps = getVisibleEventLaps(activity).filter(lap => lap.type === lapType);
     const metricTypes = this.getColumnsToDisplay(activity.type).filter((column) => column !== '#');
     const lapRows = laps.reduce<LapTableRow[]>((lapDataArray, lap, index) => {
       const row: LapTableRow = {
@@ -413,9 +408,7 @@ export class EventCardLapsComponent extends DataTableAbstractDirective implement
   private updateLapColumnMenuGroups(): void {
     const sportFamilies = new Set<AppEventLapSportFamily>();
     this.selectedActivities.forEach((activity) => {
-      const laps = activity.getLaps?.() || [];
-      const hasVisibleLaps = laps.some((lap) => this.shouldShowLapType(lap.type));
-      if (hasVisibleLaps) {
+      if (getVisibleEventLaps(activity).length > 0) {
         sportFamilies.add(resolveEventLapSportFamily(activity.type));
       }
     });

@@ -501,6 +501,11 @@ const trainingPreviewFixture = { proposalRef: 'opaque-proposal-reference', expir
 const trainingApplyFixture = { proposalRef: 'opaque-proposal-reference', status: 'applied' as const,
   scheduleRevision: 2, changes: [{ index: 0, kind: 'rename-plan', status: 'applied' as const,
     message: 'Renamed the plan.' }], providers: [], createdReferences: [] };
+const garminReplacementFixture = { ...trainingPreviewFixture, permissionMode: 'delivery' as const,
+  summary: 'Review a Garmin replacement. The original may reappear and leave a duplicate.',
+  changes: [{ index: 0, kind: 'garmin-workout-replacement', summary: 'Review Easy run on 2026-09-18.' }],
+  providerPreviews: [{ index: 0, provider: 'garmin', targetType: 'workout', action: 'replace', availability: 'ready',
+    timeZone: 'Europe/Helsinki', eligibleCount: 1, warningCount: 1, summary: 'Queues recovery, not watch receipt.' }] };
 const savedWorkoutApplyFixture = { proposalRef: 'opaque-proposal-reference', status: 'applied' as const,
   kind: 'create' as const, libraryRevision: 2, scheduleRevision: 1,
   savedWorkoutRef: 'opaque-saved-workout-reference', workoutRefs: [] };
@@ -584,6 +589,7 @@ const service = {
     readTrainingPlans: vi.fn(async (input: { tool: TrainingReadTool }) => trainingReadFixtures[input.tool]),
     previewCreatePlannedWorkout: vi.fn().mockResolvedValue(trainingPreviewFixture),
     previewTrainingChanges: vi.fn().mockResolvedValue(trainingPreviewFixture),
+    previewGarminWorkoutReplacement: vi.fn().mockResolvedValue(garminReplacementFixture),
     previewTrainingDeletion: vi.fn().mockResolvedValue({ ...trainingPreviewFixture, permissionMode: 'combined',
       changes: [{ index: 0, kind: 'delete-workout', summary: 'Delete in QS and request eligible service-copy cleanup. Recorded activities stay.' }] }),
     previewStrengthWorkoutChange: vi.fn().mockResolvedValue(trainingPreviewFixture),
@@ -1383,6 +1389,7 @@ const successfulToolArguments: Record<
   PublicMcpToolName,
   Record<string, unknown>
 > = {
+  preview_garmin_workout_replacement: { workoutRef: 'opaque-workout-reference', expectedScheduleRevision: 1, expectedWorkoutRevision: 1 },
   list_saved_workouts: {},
   get_saved_workout: { savedWorkoutRef: 'opaque-saved-workout-reference' },
   get_workout_prescription_analysis: { source: 'scheduled', reference: 'opaque-workout-reference' },
@@ -2064,7 +2071,7 @@ describe.each<FixtureTransport>(['in-memory', 'legacy-http', 'modern-http'])('MC
     const planWriteTools = tools.filter(tool => (TRAINING_WRITE_TOOLS as readonly string[]).includes(tool.name));
     const planWriteExtensions = planWriteTools.filter(tool => (TRAINING_WRITE_EXTENSION_TOOLS as readonly string[]).includes(tool.name)
       && tool.name !== 'preview_planned_workout_v2_change' && tool.name !== 'preview_saved_workout_change'
-      && !['preview_training_deletion', 'preview_planned_workout_v3_change', 'preview_saved_workout_v2_change'].includes(tool.name));
+      && !['preview_training_deletion', 'preview_garmin_workout_replacement', 'preview_planned_workout_v3_change', 'preview_saved_workout_v2_change'].includes(tool.name));
     const planDeletionPreview = planWriteTools.filter(tool => tool.name === 'preview_training_deletion');
     const planWriteV2 = planWriteTools.filter(tool => tool.name === 'preview_planned_workout_v2_change');
     const planWriteLibrary = planWriteTools.filter(tool => tool.name === 'preview_saved_workout_change');
@@ -2072,6 +2079,7 @@ describe.each<FixtureTransport>(['in-memory', 'legacy-http', 'modern-http'])('MC
     expect(Buffer.byteLength(JSON.stringify(planWriteCore), 'utf8')).toBeLessThan(48 * 1024);
     expect(Buffer.byteLength(JSON.stringify(planWriteExtensions), 'utf8')).toBeLessThan(12 * 1024);
     expect(Buffer.byteLength(JSON.stringify(planDeletionPreview), 'utf8')).toBeLessThan(6 * 1024);
+    expect(Buffer.byteLength(JSON.stringify(tools.filter(tool => tool.name === 'preview_garmin_workout_replacement')), 'utf8')).toBeLessThan(6 * 1024);
     expect(Buffer.byteLength(JSON.stringify(planWriteV2), 'utf8')).toBeLessThan(20 * 1024);
     expect(Buffer.byteLength(JSON.stringify(planWriteLibrary), 'utf8')).toBeLessThan(24 * 1024);
     for (const name of ['get_planned_workout_v3', 'get_saved_workout_v2', 'preview_planned_workout_v3_change', 'preview_saved_workout_v2_change']) {
@@ -2556,6 +2564,35 @@ describe.each<FixtureTransport>(['in-memory', 'legacy-http', 'modern-http'])('MC
         expect(result.isError, field).toBe(true);
         expect(result).not.toHaveProperty('structuredContent');
         expect(JSON.stringify(result)).not.toContain('PRIVATE-DELETION-CANARY');
+      }
+    }
+    expect(service.applyTrainingChanges).not.toHaveBeenCalled();
+  });
+
+  it('keeps replacement behind read/delivery grants, native Apply approval, and private-evidence boundaries', async () => {
+    const service = createFixtureDataService();
+    const args = successfulToolArguments.preview_garmin_workout_replacement;
+    for (const scopes of [[MCP_OAUTH_SCOPES.TrainingPlansRead], [MCP_OAUTH_SCOPES.TrainingDeliveryWrite],
+      [MCP_OAUTH_SCOPES.TrainingPlansRead, MCP_OAUTH_SCOPES.TrainingPlansWrite]]) {
+      const denied = await connectFixtureServer(service, scopes); connections.push(denied);
+      expect((await denied.client.listTools()).tools.map(tool => tool.name)).not.toContain('preview_garmin_workout_replacement');
+    }
+    const connection = await connectFixtureServer(service, [MCP_OAUTH_SCOPES.TrainingPlansRead, MCP_OAUTH_SCOPES.TrainingDeliveryWrite]);
+    connections.push(connection);
+    const tools = (await connection.client.listTools()).tools;
+    expect(tools.find(tool => tool.name === 'apply_training_changes')?.annotations?.destructiveHint).toBe(true);
+    for (const field of ['uid', 'connectionId', 'workoutId', 'approvalDigest', 'verificationEvidence', 'destinationKey', 'repairJournal']) {
+      vi.mocked(service.previewGarminWorkoutReplacement).mockClear();
+      const invalidInput = await connection.client.callTool({ name: 'preview_garmin_workout_replacement', arguments: { ...args, [field]: 'PRIVATE-REPLACEMENT' } });
+      expect(invalidInput.isError).toBe(true);
+      expect(service.previewGarminWorkoutReplacement).not.toHaveBeenCalled();
+      for (const result of [{ ...garminReplacementFixture, [field]: 'PRIVATE-REPLACEMENT' },
+        { ...garminReplacementFixture, providerPreviews: [{ ...garminReplacementFixture.providerPreviews[0], [field]: 'PRIVATE-REPLACEMENT' }] }]) {
+        service.previewGarminWorkoutReplacement = vi.fn().mockResolvedValue(result);
+        const reply = await connection.client.callTool({ name: 'preview_garmin_workout_replacement', arguments: args });
+        expect(reply.isError).toBe(true);
+        expect(reply).not.toHaveProperty('structuredContent');
+        expect(JSON.stringify(reply)).not.toContain('PRIVATE-REPLACEMENT');
       }
     }
     expect(service.applyTrainingChanges).not.toHaveBeenCalled();

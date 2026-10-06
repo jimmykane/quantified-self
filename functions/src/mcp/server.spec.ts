@@ -934,6 +934,7 @@ describe('MCP HTTP scope enforcement', () => {
       'list_saved_workouts',
       'list_training_plans',
       'preview_create_planned_workout',
+      'preview_garmin_workout_replacement',
       'preview_planned_workout_v2_change',
       'preview_planned_workout_v3_change',
       'preview_saved_workout_change',

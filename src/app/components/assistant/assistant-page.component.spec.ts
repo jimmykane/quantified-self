@@ -337,6 +337,41 @@ describe('AssistantPageComponent', () => {
     expect(review.querySelectorAll('.training-proposal-actions button')).toHaveLength(2);
   });
 
+  it.each(['applied', 'blocked'] as const)('reviews a Garmin replacement and shows its %s provider outcome without claiming receipt', async status => {
+    component.conversation.set(chatResponse.conversation);
+    component.pendingTrainingProposal.set({ ...trainingProposal, permissionMode: 'delivery',
+      changes: [{ index: 0, kind: 'garmin-workout-replacement', summary: 'Review Easy run on 2026-10-06.' }],
+      providerPreviews: [{ ...trainingProposal.providerPreviews[0], index: 0, action: 'replace' }] });
+    const message = status === 'applied' ? 'Recovery queued; receipt is not confirmed.' : 'Check evidence changed. Review again.';
+    assistantService.applyTrainingProposal.mockResolvedValueOnce({ status: status === 'applied' ? 'applied' : 'partially_applied',
+      scheduleRevision: 1, changes: [], providers: [{ index: 0, provider: 'garmin', status, message }] });
+    fixture.detectChanges();
+    const review = fixture.nativeElement.querySelector('.training-proposal') as HTMLElement;
+    expect(review.querySelector('h2')!.textContent).toBe('Review Garmin replacement copy');
+    expect(review.textContent).toContain('duplicate');
+    expect(review.textContent).toContain('Create replacement Garmin copy');
+    expect(assistantService.applyTrainingProposal).not.toHaveBeenCalled();
+    await component.applyPendingTrainingProposal();
+    expect(assistantService.applyTrainingProposal).toHaveBeenCalledWith({ proposalRef: trainingProposal.proposalRef,
+      permissionMode: 'delivery', conversationId: chatResponse.conversation.conversationId, confirm: true });
+    expect(component.trainingProposalResult()).toBe(message);
+    expect(component.pendingTrainingProposal()).toBeNull();
+  });
+
+  it('dismisses replacement without Apply and never claims success for a missing provider outcome', async () => {
+    component.conversation.set(chatResponse.conversation);
+    const proposal = { ...trainingProposal, permissionMode: 'delivery' as const,
+      changes: [{ index: 0, kind: 'garmin-workout-replacement', summary: 'Review a replacement.' }],
+      providerPreviews: [{ ...trainingProposal.providerPreviews[0], index: 0, action: 'replace' as const }] };
+    component.pendingTrainingProposal.set(proposal);
+    await component.dismissPendingTrainingProposal();
+    expect(assistantService.applyTrainingProposal).toHaveBeenLastCalledWith(expect.objectContaining({ confirm: false }));
+    component.pendingTrainingProposal.set(proposal);
+    assistantService.applyTrainingProposal.mockResolvedValueOnce({ status: 'applied', scheduleRevision: 1, changes: [], providers: [] });
+    await component.applyPendingTrainingProposal();
+    expect(component.trainingProposalResult()).toContain('No Garmin replacement result');
+  });
+
   it.each(['delete-workout', 'delete-plan'] as const)('reviews %s and its explicit cleanup choice, then displays the server outcome', async kind => {
     const noun = kind === 'delete-plan' ? 'plan' : 'workout';
     const summary = 'Also request removal of older, uncompleted service copies.';

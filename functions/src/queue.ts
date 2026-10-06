@@ -850,6 +850,7 @@ async function parseWorkoutQueueItemForServiceNameInternal(
   let pendingDisconnectFirebaseUserID: string | null = null;
   let tokenRefreshContentionFirebaseUserID: string | null = null;
   let sawInactiveProviderAccount = false;
+  let suuntoAccessDeniedError: Error | undefined;
   let processedAdditionalData: Record<string, unknown> | undefined;
 
   for (const tokenQueryDocumentSnapshot of tokenQueryDocuments) {
@@ -1088,11 +1089,23 @@ async function parseWorkoutQueueItemForServiceNameInternal(
         retryableSuuntoFITPayloadError = e;
         sawRetryableFailure = true;
         continue;
-      } else if (e.statusCode === 401) {
-        logger.warn(`Unauthorized to download workout for ${queueItem.id}, attempting to force refresh token and retry...`);
+      } else if (e.statusCode === 401 || (serviceName === ServiceNames.SuuntoApp && e.statusCode === 403)) {
+        logger.warn('Workout download authorization rejected; refreshing the same account token once.', {
+          queueItemId: queueItem.id,
+          serviceName,
+          providerStatusCode: e.statusCode,
+        });
+        let refreshedDownloadStarted = false;
         try {
           // Force refresh token and save
           serviceToken = await getTokenData(tokenQueryDocumentSnapshot, serviceName, true);
+          if (serviceName === ServiceNames.SuuntoApp
+            && (serviceToken as SuuntoAPIAuth2ServiceTokenInterface).userName
+              !== (queueItem as SuuntoAppWorkoutQueueItemInterface).userName) {
+            sawInactiveProviderAccount = true;
+            continue;
+          }
+          refreshedDownloadStarted = true;
           const downloadedPayload = await getWorkoutForService(
             serviceName,
             queueItem as SuuntoAppWorkoutQueueItemInterface | GarminAPIActivityQueueItemInterface,
@@ -1146,6 +1159,14 @@ async function parseWorkoutQueueItemForServiceNameInternal(
             sawRetryableFailure = true;
             continue;
           }
+          if (refreshedDownloadStarted && serviceName === ServiceNames.SuuntoApp && retryError.statusCode === 403) {
+            suuntoAccessDeniedError = new Error('Suunto workout access denied after token refresh (HTTP 403).');
+            logger.warn('Suunto workout access remains denied after one token refresh.', {
+              queueItemId: queueItem.id,
+              providerStatusCode: 403,
+            });
+            continue;
+          }
           lastError = retryError instanceof Error ? retryError : new Error(`${retryError}`);
           sawRetryableFailure = true;
           logger.error(new Error(`Could not get workout for ${queueItem.id} even after force refresh: ${retryError.message}`));
@@ -1153,12 +1174,6 @@ async function parseWorkoutQueueItemForServiceNameInternal(
           continue;
         }
 
-      } else if (e.statusCode === 403) {
-        logger.error(new Error(`Could not get workout for ${queueItem.id} due to 403, increasing retry by 20`));
-        retryIncrement = 20;
-        lastError = e;
-        sawRetryableFailure = true;
-        continue;
       } else if (e.statusCode === 500) {
         logger.warn(`Partner service internal error (500) for ${queueItem.id}, will retry soon.`);
         retryIncrement = 1;
@@ -1469,6 +1484,10 @@ async function parseWorkoutQueueItemForServiceNameInternal(
 
   if (terminalAuthError) {
     logger.warn(`At least one matching ${serviceName} token for ${queueItem.id} failed with terminal auth, but another matching token only failed retryably. Keeping the queue item retryable.`);
+  }
+
+  if (suuntoAccessDeniedError && !sawRetryableFailure) {
+    return moveToDeadLetterQueue(queueItem, suuntoAccessDeniedError, bulkWriter, 'SUUNTO_WORKOUT_ACCESS_DENIED');
   }
 
   if (sawUserDeletionSkip && !sawRetryableFailure) {
