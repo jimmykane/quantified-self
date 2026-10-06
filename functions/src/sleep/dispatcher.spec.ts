@@ -172,11 +172,12 @@ vi.mock('./queue-revision', () => ({
     },
 }));
 
-import { reconcileSleepSyncQueueDispatches } from './dispatcher';
+import { dispatchSleepSyncQueue, reconcileSleepSyncQueueDispatches } from './dispatcher';
 
 describe('sleep/dispatcher', () => {
     beforeEach(() => {
         vi.clearAllMocks();
+        mockLoggerInfo.mockReset();
         mockGetCloudTaskQueueDepthForQueue.mockResolvedValue(0);
         mockEnqueueSleepSyncTask.mockResolvedValue(true);
         mockEnqueueGarminHealthBackfillTask.mockResolvedValue(true);
@@ -243,6 +244,99 @@ describe('sleep/dispatcher', () => {
             docs: [],
             size: 0,
         });
+    });
+
+    it('separates Garmin batch confirmations, markers and recovery reasons from other queue work', async () => {
+        const nowMs = 1_700_000_000_000;
+        const row = (id: string, fields: Record<string, unknown> = {}) => ({
+            id,
+            data: () => ({
+                provider: 'GarminAPI', type: 'garmin_ping_batch', userID: 'private-user',
+                providerUserId: 'private-provider', processed: false,
+                dateCreated: nowMs - 5000, dispatchedToCloudTask: null, ...fields,
+            }),
+            ref: { update: vi.fn().mockResolvedValue(undefined) },
+        });
+        mockQueueGet.mockResolvedValue({
+            empty: false,
+            docs: [
+                row('private-normal'),
+                row('private-stale', { dispatchedToCloudTask: nowMs - 2 * 60 * 60 * 1000 - 1 }),
+                row('private-lease', {
+                    dispatchedToCloudTask: PROVIDER_OPERATION_IN_FLIGHT_QUEUE_DISPATCH_MARKER,
+                    processingOwner: 'private-owner', processingRevision: 'private-revision',
+                    processingLeaseExpiresAt: nowMs - 1,
+                }),
+                row('private-recent', { dispatchedToCloudTask: nowMs - 1000 }),
+                row('private-unconfirmed'), row('private-not-marked'),
+                row('private-invalid', { dateCreated: 'invalid' }),
+                row('private-guard', { providerUserId: undefined }),
+                row('private-error'),
+                row('private-suunto', { provider: 'SuuntoApp', type: 'suunto_health_poll' }),
+            ],
+        });
+        mockEnqueueSleepSyncTask.mockImplementation(async (id: string) => {
+            if (id === 'private-error') throw new Error('private-error-detail');
+            return id !== 'private-unconfirmed';
+        });
+        mockMarkQueueItemDispatchedIfUserActive.mockImplementation(async params => {
+            if (params.queueItemId === 'private-not-marked') return 'not_current';
+            await params.queueItemDocument.update({ dispatchedToCloudTask: params.dispatchedAtMs });
+            return 'marked';
+        });
+
+        const totals = await reconcileSleepSyncQueueDispatches(nowMs);
+        expect(totals).toEqual({ inspected: 10, dispatched: 4, skippedRecent: 1 });
+        const summaries = mockLoggerInfo.mock.calls.filter(([message]) => message === '[SleepSyncDispatcher] Reconciliation completed');
+        expect(summaries).toHaveLength(1);
+        const summary = summaries[0][1];
+        expect(summary).toMatchObject({
+            ...totals, telemetryVersion: 1, dispatchSource: 'scheduled', durationMs: expect.any(Number),
+            workloads: expect.arrayContaining([
+                expect.objectContaining({
+                    provider: 'GarminAPI', queueType: 'garmin_ping_batch', inspected: 9, considered: 9,
+                    enqueueConfirmed: 4, markedDispatched: 3, markedUndispatched: 1,
+                    markedStaleRecovery: 1, markedLeaseRecovery: 1, skippedRecent: 1,
+                    skippedCapacity: 0, skippedInvalidDate: 1, skippedGuard: 1,
+                    unconfirmed: 1, notMarked: 1, errors: 1, oldestQueueAgeMs: 5000,
+                }),
+                expect.objectContaining({
+                    provider: 'SuuntoApp', queueType: 'suunto_health_poll', inspected: 1,
+                    enqueueConfirmed: 1, markedDispatched: 1, markedUndispatched: 1,
+                }),
+            ]),
+        });
+        expect(JSON.stringify(summary)).not.toContain('private');
+        expect(mockQueueGet).toHaveBeenCalledTimes(2);
+    });
+
+    it('emits one empty aggregate for an empty reconciliation without changing its result', async () => {
+        await expect(reconcileSleepSyncQueueDispatches()).resolves.toEqual({
+            inspected: 0, dispatched: 0, skippedRecent: 0,
+        });
+        expect(mockLoggerInfo).toHaveBeenCalledOnce();
+        expect(mockLoggerInfo).toHaveBeenCalledWith('[SleepSyncDispatcher] Reconciliation completed',
+            expect.objectContaining({ workloads: [] }));
+    });
+
+    it('does not retry a successful scheduled dispatch when aggregate logging fails', async () => {
+        const update = vi.fn().mockResolvedValue(undefined);
+        mockQueueGet.mockResolvedValue({
+            empty: false,
+            docs: [{
+                id: 'garmin-batch', ref: { update },
+                data: () => ({
+                    provider: 'GarminAPI', type: 'garmin_ping_batch', userID: 'uid',
+                    providerUserId: 'provider-user', dateCreated: Date.now(), dispatchedToCloudTask: null,
+                }),
+            }],
+        });
+        mockLoggerInfo.mockImplementation(() => { throw new Error('logger unavailable'); });
+        const handler = dispatchSleepSyncQueue as unknown as () => Promise<void>;
+        await expect(handler()).resolves.toBeUndefined();
+        expect(mockEnqueueSleepSyncTask).toHaveBeenCalledOnce();
+        expect(update).toHaveBeenCalledOnce();
+        expect(mockLoggerInfo).toHaveBeenCalledOnce();
     });
 
     it('skips reconciliation when the Cloud Tasks queue is already at capacity', async () => {

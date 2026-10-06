@@ -25,6 +25,7 @@ import {
     isCurrentSleepQueueRevision,
 } from './queue-revision';
 import { getActiveRevisionProcessingLease } from '../queue/revision-processing-lease';
+import { SleepDispatchReconciliationTelemetry } from './dispatch-telemetry';
 
 const MAX_SLEEP_SYNC_QUEUE_SCAN = 500;
 const SLEEP_SYNC_REDISPATCH_STALE_MS = 2 * 60 * 60 * 1000;
@@ -208,6 +209,7 @@ export async function reconcileSleepSyncQueueDispatches(nowMs = Date.now()): Pro
     dispatched: number;
     skippedRecent: number;
 }> {
+    const telemetry = new SleepDispatchReconciliationTelemetry();
     const [pendingSleepTasks, pendingGarminHealthBackfillTasks] = await Promise.all([
         getCloudTaskQueueDepthForQueue(config.cloudtasks.sleepSyncQueue, true),
         getCloudTaskQueueDepthForQueue(config.cloudtasks.garminHealthBackfillQueue, true),
@@ -215,11 +217,11 @@ export async function reconcileSleepSyncQueueDispatches(nowMs = Date.now()): Pro
     if (pendingSleepTasks >= MAX_PENDING_TASKS
         && pendingGarminHealthBackfillTasks >= MAX_PENDING_TASKS) {
         logger.info('[SleepSyncDispatcher] Both task queues are at capacity; skipping dispatch reconciliation.');
-        return {
+        return telemetry.complete({
             inspected: 0,
             dispatched: 0,
             skippedRecent: 0,
-        };
+        });
     }
 
     const availableSleepSlots = Math.max(0, MAX_PENDING_TASKS - pendingSleepTasks);
@@ -238,16 +240,17 @@ export async function reconcileSleepSyncQueueDispatches(nowMs = Date.now()): Pro
     ];
 
     if (!scannedDocs.length) {
-        return {
+        return telemetry.complete({
             inspected: 0,
             dispatched: 0,
             skippedRecent: 0,
-        };
+        });
     }
 
     const candidates = scannedDocs
         .map((doc) => {
             const data = doc.data() as Partial<SleepSyncQueueItemInterface>;
+            const provider = toSleepProvider(data.provider);
             const dispatchedToCloudTask = toDispatchTimestamp(data.dispatchedToCloudTask);
             const hasRetainedProcessingLease = typeof data.processingOwner === 'string'
                 && data.processingOwner.trim().length > 0
@@ -272,9 +275,10 @@ export async function reconcileSleepSyncQueueDispatches(nowMs = Date.now()): Pro
                 queueRevision: toNonEmptyString(data.queueRevision),
                 needsLeaseRecovery,
                 userID: toNonEmptyString(data.userID),
-                provider: toSleepProvider(data.provider),
+                provider,
                 providerUserId: toNonEmptyString(data.providerUserId),
                 type: data.type,
+                measurements: telemetry.inspect({ provider, type: data.type, dateCreated: data.dateCreated }, nowMs),
             };
         })
         .sort((left, right) => {
@@ -297,17 +301,21 @@ export async function reconcileSleepSyncQueueDispatches(nowMs = Date.now()): Pro
             && garminHealthBackfillDispatched >= availableGarminHealthBackfillSlots) {
             break;
         }
+        const measurements = candidate.measurements;
+        measurements.considered += 1;
 
         // Legacy task identity falls back to the exact dateCreated value. Do
         // not normalize malformed values into a synthetic timestamp: the
         // worker would reject that task as stale while leaving the bad row
         // eligible for dispatch forever.
         if (candidate.dateCreated === null) {
+            measurements.skippedInvalidDate += 1;
             await deleteSleepSyncCandidateBeforeDispatch(candidate.doc, 'invalid dateCreated');
             continue;
         }
 
         if (!candidate.isUndispatched && !candidate.isStale) {
+            measurements.skippedRecent += 1;
             skippedRecent += 1;
             continue;
         }
@@ -317,6 +325,7 @@ export async function reconcileSleepSyncQueueDispatches(nowMs = Date.now()): Pro
             if ((isGarminHealthBackfill
                     && garminHealthBackfillDispatched >= availableGarminHealthBackfillSlots)
                 || (!isGarminHealthBackfill && sleepDispatched >= availableSleepSlots)) {
+                measurements.skippedCapacity += 1;
                 continue;
             }
             if (!(await shouldDispatchSleepSyncCandidate(
@@ -325,6 +334,7 @@ export async function reconcileSleepSyncQueueDispatches(nowMs = Date.now()): Pro
                 candidate.provider,
                 candidate.providerUserId,
             ))) {
+                measurements.skippedGuard += 1;
                 continue;
             }
 
@@ -345,15 +355,18 @@ export async function reconcileSleepSyncQueueDispatches(nowMs = Date.now()): Pro
                 taskIdentity,
             );
             if (!wasTaskEnqueued) {
+                measurements.unconfirmed += 1;
                 logger.info(`[SleepSyncDispatcher] Task not enqueued for ${candidate.doc.id}; leaving dispatch marker unchanged.`);
                 continue;
             }
+            measurements.enqueueConfirmed += 1;
             const userIDForMarker = candidate.userID || (
                 candidate.provider && candidate.providerUserId
                     ? await resolveFirebaseUserIDForSleepDispatchCandidate(candidate.provider, candidate.providerUserId)
                     : null
             );
             if (!userIDForMarker) {
+                measurements.notMarked += 1;
                 await deleteSleepSyncCandidateBeforeDispatch(candidate.doc, 'provider user no longer resolves to a local token before dispatch marker');
                 continue;
             }
@@ -370,8 +383,13 @@ export async function reconcileSleepSyncQueueDispatches(nowMs = Date.now()): Pro
                 }),
             });
             if (markerResult !== QueueDispatchMarkerResult.Marked) {
+                measurements.notMarked += 1;
                 continue;
             }
+            measurements.markedDispatched += 1;
+            if (candidate.needsLeaseRecovery) measurements.markedLeaseRecovery += 1;
+            else if (candidate.isStale) measurements.markedStaleRecovery += 1;
+            else measurements.markedUndispatched += 1;
             dispatched += 1;
             if (isGarminHealthBackfill) {
                 garminHealthBackfillDispatched += 1;
@@ -379,15 +397,16 @@ export async function reconcileSleepSyncQueueDispatches(nowMs = Date.now()): Pro
                 sleepDispatched += 1;
             }
         } catch (error) {
+            measurements.errors += 1;
             logger.error(`[SleepSyncDispatcher] Failed to dispatch queue item ${candidate.doc.id}`, error);
         }
     }
 
-    return {
+    return telemetry.complete({
         inspected: candidates.length,
         dispatched,
         skippedRecent,
-    };
+    });
 }
 
 export const dispatchSleepSyncQueue = functions.region('europe-west2').runWith({
@@ -395,6 +414,5 @@ export const dispatchSleepSyncQueue = functions.region('europe-west2').runWith({
     memory: '256MB',
     maxInstances: 1,
 }).pubsub.schedule(QUEUE_SCHEDULE).onRun(async () => {
-    const result = await reconcileSleepSyncQueueDispatches();
-    logger.info('[SleepSyncDispatcher] Reconciliation completed', result);
+    await reconcileSleepSyncQueueDispatches();
 });

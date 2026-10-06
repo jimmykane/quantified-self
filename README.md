@@ -232,6 +232,7 @@ Unified health history under `users/{uid}/healthSourceRecords` and `healthSample
 - [CI test coverage and emulator isolation](docs/ci-testing.md)
 - [Reusable event tag catalog and backfill](docs/event-tag-catalog.md)
 - [Firebase Functions target-aware entrypoint loading](docs/functions-entrypoint-loading.md)
+- [Temporary Garmin dispatch cost measurements](docs/garmin-dispatch-cost-measurements.md)
 - [Admin dashboard aggregate user history](docs/admin-dashboard-history.md)
 - [Unified health data foundation](docs/unified-health-data.md)
 - [Private Timeline notes](docs/timeline-notes.md)
