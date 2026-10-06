@@ -56,6 +56,19 @@ const INGESTION_TARGET_METADATA: Readonly<Record<string, {
     eventDocument: 'suuntoHealthWebhookIngress/{ingressID}',
   },
 };
+const SCHEDULED_MAINTENANCE_TARGET_METADATA: Readonly<Record<string, {
+  timeoutSeconds: number;
+  maxInstances?: number;
+  secrets?: readonly string[];
+}>> = {
+  scheduleSuuntoHealthSync: { timeoutSeconds: 300 },
+  scheduleSuuntoSleepSync: { timeoutSeconds: 300 },
+  redriveRejectedRouteOriginalCleanup: { timeoutSeconds: 540, maxInstances: 1 },
+  retryPendingServiceDisconnects: { timeoutSeconds: 300, secrets: [
+    'COROSAPI_CLIENT_ID', 'COROSAPI_CLIENT_SECRET', 'GARMINAPI_CLIENT_ID', 'GARMINAPI_CLIENT_SECRET',
+    'SUUNTOAPP_CLIENT_ID', 'SUUNTOAPP_CLIENT_SECRET', 'WAHOOAPI_CLIENT_ID', 'WAHOOAPI_CLIENT_SECRET',
+  ] },
+};
 const TRAINING_TARGET_METADATA: Readonly<Record<string, {
   memoryMb: number;
   timeoutSeconds: number | null;
@@ -300,7 +313,11 @@ async function check(): Promise<void> {
 
   const canaryTarget = OPTIMIZED_FUNCTION_TARGETS[0];
   assert(canaryTarget, 'The optimized target registry is empty.');
-  for (const target of [...Object.keys(INGESTION_TARGET_METADATA), ...Object.keys(TRAINING_TARGET_METADATA)]) {
+  for (const target of [
+    ...Object.keys(INGESTION_TARGET_METADATA),
+    ...Object.keys(SCHEDULED_MAINTENANCE_TARGET_METADATA),
+    ...Object.keys(TRAINING_TARGET_METADATA),
+  ]) {
     assert(OPTIMIZED_FUNCTION_TARGETS.includes(target), `${target} is missing its isolated loader.`);
   }
   for (const discoveryMode of ['control-api', 'manifest-output'] as const) {
@@ -326,7 +343,10 @@ async function check(): Promise<void> {
     );
   }
 
-  for (const target of Object.keys(INGESTION_TARGET_METADATA)) {
+  for (const target of [
+    ...Object.keys(INGESTION_TARGET_METADATA),
+    ...Object.keys(SCHEDULED_MAINTENANCE_TARGET_METADATA),
+  ]) {
     checkSecretBindingsWithInheritedTarget(target);
   }
 
@@ -428,6 +448,25 @@ async function check(): Promise<void> {
           && JSON.stringify(endpoint.taskQueueTrigger?.rateLimits?.maxDispatchesPerSecond) === 'null',
         `${target} task rate limits changed.`);
       }
+    } else if (SCHEDULED_MAINTENANCE_TARGET_METADATA[target]) {
+      const expected = SCHEDULED_MAINTENANCE_TARGET_METADATA[target];
+      assert(endpoint.availableMemoryMb === 512, `${target} memory configuration changed.`);
+      assert(endpoint.timeoutSeconds === expected.timeoutSeconds, `${target} timeout configuration changed.`);
+      assert(endpoint.cpu === undefined, `${target} CPU configuration changed.`);
+      assert(JSON.stringify(endpoint.concurrency) === 'null'
+        && JSON.stringify(endpoint.minInstances) === 'null'
+        && JSON.stringify(endpoint.maxInstances) === JSON.stringify(expected.maxInstances ?? null),
+      `${target} instance settings changed.`);
+      assert(arraysEqual(secretKeys, [...(expected.secrets || [])].sort()), `${target} secret bindings changed.`);
+      assert(endpoint.scheduleTrigger?.schedule === 'every 30 minutes'
+        && endpoint.scheduleTrigger.timeZone === undefined
+        && JSON.stringify(endpoint.scheduleTrigger.retryConfig) === '{}',
+      `${target} schedule or retry configuration changed.`);
+      assert(endpoint.callableTrigger === undefined
+        && endpoint.httpsTrigger === undefined
+        && endpoint.eventTrigger === undefined
+        && endpoint.taskQueueTrigger === undefined,
+      `${target} trigger kind changed.`);
     } else if (target === 'reconcileTrainingPlanCleanup'
       || target === 'reconcileTrainingWorkoutExpiry' || target === 'reconcileTrainingBulkShift') {
       assert(endpoint.availableMemoryMb === 512, `${target} memory configuration changed.`);

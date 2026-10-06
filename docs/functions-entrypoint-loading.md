@@ -63,6 +63,23 @@ coverage, queue processing, writes and telemetry continue through the existing h
 This internal import change has no effect on MCP contracts, Training planning or user-facing help. No additional
 instances are kept warm and runtime resources are unchanged.
 
+## Scheduled maintenance isolation
+
+Four existing Gen 2 scheduled functions load directly from their owner modules:
+
+| Target | Owner module | Preserved runtime options |
+| --- | --- | --- |
+| `scheduleSuuntoHealthSync` | `sleep/polling` | 512 MiB, 300 seconds |
+| `scheduleSuuntoSleepSync` | `sleep/polling` | 512 MiB, 300 seconds |
+| `redriveRejectedRouteOriginalCleanup` | `routes/rejected-original-cleanup` | 512 MiB, 540 seconds, max instances 1 |
+| `retryPendingServiceDisconnects` | `schedule/retry-pending-service-disconnects` | 512 MiB, 300 seconds |
+
+All four retain `europe-west2`, their original Firebase handler objects, the `every 30 minutes` schedule and existing
+time-zone and retry defaults. CPU, concurrency and minimum-instance options remain unspecified. Only the disconnect
+retry job binds secrets: the existing client ID and client secret for COROS, Garmin, Suunto and Wahoo. Polling windows,
+cursor progression, correction/reconciliation coverage, cleanup and disconnect recovery continue through the same
+handlers. The internal loading change has no MCP, Training planning or user-facing help impact.
+
 ## Verification
 
 Run the routing and discovery contract:
@@ -91,6 +108,8 @@ The check builds the Functions package and verifies:
   region and secret bindings;
 - the four ingestion targets avoid the full entrypoint, Genkit, BigQuery, MCP and admin modules, while retaining CPU,
   memory, timeout, concurrency, instance settings, secrets, trigger kinds, retry options and task rate limits;
+- the four scheduled maintenance targets avoid those unrelated modules, preserve their complete scheduled-handler
+  contracts and allow standalone secret validation with any of their targets inherited;
 - retired event-tag catalog and Garmin probe endpoints remain excluded from discovery.
 
 CI runs the compiled check after the Functions build. Firebase Functions predeploy first rejects forbidden local
@@ -184,6 +203,44 @@ After separate explicit deployment approval, deploy the selected functions from 
 ```bash
 firebase deploy --project quantified-self-io \
   --only functions:processSleepSyncTask,functions:processWorkoutTask,functions:uploadActivity,functions:fanOutSuuntoHealthWebhookIngress
+```
+
+## Scheduled maintenance benchmark and verification (2026-10-06)
+
+Three isolated Node 22.23.3 runs per target used the compiled benchmark's `--probe` mode, `--expose-gc`, the matching
+`FUNCTION_TARGET` and neither Firebase discovery flag. The baseline was `6c4874fc6`, with the same machine and
+dependencies before and after the loader change.
+
+| Target | Import before | Import after | RSS before | RSS after | Modules before | Modules after |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: |
+| `scheduleSuuntoHealthSync` | 937 ms | 335 ms | 236.8 MiB | 120.9 MiB | 3,141 | 1,431 |
+| `scheduleSuuntoSleepSync` | 931 ms | 333 ms | 237.7 MiB | 120.2 MiB | 3,141 | 1,431 |
+| `redriveRejectedRouteOriginalCleanup` | 937 ms | 73 ms | 237.6 MiB | 70.3 MiB | 3,141 | 262 |
+| `retryPendingServiceDisconnects` | 944 ms | 322 ms | 237.2 MiB | 122.1 MiB | 3,141 | 1,422 |
+| Complete entrypoint control | 937 ms | 951 ms | 237.7 MiB | 237.8 MiB | 3,141 | 3,141 |
+
+Each runtime target exports one handler; discovery still exports 168. Local imports are about 64–92% faster, with
+115–167 MiB less startup RSS. These measurements do not establish production billing savings. After deployment,
+compare startup latency, billable CPU, memory, request counts, errors and scheduled recovery outcomes over comparable
+complete days before considering changes to resource limits or polling frequency.
+
+Verification passed:
+
+- 69 tests across the loader, Firebase bootstrap, secret policy, Suunto polling, rejected-route cleanup and disconnect
+  retry specs;
+- Functions TypeScript build and compiled entrypoint check: 168 endpoints and 49 isolated targets;
+- all four complete Firebase endpoint descriptors matched the pre-change baseline;
+- deployment-source safety and secret-binding validation: 69 secret-bound endpoints, including an inherited
+  `FUNCTION_TARGET=retryPendingServiceDisconnects`;
+- scoped ESLint for the three changed TypeScript files and `git diff --check`.
+
+The app help page and connected-service help were reviewed; startup isolation needs no user-facing content change.
+The documentation-only changes have no separate automated tests. After separate explicit deployment approval,
+deploy only these four functions from the verified revision:
+
+```bash
+firebase deploy --project quantified-self-io \
+  --only functions:scheduleSuuntoHealthSync,functions:scheduleSuuntoSleepSync,functions:redriveRejectedRouteOriginalCleanup,functions:retryPendingServiceDisconnects
 ```
 
 ## Adding another optimized target
