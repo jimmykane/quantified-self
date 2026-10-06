@@ -862,6 +862,20 @@ omitted; otherwise `state` must be 1–512 visible ASCII characters and is echoe
 The token endpoint accepts UTF-8 `application/x-www-form-urlencoded` request bodies only and rejects repeated
 parameters.
 
+Token exchanges emit one `[MCP OAuth] Token request served` INFO event on success, or one `Token request rejected`
+event at WARNING for expected OAuth rejections and ERROR for server failures. Fields are limited to a coarse
+`clientFamily`, allowlisted `grantType`, `resourceStatus` (matches, mismatch, missing/invalid or not parsed), handler
+`elapsedMs`, HTTP status and, on failure, the OAuth error code and a fixed internal reason. Refresh reuse has the
+explicit `refresh_token_reuse` reason and `connectionRevoked: true` only after the revocation transaction commits;
+false is not a statement that the connection is currently active, and unexpected failures use null for unknown state.
+Private assertion failures retain their fixed
+authentication stage in this same event rather than producing a duplicate warning.
+Firebase's logger attaches the request trace automatically. Compare handler duration with the correlated Cloud Run
+request latency and instance-start logs to distinguish OAuth work from cold-start delay; handler duration alone does
+not include container startup. Never log tokens, codes, assertions, parameter values, error descriptions, raw user
+agents, client/account/connection identifiers or request bodies. These diagnostics do not change OAuth responses,
+rotation/replay protection, scopes, consent, tools or the registered contract; no app rescan or plugin sync is needed.
+
 Token-endpoint discovery advertises both `none` and `private_key_jwt`, while PKCE S256 remains mandatory for every
 authorization-code client. Public CIMD clients such as Claude use `none`. Confidential CIMD clients such as ChatGPT
 may select `private_key_jwt`; their metadata must publish `token_endpoint_auth_method: "private_key_jwt"`,

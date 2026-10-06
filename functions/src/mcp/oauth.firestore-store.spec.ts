@@ -652,6 +652,7 @@ describe('Firestore MCP OAuth store', () => {
         nowMs: 5_000,
       })).rejects.toMatchObject<McpOAuthError>({
         code: 'invalid_grant',
+        diagnosticReason: scenario.expectRevoked ? 'refresh_token_reuse' : 'superseded_grant',
       });
 
       if (scenario.expectRevoked) {

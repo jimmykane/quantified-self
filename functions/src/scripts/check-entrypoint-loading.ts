@@ -151,13 +151,14 @@ function probe(targetArgument: string): void {
   const marketingTarget = runtimeTarget != null && MARKETING_TARGETS.has(runtimeTarget);
   const assistantProposalTarget = runtimeTarget === 'applyAssistantTrainingProposal';
   const derivedRefreshTarget = runtimeTarget === 'ensureDerivedMetrics';
+  const mcpTarget = runtimeTarget === 'mcpApi';
   const forbiddenModules = normalizedModules.filter(path => {
     if (path.endsWith('/lib/functions/src/full-entrypoint.js')) return true;
     if (
       (path.includes('/node_modules/@genkit-ai/') && !assistantProposalTarget)
       || (path.includes('/node_modules/genkit/') && !assistantProposalTarget)
       || path.includes('/node_modules/@google-cloud/bigquery/')
-      || (path.includes('/lib/functions/src/mcp/') && !assistantProposalTarget && !derivedRefreshTarget)
+      || (path.includes('/lib/functions/src/mcp/') && !assistantProposalTarget && !derivedRefreshTarget && !mcpTarget)
     ) return true;
     if (!path.includes('/lib/functions/src/admin/')) return false;
     return !marketingTarget || !(
@@ -316,7 +317,21 @@ async function check(): Promise<void> {
     const secretKeys = (endpoint.secretEnvironmentVariables || [])
       .map(secret => secret.key || '')
       .sort();
-    if (target === 'receiveSuunto247Data') {
+    if (target === 'mcpApi') {
+      assert(endpoint.availableMemoryMb === 1024, `${target} memory configuration changed.`);
+      assert(endpoint.timeoutSeconds === 120, `${target} timeout configuration changed.`);
+      assert(endpoint.concurrency === 4
+        && JSON.stringify(endpoint.minInstances) === 'null'
+        && JSON.stringify(endpoint.maxInstances) === 'null',
+      `${target} instance settings changed.`);
+      assert(arraysEqual(secretKeys, ['MAPBOX_ACCESS_TOKEN', 'SUUNTOAPP_GUIDE_OWNER']), `${target} secret bindings changed.`);
+      assert(endpoint.httpsTrigger !== undefined
+        && endpoint.callableTrigger === undefined
+        && endpoint.eventTrigger === undefined
+        && endpoint.taskQueueTrigger === undefined
+        && endpoint.scheduleTrigger === undefined,
+      `${target} HTTP trigger changed.`);
+    } else if (target === 'receiveSuunto247Data') {
       assert(endpoint.availableMemoryMb === 512, `${target} memory configuration changed.`);
       assert(endpoint.timeoutSeconds === 60, `${target} timeout configuration changed.`);
       assert(JSON.stringify(endpoint.minInstances) === 'null'

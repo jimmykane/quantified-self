@@ -6,8 +6,9 @@ import {
 } from './function-target-loader';
 
 describe('function target loader', () => {
-  it('optimizes the Suunto OAuth/webhook, marketing, and Training endpoints', () => {
+  it('optimizes the MCP, Suunto OAuth/webhook, marketing, and Training endpoints', () => {
     expect(OPTIMIZED_FUNCTION_TARGETS).toEqual([
+      'mcpApi',
       'getSuuntoAPIAuthRequestTokenRedirectURI',
       'requestAndSetSuuntoAPIAccessToken',
       'receiveSuunto247Data',

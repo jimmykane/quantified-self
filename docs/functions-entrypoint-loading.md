@@ -41,6 +41,11 @@ change needs a separately approved deployment and production memory check. The m
 Firestore written-event trigger, retry behavior and 256 MiB limit. Other functions continue through the complete
 entrypoint.
 
+`mcpApi` loads directly from `mcp/server`, without the full entrypoint, Genkit, BigQuery or unrelated admin handlers.
+Its existing Gen 2 HTTP endpoint remains in `europe-west2` with 1 GiB memory, a 120-second timeout, concurrency 4,
+unchanged instance settings and only `MAPBOX_ACCESS_TOKEN` / `SUUNTOAPP_GUIDE_OWNER` secrets. This isolates startup;
+it does not change MCP/OAuth behavior or keep a paid instance warm. Production deployment remains separately approved.
+
 ## Verification
 
 Run the routing and discovery contract:
@@ -59,6 +64,8 @@ The check builds the Functions package and verifies:
 - the optimized export is the exact object created by the provider wrapper;
 - optimized Suunto startup does not import Genkit, BigQuery, MCP or admin handler modules;
 - optimized marketing startup does not import Genkit, BigQuery, MCP or unrelated admin modules;
+- optimized MCP startup avoids the full entrypoint, Genkit, BigQuery and unrelated admin handlers, preserves its
+  original HTTP handler object, and retains the region, memory, timeout, concurrency, instance settings and secrets;
 - optimized Suunto OAuth endpoints remain Gen 2 in `europe-west2` with 512 MiB and the same secret bindings;
 - the isolated Suunto 24/7 receiver remains Gen 1 HTTP in `europe-west2`, with 512 MiB, a 60-second timeout,
   unchanged instance settings and only the notification secret;
