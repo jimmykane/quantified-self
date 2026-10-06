@@ -74,6 +74,11 @@ derived recomputation is required. MCP numeric metrics,
 `distanceMeters`/`poolLengthMeters`, scopes and strict schemas are unchanged; this does not alter planned-workout
 display or delivery. Existing Settings interaction/save behavior supplies the unit preference.
 
+Event-level distance summaries classify all activities contributing to the total, even when only a swimming activity
+is selected. Summary display caches refresh when unit settings change. Merge and benchmark comparison helpers apply
+the same swim display preference to distance differences and their metric keys; the comparison grid refreshes these
+differences when the unit settings signal changes. Canonical values and percentage calculations remain unchanged.
+
 ## Activity details spacing
 
 Activity details use the workspace shell's inline gutters once. The primary summary, Training impact, metadata,

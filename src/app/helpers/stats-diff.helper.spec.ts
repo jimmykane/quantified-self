@@ -1,9 +1,16 @@
 import {
+  ActivityInterface,
+  ActivityTypes,
+  DataDistance,
+  DataDistanceMiles,
   DataPowerAvg,
   DataSpeedAvg,
   DataSpeedAvgKilometersPerHour,
   DynamicDataLoader,
+  DistanceUnits,
+  SwimPaceUnits,
 } from '@sports-alliance/sports-lib';
+import { normalizeUserUnitSettings } from '@shared/unit-aware-display';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { buildDiffMapForStats, buildStatDisplayList, computeStatDiff } from './stats-diff.helper';
 
@@ -19,6 +26,40 @@ describe('stats-diff.helper', () => {
   afterEach(() => {
     vi.restoreAllMocks();
   });
+
+  const distanceActivity = (type: ActivityTypes, meters: number): ActivityInterface => ({
+    type,
+    getStat: (statType: string) => statType === DataDistance.type ? new DataDistance(meters) : null,
+  }) as ActivityInterface;
+
+  it.each([DistanceUnits.Kilometers, DistanceUnits.Miles])('formats swim distance differences in yards with general %s units', (distanceUnits) => {
+    const settings = normalizeUserUnitSettings({ distanceUnits, swimPaceUnits: [SwimPaceUnits.MinutesPer100Yard] });
+    const result = computeStatDiff(distanceActivity(ActivityTypes.Swimming, 91.44), distanceActivity(ActivityTypes.OpenWaterSwimming, 68.58),
+      DataDistance.type, DataDistance.type, settings);
+    expect(result?.display).toBe('25 yd');
+    expect(result?.percent).toBeCloseTo(28.5714);
+  });
+
+  it('keys swim comparison differences by the displayed canonical distance even when general distances use miles', () => {
+    const settings = normalizeUserUnitSettings({ distanceUnits: DistanceUnits.Miles, swimPaceUnits: [SwimPaceUnits.MinutesPer100Yard] });
+    const diffMap = buildDiffMapForStats([new DataDistance(160.02)], [DataDistance.type],
+      [distanceActivity(ActivityTypes.Swimming, 91.44), distanceActivity(ActivityTypes.Swimming, 68.58)], settings);
+    expect(diffMap.get(DataDistance.type)?.display).toBe('25 yd');
+  });
+
+  it('keeps comparison labels aligned with swim difference keys and preserves general units for other sports', () => {
+    const settings = normalizeUserUnitSettings({ distanceUnits: DistanceUnits.Miles, swimPaceUnits: [SwimPaceUnits.MinutesPer100Yard] });
+    const stats = [new DataDistance(160.02)];
+    expect(buildStatDisplayList(stats, [DataDistance.type], settings, [ActivityTypes.Swimming]))
+      .toEqual([{ type: DataDistance.type, label: 'Distance' }]);
+    expect(buildStatDisplayList(stats, [DataDistance.type], settings, [ActivityTypes.Running]))
+      .toEqual([{ type: DataDistanceMiles.type, label: 'Distance' }]);
+    const mixed = computeStatDiff(distanceActivity(ActivityTypes.Swimming, 1609.344), distanceActivity(ActivityTypes.Running, 804.672),
+      DataDistance.type, DataDistance.type, settings);
+    expect(mixed?.display).toBe('0.50 mi');
+    expect(mixed?.percent).toBeCloseTo(66.6667);
+  });
+
 
   it('should normalize unit-derived labels in buildStatDisplayList', () => {
     const speedBaseStat = createStat(DataSpeedAvg.type, 'Average Speed');

@@ -2,7 +2,8 @@ import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { EventCardStatsGridComponent } from './event.card.stats-grid.component';
 import { AppUserSettingsQueryService } from '../../../services/app.user-settings-query.service';
 import { ElementRef, signal, NO_ERRORS_SCHEMA } from '@angular/core';
-import { ActivityTypes, UserSummariesSettingsInterface, UserUnitSettingsInterface, ActivityUtilities, DynamicDataLoader, DistanceUnits } from '@sports-alliance/sports-lib';
+import { ActivityTypes, UserSummariesSettingsInterface, UserUnitSettingsInterface, ActivityUtilities, DynamicDataLoader, DistanceUnits, SwimPaceUnits } from '@sports-alliance/sports-lib';
+import { normalizeUserUnitSettings } from '@shared/unit-aware-display';
 import { SimpleChange } from '@angular/core';
 import {
     DataAltitudeAvg,
@@ -16,6 +17,7 @@ import {
     DataDepthMax,
     DataDescent,
     DataDuration,
+    DataDistance,
     DataGradeAvg,
     DataGradeMax,
     DataGradeMin,
@@ -349,6 +351,31 @@ describe('EventCardStatsGridComponent', () => {
         });
 
         expect(component.showDiff).toBe(true);
+    });
+
+    it('refreshes swim comparison differences when only the units signal changes', () => {
+        const activities = [91.44, 68.58].map(meters => ({
+            type: ActivityTypes.Swimming,
+            getStat: (type: string) => type === DataDistance.type ? new DataDistance(meters) : null,
+        }));
+        component.event = {
+            isMerge: true,
+            getActivities: () => activities,
+            getStats: () => new Map([[DataDistance.type, new DataDistance(160.02)]]),
+        } as any;
+        component.selectedActivities = activities as any;
+        component.statsToShow = [DataDistance.type];
+        mockUserSettingsQueryService.unitSettings.set(normalizeUserUnitSettings({ distanceUnits: DistanceUnits.Miles }));
+        component.ngOnChanges({ selectedActivities: new SimpleChange([], activities, false) });
+        fixture.detectChanges();
+        expect(component.diffByType.get(DataDistance.type)?.display).toBe('22.86 m');
+
+        mockUserSettingsQueryService.unitSettings.set(normalizeUserUnitSettings({
+            distanceUnits: DistanceUnits.Miles,
+            swimPaceUnits: [SwimPaceUnits.MinutesPer100Yard],
+        }));
+        fixture.detectChanges();
+        expect(component.diffByType.get(DataDistance.type)?.display).toBe('25 yd');
     });
 
     it('should not compute diff map when event is not a merge', () => {

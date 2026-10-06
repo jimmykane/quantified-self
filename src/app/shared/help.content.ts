@@ -598,6 +598,7 @@ HRV and Sleep each have their own date range and older/newer navigation. While a
 - Swim lengths appear in activity tabs and show lap index, split progress, duration, distance, length type, stroke, strokes, swim pace, stroke rate, heart rate, SWOLF, and energy when available.
 - Active split progress is shown inside each expanded set, so a 25 m pool with a 100 m set displays 25 m, 50 m, 75 m, and 100 m splits before the rest row.
 - In **Settings -> Units -> Swim pace**, put your preferred pace unit first: **per 100 meters** shows recorded swim distances in meters, and **per 100 yards** shows them in yards. This applies to swim lengths, split progress, set totals, swimming summaries, lap tables, detailed statistics, and swim/lap chart tooltips. The general kilometers/miles preference does not override it.
+- Swim comparison differences use the same meter/yard preference as their distance values. Totals combining swimming with other sports use your general distance units.
 - A 25-yard pool with a 100-yard set shows 25 yd, 50 yd, 75 yd, and 100 yd splits before the rest row. Set headers show the total distance and time; expand them for individual lengths. Stored distances remain in meters, so changing the preference does not change your activity data.
 - Swim pace and energy values follow your preferred units from **Settings**.
 

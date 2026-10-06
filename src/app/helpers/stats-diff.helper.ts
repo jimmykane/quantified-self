@@ -1,5 +1,6 @@
-import { ActivityInterface, DataInterface, DynamicDataLoader, UserUnitSettingsInterface } from '@sports-alliance/sports-lib';
+import { ActivityInterface, DataDistance, DataInterface, DynamicDataLoader, UserUnitSettingsInterface } from '@sports-alliance/sports-lib';
 import { normalizeUnitDerivedTypeLabel } from './stat-label.helper';
+import { resolvePrimaryUnitAwareDisplayStat, resolveSummaryDisplayStat } from './summary-display.helper';
 
 export interface StatDiffResult {
   display: string;
@@ -62,7 +63,9 @@ export const computeStatDiff = (
   const denom = (valueA + valueB) / 2;
   const percent = denom === 0 ? 0 : 100 * Math.abs((valueA - valueB) / denom);
   const diffStat = DynamicDataLoader.getDataInstanceFromDataType(displayStatType, diffValue);
-  const display = `${diffStat.getDisplayValue()} ${diffStat.getDisplayUnit()}`.trim();
+  const display = displayStatType === DataDistance.type
+    ? resolvePrimaryUnitAwareDisplayStat(diffStat, unitSettings, displayStatType, [activityA.type, activityB.type])?.text ?? ''
+    : `${diffStat.getDisplayValue()} ${diffStat.getDisplayUnit()}`.trim();
 
   return { display, percent };
 };
@@ -70,7 +73,8 @@ export const computeStatDiff = (
 export const buildStatDisplayList = (
   stats: DataInterface[],
   displayedStatsToShow: string[],
-  unitSettings: UserUnitSettingsInterface
+  unitSettings: UserUnitSettingsInterface,
+  activityTypes?: readonly unknown[],
 ): StatDisplayDescriptor[] => {
   if (!stats?.length || !unitSettings) {
     return [];
@@ -87,7 +91,8 @@ export const buildStatDisplayList = (
     if (!stat) {
       return;
     }
-    const unitStats = DynamicDataLoader.getUnitBasedDataFromDataInstance(stat, unitSettings);
+    const displayStat = resolveSummaryDisplayStat(stat, statType, activityTypes, unitSettings);
+    const unitStats = DynamicDataLoader.getUnitBasedDataFromDataInstance(displayStat ?? stat, unitSettings);
     unitStats.forEach((unitStat) => {
       const displayType = unitStat.getType();
       if (seen.has(displayType)) {
@@ -116,6 +121,7 @@ export const buildDiffMapForStats = (
 
   const activityA = activities[0];
   const activityB = activities[1];
+  const activityTypes = [activityA.type, activityB.type];
   const diffMap = new Map<string, StatDiffResult>();
 
   const statsMap = new Map<string, DataInterface>();
@@ -126,7 +132,8 @@ export const buildDiffMapForStats = (
     if (!stat) {
       return;
     }
-    const unitStats = DynamicDataLoader.getUnitBasedDataFromDataInstance(stat, unitSettings);
+    const displayStat = resolveSummaryDisplayStat(stat, statType, activityTypes, unitSettings);
+    const unitStats = DynamicDataLoader.getUnitBasedDataFromDataInstance(displayStat ?? stat, unitSettings);
     unitStats.forEach((unitStat) => {
       const displayType = unitStat.getType();
       const diff = computeStatDiff(activityA, activityB, stat.getType(), displayType, unitSettings);

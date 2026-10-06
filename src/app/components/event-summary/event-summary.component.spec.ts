@@ -5,7 +5,7 @@ import { MatBottomSheet } from '@angular/material/bottom-sheet';
 import { MatDialog } from '@angular/material/dialog';
 import { MatButtonModule } from '@angular/material/button';
 import { MatChipsModule } from '@angular/material/chips';
-import { ChangeDetectorRef, Component, NO_ERRORS_SCHEMA } from '@angular/core';
+import { ChangeDetectorRef, Component, NO_ERRORS_SCHEMA, SimpleChange } from '@angular/core';
 import { readFileSync } from 'fs';
 import { resolve } from 'path';
 import {
@@ -457,6 +457,44 @@ describe('EventSummaryComponent', () => {
             expect(component.getStatValue(DataDistance.type)).toBe('100');
             expect(component.getStatUnit(DataDistance.type)).toBe('yd');
             expect(component.heroSummaryMetrics[1]).toEqual({ value: '100', label: 'yd' });
+        });
+
+        it('refreshes cached swim distance when only the unit preference changes', () => {
+            component.unitSettings = { swimPaceUnits: [SwimPaceUnits.MinutesPer100Meter] } as any;
+            component.event = {
+                ...mockEvent,
+                getActivities: () => [{ type: ActivityTypes.Swimming }],
+                getStat: (type: string) => type === DataDistance.type ? new DataDistance(91.44) : null,
+            } as any;
+            fixture.detectChanges();
+            expect(component.getStatUnit(DataDistance.type)).toBe('m');
+
+            const meters = component.unitSettings;
+            component.unitSettings = { swimPaceUnits: [SwimPaceUnits.MinutesPer100Yard] } as any;
+            component.ngOnChanges({ unitSettings: new SimpleChange(meters, component.unitSettings, false) });
+
+            expect(component.getStatValue(DataDistance.type)).toBe('100');
+            expect(component.getStatUnit(DataDistance.type)).toBe('yd');
+            expect(component.heroSummaryMetrics[1]).toEqual({ value: '100', label: 'yd' });
+        });
+
+        it('keeps mixed-sport event totals in general units even when the first or selected activity is swimming', () => {
+            const activities = [{ type: ActivityTypes.Swimming }, { type: ActivityTypes.Running }];
+            component.unitSettings = {
+                distanceUnits: DistanceUnits.Miles,
+                swimPaceUnits: [SwimPaceUnits.MinutesPer100Yard],
+            } as any;
+            component.event = {
+                ...mockEvent,
+                getActivities: () => activities,
+                getStat: (type: string) => type === DataDistance.type ? new DataDistance(1609.344) : null,
+            } as any;
+            component.selectedActivities = [activities[0]] as any;
+            fixture.detectChanges();
+
+            expect(component.getStatValue(DataDistance.type)).toBe('1.00');
+            expect(component.getStatUnit(DataDistance.type)).toBe('mi');
+            expect(component.heroSummaryMetrics[1]).toEqual({ value: '1.00', label: 'mi' });
         });
 
         it('should keep swimming summary distance in meters with miles distance preference', () => {
