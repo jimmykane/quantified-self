@@ -150,9 +150,17 @@ describe('ordered and duplicated interval recipes', () => {
       savedWorkoutRef: 'opaque-saved', title: 'Ordered intervals', status: 'active', revision: 2,
       createdAtMs: 1, updatedAtMs: 2, structure: input,
     } }).savedWorkout.structure).toEqual(input);
-    for (const field of ['sourceDuration', 'sourceDistance', 'sourcePace', 'providerWorkoutId']) {
+    for (const field of ['sourceDuration', 'sourceDistance', 'sourcePace', 'providerWorkoutId', 'swolf', 'guideFields']) {
       const leaked = { ...input, nodes: [{ ...input.nodes[0], [field]: { private: true } }, ...input.nodes.slice(1)] };
       expect(TRAINING_CHANGE_SCHEMA.safeParse({ ...update, structure: leaked }).success).toBe(false);
+      expect(TRAINING_READ_OUTPUTS.get_saved_workout.safeParse({ libraryRevision: 3, savedWorkout: {
+        savedWorkoutRef: 'opaque-saved', title: 'Ordered intervals', status: 'active', revision: 2,
+        createdAtMs: 1, updatedAtMs: 2, structure: leaked,
+      } }).success).toBe(false);
+      expect(TRAINING_READ_OUTPUTS.get_planned_workout.safeParse({ scheduleRevision: 3, workout: {
+        workoutRef: 'opaque-workout', planRef: null, title: 'Workout', localDate: '2026-10-05',
+        lifecycle: 'planned', revision: 2, createdAtMs: 1, updatedAtMs: 2, structure: leaked, displaySteps: [],
+      } }).success).toBe(false);
     }
     const duplicateIds = { ...input, nodes: [input.nodes[0], input.nodes[0]] };
     expect(TRAINING_CHANGE_SCHEMA.safeParse({ ...update, structure: duplicateIds }).success).toBe(false);

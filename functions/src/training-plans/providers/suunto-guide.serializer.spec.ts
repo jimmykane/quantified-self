@@ -3,10 +3,11 @@ import { describe, expect, it } from 'vitest';
 import { WorkoutStructureValidationError,
     type WorkoutEndingV1, type WorkoutStructureV1, type WorkoutStepV1 } from '../../../../shared/planned-workout';
 import { packageGuide, readGuideArchive } from '../delivery/suunto/archive';
-import { serializeSuuntoGuideJsonV1, serializeSuuntoGuideV2ForRecovery, serializeSuuntoGuideV3ForRecovery, serializeSuuntoGuideV4ForRecovery, serializeSuuntoGuideV5ForRecovery,
+import { serializeSuuntoGuideJsonV1, serializeSuuntoGuideV2ForRecovery, serializeSuuntoGuideV3ForRecovery, serializeSuuntoGuideV4ForRecovery, serializeSuuntoGuideV5ForRecovery, serializeSuuntoGuideV6ForRecovery,
     type SuuntoGuideFieldsStepV1 } from './suunto-guide.serializer';
 import cyclingV4 from './fixtures/suunto-cycling-v4-recovery.json';
 import swimmingV4 from './fixtures/suunto-swimming-v4-recovery.json';
+import swimmingV6 from './fixtures/suunto-swimming-v6-recovery.json';
 import { getDefaultUserUnitSettings, resolveUnitAwareDisplayStat } from '../../../../shared/unit-aware-display';
 import { assessPlannedWorkoutProviderMappingV1 } from '../../../../shared/planned-workout-providers';
 
@@ -53,7 +54,7 @@ describe('Suunto authored-target contract boundary (#773)', () => {
         'does not approve or silently discard an uncontracted %s target', kind => {
             const invalidStep = { ...step, targets: [{ kind, mode: 'absolute', minimum: 30, maximum: 40 }] };
             const serializers = [serializeSuuntoGuideJsonV1, serializeSuuntoGuideV2ForRecovery, serializeSuuntoGuideV3ForRecovery,
-                serializeSuuntoGuideV4ForRecovery, serializeSuuntoGuideV5ForRecovery];
+                serializeSuuntoGuideV4ForRecovery, serializeSuuntoGuideV5ForRecovery, serializeSuuntoGuideV6ForRecovery];
             for (const nodes of [[invalidStep], [{ kind: 'repeat', id: 'sets', count: 2, steps: [invalidStep] }]]) {
                 for (const serialize of serializers) {
                     expect(() => serialize({ version: 1, sport: ActivityTypes.Swimming, nodes },
@@ -78,14 +79,14 @@ describe('Suunto sport and prescription screen matrix', () => {
         maximumMetersPerSecond: 1.3, presentation: 'pace' } as const;
     const cadence = { kind: 'cadence', mode: 'absolute', minimumRpm: 80, maximumRpm: 90 } as const;
     const prescriptions: Array<{ targets: WorkoutStepV1['targets']; running: string[]; cycling: string[]; swimming: string[] }> = [
-        { targets: [], running: ['pace', 'heartRate'], cycling: ['power', 'heartRate', 'cadence', 'speed'], swimming: ['pace', 'strokeRate', 'heartRate'] },
-        { targets: [hr], running: ['heartRate', 'pace'], cycling: ['heartRate', 'power', 'cadence', 'speed'], swimming: ['heartRate', 'pace', 'strokeRate'] },
-        { targets: [pace], running: ['pace', 'heartRate'], cycling: ['pace', 'heartRate', 'power', 'cadence', 'speed'], swimming: ['pace', 'heartRate', 'strokeRate'] },
-        { targets: [power], running: ['power', 'heartRate', 'pace'], cycling: ['power', 'heartRate', 'cadence', 'speed'], swimming: ['heartRate', 'pace', 'strokeRate'] },
-        { targets: [cadence], running: ['cadence', 'heartRate', 'pace'], cycling: ['cadence', 'heartRate', 'power', 'speed'], swimming: ['heartRate', 'pace', 'strokeRate'] },
-        { targets: [power, hr], running: ['power', 'heartRate', 'pace'], cycling: ['power', 'heartRate', 'cadence', 'speed'], swimming: ['heartRate', 'pace', 'strokeRate'] },
-        { targets: [hr, pace], running: ['heartRate', 'pace'], cycling: ['heartRate', 'pace', 'power', 'cadence', 'speed'], swimming: ['heartRate', 'pace', 'strokeRate'] },
-        { targets: [cadence, power], running: ['cadence', 'power', 'heartRate', 'pace'], cycling: ['cadence', 'power', 'heartRate', 'speed'], swimming: ['heartRate', 'pace', 'strokeRate'] },
+        { targets: [], running: ['pace', 'heartRate'], cycling: ['power', 'heartRate', 'cadence', 'speed'], swimming: ['pace', 'strokeRate', 'swolf', 'heartRate'] },
+        { targets: [hr], running: ['heartRate', 'pace'], cycling: ['heartRate', 'power', 'cadence', 'speed'], swimming: ['heartRate', 'pace', 'strokeRate', 'swolf'] },
+        { targets: [pace], running: ['pace', 'heartRate'], cycling: ['pace', 'heartRate', 'power', 'cadence', 'speed'], swimming: ['pace', 'heartRate', 'strokeRate', 'swolf'] },
+        { targets: [power], running: ['power', 'heartRate', 'pace'], cycling: ['power', 'heartRate', 'cadence', 'speed'], swimming: ['heartRate', 'pace', 'strokeRate', 'swolf'] },
+        { targets: [cadence], running: ['cadence', 'heartRate', 'pace'], cycling: ['cadence', 'heartRate', 'power', 'speed'], swimming: ['heartRate', 'pace', 'strokeRate', 'swolf'] },
+        { targets: [power, hr], running: ['power', 'heartRate', 'pace'], cycling: ['power', 'heartRate', 'cadence', 'speed'], swimming: ['heartRate', 'pace', 'strokeRate', 'swolf'] },
+        { targets: [hr, pace], running: ['heartRate', 'pace'], cycling: ['heartRate', 'pace', 'power', 'cadence', 'speed'], swimming: ['heartRate', 'pace', 'strokeRate', 'swolf'] },
+        { targets: [cadence, power], running: ['cadence', 'power', 'heartRate', 'pace'], cycling: ['cadence', 'power', 'heartRate', 'speed'], swimming: ['heartRate', 'pace', 'strokeRate', 'swolf'] },
     ];
     const sports = [[ActivityTypes.Running, 'running'], [ActivityTypes.Cycling, 'cycling'],
         [ActivityTypes.Swimming, 'swimming']] as const;
@@ -110,8 +111,8 @@ describe('Suunto sport and prescription screen matrix', () => {
         if (ending.kind !== 'manual') expect(mapped.fields[1]).toMatchObject({ type: ending.kind === 'time'
             ? 'stepDurationCountdown' : 'stepDistanceCountdown', value: ending.kind === 'time' ? ending.seconds : ending.meters });
         for (const field of measured) {
-            if (field.type === 'pace' || field.type === 'strokeRate' || (field.type === 'power' && sport === ActivityTypes.Cycling)) {
-                expect(field).toEqual({ type: field.type, title: field.type === 'pace' ? 'Avg pace' : field.type === 'power' ? 'Avg pwr' : 'Avg strk',
+            if (field.type === 'pace' || field.type === 'strokeRate' || field.type === 'swolf' || (field.type === 'power' && sport === ActivityTypes.Cycling)) {
+                expect(field).toEqual({ type: field.type, title: field.type === 'pace' ? 'Avg pace' : field.type === 'power' ? 'Avg pwr' : field.type === 'swolf' ? 'Avg SWOLF' : 'Avg strk',
                     window: 'manualLap', aggregate: 'average' });
             } else expect(Object.keys(field).sort()).toEqual(['title', 'type']);
         }
@@ -124,6 +125,7 @@ describe('Suunto sport and prescription screen matrix', () => {
             { type: 'pace', title: 'Avg pace', window: 'manualLap', aggregate: 'average' },
             { type: 'stepDurationCountdown', value: 60, title: 'Remain' },
             { type: 'strokeRate', title: 'Avg strk', window: 'manualLap', aggregate: 'average' },
+            ...(sport === ActivityTypes.Swimming ? [{ type: 'swolf', title: 'Avg SWOLF', window: 'manualLap', aggregate: 'average' }] : []),
             { type: 'heartRate', title: 'HR' },
         ]);
     });
@@ -154,6 +156,66 @@ describe('Suunto sport and prescription screen matrix', () => {
             expect(legacy).toEqual(fixture);
             expect(JSON.stringify(legacy)).not.toContain('strokeRate');
         });
+});
+
+describe('Pool SWOLF measured screen (#773)', () => {
+    it('keeps the instruction and countdown with native average pace, stroke rate and SWOLF', () => {
+        const mapped = mappedStep(ActivityTypes.Swimming, { note: 'Aim 30-40 cycles/min' });
+        expect(mapped.fields).toEqual([
+            { type: 'pace', title: 'Avg pace', window: 'manualLap', aggregate: 'average' },
+            { type: 'stepDurationCountdown', value: 60, title: 'Remain' },
+            { type: 'text', value: 'Aim 30-40 cycles/min' },
+            { type: 'strokeRate', title: 'Avg strk', window: 'manualLap', aggregate: 'average' },
+            { type: 'swolf', title: 'Avg SWOLF', window: 'manualLap', aggregate: 'average' },
+        ]);
+        expect(mapped.notification).toEqual({ title: 'Work', text: 'Aim 30-40 cycles/min' });
+    });
+    it.each([ActivityTypes.OpenWaterSwimming, ActivityTypes.Running, ActivityTypes.TrailRunning, ActivityTypes.Treadmill,
+        ActivityTypes.Cycling, ActivityTypes.MountainBiking, ActivityTypes.IndoorCycling, ActivityTypes.EBiking,
+        ActivityTypes.Handcycle, ActivityTypes.Walking, ActivityTypes.Hiking,
+        ActivityTypes.Rowing, ActivityTypes.IndoorRowing, ActivityTypes.StrengthTraining])(
+        'does not add pool SWOLF to %s or change its v6 payload', sport => {
+            const recipe = { version: 1, sport, nodes: [{ ...step, note: 'Stay relaxed' }] };
+            const current = serializeSuuntoGuideJsonV1(recipe, options);
+            expect(current.artifact).toEqual(serializeSuuntoGuideV6ForRecovery(recipe, options).artifact);
+            expect(JSON.stringify(current.artifact)).not.toContain('swolf');
+        });
+    it('does not evict an authored HR target, its current reading or a note to fit SWOLF', () => {
+        const mapped = mappedStep(ActivityTypes.Swimming, { note: 'Keep it easy', targets: [
+            { kind: 'heart-rate', mode: 'absolute', minimumBpm: 120, maximumBpm: 140 },
+        ] });
+        expect(mapped.fields).toEqual([
+            { type: 'heartRate', title: 'HR' },
+            { type: 'stepDurationCountdown', value: 60, title: 'Remain' },
+            { type: 'targetHeartRate', min: 120, max: 140, title: 'Tgt HR' },
+            { type: 'text', value: 'Keep it easy' },
+            { type: 'pace', title: 'Avg pace', window: 'manualLap', aggregate: 'average' },
+        ]);
+    });
+    it('freezes the pre-change v6 early-Lap/repeat pool payload exactly', () => {
+        const recipe = { version: 1, sport: ActivityTypes.Swimming, nodes: [
+            { ...step, id: 'warmup', purpose: 'warmup', ending: { kind: 'time', seconds: 90, allowEarlyLap: true }, note: 'Easy swim' },
+            { kind: 'repeat', id: 'intervals', count: 2, steps: [
+                { ...step, ending: { kind: 'distance', meters: 100 } },
+                { ...step, id: 'recover', purpose: 'recovery', ending: { kind: 'manual' }, note: 'Stay relaxed' },
+            ] },
+            { ...step, id: 'cooldown', purpose: 'cooldown', ending: { kind: 'time', seconds: 30 } },
+        ] };
+        const fixtureOptions = { ...options, name: 'Pool screen fixture', sourceWorkoutId: 'synthetic-pool-v6' };
+        expect(serializeSuuntoGuideV6ForRecovery(recipe, fixtureOptions).artifact).toEqual(swimmingV6);
+        const current = serializeSuuntoGuideJsonV1(recipe, fixtureOptions).artifact;
+        expect(current.steps).toHaveLength(swimmingV6.steps.length);
+        current.steps.forEach((mapped, index) => {
+            const legacy = swimmingV6.steps[index];
+            if (mapped.type !== 'fields') throw new Error('Early-Lap fixture must use standalone screens');
+            expect(mapped).toMatchObject({ id: legacy.id, type: legacy.type, title: legacy.title,
+                ...(legacy.transitions ? { transitions: legacy.transitions } : {}),
+                notification: legacy.notification });
+            expect(mapped.createManualLap).toBe('createManualLap' in legacy ? legacy.createManualLap : undefined);
+        });
+        expect(JSON.stringify(current)).toContain('swolf');
+        expect(JSON.stringify(swimmingV6)).not.toContain('swolf');
+    });
 });
 
 describe('Suunto current readings and documented notifications', () => {

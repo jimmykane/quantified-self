@@ -30,7 +30,7 @@ export type SuuntoGuideConditionV1 =
 
 export type SuuntoGuideFieldV1 =
     | { type: SuuntoGuideLiveFieldType; title: string }
-    | { type: 'pace' | 'power' | 'strokeRate'; title: string; window: 'manualLap'; aggregate: 'average' }
+    | { type: 'pace' | 'power' | 'strokeRate' | 'swolf'; title: string; window: 'manualLap'; aggregate: 'average' }
     | { type: 'text'; value: string }
     | { type: 'stepDurationCountdown'; value: number; title: string }
     | { type: 'stepDistanceCountdown'; value: number; title: string }
@@ -41,7 +41,10 @@ export type SuuntoGuideFieldV1 =
     | { type: 'targetCadence'; min: number; max: number; title: string };
 
 export type SuuntoGuideLiveFieldType = 'heartRate' | 'power' | 'pace' | 'speed' | 'cadence';
-type GuidePresentation = 'legacy-v2' | 'live-v3' | 'block-pace-v4' | 'sport-screens-v5' | 'early-lap-v6';
+type GuidePresentation = 'legacy-v2' | 'live-v3' | 'block-pace-v4' | 'sport-screens-v5' | 'early-lap-v6' | 'pool-swolf-v7';
+function supportsEarlyLap(presentation: GuidePresentation): boolean {
+    return presentation === 'early-lap-v6' || presentation === 'pool-swolf-v7';
+}
 
 export interface SuuntoGuideFieldsStepV1 {
     id?: string;
@@ -347,8 +350,8 @@ function collectStepIssues(
 }
 
 function sportReadingField(type: SuuntoGuideReadingType, sport: ActivityTypes): SuuntoGuideFieldV1 {
-    if (type === 'strokeRate' || ((type === 'pace' || type === 'power') && isSuuntoGuideManualLapAverageV1(type, sport))) {
-        return { type, title: type === 'pace' ? 'Avg pace' : type === 'power' ? 'Avg pwr' : 'Avg strk',
+    if (type === 'strokeRate' || type === 'swolf' || ((type === 'pace' || type === 'power') && isSuuntoGuideManualLapAverageV1(type, sport))) {
+        return { type, title: type === 'pace' ? 'Avg pace' : type === 'power' ? 'Avg pwr' : type === 'swolf' ? 'Avg SWOLF' : 'Avg strk',
             window: 'manualLap', aggregate: 'average' };
     }
     const titles: Record<SuuntoGuideLiveFieldType, string> = {
@@ -403,8 +406,8 @@ function stepToSuunto(step: WorkoutStepV1, sport: ActivityTypes, presentation: G
         const titles: Record<SuuntoGuideLiveFieldType, string> = {
             heartRate: 'HR', power: 'Power', pace: 'Pace', speed: 'Speed', cadence: 'Cadence',
         };
-        const live: SuuntoGuideFieldV1[] = ['sport-screens-v5', 'early-lap-v6'].includes(presentation)
-            ? suuntoGuideOptionalReadingsV1(step, sport).map(type => sportReadingField(type, sport))
+        const live: SuuntoGuideFieldV1[] = ['sport-screens-v5', 'early-lap-v6', 'pool-swolf-v7'].includes(presentation)
+            ? suuntoGuideOptionalReadingsV1(step, sport, presentation === 'pool-swolf-v7').map(type => sportReadingField(type, sport))
             : candidates.slice(0, 5 - fields.length)
             .map(type => type === 'pace' && presentation === 'block-pace-v4'
                 ? { type, title: 'Avg pace', window: 'manualLap', aggregate: 'average' }
@@ -420,7 +423,7 @@ function stepToSuunto(step: WorkoutStepV1, sport: ActivityTypes, presentation: G
         type: 'fields',
         title: purposeTitle(step.purpose),
         fields,
-        transitions: [{ condition: presentation === 'early-lap-v6' && allowsEarlyLapV1(step.ending)
+        transitions: [{ condition: supportsEarlyLap(presentation) && allowsEarlyLapV1(step.ending)
             ? { type: 'or', conditions: [endingCondition(step.ending), { type: 'manualLap' }] } : endingCondition(step.ending) }],
         ...(presentation !== 'legacy-v2' ? { notification: {
             title: purposeTitle(step.purpose),
@@ -453,11 +456,11 @@ function structureToSteps(structure: WorkoutStructureV1, presentation: GuidePres
         type: 'fields', title: 'Complete', fields: [{ type: 'text', value: 'Guide complete' }],
         notification: { title: 'Complete', text: 'Guide complete' },
     });
-    if (!['block-pace-v4', 'sport-screens-v5', 'early-lap-v6'].includes(presentation) || !steps.some(node =>
+    if (!['block-pace-v4', 'sport-screens-v5', 'early-lap-v6', 'pool-swolf-v7'].includes(presentation) || !steps.some(node =>
         (node.type === 'repeat' ? node.steps : [node]).some(step =>
             step.fields.some(field => 'window' in field && field.window === 'manualLap')))) return steps;
 
-    if (presentation === 'early-lap-v6' && structure.nodes.some(node =>
+    if (supportsEarlyLap(presentation) && structure.nodes.some(node =>
         (node.kind === 'step' ? [node] : node.steps).some(step => allowsEarlyLapV1(step.ending)))) {
         return earlyLapBoundarySteps(structure, presentation);
     }
@@ -529,11 +532,16 @@ export function serializeSuuntoGuideV5ForRecovery(structureValue: unknown, optio
     return serializeGuide(structureValue, options, 'sport-screens-v5');
 }
 
+/** Recovery only: preserve exact early-Lap v6 screens before pool SWOLF. */
+export function serializeSuuntoGuideV6ForRecovery(structureValue: unknown, options: SerializeSuuntoGuideOptionsV1) {
+    return serializeGuide(structureValue, options, 'early-lap-v6');
+}
+
 export function serializeSuuntoGuideJsonV1(
     structureValue: unknown,
     options: SerializeSuuntoGuideOptionsV1,
 ): ProviderSerializationResultV1<SuuntoGuideJsonV1> {
-    return serializeGuide(structureValue, options, 'early-lap-v6');
+    return serializeGuide(structureValue, options, 'pool-swolf-v7');
 }
 
 /** Recovery only: preserve Training 01's exact average-pace screens and lap boundaries. */
@@ -562,7 +570,7 @@ function serializeGuide(structureValue: unknown, options: SerializeSuuntoGuideOp
     const structure = parseWorkoutStructureV1(structureValue);
     const early = structure.nodes.some(node => (node.kind === 'step' ? [node] : node.steps)
         .some(step => allowsEarlyLapV1(step.ending)));
-    if (early && presentation !== 'early-lap-v6') throw new ProviderWorkoutMappingError('suunto', 'unsupported', [{
+    if (early && !supportsEarlyLap(presentation)) throw new ProviderWorkoutMappingError('suunto', 'unsupported', [{
         severity: 'unsupported', code: 'unsupported_ending', path: '$.nodes',
         message: 'Historical Guide mappings cannot express early Lap permission.',
     }]);

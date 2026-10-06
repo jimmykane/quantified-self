@@ -2251,15 +2251,16 @@ Prioritize only two additional swimming candidates when the missing partner-uplo
 | Pool SWOLF range | Dimensionless swimming-efficiency score for a defined stroke/pool context, never an open-water or context-free performance comparison. Do not select a canonical representation before pool-length/stroke semantics are established. | Exact supported target JSON, units/range direction/limits, aggregation/window, supported pool lengths/strokes and real-watch behavior. |
 
 The public reference describes `strokeRate` and `swolf` **measured fields**, not native target representations for
-these candidates. QS already emits a swimming stroke-rate reading; this change does not add SWOLF screens or
+these candidates. QS already emits a swimming stroke-rate reading; the measured SWOLF addition below does not
 claim either new target is sendable. Other technically possible resources are not selected for this slice.
 No speculative `targetStrokeRate`, `targetSwolf` or arbitrary resource field is emitted.
 
-This preparatory slice preserves the v1 target union and every stored recipe, provider artifact, mapping version,
+The initial preparatory slice preserved the v1 target union and every stored recipe, provider artifact, mapping version,
 approval digest and recovery payload. Strict parser/Firestore-codec, Suunto current/recovery serializer and MCP
 read/proposal regressions reject uncontracted target kinds and provider-resource escape hatches, including repeat
 children. Regression inputs are deliberately invalid, not a proposed contract. Existing target-unit and saved-HR
-snapshot fixtures remain valid. Runtime behavior, other-provider support and delivery consent are unchanged.
+snapshot fixtures remain valid. That preparation changed no runtime behavior; the subsequent measured-reading
+implementation below keeps other-provider support and delivery consent unchanged.
 
 MCP/Assistant/plugin review: no tool, schema, scope, exposed field, consent, mutation, provider action, server
 instruction or bundled guidance changes. Latest and frozen full reads/previews stay strict, including Workout
@@ -2268,6 +2269,36 @@ New native targets require a deliberate recipe-version/additive MCP decision, co
 formatting and other-provider exact/degraded/unsupported rules in their implementation PR. #773 remains open for
 that contract/model/implementation and separately approved account/watch testing. HTTP acceptance cannot establish
 target gauge, averaging, alert, sensor or watch behavior. Do not ask an athlete to test a target we cannot yet encode.
+
+##### Pool-swim measured SWOLF (#773)
+
+Current mapping `suunto-guides-v7` adds the published measured field
+`{ type: 'swolf', title: 'Avg SWOLF', window: 'manualLap', aggregate: 'average' }` only for canonical `Swimming`.
+This is watch-side measured data, not an authored SWOLF target, a calculated QS metric or a promised sensor value.
+It depends on the watch's physical pool-length setting and stroke context: do not compare different pool lengths
+or strokes. QS still does not transmit authored pool length to Suunto; check that setting on the watch.
+Open-water swimming, rowing and every non-pool sport remain free of SWOLF fields.
+
+Countdowns, authored targets and notes reserve space first within five fields. Untargeted pool steps prefer
+lap-average pace, lap-average stroke rate, lap-average SWOLF, then current HR; with a note and countdown HR does
+not fit. Authored target counterparts keep priority, including current HR for an HR target. Long manual instructions
+remain text-only. Existing recorded-lap resets, first-step/no-opening-lap behavior, fixed repeats and early-Lap
+conditions are retained. No targets, recipe units, timing, completion links or completed totals change.
+
+New sends and eligible already-consented future updates use v7 after the Functions release; past/completed Guides
+stay protected. Payloads for non-pool sports (including strength) remain byte-equivalent to the previous layout.
+The recovery-only v6 serializer is frozen with a checked-in synthetic pool fixture. Exact v2-v6 uncertain attempts
+recover against their own historical payload/digest before any v7 update; loss approval carries only for the exact
+unchanged prescription. An uncertain or mismatched remote copy never permits a duplicate create. Serializer,
+synthetic HTTP and isolated Firestore-emulator tests cover retained identity, lost ACK, duplicate retries,
+rescheduling, Stop and the five-field limit.
+
+The athlete confirmed the separately authorized 6 October stroke-rate QA Guide's instructions, `Avg strk` display
+and lap-average behavior. That evidence does not verify the new SWOLF field or a native target. No SWOLF account
+send or deployment accompanies this code change. After a separately approved Functions release, verify actual
+pool-swim SWOLF readings/reset behavior on the watch; API acceptance alone is not that evidence. Keep #773 open
+for that proof and the missing native-target partner contract. MCP has no wire impact: private `swolf`/`guideFields`
+injections are rejected by scheduled/saved recipe reads and proposals, while canonical v1 recipes round-trip unchanged.
 
 ##### Current readings and boundary notifications (#784)
 
@@ -2361,15 +2392,15 @@ marker is private readback metadata, never persisted in authored recipes or proj
 file GETs by default; lifecycle tests cover lost responses, rescheduling, duplicate dispatch and strict mismatch cases.
 
 Existing `[TrainingDelivery]` Suunto acceptance, recovered-acceptance, stale-suppression, failure and checkpoint-failure
-events include two transient allowlisted labels: `guideMappingVersion` (`suunto-guides-v6`, `suunto-guides-v5`, `suunto-guides-v4`, `suunto-guides-v3`, `suunto-guides-v2`, `unknown`,
+events include two transient allowlisted labels: `guideMappingVersion` (`suunto-guides-v7`, `suunto-guides-v6`, `suunto-guides-v5`, `suunto-guides-v4`, `suunto-guides-v3`, `suunto-guides-v2`, `unknown`,
 or `not_applicable` for removal) and `deliveryPhase` (`execute` or `recover`). The version is proved by recomputing the
 immutable upsert operation's exact payload digest, including strength details, rather than copying the current adapter's
 version onto a legacy attempt. An unrecognized digest or classification failure yields `unknown` and cannot alter
 delivery/recovery. Classification runs once per claimed operation without credentials or HTTP; the phase switches to
 `execute` if recovery resumes a safe request. Other providers' existing events are unchanged.
 For rollout triage, combine `jsonPayload.message="[TrainingDelivery]"`, `jsonPayload.provider="suunto"` and
-`jsonPayload.event="failure"` with `jsonPayload.guideMappingVersion="suunto-guides-v6"` for current failures, or
-the exact `suunto-guides-v2`/`suunto-guides-v3`/`suunto-guides-v4` label and `jsonPayload.deliveryPhase="recover"` for legacy recovery.
+`jsonPayload.event="failure"` with `jsonPayload.guideMappingVersion="suunto-guides-v7"` for current failures, or
+the exact v2-v6 label and `jsonPayload.deliveryPhase="recover"` for legacy recovery.
 Checkpoint failures use `jsonPayload.event="checkpoint_failed"`. These labels are not stored in Firestore or exposed
 to the browser/MCP, and contain no UID, account/Guide/workout identity, digest, recipe, instruction, sensor reading,
 credential, provider body or raw error. They report serializer/recovery provenance, not app/watch receipt or completion.

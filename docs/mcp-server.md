@@ -280,8 +280,12 @@ latest strict recipe reads, full-workout previews and saved-library reads/previe
 and arbitrary provider resource fields. They must not treat a measured reading as an authored prescription or
 reinterpret saved relative HR snapshots as watch-native percentages. Focused negative regressions preserve this
 boundary without changing a tool, schema, scope, consent, provider action, Assistant routing or bundled skill.
-No contract promotion, client refresh or plugin rebuild is required for this documentation/test-only slice; #773
-retains the native-target implementation and additive-contract decision once an exact partner format exists.
+The subsequent Suunto v7 pool-only `Avg SWOLF` screen is also private measured presentation, not an authored target
+or new returned metric. Strict scheduled/saved-workout reads and proposals reject injected `swolf` and `guideFields`;
+canonical recipes, scopes, consent, completion reads and provider actions are unchanged. Existing recorded-lap
+reads remain independently granted and unchanged. No contract promotion, client refresh or plugin rebuild is
+required; #773 retains SWOLF watch proof and the native-target implementation/additive-contract decision once an
+exact partner format exists. This code change includes no deployment or account send.
 The manual editor's additional canonical running/cycling profiles also require no MCP contract change: the existing
 recipe schema already accepts the complete Sports Lib activity-type enum, and focused coverage proves an exact Mountain
 Biking sport survives the read projection. Suunto numeric activity recommendations and Garmin's broad

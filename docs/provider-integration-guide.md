@@ -434,6 +434,15 @@ Average labels `Avg pace`, `Avg pwr` and `Avg strk` identify documented `manualL
 Swimming stroke rate is contextual watch data, never a cadence target or rowing-stroke mapping. Only running/cycling
 receive documented power/cadence sensor counterparts; missing/unsupported sensors stay unavailable, not zero.
 
+Current `suunto-guides-v7` additionally requests measured pool-swim `swolf` with `window: 'manualLap'`,
+`aggregate: 'average'` and label `Avg SWOLF`. It is not a native target. Untargeted pool screens prioritize pace,
+stroke rate, SWOLF, then optional HR after countdowns/targets/notes; authored target counterparts retain priority.
+Open water and all non-pool layouts are unchanged. Native pool length and stroke determine the reading; QS does
+not transmit pool length or fabricate unavailable values. Existing lap boundaries and early-Lap behavior stay
+unchanged. The exact v6 recovery serializer and synthetic golden pool fixture preserve historical operation
+digests; lost v2-v6 ACKs recover before updating the same Guide. Deployment and new SWOLF watch proof remain
+separate approvals. See [measured SWOLF behavior](training-workspace.md#pool-swim-measured-swolf-773).
+
 For additional authored targets, [#773](https://github.com/jimmykane/quantified-self/issues/773) records the
 6 October contract review. The published JSON reference defines only the existing HR, power, speed/pace and cadence
 target types. Its measured `strokeRate` and `swolf` examples are not native target examples. Suunto's partner resource
@@ -442,7 +451,8 @@ and pool-context SWOLF are the bounded next candidates; neither is currently an 
 `/Activity/{Window}/{WindowIndex}/{Field}/{Aggregate}` target pattern excludes ZoneSense's `/Activity/Zones/...`
 resources. ZoneSense remains unsupported despite sport-mode availability; do not approximate it with fixed HR.
 The preparatory parser/serializer/MCP regressions reject guessed target types and resource injection even with
-mapping-loss approval. They change no v1 recipe, provider payload/version, recovery digest, permission or transport.
+mapping-loss approval. That initial preparation changed no v1 recipe, provider payload/version, recovery digest,
+permission or transport; the subsequent v7 measured-reading mapping above changes no target contract or consent.
 See [the Training contract boundary](training-workspace.md#additional-suunto-targets-contract-boundary-773) for units,
 candidate semantics, the exact partner example still needed, versioning and separately approved watch-test criteria.
 

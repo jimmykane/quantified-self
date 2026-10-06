@@ -1,0 +1,336 @@
+{
+  "type": "sequence",
+  "name": "Pool screen fixture",
+  "description": "Pool screen fixture",
+  "shortDescription": "Pool screen fixture",
+  "owner": "Quantified Self",
+  "url": "https://quantified-self.io/training/plans",
+  "activities": [
+    21
+  ],
+  "usage": "workout",
+  "localDate": "2026-09-24",
+  "externalId": "qs-suunto-bxfZxr1NBSOsD504RIIOSvcWB32gACBHIakubgn-OZc",
+  "steps": [
+    {
+      "id": "qs-boundary-0-auto",
+      "type": "fields",
+      "title": "Warm up",
+      "fields": [
+        {
+          "type": "pace",
+          "title": "Avg pace",
+          "window": "manualLap",
+          "aggregate": "average"
+        },
+        {
+          "type": "stepDurationCountdown",
+          "value": 90,
+          "title": "Remain"
+        },
+        {
+          "type": "text",
+          "value": "Easy swim"
+        },
+        {
+          "type": "strokeRate",
+          "title": "Avg strk",
+          "window": "manualLap",
+          "aggregate": "average"
+        },
+        {
+          "type": "heartRate",
+          "title": "HR"
+        }
+      ],
+      "transitions": [
+        {
+          "condition": {
+            "type": "manualLap"
+          },
+          "stepId": "qs-boundary-1-lap"
+        },
+        {
+          "condition": {
+            "type": "or",
+            "conditions": [
+              {
+                "type": "stepDuration",
+                "value": 90
+              },
+              {
+                "type": "manualLap"
+              }
+            ]
+          },
+          "stepId": "qs-boundary-1-auto"
+        }
+      ],
+      "notification": {
+        "title": "Warm up",
+        "text": "Easy swim"
+      }
+    },
+    {
+      "id": "qs-boundary-1-auto",
+      "type": "fields",
+      "title": "Work",
+      "fields": [
+        {
+          "type": "pace",
+          "title": "Avg pace",
+          "window": "manualLap",
+          "aggregate": "average"
+        },
+        {
+          "type": "stepDistanceCountdown",
+          "value": 100,
+          "title": "Remain"
+        },
+        {
+          "type": "strokeRate",
+          "title": "Avg strk",
+          "window": "manualLap",
+          "aggregate": "average"
+        },
+        {
+          "type": "heartRate",
+          "title": "HR"
+        }
+      ],
+      "transitions": [
+        {
+          "condition": {
+            "type": "stepDistance",
+            "value": 100
+          },
+          "stepId": "qs-boundary-2-auto"
+        }
+      ],
+      "notification": {
+        "title": "Work",
+        "text": "Follow distance countdown"
+      },
+      "createManualLap": true
+    },
+    {
+      "id": "qs-boundary-1-lap",
+      "type": "fields",
+      "title": "Work",
+      "fields": [
+        {
+          "type": "pace",
+          "title": "Avg pace",
+          "window": "manualLap",
+          "aggregate": "average"
+        },
+        {
+          "type": "stepDistanceCountdown",
+          "value": 100,
+          "title": "Remain"
+        },
+        {
+          "type": "strokeRate",
+          "title": "Avg strk",
+          "window": "manualLap",
+          "aggregate": "average"
+        },
+        {
+          "type": "heartRate",
+          "title": "HR"
+        }
+      ],
+      "transitions": [
+        {
+          "condition": {
+            "type": "stepDistance",
+            "value": 100
+          },
+          "stepId": "qs-boundary-2-auto"
+        }
+      ],
+      "notification": {
+        "title": "Work",
+        "text": "Follow distance countdown"
+      }
+    },
+    {
+      "id": "qs-boundary-2-auto",
+      "type": "fields",
+      "title": "Recovery",
+      "fields": [
+        {
+          "type": "pace",
+          "title": "Avg pace",
+          "window": "manualLap",
+          "aggregate": "average"
+        },
+        {
+          "type": "text",
+          "value": "Stay relaxed"
+        },
+        {
+          "type": "strokeRate",
+          "title": "Avg strk",
+          "window": "manualLap",
+          "aggregate": "average"
+        },
+        {
+          "type": "heartRate",
+          "title": "HR"
+        }
+      ],
+      "transitions": [
+        {
+          "condition": {
+            "type": "manualLap"
+          },
+          "stepId": "qs-boundary-3-auto"
+        }
+      ],
+      "notification": {
+        "title": "Recovery",
+        "text": "Stay relaxed"
+      },
+      "createManualLap": true
+    },
+    {
+      "id": "qs-boundary-3-auto",
+      "type": "fields",
+      "title": "Work",
+      "fields": [
+        {
+          "type": "pace",
+          "title": "Avg pace",
+          "window": "manualLap",
+          "aggregate": "average"
+        },
+        {
+          "type": "stepDistanceCountdown",
+          "value": 100,
+          "title": "Remain"
+        },
+        {
+          "type": "strokeRate",
+          "title": "Avg strk",
+          "window": "manualLap",
+          "aggregate": "average"
+        },
+        {
+          "type": "heartRate",
+          "title": "HR"
+        }
+      ],
+      "transitions": [
+        {
+          "condition": {
+            "type": "stepDistance",
+            "value": 100
+          },
+          "stepId": "qs-boundary-4-auto"
+        }
+      ],
+      "notification": {
+        "title": "Work",
+        "text": "Follow distance countdown"
+      }
+    },
+    {
+      "id": "qs-boundary-4-auto",
+      "type": "fields",
+      "title": "Recovery",
+      "fields": [
+        {
+          "type": "pace",
+          "title": "Avg pace",
+          "window": "manualLap",
+          "aggregate": "average"
+        },
+        {
+          "type": "text",
+          "value": "Stay relaxed"
+        },
+        {
+          "type": "strokeRate",
+          "title": "Avg strk",
+          "window": "manualLap",
+          "aggregate": "average"
+        },
+        {
+          "type": "heartRate",
+          "title": "HR"
+        }
+      ],
+      "transitions": [
+        {
+          "condition": {
+            "type": "manualLap"
+          },
+          "stepId": "qs-boundary-5-auto"
+        }
+      ],
+      "notification": {
+        "title": "Recovery",
+        "text": "Stay relaxed"
+      },
+      "createManualLap": true
+    },
+    {
+      "id": "qs-boundary-5-auto",
+      "type": "fields",
+      "title": "Cool down",
+      "fields": [
+        {
+          "type": "pace",
+          "title": "Avg pace",
+          "window": "manualLap",
+          "aggregate": "average"
+        },
+        {
+          "type": "stepDurationCountdown",
+          "value": 30,
+          "title": "Remain"
+        },
+        {
+          "type": "strokeRate",
+          "title": "Avg strk",
+          "window": "manualLap",
+          "aggregate": "average"
+        },
+        {
+          "type": "heartRate",
+          "title": "HR"
+        }
+      ],
+      "transitions": [
+        {
+          "condition": {
+            "type": "stepDuration",
+            "value": 30
+          },
+          "stepId": "qs-boundary-6-auto"
+        }
+      ],
+      "notification": {
+        "title": "Cool down",
+        "text": "For 30s"
+      }
+    },
+    {
+      "type": "fields",
+      "title": "Complete",
+      "fields": [
+        {
+          "type": "text",
+          "value": "Guide complete"
+        }
+      ],
+      "notification": {
+        "title": "Complete",
+        "text": "Guide complete"
+      },
+      "id": "qs-boundary-6-auto",
+      "createManualLap": true
+    }
+  ]
+}

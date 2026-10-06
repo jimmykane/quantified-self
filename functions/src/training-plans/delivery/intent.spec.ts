@@ -5,7 +5,7 @@ import type { DeliveryContext, DeliveryLedgerV1 } from './contracts';
 import { FakeTrainingTransport } from './test-support/fake-transport';
 import { GarminTrainingTransport } from './garmin/transport';
 import { SuuntoGuideTransport } from './suunto/transport';
-import { assessSuuntoGuideV2ForRecovery, assessSuuntoGuideV3ForRecovery, assessSuuntoGuideV4ForRecovery, assessSuuntoGuideV5ForRecovery } from './suunto/mapping';
+import { assessSuuntoGuideV2ForRecovery, assessSuuntoGuideV3ForRecovery, assessSuuntoGuideV4ForRecovery, assessSuuntoGuideV5ForRecovery, assessSuuntoGuideV6ForRecovery } from './suunto/mapping';
 
 const base: DeliveryContext = {
   workout: { schemaVersion: 1, id: 'workout', planId: null, revision: 1, localDate: '2026-09-10', lifecycle: 'planned',
@@ -100,10 +100,11 @@ describe('delivery intent', () => {
     transport.level = 'unsupported';
     expect(resolveDeliveryIntent(context)).toMatchObject({ desired: 'preserve', status: 'unsupported' });
   });
-  it.each([assessSuuntoGuideV2ForRecovery, assessSuuntoGuideV3ForRecovery, assessSuuntoGuideV4ForRecovery, assessSuuntoGuideV5ForRecovery])(
-    'keeps exact legacy loss approval across Suunto display upgrades, never across edits or authority changes', assessLegacy => {
+  it.each([assessSuuntoGuideV2ForRecovery, assessSuuntoGuideV3ForRecovery, assessSuuntoGuideV4ForRecovery, assessSuuntoGuideV5ForRecovery, assessSuuntoGuideV6ForRecovery]
+    .flatMap(assessLegacy => [ActivityTypes.Running, ActivityTypes.Swimming].map(sport => ({ assessLegacy, sport }))))(
+    'keeps exact legacy loss approval for $sport across Suunto display upgrades, never across edits or authority changes', ({ assessLegacy, sport }) => {
     const transport = new SuuntoGuideTransport(async () => { throw Error('No HTTP during assessment'); }, 'Quantified Self');
-    const workout = { ...base.workout!, structure: { ...base.workout!.structure, nodes: [{ ...base.workout!.structure.nodes[0],
+    const workout = { ...base.workout!, structure: { ...base.workout!.structure, sport, nodes: [{ ...base.workout!.structure.nodes[0],
       note: 'A'.repeat(45) }] } };
     const destination = base.connection.destinationKey;
     const prior = assessLegacy(workout, destination, 'Europe/Helsinki', 'Quantified Self');
@@ -112,7 +113,7 @@ describe('delivery intent', () => {
     const ledger = { connectionEpoch: 0, destinationKey: 'account-a', acceptedDigest: prior.digest,
       acceptedContentDigest: deliveryContentDigest(workout, 'Europe/Helsinki') } as DeliveryLedgerV1;
     expect(transport.assess(workout, 'account-a', 'Europe/Helsinki')).toMatchObject({
-      mappingVersion: 'suunto-guides-v6', compatibleApprovalDigests: expect.arrayContaining([prior.digest]),
+      mappingVersion: 'suunto-guides-v7', compatibleApprovalDigests: expect.arrayContaining([prior.digest]),
     });
     expect(resolveDeliveryIntent(context, ledger)).toMatchObject({ desired: 'present', status: 'pending', approvalDigest: null });
     const currentDigest = transport.assess(workout, 'account-a', 'Europe/Helsinki').digest;
