@@ -14,6 +14,13 @@ import {
 } from './policies.content';
 
 describe('help.content', () => {
+  it('points users to the Privacy section and explains saving analytics and email opt-outs', () => {
+    const copy = HELP_SECTIONS.find(section => section.id === 'data-and-privacy')!.content;
+    expect(copy).toContain('[Settings → Privacy](/settings?section=privacy)');
+    expect(copy).toContain('turn **Usage analytics** or **Marketing emails** off');
+    expect(copy).toContain('**Save changes**');
+    expect(copy).toContain('does not stop transactional account or billing messages');
+  });
   it('describes the public calendar and profile examples as synthetic and read-only', () => {
     const copy = HELP_SECTIONS.find(section => section.id === 'training-plans')!.content;
     expect(copy).toContain('[Training Plans overview](/features/training-plans)');

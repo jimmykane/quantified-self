@@ -23,7 +23,6 @@ const control = () => db().doc('marketingControl/global');
 const dayRef = (day: string) => db().collection('marketingDispatchDays').doc(day);
 const renderer = createLocalEmailTemplateRenderer(path.join(__dirname, '../../../templates'));
 const template = MANUAL_CAMPAIGN_EMAIL_TEMPLATE_CATALOG.find(entry => entry.id === 'marketing_campaign')!;
-const settingsUrl = 'https://quantified-self.io/settings';
 const unsubscribeBase = 'https://quantified-self.io/email/unsubscribe';
 const testUnsubscribeUrl = `${unsubscribeBase}?test=1`;
 // prepareMarketingCampaign has a nine-minute hard timeout. Permit a new attempt
@@ -125,7 +124,7 @@ function renderMessage(draft: MarketingCampaignDraft, firstName: string, uid: st
     subject: draft.subject, email_title: draft.subject, first_name: firstName,
     body_html: content.bodyHtml, body_text: content.bodyText,
     cta_html: content.ctaHtml, cta_text: content.ctaText,
-    product_url: EMAIL_LINKS.product, settings_url: settingsUrl, unsubscribe_url: unsubscribeUrl,
+    product_url: EMAIL_LINKS.product, settings_url: EMAIL_LINKS.privacySettings, unsubscribe_url: unsubscribeUrl,
   });
   return { rendered: { ...rendered, subject: draft.subject }, unsubscribeUrl };
 }

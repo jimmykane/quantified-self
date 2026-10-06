@@ -18,6 +18,7 @@ export const EMAIL_LINKS = {
     dashboard: 'https://quantified-self.io/dashboard',
     membership: 'https://quantified-self.io/pricing',
     product: 'https://quantified-self.io',
+    privacySettings: 'https://quantified-self.io/settings?section=privacy',
 } as const;
 
 type TimestampLike = {

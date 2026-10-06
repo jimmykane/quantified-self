@@ -1,4 +1,4 @@
-import { buildEmailPlanDetails } from './config';
+import { buildEmailPlanDetails, EMAIL_LINKS } from './config';
 
 export const DEVELOPMENT_UPDATE_TEMPLATE_ID = 'development_update';
 export const COROS_DELIVERY_UPDATE_TEMPLATE_ID = 'coros_delivery_update';
@@ -258,7 +258,7 @@ export const MANUAL_CAMPAIGN_EMAIL_TEMPLATE_CATALOG: readonly EmailTemplateCatal
         htmlFile: 'marketing_campaign.hbs',
         textFile: 'marketing_campaign.txt.hbs',
         partials: MARKETING_PARTIALS,
-        previewCases: [{ name: 'sample', data: { subject: 'A note from Dimitrios', email_title: 'A note from Dimitrios', first_name: 'Ada', body_html: '<p>Hello from Quantified Self.</p>', body_text: 'Hello from Quantified Self.', cta_html: '', cta_text: '', product_url: 'https://quantified-self.io', settings_url: 'https://quantified-self.io/settings', unsubscribe_url: 'https://quantified-self.io/email/unsubscribe?token=preview' } }],
+        previewCases: [{ name: 'sample', data: { subject: 'A note from Dimitrios', email_title: 'A note from Dimitrios', first_name: 'Ada', body_html: '<p>Hello from Quantified Self.</p>', body_text: 'Hello from Quantified Self.', cta_html: '', cta_text: '', product_url: 'https://quantified-self.io', settings_url: EMAIL_LINKS.privacySettings, unsubscribe_url: 'https://quantified-self.io/email/unsubscribe?token=preview' } }],
     },
     {
         id: COROS_DELIVERY_UPDATE_TEMPLATE_ID,

@@ -355,6 +355,7 @@ describe('UserSettingsComponent', () => {
         expect(component.settingsSectionOptions.map(section => section.id)).toEqual([
             'profile',
             'app',
+            'privacy',
             'dashboard',
             'map',
             'charts',
@@ -369,10 +370,11 @@ describe('UserSettingsComponent', () => {
             .map((link: Element) => link.querySelector('.settings-tab-label > span:last-child')?.textContent?.trim());
 
         expect(tabNav).toBeTruthy();
-        expect(tabNav.querySelectorAll('.mat-mdc-button')).toHaveLength(7);
+        expect(tabNav.querySelectorAll('.mat-mdc-button')).toHaveLength(8);
         expect(tabLabels).toEqual([
             'Profile',
             'Appearance',
+            'Privacy',
             'Dashboard',
             'Maps',
             'Charts',
@@ -395,7 +397,7 @@ describe('UserSettingsComponent', () => {
 
         expect(fixture.nativeElement.querySelector('.desktop-section-nav')).toBeNull();
         expect(tabPanel).toBeTruthy();
-        expect(tabNav.querySelectorAll('.mat-mdc-button')).toHaveLength(7);
+        expect(tabNav.querySelectorAll('.mat-mdc-button')).toHaveLength(8);
     });
 
     it('keeps the settings form in its centered 760px column', () => {
@@ -458,7 +460,7 @@ describe('UserSettingsComponent', () => {
         const profilePanel = fixture.nativeElement.querySelector('[aria-labelledby="settings-profile-title"]');
         const mapPanel = fixture.nativeElement.querySelector('[aria-labelledby="settings-map-title"]');
 
-        expect(panels).toHaveLength(7);
+        expect(panels).toHaveLength(8);
         expect(profilePanel.hidden).toBe(false);
         expect(mapPanel.hidden).toBe(true);
 
@@ -523,6 +525,69 @@ describe('UserSettingsComponent', () => {
         component.user.acceptedTrackingPolicy = false;
         component.ngOnChanges();
         expect(component.userSettingsFormGroup.get('acceptedTrackingPolicy').value).toBe(false);
+    });
+
+    it('opens both consent switches through the Privacy tab and direct section link', async () => {
+        component.activeSection = 'profile';
+        fixture.detectChanges();
+        const tabs = Array.from(fixture.nativeElement.querySelectorAll('[role="tab"]')) as HTMLAnchorElement[];
+        const privacyTab = tabs.find(tab => tab.textContent?.includes('Privacy'))!;
+        privacyTab.click();
+        await fixture.whenStable(); fixture.detectChanges();
+        expect(component.activeSection).toBe('privacy');
+        expect(hapticsServiceMock.selection).toHaveBeenCalledTimes(1);
+        const privacy = fixture.nativeElement.querySelector('[aria-labelledby="settings-privacy-title"]') as HTMLElement;
+        const appearance = fixture.nativeElement.querySelector('[aria-labelledby="settings-general-title"]') as HTMLElement;
+        expect(privacy.hidden).toBe(false);
+        expect(appearance.hidden).toBe(true);
+        expect(privacy.querySelectorAll('mat-slide-toggle')).toHaveLength(2);
+        expect(appearance.querySelector('mat-slide-toggle')).toBeNull();
+        expect(privacy.textContent).toContain('Save changes');
+        expect(privacy.textContent).toContain('Account and billing emails will still be sent.');
+        queryParamMapSubject.next(convertToParamMap({ section: 'profile' }));
+        queryParamMapSubject.next(convertToParamMap({ section: 'privacy' }));
+        fixture.detectChanges();
+        expect(component.activeSection).toBe('privacy');
+        expect(privacy.hidden).toBe(false);
+        expect(hapticsServiceMock.selection).toHaveBeenCalledTimes(1);
+    });
+
+    it.each([
+        { field: 'acceptedTrackingPolicy', label: 'Usage analytics', other: 'acceptedMarketingPolicy' },
+        { field: 'acceptedMarketingPolicy', label: 'Marketing emails', other: 'acceptedTrackingPolicy' },
+    ])('turns $label off through the visible switch and saves explicit false consent', async ({ field, label, other }) => {
+        component.user = { ...component.user, acceptedTrackingPolicy: true, acceptedMarketingPolicy: true };
+        component.ngOnChanges();
+        queryParamMapSubject.next(convertToParamMap({ section: 'privacy' }));
+        fixture.detectChanges();
+        const toggle = fixture.nativeElement.querySelector(`mat-slide-toggle[formControlName="${field}"] button[role="switch"]`) as HTMLButtonElement;
+        expect(toggle.getAttribute('aria-label')).toBe(label);
+        expect(toggle.getAttribute('aria-checked')).toBe('true');
+        toggle.click(); fixture.detectChanges();
+        expect(toggle.getAttribute('aria-checked')).toBe('false');
+        expect(component.userSettingsFormGroup.get(field)?.value).toBe(false);
+        expect(component.userSettingsFormGroup.get(field)?.dirty).toBe(true);
+        expect(hapticsServiceMock.selection).toHaveBeenCalledTimes(1);
+        const update = vi.spyOn(TestBed.inject(AppUserService), 'updateUserProperties').mockResolvedValue(true);
+        await component.onSubmit(new Event('submit'));
+        expect(update).toHaveBeenCalledWith(expect.objectContaining({ uid: 'test-uid' }), expect.objectContaining({ [field]: false }));
+        expect(update.mock.calls[0][1]).not.toHaveProperty(other);
+        expect(hapticsServiceMock.success).toHaveBeenCalledTimes(1);
+        component.user = { ...component.user, [field]: false };
+        component.ngOnChanges(); fixture.detectChanges();
+        expect(toggle.getAttribute('aria-checked')).toBe('false');
+    });
+
+    it('does not navigate or emit selection feedback for unchanged sections or busy consent controls', async () => {
+        await component.selectSettingsSection(component.activeSection);
+        expect(mockRouter.navigate).not.toHaveBeenCalled();
+        component.isSaving = true;
+        await component.selectSettingsSection('privacy');
+        component.onPrivacyPreferenceChange();
+        component.isSaving = false; component.isDeleting = true;
+        component.onPrivacyPreferenceChange();
+        expect(hapticsServiceMock.selection).not.toHaveBeenCalled();
+        expect(component.activeSection).toBe('profile');
     });
 
     it('should initialize acceptedMarketingPolicy from user data', () => {

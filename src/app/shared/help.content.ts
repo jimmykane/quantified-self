@@ -1266,13 +1266,9 @@ Suunto, COROS, and Wahoo history imports are queued jobs. Large ranges can take 
 
 ## Settings you can change yourself
 
-In Settings you can:
+In [Settings → Privacy](/settings?section=privacy), turn **Usage analytics** or **Marketing emails** off, then select **Save changes**. Appearance contains your theme setting. Other Settings sections let you customize charts, maps, units, and regional formatting.
 
-- turn anonymous usage statistics on or off,
-- turn marketing emails on or off,
-- and customize charts, maps, units, and regional formatting.
-
-Marketing emails are occasional founder messages about product updates and offers. They go only to accounts that explicitly opt in. Your login provider and email verification state do not change this preference. Every marketing email includes an unsubscribe link: opening it shows a confirmation page, and confirming turns the preference off without signing in. Transactional account messages are separate.
+Marketing emails are occasional founder messages about product updates and offers. They go only to accounts that explicitly opt in. Your login provider and email verification state do not change this preference. Every marketing email includes an unsubscribe link: opening it shows a confirmation page, and confirming turns the preference off without signing in. Its **Email preferences** link opens Settings → Privacy. Turning marketing emails off does not stop transactional account or billing messages.
 
 Admins can use [Marketing campaigns](/admin/marketing) to write with a formatting toolbar and see the complete founder email, including its footer, update beside the editor at desktop or phone width, or as plain text. Preview links open separately so the email remains visible. Send a test to an address you choose directly from the composer, even before saving a campaign. This test does not create a campaign. A test is marked in its subject, and its unsubscribe link cannot change anyone's preference. Editing a saved draft clears its earlier test result. Select plans and inclusive UTC signup dates, prepare the fixed recipient list, then start, pause, resume, or clone the campaign. A saved campaign needs its own test accepted by the mail service before sending starts.
 
