@@ -170,7 +170,8 @@ describe('help.content', () => {
     expect(content).toContain('Additional mapping losses, such as shortened exercise instructions, still need review');
     expect(content).toContain('Sent Guide status does not prove app/watch receipt or workout completion');
     expect(content).toContain('Suunto load instructions follow your kg or lb choice in **Settings → Units**');
-    expect(content).toContain('updates eligible synced Guides during the next sync');
+    expect(content).toContain('QS checks for unit changes about every 30 minutes and updates eligible synced Guides');
+    expect(content).toContain('changing units keeps an existing approval only when those losses are unchanged');
   });
 
   it('explains lap-button endings and their provider and completion boundaries', () => {

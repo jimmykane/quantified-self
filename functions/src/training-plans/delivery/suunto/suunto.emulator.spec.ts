@@ -312,11 +312,13 @@ describe.skipIf(!process.env.FIRESTORE_EMULATOR_HOST)('Suunto worker with real F
     expect(server.calls.filter(call => call.method === 'POST')).toHaveLength(1);
     expect(server.calls.filter(call => call.method === 'PUT')).toHaveLength(1);
   });
-  it('still requires current mapping approval when strength instructions lose text', async () => {
+  it('requires review for strength losses and retains that exact approval across kg/lb updates', async () => {
     useProductionPolicy();
     const details = { version: 1 as const, workoutId: 'w', revision: 1, exercises: [{ id: 'squat',
       name: 'Long exercise instructions '.repeat(3), sets: [{ id: 'set-one',
-        ending: { kind: 'repetitions' as const, repetitions: 5 }, externalLoadKg: 80, restAfterSeconds: 120 }] }] };
+        ending: { kind: 'repetitions' as const, repetitions: 5 }, externalLoadKg: 80, restAfterSeconds: 120 }] },
+      { id: 'short', name: 'Back squat', sets: [{ id: 'short-set',
+        ending: { kind: 'repetitions' as const, repetitions: 5 }, externalLoadKg: 80 }] }] };
     await user().collection('scheduledWorkouts').doc('w').update({ structure: projectStrengthWorkoutToV1(details) });
     await user().collection('scheduledWorkouts').doc('w').collection('strengthDetails').doc('current').set(details);
     await command('send'); await drain();
@@ -332,6 +334,22 @@ describe.skipIf(!process.env.FIRESTORE_EMULATOR_HOST)('Suunto worker with real F
     await drain(); await processTrainingDelivery(runtime, uid, row.id); await drain();
     expect((await ledger()).status).toBe('delivered');
     expect(server.guides.size).toBe(1);
+    const ids = (await ledger()).actual!.ids;
+    for (const units of [WeightUnits.Pounds, WeightUnits.Kilograms, WeightUnits.Pounds]) {
+      await user().update({ 'settings.unitSettings.weightUnits': units }); await mark();
+      expect((await ledger()).status).toBe('pending');
+      await processTrainingDelivery(runtime, uid, row.id); await drain();
+      const current = await ledger();
+      expect(current).toMatchObject({ status: 'delivered', actual: { ids },
+        mappingApprovalProof: { approvedDigest: row.approvalDigest } });
+      if (units === WeightUnits.Pounds) {
+        expect(current.mappingApprovalProof!.mappingDigest).toBe(current.acceptedDigest);
+      } // The original kg digest uses its direct approval, retaining the prior carry proof.
+      expect(JSON.stringify(server.guides.get(ids.guide)!.guide)).toContain(units === WeightUnits.Pounds ? '176.4 lb' : '80.0 kg');
+    }
+    expect(server.guides.size).toBe(1);
+    expect(server.calls.filter(call => call.method === 'POST')).toHaveLength(1);
+    expect(server.calls.filter(call => call.method === 'PUT')).toHaveLength(3);
   });
   it('does not select an account by discarding a malformed retained token', async () => {
     await db.collection('suuntoAppAccessTokens').doc(uid).collection('tokens').doc('second').set({ userName: 'second' });

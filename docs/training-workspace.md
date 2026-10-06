@@ -2181,6 +2181,14 @@ remain v7. Unit-only settings changes are picked up by the existing 30-minute re
 account/deletion, horizon, completion and additional text-loss approval checks remain authoritative. App/watch sync
 is provider-managed, and no watch receipt is inferred.
 
+An already-approved text loss carries across kg/lb changes only when the complete structured loss list is unchanged.
+The adapter recomputes the opposite-unit v8 digest and historical digests for the same full prescription,
+destination, zone and owner. Comparison includes every issue's code, path and severity before the public 20-issue
+bound is applied, so a new loss late in a long workout cannot inherit an earlier approval. Existing accepted/attempt
+content evidence or the private `mappingApprovalProof` must still match; unchanged presentation never grants consent.
+Regression cases cover repeated unit changes after current/v7 approvals, full-content/authority rejection and new
+losses beyond the public warning bound. The complete comparison stays transient and adds no stored/public field.
+
 MCP impact: no wire change. Strength input/output and recipe previews retain canonical kg. The unit snapshot stays
 outside owner-readable delivery projections and MCP output. No tool, schema, scope, consent, mutation kind, provider
 action, metric, plugin/skill rebuild, catalog refresh, migration or historical reparse is added. Regression reads cover

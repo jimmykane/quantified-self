@@ -1,6 +1,6 @@
 import { createHash } from 'node:crypto';
 import type { ScheduledWorkoutV1 } from '../../../../../shared/training-plans';
-import { ActivityTypes, type WeightUnits } from '@sports-alliance/sports-lib';
+import { ActivityTypes, WeightUnits } from '@sports-alliance/sports-lib';
 import { normalizeUserUnitSettings } from '../../../../../shared/unit-aware-display';
 import { strengthProjectionMatchesDetails, type StrengthWorkoutDetailsV1 } from '../../../../../shared/strength-workout';
 import { serializeSuuntoGuideJsonV1, serializeSuuntoStrengthGuideV1, serializeSuuntoGuideV2ForRecovery,
@@ -58,13 +58,22 @@ function mapGuide(workout: ScheduledWorkoutV1, destination: string, owner: strin
 }
 export function assessSuuntoGuide(workout: ScheduledWorkoutV1, destination: string, zone: string, owner: string,
   strength?: StrengthWorkoutDetailsV1 | null, weightUnits?: WeightUnits): DeliveryAssessment {
-  const result = assessGuide(workout, destination, zone, owner, strength, currentMappingVersion(workout), weightUnits);
+  const current = inspectGuide(workout, destination, zone, owner, strength, currentMappingVersion(workout), weightUnits);
+  const result = current.assessment;
   if (result.level === 'degraded' && result.requiresApproval !== false) {
-    // Only the same metadata, recipe, destination and losses can inherit approval.
-    const compatibleApprovalDigests = LEGACY_MAPPING_VERSIONS.filter(version => version !== result.mappingVersion).map(version =>
-      assessGuide(workout, destination, zone, owner, strength, version)).filter(legacy =>
-        legacy.level === 'degraded' && legacy.requiresApproval !== false
-        && JSON.stringify(result.issues) === JSON.stringify(legacy.issues)).map(legacy => legacy.digest);
+    const candidates = LEGACY_MAPPING_VERSIONS.filter(version => version !== result.mappingVersion).map(version =>
+      inspectGuide(workout, destination, zone, owner, strength, version));
+    if (result.mappingVersion === SUUNTO_MAPPING_VERSION) {
+      const units = normalizeUserUnitSettings({ weightUnits }).weightUnits;
+      const alternateUnits = units === WeightUnits.Kilograms ? WeightUnits.Pounds : WeightUnits.Kilograms;
+      candidates.push(inspectGuide(workout, destination, zone, owner, strength, SUUNTO_MAPPING_VERSION, alternateUnits));
+    }
+    // Approval can carry across units only for the same complete prescription
+    // and complete losses, including paths beyond the bounded public issues.
+    // Intent still requires retained full-content evidence and current consent.
+    const compatibleApprovalDigests = candidates.filter(candidate =>
+      candidate.assessment.level === 'degraded' && candidate.assessment.requiresApproval !== false
+      && current.lossSignature === candidate.lossSignature).map(candidate => candidate.assessment.digest);
     if (compatibleApprovalDigests.length) return { ...result, compatibleApprovalDigests };
   }
   return result;
@@ -111,16 +120,25 @@ function digestBase(destination: string, zone: string, owner: string,
 }
 function assessGuide(workout: ScheduledWorkoutV1, destination: string, zone: string, owner: string,
   strength: StrengthWorkoutDetailsV1 | null | undefined, version: string, weightUnits?: WeightUnits): DeliveryAssessment {
+  return inspectGuide(workout, destination, zone, owner, strength, version, weightUnits).assessment;
+}
+/** The complete loss signature is transient, never exposed or journaled. */
+function inspectGuide(workout: ScheduledWorkoutV1, destination: string, zone: string, owner: string,
+  strength: StrengthWorkoutDetailsV1 | null | undefined, version: string, weightUnits?: WeightUnits): {
+    assessment: DeliveryAssessment; lossSignature: string;
+  } {
   const base = digestBase(destination, zone, owner, strength, version, weightUnits);
   try {
     const result = mapGuide(workout, destination, owner, strength, version, weightUnits);
-    return { level: result.level, issues: result.issues.map(issue => issue.message).slice(0, 20),
+    return { lossSignature: JSON.stringify(result.issues), assessment: {
+      level: result.level, issues: result.issues.map(issue => issue.message).slice(0, 20),
       ...(result.requiresApproval === undefined ? {} : { requiresApproval: result.requiresApproval }),
-      digest: hashTrainingScheduleRequestPayload({ ...base, payload: result.artifact }), mappingVersion: version };
+      digest: hashTrainingScheduleRequestPayload({ ...base, payload: result.artifact }), mappingVersion: version } };
   } catch (error) {
     if (!(error instanceof ProviderWorkoutMappingError)) throw error;
-    return { level: 'unsupported', issues: error.issues.map(issue => issue.message).slice(0, 20),
-      digest: hashTrainingScheduleRequestPayload({ ...base, workout }), mappingVersion: version };
+    return { lossSignature: JSON.stringify(error.issues), assessment: {
+      level: 'unsupported', issues: error.issues.map(issue => issue.message).slice(0, 20),
+      digest: hashTrainingScheduleRequestPayload({ ...base, workout }), mappingVersion: version } };
   }
 }
 
