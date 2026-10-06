@@ -30,7 +30,7 @@ the first post-update scheduled reconciliation is due at 16:30 UTC and remains t
 
 The first complete collection day is October 7 UTC. Use 2–3 complete days for category attribution and at least a week
 of comparable complete days for cost conclusions, extending the window when starts are sparse or billing is incomplete.
-Deployment evidence is recorded in #759; removal remains tracked in #825. These local commits have not been pushed.
+Deployment evidence is recorded in #759; removal remains tracked in #825.
 
 For a later approved instrumentation rollout, deploy both owners from its verified commit:
 
