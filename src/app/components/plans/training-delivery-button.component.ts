@@ -106,7 +106,7 @@ export class TrainingDeliveryButtonComponent {
   });
   readonly buttonLabel = computed(() => {
     if (this.scope() === 'history') return this.historyLabel();
-    if (this.hasRecords()) return this.scope() === 'plan' ? 'Plan sync' : 'Workout sync';
+    if (!this.readState().loaded || this.readState().error || this.hasRecords()) return this.scope() === 'plan' ? 'Plan sync' : 'Workout sync';
     const provider = this.singleProvider();
     const label = provider ? PLANNED_WORKOUT_PROVIDER_CAPABILITIES_V1[provider].label : null;
     return this.scope() === 'plan' ? label ? `Sync plan with ${label}` : 'Sync plan'

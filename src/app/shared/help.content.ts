@@ -242,6 +242,8 @@ When a numeric step allows **early Lap**, the summary labels its totals as **pre
 - Expand **Deleted workouts (90 days)** in Plans or Standalone to load recoverable workouts only when you need them. The newest deletions appear first, 25 at a time; use **Show more deleted workouts** for older entries. You can still open history, restore, or permanently delete a workout from its row. If a page fails to load, use **Retry**. Changing plans or signing out clears the loaded page.
 - History preview shows what a restore would change before you confirm it. A restore creates a new revision, does not silently reclaim a workout moved to another plan or to standalone, and never recreates a permanently deleted workout.
 
+- Sync details wait for current saved settings. **Loading sync settings** is not **Sync off**. If settings are unavailable, check your connection, then close and reopen sync details; do not enable sync again just to refresh the display. **Check Garmin** reads the latest saved revisions without changing consent. If the workout, schedule or settings change during a consent or replacement review, confirmation is disabled; cancel and review the latest version. If a save was already attempted but its result is uncertain, retry that same confirmation to check the original request. Opening details, refreshing settings and failed reviews never enable sync or change completed-activity totals.
+
 ## Use Training Plans through MCP
 
 - Training Plans uses independent MCP permissions. Activity metrics, completed-activity details, provider connections, and Timeline notes do not grant access to your plans or planned workouts.
