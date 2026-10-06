@@ -11,6 +11,7 @@ import { MatInputModule } from '@angular/material/input';
 import { MatProgressSpinnerModule } from '@angular/material/progress-spinner';
 import { RouterModule } from '@angular/router';
 import type { MarketingCampaignDraft, MarketingCampaignListResponse, MarketingCampaignView, MarketingDocument, MarketingPlan } from '../../../../../shared/admin-marketing';
+import { canDeleteMarketingCampaign } from '../../../../../shared/admin-marketing';
 import { AppFunctionsService } from '../../../services/app.functions.service';
 import { PageHeaderComponent } from '../../shared/page-header/page-header.component';
 import { AppHapticsService } from '../../../services/app.haptics.service';
@@ -31,8 +32,8 @@ function emptyDraft(): MarketingCampaignDraft {
   return { name: '', subject: '', content: { type: 'doc', content: [{ type: 'paragraph', content: [] }] },
     cta: null, filters: { plans: ['free', 'basic', 'pro'], signupFrom: null, signupTo: null }, schedule: null };
 }
-function deletableDraft(campaign: MarketingCampaignView | null | undefined): boolean {
-  return campaign?.status === 'draft' || campaign?.status === 'deleting';
+function deleteLabel(campaign: MarketingCampaignView | null): string {
+  return campaign?.status === 'deleting' ? 'Retry deletion' : campaign?.status === 'draft' ? 'Delete draft' : 'Delete campaign';
 }
 
 @Component({
@@ -122,7 +123,12 @@ export class AdminMarketingComponent implements OnInit, OnDestroy {
   }
 
   get canEdit(): boolean { return this.canEditAudience || this.selected?.status === 'paused'; }
-  get canDelete(): boolean { return deletableDraft(this.selected); }
+  get canDelete(): boolean { return canDeleteMarketingCampaign(this.selected); }
+  get selectedDeleteLabel(): string { return deleteLabel(this.selected); }
+  get campaignRows() {
+    return (this.list?.campaigns || []).map(campaign => ({ campaign,
+      canDelete: canDeleteMarketingCampaign(campaign), deleteLabel: deleteLabel(campaign) }));
+  }
   get canEditAudience(): boolean { return !this.selected || this.selected.status === 'draft'; }
   get canResume(): boolean { return this.selected?.status === 'paused' && !this.dirty && this.selected.lastTestState === 'SUCCESS'; }
   get canRetryPreparation(): boolean {
@@ -351,30 +357,31 @@ export class AdminMarketingComponent implements OnInit, OnDestroy {
         : `Campaign ${action} request completed.`; });
   }
   async clone(): Promise<void> { await this.campaignAction('cloneMarketingCampaign', 'Cloning', 'Campaign copied as a new draft.'); }
-  async deleteDraft(campaign?: MarketingCampaignView): Promise<void> {
+  async deleteCampaign(campaign?: MarketingCampaignView): Promise<void> {
     const target = campaign || this.selected;
-    if (!deletableDraft(target) || !target || this.busy || this.loading() || this.confirmingDelete || this.destroyed) return;
+    if (!canDeleteMarketingCampaign(target) || !target || this.busy || this.loading() || this.confirmingDelete || this.destroyed) return;
     const id = target.id;
     const name = target.name;
+    const kind = target.status === 'draft' ? 'draft' : 'campaign';
     const discardsEdits = this.selected?.id === id && this.dirty;
     this.confirmingDelete = true;
     this.haptics.selection();
     this.deleteDialog = this.dialog.open<ConfirmationDialogComponent, ConfirmationDialogData, boolean>(ConfirmationDialogComponent, {
       width: '440px', maxWidth: 'calc(100vw - 32px)',
-      data: { title: 'Delete draft?', message: `Delete “${name}”? ${discardsEdits ? 'This also discards unsaved edits to this draft. ' : ''}This cannot be undone. Test emails already submitted will still send and count toward the daily limit.`,
-        confirmText: 'Delete draft', cancelText: 'Cancel', confirmColor: 'warn' },
+      data: { title: `Delete ${kind}?`, message: `Delete “${name}”? ${discardsEdits ? `This also discards unsaved edits to this ${kind}. ` : ''}Any prepared recipient list is also removed. This cannot be undone. Test emails already submitted will still send and count toward the daily limit.`,
+        confirmText: `Delete ${kind}`, cancelText: 'Cancel', confirmColor: 'warn' },
     });
     let confirmed: boolean | undefined;
     try { confirmed = await firstValueFrom(this.deleteDialog.afterClosed()); }
     finally { this.confirmingDelete = false; this.deleteDialog = null; }
     const current = campaign ? this.list?.campaigns.find(item => item.id === id) : this.selected;
-    if (confirmed !== true || this.destroyed || this.busy || current?.id !== id || !deletableDraft(current)) return;
+    if (confirmed !== true || this.destroyed || this.busy || current?.id !== id || !canDeleteMarketingCampaign(current)) return;
     this.deletingCampaignId.set(id);
     try {
-      await this.run('Deleting draft', async () => {
+      await this.run('Deleting campaign', async () => {
         try { return (await this.functions.call('changeMarketingCampaignStatus', { id, action: 'delete' })).data; }
         catch (error) {
-          // Cleanup can fail after the backend has locked the draft. Refresh to
+          // Cleanup can fail after the backend has locked the campaign. Refresh to
           // expose its retry action and disable edits, preserving the actual error.
           if (!this.destroyed) await this.refresh();
           throw error;
@@ -382,7 +389,7 @@ export class AdminMarketingComponent implements OnInit, OnDestroy {
       }, () => {
         if (this.list) this.list = { ...this.list, campaigns: this.list.campaigns.filter(item => item.id !== id) };
         if (this.selected?.id === id) this.newDraft(false);
-        this.notice = 'Draft deleted.';
+        this.notice = kind === 'draft' ? 'Draft deleted.' : 'Campaign deleted.';
       });
     } finally { this.deletingCampaignId.set(null); }
   }

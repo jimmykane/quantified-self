@@ -795,7 +795,7 @@ describe.skipIf(!enabled)('marketing campaign durability (emulators)', () => {
       expect((await db.collection('mail').where('marketing.campaignId', '==', campaign.id).get()).empty).toBe(true);
     } finally { releaseLookup(); await worker; lookup.mockRestore(); }
   });
-  it('recursively deletes a draft and partial audience without cancelling test mail or refunding slots', async () => {
+  it.each(['draft', 'ready'])('recursively deletes a %s and its audience without cancelling test mail or refunding slots', async status => {
     const campaign = await saveCampaign(null, draft, 'admin');
     const ref = db.collection('marketingCampaigns').doc(campaign.id);
     const recipient = ref.collection('recipients').doc('partial-recipient');
@@ -805,7 +805,8 @@ describe.skipIf(!enabled)('marketing campaign durability (emulators)', () => {
     const mailId = `marketing_test_${campaign.id}_pending`;
     const mail = { marketing: { testCampaignId: campaign.id }, delivery: { state: 'PENDING' } };
     await db.collection('mail').doc(mailId).set(mail);
-    await ref.update({ lastTestMailId: mailId });
+    await ref.update({ status, lastTestMailId: mailId,
+      stats: { eligible: 1, pending: 1, queued: 0, accepted: 0, failed: 0, skipped: 0 } });
     const quota = db.doc(`marketingDispatchDays/${utcDay(new Date())}`);
     await quota.set({ used: 7 });
     const recursiveDelete = vi.spyOn(db, 'recursiveDelete');
@@ -824,20 +825,51 @@ describe.skipIf(!enabled)('marketing campaign durability (emulators)', () => {
     } finally { recursiveDelete.mockRestore(); }
   });
 
-  it.each(['preparing', 'ready', 'running', 'paused', 'completed'])('rejects deleting a %s campaign and preserves its subtree', async status => {
+  it.each(['preparing', 'running', 'paused', 'completed'])('rejects deleting a %s campaign and preserves its subtree', async status => {
     const campaign = await saveCampaign(null, draft, 'admin');
     const ref = db.collection('marketingCampaigns').doc(campaign.id);
     await ref.update({ status });
     const recipient = ref.collection('recipients').doc('kept-recipient');
     await recipient.set({ status: 'pending' });
-    await expect(deleteCampaign(campaign.id)).rejects.toThrow('Only unprepared drafts');
+    await expect(deleteCampaign(campaign.id)).rejects.toThrow('have not started');
     expect((await ref.get()).get('status')).toBe(status);
     expect((await recipient.get()).exists).toBe(true);
   });
 
-  it('locks a deleting draft against preparation, editing, cloning and test submission', async () => {
+  it.each(['startedAt', 'queued', 'accepted', 'failed', 'skipped'])('protects a ready campaign with existing %s progress', async field => {
+    const { campaign, ref, users } = await readyScheduledCampaign(1, null);
+    await ref.update(field === 'startedAt' ? { startedAt: '2026-10-06T09:00:00Z' } : { [`stats.${field}`]: 1 });
+    await expect(deleteCampaign(campaign.id)).rejects.toThrow('have not started');
+    expect((await ref.get()).get('status')).toBe('ready');
+    expect((await ref.collection('recipients').doc(users[0].uid).get()).exists).toBe(true);
+  });
+
+  it('serializes concurrent Start and deletion of a prepared campaign', async () => {
+    const { campaign, ref, users } = await readyScheduledCampaign(1, { time: '09:00', timeZone: 'UTC' });
+    const [start, deletion] = await Promise.allSettled([
+      setCampaignStatus(campaign.id, 'start'), deleteCampaign(campaign.id),
+    ]);
+    const current = await ref.get();
+    const recipient = await ref.collection('recipients').doc(users[0].uid).get();
+    if (deletion.status === 'fulfilled') {
+      expect(start.status).toBe('rejected');
+      expect(current.exists).toBe(false);
+      expect(recipient.exists).toBe(false);
+    } else {
+      expect(start.status).toBe('fulfilled');
+      expect(deletion.reason).toMatchObject({ code: 'failed-precondition' });
+      expect(current.get('status')).toBe('running');
+      expect(current.get('startedAt')).toEqual(expect.any(String));
+      expect(recipient.exists).toBe(true);
+      await ref.update({ status: 'paused' });
+    }
+    expect((await db.collection('mail').where('marketing.campaignId', '==', campaign.id).get()).empty).toBe(true);
+  });
+
+  it.each(['draft', 'ready'])('locks a deleting %s against preparation, editing, cloning and test submission', async status => {
     const campaign = await saveCampaign(null, draft, 'admin');
     const ref = db.collection('marketingCampaigns').doc(campaign.id);
+    await ref.update({ status });
     await ref.collection('recipients').doc('partial').set({ status: 'pending' });
     let cleanupStarted!: () => void;
     let releaseCleanup!: () => void;
@@ -863,9 +895,10 @@ describe.skipIf(!enabled)('marketing campaign durability (emulators)', () => {
     } finally { releaseCleanup(); await deletion; recursiveDelete.mockRestore(); }
   });
 
-  it('keeps a failed subtree deletion visible and allows a safe retry', async () => {
+  it.each(['draft', 'ready'])('keeps a failed %s subtree deletion visible and allows a safe retry', async status => {
     const campaign = await saveCampaign(null, draft, 'admin');
     const ref = db.collection('marketingCampaigns').doc(campaign.id);
+    await ref.update({ status });
     const recipient = ref.collection('recipients').doc('partial');
     await recipient.set({ status: 'pending' });
     const recursiveDelete = vi.spyOn(db, 'recursiveDelete').mockRejectedValueOnce(new Error('Cleanup unavailable'));
@@ -879,9 +912,10 @@ describe.skipIf(!enabled)('marketing campaign durability (emulators)', () => {
     } finally { recursiveDelete.mockRestore(); }
   });
 
-  it('rejects an in-flight saved test after deletion without reserving mail or recreating the draft', async () => {
+  it.each(['draft', 'ready'])('rejects an in-flight %s test after deletion without reserving mail or recreating the campaign', async status => {
     const campaign = await saveCampaign(null, draft, 'admin');
     const ref = db.collection('marketingCampaigns').doc(campaign.id);
+    await ref.update({ status });
     const user = await admin.auth().createUser({ email: `delete-test-${randomUUID()}@example.org` });
     const quota = db.doc(`marketingDispatchDays/${utcDay(new Date())}`);
     await quota.set({ used: 0 });

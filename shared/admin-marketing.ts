@@ -56,6 +56,19 @@ export interface MarketingCampaignStats {
   skipped: number;
 }
 
+/** Prepared audiences can be discarded until Start, including scheduled campaigns. */
+export function canDeleteMarketingCampaign(campaign: {
+  status: unknown;
+  startedAt?: unknown;
+  stats?: Partial<MarketingCampaignStats> | null;
+} | null | undefined): boolean {
+  if (!campaign) return false;
+  if (campaign.status === 'draft' || campaign.status === 'deleting') return true;
+  return campaign.status === 'ready' && campaign.startedAt == null &&
+    campaign.stats?.queued === 0 && campaign.stats.accepted === 0 &&
+    campaign.stats.failed === 0 && campaign.stats.skipped === 0;
+}
+
 export interface MarketingAudienceExclusions {
   noAuth: number;
   disabledOrAdmin: number;

@@ -5,6 +5,7 @@ import { FieldPath, FieldValue } from 'firebase-admin/firestore';
 import { randomUUID, createHmac, timingSafeEqual } from 'crypto';
 import * as path from 'path';
 import type { MarketingAudienceExclusions, MarketingCampaignDraft, MarketingCampaignListResponse, MarketingCampaignStats, MarketingCampaignView, MarketingPlan, MarketingRecipientStatus } from '../../../../shared/admin-marketing';
+import { canDeleteMarketingCampaign } from '../../../../shared/admin-marketing';
 import { ACCEPTED_MARKETING_POLICY_FIELD, USER_LEGAL_COLLECTION_NAME } from '../../../../shared/user-profile-firestore';
 import { ACTIVE_SUBSCRIPTION_STATUSES } from '../shared/subscription.constants';
 import { getUserDeletionGuardState, getUserDeletionGuardStateInTransaction } from '../../shared/user-deletion-guard';
@@ -201,22 +202,22 @@ export async function saveCampaign(idInput: unknown, input: unknown, actorUid: s
 }
 export async function cloneCampaign(idInput: unknown, actorUid: string): Promise<MarketingCampaignView> {
   const source = await getCampaign(idInput);
-  if (source.status === 'deleting') throw new HttpsError('failed-precondition', 'This draft is being deleted.');
+  if (source.status === 'deleting') throw new HttpsError('failed-precondition', 'This campaign is being deleted.');
   return saveCampaign(null, { name: `Copy of ${source.name}`.slice(0, 120), subject: source.subject,
     content: source.content, cta: source.cta, filters: source.filters, schedule: source.schedule }, actorUid);
 }
 export async function deleteCampaign(idInput: unknown): Promise<{ id: string; deleted: true }> {
   const id = checkedId(idInput);
   const ref = campaigns().doc(id);
-  // This admin-only transition serializes deletion with saves, audience preparation
-  // and saved test submissions. A draft can contain a partial failed preparation.
+  // Serialize deletion with saves, preparation, Start and saved test submissions.
+  // A prepared campaign is safe to discard only before Start has been accepted.
   await db().runTransaction(async tx => {
     const doc = await tx.get(ref);
     if (!doc.exists) return; // An identical retry still cleans any orphaned descendants.
-    if (doc.get('status') !== 'draft' && doc.get('status') !== 'deleting') {
-      throw new HttpsError('failed-precondition', 'Only unprepared drafts can be deleted.');
+    if (!canDeleteMarketingCampaign({ status: doc.get('status'), startedAt: doc.get('startedAt'), stats: doc.get('stats') })) {
+      throw new HttpsError('failed-precondition', 'Only drafts and prepared campaigns that have not started can be deleted.');
     }
-    if (doc.get('status') === 'draft') {
+    if (doc.get('status') !== 'deleting') {
       tx.update(ref, { status: 'deleting', updatedAt: new Date().toISOString() });
     }
   });

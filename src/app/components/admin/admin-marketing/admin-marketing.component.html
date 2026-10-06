@@ -28,15 +28,16 @@
         <mat-card-content>
           <button mat-flat-button type="button" (click)="newDraft()" [disabled]="!!busy"><mat-icon>add</mat-icon> New campaign</button>
           <nav aria-label="Campaigns">
-            @for (campaign of list?.campaigns || []; track campaign.id) {
+            @for (row of campaignRows; track row.campaign.id) {
+              @let campaign = row.campaign;
               <div class="campaign-list-item">
                 <button mat-button type="button" class="campaign-row" [disabled]="!!busy" [class.active]="selected?.id === campaign.id" (click)="choose(campaign)">
                   <span class="campaign-row-content"><strong>{{ campaign.name }}</strong><small>{{ campaign.status }} · {{ campaign.stats.eligible }} eligible</small></span>
                 </button>
-                @if (campaign.status === 'draft' || campaign.status === 'deleting') {
+                @if (row.canDelete) {
                   <button mat-icon-button type="button" class="qs-mat-warn" [disabled]="!!busy || loading() || confirmingDelete"
-                    [attr.aria-label]="(campaign.status === 'deleting' ? 'Retry deletion: ' : 'Delete draft: ') + campaign.name"
-                    [matTooltip]="campaign.status === 'deleting' ? 'Retry deletion' : 'Delete draft'" (click)="deleteDraft(campaign)">
+                    [attr.aria-label]="row.deleteLabel + ': ' + campaign.name"
+                    [matTooltip]="row.deleteLabel" (click)="deleteCampaign(campaign)">
                     @if (deletingCampaignId() === campaign.id) { <mat-spinner diameter="24" aria-hidden="true"></mat-spinner> }
                     @else { <mat-icon>delete_outline</mat-icon> }
                   </button>
@@ -53,20 +54,20 @@
         <mat-card-header class="campaign-header">
           <mat-card-title>{{ selected ? selected.name : 'New campaign' }}</mat-card-title>
           @if (canDelete) {
-            <button mat-button type="button" class="qs-mat-warn" [disabled]="!!busy || loading() || confirmingDelete" (click)="deleteDraft()">
+            <button mat-button type="button" class="qs-mat-warn" [disabled]="!!busy || loading() || confirmingDelete" (click)="deleteCampaign()">
               <span class="refresh-button-content">
                 <span class="refresh-button-icon">
                   @if (deletingCampaignId() === selected?.id) { <mat-spinner diameter="18" aria-hidden="true"></mat-spinner> }
                   @else { <mat-icon>delete_outline</mat-icon> }
                 </span>
-                <span>{{ deletingCampaignId() === selected?.id ? 'Deleting…' : selected?.status === 'deleting' ? 'Retry deletion' : 'Delete draft' }}</span>
+                <span>{{ deletingCampaignId() === selected?.id ? 'Deleting…' : selectedDeleteLabel }}</span>
               </span>
             </button>
           }
         </mat-card-header>
         <mat-card-content>
           @if (selected?.status === 'deleting') {
-            <p class="frozen">This draft is being deleted. If it remains here, retry deletion to finish removing it.</p>
+            <p class="frozen">This campaign is being deleted. If it remains here, retry deletion to finish removing it.</p>
           } @else if (selected?.status === 'paused') {
             <p class="frozen">Paused. You can edit the message and schedule for remaining recipients. Emails already queued may still send with their original content. The audience stays fixed.</p>
           } @else if (selected?.status === 'running') {
