@@ -26,7 +26,31 @@
 }
 
 .preview-header {
+  flex-wrap: wrap;
   margin-bottom: 1rem;
+}
+
+.preview-header mat-button-toggle-group {
+  max-width: 100%;
+}
+
+.preview-workout-picker {
+  width: 100%;
+  max-width: 28rem;
+}
+
+.workout-profile-preview h4 {
+  margin: 1rem 0 0;
+  font: var(--mat-sys-title-medium);
+  overflow-wrap: anywhere;
+}
+
+.profile-preview-hint,
+.profile-preview-totals {
+  margin: 0.5rem 0 1rem;
+  color: var(--mat-sys-on-surface-variant);
+  font: var(--mat-sys-body-small);
+  overflow-wrap: anywhere;
 }
 
 .preview-header h3,

@@ -505,18 +505,28 @@ and Sports Lib-backed workout formatters through a deterministic synthetic recip
 when the deferred component is created; the fixed workout offsets then keep the selected month current for the visitor
 without reading account state or changing during that render. Tests inject an explicit reference date. The generated
 fixture spans multiple weeks and months, includes Running and Cycling recipes, fixed repeats, time/distance endings,
-heart-rate/power/pace targets, a skipped workout, an exact synthetic completed-workout marker on the selected date and
+heart-rate/power/pace/cadence targets, including a two-target step, a skipped workout, an exact synthetic completed-workout marker on the selected date and
 an empty selectable date. The deferred preview stays inside a native `data-nosnippet` boundary and
 has an SSR-stable placeholder. It may add presentation-only calendar inputs with authenticated defaults, but it must not
 inject authentication, Firestore, Functions, delivery services or account state. Planned examples never contribute to
 completed totals or Training analysis.
+
+The same deferred sample offers **Calendar** and **Workout profile** views. Profile inspection reuses
+`WorkoutProfileComponent` and the shared prescription-total formatter over the same validated synthetic recipes;
+visitors can choose a workout and inspect its steps and target ranges locally. It is explicitly read-only, not a
+public editor or saved-workout action. Empty calendar selections remain empty until a sample workout is chosen.
+The shared profile reads the applied CSS theme through `RenderedThemeService`, a read-only, browser-only class observer
+with destruction cleanup; this avoids bringing authentication, Firebase or account settings into its public import graph.
+Homepage discovery highlights live editor profiles, step reordering/duplication, richer targets and the Workout Library
+without duplicating the authenticated workspace or importing account/provider runtimes. Help's existing editor,
+profile and library instructions remain applicable; its overview link also describes the read-only profile sample.
 
 The homepage and public feature page keep their composition separate. Compact homepage rows live in
 `training-plans-home.content.ts`; SEO metadata and long-form route-only sections live in
 `training-plans-page.content.ts`. Keep these modules physically separate so route-only copy cannot enter homepage
 startup, and keep page-only detail, FAQ and launch-boundary sections out of a generic homepage configuration renderer.
 
-This discovery surface and its relative-date/completion presentation have no MCP wire impact: its copy makes the existing separately permissioned planning surface
+This discovery surface and its relative-date/completion/profile presentation have no MCP wire impact: its copy makes the existing separately permissioned planning surface
 discoverable but adds no tool, schema, field, scope, consent, projection, Assistant authority, provider action or
 bundled-skill behavior. It reads canonical frontend types only to validate and render synthetic data; the existing
 Training plan read/write contract, release lifecycle, and independent consent remain unchanged.

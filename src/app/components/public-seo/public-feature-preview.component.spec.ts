@@ -3,6 +3,7 @@ import { signal } from '@angular/core';
 import { By } from '@angular/platform-browser';
 import { MatIconTestingModule } from '@angular/material/icon/testing';
 import { NoopAnimationsModule } from '@angular/platform-browser/animations';
+import { MatButtonToggle } from '@angular/material/button-toggle';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { AppThemes } from '@sports-alliance/sports-lib';
 import { AppThemeService } from '../../services/app.theme.service';
@@ -68,6 +69,11 @@ describe('PublicFeaturePreviewComponent', () => {
   it('hydrates the Training Plans fixture without account-data services', async () => {
     const selection = vi.fn();
     TestBed.overrideProvider(AppHapticsService, { useValue: { selection } });
+    TestBed.overrideProvider(EChartsLoaderService, { useValue: {
+      init: vi.fn().mockResolvedValue({ on: vi.fn(), off: vi.fn(), dispatchAction: vi.fn(), isDisposed: () => false }),
+      setOption: vi.fn(), resize: vi.fn(), dispose: vi.fn(),
+      subscribeToViewportResize: vi.fn(() => vi.fn()), attachMobileSeriesTapFeedback: vi.fn(() => vi.fn()),
+    } });
     const element = renderPlaceholder('training-plans');
     const wrapper = element.querySelector('div[data-nosnippet]');
     const blocks = await fixture.getDeferBlocks();
@@ -80,6 +86,15 @@ describe('PublicFeaturePreviewComponent', () => {
     expect(element.textContent).toContain('Run + ride build');
     expect(element.textContent).toContain('Threshold bike blocks');
     expect(selection).not.toHaveBeenCalled();
+    const toggle = fixture.debugElement.queryAll(By.directive(MatButtonToggle))
+      .find(button => button.componentInstance.value === 'profile')!;
+    toggle.nativeElement.querySelector('button').click();
+    fixture.detectChanges();
+    await fixture.whenStable();
+    expect(element.querySelector('app-workout-profile')?.closest('div[data-nosnippet]')).toBe(wrapper);
+    expect(element.textContent).toContain('This sample is read-only; nothing is saved');
+    expect(element.textContent).toContain('Workout totals');
+    expect(selection).toHaveBeenCalledOnce();
   });
 
   it.each(['training-readiness', 'training-explorer'] as const)(

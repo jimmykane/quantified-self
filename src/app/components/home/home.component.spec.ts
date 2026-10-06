@@ -341,7 +341,7 @@ describe('HomeComponent', () => {
     it('uses the shared compact row primitive for every top-level homepage card', () => {
         const compactRows = fixture.nativeElement.querySelectorAll('app-compact-row');
 
-        expect(compactRows.length).toBe(20);
+        expect(compactRows.length).toBe(15 + TRAINING_PLANS_HOME_CONTENT.rows.length);
         expect(fixture.nativeElement.querySelector('mat-card')).toBeNull();
         expect(fixture.nativeElement.querySelectorAll('.compact-row-stack').length).toBe(7);
         expect(Array.from(compactRows).every((row: Element) => row.querySelector('article.compact-row'))).toBe(true);
@@ -418,6 +418,18 @@ describe('HomeComponent', () => {
         expect(copy).not.toBe('');
         expect(copy.trim().split(/\s+/).length).toBeLessThanOrEqual(60);
         expect(copy).not.toMatch(/Generic|mapping review|verification pending|account\/device-tested|pool length|manual rep transitions/i);
+    });
+
+    it('makes the current editor and independent reusable workouts discoverable without another CTA', () => {
+        const section = fixture.nativeElement.querySelector('.training-plans-section') as HTMLElement;
+        const text = section.textContent ?? '';
+        expect(text).toContain('See your interval profile as you build');
+        expect(text).toContain('reorder or duplicate blocks');
+        expect(text).toContain('cadence targets');
+        expect(text).toContain('Workout Library');
+        expect(text).toContain('Each scheduled copy stays independent');
+        expect(section.querySelectorAll('a')).toHaveLength(1);
+        expect(TRAINING_PLANS_HOME_CONTENT.rows.every(row => row.copy.split(/\s+/).length <= 60)).toBe(true);
     });
 
     it('should explain benchmark merge and hardware precision workflows', () => {

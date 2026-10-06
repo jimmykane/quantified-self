@@ -14,6 +14,12 @@ import {
 } from './policies.content';
 
 describe('help.content', () => {
+  it('describes the public calendar and profile examples as synthetic and read-only', () => {
+    const copy = HELP_SECTIONS.find(section => section.id === 'training-plans')!.content;
+    expect(copy).toContain('[Training Plans overview](/features/training-plans)');
+    expect(copy).toContain('interactive sample calendar, and read-only workout profiles');
+    expect(copy).toContain('never load account data or save changes');
+  });
   it('explains exact prescription subtotals, bounded estimates and unknown duration without changing delivery or recorded totals', () => {
     const copy = HELP_SECTIONS.find(section => section.id === 'training-plans')!.content;
     for (const phrase of ['## Understand workout totals', '**Workout totals** updates', 'before you save',

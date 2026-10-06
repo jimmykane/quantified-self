@@ -177,7 +177,7 @@ const TRAINING_PLANNING_HELP_SNIPPETS = {
 
 const TRAINING_PLANS_HELP_CONTENT = `## Create plans and workouts
 
-See the public [Training Plans overview](/features/training-plans) for a walkthrough and interactive sample calendar. The sample uses synthetic workouts and never loads account data.
+See the public [Training Plans overview](/features/training-plans) for a walkthrough, interactive sample calendar, and read-only workout profiles. Choose a sample workout to inspect its steps and targets. The samples use synthetic workouts and never load account data or save changes.
 
 - Open [Plans](/training/plans) to create a dated workout. Its sidebar entry sits beneath **Training**. You do not need to create a plan first: choose **Standalone** to keep the workout independent, or use the active plan when you want it grouped into a date range.
 - Select a plan or **Standalone**, then use **Add workout** in that view. Each saved workout editor has its own link, and browser Back and Forward return between the editor and the previous plan, Standalone, or Calendar screen. **Save workout** keeps you in the workout's chosen destination, while **Cancel** returns without saving. Dates within the plan stay selected, and Save and Cancel stay available while scrolling on mobile.

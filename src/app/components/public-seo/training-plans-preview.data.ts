@@ -96,7 +96,10 @@ const WORKOUT_TEMPLATES: readonly PreviewWorkoutTemplate[] = [
           kind: 'repeat', id: 'blocks', count: 3, steps: [
             {
               kind: 'step', id: 'threshold', purpose: 'work', ending: { kind: 'time', seconds: 480 },
-              targets: [{ kind: 'power', mode: 'absolute', minimumWatts: 245, maximumWatts: 270 }],
+              targets: [
+                { kind: 'power', mode: 'absolute', minimumWatts: 245, maximumWatts: 270 },
+                { kind: 'cadence', mode: 'absolute', minimumRpm: 85, maximumRpm: 95 },
+              ],
             },
             { kind: 'step', id: 'easy-spin', purpose: 'recovery', ending: { kind: 'time', seconds: 240 }, targets: [] },
           ],
