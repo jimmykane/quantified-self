@@ -73,11 +73,26 @@ test('policies require sustained/multi-observation conditions and send open/clos
   assert.equal(backlog.thresholdValue, 3);
   for (const id of ['provider-failures', 'permissions']) {
     const filter = config.policies.find(policy => policy.userLabels.policy_id === id).conditions[0].conditionThreshold.filter;
-    assert.ok(filter.includes('metric.labels.provider="garmin"'));
-    assert.ok(!filter.includes('metric.labels.provider="coros"'));
+    assert.ok(filter.includes('metric.labels.provider=one_of("garmin","wahoo","suunto")'));
+    assert.ok(!filter.includes('"coros"'));
   }
   assert.equal(config.policies.at(-1).conditions[1].conditionAbsent.duration, '1800s');
   assert.equal(metricType('queue_samples'), 'logging.googleapis.com/user/qs_training_queue_samples_v1');
+});
+
+test('provider alert filters combine exact membership sets without mixed AND/OR label restrictions', () => {
+  const config = bundle();
+  for (const [id, categories] of [
+    ['provider-failures', ['retryable', 'terminal', 'uncertain']],
+    ['permissions', ['permission', 'provider_access']],
+  ]) {
+    const filter = config.policies.find(policy => policy.userLabels.policy_id === id)
+      .conditions[0].conditionThreshold.filter;
+    assert.ok(filter.endsWith('metric.labels.provider=one_of("garmin","wahoo","suunto") AND '
+      + `metric.labels.category=one_of(${categories.map(value => JSON.stringify(value)).join(',')})`));
+    assert.doesNotMatch(filter, /\bOR\b/);
+    assert.doesNotMatch(filter, /\bcoros\b/);
+  }
 });
 
 test('cleanup errors remain detectable when Firebase logger.error prefixes a stack', () => {

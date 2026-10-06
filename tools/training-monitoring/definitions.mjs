@@ -2,7 +2,9 @@ export const OWNER = 'qs-training-monitoring-v1';
 const PREFIX = 'qs_training_';
 const MARKER = `[${OWNER}]`;
 const providers = 'jsonPayload.provider=("garmin" OR "coros" OR "wahoo" OR "suunto")';
-const activeProviders = '(metric.labels.provider="garmin" OR metric.labels.provider="wahoo" OR metric.labels.provider="suunto")';
+// Monitoring does not allow mixing AND/OR within metric-label restrictions.
+// Membership functions retain the exact provider/category sets using only AND.
+const activeProviders = 'metric.labels.provider=one_of("garmin","wahoo","suunto")';
 const labels = keys => keys.map(key => ({ key, valueType: 'STRING', description: `Bounded ${key} category` }));
 export const metricType = key => `logging.googleapis.com/user/${PREFIX}${key}_v1`;
 
@@ -98,11 +100,11 @@ export function buildTrainingMonitoring(project, channel) {
     'Check Cloud Tasks queue/IAM/dispatch reservation failures. Do not blindly resend or change provider entitlement.');
   policy('provider-failures', 'Provider failure surge', 'ERROR', [
     threshold('delivery_failures', 'At least ten delivery failures in 10 minutes', 9, '600s', '60s',
-      `${activeProviders} (metric.labels.category="retryable" OR metric.labels.category="terminal" OR metric.labels.category="uncertain")`),
+      `${activeProviders} AND metric.labels.category=one_of("retryable","terminal","uncertain")`),
   ], 'Inspect provider/category charts and service status. Expected horizon deferrals and individual disconnected accounts are excluded. COROS is excluded while new sends remain Coming soon.');
   policy('permissions', 'Provider access or scope failures', 'WARNING', [
     threshold('delivery_failures', 'At least five permission/access failures in 10 minutes', 4, '600s', '60s',
-      `${activeProviders} (metric.labels.category="permission" OR metric.labels.category="provider_access")`),
+      `${activeProviders} AND metric.labels.category=one_of("permission","provider_access")`),
   ], 'Inspect bounded error categories and connection-repair instructions. Missing scopes, unsupported entitlement and API access cannot be repaired by repeated delivery retries.');
   policy('cleanup', 'Training cleanup failures', 'WARNING', [threshold('cleanup_failures', 'At least one cleanup failure in 10 minutes', 0)],
     'Inspect TrainingCleanup/TrainingWorkoutExpiry logs, checkpoint lease/backlog checks and the existing 15-minute cleanup/daily expiry invocations. Do not purge data to clear an incident.');

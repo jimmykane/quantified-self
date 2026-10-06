@@ -4943,7 +4943,10 @@ Initial alert thresholds (tune after observing actual volume):
 
 Single-user disconnects and expected horizon deferrals do not page through the provider-failure policy. COROS is excluded
 from the two provider policies while its new-send UI remains blocked; global dispatch health still includes any retained
-queue work. Missing threshold data evaluates inactive, not healthy evidence; a separate heartbeat-absence condition
+queue work. Provider/category restrictions use `one_of(...)` membership joined with `AND`: Monitoring rejects mixed
+`AND`/`OR` metric-label restrictions even with parentheses. These exact provider/category sets were verified against
+the live read-only time-series API during activation; offline fixture tests do not replace API acceptance.
+Missing threshold data evaluates inactive, not healthy evidence; a separate heartbeat-absence condition
 detects missing telemetry after a time series exists. Initial activation must explicitly verify the first sample.
 Log ingestion can lag by several minutes; alerts are not instantaneous and thresholds use multi-minute windows.
 No historical backfill is provided by new log metrics.
