@@ -55,8 +55,10 @@ never authorize this content. Strict inputs select an existing owner/connection-
 recording/activity target. Outputs expose only that reference/target, revision/presence, explicitly labelled Borg CR10
 and selected effort/text; never whole events, links, provider data, raw IDs or receipts. Admin transactions recheck
 stored grant/Assistant generation and account deletion. External writes use native host approval; server code cannot
-inspect automatic approval settings. Built-in Gemini sees current reads and local prepare-only tools after an independent
-default-off chat choice. Preparation requires current-turn activity/date discovery and an exact target/revision read;
+inspect automatic approval settings. Built-in Gemini sees current reads and local prepare-only tools through an independent
+chat choice, on for fresh and New chats and user-disableable. Existing off choices, legacy missing flags and old retries
+retain their selected access. This default does not expand external MCP grants or change tool schemas or calculations.
+Preparation requires current-turn activity/date discovery and an exact target/revision read;
 QS shows the target and current/new effort/text, with explicit permanent deletion, before app Apply. Permission changes,
 New chat, expiry, stale proposals/revisions and deletion fences fail closed. At most one current content proposal is kept.
 

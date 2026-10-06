@@ -194,7 +194,7 @@ export class AssistantPageComponent implements OnInit, OnDestroy {
   readonly activityTagChangesEnabled = signal(false);
   readonly timelineNoteChangesEnabled = signal(false);
   readonly measurementChangesEnabled = signal(true);
-  readonly reflectionChangesEnabled = signal(false);
+  readonly reflectionChangesEnabled = signal(true);
   readonly trainingPlansEnabled = signal(false);
   readonly trainingPlanChangesEnabled = signal(false);
   readonly trainingDeliveryEnabled = signal(false);
@@ -329,7 +329,8 @@ export class AssistantPageComponent implements OnInit, OnDestroy {
       this.timelineNoteChangesEnabled.set(state.timelineNoteChangesEnabled === true);
       this.measurementChangesEnabled.set(state.conversation ? state.measurementChangesEnabled === true
         : rememberedRequest ? 'measurementChangesEnabled' in rememberedRequest && rememberedRequest.measurementChangesEnabled === true : true);
-      this.reflectionChangesEnabled.set(state.conversation ? state.reflectionChangesEnabled === true : rememberedRequest ? 'reflectionChangesEnabled' in rememberedRequest && rememberedRequest.reflectionChangesEnabled === true : false);
+      this.reflectionChangesEnabled.set(state.conversation ? state.reflectionChangesEnabled === true
+        : rememberedRequest ? 'reflectionChangesEnabled' in rememberedRequest && rememberedRequest.reflectionChangesEnabled === true : true);
       this.trainingPlansEnabled.set(state.trainingPlansEnabled === true);
       this.trainingPlanChangesEnabled.set(state.trainingPlanChangesEnabled === true);
       this.trainingDeliveryEnabled.set(state.trainingDeliveryEnabled === true);
@@ -630,7 +631,8 @@ export class AssistantPageComponent implements OnInit, OnDestroy {
         this.activityTagChangesEnabled.set(refreshedState.activityTagChangesEnabled === true);
         this.timelineNoteChangesEnabled.set(refreshedState.timelineNoteChangesEnabled === true);
         this.measurementChangesEnabled.set(refreshedState.conversation ? refreshedState.measurementChangesEnabled === true : true);
-        this.reflectionChangesEnabled.set(refreshedState.reflectionChangesEnabled === true);
+        this.reflectionChangesEnabled.set(refreshedState.conversation ? refreshedState.reflectionChangesEnabled === true
+          : request.reflectionChangesEnabled === true);
         this.trainingPlansEnabled.set(refreshedState.trainingPlansEnabled === true);
         this.trainingPlanChangesEnabled.set(refreshedState.trainingPlanChangesEnabled === true);
         this.trainingDeliveryEnabled.set(refreshedState.trainingDeliveryEnabled === true);
@@ -706,7 +708,7 @@ export class AssistantPageComponent implements OnInit, OnDestroy {
   }
 
   async resetConversation(): Promise<void> {
-    await this.replaceConversation('coordinate_free', false, false, false, false, false, false, false, true, false);
+    await this.replaceConversation('coordinate_free', false, false, false, false, false, false, false, true, true);
   }
 
   async applyPendingTrainingProposal(): Promise<void> {
@@ -905,7 +907,7 @@ export class AssistantPageComponent implements OnInit, OnDestroy {
           this.activityTagChangesEnabled.set(state.activityTagChangesEnabled === true);
           this.timelineNoteChangesEnabled.set(state.timelineNoteChangesEnabled === true);
           this.measurementChangesEnabled.set(state.conversation ? state.measurementChangesEnabled === true : true);
-      this.reflectionChangesEnabled.set(state.reflectionChangesEnabled === true);
+          this.reflectionChangesEnabled.set(state.conversation ? state.reflectionChangesEnabled === true : true);
           this.trainingPlansEnabled.set(state.trainingPlansEnabled === true);
           this.trainingPlanChangesEnabled.set(state.trainingPlanChangesEnabled === true);
           this.trainingDeliveryEnabled.set(state.trainingDeliveryEnabled === true);
@@ -999,7 +1001,7 @@ export class AssistantPageComponent implements OnInit, OnDestroy {
       this.activityTagChangesEnabled.set(state.activityTagChangesEnabled === true);
       this.timelineNoteChangesEnabled.set(state.timelineNoteChangesEnabled === true);
       this.measurementChangesEnabled.set(state.conversation ? state.measurementChangesEnabled === true : true);
-      this.reflectionChangesEnabled.set(state.reflectionChangesEnabled === true);
+      if (state.conversation) this.reflectionChangesEnabled.set(state.reflectionChangesEnabled === true);
       this.trainingPlansEnabled.set(state.trainingPlansEnabled === true);
       this.trainingPlanChangesEnabled.set(state.trainingPlanChangesEnabled === true);
       this.trainingDeliveryEnabled.set(state.trainingDeliveryEnabled === true);

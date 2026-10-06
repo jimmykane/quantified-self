@@ -130,7 +130,8 @@ RPE/descriptions. Preserve unspecified fields; Skip/Cancel/analysis requests nev
 
 On an explicit save/delete request, present the sport/date, activity/recording target, current and proposed effort/text,
 and permanent-delete consequences before the native MCP approval boundary. The built-in Assistant instead uses its
-independent default-off choice and app-owned review/Apply; the model can only prepare. Delete removes effort/text
+independent choice and app-owned review/Apply; the choice starts on for fresh and New chats, can be disabled, and
+preserves existing off choices and legacy missing flags. The model can only prepare. Delete removes effort/text
 without a recoverable history. Do not replay declined calls; retry only the same unchanged UUID/revision after uncertain
 delivery. A conflict requires a fresh read and review. Reflections never change calculated load/readiness, prescriptions,
 completion or provider deliveries. Keep automatic approval off for individual review and disable writes in unattended

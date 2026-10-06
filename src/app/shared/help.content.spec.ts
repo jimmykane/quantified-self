@@ -407,7 +407,7 @@ describe('help.content', () => {
     expect(searchHelpSections(HELP_SECTIONS, 'post-workout reflection').map(value => value.id)).toContain(section.id);
     for (const phrase of ['**Skip** or **Cancel** writes nothing', 'private even when the recording is public',
       '**Not reported** stays unknown', '**Delete permanently** removes effort and text',
-      'off for fresh and New chats', 'cannot erase text a client already received or quoted']) {
+      'on for fresh and New chats', 'cannot erase text a client already received or quoted']) {
       expect(section.content).toContain(phrase);
     }
   });

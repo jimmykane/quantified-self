@@ -24,11 +24,13 @@ destructive=true, idempotent=true, openWorld=false across all transports. The ex
 cannot detect automatic approval settings. Keep automatic approval off for individual review and disable reflection
 writes in unattended/Research modes. This never grants Training mutations or provider actions.
 
-The Assistant exposes the read and local prepare-only save/delete tools only after its independent default-off
-conversation choice. Model writes are unavailable. Current-turn activity/date discovery and exact target/revision reads
+The Assistant exposes the read and local prepare-only save/delete tools through its independent conversation choice,
+which starts on for fresh and New chats and can be disabled. Existing off choices and legacy missing flags stay off.
+Model writes are unavailable. Current-turn activity/date discovery and exact target/revision reads
 produce a bounded review, including current/new effort/text and permanent-delete disclosure. Existing app Apply rechecks
-proposal, expiry, owner, generation, permission and revision through the same service. New chat turns reflection access
-off. Text is untrusted private context and may contain health or location information. Revocation cannot erase received
+proposal, expiry, owner, generation, permission and revision through the same service. New chat restores the on default
+and invalidates old proposals. This Assistant default does not expand external MCP grants or change public tool schemas.
+Text is untrusted private context and may contain health or location information. Revocation cannot erase received
 copies; quoted Assistant context follows existing conversation retention. Private content is not included in normal
 activity metrics, descriptions, Timeline/Health reads, public shares, exports or provider deliveries.
 

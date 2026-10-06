@@ -704,7 +704,8 @@ export function createAssistantConversationStore(
           : null;
         const conversation = !storedConversation
           || storedConversation.expireAt.toMillis() <= nowMs
-          ? createEmptyConversation(now, dependencies.createId, locationAccess, false, false, false, measurementChangesEnabled)
+          ? createEmptyConversation(now, dependencies.createId, locationAccess, false, false, false,
+            measurementChangesEnabled, reflectionChangesEnabled)
           : storedConversation;
 
         if (expectedConversationId

@@ -134,7 +134,7 @@ are included in summaries and can themselves contain user- or provider-assigned 
 **Examples & data access** also contains default-off **Training plans**, available to any Assistant user independently of
 the authenticated manual-planning workspace. It discloses names, dates, complete instructions, authored notes and existing service sync status,
 including potentially sensitive personal text. Changing any optional permission starts a fresh server-owned generation
-while preserving the other choices. **New chat** resets optional choices to their defaults (manual measurements on;
+while preserving the other choices. **New chat** resets optional choices to their defaults (manual measurements and reflections on;
 Training, notes, tags and precise locations off). Missing `trainingPlansEnabled` means false.
 The reset expects the current conversation ID; requests, retries and replay fingerprints bind this boolean. Stale tabs,
 sign-out/account switches and old generations cannot grant access. Runtime rechecks consent before and after each read.
@@ -287,7 +287,9 @@ release, client rescan and explicit reauthorization; source implementation alone
 
 ## Optional post-workout reflections
 
-The independent `reflectionChangesEnabled` conversation-owned choice starts false for fresh, legacy and New chats.
+The independent `reflectionChangesEnabled` conversation-owned choice starts on for fresh and New chats. Existing off
+choices and legacy missing flags stay off; remembered retries keep their original flag. The first turn explicitly
+binds its selected flag to the new stored generation, without changing defaults for older requests that omit it.
 Changing it starts a fresh generation and preserves other choices. Requests, retries, state, reset, stored authority and
 fingerprints bind the flag; an old tab or answer cannot re-enable it. In Examples & data access, the disclosure covers
 selected private effort/text, prepare-only saves/permanent deletes, and app-owned review. It never grants adaptation.

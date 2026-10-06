@@ -756,7 +756,7 @@ export const PUBLIC_SEO_PAGES: Record<PublicSeoPageKey, PublicSeoPage> = {
       },
       {
         question: 'Can an MCP client read or save my post-workout reflection?',
-        answer: 'When released in your client, separate workout-reflection read permission plus Individual activity details access permits reading selected athlete-reported effort and text. Change workout reflections additionally permits revision-checked saves or permanent deletes through native client approval. Existing connections must authorize again. Reflections remain owner-only on public recordings, do not change plans or calculations, and are never sent to fitness providers. The built-in Assistant has an independent default-off choice and requires review and Apply in QS.',
+        answer: 'When released in your client, separate workout-reflection read permission plus Individual activity details access permits reading selected athlete-reported effort and text. Change workout reflections additionally permits revision-checked saves or permanent deletes through native client approval. Existing connections must authorize again. Reflections remain owner-only on public recordings, do not change plans or calculations, and are never sent to fitness providers. The built-in Assistant has an independent choice that starts on for fresh and New chats, can be turned off, and requires review and Apply in QS.',
       },
       {
         question: 'Can an MCP client read my Timeline notes?',

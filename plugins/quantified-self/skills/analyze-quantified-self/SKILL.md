@@ -109,7 +109,8 @@ A comparison uses only an existing exact planned-workout link with planning acce
 Do not fetch reflections for every analysis. Reflection help may ask at most three optional useful context questions;
 Skip/Cancel and an analysis request never authorize a write. For an explicit change, read the current target/revision,
 preserve unspecified fields, show current/new effort/text and permanent-delete consequences, then honor native host
-approval or the QS Assistant's default-off choice and app-owned Apply. The model stays prepare-only. Reflections cannot
+approval or the QS Assistant's independent reflection choice and app-owned Apply. The Assistant choice starts on for
+fresh and New chats, can be disabled, and preserves existing off choices and legacy missing flags. The model stays prepare-only. Reflections cannot
 alter Training calculations, recipes, completion or provider delivery; adaptation would need separate explicit consent.
 Missing permission/catalog needs reauthorization or the separate release/refresh, not a substitute data request.
 

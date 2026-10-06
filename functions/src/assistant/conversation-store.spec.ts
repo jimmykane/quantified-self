@@ -120,6 +120,20 @@ function requireStartedTurn(turn: AssistantTurnStart): BegunAssistantTurn {
 }
 
 describe('Assistant conversation store', () => {
+  it.each([true, false])('binds the first turn to the requested reflection choice %s', async enabled => {
+    const harness = createFirestoreHarness();
+    const store = createAssistantConversationStore({ db: () => harness.db as never,
+      now: () => new Date('2026-10-06T12:00:00Z'), createId: () => 'fresh-reflection-chat',
+      getDeletionGuard: async () => ({ userExists: true, deletionInProgress: false, shouldSkip: false }) });
+    const turn = requireStartedTurn(await store.beginTurn('owner', null, 'reflection-first-turn-request', 'fingerprint',
+      'coordinate_free', false, false, false, false, false, false, true, enabled));
+    expect(turn.reflectionChangesEnabled === true).toBe(enabled);
+    expect((await store.getActiveConversationState('owner')).reflectionChangesEnabled === true).toBe(enabled);
+    await expect(store.beginTurn('owner', turn.conversationId, 'reflection-changed-choice-request', 'fingerprint',
+      'coordinate_free', false, false, false, false, false, false, true, !enabled))
+      .rejects.toMatchObject({ code: 'conversation_changed' });
+  });
+
   it('keeps manual-entry permission default-off for legacy chats and fences stale choices', async () => {
     const harness = createFirestoreHarness();
     let sequence = 0;
