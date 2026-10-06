@@ -103,7 +103,7 @@ describe('help.content', () => {
   });
   it('explains bounded Suunto live screens, native sensors/units and watch-controlled boundary alerts', () => {
     const content = HELP_SECTIONS.find(section => section.id === 'training-plans')!.content;
-    for (const phrase of ['## Suunto Guide screens and interval alerts', '**block-average pace and current HR**', '**block-average power, current HR, cadence and speed**', '**block-average pace, swimming stroke rate and current HR**',
+    for (const phrase of ['## Suunto Guide screens and interval alerts', '**block-average pace and current HR**', '**block-average power, current HR, cadence and speed**', '**block-average pace, swimming stroke rate and SWOLF**', '**block-average pace, swimming stroke rate and current HR**',
       '**Avg pwr**', '**Avg strk**', 'Both targets', 'Untargeted steps stay untargeted', 'rowing strokes are not inferred', 'HR stays current',
       'at most five fields', 'Long manual instructions stay text-only', 'Suunto renders native watch units',
       'not guaranteed to match the 500 m split', 'missing readings are unavailable, not zero',
@@ -119,6 +119,24 @@ describe('help.content', () => {
       'past and completed copies stay unchanged', 'not proof of watch receipt, sensor readings, alerts or workout completion']) {
       expect(content).toContain(phrase);
     }
+  });
+  it('distinguishes authored Suunto targets, measured swimming readings and unsupported ZoneSense', () => {
+    const content = HELP_SECTIONS.find(section => section.id === 'training-plans')!.content;
+    for (const phrase of ['**Guide targets and readings are different.**',
+      'heart-rate, power, speed/pace and cadence targets', 'not an authored stroke-rate target',
+      'SWOLF targets are not supported yet', '**ZoneSense targets are not supported in SuuntoPlus Guides**',
+      'even if your watch offers ZoneSense in a sport mode', 'reference snapshot saved with your workout'])
+      expect(content).toContain(phrase);
+    expect(searchHelpSections(HELP_SECTIONS, 'ZoneSense').map(section => section.id)).toContain('training-plans');
+  });
+  it('explains pool-only measured SWOLF without target, pool-length or sensor promises', () => {
+    const content = HELP_SECTIONS.find(section => section.id === 'training-plans')!.content;
+    for (const phrase of ['pool-only **Avg SWOLF**', '**Avg SWOLF is a measured reading, not a target.**',
+      "your watch's pool-length setting", 'Compare it only within the same pool length and stroke',
+      'does not send the selected pool length to Suunto', 'calculate a substitute SWOLF',
+      'instead of optional HR', 'with current HR for an HR target', 'without SWOLF',
+      'requires the updated Functions release']) expect(content).toContain(phrase);
+    expect(searchHelpSections(HELP_SECTIONS, 'Avg SWOLF').map(section => section.id)).toContain('training-plans');
   });
   it('explains shared horizontal pinch zoom on Event details charts', () => {
     const content = HELP_SECTIONS.find(section => section.id === 'getting-started')!.content;

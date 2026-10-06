@@ -274,6 +274,20 @@ stroke-rate fields, mapping versions and approval/recovery evidence. Source-reco
 existing independently granted activity-lap read, with unchanged schema and bounds. No tool, scope, consent,
 mutation, provider action, Assistant routing or bundled-plugin change; no catalog refresh or plugin rebuild is needed.
 Watch support/sensors, alerts and adherence cannot be inferred from delivery acceptance or these read projections.
+The #773 target-capability preparation does not widen those recipes. Swimming stroke-rate and SWOLF targets have
+no established partner-upload representation, while Guide ZoneSense targeting remains unsupported. Existing and
+latest strict recipe reads, full-workout previews and saved-library reads/previews reject these uncontracted kinds
+and arbitrary provider resource fields. They must not treat a measured reading as an authored prescription or
+reinterpret saved relative HR snapshots as watch-native percentages. Focused negative regressions preserve this
+boundary without changing a tool, schema, scope, consent, provider action, Assistant routing or bundled skill.
+The subsequent Suunto v7 pool-only `Avg SWOLF` screen is also private measured presentation, not an authored target
+or new returned metric. Strict scheduled/saved-workout reads and proposals reject injected `swolf` and `guideFields`;
+canonical recipes, scopes, consent, completion reads and provider actions are unchanged. Existing recorded-lap
+reads remain independently granted and unchanged. No contract promotion, client refresh or plugin rebuild is
+required. The separately approved Guide-only v7 QA passed exact readback and the athlete confirmed the measured-field
+watch check; it created no QS workout or completion link and used no MCP mutation. Normal QS delivery still needs
+merge and separately approved Functions deployment. #773 retains the native-target implementation/additive-contract
+decision once an exact partner format exists; measured-field evidence must not close native-target criteria.
 The manual editor's additional canonical running/cycling profiles also require no MCP contract change: the existing
 recipe schema already accepts the complete Sports Lib activity-type enum, and focused coverage proves an exact Mountain
 Biking sport survives the read projection. Suunto numeric activity recommendations and Garmin's broad
