@@ -508,6 +508,11 @@
           </fieldset>
           }
 
+          <div class="editor-prescription-summary" role="group" aria-labelledby="editor-prescription-title">
+            <span id="editor-prescription-title" class="editor-prescription-label">Workout totals</span>
+            <p>{{ editorPrescriptionSummary() ?? 'Complete valid workout details to see totals.' }}</p>
+          </div>
+
           @if (editorIsStrength()) {
             <section class="workout-nodes" aria-labelledby="strength-exercises-title">
               <div class="workout-nodes-heading">

@@ -581,6 +581,16 @@ labelled as a subtotal unless every execution is distance-ended. An arithmetic f
 retaining the ordered instructions. Early-Lap recipes additionally label totals as prescribed limits and show the number
 of executions that allow early Lap. Summaries never enter canonical persistence or provider payloads.
 
+The Plans, Standalone and Workout library editors also show a compact **Workout totals** row above the profile or
+strength exercises. A shared computed canonical draft feeds both the interval profile and prescription summary;
+steps, repeat counts, endings and targets update the owner-unit display before saving. Strength drafts use the existing
+validated compatibility projection, including timed holds/rest and unknown repetition duration. Invalid, incomplete or
+loading drafts clear previous totals and show a short completion prompt. The summary remains visible when the profile
+is collapsed, wraps naturally at phone widths, and adds no card, disclosure, live announcement or persistence path.
+MCP impact review for this editor presentation: no wire impact. It uses the same analysis already exposed by
+`get_workout_prescription_analysis`, adds no saved field or calculation semantics, and changes no read/write schema,
+consent, Assistant authority, provider behavior or plugin content. Unsaved editor state remains local.
+
 MCP impact: additive `get_workout_prescription_analysis({ source: scheduled | saved, reference })` under existing
 `training-plans:read` returns the current record revision, applicable schedule/library revision, sport, strict analysis,
 and owner-unit `displaySummary`. It reuses owner/connection-bound references, masked snapshot reads, recipe/strength

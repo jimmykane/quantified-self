@@ -12,8 +12,8 @@ import { MatDatepickerInput } from '@angular/material/datepicker';
 import { MatSelect } from '@angular/material/select';
 import { MAT_FORM_FIELD_DEFAULT_OPTIONS, MatFormField } from '@angular/material/form-field';
 import { ActivatedRoute, Router, convertToParamMap, provideRouter, type Data, type ParamMap } from '@angular/router';
-import { ActivityTypes, AppThemes, DistanceUnits, PaceUnits, SpeedUnits, SwimPaceUnits, WeightUnits } from '@sports-alliance/sports-lib';
-import { normalizeUserUnitSettings } from '@shared/unit-aware-display';
+import { ActivityTypes, AppThemes, DataDistance, DistanceUnits, PaceUnits, SpeedUnits, SwimPaceUnits, WeightUnits } from '@sports-alliance/sports-lib';
+import { normalizeUserUnitSettings, resolveUnitAwareDisplayFromValue } from '@shared/unit-aware-display';
 import { projectStrengthWorkoutToV1 } from '@shared/strength-workout';
 import type { ScheduledWorkoutV1 } from '@shared/training-plans';
 import type { WorkoutLibraryItemV1 } from '@shared/workout-library';
@@ -161,6 +161,100 @@ describe('PlansWorkspaceComponent', () => {
   });
 
   afterEach(() => vi.useRealTimers());
+
+  it.each(['plans', 'standalone', 'library'] as const)('shows live unsaved timed totals and repeat changes in the %s editor', async scope => {
+    setRouteState({ mode: scope === 'library' ? 'library-create' : 'create', scope: scope === 'standalone' ? 'standalone' : 'plans', date: '2026-09-09' });
+    const fixture = await renderPlans();
+    const component = fixture.componentInstance;
+    component.addEditorRepeat();
+    component.updateStep(1, 0, 'endingValue', 3);
+    component.updateStep(1, 1, 'endingValue', 2);
+    fixture.detectChanges();
+    const summary = () => fixture.nativeElement.querySelector('.editor-prescription-summary p')?.textContent;
+    expect(summary()).toBe('30m 00s');
+    component.updateNode(1, 'count', 2); fixture.detectChanges();
+    expect(summary()).toBe('20m 00s');
+    const profile = fixture.nativeElement.querySelector('app-workout-profile');
+    expect(fixture.nativeElement.querySelector('.editor-prescription-summary').compareDocumentPosition(profile)
+      & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    const profileComponent = fixture.debugElement.query(By.directive(WorkoutProfileComponent)).componentInstance as WorkoutProfileComponent;
+    if (profileComponent.expanded()) profileComponent.toggleExpanded();
+    fixture.detectChanges();
+    expect(fixture.nativeElement.querySelector('.profile-chart')).toBeNull();
+    expect(summary()).toBe('20m 00s');
+    expect(mutate).not.toHaveBeenCalled(); expect(libraryMutate).not.toHaveBeenCalled();
+  });
+
+  it('updates estimates, unknown recoveries and early-Lap limits while editing an existing workout', async () => {
+    setRouteState({ mode: 'edit', workoutId: 'plan-workout' });
+    const fixture = await renderPlans();
+    const component = fixture.componentInstance;
+    component.updateEditorField('sport', ActivityTypes.Running);
+    component.updateStep(0, null, 'endingValue', 10);
+    component.addEditorRepeat();
+    component.updateStep(1, 0, 'endingKind', 'distance');
+    component.updateStep(1, 0, 'endingValue', 1);
+    component.updateStep(1, 0, 'targetKind', 'pace');
+    component.updateStep(1, 0, 'targetMinimum', 4);
+    component.updateStep(1, 0, 'targetMaximum', 5);
+    component.updateStep(1, 1, 'endingKind', 'manual');
+    fixture.detectChanges();
+    const summary = () => fixture.nativeElement.querySelector('.editor-prescription-summary p')?.textContent;
+    expect(summary()).toMatch(/26m 00s–30m 00s estimated \+ 4 steps with unknown duration/);
+    const distance = resolveUnitAwareDisplayFromValue(DataDistance.type, 4000, component.editor()!.unitSettings)!.text;
+    expect(summary()).toContain(`${distance} distance subtotal`);
+    component.updateStep(1, 0, 'allowEarlyLap', true); fixture.detectChanges();
+    expect(summary()).toContain('prescribed limits'); expect(summary()).toContain('4 steps allow early Lap');
+    component.updateStep(1, 1, 'endingKind', 'time');
+    component.updateStep(1, 1, 'endingValue', 1); fixture.detectChanges();
+    expect(summary()).toContain('30m 00s–34m 00s estimated');
+    expect(summary()).not.toContain('unknown duration');
+    component.updateStep(1, 0, 'targetKind', 'none'); fixture.detectChanges();
+    expect(summary()).toContain('4 steps with unknown duration'); expect(summary()).not.toContain('estimated');
+    expect(mutate).not.toHaveBeenCalled();
+  });
+
+  it.each([DistanceUnits.Kilometers, DistanceUnits.Miles])('uses the editor owner units for live distance totals in %s', async distanceUnits => {
+    const owner = { ...user, settings: { unitSettings: normalizeUserUnitSettings({ distanceUnits }) } };
+    userSignal.set(owner); userSubject.next(owner);
+    setRouteState({ mode: 'library-create' });
+    const fixture = await renderPlans(); const component = fixture.componentInstance;
+    component.updateStep(0, null, 'endingKind', 'distance');
+    component.updateStep(0, null, 'endingValue', 1); fixture.detectChanges();
+    const distance = resolveUnitAwareDisplayFromValue(DataDistance.type,
+      distanceUnits === DistanceUnits.Miles ? 1609.344 : 1000, owner.settings.unitSettings)!.text;
+    expect(fixture.nativeElement.querySelector('.editor-prescription-summary p').textContent)
+      .toBe(`Duration unknown · ${distance} prescribed`);
+    expect(libraryMutate).not.toHaveBeenCalled();
+  });
+
+  it('clears stale totals for invalid draft values and recovers when corrected', async () => {
+    setRouteState({ mode: 'create', scope: 'standalone', date: '2026-09-09' });
+    const fixture = await renderPlans(); const component = fixture.componentInstance;
+    component.updateStep(0, null, 'endingValue', 0); fixture.detectChanges();
+    expect(component.editorPrescriptionSummary()).toBeNull();
+    expect(fixture.nativeElement.querySelector('.editor-prescription-summary p').textContent)
+      .toBe('Complete valid workout details to see totals.');
+    component.updateStep(0, null, 'endingValue', 12); fixture.detectChanges();
+    expect(fixture.nativeElement.querySelector('.editor-prescription-summary p').textContent).toBe('12m 00s');
+    expect(mutate).not.toHaveBeenCalled();
+  });
+
+  it('summarizes strength holds and rest without estimating repetition duration', async () => {
+    setRouteState({ mode: 'library-create' });
+    const fixture = await renderPlans(); const component = fixture.componentInstance;
+    component.updateEditorField('sport', ActivityTypes.StrengthTraining);
+    component.updateStrengthExerciseName(0, 'Squat');
+    component.updateStrengthSet(0, 0, 'value', 5);
+    component.updateStrengthSet(0, 0, 'restAfterSeconds', 120);
+    component.addStrengthSet(0);
+    component.updateStrengthSet(0, 1, 'kind', 'time');
+    component.updateStrengthSet(0, 1, 'value', 30); fixture.detectChanges();
+    expect(fixture.nativeElement.querySelector('.editor-prescription-summary p').textContent)
+      .toBe('02m 30s timed subtotal + 1 step with unknown duration');
+    expect(fixture.nativeElement.querySelector('app-workout-profile')).toBeNull();
+    expect(libraryMutate).not.toHaveBeenCalled();
+  });
 
   it('previews exact live canonical steps, preserves selection when reordered and hides an invalid draft without writes', async () => {
     setRouteState({ mode: 'create', scope: 'standalone', date: '2026-09-09' });

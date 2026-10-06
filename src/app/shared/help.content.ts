@@ -224,7 +224,7 @@ See the public [Training Plans overview](/features/training-plans) for a walkthr
 
 ## Understand workout totals
 
-Plans and the Workout library show a prescription summary above the steps. Timed endings contribute exact time; distance endings contribute exact prescribed distance. Fixed repeats count every pass. A distance step with an explicit speed or pace target can contribute an **estimated duration range**. A relative speed target uses only the threshold-speed reference saved with that workout.
+Plans and the Workout library show a prescription summary above the steps. While editing in Plans, Standalone or the Workout library, **Workout totals** updates as you change steps, repeats, endings and targets, before you save. Invalid or incomplete workout details show a prompt instead of stale totals. The compact summary wraps on narrow screens and stays visible when the profile is collapsed. Strength totals include timed holds and rest; repetition duration stays unknown. Timed endings contribute exact time; distance endings contribute exact prescribed distance. Fixed repeats count every pass. A distance step with an explicit speed or pace target can contribute an **estimated duration range**. A relative speed target uses only the threshold-speed reference saved with that workout.
 
 When a numeric step allows **early Lap**, the summary labels its totals as **prescribed limits** and counts the steps that allow it, including repeat passes. Pressing Lap can shorten the actual workout. These totals describe the prescription, not a promise of your elapsed time or recorded distance.
 

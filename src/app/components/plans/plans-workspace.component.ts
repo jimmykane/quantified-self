@@ -420,10 +420,17 @@ export class PlansWorkspaceComponent {
   readonly editorProfileSelection = signal<WorkoutProfileSelection | null>(null);
   readonly editorProfileContext = computed(() => this.editor()
     ? `${this.currentUser()?.uid}/${this.editorGeneration}` : '');
-  readonly editorProfile = computed(() => {
+  readonly editorPrescriptionStructure = computed(() => {
     const session = this.editor();
-    if (!session || this.editorIsStrength()) return null;
+    if (!session || session.strengthLoading) return null;
     try { return this.editorStructure(session); } catch { return null; }
+  });
+  readonly editorProfile = computed(() => this.editorIsStrength() ? null : this.editorPrescriptionStructure());
+  readonly editorPrescriptionSummary = computed(() => {
+    const session = this.editor();
+    const structure = this.editorPrescriptionStructure();
+    return session && structure
+      ? formatWorkoutPrescriptionSummaryV1(structure, session.unitSettings, session.value.sport) : null;
   });
   readonly editorProfileStepId = computed(() => {
     const id = this.editorProfileSelection()?.stepId;
