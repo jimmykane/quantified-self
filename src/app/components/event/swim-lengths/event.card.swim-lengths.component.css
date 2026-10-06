@@ -49,6 +49,8 @@
   flex-wrap: wrap;
   column-gap: 10px;
   row-gap: 2px;
+  min-width: 0;
+  max-width: 100%;
   color: var(--mat-sys-on-surface-variant);
   font: var(--mat-sys-label-medium);
   font-family: 'Barlow Condensed', 'Inter', sans-serif;
@@ -100,9 +102,7 @@
   }
 
   .swim-length-summary {
-    display: grid;
-    grid-auto-rows: 17px;
-    grid-template-columns: repeat(3, max-content);
     min-height: 36px;
+    width: 100%;
   }
 }

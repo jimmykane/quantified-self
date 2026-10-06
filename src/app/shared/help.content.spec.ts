@@ -1099,6 +1099,13 @@ describe('help.content', () => {
     expect(gettingStartedSection?.content).toContain('**Settings -> Units -> Swim pace**');
     expect(gettingStartedSection?.content).toContain('25 yd, 50 yd, 75 yd, and 100 yd splits before the rest row');
     expect(gettingStartedSection?.content).toContain('Stored distances remain in meters');
+    expect(gettingStartedSection?.content).toContain('**Swim** time (excluding idle/rest lengths)');
+    expect(gettingStartedSection?.content).toContain('**Total** keeps the combined time');
+    expect(gettingStartedSection?.content).toContain('Set swim pace excludes rest too');
+    expect(gettingStartedSection?.content).toContain('Each length keeps its recorded duration and all available details');
+    expect(gettingStartedSection?.content).toContain('falling back to elapsed time when timer time is missing');
+    expect(gettingStartedSection?.content).toContain('unrecorded rest is not inferred');
+    expect(gettingStartedSection?.content).toContain('Open sets stay open when unit preferences change');
   });
 
   it('should document sport-specific event lap table columns', () => {

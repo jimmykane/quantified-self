@@ -158,6 +158,17 @@ describe('unit-aware-display', () => {
     })).toBe('08h 19m');
   });
 
+  it('preserves native fractional length timing independently of swim unit preferences', () => {
+    for (const swimPaceUnits of [[SwimPaceUnits.MinutesPer100Meter], [SwimPaceUnits.MinutesPer100Yard]]) {
+      const settings = normalizeUserUnitSettings({ swimPaceUnits });
+      for (const seconds of [0, 24.4, 61.8, 3661.2, 90061.2]) {
+        expect(formatUnitAwareDataValue(DataDuration.type, seconds, settings, {
+          durationMilliseconds: true,
+        })).toBe(new DataDuration(seconds).getDisplayValue(false, true, true));
+      }
+    }
+  });
+
   it('should format ascent and descent values with dot grouping by default', () => {
     const unitSettings = getDefaultUserUnitSettings();
 

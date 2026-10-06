@@ -209,6 +209,8 @@ export interface ResolveUnitAwareDisplayOptions {
   stripRepeatedUnit?: boolean;
   compactAscentDescent?: boolean;
   compactDuration?: boolean;
+  /** Preserve Sports Lib's fractional seconds for recorded length/split timing. */
+  durationMilliseconds?: boolean;
   locale?: string | null;
 }
 
@@ -267,7 +269,9 @@ export function resolveUnitAwareDisplayStat(
   const isDuration = selectedStat instanceof DataDuration;
   const ascentDescentDisplayValue = resolveAscentDescentDisplayValue(selectedStat, selectedType, options);
   const displayValueRaw = isDuration
-    ? rawValue !== null && Number.isFinite(rawValue) && rawValue >= SECONDS_PER_DAY
+    ? options?.durationMilliseconds === true
+      ? selectedStat.getDisplayValue(false, true, true)
+      : rawValue !== null && Number.isFinite(rawValue) && rawValue >= SECONDS_PER_DAY
       ? selectedStat.getDisplayValue(true, false)
       : options?.compactDuration === true
         ? selectedStat.getDisplayValue(false, false)

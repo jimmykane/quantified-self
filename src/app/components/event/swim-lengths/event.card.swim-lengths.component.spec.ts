@@ -1,6 +1,10 @@
 import { ChangeDetectorRef, NO_ERRORS_SCHEMA } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { ComponentFixture, TestBed } from '@angular/core/testing';
+import { NoopAnimationsModule } from '@angular/platform-browser/animations';
+import { MatExpansionModule } from '@angular/material/expansion';
+import { MatTableModule } from '@angular/material/table';
+import { MatTabsModule } from '@angular/material/tabs';
 import {
   ActivityInterface,
   DataSpeed,
@@ -16,6 +20,8 @@ import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { vi } from 'vitest';
 import { EventCardSwimLengthsComponent } from './event.card.swim-lengths.component';
+import { AppHapticsService } from '../../../services/app.haptics.service';
+import { HapticTapDirective } from '../../../directives/haptic-tap.directive';
 
 function createActivity(swimLengths: unknown[]): ActivityInterface {
   return {
@@ -60,13 +66,16 @@ function formatExpectedSwimDistance(distance: number): string {
 describe('EventCardSwimLengthsComponent', () => {
   let component: EventCardSwimLengthsComponent;
   let fixture: ComponentFixture<EventCardSwimLengthsComponent>;
+  let haptics: { selection: ReturnType<typeof vi.fn> };
 
   beforeEach(async () => {
+    haptics = { selection: vi.fn() };
     await TestBed.configureTestingModule({
-      imports: [CommonModule],
-      declarations: [EventCardSwimLengthsComponent],
+      imports: [CommonModule, MatExpansionModule, MatTableModule, MatTabsModule, NoopAnimationsModule],
+      declarations: [EventCardSwimLengthsComponent, HapticTapDirective],
       providers: [
         { provide: ChangeDetectorRef, useValue: { markForCheck: vi.fn(), detectChanges: vi.fn() } },
+        { provide: AppHapticsService, useValue: haptics },
       ],
       schemas: [NO_ERRORS_SCHEMA],
     }).compileComponents();
@@ -166,6 +175,141 @@ describe('EventCardSwimLengthsComponent', () => {
     expect(groups[1].expanded).toBe(false);
   });
 
+  it.each([SwimPaceUnits.MinutesPer100Meter, SwimPaceUnits.MinutesPer100Yard])(
+    'separates swim/rest timing, preserves total and details, and excludes rest from pace with %s', swimPaceUnit => {
+      const lengths = [
+        createSwimLength({ index: 1, timerTime: 24.4, elapsedTime: 30, distance: 25 }),
+        createSwimLength({ index: 2, timerTime: 26.4, elapsedTime: 32, distance: 25 }),
+        createSwimLength({ index: 3, type: 'idle', timerTime: 10, elapsedTime: 12, distance: null }),
+        createSwimLength({ index: 4, timerTime: 23, distance: 25 }),
+      ];
+      const originalLengths = structuredClone(lengths);
+      component.unitSettings = { swimPaceUnits: [swimPaceUnit] } as UserUnitSettingsInterface;
+      component.selectedActivities = [createActivity(lengths)];
+      component.ngOnChanges();
+      fixture.detectChanges();
+
+      const groups = component.swimLengthViews[0].groups;
+      const group = groups[0];
+      expect(group.activeDuration).toBe('50.8s');
+      expect(group.restDuration).toBe('10s');
+      expect(group.summaryRow.Duration).toBe('01m 00.8s');
+      expect(group.rows.map(row => row.Duration)).toEqual(['24.4s', '26.4s', '10s']);
+      expect(group.rows.map(row => row['#'])).toEqual([1, 2, 3]);
+      expect(group.rows.map(row => row.Type)).toEqual(['Active', 'Active', 'Idle']);
+      expect(group.rows[2].Split).toBe('Rest');
+      expect(group.summaryRow['Swim Pace']).toContain(swimPaceUnit === SwimPaceUnits.MinutesPer100Meter ? '01:41' : '01:32');
+      expect(groups[1].activeDuration).toBe('23s');
+      expect(groups[1].restDuration).toBe('');
+      expect(groups[1].summaryRow.Duration).toBe('23s');
+
+      const header = fixture.nativeElement.querySelector('mat-expansion-panel-header') as HTMLElement;
+      expect(header.textContent).toMatch(/Swim\s+50\.8s/);
+      expect(header.textContent).toMatch(/Rest\s+10s/);
+      expect(header.textContent).toMatch(/Total\s+01m 00\.8s/);
+      header.click();
+      fixture.detectChanges();
+      const table = fixture.nativeElement.querySelector('table') as HTMLElement;
+      expect(table.querySelectorAll('mat-row')).toHaveLength(3);
+      expect(table.textContent).toContain('24.4s');
+      expect(table.textContent).toContain('26.4s');
+      expect(table.textContent).toContain('10s');
+      expect(table.textContent).toContain('Freestyle');
+      expect(lengths).toEqual(originalLengths);
+    },
+  );
+
+  it('uses elapsed time only when timer time is missing and preserves explicit zero timing', () => {
+    component.selectedActivities = [createActivity([
+      createSwimLength({ index: 1, timerTime: null, elapsedTime: 20.5 }),
+      createSwimLength({ index: 2, timerTime: 0, elapsedTime: 99 }),
+      createSwimLength({ index: 3, type: ' REST ', timerTime: null, elapsedTime: 9.5, distance: null }),
+    ])];
+    component.ngOnChanges();
+    const group = component.swimLengthViews[0].groups[0];
+    expect(group.activeDuration).toBe('20.5s');
+    expect(group.restDuration).toBe('09.5s');
+    expect(group.summaryRow.Duration).toBe('30s');
+    expect(group.rows.map(row => row.Duration)).toEqual(['20.5s', '00s', '09.5s']);
+  });
+
+  it('does not invent missing durations or rest from timestamps', () => {
+    component.selectedActivities = [createActivity([
+      createSwimLength({ index: 1, timerTime: null, elapsedTime: null }),
+      createSwimLength({ index: 2, type: 'idle', timerTime: null, elapsedTime: null, distance: null }),
+    ])];
+    component.ngOnChanges();
+    fixture.detectChanges();
+    const group = component.swimLengthViews[0].groups[0];
+    expect(group.activeDuration).toBe('');
+    expect(group.restDuration).toBe('');
+    expect(group.summaryRow.Duration).toBe('');
+    expect(group.summaryRow['Swim Pace']).toBe('');
+    expect(group.rows.map(row => row.Duration)).toEqual(['', '']);
+    expect(fixture.nativeElement.querySelector('.swim-length-summary').textContent).not.toContain('00s');
+  });
+
+  it('keeps swim timing and active pace separate even if a rest row supplies distance', () => {
+    component.selectedActivities = [createActivity([
+      createSwimLength({ index: 1, distance: 25, timerTime: 25 }),
+      createSwimLength({ index: 2, type: 'rest', distance: 10, timerTime: 50 }),
+    ])];
+    component.ngOnChanges();
+    const group = component.swimLengthViews[0].groups[0];
+    expect(group.summaryRow.Distance).toBe('35 m');
+    expect(group.rows[1].Distance).toBe('10 m');
+    expect(group.summaryRow['Swim Pace']).toContain('01:40');
+  });
+
+  it('retains independent activity tabs, set boundaries and all length rows', () => {
+    component.selectedActivities = [
+      createActivity([createSwimLength({ index: 1 }), createSwimLength({ index: 2, type: 'idle', timerTime: 10 })]),
+      createActivity([createSwimLength({ index: 1, timerTime: 30 }), createSwimLength({ index: 2, type: 'rest', timerTime: 5 })]),
+    ];
+    component.ngOnChanges();
+    fixture.detectChanges();
+    expect(fixture.nativeElement.querySelector('mat-tab-group')).not.toBeNull();
+    expect(component.swimLengthViews.map(view => view.label)).toEqual(['Swimming 1', 'Swimming 2']);
+    expect(component.swimLengthViews.map(view => view.groups[0].activeDuration)).toEqual(['25s', '30s']);
+    expect(component.swimLengthViews.map(view => view.groups[0].restDuration)).toEqual(['10s', '05s']);
+    expect(component.swimLengthViews.map(view => view.groups[0].rows.map(row => row['#']))).toEqual([[1, 2], [1, 2]]);
+  });
+
+  it('keeps an expanded set open across unit refreshes with silent initialization and feedback per user toggle', () => {
+    component.selectedActivities = [createActivity([
+      createSwimLength({ index: 1 }), createSwimLength({ index: 2, type: 'idle', timerTime: 10, distance: null }),
+    ])];
+    component.ngOnChanges();
+    fixture.detectChanges();
+    expect(haptics.selection).not.toHaveBeenCalled();
+    let header = fixture.nativeElement.querySelector('mat-expansion-panel-header') as HTMLElement;
+    header.click();
+    fixture.detectChanges();
+    expect(component.swimLengthViews[0].groups[0].expanded).toBe(true);
+    expect(haptics.selection).toHaveBeenCalledTimes(1);
+
+    component.unitSettings = { swimPaceUnits: [SwimPaceUnits.MinutesPer100Yard] } as UserUnitSettingsInterface;
+    component.ngOnChanges();
+    fixture.detectChanges();
+    expect(component.swimLengthViews[0].groups[0].expanded).toBe(true);
+    expect(haptics.selection).toHaveBeenCalledTimes(1);
+    header = fixture.nativeElement.querySelector('mat-expansion-panel-header') as HTMLElement;
+    expect(header.getAttribute('aria-expanded')).toBe('true');
+    header.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', keyCode: 13, bubbles: true }));
+    fixture.detectChanges();
+    expect(component.swimLengthViews[0].groups[0].expanded).toBe(false);
+    expect(haptics.selection).toHaveBeenCalledTimes(2);
+    header.dispatchEvent(new KeyboardEvent('keydown', { key: ' ', keyCode: 32, bubbles: true }));
+    fixture.detectChanges();
+    expect(component.swimLengthViews[0].groups[0].expanded).toBe(true);
+    expect(haptics.selection).toHaveBeenCalledTimes(3);
+    header.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', keyCode: 13, ctrlKey: true, bubbles: true }));
+    header.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowDown', keyCode: 40, bubbles: true }));
+    fixture.detectChanges();
+    expect(component.swimLengthViews[0].groups[0].expanded).toBe(true);
+    expect(haptics.selection).toHaveBeenCalledTimes(3);
+  });
+
   it('should display active length split progress and keep rest rows out of the split count', () => {
     const activity = createActivity([
       createSwimLength({ index: 1, distance: 25, timerTime: 24.4, elapsedTime: 24.4 }),
@@ -260,8 +404,12 @@ describe('EventCardSwimLengthsComponent', () => {
     expect(groups[0].rows.map(row => row['#'])).toEqual([1, 2]);
     expect(groups[1].rows.map(row => row['#'])).toEqual([3]);
     expect(groups[1].label).toBe('Length 3');
-    expect(groups[1].summaryRow.Type).toBe('Set + Rest');
+    expect(groups[1].summaryRow.Type).toBe('Rest');
     expect(groups[1].summaryRow.Stroke).toBe('');
+    expect(groups[1].activeDuration).toBe('');
+    expect(groups[1].restDuration).toBe('25s');
+    expect(groups[1].summaryRow.Duration).toBe('25s');
+    expect(groups[1].summaryRow['Swim Pace']).toBe('');
   });
 
   it('should mark mixed active strokes in group summaries', () => {

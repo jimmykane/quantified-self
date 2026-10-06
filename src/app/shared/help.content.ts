@@ -595,11 +595,13 @@ HRV and Sleep each have their own date range and older/newer navigation. While a
 
 - Event details include a **Swim Lengths** table when selected swim activities contain per-length pool data.
 - Swim lengths are grouped into collapsed sets through the next idle/rest length; expand a set to inspect each individual length row.
+- Set headers separate **Swim** time (excluding idle/rest lengths) from **Rest** time. **Total** keeps the combined time when both are available. For example, 51 seconds swimming plus 10 seconds resting shows Swim 51s, Rest 10s, and Total 01m 01s. Set swim pace excludes rest too.
+- Each length keeps its recorded duration and all available details. Timing uses recorded timer time, falling back to elapsed time when timer time is missing. Missing timing stays blank; unrecorded rest is not inferred from gaps between lengths.
 - Swim lengths appear in activity tabs and show lap index, split progress, duration, distance, length type, stroke, strokes, swim pace, stroke rate, heart rate, SWOLF, and energy when available.
 - Active split progress is shown inside each expanded set, so a 25 m pool with a 100 m set displays 25 m, 50 m, 75 m, and 100 m splits before the rest row.
 - In **Settings -> Units -> Swim pace**, put your preferred pace unit first: **per 100 meters** shows recorded swim distances in meters, and **per 100 yards** shows them in yards. This applies to swim lengths, split progress, set totals, swimming summaries, lap tables, detailed statistics, and swim/lap chart tooltips. The general kilometers/miles preference does not override it.
 - Swim comparison differences use the same meter/yard preference as their distance values. Totals combining swimming with other sports use your general distance units.
-- A 25-yard pool with a 100-yard set shows 25 yd, 50 yd, 75 yd, and 100 yd splits before the rest row. Set headers show the total distance and time; expand them for individual lengths. Stored distances remain in meters, so changing the preference does not change your activity data.
+- A 25-yard pool with a 100-yard set shows 25 yd, 50 yd, 75 yd, and 100 yd splits before the rest row. Set headers show the total distance, swim time, rest time, and combined total; expand them for individual lengths. Open sets stay open when unit preferences change. Stored distances remain in meters, so changing the preference does not change your activity data.
 - Swim pace and energy values follow your preferred units from **Settings**.
 
 ### Event stamina metrics

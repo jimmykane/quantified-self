@@ -79,6 +79,18 @@ is selected. Summary display caches refresh when unit settings change. Merge and
 the same swim display preference to distance differences and their metric keys; the comparison grid refreshes these
 differences when the unit settings signal changes. Canonical values and percentage calculations remain unchanged.
 
+Recorded swim sets retain their existing boundaries (through the following idle/rest length) and every expanded
+length row. Headers label active length timing as **Swim**, idle/rest timing as **Rest**, and preserve the previous
+combined duration as **Total** when both are present. Rest-only groups show Rest without an invented active duration.
+Each duration prefers the source `timerTime`, falling back to `elapsedTime` only when timer time is absent; explicit
+zeroes remain zero, missing values remain blank, and sums retain the existing finite-value behavior. Unknown rest or
+paused gaps are not inferred from timestamps. The shared display resolver's `durationMilliseconds` option preserves
+Sports Lib's existing fractional length formatting. Set pace now uses non-rest distance/time, while row durations,
+distances, pace and other detail metrics and aggregate totals retain their existing source values. Stable group keys
+preserve disclosure state across unit refreshes. Header timings wrap at phone widths, and user disclosure clicks and
+Enter/Space toggles use app haptics without feedback for initialization or unit refreshes. This is a frontend display
+change; import/storage, event/lap totals, chart markers, Training and MCP contracts are unchanged.
+
 ## Activity details spacing
 
 Activity details use the workspace shell's inline gutters once. The primary summary, Training impact, metadata,
