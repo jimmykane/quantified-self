@@ -698,25 +698,6 @@ serialized into recipes or Firestore. New speed inputs use exact physical invers
 and knots, including an international mile of 1609.344 metres; Sports Lib remains the display/unit authority. Pace/distance
 inputs retain the exact physical mile/yard denominators described above. Open editors capture normalized owner units.
 
-The target editor was compared on 2026-10-06 with OpenAthlete commit
-[`5614ee9d88f3def49e0991298bac9a9e92764f0d`](https://github.com/openathleteorg/openathlete/tree/5614ee9d88f3def49e0991298bac9a9e92764f0d),
-using its [target intensity calculations](https://github.com/openathleteorg/openathlete/blob/5614ee9d88f3def49e0991298bac9a9e92764f0d/libs/shared/src/utils/target-intensity.ts),
-[pace conversion utilities](https://github.com/openathleteorg/openathlete/blob/5614ee9d88f3def49e0991298bac9a9e92764f0d/libs/shared/src/utils/workout.utils.ts),
-and [target form](https://github.com/openathleteorg/openathlete/blob/5614ee9d88f3def49e0991298bac9a9e92764f0d/apps/web/src/components/workout/target-form.tsx).
-A standalone differential runner exercised 207 normalized cases against the actual source: relative maximum-HR,
-FTP/critical-power and speed calculations, single/range targets, zero and >100% percentages, fractional references,
-metric/imperial presentation, absolute pace conversion, and canonical preservation through pace/speed and sport changes.
-All passed. `planned-workout-target-editor.helper.spec.ts` retains fixed numerical reference outputs for regression;
-the external implementation is not a project dependency.
-
-The comparison normalizes OpenAthlete's stored fractions to QS percentage points and supplied speed references from
-km/h to m/s. Using the same numerical VMA value in that calculation does not make VMA physiologically equivalent to
-threshold speed or permit importing it as a QS reference. QS deliberately keeps explicit saved reference snapshots,
-strict validation and equal canonical bounds for single values. It never guesses relative mode from small absolute
-numbers or fills missing references from current athlete metrics/population defaults. OpenAthlete's zones, RPE, weight,
-other reference types and live-metric behavior are outside this editor change. This validates overlapping calculations
-and canonical preservation; it does not establish full application, provider or watch parity.
-
 MCP impact review: no wire expansion. Existing strict scheduled/library recipe reads and complete-recipe proposals
 already represent all eight target variants, all six reference kinds, both speed presentations and ordered two-target
 steps. Added schema fixtures cover fractional values, zero and >100% bounds, repeats, order and rejection of local
@@ -1975,9 +1956,8 @@ manual-only and repeat/final boundaries. Local OR fixtures do not prove watch be
 ##### Current readings and boundary notifications (#784)
 
 The v5 screen baseline (retained by v6 for absent/false early Lap) builds on Training 01's reviewed v4 boundary/recovery logic and independently implements the documented partner [Guide schema](https://apizone.suunto.com/suuntoplus-guide-description),
-without dependencies or undocumented app-wrapper `alerts`, `trigger`, or `extensions`. Investigation compared
-[OpenAthlete](https://github.com/openathleteorg/openathlete/blob/main/apps/api/src/modules/providers-sync/mapping/suunto-guide.mapper.ts)
-and [suunto-mcp](https://github.com/googlarz/suunto-mcp/blob/main/src/guide-zip.ts); neither is imported or copied into QS.
+without dependencies or undocumented app-wrapper `alerts`, `trigger`, or `extensions`. Investigation also reviewed
+[suunto-mcp](https://github.com/googlarz/suunto-mcp/blob/main/src/guide-zip.ts) without importing or copying it into QS.
 Additional authored targets and ZoneSense remain separate in #773.
 
 - Running/Trail Running/Treadmill default to lap-average `pace` and current `heartRate`. Supported cycling

@@ -20,26 +20,23 @@ const targets: WorkoutTargetV1[] = [
 ];
 const preferences = [normalizeUserUnitSettings({}), normalizeUserUnitSettings({ speedUnits: [SpeedUnits.MilesPerHour], paceUnits: [PaceUnits.MinutesPerMile], swimPaceUnits: [SwimPaceUnits.MinutesPer100Yard] })];
 
-// Numerical outputs from OpenAthlete target-intensity.ts at 5614ee9d88f3def49e0991298bac9a9e92764f0d.
-// Its fractions become QS percentage points. VMA 18 km/h becomes 5 m/s solely for the numerical comparison;
-// this does not equate VMA with threshold speed or authorize importing it as that reference.
-const openAthleteFixtures: { name: string; relative: WorkoutTargetV1; resolved: WorkoutTargetV1 }[] = [
-  { name: 'HR_MAX',
+const resolvedTargetFixtures: { name: string; relative: WorkoutTargetV1; resolved: WorkoutTargetV1 }[] = [
+  { name: 'maximum heart rate',
     relative: { kind: 'heart-rate', mode: 'relative', minimumPercent: 80, maximumPercent: 120, reference: { kind: 'max-heart-rate', bpm: 190 } },
     resolved: { kind: 'heart-rate', mode: 'absolute', minimumBpm: 152, maximumBpm: 228 } },
-  { name: 'FTP_CYCLING',
+  { name: 'functional threshold power',
     relative: { kind: 'power', mode: 'relative', minimumPercent: 80, maximumPercent: 120, reference: { kind: 'functional-threshold-power', watts: 250 } },
     resolved: { kind: 'power', mode: 'absolute', minimumWatts: 200, maximumWatts: 300 } },
-  { name: 'CRITICAL_POWER_CYCLING',
+  { name: 'critical power',
     relative: { kind: 'power', mode: 'relative', minimumPercent: 75, maximumPercent: 105, reference: { kind: 'critical-power', watts: 300 } },
     resolved: { kind: 'power', mode: 'absolute', minimumWatts: 225, maximumWatts: 315 } },
-  { name: 'VMA numerical speed scaling',
+  { name: 'threshold speed',
     relative: { kind: 'speed', mode: 'relative', presentation: 'pace', minimumPercent: 90, maximumPercent: 110, reference: { kind: 'threshold-speed', metersPerSecond: 5 } },
     resolved: { kind: 'speed', mode: 'absolute', presentation: 'pace', minimumMetersPerSecond: 4.5, maximumMetersPerSecond: 5.5 } },
 ];
 
-describe('pinned OpenAthlete numerical reference fixtures', () => {
-  it.each(openAthleteFixtures)('matches $name while retaining the explicit QS reference and percentages', ({ relative, resolved }) => {
+describe('manual workout target resolution', () => {
+  it.each(resolvedTargetFixtures)('resolves $name while retaining the explicit reference and percentages', ({ relative, resolved }) => {
     for (const units of preferences) {
       const draft = workoutTargetToManualEditor(relative, ActivityTypes.Running, units);
       expect(manualEditorTargetToWorkout(draft, ActivityTypes.Running, units)).toEqual(relative);
@@ -54,7 +51,7 @@ describe('pinned OpenAthlete numerical reference fixtures', () => {
     }
   });
 
-  it('matches the reference absolute 4–5 min/km pace conversion without inverting canonical bounds', () => {
+  it('converts absolute 4–5 min/km pace without inverting canonical bounds', () => {
     const draft = { ...createManualWorkoutEditorTarget('speed'), presentation: 'pace' as const, minimum: 4, maximum: 5 };
     const expected: WorkoutTargetV1 = { kind: 'speed', mode: 'absolute', presentation: 'pace',
       minimumMetersPerSecond: 3.3333333333333335, maximumMetersPerSecond: 4.166666666666667 };
