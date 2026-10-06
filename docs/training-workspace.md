@@ -882,6 +882,15 @@ The restore-availability fence remains authoritative. These readers wait for ser
 writes cannot establish an empty/complete week. Loading, errors and incomplete reads stay distinct. Account/range/retry
 changes clear source state, and completion results bind to the current owner and selection before use. Independent live
 listeners are not a transactional schedule/completion snapshot. The retry action resubscribes all weekly sources.
+The bounded Calendar reader and full schedule reader share the same state-verification path: the acknowledged
+state watch invalidates an uncached exact-document read from the same Firebase app, and only its result selects the
+active plan and schedule revision. Both retain 30-second initial acknowledgement, verification and final restore-fence
+lookup bounds with two retries. Failed or superseded verification cannot establish an empty schedule or stale revision.
+Weekly availability, active-plan and workout listeners also bound their initial acknowledgement to 30 seconds;
+completion coverage waits for every selected batch within that bound, and the recorded-event reader has the same
+initial-read limit. Timeouts reach the existing source error/Retry UI without establishing empty data. Acknowledged
+live listeners do not expire during idle periods. Training availability errors retry through the Calendar action;
+inner schedule reads retain their existing two retries.
 Incomplete scans with no eligible prescriptions do not establish **No prescriptions**. Activity coverage also follows
 the bounded read into the grid and selected-day panel: observed activities remain navigable, but day totals, aggregate
 day training impact and period sport-volume totals are withheld. Accessible day labels and empty states do not claim
