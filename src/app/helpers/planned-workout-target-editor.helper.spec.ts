@@ -1,6 +1,6 @@
 import { ActivityTypes, SpeedUnits, PaceUnits, SwimPaceUnits } from '@sports-alliance/sports-lib';
 import { describe, expect, it } from 'vitest';
-import { parseWorkoutStructureV1, type WorkoutTargetV1 } from '@shared/planned-workout';
+import { formatWorkoutTargetV1, parseWorkoutStructureV1, type WorkoutTargetV1 } from '@shared/planned-workout';
 import { normalizeUserUnitSettings } from '@shared/unit-aware-display';
 import { manualWorkoutEditorToStructure, workoutStructureToManualEditor } from './planned-workout-editor.helper';
 import {
@@ -19,6 +19,50 @@ const targets: WorkoutTargetV1[] = [
   ...(['pace', 'speed'] as const).map(presentation => ({ kind: 'speed' as const, mode: 'relative' as const, presentation, minimumPercent: 0, maximumPercent: 130.123456789, reference: { kind: 'threshold-speed' as const, metersPerSecond: 3.1234567890123 } })),
 ];
 const preferences = [normalizeUserUnitSettings({}), normalizeUserUnitSettings({ speedUnits: [SpeedUnits.MilesPerHour], paceUnits: [PaceUnits.MinutesPerMile], swimPaceUnits: [SwimPaceUnits.MinutesPer100Yard] })];
+
+// Numerical outputs from OpenAthlete target-intensity.ts at 5614ee9d88f3def49e0991298bac9a9e92764f0d.
+// Its fractions become QS percentage points. VMA 18 km/h becomes 5 m/s solely for the numerical comparison;
+// this does not equate VMA with threshold speed or authorize importing it as that reference.
+const openAthleteFixtures: { name: string; relative: WorkoutTargetV1; resolved: WorkoutTargetV1 }[] = [
+  { name: 'HR_MAX',
+    relative: { kind: 'heart-rate', mode: 'relative', minimumPercent: 80, maximumPercent: 120, reference: { kind: 'max-heart-rate', bpm: 190 } },
+    resolved: { kind: 'heart-rate', mode: 'absolute', minimumBpm: 152, maximumBpm: 228 } },
+  { name: 'FTP_CYCLING',
+    relative: { kind: 'power', mode: 'relative', minimumPercent: 80, maximumPercent: 120, reference: { kind: 'functional-threshold-power', watts: 250 } },
+    resolved: { kind: 'power', mode: 'absolute', minimumWatts: 200, maximumWatts: 300 } },
+  { name: 'CRITICAL_POWER_CYCLING',
+    relative: { kind: 'power', mode: 'relative', minimumPercent: 75, maximumPercent: 105, reference: { kind: 'critical-power', watts: 300 } },
+    resolved: { kind: 'power', mode: 'absolute', minimumWatts: 225, maximumWatts: 315 } },
+  { name: 'VMA numerical speed scaling',
+    relative: { kind: 'speed', mode: 'relative', presentation: 'pace', minimumPercent: 90, maximumPercent: 110, reference: { kind: 'threshold-speed', metersPerSecond: 5 } },
+    resolved: { kind: 'speed', mode: 'absolute', presentation: 'pace', minimumMetersPerSecond: 4.5, maximumMetersPerSecond: 5.5 } },
+];
+
+describe('pinned OpenAthlete numerical reference fixtures', () => {
+  it.each(openAthleteFixtures)('matches $name while retaining the explicit QS reference and percentages', ({ relative, resolved }) => {
+    for (const units of preferences) {
+      const draft = workoutTargetToManualEditor(relative, ActivityTypes.Running, units);
+      expect(manualEditorTargetToWorkout(draft, ActivityTypes.Running, units)).toEqual(relative);
+      expect(manualEditorTargetPreview(draft, ActivityTypes.Running, units))
+        .toBe(`Resolved · ${formatWorkoutTargetV1(resolved, units, undefined, ActivityTypes.Running)}`);
+      if (relative.kind === 'speed' && resolved.kind === 'speed') {
+        const switched = changeManualEditorTargetPresentation(draft, 'speed', ActivityTypes.Running, units);
+        expect(manualEditorTargetToWorkout(switched, ActivityTypes.Running, units)).toEqual({ ...relative, presentation: 'speed' });
+        expect(manualEditorTargetPreview(switched, ActivityTypes.Running, units))
+          .toBe(`Resolved · ${formatWorkoutTargetV1({ ...resolved, presentation: 'speed' }, units, undefined, ActivityTypes.Running)}`);
+      }
+    }
+  });
+
+  it('matches the reference absolute 4–5 min/km pace conversion without inverting canonical bounds', () => {
+    const draft = { ...createManualWorkoutEditorTarget('speed'), presentation: 'pace' as const, minimum: 4, maximum: 5 };
+    const expected: WorkoutTargetV1 = { kind: 'speed', mode: 'absolute', presentation: 'pace',
+      minimumMetersPerSecond: 3.3333333333333335, maximumMetersPerSecond: 4.166666666666667 };
+    expect(manualEditorTargetToWorkout(draft, ActivityTypes.Running)).toEqual(expected);
+    const switched = changeManualEditorTargetPresentation(draft, 'speed', ActivityTypes.Running);
+    expect(manualEditorTargetToWorkout(switched, ActivityTypes.Running)).toEqual({ ...expected, presentation: 'speed' });
+  });
+});
 
 describe('ordered manual workout targets', () => {
   it.each(targets)('reopens and resaves exact $kind $mode $presentation with both unit systems', target => {
