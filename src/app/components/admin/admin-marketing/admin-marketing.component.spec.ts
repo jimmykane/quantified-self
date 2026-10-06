@@ -3,6 +3,8 @@ import { describe, expect, it, vi } from 'vitest';
 import { AdminMarketingComponent } from './admin-marketing.component';
 import { AppFunctionsService } from '../../../services/app.functions.service';
 import { AppHapticsService } from '../../../services/app.haptics.service';
+import { MatDialog } from '@angular/material/dialog';
+import { of, Subject } from 'rxjs';
 import type { MarketingCampaignListResponse, MarketingCampaignView } from '../../../../../shared/admin-marketing';
 
 const listing: MarketingCampaignListResponse = { campaigns: [], dailyCap: 10, usedToday: 0, utcDate: '2026-09-23' };
@@ -16,16 +18,401 @@ const pausedCampaign: MarketingCampaignView = {
   createdAt: '2026-09-23T10:00:00Z', updatedAt: '2026-09-23T10:00:00Z', startedAt: '2026-09-23T10:00:00Z',
   lastTestMailId: 'previous-test', lastTestState: 'SUCCESS', lastTestTo: 'qa@example.org',
 };
+const readyCampaign: MarketingCampaignView = { ...pausedCampaign, status: 'ready', startedAt: null,
+  stats: { eligible: 10, pending: 10, queued: 0, accepted: 0, failed: 0, skipped: 0 } };
 function setup(call = vi.fn(async () => ({ data: listing }))) {
   const haptics = { selection: vi.fn(), success: vi.fn(), error: vi.fn() };
+  const dialog = { open: vi.fn(() => ({ afterClosed: () => of(false), close: vi.fn() })) };
   TestBed.configureTestingModule({ providers: [
     { provide: AppFunctionsService, useValue: { call } },
     { provide: AppHapticsService, useValue: haptics },
+    { provide: MatDialog, useValue: dialog },
   ] });
-  return { component: TestBed.runInInjectionContext(() => new AdminMarketingComponent()), haptics, call };
+  TestBed.overrideComponent(AdminMarketingComponent, { add: { providers: [{ provide: MatDialog, useValue: dialog }] } });
+  return { component: TestBed.runInInjectionContext(() => new AdminMarketingComponent()), haptics, call, dialog };
 }
 
-describe('AdminMarketingComponent haptics', () => {
+describe('AdminMarketingComponent', () => {
+  it('confirms deletion of a prepared campaign including its recipient list without starting it', async () => {
+    const call = vi.fn(async (name: string) => ({ data: name === 'changeMarketingCampaignStatus'
+      ? { id: readyCampaign.id, deleted: true } : listing }));
+    const { component, haptics, dialog } = setup(call);
+    component.loading.set(false);
+    component.list = { ...listing, campaigns: [readyCampaign] };
+    component.choose(readyCampaign, false);
+    expect(component.canDelete).toBe(true);
+    dialog.open.mockReturnValue({ afterClosed: () => of(true), close: vi.fn() });
+    await component.deleteCampaign();
+    expect(dialog.open).toHaveBeenCalledWith(expect.anything(), expect.objectContaining({ data: expect.objectContaining({
+      title: 'Delete campaign?', confirmText: 'Delete campaign',
+      message: expect.stringContaining('Any prepared recipient list is also removed.'),
+    }) }));
+    expect(call).toHaveBeenCalledWith('changeMarketingCampaignStatus', { id: readyCampaign.id, action: 'delete' });
+    expect(component.selected).toBeNull();
+    expect(component.list?.campaigns).toEqual([]);
+    expect(component.notice).toBe('Campaign deleted.');
+    expect(haptics.success).toHaveBeenCalledTimes(1);
+    component.ngOnDestroy();
+  });
+
+  it('hides deletion for an inconsistent ready campaign that already started', async () => {
+    const { component, dialog } = setup();
+    component.loading.set(false);
+    component.choose({ ...readyCampaign, startedAt: pausedCampaign.startedAt }, false);
+    expect(component.canDelete).toBe(false);
+    await component.deleteCampaign();
+    expect(dialog.open).not.toHaveBeenCalled();
+    component.ngOnDestroy();
+  });
+
+  it('confirms draft deletion, shows progress, removes the draft and resets unsaved edits', async () => {
+    const campaign = { ...pausedCampaign, status: 'draft' as const };
+    let release!: () => void;
+    const pending = new Promise<void>(resolve => { release = resolve; });
+    const call = vi.fn(async (name: string) => name === 'changeMarketingCampaignStatus'
+      ? (await pending, { data: { id: campaign.id, deleted: true } }) : { data: listing });
+    const { component, haptics, dialog } = setup(call);
+    component.loading.set(false);
+    component.list = { ...listing, campaigns: [campaign] };
+    component.choose(campaign, false);
+    component.draft.subject = 'Unsaved changes'; component.dirty = true;
+    dialog.open.mockReturnValue({ afterClosed: () => of(true), close: vi.fn() });
+    const deletion = component.deleteCampaign();
+    await Promise.resolve();
+    expect(dialog.open).toHaveBeenCalledWith(expect.anything(), expect.objectContaining({ data: expect.objectContaining({
+      title: 'Delete draft?', message: expect.stringContaining(campaign.name), confirmColor: 'warn',
+    }) }));
+    expect(component.busy).toBe('Deleting campaign');
+    expect(call).toHaveBeenCalledWith('changeMarketingCampaignStatus', { id: campaign.id, action: 'delete' });
+    expect(haptics.success).not.toHaveBeenCalled();
+    release(); await deletion;
+    expect(component.selected).toBeNull();
+    expect(component.draft.subject).toBe('');
+    expect(component.dirty).toBe(false);
+    expect(component.preview).toBeNull();
+    expect(component.list?.campaigns).toEqual([]);
+    expect(component.notice).toBe('Draft deleted.');
+    expect(haptics.selection).toHaveBeenCalledTimes(1);
+    expect(haptics.success).toHaveBeenCalledTimes(1);
+    component.ngOnDestroy();
+  });
+
+  it('preserves the draft when confirmation is cancelled or the delete fails', async () => {
+    const { component, call, dialog, haptics } = setup();
+    component.loading.set(false);
+    component.choose({ ...pausedCampaign, status: 'draft' }, false);
+    component.draft.subject = 'Unsaved edits'; component.dirty = true;
+    await component.deleteCampaign();
+    expect(call).not.toHaveBeenCalled();
+    expect(component.draft.subject).toBe('Unsaved edits');
+    expect(haptics.success).not.toHaveBeenCalled();
+    expect(haptics.error).not.toHaveBeenCalled();
+    dialog.open.mockReturnValue({ afterClosed: () => of(true), close: vi.fn() });
+    call.mockRejectedValueOnce(new Error('Only drafts and prepared campaigns that have not started can be deleted.'));
+    await component.deleteCampaign();
+    expect(component.selected?.id).toBe(pausedCampaign.id);
+    expect(component.draft.subject).toBe('Unsaved edits');
+    expect(component.error).toContain('have not started');
+    expect(component.busy).toBe('');
+    expect(haptics.error).toHaveBeenCalledTimes(1);
+    component.ngOnDestroy();
+  });
+
+  it('ignores duplicate confirmation, changed selection and confirmation after navigation', async () => {
+    const { component, call, dialog, haptics } = setup();
+    const closed = new Subject<boolean>();
+    const close = vi.fn((value: boolean) => closed.next(value));
+    dialog.open.mockReturnValue({ afterClosed: () => closed, close });
+    component.loading.set(false);
+    component.choose({ ...pausedCampaign, status: 'draft' }, false);
+    const deletion = component.deleteCampaign();
+    await component.deleteCampaign();
+    expect(dialog.open).toHaveBeenCalledTimes(1);
+    component.newDraft(false);
+    closed.next(true); await deletion;
+    expect(call).not.toHaveBeenCalled();
+    component.choose({ ...pausedCampaign, status: 'draft' }, false);
+    const afterNavigation = component.deleteCampaign();
+    component.ngOnDestroy();
+    await afterNavigation;
+    expect(close).toHaveBeenCalledWith(false);
+    expect(call).not.toHaveBeenCalled();
+    expect(haptics.success).not.toHaveBeenCalled();
+  });
+
+  it.each(['preparing', 'running', 'paused', 'completed'] as const)('does not offer deletion for %s campaigns', async status => {
+    const { component, dialog, haptics } = setup();
+    component.loading.set(false);
+    component.choose({ ...pausedCampaign, status }, false);
+    expect(component.canDelete).toBe(false);
+    await component.deleteCampaign();
+    expect(dialog.open).not.toHaveBeenCalled();
+    expect(haptics.selection).not.toHaveBeenCalled();
+    component.ngOnDestroy();
+  });
+
+  it('renders deletion beside a saved draft, keeps its progress control stable and offers cleanup retry', async () => {
+    const { dialog } = setup();
+    const fixture = TestBed.createComponent(AdminMarketingComponent);
+    fixture.detectChanges(); await fixture.whenStable(); fixture.detectChanges();
+    const component = fixture.componentInstance;
+    const header = () => (fixture.nativeElement as HTMLElement).querySelector('.campaign-header');
+    expect(header()?.querySelector('button')).toBeNull();
+    component.choose({ ...pausedCampaign, status: 'draft' }, false);
+    fixture.detectChanges(); await fixture.whenStable(); fixture.detectChanges();
+    let button = header()?.querySelector('button') as HTMLButtonElement;
+    expect(button.textContent).toContain('Delete draft');
+    component.busy = 'Deleting campaign'; component.deletingCampaignId.set(pausedCampaign.id); fixture.detectChanges();
+    expect(header()?.querySelector('button')).toBe(button);
+    expect(button.disabled).toBe(true);
+    expect(button.textContent).toContain('Deleting…');
+    expect(button.querySelector('.refresh-button-icon mat-spinner')).not.toBeNull();
+    component.busy = ''; component.deletingCampaignId.set(null); component.loading.set(true); fixture.detectChanges();
+    expect(button.disabled).toBe(true);
+    await component.deleteCampaign();
+    expect(dialog.open).not.toHaveBeenCalled();
+    component.loading.set(false);
+    component.choose({ ...pausedCampaign, status: 'deleting' }, false); fixture.detectChanges();
+    button = header()?.querySelector('button') as HTMLButtonElement;
+    expect(button.textContent).toContain('Retry deletion');
+    expect(component.canEdit).toBe(false);
+    expect(component.canSendTest).toBe(false);
+    expect((fixture.nativeElement as HTMLElement).textContent).not.toContain('Clone');
+    component.choose(pausedCampaign, false); fixture.detectChanges();
+    expect(header()?.querySelector('button')).toBeNull();
+    fixture.destroy();
+  });
+
+  it('deletes a draft from the list without selecting it or discarding the current unsaved composer', async () => {
+    const target = { ...pausedCampaign, status: 'draft' as const };
+    const call = vi.fn(async (name: string) => ({ data: name === 'changeMarketingCampaignStatus' ? { id: target.id, deleted: true } : listing }));
+    const { component, dialog, haptics } = setup(call);
+    component.loading.set(false);
+    component.list = { ...listing, campaigns: [target] };
+    component.draft.subject = 'Keep this unsaved message'; component.dirty = true;
+    dialog.open.mockReturnValue({ afterClosed: () => of(true), close: vi.fn() });
+    await component.deleteCampaign(target);
+    expect(call).toHaveBeenCalledWith('changeMarketingCampaignStatus', { id: target.id, action: 'delete' });
+    expect(component.selected).toBeNull();
+    expect(component.draft.subject).toBe('Keep this unsaved message');
+    expect(component.dirty).toBe(true);
+    expect(haptics.success).toHaveBeenCalledTimes(1);
+    expect(dialog.open.mock.calls[0][1].data.message).not.toContain('discards unsaved edits');
+    component.ngOnDestroy();
+  });
+
+  it('shows deletion in the list and header for a prepared campaign before Start', async () => {
+    const target = { ...pausedCampaign, status: 'draft' as const };
+    const ready = { ...readyCampaign, id: 'ready_campaign_1234' };
+    const { dialog, call } = setup(vi.fn(async () => ({ data: { ...listing, campaigns: [target, ready] } })));
+    const fixture = TestBed.createComponent(AdminMarketingComponent);
+    fixture.detectChanges(); await fixture.whenStable(); fixture.detectChanges();
+    fixture.componentInstance.choose(ready, false); fixture.detectChanges();
+    const root = fixture.nativeElement as HTMLElement;
+    const rows = root.querySelectorAll('.campaign-list-item');
+    const deletion = rows[0].querySelector('button[aria-label]') as HTMLButtonElement;
+    expect(deletion.getAttribute('aria-label')).toBe(`Delete draft: ${target.name}`);
+    expect(deletion.closest('.campaign-row')).toBeNull();
+    expect(rows[1].querySelector('button[aria-label]')?.getAttribute('aria-label')).toBe(`Delete campaign: ${ready.name}`);
+    expect(root.querySelector('.campaign-header button')?.textContent).toContain('Delete campaign');
+    deletion.click(); await fixture.whenStable(); fixture.detectChanges();
+    expect(dialog.open).toHaveBeenCalledTimes(1);
+    expect(fixture.componentInstance.selected?.id).toBe(ready.id);
+    expect(call).not.toHaveBeenCalledWith('changeMarketingCampaignStatus', expect.anything());
+    fixture.destroy();
+  });
+
+  it('refreshes a partially deleted draft to expose retry without losing unsaved text or its failure', async () => {
+    const locked = { ...pausedCampaign, status: 'deleting' as const };
+    const call = vi.fn(async (name: string) => {
+      if (name === 'changeMarketingCampaignStatus') throw new Error('Cleanup unavailable');
+      return { data: { ...listing, campaigns: [locked] } };
+    });
+    const { component, dialog, haptics } = setup(call);
+    component.loading.set(false);
+    component.choose({ ...pausedCampaign, status: 'draft' }, false);
+    component.draft.subject = 'Keep until cleanup succeeds'; component.dirty = true;
+    dialog.open.mockReturnValue({ afterClosed: () => of(true), close: vi.fn() });
+    await component.deleteCampaign();
+    expect(component.selected?.status).toBe('deleting');
+    expect(component.canEdit).toBe(false);
+    expect(component.canDelete).toBe(true);
+    expect(component.draft.subject).toBe('Keep until cleanup succeeds');
+    expect(component.error).toBe('Cleanup unavailable');
+    expect(component.deletingCampaignId()).toBeNull();
+    expect(haptics.error).toHaveBeenCalledTimes(1);
+    expect(haptics.success).not.toHaveBeenCalled();
+    component.ngOnDestroy();
+  });
+
+  it('does not delete a prepared campaign that started while confirmation was open', async () => {
+    const target = readyCampaign;
+    const { component, call, dialog } = setup();
+    const closed = new Subject<boolean>();
+    component.loading.set(false); component.list = { ...listing, campaigns: [target] };
+    dialog.open.mockReturnValue({ afterClosed: () => closed, close: vi.fn() });
+    const deletion = component.deleteCampaign(target);
+    component.list = { ...listing, campaigns: [{ ...target, status: 'running', startedAt: '2026-10-06T09:00:00Z' }] };
+    closed.next(true); await deletion;
+    expect(call).not.toHaveBeenCalled();
+    component.ngOnDestroy();
+  });
+
+  it('does not refresh or give feedback after a pending deletion finishes following navigation', async () => {
+    let release!: () => void;
+    const pending = new Promise<void>(resolve => { release = resolve; });
+    const call = vi.fn(async () => { await pending; return { data: { deleted: true } }; });
+    const { component, dialog, haptics } = setup(call);
+    component.loading.set(false);
+    component.choose({ ...pausedCampaign, status: 'draft' }, false);
+    dialog.open.mockReturnValue({ afterClosed: () => of(true), close: vi.fn() });
+    const deletion = component.deleteCampaign(); await Promise.resolve();
+    component.ngOnDestroy(); release(); await deletion;
+    expect(call).toHaveBeenCalledTimes(1);
+    expect(haptics.success).not.toHaveBeenCalled();
+    expect(haptics.error).not.toHaveBeenCalled();
+  });
+
+  it('shows initial loading instead of an empty workspace or a default limit until the list arrives', async () => {
+    let release!: (value: { data: MarketingCampaignListResponse }) => void;
+    const pending = new Promise<{ data: MarketingCampaignListResponse }>(resolve => { release = resolve; });
+    const { call, haptics } = setup(vi.fn(() => pending));
+    const fixture = TestBed.createComponent(AdminMarketingComponent);
+    fixture.detectChanges();
+    const root = fixture.nativeElement as HTMLElement;
+    expect(root.querySelector('.initial-loading')?.textContent).toContain('Loading campaigns');
+    expect(root.querySelector('main')?.getAttribute('aria-busy')).toBe('true');
+    expect(root.querySelector('.workspace')).toBeNull();
+    expect(root.querySelector('input')).toBeNull();
+    expect(call).toHaveBeenCalledWith('listMarketingCampaigns');
+    release({ data: { ...listing, dailyCap: 37, campaigns: [pausedCampaign] } });
+    await fixture.whenStable();
+    fixture.detectChanges();
+    await fixture.whenStable();
+    fixture.detectChanges();
+    expect(root.querySelector('.initial-loading')).toBeNull();
+    expect(root.querySelector('main')?.getAttribute('aria-busy')).toBe('false');
+    expect(root.querySelector('.campaign-row')?.textContent).toContain(pausedCampaign.name);
+    expect(root.querySelector<HTMLInputElement>('.limit-card input')?.value).toBe('37');
+    expect(haptics.success).not.toHaveBeenCalled();
+    expect(haptics.error).not.toHaveBeenCalled();
+    fixture.destroy();
+  });
+  it('shows an initial failure with a working retry and distinguishes a loaded empty campaign list', async () => {
+    let reject!: (error: Error) => void;
+    let releaseRetry!: (value: { data: MarketingCampaignListResponse }) => void;
+    const first = new Promise<never>((_resolve, fail) => { reject = fail; });
+    const retry = new Promise<{ data: MarketingCampaignListResponse }>(resolve => { releaseRetry = resolve; });
+    const call = vi.fn().mockReturnValueOnce(first).mockReturnValueOnce(retry);
+    const { haptics } = setup(call);
+    const fixture = TestBed.createComponent(AdminMarketingComponent);
+    fixture.detectChanges();
+    reject(new Error('Unable to load campaigns'));
+    await fixture.whenStable();
+    fixture.detectChanges();
+    const root = fixture.nativeElement as HTMLElement;
+    expect(root.querySelector('[role="alert"]')?.textContent).toContain('Unable to load campaigns');
+    expect(root.querySelector('.initial-loading')).toBeNull();
+    expect(root.querySelector('.workspace')).toBeNull();
+    expect(haptics.error).not.toHaveBeenCalled();
+    const manualRefresh = vi.spyOn(fixture.componentInstance, 'manualRefresh');
+    root.querySelector<HTMLButtonElement>('.initial-load-error button')!.click();
+    fixture.detectChanges();
+    expect(root.querySelector('.initial-loading')).not.toBeNull();
+    expect(root.querySelector('[role="alert"]')).toBeNull();
+    expect(call).toHaveBeenCalledTimes(2);
+    releaseRetry({ data: listing });
+    await manualRefresh.mock.results[0].value;
+    await fixture.whenStable();
+    fixture.detectChanges();
+    expect(root.querySelector('.campaign-empty')?.textContent).toContain('No campaigns yet');
+    expect(root.querySelector('.workspace')).not.toBeNull();
+    expect(root.querySelector('.initial-load-error')).toBeNull();
+    expect(haptics.success).toHaveBeenCalledTimes(1);
+    fixture.destroy();
+  });
+  it('keeps the editor and unsaved text in place while refreshing and disables duplicate refreshes', async () => {
+    let release!: (value: { data: MarketingCampaignListResponse }) => void;
+    const pending = new Promise<{ data: MarketingCampaignListResponse }>(resolve => { release = resolve; });
+    let lists = 0;
+    const call = vi.fn((name: string) => {
+      if (name === 'listMarketingCampaigns') return ++lists === 1
+        ? Promise.resolve({ data: { ...listing, campaigns: [pausedCampaign] } }) : pending;
+      return Promise.resolve({ data: { subject: pausedCampaign.subject, html: '<p>Preview</p>', text: 'Preview' } });
+    });
+    const { haptics } = setup(call);
+    const fixture = TestBed.createComponent(AdminMarketingComponent);
+    const component = fixture.componentInstance;
+    component.choose(pausedCampaign, false);
+    fixture.detectChanges();
+    await fixture.whenStable();
+    fixture.detectChanges();
+    await fixture.whenStable();
+    component.draft.subject = 'My unsaved subject';
+    component.dirty = true;
+    fixture.detectChanges();
+    await fixture.whenStable();
+    fixture.detectChanges();
+    const root = fixture.nativeElement as HTMLElement;
+    const editor = root.querySelector('app-marketing-rich-editor');
+    const refresh = component.refresh();
+    fixture.detectChanges();
+    expect(root.querySelector('.refresh-status')?.textContent).toContain('Refreshing campaigns');
+    expect(root.querySelector('app-marketing-rich-editor')).toBe(editor);
+    expect(root.querySelector<HTMLInputElement>('input[maxlength="180"]')?.value).toBe('My unsaved subject');
+    const refreshButton = root.querySelector<HTMLButtonElement>('button[aria-label="Refresh status"]');
+    expect(refreshButton?.disabled).toBe(true);
+    expect(refreshButton?.textContent).toContain('Refreshing');
+    expect(refreshButton?.querySelector('mat-spinner')).not.toBeNull();
+    await component.manualRefresh();
+    expect(lists).toBe(2);
+    release({ data: { ...listing, campaigns: [{ ...pausedCampaign, stats: { ...pausedCampaign.stats, accepted: 3 } }] } });
+    await refresh;
+    fixture.detectChanges();
+    expect(root.querySelector('.refresh-status')).toBeNull();
+    expect(root.querySelector('app-marketing-rich-editor')).toBe(editor);
+    expect(component.draft.subject).toBe('My unsaved subject');
+    expect(component.counts?.accepted).toBe(3);
+    expect(haptics.success).not.toHaveBeenCalled();
+    fixture.destroy();
+  });
+  it('keeps loading active when an older response arrives while the latest refresh is pending', async () => {
+    let releaseOld!: (value: { data: MarketingCampaignListResponse }) => void;
+    let releaseLatest!: (value: { data: MarketingCampaignListResponse }) => void;
+    const old = new Promise<{ data: MarketingCampaignListResponse }>(resolve => { releaseOld = resolve; });
+    const latest = new Promise<{ data: MarketingCampaignListResponse }>(resolve => { releaseLatest = resolve; });
+    const { component } = setup(vi.fn().mockReturnValueOnce(old).mockReturnValueOnce(latest));
+    const olderRefresh = component.refresh();
+    const newerRefresh = component.refresh();
+    releaseOld({ data: { ...listing, dailyCap: 1 } });
+    await olderRefresh;
+    expect(component.loading()).toBe(true);
+    expect(component.list).toBeNull();
+    releaseLatest({ data: { ...listing, dailyCap: 25 } });
+    await newerRefresh;
+    expect(component.loading()).toBe(false);
+    expect(component.cap).toBe(25);
+    component.ngOnDestroy();
+  });
+  it('clears the loading state when a failed mutation invalidates an earlier refresh', async () => {
+    let releaseOld!: (value: { data: MarketingCampaignListResponse }) => void;
+    const old = new Promise<{ data: MarketingCampaignListResponse }>(resolve => { releaseOld = resolve; });
+    const call = vi.fn().mockResolvedValueOnce({ data: listing }).mockReturnValueOnce(old).mockRejectedValueOnce(new Error('Limit update failed'));
+    const { component, haptics } = setup(call);
+    await component.refresh();
+    const refresh = component.manualRefresh();
+    expect(component.loading()).toBe(true);
+    component.cap = 20;
+    await component.changeCap();
+    expect(component.loading()).toBe(false);
+    expect(component.error).toBe('Limit update failed');
+    releaseOld({ data: { ...listing, dailyCap: 1 } });
+    await refresh;
+    expect(component.loading()).toBe(false);
+    expect(component.error).toBe('Limit update failed');
+    expect(haptics.error).toHaveBeenCalledTimes(1);
+    component.ngOnDestroy();
+  });
   it('defaults to immediate sending and gives selection feedback only for accepted schedule changes', () => {
     const { component, haptics } = setup();
     expect(component.scheduleMode).toBe('now');
@@ -203,6 +590,8 @@ describe('AdminMarketingComponent haptics', () => {
     fixture.detectChanges();
     await fixture.whenStable();
     fixture.detectChanges();
+    await fixture.whenStable();
+    fixture.detectChanges();
     const root = fixture.nativeElement as HTMLElement;
     const action = (label: string) => Array.from(root.querySelectorAll<HTMLButtonElement>('.actions button'))
       .find(button => button.textContent?.trim() === label)!;
@@ -325,17 +714,21 @@ describe('AdminMarketingComponent haptics', () => {
     expect(call).not.toHaveBeenCalledWith('saveMarketingCampaign', expect.anything());
     expect(component.notice).toContain('Check that inbox');
   });
-  it('shows the test recipient field before a campaign is saved', () => {
+  it('shows the test recipient field before a campaign is saved', async () => {
     setup();
     const fixture = TestBed.createComponent(AdminMarketingComponent);
+    fixture.detectChanges();
+    await fixture.whenStable();
     fixture.detectChanges();
     expect(fixture.nativeElement.querySelector('.writing-column input[type="email"]')).not.toBeNull();
     fixture.destroy();
   });
-  it('keeps Send test disabled until the recipient address is valid', () => {
+  it('keeps Send test disabled until the recipient address is valid', async () => {
     setup();
     const fixture = TestBed.createComponent(AdminMarketingComponent);
     fixture.componentInstance.preview = { subject: 'A note', html: '<p>Hello</p>', text: 'Hello' };
+    fixture.detectChanges();
+    await fixture.whenStable();
     fixture.detectChanges();
     const input = fixture.nativeElement.querySelector('.test-send input[type="email"]') as HTMLInputElement;
     const button = fixture.nativeElement.querySelector('.test-send button') as HTMLButtonElement;

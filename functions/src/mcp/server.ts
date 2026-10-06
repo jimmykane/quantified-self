@@ -425,16 +425,36 @@ function sendOAuthError(
     status: (statusCode: number) => { json: (body: unknown) => unknown };
   },
   error: unknown,
+  tokenDiagnostics?: McpTokenRequestDiagnostics,
 ): void {
   const oauthError = error instanceof McpOAuthError
     ? error
     : new McpOAuthError('temporarily_unavailable', 'The authorization service is unavailable.', 503);
-  if (!(error instanceof McpOAuthError)) {
+  if (tokenDiagnostics) {
+    const diagnostics = {
+      ...tokenDiagnostics,
+      statusCode: oauthError.statusCode,
+      errorCode: oauthError.code,
+      reason: error instanceof McpOAuthClientAuthenticationError
+        ? 'invalid_client_authentication'
+        : error instanceof McpOAuthError
+          ? error.diagnosticReason || error.code
+          : 'unexpected_error',
+      connectionRevoked: error instanceof McpOAuthError
+        ? error.diagnosticReason === 'refresh_token_reuse' : null,
+      ...(error instanceof McpOAuthClientAuthenticationError ? { stage: error.stage } : {}),
+    };
+    if (oauthError.statusCode >= 500) {
+      logger.error('[MCP OAuth] Token request rejected', diagnostics);
+    } else {
+      logger.warn('[MCP OAuth] Token request rejected', diagnostics);
+    }
+  } else if (!(error instanceof McpOAuthError)) {
     logger.error('[MCP OAuth] Request failed unexpectedly', {
       errorName: error instanceof Error ? error.name : 'unknown',
     });
   }
-  if (error instanceof McpOAuthClientAuthenticationError) {
+  if (!tokenDiagnostics && error instanceof McpOAuthClientAuthenticationError) {
     logger.warn('[MCP OAuth] Client authentication rejected', {
       stage: error.stage,
       errorCode: error.code,
@@ -447,6 +467,33 @@ function sendOAuthError(
     error: oauthError.code,
     error_description: oauthError.message,
   });
+}
+
+interface McpTokenRequestDiagnostics {
+  clientFamily: McpDiagnosticClientFamily;
+  grantType: 'authorization_code' | 'refresh_token' | 'unsupported_or_invalid' | 'not_parsed';
+  resourceStatus: 'matches' | 'mismatch' | 'missing_or_invalid' | 'not_parsed';
+  elapsedMs: number;
+}
+
+function mcpTokenRequestDiagnostics(
+  request: Pick<Request, 'get'>,
+  params: Record<string, unknown> | undefined,
+  baseUrl: string,
+  startedAtMs: number,
+): McpTokenRequestDiagnostics {
+  const grantType = params?.grant_type;
+  return {
+    clientFamily: classifyMcpDiagnosticClientFamily(request.get('user-agent')),
+    grantType: !params ? 'not_parsed'
+      : grantType === 'authorization_code' || grantType === 'refresh_token'
+        ? grantType : 'unsupported_or_invalid',
+    resourceStatus: !params ? 'not_parsed'
+      : typeof params.resource !== 'string' || !params.resource.trim()
+        ? 'missing_or_invalid'
+        : params.resource === `${baseUrl}/mcp` ? 'matches' : 'mismatch',
+    elapsedMs: Math.max(0, Date.now() - startedAtMs),
+  };
 }
 
 export function parseMcpFormEncodedBody(raw: string): Record<string, unknown> {
@@ -930,6 +977,15 @@ export function createMcpServer(
   });
 
   if (auth.scopes.includes(MCP_OAUTH_SCOPES.TrainingPlansRead)) {
+    registerMcpTool(server, 'get_workout_prescription_analysis', {
+      title: 'Analyze a workout prescription',
+      description: 'Read deterministic prescription analysis for one scheduled or saved workout reference. Returns exact prescribed time/distance subtotals, speed-based duration ranges, unknown contributions, authored purpose totals, bounded step definitions and repeat execution counts, plus owner-unit summary text. A partial subtotal is not a complete workout total. Early Lap allowances and execution counts identify numeric limits that can end sooner; totals describe the prescription, not actual elapsed time or distance. Uses only explicit speed targets and saved threshold-speed references; no athlete defaults, completion inference, TSS, or provider calls. Strength analysis describes its compatibility summary, not full exercise details. Requires Training plans read permission.',
+      inputSchema: TRAINING_READ_INPUTS.get_workout_prescription_analysis,
+      outputSchema: outputSchemas.get_workout_prescription_analysis,
+      annotations: READ_ONLY_TOOL_ANNOTATIONS,
+    }, input => runReadOnlyTool('get_workout_prescription_analysis', () => dataService.readTrainingPlans({
+      tool: 'get_workout_prescription_analysis', arguments: input, uid: auth.uid, connectionId: auth.connectionId, scopes: auth.scopes,
+    })));
     registerMcpTool(server, 'list_saved_workouts', {
       title: 'List saved workouts',
       description: 'Read up to 25 reusable saved workout titles and states per page. These recipes have no date or automatic sync consent. Follow the cursor with the same filters; restart after library edits. Requires Training plans read permission.',
@@ -2785,30 +2841,41 @@ export const mcpApi = onRequest(MCP_API_RUNTIME_OPTIONS, async (request, respons
 
   if (request.method === 'POST' && path === '/oauth/token') {
     noStore(response);
+    const startedAtMs = Date.now();
+    let params: Record<string, unknown> | undefined;
+    const diagnostics = () => mcpTokenRequestDiagnostics(request, params, baseUrl, startedAtMs);
     if (!isMcpFormUrlEncodedContentType(request.get('content-type'))) {
-      response.status(400).json({
-        error: 'invalid_request',
-        error_description: 'The token request must use application/x-www-form-urlencoded.',
-      });
+      sendOAuthError(response, new McpOAuthError(
+        'invalid_request',
+        'The token request must use application/x-www-form-urlencoded.',
+        400,
+        'unsupported_content_type',
+      ), diagnostics());
       return;
     }
     if (!isMcpRequestBodyWithinLimit(request.body, request.get('content-length'))) {
-      response.status(413).json({
-        error: 'invalid_request',
-        error_description: 'The token request body is too large.',
-      });
+      sendOAuthError(response, new McpOAuthError(
+        'invalid_request',
+        'The token request body is too large.',
+        413,
+        'request_body_too_large',
+      ), diagnostics());
       return;
     }
     try {
-      const params = parseFormBody(request);
+      params = parseFormBody(request);
       rejectRepeatedOAuthParameters(params);
       const grantType = requireMcpTokenGrantType(params.grant_type);
       const result = grantType === 'authorization_code'
         ? await getOAuthService().exchangeAuthorizationCode(params, baseUrl)
         : await getOAuthService().exchangeRefreshToken(params, baseUrl);
       response.json(result);
+      logger.info('[MCP OAuth] Token request served', {
+        ...diagnostics(),
+        statusCode: 200,
+      });
     } catch (error) {
-      sendOAuthError(response, error);
+      sendOAuthError(response, error, diagnostics());
     }
     return;
   }

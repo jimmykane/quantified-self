@@ -17,6 +17,13 @@
 .library-placement h3,
 .library-placement p { margin: 0; }
 .library-placement-error { color: var(--mat-sys-error); }
+.workout-library [hidden] { display: none; }
+.library-filters { display: grid; grid-template-columns: minmax(0, 2fr) repeat(2, minmax(0, 1fr)); gap: 12px; }
+.library-result-count, .library-editor-note { margin: 0; color: var(--mat-sys-on-surface-variant); }
+.library-placement-review { overflow-wrap: anywhere; }
+.library-placement .workout-summary, .library-prescription-details .workout-summary { max-height: 240px; overflow: auto; }
+.library-prescription-toggle { justify-self: start; }
+.library-placement fieldset { border: 0; padding: 0; margin: 0; min-width: 0; }
 .library-placement-fields {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
@@ -26,6 +33,7 @@
 .library-placement .form-actions { display: flex; flex-wrap: wrap; gap: 8px; justify-content: flex-end; }
 
 @media (max-width: 680px) {
+  .library-filters { grid-template-columns: minmax(0, 1fr); gap: 0; }
   .library-placement-fields { grid-template-columns: minmax(0, 1fr); gap: 0; }
   .workout-library .workout-row-actions { flex-wrap: wrap; }
   .library-placement .form-actions { justify-content: stretch; }
@@ -417,6 +425,30 @@
   gap: 8px;
   color: var(--mat-sys-on-surface-variant);
   font: var(--mat-sys-body-small);
+}
+
+.workout-prescription-summary { margin-block: 4px 0; }
+
+.editor-prescription-summary {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 4px 12px;
+  min-width: 0;
+  color: var(--mat-sys-on-surface-variant);
+  font: var(--mat-sys-body-small);
+}
+
+.editor-prescription-label {
+  color: var(--mat-sys-on-surface);
+  font: var(--mat-sys-label-large);
+}
+
+.editor-prescription-summary p {
+  flex: 1 1 240px;
+  min-width: 0;
+  margin: 0;
+  overflow-wrap: anywhere;
 }
 
 .workout-row-meta app-activity-type-icon {

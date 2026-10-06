@@ -1,8 +1,9 @@
-import { Component, ElementRef, OnDestroy, OnInit, ViewChild, inject } from '@angular/core';
+import { Component, ElementRef, OnDestroy, OnInit, ViewChild, inject, signal } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { MatButtonModule } from '@angular/material/button';
 import { MatCardModule } from '@angular/material/card';
+import { MatDialog, MatDialogModule, MatDialogRef } from '@angular/material/dialog';
 import { MatCheckboxModule } from '@angular/material/checkbox';
 import { MatFormFieldModule } from '@angular/material/form-field';
 import { MatIconModule } from '@angular/material/icon';
@@ -10,22 +11,29 @@ import { MatInputModule } from '@angular/material/input';
 import { MatProgressSpinnerModule } from '@angular/material/progress-spinner';
 import { RouterModule } from '@angular/router';
 import type { MarketingCampaignDraft, MarketingCampaignListResponse, MarketingCampaignView, MarketingDocument, MarketingPlan } from '../../../../../shared/admin-marketing';
+import { canDeleteMarketingCampaign } from '../../../../../shared/admin-marketing';
 import { AppFunctionsService } from '../../../services/app.functions.service';
 import { PageHeaderComponent } from '../../shared/page-header/page-header.component';
 import { AppHapticsService } from '../../../services/app.haptics.service';
 import { MatButtonToggleModule } from '@angular/material/button-toggle';
 import { MatSlideToggleModule } from '@angular/material/slide-toggle';
 import { MatSelectModule } from '@angular/material/select';
+import { MatTooltipModule } from '@angular/material/tooltip';
 import { BrowserCompatibilityService } from '../../../services/browser.compatibility.service';
 import { validateMarketingSchedule } from '../../../../../shared/marketing-schedule';
 import { DomSanitizer, SafeHtml } from '@angular/platform-browser';
 import { MarketingRichEditorComponent } from './marketing-rich-editor.component';
 import { hasVisibleMarketingText } from './marketing-editor';
 import { openPreviewLinksOutsideFrame } from './marketing-preview-links';
+import { ConfirmationDialogComponent, ConfirmationDialogData } from '../../confirmation-dialog/confirmation-dialog.component';
+import { firstValueFrom } from 'rxjs';
 
 function emptyDraft(): MarketingCampaignDraft {
   return { name: '', subject: '', content: { type: 'doc', content: [{ type: 'paragraph', content: [] }] },
     cta: null, filters: { plans: ['free', 'basic', 'pro'], signupFrom: null, signupTo: null }, schedule: null };
+}
+function deleteLabel(campaign: MarketingCampaignView | null): string {
+  return campaign?.status === 'deleting' ? 'Retry deletion' : campaign?.status === 'draft' ? 'Delete draft' : 'Delete campaign';
 }
 
 @Component({
@@ -33,7 +41,7 @@ function emptyDraft(): MarketingCampaignDraft {
   standalone: true,
   imports: [CommonModule, FormsModule, RouterModule, MatButtonModule, MatCardModule, MatCheckboxModule,
     MatFormFieldModule, MatIconModule, MatInputModule, MatProgressSpinnerModule, MatButtonToggleModule,
-    MatSlideToggleModule, MatSelectModule, MarketingRichEditorComponent, PageHeaderComponent],
+    MatSlideToggleModule, MatSelectModule, MatDialogModule, MatTooltipModule, MarketingRichEditorComponent, PageHeaderComponent],
   templateUrl: './admin-marketing.component.html',
   styleUrls: ['./admin-marketing.component.scss'],
 })
@@ -42,10 +50,13 @@ export class AdminMarketingComponent implements OnInit, OnDestroy {
   private readonly functions = inject(AppFunctionsService);
   private readonly haptics = inject(AppHapticsService);
   private readonly sanitizer = inject(DomSanitizer);
+  private readonly dialog = inject(MatDialog);
+  private deleteDialog: MatDialogRef<ConfirmationDialogComponent, boolean> | null = null;
   private previewTimer: ReturnType<typeof setTimeout> | null = null;
   private previewSequence = 0;
   private refreshSequence = 0;
   private destroyed = false;
+  readonly loading = signal(true);
   list: MarketingCampaignListResponse | null = null;
   selected: MarketingCampaignView | null = null;
   draft = emptyDraft();
@@ -56,6 +67,8 @@ export class AdminMarketingComponent implements OnInit, OnDestroy {
   testTo = '';
   cap = 10;
   busy = '';
+  confirmingDelete = false;
+  readonly deletingCampaignId = signal<string | null>(null);
   error = '';
   notice = '';
   preview: { subject: string; html: string; text: string } | null = null;
@@ -84,7 +97,10 @@ export class AdminMarketingComponent implements OnInit, OnDestroy {
   }
 
   ngOnInit(): void { void this.refresh(); }
-  ngOnDestroy(): void { this.destroyed = true; this.clearPreviewTimer(); this.previewSequence++; }
+  ngOnDestroy(): void {
+    this.destroyed = true; this.clearPreviewTimer(); this.previewSequence++;
+    this.deleteDialog?.close(false);
+  }
   changePreview(view: 'desktop' | 'phone' | 'text'): void {
     if (this.activePreview === view) return;
     this.activePreview = view;
@@ -107,6 +123,12 @@ export class AdminMarketingComponent implements OnInit, OnDestroy {
   }
 
   get canEdit(): boolean { return this.canEditAudience || this.selected?.status === 'paused'; }
+  get canDelete(): boolean { return canDeleteMarketingCampaign(this.selected); }
+  get selectedDeleteLabel(): string { return deleteLabel(this.selected); }
+  get campaignRows() {
+    return (this.list?.campaigns || []).map(campaign => ({ campaign,
+      canDelete: canDeleteMarketingCampaign(campaign), deleteLabel: deleteLabel(campaign) }));
+  }
   get canEditAudience(): boolean { return !this.selected || this.selected.status === 'draft'; }
   get canResume(): boolean { return this.selected?.status === 'paused' && !this.dirty && this.selected.lastTestState === 'SUCCESS'; }
   get canRetryPreparation(): boolean {
@@ -115,15 +137,17 @@ export class AdminMarketingComponent implements OnInit, OnDestroy {
     return !Number.isFinite(started) || Date.now() - started >= 11 * 60_000;
   }
   get remaining(): number { return this.list ? Math.max(0, this.list.dailyCap - this.list.usedToday) : 0; }
-  get canSendTest(): boolean { return !!this.testTo.trim() && !!this.preview && !this.previewBusy && !this.previewError; }
+  get canSendTest(): boolean { return this.selected?.status !== 'deleting' && !!this.testTo.trim() && !!this.preview && !this.previewBusy && !this.previewError; }
   get counts() { return this.selected?.stats; }
   get exclusions() { return this.selected?.exclusions; }
 
-  async refresh(): Promise<void> {
+  async refresh(): Promise<'loaded' | 'failed' | 'stale'> {
     const sequence = ++this.refreshSequence;
+    this.loading.set(true);
+    this.error = '';
     try {
       const result = await this.functions.call<undefined, MarketingCampaignListResponse>('listMarketingCampaigns');
-      if (this.destroyed || sequence !== this.refreshSequence) return;
+      if (this.destroyed || sequence !== this.refreshSequence) return 'stale';
       this.list = result.data;
       this.error = '';
       this.cap = result.data.dailyCap;
@@ -131,8 +155,13 @@ export class AdminMarketingComponent implements OnInit, OnDestroy {
         const fresh = result.data.campaigns.find(item => item.id === this.selected?.id);
         if (fresh) this.updateSelected(fresh);
       }
+      return 'loaded';
     } catch (error) {
-      if (!this.destroyed && sequence === this.refreshSequence) this.error = this.message(error);
+      if (this.destroyed || sequence !== this.refreshSequence) return 'stale';
+      this.error = this.message(error);
+      return 'failed';
+    } finally {
+      if (!this.destroyed && sequence === this.refreshSequence) this.loading.set(false);
     }
   }
   choose(campaign: MarketingCampaignView, feedback = true): void {
@@ -167,8 +196,8 @@ export class AdminMarketingComponent implements OnInit, OnDestroy {
       this.selected = campaign;
     }
   }
-  newDraft(): void {
-    if (this.selected || this.draft.name || this.draft.subject) this.haptics.selection();
+  newDraft(feedback = true): void {
+    if (feedback && (this.selected || this.draft.name || this.draft.subject)) this.haptics.selection();
     this.selected = null;
     this.draft = emptyDraft();
     this.scheduleMode = 'now';
@@ -228,13 +257,19 @@ export class AdminMarketingComponent implements OnInit, OnDestroy {
     return candidate?.message || 'The request failed. Please try again.';
   }
   private async run<T>(label: string, request: () => Promise<T>, success: (result: T) => void): Promise<void> {
-    if (this.busy) return;
+    if (this.busy || this.destroyed) return;
     // A read started before this mutation must not restore its older saved
     // message or test result while the mutation is pending or after it completes.
     this.refreshSequence++;
+    this.loading.set(false);
     this.busy = label; this.error = ''; this.notice = '';
-    try { success(await request()); await this.refresh(); this.haptics.success(); }
-    catch (error) { this.error = this.message(error); this.haptics.error(); }
+    try {
+      const result = await request();
+      if (this.destroyed) return;
+      success(result); await this.refresh();
+      if (!this.destroyed) this.haptics.success();
+    }
+    catch (error) { if (!this.destroyed) { this.error = this.message(error); this.haptics.error(); } }
     finally { this.busy = ''; }
   }
   async save(): Promise<void> {
@@ -322,14 +357,52 @@ export class AdminMarketingComponent implements OnInit, OnDestroy {
         : `Campaign ${action} request completed.`; });
   }
   async clone(): Promise<void> { await this.campaignAction('cloneMarketingCampaign', 'Cloning', 'Campaign copied as a new draft.'); }
+  async deleteCampaign(campaign?: MarketingCampaignView): Promise<void> {
+    const target = campaign || this.selected;
+    if (!canDeleteMarketingCampaign(target) || !target || this.busy || this.loading() || this.confirmingDelete || this.destroyed) return;
+    const id = target.id;
+    const name = target.name;
+    const kind = target.status === 'draft' ? 'draft' : 'campaign';
+    const discardsEdits = this.selected?.id === id && this.dirty;
+    this.confirmingDelete = true;
+    this.haptics.selection();
+    this.deleteDialog = this.dialog.open<ConfirmationDialogComponent, ConfirmationDialogData, boolean>(ConfirmationDialogComponent, {
+      width: '440px', maxWidth: 'calc(100vw - 32px)',
+      data: { title: `Delete ${kind}?`, message: `Delete “${name}”? ${discardsEdits ? `This also discards unsaved edits to this ${kind}. ` : ''}Any prepared recipient list is also removed. This cannot be undone. Test emails already submitted will still send and count toward the daily limit.`,
+        confirmText: `Delete ${kind}`, cancelText: 'Cancel', confirmColor: 'warn' },
+    });
+    let confirmed: boolean | undefined;
+    try { confirmed = await firstValueFrom(this.deleteDialog.afterClosed()); }
+    finally { this.confirmingDelete = false; this.deleteDialog = null; }
+    const current = campaign ? this.list?.campaigns.find(item => item.id === id) : this.selected;
+    if (confirmed !== true || this.destroyed || this.busy || current?.id !== id || !canDeleteMarketingCampaign(current)) return;
+    this.deletingCampaignId.set(id);
+    try {
+      await this.run('Deleting campaign', async () => {
+        try { return (await this.functions.call('changeMarketingCampaignStatus', { id, action: 'delete' })).data; }
+        catch (error) {
+          // Cleanup can fail after the backend has locked the campaign. Refresh to
+          // expose its retry action and disable edits, preserving the actual error.
+          if (!this.destroyed) await this.refresh();
+          throw error;
+        }
+      }, () => {
+        if (this.list) this.list = { ...this.list, campaigns: this.list.campaigns.filter(item => item.id !== id) };
+        if (this.selected?.id === id) this.newDraft(false);
+        this.notice = kind === 'draft' ? 'Draft deleted.' : 'Campaign deleted.';
+      });
+    } finally { this.deletingCampaignId.set(null); }
+  }
   private async campaignAction(name: 'prepareMarketingCampaign' | 'cloneMarketingCampaign', label: string, message: string): Promise<void> {
     if (!this.selected) return;
     await this.run(label, async () => (await this.functions.call(name, { id: this.selected!.id })).data as MarketingCampaignView,
       campaign => { this.choose(campaign, false); this.notice = message; });
   }
   async manualRefresh(): Promise<void> {
-    await this.refresh();
-    if (!this.error) this.haptics.success(); else this.haptics.error();
+    if (this.busy || this.loading()) return;
+    const result = await this.refresh();
+    if (result === 'loaded') this.haptics.success();
+    else if (result === 'failed') this.haptics.error();
   }
   async changeCap(): Promise<void> {
     await this.run('Updating limit', async () => (await this.functions.call('setMarketingDailyCap',

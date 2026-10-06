@@ -7,7 +7,7 @@ import { onAdminCall } from '../../shared/auth';
 import { FUNCTIONS_MANIFEST } from '../../../../shared/functions-manifest';
 import { SECRET_PARAMS } from '../../secrets';
 import {
-  cloneCampaign, dispatchCampaigns, getCampaign, listCampaigns, optOut, prepareCampaign,
+  cloneCampaign, deleteCampaign, dispatchCampaigns, getCampaign, listCampaigns, optOut, prepareCampaign,
   previewCampaign, recordMailDelivery, saveCampaign, sendTest, setCampaignStatus,
   setDailyCap, verifyUnsubscribeToken,
 } from './service';
@@ -31,6 +31,9 @@ export const sendMarketingTest = onAdminCall<Record<string, unknown>>({ ...calla
   sendTest(request.data?.id, request.auth!.uid, signingKey(), request.data?.to, request.data?.draft));
 export const changeMarketingCampaignStatus = onAdminCall<Record<string, unknown>>({ ...callable('changeMarketingCampaignStatus'), timeoutSeconds: 540, secrets: [secret] }, async request => {
   const action = request.data?.action;
+  // Reuse the privileged campaign transition endpoint: clients cannot safely
+  // coordinate recursive subtree cleanup through owner-scoped Firestore Rules.
+  if (action === 'delete') return deleteCampaign(request.data?.id);
   if (action !== 'start' && action !== 'pause' && action !== 'resume' && action !== 'retry') {
     throw new HttpsError('invalid-argument', 'Unknown campaign action.');
   }

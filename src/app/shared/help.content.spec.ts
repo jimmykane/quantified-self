@@ -14,6 +14,16 @@ import {
 } from './policies.content';
 
 describe('help.content', () => {
+  it('explains exact prescription subtotals, bounded estimates and unknown duration without changing delivery or recorded totals', () => {
+    const copy = HELP_SECTIONS.find(section => section.id === 'training-plans')!.content;
+    for (const phrase of ['## Understand workout totals', '**Workout totals** updates', 'before you save',
+      'prompt instead of stale totals', 'profile is collapsed', 'repetition duration stays unknown',
+      '**estimated duration range**', 'threshold-speed reference saved',
+      'four steps with unknown duration', 'Missing information never counts as zero', 'HR, power, and cadence targets do not establish speed',
+      'exact timed-duration requirement', 'separate **workout prescription analysis**', 'client tool-catalog refresh'])
+      expect(copy).toContain(phrase);
+  });
+
   it('explains dated follow-ups, fresh evidence and confirmed Training outcomes without promising cross-chat memory', () => {
     const copy = HELP_SECTIONS.find(section => section.id === 'ai-insights')!.content;
     for (const phrase of ['message dates and confirmed Training changes', 'Freshly checked records take precedence',
@@ -59,6 +69,14 @@ describe('help.content', () => {
     expect(copy).toContain('released and discovered');
     expect(copy).toContain('never deletes recorded activities');
     expect(copy).not.toContain('MCP plan and workout deletion do not select this option');
+  });
+  it('makes selected-day library discovery and safe placement retry findable in Training Help', () => {
+    const copy = HELP_SECTIONS.find(section => section.id === 'training-plans')!.content;
+    for (const phrase of ['**Add from library**', '**Active**', '**Archived**', '**Show prescription**',
+      'exact sport', '**Retry exact placement**', 'keep the review open', 'outside the active plan']) {
+      expect(copy).toContain(phrase);
+    }
+    expect(searchHelpSections(HELP_SECTIONS, 'Add from library').map(section => section.id)).toContain('training-plans');
   });
   it('explains uncertain MCP apply replies without authorizing replacement workouts or approval bypass', () => {
     const copy = HELP_SECTIONS.find(section => section.id === 'training-plans')!.content;
@@ -228,6 +246,11 @@ describe('help.content', () => {
     expect(content).toContain('**Sync plan with Garmin**');
     expect(content).toContain('**Enable plan sync**');
     expect(content).toContain('**Workout sync status**');
+    expect(content).toContain('**Loading sync settings** is not **Sync off**');
+    expect(content).toContain('do not enable sync again just to refresh the display');
+    expect(content).toContain('reads the latest saved revisions without changing consent');
+    expect(content).toContain('confirmation is disabled; cancel and review the latest version');
+    expect(content).toContain('retry that same confirmation to check the original request');
     expect(content).toContain("each service's logo and a compact sent/total count for Suunto");
     expect(content).toContain('**No workouts due for sync** instead of showing dashes');
     expect(content).toContain('small **View** action');

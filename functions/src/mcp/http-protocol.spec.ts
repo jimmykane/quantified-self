@@ -9,12 +9,14 @@ import {
   PROTOCOL_VERSION_META_KEY,
 } from '@modelcontextprotocol/server';
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
-import { MCP_OAUTH_SCOPES, McpBearerAuthenticationError, McpOAuthError } from './oauth.service';
+import { MCP_OAUTH_SCOPES, McpBearerAuthenticationError, McpOAuthClientAuthenticationError, McpOAuthError } from './oauth.service';
 import { McpTrainingPreviewLoopGuardError } from './training-preview-loop-guard';
 import { mcpApi } from './server';
 
-const { authenticateBearer, consumeInvalidTrainingPreviewAttempt, warn, logError, info } = vi.hoisted(() => ({
+const { authenticateBearer, exchangeAuthorizationCode, exchangeRefreshToken, consumeInvalidTrainingPreviewAttempt, warn, logError, info } = vi.hoisted(() => ({
   authenticateBearer: vi.fn(),
+  exchangeAuthorizationCode: vi.fn(),
+  exchangeRefreshToken: vi.fn(),
   consumeInvalidTrainingPreviewAttempt: vi.fn(),
   warn: vi.fn(),
   logError: vi.fn(),
@@ -22,7 +24,7 @@ const { authenticateBearer, consumeInvalidTrainingPreviewAttempt, warn, logError
 }));
 vi.mock('./oauth.service', async importOriginal => ({
   ...await importOriginal<typeof import('./oauth.service')>(),
-  createMcpOAuthService: () => ({ authenticateBearer }),
+  createMcpOAuthService: () => ({ authenticateBearer, exchangeAuthorizationCode, exchangeRefreshToken }),
 }));
 vi.mock('./training-preview-loop-guard', async importOriginal => ({
   ...await importOriginal<typeof import('./training-preview-loop-guard')>(),
@@ -84,6 +86,10 @@ describe('MCP Function protocol compatibility', () => {
   });
   beforeEach(() => {
     vi.clearAllMocks();
+    const tokens = { access_token: 'private-access-canary', refresh_token: 'private-refresh-canary',
+      token_type: 'Bearer', expires_in: 3600, scope: 'metrics:read' };
+    exchangeAuthorizationCode.mockReset().mockResolvedValue(tokens);
+    exchangeRefreshToken.mockReset().mockResolvedValue(tokens);
     authenticateBearer.mockResolvedValue({
       uid: 'protocol-user', clientId: 'https://client.example/client.json',
       connectionId: 'protocol-connection', scopes: Object.values(MCP_OAUTH_SCOPES),
@@ -111,6 +117,111 @@ describe('MCP Function protocol compatibility', () => {
       body: JSON.stringify(body),
     });
   }
+
+  const tokenParams = {
+    grant_type: 'refresh_token', refresh_token: 'private-refresh-canary',
+    client_id: 'https://client.example/private-client-canary',
+    resource: 'https://quantified-self.io/mcp',
+  };
+  function tokenRequest(body = new URLSearchParams(tokenParams).toString(), contentType = 'application/x-www-form-urlencoded') {
+    return fetch(url.replace(/\/mcp$/, '/oauth/token'), {
+      method: 'POST', headers: { 'content-type': contentType, 'user-agent': 'Grok' }, body,
+    });
+  }
+  function expectPrivateTokenLogs() {
+    expect(JSON.stringify([...info.mock.calls, ...warn.mock.calls, ...logError.mock.calls]))
+      .not.toMatch(/private-.*canary|client\.example|quantified-self\.io/);
+  }
+
+  it.each(['authorization_code', 'refresh_token'])('logs safe successful %s exchanges without changing the token response', async grantType => {
+    const response = await tokenRequest(new URLSearchParams({ ...tokenParams, grant_type: grantType,
+      code: 'private-code-canary', code_verifier: 'private-verifier-canary',
+      client_assertion: 'private-assertion-canary' }).toString());
+    expect(response.status).toBe(200);
+    expect(response.headers.get('cache-control')).toBe('no-store');
+    expect(await response.json()).toMatchObject({ access_token: 'private-access-canary', refresh_token: 'private-refresh-canary' });
+    expect(info).toHaveBeenCalledExactlyOnceWith('[MCP OAuth] Token request served', {
+      clientFamily: 'grok', grantType, resourceStatus: 'matches', elapsedMs: expect.any(Number), statusCode: 200,
+    });
+    expect(grantType === 'refresh_token' ? exchangeRefreshToken : exchangeAuthorizationCode).toHaveBeenCalledOnce();
+    expect(warn).not.toHaveBeenCalled();
+    expect(logError).not.toHaveBeenCalled();
+    expectPrivateTokenLogs();
+  });
+
+  it('reports a revoked refresh-reuse grant without exposing the error message or credentials', async () => {
+    exchangeRefreshToken.mockRejectedValueOnce(new McpOAuthError(
+      'invalid_grant', 'private-error-canary', 400, 'refresh_token_reuse',
+    ));
+    const response = await tokenRequest();
+    expect(response.status).toBe(400);
+    expect(await response.json()).toEqual({ error: 'invalid_grant', error_description: 'private-error-canary' });
+    expect(warn).toHaveBeenCalledExactlyOnceWith('[MCP OAuth] Token request rejected', {
+      clientFamily: 'grok', grantType: 'refresh_token', resourceStatus: 'matches', elapsedMs: expect.any(Number),
+      statusCode: 400, errorCode: 'invalid_grant', reason: 'refresh_token_reuse', connectionRevoked: true,
+    });
+    expect(info).not.toHaveBeenCalled();
+    expect(logError).not.toHaveBeenCalled();
+    expectPrivateTokenLogs();
+  });
+
+  it.each([
+    { resource: undefined, resourceStatus: 'missing_or_invalid' },
+    { resource: 'https://private-resource-canary.example/mcp', resourceStatus: 'mismatch' },
+  ])('classifies a rejected audience as $resourceStatus without logging its value', async ({ resource, resourceStatus }) => {
+    exchangeRefreshToken.mockRejectedValueOnce(new McpOAuthError('invalid_grant', 'The token audience is invalid.', 400, 'invalid_audience'));
+    const params: Record<string, string> = { ...tokenParams };
+    if (resource === undefined) delete params.resource;
+    else params.resource = resource;
+    expect((await tokenRequest(new URLSearchParams(params).toString())).status).toBe(400);
+    expect(warn).toHaveBeenCalledExactlyOnceWith('[MCP OAuth] Token request rejected', expect.objectContaining({
+      reason: 'invalid_audience', resourceStatus, connectionRevoked: false,
+    }));
+    expectPrivateTokenLogs();
+  });
+
+  it.each([
+    { body: JSON.stringify(tokenParams), contentType: 'application/json', statusCode: 400, reason: 'unsupported_content_type' },
+    { body: 'private-body-canary'.repeat(4096), contentType: 'application/x-www-form-urlencoded', statusCode: 413, reason: 'request_body_too_large' },
+    { body: new URLSearchParams(tokenParams) + '&grant_type=refresh_token', contentType: 'application/x-www-form-urlencoded', statusCode: 400, reason: 'repeated_parameters' },
+    { body: 'grant_type=private-grant-canary', contentType: 'application/x-www-form-urlencoded', statusCode: 400, reason: 'unsupported_grant_type' },
+    { body: 'refresh_token=private-refresh-canary', contentType: 'application/x-www-form-urlencoded', statusCode: 400, reason: 'invalid_request' },
+  ])('logs $reason before any credential exchange, preserving HTTP $statusCode', async ({ body, contentType, statusCode, reason }) => {
+    const response = await tokenRequest(body, contentType);
+    expect(response.status).toBe(statusCode);
+    expect(response.headers.get('cache-control')).toBe('no-store');
+    expect(await response.json()).toHaveProperty('error', reason === 'unsupported_grant_type' ? reason : 'invalid_request');
+    expect(warn).toHaveBeenCalledExactlyOnceWith('[MCP OAuth] Token request rejected', expect.objectContaining({
+      reason, statusCode, connectionRevoked: false,
+    }));
+    expect(exchangeRefreshToken).not.toHaveBeenCalled();
+    expect(exchangeAuthorizationCode).not.toHaveBeenCalled();
+    expect(info).not.toHaveBeenCalled();
+    expect(logError).not.toHaveBeenCalled();
+    expectPrivateTokenLogs();
+  });
+
+  it('keeps one fixed private-client authentication stage diagnostic', async () => {
+    exchangeRefreshToken.mockRejectedValueOnce(new McpOAuthClientAuthenticationError('replay'));
+    expect((await tokenRequest()).status).toBe(400);
+    expect(warn).toHaveBeenCalledExactlyOnceWith('[MCP OAuth] Token request rejected', expect.objectContaining({
+      reason: 'invalid_client_authentication', errorCode: 'invalid_client', stage: 'replay', connectionRevoked: false,
+    }));
+    expectPrivateTokenLogs();
+  });
+
+  it('logs unexpected token failures as ERROR and preserves the generic 503 response', async () => {
+    exchangeRefreshToken.mockRejectedValueOnce(new Error('private-backend-canary'));
+    const response = await tokenRequest();
+    expect(response.status).toBe(503);
+    expect(await response.json()).toEqual({ error: 'temporarily_unavailable', error_description: 'The authorization service is unavailable.' });
+    expect(logError).toHaveBeenCalledExactlyOnceWith('[MCP OAuth] Token request rejected', expect.objectContaining({
+      reason: 'unexpected_error', errorCode: 'temporarily_unavailable', statusCode: 503, connectionRevoked: null,
+    }));
+    expect(warn).not.toHaveBeenCalled();
+    expect(info).not.toHaveBeenCalled();
+    expectPrivateTokenLogs();
+  });
 
   it('serves discovery and stateless tool calls for 2026 without initialize or warnings', async () => {
     const discovery = await post(modernRequest());

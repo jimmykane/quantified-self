@@ -1,5 +1,5 @@
 export type MarketingPlan = 'free' | 'basic' | 'pro';
-export type MarketingCampaignStatus = 'draft' | 'preparing' | 'ready' | 'running' | 'paused' | 'completed';
+export type MarketingCampaignStatus = 'draft' | 'deleting' | 'preparing' | 'ready' | 'running' | 'paused' | 'completed';
 export type MarketingRecipientStatus = 'pending' | 'queued' | 'accepted' | 'failed' | 'skipped';
 
 export interface MarketingTextMark {
@@ -54,6 +54,19 @@ export interface MarketingCampaignStats {
   accepted: number;
   failed: number;
   skipped: number;
+}
+
+/** Prepared audiences can be discarded until Start, including scheduled campaigns. */
+export function canDeleteMarketingCampaign(campaign: {
+  status: unknown;
+  startedAt?: unknown;
+  stats?: Partial<MarketingCampaignStats> | null;
+} | null | undefined): boolean {
+  if (!campaign) return false;
+  if (campaign.status === 'draft' || campaign.status === 'deleting') return true;
+  return campaign.status === 'ready' && campaign.startedAt == null &&
+    campaign.stats?.queued === 0 && campaign.stats.accepted === 0 &&
+    campaign.stats.failed === 0 && campaign.stats.skipped === 0;
 }
 
 export interface MarketingAudienceExclusions {

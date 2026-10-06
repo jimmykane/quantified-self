@@ -21,7 +21,8 @@ document ID and is the preferred source for upcoming-session questions. Its cont
 exact filters and schedule revision. Bulk completion reads accept at most 25 unique current workout references, preserve
 input order and reuse the same exact-evidence projection as the single-workout read.
 Full structures preserve canonical primitives, ordered node IDs, notes, repeat limits and Sports Lib owner-unit formatting.
-There are no new `Data*` classes, completed-event metrics or inferred duration estimates. Completion reads return only
+The registered instruction reads add no `Data*` classes, completed-event metrics or inferred duration estimates.
+The separate prescription-analysis read below exposes explicit recipe-based ranges. Completion reads return only
 an existing exact stored link; they never infer a match. The optional activity reference additionally requires
 `activity-details:read`.
 
@@ -520,6 +521,92 @@ discoverable but adds no tool, schema, field, scope, consent, projection, Assist
 bundled-skill behavior. It reads canonical frontend types only to validate and render synthetic data; the existing
 Training plan read/write contract, release lifecycle, and independent consent remain unchanged.
 
+### Shared workout prescription analysis (Training 04)
+
+`shared/planned-workout-analysis.ts` owns the pure deterministic `analyzeWorkoutStructureV1(value)` contract.
+It validates through the canonical codec, reads no athlete/provider data, returns detached primitive values, and never
+persists an estimate or rewrites a recipe. Version 1 returns `counts`, `summary`, `byPurpose`, and bounded `steps`.
+Sports Lib remains the scalar/unit authority; there are no new DataStore classes, event metrics, stored fields,
+recipe migration, dependency upgrades, derived-schema changes, or backfills.
+
+Counts have distinct meanings: `structuralNodes` includes repeat containers and each defined child once;
+`definedSteps` counts leaves once; `executedSteps` multiplies each leaf by its enclosing repeat's total pass count.
+The 100-node/100-repeat canonical limits permit at most 9,900 executions but fewer than 100 repeated definitions.
+Each step result preserves `stepId`, nullable `repeatId`, authored `purpose`, `multiplier`, and `allowEarlyLap`. Its prescribed seconds,
+prescribed metres, and duration classification describe one execution; summaries apply the multiplier. No expanded
+execution array is created. Notes, target objects, provider metadata and full strength details are not analysis fields.
+
+Duration rules:
+
+- A time ending supplies an exact duration. Distance endings supply exact prescribed metres but no exact time.
+- These are nominal prescribed limits, not guaranteed athlete elapsed time or distance. A numeric ending with
+  `allowEarlyLap: true` retains its limit/classification and contributes to `earlyLapSteps` in whole, purpose and
+  aggregate summaries; its execution may end sooner. Absence and false both analyze as no early-Lap allowance,
+  without rewriting their distinct authored recipe forms. Manual/Lap remains an unknown ending.
+- Distance plus absolute speed supplies an estimated range `[metres / maximumSpeed, metres / minimumSpeed]`.
+  Pace presentation does not change the canonical m/s calculation. Equal bounds remain a point estimate.
+- Relative speed uses only the recipe's saved threshold-speed snapshot times percentage points divided by 100.
+  Current athlete thresholds, population defaults, midpoint estimates and inferred speed from HR/power/cadence are excluded.
+- Manual/Lap, repetitions and kilojoules remain unknown with distinct reasons. A distance without speed is
+  `missing-speed`; canonically valid zero lower speed/percentage bounds are `unbounded-speed`.
+- Invalid/missing/inverted canonical fields fail validation. Arithmetic overflow or positive-value underflow throws
+  `WorkoutAnalysisArithmeticError`; no Infinity, NaN, fabricated zero, or implicit JSON-to-null conversion is returned.
+
+Every summary (whole recipe and all six authored purposes) separates exact prescribed subtotals and contribution counts
+from `completeExactSeconds` / `completeExactMeters`. Duration additionally separates `estimatedSubtotalRange` from
+`coveredSubtotalRange` (exact plus estimated), and returns `completeRange` only when every execution has a justified
+basis. Coverage is `none`, `partial`, or `complete`. Nullable complete values and range fields distinguish unknown
+from the zero subtotal of an absent contribution. An unused purpose has zero counts, `none` coverage and null totals.
+Distance is never inferred from a timed speed target. Purpose totals describe authored labels, not physiological intensity.
+
+Example: 600 seconds warmup plus four passes of 1,000 metres at 4–5 min/km followed by a manual recovery yields
+600 exact seconds, 4,000 prescribed metres, approximately 960–1,200 estimated seconds, and 1,560–1,800 covered seconds.
+Duration has 1 exact, 4 estimated and 4 unknown executions; complete duration/range are null. Distance is partial because
+warmup/recovery distances are unspecified. Counts are 4 structural nodes, 3 definitions and 9 executions. IEEE-754
+calculation values retain their precision; only display is rounded.
+
+`aggregateWorkoutAnalysesV1(analyses, { sourceComplete })` combines the same counts, subtotals and authored purposes
+without expanding steps. Incomplete source scans withhold complete totals even if every fetched step is timed.
+Training 09 consumers must select unique recipes using their own inclusive dates, timezone/week-start, lifecycle and
+exact stored completion rules; the analyzer neither selects weeks nor joins recorded activities. Keep completed recorded
+volume separate and avoid counting completed prescription plus remaining prescription twice. Do not treat one page
+as a whole week or invent TSS. Training 02 can consume per-definition IDs, multipliers and duration classifications;
+an unknown duration prevents an honest complete elapsed-time domain, so use a step domain or explicitly partial domain.
+This foundation does not implement either consumer's chart/calendar feature.
+
+`shared/planned-workout-analysis-display.ts` applies Sports Lib and owner unit settings to Plans/library summaries,
+preserving existing swimming/rowing display rules. Exact time is labelled as a timed subtotal when incomplete;
+estimated covered time retains an estimate label and the count of steps with unknown duration. Prescribed distance is
+labelled as a subtotal unless every execution is distance-ended. An arithmetic failure shows unavailable totals while
+retaining the ordered instructions. Early-Lap recipes additionally label totals as prescribed limits and show the number
+of executions that allow early Lap. Summaries never enter canonical persistence or provider payloads.
+
+The Plans, Standalone and Workout library editors also show a compact **Workout totals** row above the profile or
+strength exercises. A shared computed canonical draft feeds both the interval profile and prescription summary;
+steps, repeat counts, endings and targets update the owner-unit display before saving. Strength drafts use the existing
+validated compatibility projection, including timed holds/rest and unknown repetition duration. Invalid, incomplete or
+loading drafts clear previous totals and show a short completion prompt. The summary remains visible when the profile
+is collapsed, wraps naturally at phone widths, and adds no card, disclosure, live announcement or persistence path.
+MCP impact review for this editor presentation: no wire impact. It uses the same analysis already exposed by
+`get_workout_prescription_analysis`, adds no saved field or calculation semantics, and changes no read/write schema,
+consent, Assistant authority, provider behavior or plugin content. Unsaved editor state remains local.
+
+MCP impact: additive `get_workout_prescription_analysis({ source: scheduled | saved, reference })` under existing
+`training-plans:read` returns the current record revision, applicable schedule/library revision, sport, strict analysis,
+and owner-unit `displaySummary`. It reuses owner/connection-bound references, masked snapshot reads, recipe/strength
+companion validation, record-creation identity, deletion/bulk-lock/grant-generation/revision fences and existing byte
+budgets. It returns at most 100 definitions and never echoes titles, notes, internal IDs, delivery provenance or target
+snapshots. Existing instruction/library read schemas and all mutation contracts remain frozen. The Assistant uses the
+same read and stores compact uncertainty/count evidence without references or step identities. Focused and cross-domain
+bundled workflows discover the analysis capability and preserve its coverage. New tools require separately approved
+server release and registered-app rescan; updated bundled guidance requires later plugin sync. The pending digest retains
+all earlier unpromoted changes; local verification does not promote it or install into a real profile.
+
+Provider impact: no provider integration or delivery behavior changes. `wahooDurationSeconds` remains the existing
+complete exact time-only calculation; a regression fixture proves that speed-based estimates (including point estimates)
+never satisfy Wahoo duration. Strength analysis uses the validated compatibility projection for timing/counts, never
+as a complete exercise prescription. No new scope, consent, write kind, provider action, Function, Rules or index is added.
+
 ### Canonical workout boundary
 
 The built-in Assistant presents the existing strict MCP recipe and change inputs through a Gemini-compatible typed
@@ -545,7 +632,7 @@ negative values, non-positive endings/reference snapshots, inverted ranges, more
 100, nested repeats, and more than two targets per step. Its JSON output must remain Firestore-safe and must round-trip through stringify/parse without changing
 the persisted v1 value. The manual editor exposes canonical Running, Trail Running, Treadmill, Cycling, Mountain Biking,
 Indoor Cycling, E-Biking, Hand Cycle, Swimming (labelled Pool swimming), and Open Water Swimming sports plus date-only,
-time/distance/lap-button, fixed-repeat, and single absolute HR/power/pace inputs. Both swim profiles enter distance steps in metres
+time/distance/lap-button, fixed-repeat, and up to two unique absolute or relative HR/power/speed/cadence targets. Both swim profiles enter distance steps in metres
 rather than kilometres, and pace targets follow the user's swim-pace preference (/100 m or /100 yd). Changing an unsaved
 editor sport converts displayed distances and paces without changing their canonical values. The pool editor may
 select an optional physical length; a 25 m step alone never asserts a 25 m pool, and open-water swimming has no pool
@@ -565,14 +652,15 @@ MCP impact: existing recipe read and strict proposal/confirmation contracts alre
 purposes and repeat children. Regression tests cover full recipe reads and compatibility without synthesizing duration
 or dropping targets/instructions. No stored/wire schema, scope, consent, tool registration, metric, provider transport,
 or bundled plugin/skill changes are required for exposing this existing ending in the editor. Other editor limitations
-(kJ/repetition endings, relative targets and secondary targets) remain unchanged.
+(kJ/repetition endings) remain unchanged. Target expansion is described below.
 
 Running and cycling distance-step inputs follow the owner's `distanceUnits` preference (kilometres or miles), while
 their pace-target inputs independently follow the first selected `paceUnits` preference (min/km or min/mi). The editor
 also offers **Speed**, including for cycling, using numeric minimum/maximum inputs in the first selected `speedUnits`
 preference (for example km/h or mph). Speed targets reopen for editing, preserve exact canonical m/s until changed,
-and select Speed in the profile. Switching Pace/Speed converts the bounds while preserving the physical range;
-invalid drafts or zero-speed bounds cannot be converted into a finite pace range and clear the converted inputs.
+and select Speed in the profile. Switching Pace/Speed converts the bounds while preserving the physical range.
+Absolute zero-speed bounds cannot be converted into a finite pace range and clear the converted inputs. Unfinished drafts
+retain their independently convertible fields, as described below.
 Both presentations remain explicit authored choices. Duplicate steps copy their speed snapshots independently.
 The existing absolute speed recipe variant, provider mappings and MCP contracts are unchanged.
 The editor captures normalized units when opened so a settings update in another tab cannot reinterpret an unsaved number. Existing
@@ -584,13 +672,57 @@ display value or Sports Lib's approximate metres-to-miles helper for canonical s
 value to be no greater than the Slower value; the editor does not silently reorder an inverted range. Tiny positive canonical values remain positive when displayed for editing rather
 than rounding to zero. No recipe field, schedule history or stored workout requires migration. Garmin and Suunto consume
 canonical metres directly; COROS applies its existing documented integer-metre rounding and degradation approval;
-Wahoo's dated Workout delivery still rejects distance-ended recipes because its required duration is unknown.
+Wahoo's dated Workout delivery still rejects distance-ended recipes because its required complete exact timed duration is unavailable, even when prescription analysis can estimate a range.
+
+The shared `WorkoutTargetsEditorComponent` and `planned-workout-target-editor.helper.ts` expose all existing v1
+absolute/relative target variants in Plans, Standalone and the Workout library, including repeat children. Draft steps
+use ordered `targets[]`; no target, one target or two different kinds are allowed. Add/remove/reorder are explicit,
+duplicate kinds are disabled, and the strict shared parser remains the final save boundary. Range and single-value
+controls serialize the same canonical bounds; single values have equal bounds. Switching kind or absolute/relative
+mode clears incompatible numeric inputs rather than assigning them new semantics. Speed/pace presentation switches
+convert valid prescriptions without changing canonical m/s; unfinished fields remain editable.
+An unfinished range or percentage does not clear another filled bound or speed reference when switching presentation:
+completed fields convert independently, absolute pace/speed bounds exchange positions, and saved references retain their exact m/s.
+Completed newly typed fields also retain their exact canonical speed in a separate local `speedSource` snapshot while
+neighboring fields are unfinished. Presentation/sport conversions update its displayed values, duplication copies it
+independently, and kind/mode changes discard it. Missing fields never acquire invented canonical values.
+
+Relative references are typed snapshots: maximum/threshold HR in bpm, FTP/critical power in watts, threshold speed
+in m/s, and preferred cadence in rpm. The current user settings model supplies units but no explicit athlete reference
+settings. New references therefore require manual positive input; no imported threshold, population value or zone ID
+is substituted. Reopening retains saved snapshots independently of settings changes or missing settings. Percentage edits
+and presentation/sport conversions preserve a saved reference's provenance; converting a manually entered or edited
+reference does not label it as saved. These labels track persistence, independently of the local precision caches. Percentages
+are percentage points (80 means 80%) and may exceed 100. Relative pace percentages scale speed, not reciprocal pace;
+zero percent stays a valid prescription with an unavailable finite-pace explanation. A canonical resolved range uses
+the existing Sports Lib formatter. Cadence remains canonical cadence, including saved swimming/rowing targets;
+those targets never acquire invented stroke-rate semantics or measured provider counterparts.
+
+Each target's local source snapshot tracks displayed bounds/reference independently. Editing one bound preserves the
+other exact canonical bound; percentage-only edits preserve the reference's exact saved m/s. Valid presentation/sport
+changes rehydrate those snapshots. Setting an edited bound equal to the untouched displayed bound uses that bound's exact
+canonical value, avoiding rounding-induced inversion; an entirely untouched range still keeps both original bounds even
+when they display equally. Duration/distance caches remain independent, and an unchanged rounded yard pool
+length now preserves its exact saved metres. Source caches, range controls and reference input fields are never
+serialized into recipes or Firestore. New speed inputs use exact physical inverse factors for km/h, mph, m/s, ft/s
+and knots, including an international mile of 1609.344 metres; Sports Lib remains the display/unit authority. Pace/distance
+inputs retain the exact physical mile/yard denominators described above. Open editors capture normalized owner units.
+
+MCP impact review: no wire expansion. Existing strict scheduled/library recipe reads and complete-recipe proposals
+already represent all eight target variants, all six reference kinds, both speed presentations and ordered two-target
+steps. Added schema fixtures cover fractional values, zero and >100% bounds, repeats, order and rejection of local
+editor/private fields; loopback proposal tests preserve exact mixed targets through approved create/update, history
+and idempotent replay. Existing read projection, native approval, scope/owner/connection/grant/revision fences and
+provider compatibility remain authoritative. No stored migration, new mutation kind, provider action, consent,
+registered-contract digest, Assistant schema/guidance or plugin refresh is introduced. Bundled Training and cross-domain
+guidance already require explicit references and authoritative live tools. Frontend, provider serializer, structured
+output and registered-contract checks verify this coverage; device receipt and physical haptics need separate QA.
 
 Interval draft ordering and duplication use `planned-workout-editor-actions.helper.ts` with the existing v1 ordered
 node arrays. Plans, Standalone and Workout Library share the same editor controls. A move preserves every node ID and
 moves a repeat with its children; a child can move only within its own repeat. Duplication inserts immediately after the
 source, generates unique bounded IDs for the copied block and every copied child, and independently copies exact-duration,
-distance and pace caches as well as purpose, note, repeat count and draft fields. Pool settings remain workout-level.
+distance and target snapshots as well as purpose, note, repeat count and draft fields. Pool settings remain workout-level.
 Partial/invalid fields remain editable and are still rejected by the existing save conversion. The canonical 100-node
 limit counts both repeat blocks and children; additions and copies are disabled when the complete addition cannot fit.
 Strength exercises/sets use their separate editor and are deliberately outside this interval feature.
@@ -725,9 +857,9 @@ two simultaneous targets, and manual/kJ/repetition endings remain readable. Stre
 the v1 strength compatibility summary is not presented as a complete exercise profile.
 
 `workout-profile.helper.ts` shapes presentation only. The horizontal axis is explicitly step order with equal widths,
-never elapsed time or distance. No shared planned-workout analyzer is currently available on this base, so this
-renderer does not estimate distance-step time, total duration, average pace, zones or generic intensity. A future
-time-scaled view must consume the shared analyzer and its uncertainty rather than introduce a private estimator.
+never elapsed time or distance. The shared prescription analyzer now supplies canonical timing and coverage for
+consumers; this renderer keeps its explicit step domain and does not estimate widths, average pace, zones or generic
+intensity. A future time-scaled view must consume that shared analysis and its uncertainty.
 One target metric is shown at a time (HR, power, pace, speed or cadence). Both authored targets remain in accessible
 details and tooltips. Editor/profile pickers and tooltips label pool/open-water pace as **Swim pace** and
 outdoor/indoor rowing pace as **Rowing pace**; these are sport-specific labels for the existing pace presentation.
@@ -744,8 +876,11 @@ outlier filtering does not apply to prescriptions. Range rectangles end at their
 targets are centered markers. Speed uses round numeric intervals chosen after conversion to the owner's selected
 speed unit, so grid lines land on values such as 10/20/30 km/h. Other metrics retain their numeric axes.
 Editor and profile pickers prioritize Pace for running/swimming/rowing and Power/Speed for cycling, without
-changing authored targets or an explicit profile metric selection. The manual editor supports absolute cadence
-for running/cycling, with rpm-labelled bounds and canonical `minimumRpm`/`maximumRpm` storage. Changing to/from
+changing authored targets or an explicit profile metric selection. The editor selects the preferred presentation only
+when creating a new speed/pace target. New cadence targets are offered for running/cycling; saved cadence on other sports
+remains selectable and editable. The manual editor supports absolute/relative cadence
+for running/cycling, with rpm-labelled absolute bounds and canonical `minimumRpm`/`maximumRpm` storage;
+relative bounds use percentages and an explicit preferred-cadence snapshot. Changing to/from
 cadence clears incompatible draft bounds; changing sport preserves the target. Saved cadence remains editable on
 other sports but is never relabelled or converted to stroke rate. New swim/rowing stroke targets are not inferred.
 Physical pool length is explicit metadata and is never inferred from distance steps.
@@ -806,6 +941,43 @@ The library UI uses the existing unit-aware manual/strength editor and compact r
 listener runs only on library routes, and editor Cancel returns through a recorded same-owner library browse entry
 or replaces a direct link with the safe browse route. Placement selects a destination,
 inclusive dates and weekdays, previews count/overlaps, and honors the account week-start preference in weekday order.
+Title search, exact canonical sport and Active/Archived/All filters are local presentation state over the existing
+bounded library (200 entries); Active is the initial view. Empty-library, no-matches, loading and failed-listener states
+are distinct, and Retry resubscribes only on the owner library route. Filters reset on owner change and never persist
+into a recipe. Compact rows show two prescription lines with a keyboard-accessible Show/Hide disclosure for the full
+prescription. Strength previews use the complete exercise draft, including each set's time/repetitions, external load
+and rest; interval previews retain repeats, targets, pool length, optional early-Lap endings and notes. Canonical values use the owner's Sports Lib
+unit settings. A valid recipe outside the manual editor's vocabulary remains previewable and placeable unchanged;
+the UI explains the editing limitation and omits Edit rather than coercing its structure.
+
+Every owned selected-day Add workout surface (Calendar/Dashboard preview, full day and sheet) offers **Add from library**
+with `?date=YYYY-MM-DD`. The library preserves that calendar label exactly rather than converting an instant or clamping
+it to today/plan start, and carries it through recipe-editor navigation. The existing owner-bound Calendar return
+service retains the selected day and displayed period on Back. Choosing a recipe replaces results with a focused review
+of the exact saved version/prescription, explicit plan or Standalone destination, all dates, overlap count and prospective
+plan range. Cancel makes no write. Cancellation and successful placement return focus to the recipe action, or the
+library heading if a live update hides that action. The active plan is the default destination;
+outside dates still require the existing explicit range-extension confirmation. No drag/drop, folders or recipe
+persistence redesign is introduced.
+
+Placement retains its exact request, revisions, confirmed-extension flag and mutation ID while the current review has
+an uncertain result. The review also retains the submitted plan name and range, including when a live update renames,
+archives or removes that plan; an already-confirmed extension remains visible without promising another confirmation.
+Retry replays that request even if library data refreshes, using the existing server receipt to
+avoid duplicate copies. Date/destination controls and Cancel remain locked until the result resolves; definitive
+validation, capacity, revision or authorization rejections release the review for correction. This retry state is local
+to the open review, not durable across reload/navigation. Account, route and component-generation fences prevent a late
+reply or range confirmation from continuing a stale placement or changing another owner's UI. Pending adds use an
+explicit spinner; semantic filter/disclosure/destination actions have one selection haptic owner, and success/error
+feedback follows the actual async outcome. Physical haptics still require device verification.
+
+MCP impact review for library discovery/selected-day placement: no wire impact. Existing `list_saved_workouts` already
+supports title/status discovery, and exact `get_saved_workout`/`get_saved_workout_v2` reads retain canonical sport and full strength drafts;
+browser sport filtering does not add a public list field/filter. Existing saved-workout placement proposals already
+review exact dates, destination, source/schedule/plan revisions and explicit range extension. Focused owner-read fixtures
+cover archived strength sets/load/rest and exact Mountain Biking/manual/early-Lap instructions with private identity exclusion.
+No tool/schema/scope/consent, Assistant routing, bundled guidance, provider action or registered digest changes; no
+plugin sync or registered-client refresh is required by this presentation change.
 Scheduled workout rows expose **Save to library** directly; this uses the server's exact-revision `save-workout`
 snapshot operation. The workout editor also exposes **Save copy to library**: it creates an independent recipe from
 the currently displayed draft, including unsaved edits, without mutating the scheduled workout or its sync consent.
@@ -1351,6 +1523,45 @@ show **Upcoming status incomplete**, not an allegedly complete total. Read/crypt
 **Sync status unavailable**, never zero or success. Account changes clear visible results and cancel old subscriptions;
 same-scope authored edits recompute the summary without reopening its Firestore listeners.
 
+#### Server-confirmed sync settings and current revisions (#812)
+
+Delivery presence, exact per-provider settings, bounded statuses/checks, inherited plan settings and workout overrides
+wait for server-confirmed snapshots, including metadata-only acknowledgements. Cached missing/disabled documents and
+pending writes are not authoritative consent. All required provider reads must answer before an overview or summary
+becomes ready; incomplete initial reads time out after 30 seconds. Loading/error states never invent **Sync off**, a
+zero synced total, or a new Send review. Listener failure shows unavailable with close/reopen guidance. Restore-unavailable
+schedules also block reviews and confirmations rather than using their temporary empty schedule as revision zero.
+
+Before Check or a delivery preview, the browser reads three exact owner documents from the server: schedule state,
+the addressed plan/workout, and that provider's scoped settings. Strict parsers validate the records and bind the
+source/settings identity to the addressed document. Only server-confirmed absence contributes revision zero. The three
+one-shot reads use lazily loaded Firestore Lite REST with the same Firebase app's Auth and App Check providers,
+not the full SDK's watch/local-store path: even `getDocFromServer` can repeat an incorrect persisted missing-document
+result. Lite has no local cache or pending-write overlay. The live schedule-state listener retains its server-confirmed
+watch as an invalidation signal, independently verifies the exact `current` state with Lite, and publishes only that
+validated result. This adds one uncached exact-document read per acknowledged state emission, shared across that owner's
+schedule consumers; there is no polling or history query. The initial restore-status, plan-list and workout-list results,
+state-watch acknowledgement, each REST verification and final restore-fence fallback lookup are each bounded to 30 seconds.
+The schedule's existing two-retry policy still covers its inner state/list reads. Listener deadlines apply only to their
+first result, not idle time between later changes or the duration of an acknowledged restore. Cancelled, superseded or
+timed-out subscriptions cannot publish late results. A failed verification stays unavailable, never revision zero.
+Plan/workout listeners retain their existing query and cache semantics. Check
+uses the current revisions without changing consent. A preview with stale displayed revisions fails with a readable
+conflict instead of silently reviewing new consent or rebasing a replacement approval. The server transaction still
+checks revisions because these three reads are not an atomic snapshot. A live settings/schedule/source revision change
+disables a not-yet-dispatched confirmation with explicit cancel/review guidance. Once dispatch has been attempted,
+an uncertain receipt replay still retains the exact reviewed command and mutation ID; they are never rewritten to
+current revisions. Account/view changes and
+timeouts fence dispatch before and after the lazy import, after reads and during App Check readiness. Failed reads
+never fall back to cached revisions or invented zeroes.
+
+Regression coverage lives in `training-delivery-reads.spec.ts`, `training-delivery.service.spec.ts`,
+`training-plans-state-reads.spec.ts`, `training-delivery-dialog.component.spec.ts` and the Firestore wrapper metadata tests. This is a browser-read/readiness
+fix, not evidence of a new provider send, deletion or device receipt. MCP impact: no wire change; existing server-side
+Training read/proposal/confirmation contracts, shared summaries, consent, replacement safeguards, provider transports
+and completed-activity totals are unchanged. No Rules, indexes or Functions deployment is required. Live UI Check
+evidence remains #812's release verification; do not infer it from unit tests or silently widen approval.
+
 These are workout-delivery aggregates for all services, including services without a native plan object. A provider that
 does not support workout delivery cannot become synced merely through aggregation. **Synced** confirms the complete
 provider-side workout/schedule delivery reported by QS, not receipt on a watch or other device. The existing readiness,
@@ -1803,9 +2014,8 @@ manual-only and repeat/final boundaries. Local OR fixtures do not prove watch be
 ##### Current readings and boundary notifications (#784)
 
 The v5 screen baseline (retained by v6 for absent/false early Lap) builds on Training 01's reviewed v4 boundary/recovery logic and independently implements the documented partner [Guide schema](https://apizone.suunto.com/suuntoplus-guide-description),
-without dependencies or undocumented app-wrapper `alerts`, `trigger`, or `extensions`. Investigation compared
-[OpenAthlete](https://github.com/openathleteorg/openathlete/blob/main/apps/api/src/modules/providers-sync/mapping/suunto-guide.mapper.ts)
-and [suunto-mcp](https://github.com/googlarz/suunto-mcp/blob/main/src/guide-zip.ts); neither is imported or copied into QS.
+without dependencies or undocumented app-wrapper `alerts`, `trigger`, or `extensions`. Investigation also reviewed
+[suunto-mcp](https://github.com/googlarz/suunto-mcp/blob/main/src/guide-zip.ts) without importing or copying it into QS.
 Additional authored targets and ZoneSense remain separate in #773.
 
 - Running/Trail Running/Treadmill default to lap-average `pace` and current `heartRate`. Supported cycling
@@ -2142,8 +2352,20 @@ This is a documentation/checklist decision, not a change to the source-controlle
 Future deployments and availability changes still require explicit approval. Connecting or deploying alone grants no
 workout consent. Use the normal owner-selected Stop/disconnect/deletion workflows for their documented effects;
 they are not deployment rollback mechanisms. Completed Garmin adapter, pool, strength, exact-completion and schedule-repair
-evidence is retained in #647, #733, #782, #651 and #703. Remaining monitoring/release operations stay in #655 and neutral
-Sports Lib extraction in #654.
+evidence is retained in #647, #733, #782, #651 and #703. Production monitoring, opened/closed alert-email delivery and
+the lifecycle/retention regression-evidence audit are complete in #655. Current browser sync-settings release/Check
+verification remains #812; COROS and additional Suunto strength proof remain #648/#741, and neutral Sports Lib
+extraction remains #654.
+
+The release audit reuses recorded account/device observations rather than inducing production failures. Shared and
+provider-shaped Firestore-emulator tests cover Pro expiry, explicit disconnect, same/different-account reconnect,
+permission changes, duplicate dispatch, lost/partial responses, interrupted edits/removals, plan lifecycle and
+account-deletion fencing. Cleanup regressions cover 90-day recovery, recursive history/companion/reverse-link removal,
+bounded continuation beyond blocked prefixes and idempotent retries. Explicit Garmin intent tests use its actual
+transport policy to check the inclusive 365-calendar-day QS horizon across DST, year and leap-year boundaries without
+HTTP. #769/#801's reviewed paired-not-found replacement is separate from automatic Schedule-only repair: ordinary
+Check/Send/Retry cannot recreate a missing Workout, uncertain first creates stay blocked, and a surviving old Schedule
+does not authorize root replacement. Automated fault cases are not claims of live induced provider faults.
 
 Documentation maintenance for #655 changes Help and capability-limit text only. It does not change provider flags,
 mapping rules or digests, persisted recipes, MCP tools/strict schemas/scopes, consent, Assistant permissions or bundled
@@ -4768,9 +4990,150 @@ The admin callable uses only
 bounded Firestore aggregate queries, never returns ledger evidence, remote IDs, credentials or raw rejection bodies,
 and keeps the other queues available if Training indexes are missing. The collection-group status indexes in
 `firestore.indexes.json` must be deployed before outcome counts become available. Queue monitoring is read-only;
-it neither retries deliveries nor enables a provider. Production dashboards and alerts remain a separate rollout
-concern. MCP impact: none—the new counts are admin-only and do not change Training reads, mutations, scopes, consent,
+it neither retries deliveries nor enables a provider. Production dashboard/alert definitions and activation are described
+below. MCP impact: none—the counts are admin-only and do not change Training reads, mutations, scopes, consent,
 user-visible delivery projections or provider actions.
+
+### Training delivery production monitoring
+
+Production activation and email-delivery verification were completed on 6 October 2026 under #655. Repository
+definitions live in `tools/training-monitoring/definitions.mjs`; this is operational configuration, not a second Training architecture
+or a replacement for `/admin/queues/training-delivery`. No product enablement, UID gate, provider behavior, retention
+limit, schedule or rollback switch changes. Garmin/Wahoo/Suunto remain live; COROS new sends remain Coming soon.
+
+The existing **512 MiB** `dispatchTrainingDelivery` minute scheduler emits a versioned aggregate `queue_health`
+log before checking Cloud Tasks capacity, including on idle or saturated runs. It executes one Firestore index-count
+query for `dueAtMs <= now` and two field-masked, single-document queries (oldest positive due date and one immediate
+marker). Results stay bounded in memory; count-query billing scales with matching index entries, so this is not a
+promise of three billed document reads. The probe has a five-second deadline, no writes and no owner/ledger reads.
+Failed reads, deadlines and invalid negative markers produce `queue_health_unavailable`, never a fake zero backlog,
+and cannot prevent the dispatcher from continuing. The deadline bounds waiting, not cancellation of an already-sent
+Firestore RPC. Those outstanding reads remain bounded to the same three queries.
+
+`dueAgeLowerBoundMs` is deliberately a **lower bound** on dispatch delay, not end-to-end acceptance latency. Immediate
+jobs use `dueAtMs=0`; this is a marker, not the Unix epoch. Their sampled document's last-write time supplies conservative
+elapsed age. Reconciliation documents persist through horizon polling and can be reset to immediate work, so creation
+time would incorrectly age a fresh request from an older queue record. Later writes can understate age, never prove an
+older pending request. Immediate work written during the five-second probe window has age clamped to zero, not an
+incomplete-telemetry error.
+Zero-marker IDs are not chronological, so one such sample can understate the oldest immediate job. The oldest positive
+due date is queried independently so zero markers cannot hide it. Retries/reservations change due dates; this is not
+time since consent. The count and samples are not transactional, and a zero count forces age to zero if jobs disappeared
+between reads. Unknown immediate last-write time is explicitly flagged as incomplete telemetry. Future horizon jobs and
+documents without a numeric due date do not establish backlog age. No exact-oldest or watch-receipt claim is made.
+
+Google Cloud Logging supplies fourteen versioned `qs_training_*_v1` metrics for second-generation Function
+`cloud_run_revision` resources in the selected project; numeric samples are **DELTA distributions**,
+not gauges or cumulative counts. Only fixed provider/event/category labels are extracted. Existing worker logs provide
+acceptance/failure, worker-attempt latency, retry-related failures and stale suppression; verification logs provide check
+outcomes/latency; cleanup logs provide failure observations. Retry-related failures are not scheduled-retry counts,
+stale suppression is expected version protection, and COROS batch events count batches rather than individual workouts.
+Recovered acceptance and COROS batches do not currently carry comparable worker latency and are excluded from that chart.
+Cloud Tasks HTTP success can occur after the worker persisted a provider failure; it is not provider acceptance.
+
+The dedicated **QS Training Delivery** Cloud Monitoring dashboard charts these signals plus native queue depth, HTTP
+attempts and dispatch delay for `processTrainingDeliveryTask` in `europe-west2`. Latency percentiles use explicit
+buckets and are approximate. Queue charts instead reduce the distributions to mean observations, preserving a true
+zero for idle samples instead of an interpolated bucket percentile; these are not current synced-workout totals.
+Cross-service p95 latency is displayed as the maximum service p95, not claimed as a pooled global percentile.
+
+Initial alert thresholds (tune after observing actual volume):
+
+| Policy | Condition | Severity |
+| --- | --- | --- |
+| Sustained dispatch backlog | At least four samples per 5 minutes with due work delayed ≥15 minutes, sustained for 10 minutes | Error |
+| Repeated dispatch failures | At least three dispatch failures in 10 minutes | Error |
+| Provider failure surge | At least ten retryable/terminal/uncertain failures in 10 minutes across live providers | Error |
+| Provider access or scope failures | At least five permission/provider-access failures in 10 minutes across live providers | Warning |
+| Training cleanup failures | At least one cleanup failure observation in 10 minutes | Warning |
+| Queue telemetry unavailable | At least two failed/incomplete samples in 10 minutes, or no queue-health sample for 30 minutes | Warning |
+
+Single-user disconnects and expected horizon deferrals do not page through the provider-failure policy. COROS is excluded
+from the two provider policies while its new-send UI remains blocked; global dispatch health still includes any retained
+queue work. Provider/category restrictions use `one_of(...)` membership joined with `AND`: Monitoring rejects mixed
+`AND`/`OR` metric-label restrictions even with parentheses. These exact provider/category sets were verified against
+the live read-only time-series API during activation; offline fixture tests do not replace API acceptance.
+Missing threshold data evaluates inactive, not healthy evidence; a separate heartbeat-absence condition
+detects missing telemetry after a time series exists. Initial activation must explicitly verify the first sample.
+Log ingestion can lag by several minutes; alerts are not instantaneous and thresholds use multi-minute windows.
+No historical backfill is provided by new log metrics.
+
+#### Preview and separately approved activation
+
+The CLI previews JSON **offline by default**, without auth, network, files or cloud changes:
+
+```sh
+node tools/training-monitoring/cli.mjs --project=quantified-self-io
+```
+
+After separate approval, select an existing enabled **email** channel through Cloud Monitoring → Alerting → Notification
+channels. Do not store the email address or channel ID in the repository. The read-only inventory command is:
+
+```sh
+gcloud alpha monitoring channels list --project=quantified-self-io --format='table(name,displayName,type,enabled)'
+```
+
+Cloud Monitoring sends incident-opened and incident-closed emails through that channel. QS does not send these emails,
+add an SMTP integration or create a mail Function. Documentation subjects and incident text link to this runbook; the
+Google email layout itself is managed by Google. A closed incident means the configured condition cleared, not proof
+of a watch receipt or a completed workout. Existing Essentials dashboards and OOM alerts remain intact.
+
+Activation requires explicit approval covering deployment of the affected `dispatchTrainingDelivery` Function
+and application of cloud monitoring configuration with a selected channel. Neither is performed by ordinary tests or CI.
+After approval, substitute the selected channel resource in the following command (never use a made-up placeholder):
+
+```sh
+node tools/training-monitoring/cli.mjs --project=quantified-self-io \
+  --notification-channel=projects/quantified-self-io/notificationChannels/SELECTED_ID \
+  --apply --confirm-project=quantified-self-io
+```
+
+The operator needs log-metric read/update, dashboard read/create/update, alert-policy read/create/update and
+notification-channel read permissions; an existing authenticated `gcloud` account supplies the token without printing
+or saving it. The CLI verifies an enabled email channel, performs ownership/schema preflight, then upserts only its
+versioned metrics and owned dashboard/policies. The dashboard uses an empty-valued `qs-training-monitoring-v1` label
+as required by dashboard tag semantics; policies use `managed_by`/`policy_id` user labels. It never creates/deletes
+notification channels, deletes resources or
+overwrites unrelated configuration. Dashboard updates retain the API concurrency token and alert updates retain
+matching condition IDs. Run only one apply at a time: create APIs allocate IDs and concurrent first applies can race.
+If an API call fails, the CLI stops; inspect the safe HTTP status and retry the same command after fixing the cause.
+It is not a cloud transaction, so successful earlier writes remain. Ownership-tagged reapplication avoids duplicate
+resources; conflicting names/owners or immutable metric schema changes fail closed rather than overwrite.
+The preflight treats an omitted label value type as the API's default `STRING`, not an immutable schema change;
+explicitly different label types are still rejected before any write.
+Malformed API JSON is reported generically: parser error text must not expose private notification-channel data.
+
+For a new approved activation, record the metric/dashboard/policy resource identities
+privately, first idle and due-job samples, active notification-channel evidence, and a controlled incident-opened/closed
+email check. Do not synthesize provider failures, mutate customer jobs or bulk resend just to trigger alerts. Validate
+any temporary cloud test policy separately with an approved exact target and removal scope. Retain the applicable
+lifecycle/epic checklist obligations; source definitions alone do not prove that an email arrived.
+
+The approved production activation installed all fourteen metrics, the dedicated dashboard and six enabled policies
+using the existing **Alerts** email channel. Readback verified the configuration and all sixteen chart queries; live
+idle and due-job samples arrived. A separately approved temporary heartbeat policy opened and closed an incident,
+and the owner confirmed receipt of both notification emails. Only that temporary policy was subsequently removed;
+the permanent policies, existing OOM alert, dashboard, metrics and channel were preserved. See the
+[activation and email evidence](https://github.com/jimmykane/quantified-self/issues/655#issuecomment-6011349414).
+Resource identities are retained privately rather than embedding notification-channel details here. Future
+reconfiguration or another smoke test still requires separate approval; completed activation does not authorize it.
+
+Verification: `npm run test:training-monitoring`, Functions `monitoring.spec.ts`/`tasks.spec.ts`, and isolated demo
+Firestore `monitoring.emulator.spec.ts` in the CI **delivery** group. Configuration tests use injected synthetic HTTP
+responses, including initial creation, reapplication, ownership collisions, duplicate detection and failures; they
+never authenticate or provision real alerts. Review app Help's existing delivery-state explanations; no user-facing
+behavior or help change is required for admin-only operational monitoring.
+
+MCP impact: **no wire impact**. These aggregate logs/cloud definitions do not add a tool, metric exposed to users,
+scope, consent, projection, proposal, mutation, provider action or Assistant permission. Existing Training reads and
+approval-gated writes are unchanged. No provider runtime or transport contract changes.
+
+Official API references: [log metric update](https://docs.cloud.google.com/logging/docs/reference/v2/rest/v2/projects.metrics/update),
+[distribution log metrics](https://docs.cloud.google.com/logging/docs/logs-based-metrics/distribution-metrics),
+[dashboard layouts](https://docs.cloud.google.com/monitoring/dashboards/api-examples),
+[alert policies](https://docs.cloud.google.com/monitoring/api/ref_v3/rest/v3/projects.alertPolicies),
+[Cloud Tasks monitoring](https://docs.cloud.google.com/tasks/docs/monitor), and
+[log metric latency/limitations](https://docs.cloud.google.com/logging/docs/logs-based-metrics/troubleshooting).
 
 ### Sports-lib reparse observability
 

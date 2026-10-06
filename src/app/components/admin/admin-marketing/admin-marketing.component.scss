@@ -1,3 +1,11 @@
+.initial-loading { min-height: 240px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 16px; color: var(--mat-sys-on-surface-variant); }
+.initial-load-error { display: flex; justify-content: center; padding: 32px 0; }
+.refresh-status { display: flex; align-items: center; gap: 12px; margin: 0 0 16px; color: var(--mat-sys-on-surface-variant); }
+.refresh-button-content { display: flex; align-items: center; justify-content: center; gap: 8px; min-width: 124px; }
+.refresh-button-icon { display: flex; align-items: center; justify-content: center; width: 18px; height: 18px; flex: 0 0 18px; }
+.refresh-button-icon mat-icon { width: 18px; height: 18px; font-size: 18px; }
+.campaign-header { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 12px; }
+.campaign-empty { color: var(--mat-sys-on-surface-variant); }
 .workspace { display: grid; grid-template-columns: minmax(240px, 280px) minmax(0, 1fr); grid-template-areas: 'campaigns main' 'limit main'; gap: 20px; align-items: start; }
 .sidebar { grid-area: campaigns; min-width: 0; }
 .main-column { grid-area: main; display: grid; gap: 20px; min-width: 0; }
@@ -6,6 +14,8 @@ mat-card-content { padding-top: 20px; }
 mat-form-field { width: 100%; }
 .field-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; }
 .sidebar nav { display: grid; gap: 4px; margin-top: 12px; }
+.campaign-list-item { display: flex; align-items: center; gap: 4px; }
+.campaign-list-item .campaign-row { flex: 1; min-width: 0; }
 .campaign-row { display: flex; width: 100%; height: auto; min-height: 48px; padding: 10px 12px; align-items: center; justify-content: flex-start; white-space: normal; text-align: left; color: inherit; border-radius: 12px; }
 .campaign-row.active { background: var(--mat-sys-secondary-container); }
 .campaign-row-content { display: grid; width: 100%; min-width: 0; gap: 4px; text-align: left; }

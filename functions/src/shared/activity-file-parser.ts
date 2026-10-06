@@ -11,6 +11,11 @@ import {
 
 import { createParsingOptions } from '../../../shared/parsing-options';
 
+export interface JsonParserFailures {
+    primary: unknown;
+    fallback: unknown;
+}
+
 function toArrayBuffer(data: Buffer): ArrayBuffer {
     return data.buffer.slice(data.byteOffset, data.byteOffset + data.byteLength) as ArrayBuffer;
 }
@@ -30,6 +35,7 @@ export async function parseActivityFilePayload(
     payload: Buffer,
     extensionOrPath: string,
     options: ActivityParsingOptions = createParsingOptions(),
+    onJsonParsersFailed?: (failures: JsonParserFailures) => void,
 ): Promise<EventInterface> {
     const baseExtension = getActivityFileBaseExtension(extensionOrPath);
 
@@ -48,8 +54,14 @@ export async function parseActivityFilePayload(
     if (baseExtension === 'json') {
         try {
             return await EventImporterSuuntoJSON.getFromJSONString(text, options);
-        } catch {
-            return EventImporterSuuntoSML.getFromJSONString(text, options);
+        } catch (primaryError) {
+            try {
+                return await EventImporterSuuntoSML.getFromJSONString(text, options);
+            } catch (fallbackError) {
+                // Capture both attempts only on final failure; preserve the thrown error.
+                onJsonParsersFailed?.({ primary: primaryError, fallback: fallbackError });
+                throw fallbackError;
+            }
         }
     }
     if (baseExtension === 'sml') {

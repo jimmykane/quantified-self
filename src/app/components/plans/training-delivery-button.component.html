@@ -44,7 +44,9 @@
       [matTooltip]="scope() === 'history' && historyLabel() !== 'Workout sync history' ? 'Workout sync history' : ''">
     <mat-icon aria-hidden="true">sync</mat-icon>{{ buttonLabel() }}
   </button>
-    @if (summaryWorkouts() !== null && (readState().error || summaryState().error)) {
+    @if (!readState().loaded) {
+      <span class="delivery-summary-detail" role="status">Loading sync settings…</span>
+    } @else if (readState().error || summaryState().error) {
       <span class="delivery-summary-detail" role="status">Sync status unavailable</span>
     }
   }

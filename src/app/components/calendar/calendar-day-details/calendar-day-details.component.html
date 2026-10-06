@@ -47,6 +47,8 @@
             [queryParams]="{ date: data.day.dateKey }" (click)="prepareWorkoutNavigation()">Plan workout</a>
           <a mat-menu-item appHapticTap [routerLink]="['/training/plans/standalone/new']"
             [queryParams]="{ date: data.day.dateKey }" (click)="prepareWorkoutNavigation()">Standalone workout</a>
+          <a mat-menu-item appHapticTap [routerLink]="['/training/plans/library']"
+            [queryParams]="{ date: data.day.dateKey }" (click)="prepareWorkoutNavigation()">Add from library</a>
         </mat-menu>
       </div>
       @if (plannedWorkoutsStatus() === 'loading') {

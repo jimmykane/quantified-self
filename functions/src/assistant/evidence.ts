@@ -12,7 +12,7 @@ import type {
   AssistantMcpToolName,
 } from './mcp-session';
 import { isFunctionsEmulator } from '../utils';
-import { TRAINING_READ_TOOLS } from '../mcp/training-plans.schemas';
+import { TRAINING_READ_TOOLS, TRAINING_READ_OUTPUTS } from '../mcp/training-plans.schemas';
 import { MCP_MANUAL_MEASUREMENT_SCHEMA } from '../mcp/manual-measurements.schemas';
 import { HEALTH_METRIC_CATALOG } from '../../../shared/health';
 
@@ -418,6 +418,18 @@ export function buildAssistantEvidence(
   }
   if (tool.name === 'get_training_impact') {
     return buildTrainingImpactEvidence(tool, structuredContent);
+  }
+  if (tool.name === 'get_workout_prescription_analysis') {
+    const parsed = TRAINING_READ_OUTPUTS.get_workout_prescription_analysis.safeParse(structuredContent);
+    if (!parsed.success) return { toolName: tool.name, title: truncate(tool.title, 160),
+      summary: 'Prescription analysis unavailable.', facts: [], links: [] };
+    const result = parsed.data;
+    return { toolName: tool.name, title: truncate(tool.title, 160), summary: truncate(result.displaySummary, 240),
+      facts: [{ label: 'Step definitions', value: String(result.analysis.counts.definedSteps) },
+        { label: 'Executed steps', value: String(result.analysis.counts.executedSteps) },
+        { label: 'Duration coverage', value: result.analysis.summary.duration.coverage },
+        ...(result.analysis.summary.earlyLapSteps > 0
+          ? [{ label: 'Steps allowing early Lap', value: String(result.analysis.summary.earlyLapSteps) }] : [])], links: [] };
   }
   if ((TRAINING_READ_TOOLS as readonly string[]).includes(tool.name)) {
     if (tool.name === 'get_planned_workout_completion' || tool.name === 'get_planned_workout_completions') {

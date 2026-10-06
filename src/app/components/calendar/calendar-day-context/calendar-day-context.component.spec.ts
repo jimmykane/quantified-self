@@ -8,7 +8,7 @@ import type { TimelineNote } from '@shared/timeline-notes';
 import { TestBed } from '@angular/core/testing';
 import { ViewportScroller } from '@angular/common';
 import { provideRouter, Router } from '@angular/router';
-import { Subject } from 'rxjs';
+import { of, Subject } from 'rxjs';
 import { vi, expect, it, describe } from 'vitest';
 import { buildActivityCalendarViewModel } from '../../../helpers/activity-calendar.helper';
 import { AppUserService } from '../../../services/app.user.service';
@@ -31,6 +31,45 @@ function data(dateKey: string): CalendarDayDetailsData {
 const emptyEvidence = { sessions: [], hrvSeries: [], derived: null, sleepError: false, hrvError: false, readinessError: false, recoveryError: false };
 
 describe('CalendarDayContextComponent', () => {
+  it.each(['preview', 'dashboard', 'day'])('opens the saved-workout library for an owned empty %s day with its calendar date and return context', async surface => {
+    const viewer = signal<{ uid: string } | null>({ uid: 'owner' });
+    const haptics = { selection: vi.fn() };
+    await TestBed.configureTestingModule({ imports: [CalendarDayContextComponent], providers: [
+      provideRouter([]),
+      { provide: ViewportScroller, useValue: { scrollToAnchor: vi.fn() } },
+      { provide: AppUserService, useValue: { user: viewer } },
+      { provide: CalendarDayHealthService, useValue: { watch: () => of(emptyEvidence) } },
+      { provide: AppThemeService, useValue: { appTheme: signal(AppThemes.Dark) } },
+      { provide: EChartsLoaderService, useValue: { init: vi.fn().mockResolvedValue(null), dispose: vi.fn() } },
+      { provide: LoggerService, useValue: { error: vi.fn() } },
+      { provide: TrainingWorkoutDuplicateService, useValue: { duplicate: vi.fn() } },
+      { provide: AppEventColorService, useValue: { getActivityColor: vi.fn(), getColorForActivityTypeByActivityTypeGroup: vi.fn() } },
+      { provide: AppHapticsService, useValue: haptics },
+    ] }).compileComponents();
+    const fixture = TestBed.createComponent(CalendarDayContextComponent);
+    const calendarReturn = { view: 'month' as const, anchor: '2026-10-01' };
+    fixture.componentRef.setInput('data', { ...data('2026-10-25'), calendarReturn });
+    if (surface === 'dashboard') fixture.componentRef.setInput('dashboardTile', true);
+    if (surface === 'day') fixture.componentRef.setInput('standaloneDayPage', true);
+    fixture.detectChanges(); await fixture.whenStable(); fixture.detectChanges();
+    expect(haptics.selection).not.toHaveBeenCalled();
+    if (surface !== 'preview') {
+      const add = [...fixture.nativeElement.querySelectorAll('button')]
+        .find((button: HTMLButtonElement) => button.textContent?.includes('Add workout')) as HTMLButtonElement;
+      add.click(); fixture.detectChanges(); await fixture.whenStable();
+    }
+    const library = document.querySelector('a[href="/training/plans/library?date=2026-10-25"]') as HTMLAnchorElement;
+    expect(library?.textContent).toContain('Add from library');
+    const prepareReturn = vi.spyOn(TestBed.inject(CalendarDayDetailsNavigationService), 'prepareReturn');
+    vi.spyOn(TestBed.inject(Router), 'navigateByUrl').mockResolvedValue(true);
+    haptics.selection.mockClear();
+    library.click(); await fixture.whenStable();
+    expect(prepareReturn).toHaveBeenCalledWith('/', '2026-10-25', undefined, calendarReturn);
+    expect(haptics.selection).toHaveBeenCalledOnce();
+    viewer.set({ uid: 'other' }); fixture.detectChanges();
+    expect(fixture.componentInstance.canPlan()).toBe(false);
+    expect(fixture.nativeElement.querySelector('a[href*="/training/plans/library"]')).toBeNull();
+  });
   it('centers timeline time, mixed icons, and titles in a shared 44px row', () => {
     const styles = readFileSync(resolve(process.cwd(),
       'src/app/components/calendar/calendar-day-context/calendar-day-context.component.scss'), 'utf8');

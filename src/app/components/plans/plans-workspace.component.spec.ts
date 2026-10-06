@@ -1,6 +1,8 @@
+import { createManualWorkoutEditorTarget } from '../../helpers/planned-workout-target-editor.helper';
+import { WorkoutTargetsEditorComponent } from './workout-targets-editor.component';
 import { signal } from '@angular/core';
 import { Location } from '@angular/common';
-import { TestBed } from '@angular/core/testing';
+import { TestBed, type ComponentFixture } from '@angular/core/testing';
 import { By } from '@angular/platform-browser';
 import { CdkDrag, CdkDragHandle, CdkDropList, type CdkDragDrop } from '@angular/cdk/drag-drop';
 import { LiveAnnouncer } from '@angular/cdk/a11y';
@@ -12,13 +14,13 @@ import { MatDatepickerInput } from '@angular/material/datepicker';
 import { MatSelect } from '@angular/material/select';
 import { MAT_FORM_FIELD_DEFAULT_OPTIONS, MatFormField } from '@angular/material/form-field';
 import { ActivatedRoute, Router, convertToParamMap, provideRouter, type Data, type ParamMap } from '@angular/router';
-import { ActivityTypes, AppThemes, DistanceUnits, PaceUnits, SpeedUnits, SwimPaceUnits, WeightUnits } from '@sports-alliance/sports-lib';
-import { normalizeUserUnitSettings } from '@shared/unit-aware-display';
+import { ActivityTypes, AppThemes, DataDistance, DistanceUnits, PaceUnits, SpeedUnits, SwimPaceUnits, WeightUnits } from '@sports-alliance/sports-lib';
+import { normalizeUserUnitSettings, resolveUnitAwareDisplayFromValue } from '@shared/unit-aware-display';
 import { projectStrengthWorkoutToV1 } from '@shared/strength-workout';
 import type { ScheduledWorkoutV1 } from '@shared/training-plans';
 import type { WorkoutLibraryItemV1 } from '@shared/workout-library';
 import dayjs from 'dayjs';
-import { BehaviorSubject, Subject, concat, defer, of, type Observable } from 'rxjs';
+import { BehaviorSubject, Subject, concat, defer, of, throwError, type Observable } from 'rxjs';
 import { AppUserService } from '../../services/app.user.service';
 import { AppHapticsService } from '../../services/app.haptics.service';
 import { AppThemeService } from '../../services/app.theme.service';
@@ -161,6 +163,101 @@ describe('PlansWorkspaceComponent', () => {
   });
 
   afterEach(() => vi.useRealTimers());
+
+  it.each(['plans', 'standalone', 'library'] as const)('shows live unsaved timed totals and repeat changes in the %s editor', async scope => {
+    setRouteState({ mode: scope === 'library' ? 'library-create' : 'create', scope: scope === 'standalone' ? 'standalone' : 'plans', date: '2026-09-09' });
+    const fixture = await renderPlans();
+    const component = fixture.componentInstance;
+    component.addEditorRepeat();
+    component.updateStep(1, 0, 'endingValue', 3);
+    component.updateStep(1, 1, 'endingValue', 2);
+    fixture.detectChanges();
+    const summary = () => fixture.nativeElement.querySelector('.editor-prescription-summary p')?.textContent;
+    expect(summary()).toBe('30m 00s');
+    component.updateNode(1, 'count', 2); fixture.detectChanges();
+    expect(summary()).toBe('20m 00s');
+    const profile = fixture.nativeElement.querySelector('app-workout-profile');
+    expect(fixture.nativeElement.querySelector('.editor-prescription-summary').compareDocumentPosition(profile)
+      & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    const profileComponent = fixture.debugElement.query(By.directive(WorkoutProfileComponent)).componentInstance as WorkoutProfileComponent;
+    if (profileComponent.expanded()) profileComponent.toggleExpanded();
+    fixture.detectChanges();
+    expect(fixture.nativeElement.querySelector('.profile-chart')).toBeNull();
+    expect(summary()).toBe('20m 00s');
+    expect(mutate).not.toHaveBeenCalled(); expect(libraryMutate).not.toHaveBeenCalled();
+  });
+
+  it('updates estimates, unknown recoveries and early-Lap limits while editing an existing workout', async () => {
+    setRouteState({ mode: 'edit', workoutId: 'plan-workout' });
+    const fixture = await renderPlans();
+    const component = fixture.componentInstance;
+    component.updateEditorField('sport', ActivityTypes.Running);
+    component.updateStep(0, null, 'endingValue', 10);
+    component.addEditorRepeat();
+    component.updateStep(1, 0, 'endingKind', 'distance');
+    component.updateStep(1, 0, 'endingValue', 1);
+    component.updateStep(1, 1, 'endingKind', 'manual');
+    fixture.detectChanges();
+    const targetsEditor = fixture.debugElement.queryAll(By.directive(WorkoutTargetsEditorComponent))[1]
+      .componentInstance as WorkoutTargetsEditorComponent;
+    targetsEditor.targetsChange.emit([{ ...createManualWorkoutEditorTarget('speed'), minimum: 4, maximum: 5 }]);
+    fixture.detectChanges();
+    const summary = () => fixture.nativeElement.querySelector('.editor-prescription-summary p')?.textContent;
+    expect(summary()).toMatch(/26m 00s–30m 00s estimated \+ 4 steps with unknown duration/);
+    const distance = resolveUnitAwareDisplayFromValue(DataDistance.type, 4000, component.editor()!.unitSettings)!.text;
+    expect(summary()).toContain(`${distance} distance subtotal`);
+    component.updateStep(1, 0, 'allowEarlyLap', true); fixture.detectChanges();
+    expect(summary()).toContain('prescribed limits'); expect(summary()).toContain('4 steps allow early Lap');
+    component.updateStep(1, 1, 'endingKind', 'time');
+    component.updateStep(1, 1, 'endingValue', 1); fixture.detectChanges();
+    expect(summary()).toContain('30m 00s–34m 00s estimated');
+    expect(summary()).not.toContain('unknown duration');
+    targetsEditor.remove(0); fixture.detectChanges();
+    expect(summary()).toContain('4 steps with unknown duration'); expect(summary()).not.toContain('estimated');
+    expect(mutate).not.toHaveBeenCalled();
+  });
+
+  it.each([DistanceUnits.Kilometers, DistanceUnits.Miles])('uses the editor owner units for live distance totals in %s', async distanceUnits => {
+    const owner = { ...user, settings: { unitSettings: normalizeUserUnitSettings({ distanceUnits }) } };
+    userSignal.set(owner); userSubject.next(owner);
+    setRouteState({ mode: 'library-create' });
+    const fixture = await renderPlans(); const component = fixture.componentInstance;
+    component.updateStep(0, null, 'endingKind', 'distance');
+    component.updateStep(0, null, 'endingValue', 1); fixture.detectChanges();
+    const distance = resolveUnitAwareDisplayFromValue(DataDistance.type,
+      distanceUnits === DistanceUnits.Miles ? 1609.344 : 1000, owner.settings.unitSettings)!.text;
+    expect(fixture.nativeElement.querySelector('.editor-prescription-summary p').textContent)
+      .toBe(`Duration unknown · ${distance} prescribed`);
+    expect(libraryMutate).not.toHaveBeenCalled();
+  });
+
+  it('clears stale totals for invalid draft values and recovers when corrected', async () => {
+    setRouteState({ mode: 'create', scope: 'standalone', date: '2026-09-09' });
+    const fixture = await renderPlans(); const component = fixture.componentInstance;
+    component.updateStep(0, null, 'endingValue', 0); fixture.detectChanges();
+    expect(component.editorPrescriptionSummary()).toBeNull();
+    expect(fixture.nativeElement.querySelector('.editor-prescription-summary p').textContent)
+      .toBe('Complete valid workout details to see totals.');
+    component.updateStep(0, null, 'endingValue', 12); fixture.detectChanges();
+    expect(fixture.nativeElement.querySelector('.editor-prescription-summary p').textContent).toBe('12m 00s');
+    expect(mutate).not.toHaveBeenCalled();
+  });
+
+  it('summarizes strength holds and rest without estimating repetition duration', async () => {
+    setRouteState({ mode: 'library-create' });
+    const fixture = await renderPlans(); const component = fixture.componentInstance;
+    component.updateEditorField('sport', ActivityTypes.StrengthTraining);
+    component.updateStrengthExerciseName(0, 'Squat');
+    component.updateStrengthSet(0, 0, 'value', 5);
+    component.updateStrengthSet(0, 0, 'restAfterSeconds', 120);
+    component.addStrengthSet(0);
+    component.updateStrengthSet(0, 1, 'kind', 'time');
+    component.updateStrengthSet(0, 1, 'value', 30); fixture.detectChanges();
+    expect(fixture.nativeElement.querySelector('.editor-prescription-summary p').textContent)
+      .toBe('02m 30s timed subtotal + 1 step with unknown duration');
+    expect(fixture.nativeElement.querySelector('app-workout-profile')).toBeNull();
+    expect(libraryMutate).not.toHaveBeenCalled();
+  });
 
   it('previews exact live canonical steps, preserves selection when reordered and hides an invalid draft without writes', async () => {
     setRouteState({ mode: 'create', scope: 'standalone', date: '2026-09-09' });
@@ -442,7 +539,7 @@ describe('PlansWorkspaceComponent', () => {
     const component = fixture.componentInstance;
     component.updateEditorField('title', 'QA interval timing');
     component.addEditorRepeat();
-    component.updateStep(0, null, 'targetKind', 'pace');
+    component.updateStep(0, null, 'targets', [{ ...createManualWorkoutEditorTarget('speed'), minimum: null, maximum: null }]);
     fixture.detectChanges(); await fixture.whenStable(); fixture.detectChanges();
     const type = async (input: HTMLInputElement, value: string) => {
       input.value = value; input.dispatchEvent(new Event('input', { bubbles: true }));
@@ -456,9 +553,9 @@ describe('PlansWorkspaceComponent', () => {
     }
     const paceInputs: HTMLInputElement[] = [...fixture.nativeElement.querySelectorAll('app-workout-time-input input[type="text"]')];
     await type(paceInputs[0], '4:30'); await type(paceInputs[1], '5:00');
-    expect(haptics.selection).toHaveBeenCalledOnce(); // Target selection, never typing.
+    expect(haptics.selection).not.toHaveBeenCalled(); // Draft setup and typing are silent.
     const firstNode = component.editor()!.value.nodes[0];
-    expect(firstNode).toMatchObject({ endingValue: 62.05, targetMinimum: 4.5, targetMaximum: 5 });
+    expect(firstNode).toMatchObject({ endingValue: 62.05, targets: [{ minimum: 4.5, maximum: 5 }] });
     await component.saveWorkout();
     const operation = (scope === 'library' ? libraryMutate : mutate).mock.calls[0][0].operation;
     expect(operation.structure.nodes[0]).toMatchObject({ ending: { kind: 'time', seconds: 3723 },
@@ -468,6 +565,46 @@ describe('PlansWorkspaceComponent', () => {
       steps: [{ ending: { kind: 'time', seconds: 75 } }, { ending: { kind: 'time', seconds: 90 } }] });
     expect(JSON.stringify(operation.structure)).not.toMatch(/sourceDuration|sourcePace|hours|endingValue/);
     if (scope === 'library') expect(mutate).not.toHaveBeenCalled();
+  });
+
+  it.each(['scheduled', 'library'] as const)('reopens mixed snapshots in %s and keeps them exact after a settings refresh', async scope => {
+    const structure = { version: 1 as const, sport: ActivityTypes.Cycling, nodes: [{ kind: 'repeat' as const, id: 'block', count: 3, steps: [
+      { kind: 'step' as const, id: 'work', purpose: 'work' as const, ending: { kind: 'time' as const, seconds: 61.1234567890123 }, targets: [
+        { kind: 'power' as const, mode: 'relative' as const, minimumPercent: 80.123456789, maximumPercent: 130.123456789,
+          reference: { kind: 'critical-power' as const, watts: 283.123456789 } },
+        { kind: 'heart-rate' as const, mode: 'absolute' as const, minimumBpm: 150.123456789, maximumBpm: 170.123456789 },
+      ], note: 'Preserve both targets' },
+      { kind: 'step' as const, id: 'recovery', purpose: 'recovery' as const, ending: { kind: 'distance' as const, meters: 1234.123456789 }, targets: [
+        { kind: 'speed' as const, mode: 'relative' as const, presentation: 'pace' as const, minimumPercent: 0, maximumPercent: 90,
+          reference: { kind: 'threshold-speed' as const, metersPerSecond: 3.1234567890123 } },
+        { kind: 'cadence' as const, mode: 'absolute' as const, minimumRpm: 80.123456789, maximumRpm: 90.123456789 },
+      ] },
+    ] }] };
+    if (scope === 'scheduled') {
+      schedule.workouts[0].structure = structure;
+      setRouteState({ mode: 'edit', workoutId: 'plan-workout' });
+    } else {
+      libraryItems.next([{ schemaVersion: 1, id: 'mixed-library', title: 'Mixed snapshots', structure,
+        status: 'active', revision: 2, createdAtMs: 1, updatedAtMs: 2 }]);
+      libraryGet.mockResolvedValue(libraryItems.value[0]);
+      libraryMutate.mockResolvedValue({ mutationId: 'mutation-1', item: null });
+      setRouteState({ mode: 'library-edit', itemId: 'mixed-library' });
+    }
+    const fixture = await renderPlans();
+    expect(fixture.nativeElement.querySelectorAll('.target-editor')).toHaveLength(4);
+    expect(fixture.nativeElement.textContent).toContain('Saved reference snapshot');
+    const capturedUnits = fixture.componentInstance.editor()!.unitSettings;
+    const refreshed = { ...user, settings: { unitSettings: normalizeUserUnitSettings({ paceUnits: [PaceUnits.MinutesPerMile] }) } };
+    userSignal.set(refreshed); userSubject.next(refreshed); fixture.detectChanges();
+    expect(fixture.componentInstance.editor()!.unitSettings).toEqual(capturedUnits);
+    if (scope === 'scheduled') {
+      await fixture.componentInstance.saveEditorCopyToLibrary();
+      expect(libraryMutate.mock.calls[0][0].operation.structure).toEqual(structure);
+    }
+    await fixture.componentInstance.saveWorkout();
+    const operation = (scope === 'library' ? libraryMutate : mutate).mock.calls[0][0].operation;
+    expect(operation.structure).toEqual(structure);
+    expect(JSON.stringify(operation.structure)).not.toMatch(/source|rangeMode|referenceValue/);
   });
 
   it.each([
@@ -483,6 +620,8 @@ describe('PlansWorkspaceComponent', () => {
     component.updateEditorField('title', 'Cycling speed intervals');
     component.updateEditorField('sport', ActivityTypes.Cycling);
     fixture.detectChanges(); await fixture.whenStable();
+    const targets = fixture.debugElement.query(By.directive(WorkoutTargetsEditorComponent)).componentInstance as WorkoutTargetsEditorComponent;
+    targets.add(); fixture.detectChanges(); await fixture.whenStable(); fixture.detectChanges();
     const target = fixture.debugElement.queryAll(By.directive(MatSelect))
       .map(element => element.componentInstance as MatSelect).find(select => select.options.some(option => option.value === 'speed'))!;
     expect(target).toBeDefined();
@@ -490,7 +629,7 @@ describe('PlansWorkspaceComponent', () => {
     fixture.detectChanges(); await fixture.whenStable(); fixture.detectChanges();
     for (const [name, value] of [['Minimum', minimum], ['Maximum', maximum]] as const) {
       const field = [...fixture.nativeElement.querySelectorAll('mat-form-field')]
-        .find((element: HTMLElement) => element.querySelector('mat-label')?.textContent === `${name} ${label}`) as HTMLElement;
+        .find((element: HTMLElement) => element.querySelector('mat-label')?.textContent === `${name} (${label})`) as HTMLElement;
       expect(field).toBeDefined();
       const input = field.querySelector('input')!;
       input.value = String(value); input.dispatchEvent(new Event('input', { bubbles: true }));
@@ -510,28 +649,27 @@ describe('PlansWorkspaceComponent', () => {
   });
 
   it.each([
-    { sport: ActivityTypes.Running, first: 'pace', cadence: true },
-    { sport: ActivityTypes.TrailRunning, first: 'pace', cadence: true },
+    { sport: ActivityTypes.Running, first: 'speed', cadence: true },
+    { sport: ActivityTypes.TrailRunning, first: 'speed', cadence: true },
     { sport: ActivityTypes.Cycling, first: 'power', cadence: true },
     { sport: ActivityTypes.IndoorCycling, first: 'power', cadence: true },
-    { sport: ActivityTypes.Swimming, first: 'pace', cadence: false },
-    { sport: ActivityTypes.OpenWaterSwimming, first: 'pace', cadence: false },
-    { sport: ActivityTypes.Rowing, first: 'pace', cadence: false },
-    { sport: ActivityTypes.IndoorRowing, first: 'pace', cadence: false },
-    { sport: ActivityTypes.Hiking, first: 'pace', cadence: false },
+    { sport: ActivityTypes.Swimming, first: 'speed', cadence: false },
+    { sport: ActivityTypes.OpenWaterSwimming, first: 'speed', cadence: false },
+    { sport: ActivityTypes.Rowing, first: 'speed', cadence: false },
+    { sport: ActivityTypes.IndoorRowing, first: 'speed', cadence: false },
+    { sport: ActivityTypes.Hiking, first: 'speed', cadence: false },
   ])('orders $sport targets without replacing the selected target', async ({ sport, first, cadence }) => {
     setRouteState({ mode: 'create', scope: 'standalone', date: '2026-10-05' });
     const fixture = await renderPlans(); const component = fixture.componentInstance;
-    component.updateStep(0, null, 'targetKind', 'heart-rate');
-    component.updateStep(0, null, 'targetMinimum', 130); component.updateStep(0, null, 'targetMaximum', 150);
+    component.updateStep(0, null, 'targets', [{ ...createManualWorkoutEditorTarget('heart-rate'), minimum: 130, maximum: 150 }]);
     component.updateEditorField('sport', sport);
     fixture.detectChanges(); await fixture.whenStable(); fixture.detectChanges();
     const target = fixture.debugElement.queryAll(By.directive(MatSelect))
       .map(element => element.componentInstance as MatSelect).find(select => select.options.some(option => option.value === 'speed'))!;
     const choices = target.options.map(option => option.value);
-    expect(choices[0]).toBe('none'); expect(choices[1]).toBe(first);
+    expect(choices[0]).toBe(first);
     expect(choices.includes('cadence')).toBe(cadence);
-    if (sport === ActivityTypes.Cycling || sport === ActivityTypes.IndoorCycling) expect(choices[2]).toBe('speed');
+    if (sport === ActivityTypes.Cycling || sport === ActivityTypes.IndoorCycling) expect(choices[1]).toBe('speed');
     expect(target.value).toBe('heart-rate');
     expect(component.editorProfile().nodes[0]).toMatchObject({ targets: [{ kind: 'heart-rate', minimumBpm: 130, maximumBpm: 150 }] });
   });
@@ -546,13 +684,15 @@ describe('PlansWorkspaceComponent', () => {
     const fixture = await renderPlans(); const component = fixture.componentInstance;
     component.updateEditorField('title', 'Cadence intervals'); component.updateEditorField('sport', sport);
     fixture.detectChanges(); await fixture.whenStable();
+    const targets = fixture.debugElement.query(By.directive(WorkoutTargetsEditorComponent)).componentInstance as WorkoutTargetsEditorComponent;
+    targets.add(); fixture.detectChanges(); await fixture.whenStable(); fixture.detectChanges();
     const target = fixture.debugElement.queryAll(By.directive(MatSelect))
       .map(element => element.componentInstance as MatSelect).find(select => select.options.some(option => option.value === 'cadence'))!;
     target.selectionChange.emit({ source: target, value: 'cadence' });
     fixture.detectChanges(); await fixture.whenStable(); fixture.detectChanges();
     for (const [name, value] of [['Minimum', minimum], ['Maximum', maximum]] as const) {
       const field = [...fixture.nativeElement.querySelectorAll('mat-form-field')]
-        .find((element: HTMLElement) => element.querySelector('mat-label')?.textContent === `${name} rpm`) as HTMLElement;
+        .find((element: HTMLElement) => element.querySelector('mat-label')?.textContent === `${name} (rpm)`) as HTMLElement;
       const input = field.querySelector('input')!;
       input.value = String(value); input.dispatchEvent(new Event('input', { bubbles: true }));
       fixture.detectChanges(); await fixture.whenStable(); fixture.detectChanges();
@@ -562,7 +702,7 @@ describe('PlansWorkspaceComponent', () => {
     if (sport === ActivityTypes.Running) {
       component.updateEditorField('sport', ActivityTypes.Swimming);
       fixture.detectChanges(); await fixture.whenStable(); fixture.detectChanges();
-      expect(component.targetOptions().some(option => option.value === 'cadence')).toBe(false);
+      expect(targets.kinds().some(option => option.value === 'cadence')).toBe(false);
       expect(target.options.some(option => option.value === 'cadence')).toBe(true);
       expect(target.value).toBe('cadence');
       component.updateEditorField('sport', sport);
@@ -608,7 +748,7 @@ describe('PlansWorkspaceComponent', () => {
   });
 
   it.each([
-    { sport: ActivityTypes.Running, units: normalizeUserUnitSettings({ paceUnits: [PaceUnits.MinutesPerMile] }), meters: 1609.344, label: 'min/mi' },
+    { sport: ActivityTypes.Running, units: normalizeUserUnitSettings({ paceUnits: [PaceUnits.MinutesPerMile] }), meters: 1609.344, label: 'min/m' },
     { sport: ActivityTypes.Swimming, units: normalizeUserUnitSettings({}), meters: 100, label: 'min/100m' },
     { sport: ActivityTypes.OpenWaterSwimming, units: normalizeUserUnitSettings({ swimPaceUnits: [SwimPaceUnits.MinutesPer100Yard] }), meters: 91.44, label: 'min/100yd' },
     { sport: ActivityTypes.Rowing, units: normalizeUserUnitSettings({}), meters: 500, label: 'min/500m' },
@@ -621,7 +761,7 @@ describe('PlansWorkspaceComponent', () => {
     const component = fixture.componentInstance;
     component.updateEditorField('title', 'Pace input units');
     component.updateEditorField('sport', sport);
-    component.updateStep(0, null, 'targetKind', 'pace');
+    component.updateStep(0, null, 'targets', [{ ...createManualWorkoutEditorTarget('speed'), minimum: null, maximum: null }]);
     fixture.detectChanges(); await fixture.whenStable(); fixture.detectChanges();
     const inputs: HTMLInputElement[] = [...fixture.nativeElement.querySelectorAll('app-workout-time-input input[type="text"]')];
     expect(inputs[0].getAttribute('aria-label')).toBe('Faster ' + label);
@@ -648,7 +788,7 @@ describe('PlansWorkspaceComponent', () => {
     expect(mutate).not.toHaveBeenCalled();
     expect(fixture.nativeElement.querySelector('[role="alert"]').textContent).toContain('below 60');
     component.updateStep(0, null, 'endingValue', 1.25);
-    component.updateStep(0, null, 'targetKind', 'pace');
+    component.updateStep(0, null, 'targets', [{ ...createManualWorkoutEditorTarget('speed'), minimum: null, maximum: null }]);
     fixture.detectChanges(); await fixture.whenStable(); fixture.detectChanges();
     const pace: HTMLInputElement = fixture.nativeElement.querySelector('app-workout-time-input input[type="text"]');
     pace.value = '4:'; pace.dispatchEvent(new Event('input', { bubbles: true }));
@@ -665,8 +805,8 @@ describe('PlansWorkspaceComponent', () => {
     const component = fixture.componentInstance;
     component.updateEditorField('title', 'Controlled long run and pace changes');
     component.updateStep(0, null, 'endingValue', 62.05);
-    component.updateStep(0, null, 'targetKind', 'pace');
-    component.updateStep(0, null, 'targetMinimum', 4.5); component.updateStep(0, null, 'targetMaximum', 5);
+    component.updateStep(0, null, 'targets', [{ ...createManualWorkoutEditorTarget('speed'), minimum: null, maximum: null }]);
+    component.updateStep(0, null, 'targets', [{ ...createManualWorkoutEditorTarget('speed'), minimum: 4.5, maximum: 5 }]);
     component.addEditorRepeat();
     component.updateStep(1, 0, 'endingValue', 1.25); component.updateStep(1, 1, 'endingValue', 1.5);
     fixture.detectChanges(); await fixture.whenStable(); fixture.detectChanges();
@@ -675,6 +815,7 @@ describe('PlansWorkspaceComponent', () => {
       ['app-plans-workspace', 'src/app/components/plans/plans-workspace.component.scss'],
       ['app-compact-row', 'src/app/components/shared/compact-row/compact-row.component.scss'],
       ['app-workout-time-input', 'src/app/components/plans/workout-time-input.component.scss'],
+      ['app-workout-targets-editor', 'src/app/components/plans/workout-targets-editor.component.scss'],
       ['app-page-header', 'src/app/components/shared/page-header/page-header.component.scss'],
       ['app-workout-profile', 'src/app/components/plans/workout-profile.component.scss'],
     ].map(([host, file]) => sass.compileString(host + ' {' + readFileSync(file, 'utf8')
@@ -686,6 +827,22 @@ describe('PlansWorkspaceComponent', () => {
       '<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">'
       + '<link rel="stylesheet" href="styles.css">' + Array.from(document.head.querySelectorAll('style')).map(style => style.outerHTML).join('')
       + '<style>' + css + '</style></head><body class="app-hydrated"><app-plans-workspace>' + markup.outerHTML + '</app-plans-workspace></body></html>');
+    component.updateStep(0, null, 'targets', [
+      { ...createManualWorkoutEditorTarget('heart-rate'), mode: 'relative', minimum: 80, maximum: 105, referenceValue: 185 },
+      { ...createManualWorkoutEditorTarget('cadence'), minimum: 80, maximum: 95 },
+    ]);
+    component.updateStep(1, 0, 'targets', [
+      { ...createManualWorkoutEditorTarget('power'), mode: 'relative', referenceKind: 'critical-power', minimum: 80, maximum: 120, referenceValue: 250 },
+      { ...createManualWorkoutEditorTarget('speed'), minimum: 4.5, maximum: 5 },
+    ]);
+    fixture.detectChanges(); await fixture.whenStable(); fixture.detectChanges();
+    const targetMarkup = fixture.nativeElement.cloneNode(true) as HTMLElement;
+    const targetInputs: HTMLInputElement[] = [...fixture.nativeElement.querySelectorAll('input')];
+    targetMarkup.querySelectorAll('input').forEach((input, index) => input.setAttribute('value', targetInputs[index].value));
+    writeFileSync(join(process.env.TRAINING_DELIVERY_QA_DIR, 'target-editor.html'),
+      '<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">'
+      + '<link rel="stylesheet" href="styles.css">' + Array.from(document.head.querySelectorAll('style')).map(style => style.outerHTML).join('')
+      + '<style>' + css + '</style></head><body class="app-hydrated"><app-plans-workspace>' + targetMarkup.outerHTML + '</app-plans-workspace></body></html>');
     const repeat = component.editor()!.value.nodes[1] as ManualWorkoutEditorRepeat;
     component.duplicateEditorNode(repeat.id);
     component.moveEditorNode(repeat.id, -1);
@@ -727,18 +884,14 @@ describe('PlansWorkspaceComponent', () => {
     await exportEditor('pace-editor');
     const paceSession = component.editor()!;
     component.updateEditorField('sport', ActivityTypes.Cycling);
-    const pacedIndex = component.editor()!.value.nodes.findIndex(node => node.kind === 'step' && node.targetKind === 'pace');
-    component.updateStep(pacedIndex, null, 'targetKind', 'speed');
-    component.updateStep(pacedIndex, null, 'targetMinimum', 18);
-    component.updateStep(pacedIndex, null, 'targetMaximum', 36);
+    const pacedIndex = component.editor()!.value.nodes.findIndex(node => node.kind === 'step');
+    component.updateStep(pacedIndex, null, 'targets', [{ ...createManualWorkoutEditorTarget('speed'), presentation: 'speed', minimum: 18, maximum: 36 }]);
     await exportEditor('cycling-speed-editor');
     writeFileSync(join(process.env.TRAINING_DELIVERY_QA_DIR!, 'cycling-speed-recipe.json'), JSON.stringify({
       structure: manualWorkoutEditorToStructure(component.editor()!.value, component.editor()!.unitSettings),
       units: component.editor()!.unitSettings,
     }));
-    component.updateStep(pacedIndex, null, 'targetKind', 'cadence');
-    component.updateStep(pacedIndex, null, 'targetMinimum', 80);
-    component.updateStep(pacedIndex, null, 'targetMaximum', 95);
+    component.updateStep(pacedIndex, null, 'targets', [{ ...createManualWorkoutEditorTarget('cadence'), minimum: 80, maximum: 95 }]);
     await exportEditor('cycling-cadence-editor');
     writeFileSync(join(process.env.TRAINING_DELIVERY_QA_DIR!, 'cycling-cadence-recipe.json'), JSON.stringify({
       structure: manualWorkoutEditorToStructure(component.editor()!.value, component.editor()!.unitSettings),
@@ -992,6 +1145,329 @@ describe('PlansWorkspaceComponent', () => {
     await fixture.whenStable();
 
     expect(libraryWatch).toHaveBeenCalledWith(user.uid);
+  });
+
+  function savedItem(): WorkoutLibraryItemV1 {
+    return { schemaVersion: 1, id: 'saved-run', title: 'Easy run', structure: schedule.workouts[0].structure,
+      status: 'active', revision: 2, createdAtMs: 1, updatedAtMs: 2 };
+  }
+
+  it('filters active recipes by title and exact sport, distinguishes no matches, and restores archived recipes explicitly', async () => {
+    const item = savedItem();
+    libraryItems.next([item, { ...item, id: 'archived', status: 'archived' },
+      { ...item, id: 'bike', title: 'Bike tempo', structure: { ...item.structure, sport: ActivityTypes.Cycling } }]);
+    setRouteState({ mode: 'library-browse' });
+    const fixture = await renderPlans();
+    const component = fixture.componentInstance;
+    expect(component.libraryRows()).toHaveLength(2);
+    expect(fixture.debugElement.query(By.directive(MatSelect)).componentInstance.value).toBe('all');
+    component.setLibrarySport('all');
+    expect(haptics.selection).not.toHaveBeenCalled();
+    component.librarySearch.set('  EASY ');
+    component.setLibrarySport(ActivityTypes.Running);
+    fixture.detectChanges();
+    expect(component.libraryRows().map(row => row.item.id)).toEqual(['saved-run']);
+    expect(fixture.nativeElement.querySelector('.workout-prescription-summary').textContent).toContain('30m 00s');
+    component.setLibrarySport(ActivityTypes.Running);
+    expect(haptics.selection).toHaveBeenCalledOnce();
+    component.librarySearch.set('missing');
+    fixture.detectChanges();
+    expect(fixture.nativeElement.textContent).toContain('No saved workouts match these filters');
+    expect(fixture.nativeElement.textContent).not.toContain('No saved workouts yet');
+    component.librarySearch.set('');
+    component.setLibraryStatusFilter('archived');
+    fixture.detectChanges();
+    expect(component.libraryRows().map(row => row.item.id)).toEqual(['archived']);
+    expect(fixture.nativeElement.querySelector('[data-library-add]')).toBeNull();
+    component.beginLibraryPlacement({ ...item, status: 'archived' });
+    expect(component.placementItem()).toBeNull();
+    expect(libraryPlace).not.toHaveBeenCalled();
+  });
+
+  it('retries a failed owner library listener without mounting one on Calendar or writing anything', async () => {
+    libraryWatch.mockReturnValueOnce(throwError(() => new Error('Offline')));
+    setRouteState({ mode: 'library-browse' });
+    const fixture = await renderPlans();
+    expect(fixture.nativeElement.textContent).toContain('Could not load saved workouts');
+    const retry = [...fixture.nativeElement.querySelectorAll('button')]
+      .find((button: HTMLButtonElement) => button.textContent?.trim() === 'Retry') as HTMLButtonElement;
+    retry.click();
+    fixture.detectChanges(); await fixture.whenStable(); fixture.detectChanges();
+    expect(libraryWatch).toHaveBeenCalledTimes(2);
+    expect(fixture.nativeElement.textContent).toContain('No saved workouts yet');
+    expect(haptics.selection).toHaveBeenCalledOnce();
+    expect(libraryMutate).not.toHaveBeenCalled();
+  });
+
+  it.each(['2026-03-29', '2026-10-25', '2027-01-01'])('places the selected calendar label %s unchanged, including DST and year boundaries', async date => {
+    const item = savedItem();
+    libraryItems.next([item]);
+    setRouteState({ mode: 'library-browse', date });
+    libraryPlace.mockResolvedValue({ workoutIds: ['copy'], dates: [date] });
+    const fixture = await renderPlans();
+    fixture.componentInstance.beginLibraryPlacement(item);
+    fixture.componentInstance.setPlacementPlan('standalone');
+    fixture.detectChanges();
+    expect(fixture.componentInstance.placementDates()).toEqual([date]);
+    expect(fixture.nativeElement.textContent).toContain(`Selected Calendar day: ${date}`);
+    await fixture.componentInstance.placeLibraryItem();
+    expect(libraryPlace).toHaveBeenCalledWith(expect.objectContaining({ dates: [date], planId: null,
+      expectedPlanRevision: null, expectedTemplateRevision: 2 }));
+    expect(Object.keys(libraryPlace.mock.calls[0][0]).sort()).toEqual(['mutationId', 'itemId',
+      'expectedTemplateRevision', 'expectedStateRevision', 'planId', 'expectedPlanRevision', 'dates',
+      'confirmPlanRangeExtension'].sort());
+  });
+
+  it('locks an uncertain result and replays exactly the same request despite newer live recipes and schedule state', async () => {
+    const item = savedItem();
+    const scheduleChanges = new BehaviorSubject(schedule);
+    watchSchedule.mockReturnValue(scheduleChanges);
+    libraryItems.next([item]);
+    setRouteState({ mode: 'library-browse', date: '2026-09-09' });
+    libraryPlace.mockRejectedValueOnce(Object.assign(new Error('Reply lost'), { code: 'functions/unavailable' }))
+      .mockResolvedValueOnce({ workoutIds: ['copy'], dates: ['2026-09-09'] });
+    const fixture = await renderPlans();
+    const component = fixture.componentInstance;
+    component.beginLibraryPlacement(item);
+    await component.placeLibraryItem();
+    const original = libraryPlace.mock.calls[0][0];
+    scheduleChanges.next({ ...schedule, state: { ...schedule.state, revision: 5, currentWorkoutCount: 400 } });
+    libraryItems.next([{ ...item, revision: 3, status: 'archived' }]);
+    component.cancelLibraryPlacement();
+    component.setPlacementPlan('standalone');
+    component.setPlacementStartDate('2026-10-01');
+    component.setPlacementEndDate('2026-10-31');
+    component.togglePlacementWeekday(0);
+    fixture.detectChanges();
+    expect(component.placementItem()).toBe(item);
+    expect(component.placementPlanId()).toBe('active-plan');
+    expect(component.placementStartDate()).toBe('2026-09-09');
+    expect(component.placementEndDate()).toBe('2026-09-09');
+    expect(component.placementWeekdays()).toEqual([3]);
+    expect(component.placementDates()).toEqual(original.dates);
+    expect(haptics.selection).not.toHaveBeenCalled();
+    expect(fixture.nativeElement.textContent).toContain('Retry exact placement');
+    expect(fixture.debugElement.query(By.directive(MatSelect)).componentInstance.disabled).toBe(true);
+    expect(haptics.error).toHaveBeenCalledOnce();
+    expect(haptics.success).not.toHaveBeenCalled();
+    await component.placeLibraryItem();
+    expect(libraryPlace.mock.calls[1][0]).toEqual(original);
+    expect(component.placementRetry()).toBeNull();
+    expect(component.placementItem()).toBeNull();
+    expect(haptics.success).toHaveBeenCalledOnce();
+  });
+
+  it('releases a definitively rejected placement for correction and cancels without writing', async () => {
+    setRouteState({ mode: 'library-browse' });
+    libraryPlace.mockRejectedValue(Object.assign(new Error('Workout capacity reached'), { code: 'functions/resource-exhausted' }));
+    const fixture = await renderPlans();
+    fixture.componentInstance.beginLibraryPlacement(savedItem());
+    await fixture.componentInstance.placeLibraryItem();
+    expect(fixture.componentInstance.placementRetry()).toBeNull();
+    fixture.componentInstance.cancelLibraryPlacement();
+    expect(fixture.componentInstance.placementItem()).toBeNull();
+    expect(libraryPlace).toHaveBeenCalledOnce();
+  });
+
+  it.each(['cancelled', 'added', 'archived'])('restores library focus after a placement is %s', async result => {
+    const item = savedItem();
+    libraryItems.next([item]);
+    setRouteState({ mode: 'library-browse' });
+    libraryPlace.mockResolvedValue({ workoutIds: ['copy'] });
+    const fixture = await renderPlans();
+    const component = fixture.componentInstance;
+    (fixture.nativeElement.querySelector('[data-library-add="saved-run"]') as HTMLButtonElement).click();
+    fixture.detectChanges(); await fixture.whenStable();
+    expect(document.activeElement).toBe(fixture.nativeElement.querySelector('#library-placement-heading'));
+    if (result === 'cancelled') component.cancelLibraryPlacement();
+    else {
+      if (result === 'archived') libraryItems.next([{ ...item, status: 'archived' }]);
+      await component.placeLibraryItem();
+    }
+    fixture.detectChanges(); await fixture.whenStable();
+    expect(document.activeElement).toBe(fixture.nativeElement.querySelector(result === 'archived'
+      ? '#library-heading' : '[data-library-add="saved-run"]'));
+    expect(libraryPlace).toHaveBeenCalledTimes(result === 'cancelled' ? 0 : 1);
+  });
+
+  it.each(['renamed', 'archived', 'removed'])('keeps the submitted destination visible when its live plan is %s after a lost reply', async change => {
+    const scheduleChanges = new BehaviorSubject(schedule);
+    watchSchedule.mockReturnValue(scheduleChanges);
+    setRouteState({ mode: 'library-browse', date: '2026-09-09' });
+    libraryPlace.mockRejectedValueOnce(Object.assign(new Error('Reply lost'), { code: 'functions/unavailable' }))
+      .mockResolvedValueOnce({ workoutIds: ['copy'], dates: ['2026-09-09'] });
+    const fixture = await renderPlans();
+    const component = fixture.componentInstance;
+    component.beginLibraryPlacement(savedItem());
+    await component.placeLibraryItem();
+    const original = libraryPlace.mock.calls[0][0];
+    scheduleChanges.next({ ...schedule, plans: change === 'removed' ? [] : schedule.plans.map(plan =>
+      plan.id !== original.planId ? plan : { ...plan, revision: plan.revision + 1,
+        name: change === 'renamed' ? 'Different plan name' : plan.name,
+        lifecycle: change === 'archived' ? 'archived' : plan.lifecycle }) });
+    fixture.detectChanges();
+    await fixture.whenStable();
+    fixture.detectChanges();
+    expect(fixture.nativeElement.querySelector('.library-placement-review').textContent)
+      .toContain('Autumn build · 2026-09-09');
+    expect(fixture.nativeElement.querySelector('.mat-mdc-select-value').textContent).toContain('Autumn build');
+    await component.placeLibraryItem();
+    expect(libraryPlace.mock.calls[1][0]).toEqual(original);
+  });
+
+  it('replays the confirmed extension request after a lost reply without asking for another extension or adding another batch', async () => {
+    const item = savedItem();
+    const scheduleChanges = new BehaviorSubject(schedule);
+    watchSchedule.mockReturnValue(scheduleChanges);
+    setRouteState({ mode: 'library-browse', date: '2026-10-25' });
+    libraryPlace.mockRejectedValueOnce(new Error('Moving this workout requires extending Autumn build.'))
+      .mockRejectedValueOnce(Object.assign(new Error('Reply lost'), { code: 'functions/deadline-exceeded' }))
+      .mockResolvedValueOnce({ workoutIds: ['copy'] });
+    const fixture = await renderPlans();
+    const confirmDialog = vi.spyOn((fixture.componentInstance as unknown as { dialog: MatDialog }).dialog, 'open')
+      .mockReturnValue({ afterClosed: () => of(true) } as never);
+    fixture.componentInstance.beginLibraryPlacement(item);
+    await fixture.componentInstance.placeLibraryItem();
+    expect(fixture.componentInstance.placementRetry()?.confirmPlanRangeExtension).toBe(true);
+    scheduleChanges.next({ ...schedule, plans: schedule.plans.map(plan => ({ ...plan,
+      endLocalDate: '2026-10-25', revision: plan.revision + 1 })) });
+    fixture.detectChanges();
+    expect(fixture.nativeElement.textContent).toContain('Confirmed plan date extension: 2026-09-01–2026-10-25');
+    expect(fixture.nativeElement.textContent).not.toContain('QS will ask you to confirm');
+    await fixture.componentInstance.placeLibraryItem();
+    expect(libraryPlace.mock.calls[2][0]).toEqual(libraryPlace.mock.calls[1][0]);
+    expect(confirmDialog).toHaveBeenCalledOnce();
+    expect(haptics.success).toHaveBeenCalledOnce();
+  });
+
+  it.each(['account', 'route'])('fences an extension confirmation after a %s change', async change => {
+    setRouteState({ mode: 'library-browse', date: '2026-10-25' });
+    libraryPlace.mockRejectedValueOnce(new Error('Moving this workout requires extending Autumn build.'));
+    const fixture = await renderPlans();
+    const confirmation = new Subject<boolean>();
+    vi.spyOn((fixture.componentInstance as unknown as { dialog: MatDialog }).dialog, 'open')
+      .mockReturnValue({ afterClosed: () => confirmation } as never);
+    fixture.componentInstance.beginLibraryPlacement(savedItem());
+    const pending = fixture.componentInstance.placeLibraryItem();
+    await Promise.resolve(); await Promise.resolve();
+    if (change === 'account') { userSignal.set(null); userSubject.next(null); }
+    else setRouteState({}, true);
+    fixture.detectChanges();
+    confirmation.next(true); confirmation.complete(); await pending;
+    expect(libraryPlace).toHaveBeenCalledOnce();
+    expect(haptics.success).not.toHaveBeenCalled();
+    expect(snackBarOpen).not.toHaveBeenCalled();
+  });
+
+  it('discards a late placement reply without unlocking another owner’s pending placement', async () => {
+    setRouteState({ mode: 'library-browse' });
+    let resolveOld!: (value: unknown) => void;
+    let resolveNew!: (value: unknown) => void;
+    libraryPlace.mockReturnValueOnce(new Promise(resolve => { resolveOld = resolve; }))
+      .mockReturnValueOnce(new Promise(resolve => { resolveNew = resolve; }));
+    const fixture = await renderPlans();
+    const component = fixture.componentInstance;
+    component.beginLibraryPlacement(savedItem());
+    const old = component.placeLibraryItem();
+    const newUser = { ...user, uid: 'other-owner' };
+    userSignal.set(newUser); userSubject.next(newUser);
+    fixture.detectChanges(); await fixture.whenStable();
+    component.beginLibraryPlacement(savedItem());
+    const next = component.placeLibraryItem();
+    resolveOld({ workoutIds: ['old-copy'] }); await old;
+    expect(component.busyAction()).toBe('place-saved-run');
+    expect(haptics.success).not.toHaveBeenCalled();
+    expect(snackBarOpen).not.toHaveBeenCalled();
+    resolveNew({ workoutIds: ['new-copy'] }); await next;
+    expect(haptics.success).toHaveBeenCalledOnce();
+    expect(component.busyAction()).toBeNull();
+  });
+
+  it('keeps unsupported prescriptions placeable and reveals their complete instructions through a keyboard-accessible disclosure', async () => {
+    const item = savedItem();
+    item.structure = { ...item.structure, nodes: [{ kind: 'step', id: 'energy', purpose: 'work',
+      ending: { kind: 'kilojoules', kilojoules: 500 }, targets: [], note: 'Stop at the top' }] };
+    libraryItems.next([item]);
+    setRouteState({ mode: 'library-browse' });
+    const fixture = await renderPlans();
+    expect(fixture.nativeElement.querySelector('[aria-label="Edit saved workout Easy run"]')).toBeNull();
+    const disclosure = fixture.nativeElement.querySelector('[aria-controls="library-details-saved-run"]') as HTMLButtonElement;
+    expect(disclosure.getAttribute('aria-expanded')).toBe('false');
+    disclosure.click(); fixture.detectChanges();
+    expect(disclosure.getAttribute('aria-expanded')).toBe('true');
+    expect(fixture.nativeElement.querySelector('#library-details-saved-run').hidden).toBe(false);
+    expect(fixture.nativeElement.textContent).toContain('Stop at the top');
+    expect(haptics.selection).toHaveBeenCalledOnce();
+    fixture.componentInstance.beginLibraryPlacement(item);
+    expect(fixture.componentInstance.placementItem()?.structure).toEqual(item.structure);
+  });
+
+  it('preserves Calendar context when cancelling a recipe editor', async () => {
+    setRouteState({ mode: 'library-create', date: '2026-10-25' });
+    const fixture = await renderPlans();
+    const location = TestBed.inject(Location);
+    const back = vi.spyOn(location, 'back').mockImplementation(() => undefined);
+    vi.spyOn(location, 'getState').mockReturnValue({ trainingPlansEditorReturn: {
+      uid: user.uid, url: '/training/plans/library?date=2026-10-25' } });
+    fixture.componentInstance.cancelEditor();
+    expect(back).toHaveBeenCalledOnce();
+  });
+
+  it('blocks oversized date batches, calendar capacity and a plan extension beyond 366 days before placement', async () => {
+    setRouteState({ mode: 'library-browse', date: '2026-09-09' });
+    const fixture = await renderPlans();
+    const component = fixture.componentInstance;
+    component.beginLibraryPlacement(savedItem());
+    component.placementEndDate.set('2027-01-01');
+    component.placementWeekdays.set([0, 1, 2, 3, 4, 5, 6]);
+    expect(component.placementError()).toBe('Add at most 100 dates at once.');
+    await component.placeLibraryItem();
+    expect(libraryPlace).not.toHaveBeenCalled();
+    component.placementEndDate.set('2026-09-09');
+    component.placementPlanId.set('missing-plan');
+    expect(component.placementError()).toContain('available destination');
+    component.placementPlanId.set('active-plan');
+    component.setPlacementStartDate('2028-01-01');
+    expect(component.placementError()).toContain('366 days');
+    component.setPlacementPlan('standalone');
+    expect(component.placementError()).toBeNull();
+    // A live capacity increase must not invalidate receipt replay after an uncertain successful write.
+    schedule.state.currentWorkoutCount = 400;
+    component.setPlacementStartDate('2028-01-02');
+    expect(component.placementError()).toContain('400 current workouts');
+    expect(libraryPlace).not.toHaveBeenCalled();
+  });
+
+  it('reviews complete strength instructions, explicit dates and pending feedback in a focused placement', async () => {
+    const strength = { version: 1 as const, exercises: [{ id: 'squat', name: 'Squat with a deliberately long exercise label',
+      sets: Array.from({ length: 12 }, (_, index) => ({ id: `set-${index}`, ending: { kind: 'repetitions' as const, repetitions: 5 },
+        externalLoadKg: 80, restAfterSeconds: 90 })) }] };
+    const item = { ...savedItem(), title: 'Saved strength session with a long title', strength,
+      structure: projectStrengthWorkoutToV1({ ...strength, workoutId: 'saved', revision: 2 }) };
+    libraryItems.next([item, { ...savedItem(), id: 'run-2' }]);
+    setRouteState({ mode: 'library-browse', date: '2026-10-25' });
+    const fixture = await renderPlans();
+    exportLibraryQa(fixture, 'library-browse');
+    const component = fixture.componentInstance;
+    component.beginLibraryPlacement(item);
+    component.setPlacementPlan('standalone');
+    fixture.detectChanges(); await fixture.whenStable(); fixture.detectChanges();
+    const preview = fixture.nativeElement.querySelector('.library-placement .workout-summary');
+    expect(preview.querySelectorAll('li')).toHaveLength(12);
+    expect(preview.textContent).toContain('Set 12 · 5 reps · 80.0 kg · Rest 01m 30s');
+    expect(fixture.nativeElement.querySelector('[aria-label="Filter saved workouts"]')).toBeNull();
+    expect(fixture.nativeElement.querySelector('.library-placement-review').textContent).toContain('Standalone · 2026-10-25');
+    exportLibraryQa(fixture, 'library-placement');
+    let resolvePlacement!: (value: unknown) => void;
+    libraryPlace.mockReturnValue(new Promise(resolve => { resolvePlacement = resolve; }));
+    const pending = component.placeLibraryItem();
+    fixture.detectChanges();
+    expect(fixture.nativeElement.querySelector('.library-placement .button-content mat-spinner')).not.toBeNull();
+    expect(fixture.nativeElement.textContent).toContain('Adding…');
+    exportLibraryQa(fixture, 'library-pending');
+    resolvePlacement({ workoutIds: ['strength-copy'] }); await pending;
+    expect(haptics.success).toHaveBeenCalledOnce();
+    expect(haptics.error).not.toHaveBeenCalled();
   });
 
   it('starts placement inside a future active plan instead of suggesting an unwanted extension', async () => {
@@ -1382,7 +1858,7 @@ describe('PlansWorkspaceComponent', () => {
   it.each([
     { preference: {}, label: 'Kilometres', meters: 1000, pace: 'min/km' },
     { preference: { distanceUnits: DistanceUnits.Miles, paceUnits: [PaceUnits.MinutesPerMile] },
-      label: 'Miles', meters: 1609.344, pace: 'min/mi' },
+      label: 'Miles', meters: 1609.344, pace: 'min/m' },
   ])('uses $label and $pace in the editor and saves canonical values', async ({ preference, label, meters, pace }) => {
     const unitUser = { ...user, settings: { unitSettings: normalizeUserUnitSettings(preference) } };
     TestBed.overrideProvider(AppUserService, { useValue: { user: signal(unitUser), user$: of(unitUser) } });
@@ -1391,12 +1867,11 @@ describe('PlansWorkspaceComponent', () => {
     fixture.componentInstance.updateEditorField('title', 'Distance test');
     fixture.componentInstance.updateStep(0, null, 'endingKind', 'distance');
     fixture.componentInstance.updateStep(0, null, 'endingValue', 1);
-    fixture.componentInstance.updateStep(0, null, 'targetKind', 'pace');
-    fixture.componentInstance.updateStep(0, null, 'targetMinimum', 4);
-    fixture.componentInstance.updateStep(0, null, 'targetMaximum', 5);
+    fixture.componentInstance.updateStep(0, null, 'targets', [{ ...createManualWorkoutEditorTarget('speed'), minimum: null, maximum: null }]);
+    fixture.componentInstance.updateStep(0, null, 'targets', [{ ...createManualWorkoutEditorTarget('speed'), minimum: 4, maximum: 5 }]);
     fixture.detectChanges();
     expect(fixture.componentInstance.editorDistanceUnit()).toBe(label);
-    expect(fixture.componentInstance.editorPaceUnit()).toBe(pace);
+    expect(fixture.debugElement.query(By.directive(WorkoutTargetsEditorComponent)).componentInstance.rows()[0].unit).toBe(pace);
     expect(fixture.nativeElement.querySelector('.step-fields')?.textContent).toContain(label);
     await fixture.componentInstance.saveWorkout();
     expect(mutate).toHaveBeenCalledWith(expect.objectContaining({
@@ -1691,6 +2166,23 @@ describe('PlansWorkspaceComponent', () => {
     expect(fixture.componentInstance.planScheduleDate()).toBe('2026-09-09');
     expect(haptics.selection).toHaveBeenCalledOnce();
     expect(haptics.success).toHaveBeenCalledOnce();
+  });
+
+  it('shows a partial prescription subtotal with untimed recoveries while retaining ordered instructions', async () => {
+    schedule.workouts[0].structure = { version: 1, sport: ActivityTypes.Running, nodes: [
+      { kind: 'step', id: 'warm', purpose: 'warmup', ending: { kind: 'time', seconds: 600 }, targets: [] },
+      { kind: 'repeat', id: 'main', count: 4, steps: [
+        { kind: 'step', id: 'work', purpose: 'work', ending: { kind: 'distance', meters: 1000 }, targets: [
+          { kind: 'speed', mode: 'absolute', presentation: 'pace', minimumMetersPerSecond: 1000 / 300, maximumMetersPerSecond: 1000 / 240 }] },
+        { kind: 'step', id: 'recover', purpose: 'recovery', ending: { kind: 'manual' }, targets: [] },
+      ] },
+    ] };
+    const fixture = await renderPlans();
+    const summary = fixture.nativeElement.querySelector('.workout-prescription-summary')?.textContent;
+    expect(summary).toContain('estimated + 4 steps with unknown duration');
+    expect(summary).toContain('distance subtotal');
+    expect(fixture.nativeElement.querySelector('.workout-summary')?.textContent).toContain('Manual transition');
+    expect(mutate).not.toHaveBeenCalled();
   });
 
   it('keeps the color submenu backdrop off so sibling plan actions remain pointer-interactive', () => {
@@ -2137,7 +2629,9 @@ describe('PlansWorkspaceComponent', () => {
     fixture.detectChanges();
     expect(fixture.componentInstance.editorIsSwimming()).toBe(true);
     expect(fixture.nativeElement.textContent).toContain('Metres');
-    expect(fixture.componentInstance.editorPaceUnit()).toBe('min/100m');
+    fixture.componentInstance.updateStep(0, null, 'targets', [{ ...createManualWorkoutEditorTarget('speed'), minimum: 1, maximum: 2 }]);
+    fixture.detectChanges();
+    expect(fixture.debugElement.query(By.directive(WorkoutTargetsEditorComponent)).componentInstance.rows()[0].unit).toBe('min/100m');
     fixture.componentInstance.updateEditorField('title', 'Pool test');
     await fixture.componentInstance.saveWorkout();
     expect(mutate).toHaveBeenCalledWith(expect.objectContaining({
@@ -2157,7 +2651,9 @@ describe('PlansWorkspaceComponent', () => {
     fixture.componentInstance.updateStep(0, null, 'endingKind', 'distance');
     fixture.detectChanges();
     expect(fixture.nativeElement.textContent).toContain('Metres');
-    expect(fixture.componentInstance.editorPaceUnit()).toBe('min/500m');
+    fixture.componentInstance.updateStep(0, null, 'targets', [{ ...createManualWorkoutEditorTarget('speed'), minimum: 1, maximum: 2 }]);
+    fixture.detectChanges();
+    expect(fixture.debugElement.query(By.directive(WorkoutTargetsEditorComponent)).componentInstance.rows()[0].unit).toBe('min/500m');
   });
 
   it('saves a selected 25 m pool length separately from the swim step distance', async () => {
@@ -2193,7 +2689,9 @@ describe('PlansWorkspaceComponent', () => {
     fixture.detectChanges();
     expect(fixture.componentInstance.editorIsSwimming()).toBe(true);
     expect(fixture.nativeElement.textContent).toContain('Metres');
-    expect(fixture.componentInstance.editorPaceUnit()).toBe('min/100m');
+    fixture.componentInstance.updateStep(0, null, 'targets', [{ ...createManualWorkoutEditorTarget('speed'), minimum: 1, maximum: 2 }]);
+    fixture.detectChanges();
+    expect(fixture.debugElement.query(By.directive(WorkoutTargetsEditorComponent)).componentInstance.rows()[0].unit).toBe('min/100m');
     await fixture.componentInstance.saveWorkout();
     expect(mutate).toHaveBeenCalledWith(expect.objectContaining({
       operation: expect.objectContaining({
@@ -2774,6 +3272,28 @@ describe('PlansWorkspaceComponent', () => {
     expect(fixture.componentInstance.editor()).toBeNull();
     expect(mutate).not.toHaveBeenCalled();
   });
+
+  function exportLibraryQa(fixture: ComponentFixture<PlansWorkspaceComponent>, name: string): void {
+    if (!process.env.TRAINING_DELIVERY_QA_DIR) return;
+    const sass = createRequire(createRequire(resolve('package.json')).resolve('@angular/build/package.json'))('sass');
+    const css = [
+      ['app-plans-workspace', 'src/app/components/plans/plans-workspace.component.scss'],
+      ['app-compact-row', 'src/app/components/shared/compact-row/compact-row.component.scss'],
+    ].map(([host, file]) => sass.compileString(host + ' {' + readFileSync(file, 'utf8')
+      .replace(/:host\(([^)]+)\)/g, '&$1').replace(/:host/g, '&') + '}').css).join('\n');
+    const source = fixture.nativeElement.querySelector('.workout-library') as HTMLElement;
+    const rendered = source.cloneNode(true) as HTMLElement;
+    const inputs = rendered.querySelectorAll('input');
+    source.querySelectorAll('input').forEach((input, index) => {
+      inputs[index].setAttribute('value', input.value);
+      inputs[index].toggleAttribute('checked', input.checked);
+    });
+    writeFileSync(join(process.env.TRAINING_DELIVERY_QA_DIR, `${name}.html`),
+      '<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">'
+      + '<link rel="stylesheet" href="styles.css">' + Array.from(document.head.querySelectorAll('style')).map(style => style.outerHTML).join('')
+      + '<style>' + css + '</style></head><body><app-plans-workspace><main class="plans-workspace qs-workspace-page">'
+      + rendered.outerHTML + '</main></app-plans-workspace></body></html>');
+  }
 
   async function renderPlans() {
     vi.spyOn(TestBed.inject(Router), 'navigate').mockImplementation((commands, extras) => {

@@ -574,6 +574,34 @@ function clientAssertionParams(assertion: string) {
 }
 
 describe('MCP OAuth service', () => {
+  it.each(['authorization_code', 'refresh_token'])('retains safe rejection reasons for the %s token grant', async grantType => {
+    const service = createMcpOAuthService({
+      store: createMemoryStore(), now: () => 1000,
+      fetchClientMetadata: async () => metadata(), randomToken: () => 'unused-token',
+    });
+    const exchange = grantType === 'authorization_code'
+      ? service.exchangeAuthorizationCode : service.exchangeRefreshToken;
+    const params: Record<string, unknown> = {
+      code: 'private-code-canary', refresh_token: 'private-refresh-canary',
+      client_id: metadata().client_id, redirect_uri: metadata().redirect_uris[0],
+      code_verifier: 'a'.repeat(43), resource: 'https://quantified-self.io/mcp',
+    };
+    await expect(exchange({ ...params, resource: undefined }, 'https://quantified-self.io')).rejects.toMatchObject({
+      code: 'invalid_request', statusCode: 400, diagnosticReason: 'invalid_parameters',
+    });
+    await expect(exchange({ ...params, resource: 'https://other.example/mcp' }, 'https://quantified-self.io')).rejects.toMatchObject({
+      code: 'invalid_grant', statusCode: 400, diagnosticReason: 'invalid_audience',
+    });
+    await expect(exchange({ ...params, resource: [params.resource] }, 'https://quantified-self.io')).rejects.toMatchObject({
+      code: 'invalid_request', statusCode: 400, diagnosticReason: 'repeated_parameters',
+    });
+    await expect(exchange(params, 'https://quantified-self.io')).rejects.toMatchObject({
+      code: 'invalid_grant', statusCode: 400,
+      diagnosticReason: grantType === 'authorization_code'
+        ? 'invalid_or_expired_authorization_code' : 'invalid_or_expired_refresh_token',
+    });
+  });
+
   it('enforces the complete parent and location scope dependency matrix', () => {
     const states = [false, true];
     for (const activityDetails of states) {

@@ -25,6 +25,6 @@ module.exports = tseslint.config(
         }
     },
     {
-        ignores: ["node_modules/", "lib/", "coverage/", "eslint.config.js"]
+        ignores: ["node_modules/", "lib/", "coverage/", "tmp/", "functions/tmp/", "eslint.config.js", "functions/eslint.config.js"]
     }
 );

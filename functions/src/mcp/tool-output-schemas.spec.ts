@@ -1,3 +1,4 @@
+import { analyzeWorkoutStructureV1 } from '../../../shared/planned-workout-analysis';
 import { ActivityTypes } from '@sports-alliance/sports-lib';
 import { TRAINING_READ_EXTENSION_TOOLS, TRAINING_READ_TOOLS, TRAINING_WRITE_TOOLS, TRAINING_WRITE_EXTENSION_TOOLS,
   type TrainingReadTool } from './training-plans.schemas';
@@ -444,6 +445,11 @@ const derivedPayloadFixtures = {
 
 
 const trainingReadFixtures = {
+ get_workout_prescription_analysis: { source: 'scheduled', reference: 'opaque-workout-reference', revision: 1,
+   scheduleRevision: 1, libraryRevision: null, sport: ActivityTypes.Running,
+   analysis: analyzeWorkoutStructureV1({ version: 1, sport: ActivityTypes.Running, nodes: [
+     { kind: 'step', id: 'step', purpose: 'work', ending: { kind: 'manual' }, targets: [] }] }),
+   displaySummary: 'Duration unknown' },
  list_saved_workouts: { libraryRevision: 1, scanComplete: true, recordsScanned: 1, nextCursor: null,
    workouts: [{ savedWorkoutRef: 'opaque-saved-workout-reference', title: 'Easy run', status: 'active',
      revision: 1, createdAtMs: 1, updatedAtMs: 1 }] },
@@ -1386,6 +1392,7 @@ const successfulToolArguments: Record<
   preview_garmin_workout_replacement: { workoutRef: 'opaque-workout-reference', expectedScheduleRevision: 1, expectedWorkoutRevision: 1 },
   list_saved_workouts: {},
   get_saved_workout: { savedWorkoutRef: 'opaque-saved-workout-reference' },
+  get_workout_prescription_analysis: { source: 'scheduled', reference: 'opaque-workout-reference' },
   list_training_plans: {},
   get_training_plan: { planRef: 'opaque-plan-reference' },
   query_planned_workouts: { startDate: '2026-07-01', endDate: '2026-07-02' },
@@ -2051,7 +2058,9 @@ describe.each<FixtureTransport>(['in-memory', 'legacy-http', 'modern-http'])('MC
     // Keep the frozen surface's budget; each additive family has its own explicit bound.
     const planTools = tools.filter(tool => (TRAINING_READ_TOOLS as readonly string[]).includes(tool.name));
     const planReadExtensions = planTools.filter(tool => (TRAINING_READ_EXTENSION_TOOLS as readonly string[]).includes(tool.name)
-      && !['get_planned_workout_v2', 'get_planned_workout_v3', 'get_saved_workout_v2'].includes(tool.name) && !['list_saved_workouts', 'get_saved_workout'].includes(tool.name));
+      && !['get_workout_prescription_analysis', 'get_planned_workout_v2', 'get_planned_workout_v3', 'get_saved_workout_v2'].includes(tool.name) && !['list_saved_workouts', 'get_saved_workout'].includes(tool.name));
+    const analysisTools = planTools.filter(tool => tool.name === 'get_workout_prescription_analysis');
+    expect(Buffer.byteLength(JSON.stringify(analysisTools), 'utf8')).toBeLessThan(24 * 1024);
     const planReadV2 = planTools.filter(tool => tool.name === 'get_planned_workout_v2');
     const planLibraryReads = planTools.filter(tool => ['list_saved_workouts', 'get_saved_workout'].includes(tool.name));
     const planReadCore = planTools.filter(tool => !(TRAINING_READ_EXTENSION_TOOLS as readonly string[]).includes(tool.name));

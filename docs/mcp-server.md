@@ -14,6 +14,7 @@ grant. HTTP prechecks, tool registration and data reads enforce it. Revocation c
 | --- | --- |
 | `list_training_plans` | Optional name/lifecycle filters; active, paused and archived metadata |
 | `list_saved_workouts` | Up to 25 undated owner-owned workout recipes per page, with optional title/status filters |
+| `get_workout_prescription_analysis` | Exact prescribed subtotals, explicit speed-based duration ranges, unknown contributions, authored purpose totals and repeat counts for one scheduled or saved recipe |
 | `get_saved_workout` | One full saved recipe, including complete Strength Training exercises when present |
 | `get_training_plan` | Metadata, range, revision and current workout count, without loading workouts |
 | `query_planned_workouts` | Legacy document-ordered inclusive-date query retained for registered-client compatibility |
@@ -484,6 +485,42 @@ then perform the exact pending developer refresh/rescan and client/plugin tool-c
 No activity reparse, persisted-data migration, wider consent or automatic provider requeue is needed. Detailed product,
 mapping and recovery rules live in [Training workspace](training-workspace.md#optional-early-lap-on-numeric-endings-784-training-07).
 
+### Workout prescription analysis (Training 04)
+
+The additive `get_workout_prescription_analysis` read accepts an explicit `source` (`scheduled` or `saved`) and its
+opaque `reference`. It requires only independent `training-plans:read`; metrics/activity access and provider connections
+never substitute. It returns record `revision`, applicable nullable `scheduleRevision` / `libraryRevision`, canonical
+`sport`, a recursively strict `analysis`, and owner-unit `displaySummary`. The shared calculation and complete field
+semantics live in [Training prescription analysis](training-workspace.md#shared-workout-prescription-analysis-training-04).
+
+Exact prescribed time/distance subtotals are distinct from complete exact totals. Distance with an explicit positive
+speed range permits an estimated duration range; relative speed uses only an authored saved threshold-speed reference.
+No athlete default, midpoint estimate, HR/power/cadence-to-speed inference, TSS, completed-activity evidence or provider
+transport enters the result. Manual/Lap, repetitions, energy, missing speed and unbounded speed remain explicit unknowns.
+A partial covered subtotal is never a complete duration. Counts distinguish stored nodes, leaf definitions and repeat
+executions; at most 100 definition rows are returned without expanding up to 9,900 executions. Purpose totals retain
+all six authored labels. No notes, titles, target/reference snapshot objects or private transport fields are echoed.
+Numeric totals describe nominal prescribed limits. Per-definition `allowEarlyLap` and multiplied summary
+`earlyLapSteps` preserve the allowance to end numeric steps sooner; display and Assistant guidance retain this caveat.
+Complete prescription coverage does not guarantee an athlete's actual elapsed time or distance.
+
+The read shares current recipe/library validation and complete matching strength-companion fences. Strength analysis
+covers only its compatibility projection's timing/counts; full exercise discussion still needs the strength-details
+read. Owner/connection and reference-kind checks, creation identity, account deletion, bulk-operation locks, current
+grant generation, schedule/library revision and complete-result byte limits remain enforced. Arithmetic beyond finite
+representation returns safe unavailability rather than a partial or non-finite total. No Firestore write, new Function,
+Rules, index, migration, derived schema or stored analysis cache is introduced.
+
+The registered recipe/library read and write schemas are unchanged. The Assistant admits this read only with its
+existing per-chat Training choice, preserves uncertainty in compact evidence and excludes reference/step identity from
+stored evidence. Training and cross-domain bundled skills prefer the discovered analysis capability for totals rather
+than calculating their own estimates. Contract fixtures cover every ending and both speed bases, strict neighboring-field
+rejection, permission/reference/revision/deletion fences and equivalent structured/JSON-text results on all transports.
+Release requires separately approved deployment, registered-app refresh/rescan and exact pending-digest verification;
+bundled guidance requires later local plugin sync. Prior pending changes are preserved and the registered baseline/history
+are not edited. Fixture validation does not install a real profile or prove deployed availability.
+
+
 ## Purpose and boundary
 
 Quantified Self exposes a hosted, permission-scoped Model Context Protocol endpoint at `/mcp`. It lets an MCP client read the
@@ -824,6 +861,20 @@ Authorization codes are single-use and expire after five minutes. A valueless OA
 omitted; otherwise `state` must be 1–512 visible ASCII characters and is echoed exactly.
 The token endpoint accepts UTF-8 `application/x-www-form-urlencoded` request bodies only and rejects repeated
 parameters.
+
+Token exchanges emit one `[MCP OAuth] Token request served` INFO event on success, or one `Token request rejected`
+event at WARNING for expected OAuth rejections and ERROR for server failures. Fields are limited to a coarse
+`clientFamily`, allowlisted `grantType`, `resourceStatus` (matches, mismatch, missing/invalid or not parsed), handler
+`elapsedMs`, HTTP status and, on failure, the OAuth error code and a fixed internal reason. Refresh reuse has the
+explicit `refresh_token_reuse` reason and `connectionRevoked: true` only after the revocation transaction commits;
+false is not a statement that the connection is currently active, and unexpected failures use null for unknown state.
+Private assertion failures retain their fixed
+authentication stage in this same event rather than producing a duplicate warning.
+Firebase's logger attaches the request trace automatically. Compare handler duration with the correlated Cloud Run
+request latency and instance-start logs to distinguish OAuth work from cold-start delay; handler duration alone does
+not include container startup. Never log tokens, codes, assertions, parameter values, error descriptions, raw user
+agents, client/account/connection identifiers or request bodies. These diagnostics do not change OAuth responses,
+rotation/replay protection, scopes, consent, tools or the registered contract; no app rescan or plugin sync is needed.
 
 Token-endpoint discovery advertises both `none` and `private_key_jwt`, while PKCE S256 remains mandatory for every
 authorization-code client. Public CIMD clients such as Claude use `none`. Confidential CIMD clients such as ChatGPT

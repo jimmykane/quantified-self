@@ -1,8 +1,26 @@
-<main class="marketing-page qs-workspace-page" aria-labelledby="marketing-title">
+<main class="marketing-page qs-workspace-page" aria-labelledby="marketing-title" [attr.aria-busy]="loading()">
   <app-page-header title="Marketing campaigns" titleId="marketing-title" eyebrow="Administration" leadingIcon="campaign"
     subtitle="Create founder-style emails for people who opted in to marketing updates."></app-page-header>
   @if (error) { <p class="feedback error" role="alert">{{ error }}</p> }
   @if (notice) { <p class="feedback" role="status">{{ notice }}</p> }
+  @if (!list) {
+    @if (loading()) {
+      <div class="initial-loading" role="status">
+        <mat-spinner diameter="36" aria-label="Loading campaigns"></mat-spinner>
+        <span>Loading campaigns…</span>
+      </div>
+    } @else {
+      <div class="initial-load-error">
+        <button mat-stroked-button type="button" (click)="manualRefresh()">Retry loading campaigns</button>
+      </div>
+    }
+  } @else {
+  @if (loading()) {
+    <div class="refresh-status" role="status">
+      <mat-spinner diameter="20" aria-label="Refreshing campaigns"></mat-spinner>
+      <span>Refreshing campaigns…</span>
+    </div>
+  }
   <div class="workspace">
     <aside class="sidebar">
       <mat-card>
@@ -10,20 +28,47 @@
         <mat-card-content>
           <button mat-flat-button type="button" (click)="newDraft()" [disabled]="!!busy"><mat-icon>add</mat-icon> New campaign</button>
           <nav aria-label="Campaigns">
-            @for (campaign of list?.campaigns || []; track campaign.id) {
-              <button mat-button type="button" class="campaign-row" [disabled]="!!busy" [class.active]="selected?.id === campaign.id" (click)="choose(campaign)">
-                <span class="campaign-row-content"><strong>{{ campaign.name }}</strong><small>{{ campaign.status }} · {{ campaign.stats.eligible }} eligible</small></span>
-              </button>
+            @for (row of campaignRows; track row.campaign.id) {
+              @let campaign = row.campaign;
+              <div class="campaign-list-item">
+                <button mat-button type="button" class="campaign-row" [disabled]="!!busy" [class.active]="selected?.id === campaign.id" (click)="choose(campaign)">
+                  <span class="campaign-row-content"><strong>{{ campaign.name }}</strong><small>{{ campaign.status }} · {{ campaign.stats.eligible }} eligible</small></span>
+                </button>
+                @if (row.canDelete) {
+                  <button mat-icon-button type="button" class="qs-mat-warn" [disabled]="!!busy || loading() || confirmingDelete"
+                    [attr.aria-label]="row.deleteLabel + ': ' + campaign.name"
+                    [matTooltip]="row.deleteLabel" (click)="deleteCampaign(campaign)">
+                    @if (deletingCampaignId() === campaign.id) { <mat-spinner diameter="24" aria-hidden="true"></mat-spinner> }
+                    @else { <mat-icon>delete_outline</mat-icon> }
+                  </button>
+                }
+              </div>
             }
           </nav>
+          @if (!list.campaigns.length) { <p class="campaign-empty">No campaigns yet.</p> }
         </mat-card-content>
       </mat-card>
     </aside>
     <div class="main-column">
       <mat-card>
-        <mat-card-header><mat-card-title>{{ selected ? selected.name : 'New campaign' }}</mat-card-title></mat-card-header>
+        <mat-card-header class="campaign-header">
+          <mat-card-title>{{ selected ? selected.name : 'New campaign' }}</mat-card-title>
+          @if (canDelete) {
+            <button mat-button type="button" class="qs-mat-warn" [disabled]="!!busy || loading() || confirmingDelete" (click)="deleteCampaign()">
+              <span class="refresh-button-content">
+                <span class="refresh-button-icon">
+                  @if (deletingCampaignId() === selected?.id) { <mat-spinner diameter="18" aria-hidden="true"></mat-spinner> }
+                  @else { <mat-icon>delete_outline</mat-icon> }
+                </span>
+                <span>{{ deletingCampaignId() === selected?.id ? 'Deleting…' : selectedDeleteLabel }}</span>
+              </span>
+            </button>
+          }
+        </mat-card-header>
         <mat-card-content>
-          @if (selected?.status === 'paused') {
+          @if (selected?.status === 'deleting') {
+            <p class="frozen">This campaign is being deleted. If it remains here, retry deletion to finish removing it.</p>
+          } @else if (selected?.status === 'paused') {
             <p class="frozen">Paused. You can edit the message and schedule for remaining recipients. Emails already queued may still send with their original content. The audience stays fixed.</p>
           } @else if (selected?.status === 'running') {
             <p class="frozen">Pause to edit the message or schedule for remaining recipients. The audience stays fixed.</p>
@@ -134,8 +179,16 @@
             @if (selected?.status === 'paused' || selected?.status === 'completed') {
               <button mat-stroked-button type="button" [disabled]="!!busy || !selected?.stats?.failed" (click)="change('retry')">Retry failed</button>
             }
-            @if (selected) { <button mat-stroked-button type="button" [disabled]="!!busy" (click)="clone()">Clone</button> }
-            <button mat-button type="button" [disabled]="!!busy" (click)="manualRefresh()">Refresh status</button>
+            @if (selected && selected.status !== 'deleting') { <button mat-stroked-button type="button" [disabled]="!!busy" (click)="clone()">Clone</button> }
+            <button mat-button type="button" aria-label="Refresh status" [disabled]="!!busy || loading()" (click)="manualRefresh()">
+              <span class="refresh-button-content">
+                <span class="refresh-button-icon">
+                  @if (loading()) { <mat-spinner diameter="18" aria-hidden="true"></mat-spinner> }
+                  @else { <mat-icon>refresh</mat-icon> }
+                </span>
+                <span>{{ loading() ? 'Refreshing…' : 'Refresh status' }}</span>
+              </span>
+            </button>
             @if (busy) { <mat-spinner diameter="24" aria-label="Working"></mat-spinner> }
           </div>
         </mat-card-content>
@@ -171,4 +224,5 @@
       </mat-card-content>
     </mat-card>
   </div>
+  }
 </main>
