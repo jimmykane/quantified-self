@@ -6,8 +6,10 @@ The owner action on a saved event summary opens a text-first Material dialog. No
 import. The user explicitly chooses the whole recording or a real activity in that event, including multi-activity
 recordings; benchmark/ambiguous merged events are excluded. Three optional prompts cover overall feel, sport-relevant
 conditions/technique, and fatigue/recovery. One bounded exact completion-link lookup can replace the last prompt with
-planned-versus-felt context, only for one exact matching target. It does not infer a completion, match another activity,
-fetch a provider prescription, or establish that the current authored workout matches the historical recording.
+planned-versus-felt context, only for one exact matching target. A malformed or out-of-recording link, an ambiguous
+target, or more than 25 returned links keeps the generic prompt. Valid links to other activities do not imply a match
+for this selection. It does not infer a completion, fetch a provider prescription, or establish that the current
+authored workout matches the historical recording.
 
 The inspiration is the question progression in OpenAthlete's post-activity feedback agent at pinned commit
 `33e22980043640a132c670d3ca8ccbe26d588db5`

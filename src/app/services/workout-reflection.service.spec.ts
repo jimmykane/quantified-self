@@ -45,9 +45,12 @@ describe('Private reflection transactions', () => {
     expect(await service.hasExactWorkoutLink(recording)).toBe(true);
     expect(mocks.links).toHaveBeenCalledWith({ path: 'users/owner/trainingWorkoutCompletions', constraints: [['eventId', '==', 'e'], 26] });
     expect(await service.hasExactWorkoutLink({ ...recording, target: 'recording' })).toBe(false);
-    for (const values of [[{ ...link, activityId: 'other' }], [{ ...link, eventId: 'other' }], [link, link], [{ ...link, schemaVersion: 2 }]]) {
+    for (const values of [[{ ...link, activityId: 'other' }], [{ ...link, eventId: 'other' }], [link, link], [{ ...link, schemaVersion: 2 }],
+      [link, { ...link, schemaVersion: 2 }], [link, { ...link, eventId: 'other' }]]) {
       mocks.links.mockResolvedValue(result(values)); expect(await service.hasExactWorkoutLink(recording)).toBe(false);
     }
+    mocks.links.mockResolvedValue(result([link, { ...link, activityId: 'other' }]));
+    expect(await service.hasExactWorkoutLink(recording)).toBe(true);
     mocks.links.mockResolvedValue(result([link], 26)); expect(await service.hasExactWorkoutLink(recording)).toBe(false);
     mocks.links.mockResolvedValue(result([{ ...link, activityId: null }]));
     expect(await service.hasExactWorkoutLink({ ...recording, target: 'recording' })).toBe(true);

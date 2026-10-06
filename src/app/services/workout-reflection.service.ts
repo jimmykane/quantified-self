@@ -57,13 +57,16 @@ export class WorkoutReflectionService {
       TRAINING_WORKOUT_COMPLETIONS_COLLECTION_ID), where('eventId', '==', recording.eventId), limit(26)));
     this.assertOwner(recording.uid);
     if (result.size > 25) return false;
-    const matches = result.docs.flatMap(snapshot => {
+    let matches = 0;
+    for (const snapshot of result.docs) {
       try {
         const link = parseTrainingWorkoutCompletionV1(snapshot.data());
-        return link.eventId === recording.eventId && (recording.target === 'recording'
-          ? link.activityId === null : link.activityId === recording.activityId) ? [link] : [];
-      } catch { return []; }
-    });
-    return matches.length === 1;
+        if (link.eventId !== recording.eventId) return false;
+        if (recording.target === 'recording' ? link.activityId === null : link.activityId === recording.activityId) {
+          matches++;
+        }
+      } catch { return false; }
+    }
+    return matches === 1;
   }
 }
