@@ -44,6 +44,8 @@ const TARGET_LOADERS: Readonly<Record<string, ModuleLoader>> = Object.freeze({
     () => module.require('./events/upload-activity') as FunctionModule,
   fanOutSuuntoHealthWebhookIngress:
     () => module.require('./suunto/health-webhook-ingress') as FunctionModule,
+  dispatchGarminPingBatchOnWrite:
+    () => module.require('./sleep/garmin-ping-batch-dispatcher') as FunctionModule,
   scheduleSuuntoHealthSync: loadSleepPolling,
   scheduleSuuntoSleepSync: loadSleepPolling,
   redriveRejectedRouteOriginalCleanup:

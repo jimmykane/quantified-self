@@ -22,6 +22,7 @@ describe('function target loader', () => {
       'cleanupEventFile',
       'uploadActivity',
       'fanOutSuuntoHealthWebhookIngress',
+      'dispatchGarminPingBatchOnWrite',
       'scheduleSuuntoHealthSync',
       'scheduleSuuntoSleepSync',
       'redriveRejectedRouteOriginalCleanup',

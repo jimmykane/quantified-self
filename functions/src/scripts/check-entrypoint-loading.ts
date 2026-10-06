@@ -39,14 +39,15 @@ const PROVIDER_CONNECTION_AND_HEALTH_TARGETS = [
   ...Object.keys(CONNECTION_PROJECTION_TARGET_DOCUMENTS),
   'receiveGarminAPIHealthData',
 ];
-const ACTIVITY_ROUTE_CLEANUP_TARGETS = [
+const QUEUE_AND_CLEANUP_TARGETS = [
   'processActivitySyncTask',
   'processRouteSyncTask',
   'cleanupEventFile',
+  'dispatchGarminPingBatchOnWrite',
 ];
 const INGESTION_TARGET_METADATA: Readonly<Record<string, {
   memoryMb: number;
-  timeoutSeconds: number;
+  timeoutSeconds: number | null;
   trigger: 'http' | 'event' | 'task';
   secrets?: readonly string[];
   eventDocument?: string;
@@ -88,6 +89,11 @@ const INGESTION_TARGET_METADATA: Readonly<Record<string, {
   fanOutSuuntoHealthWebhookIngress: {
     memoryMb: 512, timeoutSeconds: 120, trigger: 'event', concurrency: 1, maxInstances: 50,
     eventDocument: 'suuntoHealthWebhookIngress/{ingressID}',
+  },
+  dispatchGarminPingBatchOnWrite: {
+    memoryMb: 512, timeoutSeconds: null, trigger: 'event', concurrency: 10, maxInstances: 100,
+    eventDocument: 'sleepSyncQueue/{queueItemId}',
+    eventType: 'google.cloud.firestore.document.v1.written', eventRetry: true,
   },
 };
 const SCHEDULED_MAINTENANCE_TARGET_METADATA: Readonly<Record<string, {
@@ -355,7 +361,7 @@ async function check(): Promise<void> {
   ]) {
     assert(OPTIMIZED_FUNCTION_TARGETS.includes(target), `${target} is missing its isolated loader.`);
   }
-  for (const target of [canaryTarget, ...PROVIDER_CONNECTION_AND_HEALTH_TARGETS, ...ACTIVITY_ROUTE_CLEANUP_TARGETS]) {
+  for (const target of [canaryTarget, ...PROVIDER_CONNECTION_AND_HEALTH_TARGETS, ...QUEUE_AND_CLEANUP_TARGETS]) {
     for (const discoveryMode of ['control-api', 'manifest-output'] as const) {
       const guardedDiscovery = runProbe(target, discoveryMode);
       assert(
@@ -484,7 +490,8 @@ async function check(): Promise<void> {
     } else if (INGESTION_TARGET_METADATA[target]) {
       const expected = INGESTION_TARGET_METADATA[target];
       assert(endpoint.availableMemoryMb === expected.memoryMb, `${target} memory configuration changed.`);
-      assert(endpoint.timeoutSeconds === expected.timeoutSeconds, `${target} timeout configuration changed.`);
+      assert(JSON.stringify(endpoint.timeoutSeconds) === JSON.stringify(expected.timeoutSeconds),
+        `${target} timeout configuration changed.`);
       assert(endpoint.cpu === expected.cpu, `${target} CPU configuration changed.`);
       assert(JSON.stringify(endpoint.concurrency) === JSON.stringify(expected.concurrency ?? null)
         && JSON.stringify(endpoint.maxInstances) === JSON.stringify(expected.maxInstances ?? null)

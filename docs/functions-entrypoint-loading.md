@@ -125,6 +125,24 @@ deletion checks and data writes also continue through their existing implementat
 The app help and connected-service content were reviewed. This internal loading change has no user-facing, Training
 planning, MCP read/mutation contract or provider integration behavior impact.
 
+## Garmin Ping dispatcher isolation
+
+`dispatchGarminPingBatchOnWrite` loads directly from `sleep/garmin-ping-batch-dispatcher`. It retains the original Gen 2
+Firebase handler in `europe-west2`, 512 MiB, concurrency 10, maximum 100 instances and retries on writes to
+`sleepSyncQueue/{queueItemId}`. CPU, timeout and minimum-instance settings remain unspecified; no secrets are bound.
+The compiled check serializes an unspecified timeout as null, matching Firebase's reset value without assigning a new
+runtime timeout.
+
+The dispatcher still watches the shared queue. Revision admission, account-deletion guards, revision-bound task
+identity, ambiguous-enqueue recovery and dispatch-marker transactions use the same implementation. The scheduled
+Sleep dispatcher remains its recovery path. No provider request selection, queue writes, trigger filtering or telemetry
+changes are introduced. The app help was reviewed; there is no user-facing, Training planning or MCP contract impact.
+
+This loading change is the first step of #759. Investigating invocation amplification remains separate: compare useful
+dispatches with ignored queue writes before proposing a narrower durable dispatch path. A create-only trigger would
+miss new revisions written to existing queue documents. The existing October 1–5 sample showed 111,970 requests and
+only nine container starts, so local startup improvements alone do not establish a material reduction in daily costs.
+
 ## Verification
 
 Run the routing and discovery contract:
@@ -161,6 +179,9 @@ The check builds the Functions package and verifies:
 - the activity/route workers and event cleanup avoid those unrelated modules, preserve their original Gen 2 runtime,
   secrets, task limits, retry behavior and deleted-document trigger, and allow complete discovery and standalone secret
   validation with each of their targets inherited;
+- the Garmin Ping dispatcher avoids those unrelated modules, retains its original queue-write trigger, retries,
+  resource defaults and zero-secret policy, and permits complete discovery and standalone secret validation with its
+  target inherited;
 - retired event-tag catalog and Garmin probe endpoints remain excluded from discovery.
 
 CI runs the compiled check after the Functions build. Firebase Functions predeploy first rejects forbidden local
@@ -364,6 +385,40 @@ separate explicit approval. Deploy only these three functions from the verified 
 ```bash
 firebase deploy --project quantified-self-io \
   --only functions:processActivitySyncTask,functions:cleanupEventFile,functions:processRouteSyncTask
+```
+
+## Garmin Ping dispatcher benchmark and verification (2026-10-06)
+
+Three isolated Node 22.23.3 processes per target used the compiled benchmark's `--probe` mode with `--expose-gc`, the
+matching `FUNCTION_TARGET` and neither discovery flag. The baseline was clean local `develop` at `ce4423eaf`, using the
+same machine and dependencies before and after the loader change.
+
+| Loading path | Import before | Import after | RSS before | RSS after | Modules before | Modules after |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: |
+| `dispatchGarminPingBatchOnWrite` | 985 ms | 297 ms | 238.7 MiB | 111.2 MiB | 3,141 | 1,260 |
+| Complete entrypoint control | 968 ms | 988 ms | 237.7 MiB | 238.2 MiB | 3,141 | 3,141 |
+
+Runtime now exports one handler; full discovery still exports 168. Local import time decreased by about 70%, and
+startup RSS by 127.5 MiB. These are import measurements, not production memory guarantees or billing savings. Keep
+the runtime resources unchanged for rollout verification. The high-volume investigation should attribute ignored
+writes, new batch revisions, dispatched tasks, retries and billable time without equating every trigger invocation to
+a Garmin provider request.
+
+Verification passed:
+
+- 30 tests across the loader, Firebase bootstrap, secret policy and Garmin Ping dispatcher;
+- TypeScript build and compiled entrypoint check: 168 endpoints / 56 isolated targets;
+- all 168 complete Firebase endpoint descriptors matched baseline;
+- independent fresh-process runtime/discovery descriptors, both inherited-target discovery guards, unknown-target
+  fallback and shared Admin initialization;
+- deployment-source safety, secret-binding validation for 69 endpoints and validation with the dispatcher inherited;
+- scoped ESLint for the three changed TypeScript files and `git diff --check`.
+
+Documentation-only changes have no separate automated tests. This change is local; deployment requires separate
+explicit approval. Deploy only the dispatcher from the verified revision:
+
+```bash
+firebase deploy --project quantified-self-io --only functions:dispatchGarminPingBatchOnWrite
 ```
 
 ## Adding another optimized target
