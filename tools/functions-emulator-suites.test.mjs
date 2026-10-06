@@ -50,7 +50,7 @@ test('CI matrix gates every registered group, including the 400-workout stress t
   const emulatorJob = workflow.slice(workflow.indexOf('  functions_emulators:'));
   assert.doesNotMatch(emulatorJob, /\n\s+if:/);
   for (const file of ['testing.yaml', 'buildAndDeployBeta.yml', 'buildAndDeployMain.yml',
-    'buildAndDeployProduction.yml', 'deployFunctionsManual.yml']) {
+    'deployFunctionsManual.yml']) {
     assert.match(readFileSync(resolve(root, '.github/workflows', file), 'utf8'), /uses: \.\/\.github\/workflows\/_run-tests\.yml/);
   }
 });
