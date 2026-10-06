@@ -1024,6 +1024,88 @@ describe('service-connection-meta', () => {
     }), { merge: true });
   });
 
+  it('commits the Wahoo repair claim with the exact connected generation before route or queue work', async () => {
+    await expect(markServiceConnected('user-1', ServiceNames.WahooAPI)).resolves.toBe(true);
+
+    const connectedWrite = hoisted.metaSet.mock.calls[0][1] as Record<string, unknown>;
+    expect(connectedWrite).toEqual(expect.objectContaining({
+      connectionState: 'connected',
+      routeRestoreConnectionGeneration: connectedWrite.connectionStateGeneration,
+      wahooReconnectReleasePending: true,
+      wahooReconnectReleaseConnectionGeneration: connectedWrite.connectionStateGeneration,
+      wahooReconnectReleaseLastAttemptAt: connectedWrite.routeRestoreLastAttemptAt,
+      wahooReconnectReleaseAttemptCount: 0,
+    }));
+    expect(hoisted.metaSet.mock.invocationCallOrder[0])
+      .toBeLessThan(hoisted.restoreActivitySyncRoutesForPendingDisconnectClear.mock.invocationCallOrder[0]);
+    expect(hoisted.metaSet.mock.invocationCallOrder[0])
+      .toBeLessThan(hoisted.releaseQueueItemsDeferredForReconnectRequired.mock.invocationCallOrder[0]);
+  });
+
+  it('cleans legacy Wahoo recovery fields for another service without running Wahoo release', async () => {
+    hoisted.metaData = {
+      wahooRefreshFailureCount: 2,
+      wahooRefreshFailureLastAt: 123,
+      wahooRefreshRetryAt: 456,
+      wahooReconnectReleasePending: true,
+      wahooReconnectReleaseLastAttemptAt: 123,
+      wahooReconnectReleaseAttemptCount: 2,
+      wahooReconnectReleaseConnectionGeneration: 'legacy-generation',
+    };
+    await expect(markServiceConnected('user-1', ServiceNames.SuuntoApp)).resolves.toBe(true);
+
+    expect(Object.keys(hoisted.metaData).filter(key => key.startsWith('wahoo'))).toEqual([]);
+    expect(hoisted.releaseQueueItemsDeferredForReconnectRequired).not.toHaveBeenCalled();
+    expect(hoisted.restoreActivitySyncRoutesForPendingDisconnectClear).toHaveBeenCalledTimes(2);
+  });
+
+  it('does not start Wahoo restoration or release when the connected transaction is rejected', async () => {
+    hoisted.getUserDeletionGuardStateInTransaction.mockResolvedValue({
+      userExists: false,
+      deletionInProgress: true,
+      shouldSkip: true,
+    });
+    await expect(markServiceConnected('user-1', ServiceNames.WahooAPI)).resolves.toBe(false);
+
+    expect(hoisted.metaSet).not.toHaveBeenCalled();
+    expect(hoisted.restoreActivitySyncRoutesForPendingDisconnectClear).not.toHaveBeenCalled();
+    expect(hoisted.releaseQueueItemsDeferredForReconnectRequired).not.toHaveBeenCalled();
+  });
+
+  it('retains an idempotent Wahoo repair when marker cleanup fails after successful release', async () => {
+    const persistMeta = hoisted.metaSet.getMockImplementation();
+    let failMarkerClear = true;
+    hoisted.metaSet.mockImplementation(async (ref: unknown, data: Record<string, unknown>) => {
+      if (failMarkerClear && data.wahooReconnectReleasePending === 'delete-sentinel') {
+        failMarkerClear = false;
+        throw new Error('marker cleanup write failed');
+      }
+      return persistMeta?.(ref, data);
+    });
+
+    await expect(markServiceConnected('user-1', ServiceNames.WahooAPI)).resolves.toBe(true);
+    expect(hoisted.metaData.wahooReconnectReleasePending).toBe(true);
+    expect(hoisted.releaseQueueItemsDeferredForReconnectRequired).toHaveBeenCalledTimes(1);
+
+    await expect(retryWahooReconnectQueueRelease('user-1')).resolves.toBe(true);
+    expect(hoisted.releaseQueueItemsDeferredForReconnectRequired).toHaveBeenCalledTimes(2);
+    expect(hoisted.metaData).not.toHaveProperty('wahooReconnectReleasePending');
+  });
+
+  it('does not release a Wahoo repair claim from a superseded connection generation', async () => {
+    hoisted.metaData = {
+      connectionState: 'connected',
+      connectionStateGeneration: 'new-generation',
+      wahooReconnectReleasePending: true,
+      wahooReconnectReleaseConnectionGeneration: 'old-generation',
+    };
+
+    await expect(retryWahooReconnectQueueRelease('user-1')).resolves.toBe(false);
+    expect(hoisted.metaSet).not.toHaveBeenCalled();
+    expect(hoisted.restoreActivitySyncRoutesForPendingDisconnectClear).not.toHaveBeenCalled();
+    expect(hoisted.releaseQueueItemsDeferredForReconnectRequired).not.toHaveBeenCalled();
+  });
+
   it('continues a Wahoo reconnect queue release after routes were already restored', async () => {
     hoisted.releaseQueueItemsDeferredForReconnectRequired
       .mockRejectedValueOnce(new Error('one queue write failed'));
