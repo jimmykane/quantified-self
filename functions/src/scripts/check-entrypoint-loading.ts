@@ -39,12 +39,21 @@ const PROVIDER_CONNECTION_AND_HEALTH_TARGETS = [
   ...Object.keys(CONNECTION_PROJECTION_TARGET_DOCUMENTS),
   'receiveGarminAPIHealthData',
 ];
+const ACTIVITY_ROUTE_CLEANUP_TARGETS = [
+  'processActivitySyncTask',
+  'processRouteSyncTask',
+  'cleanupEventFile',
+];
 const INGESTION_TARGET_METADATA: Readonly<Record<string, {
   memoryMb: number;
   timeoutSeconds: number;
   trigger: 'http' | 'event' | 'task';
   secrets?: readonly string[];
   eventDocument?: string;
+  eventType?: string;
+  eventRetry?: boolean;
+  maxConcurrentDispatches?: number;
+  maxDispatchesPerSecond?: number;
   concurrency?: number;
   maxInstances?: number;
   cpu?: number;
@@ -58,6 +67,23 @@ const INGESTION_TARGET_METADATA: Readonly<Record<string, {
     'SUUNTOAPP_CLIENT_ID', 'SUUNTOAPP_CLIENT_SECRET', 'SUUNTOAPP_SUBSCRIPTION_KEY',
     'WAHOOAPI_ALLOWED_FILE_HOSTS',
   ] },
+  processActivitySyncTask: {
+    memoryMb: 1024, timeoutSeconds: 540, trigger: 'task',
+    maxConcurrentDispatches: 500, maxDispatchesPerSecond: 250,
+    secrets: [
+      'COROSAPI_CLIENT_ID', 'COROSAPI_CLIENT_SECRET',
+      'SUUNTOAPP_CLIENT_ID', 'SUUNTOAPP_CLIENT_SECRET', 'SUUNTOAPP_SUBSCRIPTION_KEY',
+      'WAHOOAPI_CLIENT_ID', 'WAHOOAPI_CLIENT_SECRET',
+    ],
+  },
+  processRouteSyncTask: { memoryMb: 1024, timeoutSeconds: 540, trigger: 'task', secrets: [
+    'SUUNTOAPP_CLIENT_ID', 'SUUNTOAPP_CLIENT_SECRET', 'SUUNTOAPP_SUBSCRIPTION_KEY',
+  ] },
+  cleanupEventFile: {
+    memoryMb: 1024, timeoutSeconds: 300, trigger: 'event', concurrency: 5, maxInstances: 10,
+    eventDocument: 'users/{userId}/events/{eventId}',
+    eventType: 'google.cloud.firestore.document.v1.deleted', eventRetry: false,
+  },
   uploadActivity: { memoryMb: 4096, timeoutSeconds: 3600, trigger: 'http', cpu: 2, concurrency: 1, maxInstances: 20 },
   fanOutSuuntoHealthWebhookIngress: {
     memoryMb: 512, timeoutSeconds: 120, trigger: 'event', concurrency: 1, maxInstances: 50,
@@ -329,7 +355,7 @@ async function check(): Promise<void> {
   ]) {
     assert(OPTIMIZED_FUNCTION_TARGETS.includes(target), `${target} is missing its isolated loader.`);
   }
-  for (const target of [canaryTarget, ...PROVIDER_CONNECTION_AND_HEALTH_TARGETS]) {
+  for (const target of [canaryTarget, ...PROVIDER_CONNECTION_AND_HEALTH_TARGETS, ...ACTIVITY_ROUTE_CLEANUP_TARGETS]) {
     for (const discoveryMode of ['control-api', 'manifest-output'] as const) {
       const guardedDiscovery = runProbe(target, discoveryMode);
       assert(
@@ -479,9 +505,9 @@ async function check(): Promise<void> {
       if (expected.trigger === 'http') {
         assert(JSON.stringify(endpoint.httpsTrigger) === '{}', `${target} HTTP invoker configuration changed.`);
       } else if (expected.trigger === 'event') {
-        assert(endpoint.eventTrigger?.eventType === 'google.cloud.firestore.document.v1.created'
+        assert(endpoint.eventTrigger?.eventType === (expected.eventType ?? 'google.cloud.firestore.document.v1.created')
           && endpoint.eventTrigger.eventFilterPathPatterns?.document === expected.eventDocument
-          && endpoint.eventTrigger.retry === true,
+          && endpoint.eventTrigger.retry === (expected.eventRetry ?? true),
         `${target} Firestore trigger changed.`);
       } else {
         assert(endpoint.taskQueueTrigger?.retryConfig?.maxAttempts === 10
@@ -490,8 +516,10 @@ async function check(): Promise<void> {
           && endpoint.taskQueueTrigger.retryConfig.minBackoffSeconds === 900
           && endpoint.taskQueueTrigger.retryConfig.maxBackoffSeconds === 14_400,
         `${target} task retry configuration changed.`);
-        assert(JSON.stringify(endpoint.taskQueueTrigger?.rateLimits?.maxConcurrentDispatches) === 'null'
-          && JSON.stringify(endpoint.taskQueueTrigger?.rateLimits?.maxDispatchesPerSecond) === 'null',
+        assert(JSON.stringify(endpoint.taskQueueTrigger?.rateLimits?.maxConcurrentDispatches)
+          === JSON.stringify(expected.maxConcurrentDispatches ?? null)
+          && JSON.stringify(endpoint.taskQueueTrigger?.rateLimits?.maxDispatchesPerSecond)
+          === JSON.stringify(expected.maxDispatchesPerSecond ?? null),
         `${target} task rate limits changed.`);
       }
     } else if (SCHEDULED_MAINTENANCE_TARGET_METADATA[target]) {

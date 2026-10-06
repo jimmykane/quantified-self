@@ -34,6 +34,12 @@ const TARGET_LOADERS: Readonly<Record<string, ModuleLoader>> = Object.freeze({
     () => module.require('./tasks/sleep-sync-worker') as FunctionModule,
   processWorkoutTask:
     () => module.require('./tasks/workout-processor') as FunctionModule,
+  processActivitySyncTask:
+    () => module.require('./tasks/activity-sync-worker') as FunctionModule,
+  processRouteSyncTask:
+    () => module.require('./tasks/route-sync-worker') as FunctionModule,
+  cleanupEventFile:
+    () => module.require('./events/cleanup') as FunctionModule,
   uploadActivity:
     () => module.require('./events/upload-activity') as FunctionModule,
   fanOutSuuntoHealthWebhookIngress:

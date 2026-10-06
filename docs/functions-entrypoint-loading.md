@@ -101,6 +101,30 @@ payload validation and durable queue staging. Its generation and registered webh
 request, feed selection, reconciliation, retry, write, telemetry or MCP contract changes are introduced. The app help
 and connected-service content were reviewed; this internal startup change has no user-facing or Training planning impact.
 
+## Activity, route and event cleanup isolation
+
+Three more existing Gen 2 functions load directly from their owner modules:
+
+| Target | Owner module | Preserved runtime and trigger |
+| --- | --- | --- |
+| `processActivitySyncTask` | `tasks/activity-sync-worker` | 1 GiB, 540 seconds, Cloud Tasks |
+| `processRouteSyncTask` | `tasks/route-sync-worker` | 1 GiB, 540 seconds, Cloud Tasks |
+| `cleanupEventFile` | `events/cleanup` | 1 GiB, 300 seconds, Firestore document deleted, concurrency 5, max instances 10 |
+
+All three retain `europe-west2` and their original Firebase handler objects. Both workers retain 10 attempts,
+4 doublings and 900–14,400-second backoff. Activity sync keeps its explicit limits of 500 concurrent dispatches and
+250 dispatches per second; route sync keeps unspecified task rate limits. Activity sync binds only its existing COROS,
+Suunto API and Wahoo secrets; route sync binds only its existing Suunto API secrets. CPU and minimum-instance settings
+remain unspecified, as do the workers' runtime concurrency and maximum-instance settings.
+
+Cleanup retains `users/{userId}/events/{eventId}`, its existing disabled trigger retries and no secret bindings. Its
+event-recreation guards, transaction-owned cleanup of linked documents and metadata leaves, and Storage generation
+preconditions continue through the same handler. Queue retries, provider status polling, provider requests, account
+deletion checks and data writes also continue through their existing implementations.
+
+The app help and connected-service content were reviewed. This internal loading change has no user-facing, Training
+planning, MCP read/mutation contract or provider integration behavior impact.
+
 ## Verification
 
 Run the routing and discovery contract:
@@ -134,6 +158,9 @@ The check builds the Functions package and verifies:
 - the two token projections and Garmin Health receiver avoid those unrelated modules, preserve their original trigger,
   generation, resource and secret settings, and allow complete discovery and standalone secret validation with each
   of their targets inherited;
+- the activity/route workers and event cleanup avoid those unrelated modules, preserve their original Gen 2 runtime,
+  secrets, task limits, retry behavior and deleted-document trigger, and allow complete discovery and standalone secret
+  validation with each of their targets inherited;
 - retired event-tag catalog and Garmin probe endpoints remain excluded from discovery.
 
 CI runs the compiled check after the Functions build. Firebase Functions predeploy first rejects forbidden local
@@ -299,6 +326,44 @@ separate explicit approval. Deploy only these three functions from the verified 
 ```bash
 firebase deploy --project quantified-self-io \
   --only functions:projectSuuntoConnectionOnTokenWrite,functions:projectGarminConnectionOnTokenWrite,functions:receiveGarminAPIHealthData
+```
+
+## Activity, route and event cleanup benchmark and verification (2026-10-06)
+
+Three isolated Node 22.23.3 runs per target used the compiled benchmark's `--probe` mode, `--expose-gc`, the matching
+`FUNCTION_TARGET` and neither Firebase discovery flag. The baseline was local `develop` at `de06afb34`, before this
+loader change, using the same machine and dependencies. Existing unrelated local Training edits were present in both
+builds and are outside this change.
+
+| Target | Import before | Import after | RSS before | RSS after | Modules before | Modules after |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: |
+| `processActivitySyncTask` | 1,031 ms | 416 ms | 237.7 MiB | 122.5 MiB | 3,141 | 1,431 |
+| `cleanupEventFile` | 1,010 ms | 186 ms | 238.2 MiB | 87.3 MiB | 3,141 | 777 |
+| `processRouteSyncTask` | 972 ms | 362 ms | 238.4 MiB | 123.8 MiB | 3,141 | 1,443 |
+| Complete entrypoint control | 902 ms | 1,065 ms | 236.8 MiB | 237.4 MiB | 3,141 | 3,141 |
+
+Each runtime target exports one handler; discovery still exports 168. Local imports are approximately 60–82% faster,
+with 115–151 MiB less startup RSS. The unchanged full-entrypoint module count and similar RSS, with variable import
+time, illustrate the limits of local timing comparisons. These measurements do not establish production billing
+savings. After a separately approved deployment, compare container starts, startup latency, billable time per request,
+memory, request volume, errors, queue recovery and cleanup outcomes over comparable complete days.
+
+Verification passed:
+
+- 81 tests across the loader, Firebase bootstrap, secret policy, activity worker, event cleanup and route processor;
+- Functions TypeScript build and compiled entrypoint check: 168 endpoints and 55 isolated targets;
+- all 168 complete Firebase endpoint descriptors matched the pre-change baseline;
+- independent fresh-process comparisons for each target's runtime/discovery descriptors, both inherited-target
+  discovery guards, unknown-target fallback and shared Admin initialization;
+- deployment-source safety and secret-binding validation: 69 secret-bound endpoints, including inherited targets;
+- scoped ESLint for the three changed TypeScript files and `git diff --check`.
+
+The documentation-only changes have no separate automated tests. This batch is prepared locally; deployment requires
+separate explicit approval. Deploy only these three functions from the verified revision:
+
+```bash
+firebase deploy --project quantified-self-io \
+  --only functions:processActivitySyncTask,functions:cleanupEventFile,functions:processRouteSyncTask
 ```
 
 ## Adding another optimized target
