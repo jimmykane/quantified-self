@@ -29,9 +29,19 @@
           <button mat-flat-button type="button" (click)="newDraft()" [disabled]="!!busy"><mat-icon>add</mat-icon> New campaign</button>
           <nav aria-label="Campaigns">
             @for (campaign of list?.campaigns || []; track campaign.id) {
-              <button mat-button type="button" class="campaign-row" [disabled]="!!busy" [class.active]="selected?.id === campaign.id" (click)="choose(campaign)">
-                <span class="campaign-row-content"><strong>{{ campaign.name }}</strong><small>{{ campaign.status }} · {{ campaign.stats.eligible }} eligible</small></span>
-              </button>
+              <div class="campaign-list-item">
+                <button mat-button type="button" class="campaign-row" [disabled]="!!busy" [class.active]="selected?.id === campaign.id" (click)="choose(campaign)">
+                  <span class="campaign-row-content"><strong>{{ campaign.name }}</strong><small>{{ campaign.status }} · {{ campaign.stats.eligible }} eligible</small></span>
+                </button>
+                @if (campaign.status === 'draft' || campaign.status === 'deleting') {
+                  <button mat-icon-button type="button" class="qs-mat-warn" [disabled]="!!busy || loading() || confirmingDelete"
+                    [attr.aria-label]="(campaign.status === 'deleting' ? 'Retry deletion: ' : 'Delete draft: ') + campaign.name"
+                    [matTooltip]="campaign.status === 'deleting' ? 'Retry deletion' : 'Delete draft'" (click)="deleteDraft(campaign)">
+                    @if (deletingCampaignId() === campaign.id) { <mat-spinner diameter="24" aria-hidden="true"></mat-spinner> }
+                    @else { <mat-icon>delete_outline</mat-icon> }
+                  </button>
+                }
+              </div>
             }
           </nav>
           @if (!list.campaigns.length) { <p class="campaign-empty">No campaigns yet.</p> }
@@ -46,10 +56,10 @@
             <button mat-button type="button" class="qs-mat-warn" [disabled]="!!busy || loading() || confirmingDelete" (click)="deleteDraft()">
               <span class="refresh-button-content">
                 <span class="refresh-button-icon">
-                  @if (busy === 'Deleting draft') { <mat-spinner diameter="18" aria-hidden="true"></mat-spinner> }
+                  @if (deletingCampaignId() === selected?.id) { <mat-spinner diameter="18" aria-hidden="true"></mat-spinner> }
                   @else { <mat-icon>delete_outline</mat-icon> }
                 </span>
-                <span>{{ busy === 'Deleting draft' ? 'Deleting…' : selected?.status === 'deleting' ? 'Retry deletion' : 'Delete draft' }}</span>
+                <span>{{ deletingCampaignId() === selected?.id ? 'Deleting…' : selected?.status === 'deleting' ? 'Retry deletion' : 'Delete draft' }}</span>
               </span>
             </button>
           }

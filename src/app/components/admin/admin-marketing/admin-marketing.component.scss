@@ -14,6 +14,8 @@ mat-card-content { padding-top: 20px; }
 mat-form-field { width: 100%; }
 .field-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; }
 .sidebar nav { display: grid; gap: 4px; margin-top: 12px; }
+.campaign-list-item { display: flex; align-items: center; gap: 4px; }
+.campaign-list-item .campaign-row { flex: 1; min-width: 0; }
 .campaign-row { display: flex; width: 100%; height: auto; min-height: 48px; padding: 10px 12px; align-items: center; justify-content: flex-start; white-space: normal; text-align: left; color: inherit; border-radius: 12px; }
 .campaign-row.active { background: var(--mat-sys-secondary-container); }
 .campaign-row-content { display: grid; width: 100%; min-width: 0; gap: 4px; text-align: left; }

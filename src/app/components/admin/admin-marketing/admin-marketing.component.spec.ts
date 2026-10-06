@@ -26,6 +26,7 @@ function setup(call = vi.fn(async () => ({ data: listing }))) {
     { provide: AppHapticsService, useValue: haptics },
     { provide: MatDialog, useValue: dialog },
   ] });
+  TestBed.overrideComponent(AdminMarketingComponent, { add: { providers: [{ provide: MatDialog, useValue: dialog }] } });
   return { component: TestBed.runInInjectionContext(() => new AdminMarketingComponent()), haptics, call, dialog };
 }
 
@@ -127,12 +128,12 @@ describe('AdminMarketingComponent', () => {
     fixture.detectChanges(); await fixture.whenStable(); fixture.detectChanges();
     let button = header()?.querySelector('button') as HTMLButtonElement;
     expect(button.textContent).toContain('Delete draft');
-    component.busy = 'Deleting draft'; fixture.detectChanges();
+    component.busy = 'Deleting draft'; component.deletingCampaignId.set(pausedCampaign.id); fixture.detectChanges();
     expect(header()?.querySelector('button')).toBe(button);
     expect(button.disabled).toBe(true);
     expect(button.textContent).toContain('Deleting…');
     expect(button.querySelector('.refresh-button-icon mat-spinner')).not.toBeNull();
-    component.busy = ''; component.loading.set(true); fixture.detectChanges();
+    component.busy = ''; component.deletingCampaignId.set(null); component.loading.set(true); fixture.detectChanges();
     expect(button.disabled).toBe(true);
     await component.deleteDraft();
     expect(dialog.open).not.toHaveBeenCalled();
@@ -146,6 +147,96 @@ describe('AdminMarketingComponent', () => {
     component.choose(pausedCampaign, false); fixture.detectChanges();
     expect(header()?.querySelector('button')).toBeNull();
     fixture.destroy();
+  });
+
+  it('deletes a draft from the list without selecting it or discarding the current unsaved composer', async () => {
+    const target = { ...pausedCampaign, status: 'draft' as const };
+    const call = vi.fn(async (name: string) => ({ data: name === 'changeMarketingCampaignStatus' ? { id: target.id, deleted: true } : listing }));
+    const { component, dialog, haptics } = setup(call);
+    component.loading.set(false);
+    component.list = { ...listing, campaigns: [target] };
+    component.draft.subject = 'Keep this unsaved message'; component.dirty = true;
+    dialog.open.mockReturnValue({ afterClosed: () => of(true), close: vi.fn() });
+    await component.deleteDraft(target);
+    expect(call).toHaveBeenCalledWith('changeMarketingCampaignStatus', { id: target.id, action: 'delete' });
+    expect(component.selected).toBeNull();
+    expect(component.draft.subject).toBe('Keep this unsaved message');
+    expect(component.dirty).toBe(true);
+    expect(haptics.success).toHaveBeenCalledTimes(1);
+    expect(dialog.open.mock.calls[0][1].data.message).not.toContain('discards unsaved edits');
+    component.ngOnDestroy();
+  });
+
+  it('shows a deletion action next to drafts in the list even when a ready campaign is selected', async () => {
+    const target = { ...pausedCampaign, status: 'draft' as const };
+    const ready = { ...pausedCampaign, id: 'ready_campaign_1234', status: 'ready' as const };
+    const { dialog, call } = setup(vi.fn(async () => ({ data: { ...listing, campaigns: [target, ready] } })));
+    const fixture = TestBed.createComponent(AdminMarketingComponent);
+    fixture.detectChanges(); await fixture.whenStable(); fixture.detectChanges();
+    fixture.componentInstance.choose(ready, false); fixture.detectChanges();
+    const root = fixture.nativeElement as HTMLElement;
+    const rows = root.querySelectorAll('.campaign-list-item');
+    const deletion = rows[0].querySelector('button[aria-label]') as HTMLButtonElement;
+    expect(deletion.getAttribute('aria-label')).toBe(`Delete draft: ${target.name}`);
+    expect(deletion.closest('.campaign-row')).toBeNull();
+    expect(rows[1].querySelector('button[aria-label]')).toBeNull();
+    expect(root.querySelector('.campaign-header button')).toBeNull();
+    deletion.click(); await fixture.whenStable(); fixture.detectChanges();
+    expect(dialog.open).toHaveBeenCalledTimes(1);
+    expect(fixture.componentInstance.selected?.id).toBe(ready.id);
+    expect(call).not.toHaveBeenCalledWith('changeMarketingCampaignStatus', expect.anything());
+    fixture.destroy();
+  });
+
+  it('refreshes a partially deleted draft to expose retry without losing unsaved text or its failure', async () => {
+    const locked = { ...pausedCampaign, status: 'deleting' as const };
+    const call = vi.fn(async (name: string) => {
+      if (name === 'changeMarketingCampaignStatus') throw new Error('Cleanup unavailable');
+      return { data: { ...listing, campaigns: [locked] } };
+    });
+    const { component, dialog, haptics } = setup(call);
+    component.loading.set(false);
+    component.choose({ ...pausedCampaign, status: 'draft' }, false);
+    component.draft.subject = 'Keep until cleanup succeeds'; component.dirty = true;
+    dialog.open.mockReturnValue({ afterClosed: () => of(true), close: vi.fn() });
+    await component.deleteDraft();
+    expect(component.selected?.status).toBe('deleting');
+    expect(component.canEdit).toBe(false);
+    expect(component.canDelete).toBe(true);
+    expect(component.draft.subject).toBe('Keep until cleanup succeeds');
+    expect(component.error).toBe('Cleanup unavailable');
+    expect(component.deletingCampaignId()).toBeNull();
+    expect(haptics.error).toHaveBeenCalledTimes(1);
+    expect(haptics.success).not.toHaveBeenCalled();
+    component.ngOnDestroy();
+  });
+
+  it('does not delete a list draft that became prepared while confirmation was open', async () => {
+    const target = { ...pausedCampaign, status: 'draft' as const };
+    const { component, call, dialog } = setup();
+    const closed = new Subject<boolean>();
+    component.loading.set(false); component.list = { ...listing, campaigns: [target] };
+    dialog.open.mockReturnValue({ afterClosed: () => closed, close: vi.fn() });
+    const deletion = component.deleteDraft(target);
+    component.list = { ...listing, campaigns: [{ ...target, status: 'ready' }] };
+    closed.next(true); await deletion;
+    expect(call).not.toHaveBeenCalled();
+    component.ngOnDestroy();
+  });
+
+  it('does not refresh or give feedback after a pending deletion finishes following navigation', async () => {
+    let release!: () => void;
+    const pending = new Promise<void>(resolve => { release = resolve; });
+    const call = vi.fn(async () => { await pending; return { data: { deleted: true } }; });
+    const { component, dialog, haptics } = setup(call);
+    component.loading.set(false);
+    component.choose({ ...pausedCampaign, status: 'draft' }, false);
+    dialog.open.mockReturnValue({ afterClosed: () => of(true), close: vi.fn() });
+    const deletion = component.deleteDraft(); await Promise.resolve();
+    component.ngOnDestroy(); release(); await deletion;
+    expect(call).toHaveBeenCalledTimes(1);
+    expect(haptics.success).not.toHaveBeenCalled();
+    expect(haptics.error).not.toHaveBeenCalled();
   });
 
   it('shows initial loading instead of an empty workspace or a default limit until the list arrives', async () => {
