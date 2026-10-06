@@ -182,8 +182,11 @@ explicit, and uncertain saves retain their original receipt. See Training's deta
 Browser sync settings and summaries wait for server-confirmed owner reads, not cached absence. Check refreshes the
 exact schedule/scope/settings revisions; a stale consent or replacement preview fails rather than rebasing approval.
 Confirmations and uncertain receipt replays keep their reviewed commands unchanged. This frontend readiness fix
-does not change provider transport, permission or completion contracts. See the Training workspace's
+also disables a not-yet-dispatched confirmation when live revision updates invalidate its preview. An uncertain save
+can still retry its exact original receipt rather than replacing its approval. This does not change provider transport,
+permission or completion contracts. See the Training workspace's
 [server-confirmed settings contract](training-workspace.md#server-confirmed-sync-settings-and-current-revisions-812).
+
 **Plan sync** separates automatic plan-level settings from **Workout sync status** rows. Each row represents an individual
 workout, shows its scheduled date, and opens **Workout sync** details; editing is a separate action. **Stop plan sync** and
 **Stop workout sync** name their different scopes explicitly. Plan sync means automatic per-workout delivery, not native

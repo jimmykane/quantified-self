@@ -768,6 +768,77 @@ describe('Training provider delivery controls', () => {
     expect(service.preview).toHaveBeenCalledOnce(); expect(component.canConfirm()).toBe(true);
     expect(service.mutate).not.toHaveBeenCalled();
   });
+  it.each(['settings', 'schedule', 'workout'] as const)('blocks an already previewed replacement after a live %s change', async changed => {
+    const setting = { provider: 'garmin', enabled: true, revision: 1, timeZone: 'Europe/Helsinki' };
+    const view$ = new BehaviorSubject({ settings: [setting], statuses: [{ ...status, issues: [GARMIN_WORKOUT_NOT_FOUND_ISSUE] }],
+      verifications: [{ id: status.id, state: 'unknown', canCheck: true }] });
+    const schedule$ = new BehaviorSubject({ state: { revision: 3 }, plans: [], workouts: [{ id: 'w', planId: null, revision: 2, lifecycle: 'planned' }] });
+    service.watchScope.mockReturnValue(view$);
+    TestBed.overrideProvider(TrainingPlansService, { useValue: { watchSchedule: () => schedule$ } });
+    service.preview.mockResolvedValue({ available: true, connection: 'connected', hasPro: true, effect: 'replace',
+      eligibleCount: 1, warningCount: 0, issues: [], approvalDigest: 'a'.repeat(64) });
+    const fixture = TestBed.createComponent(TrainingDeliveryDialogComponent); fixture.detectChanges();
+    const component = fixture.componentInstance; await component.begin('garmin', 'replace'); fixture.detectChanges();
+    const reviewed = component.preview(); expect(component.canConfirm()).toBe(true);
+    if (changed === 'settings') view$.next({ ...view$.value, settings: [{ ...setting, revision: 2 }] });
+    else schedule$.next({ ...schedule$.value, ...(changed === 'schedule' ? { state: { revision: 4 } }
+      : { workouts: [{ ...schedule$.value.workouts[0], revision: 3 }] }) });
+    fixture.detectChanges();
+    expect(component.canConfirm()).toBe(false);
+    expect(fixture.nativeElement.textContent).toContain('Cancel and review the latest version');
+    await component.confirm();
+    expect(service.mutate).not.toHaveBeenCalled(); expect(service.preview).toHaveBeenCalledOnce();
+    expect(component.preview()).toBe(reviewed);
+  });
+  it('does not confirm new consent after MCP enables delivery while its preview is open', async () => {
+    service.isSetupAvailable.mockImplementation(provider => provider === 'garmin');
+    const view$ = new BehaviorSubject<{ settings: unknown[]; statuses: unknown[] }>({ settings: [], statuses: [] });
+    service.watchScope.mockReturnValue(view$);
+    const fixture = TestBed.createComponent(TrainingDeliveryDialogComponent); fixture.detectChanges();
+    const component = fixture.componentInstance; await component.begin('garmin', 'send');
+    const reviewed = component.preview(); expect(component.canConfirm()).toBe(true);
+    view$.next({ settings: [{ provider: 'garmin', enabled: true, revision: 134, timeZone: 'Europe/Helsinki' }], statuses: [] });
+    fixture.detectChanges();
+    expect(component.canConfirm()).toBe(false); await component.confirm();
+    expect(service.mutate).not.toHaveBeenCalled(); expect(component.preview()).toBe(reviewed);
+    component.cancelReview(); await component.begin('garmin', 'send');
+    expect(component.editingSettings()).toBe(true); expect(service.preview).toHaveBeenCalledOnce();
+  });
+  it('replays an uncertain replacement with its original command after live revision echoes', async () => {
+    const setting = { provider: 'garmin', enabled: true, revision: 1, timeZone: 'Europe/Helsinki' };
+    const view$ = new BehaviorSubject({ settings: [setting], statuses: [{ ...status, issues: [GARMIN_WORKOUT_NOT_FOUND_ISSUE] }],
+      verifications: [{ id: status.id, state: 'unknown', canCheck: true }] });
+    const schedule$ = new BehaviorSubject({ state: { revision: 3 }, plans: [], workouts: [{ id: 'w', planId: null, revision: 2, lifecycle: 'planned' }] });
+    service.watchScope.mockReturnValue(view$);
+    TestBed.overrideProvider(TrainingPlansService, { useValue: { watchSchedule: () => schedule$ } });
+    service.preview.mockResolvedValue({ available: true, connection: 'connected', hasPro: true, effect: 'replace',
+      eligibleCount: 1, warningCount: 0, issues: [], approvalDigest: 'a'.repeat(64) });
+    const fixture = TestBed.createComponent(TrainingDeliveryDialogComponent); fixture.detectChanges();
+    const component = fixture.componentInstance; await component.begin('garmin', 'replace');
+    const reviewed = component.preview();
+    service.mutate.mockImplementationOnce(async () => {
+      view$.next({ ...view$.value, settings: [{ ...setting, revision: 2 }] });
+      schedule$.next({ ...schedule$.value, state: { revision: 4 }, workouts: [{ ...schedule$.value.workouts[0], revision: 3 }] });
+      throw new Error('Response lost');
+    });
+    await component.confirm(); fixture.detectChanges();
+    expect(component.canConfirm()).toBe(true);
+    expect(component.preview()).toBe(reviewed);
+    await component.confirm();
+    expect(service.mutate).toHaveBeenCalledTimes(2);
+    expect(service.mutate.mock.calls[1][0]).toEqual(service.mutate.mock.calls[0][0]);
+    expect(service.preview).toHaveBeenCalledOnce();
+  });
+  it('clears a reviewed request safely when signing out makes the schedule unavailable', async () => {
+    const fixture = TestBed.createComponent(TrainingDeliveryDialogComponent); fixture.detectChanges();
+    const component = fixture.componentInstance; await component.begin('garmin', 'stop');
+    expect(component.canConfirm()).toBe(true);
+    user.set(null); user$.next(null);
+    expect(() => component.previewChangedElsewhere()).not.toThrow();
+    expect(component.previewChangedElsewhere()).toBe(false);
+    await component.confirm(); expect(service.mutate).not.toHaveBeenCalled();
+    fixture.detectChanges(); expect(close).toHaveBeenCalled();
+  });
   it('blocks stale settings edits but can replay an uncertain save receipt after a live settings echo', async () => {
     service.isSetupAvailable.mockImplementation(provider => provider === 'garmin');
     const setting = { provider: 'garmin', enabled: true, revision: 1, timeZone: 'Europe/Helsinki' };

@@ -1362,11 +1362,14 @@ schedules also block reviews and confirmations rather than using their temporary
 
 Before Check or a delivery preview, the browser reads three exact owner documents from the server: schedule state,
 the addressed plan/workout, and that provider's scoped settings. Strict parsers validate the records and bind the
-source/settings identity to the addressed document. Only server-confirmed absence contributes revision zero. Check
-uses these current revisions without changing consent. A preview with stale displayed revisions fails with a readable
+source/settings identity to the addressed document. Only server-confirmed absence contributes revision zero. These reads
+reject cache-only snapshots and pending local writes even when requested with the server-only SDK method. Check
+uses the current revisions without changing consent. A preview with stale displayed revisions fails with a readable
 conflict instead of silently reviewing new consent or rebasing a replacement approval. The server transaction still
-checks revisions because these three reads are not an atomic snapshot. Confirm and uncertain receipt replay retain
-the exact reviewed command and mutation ID; they are never rewritten to current revisions. Account/view changes and
+checks revisions because these three reads are not an atomic snapshot. A live settings/schedule/source revision change
+disables a not-yet-dispatched confirmation with explicit cancel/review guidance. Once dispatch has been attempted,
+an uncertain receipt replay still retains the exact reviewed command and mutation ID; they are never rewritten to
+current revisions. Account/view changes and
 timeouts fence dispatch after reads and during App Check readiness.
 
 Regression coverage lives in `training-delivery-reads.spec.ts`, `training-delivery.service.spec.ts`,

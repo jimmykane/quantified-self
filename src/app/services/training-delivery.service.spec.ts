@@ -24,7 +24,8 @@ const settings = { schemaVersion: 1, scope: 'workout', scopeId: 'workout', provi
   associationPlanId: null, approvedDigest: null, updatedAtMs: 1 };
 const command: TrainingDeliveryCommandV1 = { schemaVersion: 1, scope: 'workout', scopeId: 'workout', provider: 'garmin',
   mutationId: 'request', action: 'stop', expectedScheduleRevision: 1, expectedScopeRevision: 1, expectedSettingsRevision: 0 };
-const snapshot = (data: unknown) => ({ exists: () => data !== undefined, data: () => data }) as Awaited<ReturnType<typeof getDocFromServer>>;
+const snapshot = (data: unknown, metadata = { fromCache: false, hasPendingWrites: false }) =>
+  ({ exists: () => data !== undefined, data: () => data, metadata }) as Awaited<ReturnType<typeof getDocFromServer>>;
 
 describe('TrainingDeliveryService boundary', () => {
   let documents: Map<string, unknown>;
@@ -153,6 +154,21 @@ describe('TrainingDeliveryService boundary', () => {
     else documents.set('users/owner/trainingDeliverySettings/workout_workout_garmin', failure === 'invalid document'
       ? { enabled: true } : { ...settings, ...(failure === 'wrong scope' ? { scopeId: 'another-workout' } : { provider: 'wahoo' }) });
     await expect(service.check({ ...command, action: 'check' })).rejects.toThrow();
+    expect(call).not.toHaveBeenCalled();
+  });
+  it.each([
+    'trainingPlanState/current', 'scheduledWorkouts/workout', 'trainingDeliverySettings/workout_workout_garmin',
+  ])('does not use pending revisions or pending absence from %s', async suffix => {
+    const { service, call } = configure();
+    vi.mocked(getDocFromServer).mockImplementation(async ref => snapshot(documents.get(ref.path),
+      { fromCache: false, hasPendingWrites: ref.path.endsWith(suffix) }));
+    await expect(service.check({ ...command, action: 'check' })).rejects.toMatchObject({ code: 'unavailable' });
+    expect(call).not.toHaveBeenCalled();
+  });
+  it('rejects a cache-only read rather than treating it as server-confirmed absence', async () => {
+    const { service, call } = configure();
+    vi.mocked(getDocFromServer).mockResolvedValueOnce(snapshot(undefined, { fromCache: true, hasPendingWrites: false }));
+    await expect(service.preview(command)).rejects.toMatchObject({ code: 'unavailable' });
     expect(call).not.toHaveBeenCalled();
   });
   it('fences an account change during a server read without reading the next owner or dispatching', async () => {

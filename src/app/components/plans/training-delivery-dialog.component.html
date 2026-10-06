@@ -55,7 +55,9 @@
           </mat-form-field>
         </form>
       }
-      @if (editingSettings() && settingsChangedElsewhere() && !busy()) {
+      @if (previewChangedElsewhere() && !busy()) {
+        <p role="status">The schedule or sync settings changed. Cancel and review the latest version.</p>
+      } @else if (editingSettings() && settingsChangedElsewhere() && !busy()) {
         <p role="status">{{ error() && preview() ? 'Your save may already have been applied. Select Save changes again to check the result.' : 'Sync settings changed in another window. Cancel and reopen this view to see the latest settings.' }}</p>
       }
       @if (busy()) {

@@ -140,6 +140,16 @@ export class TrainingDeliveryDialogComponent {
     const setting = this.view().settings.find(item => item.provider === draft.provider);
     return !setting?.enabled || (setting.revision ?? 0) !== draft.initialSettingsRevision;
   });
+  readonly previewChangedElsewhere = computed(() => {
+    const reviewed = this.preview()?.command;
+    const schedule = this.schedule();
+    // Once a save was dispatched, its receipt must be replayed exactly even if
+    // live listeners already show its writes. Never rebase that request.
+    if (!reviewed || !schedule || this.confirmationAttempted() || this.syncReadState() !== 'ready') return false;
+    return schedule.state.revision !== reviewed.expectedScheduleRevision
+      || (this.scopeRecord()?.revision ?? 0) !== reviewed.expectedScopeRevision
+      || (this.view().settings.find(item => item.provider === reviewed.provider)?.revision ?? 0) !== reviewed.expectedSettingsRevision;
+  });
   readonly dialogTitle = computed(() => {
     if (this.editingSettings()) return this.data.scope === 'plan' ? 'Plan sync settings' : 'Workout sync settings';
     switch (this.draft()?.action) {
@@ -276,7 +286,7 @@ export class TrainingDeliveryDialogComponent {
     && this.preview()?.result.issues.includes(WAHOO_TRAINING_PERMISSION_ISSUE));
   readonly canLoadMore = computed(() => this.view().loaded && this.statuses().length === this.statusLimit());
   readonly canConfirm = computed(() => {
-    if (!this.canReview()) return false;
+    if (!this.canReview() || this.previewChangedElsewhere()) return false;
     const preview = this.preview();
     if (this.editingSettings() && (!this.hasSettingsChanges() || (this.settingsChangedElsewhere() && !this.confirmationAttempted()))) return false;
     return !!preview && (preview.command.action === 'stop'

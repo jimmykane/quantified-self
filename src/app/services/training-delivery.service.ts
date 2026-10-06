@@ -159,6 +159,11 @@ export class TrainingDeliveryService {
       getDocFromServer(doc(this.firestore, 'users', uid, command.scope === 'plan' ? 'trainingPlans' : 'scheduledWorkouts', command.scopeId)),
       getDocFromServer(doc(this.firestore, 'users', uid, TRAINING_DELIVERY_SETTINGS, deliverySettingsId(command.scope, command.scopeId, command.provider))),
     ]);
+    // Even a server-requested SDK read can contain latency-compensated local
+    // mutations. Such revisions (including a pending deletion) are not authority.
+    if ([state, scope, settings].some(snapshot => snapshot.metadata.fromCache || snapshot.metadata.hasPendingWrites)) {
+      throw Object.assign(new Error('Current sync settings are not available yet.'), { code: 'unavailable' });
+    }
     const record = scope.exists() ? (command.scope === 'plan' ? parseTrainingPlanV1(scope.data()) : parseScheduledWorkoutV1(scope.data())) : undefined;
     if (record && record.id !== command.scopeId) throw new Error('Sync source does not match its document.');
     const setting = parseScopeSettings(settings.exists() ? settings.data() : undefined, command.scope, command.scopeId, command.provider);
