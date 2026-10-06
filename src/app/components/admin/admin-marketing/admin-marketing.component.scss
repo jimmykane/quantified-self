@@ -4,6 +4,7 @@
 .refresh-button-content { display: flex; align-items: center; justify-content: center; gap: 8px; min-width: 124px; }
 .refresh-button-icon { display: flex; align-items: center; justify-content: center; width: 18px; height: 18px; flex: 0 0 18px; }
 .refresh-button-icon mat-icon { width: 18px; height: 18px; font-size: 18px; }
+.campaign-header { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 12px; }
 .campaign-empty { color: var(--mat-sys-on-surface-variant); }
 .workspace { display: grid; grid-template-columns: minmax(240px, 280px) minmax(0, 1fr); grid-template-areas: 'campaigns main' 'limit main'; gap: 20px; align-items: start; }
 .sidebar { grid-area: campaigns; min-width: 0; }

@@ -5,7 +5,7 @@ import type { Request, Response } from 'express';
 import { JSDOM } from 'jsdom';
 import { handleMarketingUnsubscribe } from './handlers';
 import { cleanupMarketingCampaignRecipients } from './cleanup';
-import { cloneCampaign, completeCampaignIfDrained, dispatchCampaigns, listCampaigns, makeUnsubscribeToken, optOut, prepareCampaign, recordMailDelivery, reserveMail, saveCampaign, sendTest, setCampaignStatus, verifyUnsubscribeToken } from './service';
+import { cloneCampaign, completeCampaignIfDrained, deleteCampaign, dispatchCampaigns, listCampaigns, makeUnsubscribeToken, optOut, prepareCampaign, recordMailDelivery, reserveMail, saveCampaign, sendTest, setCampaignStatus, verifyUnsubscribeToken } from './service';
 import { utcDay } from './core';
 
 vi.unmock('firebase-admin');
@@ -795,6 +795,129 @@ describe.skipIf(!enabled)('marketing campaign durability (emulators)', () => {
       expect((await db.collection('mail').where('marketing.campaignId', '==', campaign.id).get()).empty).toBe(true);
     } finally { releaseLookup(); await worker; lookup.mockRestore(); }
   });
+  it('recursively deletes a draft and partial audience without cancelling test mail or refunding slots', async () => {
+    const campaign = await saveCampaign(null, draft, 'admin');
+    const ref = db.collection('marketingCampaigns').doc(campaign.id);
+    const recipient = ref.collection('recipients').doc('partial-recipient');
+    const descendant = recipient.collection('attempts').doc('partial-attempt');
+    await recipient.set({ status: 'pending' });
+    await descendant.set({ partial: true });
+    const mailId = `marketing_test_${campaign.id}_pending`;
+    const mail = { marketing: { testCampaignId: campaign.id }, delivery: { state: 'PENDING' } };
+    await db.collection('mail').doc(mailId).set(mail);
+    await ref.update({ lastTestMailId: mailId });
+    const quota = db.doc(`marketingDispatchDays/${utcDay(new Date())}`);
+    await quota.set({ used: 7 });
+    const recursiveDelete = vi.spyOn(db, 'recursiveDelete');
+    try {
+      expect(await deleteCampaign(campaign.id)).toEqual({ id: campaign.id, deleted: true });
+      expect(recursiveDelete).toHaveBeenCalledWith(ref);
+      expect((await ref.get()).exists).toBe(false);
+      expect((await recipient.get()).exists).toBe(false);
+      expect((await descendant.get()).exists).toBe(false);
+      expect((await db.collection('mail').doc(mailId).get()).data()).toEqual(mail);
+      expect((await quota.get()).get('used')).toBe(7);
+      await recordMailDelivery(mailId, mail, { ...mail, delivery: { state: 'SUCCESS' } });
+      expect((await ref.get()).exists).toBe(false);
+      expect((await listCampaigns()).campaigns.some(item => item.id === campaign.id)).toBe(false);
+      expect(await deleteCampaign(campaign.id)).toEqual({ id: campaign.id, deleted: true });
+    } finally { recursiveDelete.mockRestore(); }
+  });
 
+  it.each(['preparing', 'ready', 'running', 'paused', 'completed'])('rejects deleting a %s campaign and preserves its subtree', async status => {
+    const campaign = await saveCampaign(null, draft, 'admin');
+    const ref = db.collection('marketingCampaigns').doc(campaign.id);
+    await ref.update({ status });
+    const recipient = ref.collection('recipients').doc('kept-recipient');
+    await recipient.set({ status: 'pending' });
+    await expect(deleteCampaign(campaign.id)).rejects.toThrow('Only unprepared drafts');
+    expect((await ref.get()).get('status')).toBe(status);
+    expect((await recipient.get()).exists).toBe(true);
+  });
 
+  it('locks a deleting draft against preparation, editing, cloning and test submission', async () => {
+    const campaign = await saveCampaign(null, draft, 'admin');
+    const ref = db.collection('marketingCampaigns').doc(campaign.id);
+    await ref.collection('recipients').doc('partial').set({ status: 'pending' });
+    let cleanupStarted!: () => void;
+    let releaseCleanup!: () => void;
+    const started = new Promise<void>(resolve => { cleanupStarted = resolve; });
+    const released = new Promise<void>(resolve => { releaseCleanup = resolve; });
+    const originalDelete = db.recursiveDelete.bind(db);
+    const recursiveDelete = vi.spyOn(db, 'recursiveDelete').mockImplementation(async target => {
+      cleanupStarted(); await released; return originalDelete(target);
+    });
+    const deletion = deleteCampaign(campaign.id);
+    try {
+      await started;
+      expect((await ref.get()).get('status')).toBe('deleting');
+      expect((await listCampaigns()).campaigns.find(item => item.id === campaign.id)?.status).toBe('deleting');
+      await expect(prepareCampaign(campaign.id)).rejects.toThrow('Only drafts');
+      await expect(saveCampaign(campaign.id, draft, 'admin')).rejects.toThrow();
+      await expect(cloneCampaign(campaign.id, 'admin')).rejects.toThrow('being deleted');
+      await expect(sendTest(campaign.id, 'admin', secret, 'qa@example.org')).rejects.toThrow('Tests are available');
+      await expect(setCampaignStatus(campaign.id, 'start')).rejects.toThrow();
+      releaseCleanup();
+      await deletion;
+      expect((await ref.get()).exists).toBe(false);
+    } finally { releaseCleanup(); await deletion; recursiveDelete.mockRestore(); }
+  });
+
+  it('keeps a failed subtree deletion visible and allows a safe retry', async () => {
+    const campaign = await saveCampaign(null, draft, 'admin');
+    const ref = db.collection('marketingCampaigns').doc(campaign.id);
+    const recipient = ref.collection('recipients').doc('partial');
+    await recipient.set({ status: 'pending' });
+    const recursiveDelete = vi.spyOn(db, 'recursiveDelete').mockRejectedValueOnce(new Error('Cleanup unavailable'));
+    try {
+      await expect(deleteCampaign(campaign.id)).rejects.toThrow('Cleanup unavailable');
+      expect((await ref.get()).get('status')).toBe('deleting');
+      expect((await recipient.get()).exists).toBe(true);
+      await deleteCampaign(campaign.id);
+      expect((await ref.get()).exists).toBe(false);
+      expect((await recipient.get()).exists).toBe(false);
+    } finally { recursiveDelete.mockRestore(); }
+  });
+
+  it('rejects an in-flight saved test after deletion without reserving mail or recreating the draft', async () => {
+    const campaign = await saveCampaign(null, draft, 'admin');
+    const ref = db.collection('marketingCampaigns').doc(campaign.id);
+    const user = await admin.auth().createUser({ email: `delete-test-${randomUUID()}@example.org` });
+    const quota = db.doc(`marketingDispatchDays/${utcDay(new Date())}`);
+    await quota.set({ used: 0 });
+    await db.doc('marketingControl/global').set({ dailyCap: 10 });
+    let lookupStarted!: () => void;
+    let releaseLookup!: () => void;
+    const started = new Promise<void>(resolve => { lookupStarted = resolve; });
+    const released = new Promise<void>(resolve => { releaseLookup = resolve; });
+    const auth = admin.auth();
+    const originalGetUser = auth.getUser.bind(auth);
+    const lookup = vi.spyOn(auth, 'getUser').mockImplementation(async uid => {
+      if (uid === user.uid) { lookupStarted(); await released; }
+      return originalGetUser(uid);
+    });
+    const sending = sendTest(campaign.id, user.uid, secret, user.email);
+    const rejection = expect(sending).rejects.toThrow('campaign changed');
+    try {
+      await started;
+      await deleteCampaign(campaign.id);
+      releaseLookup(); await rejection;
+      expect((await ref.get()).exists).toBe(false);
+      expect((await quota.get()).get('used')).toBe(0);
+      expect((await db.collection('mail').where('marketing.testCampaignId', '==', campaign.id).get()).empty).toBe(true);
+    } finally { releaseLookup(); await rejection; lookup.mockRestore(); }
+  });
+
+  it('rejects invalid IDs and cleans orphaned descendants on concurrent repeated deletion', async () => {
+    await expect(deleteCampaign('../mail')).rejects.toMatchObject({ code: 'invalid-argument' });
+    const id = `orphan_${randomUUID().replace(/-/g, '')}`;
+    const ref = db.collection('marketingCampaigns').doc(id);
+    const orphan = ref.collection('recipients').doc('orphan');
+    await orphan.collection('attempts').doc('detail').set({ partial: true });
+    expect((await ref.get()).exists).toBe(false);
+    await Promise.all([deleteCampaign(id), deleteCampaign(id)]);
+    expect((await orphan.listCollections()).length).toBe(0);
+    expect((await ref.listCollections()).length).toBe(0);
+    expect((await ref.get()).exists).toBe(false);
+  });
 });

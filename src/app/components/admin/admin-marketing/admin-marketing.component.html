@@ -40,9 +40,24 @@
     </aside>
     <div class="main-column">
       <mat-card>
-        <mat-card-header><mat-card-title>{{ selected ? selected.name : 'New campaign' }}</mat-card-title></mat-card-header>
+        <mat-card-header class="campaign-header">
+          <mat-card-title>{{ selected ? selected.name : 'New campaign' }}</mat-card-title>
+          @if (canDelete) {
+            <button mat-button type="button" class="qs-mat-warn" [disabled]="!!busy || loading() || confirmingDelete" (click)="deleteDraft()">
+              <span class="refresh-button-content">
+                <span class="refresh-button-icon">
+                  @if (busy === 'Deleting draft') { <mat-spinner diameter="18" aria-hidden="true"></mat-spinner> }
+                  @else { <mat-icon>delete_outline</mat-icon> }
+                </span>
+                <span>{{ busy === 'Deleting draft' ? 'Deleting…' : selected?.status === 'deleting' ? 'Retry deletion' : 'Delete draft' }}</span>
+              </span>
+            </button>
+          }
+        </mat-card-header>
         <mat-card-content>
-          @if (selected?.status === 'paused') {
+          @if (selected?.status === 'deleting') {
+            <p class="frozen">This draft is being deleted. If it remains here, retry deletion to finish removing it.</p>
+          } @else if (selected?.status === 'paused') {
             <p class="frozen">Paused. You can edit the message and schedule for remaining recipients. Emails already queued may still send with their original content. The audience stays fixed.</p>
           } @else if (selected?.status === 'running') {
             <p class="frozen">Pause to edit the message or schedule for remaining recipients. The audience stays fixed.</p>
@@ -153,7 +168,7 @@
             @if (selected?.status === 'paused' || selected?.status === 'completed') {
               <button mat-stroked-button type="button" [disabled]="!!busy || !selected?.stats?.failed" (click)="change('retry')">Retry failed</button>
             }
-            @if (selected) { <button mat-stroked-button type="button" [disabled]="!!busy" (click)="clone()">Clone</button> }
+            @if (selected && selected.status !== 'deleting') { <button mat-stroked-button type="button" [disabled]="!!busy" (click)="clone()">Clone</button> }
             <button mat-button type="button" aria-label="Refresh status" [disabled]="!!busy || loading()" (click)="manualRefresh()">
               <span class="refresh-button-content">
                 <span class="refresh-button-icon">

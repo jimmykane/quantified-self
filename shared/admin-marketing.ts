@@ -1,5 +1,5 @@
 export type MarketingPlan = 'free' | 'basic' | 'pro';
-export type MarketingCampaignStatus = 'draft' | 'preparing' | 'ready' | 'running' | 'paused' | 'completed';
+export type MarketingCampaignStatus = 'draft' | 'deleting' | 'preparing' | 'ready' | 'running' | 'paused' | 'completed';
 export type MarketingRecipientStatus = 'pending' | 'queued' | 'accepted' | 'failed' | 'skipped';
 
 export interface MarketingTextMark {

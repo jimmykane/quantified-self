@@ -144,7 +144,7 @@ export async function listCampaigns(): Promise<MarketingCampaignListResponse> {
   const now = utcDay(new Date());
   const [recent, active, controlDoc, usedDoc] = await Promise.all([
     campaigns().orderBy('createdAt', 'desc').limit(100).get(),
-    campaigns().where('status', 'in', ['preparing', 'ready', 'running', 'paused']).get(),
+    campaigns().where('status', 'in', ['deleting', 'preparing', 'ready', 'running', 'paused']).get(),
     control().get(), dayRef(now).get(),
   ]);
   const visible = new Map([...recent.docs, ...active.docs].map(doc => [doc.id, doc]));
@@ -201,8 +201,31 @@ export async function saveCampaign(idInput: unknown, input: unknown, actorUid: s
 }
 export async function cloneCampaign(idInput: unknown, actorUid: string): Promise<MarketingCampaignView> {
   const source = await getCampaign(idInput);
+  if (source.status === 'deleting') throw new HttpsError('failed-precondition', 'This draft is being deleted.');
   return saveCampaign(null, { name: `Copy of ${source.name}`.slice(0, 120), subject: source.subject,
     content: source.content, cta: source.cta, filters: source.filters, schedule: source.schedule }, actorUid);
+}
+export async function deleteCampaign(idInput: unknown): Promise<{ id: string; deleted: true }> {
+  const id = checkedId(idInput);
+  const ref = campaigns().doc(id);
+  // This admin-only transition serializes deletion with saves, audience preparation
+  // and saved test submissions. A draft can contain a partial failed preparation.
+  await db().runTransaction(async tx => {
+    const doc = await tx.get(ref);
+    if (!doc.exists) return; // An identical retry still cleans any orphaned descendants.
+    if (doc.get('status') !== 'draft' && doc.get('status') !== 'deleting') {
+      throw new HttpsError('failed-precondition', 'Only unprepared drafts can be deleted.');
+    }
+    if (doc.get('status') === 'draft') {
+      tx.update(ref, { status: 'deleting', updatedAt: new Date().toISOString() });
+    }
+  });
+  // Keep the deletion marker until descendant cleanup succeeds, so a partial
+  // failure remains visible and retryable. No campaign writer accepts this status.
+  for (const collection of await ref.listCollections()) await db().recursiveDelete(collection);
+  await db().recursiveDelete(ref);
+  // Already submitted test mail and the consumed daily slots remain untouched.
+  return { id, deleted: true };
 }
 export function previewCampaign(input: unknown): { subject: string; html: string; text: string } {
   let draft: MarketingCampaignDraft;
@@ -545,7 +568,7 @@ export async function recordMailDelivery(mailId: string, before: FirebaseFiresto
     const testRef = campaigns().doc(marketing.testCampaignId);
     await db().runTransaction(async tx => {
       const doc = await tx.get(testRef);
-      if (doc.exists && doc.get('lastTestMailId') === mailId) tx.update(testRef, { lastTestState: state });
+      if (doc.exists && doc.get('status') !== 'deleting' && doc.get('lastTestMailId') === mailId) tx.update(testRef, { lastTestState: state });
     });
     return;
   }
@@ -555,7 +578,7 @@ export async function recordMailDelivery(mailId: string, before: FirebaseFiresto
   const to: MarketingRecipientStatus = state === 'SUCCESS' ? 'accepted' : 'failed';
   await db().runTransaction(async tx => {
     const [campaign, recipient] = await Promise.all([tx.get(campaignRef), tx.get(recipientRef)]);
-    if (!campaign.exists || !recipient.exists || recipient.get('mailId') !== mailId || recipient.get('status') !== 'queued') return;
+    if (!campaign.exists || campaign.get('status') === 'deleting' || !recipient.exists || recipient.get('mailId') !== mailId || recipient.get('status') !== 'queued') return;
     tx.update(recipientRef, { status: to, deliveryState: state, deliveryAt: new Date().toISOString() });
     const stats = transitionStats(campaign.get('stats') as MarketingCampaignStats, 'queued', to);
     tx.update(campaignRef, { stats, ...(stats.pending === 0 && stats.queued === 0 && campaign.get('status') === 'running' ? { status: 'completed' } : {}) });
