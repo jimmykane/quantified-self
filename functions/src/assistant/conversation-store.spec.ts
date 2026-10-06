@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { ActivityTypes } from '@sports-alliance/sports-lib';
 import type {
   ApplyAssistantTrainingProposalResponse,
   AssistantEvidence,
@@ -282,6 +283,10 @@ describe('Assistant conversation store', () => {
       expiresAtMs: Date.parse('2026-08-03T12:15:00Z'), scheduleRevision: 1,
       summary: 'Create and send one workout.', requiresConfirmation: true as const,
       changes: [{ index: 0, kind: 'create-workout', summary: 'Create one workout.' }],
+      workoutReviews: [{ index: 0, before: null, after: { title: 'New run', localDate: '2026-08-04', destination: 'Standalone', lifecycle: 'planned' as const,
+        structure: { version: 1 as const, sport: ActivityTypes.Running, nodes: [{ kind: 'step' as const, id: 'run', purpose: 'work' as const,
+          ending: { kind: 'time' as const, seconds: 75.1234567890123 }, targets: [] }] } },
+        compatibility: (['garmin', 'coros', 'wahoo', 'suunto'] as const).map(provider => ({ provider, before: null, after: 'exact' as const, issues: [] })) }],
       providerPreviews: [{ index: 1, provider: 'garmin' as const, targetType: 'workout' as const,
         action: 'send' as const, availability: 'ready' as const, timeZone: 'Europe/Helsinki',
         eligibleCount: 1, warningCount: 0, summary: 'Garmin is ready.' }] };

@@ -1,4 +1,5 @@
 import { analyzeWorkoutStructureV1 } from '../../../shared/planned-workout-analysis';
+import type { AssistantWorkoutReview } from '../../../shared/assistant-workout-review';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { GenkitError } from 'genkit';
 import { retry } from 'genkit/model/middleware';
@@ -34,6 +35,45 @@ import type {
 import { AssistantMcpToolFailure, AssistantRecoverableMcpToolError,
   ASSISTANT_GARMIN_REPLACEMENT_BLOCKED_GUIDANCE } from './mcp-session';
 import { createAssistantContentProposal } from './content-proposal';
+
+describe('app-owned complete workout review', () => {
+  it.each(['change recovery to 75 seconds', 'set all recovery steps to 75 sec', 'remove the heart-rate target from step 2',
+    'delete the recovery step from my workout', 'insert a recovery step into the workout', 'reorder the repeat steps', 'add a note to step 3'])(
+    'routes prescription edit "%s" through the complete v3 preview', prompt => {
+    expect(selectAssistantTrainingPreviewTool(prompt)).toBe('preview_planned_workout_v3_change');
+    expect(selectAssistantTrainingPreviewTool('Delete my workout tomorrow')).toBe('preview_training_deletion');
+    });
+  it.each([false, true])('keeps review data out of model tool output and rejects unrelated recovery edits (tampered=%s)', async tampered => {
+    const { session, callTool } = createSession();
+    session.tools.push({ name: 'preview_planned_workout_v3_change', title: 'Preview', description: 'Prepare only', inputSchema: { type: 'object' } });
+    const before = { title: 'Current workout', localDate: '2026-10-07', lifecycle: 'planned' as const, destination: 'Standalone',
+      structure: { version: 1 as const, sport: ActivityTypes.Running, nodes: [{ kind: 'step' as const, id: 'recovery', purpose: 'recovery' as const,
+        ending: { kind: 'time' as const, seconds: 60 }, targets: [], note: 'Keep this' }] } };
+    const after = structuredClone(before); after.structure.nodes[0].ending.seconds = 75;
+    if (tampered) after.structure.nodes[0].note = 'Unrequested edit';
+    const review: AssistantWorkoutReview = { index: 0, before, after, compatibility: ['garmin', 'coros', 'wahoo', 'suunto'].map(provider => ({
+      provider: provider as 'garmin', before: 'exact', after: 'exact', issues: [] })) };
+    session.getTrainingWorkoutReviews = vi.fn().mockResolvedValue([review]);
+    const preview = { proposalRef: 'bound-preview', expiresAtMs: Date.parse('2026-10-06T12:15:00Z'), permissionMode: 'schedule', scheduleRevision: 1,
+      requiresConfirmation: true, summary: 'Review recovery edit.', changes: [{ index: 0, kind: 'update-workout', summary: 'Recovery to 75 seconds.' }], providerPreviews: [] };
+    const original = callTool.getMockImplementation()!;
+    callTool.mockImplementation(async (name, args) => name === 'preview_planned_workout_v3_change' ? { structuredContent: preview } : original(name, args));
+    const runtime = createAssistantRuntime({ createMcpSession: vi.fn().mockResolvedValue(session), now: () => new Date('2026-10-06T12:00:00Z'),
+      generateAnswer: async input => {
+        await input.tools.find(tool => tool.name === 'get_daily_report')!.execute({});
+        const result = await input.tools.find(tool => tool.name === 'preview_planned_workout_v3_change')!.execute({});
+        expect(result).not.toHaveProperty('workoutReviews');
+        if (tampered) expect(result).toHaveProperty('assistantToolError');
+        else expect(result).toMatchObject({ changes: preview.changes, requiresConfirmation: true, scheduleRevision: 1 });
+        return { answer: 'Review before applying.', visualRequest: { chart: null, map: null } };
+      } });
+    const result = await runtime.answer({ uid: 'owner', appBaseUrl: 'https://quantified-self.io', prompt: 'change recovery to 75 seconds',
+      timeZone: 'Europe/Helsinki', history: [], trainingPlansEnabled: true, trainingPlanChangesEnabled: true,
+      assertTrainingPlansAccess: vi.fn().mockResolvedValue(undefined), assertTrainingWriteAccess: vi.fn().mockResolvedValue(undefined) });
+    expect(result.pendingTrainingProposal?.workoutReviews).toEqual(tampered ? undefined : [review]);
+    expect(session.getTrainingWorkoutReviews).toHaveBeenCalledWith('bound-preview', 'change recovery to 75 seconds');
+  });
+});
 
 function createSession() {
   const close = vi.fn().mockResolvedValue(undefined);

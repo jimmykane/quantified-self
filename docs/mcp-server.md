@@ -578,6 +578,13 @@ bundled guidance requires later local plugin sync. Prior pending changes are pre
 are not edited. Fixture validation does not install a real profile or prove deployed availability.
 
 
+The first-party Assistant's non-strength scheduled-workout review now loads complete, bounded before/after recipes
+privately from the same simulated proposal, plus local mapping assessments from the existing compatibility helper.
+These details enter only the strict app response/conversation contract; no registered preview/read schema, scope,
+mutation kind, provider action, digest or bundled guidance changes. MCP clients keep their existing complete v3 recipe,
+prescription-analysis and compatibility reads and their native approval UI. See
+[Training proposal review](training-workspace.md#assistant-workout-proposal-review-training-11).
+
 ## Purpose and boundary
 
 Quantified Self exposes a hosted, permission-scoped Model Context Protocol endpoint at `/mcp`. It lets an MCP client read the

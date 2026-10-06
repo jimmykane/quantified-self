@@ -14,7 +14,8 @@ import {
   type AssistantVisual,
   type AssistantContentProposalPreview,
 } from '../../../shared/assistant.types';
-import { isAssistantContentProposal } from '../../../shared/assistant-response.contract';
+import { isAssistantContentProposal, isAssistantTrainingProposal } from '../../../shared/assistant-response.contract';
+import { assistantRecoveryDurationSeconds, assertAssistantRecoveryDurationEdit } from '../../../shared/assistant-workout-review';
 import type { AssistantTrainingProposalPreview } from '../../../shared/assistant.types';
 import { TRAINING_ASSISTANT_PREVIEW_OUTPUT } from '../mcp/training-plans.schemas';
 import {
@@ -348,6 +349,7 @@ function canBeTrainingDeletionReply(prompt: string): boolean {
 
 export function selectAssistantTrainingPreviewTool(prompt: string,
   history: readonly Pick<AssistantMessage, 'role' | 'text'>[] = []): typeof TRAINING_PREVIEW_TOOLS[number] {
+  if (assistantRecoveryDurationSeconds(prompt) !== null) return 'preview_planned_workout_v3_change';
   // A reply to the explicit cleanup question must retain the focused deletion
   // schema only through an uninterrupted clarification chain, not an older
   // unrelated request. This routing never supplies Apply approval.
@@ -374,6 +376,7 @@ export function selectAssistantTrainingPreviewTool(prompt: string,
     /\b(?:don't|don’t|do not|doesn't|doesn’t|does not|never|without)\s+(?:(?:also|any|other|existing)\s+){0,3}(?:edit|update|move|copy|duplicate|delete|remove|skip|archive|rename|change|modify)\b/gu,
     '',
   );
+  const editsRecipeFields = /\b(?:remove|delete|insert|add|reorder|move|swap|set|change)\s+(?:(?:the|all|my|this|that|a|an|first|second|last|heart[-\s]?rate|power|speed|pace|cadence|warm[-\s]?up|cool[-\s]?down|recovery|work|rest)\s+){0,4}(?:steps?|intervals?|targets?|repeats?|notes?)\b/iu.test(question);
   if (requestsGarminReplacement(question)) {
     return 'preview_garmin_workout_replacement';
   }
@@ -384,7 +387,7 @@ export function selectAssistantTrainingPreviewTool(prompt: string,
   if (/\b(?:delete|remove)\b[\s\S]{0,80}\b(?:plans?|workouts?|sessions?)\b/u.test(question)
     && !/\b(?:create|add|build|make|draft|propose|suggest|schedule|edit|update|modify|change|move|copy|duplicate|shift|archive|pause|activate|rename|restore|send|sync|enable|disable|stop|resume|retry|cancel|forget)\b/u.test(question)
     && !removesWorkoutFromPlan(question)
-    && !removesEarlyLapPermission(question)) {
+    && !removesEarlyLapPermission(question) && !editsRecipeFields) {
     return 'preview_training_deletion';
   }
   const createsPlan = /\b(create|add|build|make)\s+(?:(?:a|an|new|my|the)\s+){0,3}(?:training\s+)?plan\b/u.test(question);
@@ -395,6 +398,7 @@ export function selectAssistantTrainingPreviewTool(prompt: string,
   // A special recipe editor cannot perform a provider-only action or a plan
   // mutation. Select those operations before matching sport words in context.
   if (createsPlan || changesPlan || multipleWorkouts) return 'preview_training_changes';
+  if (editsRecipeFields) return 'preview_planned_workout_v3_change';
   const authorsEarlyLap = /\b(?:early[-\s]*lap|allow[\s\S]{0,30}lap|lap[\s\S]{0,30}(?:early|button))\b/u.test(question);
   const authorsWorkout = removesEarlyLapPermission(question)
     || (authorsEarlyLap && /\b(?:allow|enable|disable|turn|set)\b/u.test(question))
@@ -1467,7 +1471,17 @@ export function createAssistantRuntime(
               }
               if ((TRAINING_PREVIEW_TOOLS as readonly string[]).includes(tool.name)) {
                 await input.assertTrainingWriteAccess!();
-                pendingTrainingProposal = TRAINING_ASSISTANT_PREVIEW_OUTPUT.parse(result.structuredContent);
+                const preview = TRAINING_ASSISTANT_PREVIEW_OUTPUT.parse(result.structuredContent);
+                const workoutReviews = session.getTrainingWorkoutReviews && !tool.name.startsWith('preview_saved_workout')
+                  ? await session.getTrainingWorkoutReviews(preview.proposalRef, input.prompt) : [];
+                try { assertAssistantRecoveryDurationEdit(input.prompt, workoutReviews); }
+                catch {
+                  throw new AssistantRecoverableMcpToolError('invalid_request',
+                    'For this duration-only recovery request, read one complete current workout and change only its timed recovery definitions. Preserve all other fields, targets, notes, IDs, order and early Lap flags.');
+                }
+                const reviewed = { ...preview, ...(workoutReviews.length ? { workoutReviews } : {}) };
+                if (!isAssistantTrainingProposal(reviewed)) throw new Error('Invalid workout review.');
+                pendingTrainingProposal = reviewed;
               }
             } catch (error) {
               if (error instanceof AssistantTrainingMetricsPreparingError) {

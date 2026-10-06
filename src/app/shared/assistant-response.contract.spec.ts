@@ -1,11 +1,35 @@
 import { describe, expect, it } from 'vitest';
 import type { AssistantChatResponse } from '@shared/assistant.types';
+import { workoutReviewFixture } from '../helpers/assistant-workout-review.test-support';
 import {
   isAssistantContentProposal,
   isAssistantTrainingProposal,
   validateAssistantChatResponse,
   validateAssistantConversation,
 } from '@shared/assistant-response.contract';
+
+describe('complete first-party workout review boundary', () => {
+  const preview = { proposalRef: 'opaque', expiresAtMs: 1000, permissionMode: 'schedule', scheduleRevision: 2,
+    requiresConfirmation: true, summary: 'Review a workout.', changes: [{ index: 0, kind: 'update-workout', summary: 'Recovery edit.' }],
+    providerPreviews: [], workoutReviews: [workoutReviewFixture()] };
+  it('accepts full recipes and fails closed on missing fields, neighboring private fields and unmatched operations', () => {
+    expect(isAssistantTrainingProposal(preview)).toBe(true);
+    for (const review of [{ ...preview.workoutReviews[0], index: 1 }, { ...preview.workoutReviews[0], ownerUid: 'PRIVATE' },
+      { ...preview.workoutReviews[0], after: { ...preview.workoutReviews[0].after, providerId: 'PRIVATE' } },
+      { ...preview.workoutReviews[0], after: { ...preview.workoutReviews[0].after, structure: { version: 1, nodes: [] } } }]) {
+      expect(isAssistantTrainingProposal({ ...preview, workoutReviews: [review] })).toBe(false);
+    }
+    expect(isAssistantTrainingProposal({ ...preview, workoutReviews: [preview.workoutReviews[0], preview.workoutReviews[0]] })).toBe(false);
+  });
+  it('enforces the total byte budget without silently omitting definitions', () => {
+    const review = workoutReviewFixture();
+    review.before!.structure.nodes = Array.from({ length: 100 }, (_, index) => ({ kind: 'step', id: `step-${index}`, purpose: 'work',
+      ending: { kind: 'time', seconds: 75 }, targets: [], note: 'x'.repeat(500) })) as never;
+    review.after = structuredClone(review.before);
+    const reviews = Array.from({ length: 4 }, (_, index) => ({ ...review, index }));
+    expect(isAssistantTrainingProposal({ ...preview, changes: reviews.map(({ index }) => ({ ...preview.changes[0], index })), workoutReviews: reviews })).toBe(false);
+  });
+});
 
 describe('dedicated Garmin replacement review boundary', () => {
   const preview = { proposalRef: 'opaque', expiresAtMs: 1000, permissionMode: 'delivery', scheduleRevision: 2,

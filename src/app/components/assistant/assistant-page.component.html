@@ -244,6 +244,10 @@
               </div>
             }
           </div>
+          @for (review of proposal.workoutReviews ?? []; track review.index) {
+            <app-assistant-workout-review [review]="review" [unitSettings]="workoutReviewUnitSettings()" [compact]="compactWorkoutReviews()"
+              [contextKey]="proposal.proposalRef + ':' + review.index"></app-assistant-workout-review>
+          }
           <p class="training-proposal-disclosure">
             @if (trainingDeletionReview(); as deletionReview) {
               {{ deletionReview.disclosure }}

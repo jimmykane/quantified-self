@@ -157,7 +157,7 @@ const WAHOO_SCHEDULING_DURATION_ISSUE = {
   message: 'Wahoo delivery requires time-based steps throughout because its dated Workout record needs a total duration. Quantified Self does not estimate one from distance, work, repetitions, or manual transitions.',
 };
 
-function assessDeliveryCompatibility(provider: PlannedWorkoutProviderId, structure: ReturnType<typeof parseWorkoutStructureV1>,
+export function assessDeliveryCompatibility(provider: PlannedWorkoutProviderId, structure: ReturnType<typeof parseWorkoutStructureV1>,
   strength?: StrengthWorkoutDetailsV1) {
   const assessment = assessPlannedWorkoutProviderMappingV1(provider, structure, strength);
   const needsWahooDuration = provider === 'wahoo' && structure.nodes.some(node =>

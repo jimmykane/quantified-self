@@ -55,6 +55,7 @@ import {
 } from './assistant-visual-detail.component';
 import { AssistantVisualMapComponent } from './assistant-visual-map.component';
 import { AssistantMessageBodyComponent } from './assistant-message-body.component';
+import { AssistantWorkoutReviewComponent } from './assistant-workout-review.component';
 
 const ASSISTANT_PENDING_INITIAL_POLL_INTERVAL_MS = 2_000;
 const ASSISTANT_PENDING_MAX_POLL_INTERVAL_MS = 5_000;
@@ -149,6 +150,7 @@ function contentProposalDetails(proposal: AssistantContentProposalPreview): stri
     AssistantVisualChartComponent,
     AssistantVisualMapComponent,
     AssistantMessageBodyComponent,
+    AssistantWorkoutReviewComponent,
   ],
   templateUrl: './assistant-page.component.html',
   styleUrls: ['./assistant-page.component.scss'],
@@ -159,6 +161,8 @@ export class AssistantPageComponent implements OnInit, OnDestroy {
   private readonly quotaService = inject(AssistantQuotaService);
   private readonly hapticsService = inject(AppHapticsService);
   private readonly userSettings = inject(AppUserSettingsQueryService);
+  readonly workoutReviewUnitSettings = computed(() => this.userSettings.unitSettings());
+  readonly compactWorkoutReviews = computed(() => (this.pendingTrainingProposal()?.workoutReviews?.length ?? 0) > 3);
   private readonly bottomSheet = inject(MatBottomSheet);
   private readonly dialog = inject(MatDialog);
   private readonly breakpointObserver = inject(BreakpointObserver);

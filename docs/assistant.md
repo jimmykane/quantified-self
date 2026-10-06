@@ -165,7 +165,13 @@ explicit-date placement. Saved recipes have no date or provider consent. The mod
 `apply_training_changes`, `apply_saved_workout_change` or provider
 transport. Quantified Self stores the safe preview with the conversation and shows an **Apply changes** / **Dismiss**
 surface. Single current deletions instead show **Review plan deletion** / **Delete plan** or **Review workout deletion** /
-**Delete workout** and **Dismiss**. The review keeps the server-authored workout disposition and service-copy choice;
+**Delete workout** and **Dismiss**. For non-strength scheduled workouts the review also shows server-captured complete
+before/after prescriptions, exact ordered changes, analyzer totals with uncertainty, local provider mapping consequences,
+and the shared profile with changed definitions highlighted. The private app-only projection is bounded and grant/revision
+checked; it is never added to model tool output or the registered MCP preview. Recovery-duration-only requests have a
+narrow deterministic preservation guard. Strength and Workout Library retain their existing review paths. Detailed
+implementation and limits live in [Training proposal review](training-workspace.md#assistant-workout-proposal-review-training-11).
+The deletion review keeps the server-authored workout disposition and service-copy choice;
 it never infers older-copy removal from combined permission or changes it in the browser. Plan/history deletion is
 permanent; workout deletion is recoverable. Apply displays the actual server deletion receipt rather than a generic
 sync-update message. Requested cleanup remains unconfirmed, and a failed or missing deletion outcome never reports
