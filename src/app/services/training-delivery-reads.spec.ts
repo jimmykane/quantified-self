@@ -1,11 +1,11 @@
 import { signal } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
-import { firstValueFrom, of } from 'rxjs';
+import { firstValueFrom, of, Subject } from 'rxjs';
 import { Firestore, collectionData, docData, query, where, limit } from 'app/firebase/firestore';
 import { AppFunctionsService } from './app.functions.service';
 import { BrowserCompatibilityService } from './browser.compatibility.service';
 import { AppUserService } from './app.user.service';
-import { TrainingDeliveryService, TRAINING_DELIVERY_SUMMARY_LIMIT } from './training-delivery.service';
+import { TrainingDeliveryService, TRAINING_DELIVERY_PREVIEW_TIMEOUT_MS, TRAINING_DELIVERY_SUMMARY_LIMIT } from './training-delivery.service';
 
 vi.mock('app/firebase/firestore', () => ({
   Firestore: class {},
@@ -60,6 +60,52 @@ describe('Training summary read bounds and ownership', () => {
   it('does not touch Firestore for an absent owner', async () => {
     await firstValueFrom(TestBed.inject(TrainingDeliveryService).watchSummaryScope('', 'workout', 'w', 'p'));
     expect(collectionData).not.toHaveBeenCalled(); expect(docData).not.toHaveBeenCalled(); expect(call).not.toHaveBeenCalled();
+  });
+  it.each(['plan', 'workout', 'history'] as const)('waits for server confirmation in every %s presence and detail read', async scope => {
+    const service = TestBed.inject(TrainingDeliveryService);
+    await firstValueFrom(service.watchPresence('owner', scope, 'p'));
+    await firstValueFrom(service.watchScope('owner', scope, 'p'));
+    expect(vi.mocked(collectionData).mock.calls.every(([, options]) => options?.waitForServer === true)).toBe(true);
+    expect(vi.mocked(docData).mock.calls.every(([, options]) => options?.waitForServer === true)).toBe(true);
+  });
+  it('waits for all exact provider documents and keeps subsequent MCP settings changes live', () => {
+    const reads = new Map<string, Subject<Record<string, unknown> | undefined>>();
+    vi.mocked(docData).mockImplementation(ref => {
+      const stream = new Subject<Record<string, unknown> | undefined>(); reads.set(String(ref), stream); return stream;
+    });
+    const observed: unknown[] = [];
+    const subscription = TestBed.inject(TrainingDeliveryService).watchScope('owner', 'workout', 'w').subscribe(view => observed.push(view));
+    expect(observed).toEqual([]);
+    for (const [path, stream] of reads) if (!path.endsWith('_garmin')) stream.next(undefined);
+    expect(observed).toEqual([]);
+    const setting = { schemaVersion: 1, scope: 'workout', scopeId: 'w', provider: 'garmin', revision: 134,
+      enabled: true, suppressed: false, timeZone: 'UTC', destinationKey: 'safe', connectionEpoch: 1, scopeGeneration: 1,
+      associationPlanId: null, approvedDigest: null, updatedAtMs: 10 };
+    reads.get('users/owner/trainingDeliverySettings/workout_w_garmin')!.next(setting);
+    expect(observed).toEqual([{ settings: [setting], statuses: [], verifications: [] }]);
+    reads.get('users/owner/trainingDeliverySettings/workout_w_garmin')!.next({ ...setting, enabled: false, revision: 135 });
+    expect(observed).toHaveLength(2);
+    expect(observed[1]).toMatchObject({ settings: [{ enabled: false, revision: 135 }] });
+    expect(vi.mocked(docData).mock.calls.every(([, options]) => options?.waitForServer === true)).toBe(true);
+    expect(call).not.toHaveBeenCalled(); subscription.unsubscribe();
+  });
+  it('rejects a valid setting stored under the wrong exact document', async () => {
+    vi.mocked(docData).mockReturnValue(of({ schemaVersion: 1, scope: 'workout', scopeId: 'other', provider: 'garmin', revision: 134,
+      enabled: true, suppressed: false, timeZone: 'UTC', destinationKey: 'safe', connectionEpoch: 1, scopeGeneration: 1,
+      associationPlanId: null, approvedDigest: null, updatedAtMs: 10 }));
+    await expect(firstValueFrom(TestBed.inject(TrainingDeliveryService).watchScope('owner', 'workout', 'w')))
+      .rejects.toThrow('do not match');
+    expect(call).not.toHaveBeenCalled();
+  });
+  it('bounds incomplete server reads rather than leaving sync actions loading indefinitely', async () => {
+    vi.useFakeTimers();
+    try {
+      vi.mocked(docData).mockReturnValue(new Subject());
+      const pending = firstValueFrom(TestBed.inject(TrainingDeliveryService).watchScope('owner', 'workout', 'w'));
+      const rejected = expect(pending).rejects.toMatchObject({ name: 'TimeoutError' });
+      await vi.advanceTimersByTimeAsync(TRAINING_DELIVERY_PREVIEW_TIMEOUT_MS); await rejected;
+      expect(call).not.toHaveBeenCalled();
+    } finally { vi.useRealTimers(); }
   });
   it('withholds complete totals when the plan-override look-ahead reaches its bound', async () => {
     const override = { schemaVersion: 1, scope: 'workout', scopeId: 'w', provider: 'garmin', revision: 1,

@@ -228,6 +228,9 @@ describe('help.content', () => {
     expect(content).toContain('**Sync plan with Garmin**');
     expect(content).toContain('**Enable plan sync**');
     expect(content).toContain('**Workout sync status**');
+    expect(content).toContain('**Loading sync settings** is not **Sync off**');
+    expect(content).toContain('do not enable sync again just to refresh the display');
+    expect(content).toContain('reads the latest saved revisions without changing consent');
     expect(content).toContain("each service's logo and a compact sent/total count for Suunto");
     expect(content).toContain('**No workouts due for sync** instead of showing dashes');
     expect(content).toContain('small **View** action');

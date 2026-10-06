@@ -116,7 +116,9 @@ export class TrainingDeliveryDialogComponent {
   readonly planBound = computed(() => this.schedule()?.workouts.find(workout => workout.id === this.data.id)?.planId != null && this.data.scope === 'workout');
   readonly planDelivery = computed(() => this.data.scope === 'plan' || this.planBound());
   readonly canSend = computed(() => !!this.scopeRecord() && this.scopeRecord()!.lifecycle !== 'deleted');
-  readonly canReview = computed(() => this.view().loaded && !this.view().error && !!this.schedule() && this.data.scope !== 'history'
+  readonly syncReadState = computed(() => this.view().error || this.scheduleView().error || this.schedule()?.restoreUnavailable
+    ? 'unavailable' : !this.view().loaded || !this.scheduleView().loaded ? 'loading' : 'ready');
+  readonly canReview = computed(() => this.syncReadState() === 'ready' && !!this.schedule() && this.data.scope !== 'history'
     && (!!this.scopeRecord() || this.statuses().length > 0));
   readonly statuses = computed(() => this.view().statuses);
   readonly draftLabel = computed(() => {
@@ -204,15 +206,19 @@ export class TrainingDeliveryDialogComponent {
     const planInactive = !!scopePlan && scopePlan.lifecycle !== 'active';
     const planFocus = this.data.scope === 'plan'
       ? this.data.planSummaries?.().find(summary => summary.provider === provider)?.planFocus ?? null : null;
-    const overviewState = !this.view().loaded ? 'Loading sync status…'
+    const overviewState = this.syncReadState() === 'unavailable' ? 'Sync settings unavailable'
+      : this.syncReadState() === 'loading' ? 'Loading sync status…'
       : this.data.scope === 'history' ? 'Sync history'
       : this.planBound() ? suppressed ? 'Excluded from plan sync' : 'Follows plan sync settings'
         : setting?.enabled ? planInactive ? 'Sync saved · plan inactive' : 'Sync enabled' : 'Sync off';
-    const overviewIcon = !this.view().loaded ? 'sync'
+    const overviewIcon = this.syncReadState() === 'unavailable' ? 'help_outline'
+      : this.syncReadState() === 'loading' ? 'sync'
       : this.data.scope === 'history' ? 'history'
       : this.planBound() ? suppressed ? 'sync_disabled' : 'link'
         : setting?.enabled ? planInactive ? 'pause_circle' : 'check_circle' : 'sync_disabled';
-    const overviewDetail = planFocus ? [planFocus.label, planFocus.detail].filter(Boolean).join(' · ')
+    const overviewDetail = this.syncReadState() === 'unavailable' ? 'Close and reopen to load current settings.'
+      : this.syncReadState() === 'loading' ? 'Waiting for current sync settings.'
+      : planFocus ? [planFocus.label, planFocus.detail].filter(Boolean).join(' · ')
       : !statuses.length ? 'No workout sync status yet.'
       : statuses.length === 1 ? statuses[0].label
         : attentionWorkoutCount ? `${statusWorkoutCount} ${statusWorkoutCount === 1 ? 'workout' : 'workouts'} · ${attentionWorkoutCount} ${attentionWorkoutCount === 1 ? 'needs' : 'need'} attention`
@@ -229,7 +235,9 @@ export class TrainingDeliveryDialogComponent {
       // Current settings precede the asynchronously reconciled status after Resume.
       canResume: suppressed || (!inheritedSetting && statuses.some(status => status.status === 'stopped'
         && (!this.planBound() || status.planId === currentPlanId))),
-      settingLabel: this.planBound() ? suppressed ? 'Excluded from plan sync' : 'Follows plan sync settings'
+      settingLabel: this.syncReadState() === 'unavailable' ? 'Sync settings unavailable'
+        : this.syncReadState() === 'loading' ? 'Loading sync settings…'
+        : this.planBound() ? suppressed ? 'Excluded from plan sync' : 'Follows plan sync settings'
         : this.data.scope === 'plan' ? setting?.enabled ? 'Plan sync enabled' : 'Plan sync off'
           : setting?.enabled ? 'Workout sync enabled' : 'Workout sync off',
       visible: (ready && this.canSend()) || !!setting || statuses.length > 0,
@@ -268,6 +276,7 @@ export class TrainingDeliveryDialogComponent {
     && this.preview()?.result.issues.includes(WAHOO_TRAINING_PERMISSION_ISSUE));
   readonly canLoadMore = computed(() => this.view().loaded && this.statuses().length === this.statusLimit());
   readonly canConfirm = computed(() => {
+    if (!this.canReview()) return false;
     const preview = this.preview();
     if (this.editingSettings() && (!this.hasSettingsChanges() || (this.settingsChangedElsewhere() && !this.confirmationAttempted()))) return false;
     return !!preview && (preview.command.action === 'stop'

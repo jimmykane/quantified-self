@@ -1351,6 +1351,31 @@ show **Upcoming status incomplete**, not an allegedly complete total. Read/crypt
 **Sync status unavailable**, never zero or success. Account changes clear visible results and cancel old subscriptions;
 same-scope authored edits recompute the summary without reopening its Firestore listeners.
 
+#### Server-confirmed sync settings and current revisions (#812)
+
+Delivery presence, exact per-provider settings, bounded statuses/checks, inherited plan settings and workout overrides
+wait for server-confirmed snapshots, including metadata-only acknowledgements. Cached missing/disabled documents and
+pending writes are not authoritative consent. All required provider reads must answer before an overview or summary
+becomes ready; incomplete initial reads time out after 30 seconds. Loading/error states never invent **Sync off**, a
+zero synced total, or a new Send review. Listener failure shows unavailable with close/reopen guidance. Restore-unavailable
+schedules also block reviews and confirmations rather than using their temporary empty schedule as revision zero.
+
+Before Check or a delivery preview, the browser reads three exact owner documents from the server: schedule state,
+the addressed plan/workout, and that provider's scoped settings. Strict parsers validate the records and bind the
+source/settings identity to the addressed document. Only server-confirmed absence contributes revision zero. Check
+uses these current revisions without changing consent. A preview with stale displayed revisions fails with a readable
+conflict instead of silently reviewing new consent or rebasing a replacement approval. The server transaction still
+checks revisions because these three reads are not an atomic snapshot. Confirm and uncertain receipt replay retain
+the exact reviewed command and mutation ID; they are never rewritten to current revisions. Account/view changes and
+timeouts fence dispatch after reads and during App Check readiness.
+
+Regression coverage lives in `training-delivery-reads.spec.ts`, `training-delivery.service.spec.ts`,
+`training-delivery-dialog.component.spec.ts` and the Firestore wrapper metadata tests. This is a browser-read/readiness
+fix, not evidence of a new provider send, deletion or device receipt. MCP impact: no wire change; existing server-side
+Training read/proposal/confirmation contracts, shared summaries, consent, replacement safeguards, provider transports
+and completed-activity totals are unchanged. No Rules, indexes or Functions deployment is required. Live UI Check
+evidence remains #812's release verification; do not infer it from unit tests or silently widen approval.
+
 These are workout-delivery aggregates for all services, including services without a native plan object. A provider that
 does not support workout delivery cannot become synced merely through aggregation. **Synced** confirms the complete
 provider-side workout/schedule delivery reported by QS, not receipt on a watch or other device. The existing readiness,

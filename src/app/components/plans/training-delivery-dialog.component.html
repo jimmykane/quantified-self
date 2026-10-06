@@ -23,8 +23,9 @@
   </div>
   @if (data.scope === 'history') { <p class="delivery-caption">Individual workouts across your plans and standalone workouts. Select a workout for sync details.</p> }
   @if (notice()) { <p role="status">{{ notice() }}</p> }
-  @if (view().error || error()) { <p role="alert">{{ error() || 'Unable to load sync settings.' }}</p> }
+  @if (view().error || error()) { <p role="alert">{{ error() || 'Unable to load sync settings. Close and reopen this dialog to try again.' }}</p> }
   @if (scheduleView().error) { <p role="alert">Unable to load the training schedule. Close and reopen this dialog to try again.</p> }
+  @if (schedule()?.restoreUnavailable) { <p role="status">The schedule is being restored. Sync controls will be available when restoration finishes.</p> }
   @if (!view().loaded) { <mat-spinner diameter="24" aria-label="Loading sync settings"></mat-spinner> }
   @if (draft(); as draft) {
     <section aria-label="Review sync change" class="delivery-review" [attr.aria-busy]="busy()">
