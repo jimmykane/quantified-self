@@ -65,4 +65,15 @@ describe('complete Assistant workout review', () => {
     expect(isAssistantWorkoutReviews([value, value])).toBe(false);
     expect(() => assertAssistantRecoveryDurationEdit('change recovery to 75 seconds', [])).toThrow();
   });
+  it('rejects normalized sport aliases and untrimmed recipes at the app review boundary', () => {
+    const value = review();
+    for (const sport of ['StrengthTraining', 'strength_training']) {
+      expect(isAssistantWorkoutReviews([{ ...value, after: { ...value.after, structure: { ...recipe, sport } } }])).toBe(false);
+    }
+    const untrimmed = structuredClone(value);
+    const first = untrimmed.after!.structure.nodes[0];
+    if (first.kind !== 'step') throw new Error();
+    first.note = ` ${first.note} `;
+    expect(isAssistantWorkoutReviews([untrimmed])).toBe(false);
+  });
 });

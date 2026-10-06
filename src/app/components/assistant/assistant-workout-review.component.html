@@ -8,6 +8,7 @@
   </div>
   @for (item of view.metadata; track item.label) {
     <div class="metadata-change"><strong>{{ item.label }}</strong><span>{{ item.before }} → {{ item.after }}</span></div>
+    @if (item.precision) { <p class="precision-details">{{ item.precision }}</p> }
   }
   @if (view.changes.length) {
     <button mat-button type="button" [attr.aria-expanded]="changesExpanded()" [attr.aria-controls]="regionId" (click)="toggleChanges()">

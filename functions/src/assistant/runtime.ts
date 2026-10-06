@@ -398,9 +398,8 @@ export function selectAssistantTrainingPreviewTool(prompt: string,
   // A special recipe editor cannot perform a provider-only action or a plan
   // mutation. Select those operations before matching sport words in context.
   if (createsPlan || changesPlan || multipleWorkouts) return 'preview_training_changes';
-  if (editsRecipeFields) return 'preview_planned_workout_v3_change';
   const authorsEarlyLap = /\b(?:early[-\s]*lap|allow[\s\S]{0,30}lap|lap[\s\S]{0,30}(?:early|button))\b/u.test(question);
-  const authorsWorkout = removesEarlyLapPermission(question)
+  const authorsWorkout = editsRecipeFields || removesEarlyLapPermission(question)
     || (authorsEarlyLap && /\b(?:allow|enable|disable|turn|set)\b/u.test(question))
     || /\b(create|add|schedule|make|build|draft|propose|suggest|edit|update|modify|change)\b/u.test(question);
   const deliveryOnly = /\b(send|sync|enable|stop|retry|approve)\b/u.test(question) && !authorsWorkout;
@@ -420,6 +419,7 @@ export function selectAssistantTrainingPreviewTool(prompt: string,
   }
   if (/\b(?:create|add|build|make|draft|propose|suggest)\b/u.test(question)
     && /\b(?:and|also|then)\b[\s\S]{0,25}\b(?:edit|update|modify|change|move|copy|delete)\b[\s\S]{0,30}\b(?:workout|session|plan|step)\b/u.test(question)) return 'preview_training_changes';
+  if (editsRecipeFields) return 'preview_planned_workout_v3_change';
   if (authorsWorkout && (authorsEarlyLap
     || /\b(?:edit|update|modify|change)\b[\s\S]{0,45}\b(?:workout|session|ride|run|step|interval|ending|target|pace)\b/u.test(question))) {
     return 'preview_planned_workout_v3_change';

@@ -1,9 +1,26 @@
 import type { UserUnitSettingsInterface } from '@sports-alliance/sports-lib';
 import { diffAssistantWorkoutNodes, equalWorkoutReviewValue, type AssistantWorkoutReview, type AssistantWorkoutSnapshot } from '@shared/assistant-workout-review';
-import { formatWorkoutEndingV1, formatWorkoutStepV1, type WorkoutNodeV1 } from '@shared/planned-workout';
+import { formatWorkoutEndingV1, formatWorkoutStepV1, formatWorkoutTargetV1, type WorkoutNodeV1 } from '@shared/planned-workout';
 import { analyzeWorkoutStructureV1 } from '@shared/planned-workout-analysis';
 import { formatWorkoutPrescriptionSummaryV1 } from '@shared/planned-workout-analysis-display';
 import { formatAssistantCalendarDate } from './assistant-message-format.helper';
+
+/** Check each changed numeric field independently, so another visible edit cannot mask display rounding. */
+function hasRoundedNumericChange<T>(before: T, after: T, format: (value: T) => string): boolean {
+  const original = format(before);
+  const visit = (a: unknown, b: unknown, path: string[]): boolean => {
+    if (typeof a === 'number' && typeof b === 'number' && a !== b) {
+      const candidate = JSON.parse(JSON.stringify(before)) as T;
+      let parent = candidate as Record<string, unknown>;
+      for (const key of path.slice(0, -1)) parent = parent[key] as Record<string, unknown>;
+      parent[path[path.length - 1]] = b;
+      return format(candidate) === original;
+    }
+    if (!a || !b || typeof a !== 'object' || typeof b !== 'object') return false;
+    return Object.keys(a).some(key => visit((a as Record<string, unknown>)[key], (b as Record<string, unknown>)[key], [...path, key]));
+  };
+  return visit(before, after, []);
+}
 
 export function assistantWorkoutReviewModel(review: AssistantWorkoutReview, units?: UserUnitSettingsInterface | null, locale?: string) {
   const before = review.before, after = review.after;
@@ -13,16 +30,24 @@ export function assistantWorkoutReviewModel(review: AssistantWorkoutReview, unit
     : node.kind === 'repeat' ? `Repeat ${node.count} times` : `${formatWorkoutStepV1(node, units, locale, source?.structure.sport)}${node.note !== undefined ? ` · Note: ${node.note || '(empty)'}` : ''}`;
   const changes = diffAssistantWorkoutNodes(before?.structure ?? null, after?.structure ?? null).map(change => {
     const prior = describe(change.before, before), next = describe(change.after, after);
+    const roundedFields = change.before?.kind === 'step' && change.after?.kind === 'step'
+      && (hasRoundedNumericChange(change.before.ending, change.after.ending,
+        ending => formatWorkoutEndingV1(ending, units, locale, before?.structure.sport))
+        || change.before.targets.some(target => {
+          const proposed = change.after!.kind === 'step' ? change.after!.targets.find(value => value.kind === target.kind) : undefined;
+          return proposed && hasRoundedNumericChange(target, proposed,
+            value => formatWorkoutTargetV1(value, units, locale, before?.structure.sport));
+        }));
     return { ...change, label: `${change.after?.kind === 'repeat' || change.before?.kind === 'repeat' ? 'Repeat' : 'Step'} ${change.afterPosition ?? change.beforePosition}`,
       fieldsText: change.fields.join(' · '), beforeText: prior, afterText: next,
       beforeLocation: change.beforePosition ? `Position ${change.beforePosition}` : 'New definition',
       afterLocation: change.afterPosition ? `Position ${change.afterPosition}` : 'Removed definition',
       // A rounding collision must never disguise a real prescription edit as unchanged.
-      precision: prior === next && !equalWorkoutReviewValue(change.before, change.after) && !change.fields.every(field => field === 'Order / repeat placement')
+      precision: (roundedFields || prior === next) && !equalWorkoutReviewValue(change.before, change.after) && !change.fields.every(field => field === 'Order / repeat placement')
         ? `Exact prescription before: ${JSON.stringify(change.before)}. After: ${JSON.stringify(change.after)}.` : null,
     };
   });
-  const metadata: Array<{ label: string; before: string; after: string }> = [];
+  const metadata: Array<{ label: string; before: string; after: string; precision?: string }> = [];
   if (before && after) {
     for (const [key, label] of [['title', 'Title'], ['localDate', 'Date'], ['destination', 'Destination'], ['lifecycle', 'Status']] as const) {
       if (before[key] !== after[key]) metadata.push({ label, before: key === 'localDate' ? formatAssistantCalendarDate(before[key], locale) : before[key],
@@ -32,7 +57,11 @@ export function assistantWorkoutReviewModel(review: AssistantWorkoutReview, unit
     if (!equalWorkoutReviewValue(before.structure.poolLength, after.structure.poolLength)) {
       const pool = (value: AssistantWorkoutSnapshot) => value.structure.poolLength
         ? `${formatWorkoutEndingV1({ kind: 'distance', meters: value.structure.poolLength.meters }, units, locale, value.structure.sport)} (${value.structure.poolLength.presentation})` : 'Unspecified';
-      metadata.push({ label: 'Pool length', before: pool(before), after: pool(after) });
+      const roundedPool = before.structure.poolLength && after.structure.poolLength
+        && hasRoundedNumericChange(before.structure.poolLength, after.structure.poolLength,
+          value => pool({ ...before, structure: { ...before.structure, poolLength: value } }));
+      metadata.push({ label: 'Pool length', before: pool(before), after: pool(after),
+        ...(roundedPool ? { precision: `Exact pool setting before: ${JSON.stringify(before.structure.poolLength)}. After: ${JSON.stringify(after.structure.poolLength)}.` } : {}) });
     }
   }
   const counts = (value: AssistantWorkoutSnapshot | null) => {

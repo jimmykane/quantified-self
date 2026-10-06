@@ -37,6 +37,15 @@ import { AssistantMcpToolFailure, AssistantRecoverableMcpToolError,
 import { createAssistantContentProposal } from './content-proposal';
 
 describe('app-owned complete workout review', () => {
+  it.each([
+    ['Add a note to my strength workout.', 'preview_strength_workout_change'],
+    ['Delete the recovery step from my strength workout.', 'preview_strength_workout_change'],
+    ['Reorder the intervals in my gym session.', 'preview_strength_workout_change'],
+    ['Create one workout and change the target of my workout.', 'preview_training_changes'],
+    ['Build a workout and delete the recovery step from my existing workout.', 'preview_training_changes'],
+  ])('recipe field edits preserve the specialized route for "%s"', (prompt, expected) => {
+    expect(selectAssistantTrainingPreviewTool(prompt)).toBe(expected);
+  });
   it.each(['change recovery to 75 seconds', 'set all recovery steps to 75 sec', 'remove the heart-rate target from step 2',
     'delete the recovery step from my workout', 'insert a recovery step into the workout', 'reorder the repeat steps', 'add a note to step 3'])(
     'routes prescription edit "%s" through the complete v3 preview', prompt => {

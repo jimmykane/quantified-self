@@ -1,4 +1,4 @@
-import { ChangeDetectionStrategy, Component, LOCALE_ID, computed, effect, inject, input, signal } from '@angular/core';
+import { ChangeDetectionStrategy, Component, LOCALE_ID, computed, effect, inject, input, signal, untracked } from '@angular/core';
 import { MatButtonModule } from '@angular/material/button';
 import type { UserUnitSettingsInterface } from '@sports-alliance/sports-lib';
 import type { AssistantWorkoutReview } from '@shared/assistant-workout-review';
@@ -26,7 +26,15 @@ export class AssistantWorkoutReviewComponent {
   readonly regionId = `assistant-workout-changes-${++nextReviewId}`;
   readonly mappingRegionId = `${this.regionId}-mapping`;
   constructor() {
-    effect(() => { this.contextKey(); this.changesExpanded.set(!this.compact() && this.model().changes.length <= 8); this.mappingExpanded.set(false); this.selectedStepId.set(null); });
+    effect(() => {
+      this.contextKey();
+      // Presentation refreshes must preserve the user's disclosure and selection state.
+      untracked(() => {
+        this.changesExpanded.set(!this.compact() && this.model().changes.length <= 8);
+        this.mappingExpanded.set(false);
+        this.selectedStepId.set(null);
+      });
+    });
   }
   toggleChanges(): void { this.changesExpanded.update(value => !value); this.haptics.selection(); }
   toggleMapping(): void { this.mappingExpanded.update(value => !value); this.haptics.selection(); }

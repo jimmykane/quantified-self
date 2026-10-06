@@ -2,7 +2,8 @@ import { signal } from '@angular/core';
 import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { TestBed } from '@angular/core/testing';
 import { By } from '@angular/platform-browser';
-import { ActivityTypes, AppThemes } from '@sports-alliance/sports-lib';
+import { ActivityTypes, AppThemes, DistanceUnits } from '@sports-alliance/sports-lib';
+import { normalizeUserUnitSettings } from '@shared/unit-aware-display';
 import { workoutReviewFixture } from '../../helpers/assistant-workout-review.test-support';
 import { AppHapticsService } from '../../services/app.haptics.service';
 import { AppThemeService } from '../../services/app.theme.service';
@@ -58,6 +59,37 @@ describe('AssistantWorkoutReviewComponent', () => {
     writeSyntheticReviewFixture('assistant-review-large.html', fixture.nativeElement.outerHTML);
     fixture.componentRef.setInput('contextKey', 'fresh-proposal:0'); fixture.detectChanges(); await fixture.whenStable();
     expect(fixture.componentInstance.changesExpanded()).toBe(false); expect(haptics.selection).toHaveBeenCalledTimes(1);
+  });
+  it('keeps disclosures and selection open when owner unit settings refresh', async () => {
+    const value = workoutReviewFixture(); value.after!.structure.nodes[0].steps[1].ending = { kind: 'time', seconds: 75 };
+    value.after!.structure.nodes.push(...Array.from({ length: 8 }, (_, index) => ({ kind: 'step' as const, id: `added-${index}`,
+      purpose: 'work' as const, ending: { kind: 'time' as const, seconds: 30 }, targets: [] })));
+    const fixture = TestBed.createComponent(AssistantWorkoutReviewComponent);
+    fixture.componentRef.setInput('review', value); fixture.componentRef.setInput('contextKey', 'proposal:0');
+    fixture.detectChanges(); await fixture.whenStable();
+    fixture.nativeElement.querySelector('button').click();
+    fixture.nativeElement.querySelector(`[aria-controls="${fixture.componentInstance.mappingRegionId}"]`).click();
+    const graph = fixture.debugElement.query(By.directive(WorkoutProfileComponent)).componentInstance as WorkoutProfileComponent;
+    graph.stepSelected.emit({ stepId: 'recovery', repeatId: 'block', iteration: 1, occurrenceKey: 'recovery:1' });
+    fixture.detectChanges();
+    fixture.componentRef.setInput('unitSettings', { ...normalizeUserUnitSettings(), distanceUnits: DistanceUnits.Miles });
+    fixture.detectChanges(); await fixture.whenStable();
+    expect(fixture.componentInstance.changesExpanded()).toBe(true);
+    expect(fixture.componentInstance.mappingExpanded()).toBe(true);
+    expect(fixture.componentInstance.selectedStepId()).toBe('recovery');
+    expect(fixture.nativeElement.textContent).toContain('mi');
+    expect(haptics.selection).toHaveBeenCalledTimes(2);
+  });
+  it('renders exact pool settings when the formatted metadata rounds to the same value', async () => {
+    const value = workoutReviewFixture();
+    value.before!.structure.sport = ActivityTypes.Swimming;
+    value.before!.structure.poolLength = { meters: 25.000000001, presentation: 'meters' };
+    value.after = structuredClone(value.before); value.after!.structure.poolLength!.meters = 25.000000002;
+    const fixture = TestBed.createComponent(AssistantWorkoutReviewComponent);
+    fixture.componentRef.setInput('review', value); fixture.componentRef.setInput('contextKey', 'proposal:0');
+    fixture.detectChanges(); await fixture.whenStable();
+    expect(fixture.nativeElement.querySelector('.precision-details').textContent).toContain('25.000000002');
+    expect(haptics.selection).not.toHaveBeenCalled();
   });
   it('renders all 25 operation reviews and can export an isolated synthetic layout fixture', async () => {
     const html: string[] = [];

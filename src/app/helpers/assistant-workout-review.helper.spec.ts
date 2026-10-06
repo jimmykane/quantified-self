@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { DistanceUnits } from '@sports-alliance/sports-lib';
+import { ActivityTypes, DistanceUnits } from '@sports-alliance/sports-lib';
 import { normalizeUserUnitSettings } from '@shared/unit-aware-display';
 import { assistantWorkoutReviewModel } from './assistant-workout-review.helper';
 import { workoutReviewFixture } from './assistant-workout-review.test-support';
@@ -33,5 +33,32 @@ describe('Assistant workout review display', () => {
     const view = assistantWorkoutReviewModel(review, { ...normalizeUserUnitSettings(), distanceUnits: DistanceUnits.Miles });
     expect(view.changes[0].precision).toContain('60.12500000001');
     expect(view.afterSummary).toContain('mi');
+  });
+  it('discloses a duration rounding collision even when a note also changes', () => {
+    const review = workoutReviewFixture();
+    review.after!.structure.nodes[0].steps[1].ending = { kind: 'time', seconds: 60.12500000001 };
+    review.after!.structure.nodes[0].steps[1].note = 'A visibly different note';
+    const change = assistantWorkoutReviewModel(review).changes[0];
+    expect(change.beforeText).not.toBe(change.afterText);
+    expect(change.precision).toContain('60.12500000001');
+  });
+  it('discloses a reference rounding collision even when the distance also changes', () => {
+    const review = workoutReviewFixture();
+    review.before!.structure.nodes[0].steps[0].targets = [{ kind: 'power', mode: 'relative', minimumPercent: 95, maximumPercent: 105,
+      reference: { kind: 'functional-threshold-power', watts: 250.001 } }];
+    review.after = structuredClone(review.before);
+    review.after!.structure.nodes[0].steps[0].ending = { kind: 'distance', meters: 2000 };
+    const target = review.after!.structure.nodes[0].steps[0].targets[0];
+    if (target.kind !== 'power' || target.mode !== 'relative') throw new Error();
+    target.minimumPercent = 90;
+    target.reference.watts = 250.002;
+    expect(assistantWorkoutReviewModel(review).changes[0].precision).toContain('250.002');
+  });
+  it('discloses a pool-length edit below display precision', () => {
+    const review = workoutReviewFixture();
+    review.before!.structure.sport = ActivityTypes.Swimming;
+    review.before!.structure.poolLength = { meters: 25.000000001, presentation: 'meters' };
+    review.after = structuredClone(review.before); review.after!.structure.poolLength!.meters = 25.000000002;
+    expect(assistantWorkoutReviewModel(review).metadata.find(item => item.label === 'Pool length')?.precision).toContain('25.000000002');
   });
 });

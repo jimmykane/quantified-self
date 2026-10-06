@@ -35,9 +35,9 @@ function snapshot(v: unknown): v is AssistantWorkoutSnapshot | null {
     || typeof v.localDate !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(v.localDate)) return false;
   try {
     if (new Date(`${v.localDate}T00:00:00Z`).toISOString().slice(0, 10) !== v.localDate) return false;
-    parseWorkoutStructureV1(v.structure);
+    const structure = parseWorkoutStructureV1(v.structure);
     // Strength's compatibility projection is insufficient for a complete prescription review.
-    return (v.structure as WorkoutStructureV1).sport !== ActivityTypes.StrengthTraining;
+    return structure.sport !== ActivityTypes.StrengthTraining && equalWorkoutReviewValue(structure, v.structure);
   } catch { return false; }
 }
 

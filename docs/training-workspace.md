@@ -1098,11 +1098,15 @@ within their repeat parent, so insertion/deletion alone cannot mark every later 
 early Lap presence), ordered targets/reference snapshots, notes, repeat counts, placement and metadata changes remain
 explicit. Unmatched IDs are added/removed rather than called unchanged. The UI uses the shared analyzer for both totals
 and definition/execution counts, preserving estimated ranges, partial subtotals, unknown contributions and early-Lap
-limits. Sports Lib and owner preferences format the values; a rounding collision also discloses exact saved values.
+limits. Sports Lib and owner preferences format the values; each changed numeric field is checked independently for
+rounding collisions, including target reference snapshots and pool length. Exact saved values remain disclosed even
+when another field, note or prescription changes visibly. Review snapshots must already be canonical; sport aliases
+and recipes that need normalization are rejected at the app response boundary.
 The proposed profile reuses `WorkoutProfileComponent` with canonical changed IDs and selection. Large change lists
 have a labelled Material disclosure and bounded shared-scrollbar region; no definition is omitted. Batches with more
 than three workout reviews initially collapse each change list. Provider states remain visible while mapping limitations
 have their own disclosure.
+Changing owner unit preferences refreshes displayed values without resetting the open disclosures or selected step.
 
 The server also records whether a single update changes only timed recovery definitions to one duration, checking the
 exact destination identity as well as the complete prescription and metadata. For the narrowly recognized request
@@ -1111,7 +1115,9 @@ runtime reject any other change before it can become the current proposal. Arbit
 general edit-scope classifier; broader requests still require explicit full review. Untargeted work lasting 60/75/90
 seconds, distance blocks, unrelated targets, notes, IDs, ordering and early-Lap flags stay exact in a recovery-only edit.
 This request and explicit step, target, repeat or note edits select the full v3 preview so existing early-Lap flags
-remain representable; removing a recipe step does not route to whole-workout deletion.
+remain representable; removing a recipe step does not route to whole-workout deletion. Explicit strength-workout
+edits keep their exercise-aware tool, and create-plus-edit requests keep the existing batch tool ahead of the generic
+recipe-field route.
 
 Four local provider assessments show exact/degraded/unsupported before and after, using the same compatibility helper
 as the existing MCP read. They need no connection or HTTP call and grant no provider action. Explicit send/enable/etc.
