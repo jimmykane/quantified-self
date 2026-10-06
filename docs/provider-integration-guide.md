@@ -64,6 +64,27 @@ Garmin Sleep and Health history recovery must account for a moving provider mini
 
 Garmin stress-validation diagnostics use the existing WARNING with allowlisted family/field/reason, summary index, type, and bounded numeric-only values; never log raw provider strings or objects. Stress sample zeroes are numeric readings; daily average -2 is retained as a native-only availability code because its daily semantics are undocumented. Do not transfer sentinel meanings between summary families or let a recognized non-measurement code discard unrelated valid metrics. Garmin workout, Sleep, and Health failed jobs retain original callback URLs under the existing admin-only 30-day expiry for separately authorized recovery; successful/skipped queue rows still clear them. Never log or project those credentials. Legacy DLQ callbacks with removed credentials or expired URLs require bounded Summary Resender recovery. Verify actual ingestion, not merely replay submission. See [Garmin delivery diagnostics](garmin-integration.md#delivery-and-trust-boundary) for the exact bound and metadata contract.
 
+### Inbound prescription access is separate from delivery (#708)
+
+The October 6, 2026 investigation does **not** approve a cloud workout-library importer. See the
+[dated evidence matrix, source contracts, proposed lifecycle and test gates](training-workspace.md#inbound-workout-import-feasibility-708)
+for the detailed Training source of truth. Do not infer incoming recipe access from recorded-activity history, an OAuth
+scope, a known-ID read or successful delivery of a QS workout.
+
+| Provider | Decision for non-QS prescriptions |
+| --- | --- |
+| Garmin | Scheduled import blocked pending ownership/coverage proof; undated library no-go without documented enumeration. |
+| Suunto | Current Guide contract is creator-application-only, not another partner's or the full consumer library. |
+| COROS | Reviewed Training Plan contract has no planned-recipe/schedule read or discovery operation. |
+| Wahoo | Restricted entitlement path; content-use and coverage proof required before an import commitment. |
+
+Keep recipes, schedule occurrences and completed recordings separate. Proposed imports would create reviewed local
+snapshots with private owner-scoped provenance, not adopt destructive remote ownership or create two-way sync. The
+independent structured-FIT-file candidate also needs an explicitly accepted #583 implementation issue and rights-cleared
+fixtures; current activity upload support is not prescription import. Neither proposal permits new access requests,
+provider contact, live tests, broader consent or deployment. Importing into an active syncing plan would otherwise inherit
+its Send opt-in, so the proposed first slice is undated-library/Standalone-only, with no automatic outbound delivery.
+
 ### Structured-workout remote verification evidence
 
 Garmin completed-activity correlation is separate from remote Workout/Schedule verification. Its imported FIT
