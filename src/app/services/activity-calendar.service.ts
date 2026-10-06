@@ -21,10 +21,25 @@ import { AppEventService, type EventDocumentData } from './app.event.service';
 
 @Injectable({ providedIn: 'root' })
 export class ActivityCalendarService {
+  static readonly WEEK_EVENT_LIMIT = 1000;
   private static readonly CACHE_TTL_MS = 5 * 60 * 1000;
   private static readonly CACHE_MAX_ENTRIES = 12;
   private readonly eventService = inject(AppEventService);
   private readonly eventCache = new Map<string, { events: EventInterface[]; expiresAt: number }>();
+
+  /** One lookahead record distinguishes a complete week from an observed subtotal. */
+  watchWeekEvents(user: User, window: ActivityCalendarQueryWindow): Observable<{ events: EventInterface[]; complete: boolean }> {
+    if (!user?.uid || !Number.isFinite(window?.startMs) || !Number.isFinite(window?.endExclusiveMs)
+      || window.endExclusiveMs <= window.startMs) throw new Error('A valid owner and week are required.');
+    return this.eventService.watchEventDocumentsBy(user, [
+      { fieldPath: 'startDate', opStr: '>=', value: window.startMs },
+      { fieldPath: 'startDate', opStr: '<', value: window.endExclusiveMs },
+    ], 'startDate', true, ActivityCalendarService.WEEK_EVENT_LIMIT + 1, { waitForServer: true }).pipe(map(documents => {
+      const normal = documents.slice(0, ActivityCalendarService.WEEK_EVENT_LIMIT).filter(isNormalActivityEvent);
+      const events = normal.map(toActivityCalendarEvent).filter((event): event is EventInterface => !!event);
+      return { events, complete: documents.length <= ActivityCalendarService.WEEK_EVENT_LIMIT && events.length === normal.length };
+    }));
+  }
 
   watchEvents(
     user: User | null | undefined,

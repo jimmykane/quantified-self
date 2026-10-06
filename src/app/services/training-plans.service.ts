@@ -59,6 +59,8 @@ export interface CurrentTrainingScheduleV1 {
   workouts: ScheduledWorkoutV1[];
   /** Local read state only; never part of the persisted v1 schedule or MCP contract. */
   restoreUnavailable?: true;
+  /** Calendar-only bounded-read coverage; never persisted or exposed through MCP. */
+  workoutsComplete?: boolean;
 }
 
 export interface DeletedTrainingWorkoutsPageV1 {
@@ -105,6 +107,50 @@ export class TrainingPlansService {
   private readonly browserCompatibility = inject(BrowserCompatibilityService);
   private readonly scheduleStreams = new Map<string, Observable<CurrentTrainingScheduleV1>>();
   private readonly completionStreams = new Map<string, Observable<TrainingWorkoutCompletionV1[]>>();
+
+  watchCalendarSchedule(userId: string, startLocalDate: string, endLocalDate: string): Observable<CurrentTrainingScheduleV1> {
+    if (!userId || !/^\d{4}-\d{2}-\d{2}$/.test(startLocalDate) || !/^\d{4}-\d{2}-\d{2}$/.test(endLocalDate)
+      || startLocalDate > endLocalDate) throw new Error('A valid owner and calendar range are required.');
+    const stateRef = doc(this.firestore, 'users', userId, TRAINING_PLAN_STATE_COLLECTION_ID, TRAINING_PLAN_STATE_DOCUMENT_ID);
+    const availabilityRef = doc(this.firestore, 'users', userId, TRAINING_PLAN_STATE_COLLECTION_ID,
+      TRAINING_PLAN_STATE_DOCUMENT_ID, 'availability', 'restore');
+    const workoutsRef = collection(this.firestore, 'users', userId, SCHEDULED_WORKOUTS_COLLECTION_ID);
+    return docData(availabilityRef, { waitForServer: true }).pipe(switchMap(availability => {
+      if (availability !== undefined) return of({ ...emptyTrainingSchedule(), restoreUnavailable: true as const });
+      return docData(stateRef, { waitForServer: true }).pipe(switchMap(stateValue => {
+        const state = stateValue === undefined ? emptyTrainingSchedule().state : parseTrainingPlanStateV1(stateValue);
+        const activePlan$ = state.activePlanId === null ? of([] as TrainingPlanV1[])
+          : docData(doc(this.firestore, 'users', userId, TRAINING_PLANS_COLLECTION_ID, state.activePlanId), { waitForServer: true }).pipe(map(value => {
+            if (!value) throw new Error('The active plan is unavailable.');
+            const plan = parseTrainingPlanV1(value);
+            if (plan.id !== state.activePlanId) throw new Error('The active plan identity is inconsistent.');
+            return [plan];
+          }));
+        return combineLatest([activePlan$, collectionData(query(workoutsRef,
+          where('localDate', '>=', startLocalDate), where('localDate', '<=', endLocalDate),
+          orderBy('localDate', 'asc'), orderBy(documentId(), 'asc'), limit(401)), { idField: 'id', waitForServer: true })]).pipe(
+          map(([plans, values]) => ({ state, plans, workouts: values.slice(0, 400).map(parseScheduledWorkoutV1),
+            workoutsComplete: values.length <= 400 })),
+        );
+      }), retry({ count: 2, delay: 1000 }), catchError(error => from(getDoc(availabilityRef)).pipe(
+        switchMap(snapshot => snapshot.exists() ? of({ ...emptyTrainingSchedule(), restoreUnavailable: true as const }) : throwError(() => error)),
+      )));
+    }));
+  }
+
+  /** Exact current workout identities, independent of their date at link time. */
+  watchWorkoutCompletionsForWorkouts(userId: string, workoutIds: readonly string[]): Observable<TrainingWorkoutCompletionV1[]> {
+    const ids = [...new Set(workoutIds)].sort();
+    if (!userId || ids.length > 400 || ids.some(id => !id || id.includes('/'))) throw new Error('Invalid completion selection.');
+    if (ids.length === 0) return of([]);
+    const ref = collection(this.firestore, 'users', userId, TRAINING_WORKOUT_COMPLETIONS_COLLECTION_ID);
+    const streams$: Observable<TrainingWorkoutCompletionV1[]>[] = [];
+    for (let offset = 0; offset < ids.length; offset += 30) {
+      streams$.push(collectionData(query(ref, where(documentId(), 'in', ids.slice(offset, offset + 30)), limit(30)),
+        { idField: 'workoutId', waitForServer: true }).pipe(map(values => values.map(parseTrainingWorkoutCompletionV1))));
+    }
+    return combineLatest(streams$).pipe(map(batches => batches.flat()));
+  }
 
   watchSchedule(userId: string | null | undefined): Observable<CurrentTrainingScheduleV1> {
     const uid = `${userId || ''}`.trim();

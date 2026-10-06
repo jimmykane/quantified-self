@@ -52,11 +52,16 @@ import {
   buildPlannedWorkoutCalendarOverlay,
   type PlannedWorkoutCalendarOverlay,
 } from '../../../helpers/planned-workout-calendar.helper';
+import { CalendarWeekSummaryComponent } from '../calendar-week-summary/calendar-week-summary.component';
+import { buildCalendarWeekSummary, type CalendarWeekSource } from '../../../helpers/calendar-week-summary.helper';
+import type { TrainingWorkoutCompletionV1 } from '@shared/training-workout-completion';
+import { AppHapticsService } from '../../../services/app.haptics.service';
 import { TrainingImpactService, type TrainingImpactSnapshotState } from '../../../services/training-impact.service';
 
 interface CalendarEventsState {
   status: 'loading' | 'ready' | 'error';
   events: EventInterface[];
+  complete?: boolean;
 }
 
 interface CalendarPlansState {
@@ -64,6 +69,8 @@ interface CalendarPlansState {
   schedule: CurrentTrainingScheduleV1 | null;
   restoreInProgress?: boolean;
 }
+
+interface CalendarCompletionState extends CalendarWeekSource<TrainingWorkoutCompletionV1[]> { context: string }
 
 interface CalendarViewOption {
   value: ActivityCalendarView;
@@ -76,6 +83,7 @@ interface CalendarViewOption {
   standalone: true,
   imports: [
     SharedModule,
+    CalendarWeekSummaryComponent,
     ActivityCalendarGridComponent,
     CalendarDayContextComponent,
     ActivityCalendarVolumeListComponent,
@@ -99,6 +107,7 @@ export class CalendarPageComponent {
   private readonly dayDetailsNavigation = inject(CalendarDayDetailsNavigationService);
   private readonly trainingImpact = inject(TrainingImpactService);
   private readonly locale = inject(LOCALE_ID);
+  private readonly haptics = inject(AppHapticsService);
   private readonly notesWorkspace = viewChild(TimelineNotesWorkspaceComponent);
   private readonly reloadSequence = signal(0);
   private readonly today = signal(new Date());
@@ -129,6 +138,7 @@ export class CalendarPageComponent {
     { value: '30d', label: '30 days', icon: 'date_range' },
     { value: 'year', label: 'Year', icon: 'calendar_month' },
   ];
+  readonly isWeekView = computed(() => !this.isDayRoute && this.routeState().view === 'week');
   readonly isGridView = computed(() => isActivityCalendarGridView(this.routeState().view));
   readonly periodUnitLabel = computed(() => this.routeState().view === '30d' ? '30-day period' : this.routeState().view);
   readonly familyVolumeTooltip = ACTIVITY_CALENDAR_VOLUME_TOOLTIP;
@@ -159,39 +169,74 @@ export class CalendarPageComponent {
     this.routeState$,
     toObservable(this.reloadSequence),
   ]).pipe(
-    map(([user, state, reload]) => ({ user, reload, window: this.isDayRoute
+    map(([user, state, reload]) => ({ user, reload, week: !this.isDayRoute && state.view === 'week', window: this.isDayRoute
       ? resolveActivityCalendarDayRange(state.anchorDate)
       : resolveActivityCalendarQueryWindow(state.view, state.anchorDate, user?.settings?.unitSettings?.startOfTheWeek) })),
     distinctUntilChanged((a, b) => a.user?.uid === b.user?.uid && a.reload === b.reload
-      && a.window.startMs === b.window.startMs && a.window.endExclusiveMs === b.window.endExclusiveMs),
-    switchMap(({ user, window: queryWindow }) => {
+      && a.week === b.week && a.window.startMs === b.window.startMs && a.window.endExclusiveMs === b.window.endExclusiveMs),
+    switchMap(({ user, week, window: queryWindow }) => {
       if (!user?.uid) return of({ status: 'ready', events: [] } as CalendarEventsState);
-      return this.calendarService.watchEvents(user, queryWindow).pipe(
-        map(events => ({ status: 'ready', events }) as CalendarEventsState),
+      const events$ = week ? this.calendarService.watchWeekEvents(user, queryWindow)
+        : this.calendarService.watchEvents(user, queryWindow).pipe(map(events => ({ events, complete: true })));
+      return events$.pipe(
+        map(result => ({ status: 'ready', ...result }) as CalendarEventsState),
         startWith({ status: 'loading', events: [] } as CalendarEventsState),
         catchError(() => of({ status: 'error', events: [] } as CalendarEventsState)),
       );
     }),
   ), { initialValue: { status: 'loading', events: [] } as CalendarEventsState });
-  readonly plansState = toSignal(this.userService.user$.pipe(
-    switchMap(user => user?.uid
-      ? this.plansService.watchSchedule(user.uid).pipe(
+  readonly plansState = toSignal(combineLatest([this.userService.user$, this.routeState$, toObservable(this.reloadSequence)]).pipe(
+    map(([user, state, reload]) => ({ uid: user?.uid, reload, week: !this.isDayRoute && state.view === 'week',
+      window: resolveActivityCalendarQueryWindow(state.view, state.anchorDate, user?.settings?.unitSettings?.startOfTheWeek) })),
+    distinctUntilChanged((a, b) => a.uid === b.uid && a.reload === b.reload && a.week === b.week
+      && (!a.week || (a.window.startMs === b.window.startMs && a.window.endExclusiveMs === b.window.endExclusiveMs))),
+    switchMap(({ uid, week, window }) => {
+      if (!uid) return of({ status: 'ready', schedule: null } as CalendarPlansState);
+      const schedule$ = week ? this.plansService.watchCalendarSchedule(uid, formatActivityCalendarDateParam(new Date(window.startMs)),
+        formatActivityCalendarDateParam(new Date(window.endExclusiveMs - 1))) : this.plansService.watchSchedule(uid);
+      return schedule$.pipe(
         map(schedule => schedule.restoreUnavailable
           ? ({ status: 'error', schedule: null, restoreInProgress: true } as CalendarPlansState)
           : ({ status: 'ready', schedule } as CalendarPlansState)),
         startWith({ status: 'loading', schedule: null } as CalendarPlansState),
         catchError(() => of({ status: 'error', schedule: null } as CalendarPlansState)),
-      )
-      : of({ status: 'ready', schedule: null } as CalendarPlansState)),
+      );
+    }),
   ), { initialValue: { status: 'loading', schedule: null } as CalendarPlansState });
-  readonly workoutCompletions = toSignal(this.userService.user$.pipe(
-    switchMap(user => user?.uid
-      ? this.plansService.watchWorkoutCompletions(user.uid).pipe(
-        startWith([]),
-        catchError(() => of([])),
-      )
-      : of([])),
-  ), { initialValue: [] });
+  private readonly completionContext = computed(() => JSON.stringify([this.currentUser()?.uid, this.isWeekView(), this.reloadSequence(),
+    this.plansState().schedule ? selectCalendarVisibleScheduledWorkouts(this.plansState().schedule!).map(workout => workout.id).sort() : []]));
+  readonly completionState = toSignal(combineLatest([this.userService.user$, toObservable(this.plansState),
+    toObservable(this.isWeekView), toObservable(this.reloadSequence)]).pipe(
+    map(([user, plans, week, reload]) => ({ uid: user?.uid, week, reload, status: plans.status,
+      ids: plans.schedule ? selectCalendarVisibleScheduledWorkouts(plans.schedule).map(workout => workout.id).sort() : [] })),
+    distinctUntilChanged((a, b) => a.uid === b.uid && a.week === b.week && a.reload === b.reload
+      && a.status === b.status && JSON.stringify(a.ids) === JSON.stringify(b.ids)),
+    switchMap(({ uid, week, reload, status, ids }) => {
+      const context = JSON.stringify([uid, week, reload, ids]);
+      if (!uid) return of({ status: 'ready', data: [], complete: true, context } as CalendarCompletionState);
+      if (week && status !== 'ready') return of({ status, data: [], complete: false, context } as CalendarCompletionState);
+      const links$ = week ? this.plansService.watchWorkoutCompletionsForWorkouts(uid, ids) : this.plansService.watchWorkoutCompletions(uid);
+      return links$.pipe(
+        map(data => ({ status: 'ready', data, complete: true, context } as CalendarCompletionState)),
+        startWith({ status: 'loading', data: [], complete: false, context } as CalendarCompletionState),
+        catchError(() => of({ status: 'error', data: [], complete: false, context } as CalendarCompletionState)),
+      );
+    }),
+  ), { initialValue: { status: 'loading', data: [], complete: false, context: '' } as CalendarCompletionState });
+  private readonly currentCompletions = computed<CalendarWeekSource<TrainingWorkoutCompletionV1[]>>(() =>
+    this.completionState().context === this.completionContext() ? this.completionState() : { status: 'loading', data: [], complete: false });
+  readonly workoutCompletions = computed(() => this.currentCompletions().data);
+  readonly weekSummary = computed(() => {
+    const window = resolveActivityCalendarQueryWindow('week', this.routeState().anchorDate,
+      this.currentUser()?.settings?.unitSettings?.startOfTheWeek);
+    return buildCalendarWeekSummary({ window, startLocalDate: formatActivityCalendarDateParam(new Date(window.startMs)),
+      endLocalDate: formatActivityCalendarDateParam(new Date(window.endExclusiveMs - 1)),
+      events: { status: this.eventState().status, data: this.eventState().events, complete: this.eventState().complete !== false },
+      schedule: { status: this.plansState().status, data: this.plansState().schedule, complete: this.plansState().schedule?.workoutsComplete !== false },
+      completions: this.currentCompletions(), unitSettings: this.currentUser()?.settings?.unitSettings, locale: this.locale });
+  });
+  readonly canRetryWeek = computed(() => this.eventState().status === 'error' || this.plansState().status === 'error'
+    || this.completionState().status === 'error');
   readonly plannedWorkoutsByDate = computed<PlannedWorkoutCalendarOverlay>(() => {
     const schedule = this.plansState().schedule;
     if (!this.hasTrainingPlanningUIAccess() || !schedule) return {};
@@ -363,6 +408,7 @@ export class CalendarPageComponent {
     if (view === this.routeState().view) {
       return;
     }
+    this.haptics.selection();
     this.navigateToState({ ...this.routeState(), view,
       anchorDate: resolveActivityCalendarViewAnchor(view, this.routeState().selectedDate, this.today()) });
   }

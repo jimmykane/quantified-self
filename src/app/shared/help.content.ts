@@ -306,6 +306,14 @@ const ACTIVITY_CALENDAR_HELP_CONTENT = `## Open and navigate the calendar
 - Use the **Month / 30 days** buttons above the dashboard Calendar to switch views. The selected button shows the current view, and your choice is saved. A fresh visit starts in the current period; returning from a day, activity, or workout restores the period you were browsing. The Today mini-calendar stays in Month.
 - Selecting a day keeps the calendar visible and updates the day panel. Month and 30 days show every entry in the selected day, with an independent panel scroll on desktop; **Full day** opens the time-ordered day timeline. On a phone, selecting a date in Year view opens that month so the day's details are close to the calendar; browser Back returns to Year. The selected view, displayed period, and selected date are kept in the URL, so refreshing or sharing the authenticated route restores the same day. **Calendar** returns to the originating view and period with that day selected.
 
+## Compare a week's plan and recordings
+
+In **Week**, **Recorded** shows activities recorded within that week. **Planned prescriptions** shows non-skipped workouts from your active plan and Standalone, including workouts with a completion link. **Remaining prescriptions** shows non-skipped workouts without a link. QS keeps these totals separate.
+
+**Completed links** means an exact stored link to a recording; it does not prove you performed every instruction. A missing link does not prove you missed a workout. A linked recording stays in the week it was recorded, even if the workout was scheduled in another week. QS warns when a linked workout has since been edited. Skipped, unlinked workouts contribute no remaining prescription.
+
+Prescription summaries retain exact timed limits, explicit speed-based ranges and unknown steps. Manual/Lap, repetition and energy steps do not gain invented durations; early-Lap steps can end before their prescribed limit. Only authored distance contributes to prescription distance. Strength timing is not a total of repetitions or lifting volume. Planned load is unavailable; recorded load uses only recorded TSS. Missing metrics stay unavailable, and partial reads show observed subtotals. If a read fails, use **Retry week summary**; remaining totals stay unknown until completion links load.
+
 ## Read activity days
 
 - A circle's color identifies an activity group and its size reflects recorded duration. Larger circles mean more recorded time, using a bounded scale so unusually long activities do not dominate the grid.

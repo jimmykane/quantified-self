@@ -56,6 +56,34 @@ function fixture() {
 }
 
 describe('Training plan MCP reads', () => {
+  it('provides strict weekly planning inputs with exact cross-week completion and prescription uncertainty', async () => {
+    const f = fixture();
+    f.collections.scheduledWorkouts.w1.localDate = '2026-09-16';
+    f.collections.scheduledWorkouts.w1.revision = 2;
+    f.collections.trainingWorkoutCompletions.w1 = { schemaVersion: 1, workoutId: 'w1', planId: 'p1', provider: 'garmin',
+      matchMethod: 'provider_marker', eventId: 'private-outside-week', activityId: 'private-activity', sourceSessionIndex: 0,
+      activityStartAtMs: Date.UTC(2026, 8, 22), scheduledLocalDate: '2026-09-15', workoutRevisionAtLink: 1,
+      timing: 'late', linkedAtMs: Date.UTC(2026, 8, 22), updatedAtMs: Date.UTC(2026, 8, 22) };
+    f.structures.w1 = { version: 1, sport: ActivityTypes.Running, nodes: [
+      { kind: 'step', id: 'timed', purpose: 'work', ending: { kind: 'time', seconds: 600.25 }, targets: [] },
+      { kind: 'step', id: 'lap', purpose: 'recovery', ending: { kind: 'manual' }, targets: [] },
+    ] };
+    const page = TRAINING_READ_OUTPUTS.query_planned_workouts_by_date.parse(await f.run('query_planned_workouts_by_date',
+      { startDate: '2026-09-14', endDate: '2026-09-20', limit: 25 }));
+    expect(page.scanComplete).toBe(true);
+    expect(page.workouts).toHaveLength(3); // Active + standalone + skipped; inactive and deleted stay excluded.
+    expect(page.workouts.filter(item => item.lifecycle === 'skipped')).toHaveLength(1);
+    const completions = TRAINING_READ_OUTPUTS.get_planned_workout_completions.parse(await f.run('get_planned_workout_completions',
+      { workoutRefs: page.workouts.map(item => item.workoutRef) }));
+    expect(completions.completions.filter(item => item.state === 'linked')).toHaveLength(1);
+    const linked = completions.completions.find(item => item.state === 'linked')!;
+    expect(linked).toMatchObject({ scheduledDate: '2026-09-15', workoutChangedSinceCompletion: true, activityRef: null });
+    const analysis = TRAINING_READ_OUTPUTS.get_workout_prescription_analysis.parse(await f.run('get_workout_prescription_analysis',
+      { source: 'scheduled', reference: linked.workoutRef }));
+    expect(analysis.analysis.summary.duration).toMatchObject({ exactSubtotalSeconds: 600.25, unknownSteps: 1, completeRange: null });
+    expect(JSON.stringify({ page, completions, analysis })).not.toMatch(/private-outside-week|private-activity|eventId|activityId|destinationKey/);
+    await expect(f.run('get_planned_workout_completions', { workoutRefs: page.workouts.map(item => item.workoutRef) }, ['metrics:read'])).rejects.toThrow();
+  });
   it('analyzes scheduled and saved prescriptions with owner units without exposing notes or storage identity', async () => {
     const f = fixture();
     const recipe = { version: 1, sport: ActivityTypes.Running, nodes: [

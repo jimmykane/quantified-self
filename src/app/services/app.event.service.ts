@@ -654,9 +654,10 @@ export class AppEventService implements OnDestroy {
     orderByField: string = 'startDate',
     asc: boolean = false,
     limitCount: number = 10,
+    options: { waitForServer?: boolean } = {},
   ): Observable<EventDocumentData[]> {
     const q = this.getEventQueryForUser(user, whereClauses, orderByField, asc, limitCount);
-    return collectionData(q, { idField: 'id' }) as Observable<EventDocumentData[]>;
+    return collectionData(q, { idField: 'id', ...options }) as Observable<EventDocumentData[]>;
   }
 
   public getEventsOnceBy(
