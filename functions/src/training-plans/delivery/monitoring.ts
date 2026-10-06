@@ -33,16 +33,18 @@ export async function observeTrainingQueueHealth(db: FirebaseFirestore.Firestore
       if (dueAt === 0 || dueAt > now) throw new Error('Invalid dated queue sample');
       dueAgeLowerBoundMs = now - dueAt;
     }
-    // Zero is an immediate-work marker, not an epoch timestamp. Document IDs are
-    // not chronological, so this sample cannot claim the exact oldest zero job.
+    // Zero is an immediate-work marker, not an epoch timestamp. Reconciliation
+    // documents are reused, so creation time can predate the current pending work.
+    // Last write time is conservative; IDs aren't chronological, so this sample
+    // cannot claim the exact oldest zero job.
     let immediateAgeKnown = true;
     if (immediate.docs[0]) {
       if (immediate.docs[0].get('dueAtMs') !== 0) throw new Error('Invalid immediate queue sample');
-      const createdAt = immediate.docs[0].createTime?.toMillis();
-      // A concurrent enqueue can be created after the probe's query cutoff.
+      const updatedAt = immediate.docs[0].updateTime?.toMillis();
+      // A concurrent enqueue/update can occur after the probe's query cutoff.
       // Within this bounded probe window it is new work, not corrupt telemetry.
-      immediateAgeKnown = Number.isSafeInteger(createdAt) && createdAt! >= 0 && createdAt! <= now + PROBE_TIMEOUT_MS;
-      if (immediateAgeKnown) dueAgeLowerBoundMs = Math.max(dueAgeLowerBoundMs, now - createdAt!, 0);
+      immediateAgeKnown = Number.isSafeInteger(updatedAt) && updatedAt! >= 0 && updatedAt! <= now + PROBE_TIMEOUT_MS;
+      if (immediateAgeKnown) dueAgeLowerBoundMs = Math.max(dueAgeLowerBoundMs, now - updatedAt!, 0);
     }
     // Queries aren't a transaction; a job can disappear between the reads.
     // A zero due count must never produce a backlog incident from a stale age.

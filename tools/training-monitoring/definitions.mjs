@@ -7,9 +7,11 @@ const labels = keys => keys.map(key => ({ key, valueType: 'STRING', description:
 export const metricType = key => `logging.googleapis.com/user/${PREFIX}${key}_v1`;
 
 export function validateTarget(project, channel) {
-  if (!/^[a-z][a-z0-9-]{4,28}[a-z0-9]$/.test(project || '')) throw new Error('Explicit valid project ID required.');
-  if (channel !== undefined && !new RegExp(`^projects/${project}/notificationChannels/[0-9]+$`).test(channel)) {
-    throw new Error('Select an existing notification channel in the same project.');
+  if (typeof project !== 'string' || project !== project.trim()
+      || !/^[a-z][a-z0-9-]{4,28}[a-z0-9]$/.test(project)) throw new Error('Explicit valid project ID required.');
+  if (channel !== undefined) {
+    const match = /^projects\/([a-z][a-z0-9-]*)\/notificationChannels\/([0-9]+)$/.exec(channel);
+    if (!match || match[0] !== channel || match[1] !== project) throw new Error('Select an existing notification channel in the same project.');
   }
 }
 
@@ -54,7 +56,7 @@ export function buildTrainingMonitoring(project, channel) {
   metric('queue_due', `${health} jsonPayload.dueJobs>=0`, 'Distribution of due-job samples, not cumulative workout counts.',
     [], 'dueJobs', [0, 1, 5, 10, 25, 50, 100, 250, 500, 1000, 5000]);
   metric('queue_due_age', `${health} jsonPayload.dueAgeLowerBoundMs>=0`,
-    'Lower-bound dispatch delay samples; zero markers use sampled creation time, not epoch.',
+    'Lower-bound dispatch delay samples; zero markers use sampled last-write time, not epoch.',
     [], 'dueAgeLowerBoundMs', [0, 60000, 300000, 600000, 900000, 1200000, 1800000, 3600000, 7200000, 86400000]);
   metric('queue_overdue_samples', `${health} jsonPayload.dueJobs>0 jsonPayload.dueAgeLowerBoundMs>=900000`,
     'Minute samples with due work demonstrably delayed at least 15 minutes.');
@@ -142,7 +144,8 @@ export function buildTrainingMonitoring(project, channel) {
     chart('Cloud Tasks HTTP attempts / 10 minutes (not provider acceptance)', 'task_attempt_count', { native: true, groups: ['metric.label.response_code'] }),
     chart('Cloud Tasks dispatch delay (maximum service p95)', 'task_attempt_delays', { native: true, distribution: true, unit: 'ms' }),
   ];
-  const dashboard = { displayName: 'QS Training Delivery', labels: { managed_by: OWNER }, mosaicLayout: {
+  // Dashboard labels are tags: the API documents empty values, unlike policy userLabels.
+  const dashboard = { displayName: 'QS Training Delivery', labels: { [OWNER]: '' }, mosaicLayout: {
     columns: 12, tiles: widgets.map((widget, index) => index === 0
       ? { xPos: 0, yPos: 0, width: 12, height: 3, widget }
       : { xPos: (index - 1) % 2 * 6, yPos: 3 + Math.floor((index - 1) / 2) * 4, width: 6, height: 4, widget }),

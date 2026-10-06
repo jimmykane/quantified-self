@@ -4,7 +4,7 @@ import { observeTrainingQueueHealth } from './monitoring';
 
 vi.mock('firebase-functions/logger', () => ({ info: vi.fn(), warn: vi.fn() }));
 
-function database(count: unknown, dated: unknown = null, immediate: unknown = null, createdAt = 900_000) {
+function database(count: unknown, dated: unknown = null, immediate: unknown = null, updatedAt = 900_000) {
   const reads: { filters: unknown[][]; mask: string[]; limit: number }[] = [];
   const db = { collection: vi.fn(() => ({
     where: (...first: unknown[]) => {
@@ -19,7 +19,7 @@ function database(count: unknown, dated: unknown = null, immediate: unknown = nu
           reads.push({ filters, mask, limit });
           const value = first[1] === '>' ? dated : immediate;
           return { docs: value === null ? [] : [{
-            get: () => value, createTime: { toMillis: () => createdAt },
+            get: () => value, updateTime: { toMillis: () => updatedAt }, createTime: { toMillis: () => 1 },
             data: () => ({ uid: 'PRIVATE', deliveryId: 'PRIVATE' }),
           }] };
         },
@@ -47,7 +47,7 @@ describe('Training queue aggregate telemetry', () => {
     expect(db.collection).toHaveBeenCalledExactlyOnceWith('trainingDeliveryQueue');
   });
 
-  it('uses zero-marker creation time, retaining an older positive due date', async () => {
+  it('uses zero-marker last-write time, retaining an older positive due date', async () => {
     const { db } = database(12, 200_000, 0);
     await observeTrainingQueueHealth(db, 1_000_000);
     expect(logger.info).toHaveBeenCalledWith('[TrainingDelivery]', expect.objectContaining({
@@ -64,8 +64,16 @@ describe('Training queue aggregate telemetry', () => {
     }));
   });
 
-  it.each([Number.NaN, 1_100_000])('marks unknown immediate age (%s) without inventing elapsed time', async createdAt => {
-    const { db } = database(1, null, 0, createdAt);
+  it('does not mistake a reused reconciliation record for an old pending request', async () => {
+    const { db } = database(1, null, 0, 999_900);
+    await observeTrainingQueueHealth(db, 1_000_000);
+    expect(logger.info).toHaveBeenCalledWith('[TrainingDelivery]', expect.objectContaining({
+      dueAgeLowerBoundMs: 100, immediateAgeKnown: true,
+    }));
+  });
+
+  it.each([Number.NaN, 1_100_000])('marks unknown immediate age (%s) without inventing elapsed time', async updatedAt => {
+    const { db } = database(1, null, 0, updatedAt);
     await observeTrainingQueueHealth(db, 1_000_000);
     expect(logger.info).toHaveBeenCalledWith('[TrainingDelivery]', expect.objectContaining({
       dueAgeLowerBoundMs: 0, immediateAgeKnown: false,

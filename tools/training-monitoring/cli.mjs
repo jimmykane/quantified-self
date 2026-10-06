@@ -20,6 +20,13 @@ export function parseArguments(args) {
   return options;
 }
 
+export async function decodeMonitoringResponse(response, method) {
+  if (!response.ok) throw new Error(`Monitoring API ${method} failed (HTTP ${response.status}).`);
+  // JSON parser errors can embed the raw response, including private channel data.
+  try { return await response.json(); }
+  catch { throw new Error('Monitoring API returned an invalid JSON response.'); }
+}
+
 export async function main(args) {
   const options = parseArguments(args);
   const bundle = buildTrainingMonitoring(options.project, options['notification-channel']);
@@ -36,8 +43,7 @@ export async function main(args) {
     const response = await fetch(url, { method, headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
       body: body === undefined ? undefined : JSON.stringify(body), signal: AbortSignal.timeout(30_000), redirect: 'error' });
     // Never print provider/cloud response bodies or notification-channel labels.
-    if (!response.ok) throw new Error(`Monitoring API ${method} failed (HTTP ${response.status}).`);
-    return response.json();
+    return decodeMonitoringResponse(response, method);
   };
   console.log(JSON.stringify(await applyTrainingMonitoring(bundle, request)));
 }

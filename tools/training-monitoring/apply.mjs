@@ -36,19 +36,22 @@ export async function applyTrainingMonitoring(bundle, request) {
     list(`${logging}/projects/${project}/metrics`, 'metrics'),
   ]);
   function owned(items, title, id) {
+    const isOwned = item => id === undefined ? Object.hasOwn(item.labels || {}, OWNER) && item.labels[OWNER] === ''
+      : item.userLabels?.managed_by === OWNER;
     const matches = items.filter(item => item.displayName === title
       || (item.userLabels?.managed_by === OWNER && item.userLabels.policy_id === id)
-      || (id === undefined && item.labels?.managed_by === OWNER));
+      || (id === undefined && isOwned(item)));
     if (matches.length > 1) throw new Error('Duplicate managed configuration; resolve manually.');
     const found = matches[0];
-    if (found && (id === undefined ? found.labels?.managed_by : found.userLabels?.managed_by) !== OWNER) {
+    if (found && !isOwned(found)) {
       throw new Error('Refusing to overwrite unowned monitoring configuration.');
     }
     return found;
   }
   function resourceName(name, kind) {
     // The API can return the numeric project identity even when listed by ID.
-    if (!new RegExp(`^projects/(${project}|[0-9]+)/${kind}/[A-Za-z0-9_-]+$`).test(name || '')) {
+    const match = /^projects\/([a-z][a-z0-9-]*|[0-9]+)\/(dashboards|alertPolicies)\/([A-Za-z0-9_-]+)$/.exec(name || '');
+    if (!match || match[0] !== name || (match[1] !== project && !/^[0-9]+$/.test(match[1])) || match[2] !== kind) {
       throw new Error('Unexpected monitoring resource identity.');
     }
     return name;
@@ -71,7 +74,8 @@ export async function applyTrainingMonitoring(bundle, request) {
     const old = matches[0]?.metricDescriptor;
     if (old && (old.metricKind !== metric.metricDescriptor.metricKind || old.valueType !== metric.metricDescriptor.valueType
         || old.unit !== metric.metricDescriptor.unit
-        || JSON.stringify((old.labels || []).map(label => [label.key, label.valueType]).sort())
+        // STRING is the default enum value and can be omitted in API JSON.
+        || JSON.stringify((old.labels || []).map(label => [label.key, label.valueType ?? 'STRING']).sort())
           !== JSON.stringify(metric.metricDescriptor.labels.map(label => [label.key, label.valueType]).sort()))) {
       throw new Error('Immutable log metric schema changed; use a new versioned metric name.');
     }

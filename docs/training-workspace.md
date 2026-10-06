@@ -4894,12 +4894,15 @@ and cannot prevent the dispatcher from continuing. The deadline bounds waiting, 
 Firestore RPC. Those outstanding reads remain bounded to the same three queries.
 
 `dueAgeLowerBoundMs` is deliberately a **lower bound** on dispatch delay, not end-to-end acceptance latency. Immediate
-jobs use `dueAtMs=0`; this is a marker, not the Unix epoch. Their sampled document creation time supplies elapsed age.
-Immediate work created during the five-second probe window has age clamped to zero, not an incomplete-telemetry error.
+jobs use `dueAtMs=0`; this is a marker, not the Unix epoch. Their sampled document's last-write time supplies conservative
+elapsed age. Reconciliation documents persist through horizon polling and can be reset to immediate work, so creation
+time would incorrectly age a fresh request from an older queue record. Later writes can understate age, never prove an
+older pending request. Immediate work written during the five-second probe window has age clamped to zero, not an
+incomplete-telemetry error.
 Zero-marker IDs are not chronological, so one such sample can understate the oldest immediate job. The oldest positive
 due date is queried independently so zero markers cannot hide it. Retries/reservations change due dates; this is not
 time since consent. The count and samples are not transactional, and a zero count forces age to zero if jobs disappeared
-between reads. Unknown immediate creation time is explicitly flagged as incomplete telemetry. Future horizon jobs and
+between reads. Unknown immediate last-write time is explicitly flagged as incomplete telemetry. Future horizon jobs and
 documents without a numeric due date do not establish backlog age. No exact-oldest or watch-receipt claim is made.
 
 Google Cloud Logging supplies fourteen versioned `qs_training_*_v1` metrics for second-generation Function
@@ -4968,12 +4971,17 @@ node tools/training-monitoring/cli.mjs --project=quantified-self-io \
 The operator needs log-metric read/update, dashboard read/create/update, alert-policy read/create/update and
 notification-channel read permissions; an existing authenticated `gcloud` account supplies the token without printing
 or saving it. The CLI verifies an enabled email channel, performs ownership/schema preflight, then upserts only its
-versioned metrics and owned dashboard/policies. It never creates/deletes notification channels, deletes resources or
+versioned metrics and owned dashboard/policies. The dashboard uses an empty-valued `qs-training-monitoring-v1` label
+as required by dashboard tag semantics; policies use `managed_by`/`policy_id` user labels. It never creates/deletes
+notification channels, deletes resources or
 overwrites unrelated configuration. Dashboard updates retain the API concurrency token and alert updates retain
 matching condition IDs. Run only one apply at a time: create APIs allocate IDs and concurrent first applies can race.
 If an API call fails, the CLI stops; inspect the safe HTTP status and retry the same command after fixing the cause.
 It is not a cloud transaction, so successful earlier writes remain. Ownership-tagged reapplication avoids duplicate
 resources; conflicting names/owners or immutable metric schema changes fail closed rather than overwrite.
+The preflight treats an omitted label value type as the API's default `STRING`, not an immutable schema change;
+explicitly different label types are still rejected before any write.
+Malformed API JSON is reported generically: parser error text must not expose private notification-channel data.
 
 Before #655's alert criterion can be checked, record the approved activation, metric/dashboard/policy resource identities
 privately, first idle and due-job samples, active notification-channel evidence, and a controlled incident-opened/closed

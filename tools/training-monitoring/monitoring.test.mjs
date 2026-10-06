@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
 import { buildTrainingMonitoring, metricType, OWNER } from './definitions.mjs';
 import { applyTrainingMonitoring } from './apply.mjs';
-import { parseArguments } from './cli.mjs';
+import { decodeMonitoringResponse, parseArguments } from './cli.mjs';
 
 const project = 'demo-training-alerts';
 const channel = `projects/${project}/notificationChannels/123`;
@@ -44,6 +44,7 @@ test('dashboard references registered or native queue metrics with honest sample
   assert.match(JSON.stringify(config.dashboard), /processTrainingDeliveryTask/);
   assert.match(JSON.stringify(config.dashboard), /lower bound/);
   assert.match(JSON.stringify(config.dashboard), /not provider acceptance/);
+  assert.deepEqual(config.dashboard.labels, { [OWNER]: '' });
 });
 
 test('policies require sustained/multi-observation conditions and send open/closed notifications', () => {
@@ -93,7 +94,10 @@ test('CLI is offline by default and rejects ambiguous or unconfirmed cloud targe
   for (const args of [[], ['--project=bad/value'], [`--project=${project}`, '--apply'],
     [`--project=${project}`, '--apply', '--confirm-project=another-project', `--notification-channel=${channel}`],
     [`--project=${project}`, '--project=another-project'], [`--project=${project}`, '--token=secret'],
-    [`--project=${project}`, '--notification-channel=projects/other-project/notificationChannels/1']]) {
+    [`--project=${project}`, '--notification-channel=projects/other-project/notificationChannels/1'],
+    ['--project=demo-training-.*'], ['--project=demo-training-(a+)+'], [`--project=${project}\n`],
+    [`--project=${project}`, `--notification-channel=projects/${project}/notificationChannels/123/extra`],
+    [`--project=${project}`, `--notification-channel=${channel}\n`]]) {
     assert.throws(() => {
       const options = parseArguments(args);
       buildTrainingMonitoring(options.project, options['notification-channel']);
@@ -101,8 +105,23 @@ test('CLI is offline by default and rejects ambiguous or unconfirmed cloud targe
   }
 });
 
+test('API failures and malformed JSON never return private response bodies through error messages', async () => {
+  let bodyRead = false;
+  await assert.rejects(decodeMonitoringResponse({ ok: false, status: 403, json: () => {
+    bodyRead = true;
+    throw new Error('PRIVATE_CHANNEL_EMAIL');
+  } }, 'GET'), { message: 'Monitoring API GET failed (HTTP 403).' });
+  assert.equal(bodyRead, false);
+  await assert.rejects(decodeMonitoringResponse({ ok: true, json: () => {
+    throw new SyntaxError('Unexpected token PRIVATE_CHANNEL_EMAIL');
+  } }, 'GET'), { message: 'Monitoring API returned an invalid JSON response.' });
+  const valid = { type: 'email', enabled: true };
+  assert.deepEqual(await decodeMonitoringResponse({ ok: true, json: async () => valid }, 'GET'), valid);
+});
+
 function transport({ existing = false, collision = false, duplicate = false, channelType = 'email',
-  enabled = true, verificationStatus, metricCollision = false, immutable = false, fail = false } = {}) {
+  enabled = true, verificationStatus, metricCollision = false, immutable = false, fail = false,
+  dashboardName = `projects/${project}/dashboards/qa`, defaultLabelTypes = false, changedLabelType = false } = {}) {
   const config = bundle(); const calls = [];
   const request = async (method, url, body) => {
     calls.push({ method, url, body });
@@ -113,7 +132,7 @@ function transport({ existing = false, collision = false, duplicate = false, cha
       { displayName: 'Essentials', name: `projects/${project}/dashboards/unrelated` },
       ...(existing || collision || duplicate ? [{ ...config.dashboard,
         labels: collision ? {} : config.dashboard.labels,
-        name: `projects/${project}/dashboards/qa`, etag: 'concurrency-token' }] : []),
+        name: dashboardName, etag: 'concurrency-token' }] : []),
       ...(duplicate ? [{ ...config.dashboard, name: `projects/${project}/dashboards/duplicate`, etag: 'etag' }] : []),
     ] };
     if (url.endsWith('/alertPolicies')) return { alertPolicies: [
@@ -123,7 +142,10 @@ function transport({ existing = false, collision = false, duplicate = false, cha
     ] };
     if (url.endsWith('/metrics')) return { metrics: metricCollision ? [{ ...config.metrics[0], description: 'Unrelated metric' }]
       : immutable ? [{ ...config.metrics[0], metricDescriptor: { ...config.metrics[0].metricDescriptor, valueType: 'DOUBLE' } }]
-        : existing ? config.metrics : [] };
+        : existing ? config.metrics.map(metric => ({ ...metric, metricDescriptor: { ...metric.metricDescriptor,
+          labels: metric.metricDescriptor.labels.map(label => defaultLabelTypes ? { key: label.key, description: label.description }
+            : changedLabelType ? { ...label, valueType: 'BOOL' } : label),
+        } })) : [] };
     throw new Error('Unexpected request');
   };
   return { request, calls };
@@ -148,6 +170,15 @@ test('serial reapply updates stable IDs, preserves condition IDs/dashboard etag,
   assert.equal(patches[1].body.conditions[0].name, `projects/${project}/alertPolicies/0/conditions/0`);
 });
 
+test('reapply accepts default STRING label types omitted by API JSON without accepting a type change', async () => {
+  const { request, calls } = transport({ existing: true, defaultLabelTypes: true });
+  await applyTrainingMonitoring(bundle(), request);
+  assert.equal(calls.filter(call => call.method === 'POST').length, 0);
+  const changed = transport({ existing: true, changedLabelType: true });
+  await assert.rejects(applyTrainingMonitoring(bundle(), changed.request), /Immutable log metric schema changed/);
+  assert.ok(changed.calls.every(call => call.method === 'GET'));
+});
+
 test('collisions, duplicate managed resources and invalid channels fail before cloud writes', async () => {
   for (const options of [{ collision: true }, { duplicate: true }, { channelType: 'sms' },
     { enabled: false }, { verificationStatus: 'UNVERIFIED' }, { metricCollision: true }, { immutable: true }]) {
@@ -158,6 +189,20 @@ test('collisions, duplicate managed resources and invalid channels fail before c
   const { request, calls } = transport();
   await assert.rejects(applyTrainingMonitoring(buildTrainingMonitoring(project), request));
   assert.equal(calls.length, 0);
+});
+
+test('resource identities use exact segments, allowing numeric API project IDs but not another project or kind', async () => {
+  for (const dashboardName of ['projects/another-project/dashboards/qa',
+    `projects/${project}/alertPolicies/qa`, `projects/${project}/dashboards/qa/extra`,
+    `projects/${project}/dashboards/qa?override=1`, `projects/${project}/dashboards/qa\n`]) {
+    const { request, calls } = transport({ existing: true, dashboardName });
+    await assert.rejects(applyTrainingMonitoring(bundle(), request), /Unexpected monitoring resource identity/);
+    assert.ok(calls.every(call => call.method === 'GET'));
+  }
+  const dashboardName = 'projects/123456789/dashboards/qa';
+  const { request, calls } = transport({ existing: true, dashboardName });
+  await applyTrainingMonitoring(bundle(), request);
+  assert.equal(calls.find(call => call.method === 'PATCH').url, `https://monitoring.googleapis.com/v1/${dashboardName}`);
 });
 
 test('failed metric creation prevents policies referring to uncreated metrics', async () => {
