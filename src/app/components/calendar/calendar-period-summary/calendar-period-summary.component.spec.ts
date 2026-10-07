@@ -57,7 +57,7 @@ describe('Calendar period summary presentation', () => {
     expect(fixture.nativeElement.querySelector('.activity-count').textContent).toBe('1 activity');
     expect(fixture.nativeElement.querySelector('.recorded-metrics').textContent).toContain('389.78 Km');
     expect(fixture.nativeElement.textContent).not.toMatch(/prescription|unlinked|coverage|Completed links|No workouts/);
-    expect(fixture.nativeElement.querySelector('.planning-slot--visible')).toBeNull();
+    expect(fixture.nativeElement.querySelector('.planning-slot')).toBeNull();
     exportFixture(fixture, 'empty-plan');
   });
 
@@ -68,7 +68,7 @@ describe('Calendar period summary presentation', () => {
     expect(fixture.nativeElement.querySelector('mat-expansion-panel')).toBeNull();
   });
 
-  it('starts planning closed with counts visible and expands without changing its header height', async () => {
+  it('starts planning closed with counts visible and uses the same flexible header size when expanded', async () => {
     const value = input(); value.schedule.data.workouts = [workout];
     const fixture = await render(buildCalendarPeriodSummary(value));
     const header = fixture.nativeElement.querySelector('mat-expansion-panel-header') as HTMLElement;
@@ -77,6 +77,7 @@ describe('Calendar period summary presentation', () => {
     expect(header.getAttribute('aria-expanded')).toBe('false');
     expect(fixture.nativeElement.querySelector('.mat-expansion-panel-content-wrapper').hasAttribute('inert')).toBe(true);
     const headerHeight = header.style.height;
+    expect(headerHeight).toBe('auto');
     exportFixture(fixture, 'planned-collapsed');
     header.click(); fixture.detectChanges(); await fixture.whenStable(); fixture.detectChanges();
     expect(header.getAttribute('aria-expanded')).toBe('true');
@@ -99,6 +100,16 @@ describe('Calendar period summary presentation', () => {
     expect(fixture.nativeElement.querySelector('mat-expansion-panel-header').getAttribute('aria-expanded')).toBe('true');
     await refresh(fixture, buildCalendarPeriodSummary({ ...value, startLocalDate: '2026-10-05', endLocalDate: '2026-10-11', period: 'week' }));
     expect(fixture.nativeElement.querySelector('mat-expansion-panel-header').getAttribute('aria-expanded')).toBe('false');
+  });
+
+  it('removes empty planning after a live update and makes its leaving area inaccessible', async () => {
+    const value = input(); value.schedule.data.workouts = [workout];
+    const fixture = await render(buildCalendarPeriodSummary(value));
+    fixture.nativeElement.querySelector('mat-expansion-panel-header').click(); fixture.detectChanges();
+    value.schedule.data.workouts = [];
+    await refresh(fixture, buildCalendarPeriodSummary(value));
+    expect(fixture.nativeElement.querySelector('mat-expansion-panel')).toBeNull();
+    expect(fixture.nativeElement.querySelector('[inert][aria-hidden="true"]')).toBeTruthy();
   });
 
   it('retains skipped-only counts but hides both empty workout totals', async () => {

@@ -8,16 +8,22 @@ p { margin: 6px 0; }
 dt { font: var(--mat-sys-label-medium); color: var(--mat-sys-on-surface-variant); }
 dd { margin: 4px 0 0; font-family: 'Barlow Condensed', sans-serif; font-size: 20px; font-variant-numeric: tabular-nums; }
 .recorded-metrics { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px 24px; margin: 12px 0 0; }
-.recorded-metrics > div { min-width: 0; }
+.recorded-metrics > div { min-width: 0; overflow-wrap: anywhere; }
 .recorded-metrics .coverage { display: block; max-width: 180px; }
-.planning-slot { display: grid; grid-template-rows: 0fr; opacity: 0; transition: grid-template-rows 200ms ease, opacity 200ms ease; }
-.planning-slot--visible { grid-template-rows: 1fr; opacity: 1; }
+.planning-slot { display: grid; grid-template-rows: 1fr; transition: grid-template-rows 200ms ease, opacity 200ms ease; }
+.planning-enter { animation: planning-reveal 200ms ease; }
+.planning-leave { grid-template-rows: 0fr; opacity: 0; pointer-events: none; }
+@keyframes planning-reveal {
+  from { grid-template-rows: 0fr; opacity: 0; }
+  to { grid-template-rows: 1fr; opacity: 1; }
+}
 .planning-slot-content { min-height: 0; overflow: hidden; }
 .planning-panel { margin: 12px 0 0; border: 1px solid var(--mat-sys-outline-variant); border-radius: 12px; box-shadow: none; }
-.planning-panel mat-expansion-panel-header { padding: 0 16px; }
+.planning-panel mat-expansion-panel-header { box-sizing: border-box; min-height: 72px; padding: 8px 16px; }
 .planning-panel mat-panel-title { min-width: 0; margin-right: 12px; }
 .planning-heading { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
-.planning-caption { font-variant-numeric: tabular-nums; }
+.planning-heading > span:first-child { line-height: 1.25; }
+.planning-caption { min-height: 2lh; font-variant-numeric: tabular-nums; }
 .period-counts { display: grid; grid-template-columns: repeat(auto-fit, minmax(100px, 1fr)); gap: 12px; margin: 4px 0 16px; }
 .planning-totals { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; }
 .planning-totals > section { min-width: 0; overflow-wrap: anywhere; }
@@ -29,5 +35,5 @@ dd { margin: 4px 0 0; font-family: 'Barlow Condensed', sans-serif; font-size: 20
   .planning-totals { grid-template-columns: minmax(0, 1fr); }
 }
 @media (prefers-reduced-motion: reduce) {
-  .planning-slot { transition: none; }
+  .planning-slot { transition: none; animation: none; }
 }

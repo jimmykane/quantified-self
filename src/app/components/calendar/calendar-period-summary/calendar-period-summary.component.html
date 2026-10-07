@@ -20,59 +20,61 @@
     }
   </section>
 
-  <div class="planning-slot" [class.planning-slot--visible]="showPlanning()">
-    <div class="planning-slot-content">
-      @if (showPlanning()) {
-        <mat-expansion-panel class="planning-panel mat-elevation-z0" [expanded]="expanded()" (expandedChange)="expanded.set($event)">
-          <mat-expansion-panel-header appHapticTap collapsedHeight="72px" expandedHeight="72px">
-            <mat-panel-title>
-              <span class="planning-heading">
-                <span>Planned workouts</span>
-                <span class="planning-caption">
-                  @if (summary().scheduledCount; as count) {
-                    {{ summary().scheduleComplete ? '' : 'At least ' }}{{ count | number }} scheduled
-                    @if (summary().remainingCount !== null) {
-                      · {{ summary().remainingCount === 0 && summary().scheduleComplete ? 'Nothing remaining' : (summary().remainingCount | number) + ' remaining' + (summary().scheduleComplete ? '' : ' so far') }}
-                    } @else if (summary().completionStatus === 'loading') {
-                      · Checking activities…
-                    } @else {
-                      · Remaining unavailable
+  <div [attr.inert]="showPlanning() ? null : ''" [attr.aria-hidden]="showPlanning() ? null : true">
+    @if (showPlanning()) {
+      <div class="planning-slot" animate.enter="planning-enter" animate.leave="planning-leave">
+        <div class="planning-slot-content">
+          <mat-expansion-panel class="planning-panel mat-elevation-z0" [expanded]="expanded()" (expandedChange)="expanded.set($event)">
+            <mat-expansion-panel-header appHapticTap collapsedHeight="auto" expandedHeight="auto">
+              <mat-panel-title>
+                <span class="planning-heading">
+                  <span>Planned workouts</span>
+                  <span class="planning-caption">
+                    @if (summary().scheduledCount; as count) {
+                      {{ summary().scheduleComplete ? '' : 'At least ' }}{{ count | number }} scheduled
+                      @if (summary().remainingCount !== null) {
+                        · {{ summary().remainingCount === 0 && summary().scheduleComplete ? 'Nothing remaining' : (summary().remainingCount | number) + ' remaining' + (summary().scheduleComplete ? '' : ' so far') }}
+                      } @else if (summary().completionStatus === 'loading') {
+                        · Checking activities…
+                      } @else {
+                        · Remaining unavailable
+                      }
                     }
-                  }
+                  </span>
                 </span>
-              </span>
-            </mat-panel-title>
-          </mat-expansion-panel-header>
+              </mat-panel-title>
+            </mat-expansion-panel-header>
 
-          @if (summary().scheduledCount) {
-            @if (!summary().scheduleComplete) { <p class="coverage">Counts include only the workouts loaded so far.</p> }
-            @if (counts().length) {
-              <dl class="period-counts">
-                @for (count of counts(); track count.label) {
-                  <div><dt>{{ count.label }}</dt><dd>{{ count.value === null ? (summary().completionStatus === 'loading' ? 'Checking…' : 'Unavailable') : (count.value | number) }}</dd></div>
+            @if (summary().scheduledCount) {
+              @if (!summary().scheduleComplete) { <p class="coverage">Counts include only the workouts loaded so far.</p> }
+              @if (counts().length) {
+                <dl class="period-counts">
+                  @for (count of counts(); track count.label) {
+                    <div><dt>{{ count.label }}</dt><dd>{{ count.value === null ? (summary().completionStatus === 'loading' ? 'Checking…' : 'Unavailable') : (count.value | number) }}</dd></div>
+                  }
+                </dl>
+              }
+              <div class="planning-totals">
+                @if (summary().planned === null || summary().planned!.workoutCount > 0) {
+                  <section aria-label="Planned workout totals">
+                    <h3>Planned</h3>
+                    <p>{{ summary().plannedText }}</p>
+                    <p class="coverage">All scheduled workouts, excluding skipped workouts.</p>
+                  </section>
                 }
-              </dl>
+                @if (summary().remaining === null || summary().remaining!.workoutCount > 0) {
+                  <section aria-label="Remaining workout totals">
+                    <h3>Remaining</h3>
+                    <p>{{ summary().completionStatus === 'loading' ? 'Checking activities…' : summary().remainingText }}</p>
+                    <p class="coverage">No matching activity yet. This doesn’t necessarily mean you missed the workout.</p>
+                  </section>
+                }
+              </div>
             }
-            <div class="planning-totals">
-              @if (summary().planned === null || summary().planned!.workoutCount > 0) {
-                <section aria-label="Planned workout totals">
-                  <h3>Planned</h3>
-                  <p>{{ summary().plannedText }}</p>
-                  <p class="coverage">All scheduled workouts, excluding skipped workouts.</p>
-                </section>
-              }
-              @if (summary().remaining === null || summary().remaining!.workoutCount > 0) {
-                <section aria-label="Remaining workout totals">
-                  <h3>Remaining</h3>
-                  <p>{{ summary().completionStatus === 'loading' ? 'Checking activities…' : summary().remainingText }}</p>
-                  <p class="coverage">No matching activity yet. This doesn’t necessarily mean you missed the workout.</p>
-                </section>
-              }
-            </div>
-          }
-        </mat-expansion-panel>
-      }
-    </div>
+          </mat-expansion-panel>
+        </div>
+      </div>
+    }
   </div>
   @if (summary().warnings.length) {
     <div class="period-warnings" role="status">

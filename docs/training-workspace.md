@@ -1038,8 +1038,10 @@ The existing Calendar **Week** and **Month** views keep recorded parent-event vo
 initially collapsed **Planned workouts** panel appears only for a period with eligible workouts; its heading shows
 scheduled and remaining counts. Opening it exposes planned and remaining non-skipped totals plus nonzero or unknown
 status counts. **With an activity** describes exact stored completion evidence without implying adherence. Zero planning
-counts and empty totals are omitted. Header height stays fixed during expansion, metric columns remain stable during
-loading, and reveal/expansion motion respects reduced motion. Live updates retain the disclosure choice; period
+counts and empty totals are omitted. Header size stays consistent during expansion and grows to fit enlarged text.
+Metric columns remain stable during
+loading. The panel remains in place until its collapse finishes, with leaving content immediately inaccessible;
+reveal/expansion motion respects reduced motion. Live updates retain the disclosure choice; period
 navigation closes it. Failed or partial reads still show plain-language warnings and failures offer **Try again**.
 A fully read empty period needs no completion evidence and does not show irrelevant activity-match errors. It does not add prescriptions to recorded totals or calculate planned TSS,
 recommended load bands, adherence, or physiological forecasts. 30-day/Year modes and Dashboard retain their existing
