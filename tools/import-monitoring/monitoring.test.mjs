@@ -5,6 +5,7 @@ import test from 'node:test';
 import { buildImportMonitoring, metricType, OWNER } from './definitions.mjs';
 import { applyImportMonitoring } from './cli.mjs';
 import { buildTrainingMonitoring } from '../training-monitoring/definitions.mjs';
+import { applyTrainingMonitoring } from '../training-monitoring/apply.mjs';
 const project = 'demo-import-monitor';
 const channel = `projects/${project}/notificationChannels/123`;
 const bundle = () => buildImportMonitoring(project, channel);
@@ -105,4 +106,89 @@ test('cross-bundle ownership or title collisions fail before any cloud write', a
   const other = transport();
   await assert.rejects(applyImportMonitoring(buildTrainingMonitoring(project, channel), other.request), /mismatched/);
   assert.equal(other.calls.length, 0);
+});
+
+const provisioners = [[buildImportMonitoring, applyImportMonitoring], [buildTrainingMonitoring, applyTrainingMonitoring]];
+test('both provisioners reject malformed inventories and entries before any cloud write', async () => {
+  for (const [build, apply] of provisioners) {
+    for (const key of ['dashboards', 'alertPolicies', 'metrics']) {
+      for (const invalid of [null, [], 'PRIVATE_INVENTORY', 1, true,
+        ...[null, [], 'PRIVATE_ENTRY', 1, true, {}, { name: null }, { name: 1 }, { name: '' }, { name: ' ' }]
+          .map(item => ({ [key]: [item] }))]) {
+        const source = transport(true);
+        const request = async (method, url, body) => {
+          const response = await source.request(method, url, body);
+          return method === 'GET' && url.endsWith(`/${key}`) ? invalid : response;
+        };
+        await assert.rejects(apply(build(project, channel), request), { message: 'Malformed monitoring inventory.' });
+        assert.ok(source.calls.every(call => call.method === 'GET'));
+      }
+    }
+  }
+});
+
+test('empty API inventories remain valid, while malformed later pages fail before cloud writes', async () => {
+  for (const [build, apply] of provisioners) {
+    const empty = transport();
+    await apply(build(project, channel), async (method, url, body) => {
+      const response = await empty.request(method, url, body);
+      return method === 'GET' && !url.includes('/notificationChannels/') ? {} : response;
+    });
+    assert.equal(empty.calls.filter(call => call.method === 'POST').length, 7);
+    for (const key of ['dashboards', 'alertPolicies', 'metrics']) {
+      const source = transport(true);
+      await assert.rejects(apply(build(project, channel), async (method, url, body) => {
+        if (method === 'GET' && url.endsWith(`/${key}?pageToken=next`)) {
+          source.calls.push({ method, url, body });
+          return { [key]: [{}] };
+        }
+        const response = await source.request(method, url, body);
+        return method === 'GET' && url.endsWith(`/${key}`) ? { ...response, nextPageToken: 'next' } : response;
+      }), { message: 'Malformed monitoring inventory.' });
+      assert.ok(source.calls.some(call => call.url.endsWith('?pageToken=next')));
+      assert.ok(source.calls.every(call => call.method === 'GET'));
+    }
+  }
+});
+
+test('a managed title cannot adopt another policy identity or reuse it for two desired policies', async () => {
+  for (const [build, apply] of provisioners) {
+    const config = build(project, channel);
+    for (const wrongId of [undefined, 'unrecognized', config.policies[1].userLabels.policy_id]) {
+      const source = transport(true);
+      const request = async (method, url, body) => {
+        const response = await source.request(method, url, body);
+        if (method !== 'GET' || !url.endsWith('/alertPolicies')) return response;
+        const policy = response.alertPolicies.find(item => item.displayName === config.policies[0].displayName);
+        return { alertPolicies: [
+          ...response.alertPolicies.filter(item => item.userLabels.managed_by !== policy.userLabels.managed_by),
+          { ...policy, userLabels: { ...policy.userLabels, policy_id: wrongId } },
+        ] };
+      };
+      await assert.rejects(apply(config, request), { message: 'Refusing to overwrite a different managed policy identity.' });
+      assert.ok(source.calls.every(call => call.method === 'GET'));
+    }
+  }
+});
+
+test('a renamed policy with its original managed identity is updated in place by both provisioners', async () => {
+  for (const [build, apply] of provisioners) {
+    const config = build(project, channel);
+    const source = transport(true);
+    let policyName;
+    const request = async (method, url, body) => {
+      const response = await source.request(method, url, body);
+      if (method !== 'GET' || !url.endsWith('/alertPolicies')) return response;
+      return { alertPolicies: response.alertPolicies.map(policy => {
+        if (policy.displayName !== config.policies[0].displayName) return policy;
+        policyName = policy.name;
+        return { ...policy, displayName: 'Operator-renamed alert' };
+      }) };
+    };
+    await apply(config, request);
+    assert.ok(policyName);
+    assert.equal(source.calls.filter(call => call.method === 'POST').length, 0);
+    assert.ok(source.calls.some(call => call.method === 'PATCH' && call.url.includes(`/${policyName}?`)
+      && call.body.userLabels.policy_id === config.policies[0].userLabels.policy_id));
+  }
 });

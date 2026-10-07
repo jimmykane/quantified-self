@@ -39,6 +39,8 @@ node tools/import-monitoring/cli.mjs --project=<project-id> \
 The shared provisioner preflights paginated inventories, channel state, ownership and
 immutable metric schemas before writing. It preserves unrelated resources, Training
 monitoring, dashboard etags and condition IDs. Serial reapply uses the same resources.
+Malformed inventory envelopes/entries and title collisions with a different managed
+policy ID fail before any write. Renamed policies keep their original managed identity.
 Do not run simultaneous applies. Operations are not transactional: an API failure can
 leave an earlier metric update in place; inspect and reapply rather than deleting it.
 The CLI obtains a gcloud token only for explicit apply, keeps it in memory, and does not

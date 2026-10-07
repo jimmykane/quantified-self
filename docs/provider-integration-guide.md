@@ -1189,6 +1189,8 @@ or a new failure rate. No provider calls, retry/TTL changes or production apply 
 the local implementation. Unexpected observation/client-initialization errors remain
 isolated from the dispatcher's original result or error; unavailable observations are
 visible rather than converted into an empty backlog.
+The shared monitoring provisioner rejects malformed inventories and mismatched managed
+policy identities before any cloud writes; a title alone cannot adopt another policy.
 
 Provider parity includes operational visibility, not only a user-facing connection.
 

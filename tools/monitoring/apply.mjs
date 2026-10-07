@@ -2,6 +2,7 @@ import { validateTarget } from './target.mjs';
 
 const logging = 'https://logging.googleapis.com/v2';
 const monitoring = 'https://monitoring.googleapis.com';
+const isInventoryObject = value => value !== null && typeof value === 'object' && !Array.isArray(value);
 
 /** Injected transport makes every provisioning test offline. No deletion operations. */
 /** Shared provisioning for two explicit, separately owned monitoring bundles. */
@@ -24,7 +25,11 @@ export async function applyOwnedMonitoring(bundle, request, owner) {
     const items = []; const seen = new Set(); let token;
     do {
       const page = await request('GET', `${url}${token ? `?pageToken=${encodeURIComponent(token)}` : ''}`);
-      if (!page || (page[key] !== undefined && !Array.isArray(page[key]))) throw new Error('Malformed monitoring inventory.');
+      if (!isInventoryObject(page) || (page[key] !== undefined
+          && (!Array.isArray(page[key]) || page[key].some(item => !isInventoryObject(item)
+            || typeof item.name !== 'string' || !item.name.trim())))) {
+        throw new Error('Malformed monitoring inventory.');
+      }
       items.push(...(page[key] || []));
       token = page.nextPageToken;
       if (token !== undefined && typeof token !== 'string') throw new Error('Malformed inventory page token.');
@@ -51,6 +56,9 @@ export async function applyOwnedMonitoring(bundle, request, owner) {
     const found = matches[0];
     if (found && !isOwned(found)) {
       throw new Error('Refusing to overwrite unowned monitoring configuration.');
+    }
+    if (found && id !== undefined && found.userLabels?.policy_id !== id) {
+      throw new Error('Refusing to overwrite a different managed policy identity.');
     }
     return found;
   }
