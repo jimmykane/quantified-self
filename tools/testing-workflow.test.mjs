@@ -21,6 +21,16 @@ test('unit and emulator jobs use the declared Functions Node runtime', () => {
   }
 });
 
+test('Functions CI runs the complete suite serially and keeps runner errors fatal', () => {
+  const functionsStep = shared.jobs.unit_tests.steps.find(step => step.name === 'Install and test functions');
+  const commands = functionsStep.run.split('\n').map(line => line.trim());
+  assert.ok(commands.includes('npm run test -- --no-file-parallelism'));
+  assert.ok(commands.includes('npm run build'));
+  assert.ok(commands.includes('npm run entrypoint:check:compiled'));
+  assert.ok(commands.includes('npm run mcp:contract:check:compiled'));
+  assert.doesNotMatch(functionsStep.run, /dangerouslyIgnoreUnhandledErrors|passWithNoTests|\|\|\s*true/);
+});
+
 // The job expressions use only equality, boolean operators and literals;
 // evaluate their actual YAML values rather than a second implementation of them.
 function evaluate(expression, github, extraContext = {}) {
