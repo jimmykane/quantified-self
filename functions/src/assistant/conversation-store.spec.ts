@@ -120,6 +120,20 @@ function requireStartedTurn(turn: AssistantTurnStart): BegunAssistantTurn {
 }
 
 describe('Assistant conversation store', () => {
+  it.each([true, false])('binds the first turn to the requested reflection choice %s', async enabled => {
+    const harness = createFirestoreHarness();
+    const store = createAssistantConversationStore({ db: () => harness.db as never,
+      now: () => new Date('2026-10-06T12:00:00Z'), createId: () => 'fresh-reflection-chat',
+      getDeletionGuard: async () => ({ userExists: true, deletionInProgress: false, shouldSkip: false }) });
+    const turn = requireStartedTurn(await store.beginTurn('owner', null, 'reflection-first-turn-request', 'fingerprint',
+      'coordinate_free', false, false, false, false, false, false, true, enabled));
+    expect(turn.reflectionChangesEnabled === true).toBe(enabled);
+    expect((await store.getActiveConversationState('owner')).reflectionChangesEnabled === true).toBe(enabled);
+    await expect(store.beginTurn('owner', turn.conversationId, 'reflection-changed-choice-request', 'fingerprint',
+      'coordinate_free', false, false, false, false, false, false, true, !enabled))
+      .rejects.toMatchObject({ code: 'conversation_changed' });
+  });
+
   it('keeps manual-entry permission default-off for legacy chats and fences stale choices', async () => {
     const harness = createFirestoreHarness();
     let sequence = 0;
@@ -135,6 +149,25 @@ describe('Assistant conversation store', () => {
     await expect(store.beginTurn('owner', enabled.conversationId, 'request-123456789', 'fingerprint',
       'coordinate_free', false, false, false, false, false, false, false)).rejects.toMatchObject({ code: 'conversation_changed' });
   });
+  it('fences independent reflection consent by generation and clears it on reset', async () => {
+    const harness = createFirestoreHarness(); let sequence = 0;
+    const store = createAssistantConversationStore({ db: () => harness.db as never,
+      now: () => new Date('2026-10-06T12:00:00Z'), createId: () => `reflection-${++sequence}`,
+      getDeletionGuard: async () => ({ userExists: true, deletionInProgress: false, shouldSkip: false }) });
+    const legacy = await store.resetConversation('owner');
+    expect((await store.getActiveConversationState('owner')).reflectionChangesEnabled).not.toBe(true);
+    const enabled = await store.resetConversation('owner', 'coordinate_free', false, legacy.conversationId,
+      false, false, false, false, false, false, true);
+    expect((await store.getActiveConversationState('owner')).reflectionChangesEnabled).toBe(true);
+    await expect(store.beginTurn('owner', enabled.conversationId, 'reflection-request-12345', 'fingerprint',
+      'coordinate_free', false, false, false, false, false, false, false, false)).rejects.toMatchObject({ code: 'conversation_changed' });
+    const disabled = await store.resetConversation('owner', 'coordinate_free', false, enabled.conversationId);
+    await expect(store.resetConversation('owner', 'coordinate_free', false, enabled.conversationId,
+      false, false, false, false, false, false, true)).rejects.toMatchObject({ code: 'conversation_changed' });
+    expect((await store.getActiveConversationState('owner')).conversation?.conversationId).toBe(disabled.conversationId);
+    expect((await store.getActiveConversationState('owner')).reflectionChangesEnabled).not.toBe(true);
+  });
+
   it('cannot restore notes consent from a stale tab or delayed reset retry', async () => {
     const harness = createFirestoreHarness();
     let sequence = 0;

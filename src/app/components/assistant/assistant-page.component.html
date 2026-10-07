@@ -200,7 +200,7 @@
           <div class="training-proposal-list">
             @for (detail of review.details; track $index) {
               <div class="training-proposal-row">
-                <mat-icon aria-hidden="true">{{ review.proposal.kind === 'delete_timeline_note' ? 'warning' : 'arrow_forward' }}</mat-icon>
+                <mat-icon aria-hidden="true">{{ review.proposal.kind.startsWith('delete_') ? 'warning' : 'arrow_forward' }}</mat-icon>
                 <span>{{ detail }}</span>
               </div>
             }
@@ -210,7 +210,7 @@
             <button mat-flat-button type="button" [disabled]="proposalActionInProgress()"
               (click)="applyPendingContentProposal()">
               @if (applyingContentProposal()) { <mat-spinner diameter="18"></mat-spinner> } @else {
-                {{ review.proposal.kind === 'delete_timeline_note' ? 'Delete note' : review.proposal.kind === 'delete_manual_measurement' ? 'Delete measurement' : 'Apply change' }}
+                {{ review.proposal.kind === 'delete_timeline_note' ? 'Delete note' : review.proposal.kind === 'delete_manual_measurement' ? 'Delete measurement' : review.proposal.kind === 'delete_workout_reflection' ? 'Delete reflection' : 'Apply change' }}
               }
             </button>
             <button mat-button type="button" [disabled]="proposalActionInProgress()"

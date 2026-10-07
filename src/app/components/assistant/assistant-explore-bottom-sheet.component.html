@@ -52,8 +52,8 @@
     </section>
 
     <section class="assistant-notes-access" aria-labelledby="assistant-content-access">
-      <h3 id="assistant-content-access">Measurements, tags and notes</h3>
-      <p class="assistant-training-intro">Changes start a fresh chat. New chat resets these choices: manual measurement changes start on; other optional access starts off. You review every change.</p>
+      <h3 id="assistant-content-access">Measurements, reflections, tags and notes</h3>
+      <p class="assistant-training-intro">Changes start a fresh chat. New chat resets these choices: manual measurement changes start on, as do private workout reflections; other optional access starts off. You review every change.</p>
       <div class="assistant-training-options">
         <app-compact-row title="Manual Health measurements" titleId="assistant-measurements-title"
           icon="monitor_weight" density="compact">
@@ -62,6 +62,14 @@
             aria-label="Manual Health measurements — changing this starts a new chat"
             aria-describedby="assistant-measurements-summary"
             (change)="setMeasurementChanges($event.checked)"></mat-slide-toggle>
+        </app-compact-row>
+        <app-compact-row title="Private workout reflections" titleId="assistant-reflections-title"
+          icon="rate_review" density="compact">
+          <p id="assistant-reflections-summary" class="assistant-training-summary">Read optional private reflection text for a selected recording, and prepare a save or permanent deletion. On for fresh and New chats; you can turn access off. You review every change before Apply; this never completes or adapts a plan.</p>
+          <mat-slide-toggle compactRowAction [checked]="data.reflectionChangesEnabled === true"
+            aria-label="Private workout reflections — changing this starts a new chat"
+            aria-describedby="assistant-reflections-summary"
+            (change)="setReflectionChanges($event.checked)"></mat-slide-toggle>
         </app-compact-row>
         <app-compact-row title="Activity tag changes" titleId="assistant-activity-tags-title"
           icon="sell" density="compact">

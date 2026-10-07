@@ -976,6 +976,44 @@ describe('Assistant runtime', () => {
     expect(callTool.mock.calls.map(([name]) => name)).not.toEqual(expect.arrayContaining(['create_manual_measurement', 'update_manual_measurement', 'delete_manual_measurement']));
   });
 
+  it.each(['save', 'delete'] as const)('prepares a %s reflection only after current target and date reads, without a model write', async operation => {
+    const { session, callTool } = createSession();
+    const prepareName = operation === 'save' ? 'prepare_workout_reflection_save' : 'prepare_workout_reflection_delete';
+    session.tools = (['query_activities', 'get_workout_reflection', prepareName] as const).map(name => ({
+      name, title: name, description: name, inputSchema: { type: 'object', properties: {} },
+    }));
+    const activityRef = 'opaque-selected-run';
+    const now = Date.parse('2026-10-06T12:00:00Z');
+    callTool.mockImplementation(async (name, args) => name === 'query_activities'
+      ? { structuredContent: { activities: [{ activityRef, activityType: 'Running', startTimeMs: now - 86_400_000 }] } }
+      : name === 'get_workout_reflection'
+      ? { structuredContent: { activityRef, target: 'activity', revision: 2, present: true,
+        note: 'Current private text' } }
+      : { structuredContent: createAssistantContentProposal(prepareName, args, { now: () => now, createId: () => 'reflection-proposal' }) });
+    const access = vi.fn().mockResolvedValue(undefined);
+    const runtime = createAssistantRuntime({ now: () => new Date(now), createMcpSession: vi.fn().mockResolvedValue(session),
+      generateAnswer: async model => {
+        const prepare = model.tools.find(tool => tool.name === prepareName)!;
+        const args = { activityRef, target: 'activity', expectedRevision: 2,
+          mutationId: '11111111-1111-4111-8111-111111111111',
+          ...(operation === 'save' ? { note: 'Felt easy' } : {}) };
+        await expect(prepare.execute(args)).rejects.toThrow('current reflection revision');
+        await model.tools.find(tool => tool.name === 'get_workout_reflection')!.execute({ activityRef, target: 'activity' });
+        await expect(prepare.execute(args)).rejects.toThrow('date in this turn');
+        await model.tools.find(tool => tool.name === 'query_activities')!.execute({});
+        await expect(prepare.execute({ ...args, expectedRevision: 1 })).rejects.toThrow('current reflection revision');
+        await prepare.execute(args);
+        return { answer: 'Review this reflection. Nothing is saved yet.', visualRequest: { chart: null, map: null } };
+      } });
+    const result = await runtime.answer({ uid: 'owner', appBaseUrl: 'https://quantified-self.io',
+      prompt: 'Save my reflection for yesterday’s run.', timeZone: 'Europe/Helsinki', history: [],
+      reflectionChangesEnabled: true, assertContentWriteAccess: access });
+    expect(result.pendingContentProposal).toMatchObject({ summary: expect.stringContaining('Running on Oct 5, 2026'),
+      reflectionReview: { before: { note: 'Current private text' } } });
+    expect(access).toHaveBeenCalledTimes(4);
+    expect(callTool.mock.calls.map(([name]) => name)).not.toEqual(expect.arrayContaining(['save_workout_reflection', 'delete_workout_reflection']));
+  });
+
   it('requires a current activity-tag read before preparing a clearly identified change', async () => {
     const { session, callTool } = createSession();
     const activityRef = 'opaque-activity-reference';
@@ -2483,7 +2521,7 @@ describe('Assistant runtime', () => {
       'user-1',
       'https://beta.quantified-self.io',
       'coordinate_free',
-      false, false, false, false, undefined, false, false, false);
+      false, false, false, false, undefined, false, false, false, false);
     expect(result.answer).toBe('Your readiness is 72 today.');
     expect(result.evidence).toEqual([expect.objectContaining({
       toolName: 'get_daily_report',
@@ -2873,7 +2911,7 @@ describe('Assistant runtime', () => {
       'user-1',
       'https://quantified-self.io',
       'precise_activity',
-      false, false, false, false, undefined, false, false, false);
+      false, false, false, false, undefined, false, false, false, false);
   });
 
   it('preserves an explicit model-selected timezone', async () => {

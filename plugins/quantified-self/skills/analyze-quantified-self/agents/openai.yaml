@@ -6,7 +6,7 @@ dependencies:
   tools:
     - type: "mcp"
       value: "quantified-self"
-      description: "Permission-scoped Quantified Self cross-domain health and fitness data, including identity-safe Training impact, with optional focused note changes"
+      description: "Permission-scoped Quantified Self cross-domain health and fitness data, including identity-safe Training impact, with optional focused note changes and separately consented workout reflections"
       transport: "streamable_http"
       url: "https://quantified-self.io/mcp"
 policy:

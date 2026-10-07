@@ -171,6 +171,7 @@ function assistantAccessGeneration(data: admin.firestore.DocumentData, conversat
     data.timelineNotesEnabled === true,
     data.timelineNoteChangesEnabled === true,
     data.measurementChangesEnabled === true,
+    data.reflectionChangesEnabled === true,
   ]);
 }
 
@@ -190,12 +191,14 @@ function assertAssistantConversationData(
     : 0;
   const requiresTags = requiredScopes.includes(EVENTS_WRITE_SCOPE);
   const requiresNotes = requiredScopes.includes(TIMELINE_NOTES_WRITE_SCOPE);
+  const requiresReflections = requiredScopes.includes('workout-reflections:read');
   const requiresMeasurements = requiredScopes.includes('measurements:write');
   if (!conversationId || conversationId.length > 120
     || input.connectionId !== expectedConnectionId
     || !data || data.conversationId !== conversationId || expiresAtMs <= nowMs
     || (requiresTags && data.activityTagChangesEnabled !== true)
     || (requiresNotes && (data.timelineNotesEnabled !== true || data.timelineNoteChangesEnabled !== true))
+    || (requiresReflections && data.reflectionChangesEnabled !== true)
     || (requiresMeasurements && data.measurementChangesEnabled !== true)
     || (input.assistantProposalRef !== undefined
       && (data.pendingContentProposal?.proposalRef !== input.assistantProposalRef
@@ -242,7 +245,7 @@ export async function assertConnectionAuthorityInTransaction(
     const [conversation] = await transaction.getAll(
       deps.db.collection('users').doc(input.uid).collection('assistantConversations').doc('active'),
       { fieldMask: ['conversationId', 'expireAt', 'activityTagChangesEnabled', 'timelineNotesEnabled',
-        'timelineNoteChangesEnabled', 'measurementChangesEnabled', 'pendingContentProposal'] },
+        'timelineNoteChangesEnabled', 'measurementChangesEnabled', 'reflectionChangesEnabled', 'pendingContentProposal'] },
     );
     assertAssistantConversationData(input, conversation.exists ? conversation.data() : undefined,
       requiredScopes, deps.now(), expectedProposalKind);
@@ -268,7 +271,7 @@ export async function readAccessGeneration(
     const [conversation] = await deps.db.getAll(
       deps.db.collection('users').doc(input.uid).collection('assistantConversations').doc('active'),
       { fieldMask: ['conversationId', 'expireAt', 'activityTagChangesEnabled', 'timelineNotesEnabled',
-        'timelineNoteChangesEnabled', 'measurementChangesEnabled', 'pendingContentProposal'] },
+        'timelineNoteChangesEnabled', 'measurementChangesEnabled', 'reflectionChangesEnabled', 'pendingContentProposal'] },
     );
     return assertAssistantConversationData(input, conversation.exists ? conversation.data() : undefined,
       requiredScopes, deps.now());

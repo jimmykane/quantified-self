@@ -13,6 +13,7 @@ import {
     DataDistance,
     DataDuration,
     DataFeeling,
+    DataRPE,
     DataPaceAvg,
     DataSpeedAvg,
     DataSwimDistance,
@@ -27,9 +28,11 @@ import {
 import { vi, describe, it, expect, beforeEach } from 'vitest';
 import { AppBenchmarkFlowService } from '../../services/app.benchmark-flow.service';
 import { EventTagService } from '../../services/event-tag.service';
+import { EventDetailsSummaryBottomSheetComponent } from './event-details-summary-bottom-sheet/event-details-summary-bottom-sheet.component';
 import { EventTagsDialogComponent } from '../event-tags/event-tags-dialog.component';
 import { AppHapticsService } from '../../services/app.haptics.service';
 import { from, of, Subject } from 'rxjs';
+import { resolveUnitAwareDisplayFromValue } from '@shared/unit-aware-display';
 
 @Component({
     standalone: false,
@@ -66,7 +69,7 @@ describe('EventSummaryComponent', () => {
 
     beforeEach(async () => {
         mockBottomSheet = {
-            open: vi.fn(),
+            open: vi.fn().mockReturnValue({ afterDismissed: () => of(false) }),
         };
 
         mockBenchmarkFlowService = {
@@ -113,6 +116,18 @@ describe('EventSummaryComponent', () => {
 
     it('should create', () => {
         expect(component).toBeTruthy();
+    });
+    it.each([
+        { value: 0, settings: {} },
+        { value: 0.5, settings: { distanceUnits: [DistanceUnits.Miles] } },
+        { value: 2.5, settings: {} },
+    ])('shows saved RPE $value with canonical display after feedback editing', ({ value, settings }) => {
+        const next = TestBed.createComponent(EventSummaryComponent);
+        next.componentInstance.event = { ...mockEvent, getStat: (type: string) => type === DataRPE.type ? new DataRPE(value) : null } as never;
+        next.componentInstance.user = mockUser; next.componentInstance.unitSettings = settings as never;
+        next.detectChanges();
+        expect(next.nativeElement.querySelector('.rpe-chip')?.textContent)
+            .toContain(resolveUnitAwareDisplayFromValue(DataRPE.type, value, settings as never)?.text);
     });
 
     it('places the impact below the primary summary and before tags, devices, and further statistics', () => {
@@ -225,8 +240,22 @@ describe('EventSummaryComponent', () => {
 
     describe('open... methods', () => {
         it('openEditDetails should open bottom sheet', () => {
+            component.isOwner = true;
             component.openEditDetails();
             expect(mockBottomSheet.open).toHaveBeenCalled();
+        });
+        it('refreshes workout RPE after the combined form commits and ignores dismissal after teardown', () => {
+            const dismissed = new Subject<boolean>();
+            let stat = new DataRPE(5);
+            mockBottomSheet.open.mockReturnValue({ afterDismissed: () => dismissed });
+            component.event = { ...mockEvent, getStat: (type: string) => type === DataRPE.type ? stat : null } as never;
+            component.isOwner = true; component.openEditDetails();
+            expect(component.rpe).toBe(5);
+            stat = new DataRPE(0); dismissed.next(true);
+            expect(component.rpe).toBe(0);
+            component.openEditDetails(); fixture.destroy();
+            stat = new DataRPE(7); dismissed.next(true);
+            expect(component.rpe).toBe(0);
         });
 
         it('openDetailedStats should open bottom sheet', () => {
@@ -381,6 +410,24 @@ describe('EventSummaryComponent', () => {
             expect(mockDialog.open).not.toHaveBeenCalled();
             expect(mockHaptics.selection).not.toHaveBeenCalled();
         });
+    });
+
+    it('offers one combined editor only for a saved owner recording with one accepted-action haptic', () => {
+        component.isOwner = false; component.openEditDetails();
+        expect(mockBottomSheet.open).not.toHaveBeenCalled(); expect(mockHaptics.selection).not.toHaveBeenCalled();
+        component.isOwner = true;
+        component.event = { ...mockEvent, getID: () => '' } as any;
+        component.openEditDetails(); expect(mockBottomSheet.open).not.toHaveBeenCalled();
+        component.event = mockEvent; component.openEditDetails();
+        expect(mockBottomSheet.open).toHaveBeenCalledWith(EventDetailsSummaryBottomSheetComponent, expect.objectContaining({
+            data: { event: mockEvent, user: mockUser },
+        }));
+        fixture.componentRef.setInput('isOwner', true);
+        fixture.detectChanges();
+        expect(fixture.nativeElement.querySelectorAll('[aria-label="Edit details"]')).toHaveLength(1);
+        expect(fixture.nativeElement.querySelector('[aria-label="Post-workout reflection"]')).toBeNull();
+        expect(mockDialog.open).not.toHaveBeenCalled();
+        expect(mockHaptics.selection).toHaveBeenCalledOnce();
     });
 
     describe('Getters', () => {

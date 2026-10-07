@@ -496,6 +496,38 @@ describe('AssistantPageComponent', () => {
     expect(component.contentProposalResult()).toContain('Nothing was changed');
   });
 
+  it('reviews private reflection text, then applies only explicit confirmation', async () => {
+    const proposal: AssistantContentProposalPreview = {
+      proposalRef: 'reflection-proposal', kind: 'save_workout_reflection',
+      expiresAtMs: Date.now() + 60_000, summary: 'Save Run reflection · Oct 6 · this activity.',
+      requiresConfirmation: true,
+      arguments: { activityRef: 'opaque-reflection-activity', target: 'activity', expectedRevision: 2,
+        mutationId: '6d59c596-ddf1-4f29-9ed4-b822e6067dd9', note: 'Felt easy' },
+      reflectionReview: { before: { note: 'Windy' } },
+    };
+    component.conversation.set(chatResponse.conversation);
+    component.pendingContentProposal.set(proposal);
+    fixture.detectChanges();
+    const text = fixture.nativeElement.querySelector('.content-proposal').textContent;
+    expect(text).toContain('Review workout reflection');
+    expect(text).toContain('This activity only');
+    expect(text).not.toContain('Reported effort');
+    expect(text).not.toContain('Borg CR10');
+    expect(text).toContain('Windy'); expect(text).toContain('Felt easy');
+    expect(text).not.toContain('opaque-reflection-activity');
+    expect(assistantService.applyContentProposal).not.toHaveBeenCalled();
+    await component.dismissPendingContentProposal();
+    expect(assistantService.applyContentProposal).toHaveBeenLastCalledWith(expect.objectContaining({ confirm: false }));
+    component.pendingContentProposal.set({ ...proposal, kind: 'delete_workout_reflection',
+      arguments: { activityRef: 'opaque-reflection-activity', target: 'activity', expectedRevision: 2,
+        mutationId: '6d59c596-ddf1-4f29-9ed4-b822e6067dd9' } });
+    fixture.detectChanges();
+    expect(fixture.nativeElement.querySelector('.content-proposal').textContent).toContain('permanently deleted');
+    expect(fixture.nativeElement.querySelector('.content-proposal button').textContent).toContain('Delete reflection');
+    await component.applyPendingContentProposal();
+    expect(assistantService.applyContentProposal).toHaveBeenLastCalledWith(expect.objectContaining({ confirm: true }));
+  });
+
   it('shows every proposed Timeline note field before applying it', () => {
     const noteProposal: AssistantContentProposalPreview = {
       proposalRef: 'note-proposal-1',
@@ -1460,6 +1492,7 @@ describe('AssistantPageComponent', () => {
         activityTagChangesEnabled: false,
         timelineNoteChangesEnabled: false,
         measurementChangesEnabled: true,
+        reflectionChangesEnabled: true,
         trainingPlansEnabled: false,
         trainingPlanChangesEnabled: false,
         trainingDeliveryEnabled: false,
@@ -1477,7 +1510,7 @@ describe('AssistantPageComponent', () => {
     await component.resetConversation();
     expect(component.measurementChangesEnabled()).toBe(true);
     expect(assistantService.resetConversation).toHaveBeenLastCalledWith('coordinate_free', false, chatResponse.conversation.conversationId,
-      false, false, false, false, false, true);
+      false, false, false, false, false, true, true);
   });
 
   it('changes manual-entry access independently in a fresh chat, preserving other choices', async () => {
@@ -1493,8 +1526,74 @@ describe('AssistantPageComponent', () => {
     expect(component.timelineNotesEnabled()).toBe(true);
     expect(component.trainingPlansEnabled()).toBe(true);
     expect(component.promptControl.value).toBe('Keep my draft');
-    expect(assistantService.resetConversation).toHaveBeenLastCalledWith('coordinate_free', true, null, true, false, false, false, false, false);
+    expect(assistantService.resetConversation).toHaveBeenLastCalledWith('coordinate_free', true, null, true, false, false, false, false, false, true);
     open.mockRestore();
+  });
+
+  it('starts reflection access on, allows disabling it independently, and restores it on New chat', async () => {
+    await component.ngOnInit();
+    expect(component.reflectionChangesEnabled()).toBe(true);
+    component.timelineNotesEnabled.set(true);
+    component.promptControl.setValue('Keep my draft');
+    const sheet = (component as unknown as { bottomSheet: MatBottomSheet }).bottomSheet;
+    const open = vi.spyOn(sheet, 'open').mockReturnValue({
+      afterDismissed: () => of({ kind: 'reflection_changes', enabled: false }),
+    } as never);
+    component.openExploreSheet(); await fixture.whenStable();
+    expect(component.reflectionChangesEnabled()).toBe(false);
+    expect(component.timelineNotesEnabled()).toBe(true);
+    expect(component.promptControl.value).toBe('Keep my draft');
+    expect(assistantService.resetConversation).toHaveBeenLastCalledWith(
+      'coordinate_free', true, null, false, false, false, false, false, true, false);
+    component.openExploreSheet();
+    expect(assistantService.resetConversation).toHaveBeenCalledTimes(1);
+    await component.resetConversation();
+    expect(component.reflectionChangesEnabled()).toBe(true);
+    expect(assistantService.resetConversation).toHaveBeenLastCalledWith(
+      'coordinate_free', false, chatResponse.conversation.conversationId, false, false, false, false, false, true, true);
+    open.mockRestore();
+  });
+
+  it.each([undefined, false, true])('preserves a saved reflection choice %s when loading an existing chat', async enabled => {
+    assistantService.getConversationState.mockResolvedValueOnce({ conversation: chatResponse.conversation,
+      pendingRequestId: null, reflectionChangesEnabled: enabled });
+    await component.ngOnInit();
+    expect(component.reflectionChangesEnabled()).toBe(enabled === true);
+    expect(assistantService.resetConversation).not.toHaveBeenCalled();
+  });
+
+  it.each([undefined, false, true])('preserves a remembered first request reflection choice %s', async enabled => {
+    const requestId = 'reflection-remembered-first-request';
+    sessionStorage.setItem('quantified-self.assistant.pending-request-id', JSON.stringify({
+      storageVersion: 2, uid: 'assistant-user', requestId, message: 'How did my run feel?',
+      timeZone: 'Europe/Helsinki', submittedAtMs: Date.now(), measurementChangesEnabled: true,
+      ...(enabled === undefined ? {} : { reflectionChangesEnabled: enabled }),
+    }));
+    await component.ngOnInit(); await fixture.whenStable();
+    expect(component.reflectionChangesEnabled()).toBe(enabled === true);
+    expect(assistantService.sendMessage).toHaveBeenCalledOnce();
+    const request = assistantService.sendMessage.mock.calls[0][0];
+    expect(request.requestId).toBe(requestId);
+    expect(request.reflectionChangesEnabled === true).toBe(enabled === true);
+  });
+
+  it.each([undefined, false])('keeps a failed first request reflection choice %s off when no server chat exists', async enabled => {
+    const requestId = 'reflection-remembered-failed-request';
+    sessionStorage.setItem('quantified-self.assistant.pending-request-id', JSON.stringify({
+      storageVersion: 2, uid: 'assistant-user', requestId, message: 'How did my run feel?',
+      timeZone: 'Europe/Helsinki', submittedAtMs: Date.now(), measurementChangesEnabled: true,
+      ...(enabled === undefined ? {} : { reflectionChangesEnabled: enabled }),
+    }));
+    assistantService.sendMessage.mockRejectedValueOnce(new Error('offline'));
+    await component.ngOnInit(); await fixture.whenStable();
+    expect(component.reflectionChangesEnabled()).toBe(false);
+    await component.sendMessage();
+    const requests = assistantService.sendMessage.mock.calls.map(([request]) => request);
+    expect(requests).toHaveLength(2);
+    for (const request of requests) {
+      expect(request.requestId).toBe(requestId);
+      expect(request.reflectionChangesEnabled).not.toBe(true);
+    }
   });
 
   it('starts a fresh chat when precise activity locations are enabled', async () => {
@@ -1514,7 +1613,7 @@ describe('AssistantPageComponent', () => {
       expect(assistantService.resetConversation).toHaveBeenCalledWith(
         'precise_activity',
         false,
-        null, false, false, false, false, false, true);
+        null, false, false, false, false, false, true, true);
     });
     fixture.detectChanges();
 
@@ -1642,7 +1741,7 @@ describe('AssistantPageComponent', () => {
     await component.resetConversation();
 
     expect(assistantService.resetConversation).toHaveBeenCalledWith(
-      'coordinate_free', false, 'conversation-1', false, false, false, false, false, true);
+      'coordinate_free', false, 'conversation-1', false, false, false, false, false, true, true);
     expect(component.messages()).toEqual([]);
     expect(component.locationAccess()).toBe('coordinate_free');
     expect(component.timelineNotesEnabled()).toBe(false);
@@ -1680,7 +1779,7 @@ describe('AssistantPageComponent', () => {
     const open = vi.spyOn(sheet, 'open').mockReturnValue({ afterDismissed: () => of({ kind: 'training_plans', enabled: true }) } as never);
     component.openExploreSheet(); await vi.waitFor(() => expect(component.trainingPlansEnabled()).toBe(true));
     expect(assistantService.resetConversation).toHaveBeenLastCalledWith(
-      'precise_activity', true, null, true, false, false, false, false, true);
+      'precise_activity', true, null, true, false, false, false, false, true, true);
     expect(component.timelineNotesEnabled()).toBe(true); expect(component.locationAccess()).toBe('precise_activity');
     expect(component.promptControl.value).toBe('What is planned next week?');
     expect(hapticsService.selection).toHaveBeenCalledTimes(1); expect(hapticsService.success).toHaveBeenCalledTimes(1);
@@ -1698,7 +1797,7 @@ describe('AssistantPageComponent', () => {
     component.openExploreSheet();
     await vi.waitFor(() => expect(component.timelineNotesEnabled()).toBe(true));
     expect(assistantService.resetConversation).toHaveBeenLastCalledWith(
-      'precise_activity', true, null, false, false, false, false, false, true);
+      'precise_activity', true, null, false, false, false, false, false, true, true);
     expect(component.locationAccess()).toBe('precise_activity');
     expect(component.promptControl.value).toBe('Compare sleep and my notes.');
     expect(hapticsService.selection).toHaveBeenCalledTimes(1);
@@ -1711,7 +1810,7 @@ describe('AssistantPageComponent', () => {
     await vi.waitFor(() => expect(component.locationAccess()).toBe('coordinate_free'));
     expect(component.timelineNotesEnabled()).toBe(true);
     expect(assistantService.resetConversation).toHaveBeenLastCalledWith(
-      'coordinate_free', true, 'conversation-1', false, false, false, false, false, true);
+      'coordinate_free', true, 'conversation-1', false, false, false, false, false, true, true);
     open.mockRestore();
   });
 
@@ -1746,8 +1845,9 @@ describe('AssistantPageComponent', () => {
     component.openExploreSheet();
     await vi.waitFor(() => expect(component.resetting()).toBe(false));
     expect(assistantService.resetConversation).toHaveBeenCalledExactlyOnceWith(
-      'precise_activity', true, 'conversation-1', false, false, false, false, false, true);
+      'precise_activity', true, 'conversation-1', false, false, false, false, false, true, true);
     expect(component.timelineNotesEnabled()).toBe(false);
+    expect(component.reflectionChangesEnabled()).toBe(false);
     expect(component.locationAccess()).toBe('coordinate_free');
     expect(component.conversation()?.conversationId).toBe('new-chat');
     expect(component.promptControl.value).toBe('Keep my draft');
@@ -2156,6 +2256,7 @@ describe('AssistantPageComponent', () => {
       conversation: createdConversation,
       pendingRequestId: null,
       measurementChangesEnabled: true,
+      reflectionChangesEnabled: true,
     });
     quotaService.loadQuotaStatus.mockResolvedValueOnce(exhaustedQuota);
     component.promptControl.setValue('How am I today?');

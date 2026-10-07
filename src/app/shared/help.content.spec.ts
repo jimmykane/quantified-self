@@ -405,6 +405,7 @@ describe('help.content', () => {
       'training-plans',
       'health',
       'training-analysis',
+      'post-workout-reflections',
       'ai-insights',
       'plans-and-billing',
       'uploads-and-imports',
@@ -414,8 +415,8 @@ describe('help.content', () => {
     ]);
   });
 
-  it('should define twelve unique sections with complete content', () => {
-    expect(HELP_SECTIONS).toHaveLength(12);
+  it('should define thirteen unique sections with complete content', () => {
+    expect(HELP_SECTIONS).toHaveLength(13);
 
     const uniqueIds = new Set(HELP_SECTIONS.map(section => section.id));
     expect(uniqueIds.size).toBe(HELP_SECTIONS.length);
@@ -433,6 +434,22 @@ describe('help.content', () => {
         expect(link.target.trim().length).toBeGreaterThan(0);
       });
     });
+  });
+
+  it('makes reflection help discoverable and explains its independent privacy and deletion boundaries', () => {
+    const section = HELP_SECTIONS.find(value => value.id === 'post-workout-reflections')!;
+    expect(searchHelpSections(HELP_SECTIONS, 'post-workout reflection').map(value => value.id)).toContain(section.id);
+    for (const phrase of ['**Cancel** writes nothing', 'private even when the recording is public',
+      '**Edit details** in the summary actions', '**Save changes** once', '**Keep reflection** cancels that deletion',
+      'one **RPE** input for the **whole recording**', 'There is no separate reflection rating',
+      'event details and the note cannot be partially saved',
+      'on for fresh and New chats', 'cannot erase text a client already received or quoted']) {
+      expect(section.content).toContain(phrase);
+    }
+    expect(HELP_SECTIONS.find(value => value.id === 'ai-insights')!.content)
+      .toContain('Manual Health measurements and Private workout reflections on; other optional access off');
+    expect(section.content).not.toContain('Private reflection effort');
+    expect(HELP_SECTIONS.map(value => value.content).join('\n')).not.toContain('reflection effort/text');
   });
 
   it('documents the source-separated Health workspace and its bounded metric explorer', () => {

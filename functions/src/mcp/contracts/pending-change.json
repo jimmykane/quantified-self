@@ -1,7 +1,7 @@
 {
   "formatVersion": 1,
-  "candidateSha256": "a9cbb8225bf90ad62bc22ccf8bad0b262df3684129b44fd1369e489d07c4efde",
+  "candidateSha256": "8e6281cb08714bb106e38ca14652ff7ce212c737be07fe56bc8270fd8a9a35ed",
   "lifecycleAction": "developer-refresh",
-  "summary": "Preserve Training/Health/Timeline/activity, OAuth/PKCE, Strength/pool, library, measurements, recovery, deletion and early-Lap contracts. Add Garmin replacement preview with existing grants, fresh evidence, duplicate warning and native/app Apply approval; keep v1 Send/Retry frozen. Add read-only prescription analysis with exact subtotals, speed ranges, unknown coverage and purpose/repeat/early-Lap counts. Assistant stays prepare-only. Deploy separately, refresh/rescan and sync bundled guidance.",
+  "summary": "Preserve registered contracts and pending Garmin replacement/prescription analysis additions. Add independent workout-reflection read/write grants and three strict note-only tools with revision/retry/deletion fences. Workout RPE stays in Edit details. Assistant starts on for fresh/New chats; prior off choices and legacy flags stay off. Model changes remain prepare-only for app review/Apply. No adaptation/provider changes. Separately release, rescan and sync bundled guidance.",
   "rescanRequired": true
 }

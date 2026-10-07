@@ -1,3 +1,4 @@
+import { MatCheckboxChange } from '@angular/material/checkbox';
 import { TestBed } from '@angular/core/testing';
 import { ActivatedRoute, convertToParamMap } from '@angular/router';
 import { NoopAnimationsModule } from '@angular/platform-browser/animations';
@@ -68,6 +69,13 @@ describe('McpAuthorizationComponent', () => {
         { provide: AppHapticsService, useValue: haptics },
       ],
     }).compileComponents();
+  });
+
+  it('removes all reflection descendants when their activity parent is unchecked', () => {
+    const component = TestBed.createComponent(McpAuthorizationComponent).componentInstance;
+    component.selectedScopes.set(['activity-details:read', 'workout-reflections:read', 'workout-reflections:write', 'metrics:read']);
+    component.toggleScope('activity-details:read', { checked: false } as MatCheckboxChange);
+    expect(component.selectedScopes()).toEqual(['metrics:read']);
   });
 
   it('discloses Training-only consent and allows withholding it without granting activity or notes access', async () => {

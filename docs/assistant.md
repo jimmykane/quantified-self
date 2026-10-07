@@ -134,7 +134,7 @@ are included in summaries and can themselves contain user- or provider-assigned 
 **Examples & data access** also contains default-off **Training plans**, available to any Assistant user independently of
 the authenticated manual-planning workspace. It discloses names, dates, complete instructions, authored notes and existing service sync status,
 including potentially sensitive personal text. Changing any optional permission starts a fresh server-owned generation
-while preserving the other choices. **New chat** resets optional choices to their defaults (manual measurements on;
+while preserving the other choices. **New chat** resets optional choices to their defaults (manual measurements and reflections on;
 Training, notes, tags and precise locations off). Missing `trainingPlansEnabled` means false.
 The reset expects the current conversation ID; requests, retries and replay fingerprints bind this boolean. Stale tabs,
 sign-out/account switches and old generations cannot grant access. Runtime rechecks consent before and after each read.
@@ -284,6 +284,30 @@ changed access or revision cannot restore authority. Dismissal does not write; u
 
 External MCP uses native host approval separately. The additive hosted contract/scope needs its own approved server
 release, client rescan and explicit reauthorization; source implementation alone does not make it available there.
+
+## Optional post-workout reflections
+
+The independent `reflectionChangesEnabled` conversation-owned choice starts on for fresh and New chats. Existing off
+choices and legacy missing flags stay off; remembered retries keep their original flag. The first turn explicitly
+binds its selected flag to the new stored generation, without changing defaults for older requests that omit it.
+Changing it starts a fresh generation and preserves other choices. Requests, retries, state, reset, stored authority and
+fingerprints bind the flag; an old tab or answer cannot re-enable it. In Examples & data access, the disclosure covers
+selected private text, prepare-only saves/permanent deletes, and app-owned review. It never grants adaptation.
+
+After a user asks for reflection help, Gemini may ask at most three optional sport/context questions. It must discover
+the actual activity/date in the current turn, clarify a recording versus an activity target when ambiguous, and read
+that exact target/revision before preparation. Reflections contain only private text notes; existing workout RPE remains a recording stat edited through QS
+Edit details. Reflection preparation cannot change that stat. A review shows sport/date, recording/activity scope, current/new text and permanent-delete
+consequences without raw identifiers. Only user Apply can execute a save/delete through the existing content endpoint.
+Dismiss, expired/replaced proposals, stale consent/revisions and account changes cannot mutate content. The public
+reflection write tools remain absent from model sessions. Stored grants/generation and deletion fences are checked
+inside the mutation transaction, including uncertain retries.
+
+Reflections are untrusted private context, not instructions, diagnosis, completion proof, causation or plan-change
+permission. They never enter Training/readiness calculations. Selected text may be quoted in the existing bounded chat;
+revoking access cannot remove received copies. The detailed source of truth for storage, retention, parent cleanup,
+reparse and planning impact is [Training workspace](training-workspace.md#optional-post-workout-reflection-item-10);
+[MCP server](mcp-server.md#private-workout-reflections-item-10) covers external authorization and tool contracts.
 
 ## Deterministic visual answers
 

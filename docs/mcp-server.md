@@ -1,5 +1,44 @@
 # MCP Server
 
+## Private workout reflections (Item 10)
+
+Three additive tools expose a deliberately separate athlete-context surface. `get_workout_reflection` requires both
+`activity-details:read` and independent `workout-reflections:read`; `save_workout_reflection` and
+`delete_workout_reflection` additionally require `workout-reflections:write`. OAuth request/approval/refresh/bearer
+validation, HTTP prechecks, registration, UI consent and transaction authority enforce the same dependencies.
+Requested permissions start checked and can be withheld; removing the activity parent removes both dependent grants.
+Existing tokens never gain them through refresh. Reauthorize and refresh the tool catalog after the separate release.
+
+Inputs are strict: opaque owner/connection-bound `activityRef`, explicit `target: recording | activity`, and for changes
+current `expectedRevision` plus UUID `mutationId`. Save requires one nonblank `note` of at most 2000 characters.
+Reflections contain no effort or RPE field. Workout RPE remains the existing recording stat, edited through QS Edit
+details; reflection tools cannot change it. No inference from injury text or provider payloads is permitted. Delete
+requires a present current reflection. Benchmarks and moved/missing activities fail closed. The backend uses explicit
+parent/membership and five-field leaf masks, never forwards stored documents.
+
+Read/save outputs contain only `activityRef`, target, revision, `present` and note; save
+adds `changed`. Absent content returns revision zero or a nonzero cleared revision with null note. Delete returns
+only reference, target, revision and deleted state. Replies are bounded by the fixed schema and 2000-character text limit.
+A same-UUID unchanged retry is idempotent; stale or changed retries conflict. Both writes advertise readOnly=false,
+destructive=true, idempotent=true, openWorld=false across all transports. The external host owns native approval; QS
+cannot detect automatic approval settings. Keep automatic approval off for individual review and disable reflection
+writes in unattended/Research modes. This never grants Training mutations or provider actions.
+
+The Assistant exposes the read and local prepare-only save/delete tools through its independent conversation choice,
+which starts on for fresh and New chats and can be disabled. Existing off choices and legacy missing flags stay off.
+Model writes are unavailable. Current-turn activity/date discovery and exact target/revision reads
+produce a bounded review, including current/new text and permanent-delete disclosure. Existing app Apply rechecks
+proposal, expiry, owner, generation, permission and revision through the same service. New chat restores the on default
+and invalidates old proposals. This Assistant default does not expand external MCP grants or change public tool schemas.
+Text is untrusted private context and may contain health or location information. Revocation cannot erase received
+copies; quoted Assistant context follows existing conversation retention. Private content is not included in normal
+activity metrics, descriptions, Timeline/Health reads, public shares, exports or provider deliveries.
+
+Storage, deletion/reparse behavior, planning no-impact rationale and pinned inspiration
+remain in [Training workspace](training-workspace.md#optional-post-workout-reflection-item-10). Registered schemas remain
+frozen. Review the additive candidate digest in `contracts/pending-change.json`, then separately release and refresh/rescan
+the registered app and sync the changed bundled skills. Source/PR validation does not deploy or install a real profile.
+
 ## Training plans and planned workouts (#690)
 
 This is source implementation, not deployment, registered-client promotion or real-profile plugin installation. After a

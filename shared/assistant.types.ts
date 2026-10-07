@@ -164,6 +164,7 @@ export interface AssistantChatRequest {
   activityTagChangesEnabled?: boolean;
   timelineNoteChangesEnabled?: boolean;
   measurementChangesEnabled?: boolean;
+  reflectionChangesEnabled?: boolean;
   trainingPlansEnabled?: boolean;
   trainingPlanChangesEnabled?: boolean;
   trainingDeliveryEnabled?: boolean;
@@ -175,6 +176,8 @@ export interface AssistantChatRequest {
 }
 
 export type AssistantContentProposalKind =
+  | 'save_workout_reflection'
+  | 'delete_workout_reflection'
   | 'create_manual_measurement'
   | 'update_manual_measurement'
   | 'delete_manual_measurement'
@@ -195,6 +198,8 @@ export interface AssistantTimelineNoteFields {
 }
 
 export type AssistantContentProposalArguments =
+  | { activityRef: string; target: 'recording' | 'activity'; expectedRevision: number; mutationId: string; note: string | null }
+  | { activityRef: string; target: 'recording' | 'activity'; expectedRevision: number; mutationId: string }
   | ({ mutationId: string; metricId: ManualHealthMetricId; observedAt: string } & AssistantManualMeasurementInput)
   | ({ measurementRef: string; expectedRevision: number; observedAt?: string } & AssistantManualMeasurementInput)
   | { measurementRef: string; expectedRevision: number }
@@ -217,6 +222,7 @@ export interface AssistantManualMeasurementInput {
 }
 
 export interface AssistantContentProposalPreview {
+  reflectionReview?: { before: { note: string | null } | null };
   measurementReview?: { before: ManualHealthMeasurementFields | null; after: ManualHealthMeasurementFields | null };
   proposalRef: string;
   kind: AssistantContentProposalKind;
@@ -252,6 +258,7 @@ export interface AssistantChatResponse {
   activityTagChangesEnabled?: boolean;
   timelineNoteChangesEnabled?: boolean;
   measurementChangesEnabled?: boolean;
+  reflectionChangesEnabled?: boolean;
   trainingPlansEnabled?: boolean;
   trainingPlanChangesEnabled?: boolean;
   trainingDeliveryEnabled?: boolean;
@@ -269,6 +276,7 @@ export interface GetAssistantConversationResponse {
   activityTagChangesEnabled?: boolean;
   timelineNoteChangesEnabled?: boolean;
   measurementChangesEnabled?: boolean;
+  reflectionChangesEnabled?: boolean;
   trainingPlansEnabled?: boolean;
   trainingPlanChangesEnabled?: boolean;
   trainingDeliveryEnabled?: boolean;
@@ -286,6 +294,7 @@ export interface ResetAssistantConversationRequest {
   activityTagChangesEnabled?: boolean;
   timelineNoteChangesEnabled?: boolean;
   measurementChangesEnabled?: boolean;
+  reflectionChangesEnabled?: boolean;
   trainingPlansEnabled?: boolean;
   trainingPlanChangesEnabled?: boolean;
   trainingDeliveryEnabled?: boolean;
@@ -297,6 +306,7 @@ export interface ResetAssistantConversationResponse {
   activityTagChangesEnabled?: boolean;
   timelineNoteChangesEnabled?: boolean;
   measurementChangesEnabled?: boolean;
+  reflectionChangesEnabled?: boolean;
   trainingPlansEnabled?: boolean;
   trainingPlanChangesEnabled?: boolean;
   trainingDeliveryEnabled?: boolean;

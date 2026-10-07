@@ -1,5 +1,88 @@
 # Training Workspace Architecture and Maintenance Guide
 
+## Optional post-workout reflection (Item 10)
+
+The owner's Edit details action on a saved event summary opens one Material bottom sheet for event metadata and
+post-workout feedback: Feeling, the existing whole-recording RPE, and optional private reflection text. There is no
+separate reflection icon or dialog. All fields are staged until one Save changes action; Cancel discards the entire
+draft. No auto-prompt interrupts recording import. A workout with one selectable activity uses the whole-recording
+note without a target selector. For multiple activities, the user explicitly chooses the whole recording or a real
+activity for the note; benchmark/ambiguous merged events are excluded. Three optional prompts cover overall feel, sport-relevant
+conditions/technique, and fatigue/recovery. One bounded exact completion-link lookup can replace the last prompt with
+planned-versus-felt context, only for one exact matching target. A malformed or out-of-recording link, an ambiguous
+target, or more than 25 returned links keeps the generic prompt. Valid links to other activities do not imply a match
+for this selection. It does not infer a completion, fetch a provider prescription, or establish that the current
+authored workout matches the historical recording.
+
+The inspiration is the question progression in OpenAthlete's post-activity feedback agent at pinned commit
+`33e22980043640a132c670d3ca8ccbe26d588db5`
+([source](https://github.com/openathleteorg/openathlete/blob/33e22980043640a132c670d3ca8ccbe26d588db5/apps/api/src/mastra/agents/post-activity-feedback.agent.ts)).
+QS uses optional athlete-authored context, without copying an adaptation pipeline or voice transport. Voice entry,
+automatic plan adaptation, injury diagnosis and provider feedback delivery remain outside this implementation.
+
+### Model, ownership and retention
+
+`shared/workout-reflection.ts` owns validation and optimistic/retry semantics. Private fixed leaves live under
+`users/{uid}/events/{eventId}/workoutReflections`: `recording` or `activity_{actualActivityId}`. Each leaf contains exactly
+`schemaVersion: 1`, monotonic `revision`, UUID `mutationId`, `deleted`, and nullable `note`.
+Text is trimmed, limited to 2000 characters, rejects control characters except newline/tab/carriage return, and is
+untrusted athlete context. A note save needs nonblank text. There is no reflection effort field. The one RPE selector
+in Edit details edits the existing recording stat and preserves zero and imported fractional values until explicitly
+changed. Planned RPE is unchanged. This unreleased feature has no data migration or reparse requirement.
+
+The app-only saveEventDetails path in WorkoutReflectionService combines a sanitized patch limited to four editable
+event fields with an optional revision-checked note change in one Firestore transaction. Only changed name, description,
+Feeling or RPE fields are patched; unrelated event stats are preserved. Each edited event field checks its original
+value, while an already committed unchanged retry is accepted. Reflection conflicts prevent both writes. Details-only
+edits never read or rewrite a note and remain available while the optional note read is pending or has failed.
+The in-memory event is updated only after a successful commit. A staged Delete reflection review is applied by the
+same Save changes action; Keep reflection cancels that deletion. Account changes invalidate the whole draft.
+
+The editor reads its exact leaf with lazily loaded Firestore Lite REST using the same app's Auth/App Check providers,
+avoiding the full SDK's persisted missing-document state. That read is bounded to 30 seconds and rechecks the owner
+after module loading and the response; failure never supplies revision zero. Owner SDK transactions read the current
+parent, target membership and leaf before writing. Rules additionally check
+active-account/deletion fences, benchmark exclusion, exact keys, text bounds and monotonically increasing
+revisions. Public event access never grants reflection access; collection listing and descendants are denied.
+Unknown/corrupt leaves fail closed. Cancel and an unchanged draft never write. Concurrent revisions require reload;
+an uncertain unchanged retry preserves its mutation UUID. UUID creation uses the shared browser compatibility guard;
+an unavailable UUID reports a browser error and preserves the editable draft without writing. Account changes clear private form state and invalidate
+pending results. Accepted target/rating selections own selection haptics; async saves own success/error feedback.
+
+Deletion overwrites text with null in a content-free monotonic tombstone, preventing a stale create/edit retry
+from resurrecting that deleted reflection. There is no recoverable reflection history. Current content remains until
+reflection, recording or account deletion. The event cleanup hook deletes fixed leaves in transactions of at most 200,
+checking event absence on every page so recreated deterministic event IDs are protected. Account recursive cleanup
+covers the same subtree. No independent user-data root or queue is added. Reparse leaves exact attachments untouched
+and does not remap new activity IDs by similarity; a reflection whose original activity ID no longer exists is
+inaccessible until parent cleanup. No event reparse or derived schema bump is required for this private context.
+
+### MCP and Assistant impact review
+
+The additive surface is `get_workout_reflection`, `save_workout_reflection`, and `delete_workout_reflection` under
+independent `workout-reflections:read` / `workout-reflections:write`, both dependent on `activity-details:read`; writes
+also require reflection read. Existing activity, event, Training, Health, measurement, description and Timeline grants
+never authorize this content. Strict inputs select an existing owner/connection-bound activity reference and explicit
+recording/activity target. Outputs expose only that reference/target, revision/presence and selected private text; never whole events, links, provider data, raw IDs or receipts. Admin transactions recheck
+stored grant/Assistant generation and account deletion. External writes use native host approval; server code cannot
+inspect automatic approval settings. Built-in Gemini sees current reads and local prepare-only tools through an independent
+chat choice, on for fresh and New chats and user-disableable. Existing off choices, legacy missing flags and old retries
+retain their selected access. This default does not expand external MCP grants or change tool schemas or calculations.
+Preparation requires current-turn activity/date discovery and an exact target/revision read;
+QS shows the target and current/new text, with explicit permanent deletion, before app Apply. Permission changes,
+New chat, expiry, stale proposals/revisions and deletion fences fail closed. At most one current content proposal is kept.
+
+Planning review: recipes, planning mutation kinds, completion/link lifecycle and provider delivery are unchanged.
+Combining the app form has no MCP wire impact: scopes, schemas, projections, tool descriptions and the registered
+contract digest are unchanged. MCP/Assistant reflection changes still write only the private note; combining the app
+form does not grant either surface event-stat mutation authority or require a bundled-plugin rebuild.
+Reflection context never marks completion or enters readiness/load/durability calculations, and does not authorize
+adaptation. Exact-link reads are already covered by the current planning surface; no relevant plan-read extension is
+missing. Separate reflection coverage is implemented in this change, so no #583 deferral is required. Public contract,
+help/policies/feature page and Activity, Training and cross-domain bundled guidance are updated together. Source support
+requires a separate server/Rules release, registered app developer refresh/rescan and plugin sync; none are authorized
+by implementation or PR creation.
+
 ## Planning access through MCP and the Assistant
 
 The #690 planning surface exposes current plans, standalone/associated workouts, complete v1 instructions, chronological

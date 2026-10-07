@@ -660,7 +660,7 @@ export const PUBLIC_SEO_PAGES: Record<PublicSeoPageKey, PublicSeoPage> = {
     title: 'MCP Server for Training Data',
     description: 'Connect ChatGPT, Claude, or another MCP client to approved training, Health, sleep, measurements, routes, Timeline notes, activity tags and descriptions.',
     h1: 'Connect ChatGPT or Claude to your training data',
-    intro: 'Use the Quantified Self MCP server to let ChatGPT, Claude, or another compatible client analyze approved data and help plan your next workout. You may separately grant manual Health measurement, Timeline note, activity-tag, and bounded Training changes; every write uses the client’s approval controls.',
+    intro: 'Use the Quantified Self MCP server to let ChatGPT, Claude, or another compatible client analyze approved data and help plan your next workout. You may separately grant post-workout reflection, manual Health measurement, Timeline note, activity-tag, and bounded Training changes; every write uses the client’s approval controls.',
     chips: ['MCP server', 'ChatGPT', 'Claude', 'Explicit consent', 'Training', 'Sleep', 'Activities', 'Routes'],
     actions: [
       routeAction('Start Free', '/login', 'flat', 'arrow_forward'),
@@ -753,6 +753,10 @@ export const PUBLIC_SEO_PAGES: Record<PublicSeoPageKey, PublicSeoPage> = {
       {
         question: 'Can an MCP client read my activity descriptions?',
         answer: 'Only when Activity descriptions and Individual activity details are approved. Like every requested permission, the description checkbox starts checked; uncheck it before approving to withhold access. Existing clients missing that grant must authorize again. It returns the full event description for a selected activity; activities within one event share that text. Descriptions can contain sensitive health, personal or location information even without location permission. Revocation cannot erase received copies. Oversized text fails without truncation. An external client may edit the description only with the additional Change events grant and exact-current-text check; its host controls per-edit approval.',
+      },
+      {
+        question: 'Can an MCP client read or save my post-workout reflection?',
+        answer: 'When released in your client, separate workout-reflection read permission plus Individual activity details access permits reading selected private reflection text. Change workout reflections additionally permits revision-checked saves or permanent deletes through native client approval. Existing connections must authorize again. Reflections remain owner-only on public recordings, do not change plans or calculations, and are never sent to fitness providers. The built-in Assistant has an independent choice that starts on for fresh and New chats, can be turned off, and requires review and Apply in QS.',
       },
       {
         question: 'Can an MCP client read my Timeline notes?',

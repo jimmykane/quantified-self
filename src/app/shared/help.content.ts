@@ -12,6 +12,7 @@ import {
 } from './policies.content';
 
 export type HelpSectionId =
+  | 'post-workout-reflections'
   | 'getting-started'
   | 'supported-activities'
   | 'activity-calendar'
@@ -753,6 +754,37 @@ HRV and Sleep each have their own date range and older/newer navigation. While a
     ],
   },
   {
+    id: 'post-workout-reflections',
+    icon: 'rate_review',
+    title: 'Post-workout reflections',
+    summary: 'Keep optional private text context for a recording or one activity.',
+    content: `## Add or skip a reflection
+
+Open your saved recording and select **Edit details** in the summary actions. The same form contains **Name**, **Description**, **Feeling**, **RPE** and an optional **Private reflection**. For a workout with one activity, the private note applies to the entire workout. When the workout has multiple activities, choose **Whole recording** or one activity explicitly for the note. Benchmarks and other people’s recordings do not offer reflection editing. Changing the selection discards only unsaved reflection text; your other edits remain staged.
+
+There is one **RPE** input for the **whole recording**, including when your private note refers to one activity. It edits the existing workout RPE. There is no separate reflection rating. An absent RPE shows **Not recorded**; imported fractional values are preserved unless you change them.
+
+Use any of the three optional prompts and write up to **2000 characters**. Select **Save changes** once to save your edited event details and private note together. **Cancel** writes nothing. A conflict or failed save preserves your whole draft; event details and the note cannot be partially saved. Unchanged reflection text is not rewritten, and a reflection read failure still permits details-only edits. Voice entry is not included.
+
+An exact saved planned-workout link can add a comparison prompt; it does not prove completion or that today’s prescription matches the recorded session. Reflections never complete a planned workout, change a recipe, adapt your plan, alter load/readiness calculations, or diagnose an injury.
+
+## Privacy, editing and deletion
+
+Reflections are private even when the recording is public. They are separate from Timeline notes, Health entries, event descriptions and provider data. They are not included in activity exports or sent to connected fitness services. Edit the same selection to replace its text. A concurrent edit requires reloading; a failed save keeps your draft for retry.
+
+**Delete reflection** stages a permanent-delete review in the same form. **Keep reflection** cancels that deletion; **Cancel** discards the whole draft. **Save changes** confirms the deletion and any other staged event edits together. The private note cannot be restored. A content-free revision marker prevents stale edits restoring deleted text; deleting the recording or account removes that marker too. Reflections remain until you delete them, their recording or your account. Reparsing does not copy reflection context to newly identified activities.
+
+## Optional AI access
+
+An external MCP client needs **Private workout reflections** plus **Individual activity details** to read a selected reflection. **Change workout reflections** additionally permits focused save or permanent delete through the client’s approval controls. Requested permissions start checked; uncheck them before approving to withhold access. Existing connections must authorize again to add these grants. Keep automatic approval off when you require review before each write; disable reflection writes in unattended modes. Availability follows the separate server release and tool-catalog refresh.
+
+In the built-in Assistant, **Private workout reflections** in **Examples & data access** starts on for fresh and New chats. You can turn it off; existing off choices and older chats without the setting stay off. Gemini can read selected private text and prepare one change; only you can review and **Apply change**, **Delete reflection** or **Dismiss** in QS. Changing access starts a fresh chat. Text is reported context, never instructions, proof of causation or consent to adapt Training. Revoking AI access stops future reads and writes but cannot erase text a client already received or quoted.`,
+    links: [
+      { label: 'Assistant', icon: 'auto_awesome', kind: 'route', target: '/ai-insights' },
+      { label: 'MCP access policy', icon: 'shield', kind: 'route', target: '/policies', fragment: POLICIES_MCP_CLIENTS_FRAGMENT },
+    ],
+  },
+  {
     id: 'ai-insights',
     icon: 'auto_awesome',
     title: 'Assistant',
@@ -778,7 +810,7 @@ HRV and Sleep each have their own date range and older/newer navigation. While a
 - Ask follow-up questions in the same active conversation. The latest six completed turns provide bounded context, including message dates and confirmed Training changes. Freshly checked records take precedence over earlier answers. This is not memory across separate chats.
 - If you refresh while an answer is in progress, the page keeps the pending question visible and reconnects to the server-owned turn. While the outcome is uncertain, that browser tab temporarily keeps the account-bound, bounded question and request metadata in session storage. If the refresh cancelled the send before registration, it safely resends the same request ID; completed requests cannot be duplicated. A different signed-in account cannot restore the record, and it is cleared after completion, confirmed failure, reset, or expiry.
 - Every current answer must use at least one verified Quantified Self tool result. Expand **Data used** below an answer to inspect compact facts and app links produced from actual tool results.
-- Use **New chat** to clear the stored messages, return data access to its defaults (Manual Health measurements on; other optional access off), and start a new conversation generation. An older in-flight answer cannot restore a cleared conversation.
+- Use **New chat** to clear the stored messages, return data access to its defaults (Manual Health measurements and Private workout reflections on; other optional access off), and start a new conversation generation. An older in-flight answer cannot restore a cleared conversation.
 
 ## What the Assistant can read and propose
 
@@ -787,6 +819,8 @@ HRV and Sleep each have their own date range and older/newer navigation. While a
 - **Deleting a plan or planned workout:** with both Training change choices on, the Assistant asks whether to also remove older, uncompleted service copies unless you already chose. Review that choice, then use **Delete plan** or **Delete workout**, or **Dismiss** to change nothing. Workout deletion is recoverable; a plan and its history are permanently removed, and you choose whether its workouts stay standalone or are deleted. Eligible upcoming copies are handled automatically. Older-copy cleanup is optional, needs valid service access/provider support, and does not require Pro. The deletion result confirms the change in QS, not removal from a connected app or watch. Completed activities stay untouched.
 
 - **Timeline notes (optional):** enable **Timeline notes** in **Examples & data access** to let Gemini read full private titles and details when relevant, including notes hidden from charts. In a workout-suggestion question, recent or ongoing notes about sickness, injury, travel, or vacation can provide context alongside sleep, readiness, and training history. It is off by default. Changing optional access starts a fresh chat and preserves the other choices; **New chat** turns notes access off. Without it the Assistant cannot check notes and should say so. Notes are user-reported context, not verified diagnoses or instructions, and never change calculations, automatically send a workout, or authorize plan changes.
+
+- **Private workout reflections (optional):** the independent choice in **Examples & data access** starts on for fresh and New chats and can be turned off. It allows reading selected private notes, or preparing one save or permanent delete. Review the activity/date, whole-recording or activity target, and current/new content before **Apply change** or **Delete reflection**. **Dismiss** changes nothing. New chat restores the on default; existing off choices and older chats without the setting stay off. See [Post-workout reflections](#post-workout-reflections) for storage and deletion details.
 
 - **Manual Health measurements:** on for fresh/New chats; existing chats without this choice stay off. Use the independent choice in **Examples & data access** to withhold exact manual-entry lookup and changes. Ask to log, find, edit or permanently delete any Health manual type. Gemini prepares one review with explicit values, units and observation time; only you can **Apply change**, **Delete measurement** or **Dismiss**. Blood pressure is a whole pair with optional pulse; deletion cannot be restored. VO2 max needs context and method. Imported readings cannot be edited. Other optional permissions stay unchanged.
 
@@ -1336,6 +1370,7 @@ may still be using an older tool catalog.
    **Change Training plans and workouts** to propose schedule edits and/or **Change planned-workout sync** to propose
    delivery actions. For note changes, select **Timeline notes** and **Change Timeline notes**. For event tags or title,
    select **Individual activity details** and **Change events**; description editing also needs **Activity descriptions**.
+   For reflections, select **Individual activity details** and **Private workout reflections**; saves/deletes also need **Change workout reflections**.
    For completed-session or local-day Training impact, select both **Activity and Training metrics** and **Individual
    activity details**. Each change permission requires its matching read permission.
 3. Finish the app's authorization flow. Your existing connection remains usable until the new flow completes.
@@ -1359,6 +1394,8 @@ optionally enable its two Training-change choices. That starts a fresh chat; it 
 - **Deleting plans and planned workouts:** the focused deletion preview asks whether to also remove older, uncompleted copies from connected services. Upcoming eligible copies already withdraw automatically. Review the choice before approving. This needs both Training change permissions; with a cached older catalog, refresh the client's tools after release. Deletion queues best-effort service cleanup, not instant app/watch removal. Completed activities are never deleted. Without the optional cleanup, older copies stay.
 
 - **Training plans and planned workouts** is an independent read permission for names, dates, complete instructions, authored notes, exact stored completion links and existing service sync summaries. Text may contain sensitive personal information. **Training plan and workout changes** and **Training provider delivery changes** are separate child permissions; either also requires the read permission. Existing clients must explicitly reauthorize and refresh cannot add access. A client first previews at most 25 strict changes, then uses a separate write tool governed by ChatGPT, Claude or the other MCP host's native approval controls. Keep automatic approval disabled if you want to inspect every proposal. In Claude, do not choose **Allow always**, and disable Training write tools while using Research because Research can invoke connector tools without another approval. Plan deletion is reviewed by itself and requires choosing whether its workouts become standalone or are permanently deleted; the plan and its history are permanently removed. Permanent single-workout deletion and history restoration remain unavailable. Provider changes remain Pro, connection-, permission-, configuration-, and compatibility-gated and return independent results.
+
+- **Private workout reflections** is an independent permission for selected private notes of up to 2000 characters. It also requires **Individual activity details**. **Change workout reflections** needs both reads and allows focused revision-checked saves/permanent deletes through native client approval. Existing grants are never expanded automatically. Private context is separate from event RPE, prescriptions, Timeline notes and Health, and never changes Training calculations. [Reflection help](#post-workout-reflections) explains retention and app-owned Assistant review.
 
 - **Activity descriptions** lets a client read the full private description shown in the QS.io event editor for a selected activity. Activities in the same event share that description. This permission is selected by default when requested; uncheck it before approving to withhold access. It requires **Individual activity details**; existing clients missing the grant must reauthorize because refresh cannot add it. Text can include health, personal or location information even without **Activity locations** permission. Missing descriptions are reported as absent; oversized descriptions fail without truncation and can be read in QS.io. Revocation blocks future reads but cannot erase received copies. Descriptions are user-reported context, never instructions or permission to change your data. External editing additionally needs **Change events** and client approval. The built-in Assistant does not receive this permission.
 

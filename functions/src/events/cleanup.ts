@@ -82,6 +82,26 @@ async function deleteLinkedActivitiesIfEventStillMissing(userId: string, eventId
     return result;
 }
 
+/** Fixed leaves only: Rules and MCP deny descendants. Bound each transaction and
+ * recheck the parent every page, including retries after partial cleanup. */
+async function deleteReflectionsIfEventStillMissing(userId: string, eventId: string): Promise<GuardedCleanupResult> {
+    const db = admin.firestore();
+    const eventRef = db.doc(`users/${userId}/events/${eventId}`);
+    const query = db.collection(`users/${userId}/events/${eventId}/workoutReflections`).limit(200);
+    let deletedCount = 0;
+    while (true) {
+        const page = await db.runTransaction(async transaction => {
+            if ((await transaction.get(eventRef)).exists) return { skipped: true, deletedCount: 0 };
+            const snapshot = await transaction.get(query);
+            const documents = snapshot.docs || [];
+            documents.forEach(document => transaction.delete(document.ref));
+            return { skipped: false, deletedCount: documents.length };
+        });
+        deletedCount += page.deletedCount;
+        if (page.skipped || page.deletedCount < 200) return { skipped: page.skipped, deletedCount };
+    }
+}
+
 async function deleteMetadataIfEventStillMissing(userId: string, eventId: string): Promise<GuardedCleanupResult> {
     const db = admin.firestore();
     const eventRef = db.doc(`users/${userId}/events/${eventId}`);
@@ -153,6 +173,11 @@ async function deleteMetadataIfEventStillMissing(userId: string, eventId: string
         });
         return { skipped: false, deletedCount: (metadataSnapshot.size || 0) + linkedDocuments.length };
     });
+
+    if (!result.skipped) {
+        const reflections = await deleteReflectionsIfEventStillMissing(userId, eventId);
+        if (reflections.skipped) return reflections;
+    }
 
     if (result.skipped) {
         logger.warn('[Cleanup] stale_delete_trigger_skipped: event exists again, skipping destructive cleanup.', {

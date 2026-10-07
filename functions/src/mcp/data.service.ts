@@ -1,3 +1,5 @@
+import { runMcpWorkoutReflection } from './workout-reflections.service';
+import type { McpWorkoutReflectionTool } from './workout-reflections.schemas';
 import { hasCurrentIntensityPolicy } from '../../../shared/intensity-zones';
 import { readinessHrvObservations, buildReadinessEvaluation as buildCurrentReadinessEvaluation,
   calculateReadinessScore as calculateCurrentReadinessScore, READINESS_SLEEP_LOOKBACK_MS as CURRENT_READINESS_LOOKBACK_MS,
@@ -6591,6 +6593,11 @@ export function createMcpDataService(
         if (error instanceof McpTimelineNotesError) throw new McpDataError(error.code, error.message);
         throw new McpDataError('temporarily_unavailable', 'Timeline notes could not be read safely. Try again later.');
       }
+    },
+
+    async workoutReflection(tool: McpWorkoutReflectionTool, input: McpContentWriteInput) {
+      return runMcpContentWrite(input, (value, codec, deps) => runMcpWorkoutReflection(tool, value, codec, deps),
+        'The reflection request could not be completed safely.');
     },
 
     async updateEventTags(input: McpContentWriteInput) {
