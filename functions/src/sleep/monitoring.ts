@@ -16,7 +16,12 @@ const SOURCES = [
 ] as const;
 export const HEALTH_SLEEP_PROBE_LIMIT = 20;
 const TIMEOUT_MS = 5_000;
-const QUEUE_FIELDS = ['provider', 'type', 'userID', 'providerUserId', 'processed', 'retryCount', 'dateCreated', 'dispatchedToCloudTask', 'dispatchAfterMs', 'processingLeaseExpiresAt', 'resultStatus', 'rangeStartMs', 'garminSummaryType'];
+const GENERATION_FIELDS = {
+    GarminAPI: ['garminHealthTokenCredentialGeneration', 'garminHealthRootOAuthCredentialGeneration', 'garminHealthConnectionStateGeneration'],
+    SuuntoApp: ['suuntoHealthTokenCredentialGeneration', 'suuntoHealthRootOAuthCredentialGeneration', 'suuntoHealthConnectionStateGeneration'],
+    COROSAPI: [],
+} as const;
+const QUEUE_FIELDS = ['provider', 'type', 'userID', 'providerUserId', 'processed', 'retryCount', 'dateCreated', 'dispatchedToCloudTask', 'dispatchAfterMs', 'processingLeaseExpiresAt', 'resultStatus', 'rangeStartMs', 'garminSummaryType', ...Object.values(GENERATION_FIELDS).flat()];
 type Workload = 'sleep_sync' | 'garmin_health_backfill';
 const GROUPS = [
     ...SOURCES.map(source => ({ provider: source.provider, workload: 'sleep_sync' as Workload })),
@@ -25,6 +30,12 @@ const GROUPS = [
 
 function record(value: unknown): Record<string, unknown> {
     return value && typeof value === 'object' ? value as Record<string, unknown> : {};
+}
+
+/** Observational only: absent legacy metadata is null; malformed metadata is unknown. */
+function generation(value: unknown): string | null | false {
+    if (value == null) return null;
+    return typeof value === 'string' && value.trim() === value && value.length > 0 && value.length <= 128 ? value : false;
 }
 
 export function healthSleepWorkloadFields(value: unknown) {
@@ -106,7 +117,7 @@ export async function observeHealthSleepQueue(db: FirebaseFirestore.Firestore, b
                 const root = db.collection(source.root).doc(uid);
                 const [current, owner, tombstone, meta, connection] = await tx.getAll(
                     doc.ref, user, db.collection('userDeletionTombstones').doc(uid), user.collection('meta').doc(source.provider), root,
-                    { fieldMask: [...QUEUE_FIELDS, 'expireAt', 'connectionState', 'disconnectState', 'disconnectOperationGeneration'] },
+                    { fieldMask: [...QUEUE_FIELDS, 'expireAt', 'connectionState', 'disconnectState', 'disconnectOperationGeneration', 'activeOAuthCredentialGeneration', 'connectionStateGeneration'] },
                 );
                 if (stopped) return 'excluded';
                 if (!current.exists || !current.updateTime?.isEqual(doc.updateTime!)) return 'excluded';
@@ -118,7 +129,7 @@ export async function observeHealthSleepQueue(db: FirebaseFirestore.Firestore, b
                     || data.resultStatus === 'manual_reconciliation_required') return 'excluded';
                 if (['disconnect_pending', 'reconnect_required'].includes(meta.get('connectionState'))
                     || connection.get('disconnectState') === 'disconnect_pending' || connection.get('disconnectOperationGeneration') || !connection.exists) return 'excluded';
-                if (source.provider === SLEEP_PROVIDERS.COROSAPI && meta.get('providerUserId') && meta.get('providerUserId') !== identity) return 'excluded';
+                if (meta.get('providerUserId') && meta.get('providerUserId') !== identity) return 'excluded';
                 const health = data.type === 'suunto_health_poll'
                     || data.type === 'garmin_health_backfill'
                     || source.provider === SLEEP_PROVIDERS.GarminAPI && data.garminSummaryType && data.garminSummaryType !== 'sleeps';
@@ -126,9 +137,17 @@ export async function observeHealthSleepQueue(db: FirebaseFirestore.Firestore, b
                     ? source.provider === SLEEP_PROVIDERS.SuuntoApp ? isSuuntoHealthSyncEnabled() : isGarminHealthSyncEnabled()
                     : isSleepProviderEnabled(source.provider) && isSleepSyncUserAllowed(uid);
                 if (!enabled) return 'excluded';
-                const tokens = await tx.get(root.collection('tokens').where(source.identity, '==', identity).select('serviceName').limit(1));
+                const tokens = await tx.get(root.collection('tokens').where(source.identity, '==', identity).select('serviceName', 'tokenCredentialGeneration').limit(1));
                 if (stopped) return 'excluded';
                 if (tokens.empty) return 'excluded';
+                const activeGenerations = [generation(tokens.docs[0].get('tokenCredentialGeneration')),
+                    generation(connection.get('activeOAuthCredentialGeneration')), generation(meta.get('connectionStateGeneration'))];
+                const fences = GENERATION_FIELDS[source.provider];
+                if (activeGenerations.includes(false) || fences.some(field => generation(data[field]) === false)) return 'unknown';
+                // Workers reject superseded credentials/connections. Undefined queue fences remain legacy/unfenced;
+                // explicit null is a real fence and must not match a newly generated connection.
+                if (activeGenerations[0] !== activeGenerations[1]
+                    || fences.some((field, index) => data[field] !== undefined && data[field] !== activeGenerations[index])) return 'excluded';
                 const updated = current.updateTime?.toMillis();
                 if (!Number.isSafeInteger(updated) || updated! < 0 || updated! > now + TIMEOUT_MS) return 'unknown';
                 return Math.max(0, now - updated!);

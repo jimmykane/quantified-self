@@ -42,7 +42,12 @@ test('every native chart targets only the two exact queues; policies have worklo
   const backlog = config.policies.find(p => p.userLabels.policy_id === 'backlog').conditions;
   assert.equal(backlog[0].conditionThreshold.aggregations[0].alignmentPeriod, '5400s');
   assert.equal(backlog[1].conditionThreshold.aggregations[0].alignmentPeriod, '14400s');
-  assert.equal(config.policies.at(-1).conditions.filter(c => c.conditionAbsent).length, 4);
+  assert.equal(config.policies.find(p => p.userLabels.policy_id === 'heartbeat').conditions.filter(c => c.conditionAbsent).length, 4);
+  assert.equal(config.policies.find(p => p.userLabels.policy_id === 'telemetry').conditions.length, 2);
+  for (const policy of config.policies) for (const c of policy.conditions) {
+    assert.doesNotMatch((c.conditionThreshold || c.conditionAbsent).filter, /cloudtasks.googleapis.com/,
+      'native task retries cannot distinguish expected contention and must not page independently');
+  }
 });
 test('offline preview needs no network or credentials and CI covers definitions', () => {
   const r = spawnSync(process.execPath, ['tools/health-sleep-monitoring/cli.mjs', `--project=${project}`], { encoding: 'utf8', env: { PATH: '/no-credentials' } });

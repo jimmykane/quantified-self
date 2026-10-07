@@ -1207,6 +1207,9 @@ Health/Sleep monitoring (#830) has a separate, locally prepared bundle for the o
 the ordinary worker invocation summary and adds post-commit terminal observations and
 a bounded, field-masked probe on the existing dispatcher. Garmin, Suunto and COROS
 ordinary ingestion remain distinct from intentionally paced Garmin historical requests.
+The probe excludes superseded connection metadata; unknown metadata is not healthy zero.
+Native HTTP attempts remain diagnostic only, since expected contention also retries;
+classified processing failures, unavailable observations and missing heartbeats alert separately.
 This is not activated by the #829 deployment: its three affected Functions and owned
 dashboard/11 metrics/six policies require separate approval and production readback.
 See [Sleep sync operations](sleep-sync-operations.md#cloud-monitoring-830) for meanings,

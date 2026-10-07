@@ -117,4 +117,67 @@ describe.skipIf(!process.env.FIRESTORE_EMULATOR_HOST)('Health/Sleep bounded obse
         await observeHealthSleepQueue(db, 0);
         expect(sample()).toMatchObject({ sampled: 1, dueSample: 0, excludedSample: 1 });
     });
+    it.each([
+        ['GarminAPI', 'garmin_ping', 'garminHealthTokenCredentialGeneration', 'token'],
+        ['GarminAPI', 'garmin_health_backfill', 'garminHealthRootOAuthCredentialGeneration', 'root'],
+        ['GarminAPI', 'garmin_ping', 'garminHealthConnectionStateGeneration', 'meta'],
+        ['SuuntoApp', 'suunto_health_poll', 'suuntoHealthTokenCredentialGeneration', 'token'],
+        ['SuuntoApp', 'suunto_health_poll', 'suuntoHealthRootOAuthCredentialGeneration', 'root'],
+        ['SuuntoApp', 'suunto_health_poll', 'suuntoHealthConnectionStateGeneration', 'meta'],
+    ])('excludes superseded %s %s %s without borrowing old queue age', async (provider, type, field, target) => {
+        const ref = await seed('qa', provider, type);
+        const root = provider === 'GarminAPI' ? 'garminAPITokens' : 'suuntoAppAccessTokens';
+        await ref.update({ [field]: 'OLD_GENERATION' });
+        if (target === 'token' || target === 'root') {
+            await db.doc(`${root}/qa/tokens/account`).update({ tokenCredentialGeneration: 'NEW_GENERATION' });
+            await db.doc(`${root}/qa`).update({ activeOAuthCredentialGeneration: 'NEW_GENERATION' });
+        }
+        if (target === 'meta') await db.doc(`users/qa/meta/${provider}`).update({ connectionStateGeneration: 'NEW_GENERATION' });
+        await observeHealthSleepQueue(db, 0, (await ref.get()).updateTime!.toMillis() + 86_400_000);
+        expect(sample(provider, type === 'garmin_health_backfill' ? 'garmin_health_backfill' : 'sleep_sync'))
+            .toMatchObject({ dueSample: 0, excludedSample: 1, unknownSample: 0 });
+        expect(JSON.stringify(vi.mocked(logger.info).mock.calls)).not.toMatch(/OLD_GENERATION|NEW_GENERATION|PRIVATE/);
+    });
+    it.each(['GarminAPI', 'SuuntoApp', 'COROSAPI'])('excludes mismatched pinned %s accounts', async provider => {
+        await seed('qa', provider, provider === 'GarminAPI' ? 'garmin_ping' : provider === 'SuuntoApp' ? 'suunto_health_poll' : 'coros_poll');
+        await db.doc(`users/qa/meta/${provider}`).update({ providerUserId: 'other-account' });
+        await observeHealthSleepQueue(db, 0);
+        expect(sample(provider)).toMatchObject({ dueSample: 0, excludedSample: 1 });
+    });
+    it('accepts matching lifecycle metadata without selecting credentials and distinguishes a null fence from an absent legacy fence', async () => {
+        const ref = await seed('qa', 'SuuntoApp', 'suunto_health_poll');
+        await db.doc('suuntoAppAccessTokens/qa').update({ activeOAuthCredentialGeneration: 'GENERATION' });
+        await db.doc('suuntoAppAccessTokens/qa/tokens/account').update({ tokenCredentialGeneration: 'GENERATION' });
+        await db.doc('users/qa/meta/SuuntoApp').update({ connectionStateGeneration: 'CONNECTION' });
+        await ref.update({ suuntoHealthTokenCredentialGeneration: 'GENERATION', suuntoHealthRootOAuthCredentialGeneration: 'GENERATION', suuntoHealthConnectionStateGeneration: 'CONNECTION' });
+        await observeHealthSleepQueue(db, 0);
+        expect(sample('SuuntoApp')).toMatchObject({ dueSample: 1, unknownSample: 0 });
+        vi.clearAllMocks(); await ref.update({ suuntoHealthTokenCredentialGeneration: null });
+        await observeHealthSleepQueue(db, 0);
+        expect(sample('SuuntoApp')).toMatchObject({ dueSample: 0, excludedSample: 1 });
+    });
+    it('preserves legacy unfenced work on a matching generated connection and accepts null fences on a legacy connection', async () => {
+        await seed('unfenced', 'SuuntoApp', 'suunto_health_poll');
+        await db.doc('suuntoAppAccessTokens/unfenced').update({ activeOAuthCredentialGeneration: 'CURRENT' });
+        await db.doc('suuntoAppAccessTokens/unfenced/tokens/account').update({ tokenCredentialGeneration: 'CURRENT' });
+        const ref = await seed('null-fences', 'SuuntoApp', 'suunto_health_poll');
+        await ref.update({ suuntoHealthTokenCredentialGeneration: null, suuntoHealthRootOAuthCredentialGeneration: null, suuntoHealthConnectionStateGeneration: null });
+        await observeHealthSleepQueue(db, 0);
+        expect(sample('SuuntoApp')).toMatchObject({ dueSample: 2, unknownSample: 0 });
+    });
+    it.each([
+        ['sleepSyncQueue/qa', 'suuntoHealthTokenCredentialGeneration', ''],
+        ['sleepSyncQueue/qa', 'suuntoHealthRootOAuthCredentialGeneration', ' padded '],
+        ['sleepSyncQueue/qa', 'suuntoHealthConnectionStateGeneration', 'x'.repeat(129)],
+        ['suuntoAppAccessTokens/qa', 'activeOAuthCredentialGeneration', 123],
+        ['suuntoAppAccessTokens/qa/tokens/account', 'tokenCredentialGeneration', false],
+        ['users/qa/meta/SuuntoApp', 'connectionStateGeneration', {}],
+    ])('reports malformed %s %s as unknown without logging metadata', async (path, field, value) => {
+        await seed('qa', 'SuuntoApp', 'suunto_health_poll');
+        await db.doc(path).update({ [field]: value });
+        await observeHealthSleepQueue(db, 0);
+        expect(sample('SuuntoApp')).toMatchObject({ unknownSample: 1 });
+        expect(sample('SuuntoApp')).not.toHaveProperty('dueSample');
+        expect(JSON.stringify(vi.mocked(logger.info).mock.calls)).not.toContain('PRIVATE');
+    });
 });

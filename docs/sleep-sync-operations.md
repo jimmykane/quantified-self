@@ -391,8 +391,9 @@ this does not use the mail extension or create another notification channel.
   later by the ordinary worker. Completion is **not** historical-data coverage.
 - Native Cloud Tasks depth, HTTP attempts and dispatch-delay p95 are shown separately
   for `processSleepSyncTask` and `processGarminHealthBackfillTask`. Native transport
-  failures cannot identify a provider or exclude all expected contention; inspect the
-  worker outcome charts before interpreting them as processing incidents.
+  failures cannot identify a provider or exclude expected contention, so they are
+  diagnostic charts only, never independent paging conditions. Processing alerts use
+  the classified worker outcomes instead.
 
 ### Bounded observations and limits
 
@@ -401,14 +402,18 @@ heartbeats even when idle. There is no new scheduler, queue write or provider re
 One field-masked query reads at most 21 shared `sleepSyncQueue` rows ordered by
 `dateCreated`, handling the first 20. Each recognized candidate uses a read-only
 transaction for its unchanged queue snapshot, owner, deletion tombstone, connection
-metadata and token root, plus at most one identity-only token lookup. Credential and
+metadata and token root, plus at most one identity-filtered token metadata lookup. Opaque
+credential/connection generations are compared privately, never logged. Credential and
 provider payload fields are not selected. The existing processed/dateCreated index is
 reused; no new indexes or Rules are needed.
 
 Future polls/backfills, `dispatchAfterMs` rate/coalescing waits, ordinary retries,
 nonzero dispatch markers, active leases, deferred/reconciliation work, deleting or
 missing owners, disabled providers, rollout exclusions, disconnect/reconnect state,
-missing tokens and mismatched pinned COROS accounts are excluded. Replaced snapshots
+missing tokens, mismatched pinned provider accounts, superseded queue generation fences
+and token/root generation mismatches are excluded. Absent legacy queue fences remain
+unfenced; explicit null fences require absent current generations. Malformed generation
+metadata is unknown, not healthy zero. Replaced snapshots
 cannot borrow the old row's age. Garmin backfill is excluded while the dispatcher's
 existing native depth observation has tasks waiting/running: intentional single-task
 capacity is not a live-ingestion incident. Unknown depth marks sampled backfill unknown,
@@ -442,8 +447,8 @@ absence is a separate condition. Normal lack of new provider measurements never 
 | Repeated dispatch failures | Three attempts in 90m | Three attempts in 6h |
 | Repeated processing failures | Ten failures/retries in 15m | Three failures/retries in 6h |
 | New permanent failures | Three new DLQ commits in 30m | One new DLQ commit in 6h |
-| Repeated task HTTP failures | Twenty non-ok attempts in 15m | Three non-ok attempts in 6h |
-| Observations unavailable | Two unknown/unavailable samples per provider/lane in 90m, or its heartbeat absent for 2h | Same |
+| Observations unavailable | Two unknown/unavailable samples per provider/lane in 90m | Same |
+| Required observation heartbeat missing | Heartbeat absent for 2h per provider/lane | Same |
 
 Policies group provider/workload independently, open/close notifications on the selected
 existing channel, and auto-close after two hours without evidence. Absence needs an
