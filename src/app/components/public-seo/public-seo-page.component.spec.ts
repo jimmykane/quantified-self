@@ -163,7 +163,8 @@ describe('PublicSeoPageComponent', () => {
     expect(text).toContain('Week, Month, and Year views');
     expect(text).toContain('Duration-scaled activity circles');
     expect(text).toContain('independent from dashboard event-search filters');
-    expect(calendarFixture.debugElement.queryAll(By.directive(CompactRowComponent))).toHaveLength(7);
+    expect(text).toContain('See the active plan’s phases');
+    expect(calendarFixture.debugElement.queryAll(By.directive(CompactRowComponent))).toHaveLength(8);
     expect(calendarFixture.nativeElement.querySelectorAll('.faq-item')).toHaveLength(4);
     expect(hrefs).not.toContain('/calendar');
     expect(hrefs).toContain('/help#activity-calendar');
@@ -203,7 +204,8 @@ describe('PublicSeoPageComponent', () => {
     expect(text).not.toContain('Send to COROS');
     expect(text).not.toContain('Send to Wahoo');
     expect(text).not.toContain('Send to Suunto');
-    expect(plansFixture.nativeElement.querySelectorAll('.faq-item')).toHaveLength(6);
+    expect(text).toContain('Can I divide a training plan into phases?');
+    expect(plansFixture.nativeElement.querySelectorAll('.faq-item')).toHaveLength(7);
     expect(preview).toBeTruthy();
     expect(hrefs).toContain('/login');
     expect(hrefs).toContain('/help#training-plans');

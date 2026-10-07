@@ -651,6 +651,11 @@ owner identity and ready schedule state gate overlays; changing owners removes t
 bounded and touch-scrollable, while the dialog wraps at phone widths with the shared scrollbar skin. Overlay expansion
 stops at the inclusive end date without advancing beyond the supported date range.
 
+Public discovery covers phases in the homepage Training Plans copy and synthetic calendar preview, the Features hub,
+Training Plans and Activity Calendar pages, the Training Plans metadata and FAQ, and homepage/feature structured data.
+Public preview phases use the canonical plan codec and real plan calendar; they never load account data or save edits.
+These content and fixture changes add no MCP tools, fields, grants, mutation kinds or provider authority.
+
 MCP impact is **additive**: `get_training_plan_phases` deliberately projects only phases and plan/schedule revision and
 date metadata under `training-plans:read`. Its Firestore mask excludes neighboring private fields; existing plan reads
 keep their frozen outputs. `preview_training_plan_phases` needs the independent read plus `training-plans:write` grants

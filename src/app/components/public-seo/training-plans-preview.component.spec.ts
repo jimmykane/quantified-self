@@ -142,6 +142,8 @@ describe('TrainingPlansPreviewComponent', () => {
     ) as HTMLButtonElement;
     expect(emptyDate).toBeTruthy();
     expect(emptyDate.disabled).toBe(false);
+    expect(emptyDate.getAttribute('aria-label')).toContain('Phase: Build');
+    expect(emptyDate.closest('.calendar-day')?.querySelector('.calendar-phase')?.textContent).toBe('Build');
     emptyDate.click();
     fixture.detectChanges();
     await fixture.whenStable();

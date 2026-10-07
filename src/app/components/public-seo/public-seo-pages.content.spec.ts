@@ -203,7 +203,7 @@ describe('public-seo-pages.content', () => {
     const trainingPlans = PUBLIC_SEO_PAGES.trainingPlans;
     expect(trainingPlans.title).toBe('Training Plans for Running, Cycling & More');
     expect(trainingPlans.h1).toBe('Plan workouts for running, cycling, swimming and more');
-    expect(trainingPlans.description).toBe('Create free running, cycling, swimming, walking, hiking and rowing plans or standalone workouts. Schedule by date, separate from completed activities.');
+    expect(trainingPlans.description).toBe(TRAINING_PLANS_SEO_CONTENT.description);
     expect(trainingPlans.sections.some(section => section.preview === 'training-plans')).toBe(true);
     expect(trainingPlans.sections.some(section => section.copy.includes('one active at a time'))).toBe(true);
     expect(trainingPlans.sections.some(section => section.items.some(item => item.copy.includes('Trail Running')))).toBe(true);
