@@ -31,6 +31,32 @@ const MARKETING_SECRET_TARGETS = new Set([
   'dispatchMarketingCampaigns',
   'marketingUnsubscribe',
 ]);
+const ADMIN_TARGET_METADATA: Readonly<Record<string, {
+  ownerModule: string;
+  memoryMb: number;
+  timeoutSeconds: number | null;
+  trigger: 'callable' | 'schedule';
+  secrets?: readonly string[];
+  allowsMcp?: boolean;
+  allowsBigQuery?: boolean;
+}>> = {
+  listUsers: { ownerModule: 'users.handlers', memoryMb: 512, timeoutSeconds: 120, trigger: 'callable', allowsMcp: true },
+  getUserCount: { ownerModule: 'users.handlers', memoryMb: 512, timeoutSeconds: null, trigger: 'callable', allowsMcp: true },
+  getQueueStats: { ownerModule: 'queues.handlers', memoryMb: 512, timeoutSeconds: null, trigger: 'callable' },
+  retrySportsLibReparseHeavyJob: { ownerModule: 'queues.handlers', memoryMb: 256, timeoutSeconds: null, trigger: 'callable' },
+  setSportsLibReparseSettings: { ownerModule: 'reparse-settings.handlers', memoryMb: 256, timeoutSeconds: null, trigger: 'callable' },
+  getAdminDashboardHistory: { ownerModule: 'dashboard-history.handlers', memoryMb: 512, timeoutSeconds: null, trigger: 'callable' },
+  scheduleAdminDashboardSnapshot: { ownerModule: 'dashboard-history.handlers', memoryMb: 512, timeoutSeconds: 300, trigger: 'schedule' },
+  getSubscriptionHistoryTrend: { ownerModule: 'trends.handlers', memoryMb: 512, timeoutSeconds: null, trigger: 'callable' },
+  getUserGrowthTrend: { ownerModule: 'trends.handlers', memoryMb: 512, timeoutSeconds: null, trigger: 'callable' },
+  setMaintenanceMode: { ownerModule: 'maintenance.handlers', memoryMb: 256, timeoutSeconds: null, trigger: 'callable' },
+  getMaintenanceStatus: { ownerModule: 'maintenance.handlers', memoryMb: 512, timeoutSeconds: null, trigger: 'callable' },
+  impersonateUser: { ownerModule: 'impersonation.handlers', memoryMb: 256, timeoutSeconds: null, trigger: 'callable' },
+  stopImpersonation: { ownerModule: 'impersonation.handlers', memoryMb: 256, timeoutSeconds: null, trigger: 'callable' },
+  getFinancialStats: { ownerModule: 'financials.handlers', memoryMb: 512, timeoutSeconds: null, trigger: 'callable', secrets: ['STRIPE_SECRET_KEY'], allowsBigQuery: true },
+  previewAdminSubscriptionGift: { ownerModule: 'subscription-gifts.handlers', memoryMb: 512, timeoutSeconds: null, trigger: 'callable', secrets: ['STRIPE_ADMIN_BILLING_KEY'] },
+  grantAdminSubscriptionGift: { ownerModule: 'subscription-gifts.handlers', memoryMb: 512, timeoutSeconds: 60, trigger: 'callable', secrets: ['STRIPE_ADMIN_BILLING_KEY'] },
+};
 const CONNECTION_PROJECTION_TARGET_DOCUMENTS: Readonly<Record<string, string>> = {
   projectSuuntoConnectionOnTokenWrite: 'suuntoAppAccessTokens/{userID}/tokens/{tokenID}',
   projectGarminConnectionOnTokenWrite: 'garminAPITokens/{userID}/tokens/{tokenID}',
@@ -227,6 +253,7 @@ function probe(targetArgument: string): void {
 
   const normalizedModules = Object.keys(require.cache).map(path => path.replace(/\\/g, '/'));
   const marketingTarget = runtimeTarget != null && MARKETING_TARGETS.has(runtimeTarget);
+  const adminTarget = runtimeTarget ? ADMIN_TARGET_METADATA[runtimeTarget] : undefined;
   const assistantProposalTarget = runtimeTarget === 'applyAssistantTrainingProposal';
   const derivedRefreshTarget = runtimeTarget === 'ensureDerivedMetrics';
   const mcpTarget = runtimeTarget === 'mcpApi';
@@ -235,10 +262,19 @@ function probe(targetArgument: string): void {
     if (
       (path.includes('/node_modules/@genkit-ai/') && !assistantProposalTarget)
       || (path.includes('/node_modules/genkit/') && !assistantProposalTarget)
-      || path.includes('/node_modules/@google-cloud/bigquery/')
-      || (path.includes('/lib/functions/src/mcp/') && !assistantProposalTarget && !derivedRefreshTarget && !mcpTarget)
+      || (path.includes('/node_modules/@google-cloud/bigquery/') && !adminTarget?.allowsBigQuery)
+      || (path.includes('/lib/functions/src/mcp/')
+        && !assistantProposalTarget && !derivedRefreshTarget && !mcpTarget && !adminTarget?.allowsMcp)
     ) return true;
     if (!path.includes('/lib/functions/src/admin/')) return false;
+    if (adminTarget) {
+      return !(
+        path.endsWith('/lib/functions/src/admin/handlers/' + adminTarget.ownerModule + '.js')
+        || path.includes('/lib/functions/src/admin/shared/')
+        || (adminTarget.ownerModule === 'queues.handlers'
+          && path.endsWith('/lib/functions/src/admin/handlers/training-delivery-queue.stats.js'))
+      );
+    }
     return !marketingTarget || !(
       path.includes('/lib/functions/src/admin/marketing/')
       || path.endsWith('/lib/functions/src/admin/shared/subscription.constants.js')
@@ -357,11 +393,19 @@ async function check(): Promise<void> {
     ...PROVIDER_CONNECTION_AND_HEALTH_TARGETS,
     ...Object.keys(INGESTION_TARGET_METADATA),
     ...Object.keys(SCHEDULED_MAINTENANCE_TARGET_METADATA),
+    ...Object.keys(ADMIN_TARGET_METADATA),
     ...Object.keys(TRAINING_TARGET_METADATA),
   ]) {
     assert(OPTIMIZED_FUNCTION_TARGETS.includes(target), `${target} is missing its isolated loader.`);
   }
-  for (const target of [canaryTarget, ...PROVIDER_CONNECTION_AND_HEALTH_TARGETS, ...QUEUE_AND_CLEANUP_TARGETS]) {
+  for (const target of [
+    canaryTarget,
+    ...PROVIDER_CONNECTION_AND_HEALTH_TARGETS,
+    ...QUEUE_AND_CLEANUP_TARGETS,
+    'listUsers',
+    'scheduleAdminDashboardSnapshot',
+    'grantAdminSubscriptionGift',
+  ]) {
     for (const discoveryMode of ['control-api', 'manifest-output'] as const) {
       const guardedDiscovery = runProbe(target, discoveryMode);
       assert(
@@ -390,12 +434,18 @@ async function check(): Promise<void> {
     ...PROVIDER_CONNECTION_AND_HEALTH_TARGETS,
     ...Object.keys(INGESTION_TARGET_METADATA),
     ...Object.keys(SCHEDULED_MAINTENANCE_TARGET_METADATA),
+    ...Object.keys(ADMIN_TARGET_METADATA),
   ]) {
     checkSecretBindingsWithInheritedTarget(target);
   }
 
   const stack = await loadFirebaseManifest();
   const endpointNames = Object.keys(stack.endpoints).sort();
+  const adminExports = Object.keys(module.require(resolve(__dirname, '..', 'admin')) as Record<string, unknown>);
+  for (const target of adminExports) {
+    assert(OPTIMIZED_FUNCTION_TARGETS.includes(target), target + ' is missing its isolated admin loader.');
+    assert(stack.endpoints[target] !== undefined, target + ' is missing from Firebase discovery.');
+  }
   assert(
     arraysEqual(discovery.exports, endpointNames),
     'Firebase manifest endpoints differ from the complete discovery exports.',
@@ -605,6 +655,34 @@ async function check(): Promise<void> {
           `${target} task rate limits changed.`,
         );
       }
+    } else if (ADMIN_TARGET_METADATA[target]) {
+      const expected = ADMIN_TARGET_METADATA[target];
+      assert(endpoint.availableMemoryMb === expected.memoryMb, target + ' memory configuration changed.');
+      assert(JSON.stringify(endpoint.timeoutSeconds) === JSON.stringify(expected.timeoutSeconds),
+        target + ' timeout configuration changed.');
+      assert(endpoint.cpu === undefined
+        && JSON.stringify(endpoint.concurrency) === 'null'
+        && JSON.stringify(endpoint.minInstances) === 'null'
+        && JSON.stringify(endpoint.maxInstances) === 'null',
+      target + ' CPU or instance settings changed.');
+      assert(arraysEqual(secretKeys, [...(expected.secrets || [])].sort()), target + ' secret bindings changed.');
+      if (expected.trigger === 'schedule') {
+        assert(endpoint.scheduleTrigger?.schedule === '10 0 * * *'
+          && endpoint.scheduleTrigger.timeZone === 'UTC'
+          && endpoint.scheduleTrigger.retryConfig?.retryCount === 3
+          && endpoint.scheduleTrigger.retryConfig?.maxRetrySeconds === 21_600
+          && endpoint.scheduleTrigger.retryConfig?.minBackoffSeconds === 60
+          && endpoint.scheduleTrigger.retryConfig?.maxBackoffSeconds === 3_600,
+        target + ' schedule or retry configuration changed.');
+      } else {
+        assert(JSON.stringify(endpoint.callableTrigger) === '{}', target + ' callable trigger changed.');
+      }
+      assert(endpoint.httpsTrigger === undefined
+        && endpoint.eventTrigger === undefined
+        && endpoint.taskQueueTrigger === undefined
+        && (expected.trigger === 'callable' || endpoint.callableTrigger === undefined)
+        && (expected.trigger === 'schedule' || endpoint.scheduleTrigger === undefined),
+      target + ' trigger kind changed.');
     } else if (MARKETING_TARGETS.has(target)) {
       const expectedMemory = target === 'trackMarketingDelivery' || target === 'marketingUnsubscribe'
         ? 256 : 512;
