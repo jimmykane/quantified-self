@@ -2181,6 +2181,44 @@ describe('PlansWorkspaceComponent', () => {
     finish({ plans: [plan] });
     expect(await pending).toBe(false); expect(haptics.success).not.toHaveBeenCalled(); expect(haptics.error).not.toHaveBeenCalled();
   });
+  it.each([true, false])('does not revive a closed phase save after returning to the same owner (success=%s)', async success => {
+    const fixture = await renderPlans(); const plan = fixture.componentInstance.selectedPlan()!;
+    const close = vi.fn();
+    const dialog = vi.spyOn((fixture.componentInstance as unknown as { dialog: MatDialog }).dialog, 'open')
+      .mockReturnValue({ close, afterClosed: () => new Subject() } as never);
+    let finish!: (response: unknown) => void; let reject!: (error: Error) => void;
+    mutate.mockImplementationOnce(() => new Promise((resolve, rejectMutation) => { finish = resolve; reject = rejectMutation; }));
+    await fixture.componentInstance.editPlanPhases(plan);
+    const onSave = dialog.mock.calls[0][1]!.data.onSave;
+    const operation = { kind: 'set-plan-phases', planId: plan.id, phases: { version: 1, items: [] },
+      startLocalDate: plan.startLocalDate, endLocalDate: plan.endLocalDate, confirmPlanRangeExtension: false };
+    const pending = onSave(operation);
+    userSignal.set({ ...user, uid: 'different-owner' }); fixture.detectChanges();
+    userSignal.set(user); fixture.detectChanges();
+    if (success) finish({ plans: [plan] }); else reject(new Error('Offline'));
+    expect(await pending).toBe(false);
+    expect(close).toHaveBeenCalledOnce(); expect(haptics.success).not.toHaveBeenCalled(); expect(haptics.error).not.toHaveBeenCalled();
+    expect(snackBarOpen).not.toHaveBeenCalled();
+    expect(await onSave(operation)).toBe(false); expect(mutate).toHaveBeenCalledOnce();
+  });
+  it('does not retry a phase mutation when its editor closes during extension confirmation', async () => {
+    const fixture = await renderPlans(); const plan = fixture.componentInstance.selectedPlan()!;
+    const confirmation = new Subject<boolean>(); const close = vi.fn();
+    const dialog = vi.spyOn((fixture.componentInstance as unknown as { dialog: MatDialog }).dialog, 'open')
+      .mockReturnValueOnce({ close, afterClosed: () => new Subject() } as never)
+      .mockReturnValueOnce({ afterClosed: () => confirmation } as never);
+    mutate.mockRejectedValueOnce(new Error('Saving phases requires extending the plan range.'));
+    await fixture.componentInstance.editPlanPhases(plan);
+    const pending = dialog.mock.calls[0][1]!.data.onSave({ kind: 'set-plan-phases', planId: plan.id,
+      phases: { version: 1, items: [] }, startLocalDate: plan.startLocalDate, endLocalDate: plan.endLocalDate,
+      confirmPlanRangeExtension: false });
+    await Promise.resolve(); expect(dialog).toHaveBeenCalledTimes(2);
+    userSignal.set({ ...user, uid: 'different-owner' }); fixture.detectChanges();
+    userSignal.set(user); fixture.detectChanges();
+    confirmation.next(true); confirmation.complete();
+    expect(await pending).toBe(false); expect(mutate).toHaveBeenCalledOnce();
+    expect(haptics.success).not.toHaveBeenCalled(); expect(haptics.error).not.toHaveBeenCalled();
+  });
 
   it('revision-checks color changes, disables pending controls, and recolors from the live plan', async () => {
     const live = new BehaviorSubject(schedule);

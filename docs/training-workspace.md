@@ -635,7 +635,8 @@ requires explicit confirmation of that exact range; changing either date in the 
 cannot exclude any current non-deleted workout or resulting phase. One save writes one plan revision, leaving workout
 revisions, completion links, recipe identity and provider settings unchanged. The editor keeps failed drafts, locks
 controls during saving, uses captured revisions, and reuses an exact draft's mutation ID after an uncertain reply.
-It never rebases a stale draft automatically or saves after an owner switch.
+It never rebases a stale draft automatically or saves after an owner switch. Closing the editor permanently invalidates
+its callback, including late feedback or a pending range-confirmation retry if the user returns to the same account.
 
 Full plan before/after history and checkpoints preserve phases. Restore can add, edit or remove phases, including
 restoring legacy absence. `shift-plan` moves plan, phase and current workout calendar labels by the same integer day
@@ -647,7 +648,8 @@ Plans shows the selected plan's phases for active, paused and archived views. Th
 show only the active plan's phases, with names, boundary text, inclusive ranges and accessible labels. A phase-only
 day remains visible without creating a planned session, recorded activity or completed total. Private planning access,
 owner identity and ready schedule state gate overlays; changing owners removes the context. Calendar grids remain
-bounded and touch-scrollable, while the dialog wraps at phone widths with the shared scrollbar skin.
+bounded and touch-scrollable, while the dialog wraps at phone widths with the shared scrollbar skin. Overlay expansion
+stops at the inclusive end date without advancing beyond the supported date range.
 
 MCP impact is **additive**: `get_training_plan_phases` deliberately projects only phases and plan/schedule revision and
 date metadata under `training-plans:read`. Its Firestore mask excludes neighboring private fields; existing plan reads
@@ -660,7 +662,10 @@ context, never instructions, diagnoses, causal evidence or permission to adapt t
 
 The built-in Assistant reads phases only with its independent Training choice. Requested phase changes select the
 focused preview; the model cannot apply. The app renders all before/after details before Apply/Dismiss and rechecks
-conversation generation and current permission. Daily recommendations read the active plan's phase for the requested
+conversation generation and current permission. A phase mentioned as context for a workout does not select phase
+authoring. Phase edits and workout, plan-lifecycle or provider edits need separate reviews; a mixed request asks which
+change to review first. These internal routing and Calendar corrections do not change the public MCP contract, grants
+or provider authority. Daily recommendations read the active plan's phase for the requested
 calendar date using matching schedule/plan revisions; gaps, missing capabilities and stale evidence are explicit.
 A phase name alone cannot prescribe intensity or alter readiness. Bundled Training, Activity and cross-domain guidance
 discovers the live capability and routes changes through the separate approval workflow.

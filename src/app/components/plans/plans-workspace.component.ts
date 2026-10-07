@@ -912,17 +912,18 @@ export class PlansWorkspaceComponent {
     const expectedRevisions = this.expectedRevisions({ planIds: [plan.id],
       planRevisionOverrides: new Map([[plan.id, plan.revision]]) });
     const mutationIds = new Map<string, string>();
-    const reference = this.dialog.open(PlanPhasesDialogComponent, { width: '640px', maxWidth: 'calc(100vw - 24px)',
+    const reference: MatDialogRef<PlanPhasesDialogComponent> = this.dialog.open(PlanPhasesDialogComponent, { width: '640px', maxWidth: 'calc(100vw - 24px)',
       data: { plan, currentWorkoutDates: this.schedule().workouts.filter(workout => workout.planId === plan.id
         && workout.lifecycle !== 'deleted').map(workout => workout.localDate),
         onSave: async (operation: SetTrainingPlanPhasesMutationV1): Promise<boolean> => {
-          if (this.destroyRef.destroyed || this.currentUser()?.uid !== uid || !this.browsing() || this.busyAction()) return false;
+          const isCurrent = () => !this.destroyRef.destroyed && this.currentUser()?.uid === uid && this.phaseDialog === reference;
+          if (!isCurrent() || !this.browsing() || this.busyAction()) return false;
           const key = JSON.stringify(operation);
           const mutationId = mutationIds.get(key) ?? this.plansService.createMutationId('set-plan-phases');
           mutationIds.set(key, mutationId);
           const response = await this.runMutation({ mutationId,
-            expectedRevisions, operation }, `phases-${plan.id}`, () => !this.destroyRef.destroyed && this.currentUser()?.uid === uid);
-          if (!response || this.destroyRef.destroyed || this.currentUser()?.uid !== uid) return false;
+            expectedRevisions, operation }, `phases-${plan.id}`, isCurrent);
+          if (!response || !isCurrent()) return false;
           this.snackBar.open('Plan phases updated.', 'Dismiss', { duration: 3000 });
           return true;
         } } });
@@ -2119,7 +2120,7 @@ export class PlansWorkspaceComponent {
       const message = errorMessage(error);
       if (/requires extending/i.test(message) && 'confirmPlanRangeExtension' in request.operation) {
         const confirmed = await this.confirm('Extend plan dates?', message, 'Extend and continue');
-        if (confirmed) {
+        if (confirmed && feedbackAllowed()) {
           try {
             const response = await this.plansService.mutate({
               ...request,

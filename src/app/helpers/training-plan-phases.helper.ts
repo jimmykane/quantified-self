@@ -24,6 +24,7 @@ export function buildCalendarPlanPhases(plans: readonly TrainingPlanV1[], active
         : date === phase.startLocalDate ? 'Starts' : date === phase.endLocalDate ? 'Ends' : null;
       result[date] = { phase, planName: plan.name, color, boundary,
         ariaLabel: `Plan phase: ${phase.name}. ${phase.startLocalDate} through ${phase.endLocalDate}.${boundary ? ` ${boundary} today.` : ''}` };
+      if (date === phase.endLocalDate) break;
     }
   }
   return result;

@@ -22,4 +22,11 @@ describe('Training phase presentation', () => {
     expect(buildCalendarPlanPhases([{ ...plan, phases: undefined }], plan.id)).toEqual({});
     expect(trainingPlanPhaseOnDate({ ...plan, lifecycle: 'paused' }, '2026-10-25')?.id).toBe('base');
   });
+  it.each(['9999-12-30', '9999-12-31'])('stops at the last supported date for a phase starting %s', startLocalDate => {
+    const final = { ...plan, startLocalDate, endLocalDate: '9999-12-31', phases: { version: 1 as const,
+      items: [{ id: 'last', name: 'Last', startLocalDate, endLocalDate: '9999-12-31' }] } };
+    const dates = buildCalendarPlanPhases([final], final.id);
+    expect(Object.keys(dates)).toEqual(startLocalDate === '9999-12-31' ? ['9999-12-31'] : ['9999-12-30', '9999-12-31']);
+    expect(dates['9999-12-31'].boundary).toBe(startLocalDate === '9999-12-31' ? 'Starts and ends' : 'Ends');
+  });
 });
