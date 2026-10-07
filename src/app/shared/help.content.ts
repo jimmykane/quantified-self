@@ -1275,7 +1275,7 @@ Suunto, COROS, and Wahoo history imports are queued jobs. Large ranges can take 
 
 ## Settings you can change yourself
 
-Settings groups **Preferences** and **Privacy & account** into two columns on desktop and a single list on phones.
+Settings shows **Preferences** followed by **Privacy & account** in one column on desktop and phones.
 Select a section to expand its controls; select it again to collapse it. Opening another section keeps your unsaved
 edits. **Save changes** applies your edits across all sections. Privacy is immediately before Account.
 

@@ -476,11 +476,12 @@ describe('UserSettingsComponent', () => {
         expect(mockRouter.navigate).not.toHaveBeenCalled();
     });
 
-    it('lays out the overview in two columns and stacks it on phones with an inline save action', () => {
+    it('lays out the overview in one column at every width with an inline save action', () => {
         const styles = readFileSync(resolve(process.cwd(), 'src/app/components/user-settings/user-settings.component.scss'), 'utf8');
+        const overviewColumns = Array.from(styles.matchAll(/\.settings-overview\s*\{([^}]*)\}/g))
+            .flatMap(rule => Array.from(rule[1].matchAll(/grid-template-columns:\s*([^;]+);/g), match => match[1]));
         expect(styles).toContain('max-width: 1120px');
-        expect(styles).toContain('grid-template-columns: repeat(2, minmax(0, 1fr))');
-        expect(styles).toContain('.settings-overview {\n        grid-template-columns: 1fr');
+        expect(overviewColumns).toEqual(['minmax(0, 1fr)']);
         expect(styles).not.toContain('position: fixed');
     });
 

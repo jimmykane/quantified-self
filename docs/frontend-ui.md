@@ -51,8 +51,8 @@ geometry around responsive breakpoints as well as ordinary desktop/phone screens
 Authenticated product workspaces, except Settings, use the shared `qs-workspace-page` shell from `src/styles.scss`. It
 owns the 1440 px maximum page width, border-box sizing, and common responsive inline gutters. Apply it on the route root
 alongside the route-specific class; do not add another outer width, margin, or padding rule in the component stylesheet.
-Settings uses a centered 1120 px overview, with **Preferences** and **Privacy & account** in two columns above
-768 px and one continuous list on phones. Each section uses a surface-free Material button disclosure with
+Settings uses a centered 1120 px overview, with **Preferences** followed by **Privacy & account** in one column
+on desktop and phones. Each section uses a surface-free Material button disclosure with
 `aria-expanded` and `aria-controls`; all form panels remain mounted while collapsed. At most one section is open.
 An absent or invalid `section` query parameter shows the collapsed overview, and valid section links open their
 panel; the legacy `delete-account` link still opens Account. Closing a panel removes the section parameter.
