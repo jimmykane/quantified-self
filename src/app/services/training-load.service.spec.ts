@@ -140,6 +140,21 @@ describe('TrainingLoadService', () => {
     await service.save('u', 'e', 4, { excluded: false });
     expect(update).not.toHaveBeenCalled(); expect(set).not.toHaveBeenCalled();
   });
+  it.each([false, true])('ignores control field order when saving unchanged preferences (copy future=%s)', async future => {
+    records['users/u/events/e/metaData/trainingLoad'].controls.leg = {
+      included: true, method: 'HR', override: 0,
+    };
+    await service.save('u', 'e', 4, { key: 'leg', control: { method: 'HR', included: true, override: 0 } },
+      future ? { family: 'walking-hiking', expectedRevision: 0, policy: { method: 'HR', included: true } } : undefined);
+    // A timestamp-only load write would leave impact waiting for a rebuild that
+    // correctly ignores identical controls. Future policy saves are independent.
+    expect(update).not.toHaveBeenCalled();
+    expect(set).toHaveBeenCalledTimes(future ? 2 : 0);
+    for (const [, policy] of set.mock.calls) {
+      expect(policy).toMatchObject({ revision: 1, method: 'HR', included: true, effectiveAt: 'SERVER_TIME' });
+      expect(policy).not.toHaveProperty('override');
+    }
+  });
   it('refuses stale revisions and deleted workouts', async () => {
     await expect(service.save('u', 'e', 3, { excluded: true })).rejects.toThrow('changed elsewhere');
     delete records['users/u/events/e'];
