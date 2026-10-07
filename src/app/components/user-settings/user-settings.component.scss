@@ -140,20 +140,20 @@
 }
 
 .settings-content {
-    max-width: 1120px;
+    max-width: 800px;
     margin: 0 auto;
     padding: 32px 40px;
 }
 
 .settings-page-header {
-    margin: 0 0 28px;
+    margin: 0 0 20px;
 }
 
 .settings-overview {
     display: grid;
     grid-template-columns: minmax(0, 1fr);
     align-items: start;
-    gap: 36px;
+    gap: 24px;
 }
 
 .settings-group {
@@ -265,29 +265,39 @@
 }
 
 .settings-theme-control {
-    display: grid;
-    grid-template-columns: minmax(0, 1fr) minmax(180px, 240px);
+    display: flex;
     align-items: center;
+    justify-content: space-between;
     gap: 16px;
+    padding-bottom: 8px;
 
-    h4 {
-        margin: 0 0 4px;
-        color: var(--mat-sys-on-surface);
-        font-size: 1rem;
-        font-weight: 600;
-        line-height: 1.25;
+    mat-button-toggle-group {
+        max-width: 100%;
     }
+}
 
-    p {
+.settings-theme-label {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+
+    h2 {
         margin: 0;
-        color: var(--mat-sys-on-surface-variant);
-        font-size: 0.85rem;
-        line-height: 1.4;
+        font: var(--mat-sys-title-medium);
     }
 
-    mat-form-field {
-        width: 100%;
+    mat-icon {
+        color: var(--mat-sys-on-surface-variant);
     }
+}
+
+.settings-customize-units {
+    align-self: flex-start;
+}
+
+.settings-custom-units:not([hidden]) {
+    display: grid;
+    gap: 16px;
 }
 
 .settings-option-block {
@@ -414,6 +424,10 @@
 .settings-account-body {
     display: grid;
     gap: 20px;
+
+    .settings-panel-body {
+        padding-bottom: 0;
+    }
 }
 
 .danger-title {
@@ -466,15 +480,23 @@
     align-items: center;
     justify-content: flex-end;
     gap: 16px;
-    margin-top: 28px;
-    padding-top: 16px;
+    position: sticky;
+    bottom: 0;
+    z-index: 21;
+    margin-top: 24px;
+    padding-block: 12px max(12px, env(safe-area-inset-bottom));
     border-top: 1px solid var(--mat-sys-outline-variant);
+    background: var(--qs-overlay-surface, var(--mat-sys-surface));
 }
 
 .settings-save-status {
     flex: 1;
     color: var(--mat-sys-on-surface-variant);
     font: var(--mat-sys-body-small);
+}
+
+.settings-save-status--error {
+    color: var(--mat-sys-error);
 }
 
 .settings-save-button-content {
@@ -492,7 +514,6 @@
 }
 
 @container (max-width: 539px) {
-    .settings-theme-control,
     .settings-toggle-grid,
     .settings-slider-grid {
         grid-template-columns: 1fr;
@@ -525,10 +546,6 @@
     .settings-section-trigger {
         min-height: 48px;
         padding-block: 10px;
-    }
-
-    .settings-section-description {
-        display: none;
     }
 
     .user-profile-header {
@@ -569,8 +586,8 @@
     }
 
     .settings-theme-control {
-        grid-template-columns: 1fr;
-        align-items: stretch;
+        flex-direction: column;
+        align-items: flex-start;
     }
 
     .settings-option-block {
@@ -584,10 +601,7 @@
     }
 
     .settings-save-status {
-        flex-basis: 100%;
-    }
-
-    .settings-save-bar button {
-        width: 100%;
+        min-width: 0;
+        flex-basis: 120px;
     }
 }

@@ -1,4 +1,4 @@
-import { Component, Input, OnChanges, OnDestroy, OnInit, inject } from '@angular/core';
+import { Component, Input, OnChanges, OnDestroy, OnInit, inject, signal } from '@angular/core';
 import { Clipboard } from '@angular/cdk/clipboard';
 import { ActivatedRoute, Router } from '@angular/router';
 import { Subscription } from 'rxjs';
@@ -56,7 +56,7 @@ import {
   normalizeAppFormatLocalePreference,
 } from '../../shared/adapters/app-locale';
 
-type SettingsSectionId = 'profile' | 'app' | 'privacy' | 'dashboard' | 'map' | 'charts' | 'units' | 'account';
+type SettingsSectionId = 'privacy' | 'dashboard' | 'map' | 'charts' | 'units' | 'account';
 
 interface SettingsSectionOption {
   id: SettingsSectionId;
@@ -82,30 +82,24 @@ export class UserSettingsComponent implements OnChanges, OnDestroy, OnInit {
   public isDeleting: boolean;
   public consentToDelete: boolean;
   public errorDeleting;
-  public errorSaving;
+  public errorSaving: string | null = null;
   public activeSection: SettingsSectionId | null = null;
+  public readonly customUnitsExpanded = signal(false);
+  public readonly sectionSummaries = signal<Partial<Record<SettingsSectionId, string>>>({});
   public readonly sectionOrder: SettingsSectionId[] = [
-    'profile',
-    'app',
-    'dashboard',
-    'map',
-    'charts',
     'units',
+    'dashboard',
+    'charts',
+    'map',
     'privacy',
     'account',
   ];
   public readonly settingsSectionOptions: SettingsSectionOption[] = [
     {
-      id: 'profile',
-      label: 'Profile',
-      description: 'Name and chart watermark',
-      icon: 'manage_accounts',
-    },
-    {
-      id: 'app',
-      label: 'Appearance',
-      description: 'Color theme',
-      icon: 'tune',
+      id: 'units',
+      label: 'Units & formatting',
+      description: 'Measurement units, regional format, and week start',
+      icon: 'straighten',
     },
     {
       id: 'dashboard',
@@ -114,39 +108,33 @@ export class UserSettingsComponent implements OnChanges, OnDestroy, OnInit {
       icon: 'dashboard_customize',
     },
     {
-      id: 'map',
-      label: 'Maps',
-      description: 'Route rendering defaults',
-      icon: 'map',
-    },
-    {
       id: 'charts',
       label: 'Charts',
       description: 'Metrics and chart defaults',
       icon: 'monitoring',
     },
     {
-      id: 'units',
-      label: 'Units',
-      description: 'Distance, pace, speed, and weight',
-      icon: 'straighten',
+      id: 'map',
+      label: 'Maps',
+      description: 'Route rendering defaults',
+      icon: 'map',
     },
     {
       id: 'privacy',
-      label: 'Privacy',
+      label: 'Privacy & emails',
       description: 'Usage analytics and marketing emails',
       icon: 'privacy_tip',
     },
     {
       id: 'account',
       label: 'Account',
-      description: 'Account actions and access',
+      description: 'Profile details, plan, and account deletion',
       icon: 'account_circle',
     },
   ];
   public readonly settingsGroups = [
-    { id: 'preferences', label: 'Preferences', sections: this.settingsSectionOptions.slice(0, 6) },
-    { id: 'privacy-account', label: 'Privacy & account', sections: this.settingsSectionOptions.slice(6) },
+    { id: 'preferences', label: 'Preferences', sections: this.settingsSectionOptions.slice(0, 4) },
+    { id: 'privacy-account', label: 'Privacy & account', sections: this.settingsSectionOptions.slice(4) },
   ];
   public readonly brandTextMaxLength = 60;
 
@@ -215,6 +203,7 @@ export class UserSettingsComponent implements OnChanges, OnDestroy, OnInit {
   public isAdminUser = false;
   private initializedUserUID: string | null = null;
   private routeSubscription?: Subscription;
+  private formSubscription?: Subscription;
   private readonly controlLabels: Record<string, string> = {
     displayName: 'Name',
     appTheme: 'Interface Theme',
@@ -273,6 +262,7 @@ export class UserSettingsComponent implements OnChanges, OnDestroy, OnInit {
 
   ngOnDestroy(): void {
     this.routeSubscription?.unsubscribe();
+    this.formSubscription?.unsubscribe();
   }
 
 
@@ -287,10 +277,12 @@ export class UserSettingsComponent implements OnChanges, OnDestroy, OnInit {
         .then(isAdmin => {
           this.isAdminUser = isAdmin;
           this.syncBrandTextControlState();
+          this.refreshSectionSummaries();
         })
         .catch((error) => {
           this.isAdminUser = false;
           this.syncBrandTextControlState();
+          this.refreshSectionSummaries();
           this.logger.error('[UserSettingsComponent] Failed to resolve admin status', error);
         });
     }
@@ -313,6 +305,7 @@ export class UserSettingsComponent implements OnChanges, OnDestroy, OnInit {
         this.lastDistinctLinePatternsValue = savedValue;
       }
       this.syncBrandTextControlState();
+      this.refreshSectionSummaries();
       return;
     }
 
@@ -329,6 +322,7 @@ export class UserSettingsComponent implements OnChanges, OnDestroy, OnInit {
       ? settings.appSettings.themePreference
       : (isAppThemePreference(settings.appSettings.theme) ? settings.appSettings.theme : AppThemes.Normal);
 
+    this.formSubscription?.unsubscribe();
     this.userSettingsFormGroup = new UntypedFormGroup({
       displayName: new UntypedFormControl(this.user.displayName, []),
       dataTypesToUse: new UntypedFormControl(dataTypesToUse, [
@@ -416,6 +410,11 @@ export class UserSettingsComponent implements OnChanges, OnDestroy, OnInit {
     this.initializedUserUID = this.user.uid;
     this.selectedUnitPreset = this.resolveUnitPresetFromUnitSettings(settings.unitSettings);
     this.syncBrandTextControlState();
+    this.refreshSectionSummaries();
+    this.formSubscription = this.userSettingsFormGroup.valueChanges.subscribe(() => {
+      if (!this.isSaving) this.errorSaving = null;
+      this.refreshSectionSummaries();
+    });
   }
 
   hasError(field?: string) {
@@ -475,13 +474,16 @@ export class UserSettingsComponent implements OnChanges, OnDestroy, OnInit {
 
     if (this.clipboard.copy(userId)) {
       this.snackBar.open('User ID copied.', undefined, { duration: 2000 });
+      this.hapticsService.success();
       return;
     }
 
     this.snackBar.open('Could not copy the user ID. Please copy it manually.', undefined, { duration: 4000 });
+    this.hapticsService.error();
   }
 
   onUnitPresetChange(preset: UnitSetupPreset): void {
+    if (this.isSaving || this.isDeleting) return;
     this.selectedUnitPreset = preset;
     const presetSettings = buildUnitSettingsForUnitSetupPreset(preset);
 
@@ -493,6 +495,18 @@ export class UserSettingsComponent implements OnChanges, OnDestroy, OnInit {
       verticalSpeedUnitsToUse: presetSettings.verticalSpeedUnits,
     });
     this.userSettingsFormGroup.markAsDirty();
+    this.hapticsService.selection();
+  }
+
+  toggleCustomUnits(): void {
+    if (this.isSaving || this.isDeleting) return;
+    this.customUnitsExpanded.update(expanded => !expanded);
+    this.hapticsService.selection();
+  }
+
+  onPreferenceChange(): void {
+    if (this.isSaving || this.isDeleting) return;
+    this.hapticsService.selection();
   }
 
   onDistinctLinePatternsChange(enabled: boolean): void {
@@ -518,7 +532,7 @@ export class UserSettingsComponent implements OnChanges, OnDestroy, OnInit {
 
   async onSubmit(event) {
     event.preventDefault();
-    if (this.isSaving || this.isDeleting) return;
+    if (this.isSaving || this.isDeleting || !this.userSettingsFormGroup.dirty) return;
     if (!this.userSettingsFormGroup.valid) {
       const invalidControls = this.invalidControlDiagnostics;
       this.logger.warn('[UserSettingsComponent] Save blocked by invalid form controls', {
@@ -530,6 +544,7 @@ export class UserSettingsComponent implements OnChanges, OnDestroy, OnInit {
     }
 
     this.isSaving = true;
+    this.errorSaving = null;
     const linePatternsControl = this.userSettingsFormGroup.get('useDistinctComparisonLinePatterns');
     const lockedControls = [linePatternsControl,
       this.userSettingsFormGroup.get('acceptedTrackingPolicy'),
@@ -667,13 +682,14 @@ export class UserSettingsComponent implements OnChanges, OnDestroy, OnInit {
       }
 
       this.snackBar.open(
-        localeSyncResult === 'updated' ? 'Settings saved. Applying regional format…' : 'User updated',
+        localeSyncResult === 'updated' ? 'Settings saved. Applying regional format…' : 'Settings saved.',
         undefined,
         { duration: 2000 },
       );
       this.hapticsService.success();
       if (localeSyncResult === 'updated') this.localeService.reload();
     } catch (e) {
+      this.errorSaving = 'Changes could not be saved. Try again.';
       this.logger.error('[UserSettingsComponent] onSubmit FAILED. Error details:', e);
       this.snackBar.open('Could not update user', undefined, {
         duration: 2000,
@@ -719,7 +735,7 @@ export class UserSettingsComponent implements OnChanges, OnDestroy, OnInit {
   }
 
   private applySectionParam(section: unknown): void {
-    if (section === 'delete-account') {
+    if (section === 'delete-account' || section === 'profile') {
       this.activeSection = 'account';
       return;
     }
@@ -733,7 +749,26 @@ export class UserSettingsComponent implements OnChanges, OnDestroy, OnInit {
   }
 
   private isSettingsSection(section: unknown): section is SettingsSectionId {
-    return typeof section === 'string' && this.sectionOrder.includes(section as any);
+    return typeof section === 'string' && this.sectionOrder.includes(section as SettingsSectionId);
+  }
+
+  private refreshSectionSummaries(): void {
+    if (!this.userSettingsFormGroup) return;
+    const value = this.userSettingsFormGroup.getRawValue();
+    const distance = this.distanceUnitOptions.find(option => option.value === value.distanceUnitsToUse)?.label;
+    const weight = this.weightUnitOptions.find(option => option.value === value.weightUnitsToUse)?.label;
+    const metrics = Array.isArray(value.dataTypesToUse) ? value.dataTypesToUse.length : 0;
+    const map = Object.entries(this.mapTypes).find(([, type]) => type === value.mapType)?.[0]?.replace(/([a-z])([A-Z])/g, '$1 $2');
+    const plan = this.isProUser ? 'Pro plan' : this.isBasicUser ? 'Basic plan' : 'Free plan';
+    this.selectedUnitPreset = this.resolveUnitPresetFromUnitSettings({ distanceUnits: value.distanceUnitsToUse } as UserUnitSettingsInterface);
+    this.sectionSummaries.set({
+      units: [distance, weight, this.selectedFormatLocaleLabel].filter(Boolean).join(' · '),
+      dashboard: `${value.eventsPerPage} activities per page`,
+      charts: `${metrics} default ${metrics === 1 ? 'metric' : 'metrics'} · ${value.xAxisType} axis`,
+      map: [map, value.showMapArrows ? 'Direction arrows on' : 'Direction arrows off'].filter(Boolean).join(' · '),
+      privacy: `Analytics ${value.acceptedTrackingPolicy === true ? 'on' : 'off'} · Marketing ${value.acceptedMarketingPolicy === true ? 'on' : 'off'}`,
+      account: [value.displayName?.trim() || this.user.email, plan].filter(Boolean).join(' · '),
+    });
   }
 
   private shouldCompleteUnitSetupFromForm(settings: AppUserSettingsInterface): boolean {

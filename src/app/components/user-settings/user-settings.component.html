@@ -2,8 +2,8 @@
   <main class="settings-content" aria-labelledby="settings-page-title">
     <app-loading-overlay
       [isLoading]="isSaving || isDeleting"
-      [hasError]="errorSaving || errorDeleting"
-      [errorMessage]="errorSaving || errorDeleting"
+      [hasError]="!!errorDeleting"
+      [errorMessage]="errorDeleting"
       [showSkeleton]="false"
       height="auto">
       <form [formGroup]="userSettingsFormGroup" (submit)="onSubmit($event)" class="qs-form">
@@ -36,11 +36,23 @@
         <ng-container *ngTemplateOutlet="settingsValidationInfo"></ng-container>
 
         @let sectionTemplates = {
-          profile: profileSettings, app: appearanceSettings, dashboard: dashboardSettings,
+          dashboard: dashboardSettings,
           map: mapSettings, charts: chartSettings, units: unitSettings,
           privacy: privacySettings, account: accountSettings
         };
         <div class="settings-overview" [attr.inert]="isSaving || isDeleting ? '' : null">
+          <section class="settings-theme-control" aria-labelledby="settings-theme-title" id="settings-theme">
+            <div class="settings-theme-label">
+              <mat-icon aria-hidden="true">palette</mat-icon>
+              <h2 id="settings-theme-title">Theme</h2>
+            </div>
+            <mat-button-toggle-group formControlName="appTheme" appearance="standard"
+              hideSingleSelectionIndicator aria-label="Theme" (change)="onPreferenceChange()">
+              @for (theme of appThemeOptions; track theme.value) {
+              <mat-button-toggle [value]="theme.value">{{ theme.label }}</mat-button-toggle>
+              }
+            </mat-button-toggle-group>
+          </section>
           @for (group of settingsGroups; track group.id) {
           <section class="settings-group" [attr.aria-labelledby]="'settings-group-' + group.id">
             <h2 class="settings-group-title" [id]="'settings-group-' + group.id">{{ group.label }}</h2>
@@ -58,7 +70,7 @@
                     <mat-icon aria-hidden="true">{{ section.icon }}</mat-icon>
                     <span class="settings-section-copy">
                       <span class="settings-section-label">{{ section.label }}</span>
-                      <span class="settings-section-description">{{ section.description }}</span>
+                      <span class="settings-section-description">{{ sectionSummaries()[section.id] || section.description }}</span>
                     </span>
                     <mat-icon class="settings-section-chevron" aria-hidden="true">{{ activeSection === section.id ? 'expand_less' : 'expand_more' }}</mat-icon>
                   </span>
@@ -76,11 +88,14 @@
           }
         </div>
 
-        @if (activeSection !== 'account' || userSettingsFormGroup.dirty) {
+        @if (userSettingsFormGroup.dirty || isSaving) {
         <footer class="settings-save-bar">
-          <span class="settings-save-status" role="status" aria-live="polite">
+          <span class="settings-save-status" [class.settings-save-status--error]="!!errorSaving"
+            [attr.role]="errorSaving ? 'alert' : 'status'" [attr.aria-live]="errorSaving ? 'assertive' : 'polite'">
             @if (isSaving) { Saving changes… }
-            @else if (userSettingsFormGroup.dirty) { Unsaved changes }
+            @else if (errorSaving) { {{ errorSaving }} }
+            @else if (userSettingsFormGroup.invalid) { Check the highlighted settings }
+            @else { Unsaved changes }
           </span>
           <button mat-flat-button type="submit" class="qs-mat-primary"
             [disabled]="isSaving || isDeleting || !userSettingsFormGroup.dirty || userSettingsFormGroup.invalid">
@@ -160,6 +175,137 @@
               <mat-hint>The name shown on your profile.</mat-hint>
             </mat-form-field>
 
+          </div>
+        </ng-template>
+
+
+        <ng-template #dashboardSettings>
+          <div class="settings-panel-body">
+
+            <mat-form-field appearance="outline" subscriptSizing="dynamic">
+              <mat-label>Activities per Page</mat-label>
+              <mat-select formControlName="eventsPerPage" (selectionChange)="onPreferenceChange()">
+                @for (option of eventsPerPage; track option) {
+                <mat-option [value]="option">{{ option }}</mat-option>
+                }
+              </mat-select>
+              <mat-hint>Adjust how many records are loaded at once for better performance.</mat-hint>
+            </mat-form-field>
+
+            <mat-form-field appearance="outline" subscriptSizing="dynamic">
+              <mat-label>Exclude Ascent for Sport Types</mat-label>
+              <mat-select formControlName="removeAscentForActivitiesSummaries" multiple (selectionChange)="onPreferenceChange()">
+                @for (type of activityTypes; track type) {
+                <mat-option [value]="type" [disabled]="isMandatoryExclusion(type)">{{ type }}</mat-option>
+                }
+              </mat-select>
+              <mat-hint>Ascent data will be hidden for these activities in summaries.</mat-hint>
+            </mat-form-field>
+
+            <mat-form-field appearance="outline" subscriptSizing="dynamic">
+              <mat-label>Exclude Descent for Sport Types</mat-label>
+              <mat-select formControlName="removeDescentForActivitiesSummaries" multiple (selectionChange)="onPreferenceChange()">
+                @for (type of activityTypes; track type) {
+                <mat-option [value]="type" [disabled]="isMandatoryDescentExclusion(type)">{{ type }}</mat-option>
+                }
+              </mat-select>
+              <mat-hint>Descent data will be hidden for these activities in summaries.</mat-hint>
+            </mat-form-field>
+          </div>
+        </ng-template>
+
+        <ng-template #mapSettings>
+          <div class="settings-panel-body">
+            <mat-form-field appearance="outline" subscriptSizing="dynamic">
+              <mat-label>Map Layer (Default)</mat-label>
+              <mat-select formControlName="mapType" (selectionChange)="onPreferenceChange()">
+                @for (type of mapTypes | keyvalue; track type) {
+                <mat-option [value]="type.value">{{ type.key }}</mat-option>
+                }
+              </mat-select>
+            </mat-form-field>
+
+            <mat-form-field appearance="outline" subscriptSizing="dynamic">
+              <mat-label>Lap Markers</mat-label>
+              <mat-select formControlName="mapLapTypes" multiple (selectionChange)="onPreferenceChange()">
+                @for (lapType of lapTypes; track lapType) {
+                <mat-option [value]="lapType">{{ lapType }}</mat-option>
+                }
+              </mat-select>
+              <mat-hint>Select which markers to display on your activity routes.</mat-hint>
+            </mat-form-field>
+
+            <div class="settings-toggle-list">
+              <mat-slide-toggle formControlName="showMapLaps" (change)="onPreferenceChange()">Enable Auto-Laps</mat-slide-toggle>
+              <mat-slide-toggle formControlName="showMapArrows" (change)="onPreferenceChange()">Show Directional Arrows</mat-slide-toggle>
+            </div>
+
+            <div class="settings-slider-block">
+              <p>Route Line Width</p>
+              <mat-slider [max]="10" [min]="0.5" [step]="0.5" discrete>
+                <input matSliderThumb formControlName="mapStrokeWidth" (valueChange)="onPreferenceChange()">
+              </mat-slider>
+            </div>
+          </div>
+        </ng-template>
+
+        <ng-template #chartSettings>
+          <div class="settings-panel-body">
+            <mat-form-field appearance="outline" subscriptSizing="dynamic">
+              <mat-label>Data Scaling (X-Axis)</mat-label>
+              <mat-select formControlName="xAxisType" (selectionChange)="onPreferenceChange()">
+                @for (x of xAxisTypes | keyvalue; track x) {
+                <mat-option [value]="x.value">{{ x.key }}</mat-option>
+                }
+              </mat-select>
+            </mat-form-field>
+
+            <mat-form-field appearance="outline" subscriptSizing="dynamic">
+              <mat-label>Default chart metrics</mat-label>
+              <mat-select formControlName="dataTypesToUse" multiple (selectionChange)="onPreferenceChange()">
+                @for (group of dataGroups; track group.name) {
+                <mat-optgroup [label]="group.name">
+                  @for (data of group.data; track $index) {
+                  <mat-option [value]="data">{{ data }}</mat-option>
+                  }
+                </mat-optgroup>
+                }
+              </mat-select>
+              <mat-hint>
+                These metrics are shown by default when present. Some metrics are derived or unit-based.
+              </mat-hint>
+            </mat-form-field>
+
+            <div class="settings-toggle-grid">
+              <mat-slide-toggle formControlName="showAllData"
+                matTooltip="Adds every chartable metric recorded by the activity to Visible charts without showing it automatically." (change)="onPreferenceChange()">
+                Include all recorded metrics
+              </mat-slide-toggle>
+              <mat-slide-toggle formControlName="chartCursorBehaviour" (change)="onPreferenceChange()">Selection Tool by Default</mat-slide-toggle>
+              <mat-slide-toggle formControlName="useAnimations" (change)="onPreferenceChange()">Enable Animations</mat-slide-toggle>
+            </div>
+
+            <div class="settings-slider-grid">
+              <div class="settings-slider-block">
+                <p>Line Width</p>
+                <mat-slider [max]="10" [min]="0.5" [step]="0.5" discrete>
+                  <input matSliderThumb formControlName="chartStrokeWidth" (valueChange)="onPreferenceChange()">
+                </mat-slider>
+                <mat-slide-toggle formControlName="useDistinctComparisonLinePatterns"
+                  matTooltip="Use solid, dashed, dotted, and dash-dot device lines in merged and benchmark charts. Off by default."
+                  (change)="onDistinctLinePatternsChange($event.checked)">
+                  Distinct line patterns
+                </mat-slide-toggle>
+              </div>
+              <div class="settings-slider-block">
+                <p>Fill Intensity</p>
+                <mat-slider [max]="1" [min]="0" [step]="0.1" discrete>
+                  <input matSliderThumb formControlName="chartFillOpacity" (valueChange)="onPreferenceChange()">
+                </mat-slider>
+              </div>
+            </div>
+            <mat-divider></mat-divider>
+            <h4 class="settings-subsection-title">Chart watermark</h4>
             <mat-form-field appearance="outline" subscriptSizing="dynamic">
               <mat-label>Watermark Brand Text</mat-label>
               <input
@@ -186,168 +332,27 @@
           </div>
         </ng-template>
 
-        <ng-template #appearanceSettings>
-          <div class="settings-panel-body">
-            <div class="settings-theme-control">
-              <div>
-                <h4>Theme</h4>
-                <p>Choose the color theme for the app.</p>
-              </div>
-              <mat-form-field appearance="outline" subscriptSizing="dynamic">
-                <mat-label>Theme</mat-label>
-                <mat-select formControlName="appTheme">
-                  @for (appTheme of appThemeOptions; track appTheme.value) {
-                  <mat-option [value]="appTheme.value">{{ appTheme.label }}</mat-option>
-                  }
-                </mat-select>
-              </mat-form-field>
-            </div>
-          </div>
-        </ng-template>
-
-        <ng-template #dashboardSettings>
-          <div class="settings-panel-body">
-            <mat-form-field appearance="outline" subscriptSizing="dynamic">
-              <mat-label>Start of the Week</mat-label>
-              <mat-select formControlName="startOfTheWeek">
-                <mat-option [value]="0">Sunday</mat-option>
-                <mat-option [value]="1">Monday</mat-option>
-                <mat-option [value]="2">Tuesday</mat-option>
-                <mat-option [value]="3">Wednesday</mat-option>
-                <mat-option [value]="4">Thursday</mat-option>
-                <mat-option [value]="5">Friday</mat-option>
-                <mat-option [value]="6">Saturday</mat-option>
-              </mat-select>
-              <mat-hint>Week starts on this day in your calendars</mat-hint>
-            </mat-form-field>
-
-            <mat-form-field appearance="outline" subscriptSizing="dynamic">
-              <mat-label>Activities per Page</mat-label>
-              <mat-select formControlName="eventsPerPage">
-                @for (option of eventsPerPage; track option) {
-                <mat-option [value]="option">{{ option }}</mat-option>
-                }
-              </mat-select>
-              <mat-hint>Adjust how many records are loaded at once for better performance.</mat-hint>
-            </mat-form-field>
-
-            <mat-form-field appearance="outline" subscriptSizing="dynamic">
-              <mat-label>Exclude Ascent for Sport Types</mat-label>
-              <mat-select formControlName="removeAscentForActivitiesSummaries" multiple>
-                @for (type of activityTypes; track type) {
-                <mat-option [value]="type" [disabled]="isMandatoryExclusion(type)">{{ type }}</mat-option>
-                }
-              </mat-select>
-              <mat-hint>Ascent data will be hidden for these activities in summaries.</mat-hint>
-            </mat-form-field>
-
-            <mat-form-field appearance="outline" subscriptSizing="dynamic">
-              <mat-label>Exclude Descent for Sport Types</mat-label>
-              <mat-select formControlName="removeDescentForActivitiesSummaries" multiple>
-                @for (type of activityTypes; track type) {
-                <mat-option [value]="type" [disabled]="isMandatoryDescentExclusion(type)">{{ type }}</mat-option>
-                }
-              </mat-select>
-              <mat-hint>Descent data will be hidden for these activities in summaries.</mat-hint>
-            </mat-form-field>
-          </div>
-        </ng-template>
-
-        <ng-template #mapSettings>
-          <div class="settings-panel-body">
-            <mat-form-field appearance="outline" subscriptSizing="dynamic">
-              <mat-label>Map Layer (Default)</mat-label>
-              <mat-select formControlName="mapType">
-                @for (type of mapTypes | keyvalue; track type) {
-                <mat-option [value]="type.value">{{ type.key }}</mat-option>
-                }
-              </mat-select>
-            </mat-form-field>
-
-            <mat-form-field appearance="outline" subscriptSizing="dynamic">
-              <mat-label>Lap Markers</mat-label>
-              <mat-select formControlName="mapLapTypes" multiple>
-                @for (lapType of lapTypes; track lapType) {
-                <mat-option [value]="lapType">{{ lapType }}</mat-option>
-                }
-              </mat-select>
-              <mat-hint>Select which markers to display on your activity routes.</mat-hint>
-            </mat-form-field>
-
-            <div class="settings-toggle-list">
-              <mat-slide-toggle formControlName="showMapLaps">Enable Auto-Laps</mat-slide-toggle>
-              <mat-slide-toggle formControlName="showMapArrows">Show Directional Arrows</mat-slide-toggle>
-            </div>
-
-            <div class="settings-slider-block">
-              <p>Route Line Width</p>
-              <mat-slider [max]="10" [min]="0.5" [step]="0.5" discrete>
-                <input matSliderThumb formControlName="mapStrokeWidth">
-              </mat-slider>
-            </div>
-          </div>
-        </ng-template>
-
-        <ng-template #chartSettings>
-          <div class="settings-panel-body">
-            <mat-form-field appearance="outline" subscriptSizing="dynamic">
-              <mat-label>Data Scaling (X-Axis)</mat-label>
-              <mat-select formControlName="xAxisType">
-                @for (x of xAxisTypes | keyvalue; track x) {
-                <mat-option [value]="x.value">{{ x.key }}</mat-option>
-                }
-              </mat-select>
-            </mat-form-field>
-
-            <mat-form-field appearance="outline" subscriptSizing="dynamic">
-              <mat-label>Default chart metrics</mat-label>
-              <mat-select formControlName="dataTypesToUse" multiple>
-                @for (group of dataGroups; track group.name) {
-                <mat-optgroup [label]="group.name">
-                  @for (data of group.data; track $index) {
-                  <mat-option [value]="data">{{ data }}</mat-option>
-                  }
-                </mat-optgroup>
-                }
-              </mat-select>
-              <mat-hint>
-                These metrics are shown by default when present. Some metrics are derived or unit-based.
-              </mat-hint>
-            </mat-form-field>
-
-            <div class="settings-toggle-grid">
-              <mat-slide-toggle formControlName="showAllData"
-                matTooltip="Adds every chartable metric recorded by the activity to Visible charts without showing it automatically.">
-                Include all recorded metrics
-              </mat-slide-toggle>
-              <mat-slide-toggle formControlName="chartCursorBehaviour">Selection Tool by Default</mat-slide-toggle>
-              <mat-slide-toggle formControlName="useAnimations">Enable Animations</mat-slide-toggle>
-            </div>
-
-            <div class="settings-slider-grid">
-              <div class="settings-slider-block">
-                <p>Line Width</p>
-                <mat-slider [max]="10" [min]="0.5" [step]="0.5" discrete>
-                  <input matSliderThumb formControlName="chartStrokeWidth">
-                </mat-slider>
-                <mat-slide-toggle formControlName="useDistinctComparisonLinePatterns"
-                  matTooltip="Use solid, dashed, dotted, and dash-dot device lines in merged and benchmark charts. Off by default."
-                  (change)="onDistinctLinePatternsChange($event.checked)">
-                  Distinct line patterns
-                </mat-slide-toggle>
-              </div>
-              <div class="settings-slider-block">
-                <p>Fill Intensity</p>
-                <mat-slider [max]="1" [min]="0" [step]="0.1" discrete>
-                  <input matSliderThumb formControlName="chartFillOpacity">
-                </mat-slider>
-              </div>
-            </div>
-          </div>
-        </ng-template>
-
         <ng-template #unitSettings>
           <div class="settings-panel-body">
+            <div class="settings-option-block">
+              <div>
+                <h4 class="settings-subsection-title">Unit preset</h4>
+                <p>Set distance, pace, speed, and swim units together. Weight stays independent.</p>
+              </div>
+              <mat-button-toggle-group
+                appearance="standard"
+                [value]="selectedUnitPreset"
+                hideSingleSelectionIndicator
+                aria-label="Unit preset"
+                (change)="onUnitPresetChange($event.value)">
+                @for (option of unitPresetOptions; track option.value) {
+                <mat-button-toggle [value]="option.value">{{ option.label }}</mat-button-toggle>
+                }
+              </mat-button-toggle-group>
+            </div>
+
+            <mat-divider></mat-divider>
+
             <div class="settings-option-block settings-regional-format">
               <div>
                 <h4 class="settings-subsection-title">Regional formatting</h4>
@@ -373,36 +378,38 @@
               </mat-form-field>
             </div>
 
+            <mat-form-field appearance="outline" subscriptSizing="dynamic">
+              <mat-label>Start of the Week</mat-label>
+              <mat-select formControlName="startOfTheWeek" (selectionChange)="onPreferenceChange()">
+                <mat-option [value]="0">Sunday</mat-option>
+                <mat-option [value]="1">Monday</mat-option>
+                <mat-option [value]="2">Tuesday</mat-option>
+                <mat-option [value]="3">Wednesday</mat-option>
+                <mat-option [value]="4">Thursday</mat-option>
+                <mat-option [value]="5">Friday</mat-option>
+                <mat-option [value]="6">Saturday</mat-option>
+              </mat-select>
+              <mat-hint>Week starts on this day in your calendars</mat-hint>
+            </mat-form-field>
+
             <mat-divider></mat-divider>
 
-            <div class="settings-option-block">
-              <div>
-                <h4 class="settings-subsection-title">Simple preset</h4>
-                <p>Choose the units most of the app should use.</p>
-              </div>
-              <mat-button-toggle-group
-                appearance="standard"
-                [value]="selectedUnitPreset"
-                hideSingleSelectionIndicator
-                aria-label="Unit preset"
-                (change)="onUnitPresetChange($event.value)">
-                @for (option of unitPresetOptions; track option.value) {
-                <mat-button-toggle [value]="option.value">{{ option.label }}</mat-button-toggle>
-                }
-              </mat-button-toggle-group>
-            </div>
-
-            <div class="settings-option-block">
-              <div>
-                <h4 class="settings-subsection-title">Fine-tune units</h4>
-                <p>Adjust individual measurement units.</p>
-              </div>
-            </div>
+            <button mat-button type="button" class="settings-customize-units"
+              aria-controls="settings-custom-units"
+              [attr.aria-expanded]="customUnitsExpanded()"
+              [disabled]="isSaving || isDeleting"
+              (click)="toggleCustomUnits()">
+              <mat-icon aria-hidden="true">{{ customUnitsExpanded() ? 'expand_less' : 'expand_more' }}</mat-icon>
+              {{ customUnitsExpanded() ? 'Hide individual units' : 'Customize units' }}
+            </button>
+            <div id="settings-custom-units" class="settings-custom-units" [hidden]="!customUnitsExpanded()">
+              <h4 class="settings-subsection-title">Individual units</h4>
+              <p class="settings-section-note">Choose a different unit for each measurement.</p>
 
             <div class="settings-field-list settings-field-list--units">
               <mat-form-field appearance="outline" subscriptSizing="dynamic">
                 <mat-label>Distance</mat-label>
-                <mat-select formControlName="distanceUnitsToUse">
+                <mat-select formControlName="distanceUnitsToUse" (selectionChange)="onPreferenceChange()">
                   @for (unit of distanceUnitOptions; track unit.value) {
                   <mat-option [value]="unit.value">{{ unit.label }}</mat-option>
                   }
@@ -422,7 +429,7 @@
 
               <mat-form-field appearance="outline" subscriptSizing="dynamic">
                 <mat-label>Speed</mat-label>
-                <mat-select formControlName="speedUnitsToUse" multiple>
+                <mat-select formControlName="speedUnitsToUse" multiple (selectionChange)="onPreferenceChange()">
                   @for (unit of speedUnits | keyvalue; track unit.key) {
                   <mat-option [value]="unit.value">{{ unit.value }}</mat-option>
                   }
@@ -432,7 +439,7 @@
 
               <mat-form-field appearance="outline" subscriptSizing="dynamic">
                 <mat-label>Pace</mat-label>
-                <mat-select formControlName="paceUnitsToUse" multiple>
+                <mat-select formControlName="paceUnitsToUse" multiple (selectionChange)="onPreferenceChange()">
                   @for (unit of paceUnits | keyvalue; track unit.key) {
                   <mat-option [value]="unit.value">{{ unit.value }}</mat-option>
                   }
@@ -442,7 +449,7 @@
 
               <mat-form-field appearance="outline" subscriptSizing="dynamic">
                 <mat-label>Swim pace</mat-label>
-                <mat-select formControlName="swimPaceUnitsToUse" multiple>
+                <mat-select formControlName="swimPaceUnitsToUse" multiple (selectionChange)="onPreferenceChange()">
                   @for (unit of swimPaceUnits | keyvalue; track unit.key) {
                   <mat-option [value]="unit.value">{{ unit.value }}</mat-option>
                   }
@@ -452,13 +459,14 @@
 
               <mat-form-field appearance="outline" subscriptSizing="dynamic">
                 <mat-label>Vertical speed</mat-label>
-                <mat-select formControlName="verticalSpeedUnitsToUse" multiple>
+                <mat-select formControlName="verticalSpeedUnitsToUse" multiple (selectionChange)="onPreferenceChange()">
                   @for (unit of verticalSpeedUnits | keyvalue; track unit.key) {
                   <mat-option [value]="unit.value">{{ unit.value }}</mat-option>
                   }
                 </mat-select>
                 <mat-hint>Climb and descent rate.</mat-hint>
               </mat-form-field>
+            </div>
             </div>
           </div>
         </ng-template>
@@ -496,6 +504,8 @@
 
         <ng-template #accountSettings>
           <div class="settings-account-body">
+            <ng-container *ngTemplateOutlet="profileSettings"></ng-container>
+            <mat-divider></mat-divider>
             <mat-card appearance="outlined" class="danger-card">
               <mat-card-content class="card-content">
                 <div class="danger-title">

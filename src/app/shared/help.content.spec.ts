@@ -16,7 +16,7 @@ import {
 describe('help.content', () => {
   it('points users to the Privacy section and explains saving analytics and email opt-outs', () => {
     const copy = HELP_SECTIONS.find(section => section.id === 'data-and-privacy')!.content;
-    expect(copy).toContain('[Settings → Privacy](/settings?section=privacy)');
+    expect(copy).toContain('[Settings → Privacy & emails](/settings?section=privacy)');
     expect(copy).toContain('turn **Usage analytics** or **Marketing emails** off');
     expect(copy).toContain('**Save changes**');
     expect(copy).toContain('does not stop transactional account or billing messages');
@@ -169,7 +169,7 @@ describe('help.content', () => {
     expect(content).toContain('no separate approval for each workout or edit');
     expect(content).toContain('Additional mapping losses, such as shortened exercise instructions, still need review');
     expect(content).toContain('Sent Guide status does not prove app/watch receipt or workout completion');
-    expect(content).toContain('Suunto load instructions follow your kg or lb choice in **Settings → Units**');
+    expect(content).toContain('Suunto load instructions follow your kg or lb choice in **Settings → Units & formatting**');
     expect(content).toContain('QS checks for unit changes about every 30 minutes and updates eligible synced Guides');
     expect(content).toContain('changing units keeps an existing approval only when those losses are unchanged');
   });
@@ -205,7 +205,7 @@ describe('help.content', () => {
 
   it('explains the independent weight preference and canonical weigh-in storage', () => {
     const copy = JSON.stringify(HELP_SECTIONS);
-    expect(copy).toContain('Weight input and display use your **Settings → Units → Weight** choice (kg or lb)');
+    expect(copy).toContain('Weight input and display use your **Settings → Units & formatting → Customize units → Weight** choice (kg or lb)');
     expect(copy).toContain('saved measurements remain in canonical kg');
     expect(copy).toContain('changing a distance preset does not reset that choice');
   });
@@ -228,7 +228,7 @@ describe('help.content', () => {
   it('documents regional formatting scope, precedence, and stable export dates', () => {
     const content = HELP_SECTIONS.find(section => section.id === 'data-and-privacy')!.content.replace(/\s+/g, ' ');
 
-    expect(content).toContain('**Settings -> Units -> Regional formatting**');
+    expect(content).toContain('**Settings -> Units & formatting -> Regional formatting**');
     expect(content).toContain('**Automatic (browser)** is the recommended default');
     expect(content).toContain('saved to your account and follows you between devices');
     expect(content).toContain('the app reloads once');
@@ -786,7 +786,7 @@ describe('help.content', () => {
     expect(calendarSection?.content).toContain('Diving, Scuba Diving, Free Diving, Snorkeling, and Mermaiding');
     expect(calendarSection?.content).toContain('do not contribute either elevation metric; their vertical movement is recorded as depth');
     expect(calendarSection?.content).toContain('summary exclusions configured in **Settings** also apply');
-    expect(calendarSection?.content).toContain('Settings -> Dashboard -> Start of the Week');
+    expect(calendarSection?.content).toContain('Settings -> Units & formatting -> Start of the Week');
     expect(calendarSection?.content).toContain('visible-period activity query');
     expect(calendarSection?.content).toContain('tag filter lists your saved activity tags across all dates');
     expect(calendarSection?.content).toContain('independent from the dashboard event table');
@@ -820,7 +820,7 @@ describe('help.content', () => {
     expect(planningSection?.content).toContain('You do not need to create a plan first');
     expect(planningSection?.content).toContain('[Training Plans overview](/features/training-plans)');
     expect(planningSection?.content).toContain('Plans and standalone workouts work without a service connection');
-    expect(planningSection?.content).toContain('Settings -> Dashboard -> Start of the Week');
+    expect(planningSection?.content).toContain('Settings -> Units & formatting -> Start of the Week');
     expect(planningSection?.content).toContain('Its first weekday is marked and named below the grid');
     expect(planningSection?.content).toContain('Saturday and Sunday are subtly tinted wherever they fall in the week');
     expect(planningSection?.content).toContain('calendar cues, not rest-day recommendations');
@@ -1086,7 +1086,7 @@ describe('help.content', () => {
     expect(gettingStartedSection?.content).toContain('use **Send past activities** in **Services** for activities already in Quantified Self');
     expect(gettingStartedSection?.content).toContain('Advanced settings');
     expect(gettingStartedSection?.content).toContain('kilometers or miles');
-    expect(gettingStartedSection?.content).toContain('Settings -> Units');
+    expect(gettingStartedSection?.content).toContain('Settings -> Units & formatting');
     expect(gettingStartedSection?.content).toContain('jump distances display in feet when miles are selected');
   });
 
@@ -1100,7 +1100,7 @@ describe('help.content', () => {
     expect(gettingStartedSection?.content).toContain('lap index, split progress, duration, distance, length type, stroke, strokes, swim pace, stroke rate, heart rate, SWOLF, and energy');
     expect(gettingStartedSection?.content).toContain('use **Stroke Rate** rather than Cadence');
     expect(gettingStartedSection?.content).toContain('25 m, 50 m, 75 m, and 100 m splits before the rest row');
-    expect(gettingStartedSection?.content).toContain('**Settings -> Units -> Swim pace**');
+    expect(gettingStartedSection?.content).toContain('**Settings -> Units & formatting -> Customize units -> Swim pace**');
     expect(gettingStartedSection?.content).toContain('25 yd, 50 yd, 75 yd, and 100 yd splits before the rest row');
     expect(gettingStartedSection?.content).toContain('Stored distances remain in meters');
     expect(gettingStartedSection?.content).toContain('**Swim** time (excluding idle/rest lengths)');

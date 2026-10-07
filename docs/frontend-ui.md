@@ -51,18 +51,23 @@ geometry around responsive breakpoints as well as ordinary desktop/phone screens
 Authenticated product workspaces, except Settings, use the shared `qs-workspace-page` shell from `src/styles.scss`. It
 owns the 1440 px maximum page width, border-box sizing, and common responsive inline gutters. Apply it on the route root
 alongside the route-specific class; do not add another outer width, margin, or padding rule in the component stylesheet.
-Settings uses a centered 1120 px overview, with **Preferences** followed by **Privacy & account** in one column
-on desktop and phones. Each section uses a surface-free Material button disclosure with
+Settings uses a centered 800 px overview, with **Preferences** followed by **Privacy & account** in one column
+on desktop and phones. Theme is directly editable above six sections: Units & formatting, Dashboard, Charts,
+Maps, Privacy & emails, and Account. Each section uses a surface-free Material button disclosure with
 `aria-expanded` and `aria-controls`; all form panels remain mounted while collapsed. At most one section is open.
 An absent or invalid `section` query parameter shows the collapsed overview, and valid section links open their
-panel; the legacy `delete-account` link still opens Account. Closing a panel removes the section parameter.
+panel; legacy `profile` and `delete-account` links open Account, and `app` shows the inline Theme control. Closing a panel removes the section parameter.
 The group/disclosure/subsection heading levels are H2/H3/H4. Save changes is the only submit action; account deletion
 is an explicit button action and is blocked during saving. The overview is inert while saving or deleting so the
 loading shade cannot leave keyboard edits available; save progress remains outside that inert region.
-The inline Save changes action applies the whole form and remains available for dirty edits even when Account
-is open. Narrow column layouts use container queries to stack fields and preserve Material touch targets.
+The sticky Save changes bar appears only while the form is dirty or saving and applies the whole form. It remains
+available across section switches, uses the theme surface and safe-area padding, and reports failures without discarding edits.
+Pristine implicit submits are ignored. Section summaries follow staged form values (including disabled consent fields),
+and untouched consent summaries refresh with the user input. Profile details and name live in Account, watermark
+text lives in Charts, and week start lives in Units & formatting. Customize units is a second Material disclosure;
+its fields remain mounted and preserve edits while hidden. Narrow column layouts use container queries to stack fields and preserve Material touch targets.
 
-Settings separates **Appearance** (theme) from **Privacy** (usage analytics and marketing emails). The Privacy
+Settings separates the inline **Theme** control from **Privacy & emails** (usage analytics and marketing emails). The Privacy
 section is addressable at `/settings?section=privacy`; its switches retain the existing legal-consent form controls
 and require **Save changes**. Explicit off choices persist as false booleans, while untouched consent fields are
 omitted from updates. Section disclosures preserve unsaved form edits and emit selection feedback for expansion
