@@ -1999,9 +1999,10 @@ already returned by one complete bounded activity read for an exact `localDate` 
 validates that every referenced activity started on that local date. Planned workouts and references from another date
 are invalid input.
 
-The service reads only those exact activity and parent-event documents plus `users/{uid}/derivedMetrics/form`; it does
-not query activity history. Its field masks retain only the event link, start/end times, current or legacy TSS, and the
-event merge/benchmark flags. Account deletion is checked before and after the reads. Activity and event documents are
+The service reads only those exact activity and parent-event documents, their owner-only Training load metadata, and
+`users/{uid}/derivedMetrics/form`; it does not query activity history. Its field masks retain the event link, start/end
+times, activity type, recorded stats needed for source-fingerprint validation, and event merge/benchmark flags. These
+source fields stay internal. Account deletion is checked before and after the reads. Activity and event documents are
 queried in Firestore `in` batches of at most 30, so the public 32-reference limit remains bounded without a composite
 index. The complete result is limited to 16 KiB and still uses the ordinary per-connection MCP request limit.
 
@@ -2015,10 +2016,19 @@ that this does not measure physiological adaptation.
 
 Statuses distinguish `ready`, `partial`, `updating`, `unavailable`, and `excluded`. Reasons preserve partial coverage,
 missing TSS, benchmark/merge exclusion, incomplete activities, Form building/staleness/failure, no usable selected
-session, and a UTC Training day outside the retained snapshot. Zero TSS remains a valid modeled contribution. Current
+session, and a UTC Training day outside the retained snapshot. Zero TSS remains a valid modeled contribution.
 Recorded metric reads keep their original meaning: current TSS takes precedence over legacy Power Training Stress Score. Training impact instead resolves owner-modeled per-leg load from private event metadata, including zero overrides, saved method/inclusion policies and workout exclusions. It never distributes a parent-only score to legs. Excluded-by-owner records increment only `excludedSessionCount`, not benchmark or incomplete counts; the frozen reason remains `no_usable_sessions` when no selected sessions are usable. Policy revisions, control maps, calibration and source fingerprints never appear in the public projection. A load edit newer than Form reports updating. These implementation changes add no public fields, scopes or mutation capability. A ready Form payload must match the current
 internal Form payload version, identify the Form kind, and assert merged-event exclusion; otherwise the tool fails closed
 as updating.
+
+Output validation treats benchmark/merge and incomplete-session counts as subsets of the total exclusion count;
+owner exclusions must not be relabelled to satisfy the old equality. A source rewrite reports `updating` even when
+its cached score or leg match is temporarily unavailable. A retained identity awaiting owner review reports
+`unavailable` / `no_usable_sessions` (or partial day coverage), without exposing the private reason or counting it as
+missing TSS. Focused tests validate actual service results against the strict output schema and exercise owner
+exclusions on all three transports. Stale benchmark/incomplete selections cannot hold up other selected sessions;
+a recent owner exclusion still waits for Form to remove its previous contribution. These runtime checks preserve the
+registered JSON schemas and require no local plugin rebuild, catalog rescan, new consent or mutation capability.
 
 The built-in Assistant allowlists the same tool. It resolves exact opaque references through its existing completed-
 activity workflow, prepares Form, preserves separate UTC outcomes, and renders compact deterministic evidence without

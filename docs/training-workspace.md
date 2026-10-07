@@ -4916,8 +4916,12 @@ Legacy activities keep existing values until original-file reparse. Override and
 selection requires stored evaluations or **Reimport activity from file**. Recorded-TSS statistics, metric rankings
 and raw statistic queries keep their meaning. Training and impact use modeled load. Existing MCP reads honor
 controls without exposing policy metadata, widening frozen public schemas or adding mutation capabilities; owner
-exclusions never increment benchmark counts. Built-in Assistant instructions distinguish recorded metrics from
-modeled load. This is a completed-load feature, with no plan/workout read or mutation contract impact and no
+exclusions never increment benchmark counts, and output validation accepts them outside the benchmark/incomplete
+subsets. MCP source rewrites remain updating even without a cached score; identities needing owner review remain
+unavailable rather than being counted as missing recorded TSS. Stale benchmark metadata cannot block otherwise
+usable day contributions; recent owner exclusions still wait for the Form rebuild. Actual service responses are
+checked against the strict output validator, including partial days. Built-in Assistant instructions distinguish
+recorded metrics from modeled load. This is a completed-load feature, with no plan/workout read or mutation contract impact and no
 provider delivery changes.
 
 Release order: publish the verified Sports Lib 21.6.0 artifact first, then install that registry version in both QS
