@@ -355,63 +355,86 @@ describe('UserSettingsComponent', () => {
         expect(component.settingsSectionOptions.map(section => section.id)).toEqual([
             'profile',
             'app',
-            'privacy',
             'dashboard',
             'map',
             'charts',
             'units',
+            'privacy',
             'account',
         ]);
     });
 
-    it('renders the mobile settings selector as Material button navigation', () => {
-        const tabNav = fixture.nativeElement.querySelector('nav[role="tablist"]');
-        const tabLabels = Array.from(tabNav.querySelectorAll('.workspace-navigation__mobile-tab'))
-            .map((link: Element) => link.querySelector('.settings-tab-label > span:last-child')?.textContent?.trim());
-
-        expect(tabNav).toBeTruthy();
-        expect(tabNav.querySelectorAll('.mat-mdc-button')).toHaveLength(8);
-        expect(tabLabels).toEqual([
-            'Profile',
-            'Appearance',
-            'Privacy',
-            'Dashboard',
-            'Maps',
-            'Charts',
-            'Units',
-            'Account',
+    it('renders every settings disclosure in two ordered groups with Material buttons', () => {
+        const groups = fixture.nativeElement.querySelectorAll('.settings-group');
+        expect(groups).toHaveLength(2);
+        expect(groups[0].querySelector('.settings-group-title').textContent).toBe('Preferences');
+        expect(groups[1].querySelector('.settings-group-title').textContent).toBe('Privacy & account');
+        const triggers = Array.from(fixture.nativeElement.querySelectorAll('.settings-section-trigger')) as HTMLButtonElement[];
+        expect(triggers.map(button => button.getAttribute('aria-label'))).toEqual([
+            'Profile', 'Appearance', 'Dashboard', 'Maps', 'Charts', 'Units', 'Privacy', 'Account',
         ]);
+        expect(triggers.every(button => button.classList.contains('mat-mdc-button'))).toBe(true);
+        expect(triggers.every(button => button.type === 'button')).toBe(true);
+        expect(triggers.every(button => button.getAttribute('aria-expanded') === 'false')).toBe(true);
+        expect(fixture.nativeElement.querySelector('app-workspace-section-navigation')).toBeNull();
+        for (const button of triggers) {
+            const panel = fixture.nativeElement.querySelector('#' + button.getAttribute('aria-controls'));
+            expect(panel.getAttribute('aria-labelledby')).toBe(button.id);
+            expect(panel.hidden).toBe(true);
+        }
     });
 
-    it('renders the settings heading before section navigation', () => {
+    it('renders the settings heading before the overview', () => {
         const pageHeader = fixture.nativeElement.querySelector('.settings-page-header');
-        const sectionNavigation = fixture.nativeElement.querySelector('app-workspace-section-navigation');
-
         expect(pageHeader).toBeTruthy();
-        expect(pageHeader.nextElementSibling).toBe(sectionNavigation);
+        expect(pageHeader.nextElementSibling.classList.contains('settings-overview')).toBe(true);
     });
 
-    it('uses the horizontal settings selector without a workspace rail', () => {
-        const tabNav = fixture.nativeElement.querySelector('nav[role="tablist"]');
-        const tabPanel = fixture.nativeElement.querySelector('.settings-tab-panel');
-
-        expect(fixture.nativeElement.querySelector('.desktop-section-nav')).toBeNull();
-        expect(tabPanel).toBeTruthy();
-        expect(tabNav.querySelectorAll('.mat-mdc-button')).toHaveLength(8);
+    it('expands and collapses a section through its button without discarding edits', async () => {
+        const trigger = fixture.nativeElement.querySelector('button[aria-label="Profile"]') as HTMLButtonElement;
+        trigger.click();
+        await fixture.whenStable(); fixture.detectChanges();
+        expect(component.activeSection).toBe('profile');
+        expect(trigger.getAttribute('aria-expanded')).toBe('true');
+        const form = component.userSettingsFormGroup;
+        form.get('displayName').setValue('Unsaved name');
+        form.get('displayName').markAsDirty();
+        trigger.click();
+        await fixture.whenStable(); fixture.detectChanges();
+        expect(component.activeSection).toBeNull();
+        expect(trigger.getAttribute('aria-expanded')).toBe('false');
+        expect(form.get('displayName').value).toBe('Unsaved name');
+        expect(form.dirty).toBe(true);
+        expect(mockRouter.navigate).toHaveBeenLastCalledWith([], {
+            relativeTo: mockActivatedRoute, queryParams: { section: null }, queryParamsHandling: 'merge',
+        });
+        expect(hapticsServiceMock.selection).toHaveBeenCalledTimes(2);
     });
 
-    it('keeps the settings form in its centered 760px column', () => {
-        const styles = readFileSync(
-            resolve(process.cwd(), 'src/app/components/user-settings/user-settings.component.scss'),
-            'utf8'
-        );
-        const contentRule = styles.match(/\.settings-content\s*\{[^}]*\}/)?.[0] ?? '';
-        const saveActionRule = styles.match(/\.qs-form-actions-floating\s*\{[^}]*\}/)?.[0] ?? '';
+    it('keeps save available for edits when Account is open', async () => {
+        component.userSettingsFormGroup.get('displayName').markAsDirty();
+        await component.selectSettingsSection('account');
+        fixture.detectChanges();
+        expect(fixture.nativeElement.querySelector('.settings-save-bar button')).toBeTruthy();
+        expect(fixture.nativeElement.querySelector('.settings-save-status').textContent).toContain('Unsaved changes');
+    });
 
-        expect(contentRule).toContain('max-width: 760px');
-        expect(contentRule).toContain('margin: 0 auto');
-        expect(contentRule).not.toContain('1180px');
-        expect(saveActionRule).toContain('calc((100vw - 760px) / 2)');
+    it('ignores disclosure actions while saving or deleting', async () => {
+        component.isSaving = true;
+        await component.toggleSettingsSection('privacy');
+        component.isSaving = false; component.isDeleting = true;
+        await component.toggleSettingsSection('profile');
+        expect(component.activeSection).toBeNull();
+        expect(hapticsServiceMock.selection).not.toHaveBeenCalled();
+        expect(mockRouter.navigate).not.toHaveBeenCalled();
+    });
+
+    it('lays out the overview in two columns and stacks it on phones with an inline save action', () => {
+        const styles = readFileSync(resolve(process.cwd(), 'src/app/components/user-settings/user-settings.component.scss'), 'utf8');
+        expect(styles).toContain('max-width: 1120px');
+        expect(styles).toContain('grid-template-columns: repeat(2, minmax(0, 1fr))');
+        expect(styles).toContain('.settings-overview {\n        grid-template-columns: 1fr');
+        expect(styles).not.toContain('position: fixed');
     });
 
     it('uses dynamic Material subscript sizing for settings form fields', () => {
@@ -433,7 +456,7 @@ describe('UserSettingsComponent', () => {
     it('shows account as the final settings section for account actions', () => {
         const sectionIds = component.settingsSectionOptions.map(section => section.id);
 
-        expect(sectionIds[sectionIds.length - 2]).toBe('units');
+        expect(sectionIds[sectionIds.length - 2]).toBe('privacy');
         expect(sectionIds[sectionIds.length - 1]).toBe('account');
     });
 
@@ -489,12 +512,12 @@ describe('UserSettingsComponent', () => {
         expect(component.activeSection).toBe('account');
     });
 
-    it('should restore the profile section when the section query param is missing', () => {
+    it('collapses the overview when the section query param is missing', () => {
         component.activeSection = 'units';
 
         queryParamMapSubject.next(convertToParamMap({}));
 
-        expect(component.activeSection).toBe('profile');
+        expect(component.activeSection).toBeNull();
     });
 
     it('shows delete account as an action only while the account section is active', () => {
@@ -513,8 +536,7 @@ describe('UserSettingsComponent', () => {
         fixture.detectChanges();
 
         expect(accountPanel.hidden).toBe(false);
-        expect(fixture.nativeElement.querySelector('.qs-form-actions-floating')).toBeNull();
-        expect(fixture.nativeElement.querySelector('.mobile-save-bar')).toBeNull();
+        expect(fixture.nativeElement.querySelector('.settings-save-bar')).toBeNull();
     });
 
     it('should initialize acceptedTrackingPolicy from user data', () => {
@@ -527,17 +549,16 @@ describe('UserSettingsComponent', () => {
         expect(component.userSettingsFormGroup.get('acceptedTrackingPolicy').value).toBe(false);
     });
 
-    it('opens both consent switches through the Privacy tab and direct section link', async () => {
+    it('opens both consent switches through the Privacy disclosure and direct section link', async () => {
         component.activeSection = 'profile';
         fixture.detectChanges();
-        const tabs = Array.from(fixture.nativeElement.querySelectorAll('[role="tab"]')) as HTMLAnchorElement[];
-        const privacyTab = tabs.find(tab => tab.textContent?.includes('Privacy'))!;
+        const privacyTab = fixture.nativeElement.querySelector('button[aria-label="Privacy"]') as HTMLButtonElement;
         privacyTab.click();
         await fixture.whenStable(); fixture.detectChanges();
         expect(component.activeSection).toBe('privacy');
         expect(hapticsServiceMock.selection).toHaveBeenCalledTimes(1);
         const privacy = fixture.nativeElement.querySelector('[aria-labelledby="settings-privacy-title"]') as HTMLElement;
-        const appearance = fixture.nativeElement.querySelector('[aria-labelledby="settings-general-title"]') as HTMLElement;
+        const appearance = fixture.nativeElement.querySelector('[aria-labelledby="settings-app-title"]') as HTMLElement;
         expect(privacy.hidden).toBe(false);
         expect(appearance.hidden).toBe(true);
         expect(privacy.querySelectorAll('mat-slide-toggle')).toHaveLength(2);
@@ -587,7 +608,7 @@ describe('UserSettingsComponent', () => {
         component.isSaving = false; component.isDeleting = true;
         component.onPrivacyPreferenceChange();
         expect(hapticsServiceMock.selection).not.toHaveBeenCalled();
-        expect(component.activeSection).toBe('profile');
+        expect(component.activeSection).toBeNull();
     });
 
     it.each(['acceptedTrackingPolicy', 'acceptedMarketingPolicy'])('refreshes untouched %s while preserving unrelated edits', (field) => {
@@ -1287,13 +1308,9 @@ describe('UserSettingsComponent', () => {
         component.userSettingsFormGroup.get('dataTypesToUse').setValue([]);
         fixture.detectChanges();
 
-        const desktopSaveButton = fixture.nativeElement.querySelector('.qs-form-actions-floating button') as HTMLButtonElement;
-        const mobileSaveButton = fixture.nativeElement.querySelector('.mobile-save-bar button') as HTMLButtonElement;
-
-        expect(desktopSaveButton).toBeTruthy();
-        expect(mobileSaveButton).toBeTruthy();
-        expect(desktopSaveButton.disabled).toBe(true);
-        expect(mobileSaveButton.disabled).toBe(true);
+        const saveButton = fixture.nativeElement.querySelector('.settings-save-bar button') as HTMLButtonElement;
+        expect(saveButton).toBeTruthy();
+        expect(saveButton.disabled).toBe(true);
     });
 
     it('allows an empty display name', () => {

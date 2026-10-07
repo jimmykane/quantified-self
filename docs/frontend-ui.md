@@ -51,13 +51,19 @@ geometry around responsive breakpoints as well as ordinary desktop/phone screens
 Authenticated product workspaces, except Settings, use the shared `qs-workspace-page` shell from `src/styles.scss`. It
 owns the 1440 px maximum page width, border-box sizing, and common responsive inline gutters. Apply it on the route root
 alongside the route-specific class; do not add another outer width, margin, or padding rule in the component stylesheet.
-Settings intentionally retains its centered 760 px form column, including its aligned fixed save action, rather than
-stretching a form workflow across the workspace width.
+Settings uses a centered 1120 px overview, with **Preferences** and **Privacy & account** in two columns above
+768 px and one continuous list on phones. Each section uses a surface-free Material button disclosure with
+`aria-expanded` and `aria-controls`; all form panels remain mounted while collapsed. At most one section is open.
+An absent or invalid `section` query parameter shows the collapsed overview, and valid section links open their
+panel; the legacy `delete-account` link still opens Account. Closing a panel removes the section parameter.
+The inline Save changes action applies the whole form and remains available for dirty edits even when Account
+is open. Narrow column layouts use container queries to stack fields and preserve Material touch targets.
 
 Settings separates **Appearance** (theme) from **Privacy** (usage analytics and marketing emails). The Privacy
 section is addressable at `/settings?section=privacy`; its switches retain the existing legal-consent form controls
 and require **Save changes**. Explicit off choices persist as false booleans, while untouched consent fields are
-omitted from updates. Section navigation preserves unsaved form edits and emits selection feedback only for a change.
+omitted from updates. Section disclosures preserve unsaved form edits and emit selection feedback for expansion
+or collapse, with no feedback during route hydration or while busy.
 Background profile updates refresh untouched consent switches while preserving explicit local edits. Privacy switches
 are disabled during saving, duplicate submissions are ignored, and failed saves retain the user's choice for retry.
 
