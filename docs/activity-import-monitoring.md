@@ -17,6 +17,9 @@ Deploy the compatible runtime before applying configuration. The affected endpoi
 `parseCOROSAPIWorkoutQueue` and `parseWahooAPIWorkoutQueue`.
 The current worker remains Gen 2 at 1 GiB/540 seconds; scheduled dispatchers retain
 their Gen 1 options, secrets, regions and **every 30 minutes** schedules.
+Each dispatcher now has a direct `queue` owner-module entrypoint loader, without loading
+the full Functions registry; dispatch and observation behavior remain unchanged. See
+[entrypoint verification](functions-entrypoint-loading.md#recorded-activity-import-dispatcher-isolation).
 The definitions intentionally distinguish `cloud_run_revision` worker logs from
 `cloud_function` dispatcher logs. A later Gen 1 migration must update and verify these
 resource filters; it is not part of this ticket.

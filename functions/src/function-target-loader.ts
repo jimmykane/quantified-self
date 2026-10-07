@@ -31,6 +31,8 @@ const loadSleepPolling = (): FunctionModule =>
   module.require('./sleep/polling') as FunctionModule;
 const loadServiceConnectionAccountProjection = (): FunctionModule =>
   module.require('./service-connection-account-projection') as FunctionModule;
+const loadActivityImportDispatchers = (): FunctionModule =>
+  module.require('./queue') as FunctionModule;
 
 const TARGET_LOADERS: Readonly<Record<string, ModuleLoader>> = Object.freeze({
   mcpApi: () => module.require('./mcp/server') as FunctionModule,
@@ -48,6 +50,10 @@ const TARGET_LOADERS: Readonly<Record<string, ModuleLoader>> = Object.freeze({
     () => module.require('./tasks/sleep-sync-worker') as FunctionModule,
   processWorkoutTask:
     () => module.require('./tasks/workout-processor') as FunctionModule,
+  parseGarminAPIActivityQueue: loadActivityImportDispatchers,
+  parseSuuntoAppActivityQueue: loadActivityImportDispatchers,
+  parseCOROSAPIWorkoutQueue: loadActivityImportDispatchers,
+  parseWahooAPIWorkoutQueue: loadActivityImportDispatchers,
   processActivitySyncTask:
     () => module.require('./tasks/activity-sync-worker') as FunctionModule,
   processRouteSyncTask:

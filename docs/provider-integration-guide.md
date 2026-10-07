@@ -1178,6 +1178,14 @@ Use `app-service-source-icon` and the shared presentation helpers. Imported acti
 
 ## 10. Admin and operational coverage
 
+The four recorded-activity source dispatchers (`parseGarminAPIActivityQueue`, `parseSuuntoAppActivityQueue`,
+`parseCOROSAPIWorkoutQueue`, `parseWahooAPIWorkoutQueue`) use direct `queue` owner-module loading instead of the full
+entrypoint. They retain Gen 1, `europe-west2`, maximum one instance, their existing memory/timeouts, no secrets and
+the same 30-minute schedule. Dispatch, recovery, lifecycle guards and #829 telemetry are unchanged; monitoring
+continues using `cloud_function` for dispatchers and `cloud_run_revision` for the Gen 2 worker. See the
+[entrypoint contracts and local benchmark](functions-entrypoint-loading.md#recorded-activity-import-dispatcher-isolation).
+This startup optimization changes no provider behavior, availability, MCP contract or user-facing Help.
+
 Recorded completed-activity import monitoring (#829) has local fixed-label commit/attempt
 telemetry, bounded read-only observations on the existing 30-minute dispatchers, and a
 separately owned Cloud Monitoring dashboard with six policies. It is not Training delivery

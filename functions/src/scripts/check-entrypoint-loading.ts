@@ -71,6 +71,15 @@ const QUEUE_AND_CLEANUP_TARGETS = [
   'cleanupEventFile',
   'dispatchGarminPingBatchOnWrite',
 ];
+const ACTIVITY_IMPORT_DISPATCHER_METADATA: Readonly<Record<string, {
+  memoryMb: number;
+  timeoutSeconds: number;
+}>> = {
+  parseGarminAPIActivityQueue: { memoryMb: 1024, timeoutSeconds: 540 },
+  parseSuuntoAppActivityQueue: { memoryMb: 1024, timeoutSeconds: 540 },
+  parseCOROSAPIWorkoutQueue: { memoryMb: 256, timeoutSeconds: 300 },
+  parseWahooAPIWorkoutQueue: { memoryMb: 1024, timeoutSeconds: 540 },
+};
 const INGESTION_TARGET_METADATA: Readonly<Record<string, {
   memoryMb: number;
   timeoutSeconds: number | null;
@@ -391,6 +400,7 @@ async function check(): Promise<void> {
   assert(canaryTarget, 'The optimized target registry is empty.');
   for (const target of [
     ...PROVIDER_CONNECTION_AND_HEALTH_TARGETS,
+    ...Object.keys(ACTIVITY_IMPORT_DISPATCHER_METADATA),
     ...Object.keys(INGESTION_TARGET_METADATA),
     ...Object.keys(SCHEDULED_MAINTENANCE_TARGET_METADATA),
     ...Object.keys(ADMIN_TARGET_METADATA),
@@ -403,6 +413,7 @@ async function check(): Promise<void> {
     'impersonateUser',
     ...PROVIDER_CONNECTION_AND_HEALTH_TARGETS,
     ...QUEUE_AND_CLEANUP_TARGETS,
+    ...Object.keys(ACTIVITY_IMPORT_DISPATCHER_METADATA),
     'listUsers',
     'scheduleAdminDashboardSnapshot',
     'grantAdminSubscriptionGift',
@@ -433,6 +444,7 @@ async function check(): Promise<void> {
 
   for (const target of [
     ...PROVIDER_CONNECTION_AND_HEALTH_TARGETS,
+    ...Object.keys(ACTIVITY_IMPORT_DISPATCHER_METADATA),
     ...Object.keys(INGESTION_TARGET_METADATA),
     ...Object.keys(SCHEDULED_MAINTENANCE_TARGET_METADATA),
     ...Object.keys(ADMIN_TARGET_METADATA),
@@ -467,6 +479,7 @@ async function check(): Promise<void> {
   for (const target of OPTIMIZED_FUNCTION_TARGETS) {
     const endpoint = stack.endpoints[target];
     const expectedPlatform = target === 'receiveSuunto247Data' || target === 'receiveGarminAPIHealthData'
+      || ACTIVITY_IMPORT_DISPATCHER_METADATA[target]
       ? 'gcfv1' : 'gcfv2';
     assert(endpoint?.platform === expectedPlatform, `${target} runtime generation changed.`);
     assert(endpoint.entryPoint === target, `${target} entrypoint metadata changed.`);
@@ -580,6 +593,28 @@ async function check(): Promise<void> {
           === JSON.stringify(expected.maxDispatchesPerSecond ?? null),
         `${target} task rate limits changed.`);
       }
+    } else if (ACTIVITY_IMPORT_DISPATCHER_METADATA[target]) {
+      const expected = ACTIVITY_IMPORT_DISPATCHER_METADATA[target];
+      assert(endpoint.availableMemoryMb === expected.memoryMb, `${target} memory configuration changed.`);
+      assert(endpoint.timeoutSeconds === expected.timeoutSeconds, `${target} timeout configuration changed.`);
+      assert(endpoint.cpu === undefined
+        && endpoint.concurrency === undefined
+        && JSON.stringify(endpoint.minInstances) === 'null'
+        && endpoint.maxInstances === 1,
+      `${target} CPU or instance settings changed.`);
+      assert(secretKeys.length === 0, `${target} secret bindings changed.`);
+      assert(endpoint.scheduleTrigger?.schedule === '*/30 * * * *'
+        && JSON.stringify(endpoint.scheduleTrigger.timeZone) === 'null'
+        && JSON.stringify(endpoint.scheduleTrigger.retryConfig) === JSON.stringify({
+          retryCount: null, maxDoublings: null, maxRetryDuration: null,
+          maxBackoffDuration: null, minBackoffDuration: null,
+        }),
+      `${target} schedule or retry configuration changed.`);
+      assert(endpoint.callableTrigger === undefined
+        && endpoint.httpsTrigger === undefined
+        && endpoint.eventTrigger === undefined
+        && endpoint.taskQueueTrigger === undefined,
+      `${target} trigger kind changed.`);
     } else if (SCHEDULED_MAINTENANCE_TARGET_METADATA[target]) {
       const expected = SCHEDULED_MAINTENANCE_TARGET_METADATA[target];
       assert(endpoint.availableMemoryMb === 512, `${target} memory configuration changed.`);

@@ -85,6 +85,30 @@ coverage, queue processing, writes and telemetry continue through the existing h
 This internal import change has no effect on MCP contracts, Training planning or user-facing help. No additional
 instances are kept warm and runtime resources are unchanged.
 
+## Recorded-activity import dispatcher isolation
+
+The four existing source-queue dispatchers load directly from their shared owner module, `queue`, and export only
+the requested original Firebase handler. They remain Gen 1 scheduled functions, not Gen 2 migrations:
+
+| Target | Memory | Timeout |
+| --- | --- | --- |
+| `parseGarminAPIActivityQueue` | 1 GiB | 540 seconds |
+| `parseSuuntoAppActivityQueue` | 1 GiB | 540 seconds |
+| `parseCOROSAPIWorkoutQueue` | 256 MiB | 300 seconds |
+| `parseWahooAPIWorkoutQueue` | 1 GiB | 540 seconds |
+
+All four retain `europe-west2`, maximum one instance, `*/30 * * * *`, default time-zone/retry settings and no secret
+bindings. Minimum instances, CPU and concurrency remain unspecified. The shared dispatch implementation and its
+provider-processing dependencies remain in `queue`; this isolates the full application registry without introducing
+a competing dispatch path or claiming a dependency-free scheduler. The original capacity limit, task spreading,
+revision/connection/deletion guards, dispatch recovery and #829 observations are unchanged. Discovery and standalone
+secret validation still expose the complete registry even with any of these targets inherited.
+
+Monitoring coverage is **unchanged**: #829 still filters these dispatchers as `cloud_function`, and the Gen 2 worker
+as `cloud_run_revision`. Existing metrics, dashboard and policies remain valid; activation/readback remains #829's
+separate operational step. Help was reviewed; this internal loading change needs no user-facing copy. There is no
+MCP tool, schema, scope, consent, projection, provider action or bundled-skill change.
+
 ## Scheduled maintenance isolation
 
 Four existing Gen 2 scheduled functions load directly from their owner modules:
@@ -193,6 +217,8 @@ The check builds the Functions package and verifies:
   region and secret bindings;
 - the four ingestion targets avoid the full entrypoint, Genkit, BigQuery, MCP and admin modules, while retaining CPU,
   memory, timeout, concurrency, instance settings, secrets, trigger kinds, retry options and task rate limits;
+- the four recorded-activity dispatchers avoid those unrelated modules, retain their Gen 1 scheduled-handler contracts,
+  and preserve complete discovery and standalone secret validation with each target inherited;
 - the four scheduled maintenance targets avoid those unrelated modules, preserve their complete scheduled-handler
   contracts and allow standalone secret validation with any of their targets inherited;
 - the two token projections and Garmin Health receiver avoid those unrelated modules, preserve their original trigger,
@@ -442,6 +468,37 @@ explicit approval. Deploy only the dispatcher from the verified revision:
 ```bash
 firebase deploy --project quantified-self-io --only functions:dispatchGarminPingBatchOnWrite
 ```
+
+## Recorded-activity dispatcher benchmark and verification (2026-10-07)
+
+Three isolated Node 22.23.3 processes per target used the compiled benchmark's `--probe` mode, `--expose-gc`, matching
+`FUNCTION_TARGET` and neither discovery flag. The baseline was clean local `develop` at `1f9e4b509`, with the same
+machine and dependencies before and after the loader change.
+
+| Loading path | Import before | Import after | RSS before | RSS after | Modules before | Modules after |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: |
+| `parseGarminAPIActivityQueue` | 1,098 ms | 413 ms | 239.4 MiB | 133.1 MiB | 3,151 | 1,514 |
+| `parseSuuntoAppActivityQueue` | 1,144 ms | 421 ms | 238.0 MiB | 132.5 MiB | 3,151 | 1,514 |
+| `parseCOROSAPIWorkoutQueue` | 1,106 ms | 407 ms | 238.0 MiB | 130.4 MiB | 3,151 | 1,514 |
+| `parseWahooAPIWorkoutQueue` | 987 ms | 405 ms | 238.1 MiB | 131.3 MiB | 3,151 | 1,514 |
+| Complete entrypoint control | 996 ms | 1,038 ms | 239.0 MiB | 238.1 MiB | 3,151 | 3,151 |
+
+Each dispatcher exports one handler; discovery still exposes 168. Local imports are about 59–63% faster with
+105–108 MiB less startup RSS. These are import measurements, not production memory guarantees or billing savings.
+Keep existing resources unchanged and compare production starts, memory, errors, dispatch/recovery outcomes and
+monitoring heartbeats after a separately approved deployment.
+
+Verification passed:
+
+- 157 focused tests across loader, bootstrap, secret policy, queue and import monitoring;
+- nine offline monitoring definition/provisioning tests;
+- TypeScript build and compiled entrypoint check: 168 endpoints and 76 isolated targets;
+- all 168 full Firebase endpoint descriptors matched the pre-change baseline byte-for-byte;
+- inherited-target discovery and standalone secret validation for all four dispatchers;
+- deployment-source safety, secret-binding validation for 69 endpoints, scoped ESLint and `git diff --check`.
+
+Documentation-only changes have no separate automated suite. No provider calls, production deployment or cloud
+configuration apply was performed. This change is local on `develop`; pushing and deployment require approval.
 
 ## Adding another optimized target
 
