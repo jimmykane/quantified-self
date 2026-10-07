@@ -4892,7 +4892,9 @@ reparse overwrites any existing source document, backend EventWriter adapters du
 the server-owned `legacyLegs` field. This evidence survives partial-write retries and does not advance the load
 timestamp. After source writes, a second transaction refreshes candidates, checks the persisted source and preserves
 the latest controls. It consumes the frozen evidence before old leg cleanup. Metadata preparation and persistence
-failures propagate to the caller for retry.
+failures propagate to the caller for retry. Preparation also computes any uncached evaluations before EventWriter
+serializes source statistics, including native JSON imports whose power evaluation derives additional statistics.
+Final metadata persistence reads those cached results so source fingerprints describe exactly what was saved.
 
 Reconciliation uses the existing unique identity matcher with its unmatched-leg fallback disabled. Derived TSS is
 excluded from control identity. Ambiguous identities retain saved policies/controls and make modeled load
@@ -4908,6 +4910,8 @@ controls may require a bounded child join. Browser and backend use the same cano
 fingerprints, rejecting stale candidate/source combinations. Unrecognized leg IDs remain unavailable while a rewrite
 is in progress instead of reverting to recorded TSS. The editor checks both parent and leg fingerprints and blocks
 leg edits until stale activity details are reopened. The
+Sports Lib JSON reader preserves zero W/kg power-curve values so reopening a saved leg does not falsely change its
+source fingerprint. This read compatibility fix needs no historical reparse and exposes no additional MCP fields. The
 `onTrainingLoadMetadataWrite` trigger invalidates affected load-derived kinds and increments the event
 mutation/workout input versions; timestamp/revision-only bookkeeping does not invalidate. Impact waits when a load
 edit is newer than Form. CTL 42 days, ATL 7 days and UTC-day bucketing are unchanged.
@@ -4919,7 +4923,8 @@ controls without exposing policy metadata, widening frozen public schemas or add
 exclusions never increment benchmark counts, and output validation accepts them outside the benchmark/incomplete
 subsets. MCP source rewrites remain updating even without a cached score; identities needing owner review remain
 unavailable rather than being counted as missing recorded TSS. Stale benchmark metadata cannot block otherwise
-usable day contributions; recent owner exclusions still wait for the Form rebuild. Actual service responses are
+usable day contributions in MCP or the app; the app omits benchmark metadata listeners from impact calculations.
+Recent owner exclusions still wait for the Form rebuild. Actual service responses are
 checked against the strict output validator, including partial days. Built-in Assistant instructions distinguish
 recorded metrics from modeled load. This is a completed-load feature, with no plan/workout read or mutation contract impact and no
 provider delivery changes.

@@ -8,6 +8,7 @@ import { TrainingLoadService } from '../../services/training-load.service';
 import { AppHapticsService } from '../../services/app.haptics.service';
 import { defaultAppliedTrainingLoadPolicy } from '@shared/training-load-policy';
 import { browserTrainingLoadSourceFingerprint } from '@shared/training-load-source';
+import { ActivityTypes, EventImporterJSON } from '@sports-alliance/sports-lib';
 
 describe('Training load editor', () => {
   const save = vi.fn(); const selection = vi.fn(); const success = vi.fn(); const error = vi.fn();
@@ -88,5 +89,26 @@ describe('Training load editor', () => {
         policy: defaultAppliedTrainingLoadPolicy('Walking'), recordedTss: 87.3,
         evaluations: { version: 1, automatic: result, hr: { ...result, preference: 'HR' }, met: { ...result, preference: 'MET' } } } } });
     expect(component.automatic).toBeNull(); expect(component.recorded).toBe(87.3);
+  });
+  it('accepts restored power-curve zeros as the same saved leg and allows its override', async () => {
+    const parent = { name: 'Ride', startDate: 1000, endDate: 3601000, stats: { 'Training Stress Score': 9 } };
+    const leg = { startDate: 1000, endDate: 3601000, type: ActivityTypes.Cycling,
+      creator: { name: 'Test' }, laps: [], intensityZones: [], streams: [],
+      stats: { 'Training Stress Score': 9, PowerCurve: [{ duration: 1, power: 0, wattsPerKg: 0 }] } };
+    const event = EventImporterJSON.getEventFromJSON({ ...parent, activities: [leg] } as any).setID('e');
+    event.getActivities()[0].setID('ride');
+    TestBed.inject(MAT_DIALOG_DATA).event = event;
+    watch.mockReturnValue(of({ version: 1, revision: 1, excluded: false, controls: {},
+      parentFingerprint: await browserTrainingLoadSourceFingerprint(parent),
+      legs: { ride: { activityId: 'ride', sourceFingerprint: await browserTrainingLoadSourceFingerprint(leg),
+        identity: { startMs: 1000, endMs: 3601000, type: ActivityTypes.Cycling, duration: 3600, distance: null },
+        policy: defaultAppliedTrainingLoadPolicy(ActivityTypes.Cycling), evaluations: null, recordedTss: 9 } } }));
+    component = TestBed.runInInjectionContext(() => new TrainingLoadDialogComponent());
+    await component.ngOnInit();
+    expect(component.sourceCurrent()).toBe(true);
+    expect(component.model).toMatchObject({ status: 'available', score: 9 });
+    component.form.patchValue({ override: 0 }); component.form.markAsDirty(); await component.save();
+    expect(save).toHaveBeenCalledWith('u', 'e', 1,
+      { key: 'ride', control: { method: 'AUTOMATIC', included: true, override: 0 } }, undefined);
   });
 });

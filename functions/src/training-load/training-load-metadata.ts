@@ -90,6 +90,8 @@ export async function prepareTrainingLoadMetadata(
   const db = admin.firestore();
   const eventId = event.getID();
   if (!eventId) throw new Error('Training load requires a persisted event identity.');
+  const activities = event.getActivities();
+  if (activities.length > 100) throw new Error('Training load supports at most 100 legs per workout.');
   const eventRef = db.doc(`users/${uid}/events/${eventId}`);
   const metaRef = eventRef.collection('metaData').doc('trainingLoad');
   const firstImport = await db.runTransaction(async transaction => {
@@ -115,6 +117,10 @@ export async function prepareTrainingLoadMetadata(
     else transaction.set(metaRef, { version: 1, excluded: false, controls: {}, ...frozen });
     return false;
   });
+  // Native JSON imports may not have parse-time evaluations yet. Power evaluation
+  // can derive stats, so finish it before EventWriter snapshots source documents.
+  // The final metadata transaction then reads the cached, non-mutating results.
+  activities.forEach(activity => ActivityUtilities.getTrainingStressScoreEvaluations(activity));
   return () => persistTrainingLoadMetadata(uid, event, authorize, firstImport);
 }
 

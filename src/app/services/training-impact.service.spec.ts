@@ -10,6 +10,7 @@ import {
 } from './dashboard-derived-metrics.service';
 import { TrainingLoadService } from './training-load.service';
 import { TrainingImpactService } from './training-impact.service';
+import type { EventInterface } from '@sports-alliance/sports-lib';
 
 describe('TrainingImpactService', () => {
   const viewer$ = new BehaviorSubject<any>({ uid: 'owner' });
@@ -59,9 +60,9 @@ describe('TrainingImpactService', () => {
     });
   });
 
-  it('waits for the Form rebuild after a newer load edit and never reads another owner’s metadata', () => {
+  it.each(['available', 'excluded'])('waits for Form after a newer %s load edit and never reads another owner’s metadata', (status) => {
     viewer$.next({ uid: 'owner' });
-    loads.watchEffective.mockReturnValueOnce(of(new Map([['e', { score: 0, status: 'available', updatedAtMs: 200 }]])));
+    loads.watchEffective.mockReturnValueOnce(of(new Map([['e', { score: 0, status, updatedAtMs: 200 }]])));
     derived.watch.mockReturnValueOnce(of({ ...createDashboardDerivedMetricsMissingState(), formStatus: 'ready',
       formPoints: [], formUpdatedAtMs: 100 }));
     const instance = service();
@@ -69,6 +70,22 @@ describe('TrainingImpactService', () => {
     expect(states).toEqual(['updating']);
     loads.watchEffective.mockClear(); viewer$.next({ uid: 'other' });
     instance.watch('owner').subscribe().unsubscribe(); expect(loads.watchEffective).not.toHaveBeenCalled();
+  });
+  it('does not let benchmark metadata hold a completed day in updating state', () => {
+    viewer$.next({ uid: 'owner' });
+    const workout = { getID: () => 'workout' } as EventInterface;
+    const benchmark = { getID: () => 'benchmark', isMerge: true } as EventInterface;
+    loads.watchEffective.mockImplementationOnce((...args: any[]) => of(new Map(
+      (args[1] as EventInterface[]).map(event => [event.getID(), {
+        score: 9, status: 'available', updatedAtMs: event === benchmark ? 200 : 50,
+      }]),
+    )));
+    derived.watch.mockReturnValueOnce(of({ ...createDashboardDerivedMetricsMissingState(), formStatus: 'ready',
+      formPoints: [], formUpdatedAtMs: 100 }));
+    const states: string[] = [];
+    service().watch('owner', [workout, benchmark]).subscribe(value => states.push(value.status)).unsubscribe();
+    expect(states).toEqual(['ready']);
+    expect(loads.watchEffective).toHaveBeenLastCalledWith('owner', [workout]);
   });
   it('shares the owner Form listener and tears it down after the last subscriber', () => {
     vi.clearAllMocks();

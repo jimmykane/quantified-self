@@ -126,6 +126,26 @@ describe.skipIf(!enabled)('Training load persistence in Firestore', () => {
     expect(result.legs!.leg.policy).toMatchObject({ revision: 1, method: 'MET' });
     expect(resolveEffectiveTrainingLoad({}, result)).toMatchObject({ score: 0, status: 'available' });
   });
+  it('evaluates uncached JSON power inputs before saving source statistics', async () => {
+    const uid = setup(); await db.doc(`users/${uid}`).set({ test: true });
+    const start = Date.UTC(2026, 0, 2);
+    const event = EventImporterJSON.getEventFromJSON({ name: 'Ride', startDate: start, endDate: start + 3600000,
+      activities: [{ startDate: start, endDate: start + 3600000, type: ActivityTypes.Cycling,
+        creator: { name: 'Test' }, laps: [], intensityZones: [], streams: [],
+        stats: { FTP: 200, 'Power Normalized': 200, Duration: 3600 } }] } as any);
+    event.setID('workout'); event.getActivities()[0].setID('leg');
+    // JSON imports do not run the stream/stat generator used by FIT importers.
+    // Evaluating their power candidate also derives Power Intensity Factor.
+    expect(event.getActivities()[0].getStat('Power Intensity Factor')).toBeUndefined();
+    const finish = await prepareTrainingLoadMetadata(uid, event);
+    await source(uid, event);
+    await finish();
+    expect((await db.doc(`users/${uid}/activities/leg`).get()).data()?.stats['Power Intensity Factor']).toBe(1);
+    const result = (await db.doc(metadataPath(uid)).get()).data() as TrainingLoadMetadata;
+    expect(result.legs!.leg.evaluations?.automatic).toMatchObject({ method: 'POWER', score: 99.2 });
+    const docs = await attachEventTrainingLoads(uid, [(await db.doc(`users/${uid}/events/workout`).get())]);
+    expect(attachedEffectiveTrainingLoad(docs[0].data()!)).toMatchObject({ score: 99.2, status: 'available' });
+  });
   it('retains a legacy control with missing source evidence as an unmatched record for owner review', async () => {
     const uid = setup(); const event = workout(); await source(uid, event);
     const ref = db.doc(metadataPath(uid));
