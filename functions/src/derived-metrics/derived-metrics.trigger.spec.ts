@@ -113,6 +113,49 @@ describe('onDashboardDerivedMetricsEventWrite', () => {
         expect(hoisted.enqueueDerivedMetricsIngressTask).toHaveBeenCalledTimes(2);
     });
 
+    it('refreshes legacy source changes outside the derived rollout without enqueueing', async () => {
+        hoisted.isDerivedMetricsUidAllowed.mockReturnValue(false);
+        hoisted.metadata.mockResolvedValue({ data: () => ({ controls: { leg: { override: 0 } } }) });
+        await (onDashboardDerivedMetricsActivityWrite as any)({ params: { uid: 'user-1', activityId: 'leg' }, data: {
+            before: { exists: true, data: () => ({ eventID: 'e', stats: {} }) },
+            after: { exists: true, data: () => ({ eventID: 'e', stats: { Duration: 10 } }) } } });
+        expect(hoisted.refresh).toHaveBeenCalledWith('user-1', 'e');
+        expect(hoisted.enqueueDerivedMetricsIngressTask).not.toHaveBeenCalled();
+    });
+
+    it('uses cache readiness time for delayed legacy source invalidations', async () => {
+        hoisted.metadata.mockResolvedValue({ data: () => ({ controls: { leg: { override: 0 } } }) });
+        const started = Date.now();
+        await (onDashboardDerivedMetricsActivityWrite as any)({ time: '2026-01-01T00:00:00Z',
+            params: { uid: 'user-1', activityId: 'leg' }, data: {
+                before: { exists: true, data: () => ({ eventID: 'e' }) }, after: { exists: false } } });
+        expect(hoisted.enqueueDerivedMetricsIngressTask.mock.calls[0][2]).toBeGreaterThanOrEqual(started);
+    });
+
+    it.each([false, true])('refreshes the previous parent when a leg moves to another workout (destination import: %s)', async destinationPending => {
+        const legacy = { data: () => ({ controls: { leg: { override: 0 } } }) };
+        hoisted.metadata.mockResolvedValueOnce(destinationPending ? { data: () => ({ sourceWritePending: true }) } : legacy)
+            .mockResolvedValueOnce(legacy);
+        await (onDashboardDerivedMetricsActivityWrite as any)({ params: { uid: 'user-1', activityId: 'leg' }, data: {
+            before: { exists: true, data: () => ({ eventID: 'old' }) },
+            after: { exists: true, data: () => ({ eventID: 'new' }) } } });
+        expect(hoisted.refresh).toHaveBeenCalledWith('user-1', 'old');
+        if (!destinationPending) expect(hoisted.refresh).toHaveBeenCalledWith('user-1', 'new');
+        expect(hoisted.enqueueDerivedMetricsIngressTask).toHaveBeenCalledTimes(1);
+    });
+
+    it('selects the cache invalidation bucket after a slow deletion guard finishes', async () => {
+        const now = vi.spyOn(Date, 'now').mockReturnValue(1000);
+        const readGuard = hoisted.getAll.getMockImplementation()!;
+        hoisted.getAll.mockImplementation(async (...args: unknown[]) => { now.mockReturnValue(90000); return readGuard(...args); });
+        try {
+            await (onTrainingLoadMetadataWrite as any)({ params: { uid: 'user-1', eventId: 'e' }, data: {
+                before: { exists: true, data: () => ({ controls: {} }) },
+                after: { exists: true, data: () => ({ controls: { leg: { override: 0 } } }) } } });
+            expect(hoisted.enqueueDerivedMetricsIngressTask.mock.calls[0][2]).toBe(90000);
+        } finally { now.mockRestore(); }
+    });
+
     it('publishes completed imports once through normal full-source ingress after the cache is ready', async () => {
         await (onTrainingLoadMetadataWrite as any)({ params: { uid: 'user-1', eventId: 'e' }, data: {
             before: { exists: true, data: () => ({ version: 1, controls: {}, sourceWritePending: true }) },

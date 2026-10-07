@@ -74,7 +74,7 @@ export class TrainingLoadDialogComponent implements OnInit {
   get model() { return this.resolveLoad(); }
   get legModel() { return this.resolveLoad(this.selectedId()); }
   get automatic(): number | null {
-    return this.sourceCurrent() ? (this.leg?.evaluations ? this.leg.evaluations.automatic.score : this.recorded) : null;
+    return this.sourceCurrent() && !this.metadata()?.sourceWritePending ? (this.leg?.evaluations ? this.leg.evaluations.automatic.score : this.recorded) : null;
   }
   get recorded(): number | null { return recordedTrainingStressScore(this.activities.find(a => a.id === this.selectedId()) ?? {}); }
   get unresolved(): string[] { return this.metadata() ? unresolvedTrainingLoadLegs(this.metadata()!) : []; }
@@ -82,6 +82,7 @@ export class TrainingLoadDialogComponent implements OnInit {
   get valid(): boolean { return !this.hasOverride || validTrainingLoadOverride(Number(this.form.controls.override.value)); }
   get explanation(): string {
     if (this.legModel.status === 'excluded') return 'Excluded from modeled load. Activity history and volume are retained.';
+    if (this.metadata()?.sourceWritePending) return 'This import is not complete. Training load is unavailable until it finishes. Retry the import if it failed; you can still exclude the whole workout.';
     if (this.legModel.reasons.includes('source-updating')) return 'The activity changed during reparse. Close this editor and reopen the activity to load its current legs.';
     if (this.legModel.reasons.includes('activity-match-needs-review')) return 'Review the unmatched legs below before using modeled load.';
     if (this.legModel.method === 'OVERRIDE') return 'The numeric override sets modeled load. Reset restores this leg’s saved policy.';

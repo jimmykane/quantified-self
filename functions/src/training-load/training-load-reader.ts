@@ -30,7 +30,7 @@ export async function attachEventTrainingLoads<T extends SourceDocument>(uid: st
     // Bound concurrency and reread current records transactionally; never publish a stale scan result.
     const ids = [...metadata.keys()];
     for (let offset = 0; offset < ids.length; offset += 4)
-      await Promise.all(ids.slice(offset, offset + 4).map(id => refreshTrainingLoadSummary(uid, id, true)));
+      await Promise.all(ids.slice(offset, offset + 4).map(id => refreshTrainingLoadSummary(uid, id)));
     await completeTrainingLoadCacheWarmup(uid);
     summaries = await readTrainingLoadSummaries(uid);
     if (!summaries) throw new Error('Training load cache warmup did not complete.');
