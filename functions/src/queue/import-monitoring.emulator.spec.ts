@@ -12,10 +12,10 @@ describe.skipIf(!process.env.FIRESTORE_EMULATOR_HOST)('recorded import observati
   let db: Firestore;
   beforeEach(() => { vi.clearAllMocks(); db = new Firestore({ projectId: `demo-import-monitor-${randomUUID().slice(0, 8)}` }); });
   afterEach(async () => { await db.terminate(); });
-  async function seed(queue = 'garminAPIActivityQueue', root = 'garminAPITokens', identity = 'userID', id = 'qa') {
+  async function seed(queue = 'garminAPIActivityQueue', root = 'garminAPITokens', identity = 'userID', id = 'qa', service = ServiceNames.GarminAPI) {
     const user = db.collection('users').doc(id);
     await user.set({ private: 'PRIVATE_OWNER' });
-    await user.collection('meta').doc(ServiceNames.GarminAPI).set({ connectionState: 'connected' });
+    await user.collection('meta').doc(service).set({ connectionState: 'connected' });
     await db.collection(root).doc(id).set({ private: 'PRIVATE_ROOT' });
     await db.collection(root).doc(id).collection('tokens').doc('account').set({ [identity]: 'account', accessToken: 'PRIVATE_TOKEN' });
     const ref = db.collection(queue).doc(id);
@@ -33,7 +33,7 @@ describe.skipIf(!process.env.FIRESTORE_EMULATOR_HOST)('recorded import observati
     [ServiceNames.COROSAPI, 'coros', 'COROSAPIWorkoutQueue', 'COROSAPIAccessTokens', 'openId'],
     [ServiceNames.WahooAPI, 'wahoo', 'wahooAPIWorkoutQueue', 'wahooAPIAccessTokens', 'wahooUserID'],
   ])('observes eligible current work for %s without leaking payloads', async (service, provider, queue, root, identity) => {
-    const ref = await seed(queue, root, identity);
+    const ref = await seed(queue, root, identity, 'qa', service);
     const lastWrite = (await ref.get()).updateTime!.toMillis();
     await observeImportQueue(db, service, lastWrite + 3_600_000);
     expect(sample(provider)).toMatchObject({ dueSample: 1, ageLowerBoundMs: 3_600_000 });
@@ -66,6 +66,26 @@ describe.skipIf(!process.env.FIRESTORE_EMULATOR_HOST)('recorded import observati
     expect(sample()).toMatchObject({ unknownSample: 1 });
     expect(sample()).not.toHaveProperty('dueSample');
     expect(sample()).not.toHaveProperty('ageLowerBoundMs');
+  });
+  it.each([
+    [ServiceNames.COROSAPI, 'coros', 'COROSAPIWorkoutQueue', 'COROSAPIAccessTokens', 'openId'],
+    [ServiceNames.WahooAPI, 'wahoo', 'wahooAPIWorkoutQueue', 'wahooAPIAccessTokens', 'wahooUserID'],
+  ])('excludes a different pinned %s account despite retained credentials', async (service, provider, queue, root, identity) => {
+    await seed(queue, root, identity, 'qa', service);
+    await db.doc(`users/qa/meta/${service}`).update({ providerUserId: 'replacement-account' });
+    await observeImportQueue(db, service);
+    expect(sample(provider)).toMatchObject({ dueSample: 0, excludedSample: 1, unknownSample: 0 });
+  });
+  it('excludes missing owners, tombstones without expiry and credential children below missing roots', async () => {
+    await seed(undefined, undefined, undefined, 'missing-owner');
+    await db.doc('users/missing-owner').delete();
+    await seed(undefined, undefined, undefined, 'deleting');
+    await db.doc('userDeletionTombstones/deleting').set({});
+    await seed(undefined, undefined, undefined, 'orphan-token');
+    // Deliberately reproduce Firestore's retained child below a missing parent.
+    await db.doc('garminAPITokens/orphan-token').delete();
+    await observeImportQueue(db, ServiceNames.GarminAPI);
+    expect(sample()).toMatchObject({ dueSample: 0, excludedSample: 3, unknownSample: 0 });
   });
   it('caps work at twenty rows plus look-ahead rather than enumerating the backlog', async () => {
     const batch = db.batch();

@@ -81,6 +81,8 @@ known sample remains useful but cannot establish complete backlog coverage. Lega
 rows lacking safe owner identity are unknown, not guessed through global token scans.
 If every sampled row is unknown, numeric count/age fields are omitted, never zero.
 An inaccessible probe emits only `queue_sample_unavailable`; it cannot stop dispatch.
+The dispatcher also isolates unexpected probe/client-initialization errors, retaining
+its original result or error and emitting the same privacy-safe unavailable observation.
 There is a five-second probe deadline and no new scheduler, persistent cursor or queue
 write. At most 21 candidate documents plus 20 × (five masked documents + one token
 lookup) are read per run: 141 document reads before query minimums/retries. With four

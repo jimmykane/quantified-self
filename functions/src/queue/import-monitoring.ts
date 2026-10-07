@@ -44,6 +44,11 @@ export function recordImportDispatch(service: unknown, outcome: 'completed' | 'f
   if (source) emit(source.provider, 'dispatch_run', { outcome });
 }
 
+export function recordImportQueueUnavailable(service: unknown): void {
+  const source = SOURCES.find(item => item.service === service);
+  if (source) emit(source.provider, 'queue_sample_unavailable');
+}
+
 /** Bounded read-only lower-bound sample, piggybacking on the existing 30-minute dispatcher. */
 export async function observeImportQueue(db: FirebaseFirestore.Firestore, service: ServiceNames, now = Date.now()): Promise<void> {
   const source = SOURCES.find(item => item.service === service);
@@ -108,6 +113,6 @@ export async function observeImportQueue(db: FirebaseFirestore.Firestore, servic
     await Promise.race([sample(), new Promise<never>((_resolve, reject) => {
       timer = setTimeout(() => { stopped = true; reject(new Error('Probe deadline')); }, PROBE_TIMEOUT_MS);
     })]);
-  } catch { emit(source.provider, 'queue_sample_unavailable'); }
+  } catch { recordImportQueueUnavailable(service); }
   finally { stopped = true; if (timer) clearTimeout(timer); }
 }

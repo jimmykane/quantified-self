@@ -1186,7 +1186,9 @@ monitoring and does not change any provider's availability. See
 unknown observations, thresholds, cost bounds and separately approved activation/readback.
 HTTP acknowledgements and historical retained `failed_jobs` totals are not import success
 or a new failure rate. No provider calls, retry/TTL changes or production apply are part of
-the local implementation.
+the local implementation. Unexpected observation/client-initialization errors remain
+isolated from the dispatcher's original result or error; unavailable observations are
+visible rather than converted into an empty backlog.
 
 Provider parity includes operational visibility, not only a user-facing connection.
 

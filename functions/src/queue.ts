@@ -91,7 +91,7 @@ import {
 import { getServiceTokenRootDocumentRef } from './service-token-store';
 import { ResponseBodyTooLargeError } from './request-helper';
 import { SUUNTO_FIT_DOWNLOAD_TOO_LARGE_CONTEXT } from './suunto/constants';
-import { observeImportQueue, recordImportDispatch } from './queue/import-monitoring';
+import { observeImportQueue, recordImportDispatch, recordImportQueueUnavailable } from './queue/import-monitoring';
 
 type ProviderWorkoutQueueItem = SuuntoAppWorkoutQueueItemInterface
   | GarminAPIActivityQueueItemInterface
@@ -303,7 +303,10 @@ export async function dispatchQueueItemTasks(serviceName: ServiceNames) {
     recordImportDispatch(serviceName, 'failed');
     throw error;
   } finally {
-    await observeImportQueue(admin.firestore(), serviceName);
+    // Keep even client initialization/unexpected observation errors outside the
+    // dispatch result. A failed observation must not replace a dispatch error.
+    try { await observeImportQueue(admin.firestore(), serviceName); }
+    catch { recordImportQueueUnavailable(serviceName); }
   }
 }
 

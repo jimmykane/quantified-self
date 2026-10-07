@@ -731,6 +731,42 @@ describe('queue', () => {
     });
 
     describe('dispatchQueueItemTasks', () => {
+        it.each(['completed', 'failed'] as const)('preserves the %s dispatch result when monitoring unexpectedly rejects', async outcome => {
+            const telemetry = await import('./queue/import-monitoring');
+            const { dispatchQueueItemTasks } = await import('./queue');
+            const dispatchError = new Error('PRIVATE_DISPATCH_FAILURE');
+            const observation = vi.spyOn(telemetry, 'observeImportQueue').mockRejectedValueOnce(new Error('PRIVATE_PROBE_FAILURE'));
+            const unavailable = vi.spyOn(telemetry, 'recordImportQueueUnavailable');
+            const recordDispatch = vi.spyOn(telemetry, 'recordImportDispatch');
+            try {
+                if (outcome === 'failed') vi.mocked(utils.getCloudTaskQueueDepth).mockRejectedValueOnce(dispatchError);
+                else vi.mocked(utils.getCloudTaskQueueDepth).mockResolvedValueOnce(MAX_PENDING_TASKS);
+                const result = dispatchQueueItemTasks(ServiceNames.GarminAPI);
+                if (outcome === 'failed') await expect(result).rejects.toBe(dispatchError);
+                else await expect(result).resolves.toBeUndefined();
+                expect(observation).toHaveBeenCalledExactlyOnceWith(expect.anything(), ServiceNames.GarminAPI);
+                expect(unavailable).toHaveBeenCalledExactlyOnceWith(ServiceNames.GarminAPI);
+                expect(recordDispatch).toHaveBeenCalledExactlyOnceWith(ServiceNames.GarminAPI, outcome);
+                expect(utils.enqueueWorkoutTask).not.toHaveBeenCalled();
+            } finally {
+                observation.mockRestore(); unavailable.mockRestore(); recordDispatch.mockRestore();
+            }
+        });
+
+        it('does not fail an idle dispatch when the observation Firestore client cannot initialize', async () => {
+            const telemetry = await import('./queue/import-monitoring');
+            const admin = await import('firebase-admin');
+            const { dispatchQueueItemTasks } = await import('./queue');
+            const client = vi.spyOn(admin, 'firestore').mockImplementationOnce(() => { throw new Error('PRIVATE_CLIENT_FAILURE'); });
+            const unavailable = vi.spyOn(telemetry, 'recordImportQueueUnavailable');
+            try {
+                vi.mocked(utils.getCloudTaskQueueDepth).mockResolvedValueOnce(MAX_PENDING_TASKS);
+                await expect(dispatchQueueItemTasks(ServiceNames.GarminAPI)).resolves.toBeUndefined();
+                expect(unavailable).toHaveBeenCalledExactlyOnceWith(ServiceNames.GarminAPI);
+                expect(utils.enqueueWorkoutTask).not.toHaveBeenCalled();
+            } finally { client.mockRestore(); unavailable.mockRestore(); }
+        });
+
         it('should skip dispatch if queue is full', async () => {
             const utils = await import('./utils');
             vi.mocked(utils.getCloudTaskQueueDepth).mockResolvedValue(MAX_PENDING_TASKS); // Max pending
