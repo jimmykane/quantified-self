@@ -5023,7 +5023,13 @@ and whole-workout exclusions need no child query. Switching workouts, exclusion 
 listener. Child corrections/deletions switch impact to updating until matching source data is available. While a
 new selection's modeled result is loading, a previous selection's ready snapshot cannot supply a recorded-TSS
 fallback for the newly selected workout. The shared resolver continues to distinguish missing load, zero and
-exclusion. These frontend read corrections preserve the existing MCP updating semantics and all public schemas, scopes and mutation contracts; no plugin rebuild is needed.
+exclusion. A selected day waits if any selected session is updating: it suppresses contributions and the old Form
+outcomes even when another session already has a usable score. Once the sources are current, ready totals return;
+genuinely missing load still allows an explicitly partial total. This is presentation-only and adds no reads,
+writes or rebuilds. The same waiting state applies when the selected contributions together exceed the saved
+Form load for any UTC day, with tolerance only for floating-point summation error. Individually fitting sessions
+cannot certify an aggregate that the saved day does not yet contain. These frontend corrections preserve the existing MCP updating semantics and all public schemas,
+scopes and mutation contracts; no plugin rebuild is needed.
 
 For one activity:
 

@@ -107,12 +107,19 @@ export function buildTrainingDayImpactView(
   events: readonly EventInterface[] | null | undefined,
   source: TrainingImpactSnapshotState,
 ): TrainingDayImpactView {
-  const sessions = (events || []).map(event => buildTrainingSessionImpactView(event, source));
+  const sessionViews = (events || []).map(event => buildTrainingSessionImpactView(event, source));
+  // A pending selected load can change the shared Form outcome, even when another
+  // session already has a usable score. Missing load may be partial; pending load must wait.
+  const awaitingLoads = source.status === 'ready' && (sessionViews.some(session => session.availability === 'updating')
+    || selectedLoadsExceedForm(sessionViews));
+  const daySource: TrainingImpactSnapshotState = awaitingLoads ? { ...source, status: 'updating', formPoints: null } : source;
+  const sessions = awaitingLoads ? sessionViews.map(session => session.availability === 'ready'
+    ? unavailable('updating', 'Updating Training impact…', session.eventId, session.dayMs) : session) : sessionViews;
   const readySessions = sessions.filter((session): session is TrainingSessionImpactView & {
     impact: TrainingSessionLoadImpact;
   } => session.availability === 'ready' && session.impact !== null);
-  const points = source.status === 'ready' ? toTrainingLoadPoints(source.formPoints) : [];
-  const outcomes = source.status === 'ready'
+  const points = daySource.status === 'ready' ? toTrainingLoadPoints(daySource.formPoints) : [];
+  const outcomes = daySource.status === 'ready'
     ? [...new Set(sessions.flatMap(session => (
       session.availability !== 'excluded' && session.dayMs !== null ? [session.dayMs] : []
     )))]
@@ -127,7 +134,7 @@ export function buildTrainingDayImpactView(
     formContribution: total.formContribution + session.impact.formContribution,
   }), { trainingStressScore: 0, ctlContribution: 0, atlContribution: 0, formContribution: 0 });
   const unavailableSessionCount = sessions.filter(session => session.availability !== 'ready' && session.availability !== 'excluded').length;
-  const availability = resolveDayAvailability(source, sessions, readySessions.length);
+  const availability = resolveDayAvailability(daySource, sessions, readySessions.length);
   return {
     availability,
     message: dayAvailabilityMessage(availability, sessions),
@@ -137,6 +144,22 @@ export function buildTrainingDayImpactView(
     outcomes,
     unavailableSessionCount,
   };
+}
+
+function selectedLoadsExceedForm(sessions: readonly TrainingSessionImpactView[]): boolean {
+  const days = new Map<number, { selected: number; saved: number; count: number }>();
+  for (const { impact } of sessions) {
+    if (!impact) continue;
+    const total = days.get(impact.day.dayMs) ?? { selected: 0, saved: impact.day.trainingStressScore, count: 0 };
+    total.selected += impact.trainingStressScore;
+    total.count++;
+    days.set(impact.day.dayMs, total);
+  }
+  return [...days.values()].some(({ selected, saved, count }) => {
+    // Allow only floating-point summation error, scaled to the load and term count.
+    const tolerance = Number.EPSILON * Math.max(1, selected, saved) * count;
+    return selected > saved + tolerance;
+  });
 }
 
 export function sessionRoleHeadline(impact: TrainingSessionLoadImpact): string {

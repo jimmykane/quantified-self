@@ -6,6 +6,7 @@ import {
   resolveTrainingImpactUtcDayMs,
 } from './training-impact.helper';
 import type { TrainingImpactSnapshotState } from '../services/training-impact.service';
+import type { TrainingLoadView } from '../services/training-load.service';
 
 function event(
   id: string,
@@ -76,6 +77,27 @@ describe('training impact view helper', () => {
     expect(buildTrainingDayImpactView([activity], state)).toMatchObject({ availability: 'updating', trainingStressScore: 0 });
   });
 
+  it.each(['source-updating', 'selection-loading'])('waits for every selected load while %s instead of showing a stale day outcome', reason => {
+    const dayMs = Date.UTC(2026, 0, 1);
+    const events = [event('ready', '2026-01-01T10:00:00Z', 9), event('changing', '2026-01-01T12:00:00Z', 87.3)];
+    const state = ready([{ dayMs, load: 96.3 }]);
+    const loads = new Map<string, TrainingLoadView>([['ready', {
+      score: 9, status: 'available', method: 'MET', estimated: true, reasons: [],
+    }]]);
+    state.loadsByEventId = loads;
+    if (reason === 'source-updating') loads.set('changing', {
+      score: null, status: 'unavailable', method: null, estimated: false, reasons: [reason],
+    });
+    const view = buildTrainingDayImpactView(events, state);
+    expect(view).toMatchObject({ availability: 'updating', headline: null, trainingStressScore: 0,
+      ctlContribution: 0, atlContribution: 0, formContribution: 0, outcomes: [], unavailableSessionCount: 2 });
+    expect(view.sessions.every(session => session.impact === null)).toBe(true);
+    loads.set('changing', { score: 9, status: 'available', method: 'MET', estimated: true, reasons: [] });
+    const current = buildTrainingDayImpactView(events, { ...ready([{ dayMs, load: 18 }]), loadsByEventId: loads });
+    expect(current).toMatchObject({ availability: 'ready', trainingStressScore: 18, unavailableSessionCount: 0 });
+    expect(current.outcomes[0].trainingStressScore).toBe(18);
+  });
+
   it('maps an activity to its UTC Training day and contribution', () => {
     const activity = event('session', '2026-01-02T00:30:00+02:00', 42);
     const dayMs = Date.UTC(2026, 0, 1);
@@ -127,6 +149,25 @@ describe('training impact view helper', () => {
     expect(view.atlContribution).toBe(18);
     expect(view.formContribution).toBe(-15);
     expect(view.outcomes.map(outcome => outcome.dayMs)).toEqual([firstDayMs, secondDayMs]);
+  });
+
+  it('waits when selected contributions together exceed the saved Form day', () => {
+    const dayMs = Date.UTC(2026, 0, 1);
+    // Each workout fits individually, but Form has not yet incorporated the second workout.
+    const view = buildTrainingDayImpactView([
+      event('first', '2026-01-01T10:00:00Z', 42), event('second', '2026-01-01T12:00:00Z', 42),
+    ], ready([{ dayMs, load: 42 }]));
+    expect(view).toMatchObject({ availability: 'updating', trainingStressScore: 0, outcomes: [], unavailableSessionCount: 2 });
+  });
+
+  it('allows rounding differences when the selected loads match the saved Form day', () => {
+    const dayMs = Date.UTC(2026, 0, 1);
+    expect(33.1 + 33.2).toBeGreaterThan(66.3 + Number.EPSILON);
+    const view = buildTrainingDayImpactView([
+      event('first', '2026-01-01T10:00:00Z', 33.1), event('second', '2026-01-01T12:00:00Z', 33.2),
+    ], ready([{ dayMs, load: 66.3 }]));
+    expect(view.availability).toBe('ready');
+    expect(view.trainingStressScore).toBeCloseTo(66.3);
   });
 
   it('retains a ready partial total while counting unavailable activities', () => {
