@@ -7,7 +7,7 @@ import {
 export type DerivedMetricSource = 'event' | 'activity' | 'sleep' | 'health' | 'training-load';
 
 const fieldsBySource: Record<DerivedMetricSource, readonly string[]> = {
-    'training-load': ['version', 'excluded', 'controls', 'legs', 'parentFingerprint', 'resetUnmatched'],
+    'training-load': ['version', 'excluded', 'controls', 'legs', 'parentFingerprint', 'resetUnmatched', 'sourceRevision', 'loadRevision'],
     event: DERIVED_METRICS_EVENT_FIELDS,
     activity: [...DERIVED_METRICS_ACTIVITY_FIELDS, 'swimLengths'],
     sleep: [...new Set([...DERIVED_METRICS_TRAINING_SLEEP_FIELDS, ...DERIVED_METRICS_TRAINING_READINESS_SLEEP_FIELDS])],
@@ -35,4 +35,9 @@ export function hasDerivedMetricSourceChange(source: DerivedMetricSource, before
         && (!isDeepStrictEqual(field(before, 'source.revision.digest'), field(after, 'source.revision.digest'))
             || !isDeepStrictEqual(field(before, 'sampleChunkIds'), field(after, 'sampleChunkIds')))) return true;
     return fieldsBySource[source].some(path => !isDeepStrictEqual(field(before, path), field(after, path)));
+}
+
+/** Canonical source fields used by the import coordinator, excluding ingestion bookkeeping. */
+export function derivedMetricSourceProjection(source: DerivedMetricSource, data: unknown): Record<string, unknown> {
+    return Object.fromEntries(fieldsBySource[source].map(path => [path, field(data, path)]));
 }

@@ -6,13 +6,12 @@ import { defaultAppliedTrainingLoadPolicy, isTrainingLoadMethod, recordedTrainin
   type AppliedTrainingLoadPolicy, type TrainingLoadLeg, type TrainingLoadMetadata } from '../../../shared/training-load-policy';
 import { resolveActivityIdentityAssignments } from '../shared/activity-identity-matcher';
 import { getUserDeletionGuardStateInTransaction } from '../shared/user-deletion-guard';
-import { canonicalTrainingLoadValue as canonical, serializeTrainingLoadSource, trainingLoadTimeMs } from '../../../shared/training-load-source';
+import { canonicalTrainingLoadValue as canonical, trainingLoadTimeMs } from '../../../shared/training-load-source';
+import { prepareTrainingLoadCacheWrite, summarizeTrainingLoad, trainingLoadSourceFingerprint, trainingLoadWriteTime } from './training-load-cache';
+import { derivedMetricSourceProjection } from '../derived-metrics/derived-metrics-source-change';
+export { trainingLoadSourceFingerprint } from './training-load-cache';
 export { trainingLoadTimeMs } from '../../../shared/training-load-source';
 
-/** Does not include user-edited titles/tags, IDs, or load controls. */
-export function trainingLoadSourceFingerprint(data: Parameters<typeof serializeTrainingLoadSource>[0]): string {
-  return createHash('sha256').update(serializeTrainingLoadSource(data)).digest('hex');
-}
 function identity(data: any): TrainingLoadLeg['identity'] {
   const stat = (type: string): number | null => {
     const raw = data.stats?.[type];
@@ -99,9 +98,15 @@ export async function prepareTrainingLoadMetadata(
     if (guard.shouldSkip) throw new Error('Training load write blocked by account deletion.');
     if (authorize) await authorize(db, transaction);
     const [parent, snapshot] = await transaction.getAll(eventRef, metaRef);
-    if (!parent.exists) return true;
     const previous = snapshot.data() as TrainingLoadMetadata | undefined;
-    if (previous?.legs || previous?.legacyLegs) return false;
+    if (!parent.exists || previous?.sourceFirstImport || previous?.legs || previous?.legacyLegs) {
+      if (!previous?.sourceWritePending) {
+        const pending = { sourceWritePending: true, ...(!parent.exists ? { sourceFirstImport: true } : {}), revision: (previous?.revision ?? 0) + 1 };
+        if (snapshot.exists) transaction.update(metaRef, pending);
+        else transaction.set(metaRef, { version: 1, excluded: false, controls: {}, ...pending });
+      }
+      return previous?.sourceFirstImport === true || !parent.exists;
+    }
     const children = await transaction.get(db.collection(`users/${uid}/activities`)
       .where('eventID', '==', eventId).limit(101));
     if (children.size > 100) throw new Error('Training load supports at most 100 legs per workout.');
@@ -111,7 +116,7 @@ export async function prepareTrainingLoadMetadata(
         recordedTss: recordedTrainingStressScore(data), evaluations: null,
         policy: defaultAppliedTrainingLoadPolicy(data.type) } satisfies TrainingLoadLeg];
     }));
-    const frozen = { legacyLegs, revision: (previous?.revision ?? 0) + 1 };
+    const frozen = { legacyLegs, sourceWritePending: true, revision: (previous?.revision ?? 0) + 1 };
     // No load timestamp: this changes only identity evidence, not modeled load.
     if (snapshot.exists) transaction.update(metaRef, frozen);
     else transaction.set(metaRef, { version: 1, excluded: false, controls: {}, ...frozen });
@@ -157,31 +162,58 @@ export async function persistTrainingLoadMetadata(
       throw new Error('Training load source changed during import; retry the source write.');
     }
     let previous = snapshot.exists ? snapshot.data() as TrainingLoadMetadata : null;
-    const datedCandidates: TrainingLoadLeg[] = [];
-    for (const candidate of candidates) datedCandidates.push({ ...candidate, policy: await policyAt(db, transaction, uid, candidate) });
+    const firstImportControlKeys = new Set<string>();
     // Old documents may already have been overwritten using reused IDs. Only
     // pre-write evidence can associate a legacy control with its original leg.
     if (previous && !previous.legs && Object.keys(previous.controls).length) {
       const ids = Object.keys(previous.controls);
       const legs: Record<string, TrainingLoadLeg> = {};
       ids.forEach(id => {
-        const saved = previous?.legacyLegs?.[id] ?? (firstImport ? datedCandidates.find(leg => leg.activityId === id) : undefined);
+        const saved = previous?.legacyLegs?.[id] ?? (firstImport ? candidates.find(leg => leg.activityId === id) : undefined);
         // Missing old source evidence is an unmatched control, never permission
         // to infer its identity from the newly written activity with that ID.
+        if (firstImport && !previous?.legacyLegs?.[id] && saved) firstImportControlKeys.add(id);
         legs[id] = saved ?? { activityId: null, identity: { startMs: null, endMs: null, type: 'Unknown',
           duration: null, distance: null }, recordedTss: null, evaluations: null,
           policy: defaultAppliedTrainingLoadPolicy(null) };
       });
       previous = { ...previous, legs };
     }
-    const reconciled = reconcileTrainingLoadLegs(previous, datedCandidates);
+    const reconciled = reconcileTrainingLoadLegs(previous, candidates);
+    // Matched legs already own an immutable dated policy. Only genuinely new legs query history.
+    for (const [key, leg] of Object.entries(reconciled.legs ?? {})) {
+      if (leg.activityId && (!previous?.legs?.[key] || firstImportControlKeys.has(key)))
+        leg.policy = await policyAt(db, transaction, uid, leg);
+    }
+    const sourceDigest = createHash('sha256').update(JSON.stringify(canonical({
+      event: derivedMetricSourceProjection('event', parent.data()),
+      activities: savedActivities.map(doc => ({ id: doc.id, data: derivedMetricSourceProjection('activity', doc.data()) }))
+        .sort((a, b) => a.id.localeCompare(b.id)),
+    }))).digest('hex');
+    const sourceWriteTimes = Object.fromEntries([['event', trainingLoadWriteTime(parent.updateTime)],
+      ...savedActivities.map(doc => [`activity:${doc.id}`, trainingLoadWriteTime(doc.updateTime)])]);
     const next: TrainingLoadMetadata = { version: 1, revision: (previous?.revision ?? 0) + 1,
-      excluded: previous?.excluded ?? false, ...reconciled, parentFingerprint, updatedAt: FieldValue.serverTimestamp() };
+      excluded: previous?.excluded ?? false, ...reconciled, parentFingerprint,
+      sourceWritePending: false, sourceWriteTimes, sourceDigest,
+      sourceRevision: (previous?.sourceRevision ?? 0) + (previous?.sourceDigest === sourceDigest ? 0 : 1), updatedAt: FieldValue.serverTimestamp() };
     const loadContent = (value: TrainingLoadMetadata) => canonical({ excluded: value.excluded,
       legs: value.legs ?? {}, controls: value.controls, parentFingerprint: value.parentFingerprint ?? null,
       resetUnmatched: value.resetUnmatched ?? false });
     // Timestamp-only writes would leave impact waiting for a rebuild that the
     // semantic-change trigger correctly skips. Refresh only changed candidates/controls.
-    if (!previous || JSON.stringify(loadContent(previous)) !== JSON.stringify(loadContent(next))) transaction.set(metaRef, next);
+    const loadChanged = !previous || JSON.stringify(loadContent(previous)) !== JSON.stringify(loadContent(next));
+    const sourceChanged = previous?.sourceDigest !== sourceDigest;
+    if (!loadChanged && previous?.updatedAt !== undefined) next.updatedAt = previous.updatedAt;
+    const changed = loadChanged || sourceChanged;
+    // Bookkeeping revisions do not rewrite identical cache entries or advance the load timestamp.
+    if (!changed) next.revision = previous!.revision;
+    const cacheWrite = await prepareTrainingLoadCacheWrite(db, transaction, uid, eventId,
+      summarizeTrainingLoad(eventId, parent.data()!, next));
+    // A control can change while the source is pending without changing parser candidates.
+    // Carry a server revision so finalization still invalidates that newly resolved load.
+    next.loadRevision = (previous?.loadRevision ?? 0) + (cacheWrite.changed ? 1 : 0);
+    if (changed || cacheWrite.changed || previous?.sourceWritePending || JSON.stringify(previous?.sourceWriteTimes) !== JSON.stringify(sourceWriteTimes))
+      transaction.set(metaRef, next);
+    cacheWrite.write();
   });
 }
