@@ -33,6 +33,11 @@ const base = {
 };
 
 describe('buildCalendarDayStory', () => {
+  it('does not claim a workout is unlinked when completion coverage is unknown', () => {
+    const story = buildCalendarDayStory({ ...base, notes: [], plans: [{ ...plan, completionKnown: false }] });
+    expect(story.highlights).toEqual([]);
+    expect(story.items.find(item => item.kind === 'plan')?.detail).toContain('completion unknown');
+  });
   it('orders dated items by actual time and leaves notes and plans without invented times', () => {
     const story = buildCalendarDayStory(base);
     expect(story.items.map(item => item.kind)).toEqual(['note', 'plan', 'sleep', 'activity']);

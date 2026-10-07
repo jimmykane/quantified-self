@@ -136,7 +136,33 @@ describe('public-seo-pages.content', () => {
       });
     }
 
-    expect(JSON.stringify(PUBLIC_SEO_PAGES)).not.toMatch(/\bprivate(?:ly)?\b/i);
+  });
+
+  it('keeps generic privacy boilerplate out of public copy', () => {
+    const copy = Object.values(PUBLIC_SEO_PAGES).map(page => ({
+      ...page,
+      // Reflection access needs a concrete privacy explanation, including on public recordings.
+      faqItems: page.faqItems.filter(item => !(
+        page.key === 'mcpServer'
+        && item.question === 'Can an MCP client read or save my post-workout reflection?'
+      )),
+    }));
+
+    expect(JSON.stringify(copy)).not.toMatch(/\bprivate(?:ly)?\b/i);
+  });
+
+  it('explains reflection privacy and independent access permissions', () => {
+    const answer = PUBLIC_SEO_PAGES.mcpServer.faqItems.find(item => (
+      item.question === 'Can an MCP client read or save my post-workout reflection?'
+    ))?.answer;
+
+    expect(answer).toContain('separate workout-reflection read permission plus Individual activity details access');
+    expect(answer).toContain('Change workout reflections additionally permits revision-checked saves or permanent deletes through native client approval');
+    expect(answer).toContain('Existing connections must authorize again');
+    expect(answer).toContain('owner-only on public recordings');
+    expect(answer).toContain('never sent to fitness providers');
+    expect(answer).toContain('Assistant has an independent choice that starts on for fresh and New chats, can be turned off');
+    expect(answer).toContain('requires review and Apply in QS');
   });
 
   it('keeps the new pages focused on separate search intents', () => {
@@ -177,7 +203,7 @@ describe('public-seo-pages.content', () => {
     const trainingPlans = PUBLIC_SEO_PAGES.trainingPlans;
     expect(trainingPlans.title).toBe('Training Plans for Running, Cycling & More');
     expect(trainingPlans.h1).toBe('Plan workouts for running, cycling, swimming and more');
-    expect(trainingPlans.description).toBe('Create free running, cycling, swimming, walking, hiking and rowing plans or standalone workouts. Schedule by date, separate from completed activities.');
+    expect(trainingPlans.description).toBe(TRAINING_PLANS_SEO_CONTENT.description);
     expect(trainingPlans.sections.some(section => section.preview === 'training-plans')).toBe(true);
     expect(trainingPlans.sections.some(section => section.copy.includes('one active at a time'))).toBe(true);
     expect(trainingPlans.sections.some(section => section.items.some(item => item.copy.includes('Trail Running')))).toBe(true);

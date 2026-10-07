@@ -79,6 +79,10 @@ export class EventActionsComponent implements OnInit, OnDestroy {
   }
 
   async menuOpen(_event: unknown) {
+    if (this.isSharing) {
+      return;
+    }
+    this.hapticsService.selection();
     if (!this.showDownloadOriginal) {
       return;
     }
@@ -140,6 +144,9 @@ export class EventActionsComponent implements OnInit, OnDestroy {
   }
 
   async copyPublicEventLink(): Promise<void> {
+    if (this.isSharing) {
+      return;
+    }
     const eventID = this.event.getID();
     const copied = this.eventSharingService.copyShareUrl('event', this.user.uid, eventID);
     this.snackBar.open(copied ? 'Public link copied' : 'Could not copy public link', undefined, {
@@ -172,6 +179,9 @@ export class EventActionsComponent implements OnInit, OnDestroy {
   }
 
   private async updateEventSharing(eventID: string, enabled: boolean, copyKind: 'event' | 'comparison'): Promise<void> {
+    if (this.isSharing) {
+      return;
+    }
     this.isSharing = true;
     this.changeDetectorRef.markForCheck();
     try {

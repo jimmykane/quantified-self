@@ -36,6 +36,18 @@ publish the protected push check's name. They may appear as a skipped entry, but
 deployment dependencies and all success/failure/cancelled/skipped combinations of the final gate. `js-yaml` is an
 explicit dev dependency reusing the already locked parser; it adds no app or Functions runtime dependency.
 
+## Deployment triggers
+
+Publishing a GitHub release or prerelease does not run a build or deployment workflow. The former release-triggered
+production workflow has been removed. `npm run test:workflows` checks every workflow for release triggers to prevent
+accidental reintroduction.
+
+After the shared test gate succeeds, `develop` pushes deploy beta Hosting and `main` pushes deploy production Hosting.
+A successful main Hosting deployment creates the package version tag when the version changed; it does not publish
+a GitHub release. Functions deployment remains available through the separate `Deploy Functions (manual)` workflow,
+which tests a commit contained in `main` before deploying Functions. Firestore rules/indexes and Storage rules require
+a separately approved manual deployment.
+
 ## CodeQL routing
 
 CodeQL keeps push scans for `main`, `develop` and `feature/**`, plus its existing weekly scan of the default branch.

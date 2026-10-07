@@ -18,6 +18,12 @@ function filterSelectedIDsByAvailableActivities(activities: EventActivity[], sel
 }
 
 function preserveActivitySourceHydrationData(sourceActivity: EventActivity, targetActivity: EventActivity): void {
+  // Metadata-only live emissions reuse activity instances. Clearing the target
+  // would also clear the source and discard its hydrated GPS/chart streams.
+  if (sourceActivity === targetActivity) {
+    return;
+  }
+
   targetActivity.clearStreams();
   targetActivity.addStreams(sourceActivity.getAllStreams());
 

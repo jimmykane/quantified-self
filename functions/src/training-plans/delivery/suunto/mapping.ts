@@ -1,18 +1,24 @@
 import { createHash } from 'node:crypto';
 import type { ScheduledWorkoutV1 } from '../../../../../shared/training-plans';
-import { ActivityTypes } from '@sports-alliance/sports-lib';
+import { ActivityTypes, WeightUnits } from '@sports-alliance/sports-lib';
+import { normalizeUserUnitSettings } from '../../../../../shared/unit-aware-display';
 import { strengthProjectionMatchesDetails, type StrengthWorkoutDetailsV1 } from '../../../../../shared/strength-workout';
 import { serializeSuuntoGuideJsonV1, serializeSuuntoStrengthGuideV1, serializeSuuntoGuideV2ForRecovery,
   serializeSuuntoStrengthGuideV2ForRecovery, serializeSuuntoGuideV3ForRecovery,
   serializeSuuntoStrengthGuideV3ForRecovery, serializeSuuntoGuideV4ForRecovery,
-  serializeSuuntoStrengthGuideV4ForRecovery, serializeSuuntoGuideV5ForRecovery } from '../../providers/suunto-guide.serializer';
+  serializeSuuntoStrengthGuideV4ForRecovery, serializeSuuntoStrengthGuideV7ForRecovery,
+  serializeSuuntoGuideV5ForRecovery, serializeSuuntoGuideV6ForRecovery } from '../../providers/suunto-guide.serializer';
 import { ProviderWorkoutMappingError } from '../../providers/provider-mapping';
 import { hashTrainingScheduleRequestPayload } from '../../persistence';
 import type { DeliveryAssessment, DeliveryOperation } from '../contracts';
 
 // Adding a previously unsupported sport must not churn digests for existing Guides.
-export const SUUNTO_MAPPING_VERSION = 'suunto-guides-v6';
-const LEGACY_MAPPING_VERSIONS = ['suunto-guides-v5', 'suunto-guides-v4', 'suunto-guides-v3', 'suunto-guides-v2'] as const;
+export const SUUNTO_MAPPING_VERSION = 'suunto-guides-v8';
+const LEGACY_MAPPING_VERSIONS = ['suunto-guides-v7', 'suunto-guides-v6', 'suunto-guides-v5', 'suunto-guides-v4', 'suunto-guides-v3', 'suunto-guides-v2'] as const;
+// Unit-aware strength instructions must not churn interval/swim delivery digests.
+function currentMappingVersion(workout: ScheduledWorkoutV1): string {
+  return workout.structure.sport === ActivityTypes.StrengthTraining ? SUUNTO_MAPPING_VERSION : 'suunto-guides-v7';
+}
 // Destination already incorporates Firebase UID + provider account. Do not reuse
 // a plain workout ID: two QS users may legitimately connect the same Suunto account.
 export function guideExternalId(destination: string, workoutId: string): string {
@@ -24,11 +30,11 @@ export function validateGuideOwner(owner: string): string {
   return owner;
 }
 export function guideMapping(workout: ScheduledWorkoutV1, destination: string, owner: string,
-  strength?: StrengthWorkoutDetailsV1 | null) {
-  return mapGuide(workout, destination, owner, strength, SUUNTO_MAPPING_VERSION);
+  strength?: StrengthWorkoutDetailsV1 | null, weightUnits?: WeightUnits) {
+  return mapGuide(workout, destination, owner, strength, currentMappingVersion(workout), weightUnits);
 }
 function mapGuide(workout: ScheduledWorkoutV1, destination: string, owner: string,
-  strength: StrengthWorkoutDetailsV1 | null | undefined, version: string) {
+  strength: StrengthWorkoutDetailsV1 | null | undefined, version: string, weightUnits?: WeightUnits) {
   if (workout.structure.sport === ActivityTypes.StrengthTraining &&
     (!strength || strength.workoutId !== workout.id || !strengthProjectionMatchesDetails(workout.structure, strength))) {
     throw new ProviderWorkoutMappingError('suunto', 'unsupported', [{ severity: 'unsupported',
@@ -36,25 +42,38 @@ function mapGuide(workout: ScheduledWorkoutV1, destination: string, owner: strin
   }
   const options = { name: workout.title, owner: validateGuideOwner(owner),
     url: 'https://quantified-self.io/training/plans', localDate: workout.localDate,
-    sourceWorkoutId: workout.id, externalId: guideExternalId(destination, workout.id), allowDegraded: true };
+    sourceWorkoutId: workout.id, externalId: guideExternalId(destination, workout.id), allowDegraded: true,
+    ...(version === SUUNTO_MAPPING_VERSION ? { weightUnits } : {}) };
   const recipeSerializer = version === 'suunto-guides-v2' ? serializeSuuntoGuideV2ForRecovery
     : version === 'suunto-guides-v3' ? serializeSuuntoGuideV3ForRecovery
-      : version === 'suunto-guides-v4' ? serializeSuuntoGuideV4ForRecovery : version === 'suunto-guides-v5' ? serializeSuuntoGuideV5ForRecovery : serializeSuuntoGuideJsonV1;
+      : version === 'suunto-guides-v4' ? serializeSuuntoGuideV4ForRecovery
+        : version === 'suunto-guides-v5' ? serializeSuuntoGuideV5ForRecovery
+          : version === 'suunto-guides-v6' ? serializeSuuntoGuideV6ForRecovery : serializeSuuntoGuideJsonV1;
   const strengthSerializer = version === 'suunto-guides-v2' ? serializeSuuntoStrengthGuideV2ForRecovery
     : version === 'suunto-guides-v3' ? serializeSuuntoStrengthGuideV3ForRecovery
-      : version === 'suunto-guides-v4' ? serializeSuuntoStrengthGuideV4ForRecovery : serializeSuuntoStrengthGuideV1;
+      : version === 'suunto-guides-v4' ? serializeSuuntoStrengthGuideV4ForRecovery
+        : version === SUUNTO_MAPPING_VERSION ? serializeSuuntoStrengthGuideV1 : serializeSuuntoStrengthGuideV7ForRecovery;
   return strength
     ? strengthSerializer(strength, options) : recipeSerializer(workout.structure, options);
 }
 export function assessSuuntoGuide(workout: ScheduledWorkoutV1, destination: string, zone: string, owner: string,
-  strength?: StrengthWorkoutDetailsV1 | null): DeliveryAssessment {
-  const result = assessGuide(workout, destination, zone, owner, strength, SUUNTO_MAPPING_VERSION);
+  strength?: StrengthWorkoutDetailsV1 | null, weightUnits?: WeightUnits): DeliveryAssessment {
+  const current = inspectGuide(workout, destination, zone, owner, strength, currentMappingVersion(workout), weightUnits);
+  const result = current.assessment;
   if (result.level === 'degraded' && result.requiresApproval !== false) {
-    // Only the same metadata, recipe, destination and losses can inherit approval.
-    const compatibleApprovalDigests = LEGACY_MAPPING_VERSIONS.map(version =>
-      assessGuide(workout, destination, zone, owner, strength, version)).filter(legacy =>
-        legacy.level === 'degraded' && legacy.requiresApproval !== false
-        && JSON.stringify(result.issues) === JSON.stringify(legacy.issues)).map(legacy => legacy.digest);
+    const candidates = LEGACY_MAPPING_VERSIONS.filter(version => version !== result.mappingVersion).map(version =>
+      inspectGuide(workout, destination, zone, owner, strength, version));
+    if (result.mappingVersion === SUUNTO_MAPPING_VERSION) {
+      const units = normalizeUserUnitSettings({ weightUnits }).weightUnits;
+      const alternateUnits = units === WeightUnits.Kilograms ? WeightUnits.Pounds : WeightUnits.Kilograms;
+      candidates.push(inspectGuide(workout, destination, zone, owner, strength, SUUNTO_MAPPING_VERSION, alternateUnits));
+    }
+    // Approval can carry across units only for the same complete prescription
+    // and complete losses, including paths beyond the bounded public issues.
+    // Intent still requires retained full-content evidence and current consent.
+    const compatibleApprovalDigests = candidates.filter(candidate =>
+      candidate.assessment.level === 'degraded' && candidate.assessment.requiresApproval !== false
+      && current.lossSignature === candidate.lossSignature).map(candidate => candidate.assessment.digest);
     if (compatibleApprovalDigests.length) return { ...result, compatibleApprovalDigests };
   }
   return result;
@@ -80,23 +99,46 @@ export function assessSuuntoGuideV5ForRecovery(workout: ScheduledWorkoutV1, dest
   return assessGuide(workout, destination, zone, owner, strength, 'suunto-guides-v5');
 }
 
+/** Frozen v6 recovery/approval identity only; no new historical delivery. */
+export function assessSuuntoGuideV6ForRecovery(workout: ScheduledWorkoutV1, destination: string, zone: string, owner: string,
+  strength?: StrengthWorkoutDetailsV1 | null): DeliveryAssessment {
+  return assessGuide(workout, destination, zone, owner, strength, 'suunto-guides-v6');
+}
+
+/** Frozen v7 identity: canonical kg strength text and the current pool-SWOLF interval screens. */
+export function assessSuuntoGuideV7ForRecovery(workout: ScheduledWorkoutV1, destination: string, zone: string, owner: string,
+  strength?: StrengthWorkoutDetailsV1 | null): DeliveryAssessment {
+  return assessGuide(workout, destination, zone, owner, strength, 'suunto-guides-v7');
+}
+
 function digestBase(destination: string, zone: string, owner: string,
-  strength: StrengthWorkoutDetailsV1 | null | undefined, version: string) {
+  strength: StrengthWorkoutDetailsV1 | null | undefined, version: string, weightUnits?: WeightUnits) {
   return { mappingVersion: version, destination, zone, owner,
+    ...(strength && version === SUUNTO_MAPPING_VERSION
+      ? { weightUnits: normalizeUserUnitSettings({ weightUnits }).weightUnits } : {}),
     ...(strength ? { strength: strength.exercises } : {}) };
 }
 function assessGuide(workout: ScheduledWorkoutV1, destination: string, zone: string, owner: string,
-  strength: StrengthWorkoutDetailsV1 | null | undefined, version: string): DeliveryAssessment {
-  const base = digestBase(destination, zone, owner, strength, version);
+  strength: StrengthWorkoutDetailsV1 | null | undefined, version: string, weightUnits?: WeightUnits): DeliveryAssessment {
+  return inspectGuide(workout, destination, zone, owner, strength, version, weightUnits).assessment;
+}
+/** The complete loss signature is transient, never exposed or journaled. */
+function inspectGuide(workout: ScheduledWorkoutV1, destination: string, zone: string, owner: string,
+  strength: StrengthWorkoutDetailsV1 | null | undefined, version: string, weightUnits?: WeightUnits): {
+    assessment: DeliveryAssessment; lossSignature: string;
+  } {
+  const base = digestBase(destination, zone, owner, strength, version, weightUnits);
   try {
-    const result = mapGuide(workout, destination, owner, strength, version);
-    return { level: result.level, issues: result.issues.map(issue => issue.message).slice(0, 20),
+    const result = mapGuide(workout, destination, owner, strength, version, weightUnits);
+    return { lossSignature: JSON.stringify(result.issues), assessment: {
+      level: result.level, issues: result.issues.map(issue => issue.message).slice(0, 20),
       ...(result.requiresApproval === undefined ? {} : { requiresApproval: result.requiresApproval }),
-      digest: hashTrainingScheduleRequestPayload({ ...base, payload: result.artifact }), mappingVersion: version };
+      digest: hashTrainingScheduleRequestPayload({ ...base, payload: result.artifact }), mappingVersion: version } };
   } catch (error) {
     if (!(error instanceof ProviderWorkoutMappingError)) throw error;
-    return { level: 'unsupported', issues: error.issues.map(issue => issue.message).slice(0, 20),
-      digest: hashTrainingScheduleRequestPayload({ ...base, workout }), mappingVersion: version };
+    return { lossSignature: JSON.stringify(error.issues), assessment: {
+      level: 'unsupported', issues: error.issues.map(issue => issue.message).slice(0, 20),
+      digest: hashTrainingScheduleRequestPayload({ ...base, workout }), mappingVersion: version } };
   }
 }
 
@@ -112,9 +154,9 @@ export function guideMappingForRecovery(operation: DeliveryOperation, owner: str
   if (!operation.workout || operation.kind !== 'upsert') return null;
   for (const version of [SUUNTO_MAPPING_VERSION, ...LEGACY_MAPPING_VERSIONS]) {
     try {
-      const payload = mapGuide(operation.workout, operation.destinationKey, owner, operation.strength, version).artifact;
+      const payload = mapGuide(operation.workout, operation.destinationKey, owner, operation.strength, version, operation.suuntoWeightUnits).artifact;
       const digest = hashTrainingScheduleRequestPayload({
-        ...digestBase(operation.destinationKey, operation.timeZone, owner, operation.strength, version), payload,
+        ...digestBase(operation.destinationKey, operation.timeZone, owner, operation.strength, version, operation.suuntoWeightUnits), payload,
       });
       if (digest === operation.digest) return { mappingVersion: version, payload };
     } catch (error) {

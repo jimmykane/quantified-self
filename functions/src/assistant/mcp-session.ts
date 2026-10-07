@@ -11,6 +11,7 @@ import {
 import type { McpDataErrorCode } from '../mcp/data.service';
 import { MCP_OAUTH_SCOPES } from '../mcp/oauth.service';
 import type { AssistantLocationAccess } from '../../../shared/assistant.types';
+import { assistantRecoveryDurationSeconds, type AssistantWorkoutReview } from '../../../shared/assistant-workout-review';
 import {
   ASSISTANT_CONTENT_PROPOSAL_TOOLS,
   assistantContentProposalInputJsonSchema,
@@ -61,6 +62,7 @@ export const ASSISTANT_ACTIVITY_LOCATION_MCP_TOOL_NAMES = [
 export const ASSISTANT_MCP_TOOL_NAMES = [
   ...ASSISTANT_BASE_MCP_TOOL_NAMES,
   ...ASSISTANT_ACTIVITY_LOCATION_MCP_TOOL_NAMES,
+  'get_workout_reflection',
   'query_timeline_notes',
   'query_activities_with_tags',
   'query_editable_timeline_notes',
@@ -163,6 +165,7 @@ export class AssistantTrainingMetricsPreparingError extends Error {
 }
 
 export interface AssistantMcpSession {
+  getTrainingWorkoutReviews?: (proposalRef: string, prompt: string) => Promise<AssistantWorkoutReview[]>;
   instructions: string;
   tools: AssistantMcpToolDefinition[];
   callTool: (
@@ -184,6 +187,8 @@ const ASSISTANT_CONNECTION_ID = 'first-party-assistant-v1';
 const ASSISTANT_CLIENT_ID = 'https://quantified-self.io/internal/assistant';
 
 const ASSISTANT_CONTENT_TOOL_COPY: Record<AssistantContentProposalTool, { title: string; description: string }> = {
+  prepare_workout_reflection_save: { title: 'Prepare workout reflection', description: 'Prepare explicit private reflection text for QS review only. First discover the exact activity and read get_workout_reflection for the explicit activity or whole-recording target and current revision. This cannot change workout RPE; direct RPE changes to QS Edit details. This never writes or adapts Training.' },
+  prepare_workout_reflection_delete: { title: 'Prepare reflection deletion', description: 'Prepare permanent clearing of one exact current reflection for QS review only. First read its explicit activity/recording target and revision. Require explicit deletion intent; this never deletes the recording or changes completion.' },
   prepare_manual_measurement_create: { title: 'Prepare a manual Health measurement', description: 'Prepare a manual entry for QS review only. Discover units and metadata first. Resolve now from catalog serverTime once; preserve that instant and a UUID on retries. Never guess VO2 metadata or blood-pressure readings.' },
   prepare_manual_measurement_update: { title: 'Prepare a manual measurement edit', description: 'Prepare a manual entry edit for QS review only. First get the exact manual entry and current revision. Omitted time/metadata stay unchanged. Provider imports cannot be edited.' },
   prepare_manual_measurement_delete: { title: 'Prepare manual measurement deletion', description: 'Prepare permanent deletion for QS review only. First get the exact manual entry and current revision; never infer which entry to delete from an ambiguous query.' },
@@ -393,8 +398,9 @@ export async function createAssistantMcpSession(
   activityTagChangesEnabled = false,
   timelineNoteChangesEnabled = false,
   measurementChangesEnabled = false,
+  reflectionChangesEnabled = false,
 ): Promise<AssistantMcpSession> {
-  if ((activityTagChangesEnabled || timelineNoteChangesEnabled || measurementChangesEnabled) && !conversationId) {
+  if ((activityTagChangesEnabled || timelineNoteChangesEnabled || measurementChangesEnabled || reflectionChangesEnabled) && !conversationId) {
     throw new Error('Assistant content changes require a current conversation.');
   }
   if (timelineNoteChangesEnabled && !timelineNotesEnabled) {
@@ -403,6 +409,7 @@ export async function createAssistantMcpSession(
   const activityLocationEnabled = locationAccess === 'precise_activity';
   const expectedToolNames: readonly AssistantMcpToolName[] = [
     ...ASSISTANT_BASE_MCP_TOOL_NAMES,
+    ...(reflectionChangesEnabled ? ['get_workout_reflection' as const, 'prepare_workout_reflection_save' as const, 'prepare_workout_reflection_delete' as const] : []),
     ...(measurementChangesEnabled ? [...MCP_MANUAL_MEASUREMENT_READ_TOOLS,
       'prepare_manual_measurement_create' as const, 'prepare_manual_measurement_update' as const,
       'prepare_manual_measurement_delete' as const] : []),
@@ -430,6 +437,7 @@ export async function createAssistantMcpSession(
       MCP_OAUTH_SCOPES.MetricsRead,
       MCP_OAUTH_SCOPES.MeasurementsRead,
       ...(measurementChangesEnabled ? [MCP_OAUTH_SCOPES.MeasurementsWrite] : []),
+      ...(reflectionChangesEnabled ? [MCP_OAUTH_SCOPES.WorkoutReflectionsRead, MCP_OAUTH_SCOPES.WorkoutReflectionsWrite] : []),
       MCP_OAUTH_SCOPES.SleepRead,
       MCP_OAUTH_SCOPES.ActivityDetailsRead,
       ...(activityLocationEnabled
@@ -491,6 +499,20 @@ export async function createAssistantMcpSession(
     let preparedContentProposalRef: string | null = null;
     const readyTrainingKinds = new Set<string>();
     return {
+      getTrainingWorkoutReviews: async (proposalRef, prompt) => {
+        const { loadAssistantTrainingWorkoutReviews } = await import('../mcp/training-plans-write.service');
+        const seconds = assistantRecoveryDurationSeconds(prompt);
+        try {
+          return await loadAssistantTrainingWorkoutReviews({ uid, connectionId: auth.connectionId, scopes: auth.scopes, proposalRef,
+            ...(seconds === null ? {} : { recoveryDurationSeconds: seconds }) });
+        } catch (error) {
+          if (error && typeof error === 'object' && 'code' in error && error.code === 'invalid_request') {
+            throw new AssistantRecoverableMcpToolError('invalid_request',
+              'Prepare a fresh complete workout review. For a recovery-duration-only request preserve every other field, including the exact destination.');
+          }
+          throw error;
+        }
+      },
       // The Assistant keeps its compact evidence budget; detailed sample pagination is an external-client workflow.
       instructions: (client.getInstructions() || '').replace(MCP_ACTIVITY_SAMPLES_INSTRUCTIONS, '').trim(),
       tools,

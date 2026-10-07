@@ -1,11 +1,35 @@
 import { describe, expect, it } from 'vitest';
 import type { AssistantChatResponse } from '@shared/assistant.types';
+import { workoutReviewFixture } from '../helpers/assistant-workout-review.test-support';
 import {
   isAssistantContentProposal,
   isAssistantTrainingProposal,
   validateAssistantChatResponse,
   validateAssistantConversation,
 } from '@shared/assistant-response.contract';
+
+describe('complete first-party workout review boundary', () => {
+  const preview = { proposalRef: 'opaque', expiresAtMs: 1000, permissionMode: 'schedule', scheduleRevision: 2,
+    requiresConfirmation: true, summary: 'Review a workout.', changes: [{ index: 0, kind: 'update-workout', summary: 'Recovery edit.' }],
+    providerPreviews: [], workoutReviews: [workoutReviewFixture()] };
+  it('accepts full recipes and fails closed on missing fields, neighboring private fields and unmatched operations', () => {
+    expect(isAssistantTrainingProposal(preview)).toBe(true);
+    for (const review of [{ ...preview.workoutReviews[0], index: 1 }, { ...preview.workoutReviews[0], ownerUid: 'PRIVATE' },
+      { ...preview.workoutReviews[0], after: { ...preview.workoutReviews[0].after, providerId: 'PRIVATE' } },
+      { ...preview.workoutReviews[0], after: { ...preview.workoutReviews[0].after, structure: { version: 1, nodes: [] } } }]) {
+      expect(isAssistantTrainingProposal({ ...preview, workoutReviews: [review] })).toBe(false);
+    }
+    expect(isAssistantTrainingProposal({ ...preview, workoutReviews: [preview.workoutReviews[0], preview.workoutReviews[0]] })).toBe(false);
+  });
+  it('enforces the total byte budget without silently omitting definitions', () => {
+    const review = workoutReviewFixture();
+    review.before!.structure.nodes = Array.from({ length: 100 }, (_, index) => ({ kind: 'step', id: `step-${index}`, purpose: 'work',
+      ending: { kind: 'time', seconds: 75 }, targets: [], note: 'x'.repeat(500) })) as never;
+    review.after = structuredClone(review.before);
+    const reviews = Array.from({ length: 4 }, (_, index) => ({ ...review, index }));
+    expect(isAssistantTrainingProposal({ ...preview, changes: reviews.map(({ index }) => ({ ...preview.changes[0], index })), workoutReviews: reviews })).toBe(false);
+  });
+});
 
 describe('dedicated Garmin replacement review boundary', () => {
   const preview = { proposalRef: 'opaque', expiresAtMs: 1000, permissionMode: 'delivery', scheduleRevision: 2,
@@ -26,6 +50,24 @@ describe('dedicated Garmin replacement review boundary', () => {
   });
 });
 
+describe('plan phase review boundary', () => {
+  const phase = { id: 'base', name: 'Base', startLocalDate: '2026-10-01', endLocalDate: '2026-10-10' };
+  const preview = { proposalRef: 'opaque', expiresAtMs: 1000, permissionMode: 'schedule', scheduleRevision: 2,
+    requiresConfirmation: true, summary: 'Replace phases.', changes: [{ index: 0, kind: 'set-plan-phases', summary: 'Plan phase edit.' }],
+    providerPreviews: [], phaseReview: { planName: 'Autumn', previousStartDate: '2026-10-01', previousEndDate: '2026-10-31',
+      startDate: '2026-10-01', endDate: '2026-10-31', before: { version: 1, items: [phase] }, after: { version: 1, items: [] } } };
+  it('requires one focused complete review and rejects private fields, provider effects and malformed dates', () => {
+    expect(isAssistantTrainingProposal(preview)).toBe(true);
+    for (const patch of [{ phaseReview: undefined }, { permissionMode: 'combined' },
+      { changes: [{ ...preview.changes[0], index: 1 }] }, { changes: [...preview.changes, preview.changes[0]] },
+      { phaseReview: { ...preview.phaseReview, remoteId: 'PRIVATE' } },
+      { phaseReview: { ...preview.phaseReview, after: { version: 1, items: [{ ...phase, startLocalDate: '2026-02-30' }] } } },
+      { phaseReview: { ...preview.phaseReview, before: { version: 1, items: [{ ...phase, provider: 'PRIVATE' }] } } }]) {
+      expect(isAssistantTrainingProposal({ ...preview, ...patch })).toBe(false);
+    }
+  });
+});
+
 describe('manual measurement review boundary', () => {
   const fields = { metricId: 'body_weight', canonicalValue: 80,
     observedAtMs: Date.parse('2026-10-01T08:30:00Z'), timezoneOffsetSeconds: 10800 };
@@ -37,6 +79,7 @@ describe('manual measurement review boundary', () => {
 
   it('accepts an exact server-owned measurement review', () => {
     expect(isAssistantContentProposal(proposal)).toBe(true);
+    expect(isAssistantContentProposal({ ...proposal, reflectionReview: { before: null } })).toBe(false);
   });
 
   it.each([
@@ -46,6 +89,31 @@ describe('manual measurement review boundary', () => {
   ])('rejects a review date that cannot be displayed safely: %j', date => {
     expect(isAssistantContentProposal({ ...proposal,
       measurementReview: { before: null, after: { ...fields, ...date } } })).toBe(false);
+  });
+});
+
+describe('private workout reflection review boundary', () => {
+  const proposal = { proposalRef: 'reflection', kind: 'save_workout_reflection', expiresAtMs: 1000,
+    summary: 'Save Run reflection on Oct 6 · activity', requiresConfirmation: true,
+    arguments: { activityRef: 'opaque-activity', target: 'activity', expectedRevision: 0,
+      mutationId: '11111111-1111-4111-8111-111111111111', note: 'Reported context' },
+    reflectionReview: { before: null } };
+  it('requires explicit current review and strict target/text fields', () => {
+    expect(isAssistantContentProposal(proposal)).toBe(true);
+    expect(isAssistantContentProposal({ ...proposal, reflectionReview: undefined })).toBe(false);
+    for (const patch of [{ effort: 0.5 }, { effort: 11 }, { target: 'plan' }, { note: 'safe\n\u0000' },
+      { note: 'a'.repeat(2001) }, { provider: 'PRIVATE' }, { note: null }]) {
+      expect(isAssistantContentProposal({ ...proposal, arguments: { ...proposal.arguments, ...patch } })).toBe(false);
+    }
+    expect(isAssistantContentProposal({ ...proposal, reflectionReview: { before: { effort: 1, note: 'Current', provider: 'PRIVATE' } } })).toBe(false);
+  });
+  it('requires nonzero current revision and present content for permanent deletion', () => {
+    const { note, ...args } = proposal.arguments;
+    const deletion = { ...proposal, kind: 'delete_workout_reflection', arguments: { ...args, expectedRevision: 1 },
+      reflectionReview: { before: { note } } };
+    expect(isAssistantContentProposal(deletion)).toBe(true);
+    expect(isAssistantContentProposal({ ...deletion, arguments: args })).toBe(false);
+    expect(isAssistantContentProposal({ ...deletion, reflectionReview: { before: null } })).toBe(false);
   });
 });
 

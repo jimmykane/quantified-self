@@ -26,6 +26,7 @@ const {
     const recursiveDeleteMock = vi.fn().mockResolvedValue(undefined); // Keep for potential other use or safety
     const collectionMock = vi.fn((path) => ({
         path: path || 'mock/path',
+        limit: vi.fn((maximum: number) => ({ path, maximum })),
         doc: vi.fn((id: string) => ({ path: `${path}/${id}` })),
         where: vi.fn((field: string, operator: string, value: unknown) => ({
             path: path || 'mock/path',
@@ -148,6 +149,38 @@ describe('cleanupEventFile', () => {
         transactionSet: transactionSetMock,
     };
 
+    it('deletes private reflection leaves under the event-existence transaction fence', async () => {
+        mocks.transactionGet.mockImplementation(async (ref: { path: string }) => {
+            if (ref.path.endsWith('/workoutReflections')) return { docs: [{ ref: { path: ref.path + '/recording' } }] };
+            if (ref.path.endsWith('/activities')) return { empty: true, size: 0, docs: [] };
+            return { exists: false, docs: [] };
+        });
+        await (cleanupEventFile as unknown as (value: unknown) => Promise<void>)({
+            params: { userId: 'testUser', eventId: 'testEvent' },
+            data: { data: () => ({}) },
+        });
+        expect(mocks.transactionDelete).toHaveBeenCalledWith({ path: 'users/testUser/events/testEvent/workoutReflections/recording' });
+    });
+
+    it('bounds reflection deletion pages and stops if the recording is recreated between pages', async () => {
+        let page = 0;
+        mocks.transactionGet.mockImplementation(async (ref: { path: string; maximum?: number }) => {
+            if (ref.path === 'users/testUser/events/testEvent') return { exists: page === 1 };
+            if (ref.path.endsWith('/workoutReflections')) {
+                expect(ref.maximum).toBe(200); page++;
+                return { docs: Array.from({ length: 200 }, (_, index) => ({ ref: { path: `${ref.path}/activity_${index}` } })) };
+            }
+            if (ref.path.endsWith('/activities')) return { empty: true, size: 0, docs: [] };
+            return { exists: false, docs: [] };
+        });
+        await (cleanupEventFile as unknown as (value: unknown) => Promise<void>)({
+            params: { userId: 'testUser', eventId: 'testEvent' }, data: { data: () => ({}) },
+        });
+        expect(page).toBe(1);
+        expect(mocks.transactionDelete.mock.calls.filter(([ref]) => ref.path.includes('/workoutReflections/'))).toHaveLength(200);
+        expect(mocks.docGet).not.toHaveBeenCalled();
+    });
+
     beforeEach(() => {
         // Reset mocks if needed, but since they are hoisted consts, verify they are cleared
         vi.clearAllMocks();
@@ -233,7 +266,7 @@ describe('cleanupEventFile', () => {
 
         // Check flat activity delete
         expect(mocks.firestore.collection).toHaveBeenCalledWith('users/testUser/activities');
-        expect(mocks.runTransaction).toHaveBeenCalledTimes(2);
+        expect(mocks.runTransaction).toHaveBeenCalledTimes(3);
         expect(mocks.transactionGet.mock.calls[0][0]).toMatchObject({
             path: 'users/testUser/events/testEvent',
         });
@@ -696,7 +729,7 @@ describe('cleanupEventFile', () => {
 
         await expect(wrapped(event)).rejects.toThrow('Event cleanup failed for testEvent: activities.');
 
-        expect(mocks.runTransaction).toHaveBeenCalledTimes(2);
+        expect(mocks.runTransaction).toHaveBeenCalledTimes(3);
         expect(mocks.fileDelete).toHaveBeenCalledWith({
             ignoreNotFound: true,
             ifGenerationMatch: '12345',

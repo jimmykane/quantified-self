@@ -1,4 +1,27 @@
 import { analyzeWorkoutStructureV1 } from '../../../shared/planned-workout-analysis';
+import type { AssistantWorkoutReview } from '../../../shared/assistant-workout-review';
+
+describe('Training phase preview routing', () => {
+  it.each(['Add a Base phase to my plan', 'Rename the recovery phase', 'Remove the taper phase from the plan',
+    'Change my plan phases', "Edit my plan's phases", 'Move the taper phase a week later',
+    'Extend the Base phase by two days'])('routes an explicit phase-only edit: %s', prompt => {
+    expect(selectAssistantTrainingPreviewTool(prompt)).toBe('preview_training_plan_phases');
+  });
+  it.each([
+    ['Add a workout during my Base phase', 'preview_create_planned_workout'],
+    ['Delete my workout during the Taper phase', 'preview_training_deletion'],
+    ['Edit my strength workout during the Build phase', 'preview_strength_workout_change'],
+    ['Change recovery steps in my workout during the Build phase', 'preview_planned_workout_v3_change'],
+    ['Rename my plan containing a Base phase', 'preview_training_changes'],
+    ['Remove this training plan and all phases', 'preview_training_deletion'],
+  ])('preserves the requested object when a phase supplies context: %s', (prompt, tool) => {
+    expect(selectAssistantTrainingPreviewTool(prompt)).toBe(tool);
+  });
+  it('keeps plan deletion and read-only phase questions outside phase-edit preparation', () => {
+    expect(selectAssistantTrainingPreviewTool('Delete my plan and all phases')).toBe('preview_training_deletion');
+    expect(selectAssistantTrainingPreviewTool('Which phase am I in today?')).not.toBe('preview_training_plan_phases');
+  });
+});
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { GenkitError } from 'genkit';
 import { retry } from 'genkit/model/middleware';
@@ -34,6 +57,54 @@ import type {
 import { AssistantMcpToolFailure, AssistantRecoverableMcpToolError,
   ASSISTANT_GARMIN_REPLACEMENT_BLOCKED_GUIDANCE } from './mcp-session';
 import { createAssistantContentProposal } from './content-proposal';
+
+describe('app-owned complete workout review', () => {
+  it.each([
+    ['Add a note to my strength workout.', 'preview_strength_workout_change'],
+    ['Delete the recovery step from my strength workout.', 'preview_strength_workout_change'],
+    ['Reorder the intervals in my gym session.', 'preview_strength_workout_change'],
+    ['Create one workout and change the target of my workout.', 'preview_training_changes'],
+    ['Build a workout and delete the recovery step from my existing workout.', 'preview_training_changes'],
+  ])('recipe field edits preserve the specialized route for "%s"', (prompt, expected) => {
+    expect(selectAssistantTrainingPreviewTool(prompt)).toBe(expected);
+  });
+  it.each(['change recovery to 75 seconds', 'set all recovery steps to 75 sec', 'remove the heart-rate target from step 2',
+    'delete the recovery step from my workout', 'insert a recovery step into the workout', 'reorder the repeat steps', 'add a note to step 3'])(
+    'routes prescription edit "%s" through the complete v3 preview', prompt => {
+    expect(selectAssistantTrainingPreviewTool(prompt)).toBe('preview_planned_workout_v3_change');
+    expect(selectAssistantTrainingPreviewTool('Delete my workout tomorrow')).toBe('preview_training_deletion');
+    });
+  it.each([false, true])('keeps review data out of model tool output and rejects unrelated recovery edits (tampered=%s)', async tampered => {
+    const { session, callTool } = createSession();
+    session.tools.push({ name: 'preview_planned_workout_v3_change', title: 'Preview', description: 'Prepare only', inputSchema: { type: 'object' } });
+    const before = { title: 'Current workout', localDate: '2026-10-07', lifecycle: 'planned' as const, destination: 'Standalone',
+      structure: { version: 1 as const, sport: ActivityTypes.Running, nodes: [{ kind: 'step' as const, id: 'recovery', purpose: 'recovery' as const,
+        ending: { kind: 'time' as const, seconds: 60 }, targets: [], note: 'Keep this' }] } };
+    const after = structuredClone(before); after.structure.nodes[0].ending.seconds = 75;
+    if (tampered) after.structure.nodes[0].note = 'Unrequested edit';
+    const review: AssistantWorkoutReview = { index: 0, before, after, compatibility: ['garmin', 'coros', 'wahoo', 'suunto'].map(provider => ({
+      provider: provider as 'garmin', before: 'exact', after: 'exact', issues: [] })) };
+    session.getTrainingWorkoutReviews = vi.fn().mockResolvedValue([review]);
+    const preview = { proposalRef: 'bound-preview', expiresAtMs: Date.parse('2026-10-06T12:15:00Z'), permissionMode: 'schedule', scheduleRevision: 1,
+      requiresConfirmation: true, summary: 'Review recovery edit.', changes: [{ index: 0, kind: 'update-workout', summary: 'Recovery to 75 seconds.' }], providerPreviews: [] };
+    const original = callTool.getMockImplementation()!;
+    callTool.mockImplementation(async (name, args) => name === 'preview_planned_workout_v3_change' ? { structuredContent: preview } : original(name, args));
+    const runtime = createAssistantRuntime({ createMcpSession: vi.fn().mockResolvedValue(session), now: () => new Date('2026-10-06T12:00:00Z'),
+      generateAnswer: async input => {
+        await input.tools.find(tool => tool.name === 'get_daily_report')!.execute({});
+        const result = await input.tools.find(tool => tool.name === 'preview_planned_workout_v3_change')!.execute({});
+        expect(result).not.toHaveProperty('workoutReviews');
+        if (tampered) expect(result).toHaveProperty('assistantToolError');
+        else expect(result).toMatchObject({ changes: preview.changes, requiresConfirmation: true, scheduleRevision: 1 });
+        return { answer: 'Review before applying.', visualRequest: { chart: null, map: null } };
+      } });
+    const result = await runtime.answer({ uid: 'owner', appBaseUrl: 'https://quantified-self.io', prompt: 'change recovery to 75 seconds',
+      timeZone: 'Europe/Helsinki', history: [], trainingPlansEnabled: true, trainingPlanChangesEnabled: true,
+      assertTrainingPlansAccess: vi.fn().mockResolvedValue(undefined), assertTrainingWriteAccess: vi.fn().mockResolvedValue(undefined) });
+    expect(result.pendingTrainingProposal?.workoutReviews).toEqual(tampered ? undefined : [review]);
+    expect(session.getTrainingWorkoutReviews).toHaveBeenCalledWith('bound-preview', 'change recovery to 75 seconds');
+  });
+});
 
 function createSession() {
   const close = vi.fn().mockResolvedValue(undefined);
@@ -974,6 +1045,44 @@ describe('Assistant runtime', () => {
     }
     expect(access).toHaveBeenCalledTimes(4);
     expect(callTool.mock.calls.map(([name]) => name)).not.toEqual(expect.arrayContaining(['create_manual_measurement', 'update_manual_measurement', 'delete_manual_measurement']));
+  });
+
+  it.each(['save', 'delete'] as const)('prepares a %s reflection only after current target and date reads, without a model write', async operation => {
+    const { session, callTool } = createSession();
+    const prepareName = operation === 'save' ? 'prepare_workout_reflection_save' : 'prepare_workout_reflection_delete';
+    session.tools = (['query_activities', 'get_workout_reflection', prepareName] as const).map(name => ({
+      name, title: name, description: name, inputSchema: { type: 'object', properties: {} },
+    }));
+    const activityRef = 'opaque-selected-run';
+    const now = Date.parse('2026-10-06T12:00:00Z');
+    callTool.mockImplementation(async (name, args) => name === 'query_activities'
+      ? { structuredContent: { activities: [{ activityRef, activityType: 'Running', startTimeMs: now - 86_400_000 }] } }
+      : name === 'get_workout_reflection'
+      ? { structuredContent: { activityRef, target: 'activity', revision: 2, present: true,
+        note: 'Current private text' } }
+      : { structuredContent: createAssistantContentProposal(prepareName, args, { now: () => now, createId: () => 'reflection-proposal' }) });
+    const access = vi.fn().mockResolvedValue(undefined);
+    const runtime = createAssistantRuntime({ now: () => new Date(now), createMcpSession: vi.fn().mockResolvedValue(session),
+      generateAnswer: async model => {
+        const prepare = model.tools.find(tool => tool.name === prepareName)!;
+        const args = { activityRef, target: 'activity', expectedRevision: 2,
+          mutationId: '11111111-1111-4111-8111-111111111111',
+          ...(operation === 'save' ? { note: 'Felt easy' } : {}) };
+        await expect(prepare.execute(args)).rejects.toThrow('current reflection revision');
+        await model.tools.find(tool => tool.name === 'get_workout_reflection')!.execute({ activityRef, target: 'activity' });
+        await expect(prepare.execute(args)).rejects.toThrow('date in this turn');
+        await model.tools.find(tool => tool.name === 'query_activities')!.execute({});
+        await expect(prepare.execute({ ...args, expectedRevision: 1 })).rejects.toThrow('current reflection revision');
+        await prepare.execute(args);
+        return { answer: 'Review this reflection. Nothing is saved yet.', visualRequest: { chart: null, map: null } };
+      } });
+    const result = await runtime.answer({ uid: 'owner', appBaseUrl: 'https://quantified-self.io',
+      prompt: 'Save my reflection for yesterday’s run.', timeZone: 'Europe/Helsinki', history: [],
+      reflectionChangesEnabled: true, assertContentWriteAccess: access });
+    expect(result.pendingContentProposal).toMatchObject({ summary: expect.stringContaining('Running on Oct 5, 2026'),
+      reflectionReview: { before: { note: 'Current private text' } } });
+    expect(access).toHaveBeenCalledTimes(4);
+    expect(callTool.mock.calls.map(([name]) => name)).not.toEqual(expect.arrayContaining(['save_workout_reflection', 'delete_workout_reflection']));
   });
 
   it('requires a current activity-tag read before preparing a clearly identified change', async () => {
@@ -2483,7 +2592,7 @@ describe('Assistant runtime', () => {
       'user-1',
       'https://beta.quantified-self.io',
       'coordinate_free',
-      false, false, false, false, undefined, false, false, false);
+      false, false, false, false, undefined, false, false, false, false);
     expect(result.answer).toBe('Your readiness is 72 today.');
     expect(result.evidence).toEqual([expect.objectContaining({
       toolName: 'get_daily_report',
@@ -2873,7 +2982,7 @@ describe('Assistant runtime', () => {
       'user-1',
       'https://quantified-self.io',
       'precise_activity',
-      false, false, false, false, undefined, false, false, false);
+      false, false, false, false, undefined, false, false, false, false);
   });
 
   it('preserves an explicit model-selected timezone', async () => {

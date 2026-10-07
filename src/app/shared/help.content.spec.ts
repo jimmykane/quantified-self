@@ -16,7 +16,7 @@ import {
 describe('help.content', () => {
   it('points users to the Privacy section and explains saving analytics and email opt-outs', () => {
     const copy = HELP_SECTIONS.find(section => section.id === 'data-and-privacy')!.content;
-    expect(copy).toContain('[Settings → Privacy](/settings?section=privacy)');
+    expect(copy).toContain('[Settings → Privacy & emails](/settings?section=privacy)');
     expect(copy).toContain('turn **Usage analytics** or **Marketing emails** off');
     expect(copy).toContain('**Save changes**');
     expect(copy).toContain('does not stop transactional account or billing messages');
@@ -103,7 +103,7 @@ describe('help.content', () => {
   });
   it('explains bounded Suunto live screens, native sensors/units and watch-controlled boundary alerts', () => {
     const content = HELP_SECTIONS.find(section => section.id === 'training-plans')!.content;
-    for (const phrase of ['## Suunto Guide screens and interval alerts', '**block-average pace and current HR**', '**block-average power, current HR, cadence and speed**', '**block-average pace, swimming stroke rate and current HR**',
+    for (const phrase of ['## Suunto Guide screens and interval alerts', '**block-average pace and current HR**', '**block-average power, current HR, cadence and speed**', '**block-average pace, swimming stroke rate and SWOLF**', '**block-average pace, swimming stroke rate and current HR**',
       '**Avg pwr**', '**Avg strk**', 'Both targets', 'Untargeted steps stay untargeted', 'rowing strokes are not inferred', 'HR stays current',
       'at most five fields', 'Long manual instructions stay text-only', 'Suunto renders native watch units',
       'not guaranteed to match the 500 m split', 'missing readings are unavailable, not zero',
@@ -119,6 +119,24 @@ describe('help.content', () => {
       'past and completed copies stay unchanged', 'not proof of watch receipt, sensor readings, alerts or workout completion']) {
       expect(content).toContain(phrase);
     }
+  });
+  it('distinguishes authored Suunto targets, measured swimming readings and unsupported ZoneSense', () => {
+    const content = HELP_SECTIONS.find(section => section.id === 'training-plans')!.content;
+    for (const phrase of ['**Guide targets and readings are different.**',
+      'heart-rate, power, speed/pace and cadence targets', 'not an authored stroke-rate target',
+      'SWOLF targets are not supported yet', '**ZoneSense targets are not supported in SuuntoPlus Guides**',
+      'even if your watch offers ZoneSense in a sport mode', 'reference snapshot saved with your workout'])
+      expect(content).toContain(phrase);
+    expect(searchHelpSections(HELP_SECTIONS, 'ZoneSense').map(section => section.id)).toContain('training-plans');
+  });
+  it('explains pool-only measured SWOLF without target, pool-length or sensor promises', () => {
+    const content = HELP_SECTIONS.find(section => section.id === 'training-plans')!.content;
+    for (const phrase of ['pool-only **Avg SWOLF**', '**Avg SWOLF is a measured reading, not a target.**',
+      "your watch's pool-length setting", 'Compare it only within the same pool length and stroke',
+      'does not send the selected pool length to Suunto', 'calculate a substitute SWOLF',
+      'instead of optional HR', 'with current HR for an HR target', 'without SWOLF',
+      'requires the updated Functions release']) expect(content).toContain(phrase);
+    expect(searchHelpSections(HELP_SECTIONS, 'Avg SWOLF').map(section => section.id)).toContain('training-plans');
   });
   it('explains shared horizontal pinch zoom on Event details charts', () => {
     const content = HELP_SECTIONS.find(section => section.id === 'getting-started')!.content;
@@ -151,6 +169,9 @@ describe('help.content', () => {
     expect(content).toContain('no separate approval for each workout or edit');
     expect(content).toContain('Additional mapping losses, such as shortened exercise instructions, still need review');
     expect(content).toContain('Sent Guide status does not prove app/watch receipt or workout completion');
+    expect(content).toContain('Suunto load instructions follow your kg or lb choice in **Settings → Units & formatting**');
+    expect(content).toContain('QS checks for unit changes about every 30 minutes and updates eligible synced Guides');
+    expect(content).toContain('changing units keeps an existing approval only when those losses are unchanged');
   });
 
   it('explains lap-button endings and their provider and completion boundaries', () => {
@@ -184,7 +205,7 @@ describe('help.content', () => {
 
   it('explains the independent weight preference and canonical weigh-in storage', () => {
     const copy = JSON.stringify(HELP_SECTIONS);
-    expect(copy).toContain('Weight input and display use your **Settings → Units → Weight** choice (kg or lb)');
+    expect(copy).toContain('Weight input and display use your **Settings → Units & formatting → Customize units → Weight** choice (kg or lb)');
     expect(copy).toContain('saved measurements remain in canonical kg');
     expect(copy).toContain('changing a distance preset does not reset that choice');
   });
@@ -207,7 +228,7 @@ describe('help.content', () => {
   it('documents regional formatting scope, precedence, and stable export dates', () => {
     const content = HELP_SECTIONS.find(section => section.id === 'data-and-privacy')!.content.replace(/\s+/g, ' ');
 
-    expect(content).toContain('**Settings -> Units -> Regional formatting**');
+    expect(content).toContain('**Settings -> Units & formatting -> Regional formatting**');
     expect(content).toContain('**Automatic (browser)** is the recommended default');
     expect(content).toContain('saved to your account and follows you between devices');
     expect(content).toContain('the app reloads once');
@@ -384,6 +405,7 @@ describe('help.content', () => {
       'training-plans',
       'health',
       'training-analysis',
+      'post-workout-reflections',
       'ai-insights',
       'plans-and-billing',
       'uploads-and-imports',
@@ -393,8 +415,8 @@ describe('help.content', () => {
     ]);
   });
 
-  it('should define twelve unique sections with complete content', () => {
-    expect(HELP_SECTIONS).toHaveLength(12);
+  it('should define thirteen unique sections with complete content', () => {
+    expect(HELP_SECTIONS).toHaveLength(13);
 
     const uniqueIds = new Set(HELP_SECTIONS.map(section => section.id));
     expect(uniqueIds.size).toBe(HELP_SECTIONS.length);
@@ -412,6 +434,22 @@ describe('help.content', () => {
         expect(link.target.trim().length).toBeGreaterThan(0);
       });
     });
+  });
+
+  it('makes reflection help discoverable and explains its independent privacy and deletion boundaries', () => {
+    const section = HELP_SECTIONS.find(value => value.id === 'post-workout-reflections')!;
+    expect(searchHelpSections(HELP_SECTIONS, 'post-workout reflection').map(value => value.id)).toContain(section.id);
+    for (const phrase of ['**Cancel** writes nothing', 'private even when the recording is public',
+      '**Edit details** in the summary actions', '**Save changes** once', '**Keep reflection** cancels that deletion',
+      'one **RPE** input for the **whole recording**', 'There is no separate reflection rating',
+      'event details and the note cannot be partially saved',
+      'on for fresh and New chats', 'cannot erase text a client already received or quoted']) {
+      expect(section.content).toContain(phrase);
+    }
+    expect(HELP_SECTIONS.find(value => value.id === 'ai-insights')!.content)
+      .toContain('Manual Health measurements and Private workout reflections on; other optional access off');
+    expect(section.content).not.toContain('Private reflection effort');
+    expect(HELP_SECTIONS.map(value => value.content).join('\n')).not.toContain('reflection effort/text');
   });
 
   it('documents the source-separated Health workspace and its bounded metric explorer', () => {
@@ -755,13 +793,17 @@ describe('help.content', () => {
     expect(calendarSection?.content).toContain('intentionally have no hover or touch tooltip');
     expect(calendarSection?.content).toContain('recorded **Distance**, **Duration**, and **Ascent**');
     expect(calendarSection?.content).toContain('Month totals exclude adjacent dates');
+    expect(calendarSection?.content).toContain('**Week** and **Month** views, **Recorded**');
+    expect(calendarSection?.content).toContain('Month also retains recorded ascent');
+    expect(calendarSection?.content).toContain('**Retry month summary**');
+    expect(calendarSection?.content).toContain('If a Week or Month read is incomplete');
     expect(calendarSection?.content).toContain('scaled against the longest-duration group');
     expect(calendarSection?.content).toContain('alpine skiing, snowboarding, and downhill cycling');
     expect(calendarSection?.content).toContain('do not add ascent but do contribute descent');
     expect(calendarSection?.content).toContain('Diving, Scuba Diving, Free Diving, Snorkeling, and Mermaiding');
     expect(calendarSection?.content).toContain('do not contribute either elevation metric; their vertical movement is recorded as depth');
     expect(calendarSection?.content).toContain('summary exclusions configured in **Settings** also apply');
-    expect(calendarSection?.content).toContain('Settings -> Dashboard -> Start of the Week');
+    expect(calendarSection?.content).toContain('Settings -> Units & formatting -> Start of the Week');
     expect(calendarSection?.content).toContain('visible-period activity query');
     expect(calendarSection?.content).toContain('tag filter lists your saved activity tags across all dates');
     expect(calendarSection?.content).toContain('independent from the dashboard event table');
@@ -795,7 +837,7 @@ describe('help.content', () => {
     expect(planningSection?.content).toContain('You do not need to create a plan first');
     expect(planningSection?.content).toContain('[Training Plans overview](/features/training-plans)');
     expect(planningSection?.content).toContain('Plans and standalone workouts work without a service connection');
-    expect(planningSection?.content).toContain('Settings -> Dashboard -> Start of the Week');
+    expect(planningSection?.content).toContain('Settings -> Units & formatting -> Start of the Week');
     expect(planningSection?.content).toContain('Its first weekday is marked and named below the grid');
     expect(planningSection?.content).toContain('Saturday and Sunday are subtly tinted wherever they fall in the week');
     expect(planningSection?.content).toContain('calendar cues, not rest-day recommendations');
@@ -1047,6 +1089,9 @@ describe('help.content', () => {
     expect(gettingStartedSection?.content).toContain('Distance values in dashboards, event charts, activity chips, and CSV exports');
     expect(gettingStartedSection?.content).toContain('Dashboard **Action prompts**');
     expect(gettingStartedSection?.content).toContain('dashboard **Default units** action prompt');
+    expect(gettingStartedSection?.content).not.toContain('Keep current units');
+    expect(gettingStartedSection?.content).toContain('preserves your weight and week-start choices');
+    expect(gettingStartedSection?.content).toContain('before your first activity');
     expect(gettingStartedSection?.content).toContain('**No activities yet**');
     expect(gettingStartedSection?.content).toContain('**Upload activity**');
     expect(gettingStartedSection?.content).toContain('**Connect service**');
@@ -1061,7 +1106,7 @@ describe('help.content', () => {
     expect(gettingStartedSection?.content).toContain('use **Send past activities** in **Services** for activities already in Quantified Self');
     expect(gettingStartedSection?.content).toContain('Advanced settings');
     expect(gettingStartedSection?.content).toContain('kilometers or miles');
-    expect(gettingStartedSection?.content).toContain('Settings -> Units');
+    expect(gettingStartedSection?.content).toContain('Settings -> Units & formatting');
     expect(gettingStartedSection?.content).toContain('jump distances display in feet when miles are selected');
   });
 
@@ -1075,6 +1120,20 @@ describe('help.content', () => {
     expect(gettingStartedSection?.content).toContain('lap index, split progress, duration, distance, length type, stroke, strokes, swim pace, stroke rate, heart rate, SWOLF, and energy');
     expect(gettingStartedSection?.content).toContain('use **Stroke Rate** rather than Cadence');
     expect(gettingStartedSection?.content).toContain('25 m, 50 m, 75 m, and 100 m splits before the rest row');
+    expect(gettingStartedSection?.content).toContain('**Settings -> Units & formatting -> Customize units -> Swim pace**');
+    expect(gettingStartedSection?.content).toContain('25 yd, 50 yd, 75 yd, and 100 yd splits before the rest row');
+    expect(gettingStartedSection?.content).toContain('Stored distances remain in meters');
+    expect(gettingStartedSection?.content).toContain('**Swim** time (excluding idle/rest lengths)');
+    expect(gettingStartedSection?.content).toContain('**Total** keeps the combined time');
+    expect(gettingStartedSection?.content).toContain('Set swim pace excludes rest too');
+    expect(gettingStartedSection?.content).toContain('Each length keeps its recorded duration and all available details');
+    expect(gettingStartedSection?.content).toContain('falling back to elapsed time when timer time is missing');
+    expect(gettingStartedSection?.content).toContain('unrecorded rest is not inferred');
+    expect(gettingStartedSection?.content).toContain('Open sets stay open when unit preferences change');
+    expect(gettingStartedSection?.content).toContain('Each swim set header shows its recorded **Stroke** automatically');
+    expect(gettingStartedSection?.content).toContain('**Laps -> Columns -> Swimming -> Stroke**');
+    expect(gettingStartedSection?.content).toContain('Existing saved column choices stay as you selected them');
+    expect(gettingStartedSection?.content).toContain('Missing stroke data and rest-only laps stay blank');
   });
 
   it('should document sport-specific event lap table columns', () => {
@@ -1855,6 +1914,7 @@ describe('help.content', () => {
     const dataAndPrivacySection = HELP_SECTIONS.find(section => section.id === 'data-and-privacy');
 
     expect(dataAndPrivacySection?.content).toContain('Event and saved comparison sharing is manual');
+    expect(dataAndPrivacySection?.content).toContain('activity actions button shows a spinner while sharing is being updated');
     expect(dataAndPrivacySection?.content).toContain('every object stored under that event\'s source-file folder');
     expect(dataAndPrivacySection?.content).toContain('users/{uid}/events/{eventId}/...');
     expect(dataAndPrivacySection?.content).toContain('Use **Stop sharing**');

@@ -29,6 +29,8 @@ import {
     ACTIVITIES_EXCLUDED_FROM_DESCENT,
     ActivityTypes,
     DistanceUnits,
+    GradeAdjustedPaceUnits,
+    GradeAdjustedSpeedUnits,
     PaceUnits,
     DataPotentialStamina,
     SpeedUnits,
@@ -176,6 +178,116 @@ describe('UserSettingsComponent', () => {
         fixture.detectChanges();
     });
 
+    it('exposes Theme directly and stages a selection without saving', () => {
+        const theme = fixture.nativeElement.querySelector('.settings-theme-control');
+        expect(theme.closest('.settings-panel-section')).toBeNull();
+        const dark = Array.from(theme.querySelectorAll('mat-button-toggle'))
+            .find((button: HTMLElement) => button.textContent.trim() === 'Dark') as HTMLElement;
+        dark.querySelector('button').click();
+        fixture.detectChanges();
+        expect(component.userSettingsFormGroup.get('appTheme').value).toBe(component.appThemeOptions[2].value);
+        expect(component.userSettingsFormGroup.dirty).toBe(true);
+        expect(fixture.nativeElement.querySelector('.settings-save-bar')).toBeTruthy();
+        expect(TestBed.inject(AppUserService).updateUserProperties).not.toHaveBeenCalled();
+        expect(hapticsServiceMock.selection).toHaveBeenCalledOnce();
+    });
+
+    it('hides Save while pristine and ignores an implicit submit', async () => {
+        expect(fixture.nativeElement.querySelector('.settings-save-bar')).toBeNull();
+        await component.onSubmit(new Event('submit'));
+        expect(TestBed.inject(AppUserService).updateUserProperties).not.toHaveBeenCalled();
+        expect(hapticsServiceMock.success).not.toHaveBeenCalled();
+    });
+
+    it('places name in Account, watermark in Charts, and week start in Units', () => {
+        const account = fixture.nativeElement.querySelector('#settings-account-content');
+        const charts = fixture.nativeElement.querySelector('#settings-charts-content');
+        const units = fixture.nativeElement.querySelector('#settings-units-content');
+        expect(account.querySelector('[formControlName="displayName"]')).toBeTruthy();
+        expect(account.querySelector('[formControlName="brandText"]')).toBeNull();
+        expect(charts.querySelector('[formControlName="brandText"]')).toBeTruthy();
+        expect(units.querySelector('[formControlName="startOfTheWeek"]')).toBeTruthy();
+        const controls = Array.from(fixture.nativeElement.querySelectorAll('[formControlName]'))
+            .map((element: Element) => element.getAttribute('formControlName'));
+        expect(new Set(controls).size).toBe(controls.length);
+    });
+
+    it('updates summaries from staged settings and retains them while consent switches are locked', async () => {
+        const form = component.userSettingsFormGroup;
+        form.patchValue({ distanceUnitsToUse: DistanceUnits.Miles, weightUnitsToUse: WeightUnits.Pounds,
+            acceptedTrackingPolicy: false, acceptedMarketingPolicy: true, dataTypesToUse: ['Heart Rate'], eventsPerPage: 50 });
+        form.markAsDirty();
+        expect(component.sectionSummaries().units).toContain('Miles');
+        expect(component.sectionSummaries().units).toContain('Pounds');
+        expect(component.sectionSummaries().charts).toContain('1 default metric');
+        expect(component.sectionSummaries().dashboard).toBe('50 activities per page');
+        expect(component.sectionSummaries().privacy).toBe('Analytics off · Marketing on');
+        form.get('acceptedMarketingPolicy').disable();
+        expect(component.sectionSummaries().privacy).toBe('Analytics off · Marketing on');
+        await component.selectSettingsSection('charts');
+        await component.selectSettingsSection('privacy');
+        expect(form.dirty).toBe(true);
+        expect(component.sectionSummaries().units).toContain('Miles');
+    });
+
+    it('refreshes untouched remote consent summaries without losing local edits', () => {
+        const name = component.userSettingsFormGroup.get('displayName');
+        name.setValue('Local name'); name.markAsDirty();
+        component.user = { ...component.user, acceptedMarketingPolicy: true };
+        component.ngOnChanges();
+        expect(name.value).toBe('Local name');
+        expect(component.sectionSummaries().privacy).toContain('Marketing on');
+        expect(component.sectionSummaries().account).toContain('Local name');
+        expect(hapticsServiceMock.selection).not.toHaveBeenCalled();
+    });
+
+    it.each([{ section: 'profile', active: 'account' }, { section: 'app', active: null }])(
+        'retains the old $section link without an extra disclosure or haptic', ({ section, active }) => {
+            queryParamMapSubject.next(convertToParamMap({ section }));
+            fixture.detectChanges();
+            expect(component.activeSection).toBe(active);
+            expect(fixture.nativeElement.querySelector('.settings-theme-control')).toBeTruthy();
+            expect(hapticsServiceMock.selection).not.toHaveBeenCalled();
+        });
+
+    it('opens Customize units without dirtying the form and retains edits across collapse', () => {
+        component.activeSection = 'units'; fixture.detectChanges();
+        const toggle = fixture.nativeElement.querySelector('.settings-customize-units') as HTMLButtonElement;
+        const custom = fixture.nativeElement.querySelector('#settings-custom-units') as HTMLElement;
+        toggle.click(); fixture.detectChanges();
+        expect(toggle.getAttribute('aria-expanded')).toBe('true');
+        expect(custom.hidden).toBe(false);
+        expect(component.userSettingsFormGroup.pristine).toBe(true);
+        const weight = component.userSettingsFormGroup.get('weightUnitsToUse');
+        weight.setValue(WeightUnits.Pounds); weight.markAsDirty();
+        toggle.click(); fixture.detectChanges();
+        expect(custom.hidden).toBe(true);
+        expect(weight.value).toBe(WeightUnits.Pounds);
+        expect(weight.dirty).toBe(true);
+        expect(hapticsServiceMock.selection).toHaveBeenCalledTimes(2);
+        component.isSaving = true;
+        component.toggleCustomUnits(); component.onPreferenceChange();
+        expect(hapticsServiceMock.selection).toHaveBeenCalledTimes(2);
+    });
+
+    it('keeps an accessible save error and staged choices for retry, then hides Save after success', async () => {
+        const update = vi.mocked(TestBed.inject(AppUserService).updateUserProperties);
+        update.mockRejectedValueOnce(new Error('offline')).mockResolvedValueOnce([]);
+        const name = component.userSettingsFormGroup.get('displayName');
+        name.setValue('Retry name'); name.markAsDirty();
+        await component.onSubmit(new Event('submit')); fixture.detectChanges();
+        const status = fixture.nativeElement.querySelector('.settings-save-status');
+        expect(status.getAttribute('role')).toBe('alert');
+        expect(status.textContent).toContain('Try again');
+        expect(name.value).toBe('Retry name');
+        expect(name.dirty).toBe(true);
+        await component.onSubmit(new Event('submit')); fixture.detectChanges();
+        expect(fixture.nativeElement.querySelector('.settings-save-bar')).toBeNull();
+        expect(component.errorSaving).toBeNull();
+        expect(hapticsServiceMock.error).toHaveBeenCalledOnce();
+        expect(hapticsServiceMock.success).toHaveBeenCalledOnce();
+    });
+
     it('defaults comparison line patterns off and emits one selection haptic for accepted toggle changes', () => {
         component.activeSection = 'charts';
         fixture.detectChanges();
@@ -203,6 +315,7 @@ describe('UserSettingsComponent', () => {
         vi.mocked(TestBed.inject(AppUserService).updateUserProperties).mockImplementationOnce(() => new Promise<[]>(resolve => {
             finishSave = () => resolve([]);
         }));
+        component.userSettingsFormGroup.markAsDirty();
         const save = component.onSubmit(new Event('submit'));
         expect(control.disabled).toBe(true);
         expect(hapticsServiceMock.success).not.toHaveBeenCalled();
@@ -228,6 +341,7 @@ describe('UserSettingsComponent', () => {
         control.markAsDirty();
         const userService = TestBed.inject(AppUserService);
         const update = vi.mocked(userService.updateUserProperties).mockResolvedValue(undefined);
+        component.userSettingsFormGroup.markAsDirty();
         await component.onSubmit(new Event('submit'));
         expect(update).toHaveBeenCalledWith(expect.anything(), expect.objectContaining({
             settings: expect.objectContaining({ chartSettings: expect.objectContaining({ useDistinctComparisonLinePatterns: !enabled }) }),
@@ -239,6 +353,7 @@ describe('UserSettingsComponent', () => {
         component.userSettingsFormGroup.get('displayName').setValue('Edited name');
         component.userSettingsFormGroup.get('displayName').markAsDirty();
         const update = vi.mocked(TestBed.inject(AppUserService).updateUserProperties).mockResolvedValue([]);
+        component.userSettingsFormGroup.markAsDirty();
         await component.onSubmit(new Event('submit'));
         const chartSettings = update.mock.calls[0][1].settings.chartSettings;
         expect(chartSettings).not.toHaveProperty('useDistinctComparisonLinePatterns');
@@ -283,8 +398,8 @@ describe('UserSettingsComponent', () => {
         expect(template).not.toContain('Show All Data Points');
     });
 
-    it('shows email in the profile header when available', () => {
-        component.activeSection = 'profile';
+    it('shows email in the Account identity strip when available', () => {
+        component.activeSection = 'account';
         component.user = { ...(component.user as any), email: 'runner@example.com' } as any;
         component.ngOnChanges();
         fixture.detectChanges();
@@ -294,8 +409,8 @@ describe('UserSettingsComponent', () => {
         expect(emailLine?.textContent).toContain('runner@example.com');
     });
 
-    it('hides the profile header email when unavailable', () => {
-        component.activeSection = 'profile';
+    it('hides the Account identity strip email when unavailable', () => {
+        component.activeSection = 'account';
         component.user = { ...(component.user as any), email: null } as any;
         component.ngOnChanges();
         fixture.detectChanges();
@@ -304,8 +419,8 @@ describe('UserSettingsComponent', () => {
         expect(emailLine).toBeNull();
     });
 
-    it('copies the profile user ID to the clipboard', () => {
-        component.activeSection = 'profile';
+    it('copies the Account user ID to the clipboard', () => {
+        component.activeSection = 'account';
         fixture.detectChanges();
 
         const copyButton = fixture.nativeElement.querySelector('button[aria-label="Copy user ID"]') as HTMLButtonElement;
@@ -315,11 +430,11 @@ describe('UserSettingsComponent', () => {
         expect(snackBarMock.open).toHaveBeenCalledWith('User ID copied.', undefined, { duration: 2000 });
     });
 
-    it('shows the profile identity strip only while the profile section is active', () => {
-        component.activeSection = 'profile';
+    it('shows the profile identity strip only while Account is active', () => {
+        component.activeSection = 'account';
         fixture.detectChanges();
 
-        const profilePanel = fixture.nativeElement.querySelector('[aria-labelledby="settings-profile-title"]');
+        const profilePanel = fixture.nativeElement.querySelector('[aria-labelledby="settings-account-title"]');
         expect(profilePanel.querySelector('.settings-panel-body .user-profile-header')).toBeTruthy();
         expect(profilePanel.hidden).toBe(false);
 
@@ -353,69 +468,142 @@ describe('UserSettingsComponent', () => {
 
     it('should expose settings navigation sections in display order', () => {
         expect(component.settingsSectionOptions.map(section => section.id)).toEqual([
-            'profile',
-            'app',
-            'privacy',
-            'dashboard',
-            'map',
-            'charts',
             'units',
+            'dashboard',
+            'charts',
+            'map',
+            'privacy',
             'account',
         ]);
     });
 
-    it('renders the mobile settings selector as Material button navigation', () => {
-        const tabNav = fixture.nativeElement.querySelector('nav[role="tablist"]');
-        const tabLabels = Array.from(tabNav.querySelectorAll('.workspace-navigation__mobile-tab'))
-            .map((link: Element) => link.querySelector('.settings-tab-label > span:last-child')?.textContent?.trim());
-
-        expect(tabNav).toBeTruthy();
-        expect(tabNav.querySelectorAll('.mat-mdc-button')).toHaveLength(8);
-        expect(tabLabels).toEqual([
-            'Profile',
-            'Appearance',
-            'Privacy',
-            'Dashboard',
-            'Maps',
-            'Charts',
-            'Units',
-            'Account',
+    it('renders every settings disclosure in two ordered groups with Material buttons', () => {
+        const groups = fixture.nativeElement.querySelectorAll('.settings-group');
+        expect(groups).toHaveLength(2);
+        expect(groups[0].querySelector('.settings-group-title').textContent).toBe('Preferences');
+        expect(groups[1].querySelector('.settings-group-title').textContent).toBe('Privacy & account');
+        const triggers = Array.from(fixture.nativeElement.querySelectorAll('.settings-section-trigger')) as HTMLButtonElement[];
+        expect(triggers.map(button => button.getAttribute('aria-label'))).toEqual([
+            'Units & formatting', 'Dashboard', 'Charts', 'Maps', 'Privacy & emails', 'Account',
         ]);
+        expect(triggers.every(button => button.classList.contains('mat-mdc-button'))).toBe(true);
+        expect(triggers.every(button => button.type === 'button')).toBe(true);
+        expect(triggers.every(button => button.getAttribute('aria-expanded') === 'false')).toBe(true);
+        expect(fixture.nativeElement.querySelector('app-workspace-section-navigation')).toBeNull();
+        for (const button of triggers) {
+            const panel = fixture.nativeElement.querySelector('#' + button.getAttribute('aria-controls'));
+            expect(panel.getAttribute('aria-labelledby')).toBe(button.id);
+            expect(panel.hidden).toBe(true);
+        }
     });
 
-    it('renders the settings heading before section navigation', () => {
+    it('renders the settings heading before the overview', () => {
         const pageHeader = fixture.nativeElement.querySelector('.settings-page-header');
-        const sectionNavigation = fixture.nativeElement.querySelector('app-workspace-section-navigation');
-
         expect(pageHeader).toBeTruthy();
-        expect(pageHeader.nextElementSibling).toBe(sectionNavigation);
+        expect(pageHeader.nextElementSibling.classList.contains('settings-overview')).toBe(true);
     });
 
-    it('uses the horizontal settings selector without a workspace rail', () => {
-        const tabNav = fixture.nativeElement.querySelector('nav[role="tablist"]');
-        const tabPanel = fixture.nativeElement.querySelector('.settings-tab-panel');
-
-        expect(fixture.nativeElement.querySelector('.desktop-section-nav')).toBeNull();
-        expect(tabPanel).toBeTruthy();
-        expect(tabNav.querySelectorAll('.mat-mdc-button')).toHaveLength(8);
+    it('expands and collapses a section through its button without discarding edits', async () => {
+        const trigger = fixture.nativeElement.querySelector('button[aria-label="Account"]') as HTMLButtonElement;
+        trigger.click();
+        await fixture.whenStable(); fixture.detectChanges();
+        expect(component.activeSection).toBe('account');
+        expect(trigger.getAttribute('aria-expanded')).toBe('true');
+        const form = component.userSettingsFormGroup;
+        form.get('displayName').setValue('Unsaved name');
+        form.get('displayName').markAsDirty();
+        trigger.click();
+        await fixture.whenStable(); fixture.detectChanges();
+        expect(component.activeSection).toBeNull();
+        expect(trigger.getAttribute('aria-expanded')).toBe('false');
+        expect(form.get('displayName').value).toBe('Unsaved name');
+        expect(form.dirty).toBe(true);
+        expect(mockRouter.navigate).toHaveBeenLastCalledWith([], {
+            relativeTo: mockActivatedRoute, queryParams: { section: null }, queryParamsHandling: 'merge',
+        });
+        expect(hapticsServiceMock.selection).toHaveBeenCalledTimes(2);
     });
 
-    it('keeps the settings form in its centered 760px column', () => {
-        const styles = readFileSync(
-            resolve(process.cwd(), 'src/app/components/user-settings/user-settings.component.scss'),
-            'utf8'
-        );
-        const contentRule = styles.match(/\.settings-content\s*\{[^}]*\}/)?.[0] ?? '';
-        const saveActionRule = styles.match(/\.qs-form-actions-floating\s*\{[^}]*\}/)?.[0] ?? '';
+    it('keeps save available for edits when Account is open', async () => {
+        component.userSettingsFormGroup.get('displayName').markAsDirty();
+        await component.selectSettingsSection('account');
+        fixture.detectChanges();
+        expect(fixture.nativeElement.querySelector('.settings-save-bar button')).toBeTruthy();
+        expect(fixture.nativeElement.querySelector('.settings-save-status').textContent).toContain('Unsaved changes');
+    });
 
-        expect(contentRule).toContain('max-width: 760px');
-        expect(contentRule).toContain('margin: 0 auto');
-        expect(contentRule).not.toContain('1180px');
-        expect(saveActionRule).toContain('calc((100vw - 760px) / 2)');
+    it('makes Save changes the only submit action, including inside collapsed sections', () => {
+        component.userSettingsFormGroup.markAsDirty();
+        fixture.detectChanges();
+        const buttons = Array.from(fixture.nativeElement.querySelectorAll('form button')) as HTMLButtonElement[];
+        expect(buttons.filter(button => button.type === 'submit'))
+            .toEqual([fixture.nativeElement.querySelector('.settings-save-bar button')]);
+        const deleteButton = buttons.find(button => button.textContent?.includes('Delete My Account'))!;
+        expect(deleteButton.type).toBe('button');
+    });
+
+    it.each([false, true])('blocks edits and deletion during save and restores interaction after failure=%s', async fail => {
+        const name = component.userSettingsFormGroup.get('displayName');
+        name.setValue('Pending name');
+        name.markAsDirty();
+        component.activeSection = 'account';
+        let finishSave!: () => void;
+        const update = vi.mocked(TestBed.inject(AppUserService).updateUserProperties).mockImplementationOnce(() => new Promise<[]>(
+            (resolve, reject) => { finishSave = () => fail ? reject(new Error('offline')) : resolve([]); }
+        ));
+        component.userSettingsFormGroup.markAsDirty();
+        const save = component.onSubmit(new Event('submit'));
+        fixture.detectChanges();
+        const overview = fixture.nativeElement.querySelector('.settings-overview') as HTMLElement;
+        const deleteButton = fixture.nativeElement.querySelector('.danger-card button') as HTMLButtonElement;
+        expect(overview.hasAttribute('inert')).toBe(true);
+        expect(deleteButton.disabled).toBe(true);
+        expect(fixture.nativeElement.querySelector('.settings-save-bar mat-spinner')).toBeTruthy();
+        deleteButton.click();
+        component.deleteUser(new Event('click'));
+        expect(TestBed.inject(MatDialog).open).not.toHaveBeenCalled();
+        expect(update).toHaveBeenCalledTimes(1);
+        finishSave();
+        await save;
+        fixture.detectChanges();
+        expect(overview.hasAttribute('inert')).toBe(false);
+        expect(deleteButton.disabled).toBe(false);
+        expect(name.value).toBe('Pending name');
+        expect(name.dirty).toBe(fail);
+    });
+
+    it('keeps subsection headings beneath their group and disclosure headings', () => {
+        const panels = Array.from(fixture.nativeElement.querySelectorAll('.settings-panel-section')) as HTMLElement[];
+        for (const panel of panels) {
+            const headings = Array.from(panel.querySelectorAll('h1,h2,h3,h4,h5,h6'));
+            expect(headings.every(heading => Number(heading.tagName.slice(1)) >= 4)).toBe(true);
+        }
+        const units = fixture.nativeElement.querySelector('#settings-units-content');
+        expect(units.querySelectorAll('h4')).toHaveLength(3);
+    });
+
+    it('ignores disclosure actions while saving or deleting', async () => {
+        component.isSaving = true;
+        await component.toggleSettingsSection('privacy');
+        component.isSaving = false; component.isDeleting = true;
+        await component.toggleSettingsSection('account');
+        expect(component.activeSection).toBeNull();
+        expect(hapticsServiceMock.selection).not.toHaveBeenCalled();
+        expect(mockRouter.navigate).not.toHaveBeenCalled();
+    });
+
+    it('lays out the overview in one column at every width with a sticky save action', () => {
+        const styles = readFileSync(resolve(process.cwd(), 'src/app/components/user-settings/user-settings.component.scss'), 'utf8');
+        const overviewColumns = Array.from(styles.matchAll(/\.settings-overview\s*\{([^}]*)\}/g))
+            .flatMap(rule => Array.from(rule[1].matchAll(/grid-template-columns:\s*([^;]+);/g), match => match[1]));
+        expect(styles).toContain('max-width: 800px');
+        expect(overviewColumns).toEqual(['minmax(0, 1fr)']);
+        expect(styles).toContain('position: sticky');
+        expect(styles).not.toContain('position: fixed');
     });
 
     it('uses dynamic Material subscript sizing for settings form fields', () => {
-        const sectionsWithFormFields = ['profile', 'app', 'dashboard', 'map', 'charts', 'units'] as const;
+        const sectionsWithFormFields = ['account', 'dashboard', 'map', 'charts', 'units'] as const;
 
         for (const section of sectionsWithFormFields) {
             component.activeSection = section;
@@ -430,15 +618,15 @@ describe('UserSettingsComponent', () => {
         }
     });
 
-    it('shows account as the final settings section for account actions', () => {
+    it('shows Privacy immediately before the final Account section', () => {
         const sectionIds = component.settingsSectionOptions.map(section => section.id);
 
-        expect(sectionIds[sectionIds.length - 2]).toBe('units');
+        expect(sectionIds[sectionIds.length - 2]).toBe('privacy');
         expect(sectionIds[sectionIds.length - 1]).toBe('account');
     });
 
     it('should update section query param when a settings section is selected', async () => {
-        component.activeSection = 'profile';
+        component.activeSection = 'account';
         const selection = component.selectSettingsSection('map');
 
         expect(component.activeSection).toBe('map');
@@ -453,28 +641,28 @@ describe('UserSettingsComponent', () => {
     });
 
     it('keeps settings panels mounted while switching the visible section', () => {
-        component.activeSection = 'profile';
+        component.activeSection = 'account';
         fixture.detectChanges();
 
         const panels = fixture.nativeElement.querySelectorAll('.settings-panel-section');
-        const profilePanel = fixture.nativeElement.querySelector('[aria-labelledby="settings-profile-title"]');
+        const profilePanel = fixture.nativeElement.querySelector('[aria-labelledby="settings-account-title"]');
         const mapPanel = fixture.nativeElement.querySelector('[aria-labelledby="settings-map-title"]');
 
-        expect(panels).toHaveLength(8);
+        expect(panels).toHaveLength(6);
         expect(profilePanel.hidden).toBe(false);
         expect(mapPanel.hidden).toBe(true);
 
         component.activeSection = 'map';
         fixture.detectChanges();
 
-        expect(fixture.nativeElement.querySelector('[aria-labelledby="settings-profile-title"]')).toBe(profilePanel);
+        expect(fixture.nativeElement.querySelector('[aria-labelledby="settings-account-title"]')).toBe(profilePanel);
         expect(fixture.nativeElement.querySelector('[aria-labelledby="settings-map-title"]')).toBe(mapPanel);
         expect(profilePanel.hidden).toBe(true);
         expect(mapPanel.hidden).toBe(false);
     });
 
     it('should update the active section from account query param changes', () => {
-        component.activeSection = 'profile';
+        component.activeSection = 'account';
 
         queryParamMapSubject.next(convertToParamMap({ section: 'account' }));
 
@@ -482,30 +670,30 @@ describe('UserSettingsComponent', () => {
     });
 
     it('maps the legacy delete-account section query to account', () => {
-        component.activeSection = 'profile';
+        component.activeSection = 'account';
 
         queryParamMapSubject.next(convertToParamMap({ section: 'delete-account' }));
 
         expect(component.activeSection).toBe('account');
     });
 
-    it('should restore the profile section when the section query param is missing', () => {
+    it('collapses the overview when the section query param is missing', () => {
         component.activeSection = 'units';
 
         queryParamMapSubject.next(convertToParamMap({}));
 
-        expect(component.activeSection).toBe('profile');
+        expect(component.activeSection).toBeNull();
     });
 
     it('shows delete account as an action only while the account section is active', () => {
-        component.activeSection = 'profile';
+        component.activeSection = 'units';
         fixture.detectChanges();
 
         const accountPanel = fixture.nativeElement.querySelector('[aria-labelledby="settings-account-title"]');
         expect(accountPanel.querySelector('.danger-card')).toBeTruthy();
         expect(accountPanel.querySelector('app-mcp-connections')).toBeNull();
         expect(accountPanel.textContent).not.toContain('MCP connections');
-        expect(accountPanel.querySelector('.settings-panel-body')).toBeNull();
+        expect(accountPanel.querySelector('[formControlName="displayName"]')).toBeTruthy();
         expect(accountPanel.textContent).toContain('Delete My Account');
         expect(accountPanel.hidden).toBe(true);
 
@@ -513,8 +701,7 @@ describe('UserSettingsComponent', () => {
         fixture.detectChanges();
 
         expect(accountPanel.hidden).toBe(false);
-        expect(fixture.nativeElement.querySelector('.qs-form-actions-floating')).toBeNull();
-        expect(fixture.nativeElement.querySelector('.mobile-save-bar')).toBeNull();
+        expect(fixture.nativeElement.querySelector('.settings-save-bar')).toBeNull();
     });
 
     it('should initialize acceptedTrackingPolicy from user data', () => {
@@ -527,19 +714,18 @@ describe('UserSettingsComponent', () => {
         expect(component.userSettingsFormGroup.get('acceptedTrackingPolicy').value).toBe(false);
     });
 
-    it('opens both consent switches through the Privacy tab and direct section link', async () => {
-        component.activeSection = 'profile';
+    it('opens both consent switches through the Privacy disclosure and direct section link', async () => {
+        component.activeSection = 'account';
         fixture.detectChanges();
-        const tabs = Array.from(fixture.nativeElement.querySelectorAll('[role="tab"]')) as HTMLAnchorElement[];
-        const privacyTab = tabs.find(tab => tab.textContent?.includes('Privacy'))!;
+        const privacyTab = fixture.nativeElement.querySelector('#settings-privacy-title') as HTMLButtonElement;
         privacyTab.click();
         await fixture.whenStable(); fixture.detectChanges();
         expect(component.activeSection).toBe('privacy');
         expect(hapticsServiceMock.selection).toHaveBeenCalledTimes(1);
         const privacy = fixture.nativeElement.querySelector('[aria-labelledby="settings-privacy-title"]') as HTMLElement;
-        const appearance = fixture.nativeElement.querySelector('[aria-labelledby="settings-general-title"]') as HTMLElement;
+        const appearance = fixture.nativeElement.querySelector('.settings-theme-control') as HTMLElement;
         expect(privacy.hidden).toBe(false);
-        expect(appearance.hidden).toBe(true);
+        expect(appearance.querySelector('mat-button-toggle-group[formControlName="appTheme"]')).toBeTruthy();
         expect(privacy.querySelectorAll('mat-slide-toggle')).toHaveLength(2);
         expect(appearance.querySelector('mat-slide-toggle')).toBeNull();
         expect(privacy.textContent).toContain('Save changes');
@@ -569,6 +755,7 @@ describe('UserSettingsComponent', () => {
         expect(component.userSettingsFormGroup.get(field)?.dirty).toBe(true);
         expect(hapticsServiceMock.selection).toHaveBeenCalledTimes(1);
         const update = vi.spyOn(TestBed.inject(AppUserService), 'updateUserProperties').mockResolvedValue(true);
+        component.userSettingsFormGroup.markAsDirty();
         await component.onSubmit(new Event('submit'));
         expect(update).toHaveBeenCalledWith(expect.objectContaining({ uid: 'test-uid' }), expect.objectContaining({ [field]: false }));
         expect(update.mock.calls[0][1]).not.toHaveProperty(other);
@@ -587,7 +774,7 @@ describe('UserSettingsComponent', () => {
         component.isSaving = false; component.isDeleting = true;
         component.onPrivacyPreferenceChange();
         expect(hapticsServiceMock.selection).not.toHaveBeenCalled();
-        expect(component.activeSection).toBe('profile');
+        expect(component.activeSection).toBeNull();
     });
 
     it.each(['acceptedTrackingPolicy', 'acceptedMarketingPolicy'])('refreshes untouched %s while preserving unrelated edits', (field) => {
@@ -634,12 +821,14 @@ describe('UserSettingsComponent', () => {
         const update = vi.mocked(TestBed.inject(AppUserService).updateUserProperties).mockImplementationOnce(() => new Promise<[]>(
             (resolve, reject) => { finishSave = () => fail ? reject(new Error('offline')) : resolve([]); }
         ));
+        component.userSettingsFormGroup.markAsDirty();
         const save = component.onSubmit(new Event('submit'));
         fixture.detectChanges();
         const switches = Array.from(fixture.nativeElement.querySelectorAll('[aria-labelledby="settings-privacy-title"] button[role="switch"]')) as HTMLButtonElement[];
         expect(switches).toHaveLength(2);
         expect(switches.every(button => button.disabled)).toBe(true);
         switches.forEach(button => button.click());
+        component.userSettingsFormGroup.markAsDirty();
         await component.onSubmit(new Event('submit'));
         expect(update).toHaveBeenCalledTimes(1);
         expect(marketing.value).toBe(false);
@@ -730,6 +919,7 @@ describe('UserSettingsComponent', () => {
         component.userSettingsFormGroup.get('acceptedTrackingPolicy').markAsDirty();
 
         // Submit the form
+        component.userSettingsFormGroup.markAsDirty();
         await component.onSubmit(new Event('submit'));
 
         expect(updateUserPropertiesSpy).toHaveBeenCalledWith(
@@ -752,6 +942,7 @@ describe('UserSettingsComponent', () => {
         component.userSettingsFormGroup.get('acceptedMarketingPolicy').markAsDirty();
 
         // Submit the form
+        component.userSettingsFormGroup.markAsDirty();
         await component.onSubmit(new Event('submit'));
 
         expect(updateUserPropertiesSpy).toHaveBeenCalledWith(
@@ -769,6 +960,7 @@ describe('UserSettingsComponent', () => {
         delete (component.user as any).acceptedMarketingPolicy;
         component.ngOnChanges();
 
+        component.userSettingsFormGroup.markAsDirty();
         await component.onSubmit(new Event('submit'));
 
         const payload = updateUserPropertiesSpy.mock.calls[0][1];
@@ -785,6 +977,7 @@ describe('UserSettingsComponent', () => {
         component.userSettingsFormGroup.get('acceptedTrackingPolicy').markAsDirty();
         component.userSettingsFormGroup.get('acceptedMarketingPolicy').markAsDirty();
 
+        component.userSettingsFormGroup.markAsDirty();
         await component.onSubmit(new Event('submit'));
 
         expect(updateUserPropertiesSpy).toHaveBeenCalledWith(
@@ -804,6 +997,7 @@ describe('UserSettingsComponent', () => {
         component.ngOnChanges();
         component.userSettingsFormGroup.get('acceptedMarketingPolicy').setValue(true);
 
+        component.userSettingsFormGroup.markAsDirty();
         await component.onSubmit(new Event('submit'));
 
         const payload = updateUserPropertiesSpy.mock.calls[0][1];
@@ -820,6 +1014,7 @@ describe('UserSettingsComponent', () => {
 
         component.userSettingsFormGroup.get('distanceUnitsToUse').setValue(DistanceUnits.Miles);
 
+        component.userSettingsFormGroup.markAsDirty();
         await component.onSubmit(new Event('submit'));
 
         expect(updateUserPropertiesSpy).toHaveBeenCalledWith(
@@ -842,6 +1037,7 @@ describe('UserSettingsComponent', () => {
         component.userSettingsFormGroup.get('weightUnitsToUse').setValue(WeightUnits.Pounds);
         component.onUnitPresetChange('miles');
         expect(component.userSettingsFormGroup.get('weightUnitsToUse').value).toBe(WeightUnits.Pounds);
+        component.userSettingsFormGroup.markAsDirty();
         await component.onSubmit(new Event('submit'));
         expect(updateUserPropertiesSpy).toHaveBeenCalledWith(
             expect.objectContaining({ uid: 'test-uid' }),
@@ -870,6 +1066,7 @@ describe('UserSettingsComponent', () => {
         component.ngOnChanges();
         component.userSettingsFormGroup.get('distanceUnitsToUse').setValue(DistanceUnits.Miles);
 
+        component.userSettingsFormGroup.markAsDirty();
         await component.onSubmit(new Event('submit'));
 
         expect(updateUserPropertiesSpy).toHaveBeenCalledWith(
@@ -895,6 +1092,7 @@ describe('UserSettingsComponent', () => {
         component.ngOnChanges();
         component.userSettingsFormGroup.get('displayName').setValue('Same Units');
 
+        component.userSettingsFormGroup.markAsDirty();
         await component.onSubmit(new Event('submit'));
 
         const payload = updateUserPropertiesSpy.mock.calls[0][1];
@@ -918,14 +1116,14 @@ describe('UserSettingsComponent', () => {
         expect(component.formatLocaleOptions.every(option => option.preview.date && option.preview.number)).toBe(true);
     });
 
-    it('renders regional formatting above the unit controls', () => {
+    it('shows the unit preset before regional formatting and individual overrides', () => {
         component.activeSection = 'units';
         fixture.detectChanges();
 
         const regionalFormat = fixture.nativeElement.querySelector('.settings-regional-format');
-        const presetGroup = fixture.nativeElement.querySelector('mat-button-toggle-group');
+        const presetGroup = fixture.nativeElement.querySelector('mat-button-toggle-group[aria-label="Unit preset"]');
         expect(regionalFormat).toBeTruthy();
-        expect(regionalFormat.compareDocumentPosition(presetGroup) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+        expect(presetGroup.compareDocumentPosition(regionalFormat) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
         expect(regionalFormat.textContent).toContain('Regional formatting');
         expect(regionalFormat.textContent).toContain('exported dates stay separate');
     });
@@ -957,6 +1155,7 @@ describe('UserSettingsComponent', () => {
         component.userSettingsFormGroup.get('formatLocale').setValue('fr-FR');
         component.userSettingsFormGroup.get('formatLocale').markAsDirty();
 
+        component.userSettingsFormGroup.markAsDirty();
         await component.onSubmit(new Event('submit'));
 
         expect(updateUserPropertiesSpy).toHaveBeenCalledWith(
@@ -976,6 +1175,7 @@ describe('UserSettingsComponent', () => {
         const userService = TestBed.inject(AppUserService);
         vi.spyOn(userService, 'updateUserProperties').mockResolvedValue(true as any);
 
+        component.userSettingsFormGroup.markAsDirty();
         await component.onSubmit(new Event('submit'));
 
         expect(localeServiceMock.cachePreference).not.toHaveBeenCalled();
@@ -988,6 +1188,7 @@ describe('UserSettingsComponent', () => {
         localeServiceMock.cachePreference.mockReturnValue('storage-unavailable');
         component.userSettingsFormGroup.get('formatLocale').setValue('pl-PL');
 
+        component.userSettingsFormGroup.markAsDirty();
         await component.onSubmit(new Event('submit'));
 
         expect(snackBarMock.open).toHaveBeenCalledWith(
@@ -1005,6 +1206,7 @@ describe('UserSettingsComponent', () => {
         vi.spyOn(userService, 'updateUserProperties').mockRejectedValueOnce(new Error('offline'));
         component.userSettingsFormGroup.get('formatLocale').setValue('el-GR');
 
+        component.userSettingsFormGroup.markAsDirty();
         await component.onSubmit(new Event('submit'));
 
         expect(localeServiceMock.cachePreference).not.toHaveBeenCalled();
@@ -1026,11 +1228,63 @@ describe('UserSettingsComponent', () => {
         expect(component.userSettingsFormGroup.dirty).toBe(true);
     });
 
-    it('renders unit presets and fine-tune unit controls without an expander', () => {
+    it('allows reapplying the same preset after customizing its unit choices', () => {
+        component.activeSection = 'units';
+        component.onUnitPresetChange('kilometers');
+        component.userSettingsFormGroup.get('paceUnitsToUse').setValue([PaceUnits.MinutesPerMile]);
+        fixture.detectChanges();
+        expect(component.selectedUnitPreset).toBeNull();
+        const group = fixture.nativeElement.querySelector('mat-button-toggle-group[aria-label="Unit preset"]');
+        expect(group.querySelector('[aria-checked="true"]')).toBeNull();
+        expect(group.parentElement.textContent).toContain('Custom unit choices');
+        const kilometers = Array.from(group.querySelectorAll('mat-button-toggle'))
+            .find((toggle: HTMLElement) => toggle.textContent.trim() === 'Kilometers') as HTMLElement;
+        hapticsServiceMock.selection.mockClear();
+        kilometers.querySelector('button').click();
+        fixture.detectChanges();
+        expect(component.selectedUnitPreset).toBe('kilometers');
+        expect(component.userSettingsFormGroup.get('paceUnitsToUse').value).toEqual([PaceUnits.MinutesPerKilometer]);
+        expect(hapticsServiceMock.selection).toHaveBeenCalledOnce();
+        expect(group.parentElement.textContent).not.toContain('Custom unit choices');
+        component.onUnitPresetChange('kilometers');
+        expect(hapticsServiceMock.selection).toHaveBeenCalledOnce();
+    });
+
+    it.each([
+        { preset: 'kilometers' as const, distance: DistanceUnits.Kilometers, speed: SpeedUnits.KilometersPerHour,
+            pace: PaceUnits.MinutesPerKilometer, swim: SwimPaceUnits.MinutesPer100Meter, vertical: VerticalSpeedUnits.MetersPerSecond,
+            gap: GradeAdjustedPaceUnits.MinutesPerKilometer, gas: GradeAdjustedSpeedUnits.KilometersPerHour },
+        { preset: 'miles' as const, distance: DistanceUnits.Miles, speed: SpeedUnits.MilesPerHour,
+            pace: PaceUnits.MinutesPerMile, swim: SwimPaceUnits.MinutesPer100Yard, vertical: VerticalSpeedUnits.FeetPerSecond,
+            gap: GradeAdjustedPaceUnits.MinutesPerMile, gas: GradeAdjustedSpeedUnits.MilesPerHour },
+    ])('stages and saves $preset while preserving independent preferences', async expected => {
+        component.userSettingsFormGroup.patchValue({weightUnitsToUse: WeightUnits.Pounds, startOfTheWeek: 0, formatLocale: 'en-GB'});
+        component.onUnitPresetChange(expected.preset === 'miles' ? 'kilometers' : 'miles');
+        component.onUnitPresetChange(expected.preset);
+        expect(TestBed.inject(AppUserService).updateUserProperties).not.toHaveBeenCalled();
+        component.activeSection = 'account';
+        await component.onSubmit(new Event('submit'));
+        expect(TestBed.inject(AppUserService).updateUserProperties).toHaveBeenCalledWith(
+            component.user,
+            expect.objectContaining({settings: expect.objectContaining({
+                unitSettings: {
+                    distanceUnits: expected.distance, speedUnits: [expected.speed], paceUnits: [expected.pace],
+                    swimPaceUnits: [expected.swim], verticalSpeedUnits: [expected.vertical],
+                    gradeAdjustedPaceUnits: [expected.gap], gradeAdjustedSpeedUnits: [expected.gas],
+                    weightUnits: WeightUnits.Pounds, startOfTheWeek: 0,
+                },
+                appSettings: expect.objectContaining({formatLocale: 'en-GB'}),
+            })}),
+        );
+        expect(component.selectedUnitPreset).toBe(expected.preset);
+        expect(component.userSettingsFormGroup.pristine).toBe(true);
+    });
+
+    it('keeps individual unit controls mounted behind Customize units', () => {
         component.activeSection = 'units';
         fixture.detectChanges();
 
-        const presetGroup = fixture.nativeElement.querySelector('mat-button-toggle-group');
+        const presetGroup = fixture.nativeElement.querySelector('mat-button-toggle-group[aria-label="Unit preset"]');
         const unitsFieldList = fixture.nativeElement.querySelector('.settings-field-list--units');
         const formFields = fixture.nativeElement.querySelectorAll('mat-form-field');
 
@@ -1038,9 +1292,11 @@ describe('UserSettingsComponent', () => {
         expect(unitsFieldList).toBeTruthy();
         expect(presetGroup.hasAttribute('hideSingleSelectionIndicator')).toBe(true);
         expect(fixture.nativeElement.querySelector('mat-expansion-panel')).toBeFalsy();
-        expect(fixture.nativeElement.textContent).toContain('Fine-tune units');
+        expect(fixture.nativeElement.textContent).toContain('Customize units');
+        expect(fixture.nativeElement.querySelector('#settings-custom-units').hidden).toBe(true);
         expect(fixture.nativeElement.textContent).toContain('Health and Training body weight');
-        expect(fixture.nativeElement.textContent).toContain('first preference also selects dive depth and rate units');
+        expect(fixture.nativeElement.textContent).toContain('first preference selects swim distance in meters or yards');
+        expect(fixture.nativeElement.textContent).toContain('dive depth and rate units');
         expect(formFields.length).toBeGreaterThanOrEqual(5);
         expect(fixture.nativeElement.querySelector('.unit-simple-settings')).toBeFalsy();
         expect(fixture.nativeElement.querySelector('.unit-advanced-settings')).toBeFalsy();
@@ -1054,6 +1310,7 @@ describe('UserSettingsComponent', () => {
         component.ngOnChanges();
         component.userSettingsFormGroup.get('brandText').setValue('  My Brand  ');
 
+        component.userSettingsFormGroup.markAsDirty();
         await component.onSubmit(new Event('submit'));
 
         const payload = updateUserPropertiesSpy.mock.calls[0][1];
@@ -1068,6 +1325,7 @@ describe('UserSettingsComponent', () => {
         component.ngOnChanges();
         component.userSettingsFormGroup.get('brandText').setValue('   ');
 
+        component.userSettingsFormGroup.markAsDirty();
         await component.onSubmit(new Event('submit'));
 
         const payload = updateUserPropertiesSpy.mock.calls[0][1];
@@ -1083,6 +1341,7 @@ describe('UserSettingsComponent', () => {
         component.ngOnChanges();
         component.userSettingsFormGroup.get('brandText').setValue('Should Not Save');
 
+        component.userSettingsFormGroup.markAsDirty();
         await component.onSubmit(new Event('submit'));
 
         const payload = updateUserPropertiesSpy.mock.calls[0][1];
@@ -1098,6 +1357,7 @@ describe('UserSettingsComponent', () => {
         component.ngOnChanges();
         component.userSettingsFormGroup.get('brandText').setValue('  Grace Brand  ');
 
+        component.userSettingsFormGroup.markAsDirty();
         await component.onSubmit(new Event('submit'));
 
         const payload = updateUserPropertiesSpy.mock.calls[0][1];
@@ -1109,6 +1369,7 @@ describe('UserSettingsComponent', () => {
         const updateUserPropertiesSpy = vi.spyOn(userService, 'updateUserProperties').mockResolvedValue(true as any);
 
         component.ngOnChanges();
+        component.userSettingsFormGroup.markAsDirty();
         await component.onSubmit(new Event('submit'));
 
         const payload = updateUserPropertiesSpy.mock.calls[0][1];
@@ -1156,6 +1417,7 @@ describe('UserSettingsComponent', () => {
         component.ngOnChanges();
         component.userSettingsFormGroup.get('eventsPerPage').setValue(25);
 
+        component.userSettingsFormGroup.markAsDirty();
         await component.onSubmit(new Event('submit'));
 
         const payload = updateUserPropertiesSpy.mock.calls[0][1];
@@ -1179,6 +1441,7 @@ describe('UserSettingsComponent', () => {
         expect(component.userSettingsFormGroup.get('brandText').hasError('maxTrimmedLength')).toBe(true);
         expect(component.userSettingsFormGroup.valid).toBe(false);
 
+        component.userSettingsFormGroup.markAsDirty();
         await component.onSubmit(new Event('submit'));
         expect(updateUserPropertiesSpy).not.toHaveBeenCalled();
     });
@@ -1196,6 +1459,7 @@ describe('UserSettingsComponent', () => {
         component.userSettingsFormGroup.get('dataTypesToUse').setValue(newMetrics);
 
         // Submit the form
+        component.userSettingsFormGroup.markAsDirty();
         await component.onSubmit(new Event('submit'));
 
         expect(updateUserPropertiesSpy).toHaveBeenCalledWith(
@@ -1283,16 +1547,13 @@ describe('UserSettingsComponent', () => {
 
     it('keeps save actions visible and disabled when form is invalid', () => {
         component.ngOnChanges();
+        component.userSettingsFormGroup.markAsDirty();
         component.userSettingsFormGroup.get('dataTypesToUse').setValue([]);
         fixture.detectChanges();
 
-        const desktopSaveButton = fixture.nativeElement.querySelector('.qs-form-actions-floating button') as HTMLButtonElement;
-        const mobileSaveButton = fixture.nativeElement.querySelector('.mobile-save-bar button') as HTMLButtonElement;
-
-        expect(desktopSaveButton).toBeTruthy();
-        expect(mobileSaveButton).toBeTruthy();
-        expect(desktopSaveButton.disabled).toBe(true);
-        expect(mobileSaveButton.disabled).toBe(true);
+        const saveButton = fixture.nativeElement.querySelector('.settings-save-bar button') as HTMLButtonElement;
+        expect(saveButton).toBeTruthy();
+        expect(saveButton.disabled).toBe(true);
     });
 
     it('allows an empty display name', () => {
@@ -1332,6 +1593,7 @@ describe('UserSettingsComponent', () => {
         component.userSettingsFormGroup.get('dataTypesToUse').setValue([]);
         component.userSettingsFormGroup.get('dataTypesToUse').markAsTouched();
 
+        component.userSettingsFormGroup.markAsDirty();
         await component.onSubmit(new Event('submit'));
 
         expect(warnSpy).toHaveBeenCalledWith(
@@ -1371,6 +1633,7 @@ describe('UserSettingsComponent', () => {
         component.userSettingsFormGroup.markAsDirty();
         expect(component.userSettingsFormGroup.dirty).toBe(true);
 
+        component.userSettingsFormGroup.markAsDirty();
         await component.onSubmit(new Event('submit'));
 
         expect(component.userSettingsFormGroup.pristine).toBe(true);
@@ -1385,6 +1648,7 @@ describe('UserSettingsComponent', () => {
         component.userSettingsFormGroup.get('chartStrokeWidth').setValue(7);
         component.userSettingsFormGroup.get('chartStrokeWidth').markAsDirty();
 
+        component.userSettingsFormGroup.markAsDirty();
         await component.onSubmit(new Event('submit'));
 
         expect(hapticsServiceMock.error).toHaveBeenCalledOnce();

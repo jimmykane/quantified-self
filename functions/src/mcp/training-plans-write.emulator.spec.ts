@@ -1,6 +1,6 @@
 import { createHash, randomUUID } from 'node:crypto';
 import { Firestore } from 'firebase-admin/firestore';
-import { ActivityTypes } from '@sports-alliance/sports-lib';
+import { ActivityTypes, WeightUnits } from '@sports-alliance/sports-lib';
 import { GARMIN_GENERIC_WORKOUT_SPORTS_V1 } from '../../../shared/planned-workout-providers';
 import { afterAll, afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { DeliveryRuntime } from '../training-plans/delivery/contracts';
@@ -26,7 +26,7 @@ import { mutateTrainingScheduleForUser } from '../training-plans/persistence';
 import { BULK_SHIFT_LEASE_MS } from '../training-plans/staged-shift';
 import { applyTrainingChanges, getTrainingChangeStatus, previewCreatePlannedWorkout, previewTrainingChanges,
   previewStrengthWorkoutChange, previewPlannedWorkoutV2Change, previewPlannedWorkoutV3Change, previewTrainingDeletion,
-  previewGarminWorkoutReplacement,
+  previewGarminWorkoutReplacement, loadAssistantTrainingWorkoutReviews,
   type TrainingWriteDependencies } from './training-plans-write.service';
 import { TRAINING_DELIVERY_WRITE_SCOPE, TRAINING_PLANS_SCOPE, TRAINING_PLANS_WRITE_SCOPE } from './training-plans.schemas';
 import { createAssistantConversationStore } from '../assistant/conversation-store';
@@ -1376,15 +1376,17 @@ describe.skipIf(!process.env.FIRESTORE_EMULATOR_HOST)('Training MCP write propos
       .toMatchObject({ provider: 'suunto', status: 'delivered', hasRemoteCopy: true });
     expect(suunto.guides.size).toBe(1);
     expect([...suunto.guides.values()][0].guide.activities).toEqual([23]);
-    expect(JSON.stringify([...suunto.guides.values()][0].guide.steps)).toContain('80 kg');
+    expect(JSON.stringify([...suunto.guides.values()][0].guide.steps)).toContain('80.0 kg');
     expect(suunto.calls.filter(call => call.method === 'POST')).toHaveLength(1);
   });
 
   it('deduplicates informative strength warnings in a simulated multi-workout plan preview', async () => {
     const suunto = new SuuntoHttpFixture();
     const guideTransport = new SuuntoGuideTransport(suunto.request, 'Quantified Self', deps.now);
+    const assess = vi.spyOn(guideTransport, 'assess');
     deps.runtime.transport = provider => provider === 'suunto' ? guideTransport : null;
     const user = db.collection('users').doc(uid);
+    await user.update({ 'settings.unitSettings.weightUnits': WeightUnits.Pounds });
     const batch = db.batch();
     batch.update(user.collection('trainingPlanState').doc('current'), { activePlanId: 'strength-plan', currentWorkoutCount: 20 });
     batch.set(user.collection('trainingPlans').doc('strength-plan'), { schemaVersion: 1, id: 'strength-plan',
@@ -1412,6 +1414,8 @@ describe.skipIf(!process.env.FIRESTORE_EMULATOR_HOST)('Training MCP write propos
     expect(preview.providerPreviews[0]).toMatchObject({ availability: 'ready', warningCount: 20,
       summary: expect.stringContaining('No separate mapping approval is needed') });
     expect(preview.providerPreviews[0].summary.match(/manual transitions/g)).toHaveLength(1);
+    expect(assess).toHaveBeenCalledWith(expect.objectContaining({ structure: expect.objectContaining({ sport: ActivityTypes.StrengthTraining }) }),
+      expect.any(String), 'Europe/Helsinki', expect.objectContaining({ version: 1 }), WeightUnits.Pounds);
     expect((await user.collection('trainingDeliverySettings').get()).empty).toBe(true);
     expect(suunto.calls).toHaveLength(0);
   });
@@ -1835,6 +1839,67 @@ describe.skipIf(!process.env.FIRESTORE_EMULATOR_HOST)('Training MCP write propos
     await user.collection('assistantConversations').doc('active').update({ conversationId: 'chat-2', trainingPlanChangesEnabled: false });
     await expect(applyTrainingChanges({ uid, connectionId: 'first-party-assistant-v1:chat-1', scopes: assistantScopes,
       arguments: { proposalRef: preview.proposalRef, permissionMode: 'schedule' } }, deps)).rejects.toThrow('permissions changed');
+  });
+
+  it('captures 25 complete app reviews without extending MCP output or writing authored/provider data', async () => {
+    const user = db.collection('users').doc(uid);
+    await user.collection('assistantConversations').doc('active').set({ conversationId: 'review-chat',
+      trainingPlansEnabled: true, trainingPlanChangesEnabled: true, trainingDeliveryEnabled: false });
+    const input = { uid, connectionId: 'first-party-assistant-v1:review-chat', scopes: [TRAINING_PLANS_SCOPE, TRAINING_PLANS_WRITE_SCOPE] };
+    const preview = await previewTrainingChanges({ ...input, arguments: { expectedScheduleRevision: 1,
+      changes: Array.from({ length: 25 }, (_, index) => ({ kind: 'create-workout', localKey: `run-${index}`, plan: null,
+        localDate: '2026-09-18', title: `Reviewed run ${index}`, structure })) } }, deps);
+    expect(preview).not.toHaveProperty('workoutReviews');
+    const reviews = await loadAssistantTrainingWorkoutReviews({ ...input, proposalRef: preview.proposalRef }, deps);
+    expect(reviews).toHaveLength(25);
+    expect(reviews[24]).toMatchObject({ index: 24, before: null, after: { title: 'Reviewed run 24', destination: 'Standalone', structure } });
+    expect(reviews[0].compatibility).toHaveLength(4);
+    expect((await user.collection('scheduledWorkouts').get()).empty).toBe(true);
+    expect((await user.collection('trainingDeliverySettings').get()).empty).toBe(true);
+    expect((await user.collection('trainingPlanState').doc('current').get()).get('revision')).toBe(1);
+    expect(JSON.stringify(reviews)).not.toMatch(/workout-mcp|destinationKey|accessGeneration|proposalRef/);
+    await expect(loadAssistantTrainingWorkoutReviews({ ...input, uid: 'foreign-owner', proposalRef: preview.proposalRef }, deps)).rejects.toThrow('invalid');
+    await expect(loadAssistantTrainingWorkoutReviews({ ...input, proposalRef: preview.proposalRef }, { ...deps, now: () => preview.expiresAtMs })).rejects.toThrow('expired');
+    await user.collection('assistantConversations').doc('active').update({ trainingPlanChangesEnabled: false });
+    await expect(loadAssistantTrainingWorkoutReviews({ ...input, proposalRef: preview.proposalRef }, deps)).rejects.toThrow('permissions changed');
+  });
+
+  it.each([false, true])('binds recovery-only review to authoritative recipes and exact destinations, preserving apply replay (plan=%s)', async inPlan => {
+    const user = db.collection('users').doc(uid);
+    const conversation = user.collection('assistantConversations').doc('active');
+    await conversation.set({ conversationId: 'review-chat', trainingPlansEnabled: true, trainingPlanChangesEnabled: true, trainingDeliveryEnabled: false });
+    const input = { uid, connectionId: 'first-party-assistant-v1:review-chat', scopes: [TRAINING_PLANS_SCOPE, TRAINING_PLANS_WRITE_SCOPE] };
+    const recipe = { ...structure, nodes: [{ kind: 'repeat', id: 'block', count: 3, steps: [
+      { ...structure.nodes[0], id: 'recovery', purpose: 'recovery', ending: { kind: 'time', seconds: 60 }, note: 'keep exact', targets: [
+        { kind: 'heart-rate', mode: 'absolute', minimumBpm: 120, maximumBpm: 145 },
+      ] }, { ...structure.nodes[0], id: 'unrelated-90', ending: { kind: 'time', seconds: 90 } },
+    ] }] };
+    const create = await previewTrainingChanges({ ...input, arguments: { expectedScheduleRevision: 1, changes: [
+      ...(inPlan ? [{ kind: 'create-plan', localKey: 'plan', name: 'Reviewed plan', startDate: '2026-09-17', endDate: '2026-09-30', activate: false }] : []),
+      { kind: 'create-workout', localKey: 'run', plan: inPlan ? { localKey: 'plan' } : null, localDate: '2026-09-18', title: 'Precise run', structure: recipe },
+    ] } }, deps);
+    await conversation.update({ pendingTrainingProposal: create });
+    const result = await applyTrainingChanges({ ...input, arguments: { proposalRef: create.proposalRef, permissionMode: 'schedule' } }, deps);
+    const workoutRef = result.createdReferences.find(reference => reference.kind === 'workout')!.reference;
+    const planRef = inPlan ? result.createdReferences.find(reference => reference.kind === 'plan')!.reference : null;
+    const updated = structuredClone(recipe); updated.nodes[0].steps[0].ending.seconds = 75;
+    const args = { expectedScheduleRevision: inPlan ? 3 : 2, changes: [{ kind: 'update-workout', workout: { ref: workoutRef }, plan: planRef ? { ref: planRef } : null,
+      localDate: '2026-09-18', title: 'Precise run', structure: updated }] };
+    const preview = await previewTrainingChanges({ ...input, arguments: args }, deps);
+    const reviews = await loadAssistantTrainingWorkoutReviews({ ...input, proposalRef: preview.proposalRef, recoveryDurationSeconds: 75 }, deps);
+    expect(reviews[0].before?.structure).toEqual(recipe); expect(reviews[0].after?.structure).toEqual(updated);
+    expect(reviews[0].after?.destination).toBe(inPlan ? 'Plan: Reviewed plan' : 'Standalone');
+    const saved = (await user.collection('scheduledWorkouts').get()).docs[0];
+    expect(saved.get('structure')).toEqual(recipe);
+    const unsafe = structuredClone(args); unsafe.changes[0].structure.nodes[0].steps[1].ending.seconds = 75;
+    const rejected = await previewTrainingChanges({ ...input, arguments: unsafe }, deps);
+    await expect(loadAssistantTrainingWorkoutReviews({ ...input, proposalRef: rejected.proposalRef, recoveryDurationSeconds: 75 }, deps)).rejects.toThrow('only the timed recovery');
+    await conversation.update({ pendingTrainingProposal: { ...preview, workoutReviews: reviews } });
+    const apply = { ...input, arguments: { proposalRef: preview.proposalRef, permissionMode: 'schedule' } };
+    const applied = await applyTrainingChanges(apply, deps);
+    expect(await applyTrainingChanges(apply, deps)).toEqual(applied);
+    expect((await saved.ref.get()).get('structure')).toEqual(updated);
+    await expect(loadAssistantTrainingWorkoutReviews({ ...input, proposalRef: rejected.proposalRef }, deps)).rejects.toThrow('schedule changed');
   });
 
   it('binds Assistant writes to the exact proposal currently awaiting confirmation', async () => {

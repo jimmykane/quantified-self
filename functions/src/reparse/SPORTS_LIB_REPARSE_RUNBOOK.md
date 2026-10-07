@@ -7,6 +7,17 @@ Target version source of truth:
 - `SPORTS_LIB_REPARSE_TARGET_VERSION`
 - File: `functions/src/reparse/sports-lib-reparse.config.ts`
 
+### Sports Lib 21.5.0 recorded swim distance display
+
+Sports Lib 21.5.0 adds optional meter/yard display units to `DataSwimDistance`. Quantified Self selects these units
+from the first swim-pace preference for recorded swim views. Canonical values, JSON, metric tokens, parsers, imports,
+saved routes, Training calculations and provider delivery remain unchanged. Existing recordings can display yards
+without source files, a persistence rewrite, derived-summary regeneration or a data migration. MCP numeric metrics
+and its `distanceMeters`/`poolLengthMeters` projections retain canonical meters.
+
+Keep both automatic scanners disabled for this display-only upgrade. The strict reparse target follows the installed
+package version, but no event or route reparse is needed solely for 21.5.0.
+
 ### Sports Lib 21.4.0 Wahoo FIT completion references
 
 This additive release supplies bounded Wahoo app Plan references outside Event/Activity JSON and DataStore. New trusted

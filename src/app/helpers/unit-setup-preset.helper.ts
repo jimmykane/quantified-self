@@ -86,6 +86,22 @@ export function buildUnitSettingsForUnitSetupPreset(
   };
 }
 
+/** Weight and week start are independent of the distance-based presets. */
+export function resolveUnitSetupPreset(
+  settings: Partial<UserUnitSettingsInterface> | null | undefined,
+): UnitSetupPreset | null {
+  if (!settings) return null;
+  const arrayFields = ['speedUnits', 'paceUnits', 'swimPaceUnits', 'verticalSpeedUnits'] as const;
+  return UNIT_SETUP_PRESET_OPTIONS.find(({ value }) => {
+    const preset = buildUnitSettingsForUnitSetupPreset(value, null);
+    return settings.distanceUnits === preset.distanceUnits && arrayFields.every(field => {
+      const units = settings[field];
+      return Array.isArray(units) && units.length === preset[field].length
+        && units.every((unit, index) => unit === preset[field][index]);
+    });
+  })?.value ?? null;
+}
+
 export function shouldShowUnitSetupPrompt(
   user: AppUserInterface | null | undefined,
   targetUser: AppUserInterface | null | undefined,

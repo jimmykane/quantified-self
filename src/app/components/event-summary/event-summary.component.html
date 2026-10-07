@@ -16,15 +16,15 @@
       <mat-icon aria-hidden="true">{{ feelingIcon }}</mat-icon>
     </span>
     }
-    @if (rpe) {
-    <span summary-chips class="chip rpe-chip" [matTooltip]="'RPE: ' + rpeLabel">RPE {{ rpe }}</span>
+    @if (rpe !== null) {
+    <span summary-chips class="chip rpe-chip" [matTooltip]="'RPE: ' + rpeLabel">RPE {{ rpeLabel }}</span>
     }
 
     <div summary-actions class="event-summary-actions">
       @if (isOwner) {
       <div class="event-summary-actions-primary">
-        <button mat-icon-button (click)="openEditDetails()" matTooltip="Edit details">
-          <mat-icon>edit</mat-icon>
+        <button mat-icon-button (click)="openEditDetails()" matTooltip="Edit details" aria-label="Edit details">
+          <mat-icon>edit_note</mat-icon>
         </button>
         @if (event.isMerge && eventActivitiesCount >= 2) {
         <button mat-icon-button (click)="openBenchmark()" matTooltip="Benchmark Analysis"

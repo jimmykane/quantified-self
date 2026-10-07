@@ -1,6 +1,7 @@
 import { DataDuration } from '@sports-alliance/sports-lib';
 import { DERIVED_METRIC_KINDS } from '../../../shared/derived-metrics';
 import type { AssistantMessage } from '../../../shared/assistant.types';
+import { parseTrainingPlanPhasesV1 } from '../../../shared/training-plans';
 import type { AssistantMcpToolName } from './mcp-session';
 
 type RecordValue = Record<string, unknown>;
@@ -173,7 +174,8 @@ export interface DailyWorkoutContext {
   timelineNotes: { access: 'enabled' | 'disabled'; scanComplete: boolean | null;
     notes: RecordValue[] };
   plannedWorkouts: { access: 'enabled' | 'disabled'; scanComplete: boolean | null;
-    scheduleRevision: number | null; workouts: RecordValue[]; completionChecked: boolean };
+    scheduleRevision: number | null; workouts: RecordValue[]; completionChecked: boolean;
+    phaseContext?: { status: 'known' | 'none' | 'unavailable'; planName?: string; name?: string; startDate?: string; endDate?: string } };
   trainingSnapshots: { preparationStatus: string; form: RecordValue | null;
     rampRate: RecordValue | null; trainingSummary: RecordValue | null };
 }
@@ -312,6 +314,22 @@ export async function collectDailyWorkoutContext(input: {
       completion: completions[index] ?? null,
     }));
     plannedWorkouts.completionChecked = true;
+    plannedWorkouts.phaseContext = { status: 'unavailable' };
+    try {
+      const result = await input.read('list_training_plans', { lifecycle: 'active', limit: 2 });
+      const plans = records(result.plans);
+      if (result.scheduleRevision === schedule.scheduleRevision && result.scanComplete === true && plans.length === 0) {
+        plannedWorkouts.phaseContext = { status: 'none' };
+      } else if (result.scheduleRevision === schedule.scheduleRevision && result.scanComplete === true && plans.length === 1) {
+        const phases = await input.read('get_training_plan_phases', { planRef: plans[0].planRef });
+        if (phases.scheduleRevision === schedule.scheduleRevision && phases.planRevision === plans[0].revision) {
+          const phase = parseTrainingPlanPhasesV1(phases.phases).items.find(item => request.targetDate!
+            >= item.startLocalDate && request.targetDate! <= item.endLocalDate);
+          plannedWorkouts.phaseContext = phase ? { status: 'known', planName: String(plans[0].name), name: phase.name,
+            startDate: phase.startLocalDate, endDate: phase.endLocalDate } : { status: 'none' };
+        }
+      }
+    } catch { /* Unavailable phase evidence cannot be substituted with an invented phase. */ }
   }
 
   return {
@@ -374,6 +392,9 @@ export function dailyWorkoutFacts(context: DailyWorkoutContext): string {
   if (context.plannedWorkouts.access === 'disabled') {
     facts.push('Planned workouts and linked activities were not checked because Training plans access is off.');
   } else if (targetDate) {
+    const phase = context.plannedWorkouts.phaseContext;
+    if (phase?.status === 'known') facts.push(`**Plan phase on ${targetDate}:** ${escapeMarkdownText(phase.name)} (${phase.startDate} – ${phase.endDate}). Authored context only; it does not change load or readiness.`);
+    else if (phase) facts.push(phase.status === 'none' ? `No active-plan phase on ${targetDate}.` : 'Active-plan phase context could not be checked.');
     const linked = context.plannedWorkouts.workouts.filter(workout =>
       asRecord(workout.completion)?.state === 'linked');
     const count = context.plannedWorkouts.workouts.length;

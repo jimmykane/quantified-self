@@ -61,6 +61,17 @@ function createEvent(
 }
 
 describe('activity-calendar helper', () => {
+  it.each(['week', 'month', '30d', 'year'] as const)('labels partial %s observations without claiming empty days', view => {
+    const anchorDate = new Date(2026, 7, 3);
+    const event = createEvent('observed', anchorDate, [ActivityTypes.Running], 1800);
+    const model = buildActivityCalendarViewModel([event], { view, anchorDate, activitiesComplete: false });
+    const days = model.months.flatMap(month => month.days);
+    expect(days.every(day => day.ariaLabel.includes('Activity coverage unknown'))).toBe(true);
+    expect(days.some(day => day.ariaLabel.includes('No activities'))).toBe(false);
+    expect(days.find(day => day.eventCount)?.ariaLabel).toContain('1 observed activity');
+    expect(buildActivityCalendarSelectedDay([], anchorDate, 'en-US', anchorDate, false).ariaLabel)
+      .toContain('Activity coverage unknown');
+  });
   it.each(['month', '30d'] as const)('excludes both boundary-week context dates from %s totals', view => {
     const anchorDate = new Date(2026, 9, 1);
     const range = resolveActivityCalendarPrimaryRange(view, anchorDate, DaysOfTheWeek.Monday);

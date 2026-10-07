@@ -1,3 +1,5 @@
+import { runMcpWorkoutReflection } from './workout-reflections.service';
+import type { McpWorkoutReflectionTool } from './workout-reflections.schemas';
 import { hasCurrentIntensityPolicy } from '../../../shared/intensity-zones';
 import { readinessHrvObservations, buildReadinessEvaluation as buildCurrentReadinessEvaluation,
   calculateReadinessScore as calculateCurrentReadinessScore, READINESS_SLEEP_LOOKBACK_MS as CURRENT_READINESS_LOOKBACK_MS,
@@ -6528,6 +6530,10 @@ export function createMcpDataService(
       const { previewTrainingChanges } = await import('./training-plans-write.service');
       return previewTrainingChanges(input);
     },
+    async previewTrainingPlanPhases(input: import('./training-plans-write.service').TrainingWriteInput) {
+      const { previewTrainingPlanPhases } = await import('./training-plans-write.service');
+      return previewTrainingPlanPhases(input);
+    },
     async previewGarminWorkoutReplacement(input: import('./training-plans-write.service').TrainingWriteInput) {
       const { previewGarminWorkoutReplacement } = await import('./training-plans-write.service');
       return previewGarminWorkoutReplacement(input);
@@ -6591,6 +6597,11 @@ export function createMcpDataService(
         if (error instanceof McpTimelineNotesError) throw new McpDataError(error.code, error.message);
         throw new McpDataError('temporarily_unavailable', 'Timeline notes could not be read safely. Try again later.');
       }
+    },
+
+    async workoutReflection(tool: McpWorkoutReflectionTool, input: McpContentWriteInput) {
+      return runMcpContentWrite(input, (value, codec, deps) => runMcpWorkoutReflection(tool, value, codec, deps),
+        'The reflection request could not be completed safely.');
     },
 
     async updateEventTags(input: McpContentWriteInput) {

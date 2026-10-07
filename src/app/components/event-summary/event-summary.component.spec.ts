@@ -5,7 +5,7 @@ import { MatBottomSheet } from '@angular/material/bottom-sheet';
 import { MatDialog } from '@angular/material/dialog';
 import { MatButtonModule } from '@angular/material/button';
 import { MatChipsModule } from '@angular/material/chips';
-import { ChangeDetectorRef, Component, NO_ERRORS_SCHEMA } from '@angular/core';
+import { ChangeDetectorRef, Component, NO_ERRORS_SCHEMA, SimpleChange } from '@angular/core';
 import { readFileSync } from 'fs';
 import { resolve } from 'path';
 import {
@@ -13,6 +13,7 @@ import {
     DataDistance,
     DataDuration,
     DataFeeling,
+    DataRPE,
     DataPaceAvg,
     DataSpeedAvg,
     DataSwimDistance,
@@ -21,14 +22,17 @@ import {
     EventInterface,
     Feelings,
     Privacy,
+    SwimPaceUnits,
     User
 } from '@sports-alliance/sports-lib';
 import { vi, describe, it, expect, beforeEach } from 'vitest';
 import { AppBenchmarkFlowService } from '../../services/app.benchmark-flow.service';
 import { EventTagService } from '../../services/event-tag.service';
+import { EventDetailsSummaryBottomSheetComponent } from './event-details-summary-bottom-sheet/event-details-summary-bottom-sheet.component';
 import { EventTagsDialogComponent } from '../event-tags/event-tags-dialog.component';
 import { AppHapticsService } from '../../services/app.haptics.service';
 import { from, of, Subject } from 'rxjs';
+import { resolveUnitAwareDisplayFromValue } from '@shared/unit-aware-display';
 
 @Component({
     standalone: false,
@@ -65,7 +69,7 @@ describe('EventSummaryComponent', () => {
 
     beforeEach(async () => {
         mockBottomSheet = {
-            open: vi.fn(),
+            open: vi.fn().mockReturnValue({ afterDismissed: () => of(false) }),
         };
 
         mockBenchmarkFlowService = {
@@ -112,6 +116,18 @@ describe('EventSummaryComponent', () => {
 
     it('should create', () => {
         expect(component).toBeTruthy();
+    });
+    it.each([
+        { value: 0, settings: {} },
+        { value: 0.5, settings: { distanceUnits: [DistanceUnits.Miles] } },
+        { value: 2.5, settings: {} },
+    ])('shows saved RPE $value with canonical display after feedback editing', ({ value, settings }) => {
+        const next = TestBed.createComponent(EventSummaryComponent);
+        next.componentInstance.event = { ...mockEvent, getStat: (type: string) => type === DataRPE.type ? new DataRPE(value) : null } as never;
+        next.componentInstance.user = mockUser; next.componentInstance.unitSettings = settings as never;
+        next.detectChanges();
+        expect(next.nativeElement.querySelector('.rpe-chip')?.textContent)
+            .toContain(resolveUnitAwareDisplayFromValue(DataRPE.type, value, settings as never)?.text);
     });
 
     it('places the impact below the primary summary and before tags, devices, and further statistics', () => {
@@ -224,8 +240,22 @@ describe('EventSummaryComponent', () => {
 
     describe('open... methods', () => {
         it('openEditDetails should open bottom sheet', () => {
+            component.isOwner = true;
             component.openEditDetails();
             expect(mockBottomSheet.open).toHaveBeenCalled();
+        });
+        it('refreshes workout RPE after the combined form commits and ignores dismissal after teardown', () => {
+            const dismissed = new Subject<boolean>();
+            let stat = new DataRPE(5);
+            mockBottomSheet.open.mockReturnValue({ afterDismissed: () => dismissed });
+            component.event = { ...mockEvent, getStat: (type: string) => type === DataRPE.type ? stat : null } as never;
+            component.isOwner = true; component.openEditDetails();
+            expect(component.rpe).toBe(5);
+            stat = new DataRPE(0); dismissed.next(true);
+            expect(component.rpe).toBe(0);
+            component.openEditDetails(); fixture.destroy();
+            stat = new DataRPE(7); dismissed.next(true);
+            expect(component.rpe).toBe(0);
         });
 
         it('openDetailedStats should open bottom sheet', () => {
@@ -382,6 +412,24 @@ describe('EventSummaryComponent', () => {
         });
     });
 
+    it('offers one combined editor only for a saved owner recording with one accepted-action haptic', () => {
+        component.isOwner = false; component.openEditDetails();
+        expect(mockBottomSheet.open).not.toHaveBeenCalled(); expect(mockHaptics.selection).not.toHaveBeenCalled();
+        component.isOwner = true;
+        component.event = { ...mockEvent, getID: () => '' } as any;
+        component.openEditDetails(); expect(mockBottomSheet.open).not.toHaveBeenCalled();
+        component.event = mockEvent; component.openEditDetails();
+        expect(mockBottomSheet.open).toHaveBeenCalledWith(EventDetailsSummaryBottomSheetComponent, expect.objectContaining({
+            data: { event: mockEvent, user: mockUser },
+        }));
+        fixture.componentRef.setInput('isOwner', true);
+        fixture.detectChanges();
+        expect(fixture.nativeElement.querySelectorAll('[aria-label="Edit details"]')).toHaveLength(1);
+        expect(fixture.nativeElement.querySelector('[aria-label="Post-workout reflection"]')).toBeNull();
+        expect(mockDialog.open).not.toHaveBeenCalled();
+        expect(mockHaptics.selection).toHaveBeenCalledOnce();
+    });
+
     describe('Getters', () => {
         it('mainActivityType should return activity type', () => {
             expect(component.mainActivityType).toBe(ActivityTypes.Running);
@@ -443,6 +491,57 @@ describe('EventSummaryComponent', () => {
             expect(component.getStatUnit(DataPaceAvg.type)).toBe('min/km');
             expect(dynamicSpy).toHaveBeenCalled();
             dynamicSpy.mockRestore();
+        });
+
+        it('shows swimming hero and summary distances in yards when selected', () => {
+            component.unitSettings = { swimPaceUnits: [SwimPaceUnits.MinutesPer100Yard] } as any;
+            component.event = {
+                ...mockEvent,
+                getActivities: () => [{ type: ActivityTypes.Swimming }],
+                getStat: (type: string) => type === DataDistance.type ? new DataDistance(91.44) : null,
+            } as any;
+            fixture.detectChanges();
+            expect(component.getStatValue(DataDistance.type)).toBe('100');
+            expect(component.getStatUnit(DataDistance.type)).toBe('yd');
+            expect(component.heroSummaryMetrics[1]).toEqual({ value: '100', label: 'yd' });
+        });
+
+        it('refreshes cached swim distance when only the unit preference changes', () => {
+            component.unitSettings = { swimPaceUnits: [SwimPaceUnits.MinutesPer100Meter] } as any;
+            component.event = {
+                ...mockEvent,
+                getActivities: () => [{ type: ActivityTypes.Swimming }],
+                getStat: (type: string) => type === DataDistance.type ? new DataDistance(91.44) : null,
+            } as any;
+            fixture.detectChanges();
+            expect(component.getStatUnit(DataDistance.type)).toBe('m');
+
+            const meters = component.unitSettings;
+            component.unitSettings = { swimPaceUnits: [SwimPaceUnits.MinutesPer100Yard] } as any;
+            component.ngOnChanges({ unitSettings: new SimpleChange(meters, component.unitSettings, false) });
+
+            expect(component.getStatValue(DataDistance.type)).toBe('100');
+            expect(component.getStatUnit(DataDistance.type)).toBe('yd');
+            expect(component.heroSummaryMetrics[1]).toEqual({ value: '100', label: 'yd' });
+        });
+
+        it('keeps mixed-sport event totals in general units even when the first or selected activity is swimming', () => {
+            const activities = [{ type: ActivityTypes.Swimming }, { type: ActivityTypes.Running }];
+            component.unitSettings = {
+                distanceUnits: DistanceUnits.Miles,
+                swimPaceUnits: [SwimPaceUnits.MinutesPer100Yard],
+            } as any;
+            component.event = {
+                ...mockEvent,
+                getActivities: () => activities,
+                getStat: (type: string) => type === DataDistance.type ? new DataDistance(1609.344) : null,
+            } as any;
+            component.selectedActivities = [activities[0]] as any;
+            fixture.detectChanges();
+
+            expect(component.getStatValue(DataDistance.type)).toBe('1.00');
+            expect(component.getStatUnit(DataDistance.type)).toBe('mi');
+            expect(component.heroSummaryMetrics[1]).toEqual({ value: '1.00', label: 'mi' });
         });
 
         it('should keep swimming summary distance in meters with miles distance preference', () => {

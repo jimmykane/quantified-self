@@ -71,9 +71,21 @@ function createTestServer(options: {
 }
 
 describe('Assistant MCP session', () => {
+  it('offers only reads and local reflection preparation after independent consent, never direct model writes', async () => {
+    const session = await createAssistantMcpSession('owner', 'https://quantified-self.io',
+      undefined, 'coordinate_free', false, false, false, false, 'reflection-chat', false, false, false, true);
+    try {
+      const names = session.tools.map(tool => tool.name);
+      expect(names).toEqual(expect.arrayContaining(['get_workout_reflection', 'prepare_workout_reflection_save', 'prepare_workout_reflection_delete']));
+      expect(names).not.toContain('save_workout_reflection'); expect(names).not.toContain('delete_workout_reflection');
+      await expect(session.callTool('save_workout_reflection' as never, {})).rejects.toThrow('not available');
+      await expect(session.callTool('delete_workout_reflection' as never, {})).rejects.toThrow('not available');
+    } finally { await session.close(); }
+  });
+
   it('projects every enabled MCP input into a Gemini-compatible typed schema without weakening MCP validation', async () => {
     const session = await createAssistantMcpSession('schema-owner', 'https://quantified-self.io',
-      undefined, 'precise_activity', true, true, true, true, 'schema-conversation', true, true, true);
+      undefined, 'precise_activity', true, true, true, true, 'schema-conversation', true, true, true, true);
     try {
       const visit = (value: unknown, path: string): void => {
         expect(value, path).toMatchObject({ type: expect.any(String) });
@@ -357,7 +369,7 @@ describe('Assistant MCP session', () => {
     );
 
     try {
-      expect(session.tools.map(tool => tool.name)).toEqual(ASSISTANT_MCP_TOOL_NAMES.filter(name => name !== 'query_timeline_notes'
+      expect(session.tools.map(tool => tool.name)).toEqual(ASSISTANT_MCP_TOOL_NAMES.filter(name => name !== 'get_workout_reflection' && name !== 'query_timeline_notes'
         && name !== 'query_activities_with_tags'
         && name !== 'query_editable_timeline_notes'
         && !['list_manual_measurement_types', 'query_manual_measurements', 'get_manual_measurement'].includes(name)

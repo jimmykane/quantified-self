@@ -7,7 +7,11 @@ import { NO_ERRORS_SCHEMA } from '@angular/core';
 import { vi, describe, it, expect, beforeEach } from 'vitest';
 import {
     ActivityInterface,
+    ActivityTypes,
     DataBeginningPotentialStamina,
+    DataDistance,
+    DistanceUnits,
+    SwimPaceUnits,
     DataPace,
     DataPaceAvg,
     DataPaceMax,
@@ -99,6 +103,52 @@ describe('EventCardStatsTableComponent', () => {
 
     it('should create', () => {
         expect(component).toBeTruthy();
+    });
+
+    it('shows swimming distances in yards in detailed statistics and copied rows', () => {
+        const distance = new DataDistance(22.86);
+        component.userUnitSettings = { ...mockUserUnitSettings, swimPaceUnits: [SwimPaceUnits.MinutesPer100Yard] };
+        component.selectedActivities = [{
+            ...mockActivity,
+            type: 'Swimming',
+            getStatsAsArray: () => [distance],
+            getStat: (type: string) => type === DataDistance.type ? distance : undefined,
+        } as ActivityInterface];
+        component.ngOnChanges({});
+        const row = component.data.data.find(item => item.Name === DataDistance.type);
+        expect(row[component.columns[1]]).toBe('25 yd');
+        component.selection.select(row);
+        component.copyToSheets();
+        expect(mockDataExportService.copyToSheets).toHaveBeenCalledWith([row], component.columns, undefined);
+        expect(distance.getValue()).toBe(22.86);
+    });
+
+    it('uses the same swim units for both compared distances and their copied difference', () => {
+        component.userUnitSettings = {
+            ...mockUserUnitSettings,
+            distanceUnits: DistanceUnits.Miles,
+            swimPaceUnits: [SwimPaceUnits.MinutesPer100Yard],
+        };
+        component.selectedActivities = [91.44, 68.58].map((meters, index) => {
+            const distance = new DataDistance(meters);
+            return {
+                ...mockActivity,
+                creator: { name: `Swim ${index + 1}` },
+                type: ActivityTypes.Swimming,
+                getID: () => `swim-${index + 1}`,
+                getStatsAsArray: () => [distance],
+                getStat: (type: string) => type === DataDistance.type ? distance : undefined,
+            } as ActivityInterface;
+        });
+        component.ngOnChanges({});
+        const row = component.data.data.find(item => item.Name === DataDistance.type);
+        expect(row[component.columns[1]]).toBe('100 yd');
+        expect(row[component.columns[2]]).toBe('75 yd');
+        expect(row.Difference.display).toBe('25 yd');
+        expect(row.Difference.percent).toBeCloseTo(28.5714);
+        component.selection.select(row);
+        component.copyToSheets();
+        expect(mockDataExportService.copyToSheets).toHaveBeenCalledWith([row], component.columns, undefined);
     });
 
     it('should toggle row selection', () => {

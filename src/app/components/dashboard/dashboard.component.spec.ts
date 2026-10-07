@@ -36,6 +36,7 @@ import { SLEEP_PROVIDERS } from '@shared/sleep';
 import { MaterialModule } from '../../modules/material.module';
 import { APP_STORAGE } from '../../services/storage/app.storage.token';
 import { MemoryStorage } from '../../services/storage/memory.storage';
+import { AppHapticsService } from '../../services/app.haptics.service';
 
 describe('DashboardComponent', () => {
     let component: DashboardComponent;
@@ -50,6 +51,7 @@ describe('DashboardComponent', () => {
     let mockSnackBar: any;
     let mockLogger: any;
     let mockSleepService: any;
+    let mockHaptics: { selection: ReturnType<typeof vi.fn>; success: ReturnType<typeof vi.fn>; error: ReturnType<typeof vi.fn> };
 
     const mockUser = new User('testUser') as AppUserInterface;
 
@@ -114,6 +116,7 @@ describe('DashboardComponent', () => {
         mockSleepService = {
             watchSyncState: vi.fn().mockReturnValue(of(null)),
         };
+        mockHaptics = { selection: vi.fn(), success: vi.fn(), error: vi.fn() };
 
         mockRouter = { navigate: vi.fn().mockResolvedValue(true) };
 
@@ -150,6 +153,7 @@ describe('DashboardComponent', () => {
                 { provide: AppWindowService, useValue: { windowRef: { location: { href: '' } } } },
                 { provide: AppSleepService, useValue: mockSleepService },
                 { provide: APP_STORAGE, useClass: MemoryStorage },
+                { provide: AppHapticsService, useValue: mockHaptics },
             ],
             schemas: [NO_ERRORS_SCHEMA]
         })
@@ -831,6 +835,7 @@ describe('DashboardComponent', () => {
         (mockUser.settings.appSettings as any).unitSetupCompleted = false;
         (mockUser.settings.appSettings as any).otherAppSetting = 'stale-local-value';
         (mockUser.settings.unitSettings as any).weightUnits = WeightUnits.Pounds;
+        mockUser.settings.unitSettings.startOfTheWeek = 0;
         component.user = mockUser;
         component.selectedUnitSetupPreset = 'miles';
 
@@ -850,6 +855,7 @@ describe('DashboardComponent', () => {
                         swimPaceUnits: [SwimPaceUnits.MinutesPer100Yard],
                         verticalSpeedUnits: [VerticalSpeedUnits.FeetPerSecond],
                         weightUnits: WeightUnits.Pounds,
+                        startOfTheWeek: 0,
                     })
                 }
             }
@@ -859,33 +865,77 @@ describe('DashboardComponent', () => {
             'unitSettings'
         ]);
         expect(component.showUnitSetupPrompt).toBe(false);
+        expect(component.user).not.toBe(mockUser);
+        expect(component.user).toBeInstanceOf(User);
+        expect(component.user.settings.unitSettings.distanceUnits).toBe(DistanceUnits.Miles);
+        expect(mockHaptics.success).toHaveBeenCalledOnce();
     });
 
-    it('dismisses unit setup prompt without rewriting unit settings', async () => {
-        (mockUser.settings.appSettings as any).unitSetupCompleted = false;
-        (mockUser.settings.appSettings as any).otherAppSetting = 'stale-local-value';
-        mockUser.settings.unitSettings = {
-            distanceUnits: DistanceUnits.Kilometers,
-            speedUnits: [SpeedUnits.KilometersPerHour],
-            paceUnits: [PaceUnits.MinutesPerKilometer],
-            startOfTheWeek: 1
-        } as any;
+    it('locks unit actions immediately, prevents duplicate saves, and retries after failure', async () => {
+        mockUser.settings.appSettings.unitSetupCompleted = false;
         component.user = mockUser;
+        component.selectedUnitSetupPreset = 'miles';
+        let reject!: (error: Error) => void;
+        mockUserService.updateUserProperties.mockReturnValueOnce(new Promise((_resolve, rejectSave) => { reject = rejectSave; }));
+        const pending = component.applyUnitSetupPreset();
+        expect(component.isSavingUnitSetup).toBe(true);
+        expect(component.dashboardActionPrompts.find(prompt => prompt.id === 'unitSetup')?.busy).toBe(true);
+        component.onUnitSetupPresetChange('kilometers');
+        await component.applyUnitSetupPreset();
+        component.onDashboardActionPromptMenuAction({ promptId: 'unitSetup', action: { id: 'openUnitSettings', label: 'Advanced settings' } });
+        expect(mockUserService.updateUserProperties).toHaveBeenCalledOnce();
+        expect(mockRouter.navigate).not.toHaveBeenCalled();
+        expect(component.selectedUnitSetupPreset).toBe('miles');
+        expect(mockHaptics.selection).not.toHaveBeenCalled();
+        expect(mockHaptics.success).not.toHaveBeenCalled();
+        reject(new Error('offline'));
+        await pending;
+        expect(component.dashboardActionPrompts.find(prompt => prompt.id === 'unitSetup')).toMatchObject({busy: false, error: 'Could not save unit preferences.'});
+        expect(component.user.settings.appSettings.unitSetupCompleted).toBe(false);
+        expect(mockHaptics.error).toHaveBeenCalledOnce();
+        await component.applyUnitSetupPreset();
+        expect(component.dashboardActionPrompts.some(prompt => prompt.id === 'unitSetup')).toBe(false);
+        expect(mockUserService.updateUserProperties).toHaveBeenCalledTimes(2);
+        expect(mockHaptics.success).toHaveBeenCalledOnce();
+    });
 
-        await component.dismissUnitSetupPrompt();
+    it('does not change setup on another user dashboard or when already complete', async () => {
+        mockUser.settings.appSettings.unitSetupCompleted = false;
+        component.user = mockUser;
+        component.targetUser = {uid: 'other-user'} as AppUserInterface;
+        await component.applyUnitSetupPreset();
+        component.targetUser = null;
+        mockUser.settings.appSettings.unitSetupCompleted = true;
+        await component.applyUnitSetupPreset();
+        expect(mockUserService.updateUserProperties).not.toHaveBeenCalled();
+        expect(mockHaptics.success).not.toHaveBeenCalled();
+    });
 
-        expect(mockUserService.updateUserProperties).toHaveBeenCalledWith(
-            mockUser,
-            {
-                settings: {
-                    appSettings: {
-                        unitSetupCompleted: true
-                    }
-                }
-            }
-        );
-        expect(mockUserService.updateUserProperties.mock.calls[0][1].settings.unitSettings).toBeUndefined();
-        expect(component.showUnitSetupPrompt).toBe(false);
+    it('does not apply a completed save to a different signed-in account', async () => {
+        mockUser.settings.appSettings.unitSetupCompleted = false;
+        component.user = mockUser;
+        let resolveSave!: () => void;
+        mockUserService.updateUserProperties.mockReturnValueOnce(new Promise<void>(resolve => { resolveSave = resolve; }));
+        const pending = component.applyUnitSetupPreset();
+        const nextUser = new User('next-user') as AppUserInterface;
+        nextUser.settings = {appSettings: {unitSetupCompleted: false}, unitSettings: {distanceUnits: DistanceUnits.Kilometers}} as any;
+        component.user = nextUser;
+        resolveSave();
+        await pending;
+        expect(component.user).toBe(nextUser);
+        expect(nextUser.settings.unitSettings.distanceUnits).toBe(DistanceUnits.Kilometers);
+        expect(nextUser.settings.appSettings.unitSetupCompleted).toBe(false);
+        expect(mockHaptics.success).not.toHaveBeenCalled();
+    });
+
+    it('keeps hydration and unchanged presets silent and confirms an accepted preset change', () => {
+        fixture.detectChanges();
+        expect(mockHaptics.selection).not.toHaveBeenCalled();
+        component.selectedUnitSetupPreset = 'kilometers';
+        component.onUnitSetupPresetChange('kilometers');
+        expect(mockHaptics.selection).not.toHaveBeenCalled();
+        component.onUnitSetupPresetChange('miles');
+        expect(mockHaptics.selection).toHaveBeenCalledOnce();
     });
 
     it('navigates to settings units from the unit prompt menu action', async () => {

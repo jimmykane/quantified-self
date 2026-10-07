@@ -160,6 +160,9 @@
                 <button appHapticTap mat-menu-item type="button" (click)="beginRename(plan)">
                   <mat-icon aria-hidden="true">edit</mat-icon><span>Rename</span>
                 </button>
+                <button appHapticTap mat-menu-item type="button" (click)="editPlanPhases(plan)">
+                  <mat-icon aria-hidden="true">view_timeline</mat-icon><span>Phases</span>
+                </button>
                 <button appHapticTap mat-menu-item type="button" [matMenuTriggerFor]="planColorMenu">
                   <mat-icon [style.color]="selectedPlanAppearance().color" aria-hidden="true">palette</mat-icon><span>Plan color</span>
                 </button>
@@ -894,6 +897,10 @@
             <p>On your calendar, without a plan. You can attach them later.</p>
           } @else {
             <h3 id="selected-plan-day" aria-live="polite">{{ planScheduleDate() | date:'EEEE, MMM d' }}</h3>
+            @if (selectedDayPhase(); as phase) {
+              <p>Phase: {{ phase.name }} · {{ phase.startLocalDate }} – {{ phase.endLocalDate }}</p>
+              @if (phase.description) { <p>{{ phase.description }}</p> }
+            }
             <p>{{ displayedWorkoutRows().length }} {{ displayedWorkoutRows().length === 1 ? 'workout' : 'workouts' }}</p>
           }
         </div>

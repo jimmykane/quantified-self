@@ -165,6 +165,8 @@ Never commit environment files, service-account JSON, API tokens, private keys, 
 | Emulator CI coverage guard | `npm run test:emulator-coverage` | Rejects missing/duplicate suites, unsafe environments and skipped coverage |
 | CI workflow regression tests | `npm run test:workflows` | Fork/internal trigger routing and the required aggregate test result |
 | Training monitoring configuration | `npm run test:training-monitoring` | Offline metric/dashboard/alert definitions and safe, idempotent provisioning |
+| Activity import monitoring configuration | `npm run test:import-monitoring` | Offline four-provider dashboard/policies; no production changes by default |
+| Health/Sleep monitoring configuration | `npm run test:health-sleep-monitoring` | Offline ordinary-ingestion/serialized-backfill dashboard and policies; no production changes by default |
 | Functions lint | `npm --prefix functions run lint` | Runs ESLint with `--fix` and may edit files |
 | Install Git hooks | `npm run hooks:install` | Reinstalls the repository Lefthook hooks; `npm ci` normally installs them automatically |
 | Test the local credential guard | `npm run credentials:test` | Checks the staged-file rejection policy without reading credential values |
@@ -232,6 +234,7 @@ Unified health history under `users/{uid}/healthSourceRecords` and `healthSample
 - [CI test coverage and emulator isolation](docs/ci-testing.md)
 - [Reusable event tag catalog and backfill](docs/event-tag-catalog.md)
 - [Firebase Functions target-aware entrypoint loading](docs/functions-entrypoint-loading.md)
+- [Temporary Garmin dispatch cost measurements](docs/garmin-dispatch-cost-measurements.md)
 - [Admin dashboard aggregate user history](docs/admin-dashboard-history.md)
 - [Unified health data foundation](docs/unified-health-data.md)
 - [Private Timeline notes](docs/timeline-notes.md)
@@ -242,6 +245,7 @@ Unified health history under `users/{uid}/healthSourceRecords` and `healthSample
 - [COROS integration architecture and release checklist](docs/coros-integration.md)
 - [Wahoo integration architecture and release checklist](docs/wahoo-integration.md)
 - [Training workspace architecture and maintenance](docs/training-workspace.md)
+- [Recorded activity import monitoring and activation](docs/activity-import-monitoring.md)
 - [Frontend UI composition and shared route headers](docs/frontend-ui.md)
 - [Event chart sport defaults and visibility persistence](docs/event-chart-visibility.md)
 - [Supported activities and metrics catalog](docs/supported-activities.md)

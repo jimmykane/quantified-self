@@ -1,8 +1,9 @@
 import type { ScheduledWorkoutV1, TrainingPlanV1 } from '@shared/training-plans';
 import { formatActivityCalendarDateParam, parseActivityCalendarDate } from './activity-calendar.helper';
 import { getDateTimeFormatter } from './date-time-format.helper';
+import { trainingPlanPhaseOnDate } from './training-plan-phases.helper';
 
-type PlanRange = Pick<TrainingPlanV1, 'id' | 'startLocalDate' | 'endLocalDate'>;
+type PlanRange = Pick<TrainingPlanV1, 'id' | 'startLocalDate' | 'endLocalDate' | 'phases'>;
 
 export function resolvePlanScheduleDate(plan: PlanRange, requested: string | null, today: string): string {
   if (requested && requested >= plan.startLocalDate && requested <= plan.endLocalDate) return requested;
@@ -38,6 +39,7 @@ export function buildPlanScheduleMonth(
     const date = new Date(gridStart.getFullYear(), gridStart.getMonth(), gridStart.getDate() + index);
     const localDate = formatActivityCalendarDateParam(date);
     const inRange = localDate >= plan.startLocalDate && localDate <= plan.endLocalDate;
+    const phase = trainingPlanPhaseOnDate(plan, localDate);
     // Match the schedule service's date/ID order used by the selected-day detail rows.
     const entries = (byDate.get(localDate) ?? []).sort((a, b) => a.id.localeCompare(b.id));
     const skippedCount = entries.filter(workout => workout.lifecycle === 'skipped').length;
@@ -54,13 +56,15 @@ export function buildPlanScheduleMonth(
       isToday: localDate === options.today,
       selected: localDate === selected,
       boundary,
+      phase,
+      phaseBoundary: phase && (localDate === phase.startLocalDate || localDate === phase.endLocalDate),
       boundaryLabel: boundary === 'Plan starts and ends' ? 'Start/end' : boundary === 'Plan starts' ? 'Start' : boundary ? 'End' : null,
       entries,
       visibleEntries: entries.slice(0, 2),
       overflowCount: Math.max(0, entries.length - 2),
       ariaLabel: `${formatter.format(date)}. ${inRange
         ? `${entries.length} workout${entries.length === 1 ? '' : 's'}.${skippedCount ? ` ${skippedCount} skipped.` : ''}${boundary ? ` ${boundary}.` : ''}`
-        : 'Outside this plan.'}${localDate === options.today ? ' Today.' : ''}`,
+        : 'Outside this plan.'}${phase ? ` Phase: ${phase.name}, ${phase.startLocalDate} through ${phase.endLocalDate}.` : ''}${localDate === options.today ? ' Today.' : ''}`,
     };
   });
   const monthKey = selected.slice(0, 7);

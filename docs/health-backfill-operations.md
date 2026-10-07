@@ -134,6 +134,13 @@ can be retried after 15 minutes; do not manually delete the lease or receipts.
 
 ## Interpreting the report
 
+The separate [Health/Sleep monitoring bundle](sleep-sync-operations.md#cloud-monitoring-830)
+is prepared locally under #830, pending approved activation. Its Garmin backfill lane
+means serialized **request submission**, not proof that asynchronous callbacks have
+ingested all historical records. Intentional single-task pacing and future/rate-limit
+waits do not count as overdue live ingestion. Do not increase concurrency or replay
+history to silence an alert.
+
 - `jobsPlanned`: total windows/cursors in the eligible candidate plans, including
   previously submitted work. It is not a count of new writes or measurements.
 - `jobsSubmitted`: submissions acknowledged and checkpointed during this invocation.

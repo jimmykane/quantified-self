@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
-import { mkdtempSync, readFileSync, rmSync } from 'node:fs';
+import { mkdtempSync, readFileSync, readdirSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, resolve } from 'node:path';
 import test from 'node:test';
@@ -19,6 +19,16 @@ test('unit and emulator jobs use the declared Functions Node runtime', () => {
     const nodeSetup = job.steps.find(step => step.uses === 'actions/setup-node@v4');
     assert.equal(nodeSetup?.with['node-version'], functionsPackage.engines.node);
   }
+});
+
+test('Functions CI runs the complete suite serially and keeps runner errors fatal', () => {
+  const functionsStep = shared.jobs.unit_tests.steps.find(step => step.name === 'Install and test functions');
+  const commands = functionsStep.run.split('\n').map(line => line.trim());
+  assert.ok(commands.includes('npm run test -- --no-file-parallelism'));
+  assert.ok(commands.includes('npm run build'));
+  assert.ok(commands.includes('npm run entrypoint:check:compiled'));
+  assert.ok(commands.includes('npm run mcp:contract:check:compiled'));
+  assert.doesNotMatch(functionsStep.run, /dangerouslyIgnoreUnhandledErrors|passWithNoTests|\|\|\s*true/);
 });
 
 // The job expressions use only equality, boolean operators and literals;
@@ -98,7 +108,7 @@ test('the existing required check aggregates every real test job and rejects ski
 
 test('beta and main remain push-only and all deployments depend on the reusable test gate', () => {
   const callers = { 'buildAndDeployBeta.yml': 'run-tests', 'buildAndDeployMain.yml': 'test',
-    'buildAndDeployProduction.yml': 'test', 'deployFunctionsManual.yml': 'test' };
+    'deployFunctionsManual.yml': 'test' };
   for (const [file, jobId] of Object.entries(callers)) {
     const caller = workflow(file);
     assert.equal(caller.jobs[jobId].uses, './.github/workflows/_run-tests.yml');
@@ -108,6 +118,15 @@ test('beta and main remain push-only and all deployments depend on the reusable 
   assert.deepEqual(workflow('buildAndDeployMain.yml').on.push.branches, ['main']);
   assert.equal(workflow('buildAndDeployBeta.yml').on.pull_request, undefined);
   assert.equal(workflow('buildAndDeployMain.yml').on.pull_request, undefined);
+});
+
+test('GitHub releases have no automatic workflow trigger', () => {
+  for (const file of readdirSync(resolve(root, '.github/workflows')).filter(file => /\.ya?ml$/.test(file))) {
+    const triggers = workflow(file).on;
+    const events = typeof triggers === 'string' ? [triggers]
+      : Array.isArray(triggers) ? triggers : Object.keys(triggers);
+    assert.ok(!events.includes('release'), `${file} must not run when a GitHub release is published`);
+  }
 });
 
 test('CodeQL keeps branch baselines, fork/feature PR coverage and its scheduled scan', () => {

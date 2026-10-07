@@ -152,6 +152,7 @@ describe('dashboard-action-prompt.helper', () => {
       DASHBOARD_ACTION_PROMPT_BACKFILL_GARMIN_SLEEP_ID,
     ]);
     expect(prompts[0].primaryAction?.id).toBe('applyUnitSetup');
+    expect(prompts[0].secondaryAction).toBeUndefined();
     expect(prompts[0].menuActions?.[0]?.id).toBe('openUnitSettings');
     expect(prompts[1]).toMatchObject({
       id: DASHBOARD_ACTION_PROMPT_FIRST_ACTIVITY_UPLOAD_ID,

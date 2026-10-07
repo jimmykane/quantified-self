@@ -1,4 +1,6 @@
 export type McpScope =
+  | 'workout-reflections:read'
+  | 'workout-reflections:write'
   | 'training-plans:read'
   | 'training-plans:write'
   | 'training-delivery:write'
@@ -17,6 +19,8 @@ export type McpScope =
   | 'route-location:read';
 
 export const MCP_SCOPE_PARENTS: Partial<Record<McpScope, McpScope>> = {
+  'workout-reflections:read': 'activity-details:read',
+  'workout-reflections:write': 'workout-reflections:read',
   'training-plans:write': 'training-plans:read',
   'training-delivery:write': 'training-plans:read',
   'timeline-notes:write': 'timeline-notes:read',
@@ -30,13 +34,21 @@ export const MCP_SCOPE_CONTENT: Record<McpScope, {
   title: string;
   description: string;
 }> = {
+  'workout-reflections:read': {
+    title: 'Private workout reflections',
+    description: 'Read your full private reflection text for an explicitly selected activity or recording. Text may contain sensitive health, personal or location information. Requires Individual activity details. Existing clients must reauthorize; revocation cannot erase copies already received. Imported RPE, planned targets and completion stay separate.',
+  },
+  'workout-reflections:write': {
+    title: 'Change workout reflections',
+    description: 'Save or permanently delete private reflection text using current revisions and your client’s native approval controls. Deletion clears the content permanently and retains only a content-free revision receipt. Requires Private workout reflections access. This never completes or adapts a planned workout or changes provider data.',
+  },
   'training-plans:read': {
     title: 'Training plans and planned workouts',
-    description: 'Read your current plans, standalone planned workouts and undated saved workout recipes, including names, dates where scheduled, complete workout instructions, step notes, exact recorded completion links and existing service sync summaries. Authored text may contain sensitive health or personal information. Existing connections must reauthorize. This does not grant activity or Timeline notes access. Revoking access cannot erase copies already received.',
+    description: 'Read your current plans, standalone planned workouts and undated saved workout recipes, including names, dates where scheduled, authored plan phases and optional descriptions, complete workout instructions, step notes, exact recorded completion links and existing service sync summaries. Authored text may contain sensitive health or personal information. Existing connections must reauthorize. This does not grant activity or Timeline notes access. Revoking access cannot erase copies already received.',
   },
   'training-plans:write': {
     title: 'Change Training plans and workouts',
-    description: 'Create and edit plans and planned workouts, move or copy workouts, change plan dates and lifecycle, mark workouts skipped, move workouts to recoverable history, and explicitly delete a plan. You can also create, save, copy, edit, archive, restore or permanently delete an undated saved workout recipe, and place independent copies on explicit dates. Deleting a recipe does not remove scheduled copies or grant provider sync. Plan deletion is reviewed alone and requires choosing whether its workouts become standalone or are permanently deleted; the plan and its history are permanently removed. Every proposal is previewed before a separate apply tool governed by your client\'s approval controls. Permanent single-workout deletion and history restore are not allowed.',
+    description: 'Create and edit plans, their named phases and planned workouts, move or copy workouts, change plan dates and lifecycle, mark workouts skipped, move workouts to recoverable history, and explicitly delete a plan. You can also create, save, copy, edit, archive, restore or permanently delete an undated saved workout recipe, and place independent copies on explicit dates. Deleting a recipe does not remove scheduled copies or grant provider sync. Plan deletion is reviewed alone and requires choosing whether its workouts become standalone or are permanently deleted; the plan and its history are permanently removed. Every proposal is previewed before a separate apply tool governed by your client\'s approval controls. Permanent single-workout deletion and history restore are not allowed.',
   },
   'training-delivery:write': {
     title: 'Change planned-workout sync',

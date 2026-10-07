@@ -1,4 +1,5 @@
 import type { Firestore, Transaction } from 'firebase-admin/firestore';
+import type { WeightUnits } from '@sports-alliance/sports-lib';
 import type { PlannedWorkoutProviderId } from '../../../../shared/planned-workout-providers';
 import type { ScheduledWorkoutV1 } from '../../../../shared/training-plans';
 import type { StrengthWorkoutDetailsV1 } from '../../../../shared/strength-workout';
@@ -55,6 +56,8 @@ export interface DeliveryOperation {
   contentDigest: string | null;
   workout: ScheduledWorkoutV1 | null;
   strength?: StrengthWorkoutDetailsV1 | null;
+  /** Immutable owner preference for Suunto strength text, never an authored recipe field. */
+  suuntoWeightUnits?: WeightUnits;
   artifact: DeliveryArtifact | null;
   /** One explicitly requested removal of a past, uncompleted owned copy. */
   allowPastRemoval?: boolean;
@@ -143,7 +146,7 @@ export interface TrainingDeliveryTransport {
   /** Provider/product policy: withdraw an existing upcoming copy when moved beyond its window. */
   withdrawOutsideHorizon?: boolean;
   assess(workout: ScheduledWorkoutV1, destinationKey: string, timeZone: string,
-    strength?: StrengthWorkoutDetailsV1 | null): DeliveryAssessment;
+    strength?: StrengthWorkoutDetailsV1 | null, suuntoWeightUnits?: WeightUnits): DeliveryAssessment;
   canRemove(artifact: DeliveryArtifact, today: string, allowPastRemoval?: boolean): boolean;
   execute(operation: DeliveryOperation, checkpoint: DeliveryCheckpoint, guard: DeliveryRequestGuard): Promise<DeliveryArtifact | null>;
   recover(operation: DeliveryOperation, checkpoint: DeliveryCheckpoint, guard: DeliveryRequestGuard): Promise<DeliveryRecovery>;
@@ -272,6 +275,7 @@ export interface DeliveryIntent {
 export interface DeliveryContext {
   workout: ScheduledWorkoutV1 | null;
   strength?: StrengthWorkoutDetailsV1 | null;
+  suuntoWeightUnits?: WeightUnits;
   planActive: boolean;
   setting: TrainingDeliverySettingsV1 | null;
   override: TrainingDeliverySettingsV1 | null;

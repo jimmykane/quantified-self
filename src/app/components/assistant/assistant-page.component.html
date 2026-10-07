@@ -200,7 +200,7 @@
           <div class="training-proposal-list">
             @for (detail of review.details; track $index) {
               <div class="training-proposal-row">
-                <mat-icon aria-hidden="true">{{ review.proposal.kind === 'delete_timeline_note' ? 'warning' : 'arrow_forward' }}</mat-icon>
+                <mat-icon aria-hidden="true">{{ review.proposal.kind.startsWith('delete_') ? 'warning' : 'arrow_forward' }}</mat-icon>
                 <span>{{ detail }}</span>
               </div>
             }
@@ -210,7 +210,7 @@
             <button mat-flat-button type="button" [disabled]="proposalActionInProgress()"
               (click)="applyPendingContentProposal()">
               @if (applyingContentProposal()) { <mat-spinner diameter="18"></mat-spinner> } @else {
-                {{ review.proposal.kind === 'delete_timeline_note' ? 'Delete note' : review.proposal.kind === 'delete_manual_measurement' ? 'Delete measurement' : 'Apply change' }}
+                {{ review.proposal.kind === 'delete_timeline_note' ? 'Delete note' : review.proposal.kind === 'delete_manual_measurement' ? 'Delete measurement' : review.proposal.kind === 'delete_workout_reflection' ? 'Delete reflection' : 'Apply change' }}
               }
             </button>
             <button mat-button type="button" [disabled]="proposalActionInProgress()"
@@ -231,6 +231,19 @@
             </div>
           </div>
           <div class="training-proposal-list">
+            @if (proposal.phaseReview; as review) {
+              <section aria-label="Review plan phases" class="training-phase-review">
+                <h3>{{ review.planName }}</h3>
+                <p>Plan dates: {{ review.previousStartDate }} – {{ review.previousEndDate }} → {{ review.startDate }} – {{ review.endDate }}</p>
+                @for (side of [{ label: 'Current phases', phases: review.before }, { label: 'Proposed phases', phases: review.after }]; track side.label) {
+                  <h4>{{ side.label }}</h4>
+                  @for (phase of side.phases.items; track phase.id) {
+                    <p><strong>{{ phase.name }}</strong> · {{ phase.startLocalDate }} – {{ phase.endLocalDate }} · {{ phase.color ?? 'Plan color' }}</p>
+                    @if (phase.description) { <p class="training-phase-description">{{ phase.description }}</p> }
+                  } @empty { <p>No phases.</p> }
+                }
+              </section>
+            }
             @for (change of proposal.changes; track change.index) {
               <div class="training-proposal-row">
                 <mat-icon aria-hidden="true">arrow_forward</mat-icon>
@@ -244,6 +257,10 @@
               </div>
             }
           </div>
+          @for (review of proposal.workoutReviews ?? []; track review.index) {
+            <app-assistant-workout-review [review]="review" [unitSettings]="workoutReviewUnitSettings()" [compact]="compactWorkoutReviews()"
+              [contextKey]="proposal.proposalRef + ':' + review.index"></app-assistant-workout-review>
+          }
           <p class="training-proposal-disclosure">
             @if (trainingDeletionReview(); as deletionReview) {
               {{ deletionReview.disclosure }}

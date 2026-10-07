@@ -156,6 +156,13 @@ never infer input units from the account preference or convert a distance a seco
 metres, COROS applies its existing integer-metre mapping with approval for loss, and Wahoo's dated delivery continues
 to reject distance-ended recipes when a required total duration cannot be established.
 
+Suunto Gym Guide strength load instructions use the owner's independent kg/lb preference through Sports Lib, while
+the stored companion stays in kilograms. The private per-attempt unit snapshot and versioned strength mapping keep
+uncertain historical sends recoverable and update retained Guide identities after a unit-only change; interval
+payloads/digests stay unchanged. The existing reconciliation scan detects preference changes without wider consent,
+new provider actions, a migration or a watch-receipt claim. See
+[Suunto strength load display units](training-workspace.md#strength-load-display-units) for the detailed contract.
+
 The interval editor also exposes the existing canonical `{ kind: 'manual' }` as **Lap button press**, for every purpose
 and repeat child. It has no numeric limit and is not a time/distance-or-button combination. For supported sports,
 Garmin serializes `OPEN`, Suunto Guide transitions use `manualLap`, and COROS serializes `EndManually`; COROS delivery
@@ -433,6 +440,31 @@ are reserved first within five fields; long manual text stays text-only. Authore
 Average labels `Avg pace`, `Avg pwr` and `Avg strk` identify documented `manualLap`/`average` fields.
 Swimming stroke rate is contextual watch data, never a cadence target or rowing-stroke mapping. Only running/cycling
 receive documented power/cadence sensor counterparts; missing/unsupported sensors stay unavailable, not zero.
+
+Current `suunto-guides-v7` additionally requests measured pool-swim `swolf` with `window: 'manualLap'`,
+`aggregate: 'average'` and label `Avg SWOLF`. It is not a native target. Untargeted pool screens prioritize pace,
+stroke rate, SWOLF, then optional HR after countdowns/targets/notes; authored target counterparts retain priority.
+Open water and all non-pool layouts are unchanged. Native pool length and stroke determine the reading; QS does
+not transmit pool length or fabricate unavailable values. Existing lap boundaries and early-Lap behavior stay
+unchanged. The exact v6 recovery serializer and synthetic golden pool fixture preserve historical operation
+digests; lost v2-v6 ACKs recover before updating the same Guide. The separately approved 6 October Guide-only v7
+upload passed exact readback, and the athlete confirmed the requested SWOLF watch check. That is measured-field
+evidence, not native targeting or QS completion-link proof. Normal delivery still needs merge and separately approved
+Functions deployment. See [measured SWOLF behavior](training-workspace.md#pool-swim-measured-swolf-773).
+
+For additional authored targets, [#773](https://github.com/jimmykane/quantified-self/issues/773) records the
+6 October contract review. The published JSON reference defines only the existing HR, power, speed/pace and cadence
+target types. Its measured `strokeRate` and `swolf` examples are not native target examples. Suunto's partner resource
+list confirms watch-engine possibilities, not the exact partner-upload JSON or range units. Swimming stroke rate
+and pool-context SWOLF are the bounded next candidates; neither is currently an authored QS target. The engine's
+`/Activity/{Window}/{WindowIndex}/{Field}/{Aggregate}` target pattern excludes ZoneSense's `/Activity/Zones/...`
+resources. ZoneSense remains unsupported despite sport-mode availability; do not approximate it with fixed HR.
+The preparatory parser/serializer/MCP regressions reject guessed target types and resource injection even with
+mapping-loss approval. That initial preparation changed no v1 recipe, provider payload/version, recovery digest,
+permission or transport; the subsequent v7 measured-reading mapping above changes no target contract or consent.
+See [the Training contract boundary](training-workspace.md#additional-suunto-targets-contract-boundary-773) for units,
+candidate semantics, the exact partner example still needed, versioning and separately approved watch-test criteria.
+
 Device capability is not inferred from a connected account. Native watch units apply, without an unverified rowing /500 m label.
 Guides containing any manual-lap average create recorded laps at automatic boundaries and final completion;
 button-ended predecessors already create a lap, so the successor omits the extra lap. No opening lap or automatic
@@ -662,6 +694,19 @@ Use the existing provider structure before inventing a parallel abstraction:
 - `functions/src/queue.ts`, `functions/src/tasks/`, and `functions/src/shared/queue-config.ts` provide shared dispatch and worker infrastructure.
 - `shared/functions-manifest.ts` owns callable names and regions used by browser and Functions code.
 - `shared/provider-presentation.ts` owns display labels, branding variants, and icon keys.
+
+### Connection lifecycle module ownership
+
+`functions/src/service-connection-meta.ts` is the compatibility facade used by OAuth callbacks,
+scheduled repairs, and existing connection readers. `service-connection-lifecycle.ts` owns guarded
+connection transitions, Health lifecycle projections, provider-neutral route restoration, and
+pending-disconnect queue-release repair. Wahoo recovery fields, opaque-refresh failure tracking,
+reconnect queue release, and durable retry handling live in `wahoo/connection-recovery.ts`.
+The facade supplies Wahoo's connected-state fields to the same guarded connection transaction
+and invokes its continuation only after that write succeeds; clear-state recovery fields also
+remain in the existing transaction. Wahoo recovery calls generic restoration, while the generic
+lifecycle does not import Wahoo recovery or its queue-release implementation. This separation
+preserves the persisted fields, guards, repair schedules, and restoration/release ordering.
 
 ### Stripe billing provider boundary
 
@@ -1132,6 +1177,55 @@ history dialog remains availability-aware and falls back to Sleep-only wording w
 Use `app-service-source-icon` and the shared presentation helpers. Imported activity surfaces use source attribution; connection and destination surfaces use destination branding. See [connected-provider attribution audit](connected-provider-attribution-audit.md).
 
 ## 10. Admin and operational coverage
+
+The four recorded-activity source dispatchers (`parseGarminAPIActivityQueue`, `parseSuuntoAppActivityQueue`,
+`parseCOROSAPIWorkoutQueue`, `parseWahooAPIWorkoutQueue`) use direct `queue` owner-module loading instead of the full
+entrypoint. They retain Gen 1, `europe-west2`, maximum one instance, their existing memory/timeouts, no secrets and
+the same 30-minute schedule. Dispatch, recovery, lifecycle guards and #829 telemetry are unchanged; monitoring
+continues using `cloud_function` for dispatchers and `cloud_run_revision` for the Gen 2 worker. See the
+[entrypoint contracts and local benchmark](functions-entrypoint-loading.md#recorded-activity-import-dispatcher-isolation).
+This startup optimization changes no provider behavior, availability, MCP contract or user-facing Help.
+
+Recorded completed-activity import monitoring (#829) uses fixed-label commit/attempt
+telemetry, bounded read-only observations on the existing 30-minute dispatchers, and a
+separately owned Cloud Monitoring dashboard with six policies, activated with the existing
+Alerts email channel on 7 October 2026 after the approved five-Function deployment.
+It is not Training delivery monitoring and does not change any provider's availability. See
+[activity import monitoring](activity-import-monitoring.md) for sample limits, exclusions,
+unknown observations, thresholds, cost bounds and the separately recorded production
+activation/readback evidence in #829. Future cloud changes still require separate approval.
+HTTP acknowledgements and historical retained `failed_jobs` totals are not import success
+or a new failure rate. No provider calls, retry/TTL changes or production apply are part of
+the local implementation. Unexpected observation/client-initialization errors remain
+isolated from the dispatcher's original result or error; unavailable observations are
+visible rather than converted into an empty backlog.
+The shared monitoring provisioner rejects malformed inventories and mismatched managed
+policy identities before any cloud writes; a title alone cannot adopt another policy.
+
+Health/Sleep monitoring (#830) has a separate bundle, activated on 7 October 2026, for the ordinary
+`processSleepSyncTask` and single-task `processGarminHealthBackfillTask` queues. It reuses
+the ordinary worker invocation summary and adds post-commit terminal observations and
+a bounded, field-masked probe on the existing dispatcher. Garmin, Suunto and COROS
+ordinary ingestion remain distinct from intentionally paced Garmin historical requests.
+The probe excludes superseded connection metadata; unknown metadata is not healthy zero.
+Native HTTP attempts remain diagnostic only, since expected contention also retries;
+classified processing failures, unavailable observations and missing heartbeats alert separately.
+Its three affected Functions and owned dashboard/11 metrics/six enabled policies were
+deployed/applied with separate approval and verified through production API/query readback,
+reusing the existing Alerts email channel. It was not activated by the #829 deployment.
+Initial post-creation heartbeat-series evidence remains distinct from earlier raw logs;
+dated activation and remaining observation evidence are recorded in #830. Future changes
+still require separate approval.
+See [Sleep sync operations](sleep-sync-operations.md#cloud-monitoring-830) for meanings,
+exclusions, thresholds, costs and activation steps. HTTP ACK, request-campaign completion
+and received Health/Sleep records are different outcomes; idle feeds are not an outage.
+All three affected handlers use direct owner-module target loading. The Garmin backfill
+worker retains Gen 2, 512 MiB, 1,800 seconds, Garmin secrets and one-at-a-time task pacing;
+the existing dispatcher retains Gen 1, 256 MiB, maximum one instance and its 30-minute
+schedule. Monitoring coverage is unchanged (`cloud_run_revision` workers / `cloud_function`
+dispatcher); see the [entrypoint verification](functions-entrypoint-loading.md#healthsleep-backfill-and-dispatcher-isolation).
+No provider availability, queue concurrency, retry policy, MCP/Assistant permissions or
+user-facing Help behavior changes.
 
 Provider parity includes operational visibility, not only a user-facing connection.
 

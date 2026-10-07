@@ -895,3 +895,4 @@
 }
 
 .activity-calendar--calm-month .activity-calendar-day-number--month-label { width: auto; min-width: 24px; }
+:host .activity-calendar-phase { display: block; min-width: 0; max-width: 100%; padding: 1px 3px; border-block-start: 2px solid var(--phase-color); background: color-mix(in srgb, var(--phase-color) 15%, transparent); color: var(--mat-sys-on-surface); font: var(--mat-sys-label-small); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }

@@ -37,7 +37,6 @@ export const DASHBOARD_ACTIVITY_AUTO_SYNC_ROUTE_IDS: readonly ActivitySyncRouteI
 
 export type DashboardActionPromptActionId =
   | 'applyUnitSetup'
-  | 'dismissUnitSetup'
   | 'openUnitSettings'
   | 'upgradeToPro'
   | 'dismissFirstActivityUpload'
@@ -223,17 +222,13 @@ export function buildDashboardActionPromptViewModels(
       id: DASHBOARD_ACTION_PROMPT_UNIT_SETUP_ID,
       icon: 'straighten',
       title: 'Default units',
-      description: 'Choose the units most of the dashboard should use. You can fine-tune them later in Settings.',
+      description: 'Choose your distance, speed, and pace units. Weight and week start stay as they are. You can customize units in Settings.',
       busy: options.unitSetupBusy,
       error: options.unitSetupError,
       primaryAction: {
         id: 'applyUnitSetup',
         label: 'Apply',
         loadingLabel: 'Saving...',
-      },
-      secondaryAction: {
-        id: 'dismissUnitSetup',
-        label: 'Not now',
       },
       menuActions: [{
         id: 'openUnitSettings',

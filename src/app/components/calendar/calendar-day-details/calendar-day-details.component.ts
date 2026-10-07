@@ -47,10 +47,11 @@ export interface CalendarDayDetailsData {
   summariesSettings?: SummaryStatsSettingsLike | null;
   timelineNotes?: Signal<readonly TimelineNote[]>;
   timelineNotesStatusSource?: () => 'loading' | 'ready' | 'error';
-  activities?: Signal<{ status: 'loading' | 'ready' | 'error'; day: ActivityCalendarDayViewModel }>;
+  activities?: Signal<{ status: 'loading' | 'ready' | 'error'; day: ActivityCalendarDayViewModel; complete?: boolean }>;
   plannedWorkouts?: PlannedWorkoutCalendarEntry[];
   plannedWorkoutsSource?: () => readonly PlannedWorkoutCalendarEntry[];
   plannedWorkoutsStatusSource?: () => 'loading' | 'ready' | 'error';
+  plannedWorkoutsCompleteSource?: () => boolean;
   scheduleSource?: () => CurrentTrainingScheduleV1 | null;
   trainingImpact?: Signal<TrainingImpactSnapshotState>;
 }

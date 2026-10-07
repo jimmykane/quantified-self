@@ -1,5 +1,6 @@
 import {
   ActivityInterface,
+  DataActiveLap,
   DataDuration,
   DataEnergy,
   DataHeartRate,
@@ -8,6 +9,7 @@ import {
   DataSpeed,
   DataStrokeRate,
   DataSwimDistance,
+  LapInterface,
 } from '@sports-alliance/sports-lib';
 
 export interface AppSwimLength {
@@ -142,9 +144,74 @@ export function getActivitySwimLengths(activity: ActivityInterface | null | unde
     return [];
   }
 
+  const laps = activity.getLaps?.() || [];
   return rawSwimLengths
     .map(normalizeSwimLength)
-    .filter((swimLength): swimLength is AppSwimLength => swimLength !== null);
+    .filter((swimLength): swimLength is AppSwimLength => swimLength !== null)
+    .map(length => ({ ...length, lapIndex: getDisplaySwimLengthLapIndex(length, laps) }));
+}
+
+function getDisplaySwimLengthLapIndex(length: AppSwimLength, laps: LapInterface[]): number | null {
+  const recordedIndex = length.lapIndex;
+  if (!Number.isInteger(recordedIndex) || recordedIndex < 1 || recordedIndex > laps.length) {
+    return recordedIndex;
+  }
+  const active = isRestSwimLength(length) ? false : length.type.trim().toLowerCase() === 'active' ? true : null;
+  const recordedActive = getRecordedLapActive(laps[recordedIndex - 1]);
+  if (active === null || recordedActive === null || recordedActive === active) {
+    return recordedIndex;
+  }
+
+  // Older FIT imports used overlapping, rounded lap windows. Correct only an explicit
+  // active/rest contradiction with a unique exact start and matching recorded lap state.
+  const matches = laps.map((lap, index) => ({ lap, index })).filter(({ lap }) =>
+    lap.startDate?.getTime() === length.startDate.getTime()
+      && getRecordedLapActive(lap) === active);
+  return matches.length === 1 ? matches[0].index + 1 : recordedIndex;
+}
+
+function getRecordedLapActive(lap: LapInterface): boolean | null {
+  const stat = lap.getStat?.(DataActiveLap.type);
+  const value = stat ? stat.getValue() : null;
+  return typeof value === 'boolean' ? value : null;
+}
+
+export function isRestSwimLength(swimLength: AppSwimLength | null | undefined): boolean {
+  const type = `${swimLength?.type || ''}`.trim().toLowerCase();
+  return type === 'idle' || type === 'rest';
+}
+
+/** A categorical label from recorded non-rest lengths; never infer stroke from numeric metrics. */
+export function getSwimStrokeLabel(swimLengths: readonly AppSwimLength[]): string {
+  const strokes = new Set(swimLengths
+    .filter(length => !isRestSwimLength(length))
+    .map(length => length.stroke?.trim().toLowerCase())
+    .filter((stroke): stroke is string => !!stroke));
+  if (strokes.size === 0) {
+    return '';
+  }
+  if (strokes.size > 1) {
+    return 'Mixed';
+  }
+  return [...strokes][0].replace(/[_-]+/g, ' ').replace(/\s+/g, ' ')
+    .replace(/\b\w/g, match => match.toUpperCase());
+}
+
+/** lapIndex is one-based in the complete activity lap list, before filtering by lap type. */
+export function getSwimLapStrokeLabels(activity: ActivityInterface): Map<LapInterface, string> {
+  const lengthsByLapIndex = new Map<number, AppSwimLength[]>();
+  for (const length of getActivitySwimLengths(activity)) {
+    if (!Number.isInteger(length.lapIndex) || length.lapIndex < 1) {
+      continue;
+    }
+    const lengths = lengthsByLapIndex.get(length.lapIndex) || [];
+    lengths.push(length);
+    lengthsByLapIndex.set(length.lapIndex, lengths);
+  }
+  return new Map((activity.getLaps?.() || []).map((lap, index) => [
+    lap, getRecordedLapActive(lap) === false
+      ? '' : getSwimStrokeLabel(lengthsByLapIndex.get(index + 1) || []),
+  ]));
 }
 
 export function hasVisibleSwimLengths(activities: ActivityInterface[] | null | undefined): boolean {

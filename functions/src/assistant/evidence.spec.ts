@@ -23,6 +23,26 @@ const evidenceTools = [
 ] satisfies AssistantMcpToolDefinition[];
 
 describe('Assistant evidence', () => {
+  it('retains compact phase names and dates without private descriptions or references', () => {
+    const evidence = buildAssistantEvidence({ name: 'get_training_plan_phases', title: 'Plan phases' }, {
+      scheduleRevision: 1, planRevision: 1, planRef: 'PRIVATE-REF', startDate: '2026-09-01', endDate: '2026-09-30',
+      phases: { version: 1, items: [{ id: 'private-structural-id', name: 'Base', description: 'PRIVATE-TEXT',
+        startLocalDate: '2026-09-01', endLocalDate: '2026-09-10' }] },
+    });
+    expect(evidence?.facts).toEqual([{ label: 'Base', value: '2026-09-01 – 2026-09-10' }]);
+    expect(JSON.stringify(evidence)).not.toMatch(/PRIVATE|private-structural-id/);
+  });
+  it.each([null, 'PRIVATE-TEXT'])('shows only bounded private-note evidence (%s)', note => {
+    const evidence = buildAssistantEvidence({ name: 'get_workout_reflection', title: 'Workout reflection' }, {
+      activityRef: 'PRIVATE-REF', revision: 2, target: 'activity', note,
+      provider: 'PRIVATE-PROVIDER', effort: 5, effortScale: 'borg_cr10', present: true,
+    });
+    expect(evidence.summary).toContain('Athlete-reported context');
+    expect(evidence.facts).toHaveLength(2);
+    expect(evidence.facts[1].value).toContain(note === null ? 'None' : 'characters of private context');
+    expect(JSON.stringify(evidence)).not.toMatch(/PRIVATE|revision|effort|Borg|severe/);
+  });
+
   it('pairs manual measurement display values and units without references or revision internals', () => {
     const evidence = buildAssistantEvidence({ name: 'get_manual_measurement', title: 'Manual measurement' }, {
       measurement: { measurementRef: 'private-ref', revision: 1, metricId: 'body_weight', canonicalValue: 80,

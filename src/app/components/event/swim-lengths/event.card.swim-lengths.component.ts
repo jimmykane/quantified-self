@@ -1,4 +1,4 @@
-import { ChangeDetectionStrategy, ChangeDetectorRef, Component, Input, OnChanges } from '@angular/core';
+import { ChangeDetectionStrategy, ChangeDetectorRef, Component, Input, OnChanges, inject } from '@angular/core';
 import {
   ActivityInterface,
   convertSpeedToSwimPace,
@@ -8,13 +8,16 @@ import {
   DataHeartRate,
   DataInterface,
   DataSwimPace,
-  DataSwimDistance,
   DynamicDataLoader,
   EventInterface,
   UserUnitSettingsInterface,
 } from '@sports-alliance/sports-lib';
-import { AppSwimLength, getActivitySwimLengths } from '../../../helpers/event-swim-length.helper';
+import {
+  AppSwimLength, getActivitySwimLengths, getSwimStrokeLabel, isRestSwimLength,
+} from '../../../helpers/event-swim-length.helper';
 import { isMergeOrBenchmarkEvent } from '../../../helpers/event-visibility.helper';
+import { createSwimDistanceDisplayStat, resolveUnitAwareDisplayStat } from '@shared/unit-aware-display';
+import { AppHapticsService } from '../../../services/app.haptics.service';
 
 interface SwimLengthTableRow {
   '#': number;
@@ -47,6 +50,7 @@ interface SwimLengthGroupView {
   key: string;
   label: string;
   summaryRow: SwimLengthTableRow;
+  activeDuration: string;
   restDuration: string;
   rows: SwimLengthTableRow[];
   columns: SwimLengthTableColumn[];
@@ -79,6 +83,7 @@ export class EventCardSwimLengthsComponent implements OnChanges {
 
   public activitiesWithSwimLengths: ActivityInterface[] = [];
   public swimLengthViews: SwimLengthActivityView[] = [];
+  private readonly hapticsService = inject(AppHapticsService);
 
   constructor(private changeDetectorRef: ChangeDetectorRef) {}
 
@@ -86,7 +91,19 @@ export class EventCardSwimLengthsComponent implements OnChanges {
     this.updateData();
   }
 
+  public onGroupHeaderKeydown(event: KeyboardEvent): void {
+    if ((event.key !== 'Enter' && event.key !== ' ')
+      || event.altKey || event.ctrlKey || event.metaKey || event.shiftKey) {
+      return;
+    }
+
+    // Material toggles headers directly on Enter/Space, without generating a click.
+    this.hapticsService.selection();
+  }
+
   private updateData(): void {
+    const expandedGroupKeys = new Set(this.swimLengthViews.flatMap(view => view.groups)
+      .filter(group => group.expanded).map(group => group.key));
     this.activitiesWithSwimLengths = [];
     this.swimLengthViews = [];
 
@@ -117,6 +134,7 @@ export class EventCardSwimLengthsComponent implements OnChanges {
       const { baseLabel, ...rest } = view;
       return {
         ...rest,
+        groups: view.groups.map(group => ({ ...group, expanded: expandedGroupKeys.has(group.key) })),
         label: pendingViews.length <= 1 ? baseLabel : `${baseLabel} ${index + 1}`,
       };
     });
@@ -188,6 +206,10 @@ export class EventCardSwimLengthsComponent implements OnChanges {
       key: `${activityKey}-group-${index + 1}-${firstIndex}-${lastIndex}`,
       label: firstIndex === lastIndex ? `Length ${firstIndex}` : `Lengths ${firstIndex}-${lastIndex}`,
       summaryRow: this.buildGroupSummaryRow(rowViews),
+      activeDuration: this.formatDurationValue(this.sumDataValues(
+        rowViews.map(rowView => rowView.swimLength).filter(swimLength => !this.isIdleOrRestSwimLength(swimLength)),
+        swimLength => swimLength.timerTime ?? swimLength.elapsedTime,
+      )),
       restDuration: this.formatGroupRestDuration(rowViews),
       rows,
       columns,
@@ -224,10 +246,13 @@ export class EventCardSwimLengthsComponent implements OnChanges {
 
   private buildGroupSummaryRow(rowViews: SwimLengthRowView[]): SwimLengthTableRow {
     const swimLengths = rowViews.map(rowView => rowView.swimLength);
+    const activeSwimLengths = swimLengths.filter(swimLength => !this.isIdleOrRestSwimLength(swimLength));
     const firstIndex = swimLengths[0]?.index ?? 0;
     const lastSwimLength = swimLengths[swimLengths.length - 1];
     const totalDuration = this.sumDataValues(swimLengths, swimLength => swimLength.timerTime ?? swimLength.elapsedTime);
     const totalDistance = this.sumDataValues(swimLengths, swimLength => swimLength.distance);
+    const activeDuration = this.sumDataValues(activeSwimLengths, swimLength => swimLength.timerTime ?? swimLength.elapsedTime);
+    const activeDistance = this.sumDataValues(activeSwimLengths, swimLength => swimLength.distance);
     const totalEnergy = this.sumDataValues(swimLengths, swimLength => swimLength.calories);
     const totalStrokes = this.sumNumericValues(swimLengths, swimLength => swimLength.strokes);
     const avgCadence = this.averageDataValues(swimLengths, swimLength => swimLength.avgCadence);
@@ -238,12 +263,12 @@ export class EventCardSwimLengthsComponent implements OnChanges {
       '#': firstIndex,
       Lap: this.formatLapRange(swimLengths),
       Split: '',
-      Duration: totalDuration === null ? '' : new DataDuration(totalDuration).getDisplayValue(false, true, true),
+      Duration: this.formatDurationValue(totalDuration),
       Distance: this.formatSwimDistanceValue(totalDistance),
-      Type: this.isIdleOrRestSwimLength(lastSwimLength) ? 'Set + Rest' : 'Set',
-      Stroke: this.getGroupStrokeLabel(swimLengths),
+      Type: activeSwimLengths.length === 0 ? 'Rest' : this.isIdleOrRestSwimLength(lastSwimLength) ? 'Set + Rest' : 'Set',
+      Stroke: getSwimStrokeLabel(swimLengths),
       Strokes: this.formatOptionalInteger(totalStrokes),
-      'Swim Pace': this.formatGroupSwimPace(totalDuration, totalDistance),
+      'Swim Pace': this.formatGroupSwimPace(activeDuration, activeDistance),
       'Average Stroke Rate': avgCadence === null ? '' : this.formatStrokeRate(new DataStrokeRate(avgCadence)),
       'Average Heart Rate': avgHeartRate === null ? '' : this.formatHeartRate(new DataHeartRate(avgHeartRate)),
       SWOLF: this.formatDecimal(avgSwolf),
@@ -257,7 +282,7 @@ export class EventCardSwimLengthsComponent implements OnChanges {
       .filter(swimLength => this.isIdleOrRestSwimLength(swimLength));
     const restDuration = this.sumDataValues(restSwimLengths, swimLength => swimLength.timerTime ?? swimLength.elapsedTime);
 
-    return restDuration === null ? '' : new DataDuration(restDuration).getDisplayValue(false, true, true);
+    return this.formatDurationValue(restDuration);
   }
 
   private resolveActivityLabel(activity: ActivityInterface): string {
@@ -272,12 +297,13 @@ export class EventCardSwimLengthsComponent implements OnChanges {
   }
 
   private formatDuration(swimLength: AppSwimLength): string {
-    const duration = swimLength.timerTime ?? swimLength.elapsedTime;
-    if (duration === null) {
-      return '';
-    }
+    return this.formatDurationValue(this.getFiniteDataValue(swimLength.timerTime ?? swimLength.elapsedTime));
+  }
 
-    return duration.getDisplayValue(false, true, true);
+  private formatDurationValue(seconds: number | null): string {
+    return seconds === null ? '' : resolveUnitAwareDisplayStat(new DataDuration(seconds), this.unitSettings, {
+      durationMilliseconds: true,
+    })?.text ?? '';
   }
 
   private formatDistance(distance: AppSwimLength['distance']): string {
@@ -285,7 +311,9 @@ export class EventCardSwimLengthsComponent implements OnChanges {
   }
 
   private formatSwimDistanceValue(distance: number | null): string {
-    return distance === null ? '' : this.formatUnitAwareStat(new DataSwimDistance(distance));
+    return distance === null ? '' : resolveUnitAwareDisplayStat(
+      createSwimDistanceDisplayStat(distance, this.unitSettings), this.unitSettings,
+    )?.text ?? '';
   }
 
   private formatEnergy(calories: AppSwimLength['calories']): string {
@@ -407,34 +435,8 @@ export class EventCardSwimLengthsComponent implements OnChanges {
     }
   }
 
-  private getGroupStrokeLabel(swimLengths: AppSwimLength[]): string {
-    const activeStrokes = swimLengths
-      .filter(swimLength => !this.isIdleOrRestSwimLength(swimLength))
-      .map(swimLength => swimLength.stroke)
-      .filter((stroke): stroke is string => !!stroke && stroke.trim().length > 0);
-
-    const strokeLabels = new Map<string, string>();
-    activeStrokes.forEach((stroke) => {
-      const normalizedStroke = stroke.trim().toLowerCase();
-      if (!strokeLabels.has(normalizedStroke)) {
-        strokeLabels.set(normalizedStroke, this.formatLabel(stroke));
-      }
-    });
-
-    if (strokeLabels.size === 0) {
-      return '';
-    }
-
-    if (strokeLabels.size === 1) {
-      return [...strokeLabels.values()][0];
-    }
-
-    return 'Mixed';
-  }
-
   private isIdleOrRestSwimLength(swimLength: AppSwimLength | null | undefined): boolean {
-    const normalizedType = `${swimLength?.type || ''}`.trim().toLowerCase();
-    return normalizedType === 'idle' || normalizedType === 'rest';
+    return isRestSwimLength(swimLength);
   }
 
   private sumDataValues(

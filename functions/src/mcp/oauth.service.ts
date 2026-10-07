@@ -19,6 +19,8 @@ import {
 export const MCP_OAUTH_SCOPES = {
   MetricsRead: 'metrics:read',
   HealthRead: 'health:read',
+  WorkoutReflectionsRead: 'workout-reflections:read',
+  WorkoutReflectionsWrite: 'workout-reflections:write',
   TimelineNotesRead: 'timeline-notes:read',
   TimelineNotesWrite: 'timeline-notes:write',
   TrainingPlansRead: 'training-plans:read',
@@ -44,8 +46,12 @@ export function hasValidMcpScopeDependencies(
   return !(
     (selected.has(MCP_OAUTH_SCOPES.ActivityLocationRead)
       || selected.has(MCP_OAUTH_SCOPES.ActivityDescriptionsRead)
-      || selected.has(MCP_OAUTH_SCOPES.EventsWrite))
+      || selected.has(MCP_OAUTH_SCOPES.EventsWrite)
+      || selected.has(MCP_OAUTH_SCOPES.WorkoutReflectionsRead)
+      || selected.has(MCP_OAUTH_SCOPES.WorkoutReflectionsWrite))
     && !selected.has(MCP_OAUTH_SCOPES.ActivityDetailsRead)
+  ) && !(
+    selected.has(MCP_OAUTH_SCOPES.WorkoutReflectionsWrite) && !selected.has(MCP_OAUTH_SCOPES.WorkoutReflectionsRead)
   ) && !(
     selected.has(MCP_OAUTH_SCOPES.TimelineNotesWrite)
     && !selected.has(MCP_OAUTH_SCOPES.TimelineNotesRead)

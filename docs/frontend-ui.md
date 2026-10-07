@@ -51,15 +51,91 @@ geometry around responsive breakpoints as well as ordinary desktop/phone screens
 Authenticated product workspaces, except Settings, use the shared `qs-workspace-page` shell from `src/styles.scss`. It
 owns the 1440 px maximum page width, border-box sizing, and common responsive inline gutters. Apply it on the route root
 alongside the route-specific class; do not add another outer width, margin, or padding rule in the component stylesheet.
-Settings intentionally retains its centered 760 px form column, including its aligned fixed save action, rather than
-stretching a form workflow across the workspace width.
+Settings uses a centered 800 px overview, with **Preferences** followed by **Privacy & account** in one column
+on desktop and phones. Theme is directly editable above six sections: Units & formatting, Dashboard, Charts,
+Maps, Privacy & emails, and Account. Each section uses a surface-free Material button disclosure with
+`aria-expanded` and `aria-controls`; all form panels remain mounted while collapsed. At most one section is open.
+An absent or invalid `section` query parameter shows the collapsed overview, and valid section links open their
+panel; legacy `profile` and `delete-account` links open Account, and `app` shows the inline Theme control. Closing a panel removes the section parameter.
+The group/disclosure/subsection heading levels are H2/H3/H4. Save changes is the only submit action; account deletion
+is an explicit button action and is blocked during saving. The overview is inert while saving or deleting so the
+loading shade cannot leave keyboard edits available; save progress remains outside that inert region.
+The sticky Save changes bar appears only while the form is dirty or saving and applies the whole form. It remains
+available across section switches, uses the theme surface and safe-area padding, and reports failures without discarding edits.
+Pristine implicit submits are ignored. Section summaries follow staged form values (including disabled consent fields),
+and untouched consent summaries refresh with the user input. Profile details and name live in Account, watermark
+text lives in Charts, and week start lives in Units & formatting. Customize units is a second Material disclosure;
+its fields remain mounted and preserve edits while hidden. A unit preset is selected only when distance, speed,
+pace, swim pace, and vertical speed all match it; mixed choices show Custom unit choices and allow reapplying
+either preset. Presets preserve weight, week start, and regional format and require Save changes.
+Narrow column layouts use container queries to stack fields and preserve Material touch targets.
 
-Settings separates **Appearance** (theme) from **Privacy** (usage analytics and marketing emails). The Privacy
+Settings separates the inline **Theme** control from **Privacy & emails** (usage analytics and marketing emails). The Privacy
 section is addressable at `/settings?section=privacy`; its switches retain the existing legal-consent form controls
 and require **Save changes**. Explicit off choices persist as false booleans, while untouched consent fields are
-omitted from updates. Section navigation preserves unsaved form edits and emits selection feedback only for a change.
+omitted from updates. Section disclosures preserve unsaved form edits and emit selection feedback for expansion
+or collapse, with no feedback during route hydration or while busy.
 Background profile updates refresh untouched consent switches while preserving explicit local edits. Privacy switches
 are disabled during saving, duplicate submissions are ignored, and failed saves retain the user's choice for retry.
+
+## Dashboard unit setup
+
+The Dashboard Default units prompt uses `appSettings.unitSetupCompleted === false` and is owner-only, including
+empty dashboards. New-account defaults set this flag; legacy accounts without it are not re-prompted. The browser
+region suggests the initial preset. Apply saves the preset and the completion flag in one settings merge while
+preserving weight, week start, and other app settings. The prompt has no skip/dismiss action; it remains until
+Apply succeeds or changed unit preferences are saved in Settings. Busy view models update before awaiting a write; repeat
+actions, preset changes, and Advanced settings navigation are blocked until it settles. Failed writes leave setup
+incomplete and keep an inline retryable error. A late result cannot update a different signed-in account.
+Successful saves publish a fresh User input while retaining its prototype so dashboard display inputs refresh.
+Advanced settings still opens `/settings?section=units`; saving changed unit preferences there completes setup.
+
+## Recorded swim distance units
+
+`createSwimDistanceDisplayStat` in `shared/unit-aware-display.ts` selects Sports Lib's display-only
+`SwimDistanceUnits` from the first normalized swim-pace preference. Recorded swim length rows, splits, set totals,
+homogeneous swimming summaries, swim lap tables, detailed statistics and length/lap chart tooltips use this instance
+before resolving the shared unit-aware display. General distance preferences do not override swim units; missing or
+invalid swim preferences retain meters. Mixed-sport summaries keep general distance units. Source values and JSON
+remain canonical meters. Root and Functions manifests and lockfiles pin the released Sports Lib 21.5.0 package,
+which supplies the optional `DataSwimDistance` display-unit constructor. No activity/route reparse, data migration or
+derived recomputation is required. MCP numeric metrics,
+`distanceMeters`/`poolLengthMeters`, scopes and strict schemas are unchanged; this does not alter planned-workout
+display or delivery. Existing Settings interaction/save behavior supplies the unit preference.
+
+Event-level distance summaries classify all activities contributing to the total, even when only a swimming activity
+is selected. Summary display caches refresh when unit settings change. Merge and benchmark comparison helpers apply
+the same swim display preference to distance differences and their metric keys; the comparison grid refreshes these
+differences when the unit settings signal changes. Canonical values and percentage calculations remain unchanged.
+
+Recorded swim sets retain their existing boundaries (through the following idle/rest length) and every expanded
+length row. Headers label active length timing as **Swim**, idle/rest timing as **Rest**, and preserve the previous
+combined duration as **Total** when both are present. Rest-only groups show Rest without an invented active duration.
+Each duration prefers the source `timerTime`, falling back to `elapsedTime` only when timer time is absent; explicit
+zeroes remain zero, missing values remain blank, and sums retain the existing finite-value behavior. Unknown rest or
+paused gaps are not inferred from timestamps. The shared display resolver's `durationMilliseconds` option preserves
+Sports Lib's existing fractional length formatting. Set pace now uses non-rest distance/time, while row durations,
+distances, pace and other detail metrics and aggregate totals retain their existing source values. Stable group keys
+preserve disclosure state across unit refreshes. Header timings wrap at phone widths, and user disclosure clicks and
+Enter/Space toggles use app haptics without feedback for initialization or unit refreshes. This is a frontend display
+change; import/storage, event/lap totals, chart markers, Training and MCP contracts are unchanged.
+
+Swimming lap defaults also include the categorical **Stroke** column, selectable through the existing per-sport
+Laps column picker. Explicit saved lists, including empty lists, take precedence over the defaults. Stroke labels
+come from recorded non-rest swim lengths using their one-based `lapIndex` in the complete activity lap list, before
+lap-type filtering; lap IDs and visible row numbers do not determine the association. The same pure label helper
+supplies the default swim set header: one recorded stroke is named, different strokes show Mixed, and missing or
+rest-only stroke data stays blank. Stroke is display metadata with no numeric average or selected-summary value.
+For older FIT imports with overlapping rounded lap windows, the display helper corrects a length's lap reference
+only when its active/rest type contradicts the recorded **Active Lap** flag and exactly one lap with the matching
+flag starts at that length's recorded start time. Missing or ambiguous metadata preserves the source index; an
+explicitly inactive lap never receives a stroke label. This also corrects the expanded length table's Lap column
+without changing source records, timing, distance, chart boundaries, Training or MCP data.
+The existing per-sport settings write path stores its visibility choice; source activity/lap/length data is unchanged.
+Pinned swim-length numbers and lap number/selection cells use an opaque theme surface, including their headers,
+so horizontally scrolling values cannot bleed through the fixed identifiers in either theme.
+Pending column choices survive background preference refreshes. A failed save restores only that sport's previous
+layout, preserving changes to other sport layouts and the temporary lap selection.
 
 ## Activity details spacing
 

@@ -61,6 +61,9 @@
     </button>
   </nav>
 
+  @if (isPrescriptionSummaryView()) {
+    <app-calendar-period-summary [summary]="prescriptionSummary()" [canRetry]="canRetrySummary()" (retryRequested)="retry()"></app-calendar-period-summary>
+  } @else {
   <section class="calendar-period-summary"
     [attr.aria-label]="(isDayRoute ? dayTitle() : calendarModel().periodLabel) + ' activity totals'"
     [attr.aria-busy]="isLoading()">
@@ -78,6 +81,8 @@
     }
   </section>
 
+  }
+
   <div class="calendar-progress-slot">
     @if (isLoading()) {
     <mat-progress-bar mode="indeterminate" aria-label="Loading calendar activities"></mat-progress-bar>
@@ -88,13 +93,13 @@
   <section class="calendar-status calendar-status--error" role="alert">
     <mat-icon aria-hidden="true">error_outline</mat-icon>
     <span>Calendar activities could not be loaded.</span>
-    <button mat-stroked-button type="button" (click)="retry()">
+    <button mat-stroked-button type="button" appHapticTap (click)="retry()">
       <mat-icon aria-hidden="true">refresh</mat-icon>
       <span>Retry</span>
     </button>
   </section>
   }
-    @if (eventState().status === 'ready' && !hasEvents()) {
+    @if (activitiesComplete() && !hasEvents()) {
     <span class="calendar-status-announcement" role="status">{{ emptyStateLabel() }}</span>
     }
     @if (hasTrainingPlanningUIAccess() && plansState().status === 'error') {
@@ -115,6 +120,8 @@
       [selectedDateKey]="selectedDay()?.dateKey ?? null"
       [timelineNotesByDate]="notesByDate()"
       [plannedWorkoutsByDate]="hasTrainingPlanningUIAccess() ? plannedWorkoutsByDate() : null"
+      [plannedWorkoutsComplete]="plannedWorkoutsComplete()"
+      [planPhasesByDate]="hasTrainingPlanningUIAccess() ? planPhasesByDate() : null"
       (daySelected)="openDay($event)">
     </app-activity-calendar-grid>
     @if (selectedDayData(); as dayData) {

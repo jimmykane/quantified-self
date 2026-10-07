@@ -3,6 +3,9 @@ import { FUNCTION_SECRET_BINDINGS } from '../secrets';
 
 process.env.GCLOUD_PROJECT ||= 'secret-bindings-check';
 process.env.FIREBASE_CONFIG ||= JSON.stringify({ projectId: process.env.GCLOUD_PROJECT });
+// Validation needs the complete registry even when a developer's shell has
+// inherited an optimized FUNCTION_TARGET from runtime startup diagnostics.
+process.env.FUNCTIONS_CONTROL_API = 'true';
 
 // Runtime require is intentional: the environment needed by legacy v1 Auth
 // endpoint metadata must be established before the Functions index is loaded.

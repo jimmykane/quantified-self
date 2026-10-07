@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { ActivityTypes } from '@sports-alliance/sports-lib';
 import type {
   ApplyAssistantTrainingProposalResponse,
   AssistantEvidence,
@@ -120,6 +121,20 @@ function requireStartedTurn(turn: AssistantTurnStart): BegunAssistantTurn {
 }
 
 describe('Assistant conversation store', () => {
+  it.each([true, false])('binds the first turn to the requested reflection choice %s', async enabled => {
+    const harness = createFirestoreHarness();
+    const store = createAssistantConversationStore({ db: () => harness.db as never,
+      now: () => new Date('2026-10-06T12:00:00Z'), createId: () => 'fresh-reflection-chat',
+      getDeletionGuard: async () => ({ userExists: true, deletionInProgress: false, shouldSkip: false }) });
+    const turn = requireStartedTurn(await store.beginTurn('owner', null, 'reflection-first-turn-request', 'fingerprint',
+      'coordinate_free', false, false, false, false, false, false, true, enabled));
+    expect(turn.reflectionChangesEnabled === true).toBe(enabled);
+    expect((await store.getActiveConversationState('owner')).reflectionChangesEnabled === true).toBe(enabled);
+    await expect(store.beginTurn('owner', turn.conversationId, 'reflection-changed-choice-request', 'fingerprint',
+      'coordinate_free', false, false, false, false, false, false, true, !enabled))
+      .rejects.toMatchObject({ code: 'conversation_changed' });
+  });
+
   it('keeps manual-entry permission default-off for legacy chats and fences stale choices', async () => {
     const harness = createFirestoreHarness();
     let sequence = 0;
@@ -135,6 +150,25 @@ describe('Assistant conversation store', () => {
     await expect(store.beginTurn('owner', enabled.conversationId, 'request-123456789', 'fingerprint',
       'coordinate_free', false, false, false, false, false, false, false)).rejects.toMatchObject({ code: 'conversation_changed' });
   });
+  it('fences independent reflection consent by generation and clears it on reset', async () => {
+    const harness = createFirestoreHarness(); let sequence = 0;
+    const store = createAssistantConversationStore({ db: () => harness.db as never,
+      now: () => new Date('2026-10-06T12:00:00Z'), createId: () => `reflection-${++sequence}`,
+      getDeletionGuard: async () => ({ userExists: true, deletionInProgress: false, shouldSkip: false }) });
+    const legacy = await store.resetConversation('owner');
+    expect((await store.getActiveConversationState('owner')).reflectionChangesEnabled).not.toBe(true);
+    const enabled = await store.resetConversation('owner', 'coordinate_free', false, legacy.conversationId,
+      false, false, false, false, false, false, true);
+    expect((await store.getActiveConversationState('owner')).reflectionChangesEnabled).toBe(true);
+    await expect(store.beginTurn('owner', enabled.conversationId, 'reflection-request-12345', 'fingerprint',
+      'coordinate_free', false, false, false, false, false, false, false, false)).rejects.toMatchObject({ code: 'conversation_changed' });
+    const disabled = await store.resetConversation('owner', 'coordinate_free', false, enabled.conversationId);
+    await expect(store.resetConversation('owner', 'coordinate_free', false, enabled.conversationId,
+      false, false, false, false, false, false, true)).rejects.toMatchObject({ code: 'conversation_changed' });
+    expect((await store.getActiveConversationState('owner')).conversation?.conversationId).toBe(disabled.conversationId);
+    expect((await store.getActiveConversationState('owner')).reflectionChangesEnabled).not.toBe(true);
+  });
+
   it('cannot restore notes consent from a stale tab or delayed reset retry', async () => {
     const harness = createFirestoreHarness();
     let sequence = 0;
@@ -249,6 +283,10 @@ describe('Assistant conversation store', () => {
       expiresAtMs: Date.parse('2026-08-03T12:15:00Z'), scheduleRevision: 1,
       summary: 'Create and send one workout.', requiresConfirmation: true as const,
       changes: [{ index: 0, kind: 'create-workout', summary: 'Create one workout.' }],
+      workoutReviews: [{ index: 0, before: null, after: { title: 'New run', localDate: '2026-08-04', destination: 'Standalone', lifecycle: 'planned' as const,
+        structure: { version: 1 as const, sport: ActivityTypes.Running, nodes: [{ kind: 'step' as const, id: 'run', purpose: 'work' as const,
+          ending: { kind: 'time' as const, seconds: 75.1234567890123 }, targets: [] }] } },
+        compatibility: (['garmin', 'coros', 'wahoo', 'suunto'] as const).map(provider => ({ provider, before: null, after: 'exact' as const, issues: [] })) }],
       providerPreviews: [{ index: 1, provider: 'garmin' as const, targetType: 'workout' as const,
         action: 'send' as const, availability: 'ready' as const, timeZone: 'Europe/Helsinki',
         eligibleCount: 1, warningCount: 0, summary: 'Garmin is ready.' }] };

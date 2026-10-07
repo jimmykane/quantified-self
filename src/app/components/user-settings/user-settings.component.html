@@ -2,8 +2,8 @@
   <main class="settings-content" aria-labelledby="settings-page-title">
     <app-loading-overlay
       [isLoading]="isSaving || isDeleting"
-      [hasError]="errorSaving || errorDeleting"
-      [errorMessage]="errorSaving || errorDeleting"
+      [hasError]="!!errorDeleting"
+      [errorMessage]="errorDeleting"
       [showSkeleton]="false"
       height="auto">
       <form [formGroup]="userSettingsFormGroup" (submit)="onSubmit($event)" class="qs-form">
@@ -33,517 +33,504 @@
           subtitle="Manage your account and app preferences.">
         </app-page-header>
 
-        <app-workspace-section-navigation
-          navigationAriaLabel="Settings sections"
-          [sections]="settingsSectionOptions"
-          [activeSection]="activeSection"
-          (sectionSelected)="selectSettingsSection($any($event))">
+        <ng-container *ngTemplateOutlet="settingsValidationInfo"></ng-container>
 
-          <ng-container *ngTemplateOutlet="settingsValidationInfo"></ng-container>
+        @let sectionTemplates = {
+          dashboard: dashboardSettings,
+          map: mapSettings, charts: chartSettings, units: unitSettings,
+          privacy: privacySettings, account: accountSettings
+        };
+        <div class="settings-overview" [attr.inert]="isSaving || isDeleting ? '' : null">
+          <section class="settings-theme-control" aria-labelledby="settings-theme-title" id="settings-theme">
+            <div class="settings-theme-label">
+              <mat-icon aria-hidden="true">palette</mat-icon>
+              <h2 id="settings-theme-title">Theme</h2>
+            </div>
+            <mat-button-toggle-group formControlName="appTheme" appearance="standard"
+              hideSingleSelectionIndicator aria-label="Theme" (change)="onPreferenceChange()">
+              @for (theme of appThemeOptions; track theme.value) {
+              <mat-button-toggle [value]="theme.value">{{ theme.label }}</mat-button-toggle>
+              }
+            </mat-button-toggle-group>
+          </section>
+          @for (group of settingsGroups; track group.id) {
+          <section class="settings-group" [attr.aria-labelledby]="'settings-group-' + group.id">
+            <h2 class="settings-group-title" [id]="'settings-group-' + group.id">{{ group.label }}</h2>
+            @for (section of group.sections; track section.id) {
+            <div class="settings-disclosure" [class.settings-disclosure--expanded]="activeSection === section.id">
+              <h3 class="settings-section-heading">
+                <button mat-button type="button" class="settings-section-trigger"
+                  [id]="'settings-' + section.id + '-title'"
+                  [attr.aria-label]="section.label"
+                  [attr.aria-expanded]="activeSection === section.id"
+                  [attr.aria-controls]="'settings-' + section.id + '-content'"
+                  [disabled]="isSaving || isDeleting"
+                  (click)="toggleSettingsSection(section.id)">
+                  <span class="settings-section-row">
+                    <mat-icon aria-hidden="true">{{ section.icon }}</mat-icon>
+                    <span class="settings-section-copy">
+                      <span class="settings-section-label">{{ section.label }}</span>
+                      <span class="settings-section-description">{{ sectionSummaries()[section.id] || section.description }}</span>
+                    </span>
+                    <mat-icon class="settings-section-chevron" aria-hidden="true">{{ activeSection === section.id ? 'expand_less' : 'expand_more' }}</mat-icon>
+                  </span>
+                </button>
+              </h3>
+              <section class="settings-panel-section" role="region"
+                [id]="'settings-' + section.id + '-content'"
+                [attr.aria-labelledby]="'settings-' + section.id + '-title'"
+                [hidden]="activeSection !== section.id">
+                <ng-container *ngTemplateOutlet="sectionTemplates[section.id]"></ng-container>
+              </section>
+            </div>
+            }
+          </section>
+          }
+        </div>
 
-            <section
-              class="settings-panel-section"
-              aria-labelledby="settings-general-title"
-              [hidden]="activeSection !== 'app'">
-              <header class="settings-panel-header">
-                <h2 id="settings-general-title">Appearance</h2>
-                <p>Choose how Quantified Self looks.</p>
-              </header>
-              <mat-divider></mat-divider>
-              <div class="settings-panel-body">
-                <div class="settings-theme-control">
-                  <div>
-                    <h3>Theme</h3>
-                    <p>Choose the color theme for the app.</p>
-                  </div>
-                  <mat-form-field appearance="outline" subscriptSizing="dynamic">
-                    <mat-label>Theme</mat-label>
-                    <mat-select formControlName="appTheme">
-                      @for (appTheme of appThemeOptions; track appTheme.value) {
-                      <mat-option [value]="appTheme.value">{{ appTheme.label }}</mat-option>
-                      }
-                    </mat-select>
-                  </mat-form-field>
-                </div>
-              </div>
-            </section>
-            <section
-              class="settings-panel-section"
-              aria-labelledby="settings-privacy-title"
-              [hidden]="activeSection !== 'privacy'">
-              <header class="settings-panel-header">
-                <h2 id="settings-privacy-title">Privacy</h2>
-                <p>Choose whether to share usage analytics or receive marketing emails. Turn a switch off, then select Save changes to apply your choice.</p>
-              </header>
-              <mat-divider></mat-divider>
-              <div class="settings-panel-body">
-                <div class="settings-toggle-block">
-                  <div>
-                    <h3>Usage analytics</h3>
-                    <p>Share anonymous usage statistics to help us improve Quantified Self.</p>
-                  </div>
-                  <mat-slide-toggle
-                    aria-label="Usage analytics"
-                    formControlName="acceptedTrackingPolicy"
-                    (change)="onPrivacyPreferenceChange()">
-                  </mat-slide-toggle>
-                </div>
+        @if (userSettingsFormGroup.dirty || isSaving) {
+        <footer class="settings-save-bar">
+          <span class="settings-save-status" [class.settings-save-status--error]="!!errorSaving"
+            [attr.role]="errorSaving ? 'alert' : 'status'" [attr.aria-live]="errorSaving ? 'assertive' : 'polite'">
+            @if (isSaving) { Saving changes… }
+            @else if (errorSaving) { {{ errorSaving }} }
+            @else if (userSettingsFormGroup.invalid) { Check the highlighted settings }
+            @else { Unsaved changes }
+          </span>
+          <button mat-flat-button type="submit" class="qs-mat-primary"
+            [disabled]="isSaving || isDeleting || !userSettingsFormGroup.dirty || userSettingsFormGroup.invalid">
+            <span class="settings-save-button-content">
+              @if (isSaving) {
+              <mat-spinner diameter="20" aria-label="Saving changes"></mat-spinner>
+              } @else {
+              <mat-icon aria-hidden="true">save</mat-icon>
+              }
+              <span>Save changes</span>
+            </span>
+          </button>
+        </footer>
+        }
 
-                <mat-divider></mat-divider>
-
-                <div class="settings-toggle-block">
-                  <div>
-                    <h3>Marketing emails</h3>
-                    <p>Receive occasional founder emails about new features, product updates, and offers. Turn this off here or use the unsubscribe link in any marketing email without signing in. Account and billing emails will still be sent.</p>
-                  </div>
-                  <mat-slide-toggle
-                    aria-label="Marketing emails"
-                    formControlName="acceptedMarketingPolicy"
-                    (change)="onPrivacyPreferenceChange()">
-                  </mat-slide-toggle>
-                </div>
-              </div>
-            </section>
-            <section
-              class="settings-panel-section"
-              aria-labelledby="settings-dashboard-title"
-              [hidden]="activeSection !== 'dashboard'">
-              <header class="settings-panel-header">
-                <h2 id="settings-dashboard-title">Dashboard</h2>
-                <p>Fine-tune your main activity views.</p>
-              </header>
-              <mat-divider></mat-divider>
-              <div class="settings-panel-body">
-                <mat-form-field appearance="outline" subscriptSizing="dynamic">
-                  <mat-label>Start of the Week</mat-label>
-                  <mat-select formControlName="startOfTheWeek">
-                    <mat-option [value]="0">Sunday</mat-option>
-                    <mat-option [value]="1">Monday</mat-option>
-                    <mat-option [value]="2">Tuesday</mat-option>
-                    <mat-option [value]="3">Wednesday</mat-option>
-                    <mat-option [value]="4">Thursday</mat-option>
-                    <mat-option [value]="5">Friday</mat-option>
-                    <mat-option [value]="6">Saturday</mat-option>
-                  </mat-select>
-                  <mat-hint>Week starts on this day in your calendars</mat-hint>
-                </mat-form-field>
-
-                <mat-form-field appearance="outline" subscriptSizing="dynamic">
-                  <mat-label>Activities per Page</mat-label>
-                  <mat-select formControlName="eventsPerPage">
-                    @for (option of eventsPerPage; track option) {
-                    <mat-option [value]="option">{{ option }}</mat-option>
-                    }
-                  </mat-select>
-                  <mat-hint>Adjust how many records are loaded at once for better performance.</mat-hint>
-                </mat-form-field>
-
-                <mat-form-field appearance="outline" subscriptSizing="dynamic">
-                  <mat-label>Exclude Ascent for Sport Types</mat-label>
-                  <mat-select formControlName="removeAscentForActivitiesSummaries" multiple>
-                    @for (type of activityTypes; track type) {
-                    <mat-option [value]="type" [disabled]="isMandatoryExclusion(type)">{{ type }}</mat-option>
-                    }
-                  </mat-select>
-                  <mat-hint>Ascent data will be hidden for these activities in summaries.</mat-hint>
-                </mat-form-field>
-
-                <mat-form-field appearance="outline" subscriptSizing="dynamic">
-                  <mat-label>Exclude Descent for Sport Types</mat-label>
-                  <mat-select formControlName="removeDescentForActivitiesSummaries" multiple>
-                    @for (type of activityTypes; track type) {
-                    <mat-option [value]="type" [disabled]="isMandatoryDescentExclusion(type)">{{ type }}</mat-option>
-                    }
-                  </mat-select>
-                  <mat-hint>Descent data will be hidden for these activities in summaries.</mat-hint>
-                </mat-form-field>
-              </div>
-            </section>
-            <section
-              class="settings-panel-section"
-              aria-labelledby="settings-map-title"
-              [hidden]="activeSection !== 'map'">
-              <header class="settings-panel-header">
-                <h2 id="settings-map-title">Maps</h2>
-                <p>Configure how your activities are drawn.</p>
-              </header>
-              <mat-divider></mat-divider>
-              <div class="settings-panel-body">
-                <mat-form-field appearance="outline" subscriptSizing="dynamic">
-                  <mat-label>Map Layer (Default)</mat-label>
-                  <mat-select formControlName="mapType">
-                    @for (type of mapTypes | keyvalue; track type) {
-                    <mat-option [value]="type.value">{{ type.key }}</mat-option>
-                    }
-                  </mat-select>
-                </mat-form-field>
-
-                <mat-form-field appearance="outline" subscriptSizing="dynamic">
-                  <mat-label>Lap Markers</mat-label>
-                  <mat-select formControlName="mapLapTypes" multiple>
-                    @for (lapType of lapTypes; track lapType) {
-                    <mat-option [value]="lapType">{{ lapType }}</mat-option>
-                    }
-                  </mat-select>
-                  <mat-hint>Select which markers to display on your activity routes.</mat-hint>
-                </mat-form-field>
-
-                <div class="settings-toggle-list">
-                  <mat-slide-toggle formControlName="showMapLaps">Enable Auto-Laps</mat-slide-toggle>
-                  <mat-slide-toggle formControlName="showMapArrows">Show Directional Arrows</mat-slide-toggle>
-                </div>
-
-                <div class="settings-slider-block">
-                  <p>Route Line Width</p>
-                  <mat-slider [max]="10" [min]="0.5" [step]="0.5" discrete>
-                    <input matSliderThumb formControlName="mapStrokeWidth">
-                  </mat-slider>
-                </div>
-              </div>
-            </section>
-            <section
-              class="settings-panel-section"
-              aria-labelledby="settings-charts-title"
-              [hidden]="activeSection !== 'charts'">
-              <header class="settings-panel-header">
-                <h2 id="settings-charts-title">Charts</h2>
-                <p>Customize data visualization and analysis.</p>
-              </header>
-              <mat-divider></mat-divider>
-              <div class="settings-panel-body">
-                <mat-form-field appearance="outline" subscriptSizing="dynamic">
-                  <mat-label>Data Scaling (X-Axis)</mat-label>
-                  <mat-select formControlName="xAxisType">
-                    @for (x of xAxisTypes | keyvalue; track x) {
-                    <mat-option [value]="x.value">{{ x.key }}</mat-option>
-                    }
-                  </mat-select>
-                </mat-form-field>
-
-                <mat-form-field appearance="outline" subscriptSizing="dynamic">
-                  <mat-label>Default chart metrics</mat-label>
-                  <mat-select formControlName="dataTypesToUse" multiple>
-                    @for (group of dataGroups; track group.name) {
-                    <mat-optgroup [label]="group.name">
-                      @for (data of group.data; track $index) {
-                      <mat-option [value]="data">{{ data }}</mat-option>
-                      }
-                    </mat-optgroup>
-                    }
-                  </mat-select>
-                  <mat-hint>
-                    These metrics are shown by default when present. Some metrics are derived or unit-based.
-                  </mat-hint>
-                </mat-form-field>
-
-                <div class="settings-toggle-grid">
-                  <mat-slide-toggle formControlName="showAllData"
-                    matTooltip="Adds every chartable metric recorded by the activity to Visible charts without showing it automatically.">
-                    Include all recorded metrics
-                  </mat-slide-toggle>
-                  <mat-slide-toggle formControlName="chartCursorBehaviour">Selection Tool by Default</mat-slide-toggle>
-                  <mat-slide-toggle formControlName="useAnimations">Enable Animations</mat-slide-toggle>
-                </div>
-
-                <div class="settings-slider-grid">
-                  <div class="settings-slider-block">
-                    <p>Line Width</p>
-                    <mat-slider [max]="10" [min]="0.5" [step]="0.5" discrete>
-                      <input matSliderThumb formControlName="chartStrokeWidth">
-                    </mat-slider>
-                    <mat-slide-toggle formControlName="useDistinctComparisonLinePatterns"
-                      matTooltip="Use solid, dashed, dotted, and dash-dot device lines in merged and benchmark charts. Off by default."
-                      (change)="onDistinctLinePatternsChange($event.checked)">
-                      Distinct line patterns
-                    </mat-slide-toggle>
-                  </div>
-                  <div class="settings-slider-block">
-                    <p>Fill Intensity</p>
-                    <mat-slider [max]="1" [min]="0" [step]="0.1" discrete>
-                      <input matSliderThumb formControlName="chartFillOpacity">
-                    </mat-slider>
-                  </div>
-                </div>
-              </div>
-            </section>
-            <section
-              class="settings-panel-section"
-              aria-labelledby="settings-units-title"
-              [hidden]="activeSection !== 'units'">
-              <header class="settings-panel-header">
-                <h2 id="settings-units-title">Units</h2>
-                <p>Choose your preferred units for sporting data.</p>
-              </header>
-              <mat-divider></mat-divider>
-              <div class="settings-panel-body">
-                <div class="settings-option-block settings-regional-format">
-                  <div>
-                    <h2 class="settings-subsection-title">Regional formatting</h2>
-                    <p>Choose how dates, times, numbers, and percentages are displayed.</p>
-                  </div>
-                  <mat-form-field appearance="outline" subscriptSizing="dynamic">
-                    <mat-label>Regional format</mat-label>
-                    <mat-select
-                      formControlName="formatLocale"
-                      aria-label="Regional format"
-                      (selectionChange)="onFormatLocaleChange()">
-                      <mat-select-trigger>{{ selectedFormatLocaleLabel }}</mat-select-trigger>
-                      @for (option of formatLocaleOptions; track option.value) {
-                      <mat-option class="regional-format-option" [value]="option.value">
-                        <span class="regional-format-option__content">
-                          <span>{{ option.label }}</span>
-                          <span class="regional-format-option__preview">{{ option.preview.date }} · {{ option.preview.number }}</span>
+        <ng-template #profileSettings>
+          <div class="settings-panel-body">
+            <section class="settings-profile-shell">
+              <div class="user-profile-header">
+                <div class="header-content">
+                  <div class="header-avatar" [style.backgroundImage]="'url(\'' + userAvatarUrl + '\')'"></div>
+                  <div class="header-info">
+                    <div class="name-row">
+                      <div class="user-display-name-wrapper">
+                        <p class="user-display-name">{{ user.displayName }}</p>
+                        @if (isProUser) {
+                        <span class="pro-badge">
+                          <mat-icon>verified</mat-icon>
+                          PRO
                         </span>
-                      </mat-option>
-                      }
-                    </mat-select>
-                    <mat-hint>Display only; language, timezone, units, week start, and exported dates stay separate.</mat-hint>
-                  </mat-form-field>
-                </div>
-
-                <mat-divider></mat-divider>
-
-                <div class="settings-option-block">
-                  <div>
-                    <h2 class="settings-subsection-title">Simple preset</h2>
-                    <p>Choose the units most of the app should use.</p>
-                  </div>
-                  <mat-button-toggle-group
-                    appearance="standard"
-                    [value]="selectedUnitPreset"
-                    hideSingleSelectionIndicator
-                    aria-label="Unit preset"
-                    (change)="onUnitPresetChange($event.value)">
-                    @for (option of unitPresetOptions; track option.value) {
-                    <mat-button-toggle [value]="option.value">{{ option.label }}</mat-button-toggle>
-                    }
-                  </mat-button-toggle-group>
-                </div>
-
-                <div class="settings-option-block">
-                  <div>
-                    <h2 class="settings-subsection-title">Fine-tune units</h2>
-                    <p>Adjust individual measurement units.</p>
-                  </div>
-                </div>
-
-                <div class="settings-field-list settings-field-list--units">
-                  <mat-form-field appearance="outline" subscriptSizing="dynamic">
-                    <mat-label>Distance</mat-label>
-                    <mat-select formControlName="distanceUnitsToUse">
-                      @for (unit of distanceUnitOptions; track unit.value) {
-                      <mat-option [value]="unit.value">{{ unit.label }}</mat-option>
-                      }
-                    </mat-select>
-                    <mat-hint>Dashboard and activity distances.</mat-hint>
-                  </mat-form-field>
-
-                  <mat-form-field appearance="outline" subscriptSizing="dynamic">
-                    <mat-label>Weight</mat-label>
-                    <mat-select formControlName="weightUnitsToUse" (selectionChange)="onWeightUnitChange()">
-                      @for (unit of weightUnitOptions; track unit.value) {
-                      <mat-option [value]="unit.value">{{ unit.label }}</mat-option>
-                      }
-                    </mat-select>
-                    <mat-hint>Health and Training body weight; independent of distance.</mat-hint>
-                  </mat-form-field>
-
-                  <mat-form-field appearance="outline" subscriptSizing="dynamic">
-                    <mat-label>Speed</mat-label>
-                    <mat-select formControlName="speedUnitsToUse" multiple>
-                      @for (unit of speedUnits | keyvalue; track unit.key) {
-                      <mat-option [value]="unit.value">{{ unit.value }}</mat-option>
-                      }
-                    </mat-select>
-                    <mat-hint>Running, cycling, and activity speed.</mat-hint>
-                  </mat-form-field>
-
-                  <mat-form-field appearance="outline" subscriptSizing="dynamic">
-                    <mat-label>Pace</mat-label>
-                    <mat-select formControlName="paceUnitsToUse" multiple>
-                      @for (unit of paceUnits | keyvalue; track unit.key) {
-                      <mat-option [value]="unit.value">{{ unit.value }}</mat-option>
-                      }
-                    </mat-select>
-                    <mat-hint>Time per kilometer or mile.</mat-hint>
-                  </mat-form-field>
-
-                  <mat-form-field appearance="outline" subscriptSizing="dynamic">
-                    <mat-label>Swim pace</mat-label>
-                    <mat-select formControlName="swimPaceUnitsToUse" multiple>
-                      @for (unit of swimPaceUnits | keyvalue; track unit.key) {
-                      <mat-option [value]="unit.value">{{ unit.value }}</mat-option>
-                      }
-                    </mat-select>
-                    <mat-hint>Pool pace; the first preference also selects dive depth and rate units.</mat-hint>
-                  </mat-form-field>
-
-                  <mat-form-field appearance="outline" subscriptSizing="dynamic">
-                    <mat-label>Vertical speed</mat-label>
-                    <mat-select formControlName="verticalSpeedUnitsToUse" multiple>
-                      @for (unit of verticalSpeedUnits | keyvalue; track unit.key) {
-                      <mat-option [value]="unit.value">{{ unit.value }}</mat-option>
-                      }
-                    </mat-select>
-                    <mat-hint>Climb and descent rate.</mat-hint>
-                  </mat-form-field>
-                </div>
-              </div>
-            </section>
-            <section
-              class="settings-panel-section"
-              aria-labelledby="settings-account-title"
-              [hidden]="activeSection !== 'account'">
-              <header class="settings-panel-header">
-                <h2 id="settings-account-title">Account</h2>
-                <p>Manage account actions and access.</p>
-              </header>
-              <mat-divider></mat-divider>
-              <div class="settings-account-body">
-                <mat-card appearance="outlined" class="danger-card">
-                  <mat-card-content class="card-content">
-                    <div class="danger-title">
-                      <mat-icon>warning</mat-icon>
-                      <span>Danger Zone</span>
-                    </div>
-                    <p>
-                      Deleting your account will permanently remove all your activities, settings, connected services,
-                      and any other associated data. If you have an active subscription, it will also be cancelled.
-                      This action cannot be undone.
-                    </p>
-
-                    <div>
-                      <button mat-stroked-button class="qs-mat-warn" (click)="deleteUser($event)" [disabled]="isDeleting">
-                        <mat-icon>delete_forever</mat-icon>
-                        Delete My Account
-                      </button>
-                    </div>
-                  </mat-card-content>
-                </mat-card>
-              </div>
-            </section>
-            <section
-              class="settings-panel-section"
-              aria-labelledby="settings-profile-title"
-              [hidden]="activeSection !== 'profile'">
-              <header class="settings-panel-header">
-                <h2 id="settings-profile-title">Profile</h2>
-                <p>Manage your profile details and account controls.</p>
-              </header>
-              <mat-divider></mat-divider>
-              <div class="settings-panel-body">
-                <section class="settings-profile-shell">
-                  <div class="user-profile-header">
-                    <div class="header-content">
-                      <div class="header-avatar" [style.backgroundImage]="'url(\'' + userAvatarUrl + '\')'"></div>
-                      <div class="header-info">
-                        <div class="name-row">
-                          <div class="user-display-name-wrapper">
-                            <h2 class="user-display-name">{{ user.displayName }}</h2>
-                            @if (isProUser) {
-                            <span class="pro-badge">
-                              <mat-icon>verified</mat-icon>
-                              PRO
-                            </span>
-                            } @else if (isBasicUser) {
-                            <span class="basic-badge">
-                              <mat-icon>verified</mat-icon>
-                              BASIC
-                            </span>
-                            }
-                          </div>
-                        </div>
-                        @if (user.email) {
-                        <div class="profile-meta-row">
-                          <span class="user-email">Email: {{ user.email }}</span>
-                          <div class="user-id-row">
-                            <span class="user-id">ID: {{ user.uid }}</span>
-                            <button
-                              mat-icon-button
-                              type="button"
-                              aria-label="Copy user ID"
-                              matTooltip="Copy user ID"
-                              (click)="copyUserId()">
-                              <mat-icon>content_copy</mat-icon>
-                            </button>
-                          </div>
-                        </div>
-                        } @else {
-                        <div class="profile-meta-row">
-                          <div class="user-id-row">
-                            <span class="user-id">ID: {{ user.uid }}</span>
-                            <button
-                              mat-icon-button
-                              type="button"
-                              aria-label="Copy user ID"
-                              matTooltip="Copy user ID"
-                              (click)="copyUserId()">
-                              <mat-icon>content_copy</mat-icon>
-                            </button>
-                          </div>
-                        </div>
+                        } @else if (isBasicUser) {
+                        <span class="basic-badge">
+                          <mat-icon>verified</mat-icon>
+                          BASIC
+                        </span>
                         }
                       </div>
                     </div>
+                    @if (user.email) {
+                    <div class="profile-meta-row">
+                      <span class="user-email">Email: {{ user.email }}</span>
+                      <div class="user-id-row">
+                        <span class="user-id">ID: {{ user.uid }}</span>
+                        <button
+                          mat-icon-button
+                          type="button"
+                          aria-label="Copy user ID"
+                          matTooltip="Copy user ID"
+                          (click)="copyUserId()">
+                          <mat-icon>content_copy</mat-icon>
+                        </button>
+                      </div>
+                    </div>
+                    } @else {
+                    <div class="profile-meta-row">
+                      <div class="user-id-row">
+                        <span class="user-id">ID: {{ user.uid }}</span>
+                        <button
+                          mat-icon-button
+                          type="button"
+                          aria-label="Copy user ID"
+                          matTooltip="Copy user ID"
+                          (click)="copyUserId()">
+                          <mat-icon>content_copy</mat-icon>
+                        </button>
+                      </div>
+                    </div>
+                    }
                   </div>
-                </section>
-
-                <mat-form-field appearance="outline" subscriptSizing="dynamic">
-                  <mat-label>Name</mat-label>
-                  <input matInput formControlName="displayName">
-                  <mat-hint>The name shown on your profile.</mat-hint>
-                </mat-form-field>
-
-                <mat-form-field appearance="outline" subscriptSizing="dynamic">
-                  <mat-label>Watermark Brand Text</mat-label>
-                  <input
-                    matInput
-                    formControlName="brandText"
-                    [maxlength]="brandTextMaxLength"
-                    placeholder="Your brand on chart watermark">
-                  <mat-hint>Shown on chart watermark. Leave empty to use default text.</mat-hint>
-                  <mat-hint align="end">
-                    {{ ((userSettingsFormGroup.get('brandText')?.value || '').trim().length) }}/{{ brandTextMaxLength }}
-                  </mat-hint>
-                  @if (userSettingsFormGroup.get('brandText')?.hasError('maxTrimmedLength')) {
-                  <mat-error>Use at most {{ brandTextMaxLength }} characters.</mat-error>
-                  }
-                </mat-form-field>
-
-                @if (!canEditBrandText) {
-                <div class="brand-text-upgrade">
-                  <mat-icon>lock</mat-icon>
-                  <span>Custom watermark text is available on Basic and Pro plans.</span>
-                  <a mat-stroked-button class="qs-mat-primary" routerLink="/subscriptions">Upgrade Plan</a>
                 </div>
-                }
               </div>
             </section>
-        </app-workspace-section-navigation>
 
-        @if (activeSection !== 'account') {
-        <div class="qs-form-actions-floating">
-          <button
-            mat-flat-button
-            class="qs-mat-primary"
-            [disabled]="isSaving || !userSettingsFormGroup.dirty || userSettingsFormGroup.invalid"
-            (click)="onSubmit($event)">
-            <mat-icon>save</mat-icon>
-            Save changes
-          </button>
-        </div>
+            <mat-form-field appearance="outline" subscriptSizing="dynamic">
+              <mat-label>Name</mat-label>
+              <input matInput formControlName="displayName">
+              <mat-hint>The name shown on your profile.</mat-hint>
+            </mat-form-field>
 
-        <div class="mobile-save-bar">
-          <button
-            mat-flat-button
-            class="qs-mat-primary"
-            [disabled]="isSaving || !userSettingsFormGroup.dirty || userSettingsFormGroup.invalid"
-            (click)="onSubmit($event)">
-            <mat-icon>save</mat-icon>
-            Save changes
-          </button>
-        </div>
-        }
+          </div>
+        </ng-template>
+
+
+        <ng-template #dashboardSettings>
+          <div class="settings-panel-body">
+
+            <mat-form-field appearance="outline" subscriptSizing="dynamic">
+              <mat-label>Activities per Page</mat-label>
+              <mat-select formControlName="eventsPerPage" (selectionChange)="onPreferenceChange()">
+                @for (option of eventsPerPage; track option) {
+                <mat-option [value]="option">{{ option }}</mat-option>
+                }
+              </mat-select>
+              <mat-hint>Adjust how many records are loaded at once for better performance.</mat-hint>
+            </mat-form-field>
+
+            <mat-form-field appearance="outline" subscriptSizing="dynamic">
+              <mat-label>Exclude Ascent for Sport Types</mat-label>
+              <mat-select formControlName="removeAscentForActivitiesSummaries" multiple (selectionChange)="onPreferenceChange()">
+                @for (type of activityTypes; track type) {
+                <mat-option [value]="type" [disabled]="isMandatoryExclusion(type)">{{ type }}</mat-option>
+                }
+              </mat-select>
+              <mat-hint>Ascent data will be hidden for these activities in summaries.</mat-hint>
+            </mat-form-field>
+
+            <mat-form-field appearance="outline" subscriptSizing="dynamic">
+              <mat-label>Exclude Descent for Sport Types</mat-label>
+              <mat-select formControlName="removeDescentForActivitiesSummaries" multiple (selectionChange)="onPreferenceChange()">
+                @for (type of activityTypes; track type) {
+                <mat-option [value]="type" [disabled]="isMandatoryDescentExclusion(type)">{{ type }}</mat-option>
+                }
+              </mat-select>
+              <mat-hint>Descent data will be hidden for these activities in summaries.</mat-hint>
+            </mat-form-field>
+          </div>
+        </ng-template>
+
+        <ng-template #mapSettings>
+          <div class="settings-panel-body">
+            <mat-form-field appearance="outline" subscriptSizing="dynamic">
+              <mat-label>Map Layer (Default)</mat-label>
+              <mat-select formControlName="mapType" (selectionChange)="onPreferenceChange()">
+                @for (type of mapTypes | keyvalue; track type) {
+                <mat-option [value]="type.value">{{ type.key }}</mat-option>
+                }
+              </mat-select>
+            </mat-form-field>
+
+            <mat-form-field appearance="outline" subscriptSizing="dynamic">
+              <mat-label>Lap Markers</mat-label>
+              <mat-select formControlName="mapLapTypes" multiple (selectionChange)="onPreferenceChange()">
+                @for (lapType of lapTypes; track lapType) {
+                <mat-option [value]="lapType">{{ lapType }}</mat-option>
+                }
+              </mat-select>
+              <mat-hint>Select which markers to display on your activity routes.</mat-hint>
+            </mat-form-field>
+
+            <div class="settings-toggle-list">
+              <mat-slide-toggle formControlName="showMapLaps" (change)="onPreferenceChange()">Enable Auto-Laps</mat-slide-toggle>
+              <mat-slide-toggle formControlName="showMapArrows" (change)="onPreferenceChange()">Show Directional Arrows</mat-slide-toggle>
+            </div>
+
+            <div class="settings-slider-block">
+              <p>Route Line Width</p>
+              <mat-slider [max]="10" [min]="0.5" [step]="0.5" discrete>
+                <input matSliderThumb formControlName="mapStrokeWidth" (valueChange)="onPreferenceChange()">
+              </mat-slider>
+            </div>
+          </div>
+        </ng-template>
+
+        <ng-template #chartSettings>
+          <div class="settings-panel-body">
+            <mat-form-field appearance="outline" subscriptSizing="dynamic">
+              <mat-label>Data Scaling (X-Axis)</mat-label>
+              <mat-select formControlName="xAxisType" (selectionChange)="onPreferenceChange()">
+                @for (x of xAxisTypes | keyvalue; track x) {
+                <mat-option [value]="x.value">{{ x.key }}</mat-option>
+                }
+              </mat-select>
+            </mat-form-field>
+
+            <mat-form-field appearance="outline" subscriptSizing="dynamic">
+              <mat-label>Default chart metrics</mat-label>
+              <mat-select formControlName="dataTypesToUse" multiple (selectionChange)="onPreferenceChange()">
+                @for (group of dataGroups; track group.name) {
+                <mat-optgroup [label]="group.name">
+                  @for (data of group.data; track $index) {
+                  <mat-option [value]="data">{{ data }}</mat-option>
+                  }
+                </mat-optgroup>
+                }
+              </mat-select>
+              <mat-hint>
+                These metrics are shown by default when present. Some metrics are derived or unit-based.
+              </mat-hint>
+            </mat-form-field>
+
+            <div class="settings-toggle-grid">
+              <mat-slide-toggle formControlName="showAllData"
+                matTooltip="Adds every chartable metric recorded by the activity to Visible charts without showing it automatically." (change)="onPreferenceChange()">
+                Include all recorded metrics
+              </mat-slide-toggle>
+              <mat-slide-toggle formControlName="chartCursorBehaviour" (change)="onPreferenceChange()">Selection Tool by Default</mat-slide-toggle>
+              <mat-slide-toggle formControlName="useAnimations" (change)="onPreferenceChange()">Enable Animations</mat-slide-toggle>
+            </div>
+
+            <div class="settings-slider-grid">
+              <div class="settings-slider-block">
+                <p>Line Width</p>
+                <mat-slider [max]="10" [min]="0.5" [step]="0.5" discrete>
+                  <input matSliderThumb formControlName="chartStrokeWidth" (valueChange)="onPreferenceChange()">
+                </mat-slider>
+                <mat-slide-toggle formControlName="useDistinctComparisonLinePatterns"
+                  matTooltip="Use solid, dashed, dotted, and dash-dot device lines in merged and benchmark charts. Off by default."
+                  (change)="onDistinctLinePatternsChange($event.checked)">
+                  Distinct line patterns
+                </mat-slide-toggle>
+              </div>
+              <div class="settings-slider-block">
+                <p>Fill Intensity</p>
+                <mat-slider [max]="1" [min]="0" [step]="0.1" discrete>
+                  <input matSliderThumb formControlName="chartFillOpacity" (valueChange)="onPreferenceChange()">
+                </mat-slider>
+              </div>
+            </div>
+            <mat-divider></mat-divider>
+            <h4 class="settings-subsection-title">Chart watermark</h4>
+            <mat-form-field appearance="outline" subscriptSizing="dynamic">
+              <mat-label>Watermark Brand Text</mat-label>
+              <input
+                matInput
+                formControlName="brandText"
+                [maxlength]="brandTextMaxLength"
+                placeholder="Your brand on chart watermark">
+              <mat-hint>Shown on chart watermark. Leave empty to use default text.</mat-hint>
+              <mat-hint align="end">
+                {{ ((userSettingsFormGroup.get('brandText')?.value || '').trim().length) }}/{{ brandTextMaxLength }}
+              </mat-hint>
+              @if (userSettingsFormGroup.get('brandText')?.hasError('maxTrimmedLength')) {
+              <mat-error>Use at most {{ brandTextMaxLength }} characters.</mat-error>
+              }
+            </mat-form-field>
+
+            @if (!canEditBrandText) {
+            <div class="brand-text-upgrade">
+              <mat-icon>lock</mat-icon>
+              <span>Custom watermark text is available on Basic and Pro plans.</span>
+              <a mat-stroked-button class="qs-mat-primary" routerLink="/subscriptions">Upgrade Plan</a>
+            </div>
+            }
+          </div>
+        </ng-template>
+
+        <ng-template #unitSettings>
+          <div class="settings-panel-body">
+            <div class="settings-option-block">
+              <div>
+                <h4 class="settings-subsection-title">Unit preset</h4>
+                <p>Set distance, pace, speed, and swim units together. Weight stays independent.</p>
+                @if (selectedUnitPreset === null) {
+                <p class="settings-section-note" role="status">Custom unit choices</p>
+                }
+              </div>
+              <mat-button-toggle-group
+                appearance="standard"
+                [value]="selectedUnitPreset"
+                hideSingleSelectionIndicator
+                aria-label="Unit preset"
+                (change)="onUnitPresetChange($event.value)">
+                @for (option of unitPresetOptions; track option.value) {
+                <mat-button-toggle [value]="option.value">{{ option.label }}</mat-button-toggle>
+                }
+              </mat-button-toggle-group>
+            </div>
+
+            <mat-divider></mat-divider>
+
+            <div class="settings-option-block settings-regional-format">
+              <div>
+                <h4 class="settings-subsection-title">Regional formatting</h4>
+                <p>Choose how dates, times, numbers, and percentages are displayed.</p>
+              </div>
+              <mat-form-field appearance="outline" subscriptSizing="dynamic">
+                <mat-label>Regional format</mat-label>
+                <mat-select
+                  formControlName="formatLocale"
+                  aria-label="Regional format"
+                  (selectionChange)="onFormatLocaleChange()">
+                  <mat-select-trigger>{{ selectedFormatLocaleLabel }}</mat-select-trigger>
+                  @for (option of formatLocaleOptions; track option.value) {
+                  <mat-option class="regional-format-option" [value]="option.value">
+                    <span class="regional-format-option__content">
+                      <span>{{ option.label }}</span>
+                      <span class="regional-format-option__preview">{{ option.preview.date }} · {{ option.preview.number }}</span>
+                    </span>
+                  </mat-option>
+                  }
+                </mat-select>
+                <mat-hint>Display only; language, timezone, units, week start, and exported dates stay separate.</mat-hint>
+              </mat-form-field>
+            </div>
+
+            <mat-form-field appearance="outline" subscriptSizing="dynamic">
+              <mat-label>Start of the Week</mat-label>
+              <mat-select formControlName="startOfTheWeek" (selectionChange)="onPreferenceChange()">
+                <mat-option [value]="0">Sunday</mat-option>
+                <mat-option [value]="1">Monday</mat-option>
+                <mat-option [value]="2">Tuesday</mat-option>
+                <mat-option [value]="3">Wednesday</mat-option>
+                <mat-option [value]="4">Thursday</mat-option>
+                <mat-option [value]="5">Friday</mat-option>
+                <mat-option [value]="6">Saturday</mat-option>
+              </mat-select>
+              <mat-hint>Week starts on this day in your calendars</mat-hint>
+            </mat-form-field>
+
+            <mat-divider></mat-divider>
+
+            <button mat-button type="button" class="settings-customize-units"
+              aria-controls="settings-custom-units"
+              [attr.aria-expanded]="customUnitsExpanded()"
+              [disabled]="isSaving || isDeleting"
+              (click)="toggleCustomUnits()">
+              <mat-icon aria-hidden="true">{{ customUnitsExpanded() ? 'expand_less' : 'expand_more' }}</mat-icon>
+              {{ customUnitsExpanded() ? 'Hide individual units' : 'Customize units' }}
+            </button>
+            <div id="settings-custom-units" class="settings-custom-units" [hidden]="!customUnitsExpanded()">
+              <h4 class="settings-subsection-title">Individual units</h4>
+              <p class="settings-section-note">Choose a different unit for each measurement.</p>
+
+            <div class="settings-field-list settings-field-list--units">
+              <mat-form-field appearance="outline" subscriptSizing="dynamic">
+                <mat-label>Distance</mat-label>
+                <mat-select formControlName="distanceUnitsToUse" (selectionChange)="onPreferenceChange()">
+                  @for (unit of distanceUnitOptions; track unit.value) {
+                  <mat-option [value]="unit.value">{{ unit.label }}</mat-option>
+                  }
+                </mat-select>
+                <mat-hint>Dashboard and activity distances.</mat-hint>
+              </mat-form-field>
+
+              <mat-form-field appearance="outline" subscriptSizing="dynamic">
+                <mat-label>Weight</mat-label>
+                <mat-select formControlName="weightUnitsToUse" (selectionChange)="onWeightUnitChange()">
+                  @for (unit of weightUnitOptions; track unit.value) {
+                  <mat-option [value]="unit.value">{{ unit.label }}</mat-option>
+                  }
+                </mat-select>
+                <mat-hint>Health and Training body weight; independent of distance.</mat-hint>
+              </mat-form-field>
+
+              <mat-form-field appearance="outline" subscriptSizing="dynamic">
+                <mat-label>Speed</mat-label>
+                <mat-select formControlName="speedUnitsToUse" multiple (selectionChange)="onPreferenceChange()">
+                  @for (unit of speedUnits | keyvalue; track unit.key) {
+                  <mat-option [value]="unit.value">{{ unit.value }}</mat-option>
+                  }
+                </mat-select>
+                <mat-hint>Running, cycling, and activity speed.</mat-hint>
+              </mat-form-field>
+
+              <mat-form-field appearance="outline" subscriptSizing="dynamic">
+                <mat-label>Pace</mat-label>
+                <mat-select formControlName="paceUnitsToUse" multiple (selectionChange)="onPreferenceChange()">
+                  @for (unit of paceUnits | keyvalue; track unit.key) {
+                  <mat-option [value]="unit.value">{{ unit.value }}</mat-option>
+                  }
+                </mat-select>
+                <mat-hint>Time per kilometer or mile.</mat-hint>
+              </mat-form-field>
+
+              <mat-form-field appearance="outline" subscriptSizing="dynamic">
+                <mat-label>Swim pace</mat-label>
+                <mat-select formControlName="swimPaceUnitsToUse" multiple (selectionChange)="onPreferenceChange()">
+                  @for (unit of swimPaceUnits | keyvalue; track unit.key) {
+                  <mat-option [value]="unit.value">{{ unit.value }}</mat-option>
+                  }
+                </mat-select>
+                <mat-hint>The first preference selects swim distance in meters or yards, and dive depth and rate units.</mat-hint>
+              </mat-form-field>
+
+              <mat-form-field appearance="outline" subscriptSizing="dynamic">
+                <mat-label>Vertical speed</mat-label>
+                <mat-select formControlName="verticalSpeedUnitsToUse" multiple (selectionChange)="onPreferenceChange()">
+                  @for (unit of verticalSpeedUnits | keyvalue; track unit.key) {
+                  <mat-option [value]="unit.value">{{ unit.value }}</mat-option>
+                  }
+                </mat-select>
+                <mat-hint>Climb and descent rate.</mat-hint>
+              </mat-form-field>
+            </div>
+            </div>
+          </div>
+        </ng-template>
+
+        <ng-template #privacySettings>
+          <div class="settings-panel-body">
+            <div class="settings-toggle-block">
+              <div>
+                <h4>Usage analytics</h4>
+                <p>Share anonymous usage statistics to help us improve Quantified Self.</p>
+              </div>
+              <mat-slide-toggle
+                aria-label="Usage analytics"
+                formControlName="acceptedTrackingPolicy"
+                (change)="onPrivacyPreferenceChange()">
+              </mat-slide-toggle>
+            </div>
+
+            <mat-divider></mat-divider>
+
+            <div class="settings-toggle-block">
+              <div>
+                <h4>Marketing emails</h4>
+                <p>Receive occasional founder emails about new features, product updates, and offers.</p>
+              </div>
+              <mat-slide-toggle
+                aria-label="Marketing emails"
+                formControlName="acceptedMarketingPolicy"
+                (change)="onPrivacyPreferenceChange()">
+              </mat-slide-toggle>
+            </div>
+            <p class="settings-section-note">Turn a switch off, then select Save changes. Account and billing emails will still be sent. You can also unsubscribe directly from any marketing email without signing in.</p>
+          </div>
+        </ng-template>
+
+        <ng-template #accountSettings>
+          <div class="settings-account-body">
+            <ng-container *ngTemplateOutlet="profileSettings"></ng-container>
+            <mat-divider></mat-divider>
+            <mat-card appearance="outlined" class="danger-card">
+              <mat-card-content class="card-content">
+                <div class="danger-title">
+                  <mat-icon>warning</mat-icon>
+                  <span>Danger Zone</span>
+                </div>
+                <p>
+                  Deleting your account will permanently remove all your activities, settings, connected services,
+                  and any other associated data. If you have an active subscription, it will also be cancelled.
+                  This action cannot be undone.
+                </p>
+
+                <div>
+                  <button mat-stroked-button type="button" class="qs-mat-warn" (click)="deleteUser($event)" [disabled]="isSaving || isDeleting">
+                    <mat-icon>delete_forever</mat-icon>
+                    Delete My Account
+                  </button>
+                </div>
+              </mat-card-content>
+            </mat-card>
+          </div>
+        </ng-template>
       </form>
     </app-loading-overlay>
   </main>

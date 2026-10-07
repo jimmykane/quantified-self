@@ -1,6 +1,6 @@
 import type { Firestore } from 'firebase-admin/firestore';
 import { afterEach, vi } from 'vitest';
-import { ActivityTypes } from '@sports-alliance/sports-lib';
+import { ActivityTypes, WeightUnits } from '@sports-alliance/sports-lib';
 import { PLANNED_WORKOUT_PROVIDER_IDS } from '../../../../shared/planned-workout-providers';
 import type { ScheduledWorkoutV1 } from '../../../../shared/training-plans';
 import { projectStrengthWorkoutToV1, type StrengthWorkoutDetailsV1 } from '../../../../shared/strength-workout';
@@ -8,7 +8,8 @@ import { productionDeliveryRuntime } from './runtime';
 import { SuuntoGuideTransport } from './suunto/transport';
 import { authorizeSuuntoGuideRequest } from './suunto/authorization';
 import { readGuideArchive } from './suunto/archive';
-import { assessSuuntoGuideV2ForRecovery, assessSuuntoGuideV3ForRecovery, assessSuuntoGuideV4ForRecovery, assessSuuntoGuideV5ForRecovery, guideExternalId } from './suunto/mapping';
+import { assessSuuntoGuideV2ForRecovery, assessSuuntoGuideV3ForRecovery, assessSuuntoGuideV4ForRecovery, assessSuuntoGuideV5ForRecovery,
+  assessSuuntoGuideV6ForRecovery, assessSuuntoGuideV7ForRecovery, guideExternalId } from './suunto/mapping';
 import type { DeliveryOperation } from './contracts';
 import type { InspectionRequest } from './verification-contracts';
 
@@ -55,6 +56,9 @@ describe('Production Training delivery rollout', () => {
     expect(assessment).toEqual(policy.assess(strengthWorkout, inspection.destinationKey, inspection.timeZone, strength));
     expect(assessment.level).toBe('degraded');
     expect(assessment.requiresApproval).toBe(false);
+    const pounds = transport.assess(strengthWorkout, inspection.destinationKey, inspection.timeZone, strength, WeightUnits.Pounds);
+    expect(pounds).toEqual(policy.assess(strengthWorkout, inspection.destinationKey, inspection.timeZone, strength, WeightUnits.Pounds));
+    expect(pounds.digest).not.toBe(assessment.digest);
     expect(assessment.issues).not.toContain('The complete strength prescription is unavailable or mismatched.');
     // Load is absent from the v1 projection, but must still change the delivery digest.
     const changedLoad = structuredClone(strength);
@@ -75,8 +79,12 @@ describe('Production Training delivery rollout', () => {
     const transport = runtime.transport('suunto', 'owner')!;
     const operation: DeliveryOperation = { id: 'fixture-attempt', kind: 'upsert', deliveryId: 'fixture-delivery', generation: 1,
       destinationKey: inspection.destinationKey, connectionGeneration: inspection.connectionGeneration, timeZone: inspection.timeZone,
-      workout: strengthWorkout, strength, artifact: null, progress: null, contentDigest: 'fixture-content',
-      digest: transport.assess(strengthWorkout, inspection.destinationKey, inspection.timeZone, strength).digest };
+      workout: strengthWorkout, strength, suuntoWeightUnits: WeightUnits.Pounds, artifact: null, progress: null, contentDigest: 'fixture-content',
+      digest: transport.assess(strengthWorkout, inspection.destinationKey, inspection.timeZone, strength, WeightUnits.Pounds).digest };
+    expect(transport.diagnosticMappingVersion?.(operation)).toBe('suunto-guides-v8');
+    operation.digest = assessSuuntoGuideV7ForRecovery(strengthWorkout, inspection.destinationKey, inspection.timeZone, owner, strength).digest;
+    expect(transport.diagnosticMappingVersion?.(operation)).toBe('suunto-guides-v7');
+    operation.digest = assessSuuntoGuideV6ForRecovery(strengthWorkout, inspection.destinationKey, inspection.timeZone, owner, strength).digest;
     expect(transport.diagnosticMappingVersion?.(operation)).toBe('suunto-guides-v6');
     operation.digest = assessSuuntoGuideV5ForRecovery(strengthWorkout, inspection.destinationKey, inspection.timeZone, owner, strength).digest;
     expect(transport.diagnosticMappingVersion?.(operation)).toBe('suunto-guides-v5');

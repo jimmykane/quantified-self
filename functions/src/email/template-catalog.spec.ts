@@ -2,8 +2,10 @@ import { createHash } from 'crypto';
 import * as fs from 'fs';
 import * as path from 'path';
 import Handlebars from 'handlebars';
+import { JSDOM } from 'jsdom';
 import { describe, expect, it } from 'vitest';
 import {
+    type EmailTemplateCatalogEntry,
     COROS_DELIVERY_UPDATE_TEMPLATE_ID,
     DEVELOPMENT_UPDATE_TEMPLATE_ID,
     EMAIL_PARTIAL_CATALOG,
@@ -167,6 +169,25 @@ describe('refreshed email template catalog', () => {
     it('uses fluid shells that do not depend on media-query support at narrow widths', () => {
         expect(readTemplate('partials/email_transactional_header.hbs')).toContain('class="email-shell" width="100%"');
         expect(readTemplate('partials/email_founder_header.hbs')).toContain('class="letter" width="100%"');
+    });
+
+    it('renders compact campaign gutters without changing onboarding email spacing', () => {
+        const environment = createHandlebarsEnvironment('html');
+        const campaign = MANUAL_CAMPAIGN_EMAIL_TEMPLATE_CATALOG.find(entry => entry.id === 'marketing_campaign')!;
+        const welcome = REFRESHED_EMAIL_TEMPLATE_CATALOG.find(entry => entry.id === 'registration_welcome')!;
+        const render = (template: EmailTemplateCatalogEntry) => environment.compile(readTemplate(template.htmlFile), { strict: true })(template.previewCases[0].data);
+        const campaignDocument = new JSDOM(render(campaign)).window.document;
+        const welcomeDocument = new JSDOM(render(welcome)).window.document;
+
+        expect(campaignDocument.querySelector('style')?.textContent).toContain('.letter-gutter { padding:0 !important; }');
+        expect(campaignDocument.querySelector('style')?.textContent).toContain('.letter-body { padding:24px 16px !important; }');
+        expect(campaignDocument.querySelector('style')?.textContent).toContain('.letter-footer { padding:0 16px 24px !important; }');
+        expect(campaignDocument.querySelector('.letter-gutter')?.getAttribute('style')).toContain('padding:24px 12px');
+        expect(campaignDocument.querySelector('.letter-body')?.getAttribute('style')).toContain('padding:44px 42px');
+        expect(campaignDocument.querySelector('.letter-footer')?.getAttribute('style')).toContain('padding:0 42px 36px');
+        expect(welcomeDocument.querySelector('style')?.textContent).toContain('.letter-body { padding:32px 22px !important; }');
+        expect(welcomeDocument.querySelector('style')?.textContent).not.toContain('.letter-footer');
+        expect(welcomeDocument.querySelector('.letter-body')?.getAttribute('style')).toContain('padding:44px 42px');
     });
 
     it('keeps the transactional footer aligned with the product positioning', () => {

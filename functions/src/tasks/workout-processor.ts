@@ -12,6 +12,7 @@ import {
     normalizeQueueRevision,
 } from '../queue/revision-identity';
 import { FUNCTION_SECRET_BINDINGS } from '../secrets';
+import { recordImportAttempt, type ImportAttemptOutcome } from '../queue/import-monitoring';
 
 function normalizeDispatchRecoveryGeneration(value: unknown): number | null {
     return typeof value === 'number' && Number.isSafeInteger(value) && value >= 0
@@ -31,131 +32,148 @@ export const processWorkoutTask = onTaskDispatched({
     timeoutSeconds: 540,
     region: 'europe-west2',
 }, async (request) => {
-    const {
-        queueItemId,
-        serviceName,
-        queueRevision,
-        queueDateCreated,
-        dispatchRecoveryGeneration,
-    } = request.data as {
-        queueItemId: string;
-        serviceName: ServiceNames;
-        queueRevision?: string;
-        queueDateCreated?: number;
-        dispatchRecoveryGeneration?: number;
-    };
-
-    const collectionName = getServiceWorkoutQueueName(serviceName);
-    logger.info(`[TaskWorker] Starting task for ${serviceName} item: ${queueItemId} in collection ${collectionName}`);
-
-    const queueRef = admin.firestore().collection(collectionName).doc(queueItemId);
-    const queueDoc = await queueRef.get();
-
-    if (!queueDoc.exists) {
-        // Check if the item is in the Dead Letter Queue (failed_jobs)
-        // This handles cases where the task retry loop continues even after the item was securely moved to DLQ
-        const failedJobDoc = await admin.firestore().collection('failed_jobs').doc(queueItemId).get();
-
-        if (failedJobDoc.exists) {
-            logger.warn(`[TaskWorker] Queue item ${queueItemId} not found in ${collectionName} but exists in failed_jobs. Stopping retry.`);
-            return;
-        }
-        if (await isQueueItemDeletedForUserCleanup(collectionName, queueItemId)) {
-            logger.warn(`[TaskWorker] Queue item ${queueItemId} in ${collectionName} was deleted during account cleanup. Stopping retry.`);
-            return;
-        }
-
-        // Throw error so Cloud Tasks retries with exponential backoff.
-        // This handles race conditions where the task executes before Firestore write propagates.
-        throw new Error(`[TaskWorker] Queue item ${queueItemId} not found in ${collectionName}`);
-    }
-
-    const queueItem = queueDoc.data();
-    const currentQueueRevision = normalizeQueueRevision(queueItem?.queueRevision);
-    const expectedQueueRevision = normalizeQueueRevision(queueRevision);
-    const expectedQueueDateCreated = Number(queueDateCreated);
-    const expectedDispatchRecoveryGeneration = normalizeDispatchRecoveryGeneration(
-        dispatchRecoveryGeneration,
-    );
-    const currentDispatchRecoveryGeneration = normalizeDispatchRecoveryGeneration(
-        queueItem?.dispatchRecoveryGeneration,
-    ) ?? 0;
-    const shouldCheckQueueRevision = expectedQueueRevision !== null
-        || (serviceName === ServiceNames.COROSAPI && currentQueueRevision !== null)
-        || Number.isFinite(expectedQueueDateCreated);
-    if (shouldCheckQueueRevision && !hasMatchingQueueRevision({
-        currentQueueItem: queueItem || {},
-        attemptedQueueItem: { queueRevision: expectedQueueRevision },
-        legacyIdentityMatches: Number.isFinite(expectedQueueDateCreated)
-            && queueItem?.dateCreated === expectedQueueDateCreated,
-    })) {
-        logger.info(`[TaskWorker] Skipping stale ${serviceName} task for item ${queueItemId}; the queue revision has advanced.`);
-        return;
-    }
-    if (expectedDispatchRecoveryGeneration !== null
-        && expectedDispatchRecoveryGeneration < currentDispatchRecoveryGeneration) {
-        logger.info(`[TaskWorker] Skipping stale ${serviceName} task for item ${queueItemId}; the dispatch recovery generation has advanced.`);
-        return;
-    }
-    if (queueItem?.processed === true) {
-        logger.info(`[TaskWorker] Item ${queueItemId} already processed, skipping.`);
-        return;
-    }
-
+    const startedAt = Date.now();
+    let outcome: ImportAttemptOutcome = 'failed';
     try {
-        // Process the individual item reusing the core logic
-        // We pass null for caches/pendingWrites as this worker focuses on a single item
-        // and Cloud Tasks handles the concurrency at the queue level.
-        const queueItemForProcessing = Object.assign({
-            id: queueItemId,
-            ref: queueRef,
-        }, queueItem) as any;
-        const result = expectedDispatchRecoveryGeneration !== null
-            ? await parseWorkoutQueueItemForServiceName(
-                serviceName,
-                queueItemForProcessing,
-                undefined,
-                undefined,
-                undefined,
-                undefined,
-                expectedDispatchRecoveryGeneration,
-            )
-            : await parseWorkoutQueueItemForServiceName(serviceName, queueItemForProcessing);
+        const {
+            queueItemId,
+            serviceName,
+            queueRevision,
+            queueDateCreated,
+            dispatchRecoveryGeneration,
+        } = request.data as {
+            queueItemId: string;
+            serviceName: ServiceNames;
+            queueRevision?: string;
+            queueDateCreated?: number;
+            dispatchRecoveryGeneration?: number;
+        };
 
-        switch (result) {
-            case QueueResult.Processed:
-                logger.info(`[TaskWorker] Successfully processed ${serviceName} item: ${queueItemId}`);
-                break;
-            case QueueResult.Skipped:
-                logger.warn(`[TaskWorker] Skipped ${serviceName} item ${queueItemId} because the owning user is missing or deletion is in progress.`);
-                if ((await markQueueItemSkipped(queueItemForProcessing, undefined, QUEUE_SKIPPED_REASONS.WorkerReturnedSkipped)) === QueueResult.Failed) {
-                    throw new Error(`Fatal failure updating skipped state for ${serviceName} item: ${queueItemId}`);
-                }
-                break;
-            case QueueResult.Deferred:
-                logger.warn(`[TaskWorker] Deferred ${serviceName} item ${queueItemId}; it remains queued for a future dispatcher run.`);
-                break;
-            case QueueResult.TokenRefreshDeferred:
-                logger.info(`[TaskWorker] Deferred ${serviceName} item ${queueItemId} while another worker refreshes its token.`);
-                break;
-            case QueueResult.MovedToDLQ:
-                logger.warn(`[TaskWorker] Item ${queueItemId} for ${serviceName} was moved to DLQ (failed_jobs).`);
-                break;
-            case QueueResult.RetryIncremented:
-                logger.warn(`[TaskWorker] Item ${queueItemId} for ${serviceName} failed and retry count was incremented.`);
-                throw new Error(`Item ${queueItemId} failed and was scheduled for retry.`);
-            case QueueResult.Failed:
-                logger.error(`[TaskWorker] Fatal failure updating state for ${serviceName} item: ${queueItemId}`);
-                throw new Error(`Fatal failure updating state for ${serviceName} item: ${queueItemId}`);
+        const collectionName = getServiceWorkoutQueueName(serviceName);
+        logger.info(`[TaskWorker] Starting task for ${serviceName} item: ${queueItemId} in collection ${collectionName}`);
 
-            default:
-                logger.error(`[TaskWorker] Unexpected result for ${serviceName} item: ${queueItemId}: ${result}`);
-                throw new Error(`Unexpected result for ${queueItemId}: ${result}`);
+        const queueRef = admin.firestore().collection(collectionName).doc(queueItemId);
+        const queueDoc = await queueRef.get();
+
+        if (!queueDoc.exists) {
+            // Check if the item is in the Dead Letter Queue (failed_jobs)
+            // This handles cases where the task retry loop continues even after the item was securely moved to DLQ
+            const failedJobDoc = await admin.firestore().collection('failed_jobs').doc(queueItemId).get();
+
+            if (failedJobDoc.exists) {
+                outcome = 'already_dead_lettered';
+                logger.warn(`[TaskWorker] Queue item ${queueItemId} not found in ${collectionName} but exists in failed_jobs. Stopping retry.`);
+                return;
+            }
+            if (await isQueueItemDeletedForUserCleanup(collectionName, queueItemId)) {
+                outcome = 'cleanup_removed';
+                logger.warn(`[TaskWorker] Queue item ${queueItemId} in ${collectionName} was deleted during account cleanup. Stopping retry.`);
+                return;
+            }
+
+            // Throw error so Cloud Tasks retries with exponential backoff.
+            // This handles race conditions where the task executes before Firestore write propagates.
+            throw new Error(`[TaskWorker] Queue item ${queueItemId} not found in ${collectionName}`);
         }
 
-    } catch (error) {
-        logger.error(`[TaskWorker] Error processing ${serviceName} item ${queueItemId}:`, error);
-        // Throwing an error here triggers the Cloud Task retry with exponential backoff
-        throw error;
+        const queueItem = queueDoc.data();
+        const currentQueueRevision = normalizeQueueRevision(queueItem?.queueRevision);
+        const expectedQueueRevision = normalizeQueueRevision(queueRevision);
+        const expectedQueueDateCreated = Number(queueDateCreated);
+        const expectedDispatchRecoveryGeneration = normalizeDispatchRecoveryGeneration(
+            dispatchRecoveryGeneration,
+        );
+        const currentDispatchRecoveryGeneration = normalizeDispatchRecoveryGeneration(
+            queueItem?.dispatchRecoveryGeneration,
+        ) ?? 0;
+        const shouldCheckQueueRevision = expectedQueueRevision !== null
+            || (serviceName === ServiceNames.COROSAPI && currentQueueRevision !== null)
+            || Number.isFinite(expectedQueueDateCreated);
+        if (shouldCheckQueueRevision && !hasMatchingQueueRevision({
+            currentQueueItem: queueItem || {},
+            attemptedQueueItem: { queueRevision: expectedQueueRevision },
+            legacyIdentityMatches: Number.isFinite(expectedQueueDateCreated)
+                && queueItem?.dateCreated === expectedQueueDateCreated,
+        })) {
+            outcome = 'stale';
+            logger.info(`[TaskWorker] Skipping stale ${serviceName} task for item ${queueItemId}; the queue revision has advanced.`);
+            return;
+        }
+        if (expectedDispatchRecoveryGeneration !== null
+            && expectedDispatchRecoveryGeneration < currentDispatchRecoveryGeneration) {
+            outcome = 'stale';
+            logger.info(`[TaskWorker] Skipping stale ${serviceName} task for item ${queueItemId}; the dispatch recovery generation has advanced.`);
+            return;
+        }
+        if (queueItem?.processed === true) {
+            outcome = 'already_processed';
+            logger.info(`[TaskWorker] Item ${queueItemId} already processed, skipping.`);
+            return;
+        }
+
+        try {
+            // Process the individual item reusing the core logic
+            // We pass null for caches/pendingWrites as this worker focuses on a single item
+            // and Cloud Tasks handles the concurrency at the queue level.
+            const queueItemForProcessing = Object.assign({
+                id: queueItemId,
+                ref: queueRef,
+            }, queueItem) as any;
+            const result = expectedDispatchRecoveryGeneration !== null
+                ? await parseWorkoutQueueItemForServiceName(
+                    serviceName,
+                    queueItemForProcessing,
+                    undefined,
+                    undefined,
+                    undefined,
+                    undefined,
+                    expectedDispatchRecoveryGeneration,
+                )
+                : await parseWorkoutQueueItemForServiceName(serviceName, queueItemForProcessing);
+
+            switch (result) {
+                case QueueResult.Processed:
+                    outcome = 'acknowledged';
+                    logger.info(`[TaskWorker] Successfully processed ${serviceName} item: ${queueItemId}`);
+                    break;
+                case QueueResult.Skipped:
+                    logger.warn(`[TaskWorker] Skipped ${serviceName} item ${queueItemId} because the owning user is missing or deletion is in progress.`);
+                    if ((await markQueueItemSkipped(queueItemForProcessing, undefined, QUEUE_SKIPPED_REASONS.WorkerReturnedSkipped)) === QueueResult.Failed) {
+                        throw new Error(`Fatal failure updating skipped state for ${serviceName} item: ${queueItemId}`);
+                    }
+                    outcome = 'acknowledged';
+                    break;
+                case QueueResult.Deferred:
+                    outcome = 'deferred';
+                    logger.warn(`[TaskWorker] Deferred ${serviceName} item ${queueItemId}; it remains queued for a future dispatcher run.`);
+                    break;
+                case QueueResult.TokenRefreshDeferred:
+                    outcome = 'token_refresh_deferred';
+                    logger.info(`[TaskWorker] Deferred ${serviceName} item ${queueItemId} while another worker refreshes its token.`);
+                    break;
+                case QueueResult.MovedToDLQ:
+                    outcome = 'dead_lettered';
+                    logger.warn(`[TaskWorker] Item ${queueItemId} for ${serviceName} was moved to DLQ (failed_jobs).`);
+                    break;
+                case QueueResult.RetryIncremented:
+                    outcome = 'retry';
+                    logger.warn(`[TaskWorker] Item ${queueItemId} for ${serviceName} failed and retry count was incremented.`);
+                    throw new Error(`Item ${queueItemId} failed and was scheduled for retry.`);
+                case QueueResult.Failed:
+                    logger.error(`[TaskWorker] Fatal failure updating state for ${serviceName} item: ${queueItemId}`);
+                    throw new Error(`Fatal failure updating state for ${serviceName} item: ${queueItemId}`);
+
+                default:
+                    logger.error(`[TaskWorker] Unexpected result for ${serviceName} item: ${queueItemId}: ${result}`);
+                    throw new Error(`Unexpected result for ${queueItemId}: ${result}`);
+            }
+
+        } catch (error) {
+            logger.error(`[TaskWorker] Error processing ${serviceName} item ${queueItemId}:`, error);
+            // Throwing an error here triggers the Cloud Task retry with exponential backoff
+            throw error;
+        }
+    } finally {
+        recordImportAttempt(request.data?.serviceName, outcome, Date.now() - startedAt);
     }
 });

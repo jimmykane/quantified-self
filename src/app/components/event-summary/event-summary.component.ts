@@ -1,8 +1,10 @@
-import { ChangeDetectionStrategy, Component, Input, OnChanges, SimpleChanges, ChangeDetectorRef, inject } from '@angular/core';
+import { ChangeDetectionStrategy, Component, DestroyRef, Input, OnChanges, SimpleChanges, ChangeDetectorRef, inject } from '@angular/core';
+import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { AppEventInterface } from '@shared/app-event.interface';
 import {
   User,
   ActivityInterface,
+  ActivityTypes,
   UserUnitSettingsInterface,
   DataDistance,
   DataDuration,
@@ -22,10 +24,11 @@ import { resolvePreferredSpeedDerivedAverageTypeForActivity } from '../../helper
 import { SummaryPrimaryInfoMetric } from '../shared/summary-primary-info/summary-primary-info.component';
 import { EventDevicesService } from '../../services/event-devices.service';
 import { MatDialog } from '@angular/material/dialog';
-import { firstValueFrom } from 'rxjs';
+import { firstValueFrom, take } from 'rxjs';
 import { EventTagService } from '../../services/event-tag.service';
 import { EventTagsDialogComponent } from '../event-tags/event-tags-dialog.component';
 import { AppHapticsService } from '../../services/app.haptics.service';
+import { resolveUnitAwareDisplayFromValue } from '@shared/unit-aware-display';
 
 @Component({
   selector: 'app-event-summary',
@@ -54,6 +57,7 @@ export class EventSummaryComponent implements OnChanges {
   private heroEffortStatTypeValue: string = DataSpeedAvg.type;
   private eventActivitiesCountValue = 0;
   private mainActivityTypeValue = 'Other';
+  private eventActivityTypesValue: ActivityTypes[] = [];
   private benchmarkCountValue = 0;
   private feelingValue: Feelings | null = null;
   private feelingLabelValue = '';
@@ -66,9 +70,11 @@ export class EventSummaryComponent implements OnChanges {
   private deviceSourceSuppressedLabelsValue: readonly string[] = [];
   private cachedEventRef: AppEventInterface | null = null;
   private cachedSelectedActivitiesRef: ActivityInterface[] | null = null;
+  private cachedUnitSettingsRef: UserUnitSettingsInterface | undefined;
   private templateStateInitialized = false;
   private eventTagsValue: string[] = [];
   private readonly hapticsService = inject(AppHapticsService);
+  private readonly destroyRef = inject(DestroyRef);
 
   constructor(
     private cd: ChangeDetectorRef,
@@ -81,14 +87,20 @@ export class EventSummaryComponent implements OnChanges {
   }
 
   ngOnChanges(changes: SimpleChanges): void {
-    if (changes['event'] || changes['selectedActivities']) {
+    if (changes['event'] || changes['selectedActivities'] || changes['unitSettings']) {
       this.rebuildTemplateState();
     }
   }
 
   openEditDetails() {
-    this.bottomSheet.open(EventDetailsSummaryBottomSheetComponent, {
+    if (!this.isOwner || !this.user || !this.event?.getID?.()) return;
+    this.hapticsService.selection();
+    const ref = this.bottomSheet.open(EventDetailsSummaryBottomSheetComponent, {
       data: { event: this.event, user: this.user }
+    });
+    ref.afterDismissed().pipe(take(1), takeUntilDestroyed(this.destroyRef)).subscribe(saved => {
+      if (!saved) return;
+      this.rebuildTemplateState(); this.cd.markForCheck();
     });
   }
 
@@ -234,7 +246,7 @@ export class EventSummaryComponent implements OnChanges {
   get heroSummaryMetrics(): SummaryPrimaryInfoMetric[] {
     this.ensureTemplateState();
     return this.heroStatsValue.map((statType) =>
-      buildHeroMetric(statType, this.event?.getStat(statType), this.unitSettings, [this.mainActivityTypeValue])
+      buildHeroMetric(statType, this.event?.getStat(statType), this.unitSettings, this.eventActivityTypesValue)
     );
   }
 
@@ -254,7 +266,7 @@ export class EventSummaryComponent implements OnChanges {
       return cachedStat.value;
     }
     const stat = this.event?.getStat(statType);
-    const unitAware = resolvePrimaryUnitAwareDisplayStat(stat, this.unitSettings, statType, [this.mainActivityTypeValue]);
+    const unitAware = resolvePrimaryUnitAwareDisplayStat(stat, this.unitSettings, statType, this.eventActivityTypesValue);
     return unitAware ? unitAware.value : '--';
   }
 
@@ -265,7 +277,7 @@ export class EventSummaryComponent implements OnChanges {
       return cachedStat.unit;
     }
     const stat = this.event?.getStat(statType);
-    const unitAware = resolvePrimaryUnitAwareDisplayStat(stat, this.unitSettings, statType, [this.mainActivityTypeValue]);
+    const unitAware = resolvePrimaryUnitAwareDisplayStat(stat, this.unitSettings, statType, this.eventActivityTypesValue);
     return unitAware ? unitAware.unit : '';
   }
 
@@ -301,6 +313,7 @@ export class EventSummaryComponent implements OnChanges {
       : activities;
     this.eventActivitiesCountValue = activities.length;
     this.mainActivityTypeValue = activities[0]?.type || 'Other';
+    this.eventActivityTypesValue = activities.map(activity => activity.type);
     this.heroEffortStatTypeValue = resolvePreferredSpeedDerivedAverageTypeForActivity(this.mainActivityTypeValue) || DataSpeedAvg.type;
     this.heroStatsValue = this.resolveHeroStats(this.mainActivityTypeValue);
     this.heroStatLookup = this.buildHeroStatLookup();
@@ -329,10 +342,12 @@ export class EventSummaryComponent implements OnChanges {
     this.feelingIconValue = this.resolveFeelingIcon(this.feelingValue);
 
     const rpeStat = this.event?.getStat(DataRPE.type) as DataRPE;
-    this.rpeValue = rpeStat ? rpeStat.getValue() as RPEBorgCR10SCale : null;
-    this.rpeLabelValue = this.rpeValue === null ? '' : (RPEBorgCR10SCale[this.rpeValue] || '');
+    const rpe = rpeStat ? rpeStat.getValue() : null;
+    this.rpeValue = typeof rpe === 'number' && Number.isFinite(rpe) && rpe >= 0 && rpe <= 10 ? rpe as RPEBorgCR10SCale : null;
+    this.rpeLabelValue = this.rpeValue === null ? '' : (resolveUnitAwareDisplayFromValue(DataRPE.type, this.rpeValue, this.unitSettings)?.text || '');
     this.cachedEventRef = this.event;
     this.cachedSelectedActivitiesRef = this.selectedActivities;
+    this.cachedUnitSettingsRef = this.unitSettings;
     this.templateStateInitialized = true;
   }
 
@@ -348,7 +363,7 @@ export class EventSummaryComponent implements OnChanges {
     const lookup = new Map<string, { value: string; unit: string }>();
     this.heroStatsValue.forEach((statType) => {
       const stat = this.event?.getStat(statType);
-      const unitAware = resolvePrimaryUnitAwareDisplayStat(stat, this.unitSettings, statType, [this.mainActivityTypeValue]);
+      const unitAware = resolvePrimaryUnitAwareDisplayStat(stat, this.unitSettings, statType, this.eventActivityTypesValue);
       lookup.set(statType, {
         value: unitAware ? unitAware.value : '--',
         unit: unitAware ? unitAware.unit : '',
@@ -426,7 +441,8 @@ export class EventSummaryComponent implements OnChanges {
   }
 
   private ensureTemplateState(): void {
-    if (!this.templateStateInitialized || this.cachedEventRef !== this.event || this.cachedSelectedActivitiesRef !== this.selectedActivities) {
+    if (!this.templateStateInitialized || this.cachedEventRef !== this.event || this.cachedSelectedActivitiesRef !== this.selectedActivities
+      || this.cachedUnitSettingsRef !== this.unitSettings) {
       this.rebuildTemplateState();
     }
   }

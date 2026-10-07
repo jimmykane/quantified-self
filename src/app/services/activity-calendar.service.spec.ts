@@ -49,6 +49,41 @@ describe('ActivityCalendarService', () => {
     }], 'startDate', true, 0);
   });
 
+  it('bounds weekly reads and marks lookahead or malformed documents as incomplete', async () => {
+    const service = TestBed.inject(ActivityCalendarService);
+    const user = { uid: 'owner' } as User;
+    const window = { startMs: 1, endExclusiveMs: 100 };
+    watchEventDocumentsBy.mockReturnValueOnce(of(Array.from({ length: 1001 }, (_, i) => eventAt(`${i}`, new Date(2)))));
+    const partial = await firstValueFrom(service.watchSummaryEvents(user, window));
+    expect(partial.events).toHaveLength(1000);
+    expect(partial.complete).toBe(false);
+    expect(watchEventDocumentsBy).toHaveBeenLastCalledWith(user, expect.any(Array), 'startDate', true, 1001, { waitForServer: true });
+    watchEventDocumentsBy.mockReturnValueOnce(of([eventAt('', new Date(2))]));
+    expect((await firstValueFrom(service.watchSummaryEvents(user, window))).complete).toBe(false);
+    watchEventDocumentsBy.mockReturnValueOnce(of([]));
+    expect(await firstValueFrom(service.watchSummaryEvents(user, window))).toEqual({ events: [], complete: true });
+  });
+  it('bounds the first weekly acknowledgement without expiring a healthy idle listener', async () => {
+    vi.useFakeTimers();
+    try {
+      const pending = new Subject<ReturnType<typeof eventAt>[]>();
+      watchEventDocumentsBy.mockReturnValue(pending);
+      const service = TestBed.inject(ActivityCalendarService);
+      const user = { uid: 'owner' } as User;
+      const window = { startMs: 1, endExclusiveMs: 100 };
+      const result = firstValueFrom(service.watchSummaryEvents(user, window));
+      const rejected = expect(result).rejects.toMatchObject({ name: 'TimeoutError' });
+      await vi.advanceTimersByTimeAsync(ActivityCalendarService.SUMMARY_READ_TIMEOUT_MS); await rejected;
+      expect(pending.observed).toBe(false);
+      const values: unknown[] = []; const failed = vi.fn();
+      const subscription = service.watchSummaryEvents(user, window).subscribe({ next: value => values.push(value), error: failed });
+      pending.next([]); await vi.advanceTimersByTimeAsync(2 * ActivityCalendarService.SUMMARY_READ_TIMEOUT_MS);
+      expect(values).toEqual([{ events: [], complete: true }]);
+      expect(failed).not.toHaveBeenCalled(); expect(subscription.closed).toBe(false);
+      subscription.unsubscribe();
+    } finally { vi.useRealTimers(); }
+  });
+
   it('builds lightweight calendar events and orders them chronologically', async () => {
     const later = eventAt('later', new Date(2026, 7, 4));
     const earlier = eventAt('earlier', new Date(2026, 7, 2));

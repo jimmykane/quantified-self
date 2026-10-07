@@ -126,6 +126,71 @@ describe('queue-utils', () => {
         vi.restoreAllMocks();
     });
 
+    describe('Health/Sleep committed observations', () => {
+        const observed = () => vi.mocked(logger.info).mock.calls.filter(([message]) => message === '[HealthSleep]');
+        const item = () => ({ id: 'qa', provider: 'GarminAPI', type: 'garmin_ping', userID: 'user-1', queueRevision: 'R1', dateCreated: 1, processed: false, retryCount: 0,
+            ref: { parent: { id: 'sleepSyncQueue' }, id: 'qa' }, payload: 'PRIVATE_PAYLOAD' } as unknown as SleepSyncQueueItemInterface);
+        it('emits once after a retried completion transaction commits, not inside its callbacks', async () => {
+            vi.spyOn(logger, 'info').mockImplementation(() => {});
+            const current = item();
+            hoisted.transaction.get.mockResolvedValue({ exists: true, data: () => ({ ...current }) });
+            hoisted.runTransaction.mockImplementationOnce(async callback => {
+                await callback(hoisted.transaction);
+                expect(observed()).toHaveLength(0);
+                return callback(hoisted.transaction);
+            });
+            expect(await updateToProcessed(current, undefined, { resultStatus: 'success' })).toBe(QueueResult.Processed);
+            expect(observed()).toEqual([['[HealthSleep]', { telemetryVersion: 1, provider: 'GarminAPI', workload: 'sleep_sync', event: 'committed', outcome: 'completed' }]]);
+        });
+        it('does not emit success for stale, deletion-fenced or failed completion', async () => {
+            vi.spyOn(logger, 'info').mockImplementation(() => {});
+            const current = item();
+            hoisted.transaction.get.mockResolvedValue({ exists: true, data: () => ({ ...current, queueRevision: 'R2' }) });
+            await updateToProcessed(current, undefined, { resultStatus: 'success' });
+            hoisted.getUserDeletionGuardStateInTransaction.mockResolvedValueOnce({ shouldSkip: true });
+            await updateToProcessed(current, undefined, { resultStatus: 'success' });
+            hoisted.runTransaction.mockRejectedValueOnce(new Error('PRIVATE_FAILURE'));
+            expect(await updateToProcessed(current, undefined, { resultStatus: 'success' })).toBe(QueueResult.Failed);
+            expect(observed()).toHaveLength(0);
+        });
+        it.each(['retry', 'expected_contention'])('counts a committed %s separately without extracting raw errors', async outcome => {
+            vi.spyOn(logger, 'info').mockImplementation(() => {});
+            const current = item();
+            hoisted.transaction.get.mockResolvedValue({ exists: true, data: () => ({ ...current }) });
+            const error = new Error('PRIVATE_ERROR');
+            if (outcome === 'expected_contention') error.name = 'TokenRefreshInProgressError';
+            expect(await increaseRetryCountIfCurrentUserActive({ queueItem: current, error, userID: 'user-1', phase: 'qa', logPrefix: 'qa', isCurrent: () => true })).toBe(QueueResult.RetryIncremented);
+            expect(observed()).toEqual([['[HealthSleep]', { telemetryVersion: 1, provider: 'GarminAPI', workload: 'sleep_sync', event: 'retry_transition', outcome }]]);
+        });
+    });
+
+    describe('recorded import commit observations', () => {
+        const observed = () => vi.mocked(logger.info).mock.calls.filter(([message]) => message === '[ActivityImport]');
+        it('counts a new dead letter only after batch commit and not failed persistence', async () => {
+            const createItem = () => ({ id: 'qa', ref: { parent: { id: 'garminAPIActivityQueue' }, id: 'qa' } } as unknown as GarminAPIActivityQueueItemInterface);
+            const log = vi.spyOn(logger, 'info').mockImplementation(() => {});
+            hoisted.batch.commit.mockRejectedValueOnce(new Error('PRIVATE_FAILURE'));
+            expect(await moveToDeadLetterQueue(createItem(), new Error('PRIVATE_PROVIDER'))).toBe(QueueResult.Failed);
+            expect(observed()).toHaveLength(0);
+            hoisted.batch.commit.mockResolvedValueOnce(undefined);
+            expect(await moveToDeadLetterQueue(createItem(), new Error('PRIVATE_PROVIDER'))).toBe(QueueResult.MovedToDLQ);
+            expect(log).toHaveBeenCalledWith('[ActivityImport]', { telemetryVersion: 1, provider: 'garmin', event: 'committed', outcome: 'dead_lettered' });
+            expect(observed()).toHaveLength(1);
+        });
+
+        it('separates durable success/skip from a stale acknowledgement', async () => {
+            vi.spyOn(logger, 'info').mockImplementation(() => {});
+            const item = { id: 'qa', firebaseUserID: 'owner', queueRevision: 'R1', ref: { parent: { id: 'suuntoAppWorkoutQueue' }, id: 'qa' } } as unknown as GarminAPIActivityQueueItemInterface;
+            hoisted.transaction.get.mockResolvedValue({ exists: true, data: () => ({ queueRevision: 'R2', processed: false }) });
+            await updateToProcessed(item);
+            expect(observed()).toHaveLength(0);
+            hoisted.transaction.get.mockResolvedValue({ exists: true, data: () => ({ queueRevision: 'R1', processed: false }) });
+            await updateToProcessed(item);
+            await markQueueItemSkipped(item, undefined, 'expected_skip');
+            expect(observed().map(([, fields]) => fields?.outcome)).toEqual(['imported', 'skipped']);
+        });
+    });
+
     describe('provider operation claim lease', () => {
         it('treats only a recent in-flight marker as active', () => {
             const nowMs = 1_800_000_000_000;
@@ -183,6 +248,7 @@ describe('queue-utils', () => {
 
     describe('moveToDeadLetterQueue', () => {
         it.each(['batch', 'bulkWriter'])('retains a Garmin workout callback and the failed-job TTL with %s', async writer => {
+            const info = vi.spyOn(logger, 'info').mockImplementation(() => {});
             const queueItem = {
                 id: 'garmin-workout',
                 ref: { parent: { id: 'garminAPIActivityQueue' }, id: 'garmin-workout' },
@@ -201,7 +267,7 @@ describe('queue-utils', () => {
                 callbackURL: queueItem.callbackURL,
                 expireAt: new Date(nowMs + TTL_CONFIG.FAILED_JOBS_IN_DAYS * 24 * 60 * 60 * 1000),
             });
-            expect(JSON.stringify(vi.mocked(logger.info).mock.calls)).not.toContain(queueItem.callbackURL);
+            expect(JSON.stringify(info.mock.calls)).not.toContain(queueItem.callbackURL);
         });
 
         it.each(['garmin_ping', 'garmin_ping_batch'])('retains callbacks when the guarded %s revision fails', async type => {

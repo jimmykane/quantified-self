@@ -225,7 +225,7 @@ describe('processWahooWorkoutQueueItem', () => {
       }),
       sourceFileData: Buffer.from('valid-fit'),
     });
-    expect(mocks.completeRevision).toHaveBeenCalledWith(queueItem, expect.any(String));
+    expect(mocks.completeRevision).toHaveBeenCalledWith(queueItem, expect.any(String), {}, true);
   });
 
   it('skips an inbound row that belongs to a different retained Wahoo account', async () => {

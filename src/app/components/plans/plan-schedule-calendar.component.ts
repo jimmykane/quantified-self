@@ -18,6 +18,7 @@ import { trainingPlanAppearance } from '../../helpers/training-plan-appearance.h
   changeDetection: ChangeDetectionStrategy.OnPush,
 })
 export class PlanScheduleCalendarComponent {
+  readonly phaseAppearance = trainingPlanAppearance;
   readonly plan = input.required<TrainingPlanV1>();
   readonly workouts = input.required<readonly ScheduledWorkoutV1[]>();
   readonly completedWorkoutIds = input<readonly string[]>([]);

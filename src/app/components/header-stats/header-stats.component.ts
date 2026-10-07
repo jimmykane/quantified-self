@@ -168,7 +168,7 @@ export class HeaderStatsComponent implements OnChanges {
   }
 
   private getSummaryDisplayStats(stat: DataInterface): DataInterface[] {
-    const displayStat = resolveSummaryDisplayStat(stat, stat.getType(), this.activityTypes);
+    const displayStat = resolveSummaryDisplayStat(stat, stat.getType(), this.activityTypes, this.unitSettings);
     return DynamicDataLoader.getUnitBasedDataFromDataInstance(displayStat ?? stat, this.unitSettings);
   }
 

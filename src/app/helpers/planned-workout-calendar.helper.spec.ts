@@ -47,6 +47,12 @@ const PLAN: TrainingPlanV1 = {
 };
 
 describe('planned workout calendar overlay', () => {
+  it('keeps observed links but labels unlinked entries unknown when completion coverage is unavailable', () => {
+    const day = buildPlannedWorkoutCalendarOverlay([workout('tempo'), workout('standalone')], [PLAN], PLAN.id, ['tempo'], false)['2026-09-02'];
+    expect(day.entries.find(entry => entry.workout.id === 'tempo')).toMatchObject({ completed: true });
+    expect(day.entries.find(entry => entry.workout.id === 'standalone')).toMatchObject({ completed: false, completionKnown: false });
+    expect(day.ariaLabel).toContain('Completion coverage unknown');
+  });
   it('derives plan colors live, keeps standalone neutral, and reserves a marker for both scopes', () => {
     const entries = [workout('standalone'), { ...workout('standalone'), id: 'standalone-2' }, workout('tempo', 'skipped')];
     const colored = { ...PLAN, color: 'purple' as const };

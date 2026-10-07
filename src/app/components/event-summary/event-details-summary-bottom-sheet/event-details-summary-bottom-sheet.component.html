@@ -1,49 +1,72 @@
-<app-bottom-sheet-header title="Edit Event Details" icon="edit_note">
-    <button mat-icon-button (click)="close()">
-        <mat-icon>close</mat-icon>
-    </button>
+<app-bottom-sheet-header title="Edit details" icon="edit_note">
+  <button mat-icon-button (click)="close()" [disabled]="busy()" aria-label="Close event details"><mat-icon>close</mat-icon></button>
 </app-bottom-sheet-header>
-
 <div class="bottom-sheet-content">
-    <mat-card-subtitle style="margin-top: 0.1em; margin-bottom: 0px; color: unset;">
-        <mat-form-field appearance="outline">
-            <mat-label>Name</mat-label>
-            <input matInput [placeholder]="'Add a name'" (change)="saveEventName()"
-                (keydown.enter)='$event.target.blur()' [(ngModel)]='event.name' [type]="'text'">
-        </mat-form-field>
-    </mat-card-subtitle>
-
-    <mat-card-subtitle style="margin-top: 0em; margin-bottom: 0; color: unset;">
-        <mat-form-field appearance="outline">
-            <mat-label>Description</mat-label>
-            <textarea matInput rows="6" [placeholder]="'Add a description'" (change)="saveEventDescription()"
-                class="qs-scrollbar" (keydown.enter)='$any($event.target).blur()' [(ngModel)]='event.description'>
-        </textarea>
-        </mat-form-field>
-    </mat-card-subtitle>
-
-    <div class="split-row">
-        <mat-form-field appearance="outline" class="half-width">
-            <mat-label>Feeling</mat-label>
-            <mat-select (selectionChange)="saveEventFeeling()" [(ngModel)]='feeling' [placeholder]="'Feeling'">
-                @for (selectOption of feelings | keyvalue : returnZero; track selectOption) {
-                <mat-option [value]="selectOption.value">
-                    {{selectOption.key}}
-                </mat-option>
-                }
-            </mat-select>
-        </mat-form-field>
-
-        <mat-form-field appearance="outline" class="half-width">
-            <mat-label>RPE</mat-label>
-            <mat-select (selectionChange)="saveEventRPE()" [(ngModel)]='rpe'
-                [placeholder]="'Rating of Perceived Exertion'">
-                @for (selectOption of rpeBorgCR10SCale | keyvalue : returnZero; track selectOption) {
-                <mat-option [value]="selectOption.value">
-                    {{selectOption.key}}
-                </mat-option>
-                }
-            </mat-select>
-        </mat-form-field>
-    </div>
+  <mat-form-field appearance="outline" subscriptSizing="dynamic">
+    <mat-label>Name</mat-label>
+    <input matInput [ngModel]="name()" (ngModelChange)="name.set($event)" [disabled]="busy()">
+  </mat-form-field>
+  <mat-form-field appearance="outline" subscriptSizing="dynamic">
+    <mat-label>Description</mat-label>
+    <textarea matInput rows="3" [ngModel]="description()" (ngModelChange)="description.set($event)" [disabled]="busy()"></textarea>
+  </mat-form-field>
+  <h3>Post-workout feedback</h3>
+  <div class="split-row">
+    <mat-form-field appearance="outline" subscriptSizing="dynamic">
+      <mat-label>Feeling</mat-label>
+      <mat-select [value]="feeling()" (selectionChange)="setRating('feeling', $event.value)" [disabled]="busy()" placeholder="Not recorded">
+        @for (option of feelings; track option.value) { <mat-option [value]="option.value">{{ option.label }}</mat-option> }
+      </mat-select>
+    </mat-form-field>
+    <mat-form-field appearance="outline" subscriptSizing="dynamic">
+      <mat-label>RPE</mat-label>
+      <mat-select [value]="rpe()" (selectionChange)="setRating('rpe', $event.value)" [disabled]="busy()" placeholder="Not recorded">
+        @for (option of rpeOptions; track option.value) { <mat-option [value]="option.value">{{ option.label }}</mat-option> }
+      </mat-select>
+      <mat-hint>For the whole recording.</mat-hint>
+    </mat-form-field>
+  </div>
+  @if (canReflect) {
+    <h3>Private reflection</h3>
+    <p>Optional. Private even when this recording is public.</p>
+    @if (showTargetSelector) {
+      <mat-form-field appearance="outline" subscriptSizing="dynamic">
+        <mat-label>Reflect on</mat-label>
+        <mat-select [value]="selected().id" (selectionChange)="select($event.value)" [disabled]="busy()">
+          @for (target of targets; track target.id) { <mat-option [value]="target.id">{{ target.label }}</mat-option> }
+        </mat-select>
+        <mat-hint>Changing this selection discards unsaved reflection text.</mat-hint>
+      </mat-form-field>
+    }
+    @if (loading()) { <mat-progress-bar mode="indeterminate" aria-label="Loading reflection"></mat-progress-bar> }
+    @if (readReady()) {
+      <ul>@for (prompt of prompts(); track prompt) { <li>{{ prompt }}</li> }</ul>
+      @if (exactlyLinked()) { <p>There is one exact saved planned-workout link for this selection. The current plan may have changed since recording.</p> }
+      <mat-form-field appearance="outline" subscriptSizing="dynamic">
+        <mat-label>Your reflection</mat-label>
+        <textarea matInput rows="4" maxlength="2000" [ngModel]="note()" (ngModelChange)="note.set($event)" [disabled]="busy() || deleteReview()"></textarea>
+        <mat-hint align="end">{{ note().length }} / 2000</mat-hint>
+      </mat-form-field>
+      @if (saved() && !saved()?.deleted) {
+        @if (deleteReview()) {
+          <p role="alert">Saving will permanently delete this reflection text. It cannot be restored.</p>
+          <button mat-button (click)="cancelDelete()" [disabled]="busy()">Keep reflection</button>
+        } @else {
+          <button mat-button (click)="reviewDelete()" [disabled]="busy()">Delete reflection</button>
+        }
+      }
+      @if (emptyExistingNote()) { <p role="alert">Use Delete reflection to remove the saved note, or Cancel to keep it.</p> }
+    }
+    @if (reflectionError()) { <p role="alert">{{ reflectionError() }}</p><button mat-button (click)="reload()" [disabled]="busy()">Reload reflection</button> }
+  }
+  @if (error()) { <p role="alert">{{ error() }}</p> }
+</div>
+<div class="form-actions">
+  <button mat-button (click)="close()" [disabled]="busy()">Cancel</button>
+  <button mat-flat-button (click)="save()" [disabled]="!canSave()">
+    <span class="action-content">
+      @if (busy()) { <mat-spinner diameter="24"></mat-spinner> } @else { <mat-icon>check</mat-icon> }
+      <span>Save changes</span>
+    </span>
+  </button>
 </div>

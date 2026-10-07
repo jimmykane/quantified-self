@@ -1,5 +1,6 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type * as admin from 'firebase-admin';
+import { performance } from 'node:perf_hooks';
 import { QueueDispatchMarkerResult } from '../queue/dispatch-marker';
 import { SleepSyncQueueItemInterface } from '../queue/queue-item.interface';
 
@@ -10,6 +11,7 @@ const hoisted = vi.hoisted(() => ({
     markQueueItemDispatchedIfUserActive: vi.fn(),
     enqueueSleepSyncTask: vi.fn(),
     loggerWarn: vi.fn(),
+    loggerInfo: vi.fn(),
 }));
 
 vi.mock('firebase-admin', () => ({
@@ -17,7 +19,7 @@ vi.mock('firebase-admin', () => ({
 }));
 
 vi.mock('firebase-functions/logger', () => ({
-    info: vi.fn(),
+    info: hoisted.loggerInfo,
     warn: hoisted.loggerWarn,
     error: vi.fn(),
 }));
@@ -73,6 +75,8 @@ function queueItem(overrides: Partial<SleepSyncQueueItemInterface> = {}): SleepS
 describe('Garmin Ping batch Firestore dispatcher', () => {
     beforeEach(() => {
         vi.clearAllMocks();
+        hoisted.loggerInfo.mockReset();
+        vi.spyOn(Math, 'random').mockReturnValue(0.99);
         hoisted.getUserDeletionGuardState.mockResolvedValue({
             userExists: true,
             deletionInProgress: false,
@@ -82,6 +86,138 @@ describe('Garmin Ping batch Firestore dispatcher', () => {
         hoisted.markQueueItemDispatchedIfUserActive
             .mockResolvedValue(QueueDispatchMarkerResult.Marked);
         hoisted.deleteSleepQueueRevisionWithTombstone.mockResolvedValue(true);
+    });
+    afterEach(() => vi.restoreAllMocks());
+
+    function writeEvent(beforeItem: SleepSyncQueueItemInterface | undefined, afterItem: SleepSyncQueueItemInterface | undefined,
+        currentItem = afterItem) {
+        const ref = {
+            get: vi.fn().mockResolvedValue({ exists: !!currentItem, data: () => currentItem }),
+        } as unknown as admin.firestore.DocumentReference;
+        const event = {
+            data: {
+                before: { exists: !!beforeItem, data: () => beforeItem },
+                after: { exists: !!afterItem, data: () => afterItem, ref, id: 'batch-1' },
+            },
+            params: { queueItemId: 'batch-1' }, id: 'private-event-id',
+        };
+        const run = () => (dispatchGarminPingBatchOnWrite as unknown as (value: typeof event) => Promise<void>)(event);
+        return { run, ref, event };
+    }
+
+    it.each([
+        ['other_provider_or_type', queueItem({ type: 'garmin_ping' }), undefined],
+        ['already_processed', queueItem({ processed: true }), undefined],
+        ['already_dispatched', queueItem({ dispatchedToCloudTask: 1234 }), undefined],
+        ['same_revision', queueItem({ retryCount: 1 }), queueItem()],
+        ['invalid_revision', queueItem({ queueRevision: undefined, dateCreated: NaN }), queueItem()],
+    ] as const)('classifies %s writes without querying or enqueueing', async (outcome, after, before) => {
+        vi.mocked(Math.random).mockReturnValue(0);
+        const { run, ref } = writeEvent(before, after);
+        await run();
+        expect(ref.get).not.toHaveBeenCalled();
+        expect(hoisted.enqueueSleepSyncTask).not.toHaveBeenCalled();
+        expect(hoisted.loggerInfo).toHaveBeenCalledWith('[GarminPingBatchDispatcher] Invocation summary',
+            expect.objectContaining({ outcome, sampleRate: 0.05, sampleWeight: 20 }));
+    });
+
+    it('samples deleted writes using the before workload without querying Firestore', async () => {
+        vi.mocked(Math.random).mockReturnValue(0);
+        const { run, ref } = writeEvent(queueItem(), undefined);
+        await run();
+        expect(ref.get).not.toHaveBeenCalled();
+        expect(hoisted.loggerInfo).toHaveBeenCalledWith('[GarminPingBatchDispatcher] Invocation summary',
+            expect.objectContaining({ outcome: 'deleted_write', writeKind: 'delete', queueType: 'garmin_ping_batch' }));
+        expect(hoisted.enqueueSleepSyncTask).not.toHaveBeenCalled();
+    });
+
+    it('does not decode an unsampled deleted snapshot', async () => {
+        const { run, event } = writeEvent(queueItem(), undefined);
+        const beforeData = vi.fn(() => queueItem());
+        event.data.before.data = beforeData;
+        await run();
+        expect(beforeData).not.toHaveBeenCalled();
+        expect(hoisted.loggerInfo).not.toHaveBeenCalled();
+    });
+
+    it('excludes sampled snapshot decoding from duration and retains submillisecond handler time', async () => {
+        vi.mocked(Math.random).mockReturnValue(0);
+        vi.spyOn(performance, 'now').mockReturnValueOnce(100).mockReturnValue(100.375);
+        const { run, event } = writeEvent(queueItem(), undefined);
+        event.data.before.data = () => {
+            vi.mocked(performance.now).mockReturnValue(10_000);
+            return queueItem();
+        };
+        await run();
+        expect(hoisted.loggerInfo).toHaveBeenCalledWith('[GarminPingBatchDispatcher] Invocation summary',
+            expect.objectContaining({ outcome: 'deleted_write', durationMs: 0.375, sampleWeight: 20 }));
+    });
+
+    it('records a current newly durable revision and preserves revision-bound task identity', async () => {
+        const { run, ref } = writeEvent(queueItem(), queueItem({ queueRevision: 'revision-2' }));
+        await run();
+        expect(ref.get).toHaveBeenCalledOnce();
+        expect(hoisted.enqueueSleepSyncTask).toHaveBeenCalledWith('batch-1', 1_700_000_000_000, undefined, {
+            queueRevision: 'revision-2', queueDateCreated: 1_700_000_000_000,
+            recoveryTaskKey: 'firestore-private-event-id',
+        });
+        expect(hoisted.loggerInfo).toHaveBeenCalledWith('[GarminPingBatchDispatcher] Invocation summary',
+            expect.objectContaining({ outcome: 'dispatched', writeKind: 'update', sampleRate: 1, enqueueConfirmed: true }));
+        expect(JSON.stringify(hoisted.loggerInfo.mock.calls)).not.toContain('private-event-id');
+    });
+
+    it('distinguishes task confirmation from a stale or failed marker transition', async () => {
+        hoisted.markQueueItemDispatchedIfUserActive.mockResolvedValueOnce(QueueDispatchMarkerResult.NotCurrent);
+        await writeEvent(undefined, queueItem()).run();
+        expect(hoisted.loggerInfo).toHaveBeenLastCalledWith('[GarminPingBatchDispatcher] Invocation summary',
+            expect.objectContaining({ outcome: 'stale', enqueueConfirmed: true }));
+        hoisted.markQueueItemDispatchedIfUserActive.mockRejectedValueOnce(new Error('marker unavailable'));
+        await expect(writeEvent(undefined, queueItem()).run()).rejects.toThrow('marker unavailable');
+        expect(hoisted.loggerInfo).toHaveBeenLastCalledWith('[GarminPingBatchDispatcher] Invocation summary',
+            expect.objectContaining({ outcome: 'error', enqueueConfirmed: true }));
+    });
+
+    it('records stale and leased work while preserving the no-enqueue decisions', async () => {
+        const stale = writeEvent(undefined, queueItem(), queueItem({ queueRevision: 'revision-2' }));
+        await stale.run();
+        expect(hoisted.loggerInfo).toHaveBeenLastCalledWith('[GarminPingBatchDispatcher] Invocation summary',
+            expect.objectContaining({ outcome: 'stale', sampleRate: 1 }));
+        const leased = writeEvent(undefined, queueItem({
+            processingOwner: 'private-worker', processingRevision: 'revision:revision-1',
+            processingLeaseExpiresAt: Date.now() + 60_000,
+        }));
+        await leased.run();
+        expect(leased.ref.get).not.toHaveBeenCalled();
+        expect(hoisted.loggerInfo).toHaveBeenLastCalledWith('[GarminPingBatchDispatcher] Invocation summary',
+            expect.objectContaining({ outcome: 'leased', sampleRate: 1 }));
+        expect(hoisted.enqueueSleepSyncTask).not.toHaveBeenCalled();
+    });
+
+    it('records an error without acknowledging an ambiguous Cloud Tasks result, even if logging fails', async () => {
+        hoisted.enqueueSleepSyncTask.mockResolvedValue(false);
+        const { run } = writeEvent(undefined, queueItem());
+        await expect(run()).rejects.toThrow('Garmin Ping batch Cloud Task dispatch was not confirmed.');
+        expect(hoisted.loggerInfo).toHaveBeenCalledWith('[GarminPingBatchDispatcher] Invocation summary',
+            expect.objectContaining({ outcome: 'error', sampleRate: 1, enqueueConfirmed: false }));
+        hoisted.loggerInfo.mockImplementation(() => { throw new Error('logger unavailable'); });
+        await expect(run()).rejects.toThrow('Garmin Ping batch Cloud Task dispatch was not confirmed.');
+        expect(hoisted.markQueueItemDispatchedIfUserActive).not.toHaveBeenCalled();
+    });
+
+    it('preserves successful acknowledgement when diagnostic logging throws', async () => {
+        hoisted.loggerInfo.mockImplementation(() => { throw new Error('logger unavailable'); });
+        await expect(writeEvent(undefined, queueItem()).run()).resolves.toBeUndefined();
+        expect(hoisted.enqueueSleepSyncTask).toHaveBeenCalledOnce();
+        expect(hoisted.markQueueItemDispatchedIfUserActive).toHaveBeenCalledOnce();
+    });
+
+    it('acknowledges missing data and deleted writes even when diagnostic snapshot access fails', async () => {
+        const { run, event } = writeEvent(queueItem(), undefined);
+        event.data.before.data = () => { throw new Error('invalid before snapshot'); };
+        await expect(run()).resolves.toBeUndefined();
+        const handler = dispatchGarminPingBatchOnWrite as unknown as (event: { params: object }) => Promise<void>;
+        await expect(handler({ params: {} })).resolves.toBeUndefined();
+        expect(hoisted.enqueueSleepSyncTask).not.toHaveBeenCalled();
     });
 
     it('registers a retryable queue-write trigger outside the webhook handler', () => {

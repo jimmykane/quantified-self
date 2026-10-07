@@ -21,12 +21,16 @@
     <mat-expansion-panel class="swim-length-group-panel mat-elevation-z0 qs-overlay-flat"
       [expanded]="group.expanded" (opened)="group.expanded = true"
       (closed)="group.expanded = false">
-      <mat-expansion-panel-header class="swim-length-group-header" collapsedHeight="auto" expandedHeight="auto">
+      <mat-expansion-panel-header class="swim-length-group-header" collapsedHeight="auto" expandedHeight="auto"
+        appHapticTap (keydown)="onGroupHeaderKeydown($event)">
         <mat-panel-title>
           <span class="swim-length-header-content">
             <span class="swim-length-header-title mat-label-large">{{ group.label }}</span>
             <span class="swim-length-summary mat-label-medium">
               <span>{{ group.summaryRow.Type }}</span>
+              @if (group.summaryRow.Stroke) {
+              <span>Stroke: {{ group.summaryRow.Stroke }}</span>
+              }
               <span>
                 <span class="swim-length-number">{{ group.rows.length }}</span>
                 {{ group.rows.length === 1 ? 'length' : 'lengths' }}
@@ -34,12 +38,19 @@
               @if (group.summaryRow.Distance) {
               <span class="swim-length-number">{{ group.summaryRow.Distance }}</span>
               }
-              @if (group.summaryRow.Duration) {
-              <span class="swim-length-number">{{ group.summaryRow.Duration }}</span>
+              @if (group.activeDuration) {
+              <span>
+                Swim <span class="swim-length-number">{{ group.activeDuration }}</span>
+              </span>
               }
               @if (group.restDuration) {
               <span>
                 Rest <span class="swim-length-number">{{ group.restDuration }}</span>
+              </span>
+              }
+              @if (group.activeDuration && group.restDuration) {
+              <span>
+                Total <span class="swim-length-number">{{ group.summaryRow.Duration }}</span>
               </span>
               }
             </span>

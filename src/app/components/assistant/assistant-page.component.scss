@@ -594,6 +594,10 @@ h1 {
 .training-proposal-heading p,
 .training-proposal-disclosure { color: var(--mat-sys-on-surface-variant); font-size: 0.82rem; line-height: 1.4; }
 .training-proposal-list { display: grid; }
+.training-phase-review { min-width: 0; overflow-wrap: anywhere; }
+.training-phase-review h3, .training-phase-review h4 { font: var(--mat-sys-title-small); }
+.training-phase-review p { font: var(--mat-sys-body-small); }
+.training-phase-description { white-space: pre-wrap; }
 .training-proposal-row { padding: 9px 0; border-top: 1px solid var(--mat-sys-outline-variant); font-size: 0.88rem; }
 .training-proposal-row mat-icon { width: 20px; height: 20px; font-size: 20px; color: var(--mat-sys-primary); }
 .training-proposal-actions { display: flex; flex-wrap: wrap; gap: 8px; }

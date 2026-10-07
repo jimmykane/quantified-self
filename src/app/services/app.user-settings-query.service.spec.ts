@@ -5,7 +5,7 @@ import { AppAuthService } from '../authentication/app.auth.service';
 import { AppUserService } from './app.user.service';
 import { LoggerService } from './logger.service';
 import { BehaviorSubject } from 'rxjs';
-import { User, AppThemes, DataPaceAvg, MapTypes } from '@sports-alliance/sports-lib';
+import { User, AppThemes, DataDuration, DataPaceAvg, MapTypes } from '@sports-alliance/sports-lib';
 import { vi, describe, it, expect, beforeEach, afterEach } from 'vitest';
 
 describe('AppUserSettingsQueryService', () => {
@@ -256,6 +256,16 @@ describe('AppUserSettingsQueryService', () => {
                 .rejects.toThrow('supported sport family');
 
             expect(mockUserService.updateUserProperties).not.toHaveBeenCalled();
+        });
+
+        it('saves the categorical Stroke column through the existing swimming layout preference', async () => {
+            const user = createMockUser({ uid: 'test-uid' });
+            mockUserSubject.next(user);
+            TestBed.flushEffects();
+            await service.updateLapTableColumns('swimming', ['Stroke', DataDuration.type]);
+            expect(mockUserService.updateUserProperties).toHaveBeenCalledWith(user, {
+                settings: { eventDetailsSettings: { lapTableColumnsBySportFamily: { swimming: ['Stroke', DataDuration.type] } } },
+            });
         });
     });
 

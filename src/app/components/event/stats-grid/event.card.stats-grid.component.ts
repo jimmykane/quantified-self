@@ -9,10 +9,11 @@ import {
   OnDestroy,
   SimpleChanges,
   ViewChild,
+  effect,
   inject
 } from '@angular/core';
 import { EventInterface } from '@sports-alliance/sports-lib';
-import { ActivityInterface } from '@sports-alliance/sports-lib';
+import { ActivityInterface, UserUnitSettingsInterface } from '@sports-alliance/sports-lib';
 import { DataInterface } from '@sports-alliance/sports-lib';
 import { ActivityUtilities } from '@sports-alliance/sports-lib';
 import { ActivityTypes } from '@sports-alliance/sports-lib';
@@ -99,6 +100,10 @@ export class EventCardStatsGridComponent implements OnChanges, AfterViewInit, On
 
   public get summariesSettings() {
     return this.userSettingsQuery.summariesSettings();
+  }
+
+  constructor() {
+    effect(() => this.updateDiffMap(this.unitSettings));
   }
 
   ngAfterViewInit() {
@@ -227,25 +232,25 @@ export class EventCardStatsGridComponent implements OnChanges, AfterViewInit, On
     return SUMMARY_TAB_ICONS[tabId] || SUMMARY_TAB_ICONS.other;
   }
 
-  private updateDiffMap() {
+  private updateDiffMap(unitSettings = this.unitSettings) {
     const diffStart = this.getPerfStart();
     this.showDiff = !!this.event?.isMerge && this.selectedActivities.length === 2;
-    if (!this.showDiff || !this.unitSettings) {
+    if (!this.showDiff || !unitSettings) {
       this.diffByType = new Map();
       if (STATS_GRID_PERF_LOGS_ENABLED) {
         this.logPerf('update_diff_map', diffStart, { showDiff: false });
       }
       return;
     }
-    this.diffByType = this.buildDiffMap();
+    this.diffByType = this.buildDiffMap(unitSettings);
     if (STATS_GRID_PERF_LOGS_ENABLED) {
       this.logPerf('update_diff_map', diffStart, { showDiff: true, diffCount: this.diffByType.size });
     }
   }
 
-  private buildDiffMap(): Map<string, { display: string; percent: number; color: string }> {
+  private buildDiffMap(unitSettings: UserUnitSettingsInterface): Map<string, { display: string; percent: number; color: string }> {
     const compositeAwareTypes = expandStatsTypesForCompositeDiff(this.displayedStatsToShow);
-    const diffMap = buildDiffMapForStats(this.stats, compositeAwareTypes, this.selectedActivities, this.unitSettings);
+    const diffMap = buildDiffMapForStats(this.stats, compositeAwareTypes, this.selectedActivities, unitSettings);
     const coloredMap = new Map<string, { display: string; percent: number; color: string }>();
     diffMap.forEach((diff, type) => {
       coloredMap.set(type, {

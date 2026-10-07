@@ -58,6 +58,12 @@ jobs:
       - name: Check Training monitoring definitions and safe provisioning
         run: npm run test:training-monitoring
 
+      - name: Check activity import monitoring definitions and safe provisioning
+        run: npm run test:import-monitoring
+
+      - name: Test Health/Sleep monitoring configuration
+        run: npm run test:health-sleep-monitoring
+
       - name: Validate local Quantified Self plugin
         env:
           QS_CHATGPT_APP_ID: plugin_asdk_app_ci_fixture
@@ -86,7 +92,9 @@ jobs:
           cd functions
           npm ci
           npm run lint
-          npm run test
+          # Serial files keep Vitest imports and result reporting within the
+          # shared runner's capacity while preserving per-file isolation.
+          npm run test -- --no-file-parallelism
           npm run build
           npm run entrypoint:check:compiled
           npm run mcp:contract:check:compiled

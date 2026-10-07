@@ -6,6 +6,7 @@ import {
   SwimPaceUnits,
 } from '@sports-alliance/sports-lib';
 import { normalizeUserUnitSettings } from '@shared/unit-aware-display';
+import { isSuuntoGuideManualLapAverageV1, suuntoGuideOptionalReadingsV1 } from '@shared/suunto-guide-presentation';
 import {
   INITIAL_MANUAL_WORKOUT_EDITOR_PROFILE_V1,
   WORKOUT_STRUCTURE_MAX_NODES,
@@ -76,6 +77,42 @@ const COMPLETE_STRUCTURE_INPUT = {
     },
   ],
 };
+
+describe('Suunto pool-only measured presentation shared with compatibility', () => {
+  const step = { kind: 'step', id: 'swim', purpose: 'work', ending: { kind: 'time', seconds: 90 }, targets: [] } as const;
+  it('adds SWOLF only after reserving the countdown and instructions', () => {
+    const input = parseWorkoutStructureV1({ version: 1, sport: ActivityTypes.Swimming,
+      nodes: [{ ...step, note: 'Aim 30-40 cycles/min' }] });
+    const block = input.nodes[0];
+    if (block.kind !== 'step') throw new Error('Expected a step');
+    expect(suuntoGuideOptionalReadingsV1(block, input.sport)).toEqual(['pace', 'strokeRate', 'swolf']);
+    expect(suuntoGuideOptionalReadingsV1(block, input.sport, false)).toEqual(['pace', 'strokeRate', 'heartRate']);
+    expect(deserializeWorkoutStructureV1(serializeWorkoutStructureV1(input))).toEqual(input);
+    expect(JSON.stringify(input)).not.toContain('swolf');
+  });
+  it('preserves target counterpart priority instead of forcing SWOLF into a full screen', () => {
+    const input = parseWorkoutStructureV1({ version: 1, sport: ActivityTypes.Swimming, nodes: [{ ...step,
+      note: 'Keep it easy', targets: [{ kind: 'heart-rate', mode: 'absolute', minimumBpm: 120, maximumBpm: 140 }] }] });
+    const block = input.nodes[0];
+    if (block.kind !== 'step') throw new Error('Expected a step');
+    expect(suuntoGuideOptionalReadingsV1(block, input.sport)).toEqual(['heartRate', 'pace']);
+  });
+  it('keeps open-water defaults and excludes non-pool SWOLF averaging', () => {
+    const block = parseWorkoutStructureV1({ version: 1, sport: ActivityTypes.OpenWaterSwimming, nodes: [step] }).nodes[0];
+    if (block.kind !== 'step') throw new Error('Expected a step');
+    expect(suuntoGuideOptionalReadingsV1(block, ActivityTypes.OpenWaterSwimming)).toEqual(['pace', 'strokeRate', 'heartRate']);
+    expect(isSuuntoGuideManualLapAverageV1('swolf', ActivityTypes.Swimming)).toBe(true);
+    for (const sport of [ActivityTypes.OpenWaterSwimming, ActivityTypes.Rowing, ActivityTypes.IndoorRowing])
+      expect(isSuuntoGuideManualLapAverageV1('swolf', sport)).toBe(false);
+  });
+  it('keeps long manual instructions text-only for current and historical field selection', () => {
+    const block = parseWorkoutStructureV1({ version: 1, sport: ActivityTypes.Swimming,
+      nodes: [{ ...step, ending: { kind: 'manual' }, note: 'Stay relaxed and focus on a smooth consistent stroke throughout this set' }] }).nodes[0];
+    if (block.kind !== 'step') throw new Error('Expected a step');
+    expect(suuntoGuideOptionalReadingsV1(block, ActivityTypes.Swimming)).toEqual([]);
+    expect(suuntoGuideOptionalReadingsV1(block, ActivityTypes.Swimming, false)).toEqual([]);
+  });
+});
 
 function expectValidationIssue(
   value: unknown,
@@ -148,6 +185,26 @@ describe('planned workout v1 contract', () => {
       nodes: [{ kind: 'teleport', id: 'bad' }],
     }, 'unknown_discriminant', '$.nodes[0].kind');
   });
+
+  it.each(['stroke-rate', 'swolf', 'zone-sense', 'heart-rate-percentage'])(
+    'rejects uncontracted %s targets in steps and repeat children without changing v1', kind => {
+      // Negative inputs, not proposed JSON formats for these targets.
+      const targets = [{ kind, mode: 'absolute', minimum: 30, maximum: 40 }];
+      const step = { kind: 'step', id: 'swim', purpose: 'work', ending: { kind: 'time', seconds: 90 }, targets };
+      const direct = { version: 1, sport: ActivityTypes.Swimming, nodes: [step] };
+      expectValidationIssue(direct, 'unknown_discriminant', '$.nodes[0].targets[0].kind');
+      expectValidationIssue({ ...direct, nodes: [{ kind: 'repeat', id: 'sets', count: 2, steps: [step] }] },
+        'unknown_discriminant', '$.nodes[0].steps[0].targets[0].kind');
+      expect(() => deserializeWorkoutStructureV1(JSON.stringify(direct))).toThrow(WorkoutStructureValidationError);
+      expect(() => toFirestoreWorkoutStructureV1(direct)).toThrow(WorkoutStructureValidationError);
+    });
+
+  it.each(['/Activity/ManualLap/0/StrokeRate/Average', '/Activity/Zones/ZoneSense/Zone1/Duration'])(
+    'rejects a provider resource attached to a valid canonical target: %s', resource => {
+      expectValidationIssue({ ...COMPLETE_STRUCTURE_INPUT, nodes: [{ ...COMPLETE_STRUCTURE_INPUT.nodes[0],
+        targets: [{ ...COMPLETE_STRUCTURE_INPUT.nodes[0].targets[0], resource }] }] },
+      'unknown_field', '$.nodes[0].targets[0].resource');
+    });
 
   it('rejects duplicate IDs and nested repeats', () => {
     expectValidationIssue({

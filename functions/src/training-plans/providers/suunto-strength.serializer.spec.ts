@@ -1,6 +1,9 @@
 import { describe, expect, it } from 'vitest';
+import { DataWeight, WeightUnits } from '@sports-alliance/sports-lib';
+import { normalizeUserUnitSettings, resolveUnitAwareDisplayStat } from '../../../../shared/unit-aware-display';
 import { serializeSuuntoStrengthGuideV1, serializeSuuntoStrengthGuideV2ForRecovery,
-  serializeSuuntoStrengthGuideV3ForRecovery, serializeSuuntoStrengthGuideV4ForRecovery } from './suunto-guide.serializer';
+  serializeSuuntoStrengthGuideV3ForRecovery, serializeSuuntoStrengthGuideV4ForRecovery,
+  serializeSuuntoStrengthGuideV7ForRecovery } from './suunto-guide.serializer';
 import legacyFixture from './fixtures/suunto-strength-v2-recovery.json';
 import v3Fixture from './fixtures/suunto-strength-v3-recovery.json';
 
@@ -18,7 +21,8 @@ describe('Suunto Gym Guide strength mapping', () => {
     const legacy = serializeSuuntoStrengthGuideV3ForRecovery(details, { ...options, allowDegraded: false }).artifact;
     expect(legacy).toEqual(v3Fixture);
     expect(serializeSuuntoStrengthGuideV4ForRecovery(details, { ...options, allowDegraded: false }).artifact).toEqual(v3Fixture);
-    expect(serializeSuuntoStrengthGuideV1(details, { ...options, allowDegraded: false }).artifact).toEqual(v3Fixture);
+    expect(serializeSuuntoStrengthGuideV7ForRecovery(details, { ...options, allowDegraded: false,
+      weightUnits: WeightUnits.Pounds }).artifact).toEqual(v3Fixture);
     expect(JSON.stringify(legacy)).not.toMatch(/createManualLap|aggregate|window/);
   });
   it('freezes the exact legacy strength payload for digest-verified recovery', () => {
@@ -44,7 +48,29 @@ describe('Suunto Gym Guide strength mapping', () => {
       { type: 'fields', title: 'Complete', notification: { title: 'Complete', text: 'Guide complete' } },
     ]);
     expect(JSON.stringify(result.artifact)).toContain('5 reps');
-    expect(JSON.stringify(result.artifact)).toContain('80 kg');
+    expect(JSON.stringify(result.artifact)).toContain('80.0 kg');
+  });
+  it.each([undefined, WeightUnits.Kilograms, WeightUnits.Pounds])('formats loads in owner units %s without changing the prescription', weightUnits => {
+    const canonical = DataWeight.fromDisplayValue(100, WeightUnits.Pounds).getValue();
+    const draft = { ...details, exercises: [{ ...details.exercises[0], sets: [
+      { ...details.exercises[0].sets[0], externalLoadKg: canonical },
+      { ...details.exercises[0].sets[0], id: 'zero', externalLoadKg: 0 },
+      { ...details.exercises[0].sets[0], id: 'fractional', externalLoadKg: 2.375 },
+      details.exercises[0].sets[1],
+    ] }] };
+    const before = structuredClone(draft);
+    const result = serializeSuuntoStrengthGuideV1(draft, { ...options, weightUnits, allowDegraded: false });
+    const units = normalizeUserUnitSettings({ weightUnits });
+    const serialized = JSON.stringify(result.artifact);
+    for (const load of [canonical, 0, 2.375]) {
+      expect(serialized).toContain(resolveUnitAwareDisplayStat(new DataWeight(load), units)!.text);
+    }
+    if (weightUnits === WeightUnits.Pounds) expect(serialized).toContain('100.0 lb');
+    else expect(serialized).toContain('45.4 kg');
+    const unloaded = result.artifact.steps[6];
+    expect(JSON.stringify(unloaded)).not.toMatch(/\bkg\b|\blb\b/);
+    expect(draft).toEqual(before);
+    expect(result.requiresApproval).toBe(false);
   });
   it('still requires approval for additional loss of long exercise instructions', () => {
     const long = { ...details, exercises: [{ ...details.exercises[0], name: 'A'.repeat(80) }] };

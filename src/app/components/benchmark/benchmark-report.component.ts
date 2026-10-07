@@ -578,7 +578,7 @@ export class BenchmarkReportComponent implements OnChanges {
 
         const statsList = Array.from(statsByType.values());
         const displayedStatsToShow = statsList.map(stat => stat.getType());
-        const displayList = buildStatDisplayList(statsList, displayedStatsToShow, unitSettings);
+        const displayList = buildStatDisplayList(statsList, displayedStatsToShow, unitSettings, compareActivities.map(activity => activity.type));
         const diffMap = buildDiffMapForStats(statsList, displayedStatsToShow, compareActivities, unitSettings);
 
         this.diffChips = displayList

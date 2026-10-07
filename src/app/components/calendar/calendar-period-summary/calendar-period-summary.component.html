@@ -1,0 +1,53 @@
+<section aria-labelledby="calendar-period-summary-title" [attr.aria-busy]="summary().loading">
+  <header>
+    <h2 id="calendar-period-summary-title">{{ periodLabel() }} summary</h2>
+    @if (summary().loading) { <span role="status">Loading {{ periodLabel().toLowerCase() }} coverage…</span> }
+  </header>
+  <dl class="period-counts">
+    @for (count of counts(); track count.label) {
+      <div><dt>{{ count.label }}</dt><dd>{{ count.value === null ? 'Unknown' : (count.value | number) }}</dd></div>
+    }
+  </dl>
+  <div class="period-sources">
+    <section [attr.aria-label]="'Recorded ' + periodLabel().toLowerCase() + ' volume'">
+      <h3>Recorded</h3>
+      <p>{{ summary().recordedCount === null ? 'Activity count unknown' : (summary().recordedCount | number) + (summary().recordedComplete ? ' recorded activities' : ' observed recorded activities') }}</p>
+      <dl class="recorded-metrics">
+        @for (metric of summary().recordedMetrics; track metric.label) {
+          <div><dt>{{ metric.label }}</dt><dd>{{ metric.text }}</dd>
+            @if (metric.coverage) { <span class="coverage">{{ metric.coverage }}</span> }
+          </div>
+        }
+      </dl>
+    </section>
+    <section [attr.aria-label]="'Scheduled ' + periodLabel().toLowerCase() + ' prescriptions'">
+      <h3>Planned prescriptions</h3>
+      <p class="prescription">{{ summary().plannedText }}</p>
+      <p class="coverage">Includes linked prescriptions; excludes skipped workouts.</p>
+      @if (summary().planned; as planned) {
+        @if (planned.summary.distance.unknownSteps > 0) {
+          <p class="coverage">{{ planned.summary.distance.unknownSteps | number }} steps without prescribed distance.</p>
+        }
+      }
+    </section>
+    <section [attr.aria-label]="'Remaining ' + periodLabel().toLowerCase() + ' prescriptions'">
+      <h3>Remaining prescriptions</h3>
+      <p class="prescription">{{ summary().remainingText }}</p>
+      <p class="coverage">Unlinked, non-skipped workouts. A missing link does not prove a workout was missed.</p>
+      @if (summary().remaining; as remaining) {
+        @if (remaining.summary.distance.unknownSteps > 0) {
+          <p class="coverage">{{ remaining.summary.distance.unknownSteps | number }} steps without prescribed distance.</p>
+        }
+      }
+    </section>
+  </div>
+  <p class="coverage">Recorded activities stay in the {{ periodLabel().toLowerCase() }} they were recorded in. Planned load is unavailable; prescriptions are not added to recorded load.</p>
+  @if (summary().warnings.length) {
+    <div class="period-warnings" role="status">
+      @for (warning of summary().warnings; track warning) { <p>{{ warning }}</p> }
+      @if (canRetry()) {
+        <button mat-button appHapticTap type="button" (click)="retryRequested.emit()"><mat-icon aria-hidden="true">refresh</mat-icon>Retry {{ periodLabel().toLowerCase() }} summary</button>
+      }
+    </div>
+  }
+</section>

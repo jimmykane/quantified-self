@@ -145,6 +145,8 @@ export interface BuildActivityCalendarViewModelOptions {
   summariesSettings?: SummaryStatsSettingsLike | null;
   locale?: string;
   now?: Date;
+  /** False preserves observed markers without claiming full-day coverage. */
+  activitiesComplete?: boolean;
 }
 
 interface ActivityCalendarFamilyIdentity {
@@ -367,6 +369,7 @@ export function buildActivityCalendarViewModel(
       options.startOfWeek,
       locale,
       now,
+      options.activitiesComplete,
     ));
     return {
       view,
@@ -384,6 +387,7 @@ export function buildActivityCalendarViewModel(
       true,
       locale,
       now,
+      options.activitiesComplete,
     ));
     const months = [{
       id: `week-${formatActivityCalendarDateParam(weekStart)}`,
@@ -407,15 +411,15 @@ export function buildActivityCalendarViewModel(
   const days: ActivityCalendarDayViewModel[] = [];
   for (let date = new Date(window.startMs); date.getTime() < window.endExclusiveMs; date = addLocalDays(date, 1)) {
     days.push(buildDayViewModel(date, eventsByDay,
-      date.getTime() >= primary.startMs && date.getTime() < primary.endExclusiveMs, locale, now));
+      date.getTime() >= primary.startMs && date.getTime() < primary.endExclusiveMs, locale, now, options.activitiesComplete));
   }
   const months = [{ id: view === 'month' ? `${anchorDate.getFullYear()}-${`${anchorDate.getMonth() + 1}`.padStart(2, '0')}` : `30d-${formatActivityCalendarDateParam(anchorDate)}`, label: periodLabel, weekdays, days }];
   return { view, periodLabel, months, summary: buildActivityCalendarPeriodSummaryForMonths(months, options.summariesSettings) };
 }
 
 /** Project one exact selected date from the bounded period read, including paged context dates. */
-export function buildActivityCalendarSelectedDay(events: EventInterface[], date: Date, locale?: string, now = new Date()): ActivityCalendarDayViewModel {
-  return buildDayViewModel(startOfLocalDay(date), groupEventsByLocalDay(events), false, locale, startOfLocalDay(now));
+export function buildActivityCalendarSelectedDay(events: EventInterface[], date: Date, locale?: string, now = new Date(), activitiesComplete = true): ActivityCalendarDayViewModel {
+  return buildDayViewModel(startOfLocalDay(date), groupEventsByLocalDay(events), false, locale, startOfLocalDay(now), activitiesComplete);
 }
 
 export function formatActivityCalendarDuration(durationSeconds: number, unknown = false): string {
@@ -472,6 +476,7 @@ function buildMonthViewModel(
   startOfWeek: DaysOfTheWeek | number | null | undefined,
   locale: string | undefined,
   now: Date,
+  activitiesComplete = true,
 ): ActivityCalendarMonthViewModel {
   const gridStart = startOfCalendarWeek(monthStart, startOfWeek);
   return {
@@ -486,6 +491,7 @@ function buildMonthViewModel(
         date.getMonth() === monthStart.getMonth() && date.getFullYear() === monthStart.getFullYear(),
         locale,
         now,
+        activitiesComplete,
       );
     }),
   };
@@ -497,6 +503,7 @@ function buildDayViewModel(
   inPrimaryPeriod: boolean,
   locale: string | undefined,
   now: Date,
+  activitiesComplete = true,
 ): ActivityCalendarDayViewModel {
   const dateKey = formatActivityCalendarDateParam(date);
   const events = [...(eventsByDay.get(dateKey) || [])].sort((left, right) => (
@@ -554,7 +561,9 @@ function buildDayViewModel(
   const familySummary = families
     .map(family => `${family.label} ${family.durationLabel}`)
     .join(', ');
-  const activitySummary = events.length
+  const activitySummary = !activitiesComplete
+    ? `Activity coverage unknown${events.length ? `. ${events.length} observed ${events.length === 1 ? 'activity' : 'activities'}, observed duration ${durationLabel}` : ''}`
+    : events.length
     ? `${events.length} ${events.length === 1 ? 'activity' : 'activities'}, ${durationLabel}`
     : 'No activities';
 

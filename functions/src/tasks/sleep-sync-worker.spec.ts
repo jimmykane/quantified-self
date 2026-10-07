@@ -251,6 +251,7 @@ describe('processSleepSyncTask', () => {
       ([message]) => message === '[SleepSyncTaskWorker] Invocation summary',
     );
     expect(summaryCall?.[1]).toEqual({
+      telemetryVersion: 1, workload: 'sleep_sync',
       provider: 'SuuntoApp',
       queueType: 'suunto_health_poll',
       healthTrigger: 'webhook',
@@ -283,6 +284,7 @@ describe('processSleepSyncTask', () => {
       ([message]) => message === '[SleepSyncTaskWorker] Invocation summary',
     );
     expect(summaryCall?.[1]).toEqual({
+      telemetryVersion: 1, workload: 'sleep_sync',
       provider: 'GarminAPI',
       queueType: 'garmin_ping',
       healthTrigger: 'none',
@@ -377,6 +379,7 @@ describe('processSleepSyncTask', () => {
       ([message]) => message === '[SleepSyncTaskWorker] Invocation summary',
     );
     expect(summaryCall?.[1]).toEqual({
+      telemetryVersion: 1, workload: 'sleep_sync',
       provider: 'unknown',
       queueType: 'unknown',
       healthTrigger: 'none',

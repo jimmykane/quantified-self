@@ -1,7 +1,7 @@
 {
   "formatVersion": 1,
-  "candidateSha256": "a9cbb8225bf90ad62bc22ccf8bad0b262df3684129b44fd1369e489d07c4efde",
+  "candidateSha256": "dd9659d46041827941b36c9e47d08eae1c91ba5edab41eca2d98fd6a9fb3538b",
   "lifecycleAction": "developer-refresh",
-  "summary": "Preserve Training/Health/Timeline/activity, OAuth/PKCE, Strength/pool, library, measurements, recovery, deletion and early-Lap contracts. Add Garmin replacement preview with existing grants, fresh evidence, duplicate warning and native/app Apply approval; keep v1 Send/Retry frozen. Add read-only prescription analysis with exact subtotals, speed ranges, unknown coverage and purpose/repeat/early-Lap counts. Assistant stays prepare-only. Deploy separately, refresh/rescan and sync bundled guidance.",
+  "summary": "Preserve all pending additions, including Garmin replacement, prescription analysis and note-only workout reflections. Add bounded plan-phase reads and a focused full before/after preview under existing planning grants, reusing native/app-confirmed idempotent Apply. Frozen schemas/baselines stay unchanged. RPE stays in Edit details. Phases do not alter metrics, recipes, completion or provider authority. Reader-first release, exact rescan and bundled-guidance sync remain separate.",
   "rescanRequired": true
 }

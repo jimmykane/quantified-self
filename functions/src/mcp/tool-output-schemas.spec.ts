@@ -1,3 +1,4 @@
+import { MCP_WORKOUT_REFLECTION_TOOLS } from './workout-reflections.schemas';
 import { analyzeWorkoutStructureV1 } from '../../../shared/planned-workout-analysis';
 import { ActivityTypes } from '@sports-alliance/sports-lib';
 import { TRAINING_READ_EXTENSION_TOOLS, TRAINING_READ_TOOLS, TRAINING_WRITE_TOOLS, TRAINING_WRITE_EXTENSION_TOOLS,
@@ -468,6 +469,10 @@ const trainingReadFixtures = {
      nodes: [{ kind: 'step', id: 'step', purpose: 'work', ending: { kind: 'time', seconds: 1800 }, targets: [] }] } } },
  list_training_plans: { scheduleRevision: 1, scanComplete: true, recordsScanned: 1, limitsReached: [], nextCursor: null, plans: [{ planRef: 'opaque-plan-reference', name: 'Autumn', lifecycle: 'active', startDate: '2026-07-01', endDate: '2026-07-02', revision: 1, currentWorkoutCount: 1, color: null, createdAtMs: 1, updatedAtMs: 1 }] },
  get_training_plan: { scheduleRevision: 1, plan: { planRef: 'opaque-plan-reference', name: 'Autumn', lifecycle: 'active', startDate: '2026-07-01', endDate: '2026-07-02', revision: 1, currentWorkoutCount: 1, color: null, createdAtMs: 1, updatedAtMs: 1 } },
+ get_training_plan_phases: { scheduleRevision: 1, planRef: 'opaque-plan-reference', planRevision: 1,
+   startDate: '2026-07-01', endDate: '2026-07-02', phases: { version: 1, items: [
+     { id: 'base', name: 'Base', startLocalDate: '2026-07-01', endLocalDate: '2026-07-02', description: 'User context', color: 'green' },
+   ] } },
  query_planned_workouts: { scheduleRevision: 1, scanComplete: true, recordsScanned: 1, limitsReached: [], nextCursor: null, startDate: '2026-07-01', endDate: '2026-07-02', scope: 'calendar', workouts: [{ workoutRef: 'opaque-workout-reference', planRef: null, title: 'Easy run', localDate: '2026-07-01', lifecycle: 'planned', revision: 1, createdAtMs: 1, updatedAtMs: 1 }] },
  query_planned_workouts_by_date: { scheduleRevision: 1, scanComplete: true, recordsScanned: 1, limitsReached: [], nextCursor: null, startDate: '2026-07-01', endDate: '2026-07-02', scope: 'calendar', workouts: [{ workoutRef: 'opaque-workout-reference', planRef: null, title: 'Easy run', localDate: '2026-07-01', lifecycle: 'planned', revision: 1, createdAtMs: 1, updatedAtMs: 1 }] },
  get_planned_workout: { scheduleRevision: 1, workout: { ...{ workoutRef: 'opaque-workout-reference', planRef: null, title: 'Easy run', localDate: '2026-07-01', lifecycle: 'planned', revision: 1, createdAtMs: 1, updatedAtMs: 1 }, structure: { version: 1, sport: ActivityTypes.Running, nodes: [{kind:'step', id:'step',purpose:'work',ending:{kind:'manual'},targets:[], note:'Untrusted text'}] }, displaySteps: [{nodeId:'step',text:'Work · Manual transition'}] } },
@@ -564,6 +569,11 @@ function createFixtureDataService(
   const activityLocation = options.activityLocation !== false;
   const routeLocation = options.routeLocation !== false;
 const service = {
+    workoutReflection: vi.fn(async (tool: string) => tool === 'delete_workout_reflection'
+      ? { activityRef: ACTIVITY_REF, target: 'activity', revision: 2, deleted: true }
+      : { activityRef: ACTIVITY_REF, target: 'activity', revision: 1, present: true,
+          note: 'reported context',
+          ...(tool === 'save_workout_reflection' ? { changed: true } : {}) }),
     manualMeasurement: vi.fn(async (tool: McpManualMeasurementTool) => {
       const measurement = { measurementRef: 'opaque-measurement-reference', revision: 1, metricId: 'body_weight',
         canonicalValue: 80, canonicalUnit: 'kg', displayValue: '80', displayUnit: 'kg', observedAt: '2026-07-01T08:00:00Z',
@@ -589,6 +599,10 @@ const service = {
     readTrainingPlans: vi.fn(async (input: { tool: TrainingReadTool }) => trainingReadFixtures[input.tool]),
     previewCreatePlannedWorkout: vi.fn().mockResolvedValue(trainingPreviewFixture),
     previewTrainingChanges: vi.fn().mockResolvedValue(trainingPreviewFixture),
+    previewTrainingPlanPhases: vi.fn().mockResolvedValue({ ...trainingPreviewFixture,
+      phaseReview: { planName: 'Autumn', previousStartDate: '2026-07-01', previousEndDate: '2026-07-02',
+        startDate: '2026-07-01', endDate: '2026-07-02', before: { version: 1, items: [] }, after: { version: 1, items: [] } },
+      changes: [{ index: 0, kind: 'set-plan-phases', summary: 'Replace phases in the selected plan.' }] }),
     previewGarminWorkoutReplacement: vi.fn().mockResolvedValue(garminReplacementFixture),
     previewTrainingDeletion: vi.fn().mockResolvedValue({ ...trainingPreviewFixture, permissionMode: 'combined',
       changes: [{ index: 0, kind: 'delete-workout', summary: 'Delete in QS and request eligible service-copy cleanup. Recorded activities stay.' }] }),
@@ -1395,6 +1409,10 @@ const successfulToolArguments: Record<
   get_workout_prescription_analysis: { source: 'scheduled', reference: 'opaque-workout-reference' },
   list_training_plans: {},
   get_training_plan: { planRef: 'opaque-plan-reference' },
+  get_training_plan_phases: { planRef: 'opaque-plan-reference' },
+  preview_training_plan_phases: { expectedScheduleRevision: 1, change: { kind: 'set-plan-phases',
+    plan: { ref: 'opaque-plan-reference' }, expectedPlanRevision: 1, phases: { version: 1, items: [] },
+    startDate: '2026-07-01', endDate: '2026-07-02', confirmPlanRangeExtension: false } },
   query_planned_workouts: { startDate: '2026-07-01', endDate: '2026-07-02' },
   query_planned_workouts_by_date: { startDate: '2026-07-01', endDate: '2026-07-02' },
   get_planned_workout: { workoutRef: 'opaque-workout-reference' },
@@ -1440,6 +1458,11 @@ const successfulToolArguments: Record<
   apply_training_changes: { proposalRef: 'opaque-proposal-reference', permissionMode: 'schedule' },
   get_training_change_status: { proposalRef: 'opaque-proposal-reference', permissionMode: 'schedule' },
   apply_saved_workout_change: { proposalRef: 'opaque-proposal-reference', permissionMode: 'schedule' },
+  get_workout_reflection: { activityRef: ACTIVITY_REF, target: 'activity' },
+  save_workout_reflection: { activityRef: ACTIVITY_REF, target: 'activity', expectedRevision: 0,
+    mutationId: '123e4567-e89b-42d3-a456-426614174000', note: 'reported context' },
+  delete_workout_reflection: { activityRef: ACTIVITY_REF, target: 'activity', expectedRevision: 1,
+    mutationId: '123e4567-e89b-42d3-a456-426614174000' },
   get_activity_description: { activityRef: 'opaque-activity-ref' },
   query_timeline_notes: { startDate: '2026-07-01', endDate: '2026-07-02' },
   update_event_tags: { activityRef: ACTIVITY_REF, expectedTags: ['Race'], tags: ['Race', 'Reviewed'] },
@@ -2052,13 +2075,15 @@ describe.each<FixtureTransport>(['in-memory', 'legacy-http', 'modern-http'])('MC
     expect(tools.every(tool => Boolean(tool.outputSchema))).toBe(true);
     const healthTools = tools.filter(tool => ['list_health_metrics', 'query_health_metric', 'get_hrv_personal_range'].includes(tool.name));
     const noteTools = tools.filter(tool => ['query_timeline_notes', 'get_activity_description'].includes(tool.name));
+    const reflectionTools = tools.filter(tool => (MCP_WORKOUT_REFLECTION_TOOLS as readonly string[]).includes(tool.name));
+    expect(Buffer.byteLength(JSON.stringify(reflectionTools), 'utf8')).toBeLessThan(12 * 1024);
     const contentWriteTools = tools.filter(tool => (MCP_CONTENT_WRITE_TOOLS as readonly string[]).includes(tool.name));
     expect(Buffer.byteLength(JSON.stringify(noteTools), 'utf8')).toBeLessThan(8 * 1024);
     expect(Buffer.byteLength(JSON.stringify(contentWriteTools), 'utf8')).toBeLessThan(20 * 1024);
     // Keep the frozen surface's budget; each additive family has its own explicit bound.
     const planTools = tools.filter(tool => (TRAINING_READ_TOOLS as readonly string[]).includes(tool.name));
     const planReadExtensions = planTools.filter(tool => (TRAINING_READ_EXTENSION_TOOLS as readonly string[]).includes(tool.name)
-      && !['get_workout_prescription_analysis', 'get_planned_workout_v2', 'get_planned_workout_v3', 'get_saved_workout_v2'].includes(tool.name) && !['list_saved_workouts', 'get_saved_workout'].includes(tool.name));
+      && !['get_workout_prescription_analysis', 'get_planned_workout_v2', 'get_planned_workout_v3', 'get_saved_workout_v2'].includes(tool.name) && !['get_training_plan_phases', 'list_saved_workouts', 'get_saved_workout'].includes(tool.name));
     const analysisTools = planTools.filter(tool => tool.name === 'get_workout_prescription_analysis');
     expect(Buffer.byteLength(JSON.stringify(analysisTools), 'utf8')).toBeLessThan(24 * 1024);
     const planReadV2 = planTools.filter(tool => tool.name === 'get_planned_workout_v2');
@@ -2071,7 +2096,7 @@ describe.each<FixtureTransport>(['in-memory', 'legacy-http', 'modern-http'])('MC
     const planWriteTools = tools.filter(tool => (TRAINING_WRITE_TOOLS as readonly string[]).includes(tool.name));
     const planWriteExtensions = planWriteTools.filter(tool => (TRAINING_WRITE_EXTENSION_TOOLS as readonly string[]).includes(tool.name)
       && tool.name !== 'preview_planned_workout_v2_change' && tool.name !== 'preview_saved_workout_change'
-      && !['preview_training_deletion', 'preview_garmin_workout_replacement', 'preview_planned_workout_v3_change', 'preview_saved_workout_v2_change'].includes(tool.name));
+      && !['preview_training_plan_phases', 'preview_training_deletion', 'preview_garmin_workout_replacement', 'preview_planned_workout_v3_change', 'preview_saved_workout_v2_change'].includes(tool.name));
     const planDeletionPreview = planWriteTools.filter(tool => tool.name === 'preview_training_deletion');
     const planWriteV2 = planWriteTools.filter(tool => tool.name === 'preview_planned_workout_v2_change');
     const planWriteLibrary = planWriteTools.filter(tool => tool.name === 'preview_saved_workout_change');
@@ -2082,7 +2107,7 @@ describe.each<FixtureTransport>(['in-memory', 'legacy-http', 'modern-http'])('MC
     expect(Buffer.byteLength(JSON.stringify(tools.filter(tool => tool.name === 'preview_garmin_workout_replacement')), 'utf8')).toBeLessThan(6 * 1024);
     expect(Buffer.byteLength(JSON.stringify(planWriteV2), 'utf8')).toBeLessThan(20 * 1024);
     expect(Buffer.byteLength(JSON.stringify(planWriteLibrary), 'utf8')).toBeLessThan(24 * 1024);
-    for (const name of ['get_planned_workout_v3', 'get_saved_workout_v2', 'preview_planned_workout_v3_change', 'preview_saved_workout_v2_change']) {
+    for (const name of ['get_training_plan_phases', 'preview_training_plan_phases', 'get_planned_workout_v3', 'get_saved_workout_v2', 'preview_planned_workout_v3_change', 'preview_saved_workout_v2_change']) {
       expect(Buffer.byteLength(JSON.stringify(tools.filter(tool => tool.name === name)), 'utf8')).toBeLessThan(24 * 1024);
     }
     const applyTrainingChangesTool = tools.find(tool => tool.name === 'apply_training_changes');
@@ -2104,7 +2129,7 @@ describe.each<FixtureTransport>(['in-memory', 'legacy-http', 'modern-http'])('MC
     expect(Buffer.byteLength(JSON.stringify(manualTools), 'utf8')).toBeLessThan(24 * 1024);
     expect(Buffer.byteLength(JSON.stringify(tools.filter(tool => !planTools.includes(tool) && !planWriteTools.includes(tool)
       && !healthTools.includes(tool) && !noteTools.includes(tool) && !sampleTools.includes(tool)
-      && !contentWriteTools.includes(tool) && !readinessTools.includes(tool)
+      && !contentWriteTools.includes(tool) && !reflectionTools.includes(tool) && !readinessTools.includes(tool)
       && !trainingImpactTools.includes(tool) && !manualTools.includes(tool))), 'utf8'))
       .toBeLessThan(256 * 1024);
     collectObjectSchemas(tools.map(tool => tool.outputSchema))
@@ -2872,6 +2897,31 @@ describe.each<FixtureTransport>(['in-memory', 'legacy-http', 'modern-http'])('MC
     }
   });
 
+
+  it('exposes phase tools only with their independent grants and rejects nested leakage on every transport', async () => {
+    const service = createFixtureDataService();
+    const readOnly = await connectFixtureServer(service, [MCP_OAUTH_SCOPES.TrainingPlansRead]); connections.push(readOnly);
+    const names = (await readOnly.client.listTools()).tools.map(tool => tool.name);
+    expect(names).toContain('get_training_plan_phases'); expect(names).not.toContain('preview_training_plan_phases');
+    const connection = await connectFixtureServer(service); connections.push(connection);
+    const fixture = trainingReadFixtures.get_training_plan_phases;
+    for (const field of ['providerId', 'grantId', 'sourceKey', 'recipe', 'completion', 'streams']) {
+      for (const projection of [{ ...fixture, [field]: 'private-phase-canary' }, { ...fixture, phases: { ...fixture.phases,
+        items: [{ ...fixture.phases.items[0], [field]: 'private-phase-canary' }] } }]) {
+        service.readTrainingPlans = vi.fn().mockResolvedValue(projection);
+        const result = await connection.client.callTool({ name: 'get_training_plan_phases', arguments: successfulToolArguments.get_training_plan_phases });
+        expect(result.isError).toBe(true); expect(result).not.toHaveProperty('structuredContent');
+        expect(JSON.stringify(result)).not.toContain('private-phase-canary');
+      }
+    }
+    const safe = await service.previewTrainingPlanPhases({ uid: 'fixture', connectionId: 'fixture', scopes: [], arguments: {} });
+    for (const projection of [{ ...safe, phaseReview: undefined }, { ...safe, phaseReview: { ...safe.phaseReview, providerId: 'private-phase-canary' } }]) {
+      service.previewTrainingPlanPhases = vi.fn().mockResolvedValue(projection);
+      const result = await connection.client.callTool({ name: 'preview_training_plan_phases', arguments: successfulToolArguments.preview_training_plan_phases });
+      expect(result.isError).toBe(true); expect(result).not.toHaveProperty('structuredContent');
+      expect(JSON.stringify(result)).not.toContain('private-phase-canary');
+    }
+  });
   it('requires both activity grants and strictly projects description text on every transport', async () => {
     const service = createFixtureDataService();
     for (const scopes of [[], [MCP_OAUTH_SCOPES.ActivityDetailsRead], [MCP_OAUTH_SCOPES.ActivityDescriptionsRead]]) {
@@ -2932,6 +2982,40 @@ describe.each<FixtureTransport>(['in-memory', 'legacy-http', 'modern-http'])('MC
     const page = await connection.client.callTool({ name: 'query_timeline_notes', arguments: successfulToolArguments.query_timeline_notes });
     expect(page.isError).not.toBe(true);
     expect(page.structuredContent).toMatchObject({ scanComplete: false, nextCursor: 'opaque-cursor' });
+  });
+
+  it('isolates reflection grants, native approval annotations and private projections on every transport', async () => {
+    const service = createFixtureDataService();
+    for (const scopes of [[MCP_OAUTH_SCOPES.ActivityDetailsRead], [MCP_OAUTH_SCOPES.WorkoutReflectionsRead],
+      [MCP_OAUTH_SCOPES.WorkoutReflectionsWrite], [MCP_OAUTH_SCOPES.ActivityDetailsRead, MCP_OAUTH_SCOPES.WorkoutReflectionsRead]]) {
+      const connection = await connectFixtureServer(service, scopes); connections.push(connection);
+      const names = (await connection.client.listTools()).tools.map(tool => tool.name);
+      expect(names).not.toContain('save_workout_reflection'); expect(names).not.toContain('delete_workout_reflection');
+      expect(names.includes('get_workout_reflection')).toBe(scopes.includes(MCP_OAUTH_SCOPES.ActivityDetailsRead)
+        && scopes.includes(MCP_OAUTH_SCOPES.WorkoutReflectionsRead));
+    }
+    const scopes = [MCP_OAUTH_SCOPES.ActivityDetailsRead, MCP_OAUTH_SCOPES.WorkoutReflectionsRead, MCP_OAUTH_SCOPES.WorkoutReflectionsWrite];
+    const connection = await connectFixtureServer(service, scopes); connections.push(connection);
+    const tools = (await connection.client.listTools()).tools;
+    for (const name of MCP_WORKOUT_REFLECTION_TOOLS) {
+      expect(tools.find(tool => tool.name === name)?.annotations).toMatchObject({
+        readOnlyHint: name === 'get_workout_reflection', destructiveHint: name !== 'get_workout_reflection',
+        idempotentHint: true, openWorldHint: false,
+      });
+      const invalid = await connection.client.callTool({ name, arguments: { ...successfulToolArguments[name], uid: 'attacker' } });
+      expect(invalid.isError).toBe(true);
+    }
+    expect(service.workoutReflection).not.toHaveBeenCalled();
+    const valid = await connection.client.callTool({ name: 'save_workout_reflection', arguments: successfulToolArguments.save_workout_reflection });
+    expect(valid.isError).not.toBe(true);
+    expect(service.workoutReflection).toHaveBeenCalledWith('save_workout_reflection', expect.objectContaining({
+      uid: 'user-1', connectionId: 'connection-1', grantId: 'grant-1', scopes,
+    }));
+    const safe = (valid.structuredContent as Record<string, unknown>);
+    service.workoutReflection = vi.fn().mockResolvedValue({ ...safe, providerPayload: 'private-reflection-provenance-canary' });
+    const leaked = await connection.client.callTool({ name: 'save_workout_reflection', arguments: successfulToolArguments.save_workout_reflection });
+    expect(leaked.isError).toBe(true); expect(leaked).not.toHaveProperty('structuredContent');
+    expect(JSON.stringify(leaked)).not.toContain('private-reflection-provenance-canary');
   });
 
   it('isolates content-write scopes, annotations, identity and private output on every transport', async () => {

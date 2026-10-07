@@ -89,6 +89,16 @@ Webhook delivery and history are idempotent. The deterministic queue and event I
 
 The history dialog reads the existing server-owned `historyImportLeaseExpiresAt` from the user's Wahoo service metadata. A finite future expiry shows **Import already running** and disables submission, including after the dialog is closed and reopened. Removing or expiring the lease resumes the normal form/cooldown rules; renewing it replaces the expiry timer. This lease covers the history scan that queues activities, not completion of background activity processing. Closing the dialog does not cancel accepted server work. Metadata is a UI hint, and the callable transaction remains authoritative. If a competing tab wins before metadata arrives, Wahoo `functions/already-exists` (or `already-exists`) shows a wait message without a success event, error haptic, or Sentry report. Unexpected failures remain logged; destroyed dialogs receive no late UI feedback, and expiry timers are cleared on teardown.
 
+## Connection recovery ownership
+
+Connection recovery is implemented in `functions/src/wahoo/connection-recovery.ts`; the existing
+`service-connection-meta.ts` facade retains callers' APIs. Wahoo's initial reconnect-release claim
+is supplied to `service-connection-lifecycle.ts` and committed with the guarded connected state.
+Generic route restoration still completes before Wahoo's separate reconnect queue release, and
+the durable Wahoo marker is cleared only after that release succeeds. Opaque-refresh failure
+tracking and recovery-field cleanup share the Wahoo-owned module. This is a code-ownership
+refactor with unchanged fields, transaction guards, retries, and user-visible behavior.
+
 ## Configuration
 
 Functions require:

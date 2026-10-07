@@ -1,5 +1,11 @@
-<button mat-icon-button aria-label="Activity actions" [matMenuTriggerFor]="menu" (click)="$event.stopPropagation();" (menuOpened)="menuOpen($event)">
+<button mat-icon-button [attr.aria-label]="isSharing ? 'Updating sharing' : 'Activity actions'"
+  [disabled]="isSharing" [attr.aria-busy]="isSharing" [matMenuTriggerFor]="menu"
+  (click)="$event.stopPropagation();" (menuOpened)="menuOpen($event)">
+  @if (isSharing) {
+  <mat-spinner diameter="24" aria-label="Updating sharing"></mat-spinner>
+  } @else {
   <mat-icon>more_vert</mat-icon>
+  }
 </button>
 <mat-menu #menu="matMenu" class="qs-menu-panel">
   @if (!isPubliclyShared) {

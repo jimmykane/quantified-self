@@ -3,13 +3,14 @@ import type { PublicFeaturePreviewKey } from './public-feature-preview.types';
 /** Concise metadata shared by the public Training Plans route and its structured data. */
 export const TRAINING_PLANS_SEO_CONTENT = {
   title: 'Training Plans for Running, Cycling & More',
-  description: 'Create free running, cycling, swimming, walking, hiking and rowing plans or standalone workouts. Schedule by date, separate from completed activities.',
+  description: 'Create free training plans and standalone workouts for running, cycling, swimming and more. Organize phases by date, with completed activities kept separate.',
   h1: 'Plan workouts for running, cycling, swimming and more',
-  intro: 'Build a dated plan or start with one standalone workout. Work directly in Quantified Self, keep scheduled work separate from completed activities, and connect other tools only when you choose.',
+  intro: 'Build a dated plan with named phases or start with one standalone workout. Work directly in Quantified Self, keep scheduled work separate from completed activities, and connect other tools only when you choose.',
   featureList: [
     'Running, cycling, swimming, walking, hiking, rowing and strength plans included on the free tier',
     'Standalone structured workouts without a plan',
     'Dated plan calendars with colors, history, and shifting',
+    'Custom plan phases with inclusive dates, descriptions, and colors',
     'Planned-workout overlays kept separate from completed activity totals',
   ],
   socialImageAlt: 'Synthetic purple running and cycling training plan calendar with structured workout examples',
@@ -37,6 +38,11 @@ export const TRAINING_PLANS_PAGE_SECTIONS = [
         icon: 'palette',
         title: 'Dates, colors, skips, shifts, and history',
         copy: 'Give each plan a color, select any date in its range, keep skipped workouts visible, shift the plan dates, and use revision history when a change needs to be restored.',
+      },
+      {
+        icon: 'view_timeline',
+        title: 'Name the stages of your plan',
+        copy: 'Use Plan actions → Phases to add up to 32 named date ranges, such as Base, Build, Recovery, or Taper. Choose custom names, optional descriptions, and colors. Dates include both endpoints; gaps and single-day phases are allowed, while overlaps are rejected. Confirm any extension of the plan range. Shift dates moves phases with the workouts, and history can restore phase edits.',
       },
     ],
     preview: 'training-plans' satisfies PublicFeaturePreviewKey,
@@ -81,7 +87,7 @@ export const TRAINING_PLANS_PAGE_SECTIONS = [
   {
     eyebrow: 'Calendar Context',
     title: 'Keep planned work separate from completed training',
-    copy: 'Planned workouts are an overlay, not completed evidence. Every calendar date remains selectable, while planned and completed entries retain separate meaning and actions.',
+    copy: 'Planned workouts and authored phase labels provide calendar context. Every calendar date remains selectable, while planned and completed entries retain separate meaning and actions.',
     items: [
       {
         icon: 'event_note',
@@ -92,6 +98,11 @@ export const TRAINING_PLANS_PAGE_SECTIONS = [
         icon: 'calculate',
         title: 'Completed totals remain unchanged',
         copy: 'A planned workout never adds distance, duration, ascent, load, or workout count to completed-activity totals.',
+      },
+      {
+        icon: 'view_timeline',
+        title: 'Phase context on days without workouts',
+        copy: 'The main Calendar shows the active plan’s phases, including days without workouts. Select a paused or archived plan in Plans to see its own phases. Phase labels do not generate workouts, prescribe intensity, change readiness, or mark completion, and phase metadata stays in Quantified Self.',
       },
       {
         icon: 'monitoring',

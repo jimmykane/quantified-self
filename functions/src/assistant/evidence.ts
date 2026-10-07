@@ -402,6 +402,13 @@ export function buildAssistantEvidence(
   tool: Pick<AssistantMcpToolDefinition, 'name' | 'title'>,
   structuredContent: Record<string, unknown>,
 ): AssistantEvidence {
+  if (tool.name === 'get_workout_reflection') {
+    const textLength = typeof structuredContent.note === 'string' ? structuredContent.note.length : 0;
+    return { toolName: tool.name, title: tool.title,
+      summary: 'Athlete-reported context; no Training calculations or plans changed.',
+      facts: [{ label: 'Target', value: structuredContent.target === 'recording' ? 'Whole recording' : 'Selected activity' },
+        { label: 'Reflection text', value: textLength ? `${textLength} characters of private context` : 'None' }], links: [] };
+  }
   if (tool.name === 'get_manual_measurement' || tool.name === 'query_manual_measurements') {
     const raw = tool.name === 'get_manual_measurement' ? [structuredContent.measurement] : structuredContent.measurements;
     const rows = Array.isArray(raw) ? raw.flatMap(item => {
@@ -432,6 +439,12 @@ export function buildAssistantEvidence(
           ? [{ label: 'Steps allowing early Lap', value: String(result.analysis.summary.earlyLapSteps) }] : [])], links: [] };
   }
   if ((TRAINING_READ_TOOLS as readonly string[]).includes(tool.name)) {
+    if (tool.name === 'get_training_plan_phases') {
+      const result = TRAINING_READ_OUTPUTS.get_training_plan_phases.parse(structuredContent);
+      return { toolName: tool.name, title: 'Plan phases', summary: `${result.phases.items.length} authored plan phases; gaps are allowed.`,
+        facts: result.phases.items.slice(0, MAX_FACTS).map(phase => ({ label: truncate(phase.name, 80),
+          value: `${phase.startLocalDate} – ${phase.endLocalDate}` })), links: [] };
+    }
     if (tool.name === 'get_planned_workout_completion' || tool.name === 'get_planned_workout_completions') {
       const raw = tool.name === 'get_planned_workout_completions'
         ? structuredContent.completions : [structuredContent];

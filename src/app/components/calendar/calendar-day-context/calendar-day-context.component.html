@@ -29,6 +29,13 @@
       <div class="calendar-day-context-loading-timeline" aria-hidden="true"></div>
     </div>
   } @else {
+  @if (planPhase(); as context) {
+    <section class="calendar-day-phase" aria-label="Plan phase">
+      <p class="calendar-day-entry-title">Phase: {{ context.phase.name }}</p>
+      <p class="calendar-day-entry-supporting">{{ context.planName }} · {{ context.phase.startLocalDate }} – {{ context.phase.endLocalDate }}</p>
+      @if (context.phase.description) { <p class="calendar-day-entry-supporting">{{ context.phase.description }}</p> }
+    </section>
+  }
   @if (showActivityTotals()) {
     <div class="calendar-day-context-totals" role="group" [attr.aria-label]="title() + ' activity totals'"
       [attr.aria-busy]="activityState().status === 'loading'">
@@ -37,7 +44,13 @@
       }
     </div>
   }
-  @if (!compact() && trainingImpactState().status !== 'private' && activities().length) {
+  @if (activityState().status === 'ready' && !activitiesComplete()) {
+    <p role="status">Activity coverage is incomplete. Day totals are unknown; open the full day to load this date.</p>
+  }
+  @if (canPlan() && plannedStatus() === 'ready' && !plannedWorkoutsComplete()) {
+    <p role="status">Planned workout coverage is incomplete. Only observed workouts are shown.</p>
+  }
+  @if (!compact() && activitiesComplete() && trainingImpactState().status !== 'private' && activities().length) {
     <app-training-impact [impact]="dayTrainingImpact()"
       [variant]="dashboardTile() || calmMonth() ? 'compact' : 'summary'"
       title="Day training impact"></app-training-impact>
@@ -156,7 +169,7 @@
             </li>
           }
         </ol>
-      } @else if (activityState().status === 'ready' && notesStatus() === 'ready' && (!canPlan() || plannedStatus() === 'ready') && healthState().status === 'ready') {
+      } @else if (activitiesComplete() && notesStatus() === 'ready' && (!canPlan() || plannedWorkoutsComplete()) && healthState().status === 'ready') {
         <p>No activities, plans, or notes for this day.</p>
       }
     </section>
@@ -272,7 +285,7 @@
   @if (activityState().status !== 'ready' || activities().length) {
   <section class="calendar-day-context-section" aria-label="Activities on selected day">
     <div class="calendar-day-context-section-header"><h3>Activities</h3>
-      @if (activityState().status === 'ready') { <span>{{ day().eventCount }} completed · {{ day().durationLabel }}</span> }
+      @if (activitiesComplete()) { <span>{{ day().eventCount }} completed · {{ day().durationLabel }}</span> }
     </div>
     @if (activityState().status === 'loading') { <p role="status">Loading activities…</p> }
     @else if (activityState().status === 'error') { <p role="alert">Activities could not be loaded.</p> }
@@ -330,7 +343,7 @@
             </div>
           }
         </mat-nav-list>
-      } @else { <p>No planned workouts for this day.</p> }
+      } @else if (plannedWorkoutsComplete()) { <p>No planned workouts for this day.</p> }
     </section>
   }
   }

@@ -150,9 +150,17 @@ describe('ordered and duplicated interval recipes', () => {
       savedWorkoutRef: 'opaque-saved', title: 'Ordered intervals', status: 'active', revision: 2,
       createdAtMs: 1, updatedAtMs: 2, structure: input,
     } }).savedWorkout.structure).toEqual(input);
-    for (const field of ['sourceDuration', 'sourceDistance', 'sourcePace', 'providerWorkoutId']) {
+    for (const field of ['sourceDuration', 'sourceDistance', 'sourcePace', 'providerWorkoutId', 'swolf', 'guideFields']) {
       const leaked = { ...input, nodes: [{ ...input.nodes[0], [field]: { private: true } }, ...input.nodes.slice(1)] };
       expect(TRAINING_CHANGE_SCHEMA.safeParse({ ...update, structure: leaked }).success).toBe(false);
+      expect(TRAINING_READ_OUTPUTS.get_saved_workout.safeParse({ libraryRevision: 3, savedWorkout: {
+        savedWorkoutRef: 'opaque-saved', title: 'Ordered intervals', status: 'active', revision: 2,
+        createdAtMs: 1, updatedAtMs: 2, structure: leaked,
+      } }).success).toBe(false);
+      expect(TRAINING_READ_OUTPUTS.get_planned_workout.safeParse({ scheduleRevision: 3, workout: {
+        workoutRef: 'opaque-workout', planRef: null, title: 'Workout', localDate: '2026-10-05',
+        lifecycle: 'planned', revision: 2, createdAtMs: 1, updatedAtMs: 2, structure: leaked, displaySteps: [],
+      } }).success).toBe(false);
     }
     const duplicateIds = { ...input, nodes: [input.nodes[0], input.nodes[0]] };
     expect(TRAINING_CHANGE_SCHEMA.safeParse({ ...update, structure: duplicateIds }).success).toBe(false);
@@ -160,6 +168,46 @@ describe('ordered and duplicated interval recipes', () => {
 });
 
 describe('Strict public Training recipe v1', () => {
+  function expectTargetAcceptance(target: unknown, accepted: boolean): void {
+    const structure = { version: 1, sport: ActivityTypes.Swimming,
+      nodes: [{ kind: 'step', id: 'swim', purpose: 'work', ending: { kind: 'time', seconds: 90 }, targets: [target] }] };
+    for (const schema of [TRAINING_RECIPE_SCHEMA, TRAINING_RECIPE_WITH_POOL_SCHEMA, TRAINING_RECIPE_WITH_EARLY_LAP_SCHEMA])
+      expect(schema.safeParse(structure).success).toBe(accepted);
+    const workout = { workoutRef: 'opaque-workout', planRef: null, title: 'Swim', localDate: '2026-10-07',
+      lifecycle: 'planned', revision: 1, createdAtMs: 1, updatedAtMs: 1, structure, displaySteps: [] };
+    for (const schema of [TRAINING_READ_OUTPUTS.get_planned_workout, TRAINING_READ_OUTPUTS.get_planned_workout_v2,
+      TRAINING_READ_OUTPUTS.get_planned_workout_v3])
+      expect(schema.safeParse({ scheduleRevision: 1, workout }).success).toBe(accepted);
+    const change = { kind: 'create-workout', localKey: 'swim', plan: null, localDate: '2026-10-07', title: 'Swim', structure };
+    expect(TRAINING_CHANGE_SCHEMA.safeParse(change).success).toBe(accepted);
+    expect(TRAINING_WRITE_INPUTS.preview_create_planned_workout.safeParse({
+      expectedScheduleRevision: 1, localDate: '2026-10-07', title: 'Swim', structure }).success).toBe(accepted);
+    for (const schema of [TRAINING_WRITE_INPUTS.preview_planned_workout_v2_change,
+      TRAINING_WRITE_INPUTS.preview_planned_workout_v3_change])
+      expect(schema.safeParse({ expectedScheduleRevision: 1, change }).success).toBe(accepted);
+    const savedWorkout = { savedWorkoutRef: 'opaque-saved', title: 'Swim', status: 'active', revision: 1,
+      createdAtMs: 1, updatedAtMs: 1, structure };
+    for (const schema of [TRAINING_READ_OUTPUTS.get_saved_workout, TRAINING_READ_OUTPUTS.get_saved_workout_v2])
+      expect(schema.safeParse({ libraryRevision: 1, savedWorkout }).success).toBe(accepted);
+    for (const schema of [TRAINING_WRITE_INPUTS.preview_saved_workout_change, TRAINING_WRITE_INPUTS.preview_saved_workout_v2_change])
+      expect(schema.safeParse({ expectedScheduleRevision: 1, expectedLibraryRevision: 1,
+        change: { kind: 'create', title: 'Swim', structure } }).success).toBe(accepted);
+  }
+
+  it.each([
+    { kind: 'stroke-rate', mode: 'absolute', minimum: 30, maximum: 40 },
+    { kind: 'swolf', mode: 'absolute', minimum: 30, maximum: 40 },
+    { kind: 'zone-sense', mode: 'absolute', minimum: 1, maximum: 2 },
+    { kind: 'heart-rate-percentage', mode: 'absolute', minimum: 60, maximum: 80 },
+    { ...targetVariantFixtures['heart-rate:absolute'], resource: '/Activity/ManualLap/0/StrokeRate/Average' },
+    { ...targetVariantFixtures['heart-rate:absolute'], resource: '/Activity/Zones/ZoneSense/Zone1/Duration' },
+  ])('keeps uncontracted Guide targets/resources out of every recipe generation: $kind', target => {
+    // Negative fixtures do not define a new native Guide or canonical target format.
+    // The valid counterpart proves rejection is not caused by an unrelated envelope field.
+    expectTargetAcceptance(targetVariantFixtures['heart-rate:absolute'], true);
+    expectTargetAcceptance(target, false);
+  });
+
   it.each([ActivityTypes.Running, ActivityTypes.Cycling, ActivityTypes.Swimming, ActivityTypes.OpenWaterSwimming])(
     'preserves %s canonical recipes through public read/write validation without watch fields', sport => {
       for (const ending of [endingFixtures.time, endingFixtures.distance, endingFixtures.manual]) {

@@ -184,6 +184,31 @@ describe('AssistantExploreBottomSheetComponent', () => {
     expect(bottomSheetRef.dismiss).toHaveBeenLastCalledWith({ kind: 'timeline_note_changes', enabled: true });
   });
 
+  it('respects omitted legacy reflection access and ignores no-op choices', () => {
+    expect(component.data.reflectionChangesEnabled ?? false).toBe(false);
+    const toggle = fixture.nativeElement.querySelector('[aria-label^="Private workout reflections"]');
+    expect(toggle).not.toBeNull();
+    expect(fixture.nativeElement.textContent).toContain('Private workout reflections');
+    component.setReflectionChanges(false); expect(bottomSheetRef.dismiss).not.toHaveBeenCalled();
+    component.setReflectionChanges(true);
+    expect(bottomSheetRef.dismiss).toHaveBeenCalledExactlyOnceWith({ kind: 'reflection_changes', enabled: true });
+  });
+
+  it('shows supplied reflection access as on and allows disabling it', () => {
+    fixture.destroy();
+    component.data.reflectionChangesEnabled = true;
+    fixture = TestBed.createComponent(AssistantExploreBottomSheetComponent);
+    component = fixture.componentInstance;
+    fixture.detectChanges();
+    const toggle = fixture.nativeElement.querySelector('#assistant-reflections-title')?.closest('app-compact-row')
+      ?.querySelector('button[role="switch"]');
+    expect(toggle?.getAttribute('aria-checked')).toBe('true');
+    expect(fixture.nativeElement.textContent).toContain('On for fresh and New chats; you can turn access off.');
+    component.setReflectionChanges(true); expect(bottomSheetRef.dismiss).not.toHaveBeenCalled();
+    component.setReflectionChanges(false);
+    expect(bottomSheetRef.dismiss).toHaveBeenCalledExactlyOnceWith({ kind: 'reflection_changes', enabled: false });
+  });
+
   it('closes without a prompt when dismissed explicitly', () => {
     component.close();
 

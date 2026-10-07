@@ -3,7 +3,7 @@
 <app-event-section-header icon="linear_scale" title="Laps">
   @if (canCustomize && lapColumnMenuGroups.length > 0) {
   <button mat-icon-button [matMenuTriggerFor]="lapColumnsMenu" matTooltip="Choose lap columns"
-    aria-label="Choose lap columns">
+    aria-label="Choose lap columns" appHapticTap>
     <mat-icon>view_column</mat-icon>
   </button>
   }

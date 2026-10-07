@@ -1,11 +1,13 @@
 import { describe, expect, it, vi } from 'vitest';
-import { ActivityTypes } from '@sports-alliance/sports-lib';
+import { ActivityTypes, WeightUnits } from '@sports-alliance/sports-lib';
+import { projectStrengthWorkoutToV1, type StrengthWorkoutDetailsV1 } from '../../../../shared/strength-workout';
 import { resolveDeliveryIntent, deliveryIdentity, deliveryContentDigest } from './intent';
 import type { DeliveryContext, DeliveryLedgerV1 } from './contracts';
 import { FakeTrainingTransport } from './test-support/fake-transport';
 import { GarminTrainingTransport } from './garmin/transport';
 import { SuuntoGuideTransport } from './suunto/transport';
-import { assessSuuntoGuideV2ForRecovery, assessSuuntoGuideV3ForRecovery, assessSuuntoGuideV4ForRecovery, assessSuuntoGuideV5ForRecovery } from './suunto/mapping';
+import { assessSuuntoGuideV2ForRecovery, assessSuuntoGuideV3ForRecovery, assessSuuntoGuideV4ForRecovery, assessSuuntoGuideV5ForRecovery,
+  assessSuuntoGuideV6ForRecovery, assessSuuntoGuideV7ForRecovery } from './suunto/mapping';
 
 const base: DeliveryContext = {
   workout: { schemaVersion: 1, id: 'workout', planId: null, revision: 1, localDate: '2026-09-10', lifecycle: 'planned',
@@ -100,10 +102,76 @@ describe('delivery intent', () => {
     transport.level = 'unsupported';
     expect(resolveDeliveryIntent(context)).toMatchObject({ desired: 'preserve', status: 'unsupported' });
   });
-  it.each([assessSuuntoGuideV2ForRecovery, assessSuuntoGuideV3ForRecovery, assessSuuntoGuideV4ForRecovery, assessSuuntoGuideV5ForRecovery])(
-    'keeps exact legacy loss approval across Suunto display upgrades, never across edits or authority changes', assessLegacy => {
+  it.each(['current', 'legacy-v7'].flatMap(version => [WeightUnits.Kilograms, WeightUnits.Pounds]
+    .map(units => ({ version, units }))))('retains the same approved strength losses after $version / $units unit changes', ({ version, units }) => {
     const transport = new SuuntoGuideTransport(async () => { throw Error('No HTTP during assessment'); }, 'Quantified Self');
-    const workout = { ...base.workout!, structure: { ...base.workout!.structure, nodes: [{ ...base.workout!.structure.nodes[0],
+    const strength: StrengthWorkoutDetailsV1 = { version: 1, workoutId: base.workout!.id, revision: 1,
+      exercises: [{ id: 'exercise', name: 'A'.repeat(60), sets: [{ id: 'set',
+        ending: { kind: 'repetitions', repetitions: 5 }, externalLoadKg: 80 }] }] };
+    const workout = { ...base.workout!, structure: projectStrengthWorkoutToV1(strength) };
+    const assess = (weightUnits: WeightUnits) => transport.assess(workout, 'account-a', 'Europe/Helsinki', strength, weightUnits);
+    const prior = version === 'current' ? assess(units)
+      : assessSuuntoGuideV7ForRecovery(workout, 'account-a', 'Europe/Helsinki', 'Quantified Self', strength);
+    expect(prior.requiresApproval).toBe(true);
+    const context: DeliveryContext = { ...base, workout, strength, transport, suuntoWeightUnits: units,
+      setting: { ...base.setting!, provider: 'suunto', approvedDigest: prior.digest } };
+    const ledger = { connectionEpoch: 0, destinationKey: 'account-a', acceptedDigest: prior.digest,
+      acceptedContentDigest: deliveryContentDigest(workout, 'Europe/Helsinki', strength) } as DeliveryLedgerV1;
+    const first = resolveDeliveryIntent(context, ledger);
+    expect(first.desired).toBe('present');
+    // Model the accepted presentation upgrade before the owner changes units again.
+    ledger.acceptedDigest = first.digest;
+    ledger.mappingApprovalProof = first.mappingApprovalProof;
+    const changedUnits = units === WeightUnits.Kilograms ? WeightUnits.Pounds : WeightUnits.Kilograms;
+    const changed = resolveDeliveryIntent({ ...context, suuntoWeightUnits: changedUnits }, ledger);
+    expect(changed).toMatchObject({ desired: 'present', status: 'pending', approvalDigest: null });
+    expect(changed.issues).toEqual(first.issues);
+    ledger.acceptedDigest = changed.digest;
+    ledger.mappingApprovalProof = changed.mappingApprovalProof;
+    expect(resolveDeliveryIntent(context, ledger).desired).toBe('present');
+    expect(resolveDeliveryIntent({ ...context, suuntoWeightUnits: changedUnits }, {
+      ...ledger, acceptedContentDigest: 'mismatch', mappingApprovalProof: undefined,
+    }).status).toBe('approval_required');
+    expect(resolveDeliveryIntent({ ...context, suuntoWeightUnits: changedUnits, hasPro: false }, ledger).status).toBe('paused_pro');
+    expect(resolveDeliveryIntent({ ...context, suuntoWeightUnits: changedUnits, setting: null }, ledger).desired).toBe('absent');
+    expect(resolveDeliveryIntent({ ...context, suuntoWeightUnits: changedUnits,
+      connection: { ...context.connection, epoch: 1 } }, ledger).status).toBe('fresh_consent_required');
+    const edited = structuredClone(strength);
+    edited.exercises[0].name = 'A'.repeat(59) + 'B'; // An edit hidden beyond the watch's truncated text.
+    expect(resolveDeliveryIntent({ ...context, suuntoWeightUnits: changedUnits, strength: edited,
+      workout: { ...workout, structure: projectStrengthWorkoutToV1(edited) } }, ledger).status).toBe('approval_required');
+  });
+  it('does not inherit strength approval when pounds adds a loss beyond the bounded public warning list', () => {
+    const transport = new SuuntoGuideTransport(async () => { throw Error('No HTTP during assessment'); }, 'Quantified Self');
+    const strength: StrengthWorkoutDetailsV1 = { version: 1, workoutId: base.workout!.id, revision: 1, exercises: [
+      { id: 'long', name: 'A'.repeat(60), sets: Array.from({ length: 20 }, (_, index) => ({ id: `long-set-${index}`,
+        ending: { kind: 'repetitions' as const, repetitions: 5 }, externalLoadKg: 80 })) },
+      // The complete label fits 54 characters in kg, but needs 55 in lb.
+      { id: 'boundary', name: 'B'.repeat(27), sets: [{ id: 'last',
+        ending: { kind: 'repetitions', repetitions: 5 }, externalLoadKg: 80 }] },
+    ] };
+    const workout = { ...base.workout!, structure: projectStrengthWorkoutToV1(strength) };
+    const kg = transport.assess(workout, 'account-a', 'Europe/Helsinki', strength, WeightUnits.Kilograms);
+    const lb = transport.assess(workout, 'account-a', 'Europe/Helsinki', strength, WeightUnits.Pounds);
+    const legacy = assessSuuntoGuideV7ForRecovery(workout, 'account-a', 'Europe/Helsinki', 'Quantified Self', strength);
+    expect(lb.issues).toHaveLength(20);
+    expect(lb.issues).toEqual(kg.issues);
+    expect(lb).not.toHaveProperty('lossSignature');
+    expect(lb.compatibleApprovalDigests ?? []).not.toContain(legacy.digest);
+    expect(lb.compatibleApprovalDigests ?? []).not.toContain(kg.digest);
+    for (const prior of [kg, legacy]) {
+      const context: DeliveryContext = { ...base, workout, strength, transport, suuntoWeightUnits: WeightUnits.Pounds,
+        setting: { ...base.setting!, provider: 'suunto', approvedDigest: prior.digest } };
+      const ledger = { connectionEpoch: 0, destinationKey: 'account-a', acceptedDigest: prior.digest,
+        acceptedContentDigest: deliveryContentDigest(workout, 'Europe/Helsinki', strength) } as DeliveryLedgerV1;
+      expect(resolveDeliveryIntent(context, ledger).status).toBe('approval_required');
+    }
+  });
+  it.each([assessSuuntoGuideV2ForRecovery, assessSuuntoGuideV3ForRecovery, assessSuuntoGuideV4ForRecovery, assessSuuntoGuideV5ForRecovery, assessSuuntoGuideV6ForRecovery]
+    .flatMap(assessLegacy => [ActivityTypes.Running, ActivityTypes.Swimming].map(sport => ({ assessLegacy, sport }))))(
+    'keeps exact legacy loss approval for $sport across Suunto display upgrades, never across edits or authority changes', ({ assessLegacy, sport }) => {
+    const transport = new SuuntoGuideTransport(async () => { throw Error('No HTTP during assessment'); }, 'Quantified Self');
+    const workout = { ...base.workout!, structure: { ...base.workout!.structure, sport, nodes: [{ ...base.workout!.structure.nodes[0],
       note: 'A'.repeat(45) }] } };
     const destination = base.connection.destinationKey;
     const prior = assessLegacy(workout, destination, 'Europe/Helsinki', 'Quantified Self');
@@ -112,7 +180,7 @@ describe('delivery intent', () => {
     const ledger = { connectionEpoch: 0, destinationKey: 'account-a', acceptedDigest: prior.digest,
       acceptedContentDigest: deliveryContentDigest(workout, 'Europe/Helsinki') } as DeliveryLedgerV1;
     expect(transport.assess(workout, 'account-a', 'Europe/Helsinki')).toMatchObject({
-      mappingVersion: 'suunto-guides-v6', compatibleApprovalDigests: expect.arrayContaining([prior.digest]),
+      mappingVersion: 'suunto-guides-v7', compatibleApprovalDigests: expect.arrayContaining([prior.digest]),
     });
     expect(resolveDeliveryIntent(context, ledger)).toMatchObject({ desired: 'present', status: 'pending', approvalDigest: null });
     const currentDigest = transport.assess(workout, 'account-a', 'Europe/Helsinki').digest;

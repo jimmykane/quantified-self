@@ -89,6 +89,7 @@ export interface AssistantCallableDependencies {
     activityTagChangesEnabled?: boolean;
     timelineNoteChangesEnabled?: boolean;
     measurementChangesEnabled?: boolean;
+    reflectionChangesEnabled?: boolean;
     trainingPlansEnabled?: boolean;
     trainingPlanChangesEnabled?: boolean;
     trainingDeliveryEnabled?: boolean;
@@ -96,7 +97,7 @@ export interface AssistantCallableDependencies {
     assertTrainingPlansAccess?: () => Promise<void>;
     assertTrainingWriteAccess?: () => Promise<void>;
     assertTimelineNotesAccess?: () => Promise<void>;
-    assertContentWriteAccess?: (kind: 'activity_tags' | 'timeline_notes' | 'measurements') => Promise<void>;
+    assertContentWriteAccess?: (kind: 'activity_tags' | 'timeline_notes' | 'measurements' | 'reflections') => Promise<void>;
     history: AssistantMessage[];
     onBillableAttempt: () => Promise<void>;
   }) => Promise<AssistantRuntimeResult>;
@@ -288,6 +289,7 @@ function parseAssistantChatRequest(value: unknown): AssistantChatRequest {
   const activityTagChangesEnabled = parseOptionalDataAccess(data.activityTagChangesEnabled, 'activityTagChangesEnabled');
   const timelineNoteChangesEnabled = parseOptionalDataAccess(data.timelineNoteChangesEnabled, 'timelineNoteChangesEnabled');
   const measurementChangesEnabled = parseOptionalDataAccess(data.measurementChangesEnabled, 'measurementChangesEnabled');
+  const reflectionChangesEnabled = parseOptionalDataAccess(data.reflectionChangesEnabled, 'reflectionChangesEnabled');
   const timelineNotesEnabled = parseOptionalDataAccess(data.timelineNotesEnabled, 'timelineNotesEnabled');
   if ((trainingPlanChangesEnabled || trainingDeliveryEnabled) && !trainingPlansEnabled) {
     throw new HttpsError('invalid-argument', 'Training plans read access is required before enabling Training changes.');
@@ -304,6 +306,7 @@ function parseAssistantChatRequest(value: unknown): AssistantChatRequest {
     activityTagChangesEnabled,
     timelineNoteChangesEnabled,
     measurementChangesEnabled,
+    reflectionChangesEnabled,
     trainingPlansEnabled,
     trainingPlanChangesEnabled,
     trainingDeliveryEnabled,
@@ -358,6 +361,7 @@ function assertRequestFingerprintMatchesInput(
     input.activityTagChangesEnabled,
     input.timelineNoteChangesEnabled,
     input.measurementChangesEnabled,
+    input.reflectionChangesEnabled,
   )) {
     throw new HttpsError(
       'invalid-argument',
@@ -446,6 +450,7 @@ async function buildExistingRequestResponse(
     ...(input.activityTagChangesEnabled ? { activityTagChangesEnabled: true } : {}),
     ...(input.timelineNoteChangesEnabled ? { timelineNoteChangesEnabled: true } : {}),
     ...(input.measurementChangesEnabled ? { measurementChangesEnabled: true } : {}),
+    ...(input.reflectionChangesEnabled ? { reflectionChangesEnabled: true } : {}),
     ...(input.trainingPlansEnabled ? { trainingPlansEnabled: true } : {}),
     ...(input.trainingPlanChangesEnabled ? { trainingPlanChangesEnabled: true } : {}),
     ...(input.trainingDeliveryEnabled ? { trainingDeliveryEnabled: true } : {}),
@@ -512,6 +517,7 @@ export async function runAssistantChat(
       input.activityTagChangesEnabled,
       input.timelineNoteChangesEnabled,
       input.measurementChangesEnabled,
+      input.reflectionChangesEnabled,
     );
     const existingRequest = await dependencies.conversationStore.findRequestState(
       uid,
@@ -567,6 +573,7 @@ export async function runAssistantChat(
       input.activityTagChangesEnabled,
       input.timelineNoteChangesEnabled,
       input.measurementChangesEnabled,
+      input.reflectionChangesEnabled,
     );
     if (turnStart.kind === 'replayed') {
       assertRequestFingerprintMatchesInput(turnStart, input);
@@ -578,6 +585,7 @@ export async function runAssistantChat(
         ...(input.activityTagChangesEnabled ? { activityTagChangesEnabled: true } : {}),
         ...(input.timelineNoteChangesEnabled ? { timelineNoteChangesEnabled: true } : {}),
         ...(input.measurementChangesEnabled ? { measurementChangesEnabled: true } : {}),
+        ...(input.reflectionChangesEnabled ? { reflectionChangesEnabled: true } : {}),
         ...(input.trainingPlansEnabled ? { trainingPlansEnabled: true } : {}),
         ...(input.trainingPlanChangesEnabled ? { trainingPlanChangesEnabled: true } : {}),
         ...(input.trainingDeliveryEnabled ? { trainingDeliveryEnabled: true } : {}),
@@ -601,6 +609,7 @@ export async function runAssistantChat(
         ...(input.activityTagChangesEnabled ? { activityTagChangesEnabled: true } : {}),
         ...(input.timelineNoteChangesEnabled ? { timelineNoteChangesEnabled: true } : {}),
         ...(input.measurementChangesEnabled ? { measurementChangesEnabled: true } : {}),
+        ...(input.reflectionChangesEnabled ? { reflectionChangesEnabled: true } : {}),
         ...(input.trainingPlansEnabled ? { trainingPlansEnabled: true } : {}),
         ...(input.trainingPlanChangesEnabled ? { trainingPlanChangesEnabled: true } : {}),
         ...(input.trainingDeliveryEnabled ? { trainingDeliveryEnabled: true } : {}),
@@ -620,6 +629,7 @@ export async function runAssistantChat(
     const activityTagChangesEnabled = begunTurn.activityTagChangesEnabled === true;
     const timelineNoteChangesEnabled = begunTurn.timelineNoteChangesEnabled === true;
     const measurementChangesEnabled = begunTurn.measurementChangesEnabled === true;
+    const reflectionChangesEnabled = begunTurn.reflectionChangesEnabled === true;
     const trainingPlansEnabled = begunTurn.trainingPlansEnabled === true;
     const trainingPlanChangesEnabled = begunTurn.trainingPlanChangesEnabled === true;
     const trainingDeliveryEnabled = begunTurn.trainingDeliveryEnabled === true;
@@ -631,7 +641,8 @@ export async function runAssistantChat(
     }
     if (activityTagChangesEnabled !== (input.activityTagChangesEnabled === true)
       || timelineNoteChangesEnabled !== (input.timelineNoteChangesEnabled === true)
-      || measurementChangesEnabled !== (input.measurementChangesEnabled === true)) {
+      || measurementChangesEnabled !== (input.measurementChangesEnabled === true)
+      || reflectionChangesEnabled !== (input.reflectionChangesEnabled === true)) {
       throw new AssistantConversationStoreError('conversation_changed', 'The Assistant data-access setting changed.');
     }
     if (trainingPlanChangesEnabled !== (input.trainingPlanChangesEnabled === true)
@@ -648,6 +659,7 @@ export async function runAssistantChat(
       activityTagChangesEnabled,
       timelineNoteChangesEnabled,
       measurementChangesEnabled,
+      reflectionChangesEnabled,
       trainingPlansEnabled,
       trainingPlanChangesEnabled,
       trainingDeliveryEnabled,
@@ -673,12 +685,13 @@ export async function runAssistantChat(
           throw new AssistantConversationStoreError('conversation_changed', 'The Assistant data-access setting changed.');
         }
       } } : {}),
-      ...((activityTagChangesEnabled || timelineNoteChangesEnabled || measurementChangesEnabled) ? { assertContentWriteAccess: async (
-        kind: 'activity_tags' | 'timeline_notes' | 'measurements',
+      ...((activityTagChangesEnabled || timelineNoteChangesEnabled || measurementChangesEnabled || reflectionChangesEnabled) ? { assertContentWriteAccess: async (
+        kind: 'activity_tags' | 'timeline_notes' | 'measurements' | 'reflections',
       ) => {
         const current = await dependencies.conversationStore.getActiveConversationState(uid);
         const permitted = kind === 'activity_tags'
           ? current.activityTagChangesEnabled === true
+          : kind === 'reflections' ? current.reflectionChangesEnabled === true
           : kind === 'measurements' ? current.measurementChangesEnabled === true
           : current.timelineNotesEnabled === true && current.timelineNoteChangesEnabled === true;
         if (current.conversation?.conversationId !== notesConversationId || !permitted) {
@@ -726,6 +739,7 @@ export async function runAssistantChat(
       ...(activityTagChangesEnabled ? { activityTagChangesEnabled: true } : {}),
       ...(timelineNoteChangesEnabled ? { timelineNoteChangesEnabled: true } : {}),
       ...(measurementChangesEnabled ? { measurementChangesEnabled: true } : {}),
+      ...(reflectionChangesEnabled ? { reflectionChangesEnabled: true } : {}),
       ...(trainingPlansEnabled ? { trainingPlansEnabled: true } : {}),
       ...(trainingPlanChangesEnabled ? { trainingPlanChangesEnabled: true } : {}),
       ...(trainingDeliveryEnabled ? { trainingDeliveryEnabled: true } : {}),
@@ -820,6 +834,7 @@ export async function runResetAssistantConversation(
   const activityTagChangesEnabled = parseOptionalDataAccess(data.activityTagChangesEnabled, 'activityTagChangesEnabled');
   const timelineNoteChangesEnabled = parseOptionalDataAccess(data.timelineNoteChangesEnabled, 'timelineNoteChangesEnabled');
   const measurementChangesEnabled = parseOptionalDataAccess(data.measurementChangesEnabled, 'measurementChangesEnabled');
+  const reflectionChangesEnabled = parseOptionalDataAccess(data.reflectionChangesEnabled, 'reflectionChangesEnabled');
   const trainingPlansEnabled = parseOptionalDataAccess(data.trainingPlansEnabled, 'trainingPlansEnabled');
   const trainingPlanChangesEnabled = parseOptionalDataAccess(data.trainingPlanChangesEnabled, 'trainingPlanChangesEnabled');
   const trainingDeliveryEnabled = parseOptionalDataAccess(data.trainingDeliveryEnabled, 'trainingDeliveryEnabled');
@@ -832,7 +847,7 @@ export async function runResetAssistantConversation(
   const conversationId = typeof data.conversationId === 'string' ? data.conversationId.trim() : data.conversationId;
   if ((conversationId !== undefined && conversationId !== null
     && (typeof conversationId !== 'string' || !conversationId || conversationId.length > 120))
-    || ((timelineNotesEnabled || activityTagChangesEnabled || timelineNoteChangesEnabled || measurementChangesEnabled || trainingPlansEnabled
+    || ((timelineNotesEnabled || activityTagChangesEnabled || timelineNoteChangesEnabled || measurementChangesEnabled || reflectionChangesEnabled || trainingPlansEnabled
       || trainingPlanChangesEnabled || trainingDeliveryEnabled) && conversationId === undefined)) {
     throw new HttpsError('invalid-argument', 'Provide the current conversationId or null before enabling optional data access.');
   }
@@ -840,11 +855,12 @@ export async function runResetAssistantConversation(
     return {
       conversation: await conversationStore.resetConversation(uid, locationAccess, timelineNotesEnabled, conversationId,
         trainingPlansEnabled, trainingPlanChangesEnabled, trainingDeliveryEnabled,
-        activityTagChangesEnabled, timelineNoteChangesEnabled, measurementChangesEnabled),
+        activityTagChangesEnabled, timelineNoteChangesEnabled, measurementChangesEnabled, reflectionChangesEnabled),
       ...(timelineNotesEnabled ? { timelineNotesEnabled: true } : {}),
       ...(activityTagChangesEnabled ? { activityTagChangesEnabled: true } : {}),
       ...(timelineNoteChangesEnabled ? { timelineNoteChangesEnabled: true } : {}),
       ...(measurementChangesEnabled ? { measurementChangesEnabled: true } : {}),
+      ...(reflectionChangesEnabled ? { reflectionChangesEnabled: true } : {}),
       ...(trainingPlansEnabled ? { trainingPlansEnabled: true } : {}),
       ...(trainingPlanChangesEnabled ? { trainingPlanChangesEnabled: true } : {}),
       ...(trainingDeliveryEnabled ? { trainingDeliveryEnabled: true } : {}),
@@ -958,6 +974,7 @@ export async function runApplyAssistantContentProposal(
     throw mapAssistantError(error);
   }
   const proposal = current.pendingContentProposal;
+  const needsReflections = proposal?.kind === 'save_workout_reflection' || proposal?.kind === 'delete_workout_reflection';
   const needsTags = proposal?.kind === 'update_event_tags';
   const needsMeasurements = proposal?.kind === 'create_manual_measurement'
     || proposal?.kind === 'update_manual_measurement' || proposal?.kind === 'delete_manual_measurement';
@@ -966,6 +983,7 @@ export async function runApplyAssistantContentProposal(
     || proposal?.kind === 'delete_timeline_note';
   if (current.conversation?.conversationId !== conversationId
     || !proposal || proposal.proposalRef !== proposalRef
+    || (needsReflections && (current.reflectionChangesEnabled !== true || !proposal.reflectionReview))
     || (needsTags && current.activityTagChangesEnabled !== true)
     || (needsMeasurements && current.measurementChangesEnabled !== true)
     || (needsMeasurements && !proposal.measurementReview)
@@ -985,7 +1003,9 @@ export async function runApplyAssistantContentProposal(
     connectionId: `first-party-assistant-v1:${conversationId}`,
     assistantConversationId: conversationId,
     assistantProposalRef: proposalRef,
-    scopes: needsTags
+    scopes: needsReflections
+      ? [MCP_OAUTH_SCOPES.ActivityDetailsRead, MCP_OAUTH_SCOPES.WorkoutReflectionsRead, MCP_OAUTH_SCOPES.WorkoutReflectionsWrite]
+      : needsTags
       ? [MCP_OAUTH_SCOPES.ActivityDetailsRead, MCP_OAUTH_SCOPES.EventsWrite]
       : needsMeasurements ? [MCP_OAUTH_SCOPES.MeasurementsWrite]
       : [MCP_OAUTH_SCOPES.TimelineNotesRead, MCP_OAUTH_SCOPES.TimelineNotesWrite],
@@ -994,6 +1014,10 @@ export async function runApplyAssistantContentProposal(
   let eventTagsChanged: boolean | null = null;
   try {
     switch (proposal.kind) {
+      case 'save_workout_reflection':
+      case 'delete_workout_reflection':
+        await dataService.workoutReflection(proposal.kind, writeInput);
+        break;
       case 'create_manual_measurement':
       case 'update_manual_measurement':
       case 'delete_manual_measurement':
@@ -1031,6 +1055,7 @@ export async function runApplyAssistantContentProposal(
         ? eventTagsChanged
           ? 'Event tags updated.'
           : 'Event tags already matched the requested list.'
+        : needsReflections ? proposal.kind === 'delete_workout_reflection' ? 'Reflection permanently deleted.' : 'Reflection saved.'
         : needsMeasurements ? proposal.kind === 'delete_manual_measurement' ? 'Manual measurement deleted.'
           : proposal.kind === 'create_manual_measurement' ? 'Manual measurement logged.' : 'Manual measurement updated.'
         : proposal.kind === 'delete_timeline_note'

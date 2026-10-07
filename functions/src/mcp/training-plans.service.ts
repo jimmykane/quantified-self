@@ -12,6 +12,7 @@ import { assessPlannedWorkoutProviderMappingV1, PLANNED_WORKOUT_PROVIDER_IDS,
 import { parseTrainingWorkoutCompletionV1 } from '../../../shared/training-workout-completion';
 import { parseStrengthWorkoutDetailsV1, strengthProjectionMatchesDetails, type StrengthWorkoutDetailsV1 } from '../../../shared/strength-workout';
 import { parseWorkoutLibraryItemV1 } from '../../../shared/workout-library';
+import { parseTrainingPlanPhasesV1, validateTrainingPlanDateRange, validateTrainingPlanPhaseRange } from '../../../shared/training-plans';
 import { isUserDeletionTombstoneActive } from '../shared/user-deletion-guard';
 import { TRAINING_PLANS_SCOPE, TRAINING_READ_INPUTS, TRAINING_READ_OUTPUTS, TRAINING_RECIPE_SCHEMA,
   TRAINING_RECIPE_WITH_POOL_SCHEMA, TRAINING_RECIPE_WITH_EARLY_LAP_SCHEMA,
@@ -56,6 +57,7 @@ type Filter = { field: 'planId' | 'workoutId' | 'scopeId' | 'associationPlanId';
 interface WorkoutDateCursor { localDate: string; id: string }
 interface State { revision: number; activePlanId: string | null; libraryRevision?: number; accessGeneration?: string }
 export interface TrainingReadView {
+  getPlanPhases?(id: string): Promise<Document | null>;
   get(collection: Collection, id: string, structure?: boolean): Promise<Document | null>;
   getStrengthDetails?(workoutId: string): Promise<Document | null>;
   page(collection: Collection, after: string | null, limit: number, filter?: Filter): Promise<Document[]>;
@@ -107,6 +109,11 @@ export function createFirestoreTrainingReads(database: () => FirebaseFirestore.F
     const db = database();
     const user = db.collection('users').doc(uid);
     return db.runTransaction(async transaction => read({
+      async getPlanPhases(documentId) {
+        const [doc] = await transaction.getAll(user.collection('trainingPlans').doc(documentId),
+          { fieldMask: [...MASKS.trainingPlans, 'phases'] });
+        return doc.exists ? { id: doc.id, data: doc.data()! } : null;
+      },
       async get(collection, documentId, structure = false) {
         const fields = [...MASKS[collection], ...(structure ? collection === 'workoutLibrary'
           ? ['structure', 'strength'] : ['structure'] : [])];
@@ -157,7 +164,7 @@ const WAHOO_SCHEDULING_DURATION_ISSUE = {
   message: 'Wahoo delivery requires time-based steps throughout because its dated Workout record needs a total duration. Quantified Self does not estimate one from distance, work, repetitions, or manual transitions.',
 };
 
-function assessDeliveryCompatibility(provider: PlannedWorkoutProviderId, structure: ReturnType<typeof parseWorkoutStructureV1>,
+export function assessDeliveryCompatibility(provider: PlannedWorkoutProviderId, structure: ReturnType<typeof parseWorkoutStructureV1>,
   strength?: StrengthWorkoutDetailsV1) {
   const assessment = assessPlannedWorkoutProviderMappingV1(provider, structure, strength);
   const needsWahooDuration = provider === 'wahoo' && structure.nodes.some(node =>
@@ -199,6 +206,11 @@ export async function readTrainingPlans(input: TrainingReadInput, reads: Trainin
     // Account for every selected document once, including the unused tail of a fetched page.
     // Measuring only projected results misses lookahead records and double-counts cached plans.
     const view: TrainingReadView = {
+      async getPlanPhases(id) {
+        const doc = await source.getPlanPhases?.(id);
+        if (doc) measure(doc);
+        return doc ?? null;
+      },
       async get(collection, id, structure) {
         const doc = await source.get(collection, id, structure);
         if (doc) measure(doc);
@@ -365,6 +377,19 @@ export async function readTrainingPlans(input: TrainingReadInput, reads: Trainin
     if (input.tool === 'get_training_plan') {
       const a = TRAINING_READ_INPUTS.get_training_plan.parse(args.data);
       return { scheduleRevision: state.revision, plan: projectPlan(await resolve(a.planRef, 'plan')) };
+    }
+    if (input.tool === 'get_training_plan_phases') {
+      const a = TRAINING_READ_INPUTS.get_training_plan_phases.parse(args.data);
+      const current = await resolve(a.planRef, 'plan');
+      const document = await view.getPlanPhases?.(current.id);
+      if (!document || document.data.createdAtMs !== current.data.createdAtMs || document.data.revision !== current.data.revision) throw unavailable();
+      const { phases: stored, ...metadata } = document.data;
+      const plan = planSchema.parse(metadata);
+      validateTrainingPlanDateRange(plan.startLocalDate, plan.endLocalDate);
+      const phases = stored === undefined ? { version: 1 as const, items: [] } : parseTrainingPlanPhasesV1(stored);
+      validateTrainingPlanPhaseRange(phases, plan.startLocalDate, plan.endLocalDate);
+      return { scheduleRevision: state.revision, planRef: a.planRef, planRevision: plan.revision,
+        startDate: plan.startLocalDate, endDate: plan.endLocalDate, phases };
     }
     if (input.tool === 'get_planned_workout' || input.tool === 'get_planned_workout_v2' || input.tool === 'get_planned_workout_v3') {
       const a = TRAINING_READ_INPUTS[input.tool].parse(args.data);

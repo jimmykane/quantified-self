@@ -49,6 +49,8 @@
   flex-wrap: wrap;
   column-gap: 10px;
   row-gap: 2px;
+  min-width: 0;
+  max-width: 100%;
   color: var(--mat-sys-on-surface-variant);
   font: var(--mat-sys-label-medium);
   font-family: 'Barlow Condensed', 'Inter', sans-serif;
@@ -64,10 +66,14 @@
   font-family: 'Barlow Condensed', 'Inter', sans-serif;
 }
 
-.swim-length-index-cell {
+.table-container .swim-length-index-cell,
+.table-container mat-row:hover .swim-length-index-cell {
   flex: 0 0 48px;
   width: 48px;
   max-width: 48px;
+  /* Pinned cells must mask horizontally scrolling values, including on hover. */
+  background: linear-gradient(var(--mat-sys-surface), var(--mat-sys-surface)), var(--mat-sys-surface-container-lowest);
+  opacity: 1;
 }
 
 .swim-length-lap-cell {
@@ -100,9 +106,7 @@
   }
 
   .swim-length-summary {
-    display: grid;
-    grid-auto-rows: 17px;
-    grid-template-columns: repeat(3, max-content);
     min-height: 36px;
+    width: 100%;
   }
 }
