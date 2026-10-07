@@ -2029,6 +2029,9 @@ missing TSS. Focused tests validate actual service results against the strict ou
 exclusions on all three transports. Stale benchmark/incomplete selections cannot hold up other selected sessions;
 a recent owner exclusion still waits for Form to remove its previous contribution. These runtime checks preserve the
 registered JSON schemas and require no local plugin rebuild, catalog rescan, new consent or mutation capability.
+Session and selected-day load comparisons share the app's machine-precision tolerance, scaled by load and summed
+term count. Numerically equivalent decimal totals do not falsely report `form_updating`; genuinely higher selected
+load still waits for Form. No stored scores, wire fields, read counts or refresh behavior change.
 
 The built-in Assistant allowlists the same tool. It resolves exact opaque references through its existing completed-
 activity workflow, prepares Form, preserves separate UTC outcomes, and renders compact deterministic evidence without

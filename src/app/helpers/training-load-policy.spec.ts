@@ -28,6 +28,29 @@ describe('modeled Training load', () => {
     expect(resolveEffectiveTrainingLoad(source, data).score).toBeCloseTo(9.06, 10);
     expect(resolveEffectiveTrainingLoad(source, data, activities, 'walk').score).toBe(0.04);
   });
+  it('keeps a multisport total identical when stored leg records return in a different order', () => {
+    const data = metadata();
+    const leg = data.legs!.walk;
+    data.legs = Object.fromEntries(Array.from({ length: 100 }, (_, index) => [`leg-${index}`, {
+      ...leg, activityId: `activity-${index}`, recordedTss: index === 99 ? 9999 : 0.1,
+    }]));
+    const parsed = resolveEffectiveTrainingLoad(source, data);
+    const restored = resolveEffectiveTrainingLoad(source, {
+      ...data, legs: Object.fromEntries(Object.entries(data.legs).reverse()),
+    });
+    expect(parsed.score).toBeCloseTo(10008.9, 8);
+    expect(restored.score).toBe(parsed.score);
+  });
+  it('keeps the unavailable-workout reason stable when unavailable legs return in another order', () => {
+    const data = metadata();
+    data.legs!.walk.recordedTss = null; data.legs!.ride.recordedTss = null;
+    data.controls.walk = { method: 'HR' };
+    const original = resolveEffectiveTrainingLoad(source, data);
+    expect(original.status).toBe('unavailable');
+    expect(resolveEffectiveTrainingLoad(source, {
+      ...data, legs: Object.fromEntries(Object.entries(data.legs!).reverse()),
+    })).toEqual(original);
+  });
   it('does not fall back to recorded scores for a stale leg outside the saved source revision', () => {
     expect(resolveEffectiveTrainingLoad(source, metadata(),
       [{ id: 'stale', type: 'Walking', stats: { 'Training Stress Score': 999 } }], 'stale'))

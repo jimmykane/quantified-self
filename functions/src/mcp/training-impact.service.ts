@@ -15,6 +15,7 @@ import { isValidIanaTimeZone } from '../../../shared/event-stat-aggregation';
 import {
   buildTrainingLoadPoints,
   buildTrainingSessionLoadImpact,
+  isTrainingLoadWithinTotal,
   resolveTrainingLoadDayImpact,
   TRAINING_LOAD_ATL_TIME_CONSTANT_DAYS,
   TRAINING_LOAD_CTL_TIME_CONSTANT_DAYS,
@@ -637,12 +638,12 @@ export async function getMcpTrainingImpact(
     Math.max(snapshot.payload.rangeEndDayMs ?? latestRequestedDay, latestRequestedDay),
   );
   const selectedLoadByDay = eligible.reduce((totals, candidate) => {
-    totals.set(
-      candidate.dayMs,
-      (totals.get(candidate.dayMs) || 0) + candidate.trainingStressScore,
-    );
+    const total = totals.get(candidate.dayMs) ?? { load: 0, count: 0 };
+    total.load += candidate.trainingStressScore;
+    total.count++;
+    totals.set(candidate.dayMs, total);
     return totals;
-  }, new Map<number, number>());
+  }, new Map<number, { load: number; count: number }>());
   const impacts: TrainingSessionLoadImpact[] = [];
   let hasUpdatingUnavailable = false;
   for (const candidate of eligible) {
@@ -660,10 +661,10 @@ export async function getMcpTrainingImpact(
       continue;
     }
     const dayImpact = resolveTrainingLoadDayImpact(points, candidate.dayMs);
+    const selected = selectedLoadByDay.get(candidate.dayMs)!;
     if (
       dayImpact
-      && (selectedLoadByDay.get(candidate.dayMs) || 0)
-        > dayImpact.trainingStressScore + Number.EPSILON
+      && !isTrainingLoadWithinTotal(selected.load, dayImpact.trainingStressScore, selected.count)
     ) {
       counts.unavailableSessionCount += 1;
       hasUpdatingUnavailable = true;

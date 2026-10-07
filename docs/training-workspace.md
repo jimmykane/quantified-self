@@ -4920,6 +4920,11 @@ removed so deleted history stops adding rebuild reads. Buckets are flat document
 documents remain to route future writes and are omitted from the leaf query. All cache records are below the
 recursively deleted user root.
 
+The shared resolver sums included, available leg scores in ascending numeric order and sorts the aggregate diagnostic
+set, including primary-reason selection when every included leg is unavailable. Reading identical Firestore leg maps in another order therefore produces the same parent summary, avoiding
+floating-point freshness mismatches and unnecessary cache writes. Individual leg values retain their full precision;
+the editor's one-decimal display is not used to round modeled load.
+
 A versioned `state` document becomes ready only after the first **full-history** build warms existing metadata.
 That cold build uses exact owner paths in batches of at most 100 and refreshes existing metadata with at most four
 concurrent transactions, rereading current sources and controls before every cache write. Interrupted imports warm
@@ -5028,7 +5033,10 @@ outcomes even when another session already has a usable score. Once the sources 
 genuinely missing load still allows an explicitly partial total. This is presentation-only and adds no reads,
 writes or rebuilds. The same waiting state applies when the selected contributions together exceed the saved
 Form load for any UTC day, with tolerance only for floating-point summation error. Individually fitting sessions
-cannot certify an aggregate that the saved day does not yet contain. These frontend corrections preserve the existing MCP updating semantics and all public schemas,
+cannot certify an aggregate that the saved day does not yet contain. Session, Calendar-day and MCP impact use the
+same shared total comparison, scaling machine precision to load and term count. Equivalent decimal totals such as
+33.1 + 33.2 versus 66.3 remain usable; a real excess still waits for Form. This comparison does not round, alter or
+persist any load, and adds no reads or rebuilds. These corrections preserve the existing MCP updating semantics and all public schemas,
 scopes and mutation contracts; no plugin rebuild is needed.
 
 For one activity:
