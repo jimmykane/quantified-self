@@ -451,8 +451,9 @@ const trainingImpactOutput = z.strictObject({
       !== coverage.requestedSessionCount
     || coverage.modeledSessionCount + coverage.unavailableSessionCount
       !== coverage.eligibleSessionCount
+    // Owner load exclusions contribute to the total without belonging to either legacy subset.
     || coverage.benchmarkOrMergeSessionCount + coverage.notCompletedSessionCount
-      !== coverage.excludedSessionCount
+      > coverage.excludedSessionCount
   ) {
     context.addIssue({
       code: 'custom',

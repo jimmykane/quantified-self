@@ -150,6 +150,7 @@ interface ResolvedTrainingImpactCandidate {
   trainingStressScore: number | null;
   loadUpdatedAtMs: number;
   sourceUpdating: boolean;
+  loadNeedsReview: boolean;
   dayMs: number;
   exclusion: 'benchmark_or_merge' | 'not_completed' | 'user_excluded' | null;
 }
@@ -506,13 +507,16 @@ async function loadCandidates(
     }
     const metadata = loadMetadata.get(reference.eventId);
     const leg = Object.values(metadata?.legs ?? {}).find(item => item.activityId === reference.activityId);
-    const sourceUpdating = (!!metadata?.parentFingerprint && metadata.parentFingerprint !== trainingLoadSourceFingerprint(event))
-      || (!!leg?.sourceFingerprint && leg.sourceFingerprint !== trainingLoadSourceFingerprint(activity));
     const modeled = resolveEffectiveTrainingLoad({}, metadata,
       [{ ...activity, id: reference.activityId }], reference.activityId);
+    const sourceUpdating = modeled.status !== 'excluded' && (
+      modeled.reasons.includes('source-updating')
+      || (!!metadata?.parentFingerprint && metadata.parentFingerprint !== trainingLoadSourceFingerprint(event))
+      || (!!leg?.sourceFingerprint && leg.sourceFingerprint !== trainingLoadSourceFingerprint(activity)));
     return {
       trainingStressScore: modeled.score,
       sourceUpdating,
+      loadNeedsReview: modeled.reasons.includes('activity-match-needs-review'),
       loadUpdatedAtMs: timestampMs(metadata?.updatedAt) ?? 0,
       dayMs: utcDayMs(startTimeMs),
       exclusion: isBenchmarkEventForTrainingMetrics(event)
@@ -552,6 +556,11 @@ export async function getMcpTrainingImpact(
       }
       return false;
     }
+    if (candidate.sourceUpdating || candidate.loadNeedsReview) {
+      counts.eligibleSessionCount += 1;
+      counts.unavailableSessionCount += 1;
+      return false;
+    }
     if (candidate.trainingStressScore === null) {
       counts.missingTssSessionCount += 1;
       return false;
@@ -559,6 +568,16 @@ export async function getMcpTrainingImpact(
     counts.eligibleSessionCount += 1;
     return true;
   }) as Array<ResolvedTrainingImpactCandidate & { trainingStressScore: number }>;
+
+  // A rewrite can temporarily have neither a score nor a matching leg. It is
+  // pending source validation, not evidence that the activity has no load.
+  if (candidates.some(candidate => !candidate.exclusion && candidate.sourceUpdating)) {
+    counts.unavailableSessionCount = counts.eligibleSessionCount;
+    if (!await reads.activeOwner(input.uid)) {
+      throw new McpTrainingImpactError('temporarily_unavailable', 'Training impact is unavailable for this account.');
+    }
+    return result({ ...input, ...normalized }, 'updating', 'form_updating', counts);
+  }
 
   if (!eligible.length) {
     const onlyExcluded = counts.excludedSessionCount === counts.requestedSessionCount;
@@ -589,8 +608,11 @@ export async function getMcpTrainingImpact(
   }
 
   const rawSnapshot = await reads.fetchFormSnapshot(input.uid);
-  const hasNewerLoad = candidates.some(candidate => candidate.sourceUpdating
-    || candidate.loadUpdatedAtMs > (timestampMs(rawSnapshot?.updatedAtMs) ?? 0));
+  // User exclusion may have removed prior modeled load, so it still waits for
+  // Form. Benchmarks and incomplete selections cannot hold up other sessions.
+  const hasNewerLoad = candidates.some(candidate =>
+    (candidate.exclusion === null || candidate.exclusion === 'user_excluded')
+    && candidate.loadUpdatedAtMs > (timestampMs(rawSnapshot?.updatedAtMs) ?? 0));
   const snapshot = formSnapshotState(hasNewerLoad ? null : rawSnapshot);
   if (snapshot.status !== 'ready') {
     counts.unavailableSessionCount = counts.eligibleSessionCount;
