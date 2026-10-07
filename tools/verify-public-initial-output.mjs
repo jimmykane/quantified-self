@@ -365,7 +365,7 @@ function assertPrerenderedDocuments() {
 
 function assertTrainingPlansDocument(documentRef) {
   const expectedTitle = 'Training Plans for Running, Cycling & More - Quantified Self';
-  const expectedDescription = 'Create free running, cycling, swimming, walking, hiking and rowing plans or standalone workouts. Schedule by date, separate from completed activities.';
+  const expectedDescription = 'Create free training plans and standalone workouts for running, cycling, swimming and more. Organize phases by date, with completed activities kept separate.';
   const expectedCanonical = `https://quantified-self.io${TRAINING_PLANS_ROUTE}`;
   const expectedSocialImage = 'https://quantified-self.io/assets/images/training-plans-social.png';
 
