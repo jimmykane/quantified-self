@@ -13,19 +13,27 @@ const nativeTaskMetrics = new Set([
   'cloudtasks.googleapis.com/queue/task_attempt_count',
   'cloudtasks.googleapis.com/queue/task_attempt_delays',
 ]);
+const filterMetricType = filter => /(?:^|\s)metric\.type="([^"]+)"/.exec(filter)?.[1];
 
 function assertDashboardMetricScope(config) {
   const logMetricTypes = config.metrics.map(metric => `logging.googleapis.com/user/${metric.name}`);
   for (const tile of config.dashboard.mosaicLayout.tiles.slice(1)) {
     const query = tile.widget.xyChart.dataSets[0].timeSeriesQuery.timeSeriesFilter;
     // This is a Monitoring filter, not a URL. Compare its metric.type value exactly.
-    const type = /(?:^|\s)metric\.type="([^"]+)"/.exec(query.filter)?.[1];
+    const type = filterMetricType(query.filter);
     assert.ok(logMetricTypes.includes(type) || nativeTaskMetrics.has(type), 'Unexpected dashboard metric type');
     if (nativeTaskMetrics.has(type)) {
       assert.match(query.filter, /resource\.type="cloud_tasks_queue"/);
       assert.match(query.filter, /resource\.labels\.location="europe-west2"/);
       assert.match(query.filter, /resource\.labels\.queue_id=\("processSleepSyncTask" OR "processGarminHealthBackfillTask"\)/);
     }
+  }
+}
+function assertPolicyMetricScope(config) {
+  const logMetricTypes = config.metrics.map(metric => `logging.googleapis.com/user/${metric.name}`);
+  for (const policy of config.policies) for (const condition of policy.conditions) {
+    const filter = (condition.conditionThreshold || condition.conditionAbsent).filter;
+    assert.ok(logMetricTypes.includes(filterMetricType(filter)), 'Alerts must use registered log metric types, not native contention retries');
   }
 }
 
@@ -45,7 +53,7 @@ test('fixed dimensions separate durable outcomes, invocation summaries, retries 
   assert.doesNotMatch(config.metrics.find(metric => metric.name.includes('new_dead_letters')).filter, /failed_jobs/);
 });
 test('every native chart targets only the two exact queues; policies have workload-specific thresholds', () => {
-  const config = bundle(); assertDashboardMetricScope(config);
+  const config = bundle(); assertDashboardMetricScope(config); assertPolicyMetricScope(config);
   for (const policy of config.policies) {
     assert.equal(policy.enabled, true); assert.equal(policy.userLabels.managed_by, OWNER); assert.deepEqual(policy.notificationChannels, [channel]);
     assert.deepEqual(policy.alertStrategy.notificationPrompts, ['OPENED', 'CLOSED']);
@@ -59,9 +67,15 @@ test('every native chart targets only the two exact queues; policies have worklo
   assert.equal(backlog[1].conditionThreshold.aggregations[0].alignmentPeriod, '14400s');
   assert.equal(config.policies.find(p => p.userLabels.policy_id === 'heartbeat').conditions.filter(c => c.conditionAbsent).length, 4);
   assert.equal(config.policies.find(p => p.userLabels.policy_id === 'telemetry').conditions.length, 2);
-  for (const policy of config.policies) for (const c of policy.conditions) {
-    assert.doesNotMatch((c.conditionThreshold || c.conditionAbsent).filter, /cloudtasks.googleapis.com/,
-      'native task retries cannot distinguish expected contention and must not page independently');
+});
+test('alert scopes reject native retries, unknown metrics and metric names outside the actual type field', () => {
+  for (const filter of [
+    'metric.type="cloudtasks.googleapis.com/queue/task_attempt_count"',
+    'metric.type="logging.googleapis.com/user/unregistered"',
+    'note="logging.googleapis.com/user/qs_health_sleep_probe_failures_v1"',
+  ]) {
+    const config = bundle(); config.policies[0].conditions[0].conditionThreshold.filter = filter;
+    assert.throws(() => assertPolicyMetricScope(config), /Alerts must use registered log metric types/);
   }
 });
 test('metric classification rejects lookalikes, missing types and queue names outside the actual scope', () => {
