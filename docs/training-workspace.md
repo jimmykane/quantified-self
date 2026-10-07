@@ -4870,8 +4870,10 @@ not invent mass, subtract resting calories, use reference-MET tables, or adopt S
 Owners open **Training load** from the activity action menu. The editor separates recorded, Automatic and modeled
 TSS, explains the actual method/fallback, and supports a preferred method, 0–9999 numeric override (one decimal),
 per-leg inclusion, whole-workout exclusion and reset. Exclusions retain history and volume. Missing load remains
-distinct from a valid zero and from exclusion. Multisport overrides belong to individual legs; included available
-legs sum once, with unavailable coverage retained. Reset restores the saved per-leg policy rather than today's
+distinct from a valid zero and from exclusion. Clearing the numeric field removes the override; an explicit zero
+remains a valid override. Multisport overrides belong to individual legs; included available legs sum once at full
+precision, with rounding applied only for display and unavailable coverage explained in the editor and impact.
+Excluded sessions do not count as missing-load sessions. Reset restores the saved per-leg policy rather than today's
 Settings. A whole-workout reset also explicitly releases retained unmatched controls; per-leg reset retains any
 explicit association.
 
@@ -4885,19 +4887,27 @@ leg freezes that applied policy; duplicate uploads, resyncs and reparses preserv
 Private `users/{uid}/events/{eventId}/metaData/trainingLoad` stores server-owned candidates, source fingerprints,
 leg identities and applied policies beside owner-editable controls. Firestore Rules allow exact owner-scoped
 transactions with revision checks and deletion guards, while denying client writes to calculated fields, policy
-revision updates/deletes and cross-event associations. Backend EventWriter adapters prepare metadata for provider
-ingestion, manual upload and source-file reparse before old leg cleanup, checking the latest persisted source and
-controls in the transaction. Metadata preparation failures propagate to the caller for retry.
+revision updates/deletes and cross-event associations. Before provider ingestion, manual upload or source-file
+reparse overwrites any existing source document, backend EventWriter adapters durably freeze legacy identities in
+the server-owned `legacyLegs` field. This evidence survives partial-write retries and does not advance the load
+timestamp. After source writes, a second transaction refreshes candidates, checks the persisted source and preserves
+the latest controls. It consumes the frozen evidence before old leg cleanup. Metadata preparation and persistence
+failures propagate to the caller for retry.
 
 Reconciliation uses the existing unique identity matcher with its unmatched-leg fallback disabled. Derived TSS is
 excluded from control identity. Ambiguous identities retain saved policies/controls and make modeled load
-unavailable until the owner explicitly reassociates or resets them. Reassociation survives the next reparse.
+unavailable until the owner explicitly reassociates or resets them. Missing legacy identity evidence also requires
+review; a newly written activity with a reused ID cannot establish the old control's identity. Reassociation survives
+the next reparse, and copying preferences uses the newly associated activity's sport family.
 Bounds: 100 source legs/controls per event and 200 retained identities; reaching the retained bound requires review
 before further reparse.
 
 `shared/training-load-policy.ts` owns the effective-load resolver for Form, weekly load, ACWR, comparisons, sport
 contributions and impact. Backend metadata reads use exact owner paths in batches of at most 100; immediate legacy
-controls may require a bounded child join. Source fingerprints reject stale candidate/source combinations. The
+controls may require a bounded child join. Browser and backend use the same canonical source projection for SHA-256
+fingerprints, rejecting stale candidate/source combinations. Unrecognized leg IDs remain unavailable while a rewrite
+is in progress instead of reverting to recorded TSS. The editor checks both parent and leg fingerprints and blocks
+leg edits until stale activity details are reopened. The
 `onTrainingLoadMetadataWrite` trigger invalidates affected load-derived kinds and increments the event
 mutation/workout input versions; timestamp/revision-only bookkeeping does not invalidate. Impact waits when a load
 edit is newer than Form. CTL 42 days, ATL 7 days and UTC-day bucketing are unchanged.
@@ -4917,8 +4927,9 @@ values are rewritten merely by deploying this change.
 
 Local verification covers the encoded synthetic recovery walk (7.6 HR TSS), MET inputs (9 TSS), library package
 exports, provider/manual/reparse writers, modeled-load builders, owner Rules and frozen MCP reads. The Firestore
-emulator verifies delayed policy selection, idempotent duplicates, changed leg IDs, concurrent reparse/control
-edits and deletion guards. The actual editor and Settings were exercised with synthetic local data at desktop and
+emulator verifies delayed policy selection, idempotent duplicates, changed/reused leg IDs, partial-write retries,
+missing legacy identity, edits during first import, concurrent reparse/control edits and deletion guards. The actual
+editor and Settings were exercised with synthetic local data at desktop and
 320/390-pixel phone widths. No original user FIT file or production data was used.
 
 #### Activity and selected-day Training impact

@@ -252,11 +252,11 @@ service cloud.firestore {
 
 
             match /metaData/trainingLoad {
-              function validControl(key, control, legs) {
+              function validControl(key, control, legs, legacy) {
                 let ownedActivity = /databases/$(database)/documents/users/$(userID)/activities/$(key);
                 let target = /databases/$(database)/documents/users/$(userID)/activities/$(control.get('activityId', '_'));
                 return key is string && key.matches('^[a-zA-Z0-9_-]{1,128}$')
-                  && (key in legs || (exists(ownedActivity) && get(ownedActivity).data.eventID == eventID))
+                  && (key in legs || (legacy && exists(ownedActivity) && get(ownedActivity).data.eventID == eventID))
                   && control is map && control.keys().hasOnly(['method', 'included', 'override', 'activityId', 'dismissed'])
                   && control.get('method', 'AUTOMATIC') in ['AUTOMATIC', 'HR', 'MET']
                   && control.get('included', true) is bool
@@ -278,7 +278,7 @@ service cloud.firestore {
                   && data.updatedAt == request.time && data.excluded is bool && data.controls is map && data.controls.size() <= 100
                   && (data.controls.size() == 0
                     || (key is string && data.controls.diff(oldControls).affectedKeys().hasOnly([key])
-                      && (!(key in data.controls) || validControl(key, data.controls[key], legs)))
+                      && (!(key in data.controls) || validControl(key, data.controls[key], legs, !('legs' in before))))
                     || (key == null && data.controls == oldControls));
               }
               allow read: if isOwner();

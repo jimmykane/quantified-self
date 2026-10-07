@@ -1,6 +1,8 @@
 import { TestBed } from '@angular/core/testing';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { of } from 'rxjs';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { firstValueFrom, of } from 'rxjs';
+import { createHash, webcrypto } from 'node:crypto';
+import { serializeTrainingLoadSource } from '@shared/training-load-source';
 import { Firestore, runTransaction } from 'app/firebase/firestore';
 import { AppUserService } from './app.user.service';
 import { TrainingLoadService } from './training-load.service';
@@ -15,6 +17,7 @@ describe('TrainingLoadService', () => {
   const update = vi.fn(); const set = vi.fn();
   beforeEach(() => {
     vi.clearAllMocks();
+    vi.stubGlobal('crypto', webcrypto);
     records = { 'users/u/events/e': {}, 'users/u/events/e/metaData/trainingLoad': {
       version: 1, revision: 4, excluded: false, controls: { leg: { override: 22 }, other: { included: false } },
     } };
@@ -24,6 +27,19 @@ describe('TrainingLoadService', () => {
     TestBed.configureTestingModule({ providers: [TrainingLoadService, { provide: Firestore, useValue: {} },
       { provide: AppUserService, useValue: { user$: of({ uid: 'u' }) } }] });
     service = TestBed.inject(TrainingLoadService);
+  });
+  afterEach(() => vi.unstubAllGlobals());
+  it('uses the backend source fingerprint in the browser and preserves explicit exclusion while sources update', async () => {
+    const data = { startDate: new Date(1000), endDate: new Date(3601000), stats: { 'Training Stress Score': 9 } };
+    const metadata = { version: 1 as const, revision: 1, excluded: false, controls: {},
+      parentFingerprint: createHash('sha256').update(serializeTrainingLoadSource(data)).digest('hex') };
+    vi.spyOn(service, 'watch').mockReturnValue(of(metadata));
+    const event = { getID: () => 'e', getActivities: () => [], stats: data.stats, toJSON: () => data } as never;
+    expect((await firstValueFrom(service.watchEffective('u', [event]))).get('e')).toMatchObject({ score: 9 });
+    data.stats['Training Stress Score'] = 87.3;
+    expect((await firstValueFrom(service.watchEffective('u', [event]))).get('e')).toMatchObject({ score: null, reasons: ['source-updating'] });
+    metadata.excluded = true;
+    expect((await firstValueFrom(service.watchEffective('u', [event]))).get('e')).toMatchObject({ score: 0, status: 'excluded' });
   });
   it('replaces the controls map so a single reset removes its old override without changing siblings', async () => {
     await service.save('u', 'e', 4, { key: 'leg', control: null });

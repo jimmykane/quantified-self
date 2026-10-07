@@ -18,11 +18,15 @@ maximum HR; missing calibration can fall back to the calorie-derived MET estimat
 Valid imported TSS retains precedence. See `docs/training-workspace.md` for the exact calculation and policy contract.
 
 Historical recordings keep their current recorded values until source-backed reparse. Numeric overrides and exclusions
-work immediately; HR/MET selection needs cached evaluations. Reparse refreshes calculated candidates after sanitized
-event/activity writes and before stale child removal. Its transaction preserves the latest controls and original dated
-policy snapshot, checks source fingerprints and deletion guards, and uses strict leg identity matching without TSS.
-An ambiguous match retains controls and leaves modeled load unavailable until owner reassociation or reset. Identical
-imports do not advance the metadata revision or timestamp. Changed metadata invalidates affected Training snapshots.
+work immediately; HR/MET selection needs cached evaluations. Before overwriting any event/activity document, reparse
+durably freezes legacy identities in private server-owned metadata. Retries retain this evidence even when IDs are
+reused or a previous attempt wrote only part of the source. Reparse then refreshes calculated candidates after
+sanitized event/activity writes and before stale child removal. Its transaction preserves the latest controls and
+original dated policy snapshot, checks source fingerprints and deletion guards, and uses strict leg identity matching
+without TSS. Ambiguous matches or missing old identity evidence retain controls and leave modeled load unavailable
+until owner reassociation or reset. Identity preparation does not advance the load timestamp; repeated identical
+imports do not advance the completed metadata revision or timestamp. Changed load metadata invalidates affected
+Training snapshots.
 
 Keep automatic event and route scanners disabled. This change needs no saved-route reparse. Use the existing targeted
 original-file action for an approved historical correction; do not bulk-rewrite recorded scores or distribute parent

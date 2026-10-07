@@ -2,6 +2,7 @@ import {
   DataAscent,
   DataDescent,
   DataDuration,
+  DataTrainingStressScore,
   DataSwimDistance,
   type DataInterface,
   DaysOfTheWeek,
@@ -211,6 +212,8 @@ export interface ResolveUnitAwareDisplayOptions {
   compactDuration?: boolean;
   /** Preserve Sports Lib's fractional seconds for recorded length/split timing. */
   durationMilliseconds?: boolean;
+  /** Keep the load editor's requested precision in the canonical Sports Lib formatter. */
+  trainingStressScoreDecimals?: 0 | 1;
   locale?: string | null;
 }
 
@@ -276,7 +279,9 @@ export function resolveUnitAwareDisplayStat(
       : options?.compactDuration === true
         ? selectedStat.getDisplayValue(false, false)
         : selectedStat.getDisplayValue()
-    : ascentDescentDisplayValue ?? selectedStat.getDisplayValue?.();
+    : selectedStat instanceof DataTrainingStressScore && options?.trainingStressScoreDecimals !== undefined
+      ? selectedStat.getDisplayValue(options.trainingStressScoreDecimals)
+      : ascentDescentDisplayValue ?? selectedStat.getDisplayValue?.();
   const displayUnitRaw = selectedStat.getDisplayUnit?.();
   const displayUnit = toDisplayText(displayUnitRaw).trim();
   const displayValue = options?.stripRepeatedUnit === true

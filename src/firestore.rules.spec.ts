@@ -87,6 +87,19 @@ describe('Firestore Security Rules', () => {
             await assertSucceeds(owner.doc(path).update({ controls: {}, editedLegKey: null, revision: 2, updatedAt: serverTimestamp() }));
             expect((await owner.doc(path).get()).data()?.legs.leg.policy.method).toBe('HR');
         });
+        it('requires saved leg keys after reparse and protects frozen legacy identities', async () => {
+            await seed();
+            await testEnv.withSecurityRulesDisabled(async context => {
+                await context.firestore().doc(path).set({ version: 1, revision: 1, excluded: false, controls: {},
+                    legacyLegs: { leg: { identity: { type: 'Walking' } } },
+                    legs: { stable: { activityId: 'leg', policy: { method: 'HR', included: true } } } });
+            });
+            const owner = testEnv.authenticatedContext('owner').firestore();
+            const { serverTimestamp } = await import('firebase/firestore');
+            await assertFails(owner.doc(path).update(await edit(2)));
+            await assertFails(owner.doc(path).update({ legacyLegs: {}, revision: 2, updatedAt: serverTimestamp() }));
+            await assertSucceeds(owner.doc(path).update({ ...await edit(2), editedLegKey: 'stable', controls: { stable: { override: 0 } } }));
+        });
         it('requires atomic immutable policy revisions with server timestamps', async () => {
             await seed();
             const owner = testEnv.authenticatedContext('owner').firestore();

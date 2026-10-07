@@ -6,9 +6,9 @@ vi.unmock('@sports-alliance/sports-lib');
 import * as admin from 'firebase-admin';
 import { Timestamp } from 'firebase-admin/firestore';
 import { ActivityTypes, ActivityUtilities, EventImporterJSON, type EventInterface } from '@sports-alliance/sports-lib';
-import { persistTrainingLoadMetadata } from './training-load-metadata';
+import { persistTrainingLoadMetadata, prepareTrainingLoadMetadata } from './training-load-metadata';
 import { attachEventTrainingLoads } from './training-load-reader';
-import { attachedEffectiveTrainingLoad, type TrainingLoadMetadata } from '../../../shared/training-load-policy';
+import { attachedEffectiveTrainingLoad, resolveEffectiveTrainingLoad, type TrainingLoadMetadata } from '../../../shared/training-load-policy';
 
 const enabled = !!process.env.FIRESTORE_EMULATOR_HOST;
 describe.skipIf(!enabled)('Training load persistence in Firestore', () => {
@@ -91,5 +91,49 @@ describe.skipIf(!enabled)('Training load persistence in Firestore', () => {
     ]);
     expect((await ref.get()).data()).toMatchObject({ revision: 3, controls: { leg: { override: 12.3 } },
       legs: { leg: { activityId: 'new-leg', policy: { revision: 0 } } } });
+  });
+  it('freezes legacy identity before reused IDs are overwritten and retains it through partial-write retries', async () => {
+    const uid = setup(); const original = workout(); await source(uid, original);
+    const ref = db.doc(metadataPath(uid));
+    await ref.set({ version: 1, revision: 1, excluded: false, controls: { leg: { override: 12.3 } },
+      updatedAt: Timestamp.fromMillis(1000) });
+    const changed = workout(); changed.getActivities()[0].type = ActivityTypes.Cycling;
+    await prepareTrainingLoadMetadata(uid, changed);
+    const prepared = (await ref.get()).data() as TrainingLoadMetadata;
+    expect(prepared.legs).toBeUndefined();
+    expect((prepared.updatedAt as Timestamp).toMillis()).toBe(1000);
+    expect(resolveEffectiveTrainingLoad({}, prepared, [{ id: 'leg', type: ActivityTypes.Walking }]).score).toBe(12.3);
+    await source(uid, changed); // A prior attempt wrote sources, but failed before final metadata.
+    const retry = await prepareTrainingLoadMetadata(uid, changed);
+    await ref.update({ 'controls.leg.override': 15, revision: 3 }); // Edit after preparation must also survive.
+    await retry();
+    const result = (await ref.get()).data() as TrainingLoadMetadata;
+    expect(result.legacyLegs).toBeUndefined();
+    expect(result.controls.leg.override).toBe(15);
+    expect(result.legs!.leg).toMatchObject({ activityId: null, identity: { type: ActivityTypes.Walking } });
+    expect(Object.values(result.legs!).filter(leg => leg.activityId === 'leg')).toHaveLength(1);
+    expect(resolveEffectiveTrainingLoad({}, result)).toMatchObject({ status: 'unavailable', reasons: ['activity-match-needs-review'] });
+  });
+  it('accepts a first-import control created between the source and metadata writes', async () => {
+    const uid = setup(); await db.doc(`users/${uid}`).set({ test: true });
+    await db.doc(`users/${uid}/trainingLoadPolicies/walking-hiking/revisions/past`).set({
+      revision: 1, method: 'MET', included: true, effectiveAt: Timestamp.fromMillis(Date.UTC(2026, 0, 1)) });
+    const event = workout(); const finish = await prepareTrainingLoadMetadata(uid, event);
+    await source(uid, event);
+    await db.doc(metadataPath(uid)).set({ version: 1, revision: 1, excluded: false, controls: { leg: { override: 0 } } });
+    await finish();
+    const result = (await db.doc(metadataPath(uid)).get()).data() as TrainingLoadMetadata;
+    expect(result.legs!.leg.policy).toMatchObject({ revision: 1, method: 'MET' });
+    expect(resolveEffectiveTrainingLoad({}, result)).toMatchObject({ score: 0, status: 'available' });
+  });
+  it('retains a legacy control with missing source evidence as an unmatched record for owner review', async () => {
+    const uid = setup(); const event = workout(); await source(uid, event);
+    const ref = db.doc(metadataPath(uid));
+    await ref.set({ version: 1, revision: 1, excluded: false, controls: { missing: { override: 5 } } });
+    const finish = await prepareTrainingLoadMetadata(uid, event); await source(uid, event); await finish();
+    const result = (await ref.get()).data() as TrainingLoadMetadata;
+    expect(result.controls.missing.override).toBe(5);
+    expect(result.legs!.missing).toMatchObject({ activityId: null, identity: { startMs: null, type: 'Unknown' } });
+    expect(resolveEffectiveTrainingLoad({}, result).status).toBe('unavailable');
   });
 });

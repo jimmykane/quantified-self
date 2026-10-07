@@ -6,23 +6,12 @@ import { defaultAppliedTrainingLoadPolicy, isTrainingLoadMethod, recordedTrainin
   type AppliedTrainingLoadPolicy, type TrainingLoadLeg, type TrainingLoadMetadata } from '../../../shared/training-load-policy';
 import { resolveActivityIdentityAssignments } from '../shared/activity-identity-matcher';
 import { getUserDeletionGuardStateInTransaction } from '../shared/user-deletion-guard';
+import { canonicalTrainingLoadValue as canonical, serializeTrainingLoadSource, trainingLoadTimeMs } from '../../../shared/training-load-source';
+export { trainingLoadTimeMs } from '../../../shared/training-load-source';
 
-export function trainingLoadTimeMs(value: any): number {
-  return value instanceof Date ? value.getTime() : typeof value?.toMillis === 'function' ? value.toMillis()
-    : typeof value === 'number' ? value : Date.parse(value);
-}
-function canonical(value: unknown): unknown {
-  if (Array.isArray(value)) return value.map(canonical);
-  if (value && typeof value === 'object') return Object.fromEntries(Object.entries(value)
-    .filter(([, item]) => item !== undefined).sort(([a], [b]) => a.localeCompare(b)).map(([key, item]) => [key, canonical(item)]));
-  return value;
-}
 /** Does not include user-edited titles/tags, IDs, or load controls. */
-export function trainingLoadSourceFingerprint(data: any): string {
-  return createHash('sha256').update(JSON.stringify(canonical({
-    startMs: trainingLoadTimeMs(data.startDate), endMs: trainingLoadTimeMs(data.endDate),
-    type: data.type ?? null, stats: data.stats ?? {},
-  }))).digest('hex');
+export function trainingLoadSourceFingerprint(data: Parameters<typeof serializeTrainingLoadSource>[0]): string {
+  return createHash('sha256').update(serializeTrainingLoadSource(data)).digest('hex');
 }
 function identity(data: any): TrainingLoadLeg['identity'] {
   const stat = (type: string): number | null => {
@@ -83,7 +72,7 @@ async function policyAt(
   db: admin.firestore.Firestore, transaction: admin.firestore.Transaction, uid: string, leg: TrainingLoadLeg,
 ): Promise<AppliedTrainingLoadPolicy> {
   const fallback = defaultAppliedTrainingLoadPolicy(leg.identity.type);
-  if (!fallback.family || !Number.isFinite(leg.identity.startMs)) return fallback;
+  if (!fallback.family || typeof leg.identity.startMs !== 'number' || !Number.isFinite(leg.identity.startMs)) return fallback;
   const result = await transaction.get(db.doc(`users/${uid}/trainingLoadPolicies/${fallback.family}`)
     .collection('revisions').where('effectiveAt', '<=', Timestamp.fromMillis(leg.identity.startMs))
     .orderBy('effectiveAt', 'desc').limit(1));
@@ -93,10 +82,47 @@ async function policyAt(
       effectiveAtMs: trainingLoadTimeMs(data.effectiveAt) } : fallback;
 }
 
+/** Freeze legacy identities durably before any source overwrite, including retries after a partial write. */
+export async function prepareTrainingLoadMetadata(
+  uid: string, event: EventInterface,
+  authorize?: (db: admin.firestore.Firestore, transaction: admin.firestore.Transaction) => Promise<void>,
+): Promise<() => Promise<void>> {
+  const db = admin.firestore();
+  const eventId = event.getID();
+  if (!eventId) throw new Error('Training load requires a persisted event identity.');
+  const eventRef = db.doc(`users/${uid}/events/${eventId}`);
+  const metaRef = eventRef.collection('metaData').doc('trainingLoad');
+  const firstImport = await db.runTransaction(async transaction => {
+    const guard = await getUserDeletionGuardStateInTransaction(db, transaction, uid);
+    if (guard.shouldSkip) throw new Error('Training load write blocked by account deletion.');
+    if (authorize) await authorize(db, transaction);
+    const [parent, snapshot] = await transaction.getAll(eventRef, metaRef);
+    if (!parent.exists) return true;
+    const previous = snapshot.data() as TrainingLoadMetadata | undefined;
+    if (previous?.legs || previous?.legacyLegs) return false;
+    const children = await transaction.get(db.collection(`users/${uid}/activities`)
+      .where('eventID', '==', eventId).limit(101));
+    if (children.size > 100) throw new Error('Training load supports at most 100 legs per workout.');
+    const legacyLegs = Object.fromEntries(children.docs.map(document => {
+      const data = document.data();
+      return [document.id, { activityId: document.id, identity: identity(data),
+        recordedTss: recordedTrainingStressScore(data), evaluations: null,
+        policy: defaultAppliedTrainingLoadPolicy(data.type) } satisfies TrainingLoadLeg];
+    }));
+    const frozen = { legacyLegs, revision: (previous?.revision ?? 0) + 1 };
+    // No load timestamp: this changes only identity evidence, not modeled load.
+    if (snapshot.exists) transaction.update(metaRef, frozen);
+    else transaction.set(metaRef, { version: 1, excluded: false, controls: {}, ...frozen });
+    return false;
+  });
+  return () => persistTrainingLoadMetadata(uid, event, authorize, firstImport);
+}
+
 /** Called by all backend writers while parse-time candidates remain available. */
 export async function persistTrainingLoadMetadata(
   uid: string, event: EventInterface,
   authorize?: (db: admin.firestore.Firestore, transaction: admin.firestore.Transaction) => Promise<void>,
+  firstImport = false,
 ): Promise<void> {
   const db = admin.firestore();
   const eventId = event.getID();
@@ -118,31 +144,30 @@ export async function persistTrainingLoadMetadata(
     if (authorize) await authorize(db, transaction);
     const [parent, snapshot, ...savedActivities] = await transaction.getAll(eventRef, metaRef,
       ...candidates.map(leg => db.doc(`users/${uid}/activities/${leg.activityId}`)));
-    if (!parent.exists || trainingLoadSourceFingerprint(parent.data()) !== parentFingerprint ||
+    if (!parent.exists || trainingLoadSourceFingerprint(parent.data() ?? {}) !== parentFingerprint ||
       candidates.some((leg, index) => !savedActivities[index]?.exists ||
         savedActivities[index].data()?.eventID !== eventId ||
-        trainingLoadSourceFingerprint(savedActivities[index].data()) !== leg.sourceFingerprint)) {
+        trainingLoadSourceFingerprint(savedActivities[index].data() ?? {}) !== leg.sourceFingerprint)) {
       throw new Error('Training load source changed during import; retry the source write.');
     }
     let previous = snapshot.exists ? snapshot.data() as TrainingLoadMetadata : null;
-    // A legacy owner edit may predate the first calculated cache. Read its exact old
-    // activities before reparse removes stale IDs; never attach it by array position.
-    if (previous && !previous.legs && Object.keys(previous.controls).length) {
-      const ids = Object.keys(previous.controls);
-      const documents = await transaction.getAll(...ids.map(id => db.doc(`users/${uid}/activities/${id}`)));
-      const legs: Record<string, TrainingLoadLeg> = {};
-      documents.forEach((document, index) => {
-        const data = document.data();
-        if (document.exists && data?.eventID === eventId) legs[ids[index]] = {
-          activityId: ids[index], identity: identity(data), recordedTss: recordedTrainingStressScore(data),
-          evaluations: null, policy: defaultAppliedTrainingLoadPolicy(data.type),
-        };
-      });
-      if (Object.keys(legs).length !== ids.length) throw new Error('A legacy load control needs review before reparse.');
-      previous = { ...previous, legs };
-    }
     const datedCandidates: TrainingLoadLeg[] = [];
     for (const candidate of candidates) datedCandidates.push({ ...candidate, policy: await policyAt(db, transaction, uid, candidate) });
+    // Old documents may already have been overwritten using reused IDs. Only
+    // pre-write evidence can associate a legacy control with its original leg.
+    if (previous && !previous.legs && Object.keys(previous.controls).length) {
+      const ids = Object.keys(previous.controls);
+      const legs: Record<string, TrainingLoadLeg> = {};
+      ids.forEach(id => {
+        const saved = previous?.legacyLegs?.[id] ?? (firstImport ? datedCandidates.find(leg => leg.activityId === id) : undefined);
+        // Missing old source evidence is an unmatched control, never permission
+        // to infer its identity from the newly written activity with that ID.
+        legs[id] = saved ?? { activityId: null, identity: { startMs: null, endMs: null, type: 'Unknown',
+          duration: null, distance: null }, recordedTss: null, evaluations: null,
+          policy: defaultAppliedTrainingLoadPolicy(null) };
+      });
+      previous = { ...previous, legs };
+    }
     const reconciled = reconcileTrainingLoadLegs(previous, datedCandidates);
     const next: TrainingLoadMetadata = { version: 1, revision: (previous?.revision ?? 0) + 1,
       excluded: previous?.excluded ?? false, ...reconciled, parentFingerprint, updatedAt: FieldValue.serverTimestamp() };
