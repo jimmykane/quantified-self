@@ -7,7 +7,7 @@ import { DEFAULT_TRAINING_LOAD_POLICY, isTrainingLoadMethod, resolveEffectiveTra
   type EffectiveTrainingLoad, type TrainingLoadActivity, type TrainingLoadControl, type TrainingLoadMetadata, type TrainingLoadPolicy } from '@shared/training-load-policy';
 import { isTrainingDiscipline, type TrainingSportId } from '@shared/training-disciplines';
 import { AppUserService } from './app.user.service';
-import { browserTrainingLoadSourceFingerprint } from '@shared/training-load-source';
+import { browserTrainingLoadSourceFingerprint, canonicalTrainingLoadValue } from '@shared/training-load-source';
 
 export interface TrainingLoadView extends EffectiveTrainingLoad { updatedAtMs?: number; }
 export interface TrainingLoadPolicyHead extends TrainingLoadPolicy { id: TrainingSportId; revision: number; }
@@ -98,7 +98,9 @@ export class TrainingLoadService {
         controls: 'reset' in edit ? {} : controls, resetUnmatched: 'reset' in edit ? true : current?.resetUnmatched ?? false, editedLegKey: 'key' in edit ? edit.key : null, updatedAt: serverTimestamp() };
       const changed = !current || patch.excluded !== current.excluded
         || patch.resetUnmatched !== (current.resetUnmatched ?? false)
-        || JSON.stringify(patch.controls) !== JSON.stringify(current.controls);
+        // Firestore map field order can differ from the editor's object order.
+        // Unchanged controls must not advance freshness without a load rebuild.
+        || JSON.stringify(canonicalTrainingLoadValue(patch.controls)) !== JSON.stringify(canonicalTrainingLoadValue(current.controls));
       if (changed) {
         if (snapshot.exists()) transaction.update(ref, patch);
         else transaction.set(ref, patch);

@@ -4908,6 +4908,13 @@ and editor lifetime; switching accounts or closing Settings prevents stale compl
 giving feedback. This coordination uses the existing policy listener and adds no database operations. It does not
 change persisted policy semantics or MCP contracts; policy history remains private.
 
+Saving unchanged leg controls compares values independently of Firestore map field order. It leaves the workout's
+revision and load timestamp unchanged, avoiding an unnecessary metadata write and preventing Training impact from
+waiting for a rebuild that correctly ignores unchanged controls. An explicit copy to future sport defaults still
+saves its dated policy revision independently. This uses the existing transaction reads and adds no database work;
+owner Rules, load calculations, queue behavior and MCP contracts are unchanged. Existing help remains applicable:
+future defaults do not change the current workout's saved policy or copy its numeric override.
+
 Private `users/{uid}/events/{eventId}/metaData/trainingLoad` stores server-owned candidates, source fingerprints,
 leg identities and applied policies beside owner-editable controls. Firestore Rules allow exact owner-scoped
 transactions with revision checks and deletion guards, while denying client writes to calculated fields, policy
