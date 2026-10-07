@@ -419,6 +419,53 @@ describe('UserSettingsComponent', () => {
         expect(fixture.nativeElement.querySelector('.settings-save-status').textContent).toContain('Unsaved changes');
     });
 
+    it('makes Save changes the only submit action, including inside collapsed sections', () => {
+        const buttons = Array.from(fixture.nativeElement.querySelectorAll('form button')) as HTMLButtonElement[];
+        expect(buttons.filter(button => button.type === 'submit'))
+            .toEqual([fixture.nativeElement.querySelector('.settings-save-bar button')]);
+        const deleteButton = buttons.find(button => button.textContent?.includes('Delete My Account'))!;
+        expect(deleteButton.type).toBe('button');
+    });
+
+    it.each([false, true])('blocks edits and deletion during save and restores interaction after failure=%s', async fail => {
+        const name = component.userSettingsFormGroup.get('displayName');
+        name.setValue('Pending name');
+        name.markAsDirty();
+        component.activeSection = 'account';
+        let finishSave!: () => void;
+        const update = vi.mocked(TestBed.inject(AppUserService).updateUserProperties).mockImplementationOnce(() => new Promise<[]>(
+            (resolve, reject) => { finishSave = () => fail ? reject(new Error('offline')) : resolve([]); }
+        ));
+        const save = component.onSubmit(new Event('submit'));
+        fixture.detectChanges();
+        const overview = fixture.nativeElement.querySelector('.settings-overview') as HTMLElement;
+        const deleteButton = fixture.nativeElement.querySelector('.danger-card button') as HTMLButtonElement;
+        expect(overview.hasAttribute('inert')).toBe(true);
+        expect(deleteButton.disabled).toBe(true);
+        expect(fixture.nativeElement.querySelector('.settings-save-bar mat-spinner')).toBeTruthy();
+        deleteButton.click();
+        component.deleteUser(new Event('click'));
+        expect(TestBed.inject(MatDialog).open).not.toHaveBeenCalled();
+        expect(update).toHaveBeenCalledTimes(1);
+        finishSave();
+        await save;
+        fixture.detectChanges();
+        expect(overview.hasAttribute('inert')).toBe(false);
+        expect(deleteButton.disabled).toBe(false);
+        expect(name.value).toBe('Pending name');
+        expect(name.dirty).toBe(fail);
+    });
+
+    it('keeps subsection headings beneath their group and disclosure headings', () => {
+        const panels = Array.from(fixture.nativeElement.querySelectorAll('.settings-panel-section')) as HTMLElement[];
+        for (const panel of panels) {
+            const headings = Array.from(panel.querySelectorAll('h1,h2,h3,h4,h5,h6'));
+            expect(headings.every(heading => Number(heading.tagName.slice(1)) >= 4)).toBe(true);
+        }
+        const units = fixture.nativeElement.querySelector('#settings-units-content');
+        expect(units.querySelectorAll('h4')).toHaveLength(3);
+    });
+
     it('ignores disclosure actions while saving or deleting', async () => {
         component.isSaving = true;
         await component.toggleSettingsSection('privacy');

@@ -56,6 +56,9 @@ Settings uses a centered 1120 px overview, with **Preferences** and **Privacy & 
 `aria-expanded` and `aria-controls`; all form panels remain mounted while collapsed. At most one section is open.
 An absent or invalid `section` query parameter shows the collapsed overview, and valid section links open their
 panel; the legacy `delete-account` link still opens Account. Closing a panel removes the section parameter.
+The group/disclosure/subsection heading levels are H2/H3/H4. Save changes is the only submit action; account deletion
+is an explicit button action and is blocked during saving. The overview is inert while saving or deleting so the
+loading shade cannot leave keyboard edits available; save progress remains outside that inert region.
 The inline Save changes action applies the whole form and remains available for dirty edits even when Account
 is open. Narrow column layouts use container queries to stack fields and preserve Material touch targets.
 

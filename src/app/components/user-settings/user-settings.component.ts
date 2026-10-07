@@ -787,7 +787,7 @@ export class UserSettingsComponent implements OnChanges, OnDestroy, OnInit {
 
   public deleteUser(event: Event) {
     event.preventDefault();
-    if (this.isDeleting) {
+    if (this.isSaving || this.isDeleting) {
       return;
     }
 

@@ -40,7 +40,7 @@
           map: mapSettings, charts: chartSettings, units: unitSettings,
           privacy: privacySettings, account: accountSettings
         };
-        <div class="settings-overview">
+        <div class="settings-overview" [attr.inert]="isSaving || isDeleting ? '' : null">
           @for (group of settingsGroups; track group.id) {
           <section class="settings-group" [attr.aria-labelledby]="'settings-group-' + group.id">
             <h2 class="settings-group-title" [id]="'settings-group-' + group.id">{{ group.label }}</h2>
@@ -105,7 +105,7 @@
                   <div class="header-info">
                     <div class="name-row">
                       <div class="user-display-name-wrapper">
-                        <h2 class="user-display-name">{{ user.displayName }}</h2>
+                        <p class="user-display-name">{{ user.displayName }}</p>
                         @if (isProUser) {
                         <span class="pro-badge">
                           <mat-icon>verified</mat-icon>
@@ -190,7 +190,7 @@
           <div class="settings-panel-body">
             <div class="settings-theme-control">
               <div>
-                <h3>Theme</h3>
+                <h4>Theme</h4>
                 <p>Choose the color theme for the app.</p>
               </div>
               <mat-form-field appearance="outline" subscriptSizing="dynamic">
@@ -350,7 +350,7 @@
           <div class="settings-panel-body">
             <div class="settings-option-block settings-regional-format">
               <div>
-                <h2 class="settings-subsection-title">Regional formatting</h2>
+                <h4 class="settings-subsection-title">Regional formatting</h4>
                 <p>Choose how dates, times, numbers, and percentages are displayed.</p>
               </div>
               <mat-form-field appearance="outline" subscriptSizing="dynamic">
@@ -377,7 +377,7 @@
 
             <div class="settings-option-block">
               <div>
-                <h2 class="settings-subsection-title">Simple preset</h2>
+                <h4 class="settings-subsection-title">Simple preset</h4>
                 <p>Choose the units most of the app should use.</p>
               </div>
               <mat-button-toggle-group
@@ -394,7 +394,7 @@
 
             <div class="settings-option-block">
               <div>
-                <h2 class="settings-subsection-title">Fine-tune units</h2>
+                <h4 class="settings-subsection-title">Fine-tune units</h4>
                 <p>Adjust individual measurement units.</p>
               </div>
             </div>
@@ -467,7 +467,7 @@
           <div class="settings-panel-body">
             <div class="settings-toggle-block">
               <div>
-                <h3>Usage analytics</h3>
+                <h4>Usage analytics</h4>
                 <p>Share anonymous usage statistics to help us improve Quantified Self.</p>
               </div>
               <mat-slide-toggle
@@ -481,8 +481,8 @@
 
             <div class="settings-toggle-block">
               <div>
-                <h3>Marketing emails</h3>
-              <p>Receive occasional founder emails about new features, product updates, and offers.</p>
+                <h4>Marketing emails</h4>
+                <p>Receive occasional founder emails about new features, product updates, and offers.</p>
               </div>
               <mat-slide-toggle
                 aria-label="Marketing emails"
@@ -509,7 +509,7 @@
                 </p>
 
                 <div>
-                  <button mat-stroked-button class="qs-mat-warn" (click)="deleteUser($event)" [disabled]="isDeleting">
+                  <button mat-stroked-button type="button" class="qs-mat-warn" (click)="deleteUser($event)" [disabled]="isSaving || isDeleting">
                     <mat-icon>delete_forever</mat-icon>
                     Delete My Account
                   </button>
