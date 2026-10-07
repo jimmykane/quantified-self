@@ -1,5 +1,6 @@
 import {
   ActivityInterface,
+  DataActiveLap,
   DataDuration,
   DataEnergy,
   DataHeartRate,
@@ -143,9 +144,36 @@ export function getActivitySwimLengths(activity: ActivityInterface | null | unde
     return [];
   }
 
+  const laps = activity.getLaps?.() || [];
   return rawSwimLengths
     .map(normalizeSwimLength)
-    .filter((swimLength): swimLength is AppSwimLength => swimLength !== null);
+    .filter((swimLength): swimLength is AppSwimLength => swimLength !== null)
+    .map(length => ({ ...length, lapIndex: getDisplaySwimLengthLapIndex(length, laps) }));
+}
+
+function getDisplaySwimLengthLapIndex(length: AppSwimLength, laps: LapInterface[]): number | null {
+  const recordedIndex = length.lapIndex;
+  if (!Number.isInteger(recordedIndex) || recordedIndex < 1 || recordedIndex > laps.length) {
+    return recordedIndex;
+  }
+  const active = isRestSwimLength(length) ? false : length.type.trim().toLowerCase() === 'active' ? true : null;
+  const recordedActive = getRecordedLapActive(laps[recordedIndex - 1]);
+  if (active === null || recordedActive === null || recordedActive === active) {
+    return recordedIndex;
+  }
+
+  // Older FIT imports used overlapping, rounded lap windows. Correct only an explicit
+  // active/rest contradiction with a unique exact start and matching recorded lap state.
+  const matches = laps.map((lap, index) => ({ lap, index })).filter(({ lap }) =>
+    lap.startDate?.getTime() === length.startDate.getTime()
+      && getRecordedLapActive(lap) === active);
+  return matches.length === 1 ? matches[0].index + 1 : recordedIndex;
+}
+
+function getRecordedLapActive(lap: LapInterface): boolean | null {
+  const stat = lap.getStat?.(DataActiveLap.type);
+  const value = stat ? stat.getValue() : null;
+  return typeof value === 'boolean' ? value : null;
 }
 
 export function isRestSwimLength(swimLength: AppSwimLength | null | undefined): boolean {
@@ -181,7 +209,8 @@ export function getSwimLapStrokeLabels(activity: ActivityInterface): Map<LapInte
     lengthsByLapIndex.set(length.lapIndex, lengths);
   }
   return new Map((activity.getLaps?.() || []).map((lap, index) => [
-    lap, getSwimStrokeLabel(lengthsByLapIndex.get(index + 1) || []),
+    lap, getRecordedLapActive(lap) === false
+      ? '' : getSwimStrokeLabel(lengthsByLapIndex.get(index + 1) || []),
   ]));
 }
 

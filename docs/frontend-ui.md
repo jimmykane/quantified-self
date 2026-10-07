@@ -97,7 +97,14 @@ come from recorded non-rest swim lengths using their one-based `lapIndex` in the
 lap-type filtering; lap IDs and visible row numbers do not determine the association. The same pure label helper
 supplies the default swim set header: one recorded stroke is named, different strokes show Mixed, and missing or
 rest-only stroke data stays blank. Stroke is display metadata with no numeric average or selected-summary value.
+For older FIT imports with overlapping rounded lap windows, the display helper corrects a length's lap reference
+only when its active/rest type contradicts the recorded **Active Lap** flag and exactly one lap with the matching
+flag starts at that length's recorded start time. Missing or ambiguous metadata preserves the source index; an
+explicitly inactive lap never receives a stroke label. This also corrects the expanded length table's Lap column
+without changing source records, timing, distance, chart boundaries, Training or MCP data.
 The existing per-sport settings write path stores its visibility choice; source activity/lap/length data is unchanged.
+Pinned swim-length numbers and lap number/selection cells use an opaque theme surface, including their headers,
+so horizontally scrolling values cannot bleed through the fixed identifiers in either theme.
 Pending column choices survive background preference refreshes. A failed save restores only that sport's previous
 layout, preserving changes to other sport layouts and the temporary lap selection.
 

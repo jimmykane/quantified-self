@@ -22,6 +22,15 @@
   max-width: 48px;
 }
 
+.table-container .lap-index-cell,
+.table-container .lap-selection-cell,
+.table-container mat-row:hover .lap-index-cell,
+.table-container mat-row:hover .lap-selection-cell {
+  /* Keep pinned identifiers and selection controls opaque while the table scrolls. */
+  background: linear-gradient(var(--mat-sys-surface), var(--mat-sys-surface)), var(--mat-sys-surface-container-lowest);
+  opacity: 1;
+}
+
 .lap-duration-cell {
   flex: 0 0 104px;
   width: 104px;

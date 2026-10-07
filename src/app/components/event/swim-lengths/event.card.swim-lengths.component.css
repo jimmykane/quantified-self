@@ -66,10 +66,14 @@
   font-family: 'Barlow Condensed', 'Inter', sans-serif;
 }
 
-.swim-length-index-cell {
+.table-container .swim-length-index-cell,
+.table-container mat-row:hover .swim-length-index-cell {
   flex: 0 0 48px;
   width: 48px;
   max-width: 48px;
+  /* Pinned cells must mask horizontally scrolling values, including on hover. */
+  background: linear-gradient(var(--mat-sys-surface), var(--mat-sys-surface)), var(--mat-sys-surface-container-lowest);
+  opacity: 1;
 }
 
 .swim-length-lap-cell {
