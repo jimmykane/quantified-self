@@ -35,9 +35,11 @@
           </mat-icon>
         </button>
         }
+        @if (canEditTrainingLoad) {
         <button mat-icon-button type="button" (click)="openTrainingLoad()" matTooltip="Training load" aria-label="Edit Training load">
           <mat-icon>monitor_heart</mat-icon>
         </button>
+        }
         <app-event-actions [user]="user" [event]="event" [showDownloadOriginal]="true" align="end"></app-event-actions>
       </div>
       }

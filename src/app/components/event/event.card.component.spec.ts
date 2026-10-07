@@ -289,15 +289,24 @@ describe('EventCardComponent', () => {
         expect(fixture.nativeElement.querySelector('app-training-impact')).toBeNull();
     });
 
-    it('does not show or load Training impact for benchmark event details', () => {
+    it.each([{ isMerge: true }, { mergeType: 'benchmark', isMerge: false }])('does not show or load Training impact for benchmark event details %j', classification => {
         mockTrainingImpactService.watch.mockClear();
-        component.event.set({ ...mockEvent, hasBenchmark: true } as AppEventInterface);
+        component.event.set({ ...mockEvent, ...classification } as AppEventInterface);
         fixture.detectChanges();
 
         expect(component.trainingImpact()).toBeNull();
         expect(component.trainingImpactState().status).toBe('private');
         expect(fixture.nativeElement.querySelector('app-training-impact')).toBeNull();
         expect(mockTrainingImpactService.watch).not.toHaveBeenCalled();
+    });
+
+    it('keeps Training impact available for a combined multisport workout', () => {
+        mockTrainingImpactService.watch.mockClear();
+        component.event.set({ ...mockEvent, isMerge: true, mergeType: 'multi' } as AppEventInterface);
+        fixture.detectChanges();
+        expect(component.trainingImpact()?.availability).toBe('missing-tss');
+        expect(mockTrainingImpactService.watch).toHaveBeenCalledWith('testUser', [component.event()]);
+        expect(fixture.nativeElement.querySelector('app-training-impact')).not.toBeNull();
     });
 
     it('should initialize event from route data as signal', () => {
