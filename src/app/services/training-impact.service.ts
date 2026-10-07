@@ -5,6 +5,7 @@ import { DERIVED_METRIC_KINDS } from '@shared/derived-metrics';
 import { catchError, combineLatest, distinctUntilChanged, finalize, map, Observable, of, shareReplay, startWith, switchMap, tap } from 'rxjs';
 import type { DashboardFormPoint } from '../helpers/dashboard-form.helper';
 import { AppUserService } from './app.user.service';
+import { isMergeOrBenchmarkEvent } from '../helpers/event-visibility.helper';
 import {
   DashboardDerivedMetricsService,
   type DashboardDerivedMetricsState,
@@ -33,11 +34,12 @@ export class TrainingImpactService {
   watch(uid: string, events: readonly EventInterface[] = []): Observable<TrainingImpactSnapshotState> {
     const normalizedUid = `${uid || ''}`.trim();
     if (!normalizedUid) return of(PRIVATE_STATE);
+    const loadEvents = events.filter(event => !isMergeOrBenchmarkEvent(event));
     return this.users.user$.pipe(
       map(viewer => `${viewer?.uid || ''}`.trim()),
       distinctUntilChanged(),
       switchMap(viewerUid => viewerUid === normalizedUid
-        ? combineLatest([this.watchOwner(normalizedUid), this.loads.watchEffective(normalizedUid, events)]).pipe(
+        ? combineLatest([this.watchOwner(normalizedUid), this.loads.watchEffective(normalizedUid, loadEvents)]).pipe(
           map(([state, loadsByEventId]) => ({ ...state, loadsByEventId,
             status: state.status === 'ready' && [...loadsByEventId.values()].some(load =>
               (load.updatedAtMs ?? 0) > (state.formUpdatedAtMs ?? 0)) ? 'updating' as const : state.status })),
