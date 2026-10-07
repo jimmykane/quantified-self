@@ -12,7 +12,8 @@ import { attachEventTrainingLoads } from './training-load-reader';
 import { attachedEffectiveTrainingLoad, resolveEffectiveTrainingLoad, type TrainingLoadMetadata } from '../../../shared/training-load-policy';
 
 const enabled = !!process.env.FIRESTORE_EMULATOR_HOST;
-describe.skipIf(!enabled)('Training load persistence in Firestore', () => {
+// Contended real Firestore transactions can retry beyond the five-second unit-test budget.
+describe.skipIf(!enabled)('Training load persistence in Firestore', { timeout: 30_000 }, () => {
   let db: admin.firestore.Firestore;
   const users: string[] = [];
   function setup() {
