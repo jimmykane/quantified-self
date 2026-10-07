@@ -25,8 +25,8 @@ The instrumentation was deployed with explicit approval on October 6, 2026 from 
 
 The Garmin revision is ready and serves 100% of traffic. Before/after checks preserved runtime, triggers, resources,
 retry policy, secret bindings and the enabled 30-minute reconciliation schedule. Both uploaded source archives matched
-the reviewed compiled owners and contained no forbidden local configuration files. Initial Garmin summaries are visible;
-the first post-update scheduled reconciliation is due at 16:30 UTC and remains to be observed.
+the reviewed compiled owners and contained no forbidden local configuration files. Both measurement streams are visible;
+the first post-update scheduled reconciliation was observed on October 6 at 16:30:09 UTC with both task classes scanned.
 
 The first complete collection day is October 7 UTC. Use 2–3 complete days for category attribution and at least a week
 of comparable complete days for cost conclusions, extending the window when starts are sparse or billing is incomplete.
