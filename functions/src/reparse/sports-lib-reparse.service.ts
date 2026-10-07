@@ -9,6 +9,8 @@ import {
     ActivityUtilities,
     DataDistance,
     DataDuration,
+    DataTrainingStressScore,
+    DataTrainingStressScoreMethod,
     EventInterface,
     EventUtilities,
 } from '@sports-alliance/sports-lib';
@@ -1999,6 +2001,22 @@ export async function reparseEventFromOriginalFiles(
                         activityAny.addStat(stat);
                     }
                 });
+                // Regeneration temporarily removes file inputs (energy, mass, gender,
+                // etc.). Restore the parsed score and its provenance as a pair, then
+                // refresh candidates from the complete inputs before persistence.
+                for (const type of [DataTrainingStressScore.type, DataTrainingStressScoreMethod.type]) {
+                    activity.removeStat(type);
+                    const parsedStat = previousStats.get(type);
+                    if (parsedStat) activityAny.addStat(parsedStat);
+                }
+                const automatic = ActivityUtilities.evaluateTrainingStressScore(activity).automatic;
+                if (automatic.score !== null && automatic.method !== null) {
+                    activity.addStat(new DataTrainingStressScore(automatic.score));
+                    activity.addStat(new DataTrainingStressScoreMethod(automatic.method));
+                } else {
+                    activity.removeStat(DataTrainingStressScore.type);
+                    activity.removeStat(DataTrainingStressScoreMethod.type);
+                }
             });
         }
         EventUtilities.reGenerateStatsForEvent(reparsedEvent);

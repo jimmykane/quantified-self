@@ -61,6 +61,7 @@ const hoisted = vi.hoisted(() => {
     const mergeEvents = vi.fn((events: any[]) => events[0]);
     const reGenerateStatsForEvent = vi.fn();
     const generateMissingStreamsAndStatsForActivity = vi.fn();
+    const evaluateTrainingStressScore = vi.fn();
     const mockGenerateActivityIDFromSourceKey = vi.fn();
     const mockLoggerInfo = vi.fn();
     const mockLoggerWarn = vi.fn();
@@ -94,6 +95,7 @@ const hoisted = vi.hoisted(() => {
         mergeEvents,
         reGenerateStatsForEvent,
         generateMissingStreamsAndStatsForActivity,
+        evaluateTrainingStressScore,
         mockGenerateActivityIDFromSourceKey,
         mockLoggerInfo,
         mockLoggerWarn,
@@ -153,25 +155,31 @@ vi.mock('firebase-admin/firestore', () => ({
     },
 }));
 
-vi.mock('@sports-alliance/sports-lib', () => ({
-    ActivityParsingOptions: class ActivityParsingOptions {
-        constructor(public opts: unknown) { }
-    },
-    DataDistance: { type: 'distance' },
-    DataDuration: { type: 'duration' },
-    EventImporterFIT: hoisted.fitImporter,
-    EventImporterGPX: hoisted.gpxImporter,
-    EventImporterTCX: hoisted.tcxImporter,
-    EventImporterSuuntoJSON: hoisted.suuntoJSONImporter,
-    EventImporterSuuntoSML: hoisted.suuntoSMLImporter,
-    ActivityUtilities: {
-        generateMissingStreamsAndStatsForActivity: hoisted.generateMissingStreamsAndStatsForActivity,
-    },
-    EventUtilities: {
-        mergeEvents: hoisted.mergeEvents,
-        reGenerateStatsForEvent: hoisted.reGenerateStatsForEvent,
-    },
-}));
+vi.mock('@sports-alliance/sports-lib', async (importOriginal) => {
+    const actual = await importOriginal<typeof import('@sports-alliance/sports-lib')>();
+    return {
+        ActivityParsingOptions: class ActivityParsingOptions {
+            constructor(public opts: unknown) { }
+        },
+        DataDistance: { type: 'distance' },
+        DataDuration: { type: 'duration' },
+        DataTrainingStressScore: actual.DataTrainingStressScore,
+        DataTrainingStressScoreMethod: actual.DataTrainingStressScoreMethod,
+        EventImporterFIT: hoisted.fitImporter,
+        EventImporterGPX: hoisted.gpxImporter,
+        EventImporterTCX: hoisted.tcxImporter,
+        EventImporterSuuntoJSON: hoisted.suuntoJSONImporter,
+        EventImporterSuuntoSML: hoisted.suuntoSMLImporter,
+        ActivityUtilities: {
+            generateMissingStreamsAndStatsForActivity: hoisted.generateMissingStreamsAndStatsForActivity,
+            evaluateTrainingStressScore: hoisted.evaluateTrainingStressScore,
+        },
+        EventUtilities: {
+            mergeEvents: hoisted.mergeEvents,
+            reGenerateStatsForEvent: hoisted.reGenerateStatsForEvent,
+        },
+    };
+});
 
 vi.mock('../shared/event-writer', () => ({
     EventWriter: vi.fn((adapter: any, _storageAdapter: any, _bucketName: any, logger: any) => {
@@ -307,6 +315,7 @@ describe('sports-lib-reparse.service', () => {
         hoisted.suuntoSMLImporter.getFromXML.mockResolvedValue(makeEvent());
         hoisted.suuntoSMLImporter.getFromJSONString.mockResolvedValue(makeEvent());
         hoisted.generateMissingStreamsAndStatsForActivity.mockImplementation(() => { });
+        hoisted.evaluateTrainingStressScore.mockReturnValue({ automatic: { score: null, method: null } });
         hoisted.mockGenerateActivityIDFromSourceKey.mockImplementation(
             async (eventID: string, sourceActivityKey: string) => `new-${eventID}-${sourceActivityKey}`,
         );
@@ -2264,6 +2273,7 @@ describe('sports-lib-reparse.service', () => {
             setID: vi.fn(),
             creator: { name: 'A' },
             getStats: vi.fn(() => activityStats),
+            removeStat: vi.fn((type: string) => activityStats.delete(type)),
             clearStats: vi.fn(() => {
                 activityStats = new Map<string, unknown>();
             }),
@@ -2300,6 +2310,49 @@ describe('sports-lib-reparse.service', () => {
         expect(parsedActivity.getStat).toHaveBeenCalledWith('preserved');
         expect(activityStats.get('preserved')).toBe(preservedStat);
         expect(activityStats.get('generated')).toBe(generatedStat);
+    });
+
+    it.each([
+        { label: 'calorie MET', score: undefined, method: undefined, expected: 9, expectedMethod: 'MET', calories: true },
+        { label: 'imported score', score: 42, method: 'IMPORTED', expected: 42, expectedMethod: 'IMPORTED', calories: true },
+        { label: 'imported zero', score: 0, method: 'IMPORTED', expected: 0, expectedMethod: 'IMPORTED', calories: true },
+        { label: 'imported score over generated power', score: 42, method: 'IMPORTED', expected: 42, expectedMethod: 'IMPORTED', calories: true, power: true },
+        { label: 'stale calculated score', score: 87.3, method: 'HR', expected: null, expectedMethod: null, calories: false },
+    ])('regenerate keeps recorded and cached TSS consistent for $label', async ({ score, method, expected, expectedMethod, calories, power = false }) => {
+        const sports = await vi.importActual<typeof import('@sports-alliance/sports-lib')>('@sports-alliance/sports-lib');
+        const parsedEvent = sports.EventImporterJSON.getEventFromJSON({
+            name: 'Synthetic walk', startDate: 0, endDate: 3600000,
+            activities: [{ startDate: 0, endDate: 3600000, type: power ? sports.ActivityTypes.Cycling : sports.ActivityTypes.Walking,
+                creator: { name: 'Test' }, laps: [], intensityZones: [], streams: [],
+                stats: { ...(calories ? { Energy: 210, Weight: 70 } : {}),
+                    ...(score === undefined ? {} : { 'Training Stress Score': score, 'Training Stress Score Method': method }) } }],
+        } as any);
+        const activity = parsedEvent.getFirstActivity();
+        if (power) {
+            const stream = activity.createStream(sports.DataPower.type);
+            stream.setData(Array.from({ length: 3601 }, () => 200));
+            activity.addStream(stream);
+        }
+        if (expected !== null) sports.ActivityUtilities.generateMissingStreamsAndStatsForActivity(activity);
+        hoisted.fitImporter.getFromArrayBuffer.mockResolvedValue(parsedEvent);
+        hoisted.generateMissingStreamsAndStatsForActivity.mockImplementation(item => {
+            sports.ActivityUtilities.generateMissingStreamsAndStatsForActivity(item);
+            if (power) expect(item.getStat(sports.DataTrainingStressScoreMethod.type)?.getValue()).toBe('POWER');
+        });
+        hoisted.evaluateTrainingStressScore.mockImplementation(
+            item => sports.ActivityUtilities.evaluateTrainingStressScore(item));
+
+        await reparseEventFromOriginalFiles('u1', 'e1', { mode: 'regenerate',
+            eventData: { originalFile: { path: 'users/u1/events/e1/original.fit' } },
+            activityDocs: [], targetSportsLibVersion: TARGET_SPORTS_LIB_VERSION });
+
+        expect(hoisted.mockWriteAllEventData.mock.calls[0][1]).toBe(parsedEvent);
+        const evaluations = sports.ActivityUtilities.getTrainingStressScoreEvaluations(activity);
+        for (const preference of ['automatic', 'hr', 'met'] as const) {
+            expect(evaluations[preference]).toMatchObject({ score: expected, method: expectedMethod });
+        }
+        expect(activity.getStat(sports.DataTrainingStressScore.type)?.getValue() ?? null).toBe(expected);
+        expect(activity.getStat(sports.DataTrainingStressScoreMethod.type)?.getValue() ?? null).toBe(expectedMethod);
     });
 
     it('reparseEventFromOriginalFiles should skip activity-level regeneration in reimport mode', async () => {

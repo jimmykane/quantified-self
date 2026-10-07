@@ -4924,6 +4924,14 @@ evidence before old leg cleanup. Metadata preparation and persistence failures p
 serializes source statistics, including native JSON imports whose power evaluation derives additional statistics.
 Final metadata persistence reads those cached results so source fingerprints describe exactly what was saved.
 
+The source-file **Regenerate statistics** path refreshes TSS evaluations after restoring file statistics that generic
+regeneration temporarily clears, including calories, body mass and gender. It restores the parsed TSS score and method
+together before evaluation, preserving imported scores (including zero), recalculating known calculated scores, and
+removing unavailable calculated scores instead of resurrecting them from the backup stats. Recorded TSS and private
+candidates therefore describe the same completed regeneration. This correction adds only in-memory evaluation, with
+no additional Firestore reads/writes, queue work, provider calls, or MCP schema/scope/mutation changes. Monitoring
+coverage is unchanged: existing reparse persistence and failure stages still own the operation and its retries.
+
 Reconciliation uses the existing unique identity matcher with its unmatched-leg fallback disabled. Derived TSS is
 excluded from control identity. Ambiguous identities retain saved policies/controls and make modeled load
 unavailable until the owner explicitly reassociates or resets them. Missing legacy identity evidence also requires

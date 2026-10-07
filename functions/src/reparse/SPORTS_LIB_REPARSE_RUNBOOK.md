@@ -17,6 +17,10 @@ Nordic Walking, Hiking and Trekking skip calculated pace and power. HR requires 
 maximum HR; missing calibration can fall back to the calorie-derived MET estimate when its file inputs exist.
 Valid imported TSS retains precedence. See `docs/training-workspace.md` for the exact calculation and policy contract.
 
+Regenerate mode restores file-only calculation inputs before refreshing TSS candidates. Imported scores, including
+zero, retain their provenance; unavailable calculated scores are removed. Recorded TSS and private evaluations must
+agree before EventWriter persists them. This uses the existing persistence stages without additional database calls.
+
 Historical recordings keep their current recorded values until source-backed reparse. Numeric overrides and exclusions
 work immediately; HR/MET selection needs cached evaluations. Before overwriting any event/activity document, reparse
 durably freezes legacy identities in private server-owned metadata. Retries retain this evidence even when IDs are
@@ -24,9 +28,10 @@ reused or a previous attempt wrote only part of the source. Reparse then refresh
 sanitized event/activity writes and before stale child removal. Its transaction preserves the latest controls and
 original dated policy snapshot, checks source fingerprints and deletion guards, and uses strict leg identity matching
 without TSS. Ambiguous matches or missing old identity evidence retain controls and leave modeled load unavailable
-until owner reassociation or reset. Identity preparation does not advance the load timestamp; repeated identical
-imports do not advance the completed metadata revision or timestamp. Changed load metadata invalidates affected
-Training snapshots.
+until owner reassociation or reset. Identity preparation does not advance the load timestamp. Clearing a pending
+import advances load freshness and requests a targeted load rebuild even when the source is identical, because an
+intermediate build may have observed the pending state. Repeated finalization without pending state or changed
+inputs is idempotent. Changed load metadata invalidates affected Training snapshots.
 
 Keep automatic event and route scanners disabled. This change needs no saved-route reparse. Use the existing targeted
 original-file action for an approved historical correction; do not bulk-rewrite recorded scores or distribute parent
