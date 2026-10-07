@@ -25,7 +25,7 @@ function assertDashboardMetricScope(config) {
     if (nativeTaskMetrics.has(type)) {
       assert.match(query.filter, /resource\.type="cloud_tasks_queue"/);
       assert.match(query.filter, /resource\.labels\.location="europe-west2"/);
-      assert.match(query.filter, /resource\.labels\.queue_id=\("processSleepSyncTask" OR "processGarminHealthBackfillTask"\)/);
+      assert.match(query.filter, /resource\.labels\.queue_id=one_of\("processSleepSyncTask", "processGarminHealthBackfillTask"\)/);
     }
   }
 }
@@ -91,9 +91,23 @@ test('metric classification rejects lookalikes, missing types and queue names ou
   }
   const config = bundle();
   const query = config.dashboard.mosaicLayout.tiles[1].widget.xyChart.dataSets[0].timeSeriesQuery.timeSeriesFilter;
-  query.filter = query.filter.replace('resource.labels.queue_id=("processSleepSyncTask" OR "processGarminHealthBackfillTask")',
+  query.filter = query.filter.replace('resource.labels.queue_id=one_of("processSleepSyncTask", "processGarminHealthBackfillTask")',
     'resource.labels.queue_id="unrelated" note="processSleepSyncTask processGarminHealthBackfillTask"');
   assert.throws(() => assertDashboardMetricScope(config));
+});
+test('native queue comparisons reject Logging shorthand and mixed AND/OR restrictions', () => {
+  for (const tileIndex of [1, 2, 3]) for (const invalid of [
+    'resource.labels.queue_id=("processSleepSyncTask" OR "processGarminHealthBackfillTask")',
+    '(resource.labels.queue_id="processSleepSyncTask" OR resource.labels.queue_id="processGarminHealthBackfillTask")',
+  ]) {
+    const config = bundle();
+    const query = config.dashboard.mosaicLayout.tiles[tileIndex].widget.xyChart.dataSets[0].timeSeriesQuery.timeSeriesFilter;
+    query.filter = query.filter.replace(
+      'resource.labels.queue_id=one_of("processSleepSyncTask", "processGarminHealthBackfillTask")',
+      invalid,
+    );
+    assert.throws(() => assertDashboardMetricScope(config));
+  }
 });
 test('offline preview needs no network or credentials and CI covers definitions', () => {
   const r = spawnSync(process.execPath, ['tools/health-sleep-monitoring/cli.mjs', `--project=${project}`], { encoding: 'utf8', env: { PATH: '/no-credentials' } });

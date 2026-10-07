@@ -1202,7 +1202,7 @@ visible rather than converted into an empty backlog.
 The shared monitoring provisioner rejects malformed inventories and mismatched managed
 policy identities before any cloud writes; a title alone cannot adopt another policy.
 
-Health/Sleep monitoring (#830) has a separate, locally prepared bundle for the ordinary
+Health/Sleep monitoring (#830) has a separate bundle, activated on 7 October 2026, for the ordinary
 `processSleepSyncTask` and single-task `processGarminHealthBackfillTask` queues. It reuses
 the ordinary worker invocation summary and adds post-commit terminal observations and
 a bounded, field-masked probe on the existing dispatcher. Garmin, Suunto and COROS
@@ -1210,8 +1210,12 @@ ordinary ingestion remain distinct from intentionally paced Garmin historical re
 The probe excludes superseded connection metadata; unknown metadata is not healthy zero.
 Native HTTP attempts remain diagnostic only, since expected contention also retries;
 classified processing failures, unavailable observations and missing heartbeats alert separately.
-This is not activated by the #829 deployment: its three affected Functions and owned
-dashboard/11 metrics/six policies require separate approval and production readback.
+Its three affected Functions and owned dashboard/11 metrics/six enabled policies were
+deployed/applied with separate approval and verified through production API/query readback,
+reusing the existing Alerts email channel. It was not activated by the #829 deployment.
+Initial post-creation heartbeat-series evidence remains distinct from earlier raw logs;
+dated activation and remaining observation evidence are recorded in #830. Future changes
+still require separate approval.
 See [Sleep sync operations](sleep-sync-operations.md#cloud-monitoring-830) for meanings,
 exclusions, thresholds, costs and activation steps. HTTP ACK, request-campaign completion
 and received Health/Sleep records are different outcomes; idle feeds are not an outage.

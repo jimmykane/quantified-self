@@ -353,9 +353,12 @@ next daily COROS poll will request the rolling recent window again.
 
 ## Cloud Monitoring (#830)
 
-Status: source and offline/demo-emulator verification are prepared locally. **Not yet
-activated in production.** #830 stays In progress until an approved deployment/apply
-and live API/query readback are recorded. The #829 Activity Import dashboard and #655
+Status: **activated in production on 7 October 2026**, after the separately approved
+three-Function deployment and configuration apply. The existing Alerts email channel
+is reused. All 11 metrics, dashboard queries and six enabled policies passed API readback;
+dated activation and observation evidence is recorded in [#830](https://github.com/jimmykane/quantified-self/issues/830).
+Initial log-metric heartbeats still need post-creation observations; raw pre-creation logs
+are not retrospective metric samples. The #829 Activity Import dashboard and #655
 Training dashboard do not provide this area's coverage.
 
 `tools/health-sleep-monitoring/definitions.mjs` owns **QS Health & Sleep**, 11 versioned
@@ -394,6 +397,11 @@ this does not use the mail extension or create another notification channel.
   failures cannot identify a provider or exclude expected contention, so they are
   diagnostic charts only, never independent paging conditions. Processing alerts use
   the classified worker outcomes instead.
+  Their filters use the documented Monitoring `one_of` comparison for these two exact
+  queue IDs, together with the project and region constraints. Logging-style value lists
+  and mixed AND/OR resource-label restrictions are not valid here; see
+  [Monitoring filter syntax](https://docs.cloud.google.com/monitoring/api/v3/filters#comparisons).
+  Production query checks cover the effective filters and aggregations, not only fixture strings.
 
 ### Bounded observations and limits
 

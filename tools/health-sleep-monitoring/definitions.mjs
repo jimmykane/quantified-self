@@ -38,7 +38,8 @@ export function buildHealthSleepMonitoring(project, channel) {
   metric('probe_failures', 'cloud_function', `${operational} (jsonPayload.event="queue_sample_unavailable" OR (jsonPayload.event="queue_sample" jsonPayload.unknownSample>0))`, 'Unknown/failed reads, not zero backlog; known sample saturation alone is not failure.');
   const sum = (period, fields = groups) => ({ alignmentPeriod: period, perSeriesAligner: 'ALIGN_SUM', crossSeriesReducer: 'REDUCE_SUM', groupByFields: fields });
   const filter = (key, resource = 'cloud_run_revision', extra = '') => `metric.type="${metricType(key)}" resource.type="${resource}" resource.labels.project_id="${project}" ${extra}`.trim();
-  const native = (key, queue) => `metric.type="cloudtasks.googleapis.com/queue/${key}" resource.type="cloud_tasks_queue" resource.labels.project_id="${project}" resource.labels.location="europe-west2" ${queue ? `resource.labels.queue_id="${queue}"` : 'resource.labels.queue_id=("processSleepSyncTask" OR "processGarminHealthBackfillTask")'}`;
+  // Monitoring forbids mixing AND/OR resource-label restrictions; one_of keeps the two queues exact.
+  const native = (key, queue) => `metric.type="cloudtasks.googleapis.com/queue/${key}" resource.type="cloud_tasks_queue" resource.labels.project_id="${project}" resource.labels.location="europe-west2" ${queue ? `resource.labels.queue_id="${queue}"` : 'resource.labels.queue_id=one_of("processSleepSyncTask", "processGarminHealthBackfillTask")'}`;
   function threshold(key, resource, count, period, workload) {
     return { displayName: `${key} ${workload}`, conditionThreshold: { filter: filter(key, resource, `metric.labels.workload="${workload}"`), aggregations: [sum(period)],
       comparison: 'COMPARISON_GT', thresholdValue: count - 1, duration: '60s', trigger: { count: 1 }, evaluationMissingData: 'EVALUATION_MISSING_DATA_INACTIVE' } };
