@@ -8,6 +8,7 @@ import { TrainingLoadService } from '../../services/training-load.service';
 import { AppHapticsService } from '../../services/app.haptics.service';
 import { defaultAppliedTrainingLoadPolicy } from '@shared/training-load-policy';
 import { browserTrainingLoadSourceFingerprint } from '@shared/training-load-source';
+import * as trainingLoadSource from '@shared/training-load-source';
 import { ActivityTypes, EventImporterJSON } from '@sports-alliance/sports-lib';
 
 describe('Training load editor', () => {
@@ -81,6 +82,49 @@ describe('Training load editor', () => {
       expect(waiting$.observed).toBe(false);
       expect(component.loaded()).toBe(false);
     } finally { waiting$.complete(); }
+  });
+  it.each(['initial', 'after-save'])('releases pending %s reads when the editor is destroyed', async phase => {
+    const metadata$ = new Subject<null>(); const policies$ = new Subject<[]>();
+    watch.mockReturnValue(metadata$); watchPolicies.mockReturnValue(policies$);
+    component.form.patchValue({ override: 9 }); component.form.markAsDirty();
+    const pending = phase === 'initial' ? component.ngOnInit() : component.save();
+    try {
+      await vi.waitFor(() => {
+        expect(metadata$.observed).toBe(true); expect(policies$.observed).toBe(true);
+      });
+      TestBed.resetTestingModule();
+      expect(metadata$.observed).toBe(false); expect(policies$.observed).toBe(false);
+      await pending;
+      expect(component.loaded()).toBe(false); expect(component.error()).toBe('');
+      expect(success).not.toHaveBeenCalled(); expect(error).not.toHaveBeenCalled();
+    } finally {
+      metadata$.next(null); metadata$.complete(); policies$.next([]); policies$.complete(); await pending;
+    }
+  });
+  it.each(['resolve', 'reject'] as const)('keeps a closed editor silent when a pending save later %ss', async outcome => {
+    let finish!: () => void;
+    save.mockImplementationOnce(() => new Promise<void>((resolve, reject) => {
+      finish = outcome === 'resolve' ? resolve : () => reject(new Error('Late failure'));
+    }));
+    component.form.patchValue({ override: 9 }); component.form.markAsDirty();
+    const pending = component.save();
+    TestBed.resetTestingModule(); finish(); await pending;
+    expect(watch).toHaveBeenCalledOnce(); expect(watchPolicies).toHaveBeenCalledOnce();
+    expect(component.form.controls.override.value).toBe(9); expect(component.error()).toBe('');
+    expect(success).not.toHaveBeenCalled(); expect(error).not.toHaveBeenCalled();
+  });
+  it('discards source verification that finishes after the editor is destroyed', async () => {
+    let finish!: (fingerprint: string) => void;
+    const fingerprint = vi.spyOn(trainingLoadSource, 'browserTrainingLoadSourceFingerprint')
+      .mockImplementationOnce(() => new Promise(resolve => { finish = resolve; }));
+    watch.mockReturnValue(of({ version: 1, revision: 2, excluded: false, controls: {}, parentFingerprint: 'current' }));
+    const pending = component.ngOnInit();
+    try {
+      await vi.waitFor(() => expect(finish).toBeTypeOf('function'));
+      TestBed.resetTestingModule(); finish('current'); await pending;
+      expect(component.loaded()).toBe(false); expect(component.metadata()).toBeNull();
+      expect(component.error()).toBe(''); expect(error).not.toHaveBeenCalled();
+    } finally { fingerprint.mockRestore(); finish?.('current'); await pending; }
   });
   it('removes an override when the number input is cleared instead of saving zero', async () => {
     // Angular's number value accessor emits null for an empty native number input.

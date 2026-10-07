@@ -1,4 +1,5 @@
-import { ChangeDetectionStrategy, Component, inject, OnInit, signal, LOCALE_ID } from '@angular/core';
+import { ChangeDetectionStrategy, Component, DestroyRef, inject, OnInit, signal, LOCALE_ID } from '@angular/core';
+import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { MAT_DIALOG_DATA, MatDialogRef } from '@angular/material/dialog';
 import { FormControl, FormGroup } from '@angular/forms';
 import { firstValueFrom, forkJoin, take } from 'rxjs';
@@ -24,6 +25,7 @@ export class TrainingLoadDialogComponent implements OnInit {
   private readonly service = inject(TrainingLoadService);
   private readonly haptics = inject(AppHapticsService);
   private readonly locale = inject(LOCALE_ID);
+  private readonly destroyRef = inject(DestroyRef);
   readonly dialog = inject(MatDialogRef<TrainingLoadDialogComponent>);
   readonly metadata = signal<TrainingLoadMetadata | null>(null);
   readonly loaded = signal(false);
@@ -40,12 +42,14 @@ export class TrainingLoadDialogComponent implements OnInit {
 
   async ngOnInit(): Promise<void> { await this.reload(); }
   private async reload(): Promise<boolean> {
+    if (this.destroyRef.destroyed) return false;
     this.loaded.set(false);
     try {
       const [metadata, policies] = await firstValueFrom(forkJoin([
         this.service.watch(this.data.user.uid, this.data.event.getID() as string).pipe(take(1)),
         this.service.watchPolicies(this.data.user.uid).pipe(take(1)),
-      ]));
+      ]).pipe(takeUntilDestroyed(this.destroyRef)));
+      if (this.destroyRef.destroyed) return false;
       const sourceCurrent = !metadata?.parentFingerprint || metadata.parentFingerprint ===
         await browserTrainingLoadSourceFingerprint(this.data.event.toJSON());
       const legSourcesCurrent = await Promise.all(this.data.event.getActivities().map(async activity => {
@@ -53,6 +57,7 @@ export class TrainingLoadDialogComponent implements OnInit {
         return !metadata?.legs || !!saved && (!saved.sourceFingerprint || saved.sourceFingerprint ===
           await browserTrainingLoadSourceFingerprint(activity.toJSON()));
       }));
+      if (this.destroyRef.destroyed) return false;
       const currentIds = new Set(this.activities.map(activity => activity.id));
       const allSavedLegsPresent = Object.values(metadata?.legs ?? {}).every(leg => !leg.activityId || currentIds.has(leg.activityId));
       this.sourceCurrent.set(sourceCurrent && allSavedLegsPresent && legSourcesCurrent.every(Boolean));
@@ -62,7 +67,7 @@ export class TrainingLoadDialogComponent implements OnInit {
       this.loaded.set(true);
       return true;
     } catch {
-      this.error.set('Training load could not be loaded. Close and try again.');
+      if (!this.destroyRef.destroyed) this.error.set('Training load could not be loaded. Close and try again.');
       return false;
     }
   }
@@ -155,17 +160,26 @@ export class TrainingLoadDialogComponent implements OnInit {
     await this.mutate(() => this.service.save(this.data.user.uid, this.data.event.getID() as string, this.metadata()?.revision ?? 0, edit));
   }
   private async mutate(action: () => Promise<void>): Promise<void> {
-    if (this.busy() || !this.loaded()) return;
+    if (this.destroyRef.destroyed || this.busy() || !this.loaded()) return;
     this.busy.set(true); this.error.set(''); this.form.disable({ emitEvent: false });
     try {
       await action();
-      if (await this.reload()) this.haptics.success();
+      if (this.destroyRef.destroyed) return;
+      const reloaded = await this.reload();
+      if (this.destroyRef.destroyed) return;
+      if (reloaded) this.haptics.success();
       else {
         this.error.set('Changes were saved, but updated Training load could not be loaded. Close and reopen the editor before making further changes.');
         this.haptics.error();
       }
     }
-    catch (error) { this.error.set(error instanceof Error ? error.message : 'Could not save Training load.'); this.haptics.error(); }
-    finally { this.busy.set(false); this.form.enable({ emitEvent: false }); }
+    catch (error) {
+      if (!this.destroyRef.destroyed) {
+        this.error.set(error instanceof Error ? error.message : 'Could not save Training load.'); this.haptics.error();
+      }
+    }
+    finally {
+      if (!this.destroyRef.destroyed) { this.busy.set(false); this.form.enable({ emitEvent: false }); }
+    }
   }
 }

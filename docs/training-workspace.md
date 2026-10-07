@@ -4882,6 +4882,10 @@ another edit. If that refresh fails, it hides the old load and form, stops the l
 write succeeded but the editor must be reopened. A failed read also unsubscribes the other pending refresh read.
 A rejected write retains the draft for review. This affects editor
 readiness only; persisted policies, calculation semantics and MCP contracts are unchanged.
+Closing/destroying the editor unsubscribes any pending metadata/policy reads. A submitted save still completes,
+but its late result cannot start another refresh, change the closed editor's state or give success/error feedback.
+Async source-fingerprint checks also discard results after destruction. Reopening reads the current saved state;
+this lifecycle handling adds no database operations and has no MCP contract impact.
 
 Settings → Training load uses the existing ten sport families, including Walking & Hiking. Defaults are
 Automatic/included. Saving appends an immutable server-timestamped revision in
