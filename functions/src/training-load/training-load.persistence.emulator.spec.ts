@@ -159,6 +159,28 @@ describe.skipIf(!enabled)('Training load persistence in Firestore', () => {
     expect((await readTrainingLoadSummaries(uid))?.get('workout')?.load.score).toBe(0);
   });
 
+  it.each(['changed', 'deleted', 'moved'])('rejects a cached parent total when a parsed leg is %s', async mutation => {
+    const uid = setup(); const event = workout(); await source(uid, event); await persistTrainingLoadMetadata(uid, event);
+    await completeTrainingLoadCacheWarmup(uid);
+    const leg = db.doc(`users/${uid}/activities/leg`);
+    if (mutation === 'changed') await leg.update({ 'stats.Energy': 999 });
+    else if (mutation === 'deleted') await leg.delete();
+    else await leg.update({ eventID: 'another-workout' });
+    await refreshTrainingLoadSummary(uid, 'workout');
+    const parent = db.doc(`users/${uid}/events/workout`);
+    const [projection] = await attachEventTrainingLoads(uid, [await parent.get()]);
+    expect(attachedEffectiveTrainingLoad(projection.data()!)).toMatchObject({ score: null, reasons: ['source-updating'] });
+    // A delayed owner edit must not restore a score from stale candidates.
+    await db.doc(metadataPath(uid)).update({ controls: { leg: { override: 0 } } });
+    await refreshTrainingLoadSummary(uid, 'workout');
+    expect((await readTrainingLoadSummaries(uid))?.get('workout')?.load.score).toBeNull();
+    await db.doc(metadataPath(uid)).update({ excluded: true }); await refreshTrainingLoadSummary(uid, 'workout');
+    expect((await readTrainingLoadSummaries(uid))?.get('workout')?.load.status).toBe('excluded');
+    await db.doc(metadataPath(uid)).update({ excluded: false });
+    const finish = await prepareTrainingLoadMetadata(uid, event); await source(uid, event); await finish();
+    expect((await readTrainingLoadSummaries(uid))?.get('workout')?.load).toMatchObject({ score: 0, status: 'available' });
+  });
+
   it('splits full buckets atomically under concurrent writes and reads 1,001 summaries in 17 billed document reads', async () => {
     const uid = setup(); const event = workout(); await source(uid, event); await persistTrainingLoadMetadata(uid, event);
     const metadata = (await db.doc(metadataPath(uid)).get()).data() as TrainingLoadMetadata;
@@ -208,6 +230,9 @@ describe.skipIf(!enabled)('Training load persistence in Firestore', () => {
     const changed = workout('new'); await source(uid, changed); await persistTrainingLoadMetadata(uid, changed);
     expect((await ref.get()).data()).toMatchObject({ revision: 3, controls: { leg: { override: 0 } },
       legs: { leg: { activityId: 'new', policy: { revision: 1 } } } });
+    // An obsolete source leg still awaits cleanup; it is not part of the new modeled leg set.
+    await db.doc(`users/${uid}/activities/leg`).update({ 'stats.Energy': 999 });
+    await refreshTrainingLoadSummary(uid, 'workout');
     const docs = await attachEventTrainingLoads(uid, [(await db.doc(`users/${uid}/events/workout`).get())]);
     expect(attachedEffectiveTrainingLoad(docs[0].data()!)).toMatchObject({ score: 0, status: 'available' });
   });

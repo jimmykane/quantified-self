@@ -113,6 +113,24 @@ describe('onDashboardDerivedMetricsEventWrite', () => {
         expect(hoisted.enqueueDerivedMetricsIngressTask).toHaveBeenCalledTimes(2);
     });
 
+    it.each([false, true])('refreshes parsed load candidates after uncoordinated child changes (deleted: %s)', async deleted => {
+        hoisted.metadata.mockResolvedValue({ data: () => ({ controls: {}, legs: { leg: { activityId: 'leg' } } }) });
+        await (onDashboardDerivedMetricsActivityWrite as any)({ params: { uid: 'user-1', activityId: 'leg' }, data: {
+            before: { exists: true, data: () => ({ eventID: 'e', stats: {} }) },
+            after: { exists: !deleted, data: () => deleted ? undefined : { eventID: 'e', stats: { Duration: 10 } } } } });
+        expect(hoisted.refresh).toHaveBeenCalledWith('user-1', 'e');
+        expect(hoisted.refresh.mock.invocationCallOrder[0]).toBeLessThan(hoisted.enqueueDerivedMetricsIngressTask.mock.invocationCallOrder[0]);
+    });
+
+    it('avoids parsed leg verification for a device-label-only edit', async () => {
+        hoisted.metadata.mockResolvedValue({ data: () => ({ controls: {}, legs: { leg: { activityId: 'leg' } } }) });
+        await (onDashboardDerivedMetricsActivityWrite as any)({ params: { uid: 'user-1', activityId: 'leg' }, data: {
+            before: { exists: true, data: () => ({ eventID: 'e', creator: { name: 'Old label' } }) },
+            after: { exists: true, data: () => ({ eventID: 'e', creator: { name: 'New label' } }) } } });
+        expect(hoisted.refresh).not.toHaveBeenCalled();
+        expect(hoisted.enqueueDerivedMetricsIngressTask).toHaveBeenCalledTimes(1);
+    });
+
     it('refreshes legacy source changes outside the derived rollout without enqueueing', async () => {
         hoisted.isDerivedMetricsUidAllowed.mockReturnValue(false);
         hoisted.metadata.mockResolvedValue({ data: () => ({ controls: { leg: { override: 0 } } }) });
@@ -132,8 +150,9 @@ describe('onDashboardDerivedMetricsEventWrite', () => {
         expect(hoisted.enqueueDerivedMetricsIngressTask.mock.calls[0][2]).toBeGreaterThanOrEqual(started);
     });
 
-    it.each([false, true])('refreshes the previous parent when a leg moves to another workout (destination import: %s)', async destinationPending => {
-        const legacy = { data: () => ({ controls: { leg: { override: 0 } } }) };
+    it.each([[false, false], [false, true], [true, false], [true, true]])(
+        'refreshes the previous parent when a leg moves (destination import: %s, parsed: %s)', async (destinationPending, parsed) => {
+        const legacy = { data: () => ({ controls: { leg: { override: 0 } }, ...(parsed ? { legs: { leg: { activityId: 'leg' } } } : {}) }) };
         hoisted.metadata.mockResolvedValueOnce(destinationPending ? { data: () => ({ sourceWritePending: true }) } : legacy)
             .mockResolvedValueOnce(legacy);
         await (onDashboardDerivedMetricsActivityWrite as any)({ params: { uid: 'user-1', activityId: 'leg' }, data: {

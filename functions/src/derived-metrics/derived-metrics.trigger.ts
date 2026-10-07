@@ -7,8 +7,8 @@ import { HEALTH_METRIC_IDS } from '../../../shared/health';
 import { isDerivedMetricsUidAllowed } from './derived-metrics-uid-gate';
 import { enqueueDerivedMetricsIngressTask } from '../shared/cloud-tasks';
 import { getUserDeletionGuardState } from '../shared/user-deletion-guard';
+import { refreshTrainingLoadSummary, trainingLoadSourceFingerprint, trainingLoadWriteTime } from '../training-load/training-load-cache';
 import { hasDerivedMetricSourceChange, hasGarminSleepHeartRateSource } from './derived-metrics-source-change';
-import { refreshTrainingLoadSummary, trainingLoadWriteTime } from '../training-load/training-load-cache';
 
 const DERIVED_METRICS_SOURCE_TRIGGER_MEMORY = '512MiB';
 
@@ -82,9 +82,13 @@ async function handleDerivedMetricsSourceWrite(
                 coordinatedWrite = true;
                 continue;
             }
+            // Parsed totals must also stop using candidates for changed/deleted/moved legs.
+            // Names and device labels do not affect this guard or require extra leg reads.
+            const parsedLegChanged = source === 'activity' && metadata?.legs && (!beforeExists || !afterExists ||
+                before?.eventID !== after?.eventID ||
+                trainingLoadSourceFingerprint(before ?? {}) !== trainingLoadSourceFingerprint(after ?? {}));
             // Legacy controls resolve against live recorded children until their first reparse.
-            // Their compact projection must follow ordinary source corrections/deletions too.
-            if (metadata && !metadata.legs && Object.keys(metadata.controls ?? {}).length) {
+            if (metadata && (parsedLegChanged || (!metadata.legs && Object.keys(metadata.controls ?? {}).length))) {
                 await refreshTrainingLoadSummary(uid, eventId);
                 cacheRefreshed = true;
             }
