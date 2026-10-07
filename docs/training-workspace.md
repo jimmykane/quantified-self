@@ -5,9 +5,9 @@
 The owner's Edit details action on a saved event summary opens one Material bottom sheet for event metadata and
 post-workout feedback: Feeling, the existing whole-recording RPE, and optional private reflection text. There is no
 separate reflection icon or dialog. All fields are staged until one Save changes action; Cancel discards the entire
-draft. No auto-prompt interrupts recording import. The user explicitly chooses the whole recording or a real activity
-for the note, including multi-activity
-recordings; benchmark/ambiguous merged events are excluded. Three optional prompts cover overall feel, sport-relevant
+draft. No auto-prompt interrupts recording import. A workout with one selectable activity uses the whole-recording
+note without a target selector. For multiple activities, the user explicitly chooses the whole recording or a real
+activity for the note; benchmark/ambiguous merged events are excluded. Three optional prompts cover overall feel, sport-relevant
 conditions/technique, and fatigue/recovery. One bounded exact completion-link lookup can replace the last prompt with
 planned-versus-felt context, only for one exact matching target. A malformed or out-of-recording link, an ambiguous
 target, or more than 25 returned links keeps the generic prompt. Valid links to other activities do not imply a match

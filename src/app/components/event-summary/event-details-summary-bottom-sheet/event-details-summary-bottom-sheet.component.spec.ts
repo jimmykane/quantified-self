@@ -66,6 +66,18 @@ describe('Combined event details and post-workout feedback', () => {
     expect(haptics.selection).toHaveBeenCalledTimes(3); expect(haptics.success).toHaveBeenCalledOnce();
     expect(ref.dismiss).toHaveBeenCalledWith(true);
   });
+  it('reads and saves feedback for the workout without a redundant selector when it has one activity', async () => {
+    fixture.destroy(); service.read.mockClear();
+    TestBed.inject(MAT_BOTTOM_SHEET_DATA).event.getActivities = () => [{ getID: () => 'run', type: 'Running' }];
+    await create();
+    expect(fixture.nativeElement.querySelectorAll('mat-select')).toHaveLength(2);
+    expect(fixture.nativeElement.textContent).not.toContain('Reflect on');
+    expect(service.read).toHaveBeenCalledWith(expect.objectContaining({ target: 'recording', activityId: 'recording' }));
+    component.note.set('Workout feedback'); await component.save();
+    expect(service.saveEventDetails).toHaveBeenCalledWith(expect.objectContaining({ target: 'recording', activityId: 'recording' }), {},
+      expect.objectContaining({ fields: { note: 'Workout feedback' } }));
+    expect(haptics.selection).toHaveBeenCalledOnce();
+  });
   it('Cancel discards every staged field without mutating the recording', () => {
     component.name.set('Draft'); component.setRating('rpe', 7); component.note.set('private draft'); component.close();
     expect(component.data.event.name).toBe('Run'); expect(addStat).not.toHaveBeenCalled();

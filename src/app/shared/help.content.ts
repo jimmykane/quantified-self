@@ -742,7 +742,7 @@ HRV and Sleep each have their own date range and older/newer navigation. While a
     summary: 'Keep optional private text context for a recording or one activity.',
     content: `## Add or skip a reflection
 
-Open your saved recording and select **Edit details** in the summary actions. The same form contains **Name**, **Description**, **Feeling**, **RPE** and an optional **Private reflection**. Choose **Whole recording** or one activity explicitly for the private note. Benchmarks and other people’s recordings do not offer reflection editing. Changing the selection discards only unsaved reflection text; your other edits remain staged.
+Open your saved recording and select **Edit details** in the summary actions. The same form contains **Name**, **Description**, **Feeling**, **RPE** and an optional **Private reflection**. For a workout with one activity, the private note applies to the entire workout. When the workout has multiple activities, choose **Whole recording** or one activity explicitly for the note. Benchmarks and other people’s recordings do not offer reflection editing. Changing the selection discards only unsaved reflection text; your other edits remain staged.
 
 There is one **RPE** input for the **whole recording**, including when your private note refers to one activity. It edits the existing workout RPE. There is no separate reflection rating. An absent RPE shows **Not recorded**; imported fractional values are preserved unless you change them.
 

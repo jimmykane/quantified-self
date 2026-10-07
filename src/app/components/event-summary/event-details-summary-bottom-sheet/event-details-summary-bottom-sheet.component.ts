@@ -39,6 +39,7 @@ export class EventDetailsSummaryBottomSheetComponent implements OnInit {
       ? [{ id: `activity_${activity.getID()}`, target: 'activity' as WorkoutReflectionTarget,
           activityId: activity.getID(), label: `Activity ${index + 1} · ${activity.type}`, sport: activity.type }] : []),
   ];
+  readonly showTargetSelector = this.targets.length > 2;
   readonly selected = signal(this.targets[0]);
   readonly note = signal('');
   readonly saved = signal<WorkoutReflection | null>(null);

@@ -29,13 +29,15 @@
   @if (canReflect) {
     <h3>Private reflection</h3>
     <p>Optional. Private even when this recording is public.</p>
-    <mat-form-field appearance="outline" subscriptSizing="dynamic">
-      <mat-label>Reflect on</mat-label>
-      <mat-select [value]="selected().id" (selectionChange)="select($event.value)" [disabled]="busy()">
-        @for (target of targets; track target.id) { <mat-option [value]="target.id">{{ target.label }}</mat-option> }
-      </mat-select>
-      <mat-hint>Changing this selection discards unsaved reflection text.</mat-hint>
-    </mat-form-field>
+    @if (showTargetSelector) {
+      <mat-form-field appearance="outline" subscriptSizing="dynamic">
+        <mat-label>Reflect on</mat-label>
+        <mat-select [value]="selected().id" (selectionChange)="select($event.value)" [disabled]="busy()">
+          @for (target of targets; track target.id) { <mat-option [value]="target.id">{{ target.label }}</mat-option> }
+        </mat-select>
+        <mat-hint>Changing this selection discards unsaved reflection text.</mat-hint>
+      </mat-form-field>
+    }
     @if (loading()) { <mat-progress-bar mode="indeterminate" aria-label="Loading reflection"></mat-progress-bar> }
     @if (readReady()) {
       <ul>@for (prompt of prompts(); track prompt) { <li>{{ prompt }}</li> }</ul>
