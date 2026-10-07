@@ -37,6 +37,9 @@ value, while an already committed unchanged retry is accepted. Reflection confli
 edits never read or rewrite a note and remain available while the optional note read is pending or has failed.
 The in-memory event is updated only after a successful commit. A staged Delete reflection review is applied by the
 same Save changes action; Keep reflection cancels that deletion. Account changes invalidate the whole draft.
+After a failed save, Review latest reflection reloads the revision and displays current saved text while preserving
+edited draft fields. An unchanged note refreshes instead of becoming an unintended overwrite. Failed recovery reads
+keep the draft for another reload; a staged deletion already applied elsewhere becomes a no-op instead of restoring text.
 
 The editor reads its exact leaf with lazily loaded Firestore Lite REST using the same app's Auth/App Check providers,
 avoiding the full SDK's persisted missing-document state. That read is bounded to 30 seconds and rechecks the owner

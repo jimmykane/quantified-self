@@ -114,6 +114,48 @@ describe('Combined event details and post-workout feedback', () => {
     expect(component.error()).toContain('supported browser'); expect(component.busy()).toBe(false);
     expect(service.saveEventDetails).not.toHaveBeenCalled(); expect(component.data.event.name).toBe('Run');
   });
+  it('recovers a reflection conflict by showing the latest text while keeping the full draft', async () => {
+    fixture.destroy(); service.read.mockResolvedValueOnce(saved); await create();
+    component.name.set('Draft name'); component.setRating('rpe', 7); component.note.set('my draft');
+    service.saveEventDetails.mockRejectedValueOnce(new Error('Reflection changed elsewhere. Reload it before editing.'));
+    await component.save(); fixture.detectChanges();
+    const review = Array.from(fixture.nativeElement.querySelectorAll('button'))
+      .find((button: HTMLButtonElement) => button.textContent.includes('Review latest reflection')) as HTMLButtonElement;
+    expect(review).toBeDefined();
+    service.read.mockResolvedValueOnce({ ...saved, revision: 5, note: 'concurrent note' });
+    review.click(); await fixture.whenStable(); fixture.detectChanges();
+    expect(component.name()).toBe('Draft name'); expect(component.rpe()).toBe(7); expect(component.note()).toBe('my draft');
+    expect(fixture.nativeElement.textContent).toContain('concurrent note'); expect(component.error()).toBe('');
+    expect(haptics.selection).toHaveBeenCalledTimes(3); // Rating, failed Save, then one recovery action.
+    expect(service.saveEventDetails).toHaveBeenCalledOnce();
+    await component.save();
+    expect(service.saveEventDetails.mock.calls[1][2]).toEqual(expect.objectContaining({ expectedRevision: 5, fields: { note: 'my draft' } }));
+  });
+  it('keeps the draft through a failed conflict reload and retries without inventing a revision', async () => {
+    fixture.destroy(); service.read.mockResolvedValueOnce(saved); await create();
+    component.name.set('Draft name'); component.note.set('my draft');
+    service.read.mockRejectedValueOnce(new Error('offline')); component.reviewLatest(); await fixture.whenStable();
+    expect(component.note()).toBe('my draft'); expect(component.name()).toBe('Draft name');
+    expect(component.canSave()).toBe(false); await component.save(); expect(service.saveEventDetails).not.toHaveBeenCalled();
+    service.read.mockResolvedValueOnce({ ...saved, revision: 6, note: 'latest' }); component.reload(); await fixture.whenStable();
+    expect(component.note()).toBe('my draft'); await component.save();
+    expect(service.saveEventDetails.mock.calls[0][2].expectedRevision).toBe(6);
+  });
+  it('refreshes unchanged note text instead of turning a details-only retry into a stale note overwrite', async () => {
+    fixture.destroy(); service.read.mockResolvedValueOnce(saved); await create();
+    component.name.set('Draft name');
+    service.read.mockResolvedValueOnce({ ...saved, revision: 5, note: 'concurrent note' });
+    component.reviewLatest(); await fixture.whenStable();
+    expect(component.note()).toBe('concurrent note'); expect(component.reflectionChanged()).toBe(false);
+    await component.save(); expect(service.saveEventDetails).toHaveBeenCalledWith(expect.any(Object), expect.any(Object), undefined);
+  });
+  it.each([null, { ...saved, revision: 5, deleted: true, note: null }])('does not restore a staged deletion that already happened during reload: %j', async latest => {
+    fixture.destroy(); service.read.mockResolvedValueOnce(saved); await create();
+    component.reviewDelete(); component.name.set('Draft name');
+    service.read.mockResolvedValueOnce(latest); component.reviewLatest(); await fixture.whenStable();
+    expect(component.note()).toBe(''); expect(component.deleteReview()).toBe(false); expect(component.reflectionChanged()).toBe(false);
+    await component.save(); expect(service.saveEventDetails).toHaveBeenCalledWith(expect.any(Object), expect.any(Object), undefined);
+  });
   it('stages permanent reflection deletion for the same Save changes action and allows cancelling it', async () => {
     fixture.destroy(); service.read.mockResolvedValue(saved); await create();
     component.reviewDelete(); expect(service.saveEventDetails).not.toHaveBeenCalled();

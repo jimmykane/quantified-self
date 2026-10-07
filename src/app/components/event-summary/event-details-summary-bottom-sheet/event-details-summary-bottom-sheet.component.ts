@@ -48,6 +48,7 @@ export class EventDetailsSummaryBottomSheetComponent implements OnInit {
   readonly error = signal('');
   readonly reflectionError = signal('');
   readonly deleteReview = signal(false);
+  readonly reviewingLatest = signal(false);
   readonly exactlyLinked = signal(false);
   readonly prompts = computed(() => reflectionPrompts(this.selected().sport, this.exactlyLinked()));
   readonly detailsChanges = computed(() => eventDetailsChanges(this.original,
@@ -83,16 +84,25 @@ export class EventDetailsSummaryBottomSheetComponent implements OnInit {
     if (!target || this.busy() || target.id === this.selected().id) return;
     this.haptics.selection(); this.selected.set(target); await this.load();
   }
-  async load(): Promise<void> {
+  async load(preserveDraft = false): Promise<void> {
+    const keepNote = preserveDraft && (this.reflectionChanged() || this.emptyExistingNote());
     const generation = ++this.generation;
-    this.loading.set(true); this.readReady.set(false); this.reflectionError.set(''); this.note.set('');
-    this.saved.set(null); this.exactlyLinked.set(false); this.deleteReview.set(false); this.attempt = null;
+    this.loading.set(true); this.readReady.set(false); this.reflectionError.set('');
+    this.reviewingLatest.set(preserveDraft);
+    if (!preserveDraft) { this.note.set(''); this.saved.set(null); this.deleteReview.set(false); }
+    this.exactlyLinked.set(false); this.attempt = null;
     const current = () => !this.destroyRef.destroyed && generation === this.generation;
     try {
       const recording = this.recording();
       const value = await this.service.read(recording);
       if (!current()) return;
-      this.readReady.set(true); this.saved.set(value); this.note.set(value?.note ?? '');
+      this.readReady.set(true); this.saved.set(value);
+      if (!keepNote) this.note.set(value?.note ?? '');
+      // A deletion already applied elsewhere must never turn the old draft into a restore.
+      if (preserveDraft && this.deleteReview() && (!value || value.deleted)) {
+        this.note.set(''); this.deleteReview.set(false);
+      }
+      if (preserveDraft) this.error.set('');
       void this.service.hasExactWorkoutLink(recording).then(linked => {
         if (current()) this.exactlyLinked.set(linked);
       }).catch(() => { /* Keep the generic optional prompt when the link is unknown. */ });
@@ -100,7 +110,11 @@ export class EventDetailsSummaryBottomSheetComponent implements OnInit {
       if (current()) this.reflectionError.set(error instanceof Error ? error.message : 'Could not load reflection.');
     } finally { if (current()) this.loading.set(false); }
   }
-  reload(): void { if (this.busy()) return; this.haptics.selection(); void this.load(); }
+  reload(): void { if (this.busy() || this.loading()) return; this.haptics.selection(); void this.load(this.reviewingLatest()); }
+  reviewLatest(): void {
+    if (this.busy() || this.loading() || !this.canReflect || !this.readReady()) return;
+    this.haptics.selection(); void this.load(true);
+  }
   close(): void { if (this.busy()) return; this.haptics.selection(); this.generation++; this.ref.dismiss(); }
   reviewDelete(): void {
     if (this.busy() || !this.saved() || this.saved()?.deleted || this.deleteReview()) return;

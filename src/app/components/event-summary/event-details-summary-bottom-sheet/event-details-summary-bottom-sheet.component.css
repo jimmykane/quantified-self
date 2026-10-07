@@ -3,6 +3,7 @@
 mat-form-field { width: 100%; min-width: 0; }
 .split-row { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); align-items: start; gap: 1rem; }
 p, ul, h3 { margin: 0; }
+.latest-note { white-space: pre-wrap; overflow-wrap: anywhere; }
 h3 { font: var(--mat-sys-title-medium); }
 li + li { margin-top: .5rem; }
 .form-actions { display: flex; justify-content: flex-end; flex-shrink: 0; gap: .5rem; padding: 1rem; }
