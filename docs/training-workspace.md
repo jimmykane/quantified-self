@@ -4912,6 +4912,8 @@ excluded from control identity. Ambiguous identities retain saved policies/contr
 unavailable until the owner explicitly reassociates or resets them. Missing legacy identity evidence also requires
 review; a newly written activity with a reused ID cannot establish the old control's identity. Reassociation survives
 the next reparse, and copying preferences uses the newly associated activity's sport family.
+Retained unmatched identities stay outside automatic matching on later reparses, even if their old identity reappears.
+Only an explicit owner association makes one eligible to match again; otherwise its saved controls remain pending review.
 Bounds: 100 source legs/controls per event and 200 retained identities; reaching the retained bound requires review
 before further reparse.
 
