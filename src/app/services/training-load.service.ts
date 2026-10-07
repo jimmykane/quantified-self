@@ -1,10 +1,10 @@
 import { inject, Injectable } from '@angular/core';
 import { collection, collectionData, doc, docData, Firestore, runTransaction, serverTimestamp,
-  getDocs, query, where, limit } from 'app/firebase/firestore';
+  query, where, limit } from 'app/firebase/firestore';
 import type { EventInterface } from '@sports-alliance/sports-lib';
-import { combineLatest, map, Observable, of, switchMap } from 'rxjs';
+import { combineLatest, map, Observable, of, startWith, switchMap } from 'rxjs';
 import { DEFAULT_TRAINING_LOAD_POLICY, isTrainingLoadMethod, resolveEffectiveTrainingLoad, validTrainingLoadOverride,
-  type EffectiveTrainingLoad, type TrainingLoadControl, type TrainingLoadMetadata, type TrainingLoadPolicy } from '@shared/training-load-policy';
+  type EffectiveTrainingLoad, type TrainingLoadActivity, type TrainingLoadControl, type TrainingLoadMetadata, type TrainingLoadPolicy } from '@shared/training-load-policy';
 import { isTrainingDiscipline, type TrainingSportId } from '@shared/training-disciplines';
 import { AppUserService } from './app.user.service';
 import { browserTrainingLoadSourceFingerprint } from '@shared/training-load-source';
@@ -32,22 +32,42 @@ export class TrainingLoadService {
 
   watchEffective(uid: string, events: readonly EventInterface[]): Observable<Map<string, TrainingLoadView>> {
     if (!events.length) return of(new Map());
-    return combineLatest(events.map(event => this.watch(uid, event.getID() as string).pipe(switchMap(async metadata => {
-      let activities = event.getActivities().map(activity => ({ id: activity.getID() as string,
+    return combineLatest(events.map(event => this.watch(uid, event.getID() as string).pipe(switchMap(metadata => {
+      const loaded = event.getActivities().map(activity => ({ ...activity.toJSON(), id: activity.getID() as string,
         type: activity.type, getStat: activity.getStat.bind(activity) }));
-      if (metadata && !metadata.legs && Object.keys(metadata.controls).length && !activities.length) {
-        const children = await getDocs(query(collection(this.firestore, `users/${uid}/activities`),
-          where('eventID', '==', event.getID()), limit(101)));
-        if (children.size > 100) throw new Error('Too many workout legs.');
-        activities = children.docs.map(child => ({ ...child.data(), id: child.id })) as typeof activities;
-      }
-      const timestamp = metadata?.updatedAt as { toMillis?: () => number } | undefined;
-      const stale = !metadata?.excluded && !!metadata?.parentFingerprint && metadata.parentFingerprint !==
-        await browserTrainingLoadSourceFingerprint(event.toJSON());
-      const resolved = stale ? { score: null, status: 'unavailable' as const, method: null,
-        estimated: false, reasons: ['source-updating'] } : resolveEffectiveTrainingLoad(event, metadata, activities);
-      return [event.getID() as string, { ...resolved,
-        updatedAtMs: timestamp?.toMillis?.() ?? 0 }] as const;
+      const legs = Object.values(metadata?.legs ?? {}).filter(leg => leg.activityId);
+      const needsSources = metadata && !metadata.excluded && !metadata.sourceWritePending && !loaded.length
+        && (legs.length || (!metadata.legs && Object.keys(metadata.controls).length));
+      // Calendar summaries have no hydrated legs. Watch only the selected workout,
+      // so child-only corrections/deletions cannot leave impact showing old candidates.
+      // Event details already receive live hydrated legs and need no additional query.
+      const sources$: Observable<(TrainingLoadActivity & Record<string, unknown>)[] | null> = needsSources
+        ? collectionData(query(collection(this.firestore, `users/${uid}/activities`),
+          where('eventID', '==', event.getID()), limit(101)), { idField: 'id' }).pipe(map(children => {
+            if (children.length > 100) throw new Error('Too many workout legs.');
+            return children as (TrainingLoadActivity & Record<string, unknown>)[];
+          }), startWith(null))
+        : of(loaded);
+      return sources$.pipe(switchMap(async activities => {
+        const timestamp = metadata?.updatedAt as { toMillis?: () => number } | undefined;
+        let stale = activities === null;
+        if (!stale && metadata && !metadata.excluded && !metadata.sourceWritePending) {
+          stale = !!metadata.parentFingerprint && metadata.parentFingerprint !==
+            await browserTrainingLoadSourceFingerprint(event.toJSON?.() ?? event);
+          if (!stale && metadata.legs) {
+            const current = new Map(activities!.map(activity => [activity.id, activity]));
+            const matches = await Promise.all(legs.map(async leg => {
+              const activity = current.get(leg.activityId!);
+              return !!activity && (!leg.sourceFingerprint || leg.sourceFingerprint ===
+                await browserTrainingLoadSourceFingerprint(activity));
+            }));
+            stale = matches.some(matchesSource => !matchesSource);
+          }
+        }
+        const resolved = stale ? { score: null, status: 'unavailable' as const, method: null,
+          estimated: false, reasons: ['source-updating'] } : resolveEffectiveTrainingLoad(event, metadata, activities ?? []);
+        return [event.getID() as string, { ...resolved, updatedAtMs: timestamp?.toMillis?.() ?? 0 }] as const;
+      }));
     })))).pipe(map(entries => new Map(entries)));
   }
 

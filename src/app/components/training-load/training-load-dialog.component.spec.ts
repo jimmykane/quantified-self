@@ -90,6 +90,20 @@ describe('Training load editor', () => {
     watch.mockReturnValue(of({ ...metadata, excluded: true })); await component.ngOnInit();
     expect(component.model).toMatchObject({ status: 'excluded', score: 0 });
   });
+  it('blocks leg edits when a saved active leg is missing from the opened workout', async () => {
+    const fingerprint = await browserTrainingLoadSourceFingerprint(source);
+    const leg = { activityId: 'walk', sourceFingerprint: fingerprint,
+      identity: { startMs: 1000, endMs: 3601000, type: 'Walking', duration: 3600, distance: null },
+      policy: defaultAppliedTrainingLoadPolicy('Walking'), evaluations: null, recordedTss: 9 };
+    watch.mockReturnValue(of({ version: 1, revision: 2, excluded: false, controls: {}, parentFingerprint: fingerprint,
+      legs: { walk: leg, missing: { ...leg, activityId: 'missing' } } }));
+    await component.ngOnInit();
+    expect(component.sourceCurrent()).toBe(false);
+    expect(component.model).toMatchObject({ score: null, reasons: ['source-updating'] });
+    component.form.patchValue({ override: 0 }); component.form.markAsDirty(); await component.save();
+    expect(save).not.toHaveBeenCalled();
+  });
+
   it('keeps unavailable Automatic evaluations distinct from the recorded score', () => {
     const result = { preference: 'AUTOMATIC' as const, method: null, score: null, estimated: false,
       provenance: null, reasons: ['missing-met-inputs' as const] };

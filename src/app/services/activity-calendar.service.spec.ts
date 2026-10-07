@@ -1,4 +1,5 @@
 import { TestBed } from '@angular/core/testing';
+import { serializeTrainingLoadSource } from '@shared/training-load-source';
 import {
   ActivityTypes,
   DataActivityTypes,
@@ -105,6 +106,16 @@ describe('ActivityCalendarService', () => {
     expect(events[0].getStat(DASHBOARD_FORM_TRAINING_STRESS_SCORE_TYPE)?.getValue()).toBe(84);
     expect(events[0].getActivityTypesAsArray()).toEqual([ActivityTypes.Running]);
     expect(events[0].getActivityTypesAsString()).toBe('Running');
+  });
+
+  it('provides the complete persisted fingerprint and an empty leg list to Training load readers', async () => {
+    const source = { ...eventAt('walk', new Date(2026, 7, 2)), endDate: new Date(2026, 7, 2, 1),
+      stats: { Duration: 3600, 'Training Stress Score': 9, Energy: 210, 'Heart Rate Average': 82 } };
+    watchEventDocumentsBy.mockReturnValue(of([source]));
+    const [event] = await firstValueFrom(TestBed.inject(ActivityCalendarService).watchEvents(
+      { uid: 'user-1' } as User, { startMs: 1, endExclusiveMs: Date.now() }));
+    expect(event.getActivities()).toEqual([]);
+    expect(serializeTrainingLoadSource(event.toJSON?.() ?? event)).toBe(serializeTrainingLoadSource(source));
   });
 
   it('preserves legacy TSS for Training impact when current TSS is missing', async () => {

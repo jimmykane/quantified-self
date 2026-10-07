@@ -5009,7 +5009,23 @@ editor and Settings were exercised with synthetic local data at desktop and
 
 Owner-only activity details and selected-day Calendar surfaces reuse the current Form snapshot to explain how each
 completed activity's modeled TSS participates in this model. They do not query activity history or create a separate
-derived snapshot. For one activity:
+derived snapshot. Calendar's lightweight event adapter exposes an empty leg list and retains the complete stored
+statistics and end time as source fields for fingerprint validation. This avoids treating a summary object as a fully
+hydrated Sports Lib event. Impact validates saved active leg identities and fingerprints as well
+as the parent; the editor also refuses leg edits when a saved active leg is missing from the opened workout.
+
+Event details reuse their existing live hydrated legs, with no additional source query. For a selected Calendar
+workout with parsed candidates, or legacy per-leg controls, the load reader opens a live owner-scoped child query
+only when hydrated legs are absent. The query is limited to 101 documents to enforce the 100-leg bound. It adds
+reads for the returned legs (or Firestore's empty-query minimum) and later changed documents while that selected
+workout is observed; it does not scan history or add full-rebuild reads. Untouched legacy workouts, pending imports
+and whole-workout exclusions need no child query. Switching workouts, exclusion or unsubscribing releases the
+listener. Child corrections/deletions switch impact to updating until matching source data is available. While a
+new selection's modeled result is loading, a previous selection's ready snapshot cannot supply a recorded-TSS
+fallback for the newly selected workout. The shared resolver continues to distinguish missing load, zero and
+exclusion. These frontend read corrections preserve the existing MCP updating semantics and all public schemas, scopes and mutation contracts; no plugin rebuild is needed.
+
+For one activity:
 
 ```text
 Fitness load (CTL) contribution = activity TSS / 42
