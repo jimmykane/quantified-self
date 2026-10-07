@@ -313,11 +313,13 @@ const ACTIVITY_CALENDAR_HELP_CONTENT = `## Open and navigate the calendar
 
 ## Compare planned and recorded training
 
-In the full Calendar’s **Week** and **Month** views, **Recorded** shows activities recorded within the selected period. Month also retains recorded ascent, following your sport and summary exclusions. Month totals exclude adjacent dates shown only to complete the grid; those dates remain selectable. **Planned prescriptions** shows non-skipped workouts from your active plan and Standalone, including workouts with a completion link. **Remaining prescriptions** shows non-skipped workouts without a link. QS keeps these totals separate.
+In the full Calendar’s **Week** and **Month** views, your activity count and recorded totals appear first. Month also retains recorded ascent, following your sport and summary exclusions. Month totals exclude adjacent dates shown only to complete the grid; those dates remain selectable.
 
-**Completed links** means an exact stored link to a recording; it does not prove you performed every instruction. A missing link does not prove you missed a workout. A linked recording stays in the period it was recorded, even if the workout was scheduled in another week or month. QS warns when a linked workout has since been edited. Skipped, unlinked workouts contribute no remaining prescription.
+**Planned workouts** appears only when there are workouts from your active plan or Standalone in that week or month. Its heading shows how many are scheduled and how many remain. Tap it to see the details; it starts closed when you open another period. Empty planning sections and zero counts stay hidden.
 
-Prescription summaries retain exact timed limits, explicit speed-based ranges and unknown steps. Manual/Lap, repetition and energy steps do not gain invented durations; early-Lap steps can end before their prescribed limit. Only authored distance contributes to prescription distance. Strength timing is not a total of repetitions or lifting volume. Planned load is unavailable; recorded load uses only recorded TSS. Missing metrics stay unavailable, and partial reads show observed subtotals. If a read fails, use **Retry week summary** or **Retry month summary**; remaining totals stay unknown until completion links load.
+**With an activity** counts workouts with a matching recording. **Remaining** means a workout has no matching activity and has not been skipped; you may have done it without an activity match. **Planned** totals include workouts with an activity and leave out skipped workouts. A matching recording does not tell QS whether you followed every step. The recording stays in the period when it happened, even if the workout was scheduled for another date. If you edited a workout after recording its activity, QS points that out.
+
+Workout time can be an estimate or a total of only the steps with a set time. Steps without a set time are identified, and steps you can end early with Lap may take less time. Distance includes only the distance set in the workout. Training load comes from recorded activities. If a Week or Month read is incomplete, QS tells you that some activities or workouts may be missing. If a read fails, use **Try again**. Remaining counts stay unavailable until activity matches can be checked.
 
 ## Read activity days
 

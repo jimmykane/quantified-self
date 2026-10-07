@@ -1,4 +1,4 @@
-import { ChangeDetectionStrategy, Component, computed, input, output } from '@angular/core';
+import { ChangeDetectionStrategy, Component, computed, input, linkedSignal, output } from '@angular/core';
 import { SharedModule } from '../../../modules/shared.module';
 import type { CalendarPeriodSummary } from '../../../helpers/calendar-period-summary.helper';
 
@@ -12,10 +12,21 @@ export class CalendarPeriodSummaryComponent {
   readonly periodLabel = computed(() => this.summary().period === 'month' ? 'Month' : 'Week');
   readonly canRetry = input(false);
   readonly retryRequested = output<void>();
+  readonly showPlanning = computed(() => (this.summary().scheduledCount ?? 0) > 0);
+  // Source refreshes keep the user's choice; moving to another period closes the details.
+  readonly expanded = linkedSignal({ source: () => this.summary().periodKey,
+    computation: (periodKey, previous) => previous?.source === periodKey ? previous.value : false });
+  readonly recordedText = computed(() => {
+    const summary = this.summary();
+    if (summary.recordedStatus === 'loading') return 'Loading activities…';
+    if (summary.recordedCount === null) return 'Activities unavailable';
+    if (summary.recordedCount === 0 && summary.recordedComplete) return `No activities this ${summary.period}`;
+    const count = summary.recordedCount.toLocaleString();
+    return `${count} ${summary.recordedCount === 1 ? 'activity' : 'activities'}${summary.recordedComplete ? '' : ' loaded so far'}`;
+  });
   readonly counts = computed(() => [
-    { label: 'Scheduled', value: this.summary().scheduledCount },
-    { label: 'Completed links', value: this.summary().completedCount },
-    { label: 'Skipped, unlinked', value: this.summary().skippedCount },
-    { label: 'Remaining, unlinked', value: this.summary().remainingCount },
-  ].map(count => ({ ...count, label: count.value !== null && !this.summary().scheduleComplete ? `Observed ${count.label.toLowerCase()}` : count.label })));
+    { label: 'With an activity', value: this.summary().completedCount },
+    { label: 'Skipped', value: this.summary().skippedCount },
+    { label: 'Remaining', value: this.summary().remainingCount },
+  ].filter(count => count.value === null || count.value > 0));
 }

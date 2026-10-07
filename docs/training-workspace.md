@@ -1034,9 +1034,14 @@ packed Sports Lib package. That gate is tracked by GitHub issue #654 under epic 
 
 ### Calendar period planned and recorded summaries (Training 09)
 
-The existing Calendar **Week** and **Month** views show three independent sources above their day grids: recorded parent-event volume,
-non-skipped planned prescriptions (including already linked prescriptions), and remaining non-skipped prescriptions
-without an exact stored completion link. It does not add prescriptions to recorded totals or calculate planned TSS,
+The existing Calendar **Week** and **Month** views keep recorded parent-event volume above their day grids. A flat,
+initially collapsed **Planned workouts** panel appears only for a period with eligible workouts; its heading shows
+scheduled and remaining counts. Opening it exposes planned and remaining non-skipped totals plus nonzero or unknown
+status counts. **With an activity** describes exact stored completion evidence without implying adherence. Zero planning
+counts and empty totals are omitted. Header height stays fixed during expansion, metric columns remain stable during
+loading, and reveal/expansion motion respects reduced motion. Live updates retain the disclosure choice; period
+navigation closes it. Failed or partial reads still show plain-language warnings and failures offer **Try again**.
+A fully read empty period needs no completion evidence and does not show irrelevant activity-match errors. It does not add prescriptions to recorded totals or calculate planned TSS,
 recommended load bands, adherence, or physiological forecasts. 30-day/Year modes and Dashboard retain their existing
 summaries. Weeks use the owner's configured week start and seven local calendar dates, including DST and year boundaries.
 Month uses the first local date through the last local date, including leap months. Both modes read the complete
@@ -1063,7 +1068,7 @@ completion coverage labels unlinked observations as **completion unknown** and s
 
 Owner-scoped reads are bounded: recorded events have a 1,000-parent cap plus one lookahead; scheduled records have a
 400-record cap plus one lookahead, with only the exact active-plan document read for presentation. Deleted and inactive
-records can consume that bounded date scan, so a lookahead produces **observed** counts and partial prescription coverage.
+records can consume that bounded date scan, so a lookahead identifies counts as **At least** and leaves complete prescription totals unavailable.
 Completion listeners read exact selected workout IDs in batches of at most 30, never an account-wide completion history.
 The restore-availability fence remains authoritative. These readers wait for server-confirmed snapshots; cached or pending
 writes cannot establish an empty/complete period. Loading, errors and incomplete reads stay distinct. Account/range/retry
@@ -1078,7 +1083,7 @@ completion coverage waits for every selected batch within that bound, and the re
 initial-read limit. Timeouts reach the existing source error/Retry UI without establishing empty data. Acknowledged
 live listeners do not expire during idle periods. Training availability errors retry through the Calendar action;
 inner schedule reads retain their existing two retries.
-Incomplete scans with no eligible prescriptions do not establish **No prescriptions**. Activity coverage also follows
+Incomplete scans with no eligible prescriptions still show a missing-workouts warning; they do not establish an empty plan. Activity coverage also follows
 the bounded read into the grid and selected-day panel: observed activities remain navigable, but day totals, aggregate
 day training impact and period sport-volume totals are withheld. Accessible day labels and empty states do not claim
 there are no activities or planned workouts without complete coverage. Opening **Full day** loads that date independently.

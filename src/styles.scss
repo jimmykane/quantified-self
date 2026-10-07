@@ -701,6 +701,13 @@ mat-table {
   backdrop-filter: none !important;
 }
 
+// Expansion's internal elements belong to Material, so its motion override is scoped here.
+@media (prefers-reduced-motion: reduce) {
+  app-calendar-period-summary .planning-panel :is(.mat-expansion-panel-content-wrapper, .mat-expansion-panel-content, .mat-expansion-indicator) {
+    transition: none;
+  }
+}
+
 .mat-mdc-dialog-surface {
   --mat-dialog-container-color: var(--qs-overlay-surface);
 

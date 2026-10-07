@@ -143,6 +143,7 @@ describe('CalendarPageComponent', () => {
     queryParams.next(convertToParamMap({ view, date: '2026-08-03' }));
     const plans = TestBed.inject(TrainingPlansService);
     const calendar = TestBed.inject(ActivityCalendarService);
+    watchSchedule.mockReturnValue(of(trainingSchedule()));
     vi.mocked(plans.watchWorkoutCompletionsForWorkouts).mockReturnValueOnce(throwError(() => new Error('failed'))).mockReturnValue(of([]));
     const fixture = TestBed.createComponent(CalendarPageComponent);
     fixture.detectChanges(); await fixture.whenStable(); fixture.detectChanges();
@@ -150,10 +151,10 @@ describe('CalendarPageComponent', () => {
     expect(plans.watchCalendarSchedule).toHaveBeenCalledWith(planningUserUid,
       view === 'week' ? '2026-08-03' : '2026-07-27', view === 'week' ? '2026-08-09' : '2026-09-06');
     expect(fixture.componentInstance.prescriptionSummary().remainingCount).toBeNull();
-    expect(fixture.nativeElement.textContent).toContain('Completion coverage is unavailable');
-    const retry = Array.from(fixture.nativeElement.querySelectorAll('button')).find((button: HTMLButtonElement) => button.textContent.includes(`Retry ${view} summary`)) as HTMLButtonElement;
+    expect(fixture.nativeElement.textContent).toContain('Workout activity matches could not be checked');
+    const retry = Array.from(fixture.nativeElement.querySelectorAll('button')).find((button: HTMLButtonElement) => button.textContent.includes('Try again')) as HTMLButtonElement;
     retry.click(); fixture.detectChanges(); await fixture.whenStable(); fixture.detectChanges();
-    expect(fixture.componentInstance.prescriptionSummary().remainingCount).toBe(0);
+    expect(fixture.componentInstance.prescriptionSummary().remainingCount).toBe(2);
     expect(haptics.selection).toHaveBeenCalledTimes(1);
   });
 
@@ -332,7 +333,7 @@ describe('CalendarPageComponent', () => {
       { label: 'Duration', value: '01h 00m 00s' },
       { label: 'Distance', value: '10.00 Km' },
       { label: 'Ascent', value: '450 m' },
-      { label: 'Recorded load', value: 'Unavailable' },
+      { label: 'Training load', value: 'Unavailable' },
     ]);
     const selectedDayTotals = [...fixture.nativeElement.querySelectorAll('.calendar-selected-day .calendar-day-context-totals > div')]
       .map((metric: HTMLElement) => ({

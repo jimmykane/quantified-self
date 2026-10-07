@@ -1,6 +1,5 @@
 import { DataAscent, DataDistance, DataDuration, type EventInterface, type UserUnitSettingsInterface } from '@sports-alliance/sports-lib';
 import { aggregateWorkoutAnalysesV1, analyzeWorkoutStructureV1, type WorkoutAnalysisAggregateV1 } from '@shared/planned-workout-analysis';
-import { formatWorkoutAnalysisSummaryV1 } from '@shared/planned-workout-analysis-display';
 import type { ScheduledWorkoutV1 } from '@shared/training-plans';
 import type { TrainingWorkoutCompletionV1 } from '@shared/training-workout-completion';
 import { resolveUnitAwareDisplayFromValue } from '@shared/unit-aware-display';
@@ -20,6 +19,9 @@ export interface CalendarPeriodSchedule {
 export interface CalendarPeriodMetric { label: string; text: string; coverage: string }
 export interface CalendarPeriodSummary {
   period: 'week' | 'month';
+  periodKey: string;
+  recordedStatus: CalendarPeriodSource<unknown>['status'];
+  completionStatus: CalendarPeriodSource<unknown>['status'];
   recordedCount: number | null;
   recordedComplete: boolean;
   scheduleComplete: boolean;
@@ -35,6 +37,33 @@ export interface CalendarPeriodSummary {
   remainingText: string;
   warnings: string[];
   loading: boolean;
+}
+
+/** Calendar copy keeps the analysis limits visible without exposing its internal vocabulary. */
+function formatCalendarWorkoutTotals(
+  analysis: WorkoutAnalysisAggregateV1 | null,
+  unitSettings?: UserUnitSettingsInterface | null,
+): string {
+  if (!analysis) return 'Totals unavailable';
+  if (analysis.workoutCount === 0) return analysis.sourceComplete ? 'No workouts' : 'Workouts may be missing';
+  const { duration, distance, earlyLapSteps } = analysis.summary;
+  const parts: string[] = [];
+  if (duration.coveredSubtotalRange) {
+    const minimum = resolveUnitAwareDisplayFromValue(DataDuration.type, duration.coveredSubtotalRange.minimumSeconds, unitSettings)?.text;
+    const maximum = resolveUnitAwareDisplayFromValue(DataDuration.type, duration.coveredSubtotalRange.maximumSeconds, unitSettings)?.text;
+    if (minimum && maximum) {
+      const range = minimum === maximum ? minimum : `${minimum}–${maximum}`;
+      parts.push(`${duration.estimatedSteps > 0 ? 'About ' : ''}${range}${!analysis.sourceComplete ? ' from workouts loaded' : ''}`);
+    }
+  }
+  if (duration.unknownSteps > 0) parts.push(`${parts.length ? 'Plus steps' : 'Steps'} with no set time`);
+  else if (!parts.length) parts.push('Time not set');
+  if (distance.exactSteps > 0) {
+    const display = resolveUnitAwareDisplayFromValue(DataDistance.type, distance.exactSubtotalMeters, unitSettings);
+    if (display) parts.push(`${display.text}${distance.coverage === 'partial' ? ' distance set' : ''}`);
+  }
+  if (earlyLapSteps > 0) parts.push('Some steps can finish earlier with Lap');
+  return parts.join(' · ');
 }
 
 /** The period summary and calendar markers must use the same exact-link validity rules. */
@@ -80,19 +109,20 @@ export function buildCalendarPeriodSummary(input: {
   summariesSettings?: SummaryStatsSettingsLike | null;
 }): CalendarPeriodSummary {
   const { events, schedule, completions, unitSettings, locale } = input;
-  const warnings: string[] = [];
+  const recordedWarnings: string[] = [];
+  const planningWarnings: string[] = [];
   const number = new Intl.NumberFormat(locale);
   const recorded = new Map<string, EventInterface>();
   if (events.status === 'ready') for (const event of events.data) {
     const time = event.startDate?.getTime();
     if (time >= input.window.startMs && time < input.window.endExclusiveMs) recorded.set(event.getID(), event);
   }
-  if (events.status === 'error') warnings.push('Recorded activities could not be loaded. Recorded totals are unavailable.');
-  else if (events.status === 'ready' && !events.complete) warnings.push('Recorded coverage is incomplete. Values show only the observed activities.');
+  if (events.status === 'error') recordedWarnings.push('Activities could not be loaded. Try again to see your totals.');
+  else if (events.status === 'ready' && !events.complete) recordedWarnings.push('Some activities may be missing. Totals include only the activities loaded so far.');
   const recordedMetrics = [
     { label: 'Duration', type: DataDuration.type },
     { label: 'Distance', type: DataDistance.type },
-    { label: 'Recorded load', type: DASHBOARD_FORM_TRAINING_STRESS_SCORE_TYPE },
+    { label: 'Training load', type: DASHBOARD_FORM_TRAINING_STRESS_SCORE_TYPE },
   ].map(({ label, type }) => {
     let sum = 0;
     let sources = 0;
@@ -105,7 +135,7 @@ export function buildCalendarPeriodSummary(input: {
     const display = sources > 0 && Number.isFinite(sum) ? resolveUnitAwareDisplayFromValue(type, sum, unitSettings) : null;
     const complete = events.status === 'ready' && events.complete && sources === recorded.size;
     return { label, text: display?.text ?? 'Unavailable', coverage: display && !complete
-      ? `Subtotal · ${number.format(sources)} of ${number.format(recorded.size)} observed activities` : '' };
+      ? `From ${number.format(sources)} of ${number.format(recorded.size)} activities loaded` : '' };
   });
   if (input.period === 'month') {
     const ascent = buildActivityCalendarPeriodSummary([...recorded.values()], input.summariesSettings);
@@ -114,44 +144,45 @@ export function buildCalendarPeriodSummary(input: {
     const display = sources > 0 ? resolveUnitAwareDisplayFromValue(DataAscent.type, ascent.totalAscentMeters, unitSettings) : null;
     const complete = events.status === 'ready' && events.complete && sources === eligible;
     recordedMetrics.splice(2, 0, { label: 'Ascent', text: display?.text ?? 'Unavailable', coverage: display && !complete
-      ? `Subtotal · ${number.format(sources)} of ${number.format(eligible)} eligible observed activities` : '' });
+      ? `From ${number.format(sources)} of ${number.format(eligible)} activities that count toward ascent` : '' });
   }
   const workouts = new Map<string, ScheduledWorkoutV1>();
   if (schedule.status === 'ready' && schedule.data) for (const workout of schedule.data.workouts) {
     if (workout.lifecycle !== 'deleted' && (workout.planId === null || workout.planId === schedule.data.state.activePlanId)
       && workout.localDate >= input.startLocalDate && workout.localDate <= input.endLocalDate) workouts.set(workout.id, workout);
   }
-  if (schedule.status === 'error') warnings.push('Scheduled workouts could not be loaded. Prescription totals are unavailable.');
-  else if (schedule.status === 'ready' && !schedule.complete) warnings.push('Schedule coverage is incomplete. Counts and prescriptions show only observed workouts.');
+  if (schedule.status === 'error') planningWarnings.push('Planned workouts could not be loaded. Try again to see your plan.');
+  else if (schedule.status === 'ready' && !schedule.complete) planningWarnings.push('Some planned workouts may be missing. Totals include only the workouts loaded so far.');
   const coverage = resolveCalendarCompletionCoverage([...workouts.values()], completions);
   const linkedIds = new Set(coverage.linkedWorkoutIds);
   const completedCount = linkedIds.size;
   let skippedCount = 0;
-  const { complete: completionComplete, changedSinceCompletionCount } = coverage;
+  // No activity links are needed to establish that a fully loaded period has no workouts.
+  const emptySchedule = schedule.status === 'ready' && schedule.complete && workouts.size === 0;
+  const completionComplete = emptySchedule || coverage.complete;
+  const { changedSinceCompletionCount } = coverage;
   const remainingWorkouts: ScheduledWorkoutV1[] = [];
   for (const workout of workouts.values()) {
     if (linkedIds.has(workout.id)) continue;
     if (workout.lifecycle === 'skipped') skippedCount++;
     else remainingWorkouts.push(workout);
   }
-  if (!completionComplete && schedule.status === 'ready') warnings.push(completions.status === 'loading'
-    ? 'Completion links are loading. Remaining prescriptions are unavailable.'
-    : 'Completion coverage is unavailable. Remaining prescriptions and completion counts are unknown.');
-  if (changedSinceCompletionCount > 0) warnings.push('Some linked workouts changed after completion. Links do not prove the current prescription was performed.');
+  if (!completionComplete && schedule.status === 'ready' && completions.status !== 'loading') planningWarnings.push(
+    'Workout activity matches could not be checked. Remaining workouts are unavailable for now.');
+  if (changedSinceCompletionCount > 0) planningWarnings.push('Some workouts were edited after their activity was recorded. Your activity may reflect the earlier version.');
   const analyze = (values: ScheduledWorkoutV1[]): WorkoutAnalysisAggregateV1 | null => {
     try { return aggregateWorkoutAnalysesV1(values.map(value => analyzeWorkoutStructureV1(value.structure)), { sourceComplete: schedule.complete }); }
-    catch { warnings.push('Prescription totals are unavailable for an unrepresentable recipe.'); return null; }
+    catch { planningWarnings.push('Some workout totals could not be calculated. You can still open each workout to see its steps.'); return null; }
   };
   const scheduleReady = schedule.status === 'ready' && !!schedule.data;
   // Skipped prescriptions contribute no planned volume, even if retained completion evidence exists.
   const plannedWorkouts = [...workouts.values()].filter(workout => workout.lifecycle === 'planned');
   const planned = scheduleReady ? analyze(plannedWorkouts) : null;
   const remaining = scheduleReady && completionComplete ? analyze(remainingWorkouts) : null;
-  const analysisText = (analysis: WorkoutAnalysisAggregateV1 | null) => analysis === null ? 'Unavailable'
-    : analysis.workoutCount === 0 ? analysis.sourceComplete ? 'No prescriptions' : 'No prescriptions in observed records; complete total unknown'
-      : formatWorkoutAnalysisSummaryV1(analysis.summary, unitSettings, undefined, locale);
   return {
     period: input.period ?? 'week',
+    periodKey: `${input.period ?? 'week'}:${input.startLocalDate}:${input.endLocalDate}`,
+    recordedStatus: events.status, completionStatus: completions.status,
     recordedCount: events.status === 'ready' ? recorded.size : null,
     recordedComplete: events.status === 'ready' && events.complete,
     scheduleComplete: scheduleReady && schedule.complete,
@@ -159,7 +190,9 @@ export function buildCalendarPeriodSummary(input: {
     completedCount: scheduleReady && completionComplete ? completedCount : null,
     skippedCount: scheduleReady && completionComplete ? skippedCount : null,
     remainingCount: scheduleReady && completionComplete ? remainingWorkouts.length : null,
-    changedSinceCompletionCount, planned, remaining, plannedText: analysisText(planned), remainingText: analysisText(remaining), warnings,
-    loading: events.status === 'loading' || schedule.status === 'loading' || completions.status === 'loading',
+    changedSinceCompletionCount, planned, remaining,
+    plannedText: formatCalendarWorkoutTotals(planned, unitSettings), remainingText: formatCalendarWorkoutTotals(remaining, unitSettings),
+    warnings: [...recordedWarnings, ...planningWarnings],
+    loading: events.status === 'loading' || schedule.status === 'loading' || (!emptySchedule && completions.status === 'loading'),
   };
 }
