@@ -11,6 +11,9 @@ import { AppThemeService } from '../../services/app.theme.service';
 import { NO_ERRORS_SCHEMA, signal } from '@angular/core';
 import {
     ActivityTypes,
+    EventImporterJSON,
+    DataLatitudeDegrees,
+    DataLongitudeDegrees,
     EventInterface,
     User,
     ActivityInterface,
@@ -39,6 +42,7 @@ import {
     DataRMV,
     DataPO2,
     DataDiveAscentRate,
+    Stream,
 } from '@sports-alliance/sports-lib';
 import { LoggerService } from '../../services/logger.service';
 import { MatBottomSheet } from '@angular/material/bottom-sheet';
@@ -312,6 +316,38 @@ describe('EventCardComponent', () => {
 
         expect(component.event()).toBe(liveUpdatedEvent);
         expect(component.event()?.name).toBe('Live Updated Event');
+    });
+
+    it('keeps the map mounted when sharing changes reuse the current live activity', () => {
+        const startDate = new Date('2026-01-01T10:00:00Z');
+        const endDate = new Date('2026-01-01T10:00:02Z');
+        const activity = EventImporterJSON.getActivityFromJSON({
+            startDate: +startDate, endDate: +endDate, type: ActivityTypes.Running,
+            name: '', powerMeter: false, trainer: false, creator: { name: 'Watch', devices: [] },
+            stats: {}, laps: [], streams: [], intensityZones: [], events: [],
+        }).setID('act1');
+        activity.addStreams([
+            new Stream(DataLatitudeDegrees.type, [60, 60.001, 60.002]),
+            new Stream(DataLongitudeDegrees.type, [24, 24.001, 24.002]),
+        ]);
+        component.event.set(createEvent('evt1', [activity]) as AppEventInterface);
+        component.selectedActivitiesInstant.set([activity]);
+        component.selectedActivitiesDebounced.set([activity]);
+        fixture.detectChanges();
+        const map = fixture.nativeElement.querySelector('app-event-card-map');
+        expect(map).not.toBeNull();
+
+        for (const privacy of ['public', 'private']) {
+            const liveEvent = { ...createEvent('evt1', [activity]), privacy } as AppEventInterface;
+            liveEventDetailsByRouteKey.get('testUser:evt1')?.next(liveEvent);
+            fixture.detectChanges();
+
+            expect(component.event()?.privacy).toBe(privacy);
+            expect(component.hasPositionsFlag()).toBe(true);
+            expect(fixture.nativeElement.querySelector('app-event-card-map')).toBe(map);
+            expect(component.selectedActivitiesDebounced()).toEqual([activity]);
+            expect(mockEventService.getEventActivitiesAndSomeStreams).not.toHaveBeenCalled();
+        }
     });
 
     it('should trigger one full refresh when live activity IDs mismatch', async () => {

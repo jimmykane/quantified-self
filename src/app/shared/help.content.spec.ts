@@ -1911,6 +1911,7 @@ describe('help.content', () => {
     const dataAndPrivacySection = HELP_SECTIONS.find(section => section.id === 'data-and-privacy');
 
     expect(dataAndPrivacySection?.content).toContain('Event and saved comparison sharing is manual');
+    expect(dataAndPrivacySection?.content).toContain('activity actions button shows a spinner while sharing is being updated');
     expect(dataAndPrivacySection?.content).toContain('every object stored under that event\'s source-file folder');
     expect(dataAndPrivacySection?.content).toContain('users/{uid}/events/{eventId}/...');
     expect(dataAndPrivacySection?.content).toContain('Use **Stop sharing**');

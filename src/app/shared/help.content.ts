@@ -1307,6 +1307,7 @@ Suunto, COROS, and Wahoo history imports are queued jobs. Large ranges can take 
 
 - Profile and activity visibility is managed by the platform and is not configurable in the app UI.
 - Event and saved comparison sharing is manual. Use **Share link** on an event or saved comparison to create a public URL.
+- On event details, the activity actions button shows a spinner while sharing is being updated. Wait for it to finish before copying the public link or changing sharing again; your map and charts stay visible.
 - Public links expose the shared event, its activities, any saved benchmark report, and every object stored under that event's source-file folder (\`users/{uid}/events/{eventId}/...\`) while sharing is enabled.
 - Public links do not expire automatically and are marked noindex, but anyone with the URL can open them.
 - Use **Stop sharing** from the event details menu or saved comparison row to make the event, activities, and event source-file folder private again.

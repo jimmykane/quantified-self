@@ -15,10 +15,14 @@ import { HttpClientTestingModule } from '@angular/common/http/testing';
 import { AppAnalyticsService } from '../../services/app.analytics.service';
 import { AppEventReprocessService, ReprocessError } from '../../services/app.event-reprocess.service';
 import { AppProcessingService } from '../../services/app.processing.service';
-import { AppEventSharingService } from '../../services/app.event-sharing.service';
+import { AppEventSharingService, SetEventSharingResponse } from '../../services/app.event-sharing.service';
 import { NO_ERRORS_SCHEMA } from '@angular/core';
 import { vi, describe, it, expect, beforeEach } from 'vitest';
 import { MatMenuModule } from '@angular/material/menu';
+import { MatButtonModule } from '@angular/material/button';
+import { MAT_ICON_DEFAULT_OPTIONS, MatIconModule } from '@angular/material/icon';
+import { MatProgressSpinnerModule } from '@angular/material/progress-spinner';
+import { Privacy } from '@sports-alliance/sports-lib';
 import { of } from 'rxjs';
 import { ConfirmationDialogComponent } from '../confirmation-dialog/confirmation-dialog.component';
 import { CalendarDayDetailsNavigationService } from '../../services/calendar-day-details-navigation.service';
@@ -149,8 +153,9 @@ describe('EventActionsComponent', () => {
 
         await TestBed.configureTestingModule({
             declarations: [EventActionsComponent],
-            imports: [HttpClientTestingModule, MatMenuModule],
+            imports: [HttpClientTestingModule, MatMenuModule, MatButtonModule, MatIconModule, MatProgressSpinnerModule],
             providers: [
+                { provide: MAT_ICON_DEFAULT_OPTIONS, useValue: { fontSet: 'material-symbols-rounded' } },
                 { provide: AppEventService, useValue: mockEventService },
                 { provide: AppEventReprocessService, useValue: mockEventReprocessService },
                 { provide: AppProcessingService, useValue: mockProcessingService },
@@ -192,6 +197,18 @@ describe('EventActionsComponent', () => {
 
     it('should create', () => {
         expect(component).toBeTruthy();
+        expect(mockHapticsService.selection).not.toHaveBeenCalled();
+        expect(mockHapticsService.success).not.toHaveBeenCalled();
+        expect(mockHapticsService.error).not.toHaveBeenCalled();
+    });
+
+    it('provides selection feedback only when the actions menu can open', async () => {
+        await component.menuOpen(undefined);
+        expect(mockHapticsService.selection).toHaveBeenCalledOnce();
+
+        component.isSharing = true;
+        await component.menuOpen(undefined);
+        expect(mockHapticsService.selection).toHaveBeenCalledOnce();
     });
 
     it('should stay on the current page after a table action deletes an event', async () => {
@@ -237,6 +254,81 @@ describe('EventActionsComponent', () => {
         expect(mockHapticsService.success).toHaveBeenCalledOnce();
     });
 
+    it.each([
+        { action: 'shareEventLink' as const, enabled: true, privacy: 'public' as const },
+        { action: 'stopSharingEvent' as const, enabled: false, privacy: 'private' as const },
+    ])('shows a visible loader and blocks repeated actions during $action', async ({ action, enabled, privacy }) => {
+        let resolveSharing!: (response: SetEventSharingResponse) => void;
+        const pendingSharing = new Promise<SetEventSharingResponse>(resolve => {
+            resolveSharing = resolve;
+        });
+        let notifySharingStarted!: () => void;
+        const sharingStarted = new Promise<void>(resolve => { notifySharingStarted = resolve; });
+        mockEventSharingService.setEventSharing.mockImplementationOnce(() => {
+            notifySharingStarted();
+            return pendingSharing;
+        });
+        if (!enabled) {
+            component.event.privacy = Privacy.Public;
+        }
+        const trigger = fixture.nativeElement.querySelector('button') as HTMLButtonElement;
+        expect(trigger.disabled).toBe(false);
+        expect(trigger.querySelector('mat-spinner')).toBeNull();
+
+        const sharing = component[action]();
+        await sharingStarted;
+        fixture.detectChanges();
+
+        expect(mockEventSharingService.setEventSharing).toHaveBeenCalledWith(component.user, 'event-123', enabled);
+        expect(component.isSharing).toBe(true);
+        expect(trigger.disabled).toBe(true);
+        expect(trigger.getAttribute('aria-busy')).toBe('true');
+        expect(trigger.getAttribute('aria-label')).toBe('Updating sharing');
+        expect(trigger.querySelector('mat-spinner')?.getAttribute('aria-label')).toBe('Updating sharing');
+        expect(trigger.querySelector('mat-icon')).toBeNull();
+        expect(mockHapticsService.success).not.toHaveBeenCalled();
+        expect(mockHapticsService.error).not.toHaveBeenCalled();
+
+        await component.shareEventLink();
+        await component.stopSharingEvent();
+        await component.copyPublicEventLink();
+        expect(mockEventSharingService.setEventSharing).toHaveBeenCalledOnce();
+        expect(mockDialog.open).toHaveBeenCalledOnce();
+        expect(mockEventSharingService.copyShareUrl).not.toHaveBeenCalled();
+
+        resolveSharing({ eventID: 'event-123', privacy, publicEventUrl: '', publicComparisonUrl: '' });
+        await sharing;
+        fixture.detectChanges();
+
+        expect(component.isSharing).toBe(false);
+        expect(trigger.disabled).toBe(false);
+        expect(trigger.getAttribute('aria-busy')).toBe('false');
+        expect(trigger.querySelector('mat-spinner')).toBeNull();
+        expect(trigger.querySelector('mat-icon')?.textContent).toContain('more_vert');
+        expect(mockHapticsService.success).toHaveBeenCalledOnce();
+    });
+
+    it('clears the loading state after a sharing failure and allows retry', async () => {
+        mockEventSharingService.setEventSharing.mockRejectedValueOnce(new Error('Sharing failed'));
+
+        await component.shareEventLink();
+        fixture.detectChanges();
+
+        const trigger = fixture.nativeElement.querySelector('button') as HTMLButtonElement;
+        expect(component.isSharing).toBe(false);
+        expect(trigger.disabled).toBe(false);
+        expect(trigger.querySelector('mat-spinner')).toBeNull();
+        expect(component.event.privacy).toBe('private');
+        expect(mockEventSharingService.copyShareUrl).not.toHaveBeenCalled();
+        expect(mockSnackBar.open).toHaveBeenCalledWith('Could not update sharing', undefined, { duration: 3500 });
+        expect(mockHapticsService.error).toHaveBeenCalledOnce();
+        expect(mockHapticsService.success).not.toHaveBeenCalled();
+
+        await component.shareEventLink();
+        expect(mockEventSharingService.setEventSharing).toHaveBeenCalledTimes(2);
+        expect(mockHapticsService.success).toHaveBeenCalledOnce();
+    });
+
     it('should not enable sharing when the public-share confirmation is cancelled', async () => {
         mockDialog.open.mockReturnValueOnce({
             afterClosed: () => of(false),
@@ -253,6 +345,10 @@ describe('EventActionsComponent', () => {
         expect(mockEventSharingService.setEventSharing).not.toHaveBeenCalled();
         expect(mockEventSharingService.copyShareUrl).not.toHaveBeenCalled();
         expect((component.event as any).privacy).toBe('private');
+        expect(component.isSharing).toBe(false);
+        expect(fixture.nativeElement.querySelector('mat-spinner')).toBeNull();
+        expect(mockHapticsService.success).not.toHaveBeenCalled();
+        expect(mockHapticsService.error).not.toHaveBeenCalled();
     });
 
     it('should copy an existing public event link without calling the backend', async () => {
