@@ -67,6 +67,28 @@ describe('processWorkoutTask', () => {
         mockCollection.doc.mockReturnValue(mockDoc);
     });
 
+    it.each([
+        [QueueResult.Processed, 'acknowledged', false],
+        [QueueResult.Deferred, 'deferred', false],
+        [QueueResult.TokenRefreshDeferred, 'token_refresh_deferred', false],
+        [QueueResult.MovedToDLQ, 'dead_lettered', false],
+        [QueueResult.RetryIncremented, 'retry', true],
+        [QueueResult.Failed, 'failed', true],
+    ])('reports %s as an attempt, not a committed import', async (result, outcome, rejects) => {
+        mockGet.mockResolvedValue({ exists: true, data: () => ({ processed: false }) });
+        mockParseWorkoutQueueItemForServiceName.mockResolvedValue(result);
+        const invokeTask = processWorkoutTask as unknown as (request: { data: Record<string, unknown> }) => Promise<void>;
+        const invocation = invokeTask({ data: { queueItemId: 'PRIVATE_QUEUE', serviceName: ServiceNames.WahooAPI } });
+        if (rejects) await expect(invocation).rejects.toThrow();
+        else await invocation;
+        expect(mockLoggerInfo).toHaveBeenCalledWith('[ActivityImport]', {
+            event: 'worker_attempt', telemetryVersion: 1, provider: 'wahoo', outcome, durationMs: expect.any(Number),
+        });
+        const safe = mockLoggerInfo.mock.calls.filter(([message]) => message === '[ActivityImport]');
+        expect(safe).toHaveLength(1);
+        expect(JSON.stringify(safe)).not.toContain('PRIVATE_QUEUE');
+    });
+
     it('should process a valid queue item', async () => {
         const queueItemId = 'test-id';
         const serviceName = ServiceNames.GarminAPI;

@@ -1178,6 +1178,16 @@ Use `app-service-source-icon` and the shared presentation helpers. Imported acti
 
 ## 10. Admin and operational coverage
 
+Recorded completed-activity import monitoring (#829) has local fixed-label commit/attempt
+telemetry, bounded read-only observations on the existing 30-minute dispatchers, and a
+separately owned Cloud Monitoring dashboard with six policies. It is not Training delivery
+monitoring and does not change any provider's availability. See
+[activity import monitoring](activity-import-monitoring.md) for sample limits, exclusions,
+unknown observations, thresholds, cost bounds and separately approved activation/readback.
+HTTP acknowledgements and historical retained `failed_jobs` totals are not import success
+or a new failure rate. No provider calls, retry/TTL changes or production apply are part of
+the local implementation.
+
 Provider parity includes operational visibility, not only a user-facing connection.
 
 Garmin's temporary `garminWebhookProbe` tested URL transport and discarded incoming payloads. PR #800 removes its

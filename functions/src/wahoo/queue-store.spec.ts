@@ -1,6 +1,8 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { ServiceNames } from '@sports-alliance/sports-lib';
 import type { WahooAPIWorkoutQueueItemInterface } from '../queue/queue-item.interface';
+import { recordImportCompletion } from '../queue/import-monitoring';
+vi.mock('../queue/import-monitoring', () => ({ recordImportCommit: vi.fn(), recordImportCompletion: vi.fn() }));
 
 const mocks = vi.hoisted(() => {
   const transactionGet = vi.fn();
@@ -8,7 +10,7 @@ const mocks = vi.hoisted(() => {
   const transactionUpdate = vi.fn();
   const transactionDelete = vi.fn();
   const refGet = vi.fn();
-  const ref = { id: 'queue-1', path: 'wahooAPIWorkoutQueue/queue-1', get: refGet };
+  const ref = { id: 'queue-1', path: 'wahooAPIWorkoutQueue/queue-1', parent: { id: 'wahooAPIWorkoutQueue' }, get: refGet };
   const failedRef = { id: 'queue-1', path: 'failed_jobs/queue-1' };
   const activityQueryGet = vi.fn();
   return {
@@ -415,6 +417,7 @@ describe('upsertWahooWorkoutQueueItem', () => {
       mocks.ref,
       expect.objectContaining({ processed: true }),
     );
+    expect(recordImportCompletion).not.toHaveBeenCalled();
   });
 
   it('marks only the claimed current revision as processed', async () => {
@@ -423,13 +426,20 @@ describe('upsertWahooWorkoutQueueItem', () => {
       data: () => ({ ...input, processingOwner: 'worker-1' }),
     });
 
-    await expect(completeWahooWorkoutQueueRevision({ ...input, ref: mocks.ref } as any, 'worker-1'))
+    await expect(completeWahooWorkoutQueueRevision({ ...input, ref: mocks.ref } as any, 'worker-1', {}, true))
       .resolves.toBe('PROCESSED');
     expect(mocks.transactionUpdate).toHaveBeenCalledWith(mocks.ref, expect.objectContaining({
       processed: true,
       processedAt: expect.any(Number),
       processingOwner: 'delete-sentinel',
     }));
+    expect(recordImportCompletion).toHaveBeenCalledExactlyOnceWith('wahooAPIWorkoutQueue', {});
+  });
+
+  it('does not count a pre-persistence completion as a successful import', async () => {
+    mocks.transactionGet.mockResolvedValue({ exists: true, data: () => ({ ...input, processingOwner: 'worker-1' }) });
+    await completeWahooWorkoutQueueRevision({ ...input, ref: mocks.ref } as unknown as WahooAPIWorkoutQueueItemInterface, 'worker-1');
+    expect(recordImportCompletion).not.toHaveBeenCalled();
   });
 
   it('does not let an older worker retry overwrite a newer revision', async () => {

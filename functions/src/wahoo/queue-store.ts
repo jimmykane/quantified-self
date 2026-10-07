@@ -1,4 +1,5 @@
 import * as admin from 'firebase-admin';
+import { recordImportCommit, recordImportCompletion } from '../queue/import-monitoring';
 import * as logger from 'firebase-functions/logger';
 import {
   enqueueWorkoutTaskWithDispatchRecovery,
@@ -276,21 +277,22 @@ export async function completeWahooWorkoutQueueRevision(
   queueItem: WahooAPIWorkoutQueueItemInterface,
   processingOwner: string,
   additionalData: Record<string, unknown> = {},
+  importPersisted = false,
 ): Promise<QueueResult.Processed> {
   if (!queueItem.ref) throw new Error(`No document reference supplied for Wahoo queue item ${queueItem.id}`);
   const now = Date.now();
-  await admin.firestore().runTransaction(async (transaction) => {
+  const completed = await admin.firestore().runTransaction(async (transaction) => {
     const deletionGuard = await getUserDeletionGuardStateInTransaction(
       admin.firestore(),
       transaction,
       queueItem.firebaseUserID!,
       now,
     );
-    if (deletionGuard.shouldSkip) return;
+    if (deletionGuard.shouldSkip) return false;
     const snapshot = await transaction.get(queueItem.ref!);
-    if (!snapshot.exists) return;
+    if (!snapshot.exists) return false;
     const current = snapshot.data() as Partial<WahooAPIWorkoutQueueItemInterface>;
-    if (current.processingOwner !== processingOwner) return;
+    if (current.processingOwner !== processingOwner) return false;
 
     if (hasSameRevision(current, queueItem)) {
       transaction.update(queueItem.ref!, {
@@ -299,7 +301,7 @@ export async function completeWahooWorkoutQueueRevision(
         ...additionalData,
         ...clearRevisionProcessingLeaseUpdate(),
       });
-      return;
+      return true;
     }
 
     // A newer summary arrived while this worker held the lease. Release it and
@@ -309,7 +311,13 @@ export async function completeWahooWorkoutQueueRevision(
       dispatchedToCloudTask: null,
       ...clearRevisionProcessingLeaseUpdate(),
     });
+    return false;
   });
+  // This helper also releases pre-persistence stale/expired claims. A committed
+  // processed flag alone is not proof that an event was imported.
+  if (completed === true && (importPersisted || additionalData.resultStatus === 'skipped')) {
+    recordImportCompletion(queueItem.ref.parent?.id, additionalData);
+  }
   return QueueResult.Processed;
 }
 
@@ -320,7 +328,7 @@ export async function failWahooWorkoutQueueRevision(
 ): Promise<QueueResult.Processed | QueueResult.RetryIncremented | QueueResult.MovedToDLQ | QueueResult.Failed> {
   if (!queueItem.ref) throw new Error(`No document reference supplied for Wahoo queue item ${queueItem.id}`);
   try {
-    return await admin.firestore().runTransaction(async (transaction) => {
+    const result = await admin.firestore().runTransaction(async (transaction) => {
       const deletionGuard = await getUserDeletionGuardStateInTransaction(
         admin.firestore(),
         transaction,
@@ -375,6 +383,8 @@ export async function failWahooWorkoutQueueRevision(
       });
       return QueueResult.RetryIncremented;
     });
+    if (result === QueueResult.MovedToDLQ) recordImportCommit(queueItem.ref.parent?.id, 'dead_lettered');
+    return result;
   } catch (transactionError) {
     logger.error(`Could not update Wahoo retry state for ${queueItem.id}`, transactionError);
     return QueueResult.Failed;

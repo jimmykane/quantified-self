@@ -28,6 +28,7 @@ import { getServiceTokenRootDocumentRef } from './service-token-store';
 import { isServiceDisconnectPendingData } from './service-disconnect-pending-state';
 import { SLEEP_SYNC_QUEUE_COLLECTION_NAME } from './sleep/constants';
 import { getQueueCleanupTombstoneDocumentRef } from './queue/cleanup-tombstone';
+import { recordImportCommit, recordImportCompletion } from './queue/import-monitoring';
 
 
 export enum QueueResult {
@@ -248,6 +249,7 @@ export async function moveToDeadLetterQueue(queueItem: QueueItemInterface, error
             await batch.commit();
         }
 
+        if (!bulkWriter) recordImportCommit(queueItem.ref?.parent?.id, 'dead_lettered');
         logger.info(`Moved item ${queueItem.id} to Dead Letter Queue (failed_jobs)`);
         return QueueResult.MovedToDLQ;
     } catch (e) {
@@ -314,6 +316,7 @@ export async function moveToDeadLetterQueueIfCurrentAndNotCleanupTombstoned(
             return QueueResult.Processed;
         }
         logger.info(`[${params.logPrefix}] Moved queue item ${params.queueItem.id} to failed_jobs.`);
+        recordImportCommit(params.collectionName, 'dead_lettered');
         return QueueResult.MovedToDLQ;
     } catch (error) {
         logger.error(`[${params.logPrefix}] Failed guarded DLQ transition for ${params.queueItem.id}.`, {
@@ -481,6 +484,7 @@ export async function moveToDeadLetterQueueIfCurrentUserActive(
         } else {
             logger.info(`Moved item ${queueItem.id} to Dead Letter Queue (failed_jobs)`);
         }
+        recordImportCommit(queueItem.ref?.parent?.id, 'dead_lettered');
         return QueueResult.MovedToDLQ;
     } catch (error) {
         logger.error(new Error(`Failed to move item ${queueItem.id} to DLQ: ${error}`));
@@ -879,6 +883,7 @@ export async function increaseRetryCountIfCurrentUserActive(
         params.queueItem.totalRetryCount = nextTotalRetryCount;
         params.queueItem.errors = nextErrors;
         if (movedToDlq) {
+            recordImportCommit(params.queueItem.ref?.parent?.id, 'dead_lettered');
             if (params.manualReconciliation) {
                 logger.error(`Item ${params.queueItem.id} exceeded max retries (${MAX_RETRY_COUNT}). Copied it to DLQ and retained a terminal manual-reconciliation marker.`);
             } else {
@@ -993,6 +998,9 @@ async function updateToProcessedIfCurrentUserActive(
         if (transitionResult === QueueItemUserGuardedUpdateResult.NotCurrent) {
             logger.info(`Skipping stale processed-state transition for queue item ${queueItem.id}; its revision already advanced.`);
         }
+        if (transitionResult === QueueItemUserGuardedUpdateResult.Updated) {
+            recordImportCompletion(queueItem.ref?.parent?.id, additionalData);
+        }
         return QueueResult.Processed;
     } catch (error) {
         logger.error(new Error(`Could not update guarded processed state for ${queueItem.id}: ${error}`));
@@ -1070,6 +1078,7 @@ export async function updateToProcessed(queueItem: QueueItemInterface, bulkWrite
             await ref.update(updateData);
         }
 
+        if (!bulkWriter) recordImportCompletion(ref.parent?.id, additionalData);
         logger.info(`Updated to processed  ${queueItem.id}`);
         return QueueResult.Processed;
     } catch {

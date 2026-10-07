@@ -1,3 +1,5 @@
+import { validateTarget } from '../monitoring/target.mjs';
+export { validateTarget } from '../monitoring/target.mjs';
 export const OWNER = 'qs-training-monitoring-v1';
 const PREFIX = 'qs_training_';
 const MARKER = `[${OWNER}]`;
@@ -7,15 +9,6 @@ const providers = 'jsonPayload.provider=("garmin" OR "coros" OR "wahoo" OR "suun
 const activeProviders = 'metric.labels.provider=one_of("garmin","wahoo","suunto")';
 const labels = keys => keys.map(key => ({ key, valueType: 'STRING', description: `Bounded ${key} category` }));
 export const metricType = key => `logging.googleapis.com/user/${PREFIX}${key}_v1`;
-
-export function validateTarget(project, channel) {
-  if (typeof project !== 'string' || project !== project.trim()
-      || !/^[a-z][a-z0-9-]{4,28}[a-z0-9]$/.test(project)) throw new Error('Explicit valid project ID required.');
-  if (channel !== undefined) {
-    const match = /^projects\/([a-z][a-z0-9-]*)\/notificationChannels\/([0-9]+)$/.exec(channel);
-    if (!match || match[0] !== channel || match[1] !== project) throw new Error('Select an existing notification channel in the same project.');
-  }
-}
 
 export function buildTrainingMonitoring(project, channel) {
   validateTarget(project, channel);

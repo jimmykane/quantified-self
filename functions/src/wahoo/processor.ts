@@ -238,7 +238,7 @@ export async function processWahooWorkoutQueueItem(
         skippedReason: 'user_deleted_or_deleting',
       });
     }
-    return completeWahooWorkoutQueueRevision(queueItem, processingOwner);
+    return completeWahooWorkoutQueueRevision(queueItem, processingOwner, {}, true);
   } catch (error) {
     if (isWahooReconnectRequiredError(error)) {
       return deferClaimedWahooQueueItemForReconnect(queueItem, userID, processingOwner);

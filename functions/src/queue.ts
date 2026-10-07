@@ -91,6 +91,7 @@ import {
 import { getServiceTokenRootDocumentRef } from './service-token-store';
 import { ResponseBodyTooLargeError } from './request-helper';
 import { SUUNTO_FIT_DOWNLOAD_TOO_LARGE_CONTEXT } from './suunto/constants';
+import { observeImportQueue, recordImportDispatch } from './queue/import-monitoring';
 
 type ProviderWorkoutQueueItem = SuuntoAppWorkoutQueueItemInterface
   | GarminAPIActivityQueueItemInterface
@@ -295,6 +296,18 @@ async function attachFirebaseUserIDToQueueItem<T extends ProviderWorkoutQueueIte
 
 
 export async function dispatchQueueItemTasks(serviceName: ServiceNames) {
+  try {
+    await dispatchQueueItemTasksInternal(serviceName);
+    recordImportDispatch(serviceName, 'completed');
+  } catch (error) {
+    recordImportDispatch(serviceName, 'failed');
+    throw error;
+  } finally {
+    await observeImportQueue(admin.firestore(), serviceName);
+  }
+}
+
+async function dispatchQueueItemTasksInternal(serviceName: ServiceNames) {
   // Check queue depth
   const pendingTasks = await getCloudTaskQueueDepth(true);
   if (pendingTasks >= MAX_PENDING_TASKS) {
