@@ -83,8 +83,8 @@ are disabled during saving, duplicate submissions are ignored, and failed saves 
 The Dashboard Default units prompt uses `appSettings.unitSetupCompleted === false` and is owner-only, including
 empty dashboards. New-account defaults set this flag; legacy accounts without it are not re-prompted. The browser
 region suggests the initial preset. Apply saves the preset and the completion flag in one settings merge while
-preserving weight, week start, and other app settings. Keep current units (formerly Not now) writes only the
-completion flag and permanently dismisses the prompt. Busy view models update before awaiting a write; repeat
+preserving weight, week start, and other app settings. The prompt has no skip/dismiss action; it remains until
+Apply succeeds or changed unit preferences are saved in Settings. Busy view models update before awaiting a write; repeat
 actions, preset changes, and Advanced settings navigation are blocked until it settles. Failed writes leave setup
 incomplete and keep an inline retryable error. A late result cannot update a different signed-in account.
 Successful saves publish a fresh User input while retaining its prototype so dashboard display inputs refresh.

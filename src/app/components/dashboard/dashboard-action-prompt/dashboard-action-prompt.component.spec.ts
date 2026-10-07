@@ -44,7 +44,6 @@ class DashboardActionPromptHostComponent {
     title: 'Default units',
     description: 'Choose units.',
     primaryAction: { id: 'applyUnitSetup', label: 'Apply', loadingLabel: 'Saving...' },
-    secondaryAction: { id: 'dismissUnitSetup', label: 'Not now' },
     menuActions: [{ id: 'openUnitSettings', label: 'Advanced settings', icon: 'tune' }],
   };
 
@@ -74,7 +73,8 @@ describe('DashboardActionPromptComponent', () => {
     expect(text).toContain('Default units');
     expect(text).toContain('Choose units.');
     expect(text).toContain('Projected controls');
-    expect(text).toContain('Not now');
+    expect(text).not.toContain('Not now');
+    expect(text).not.toContain('Keep current units');
     expect(text).toContain('Advanced settings');
     expect(text).toContain('Apply');
     expect(fixture.nativeElement.querySelector('mat-icon')?.textContent?.trim()).toBe('straighten');
@@ -93,6 +93,14 @@ describe('DashboardActionPromptComponent', () => {
 
   it('keeps dismissal before projected and primary actions', () => {
     host.hasActionControls = true;
+    host.prompt = {
+      id: 'firstActivityUpload',
+      icon: 'upload_file',
+      title: 'Upload your first activities',
+      description: 'Start with a file upload.',
+      primaryAction: { id: 'upgradeToPro', label: 'Upgrade to Pro' },
+      secondaryAction: { id: 'dismissFirstActivityUpload', label: 'Not now' },
+    };
     fixture.detectChanges();
 
     const actionsText = fixture.nativeElement
@@ -102,7 +110,7 @@ describe('DashboardActionPromptComponent', () => {
       .trim() || '';
 
     expect(actionsText.indexOf('Not now')).toBeLessThan(actionsText.indexOf('Projected action'));
-    expect(actionsText.indexOf('Projected action')).toBeLessThan(actionsText.indexOf('Apply'));
+    expect(actionsText.indexOf('Projected action')).toBeLessThan(actionsText.indexOf('Upgrade to Pro'));
   });
 
   it('pins the action row to the bottom of equal-height prompt cards', () => {
@@ -155,20 +163,29 @@ describe('DashboardActionPromptComponent', () => {
   });
 
   it('emits primary and secondary actions with prompt context', () => {
+    host.prompt = {
+      id: 'firstActivityUpload',
+      icon: 'upload_file',
+      title: 'Upload your first activities',
+      description: 'Start with a file upload.',
+      primaryAction: { id: 'upgradeToPro', label: 'Upgrade to Pro' },
+      secondaryAction: { id: 'dismissFirstActivityUpload', label: 'Not now' },
+    };
+    fixture.detectChanges();
     const buttons = fixture.debugElement.queryAll(By.css('button'));
     const secondaryButton = buttons.find(button => button.nativeElement.textContent.includes('Not now'));
-    const primaryButton = buttons.find(button => button.nativeElement.textContent.includes('Apply'));
+    const primaryButton = buttons.find(button => button.nativeElement.textContent.includes('Upgrade to Pro'));
 
     secondaryButton?.nativeElement.click();
     primaryButton?.nativeElement.click();
 
     expect(host.onSecondary).toHaveBeenCalledWith(expect.objectContaining({
-      promptId: 'unitSetup',
-      action: expect.objectContaining({ id: 'dismissUnitSetup' }),
+      promptId: 'firstActivityUpload',
+      action: expect.objectContaining({ id: 'dismissFirstActivityUpload' }),
     }));
     expect(host.onPrimary).toHaveBeenCalledWith(expect.objectContaining({
-      promptId: 'unitSetup',
-      action: expect.objectContaining({ id: 'applyUnitSetup' }),
+      promptId: 'firstActivityUpload',
+      action: expect.objectContaining({ id: 'upgradeToPro' }),
     }));
   });
 

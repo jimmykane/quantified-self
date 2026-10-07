@@ -470,11 +470,6 @@ export class DashboardComponent implements OnInit, OnDestroy {
   }
 
   onDashboardActionPromptSecondary(event: DashboardActionPromptEvent): void {
-    if (event.promptId === DASHBOARD_ACTION_PROMPT_UNIT_SETUP_ID && event.action.id === 'dismissUnitSetup') {
-      void this.dismissUnitSetupPrompt();
-      return;
-    }
-
     if (
       event.promptId === DASHBOARD_ACTION_PROMPT_FIRST_ACTIVITY_UPLOAD_ID
       && event.action.id === 'dismissFirstActivityUpload'
@@ -600,43 +595,6 @@ export class DashboardComponent implements OnInit, OnDestroy {
       if (this.destroyRef.destroyed || this.user?.uid !== user.uid) return;
       this.unitSetupError = 'Could not save unit preferences.';
       this.logger.error('[DashboardComponent] Failed to apply unit setup preset', error);
-      this.hapticsService.error();
-    } finally {
-      this.isSavingUnitSetup = false;
-      this.syncDashboardActionPromptState();
-    }
-  }
-
-  async dismissUnitSetupPrompt(): Promise<void> {
-    if (this.isSavingUnitSetup || !shouldShowUnitSetupPrompt(this.user, this.targetUser)) {
-      return;
-    }
-
-    const user = this.user;
-    this.isSavingUnitSetup = true;
-    this.unitSetupError = null;
-    this.syncDashboardActionPromptState();
-
-    try {
-      const unitSetupCompletedAppSettings = {
-        unitSetupCompleted: true,
-      };
-      await this.userService.updateUserProperties(user, {
-        settings: {
-          appSettings: unitSetupCompletedAppSettings,
-        },
-      });
-      if (this.destroyRef.destroyed || this.user?.uid !== user.uid) return;
-      user.settings.appSettings = { ...user.settings.appSettings, ...unitSetupCompletedAppSettings };
-      this.user.settings.appSettings = { ...this.user.settings.appSettings, ...unitSetupCompletedAppSettings };
-      this.syncDashboardActionPromptState();
-      this.snackBar.open('You can change units in Settings anytime', undefined, { duration: 2500 });
-      this.analyticsService.logEvent('unit_setup_skip');
-      this.hapticsService.success();
-    } catch (error) {
-      if (this.destroyRef.destroyed || this.user?.uid !== user.uid) return;
-      this.unitSetupError = 'Could not save this choice.';
-      this.logger.error('[DashboardComponent] Failed to dismiss unit setup prompt', error);
       this.hapticsService.error();
     } finally {
       this.isSavingUnitSetup = false;

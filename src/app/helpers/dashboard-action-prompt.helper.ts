@@ -37,7 +37,6 @@ export const DASHBOARD_ACTIVITY_AUTO_SYNC_ROUTE_IDS: readonly ActivitySyncRouteI
 
 export type DashboardActionPromptActionId =
   | 'applyUnitSetup'
-  | 'dismissUnitSetup'
   | 'openUnitSettings'
   | 'upgradeToPro'
   | 'dismissFirstActivityUpload'
@@ -230,10 +229,6 @@ export function buildDashboardActionPromptViewModels(
         id: 'applyUnitSetup',
         label: 'Apply',
         loadingLabel: 'Saving...',
-      },
-      secondaryAction: {
-        id: 'dismissUnitSetup',
-        label: 'Keep current units',
       },
       menuActions: [{
         id: 'openUnitSettings',

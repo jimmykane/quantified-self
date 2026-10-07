@@ -882,7 +882,6 @@ describe('DashboardComponent', () => {
         expect(component.dashboardActionPrompts.find(prompt => prompt.id === 'unitSetup')?.busy).toBe(true);
         component.onUnitSetupPresetChange('kilometers');
         await component.applyUnitSetupPreset();
-        await component.dismissUnitSetupPrompt();
         component.onDashboardActionPromptMenuAction({ promptId: 'unitSetup', action: { id: 'openUnitSettings', label: 'Advanced settings' } });
         expect(mockUserService.updateUserProperties).toHaveBeenCalledOnce();
         expect(mockRouter.navigate).not.toHaveBeenCalled();
@@ -905,11 +904,9 @@ describe('DashboardComponent', () => {
         component.user = mockUser;
         component.targetUser = {uid: 'other-user'} as AppUserInterface;
         await component.applyUnitSetupPreset();
-        await component.dismissUnitSetupPrompt();
         component.targetUser = null;
         mockUser.settings.appSettings.unitSetupCompleted = true;
         await component.applyUnitSetupPreset();
-        await component.dismissUnitSetupPrompt();
         expect(mockUserService.updateUserProperties).not.toHaveBeenCalled();
         expect(mockHaptics.success).not.toHaveBeenCalled();
     });
@@ -931,28 +928,6 @@ describe('DashboardComponent', () => {
         expect(mockHaptics.success).not.toHaveBeenCalled();
     });
 
-    it('keeps dismissal pending and retryable without changing any unit preferences', async () => {
-        mockUser.settings.appSettings.unitSetupCompleted = false;
-        component.user = mockUser;
-        const originalUnits = component.user.settings.unitSettings;
-        let reject!: (error: Error) => void;
-        mockUserService.updateUserProperties.mockReturnValueOnce(new Promise((_resolve, rejectSave) => { reject = rejectSave; }));
-        const pending = component.dismissUnitSetupPrompt();
-        expect(component.dashboardActionPrompts.find(prompt => prompt.id === 'unitSetup')?.busy).toBe(true);
-        await component.dismissUnitSetupPrompt();
-        expect(mockUserService.updateUserProperties).toHaveBeenCalledOnce();
-        reject(new Error('offline'));
-        await pending;
-        expect(component.dashboardActionPrompts.find(prompt => prompt.id === 'unitSetup')).toMatchObject({busy: false, error: 'Could not save this choice.'});
-        expect(mockUser.settings.appSettings.unitSetupCompleted).toBe(false);
-        expect(mockUser.settings.unitSettings).toBe(originalUnits);
-        await component.dismissUnitSetupPrompt();
-        expect(component.showUnitSetupPrompt).toBe(false);
-        expect(mockUser.settings.unitSettings).toBe(originalUnits);
-        expect(mockHaptics.error).toHaveBeenCalledOnce();
-        expect(mockHaptics.success).toHaveBeenCalledOnce();
-    });
-
     it('keeps hydration and unchanged presets silent and confirms an accepted preset change', () => {
         fixture.detectChanges();
         expect(mockHaptics.selection).not.toHaveBeenCalled();
@@ -961,33 +936,6 @@ describe('DashboardComponent', () => {
         expect(mockHaptics.selection).not.toHaveBeenCalled();
         component.onUnitSetupPresetChange('miles');
         expect(mockHaptics.selection).toHaveBeenCalledOnce();
-    });
-
-    it('dismisses unit setup prompt without rewriting unit settings', async () => {
-        (mockUser.settings.appSettings as any).unitSetupCompleted = false;
-        (mockUser.settings.appSettings as any).otherAppSetting = 'stale-local-value';
-        mockUser.settings.unitSettings = {
-            distanceUnits: DistanceUnits.Kilometers,
-            speedUnits: [SpeedUnits.KilometersPerHour],
-            paceUnits: [PaceUnits.MinutesPerKilometer],
-            startOfTheWeek: 1
-        } as any;
-        component.user = mockUser;
-
-        await component.dismissUnitSetupPrompt();
-
-        expect(mockUserService.updateUserProperties).toHaveBeenCalledWith(
-            mockUser,
-            {
-                settings: {
-                    appSettings: {
-                        unitSetupCompleted: true
-                    }
-                }
-            }
-        );
-        expect(mockUserService.updateUserProperties.mock.calls[0][1].settings.unitSettings).toBeUndefined();
-        expect(component.showUnitSetupPrompt).toBe(false);
     });
 
     it('navigates to settings units from the unit prompt menu action', async () => {
