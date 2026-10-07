@@ -84,6 +84,43 @@ describe('Training plan MCP reads', () => {
     expect(JSON.stringify({ page, completions, analysis })).not.toMatch(/private-outside-week|private-activity|eventId|activityId|destinationKey/);
     await expect(f.run('get_planned_workout_completions', { workoutRefs: page.workouts.map(item => item.workoutRef) }, ['metrics:read'])).rejects.toThrow();
   });
+  it('covers a leap month across chronological pages and bounded cross-month completion reads', async () => {
+    const f = fixture();
+    f.collections.scheduledWorkouts = Object.fromEntries(Array.from({ length: 29 }, (_, index) => {
+      const day = String(index + 1).padStart(2, '0');
+      return [`d${day}`, workout(index % 2 ? null : 'p1', `2028-02-${day}`, index === 28 ? 'skipped' : 'planned')];
+    }));
+    Object.assign(f.collections.scheduledWorkouts, { before: workout(null, '2028-01-31'), after: workout(null, '2028-03-01'),
+      inactive: workout('p2', '2028-02-02'), deleted: workout('p1', '2028-02-03', 'deleted') });
+    f.collections.scheduledWorkouts.d01.revision = 2;
+    f.collections.trainingWorkoutCompletions.d01 = { schemaVersion: 1, workoutId: 'd01', planId: 'p1', provider: 'garmin',
+      matchMethod: 'provider_marker', eventId: 'private-outside-month', activityId: 'private-activity', sourceSessionIndex: 0,
+      activityStartAtMs: Date.UTC(2028, 2, 2), scheduledLocalDate: '2028-01-31', workoutRevisionAtLink: 1,
+      timing: 'late', linkedAtMs: 1, updatedAtMs: 1 };
+    const args = { startDate: '2028-02-01', endDate: '2028-02-29', limit: 25 };
+    const output = TRAINING_READ_OUTPUTS.query_planned_workouts_by_date;
+    const first = output.parse(await f.run('query_planned_workouts_by_date', args));
+    expect(first.workouts).toHaveLength(25); expect(first.nextCursor).toBeTruthy();
+    const last = output.parse(await f.run('query_planned_workouts_by_date', { ...args, cursor: first.nextCursor }));
+    expect(last.nextCursor).toBeNull(); expect(last.scanComplete).toBe(true);
+    const workouts = [...first.workouts, ...last.workouts];
+    expect(workouts).toHaveLength(29);
+    expect(workouts.map(item => item.localDate)).toEqual(Array.from({ length: 29 }, (_, index) => `2028-02-${String(index + 1).padStart(2, '0')}`));
+    expect(workouts.filter(item => item.lifecycle === 'skipped')).toHaveLength(1);
+    const completionOutput = TRAINING_READ_OUTPUTS.get_planned_workout_completions;
+    const completions = [];
+    for (const page of [first, last]) {
+      const result = completionOutput.parse(await f.run('get_planned_workout_completions', { workoutRefs: page.workouts.map(item => item.workoutRef) }));
+      completions.push(...result.completions);
+    }
+    expect(completions.filter(item => item.state === 'linked')).toEqual([expect.objectContaining({
+      scheduledDate: '2028-01-31', workoutChangedSinceCompletion: true, activityRef: null,
+    })]);
+    expect(completions.filter(item => item.state === 'unlinked')).toHaveLength(28);
+    expect(JSON.stringify({ workouts, completions })).not.toMatch(/private-outside-month|private-activity|eventId|activityId/);
+    await expect(f.run('query_planned_workouts_by_date', args, ['metrics:read'])).rejects.toThrow();
+    await expect(f.run('get_planned_workout_completions', { workoutRefs: first.workouts.map(item => item.workoutRef) }, ['metrics:read'])).rejects.toThrow();
+  });
   it('analyzes scheduled and saved prescriptions with owner units without exposing notes or storage identity', async () => {
     const f = fixture();
     const recipe = { version: 1, sport: ActivityTypes.Running, nodes: [

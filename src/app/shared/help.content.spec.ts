@@ -776,6 +776,10 @@ describe('help.content', () => {
     expect(calendarSection?.content).toContain('intentionally have no hover or touch tooltip');
     expect(calendarSection?.content).toContain('recorded **Distance**, **Duration**, and **Ascent**');
     expect(calendarSection?.content).toContain('Month totals exclude adjacent dates');
+    expect(calendarSection?.content).toContain('**Week** and **Month** views, **Recorded**');
+    expect(calendarSection?.content).toContain('Month also retains recorded ascent');
+    expect(calendarSection?.content).toContain('**Retry month summary**');
+    expect(calendarSection?.content).toContain('If a Week or Month read is incomplete');
     expect(calendarSection?.content).toContain('scaled against the longest-duration group');
     expect(calendarSection?.content).toContain('alpine skiing, snowboarding, and downhill cycling');
     expect(calendarSection?.content).toContain('do not add ascent but do contribute descent');

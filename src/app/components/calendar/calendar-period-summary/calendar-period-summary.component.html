@@ -1,15 +1,15 @@
-<section aria-labelledby="calendar-week-summary-title" [attr.aria-busy]="summary().loading">
+<section aria-labelledby="calendar-period-summary-title" [attr.aria-busy]="summary().loading">
   <header>
-    <h2 id="calendar-week-summary-title">Week summary</h2>
-    @if (summary().loading) { <span role="status">Loading week coverage…</span> }
+    <h2 id="calendar-period-summary-title">{{ periodLabel() }} summary</h2>
+    @if (summary().loading) { <span role="status">Loading {{ periodLabel().toLowerCase() }} coverage…</span> }
   </header>
-  <dl class="week-counts">
+  <dl class="period-counts">
     @for (count of counts(); track count.label) {
       <div><dt>{{ count.label }}</dt><dd>{{ count.value === null ? 'Unknown' : (count.value | number) }}</dd></div>
     }
   </dl>
-  <div class="week-sources">
-    <section aria-label="Recorded week volume">
+  <div class="period-sources">
+    <section [attr.aria-label]="'Recorded ' + periodLabel().toLowerCase() + ' volume'">
       <h3>Recorded</h3>
       <p>{{ summary().recordedCount === null ? 'Activity count unknown' : (summary().recordedCount | number) + (summary().recordedComplete ? ' recorded activities' : ' observed recorded activities') }}</p>
       <dl class="recorded-metrics">
@@ -20,7 +20,7 @@
         }
       </dl>
     </section>
-    <section aria-label="Scheduled week prescriptions">
+    <section [attr.aria-label]="'Scheduled ' + periodLabel().toLowerCase() + ' prescriptions'">
       <h3>Planned prescriptions</h3>
       <p class="prescription">{{ summary().plannedText }}</p>
       <p class="coverage">Includes linked prescriptions; excludes skipped workouts.</p>
@@ -30,7 +30,7 @@
         }
       }
     </section>
-    <section aria-label="Remaining week prescriptions">
+    <section [attr.aria-label]="'Remaining ' + periodLabel().toLowerCase() + ' prescriptions'">
       <h3>Remaining prescriptions</h3>
       <p class="prescription">{{ summary().remainingText }}</p>
       <p class="coverage">Unlinked, non-skipped workouts. A missing link does not prove a workout was missed.</p>
@@ -41,12 +41,12 @@
       }
     </section>
   </div>
-  <p class="coverage">Recorded activities stay in their recording week. Planned load is unavailable; prescriptions are not added to recorded load.</p>
+  <p class="coverage">Recorded activities stay in the {{ periodLabel().toLowerCase() }} they were recorded in. Planned load is unavailable; prescriptions are not added to recorded load.</p>
   @if (summary().warnings.length) {
-    <div class="week-warnings" role="status">
+    <div class="period-warnings" role="status">
       @for (warning of summary().warnings; track warning) { <p>{{ warning }}</p> }
       @if (canRetry()) {
-        <button mat-button appHapticTap type="button" (click)="retryRequested.emit()"><mat-icon aria-hidden="true">refresh</mat-icon>Retry week summary</button>
+        <button mat-button appHapticTap type="button" (click)="retryRequested.emit()"><mat-icon aria-hidden="true">refresh</mat-icon>Retry {{ periodLabel().toLowerCase() }} summary</button>
       }
     </div>
   }

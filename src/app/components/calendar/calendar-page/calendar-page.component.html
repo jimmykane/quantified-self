@@ -61,8 +61,8 @@
     </button>
   </nav>
 
-  @if (isWeekView()) {
-    <app-calendar-week-summary [summary]="weekSummary()" [canRetry]="canRetryWeek()" (retryRequested)="retry()"></app-calendar-week-summary>
+  @if (isPrescriptionSummaryView()) {
+    <app-calendar-period-summary [summary]="prescriptionSummary()" [canRetry]="canRetrySummary()" (retryRequested)="retry()"></app-calendar-period-summary>
   } @else {
   <section class="calendar-period-summary"
     [attr.aria-label]="(isDayRoute ? dayTitle() : calendarModel().periodLabel) + ' activity totals'"

@@ -1,7 +1,7 @@
-import { ActivityTypes, DataDistance, DataDuration, DistanceUnits, type EventInterface } from '@sports-alliance/sports-lib';
+import { ActivityTypes, DataAscent, DataDistance, DataDuration, DistanceUnits, type EventInterface } from '@sports-alliance/sports-lib';
 import type { ScheduledWorkoutV1 } from '@shared/training-plans';
 import type { TrainingWorkoutCompletionV1 } from '@shared/training-workout-completion';
-import { buildCalendarWeekSummary, resolveCalendarCompletionCoverage } from './calendar-week-summary.helper';
+import { buildCalendarPeriodSummary, resolveCalendarCompletionCoverage } from './calendar-period-summary.helper';
 import { DASHBOARD_FORM_LEGACY_TRAINING_STRESS_SCORE_TYPE, DASHBOARD_FORM_TRAINING_STRESS_SCORE_TYPE } from './dashboard-form.helper';
 
 const start = new Date(2026, 9, 5);
@@ -22,14 +22,14 @@ const input = () => ({ window: { startMs: start.getTime(), endExclusiveMs: end.g
   schedule: { status: 'ready' as const, complete: true, data: { state: { activePlanId: 'active' }, workouts: [] as ScheduledWorkoutV1[] } },
   completions: { status: 'ready' as const, complete: true, data: [] as TrainingWorkoutCompletionV1[] } });
 
-describe('Calendar weekly summaries', () => {
+describe('Calendar period summaries', () => {
   it('partitions current active/standalone workouts with exact links taking precedence over skipped', () => {
     const value = input();
     value.schedule.data.workouts = [workout('remaining'), workout('done', { planId: 'active' }), workout('skipped', { lifecycle: 'skipped' }),
       workout('skipped-linked', { lifecycle: 'skipped' }), workout('inactive', { planId: 'paused' }), workout('deleted', { lifecycle: 'deleted' }),
       workout('outside', { localDate: '2026-10-12' })];
     value.completions.data = [link('done', { planId: 'active' }), link('skipped-linked')];
-    const summary = buildCalendarWeekSummary(value);
+    const summary = buildCalendarPeriodSummary(value);
     expect([summary.scheduledCount, summary.completedCount, summary.skippedCount, summary.remainingCount]).toEqual([4, 2, 1, 1]);
     expect(summary.planned?.summary.duration.completeExactSeconds).toBe(3600.5);
     expect(summary.remaining?.summary.duration.completeExactSeconds).toBe(1800.25);
@@ -42,12 +42,12 @@ describe('Calendar weekly summaries', () => {
       [DASHBOARD_FORM_LEGACY_TRAINING_STRESS_SCORE_TYPE]: 99 });
     value.events.data = [parent, parent, event('legacy', { [DASHBOARD_FORM_LEGACY_TRAINING_STRESS_SCORE_TYPE]: 30 }),
       event('missing', {}), event('end', { [DataDuration.type]: 999 }, end), event('before', {}, new Date(start.getTime() - 1))];
-    const summary = buildCalendarWeekSummary(value);
+    const summary = buildCalendarPeriodSummary(value);
     expect(summary.recordedCount).toBe(3);
     expect(summary.recordedMetrics[0].coverage).toContain('1 of 3');
     expect(summary.recordedMetrics[2].text).toContain('30');
     expect(summary.recordedMetrics[2].coverage).toContain('2 of 3');
-    expect(buildCalendarWeekSummary({ ...value, unitSettings: { distanceUnits: DistanceUnits.Miles } }).recordedMetrics[1].text).toContain('mi');
+    expect(buildCalendarPeriodSummary({ ...value, unitSettings: { distanceUnits: DistanceUnits.Miles } }).recordedMetrics[1].text).toContain('mi');
     expect(summary.recordedMetrics[1].text).toContain('Km');
   });
   it('reuses shared range/unknown/repeat/early-Lap analysis without a midpoint or planned load model', () => {
@@ -57,7 +57,7 @@ describe('Calendar weekly summaries', () => {
         ending: { kind: 'distance', meters: 1000, allowEarlyLap: true }, targets: [{ kind: 'speed', mode: 'absolute', presentation: 'speed', minimumMetersPerSecond: 2, maximumMetersPerSecond: 4 }] }] },
       { kind: 'step', id: 'lap', purpose: 'recovery', ending: { kind: 'manual' }, targets: [] },
     ] } })];
-    const summary = buildCalendarWeekSummary(value);
+    const summary = buildCalendarPeriodSummary(value);
     expect(summary.remaining?.summary.duration).toMatchObject({ estimatedSubtotalRange: { minimumSeconds: 750, maximumSeconds: 1500 }, unknownSteps: 1, completeRange: null });
     expect(summary.remaining?.summary.distance.exactSubtotalMeters).toBe(3000);
     expect(summary.remainingText).toContain('estimated');
@@ -68,16 +68,16 @@ describe('Calendar weekly summaries', () => {
     const value = input();
     value.schedule.data.workouts = [workout('a')];
     for (const status of ['loading', 'error'] as const) {
-      const summary = buildCalendarWeekSummary({ ...value, completions: { ...value.completions, status } });
+      const summary = buildCalendarPeriodSummary({ ...value, completions: { ...value.completions, status } });
       expect(summary.remainingCount).toBeNull(); expect(summary.completedCount).toBeNull(); expect(summary.remaining).toBeNull();
       expect(summary.planned?.workoutCount).toBe(1);
     }
     value.completions.data = [link('a', { workoutRevisionAtLink: 3 })];
-    expect(buildCalendarWeekSummary(value).remaining).toBeNull();
+    expect(buildCalendarPeriodSummary(value).remaining).toBeNull();
   });
   it('withholds complete prescription totals when a bounded schedule read is partial', () => {
     const value = input(); value.schedule.complete = false; value.schedule.data.workouts = [workout('a')]; value.events.complete = false;
-    const summary = buildCalendarWeekSummary(value);
+    const summary = buildCalendarPeriodSummary(value);
     expect(summary.planned?.summary.duration.completeExactSeconds).toBeNull();
     expect(summary.plannedText).toContain('partial source');
     expect(summary.warnings.join(' ')).toContain('incomplete');
@@ -85,7 +85,7 @@ describe('Calendar weekly summaries', () => {
   it('does not claim there are no prescriptions when an incomplete scan found no eligible workouts', () => {
     const value = input(); value.schedule.complete = false;
     value.schedule.data.workouts = [workout('inactive', { planId: 'paused' })];
-    const summary = buildCalendarWeekSummary(value);
+    const summary = buildCalendarPeriodSummary(value);
     expect(summary.plannedText).toContain('complete total unknown');
     expect(summary.remainingText).toContain('complete total unknown');
   });
@@ -97,11 +97,39 @@ describe('Calendar weekly summaries', () => {
       .toEqual({ complete: false, linkedWorkoutIds: ['valid'], changedSinceCompletionCount: 1 });
     expect(resolveCalendarCompletionCoverage(workouts, { status: 'error', complete: false, data }).linkedWorkoutIds).toEqual([]);
   });
+  it('uses a leap-month window while keeping exact cross-month links and owner distance units', () => {
+    const value = input();
+    value.window = { startMs: new Date(2028, 1, 1).getTime(), endExclusiveMs: new Date(2028, 2, 1).getTime() };
+    value.startLocalDate = '2028-02-01'; value.endLocalDate = '2028-02-29';
+    value.events.data = [event('leap', { [DataDuration.type]: 600, [DataDistance.type]: 1609.344 }, new Date(2028, 1, 29)),
+      event('before', {}, new Date(2028, 0, 31)), event('after', {}, new Date(2028, 2, 1))];
+    value.schedule.data.workouts = [workout('first', { localDate: '2028-02-01' }), workout('leap', { localDate: '2028-02-29' }),
+      workout('before', { localDate: '2028-01-31' }), workout('after', { localDate: '2028-03-01' })];
+    value.completions.data = [link('first', { scheduledLocalDate: '2028-01-01', activityStartAtMs: new Date(2028, 2, 3).getTime() })];
+    const summary = buildCalendarPeriodSummary({ ...value, period: 'month', unitSettings: { distanceUnits: DistanceUnits.Miles } });
+    expect(summary).toMatchObject({ period: 'month', recordedCount: 1, scheduledCount: 2, completedCount: 1, remainingCount: 1 });
+    expect(summary.planned?.summary.duration.completeExactSeconds).toBe(3600.5);
+    expect(summary.remaining?.summary.duration.completeExactSeconds).toBe(1800.25);
+    expect(summary.recordedMetrics[1].text).toContain('mi');
+  });
+  it.each([undefined, DistanceUnits.Miles])('preserves monthly ascent exclusions and missing metrics with distance units %s', distanceUnits => {
+    const value = input();
+    value.events.data = [
+      { ...event('run', { [DataAscent.type]: 450 }), getActivityTypesAsArray: () => [ActivityTypes.Running] },
+      { ...event('missing', {}), getActivityTypesAsArray: () => [ActivityTypes.Running] },
+      { ...event('ski', { [DataAscent.type]: 900 }), getActivityTypesAsArray: () => [ActivityTypes.AlpineSki] },
+      { ...event('bike', { [DataAscent.type]: 700 }), getActivityTypesAsArray: () => [ActivityTypes.Cycling] },
+    ];
+    const summary = buildCalendarPeriodSummary({ ...value, period: 'month', unitSettings: distanceUnits ? { distanceUnits } : undefined, summariesSettings: { removeAscentForEventTypes: [ActivityTypes.Cycling] } });
+    expect(summary.recordedMetrics.find(metric => metric.label === 'Ascent')).toEqual({ label: 'Ascent', text: '450 m',
+      coverage: 'Subtotal · 1 of 2 eligible observed activities' });
+    expect(buildCalendarPeriodSummary(value).recordedMetrics.some(metric => metric.label === 'Ascent')).toBe(false);
+  });
   it('distinguishes ready empty from failed reads and never treats missing metrics as zero', () => {
-    const empty = buildCalendarWeekSummary(input());
+    const empty = buildCalendarPeriodSummary(input());
     expect(empty.scheduledCount).toBe(0); expect(empty.remainingCount).toBe(0); expect(empty.remainingText).toBe('No prescriptions');
     expect(empty.recordedMetrics.every(metric => metric.text === 'Unavailable')).toBe(true);
-    const failed = buildCalendarWeekSummary({ ...input(), events: { status: 'error', complete: false, data: [] }, schedule: { status: 'error', complete: false, data: null } });
+    const failed = buildCalendarPeriodSummary({ ...input(), events: { status: 'error', complete: false, data: [] }, schedule: { status: 'error', complete: false, data: null } });
     expect(failed.recordedCount).toBeNull(); expect(failed.scheduledCount).toBeNull(); expect(failed.planned).toBeNull();
   });
 });

@@ -1,14 +1,15 @@
 import { ChangeDetectionStrategy, Component, computed, input, output } from '@angular/core';
 import { SharedModule } from '../../../modules/shared.module';
-import type { CalendarWeekSummary } from '../../../helpers/calendar-week-summary.helper';
+import type { CalendarPeriodSummary } from '../../../helpers/calendar-period-summary.helper';
 
 @Component({
-  selector: 'app-calendar-week-summary', standalone: true, imports: [SharedModule],
-  templateUrl: './calendar-week-summary.component.html', styleUrl: './calendar-week-summary.component.scss',
+  selector: 'app-calendar-period-summary', standalone: true, imports: [SharedModule],
+  templateUrl: './calendar-period-summary.component.html', styleUrl: './calendar-period-summary.component.scss',
   changeDetection: ChangeDetectionStrategy.OnPush,
 })
-export class CalendarWeekSummaryComponent {
-  readonly summary = input.required<CalendarWeekSummary>();
+export class CalendarPeriodSummaryComponent {
+  readonly summary = input.required<CalendarPeriodSummary>();
+  readonly periodLabel = computed(() => this.summary().period === 'month' ? 'Month' : 'Week');
   readonly canRetry = input(false);
   readonly retryRequested = output<void>();
   readonly counts = computed(() => [

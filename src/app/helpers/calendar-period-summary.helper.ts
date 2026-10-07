@@ -1,27 +1,29 @@
-import { DataDistance, DataDuration, type EventInterface, type UserUnitSettingsInterface } from '@sports-alliance/sports-lib';
+import { DataAscent, DataDistance, DataDuration, type EventInterface, type UserUnitSettingsInterface } from '@sports-alliance/sports-lib';
 import { aggregateWorkoutAnalysesV1, analyzeWorkoutStructureV1, type WorkoutAnalysisAggregateV1 } from '@shared/planned-workout-analysis';
 import { formatWorkoutAnalysisSummaryV1 } from '@shared/planned-workout-analysis-display';
 import type { ScheduledWorkoutV1 } from '@shared/training-plans';
 import type { TrainingWorkoutCompletionV1 } from '@shared/training-workout-completion';
 import { resolveUnitAwareDisplayFromValue } from '@shared/unit-aware-display';
 import { DASHBOARD_FORM_TRAINING_STRESS_SCORE_TYPE, resolveDashboardFormTrainingStressScore } from './dashboard-form.helper';
-import type { ActivityCalendarQueryWindow } from './activity-calendar.helper';
+import { buildActivityCalendarPeriodSummary, type ActivityCalendarQueryWindow } from './activity-calendar.helper';
+import type { SummaryStatsSettingsLike } from './summary-stats.helper';
 
-export interface CalendarWeekSource<T> {
+export interface CalendarPeriodSource<T> {
   status: 'loading' | 'ready' | 'error';
   data: T;
   complete: boolean;
 }
-export interface CalendarWeekSchedule {
+export interface CalendarPeriodSchedule {
   state: { activePlanId: string | null };
   workouts: ScheduledWorkoutV1[];
 }
-export interface CalendarWeekMetric { label: string; text: string; coverage: string }
-export interface CalendarWeekSummary {
+export interface CalendarPeriodMetric { label: string; text: string; coverage: string }
+export interface CalendarPeriodSummary {
+  period: 'week' | 'month';
   recordedCount: number | null;
   recordedComplete: boolean;
   scheduleComplete: boolean;
-  recordedMetrics: CalendarWeekMetric[];
+  recordedMetrics: CalendarPeriodMetric[];
   scheduledCount: number | null;
   completedCount: number | null;
   skippedCount: number | null;
@@ -35,10 +37,10 @@ export interface CalendarWeekSummary {
   loading: boolean;
 }
 
-/** The week summary and calendar markers must use the same exact-link validity rules. */
+/** The period summary and calendar markers must use the same exact-link validity rules. */
 export function resolveCalendarCompletionCoverage(
   workouts: readonly ScheduledWorkoutV1[],
-  completions: CalendarWeekSource<readonly TrainingWorkoutCompletionV1[]>,
+  completions: CalendarPeriodSource<readonly TrainingWorkoutCompletionV1[]>,
 ): { complete: boolean; linkedWorkoutIds: string[]; changedSinceCompletionCount: number } {
   if (completions.status !== 'ready') return { complete: false, linkedWorkoutIds: [], changedSinceCompletionCount: 0 };
   const links = new Map<string, TrainingWorkoutCompletionV1>();
@@ -64,17 +66,19 @@ export function resolveCalendarCompletionCoverage(
   return { complete, linkedWorkoutIds, changedSinceCompletionCount };
 }
 
-/** Calendar-local week volume. Completion is stored evidence, never inferred adherence. */
-export function buildCalendarWeekSummary(input: {
+/** Calendar-local period volume. Completion is stored evidence, never inferred adherence. */
+export function buildCalendarPeriodSummary(input: {
+  period?: 'week' | 'month';
   window: ActivityCalendarQueryWindow;
   startLocalDate: string;
   endLocalDate: string;
-  events: CalendarWeekSource<readonly EventInterface[]>;
-  schedule: CalendarWeekSource<CalendarWeekSchedule | null>;
-  completions: CalendarWeekSource<readonly TrainingWorkoutCompletionV1[]>;
+  events: CalendarPeriodSource<readonly EventInterface[]>;
+  schedule: CalendarPeriodSource<CalendarPeriodSchedule | null>;
+  completions: CalendarPeriodSource<readonly TrainingWorkoutCompletionV1[]>;
   unitSettings?: UserUnitSettingsInterface | null;
   locale?: string;
-}): CalendarWeekSummary {
+  summariesSettings?: SummaryStatsSettingsLike | null;
+}): CalendarPeriodSummary {
   const { events, schedule, completions, unitSettings, locale } = input;
   const warnings: string[] = [];
   const number = new Intl.NumberFormat(locale);
@@ -103,6 +107,15 @@ export function buildCalendarWeekSummary(input: {
     return { label, text: display?.text ?? 'Unavailable', coverage: display && !complete
       ? `Subtotal · ${number.format(sources)} of ${number.format(recorded.size)} observed activities` : '' };
   });
+  if (input.period === 'month') {
+    const ascent = buildActivityCalendarPeriodSummary([...recorded.values()], input.summariesSettings);
+    const eligible = ascent.families.reduce((count, family) => count + family.metrics.ascent.eligibleEventCount, 0);
+    const sources = ascent.families.reduce((count, family) => count + family.metrics.ascent.recordedEventCount, 0);
+    const display = sources > 0 ? resolveUnitAwareDisplayFromValue(DataAscent.type, ascent.totalAscentMeters, unitSettings) : null;
+    const complete = events.status === 'ready' && events.complete && sources === eligible;
+    recordedMetrics.splice(2, 0, { label: 'Ascent', text: display?.text ?? 'Unavailable', coverage: display && !complete
+      ? `Subtotal · ${number.format(sources)} of ${number.format(eligible)} eligible observed activities` : '' });
+  }
   const workouts = new Map<string, ScheduledWorkoutV1>();
   if (schedule.status === 'ready' && schedule.data) for (const workout of schedule.data.workouts) {
     if (workout.lifecycle !== 'deleted' && (workout.planId === null || workout.planId === schedule.data.state.activePlanId)
@@ -138,6 +151,7 @@ export function buildCalendarWeekSummary(input: {
     : analysis.workoutCount === 0 ? analysis.sourceComplete ? 'No prescriptions' : 'No prescriptions in observed records; complete total unknown'
       : formatWorkoutAnalysisSummaryV1(analysis.summary, unitSettings, undefined, locale);
   return {
+    period: input.period ?? 'week',
     recordedCount: events.status === 'ready' ? recorded.size : null,
     recordedComplete: events.status === 'ready' && events.complete,
     scheduleComplete: scheduleReady && schedule.complete,

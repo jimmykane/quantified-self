@@ -54,14 +54,14 @@ describe('ActivityCalendarService', () => {
     const user = { uid: 'owner' } as User;
     const window = { startMs: 1, endExclusiveMs: 100 };
     watchEventDocumentsBy.mockReturnValueOnce(of(Array.from({ length: 1001 }, (_, i) => eventAt(`${i}`, new Date(2)))));
-    const partial = await firstValueFrom(service.watchWeekEvents(user, window));
+    const partial = await firstValueFrom(service.watchSummaryEvents(user, window));
     expect(partial.events).toHaveLength(1000);
     expect(partial.complete).toBe(false);
     expect(watchEventDocumentsBy).toHaveBeenLastCalledWith(user, expect.any(Array), 'startDate', true, 1001, { waitForServer: true });
     watchEventDocumentsBy.mockReturnValueOnce(of([eventAt('', new Date(2))]));
-    expect((await firstValueFrom(service.watchWeekEvents(user, window))).complete).toBe(false);
+    expect((await firstValueFrom(service.watchSummaryEvents(user, window))).complete).toBe(false);
     watchEventDocumentsBy.mockReturnValueOnce(of([]));
-    expect(await firstValueFrom(service.watchWeekEvents(user, window))).toEqual({ events: [], complete: true });
+    expect(await firstValueFrom(service.watchSummaryEvents(user, window))).toEqual({ events: [], complete: true });
   });
   it('bounds the first weekly acknowledgement without expiring a healthy idle listener', async () => {
     vi.useFakeTimers();
@@ -71,13 +71,13 @@ describe('ActivityCalendarService', () => {
       const service = TestBed.inject(ActivityCalendarService);
       const user = { uid: 'owner' } as User;
       const window = { startMs: 1, endExclusiveMs: 100 };
-      const result = firstValueFrom(service.watchWeekEvents(user, window));
+      const result = firstValueFrom(service.watchSummaryEvents(user, window));
       const rejected = expect(result).rejects.toMatchObject({ name: 'TimeoutError' });
-      await vi.advanceTimersByTimeAsync(ActivityCalendarService.WEEK_READ_TIMEOUT_MS); await rejected;
+      await vi.advanceTimersByTimeAsync(ActivityCalendarService.SUMMARY_READ_TIMEOUT_MS); await rejected;
       expect(pending.observed).toBe(false);
       const values: unknown[] = []; const failed = vi.fn();
-      const subscription = service.watchWeekEvents(user, window).subscribe({ next: value => values.push(value), error: failed });
-      pending.next([]); await vi.advanceTimersByTimeAsync(2 * ActivityCalendarService.WEEK_READ_TIMEOUT_MS);
+      const subscription = service.watchSummaryEvents(user, window).subscribe({ next: value => values.push(value), error: failed });
+      pending.next([]); await vi.advanceTimersByTimeAsync(2 * ActivityCalendarService.SUMMARY_READ_TIMEOUT_MS);
       expect(values).toEqual([{ events: [], complete: true }]);
       expect(failed).not.toHaveBeenCalled(); expect(subscription.closed).toBe(false);
       subscription.unsubscribe();

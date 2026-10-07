@@ -872,16 +872,19 @@ pass separately authorized create/update/reschedule/delete round trips, Wahoo an
 have not contaminated the neutral model, and persisted Quantified Self fixtures round-trip unchanged through a locally
 packed Sports Lib package. That gate is tracked by GitHub issue #654 under epic #583.
 
-### Calendar weekly planned and recorded summaries (Training 09)
+### Calendar period planned and recorded summaries (Training 09)
 
-The existing Calendar **Week** view shows three independent sources above its day grid: recorded parent-event volume,
+The existing Calendar **Week** and **Month** views show three independent sources above their day grids: recorded parent-event volume,
 non-skipped planned prescriptions (including already linked prescriptions), and remaining non-skipped prescriptions
 without an exact stored completion link. It does not add prescriptions to recorded totals or calculate planned TSS,
-recommended load bands, adherence, or physiological forecasts. Other Calendar modes and Dashboard retain their existing
+recommended load bands, adherence, or physiological forecasts. 30-day/Year modes and Dashboard retain their existing
 summaries. Weeks use the owner's configured week start and seven local calendar dates, including DST and year boundaries.
-Recorded events use the closed-open instant window; scheduled workouts use inclusive local-date labels.
+Month uses the first local date through the last local date, including leap months. Both modes read the complete
+visible grid so adjoining dates remain selectable, but the summary uses only the exact primary period. Month retains
+recorded ascent through the shared Calendar elevation exclusions and owner-unit display, with missing eligible metrics
+labelled as subtotals. Recorded events use the closed-open instant window; scheduled workouts use inclusive local-date labels.
 
-`calendar-week-summary.helper.ts` reuses Training 04's shared analysis and aggregate rather than estimating another
+`calendar-period-summary.helper.ts` reuses Training 04's shared analysis and aggregate rather than estimating another
 workout duration. Exact fractional time/distance, explicit speed ranges, repeat execution counts, unknown endings and
 early-Lap prescribed limits remain distinct. Mixed sports use the general owner distance preference for aggregate
 prescription distance. Strength compatibility timing is not exercise/repetition volume. Missing recorded metrics stay
@@ -889,10 +892,10 @@ unavailable; partially covered metrics are labelled subtotals with their observe
 precedence over legacy Power TSS, including valid zero; unique parent IDs prevent multisport double counting.
 
 Scheduled counts include current active-plan and standalone workouts, including skipped workouts, but exclude deleted,
-inactive-plan and out-of-week records. Exact completion links take precedence over skipped lifecycle in the count
+inactive-plan and out-of-period records. Exact completion links take precedence over skipped lifecycle in the count
 partition. Unlinked skipped workouts contribute no remaining prescription. Links survive date/plan changes; their
-at-link scheduled date is never used to select current-week completion evidence. A recording stays in its own recording
-week even if linked to a prescription scheduled elsewhere. Changed linked revisions are disclosed, because a link does
+at-link scheduled date is never used to select current-period completion evidence. A recording stays in its own recording
+period even if linked to a prescription scheduled elsewhere. Changed linked revisions are disclosed, because a link does
 not prove the current edited prescription was performed. Future-revision, conflicting-plan-at-the-same-revision and
 ambiguous links make completion coverage unknown rather than making a workout appear unlinked.
 The summary and day markers share this validity boundary. Invalid links never create a completed marker; unavailable
@@ -903,14 +906,14 @@ Owner-scoped reads are bounded: recorded events have a 1,000-parent cap plus one
 records can consume that bounded date scan, so a lookahead produces **observed** counts and partial prescription coverage.
 Completion listeners read exact selected workout IDs in batches of at most 30, never an account-wide completion history.
 The restore-availability fence remains authoritative. These readers wait for server-confirmed snapshots; cached or pending
-writes cannot establish an empty/complete week. Loading, errors and incomplete reads stay distinct. Account/range/retry
+writes cannot establish an empty/complete period. Loading, errors and incomplete reads stay distinct. Account/range/retry
 changes clear source state, and completion results bind to the current owner and selection before use. Independent live
-listeners are not a transactional schedule/completion snapshot. The retry action resubscribes all weekly sources.
+listeners are not a transactional schedule/completion snapshot. The retry action resubscribes all period sources.
 The bounded Calendar reader and full schedule reader share the same state-verification path: the acknowledged
 state watch invalidates an uncached exact-document read from the same Firebase app, and only its result selects the
 active plan and schedule revision. Both retain 30-second initial acknowledgement, verification and final restore-fence
 lookup bounds with two retries. Failed or superseded verification cannot establish an empty schedule or stale revision.
-Weekly availability, active-plan and workout listeners also bound their initial acknowledgement to 30 seconds;
+Week/Month availability, active-plan and workout listeners also bound their initial acknowledgement to 30 seconds;
 completion coverage waits for every selected batch within that bound, and the recorded-event reader has the same
 initial-read limit. Timeouts reach the existing source error/Retry UI without establishing empty data. Acknowledged
 live listeners do not expire during idle periods. Training availability errors retry through the Calendar action;
@@ -921,14 +924,17 @@ day training impact and period sport-volume totals are withheld. Accessible day 
 there are no activities or planned workouts without complete coverage. Opening **Full day** loads that date independently.
 
 MCP impact review: **no wire impact**. The existing chronological date query provides calendar-visible lifecycle and
-bounded scan coverage; exact bulk completion reads preserve out-of-week links and changed revisions; the additive
-Training 04 prescription analysis provides every planned volume/uncertainty input. The same-PR MCP regression combines
+bounded scan coverage; exact bulk completion reads preserve out-of-period links and changed revisions; the additive
+Training 04 prescription analysis provides every planned volume/uncertainty input. The feature MCP regressions combine
 these strict reads, with inactive/deleted exclusion, skipped/unlinked entries, fractional time/manual recovery and private
 activity identity/independent-consent checks. Recorded metrics remain in their separately consented existing domain.
+Monthly coverage also exercises a 29-day leap month across chronological continuations and bounded completion batches,
+with adjacent-date exclusion, skipped/inactive/deleted filtering, cross-month links and independent consent.
+The frontend period label and recorded ascent compose existing inputs; neither changes a safe read projection.
 No new tool, exposed metric, schema, grant, mutation, stored field, provider action, contract digest or plugin guidance
 is needed for this local composition. No deployment or registered-client refresh is performed.
 
-Verification: weekly helper/service/page/presentation specs, existing Calendar date/overlay specs, MCP Training reads
+Verification: Week/Month helper/service/page/presentation specs, existing Calendar date/overlay specs, MCP Training reads
 and strict transport contracts, TypeScript, frontend local build and Functions contract check. Browser layout checks use
 only synthetic rendered markup at 320px and desktop widths in light/dark; physical haptics require device verification.
 
