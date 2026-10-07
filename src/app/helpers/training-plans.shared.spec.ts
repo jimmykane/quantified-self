@@ -92,6 +92,17 @@ describe('training-plan persisted contracts', () => {
     expect(() => parseTrainingPlanV1({ ...PLAN, phases: { version: 1, items: [{ ...phase, startLocalDate: '2026-08-31' }] } })).toThrow();
   });
 
+  it('rejects control characters while preserving tabs and line breaks only in descriptions', () => {
+    const phase = { id: 'base', name: 'Base', startLocalDate: '2026-09-01', endLocalDate: '2026-09-10' };
+    for (const code of [...Array.from({ length: 32 }, (_, index) => index), 127]) {
+      const character = String.fromCharCode(code);
+      expect(() => parseTrainingPlanPhasesV1({ version: 1, items: [{ ...phase, name: `Base${character}stage` }] })).toThrow();
+      const value = { version: 1, items: [{ ...phase, description: `First${character}second` }] };
+      if ([9, 10, 13].includes(code)) expect(parseTrainingPlanPhasesV1(value).items[0].description).toBe(`First${character}second`);
+      else expect(() => parseTrainingPlanPhasesV1(value)).toThrow();
+    }
+  });
+
   it('rejects invalid, overlapping, duplicate, oversized and unknown phase data', () => {
     const phase = { id: 'base', name: 'Base', startLocalDate: '2026-09-01', endLocalDate: '2026-09-10' };
     for (const item of [{ ...phase, color: '#fff' }, { ...phase, startLocalDate: '2026-02-30' },

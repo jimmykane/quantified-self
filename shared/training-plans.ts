@@ -473,6 +473,14 @@ export function validateTrainingPlanDateRange(startLocalDate: string, endLocalDa
   }
 }
 
+function hasUnsupportedPhaseControl(text: string, allowDescriptionWhitespace = false): boolean {
+  for (const character of text) {
+    const code = character.charCodeAt(0);
+    if (code === 127 || (code < 32 && (!allowDescriptionWhitespace || (code !== 9 && code !== 10 && code !== 13)))) return true;
+  }
+  return false;
+}
+
 export function parseTrainingPlanPhasesV1(value: unknown): TrainingPlanPhasesV1 {
   const record = asRecord(value, '$.phases');
   rejectUnknownFields(record, ['version', 'items'], '$.phases');
@@ -489,7 +497,7 @@ export function parseTrainingPlanPhasesV1(value: unknown): TrainingPlanPhasesV1 
     validateTrainingPlanDateRange(startLocalDate, endLocalDate);
     const name = readString(phase.name, `${path}.name`, 80);
     const description = phase.description === undefined ? undefined : readString(phase.description, `${path}.description`, 1000);
-    if (/[\u0000-\u001f\u007f]/u.test(name) || (description !== undefined && /[\u0000-\u0008\u000b\u000c\u000e-\u001f\u007f]/u.test(description))) {
+    if (hasUnsupportedPhaseControl(name) || (description !== undefined && hasUnsupportedPhaseControl(description, true))) {
       throw new TrainingPlanContractError(path, 'Unsupported control character.');
     }
     return { id: readEntityId(phase.id, `${path}.id`), name, startLocalDate, endLocalDate,
