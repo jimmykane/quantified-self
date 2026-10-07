@@ -1,7 +1,7 @@
 import { ChangeDetectionStrategy, Component, inject, OnInit, signal, LOCALE_ID } from '@angular/core';
 import { MAT_DIALOG_DATA, MatDialogRef } from '@angular/material/dialog';
 import { FormControl, FormGroup } from '@angular/forms';
-import { firstValueFrom } from 'rxjs';
+import { firstValueFrom, forkJoin, take } from 'rxjs';
 import { DataTrainingStressScore, type User, type UserUnitSettingsInterface } from '@sports-alliance/sports-lib';
 import type { AppEventInterface } from '@shared/app-event.interface';
 import { defaultAppliedTrainingLoadPolicy, recordedTrainingStressScore, resolveEffectiveTrainingLoad,
@@ -39,12 +39,13 @@ export class TrainingLoadDialogComponent implements OnInit {
     future: new FormControl(false, { nonNullable: true }) });
 
   async ngOnInit(): Promise<void> { await this.reload(); }
-  private async reload(): Promise<void> {
+  private async reload(): Promise<boolean> {
+    this.loaded.set(false);
     try {
-      const [metadata, policies] = await Promise.all([
-        firstValueFrom(this.service.watch(this.data.user.uid, this.data.event.getID() as string)),
-        firstValueFrom(this.service.watchPolicies(this.data.user.uid)),
-      ]);
+      const [metadata, policies] = await firstValueFrom(forkJoin([
+        this.service.watch(this.data.user.uid, this.data.event.getID() as string).pipe(take(1)),
+        this.service.watchPolicies(this.data.user.uid).pipe(take(1)),
+      ]));
       const sourceCurrent = !metadata?.parentFingerprint || metadata.parentFingerprint ===
         await browserTrainingLoadSourceFingerprint(this.data.event.toJSON());
       const legSourcesCurrent = await Promise.all(this.data.event.getActivities().map(async activity => {
@@ -55,10 +56,15 @@ export class TrainingLoadDialogComponent implements OnInit {
       const currentIds = new Set(this.activities.map(activity => activity.id));
       const allSavedLegsPresent = Object.values(metadata?.legs ?? {}).every(leg => !leg.activityId || currentIds.has(leg.activityId));
       this.sourceCurrent.set(sourceCurrent && allSavedLegsPresent && legSourcesCurrent.every(Boolean));
-      this.metadata.set(metadata); this.policies.set(policies); this.loaded.set(true);
+      this.metadata.set(metadata); this.policies.set(policies);
       if (!this.selectedId()) this.selectedId.set(this.activities[0]?.id ?? '');
       this.resetDraft();
-    } catch { this.error.set('Training load could not be loaded. Close and try again.'); }
+      this.loaded.set(true);
+      return true;
+    } catch {
+      this.error.set('Training load could not be loaded. Close and try again.');
+      return false;
+    }
   }
   get selectedKey(): string {
     return Object.entries(this.metadata()?.controls ?? {}).find(([, control]) => control.activityId === this.selectedId())?.[0]
@@ -149,9 +155,16 @@ export class TrainingLoadDialogComponent implements OnInit {
     await this.mutate(() => this.service.save(this.data.user.uid, this.data.event.getID() as string, this.metadata()?.revision ?? 0, edit));
   }
   private async mutate(action: () => Promise<void>): Promise<void> {
-    if (this.busy()) return;
+    if (this.busy() || !this.loaded()) return;
     this.busy.set(true); this.error.set(''); this.form.disable({ emitEvent: false });
-    try { await action(); await this.reload(); this.haptics.success(); }
+    try {
+      await action();
+      if (await this.reload()) this.haptics.success();
+      else {
+        this.error.set('Changes were saved, but updated Training load could not be loaded. Close and reopen the editor before making further changes.');
+        this.haptics.error();
+      }
+    }
     catch (error) { this.error.set(error instanceof Error ? error.message : 'Could not save Training load.'); this.haptics.error(); }
     finally { this.busy.set(false); this.form.enable({ emitEvent: false }); }
   }

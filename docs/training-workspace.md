@@ -4877,6 +4877,12 @@ Excluded sessions do not count as missing-load sessions. Reset restores the save
 Settings. A whole-workout reset also explicitly releases retained unmatched controls; per-leg reset retains any
 explicit association.
 
+After saving controls, the editor reloads its metadata and sport policy heads before showing updated load or allowing
+another edit. If that refresh fails, it hides the old load and form, stops the loading indicator, and explains that the
+write succeeded but the editor must be reopened. A failed read also unsubscribes the other pending refresh read.
+A rejected write retains the draft for review. This affects editor
+readiness only; persisted policies, calculation semantics and MCP contracts are unchanged.
+
 Settings → Training load uses the existing ten sport families, including Walking & Hiking. Defaults are
 Automatic/included. Saving appends an immutable server-timestamped revision in
 `users/{uid}/trainingLoadPolicies/{family}/revisions/{revisionId}` and updates the revision-checked head. The leg
