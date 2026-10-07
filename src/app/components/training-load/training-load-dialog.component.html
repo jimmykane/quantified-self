@@ -2,7 +2,7 @@
 <mat-dialog-content [attr.aria-busy]="busy()">
   <p>Modeled TSS drives Fitness, Fatigue and Form. Recorded statistics stay unchanged.</p>
   @if (error()) { <p role="alert">{{ error() }}</p> }
-  @if (!loaded()) { <mat-spinner diameter="28" aria-label="Loading Training load"></mat-spinner> }
+  @if (!loaded() && !error()) { <mat-spinner diameter="28" aria-label="Loading Training load"></mat-spinner> }
   @if (loaded()) {
     <div class="workout-load"><strong>Modeled workout TSS</strong><span>{{ score(model.score) }}</span></div>
     @if (model.status === 'partial') { <p role="status">This total includes available legs only. Some included legs have no usable load.</p> }

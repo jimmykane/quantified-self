@@ -2,7 +2,7 @@ import { TestBed } from '@angular/core/testing';
 import { MAT_DIALOG_DATA, MatDialogRef } from '@angular/material/dialog';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { webcrypto } from 'node:crypto';
-import { of } from 'rxjs';
+import { of, Subject, throwError } from 'rxjs';
 import { TrainingLoadDialogComponent } from './training-load-dialog.component';
 import { TrainingLoadService } from '../../services/training-load.service';
 import { AppHapticsService } from '../../services/app.haptics.service';
@@ -12,18 +12,18 @@ import { ActivityTypes, EventImporterJSON } from '@sports-alliance/sports-lib';
 
 describe('Training load editor', () => {
   const save = vi.fn(); const selection = vi.fn(); const success = vi.fn(); const error = vi.fn();
-  const watch = vi.fn();
+  const watch = vi.fn(); const watchPolicies = vi.fn();
   const source = { startDate: 1000, endDate: 3601000, stats: { 'Training Stress Score': 87.3 } };
   let component: TrainingLoadDialogComponent;
   beforeEach(async () => {
     vi.clearAllMocks(); save.mockResolvedValue(undefined);
-    watch.mockReturnValue(of(null)); vi.stubGlobal('crypto', webcrypto);
+    watch.mockReturnValue(of(null)); watchPolicies.mockReturnValue(of([])); vi.stubGlobal('crypto', webcrypto);
     TestBed.configureTestingModule({ providers: [
       { provide: MAT_DIALOG_DATA, useValue: { user: { uid: 'u' }, event: { getID: () => 'e',
         getActivities: () => [{ getID: () => 'walk', type: 'Walking', toJSON: () => source, getStat: () => ({ getValue: () => 87.3 }) }],
         toJSON: () => source, getStat: () => ({ getValue: () => 87.3 }) } } },
       { provide: MatDialogRef, useValue: { close: vi.fn() } },
-      { provide: TrainingLoadService, useValue: { save, watch, watchPolicies: () => of([]) } },
+      { provide: TrainingLoadService, useValue: { save, watch, watchPolicies } },
       { provide: AppHapticsService, useValue: { selection, success, error } },
     ] });
     component = TestBed.runInInjectionContext(() => new TrainingLoadDialogComponent());
@@ -58,6 +58,29 @@ describe('Training load editor', () => {
     await component.save();
     expect(component.error()).toBe('Changed elsewhere'); expect(component.form.controls.override.value).toBe(9);
     expect(error).toHaveBeenCalledOnce(); expect(success).not.toHaveBeenCalled();
+  });
+  it.each(['metadata', 'policies'])('stops using stale editor state when %s cannot reload after a successful save', async failedRead => {
+    (failedRead === 'metadata' ? watch : watchPolicies).mockReturnValue(throwError(() => new Error('Offline')));
+    component.form.patchValue({ override: 0 }); component.form.markAsDirty();
+    await component.save();
+    expect(save).toHaveBeenCalledOnce();
+    expect(component.loaded()).toBe(false); expect(component.busy()).toBe(false);
+    expect(component.error()).toMatch(/saved.*could not be loaded/i);
+    expect(error).toHaveBeenCalledOnce(); expect(success).not.toHaveBeenCalled();
+    await component.save(); await component.resetLeg(); await component.resetWorkout();
+    await component.excludeWorkout(true); await component.associate('old', 'walk'); await component.dismiss('old');
+    expect(save).toHaveBeenCalledOnce();
+  });
+  it.each(['metadata', 'policies'])('releases the other waiting read when the %s refresh fails', async failedRead => {
+    const waiting$ = new Subject();
+    (failedRead === 'metadata' ? watch : watchPolicies).mockReturnValue(throwError(() => new Error('Offline')));
+    (failedRead === 'metadata' ? watchPolicies : watch).mockReturnValue(waiting$);
+    component.form.patchValue({ override: 0 }); component.form.markAsDirty();
+    try {
+      await component.save();
+      expect(waiting$.observed).toBe(false);
+      expect(component.loaded()).toBe(false);
+    } finally { waiting$.complete(); }
   });
   it('removes an override when the number input is cleared instead of saving zero', async () => {
     // Angular's number value accessor emits null for an empty native number input.
