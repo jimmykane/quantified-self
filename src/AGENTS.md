@@ -14,8 +14,8 @@ Frontend-only rules:
   policy, SSR/prerender registration, route SEO metadata, public-route handling, internal links, and tests. Deliberately
   exclude non-indexable pages from the sitemap and set their `noindex` policy where applicable.
 - Authenticated product workspace routes, except Settings, must apply the shared `qs-workspace-page` class to their route
-  root. Do not add route-local outer width, margin, or padding rules. Settings intentionally retains its centered 760px
-  form layout. See `docs/frontend-ui.md` for the shell contract.
+  root. Do not add route-local outer width, margin, or padding rules. Settings intentionally uses a centered 1120px
+  overview layout with two columns on desktop and one on phones. See `docs/frontend-ui.md` for the shell contract.
 - Always include the app's haptic feedback in new or changed interactive UI. Reuse `AppHapticsService` and
   `appHapticTap` (exported by `AppChartSharedModule`); never call vibration APIs directly. Audit the whole interaction,
   including mobile selectors, range/source changes, disclosure controls, dialogs, retries, and completed mutations.

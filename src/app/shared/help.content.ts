@@ -1275,6 +1275,10 @@ Suunto, COROS, and Wahoo history imports are queued jobs. Large ranges can take 
 
 ## Settings you can change yourself
 
+Settings groups **Preferences** and **Privacy & account** into two columns on desktop and a single list on phones.
+Select a section to expand its controls; select it again to collapse it. Opening another section keeps your unsaved
+edits. **Save changes** applies your edits across all sections. Privacy is immediately before Account.
+
 In [Settings → Privacy](/settings?section=privacy), turn **Usage analytics** or **Marketing emails** off, then select **Save changes**. Appearance contains your theme setting. Other Settings sections let you customize charts, maps, units, and regional formatting.
 
 Marketing emails are occasional founder messages about product updates and offers. They go only to accounts that explicitly opt in. Your login provider and email verification state do not change this preference. Every marketing email includes an unsubscribe link: opening it shows a confirmation page, and confirming turns the preference off without signing in. Its **Email preferences** link opens Settings → Privacy. Turning marketing emails off does not stop transactional account or billing messages.

@@ -1,4 +1,5 @@
 @use '../../../styles/breakpoints' as bp;
+@use '@angular/material' as mat;
 
 :host {
     --section-spacing: 24px;
@@ -139,56 +140,106 @@
 }
 
 .settings-content {
-    max-width: 760px;
+    max-width: 1120px;
     margin: 0 auto;
     padding: 32px 40px;
 }
 
 .settings-page-header {
-    max-width: 760px;
     margin: 0 0 28px;
 }
 
+.settings-overview {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    align-items: start;
+    gap: 36px;
+}
+
+.settings-group {
+    min-width: 0;
+    container-type: inline-size;
+}
+
+.settings-group-title {
+    margin: 0 0 8px;
+    color: var(--mat-sys-on-surface-variant);
+    font: var(--mat-sys-title-small);
+}
+
+.settings-disclosure {
+    border-bottom: 1px solid var(--mat-sys-outline-variant);
+}
+
+.settings-section-heading {
+    margin: 0;
+}
+
+.settings-section-trigger {
+    width: 100%;
+    height: auto;
+    min-height: 64px;
+    padding: 12px 0;
+    text-align: start;
+    @include mat.button-overrides((
+        text-label-text-color: var(--mat-sys-on-surface),
+        text-container-shape: 0,
+    ));
+}
+
+.settings-section-row {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    width: 100cqw;
+    min-width: 0;
+}
+
+.settings-section-copy {
+    display: grid;
+    flex: 1;
+    gap: 4px;
+    min-width: 0;
+}
+
+.settings-section-label {
+    font: var(--mat-sys-title-medium);
+}
+
+.settings-section-description {
+    color: var(--mat-sys-on-surface-variant);
+    font: var(--mat-sys-body-small);
+    white-space: normal;
+}
+
+.settings-section-chevron,
+.settings-section-row > mat-icon {
+    flex: 0 0 24px;
+    color: var(--mat-sys-on-surface-variant);
+}
+
+.settings-disclosure--expanded .settings-section-row > mat-icon:first-child {
+    color: var(--mat-sys-primary);
+}
+
+.settings-section-note {
+    margin: 0;
+    color: var(--mat-sys-on-surface-variant);
+    font: var(--mat-sys-body-small);
+}
+
 .settings-panel-section {
-    max-width: 760px;
     overflow: visible;
     border: 0;
     border-radius: 0;
     background: transparent;
 }
 
-.settings-panel-header {
-    margin-bottom: 20px;
-    padding: 0;
-
-    h2 {
-        margin: 0 0 6px;
-        color: var(--mat-sys-on-surface);
-        font-size: 1.5rem;
-        line-height: 1.2;
-        font-weight: 700;
-    }
-
-    p {
-        margin: 0;
-        color: var(--mat-sys-on-surface-variant);
-        font-size: 0.9rem;
-        line-height: 1.4;
-    }
-}
-
-.settings-panel-section > mat-divider {
-    display: none;
-}
-
 .settings-panel-body {
     display: flex;
     flex-direction: column;
     gap: 16px;
-    padding: 20px;
-    border: 1px solid var(--mat-sys-outline-variant);
-    border-radius: 12px;
-    background: var(--mat-sys-surface-container-lowest);
+    padding: 12px 0 24px;
 }
 
 .settings-toggle-block {
@@ -197,7 +248,7 @@
     align-items: center;
     gap: 16px;
 
-    h3 {
+    h4 {
         margin: 0 0 4px;
         color: var(--mat-sys-on-surface);
         font-size: 1rem;
@@ -219,7 +270,7 @@
     align-items: center;
     gap: 16px;
 
-    h3 {
+    h4 {
         margin: 0 0 4px;
         color: var(--mat-sys-on-surface);
         font-size: 1rem;
@@ -296,7 +347,7 @@
     }
 }
 
-@include bp.min-768 {
+@container (min-width: 540px) {
     .settings-field-list--units {
         display: grid;
         grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -328,7 +379,9 @@
     }
 
     mat-slider {
-        width: 100%;
+        // Leave room for Material's thumb and its touch target at both ends.
+        width: calc(100% - 48px);
+        margin-inline: 24px;
     }
 }
 
@@ -336,7 +389,7 @@
     display: flex;
     flex-direction: column;
     gap: 20px;
-    padding: 24px;
+    padding: 16px;
 }
 
 .brand-text-upgrade {
@@ -408,38 +461,47 @@
     font-size: 0.8rem;
 }
 
-.qs-form-actions-floating {
-    position: fixed;
-    right: max(32px, calc((100vw - 760px) / 2));
-    bottom: 32px;
-    z-index: 100;
-}
-
-.qs-form-actions-floating button {
-    min-height: 48px;
-}
-
-.mobile-save-bar {
-    display: none;
-    position: fixed;
-    bottom: 0;
-    left: 0;
-    right: 0;
-    padding: 12px 16px calc(12px + env(safe-area-inset-bottom));
-    background: var(--mat-sys-surface-container-lowest);
+.settings-save-bar {
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+    gap: 16px;
+    margin-top: 28px;
+    padding-top: 16px;
     border-top: 1px solid var(--mat-sys-outline-variant);
-    z-index: 100;
 }
 
-.mobile-save-bar button {
-    width: 100%;
+.settings-save-status {
+    flex: 1;
+    color: var(--mat-sys-on-surface-variant);
+    font: var(--mat-sys-body-small);
 }
 
-.qs-form-actions-floating button[disabled],
-.mobile-save-bar button[disabled] {
-    opacity: 0.5;
-    filter: grayscale(1);
-    pointer-events: none;
+.settings-save-button-content {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+
+    mat-icon,
+    mat-spinner {
+        width: 20px;
+        height: 20px;
+        font-size: 20px;
+    }
+}
+
+@container (max-width: 539px) {
+    .settings-theme-control,
+    .settings-toggle-grid,
+    .settings-slider-grid {
+        grid-template-columns: 1fr;
+    }
+
+    .settings-option-block {
+        align-items: stretch;
+        flex-direction: column;
+    }
 }
 
 @include bp.max-768 {
@@ -453,7 +515,21 @@
 
     .settings-content {
         padding-top: 24px;
-        padding-bottom: 96px;
+        padding-bottom: 24px;
+    }
+
+    .settings-overview {
+        grid-template-columns: 1fr;
+        gap: 24px;
+    }
+
+    .settings-section-trigger {
+        min-height: 48px;
+        padding-block: 10px;
+    }
+
+    .settings-section-description {
+        display: none;
     }
 
     .user-profile-header {
@@ -484,17 +560,8 @@
         margin-bottom: 20px;
     }
 
-    .settings-panel-header {
-        margin-bottom: 16px;
-        padding: 0;
-    }
-
-    .settings-panel-header h2 {
-        font-size: 1.5rem;
-    }
-
     .settings-panel-body {
-        padding: 16px;
+        padding: 12px 0 24px;
     }
 
     .settings-toggle-grid,
@@ -512,11 +579,16 @@
         flex-direction: column;
     }
 
-    .qs-form-actions-floating {
-        display: none;
+    .settings-save-bar {
+        flex-wrap: wrap;
+        gap: 12px;
     }
 
-    .mobile-save-bar {
-        display: block;
+    .settings-save-status {
+        flex-basis: 100%;
+    }
+
+    .settings-save-bar button {
+        width: 100%;
     }
 }

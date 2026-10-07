@@ -83,7 +83,7 @@ export class UserSettingsComponent implements OnChanges, OnDestroy, OnInit {
   public consentToDelete: boolean;
   public errorDeleting;
   public errorSaving;
-  public activeSection: SettingsSectionId = 'profile';
+  public activeSection: SettingsSectionId | null = null;
   public readonly sectionOrder: SettingsSectionId[] = [
     'profile',
     'app',
@@ -98,7 +98,7 @@ export class UserSettingsComponent implements OnChanges, OnDestroy, OnInit {
     {
       id: 'profile',
       label: 'Profile',
-      description: 'Identity and account controls',
+      description: 'Name and chart watermark',
       icon: 'manage_accounts',
     },
     {
@@ -143,6 +143,10 @@ export class UserSettingsComponent implements OnChanges, OnDestroy, OnInit {
       description: 'Account actions and access',
       icon: 'account_circle',
     },
+  ];
+  public readonly settingsGroups = [
+    { id: 'preferences', label: 'Preferences', sections: this.settingsSectionOptions.slice(0, 6) },
+    { id: 'privacy-account', label: 'Privacy & account', sections: this.settingsSectionOptions.slice(6) },
   ];
   public readonly brandTextMaxLength = 60;
 
@@ -447,7 +451,11 @@ export class UserSettingsComponent implements OnChanges, OnDestroy, OnInit {
     return this.mandatoryDescentExclusions.indexOf(type) >= 0;
   }
 
-  async selectSettingsSection(section: SettingsSectionId): Promise<void> {
+  async toggleSettingsSection(section: SettingsSectionId): Promise<void> {
+    await this.selectSettingsSection(section === this.activeSection ? null : section);
+  }
+
+  async selectSettingsSection(section: SettingsSectionId | null): Promise<void> {
     if (section === this.activeSection || this.isSaving || this.isDeleting) return;
     this.activeSection = section;
     this.hapticsService.selection();
@@ -721,7 +729,7 @@ export class UserSettingsComponent implements OnChanges, OnDestroy, OnInit {
       return;
     }
 
-    this.activeSection = 'profile';
+    this.activeSection = null;
   }
 
   private isSettingsSection(section: unknown): section is SettingsSectionId {
@@ -779,7 +787,7 @@ export class UserSettingsComponent implements OnChanges, OnDestroy, OnInit {
 
   public deleteUser(event: Event) {
     event.preventDefault();
-    if (this.isDeleting) {
+    if (this.isSaving || this.isDeleting) {
       return;
     }
 
