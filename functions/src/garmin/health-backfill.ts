@@ -1,5 +1,6 @@
 import * as admin from 'firebase-admin';
 import * as logger from 'firebase-functions/logger';
+import { recordHealthSleepCommit } from '../sleep/monitoring';
 import { ServiceNames } from '@sports-alliance/sports-lib';
 import { HEALTH_PROVIDERS, HEALTH_SYNC_STATUSES } from '../../../shared/health';
 import { SLEEP_PROVIDERS } from '../../../shared/sleep';
@@ -390,6 +391,7 @@ async function markBackfillSkipped(
         { skippedContext: 'USER_DELETION_GUARD' },
       );
     }
+    if (transition === 'skipped') recordHealthSleepCommit(queueItem, 'skipped');
     return QueueResult.Processed;
   } catch (error) {
     logger.error('[GarminHealthBackfill] Could not persist skipped backfill progress.', {
@@ -807,6 +809,7 @@ export async function processGarminHealthBackfillQueueItem(
     }
     if (transition === 'lifecycle_changed') return markBackfillSkipped(queueItem, parsed.total);
     if (transition === 'superseded') return QueueResult.Processed;
+    if (isCompleteGarminHealthBackfillCursor(nextCursor)) recordHealthSleepCommit(queueItem, 'completed');
     cursor = nextCursor;
 
     if (minimumStartMs !== null) {

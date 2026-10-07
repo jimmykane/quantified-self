@@ -166,6 +166,7 @@ Never commit environment files, service-account JSON, API tokens, private keys, 
 | CI workflow regression tests | `npm run test:workflows` | Fork/internal trigger routing and the required aggregate test result |
 | Training monitoring configuration | `npm run test:training-monitoring` | Offline metric/dashboard/alert definitions and safe, idempotent provisioning |
 | Activity import monitoring configuration | `npm run test:import-monitoring` | Offline four-provider dashboard/policies; no production changes by default |
+| Health/Sleep monitoring configuration | `npm run test:health-sleep-monitoring` | Offline ordinary-ingestion/serialized-backfill dashboard and policies; no production changes by default |
 | Functions lint | `npm --prefix functions run lint` | Runs ESLint with `--fix` and may edit files |
 | Install Git hooks | `npm run hooks:install` | Reinstalls the repository Lefthook hooks; `npm ci` normally installs them automatically |
 | Test the local credential guard | `npm run credentials:test` | Checks the staged-file rejection policy without reading credential values |

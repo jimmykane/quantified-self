@@ -251,6 +251,15 @@ describe('Garmin Health backfill processor', () => {
     vi.useRealTimers();
   });
 
+  it('emits one completed request campaign only after the terminal cursor commits', async () => {
+    const invocation = processGarminHealthBackfillQueueItem(createQueueItem());
+    await vi.runAllTimersAsync();
+    expect(await invocation).toBe(QueueResult.Processed);
+    const records = vi.mocked(logger.info).mock.calls.filter(([message]) => message === '[HealthSleep]');
+    expect(records).toEqual([['[HealthSleep]', { telemetryVersion: 1, provider: 'GarminAPI', workload: 'garmin_health_backfill', event: 'committed', outcome: 'completed' }]]);
+    expect(hoisted.queueData).toMatchObject({ processed: true, resultStatus: 'success' });
+  });
+
   it.each([false, true])('finishes all families despite a moving cutoff (resuming: %s)', async (resuming) => {
     const nowMs = Date.parse('2026-04-30T12:00:00Z');
     const startMs = Date.parse('2016-01-01T00:00:00Z');

@@ -126,6 +126,44 @@ describe('queue-utils', () => {
         vi.restoreAllMocks();
     });
 
+    describe('Health/Sleep committed observations', () => {
+        const observed = () => vi.mocked(logger.info).mock.calls.filter(([message]) => message === '[HealthSleep]');
+        const item = () => ({ id: 'qa', provider: 'GarminAPI', type: 'garmin_ping', userID: 'user-1', queueRevision: 'R1', dateCreated: 1, processed: false, retryCount: 0,
+            ref: { parent: { id: 'sleepSyncQueue' }, id: 'qa' }, payload: 'PRIVATE_PAYLOAD' } as unknown as SleepSyncQueueItemInterface);
+        it('emits once after a retried completion transaction commits, not inside its callbacks', async () => {
+            vi.spyOn(logger, 'info').mockImplementation(() => {});
+            const current = item();
+            hoisted.transaction.get.mockResolvedValue({ exists: true, data: () => ({ ...current }) });
+            hoisted.runTransaction.mockImplementationOnce(async callback => {
+                await callback(hoisted.transaction);
+                expect(observed()).toHaveLength(0);
+                return callback(hoisted.transaction);
+            });
+            expect(await updateToProcessed(current, undefined, { resultStatus: 'success' })).toBe(QueueResult.Processed);
+            expect(observed()).toEqual([['[HealthSleep]', { telemetryVersion: 1, provider: 'GarminAPI', workload: 'sleep_sync', event: 'committed', outcome: 'completed' }]]);
+        });
+        it('does not emit success for stale, deletion-fenced or failed completion', async () => {
+            vi.spyOn(logger, 'info').mockImplementation(() => {});
+            const current = item();
+            hoisted.transaction.get.mockResolvedValue({ exists: true, data: () => ({ ...current, queueRevision: 'R2' }) });
+            await updateToProcessed(current, undefined, { resultStatus: 'success' });
+            hoisted.getUserDeletionGuardStateInTransaction.mockResolvedValueOnce({ shouldSkip: true });
+            await updateToProcessed(current, undefined, { resultStatus: 'success' });
+            hoisted.runTransaction.mockRejectedValueOnce(new Error('PRIVATE_FAILURE'));
+            expect(await updateToProcessed(current, undefined, { resultStatus: 'success' })).toBe(QueueResult.Failed);
+            expect(observed()).toHaveLength(0);
+        });
+        it.each(['retry', 'expected_contention'])('counts a committed %s separately without extracting raw errors', async outcome => {
+            vi.spyOn(logger, 'info').mockImplementation(() => {});
+            const current = item();
+            hoisted.transaction.get.mockResolvedValue({ exists: true, data: () => ({ ...current }) });
+            const error = new Error('PRIVATE_ERROR');
+            if (outcome === 'expected_contention') error.name = 'TokenRefreshInProgressError';
+            expect(await increaseRetryCountIfCurrentUserActive({ queueItem: current, error, userID: 'user-1', phase: 'qa', logPrefix: 'qa', isCurrent: () => true })).toBe(QueueResult.RetryIncremented);
+            expect(observed()).toEqual([['[HealthSleep]', { telemetryVersion: 1, provider: 'GarminAPI', workload: 'sleep_sync', event: 'retry_transition', outcome }]]);
+        });
+    });
+
     describe('recorded import commit observations', () => {
         const observed = () => vi.mocked(logger.info).mock.calls.filter(([message]) => message === '[ActivityImport]');
         it('counts a new dead letter only after batch commit and not failed persistence', async () => {

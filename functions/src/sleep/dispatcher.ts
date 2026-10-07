@@ -26,6 +26,7 @@ import {
 } from './queue-revision';
 import { getActiveRevisionProcessingLease } from '../queue/revision-processing-lease';
 import { SleepDispatchReconciliationTelemetry } from './dispatch-telemetry';
+import { observeHealthSleepQueue, recordHealthSleepDispatch, recordHealthSleepUnavailable } from './monitoring';
 
 const MAX_SLEEP_SYNC_QUEUE_SCAN = 500;
 const SLEEP_SYNC_REDISPATCH_STALE_MS = 2 * 60 * 60 * 1000;
@@ -204,7 +205,7 @@ async function scanSleepSyncQueueTaskClass(
     return matchedDocs;
 }
 
-export async function reconcileSleepSyncQueueDispatches(nowMs = Date.now()): Promise<{
+export async function reconcileSleepSyncQueueDispatches(nowMs = Date.now(), reportBackfillDepth?: (depth: number) => void): Promise<{
     inspected: number;
     dispatched: number;
     skippedRecent: number;
@@ -214,6 +215,7 @@ export async function reconcileSleepSyncQueueDispatches(nowMs = Date.now()): Pro
         getCloudTaskQueueDepthForQueue(config.cloudtasks.sleepSyncQueue, true),
         getCloudTaskQueueDepthForQueue(config.cloudtasks.garminHealthBackfillQueue, true),
     ]);
+    reportBackfillDepth?.(pendingGarminHealthBackfillTasks);
     if (pendingSleepTasks >= MAX_PENDING_TASKS
         && pendingGarminHealthBackfillTasks >= MAX_PENDING_TASKS) {
         logger.info('[SleepSyncDispatcher] Both task queues are at capacity; skipping dispatch reconciliation.');
@@ -359,6 +361,7 @@ export async function reconcileSleepSyncQueueDispatches(nowMs = Date.now()): Pro
                 taskIdentity,
             );
             if (!wasTaskEnqueued) {
+                recordHealthSleepDispatch(candidate.doc.data(), 'failed');
                 measurements.unconfirmed += 1;
                 logger.info(`[SleepSyncDispatcher] Task not enqueued for ${candidate.doc.id}; leaving dispatch marker unchanged.`);
                 continue;
@@ -401,6 +404,7 @@ export async function reconcileSleepSyncQueueDispatches(nowMs = Date.now()): Pro
                 sleepDispatched += 1;
             }
         } catch (error) {
+            recordHealthSleepDispatch(candidate.doc.data(), 'failed');
             measurements.errors += 1;
             logger.error(`[SleepSyncDispatcher] Failed to dispatch queue item ${candidate.doc.id}`, error);
         }
@@ -418,5 +422,15 @@ export const dispatchSleepSyncQueue = functions.region('europe-west2').runWith({
     memory: '256MB',
     maxInstances: 1,
 }).pubsub.schedule(QUEUE_SCHEDULE).onRun(async () => {
-    await reconcileSleepSyncQueueDispatches();
+    let backfillDepth: number | undefined;
+    try {
+        await reconcileSleepSyncQueueDispatches(Date.now(), depth => { backfillDepth = depth; });
+        recordHealthSleepDispatch(undefined, 'completed');
+    } catch (error) {
+        recordHealthSleepDispatch(undefined, 'failed');
+        throw error;
+    } finally {
+        try { await observeHealthSleepQueue(admin.firestore(), backfillDepth); }
+        catch { recordHealthSleepUnavailable(); }
+    }
 });

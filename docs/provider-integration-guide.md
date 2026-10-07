@@ -1202,6 +1202,19 @@ visible rather than converted into an empty backlog.
 The shared monitoring provisioner rejects malformed inventories and mismatched managed
 policy identities before any cloud writes; a title alone cannot adopt another policy.
 
+Health/Sleep monitoring (#830) has a separate, locally prepared bundle for the ordinary
+`processSleepSyncTask` and single-task `processGarminHealthBackfillTask` queues. It reuses
+the ordinary worker invocation summary and adds post-commit terminal observations and
+a bounded, field-masked probe on the existing dispatcher. Garmin, Suunto and COROS
+ordinary ingestion remain distinct from intentionally paced Garmin historical requests.
+This is not activated by the #829 deployment: its three affected Functions and owned
+dashboard/11 metrics/six policies require separate approval and production readback.
+See [Sleep sync operations](sleep-sync-operations.md#cloud-monitoring-830) for meanings,
+exclusions, thresholds, costs and activation steps. HTTP ACK, request-campaign completion
+and received Health/Sleep records are different outcomes; idle feeds are not an outage.
+No provider availability, queue concurrency, retry policy, MCP/Assistant permissions or
+user-facing Help behavior changes.
+
 Provider parity includes operational visibility, not only a user-facing connection.
 
 Garmin's temporary `garminWebhookProbe` tested URL transport and discarded incoming payloads. PR #800 removes its

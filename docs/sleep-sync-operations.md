@@ -350,3 +350,152 @@ export const SLEEP_SYNC_DISABLED_PROVIDERS: readonly SleepProvider[] = [
 Update the provider flag tests and deploy or restart the Functions runtime. Restore the empty
 list to re-enable it. Queued items skipped while disabled are intentionally not retried; the
 next daily COROS poll will request the rolling recent window again.
+
+## Cloud Monitoring (#830)
+
+Status: source and offline/demo-emulator verification are prepared locally. **Not yet
+activated in production.** #830 stays In progress until an approved deployment/apply
+and live API/query readback are recorded. The #829 Activity Import dashboard and #655
+Training dashboard do not provide this area's coverage.
+
+`tools/health-sleep-monitoring/definitions.mjs` owns **QS Health & Sleep**, 11 versioned
+log-based metrics and six alert policies, tagged `qs-health-sleep-monitoring-v1`.
+Provisioning reuses `tools/monitoring/`, checks ownership and inventories before writing,
+preserves dashboard etags/policy condition IDs on reapplication, and never deletes or
+adopts unrelated resources. The existing Alerts email channel is selected explicitly;
+this does not use the mail extension or create another notification channel.
+
+### Metrics and interpretation
+
+- Fixed dimensions are `provider` (`GarminAPI`, `SuuntoApp`, `COROSAPI`, `unknown`) and
+  `workload` (`sleep_sync`, `garmin_health_backfill`); terminal/attempt outcomes are closed
+  categories. No UID, job/account ID, title, email, credential, callback URL, raw error
+  or Health/Sleep payload is extracted or added to the new operational logs.
+- `committed` and `new_dead_letters` are observations **after** guarded transactions
+  commit, not within retriable callbacks. Repeated stale tasks, ACKs, retained
+  `failed_jobs`, and failed persistence are not new successes or permanent failures.
+  Skips remain separate. Ordinary `completed` means that its success transition committed;
+  it is not a record/session count or an exactly-once audit ledger. A crash between a
+  commit and its best-effort log can lose an observation.
+- `worker_attempts` and `worker_latency` reuse `[SleepSyncTaskWorker] Invocation summary`
+  and the independent `[GarminHealthBackfillTaskWorker] Invocation summary`. `processed`
+  includes lifecycle skips; HTTP acknowledgement and DLQ handling are not ingestion
+  success. Existing #759 dispatcher diagnostics remain intact and are not dependencies.
+- `worker_failures` counts failed/error/missing attempts and committed retry transitions;
+  the matching `retry_incremented` summary is not counted again. Expected refresh/lease
+  contention, stale tasks, already-processed work, deferrals and skips are excluded.
+  `dispatch_failures` covers failed/unconfirmed enqueue attempts and scheduler failures,
+  not a refused stale marker after a confirmed enqueue.
+- Garmin backfill `completed` means its terminal request cursor committed. Requests
+  are intentionally serialized and paced; asynchronous Garmin callbacks are ingested
+  later by the ordinary worker. Completion is **not** historical-data coverage.
+- Native Cloud Tasks depth, HTTP attempts and dispatch-delay p95 are shown separately
+  for `processSleepSyncTask` and `processGarminHealthBackfillTask`. Native transport
+  failures cannot identify a provider or exclude all expected contention; inspect the
+  worker outcome charts before interpreting them as processing incidents.
+
+### Bounded observations and limits
+
+The existing 30-minute `dispatchSleepSyncQueue` scheduler emits four observation
+heartbeats even when idle. There is no new scheduler, queue write or provider request.
+One field-masked query reads at most 21 shared `sleepSyncQueue` rows ordered by
+`dateCreated`, handling the first 20. Each recognized candidate uses a read-only
+transaction for its unchanged queue snapshot, owner, deletion tombstone, connection
+metadata and token root, plus at most one identity-only token lookup. Credential and
+provider payload fields are not selected. The existing processed/dateCreated index is
+reused; no new indexes or Rules are needed.
+
+Future polls/backfills, `dispatchAfterMs` rate/coalescing waits, ordinary retries,
+nonzero dispatch markers, active leases, deferred/reconciliation work, deleting or
+missing owners, disabled providers, rollout exclusions, disconnect/reconnect state,
+missing tokens and mismatched pinned COROS accounts are excluded. Replaced snapshots
+cannot borrow the old row's age. Garmin backfill is excluded while the dispatcher's
+existing native depth observation has tasks waiting/running: intentional single-task
+capacity is not a live-ingestion incident. Unknown depth marks sampled backfill unknown,
+not eligible. Depth is the existing pre-dispatch snapshot, not an atomic joint view of
+Firestore and Cloud Tasks; the next scheduled observation refreshes it.
+
+`sampled_due` and `sampled_age` are **lower bounds**, not complete queue totals or true
+oldest-work age. Age uses the last Firestore write, conservatively resetting after
+recovery/replacement; charts show hourly sample means. Saturation is explicit and the
+shared oldest prefix may hide later providers/work. Rows without `dateCreated` are not
+returned by the ordered query. Admin Queue Monitor/native queue metrics are necessary
+companions; this probe does not prove all malformed or later work is healthy.
+
+Malformed owner/type/timestamps or failed reads are unknown. Unknown-only observations
+omit numerical backlog/age, never publish false zeros; an unclassifiable provider marks
+all four observed lanes unknown. `queue_samples` includes known and unavailable
+heartbeats, while `probe_failures` captures unknown/unavailable observations. A five-second
+deadline stops further lookups and suppresses late success; an in-flight read RPC cannot
+be cancelled and may finish read-only. Telemetry failures cannot change task ACK/retry
+or the dispatcher's original result/error.
+
+### Initial alert thresholds
+
+These are starting thresholds to tune from measured traffic, not an SLA. Each threshold
+condition must hold for 60 seconds and treats missing samples as inactive; telemetry
+absence is a separate condition. Normal lack of new provider measurements never alerts.
+
+| Policy | Ordinary ingestion | Serialized Garmin backfill |
+| --- | --- | --- |
+| Sustained undispatched work | Two observations at least 1h old in 90m | Two observations at least 6h old in 4h, while native task depth is zero |
+| Repeated dispatch failures | Three attempts in 90m | Three attempts in 6h |
+| Repeated processing failures | Ten failures/retries in 15m | Three failures/retries in 6h |
+| New permanent failures | Three new DLQ commits in 30m | One new DLQ commit in 6h |
+| Repeated task HTTP failures | Twenty non-ok attempts in 15m | Three non-ok attempts in 6h |
+| Observations unavailable | Two unknown/unavailable samples per provider/lane in 90m, or its heartbeat absent for 2h | Same |
+
+Policies group provider/workload independently, open/close notifications on the selected
+existing channel, and auto-close after two hours without evidence. Absence needs an
+initial time series: do not treat absence of an incident as proof of first activation.
+Inspect Dashboard → **QS Health & Sleep**, Logs Explorer and `/admin/queues` before
+action. Check the affected lane's exclusions, sample saturation/unknowns, native queue
+state and safe worker categories; investigate identifiers/errors only privately. Do not
+purge, replay, change concurrency or call provider APIs merely to silence an alert.
+
+### Cost, verification and activation
+
+Worst-case probe document reads per invocation are 21 + (20 × 5) + 20 = **141**,
+or **6,768/day** at the unchanged 30-minute cadence. Empty-query minimums and billing
+depend on actual results; the bound excludes existing dispatch reads and any platform
+index-read charges. No extra Cloud Tasks depth request is added. Four probe heartbeats
+per invocation mean 192/day, plus bounded transition/attempt logs. Eleven log-based
+metrics (including distributions) can incur Logging/Monitoring ingestion/storage costs;
+measure billed volume/cardinality rather than assuming alerts are free. No new Function,
+queue, scheduler, dependencies, Health/Sleep data storage or email-extension work is added.
+Worker/dispatcher generation, memory, secrets, timeout, retry and single-task limits are
+unchanged; only the ordinary worker already has a direct target-loader path.
+
+Local checks:
+
+```bash
+npm run test:health-sleep-monitoring
+npm run test:emulator-coverage
+npm run test:functions-emulators -- mcp-data
+npm --prefix functions run entrypoint:check
+npm --prefix functions run deploy:safety:compiled
+node tools/health-sleep-monitoring/cli.mjs --project=quantified-self-io
+```
+
+The last command is offline preview only: no credential access, network or cloud writes.
+After **separate explicit approval**, deploy exactly the three affected Functions, then
+apply the owned resources using the already approved existing email channel:
+
+```bash
+firebase deploy --project quantified-self-io --only functions:processSleepSyncTask,functions:processGarminHealthBackfillTask,functions:dispatchSleepSyncQueue
+node tools/health-sleep-monitoring/cli.mjs --project=quantified-self-io --notification-channel=projects/quantified-self-io/notificationChannels/EXISTING_CHANNEL_ID --apply --confirm-project=quantified-self-io
+```
+
+Before marking #830 Done, record deployed options/generations, all 11 metric filters and
+dimensions, one owned dashboard, six enabled policies and the exact existing channel
+without its private labels. Reapply serially to prove no duplicates/unrelated changes;
+read back each chart and alert query, including native queue scopes and distribution
+aggregation. Wait for four natural heartbeats and distinguish raw logs from aligned
+counter interpolation. Verify representative threshold/missing-data behavior against
+safe aggregate samples and reuse #655's same-channel delivery proof only if that channel
+is unchanged. No fault injection, test email, provider call or temporary resource deletion
+is authorized by these instructions. Keep activation/readback evidence on #830.
+
+Help was reviewed: this is admin operational visibility only, so product explanations
+remain unchanged. MCP impact is **none**: no tools, metrics exposed to users, schemas,
+scopes, consent, provider actions, Assistant permissions or bundled skills change.

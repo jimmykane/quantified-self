@@ -378,7 +378,8 @@ describe('sleep/dispatcher', () => {
         await expect(handler()).resolves.toBeUndefined();
         expect(mockEnqueueSleepSyncTask).toHaveBeenCalledOnce();
         expect(update).toHaveBeenCalledOnce();
-        expect(mockLoggerInfo).toHaveBeenCalledOnce();
+        expect(mockLoggerInfo.mock.calls.filter(([message]) => message === '[SleepSyncDispatcher] Reconciliation completed')).toHaveLength(1);
+        expect(mockLoggerInfo.mock.calls.filter(([, fields]) => fields?.event === 'queue_sample_unavailable')).toHaveLength(4);
     });
 
     it('skips reconciliation when the Cloud Tasks queue is already at capacity', async () => {
@@ -694,6 +695,24 @@ describe('sleep/dispatcher', () => {
         });
         expect(updateUndispatched).not.toHaveBeenCalled();
         expect(mockLoggerInfo).toHaveBeenCalledWith(expect.stringContaining('Task not enqueued'));
+        expect(mockLoggerInfo).toHaveBeenCalledWith('[HealthSleep]', { telemetryVersion: 1, provider: 'SuuntoApp', workload: 'sleep_sync', event: 'dispatch_run', outcome: 'failed' });
+    });
+
+    it('shares the existing backfill depth observation without an additional Cloud Tasks read', async () => {
+        mockGetCloudTaskQueueDepthForQueue.mockImplementation(async (queue: string) => queue === 'processGarminHealthBackfillTask' ? 7 : 0);
+        const report = vi.fn();
+        await reconcileSleepSyncQueueDispatches(Date.now(), report);
+        expect(report).toHaveBeenCalledExactlyOnceWith(7);
+        expect(mockGetCloudTaskQueueDepthForQueue).toHaveBeenCalledTimes(2);
+    });
+
+    it('an unavailable observation preserves the original scheduled failure', async () => {
+        const error = new Error('PRIVATE_API_ERROR');
+        mockGetCloudTaskQueueDepthForQueue.mockRejectedValueOnce(error);
+        const handler = dispatchSleepSyncQueue as unknown as () => Promise<void>;
+        await expect(handler()).rejects.toBe(error);
+        expect(mockLoggerInfo).toHaveBeenCalledWith('[HealthSleep]', { telemetryVersion: 1, provider: 'unknown', workload: 'sleep_sync', event: 'dispatch_run', outcome: 'failed' });
+        expect(mockLoggerInfo.mock.calls.filter(([, fields]) => fields?.event === 'queue_sample_unavailable')).toHaveLength(4);
     });
 
     it('preserves the Suunto webhook delay when recovering an undispatched queue row', async () => {

@@ -29,6 +29,7 @@ import { isServiceDisconnectPendingData } from './service-disconnect-pending-sta
 import { SLEEP_SYNC_QUEUE_COLLECTION_NAME } from './sleep/constants';
 import { getQueueCleanupTombstoneDocumentRef } from './queue/cleanup-tombstone';
 import { recordImportCommit, recordImportCompletion } from './queue/import-monitoring';
+import { recordHealthSleepCommit, recordHealthSleepCompletion, recordHealthSleepRetry } from './sleep/monitoring';
 
 
 export enum QueueResult {
@@ -317,6 +318,7 @@ export async function moveToDeadLetterQueueIfCurrentAndNotCleanupTombstoned(
         }
         logger.info(`[${params.logPrefix}] Moved queue item ${params.queueItem.id} to failed_jobs.`);
         recordImportCommit(params.collectionName, 'dead_lettered');
+        recordHealthSleepCommit(params.queueItem, 'dead_lettered');
         return QueueResult.MovedToDLQ;
     } catch (error) {
         logger.error(`[${params.logPrefix}] Failed guarded DLQ transition for ${params.queueItem.id}.`, {
@@ -485,6 +487,7 @@ export async function moveToDeadLetterQueueIfCurrentUserActive(
             logger.info(`Moved item ${queueItem.id} to Dead Letter Queue (failed_jobs)`);
         }
         recordImportCommit(queueItem.ref?.parent?.id, 'dead_lettered');
+        recordHealthSleepCommit(queueItem, 'dead_lettered');
         return QueueResult.MovedToDLQ;
     } catch (error) {
         logger.error(new Error(`Failed to move item ${queueItem.id} to DLQ: ${error}`));
@@ -884,6 +887,7 @@ export async function increaseRetryCountIfCurrentUserActive(
         params.queueItem.errors = nextErrors;
         if (movedToDlq) {
             recordImportCommit(params.queueItem.ref?.parent?.id, 'dead_lettered');
+            recordHealthSleepCommit(params.queueItem, 'dead_lettered');
             if (params.manualReconciliation) {
                 logger.error(`Item ${params.queueItem.id} exceeded max retries (${MAX_RETRY_COUNT}). Copied it to DLQ and retained a terminal manual-reconciliation marker.`);
             } else {
@@ -894,6 +898,7 @@ export async function increaseRetryCountIfCurrentUserActive(
 
         params.queueItem.dispatchedToCloudTask = nextDispatchMarker;
         params.queueItem.providerOperationStartedAt = null;
+        recordHealthSleepRetry(params.queueItem, params.error);
         logger.info(`Updated retry count for ${params.queueItem.id} to ${nextRetryCount}`);
         return QueueResult.RetryIncremented;
     } catch (error) {
@@ -1000,6 +1005,7 @@ async function updateToProcessedIfCurrentUserActive(
         }
         if (transitionResult === QueueItemUserGuardedUpdateResult.Updated) {
             recordImportCompletion(queueItem.ref?.parent?.id, additionalData);
+            recordHealthSleepCompletion(queueItem, additionalData);
         }
         return QueueResult.Processed;
     } catch (error) {
@@ -1041,6 +1047,8 @@ async function updateLegacySleepQueueToProcessedIfCurrentAndNotCleanupTombstoned
         });
         if (!updated) {
             logger.info(`Skipping stale, leased, or cleanup-tombstoned legacy Sleep completion for queue item ${queueItem.id}.`);
+        } else {
+            recordHealthSleepCompletion(queueItem, additionalData);
         }
         return QueueResult.Processed;
     } catch (error) {

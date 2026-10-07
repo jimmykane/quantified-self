@@ -13,6 +13,7 @@ import { isCurrentSleepQueueRevision } from '../sleep/queue-revision';
 import { SLEEP_PROVIDERS } from '../../../shared/sleep';
 import { isGarminSupportedSummaryType } from '../garmin/health-summary-types';
 import { SleepSyncQueueItemType } from '../queue/queue-item.interface';
+import { healthSleepWorkloadFields, healthSleepFailureOutcome } from '../sleep/monitoring';
 
 interface SleepSyncTaskPayload {
     queueItemId: string;
@@ -144,9 +145,14 @@ export const processSleepSyncTask = onTaskDispatched({
             default:
                 throw new Error(`Unexpected result for sleep sync item ${queueItemId}: ${result}`);
         }
+    } catch (error) {
+        if (outcome === 'error') outcome = healthSleepFailureOutcome(error);
+        throw error;
     } finally {
         try {
             logger.info('[SleepSyncTaskWorker] Invocation summary', {
+                telemetryVersion: 1,
+                ...healthSleepWorkloadFields(queueItem),
                 ...safeWorkloadFields(queueItem),
                 outcome,
                 durationMs: Math.max(0, Math.round(performance.now() - startedAtMs)),
