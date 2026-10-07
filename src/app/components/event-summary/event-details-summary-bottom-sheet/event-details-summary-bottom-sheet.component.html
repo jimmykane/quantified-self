@@ -38,12 +38,6 @@
     </mat-form-field>
     @if (loading()) { <mat-progress-bar mode="indeterminate" aria-label="Loading reflection"></mat-progress-bar> }
     @if (readReady()) {
-      @if (reviewingLatest()) {
-        <p role="status">Your draft is kept. Review the latest saved reflection before saving again.</p>
-        @if (saved() && !saved()?.deleted) {
-          <p>Latest saved reflection:</p><p class="latest-note">{{ saved()?.note }}</p>
-        } @else { <p>No reflection is currently saved.</p> }
-      }
       <ul>@for (prompt of prompts(); track prompt) { <li>{{ prompt }}</li> }</ul>
       @if (exactlyLinked()) { <p>There is one exact saved planned-workout link for this selection. The current plan may have changed since recording.</p> }
       <mat-form-field appearance="outline" subscriptSizing="dynamic">
@@ -63,12 +57,7 @@
     }
     @if (reflectionError()) { <p role="alert">{{ reflectionError() }}</p><button mat-button (click)="reload()" [disabled]="busy()">Reload reflection</button> }
   }
-  @if (error()) {
-    <p role="alert">{{ error() }}</p>
-    @if (canReflect && readReady()) {
-      <button mat-button (click)="reviewLatest()" [disabled]="busy() || loading()">Review latest reflection</button>
-    }
-  }
+  @if (error()) { <p role="alert">{{ error() }}</p> }
 </div>
 <div class="form-actions">
   <button mat-button (click)="close()" [disabled]="busy()">Cancel</button>

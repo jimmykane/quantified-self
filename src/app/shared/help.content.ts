@@ -748,8 +748,6 @@ There is one **RPE** input for the **whole recording**, including when your priv
 
 Use any of the three optional prompts and write up to **2000 characters**. Select **Save changes** once to save your edited event details and private note together. **Cancel** writes nothing. A conflict or failed save preserves your whole draft; event details and the note cannot be partially saved. Unchanged reflection text is not rewritten, and a reflection read failure still permits details-only edits. Voice entry is not included.
 
-After a reflection conflict, select **Review latest reflection** to load the latest revision without losing your edits. Compare the latest saved text with your draft before saving again. Unchanged note text refreshes automatically; an edited note stays in your draft. If that read fails, **Reload reflection** retries while keeping the draft.
-
 An exact saved planned-workout link can add a comparison prompt; it does not prove completion or that today’s prescription matches the recorded session. Reflections never complete a planned workout, change a recipe, adapt your plan, alter load/readiness calculations, or diagnose an injury.
 
 ## Privacy, editing and deletion
