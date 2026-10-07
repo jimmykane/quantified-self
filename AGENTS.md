@@ -11,6 +11,7 @@ Always-on rules:
 - `.agent/rules/verify-changes-with-tests.md`
 - `.agent/rules/backend-crud-boundary.md`
 - `.agent/rules/canonical-metric-display.md`
+- `.agent/rules/queue-monitoring-coverage.md` for provider/service integrations and queue lifecycle changes
 - `.agent/rules/firestore-write-sanitization.md` for any frontend/functions write path that persists event or activity data
 - Never patch or directly modify files under `node_modules/`.
 - Never install or add the official Garmin FIT SDK as a project dependency, development dependency, optional dependency,
