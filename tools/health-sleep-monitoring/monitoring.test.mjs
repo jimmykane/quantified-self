@@ -8,6 +8,26 @@ import { buildImportMonitoring } from '../import-monitoring/definitions.mjs';
 import { buildTrainingMonitoring } from '../training-monitoring/definitions.mjs';
 const project = 'demo-health-monitor'; const channel = `projects/${project}/notificationChannels/123`;
 const bundle = () => buildHealthSleepMonitoring(project, channel);
+const nativeTaskMetrics = new Set([
+  'cloudtasks.googleapis.com/queue/depth',
+  'cloudtasks.googleapis.com/queue/task_attempt_count',
+  'cloudtasks.googleapis.com/queue/task_attempt_delays',
+]);
+
+function assertDashboardMetricScope(config) {
+  const logMetricTypes = config.metrics.map(metric => `logging.googleapis.com/user/${metric.name}`);
+  for (const tile of config.dashboard.mosaicLayout.tiles.slice(1)) {
+    const query = tile.widget.xyChart.dataSets[0].timeSeriesQuery.timeSeriesFilter;
+    // This is a Monitoring filter, not a URL. Compare its metric.type value exactly.
+    const type = /(?:^|\s)metric\.type="([^"]+)"/.exec(query.filter)?.[1];
+    assert.ok(logMetricTypes.includes(type) || nativeTaskMetrics.has(type), 'Unexpected dashboard metric type');
+    if (nativeTaskMetrics.has(type)) {
+      assert.match(query.filter, /resource\.type="cloud_tasks_queue"/);
+      assert.match(query.filter, /resource\.labels\.location="europe-west2"/);
+      assert.match(query.filter, /resource\.labels\.queue_id=\("processSleepSyncTask" OR "processGarminHealthBackfillTask"\)/);
+    }
+  }
+}
 
 test('fixed dimensions separate durable outcomes, invocation summaries, retries and paced backfill', () => {
   const config = bundle(); assert.equal(config.metrics.length, 11); assert.equal(config.policies.length, 6);
@@ -25,12 +45,7 @@ test('fixed dimensions separate durable outcomes, invocation summaries, retries 
   assert.doesNotMatch(config.metrics.find(metric => metric.name.includes('new_dead_letters')).filter, /failed_jobs/);
 });
 test('every native chart targets only the two exact queues; policies have workload-specific thresholds', () => {
-  const config = bundle(); const types = config.metrics.map(metric => `logging.googleapis.com/user/${metric.name}`);
-  for (const tile of config.dashboard.mosaicLayout.tiles.slice(1)) {
-    const q = tile.widget.xyChart.dataSets[0].timeSeriesQuery.timeSeriesFilter;
-    assert.ok(types.includes(/metric.type="([^"]+)"/.exec(q.filter)[1]) || q.filter.includes('cloudtasks.googleapis.com/queue/'));
-    if (q.filter.includes('cloudtasks.googleapis.com')) { assert.match(q.filter, /processSleepSyncTask/); assert.match(q.filter, /processGarminHealthBackfillTask/); }
-  }
+  const config = bundle(); assertDashboardMetricScope(config);
   for (const policy of config.policies) {
     assert.equal(policy.enabled, true); assert.equal(policy.userLabels.managed_by, OWNER); assert.deepEqual(policy.notificationChannels, [channel]);
     assert.deepEqual(policy.alertStrategy.notificationPrompts, ['OPENED', 'CLOSED']);
@@ -48,6 +63,23 @@ test('every native chart targets only the two exact queues; policies have worklo
     assert.doesNotMatch((c.conditionThreshold || c.conditionAbsent).filter, /cloudtasks.googleapis.com/,
       'native task retries cannot distinguish expected contention and must not page independently');
   }
+});
+test('metric classification rejects lookalikes, missing types and queue names outside the actual scope', () => {
+  for (const filter of [
+    'metric.type="evil.cloudtasks.googleapis.com/queue/depth"',
+    'metric.type="cloudtasks.googleapis.com.evil/queue/depth"',
+    'metric.type="cloudtasks.googleapis.com/queue/unknown"',
+    'resource.type="cloud_tasks_queue" note="cloudtasks.googleapis.com/queue/depth"',
+  ]) {
+    const config = bundle();
+    config.dashboard.mosaicLayout.tiles[1].widget.xyChart.dataSets[0].timeSeriesQuery.timeSeriesFilter.filter = filter;
+    assert.throws(() => assertDashboardMetricScope(config), /Unexpected dashboard metric type/);
+  }
+  const config = bundle();
+  const query = config.dashboard.mosaicLayout.tiles[1].widget.xyChart.dataSets[0].timeSeriesQuery.timeSeriesFilter;
+  query.filter = query.filter.replace('resource.labels.queue_id=("processSleepSyncTask" OR "processGarminHealthBackfillTask")',
+    'resource.labels.queue_id="unrelated" note="processSleepSyncTask processGarminHealthBackfillTask"');
+  assert.throws(() => assertDashboardMetricScope(config));
 });
 test('offline preview needs no network or credentials and CI covers definitions', () => {
   const r = spawnSync(process.execPath, ['tools/health-sleep-monitoring/cli.mjs', `--project=${project}`], { encoding: 'utf8', env: { PATH: '/no-credentials' } });
