@@ -50,6 +50,24 @@ describe('dedicated Garmin replacement review boundary', () => {
   });
 });
 
+describe('plan phase review boundary', () => {
+  const phase = { id: 'base', name: 'Base', startLocalDate: '2026-10-01', endLocalDate: '2026-10-10' };
+  const preview = { proposalRef: 'opaque', expiresAtMs: 1000, permissionMode: 'schedule', scheduleRevision: 2,
+    requiresConfirmation: true, summary: 'Replace phases.', changes: [{ index: 0, kind: 'set-plan-phases', summary: 'Plan phase edit.' }],
+    providerPreviews: [], phaseReview: { planName: 'Autumn', previousStartDate: '2026-10-01', previousEndDate: '2026-10-31',
+      startDate: '2026-10-01', endDate: '2026-10-31', before: { version: 1, items: [phase] }, after: { version: 1, items: [] } } };
+  it('requires one focused complete review and rejects private fields, provider effects and malformed dates', () => {
+    expect(isAssistantTrainingProposal(preview)).toBe(true);
+    for (const patch of [{ phaseReview: undefined }, { permissionMode: 'combined' },
+      { changes: [{ ...preview.changes[0], index: 1 }] }, { changes: [...preview.changes, preview.changes[0]] },
+      { phaseReview: { ...preview.phaseReview, remoteId: 'PRIVATE' } },
+      { phaseReview: { ...preview.phaseReview, after: { version: 1, items: [{ ...phase, startLocalDate: '2026-02-30' }] } } },
+      { phaseReview: { ...preview.phaseReview, before: { version: 1, items: [{ ...phase, provider: 'PRIVATE' }] } } }]) {
+      expect(isAssistantTrainingProposal({ ...preview, ...patch })).toBe(false);
+    }
+  });
+});
+
 describe('manual measurement review boundary', () => {
   const fields = { metricId: 'body_weight', canonicalValue: 80,
     observedAtMs: Date.parse('2026-10-01T08:30:00Z'), timezoneOffsetSeconds: 10800 };

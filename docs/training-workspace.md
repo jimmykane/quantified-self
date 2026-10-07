@@ -614,6 +614,83 @@ discoverable but adds no tool, schema, field, scope, consent, projection, Assist
 bundled-skill behavior. It reads canonical frontend types only to validate and render synthetic data; the existing
 Training plan read/write contract, release lifecycle, and independent consent remain unchanged.
 
+### Training plan phases (Training 12)
+
+Phases are optional authored context on one current plan. **Plan actions → Phases** edits their names, inclusive
+calendar dates, optional descriptions and named palette colors. Base, Build, Recovery and Taper are suggestions,
+not an enum or a prescription. Custom names, gaps and single-day phases are allowed; overlapping boundary dates are
+not. A phase never generates workouts, changes recipes/targets, implies rest or completion, changes load/readiness
+calculations, or grants provider consent. No provider receives phase metadata.
+
+`TrainingPlanV1.phases` is an optional `{version: 1, items}` envelope. Each item has a stable plan-local structural
+`id`, a trimmed 1–80-character `name`, `startLocalDate`/`endLocalDate`, optional 1–1000-character `description` and optional
+existing palette `color`. Missing color inherits the plan color. Unknown fields, malformed dates, control characters,
+duplicate IDs, overlaps, more than 32 phases and an envelope above 32 KiB UTF-8 fail closed. The canonical codec sorts
+by start date and ID and requires every phase inside the plan's existing maximum 366-day inclusive range. Missing
+phases is the legacy empty state; saving an empty list removes the field. No migration or derived schema bump is needed.
+
+The existing sanitized Training mutation owns `set-plan-phases`, one complete replacement plus exact resulting plan
+start/end dates and `confirmPlanRangeExtension`. Both state and plan revisions are mandatory. Widening either boundary
+requires explicit confirmation of that exact range; changing either date in the dialog clears confirmation. Shrinking
+cannot exclude any current non-deleted workout or resulting phase. One save writes one plan revision, leaving workout
+revisions, completion links, recipe identity and provider settings unchanged. The editor keeps failed drafts, locks
+controls during saving, uses captured revisions, and reuses an exact draft's mutation ID after an uncertain reply.
+It never rebases a stale draft automatically or saves after an owner switch. Closing the editor permanently invalidates
+its callback, including late feedback or a pending range-confirmation retry if the user returns to the same account.
+
+Full plan before/after history and checkpoints preserve phases. Restore can add, edit or remove phases, including
+restoring legacy absence. `shift-plan` moves plan, phase and current workout calendar labels by the same integer day
+offset, including DST/leap/year boundaries, preserving phase IDs and metadata. Ordinary and staged history paths use
+the same codec. Plan deletion removes embedded phases and all plan history; conversion to standalone does not copy
+phases onto workouts. Account cleanup uses the existing plan tree; phases create no descendant collection or cleanup job.
+
+Plans shows the selected plan's phases for active, paused and archived views. The main Calendar and owner day context
+show only the active plan's phases, with names, boundary text, inclusive ranges and accessible labels. A phase-only
+day remains visible without creating a planned session, recorded activity or completed total. Private planning access,
+owner identity and ready schedule state gate overlays; changing owners removes the context. Calendar grids remain
+bounded and touch-scrollable, while the dialog wraps at phone widths with the shared scrollbar skin. Overlay expansion
+stops at the inclusive end date without advancing beyond the supported date range.
+
+Public discovery covers phases in the homepage Training Plans copy and synthetic calendar preview, the Features hub,
+Training Plans and Activity Calendar pages, the Training Plans metadata and FAQ, and homepage/feature structured data.
+Public preview phases use the canonical plan codec and real plan calendar; they never load account data or save edits.
+These content and fixture changes add no MCP tools, fields, grants, mutation kinds or provider authority.
+
+MCP impact is **additive**: `get_training_plan_phases` deliberately projects only phases and plan/schedule revision and
+date metadata under `training-plans:read`. Its Firestore mask excludes neighboring private fields; existing plan reads
+keep their frozen outputs. `preview_training_plan_phases` needs the independent read plus `training-plans:write` grants
+and accepts one full phase replacement with an opaque plan reference, exact schedule/plan revisions, date range and
+explicit extension choice. Its complete before/after review includes descriptions, colors and both date ranges.
+The existing native-approval-gated idempotent Apply executes the owner/connection/grant/revision/expiry-bound proposal.
+No new scope, callable, provider action or delivery authority is introduced. Phase text remains untrusted private
+context, never instructions, diagnoses, causal evidence or permission to adapt training.
+
+The built-in Assistant reads phases only with its independent Training choice. Requested phase changes select the
+focused preview; the model cannot apply. The app renders all before/after details before Apply/Dismiss and rechecks
+conversation generation and current permission. A phase mentioned as context for a workout does not select phase
+authoring. Phase edits and workout, plan-lifecycle or provider edits need separate reviews; a mixed request asks which
+change to review first. These internal routing and Calendar corrections do not change the public MCP contract, grants
+or provider authority. Daily recommendations read the active plan's phase for the requested
+calendar date using matching schedule/plan revisions; gaps, missing capabilities and stale evidence are explicit.
+A phase name alone cannot prescribe intensity or alter readiness. Bundled Training, Activity and cross-domain guidance
+discovers the live capability and routes changes through the separate approval workflow.
+
+Release requires **reader-first backend rollout**: separately approve and deploy the existing Training mutation/read,
+history/restore/deletion and MCP/Assistant readers before enabling the updated frontend writer. Older strict backend
+readers reject the new optional field; do not roll them back after phases have been saved. Roll back the frontend writer
+while retaining compatible backend readers if needed. Reload cached browser tabs before using the phase writer;
+pre-phase strict frontend readers can reject a plan containing phase metadata. No reparse, migration, provider requeue, Rules/index change or
+production write is part of this implementation. Refresh/rescan the registered MCP app against the exact pending digest
+before promotion; preserve registered baselines/history and earlier pending additions. Validate bundled guidance and
+sync only the intended profile. Local fixture validation does not release or prove client availability.
+
+Verification includes codec bounds/Unicode/overlap/legacy cases, date shifts, optimistic range checks, exact retries,
+owner-gated Calendar display, complete Assistant review, matching dated evidence, all three MCP transports and strict
+leakage fixtures. Loopback demo Firestore tests cover preview-only behavior, idempotent Apply, masked legacy/read
+projections, full history/restore, embedded deletion cleanup, grant conflicts, app confirmation and an already-enabled
+provider remaining unchanged after a phase edit. Browser QA must cover keyboard, 320px wrapping and light/dark overflow;
+mocked haptics verify ownership but do not prove physical device vibration.
+
 ### Shared workout prescription analysis (Training 04)
 
 `shared/planned-workout-analysis.ts` owns the pure deterministic `analyzeWorkoutStructureV1(value)` contract.

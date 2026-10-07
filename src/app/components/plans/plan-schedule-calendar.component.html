@@ -41,6 +41,11 @@
           }
         </button>
         @if (day.inRange) {
+          @if (day.phase; as phase) {
+            <span class="calendar-phase" [class.calendar-phase--boundary]="day.phaseBoundary"
+              [style.--phase-color]="phaseAppearance({ color: phase.color ?? plan().color }).color"
+              [matTooltip]="'Phase: ' + phase.name + ' · ' + phase.startLocalDate + ' – ' + phase.endLocalDate">{{ phase.name }}</span>
+          }
           @if (day.boundary) { <span class="calendar-boundary">{{ day.boundaryLabel }}</span> }
           <div class="calendar-workouts">
             @for (workout of day.visibleEntries; track workout.id) {

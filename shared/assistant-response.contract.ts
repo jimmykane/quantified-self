@@ -1,5 +1,6 @@
 import { validateReflectionFields } from './workout-reflection';
 import { isAssistantWorkoutReviews } from './assistant-workout-review';
+import { parseTrainingPlanPhaseReviewV1 } from './training-plans';
 import {
   ASSISTANT_CONVERSATION_VERSION,
   ASSISTANT_MAX_EVIDENCE_ITEMS,
@@ -123,7 +124,7 @@ function isFiniteNumber(value: unknown): value is number {
 export function isAssistantTrainingProposal(value: unknown): value is AssistantTrainingProposalPreview {
   if (!isRecord(value)
     || !hasOnlyKeys(value, ['proposalRef', 'permissionMode', 'expiresAtMs', 'scheduleRevision', 'summary',
-      'requiresConfirmation', 'changes', 'providerPreviews', 'workoutReviews'])
+      'requiresConfirmation', 'changes', 'providerPreviews', 'workoutReviews', 'phaseReview'])
     || !isBoundedString(value.proposalRef, 1, 2048)
     || !['schedule', 'delivery', 'combined'].includes(`${value.permissionMode}`)
     || !Number.isSafeInteger(value.expiresAtMs) || Number(value.expiresAtMs) < 0
@@ -157,6 +158,11 @@ export function isAssistantTrainingProposal(value: unknown): value is AssistantT
   const changeIndices = new Set(value.changes.map(change => change.index));
   if (value.workoutReviews !== undefined && (!isAssistantWorkoutReviews(value.workoutReviews)
     || value.workoutReviews.some(review => !changeIndices.has(review.index)))) return false;
+  const phases = value.changes.some(change => isRecord(change) && change.kind === 'set-plan-phases');
+  if (phases || value.phaseReview !== undefined) {
+    if (!phases || value.permissionMode !== 'schedule' || value.changes.length !== 1 || value.changes[0].index !== 0 || value.providerPreviews.length !== 0) return false;
+    try { parseTrainingPlanPhaseReviewV1(value.phaseReview); } catch { return false; }
+  }
   if (replacement && (value.permissionMode !== 'delivery' || value.changes.length !== 1 || value.providerPreviews.length !== 1
     || value.changes[0].index !== 0 || value.changes[0].kind !== 'garmin-workout-replacement'
     || value.providerPreviews[0].index !== 0 || value.providerPreviews[0].provider !== 'garmin'

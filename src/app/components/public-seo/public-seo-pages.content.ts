@@ -174,7 +174,7 @@ export const PUBLIC_SEO_PAGES: Record<PublicSeoPageKey, PublicSeoPage> = {
           {
             icon: 'edit_calendar',
             title: 'Training plans',
-            copy: 'Create running, cycling, pool, and open-water plans or standalone structured workouts, then see them beside—not inside—your completed activity history.',
+            copy: 'Create plans with named date phases or standalone structured workouts for running, cycling, swimming, and more. See planned work alongside completed activity history.',
           },
           {
             icon: 'auto_awesome',
@@ -317,6 +317,11 @@ export const PUBLIC_SEO_PAGES: Record<PublicSeoPageKey, PublicSeoPage> = {
             icon: 'edit_calendar',
             title: 'Planned workouts remain an overlay',
             copy: 'Standalone and active-plan workouts can appear on the calendar, including skipped workouts, but never increase completed distance, duration, ascent, load, or workout totals.',
+          },
+          {
+            icon: 'view_timeline',
+            title: 'See the active plan’s phases',
+            copy: 'Named phase ranges, colors, and boundary labels appear on the active plan’s Calendar days, including dates without workouts. Open a day to see its phase context. Phases are authored planning labels and do not change recorded totals or readiness.',
           },
         ],
       },
@@ -473,7 +478,7 @@ export const PUBLIC_SEO_PAGES: Record<PublicSeoPageKey, PublicSeoPage> = {
     description: TRAINING_PLANS_SEO_CONTENT.description,
     h1: TRAINING_PLANS_SEO_CONTENT.h1,
     intro: TRAINING_PLANS_SEO_CONTENT.intro,
-    chips: ['Plans included', 'Standalone workouts', 'MCP planning', 'Provider delivery for Pro', 'Plan calendar', 'Completed totals stay separate'],
+    chips: ['Plans included', 'Standalone workouts', 'Named phases', 'MCP planning', 'Provider delivery for Pro', 'Plan calendar', 'Completed totals stay separate'],
     actions: [
       routeAction('Start Free', '/login', 'flat', 'arrow_forward'),
       routeAction('Training Plans Help', '/help', 'stroked', undefined, 'training-plans'),
@@ -524,6 +529,10 @@ export const PUBLIC_SEO_PAGES: Record<PublicSeoPageKey, PublicSeoPage> = {
       {
         question: 'Does connecting Garmin, COROS, Wahoo, or Suunto send my planned workouts?',
         answer: 'No. Provider workout delivery is a separate Pro feature with explicit Send or plan opt-in actions. New COROS plan sync and standalone Send actions are coming soon in the app. Connecting a provider never sends a planned workout by itself.',
+      },
+      {
+        question: 'Can I divide a training plan into phases?',
+        answer: 'Yes. Choose Plan actions → Phases to add up to 32 custom names with inclusive date ranges, optional descriptions, and colors. Base, Build, Recovery, and Taper are suggestions. Gaps and single-day phases are allowed; overlaps are not. Confirm any extension of the plan dates and keep current workouts inside the range. Phases move with Shift dates and can be restored through history. They provide context without creating workouts, changing readiness or targets, or sending phase metadata to providers.',
       },
       {
         question: 'Can I use an MCP client with Training Plans?',
@@ -764,7 +773,7 @@ export const PUBLIC_SEO_PAGES: Record<PublicSeoPageKey, PublicSeoPage> = {
       },
       {
         question: 'Can an MCP client read my Training plans and planned workouts?',
-        answer: 'With separate Training permission, clients can read plans, workouts, saved workout recipes, instructions, an authored pool-swim length when selected, notes, exact completion links and sanitized sync status. After release and a tool-catalog refresh, a separate prescription analysis can report exact time/distance subtotals, explicit speed-based duration ranges, unknown contributions and repeat counts. Partial subtotals are not complete workout totals. Pool length is not step distance. The separate plan-and-workout change grant permits a bounded preview to save, edit or place a library recipe on explicit dates; a distinct apply uses the client\'s approval controls. Saving a recipe never grants provider sync. Provider delivery remains Pro and connection-gated; sync confirms cloud delivery, not watch receipt.',
+        answer: 'With separate Training permission, clients can read plans, workouts, saved workout recipes, instructions, an authored pool-swim length when selected, notes, exact completion links and sanitized sync status. After release and a tool-catalog refresh, focused phase tools can read authored names, inclusive dates and optional descriptions or preview a complete phase edit with the independent plan-change grant. Phase labels never change readiness, workout targets or completion. A separate prescription analysis can report exact time/distance subtotals, explicit speed-based duration ranges, unknown contributions and repeat counts. Partial subtotals are not complete workout totals. Pool length is not step distance. The separate plan-and-workout change grant permits a bounded preview to save, edit or place a library recipe on explicit dates; a distinct apply uses the client\'s approval controls. Saving a recipe never grants provider sync. Provider delivery remains Pro and connection-gated; sync confirms cloud delivery, not watch receipt.',
       },
       {
         question: 'Why are my Training plan tools missing?',

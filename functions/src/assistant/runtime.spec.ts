@@ -1,5 +1,27 @@
 import { analyzeWorkoutStructureV1 } from '../../../shared/planned-workout-analysis';
 import type { AssistantWorkoutReview } from '../../../shared/assistant-workout-review';
+
+describe('Training phase preview routing', () => {
+  it.each(['Add a Base phase to my plan', 'Rename the recovery phase', 'Remove the taper phase from the plan',
+    'Change my plan phases', "Edit my plan's phases", 'Move the taper phase a week later',
+    'Extend the Base phase by two days'])('routes an explicit phase-only edit: %s', prompt => {
+    expect(selectAssistantTrainingPreviewTool(prompt)).toBe('preview_training_plan_phases');
+  });
+  it.each([
+    ['Add a workout during my Base phase', 'preview_create_planned_workout'],
+    ['Delete my workout during the Taper phase', 'preview_training_deletion'],
+    ['Edit my strength workout during the Build phase', 'preview_strength_workout_change'],
+    ['Change recovery steps in my workout during the Build phase', 'preview_planned_workout_v3_change'],
+    ['Rename my plan containing a Base phase', 'preview_training_changes'],
+    ['Remove this training plan and all phases', 'preview_training_deletion'],
+  ])('preserves the requested object when a phase supplies context: %s', (prompt, tool) => {
+    expect(selectAssistantTrainingPreviewTool(prompt)).toBe(tool);
+  });
+  it('keeps plan deletion and read-only phase questions outside phase-edit preparation', () => {
+    expect(selectAssistantTrainingPreviewTool('Delete my plan and all phases')).toBe('preview_training_deletion');
+    expect(selectAssistantTrainingPreviewTool('Which phase am I in today?')).not.toBe('preview_training_plan_phases');
+  });
+});
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { GenkitError } from 'genkit';
 import { retry } from 'genkit/model/middleware';

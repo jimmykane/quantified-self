@@ -19,8 +19,8 @@ import {
 import { Location } from '@angular/common';
 import { LiveAnnouncer } from '@angular/cdk/a11y';
 import { DragDropModule, type CdkDragDrop } from '@angular/cdk/drag-drop';
-import { toObservable, toSignal } from '@angular/core/rxjs-interop';
-import { MatDialog } from '@angular/material/dialog';
+import { takeUntilDestroyed, toObservable, toSignal } from '@angular/core/rxjs-interop';
+import { MatDialog, type MatDialogRef } from '@angular/material/dialog';
 import { MatSnackBar } from '@angular/material/snack-bar';
 import { ActivatedRoute, Router, type NavigationExtras } from '@angular/router';
 import { ActivityTypes, DataWeight, DistanceUnits, WeightUnits, type UserUnitSettingsInterface } from '@sports-alliance/sports-lib';
@@ -50,6 +50,8 @@ import { WorkoutLibraryService } from '../../services/workout-library.service';
 import { ConfirmationDialogComponent, type ConfirmationWithPastProviderCleanup } from '../confirmation-dialog/confirmation-dialog.component';
 import { CompactRowComponent } from '../shared/compact-row/compact-row.component';
 import { PlanScheduleCalendarComponent } from './plan-schedule-calendar.component';
+import { PlanPhasesDialogComponent } from './plan-phases-dialog.component';
+import { trainingPlanPhaseOnDate } from '../../helpers/training-plan-phases.helper';
 import { TrainingDeliveryButtonComponent } from './training-delivery-button.component';
 import { WorkoutTargetsEditorComponent } from './workout-targets-editor.component';
 import { WorkoutTimeInputComponent } from './workout-time-input.component';
@@ -97,6 +99,7 @@ import {
   type MutateTrainingScheduleRequestV1,
   type MutateTrainingScheduleResponseV1,
   type ScheduledWorkoutV1,
+  type SetTrainingPlanPhasesMutationV1,
   type TrainingPlanLifecycle,
   type TrainingPlanColor,
   type TrainingPlanV1,
@@ -196,6 +199,7 @@ export class PlansWorkspaceComponent {
   private readonly host = inject<ElementRef<HTMLElement>>(ElementRef);
   private readonly injector = inject(Injector);
   private readonly dialog = inject(MatDialog);
+  private phaseDialog: MatDialogRef<PlanPhasesDialogComponent> | null = null;
   private readonly snackBar = inject(MatSnackBar);
   private readonly liveAnnouncer = inject(LiveAnnouncer);
   private readonly route = inject(ActivatedRoute);
@@ -236,7 +240,7 @@ export class PlansWorkspaceComponent {
   readonly editorDragDelay = { touch: 200, mouse: 0 };
 
   constructor() {
-    this.destroyRef.onDestroy(() => this.clearEditorAnnouncement());
+    this.destroyRef.onDestroy(() => { this.clearEditorAnnouncement(); this.phaseDialog?.close(); });
   }
 
   readonly sportOptionGroups: ReadonlyArray<{
@@ -502,6 +506,7 @@ export class PlansWorkspaceComponent {
     plan.id === this.selectedPlanId()
   )) ?? null);
   readonly selectedPlanAppearance = computed(() => trainingPlanAppearance(this.selectedPlan()));
+  readonly selectedDayPhase = computed(() => trainingPlanPhaseOnDate(this.selectedPlan(), this.planScheduleDate() ?? ''));
   readonly planAppearances = computed(() => Object.fromEntries(this.planOptions().map(plan => [plan.id, trainingPlanAppearance(plan)])));
   readonly selectedPlanActionBusy = computed(() => {
     const planId = this.selectedPlanId();
@@ -654,6 +659,8 @@ export class PlansWorkspaceComponent {
     const requested = this.routeState();
     const uid = this.currentUser()?.uid;
     if (this.routeOwner !== uid) {
+      this.phaseDialog?.close();
+      this.phaseDialog = null;
       this.routeOwner = uid;
       this.appliedRouteKey = null;
       this.advanceEditorGeneration();
@@ -897,6 +904,33 @@ export class PlansWorkspaceComponent {
     this.clearPlanActions();
     this.renamingPlanId.set(plan.id);
     this.renameValue.set(plan.name);
+  }
+
+  async editPlanPhases(plan: TrainingPlanV1): Promise<void> {
+    const uid = this.currentUser()?.uid;
+    if (!uid || this.busyAction() || !this.browsing()) return;
+    const expectedRevisions = this.expectedRevisions({ planIds: [plan.id],
+      planRevisionOverrides: new Map([[plan.id, plan.revision]]) });
+    const mutationIds = new Map<string, string>();
+    const reference: MatDialogRef<PlanPhasesDialogComponent> = this.dialog.open(PlanPhasesDialogComponent, { width: '640px', maxWidth: 'calc(100vw - 24px)',
+      data: { plan, currentWorkoutDates: this.schedule().workouts.filter(workout => workout.planId === plan.id
+        && workout.lifecycle !== 'deleted').map(workout => workout.localDate),
+        onSave: async (operation: SetTrainingPlanPhasesMutationV1): Promise<boolean> => {
+          const isCurrent = () => !this.destroyRef.destroyed && this.currentUser()?.uid === uid && this.phaseDialog === reference;
+          if (!isCurrent() || !this.browsing() || this.busyAction()) return false;
+          const key = JSON.stringify(operation);
+          const mutationId = mutationIds.get(key) ?? this.plansService.createMutationId('set-plan-phases');
+          mutationIds.set(key, mutationId);
+          const response = await this.runMutation({ mutationId,
+            expectedRevisions, operation }, `phases-${plan.id}`, isCurrent);
+          if (!response || !isCurrent()) return false;
+          this.snackBar.open('Plan phases updated.', 'Dismiss', { duration: 3000 });
+          return true;
+        } } });
+    this.phaseDialog = reference;
+    reference.afterClosed().pipe(takeUntilDestroyed(this.destroyRef)).subscribe(() => {
+      if (this.phaseDialog === reference) this.phaseDialog = null;
+    });
   }
 
   async setPlanColor(plan: TrainingPlanV1, color: TrainingPlanColor): Promise<void> {
@@ -2074,26 +2108,28 @@ export class PlansWorkspaceComponent {
   private async runMutation(
     request: MutateTrainingScheduleRequestV1,
     action: string,
+    feedbackAllowed: () => boolean = () => true,
   ): Promise<MutateTrainingScheduleResponseV1 | null> {
     this.busyAction.set(action);
     try {
       const response = await this.plansService.mutate(request);
-      this.haptics.success();
+      if (feedbackAllowed()) this.haptics.success();
       return response;
     } catch (error) {
+      if (!feedbackAllowed()) return null;
       const message = errorMessage(error);
       if (/requires extending/i.test(message) && 'confirmPlanRangeExtension' in request.operation) {
         const confirmed = await this.confirm('Extend plan dates?', message, 'Extend and continue');
-        if (confirmed) {
+        if (confirmed && feedbackAllowed()) {
           try {
             const response = await this.plansService.mutate({
               ...request,
               operation: { ...request.operation, confirmPlanRangeExtension: true },
             } as MutateTrainingScheduleRequestV1);
-            this.haptics.success();
+            if (feedbackAllowed()) this.haptics.success();
             return response;
           } catch (retryError) {
-            this.showError(retryError);
+            if (feedbackAllowed()) this.showError(retryError);
             return null;
           }
         }

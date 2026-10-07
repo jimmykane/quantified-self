@@ -1,0 +1,37 @@
+<h2 mat-dialog-title>Phases · {{ data.plan.name }}</h2>
+<mat-dialog-content>
+  <p>Give parts of your plan a name. Dates are inclusive; gaps and single-day phases are allowed. Phases cannot overlap and do not change workout targets or delivery.</p>
+  <div class="phase-range">
+    <mat-form-field><mat-label>Plan starts</mat-label><input matInput [disabled]="saving()" type="date" [ngModel]="start()" (ngModelChange)="setPlanDate('start', $event)"></mat-form-field>
+    <mat-form-field><mat-label>Plan ends</mat-label><input matInput [disabled]="saving()" type="date" [ngModel]="end()" (ngModelChange)="setPlanDate('end', $event)"></mat-form-field>
+  </div>
+  @if (extending()) {
+    <mat-checkbox [disabled]="saving()" [checked]="confirmExtension()" (change)="setExtensionConfirmation($event.checked)">Extend the plan to {{ start() }} through {{ end() }}</mat-checkbox>
+  }
+  @for (phase of items(); track phase.id; let index = $index) {
+    <fieldset class="phase-row">
+      <legend>Phase {{ index + 1 }}</legend>
+      <mat-form-field><mat-label>Name</mat-label><input matInput [disabled]="saving()" maxlength="80" [ngModel]="phase.name" (ngModelChange)="update(phase.id, 'name', $event)"></mat-form-field>
+      <div class="phase-range">
+        <mat-form-field><mat-label>Starts</mat-label><input matInput [disabled]="saving()" type="date" [ngModel]="phase.startLocalDate" (ngModelChange)="update(phase.id, 'startLocalDate', $event)"></mat-form-field>
+        <mat-form-field><mat-label>Ends</mat-label><input matInput [disabled]="saving()" type="date" [ngModel]="phase.endLocalDate" (ngModelChange)="update(phase.id, 'endLocalDate', $event)"></mat-form-field>
+      </div>
+      <mat-form-field><mat-label>Description (optional)</mat-label><textarea matInput [disabled]="saving()" rows="2" maxlength="1000" [ngModel]="phase.description ?? ''" (ngModelChange)="update(phase.id, 'description', $event)"></textarea></mat-form-field>
+      <mat-form-field><mat-label>Color</mat-label><mat-select [disabled]="saving()" [value]="phase.color ?? ''" (selectionChange)="selectColor(phase.id, $event.value)">
+        <mat-option value="">Use plan color</mat-option>
+        @for (color of colors; track color.id) { <mat-option [value]="color.id">{{ color.label }}</mat-option> }
+      </mat-select></mat-form-field>
+      <button mat-button type="button" [disabled]="saving()" (click)="remove(phase.id)" [attr.aria-label]="'Remove phase ' + (phase.name || (index + 1))"><mat-icon aria-hidden="true">delete</mat-icon>Remove phase</button>
+    </fieldset>
+  } @empty { <p>No phases. Add one below.</p> }
+  <div class="phase-add-actions">
+    <button mat-stroked-button type="button" (click)="add()" [disabled]="saving() || items().length >= maxPhases">Add phase</button>
+    @for (name of suggestions; track name) { <button mat-button type="button" (click)="add(name)" [disabled]="saving() || items().length >= maxPhases">{{ name }}</button> }
+  </div>
+  <p class="phase-hint">{{ items().length }}/{{ maxPhases }} phases. Save records one plan revision. Removing phases can be undone through plan history.</p>
+  @if (validation().error) { <p class="phase-error" role="status">{{ validation().error }}</p> }
+</mat-dialog-content>
+<mat-dialog-actions align="end">
+  <button appHapticTap mat-button mat-dialog-close [disabled]="saving()" type="button">Cancel</button>
+  <button mat-flat-button type="button" (click)="save()" [disabled]="saving() || !validation().phases || unchanged() || (extending() && !confirmExtension())">@if (saving()) { <mat-spinner diameter="18"></mat-spinner> } {{ saving() ? 'Saving phases…' : 'Save phases' }}</button>
+</mat-dialog-actions>

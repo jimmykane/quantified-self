@@ -15,6 +15,7 @@ import {
   parseScheduledWorkoutV1,
   parseTrainingPlanStateV1,
   parseTrainingPlanV1,
+  parseTrainingPlanPhasesV1,
   shouldCheckpointTrainingPlanRevision,
   validateTrainingPlanDateRange,
   type TrainingPlanV1,
@@ -79,6 +80,47 @@ describe('training-plan date contracts', () => {
 });
 
 describe('training-plan persisted contracts', () => {
+  it('normalizes bounded phase metadata and preserves legacy plans', () => {
+    const phase = { id: 'base', name: ' Base ', startLocalDate: '2026-09-01', endLocalDate: '2026-09-10', color: 'green' };
+    const phases = parseTrainingPlanPhasesV1({ version: 1, items: [
+      { ...phase, id: 'taper', name: 'Taper', startLocalDate: '2026-09-20', endLocalDate: '2026-09-20' }, phase,
+    ] });
+    expect(phases.items.map(item => item.id)).toEqual(['base', 'taper']);
+    expect(phases.items[0].name).toBe('Base');
+    expect(parseTrainingPlanV1({ ...PLAN, phases }).phases).toEqual(phases);
+    expect(parseTrainingPlanV1(PLAN)).not.toHaveProperty('phases');
+    expect(() => parseTrainingPlanV1({ ...PLAN, phases: { version: 1, items: [{ ...phase, startLocalDate: '2026-08-31' }] } })).toThrow();
+  });
+
+  it('rejects control characters while preserving tabs and line breaks only in descriptions', () => {
+    const phase = { id: 'base', name: 'Base', startLocalDate: '2026-09-01', endLocalDate: '2026-09-10' };
+    for (const code of [...Array.from({ length: 32 }, (_, index) => index), 127]) {
+      const character = String.fromCharCode(code);
+      expect(() => parseTrainingPlanPhasesV1({ version: 1, items: [{ ...phase, name: `Base${character}stage` }] })).toThrow();
+      const value = { version: 1, items: [{ ...phase, description: `First${character}second` }] };
+      if ([9, 10, 13].includes(code)) expect(parseTrainingPlanPhasesV1(value).items[0].description).toBe(`First${character}second`);
+      else expect(() => parseTrainingPlanPhasesV1(value)).toThrow();
+    }
+  });
+
+  it('rejects invalid, overlapping, duplicate, oversized and unknown phase data', () => {
+    const phase = { id: 'base', name: 'Base', startLocalDate: '2026-09-01', endLocalDate: '2026-09-10' };
+    for (const item of [{ ...phase, color: '#fff' }, { ...phase, startLocalDate: '2026-02-30' },
+      { ...phase, name: '\u0000' }, { ...phase, description: 'a'.repeat(1001) }, { ...phase, extra: true }]) {
+      expect(() => parseTrainingPlanPhasesV1({ version: 1, items: [item] })).toThrow();
+    }
+    expect(() => parseTrainingPlanPhasesV1({ version: 2, items: [] })).toThrow();
+    expect(() => parseTrainingPlanPhasesV1({ version: 1, items: [phase, phase] })).toThrow();
+    expect(() => parseTrainingPlanPhasesV1({ version: 1, items: [phase,
+      { ...phase, id: 'build', startLocalDate: '2026-09-10', endLocalDate: '2026-09-20' }] })).toThrow();
+    expect(() => parseTrainingPlanPhasesV1({ version: 1, items: Array.from({ length: 33 }, (_, i) => ({ ...phase, id: `p-${i}` })) })).toThrow();
+    const unicode = Array.from({ length: 20 }, (_, i) => ({ ...phase, id: `p-${i}`,
+      startLocalDate: `2026-09-${String(i + 1).padStart(2, '0')}`,
+      endLocalDate: `2026-09-${String(i + 1).padStart(2, '0')}`, description: '界'.repeat(1000) }));
+    expect(() => parseTrainingPlanPhasesV1({ version: 1, items: unicode })).toThrow('32 KiB');
+    expect(parseTrainingPlanPhasesV1({ version: 1, items: [] })).toEqual({ version: 1, items: [] });
+  });
+
   it.each(TRAINING_PLAN_COLORS)('round-trips the named plan color %s without changing the recipe contract', color => {
     const colored = { ...PLAN, color };
     expect(parseTrainingPlanV1(JSON.parse(JSON.stringify(colored)))).toEqual(colored);

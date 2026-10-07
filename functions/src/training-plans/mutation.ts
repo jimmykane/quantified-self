@@ -291,10 +291,30 @@ export function applyTrainingScheduleMutation(
             if (after.state.activePlanId === plan.id) after.state.activePlanId = null;
             break;
         }
+        case 'set-plan-phases': {
+            const plan = expectPlan(operation.planId);
+            if ((operation.startLocalDate < plan.startLocalDate || operation.endLocalDate > plan.endLocalDate)
+                && !operation.confirmPlanRangeExtension) {
+                throw new TrainingScheduleMutationError('range-extension-required', `Saving phases requires extending the plan range to ${operation.startLocalDate} through ${operation.endLocalDate}.`);
+            }
+            if ([...after.workouts.values()].some(workout => workout.planId === plan.id && workout.lifecycle !== 'deleted'
+                && (workout.localDate < operation.startLocalDate || workout.localDate > operation.endLocalDate))) {
+                throw new TrainingScheduleMutationError('failed-precondition', 'The plan range must contain every current workout. Move or remove excluded workouts first.');
+            }
+            plan.startLocalDate = operation.startLocalDate;
+            plan.endLocalDate = operation.endLocalDate;
+            if (operation.phases.items.length) plan.phases = cloneValue(operation.phases);
+            else delete plan.phases;
+            affectedPlanIds.add(plan.id);
+            break;
+        }
         case 'shift-plan': {
             const plan = expectPlan(operation.planId);
             plan.startLocalDate = addDaysToTrainingLocalDate(plan.startLocalDate, operation.days);
             plan.endLocalDate = addDaysToTrainingLocalDate(plan.endLocalDate, operation.days);
+            if (plan.phases) plan.phases.items = plan.phases.items.map(phase => ({ ...phase,
+                startLocalDate: addDaysToTrainingLocalDate(phase.startLocalDate, operation.days),
+                endLocalDate: addDaysToTrainingLocalDate(phase.endLocalDate, operation.days) }));
             affectedPlanIds.add(plan.id);
             for (const workout of after.workouts.values()) {
                 if (workout.planId !== plan.id || workout.lifecycle === 'deleted') continue;

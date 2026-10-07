@@ -48,11 +48,16 @@ describe('CalendarDayContextComponent', () => {
     ] }).compileComponents();
     const fixture = TestBed.createComponent(CalendarDayContextComponent);
     const calendarReturn = { view: 'month' as const, anchor: '2026-10-01' };
-    fixture.componentRef.setInput('data', { ...data('2026-10-25'), calendarReturn });
+    fixture.componentRef.setInput('data', { ...data('2026-10-25'), calendarReturn, scheduleSource: () => ({
+      state: { activePlanId: 'plan' }, plans: [{ id: 'plan', name: 'Autumn', lifecycle: 'active',
+        phases: { version: 1, items: [{ id: 'base', name: 'Base', startLocalDate: '2026-10-24', endLocalDate: '2026-10-25', description: 'Phase-only day' }] } }],
+    }) as never });
     if (surface === 'dashboard') fixture.componentRef.setInput('dashboardTile', true);
     if (surface === 'day') fixture.componentRef.setInput('standaloneDayPage', true);
     fixture.detectChanges(); await fixture.whenStable(); fixture.detectChanges();
     expect(haptics.selection).not.toHaveBeenCalled();
+    expect(fixture.nativeElement.textContent).toContain('Phase-only day');
+    expect(fixture.componentInstance.dashboardDayIsEmpty()).toBe(false);
     if (surface !== 'preview') {
       const add = [...fixture.nativeElement.querySelectorAll('button')]
         .find((button: HTMLButtonElement) => button.textContent?.includes('Add workout')) as HTMLButtonElement;
@@ -68,6 +73,7 @@ describe('CalendarDayContextComponent', () => {
     expect(haptics.selection).toHaveBeenCalledOnce();
     viewer.set({ uid: 'other' }); fixture.detectChanges();
     expect(fixture.componentInstance.canPlan()).toBe(false);
+    expect(fixture.nativeElement.textContent).not.toContain('Phase-only day');
     expect(fixture.nativeElement.querySelector('a[href*="/training/plans/library"]')).toBeNull();
   });
   it('centers timeline time, mixed icons, and titles in a shared 44px row', () => {

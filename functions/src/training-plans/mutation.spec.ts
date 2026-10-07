@@ -93,6 +93,52 @@ function request(
 }
 
 describe('applyTrainingScheduleMutation', () => {
+    it('replaces and removes phases through plan revisions without altering workouts', () => {
+        const selected = plan({ workoutCount: 1 });
+        const scheduled = workout({ planId: selected.id });
+        const source = snapshot([selected], [scheduled], selected.id);
+        const operation = { kind: 'set-plan-phases' as const, planId: selected.id,
+            startLocalDate: selected.startLocalDate, endLocalDate: selected.endLocalDate,
+            confirmPlanRangeExtension: false,
+            phases: { version: 1 as const, items: [{ id: 'base', name: 'Base',
+                startLocalDate: '2026-09-01', endLocalDate: '2026-09-10' }] } };
+        const result = applyTrainingScheduleMutation(source, request(operation,
+            [{ scope: 'plan', id: selected.id, revision: selected.revision }]), NOW_MS);
+        expect(result.after.plans.get(selected.id)).toMatchObject({ phases: operation.phases, revision: 4 });
+        expect(result.changedWorkoutIds).toEqual([]);
+        expect(result.after.workouts).toEqual(source.workouts);
+        const removed = applyTrainingScheduleMutation(result.after, { mutationId: 'remove-phases',
+            expectedRevisions: [{ scope: 'state', id: 'current', revision: 8 }, { scope: 'plan', id: selected.id, revision: 4 }],
+            operation: { ...operation, phases: { version: 1, items: [] } } }, NOW_MS + 1);
+        expect(removed.after.plans.get(selected.id)).not.toHaveProperty('phases');
+        expect(() => applyTrainingScheduleMutation(result.after, request(operation,
+            [{ scope: 'plan', id: selected.id, revision: selected.revision }]), NOW_MS)).toThrow('changed from revision');
+    });
+
+    it('requires explicit phase range extension and refuses shrinking past current workouts', () => {
+        const selected = plan({ workoutCount: 1 });
+        const source = snapshot([selected], [workout({ planId: selected.id })], selected.id);
+        const operation = { kind: 'set-plan-phases' as const, planId: selected.id,
+            startLocalDate: '2026-08-31', endLocalDate: selected.endLocalDate,
+            confirmPlanRangeExtension: false, phases: { version: 1 as const, items: [] } };
+        const expected = [{ scope: 'plan' as const, id: selected.id, revision: selected.revision }];
+        expect(() => applyTrainingScheduleMutation(source, request(operation, expected), NOW_MS)).toThrow('requires extending');
+        expect(applyTrainingScheduleMutation(source, request({ ...operation, confirmPlanRangeExtension: true }, expected), NOW_MS)
+            .after.plans.get(selected.id)?.startLocalDate).toBe('2026-08-31');
+        expect(() => applyTrainingScheduleMutation(source, request({ ...operation, startLocalDate: '2026-09-03' }, expected), NOW_MS))
+            .toThrow('every current workout');
+    });
+
+    it('shifts date-only phases across DST while keeping their identity and metadata', () => {
+        const selected = plan({ startLocalDate: '2026-10-20', endLocalDate: '2026-11-01', phases: { version: 1, items: [
+            { id: 'taper', name: 'Taper', description: 'Keep easy', color: 'purple', startLocalDate: '2026-10-24', endLocalDate: '2026-10-26' },
+        ] } });
+        const result = applyTrainingScheduleMutation(snapshot([selected]), request({ kind: 'shift-plan', planId: selected.id, days: 7 },
+            [{ scope: 'plan', id: selected.id, revision: selected.revision }]), NOW_MS);
+        expect(result.after.plans.get(selected.id)?.phases?.items[0]).toEqual({ ...selected.phases!.items[0],
+            startLocalDate: '2026-10-31', endLocalDate: '2026-11-02' });
+    });
+
     let initial: TrainingScheduleSnapshotV1;
 
     beforeEach(() => {
