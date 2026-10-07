@@ -96,6 +96,12 @@ service cloud.firestore {
            && !resource.data.keys().hasAny(['trainingSettings']);
       }
 
+      // Compact derived load projections are private and exclusively server-owned.
+      match /trainingLoadCache/{document} {
+        allow read: if isOwner();
+        allow write: if false;
+      }
+
       // Immutable dated load preferences. The head and its new revision are committed together.
       match /trainingLoadPolicies/{family} {
         function validPolicy() {

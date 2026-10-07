@@ -3,6 +3,11 @@ import { attachedEffectiveTrainingLoad, defaultAppliedTrainingLoadPolicy, type T
 import { trainingLoadSourceFingerprint } from './training-load-metadata';
 import { attachActivityTrainingLoad, attachEventTrainingLoads, fetchTrainingLoadMetadata } from './training-load-reader';
 
+const cache = vi.hoisted(() => ({ read: vi.fn(), refresh: vi.fn(), complete: vi.fn() }));
+vi.mock('./training-load-cache', async importOriginal => ({ ...await importOriginal<any>(),
+  readTrainingLoadSummaries: cache.read, refreshTrainingLoadSummary: cache.refresh, completeTrainingLoadCacheWarmup: cache.complete }));
+import { summarizeTrainingLoad } from './training-load-cache';
+
 const db = vi.hoisted(() => ({ doc: vi.fn((path: string) => ({ path })), getAll: vi.fn() }));
 vi.mock('firebase-admin', () => ({ firestore: () => db }));
 
@@ -20,6 +25,20 @@ describe('owner Training load projections', () => {
     expect(db.doc.mock.calls.map(([path]) => path)).toEqual(ids.map(id => `users/owner/events/${id}/metaData/trainingLoad`));
   });
 
+  it('warms metadata once and does not join individual event metadata on subsequent full rebuilds', async () => {
+    const docs = Array.from({ length: 1001 }, (_, i) => ({ id: `event-${i}`, data: () => ({ stats: {} }) }));
+    cache.read.mockResolvedValue(new Map()).mockResolvedValueOnce(null);
+    db.getAll.mockImplementation(async (...refs: unknown[]) => refs.map((_, i) => ({ exists: i === 0,
+      data: () => i === 0 ? { version: 1, controls: {} } : undefined })));
+    await attachEventTrainingLoads('owner', docs);
+    expect(db.getAll).toHaveBeenCalledTimes(11);
+    expect(cache.complete).toHaveBeenCalledTimes(1);
+    expect(cache.refresh).toHaveBeenCalledTimes(11);
+    db.getAll.mockClear();
+    await attachEventTrainingLoads('owner', docs);
+    expect(db.getAll).not.toHaveBeenCalled();
+  });
+
   it('keeps recorded statistics intact while applying per-leg controls, and rejects stale source projections', async () => {
     const parent = { startDate: 1000, endDate: 3601000, stats: { 'Training Stress Score': 87.3 } };
     const child = { ...parent, type: 'Walking', stats: { 'Training Stress Score': 87.3, Duration: 3600 } };
@@ -28,7 +47,7 @@ describe('owner Training load projections', () => {
       legs: { saved: { activityId: 'leg', recordedTss: 87.3, evaluations: null,
         identity: { startMs: 1000, endMs: 3601000, type: 'Walking', duration: 3600, distance: null },
         policy: defaultAppliedTrainingLoadPolicy('Walking'), sourceFingerprint: trainingLoadSourceFingerprint(child) } } };
-    db.getAll.mockResolvedValue([{ exists: true, data: () => metadata }]);
+    cache.read.mockImplementation(async () => new Map([['event', summarizeTrainingLoad('event', parent, metadata)!]]));
     const [projection] = await attachEventTrainingLoads('owner', [{ id: 'event', data: () => ({ ...parent }) }]);
     expect(attachedEffectiveTrainingLoad(projection.data())).toMatchObject({ score: 0, status: 'available' });
     expect(JSON.stringify(projection.data())).toBe(JSON.stringify(parent));

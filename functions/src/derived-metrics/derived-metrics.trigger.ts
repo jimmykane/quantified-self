@@ -7,6 +7,7 @@ import { HEALTH_METRIC_IDS } from '../../../shared/health';
 import { isDerivedMetricsUidAllowed } from './derived-metrics-uid-gate';
 import { enqueueDerivedMetricsIngressTask } from '../shared/cloud-tasks';
 import { getUserDeletionGuardState } from '../shared/user-deletion-guard';
+import { refreshTrainingLoadSummary, trainingLoadWriteTime } from '../training-load/training-load-cache';
 import { hasDerivedMetricSourceChange } from './derived-metrics-source-change';
 
 const DERIVED_METRICS_SOURCE_TRIGGER_MEMORY = '512MiB';
@@ -42,10 +43,12 @@ async function handleDerivedMetricsSourceWrite(
     if (!uid) {
         return;
     }
-    if (!isDerivedMetricsUidAllowed(uid)) {
-        return;
-    }
 
+    const before = event.data?.before?.data?.();
+    const after = event.data?.after?.data?.();
+    // Preparation only reserves the import. Owner edits made during it are retried below.
+    if (source === 'training-load' && after?.sourceWritePending &&
+        (!before || !hasDerivedMetricSourceChange(source, before, after)) && !Object.keys(after.controls ?? {}).length) return;
     // Creates, updates, and deletes can all change the derived comparison.
     const beforeExists = !!event.data?.before?.exists;
     const afterExists = !!event.data?.after?.exists;
@@ -58,11 +61,18 @@ async function handleDerivedMetricsSourceWrite(
         return;
     }
     const sourceId = resolveDerivedMetricsSourceId(event, source);
+    // Cache maintenance is independent of the derived-metrics rollout gate.
+    // Always reread current metadata before invalidating, including redelivered older events.
+    if (source === 'training-load' || (source === 'event' && !afterExists))
+        await refreshTrainingLoadSummary(uid, sourceId!);
+    if (!isDerivedMetricsUidAllowed(uid)) return;
 
     // Debounce mutation ingress by uid + short time bucket.
     // Deterministic Cloud Task naming ensures one pending ingress task per bucket.
     // The ingress helper schedules execution at bucket-close + short buffer.
-    const eventTimeMs = resolveEventTimeMs(event);
+    // Refresh retries may finish after the original debounce bucket was consumed.
+    // Use readiness time for metadata so a delayed control update cannot be lost.
+    const eventTimeMs = source === 'training-load' ? Date.now() : resolveEventTimeMs(event);
     const sleepIngressOptions = source === 'sleep'
         ? {
             taskScope: 'sleep',
@@ -100,7 +110,23 @@ async function handleDerivedMetricsSourceWrite(
         });
         return;
     }
-    const loadIngressOptions = source === 'training-load' ? {
+    if ((source === 'event' && afterExists) || source === 'activity') {
+        const eventId = source === 'event' ? sourceId : after?.eventID ?? before?.eventID;
+        if (eventId) {
+            const metadata = (await admin.firestore().doc(`users/${uid}/events/${eventId}/metaData/trainingLoad`).get()).data();
+            const key = source === 'event' ? 'event' : `activity:${sourceId}`;
+            const time = trainingLoadWriteTime(event.data?.after?.updateTime);
+            // The final metadata transaction owns import invalidation, even for delayed source deliveries.
+            if (afterExists && (metadata?.sourceWritePending || (time && metadata?.sourceWriteTimes?.[key] === time))) return;
+            // Legacy controls resolve against live recorded children until their first reparse.
+            // Their compact projection must follow ordinary source corrections/deletions too.
+            if (metadata && !metadata.legs && Object.keys(metadata.controls ?? {}).length)
+                await refreshTrainingLoadSummary(uid, eventId);
+        }
+    }
+    const completedSourceWrite = source === 'training-load' && after?.sourceRevision !== undefined &&
+        after.sourceRevision !== before?.sourceRevision;
+    const loadIngressOptions = source === 'training-load' && !completedSourceWrite ? {
         taskScope: 'training-load',
         metricKinds: [DERIVED_METRIC_KINDS.Form, DERIVED_METRIC_KINDS.Acwr, DERIVED_METRIC_KINDS.RampRate,
             DERIVED_METRIC_KINDS.MonotonyStrain, DERIVED_METRIC_KINDS.FormNow, DERIVED_METRIC_KINDS.FormPlus7d,

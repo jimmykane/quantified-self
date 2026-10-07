@@ -4882,7 +4882,8 @@ Automatic/included. Saving appends an immutable server-timestamped revision in
 `users/{uid}/trainingLoadPolicies/{family}/revisions/{revisionId}` and updates the revision-checked head. The leg
 editor can copy method/inclusion to future family defaults, never a numeric override. First import chooses the last
 revision effective at the leg's recorded start time, so old/delayed uploads do not acquire today's defaults. Each
-leg freezes that applied policy; duplicate uploads, resyncs and reparses preserve it.
+leg freezes that applied policy; duplicate uploads, resyncs and reparses preserve it. Matched legs reuse that
+snapshot without querying policy history again; only new legs select a dated policy.
 
 Private `users/{uid}/events/{eventId}/metaData/trainingLoad` stores server-owned candidates, source fingerprints,
 leg identities and applied policies beside owner-editable controls. Firestore Rules allow exact owner-scoped
@@ -4890,9 +4891,12 @@ transactions with revision checks and deletion guards, while denying client writ
 revision updates/deletes and cross-event associations. Before provider ingestion, manual upload or source-file
 reparse overwrites any existing source document, backend EventWriter adapters durably freeze legacy identities in
 the server-owned `legacyLegs` field. This evidence survives partial-write retries and does not advance the load
-timestamp. After source writes, a second transaction refreshes candidates, checks the persisted source and preserves
-the latest controls. It consumes the frozen evidence before old leg cleanup. Metadata preparation and persistence
-failures propagate to the caller for retry. Preparation also computes any uncached evaluations before EventWriter
+timestamp. Preparation also sets `sourceWritePending` before source writes. After source writes, a second transaction
+refreshes candidates, checks the persisted source, preserves the latest controls and atomically updates the compact
+load cache. It clears the pending marker, records exact source update times and advances `sourceRevision` only when
+the shared derived-source projection changes. Failed preparation/finalization must be retried through the original
+writer; never clear a pending marker manually to bypass incomplete candidates. Finalization consumes the frozen
+evidence before old leg cleanup. Metadata preparation and persistence failures propagate to the caller for retry. Preparation also computes any uncached evaluations before EventWriter
 serializes source statistics, including native JSON imports whose power evaluation derives additional statistics.
 Final metadata persistence reads those cached results so source fingerprints describe exactly what was saved.
 
@@ -4905,14 +4909,50 @@ Bounds: 100 source legs/controls per event and 200 retained identities; reaching
 before further reparse.
 
 `shared/training-load-policy.ts` owns the effective-load resolver for Form, weekly load, ACWR, comparisons, sport
-contributions and impact. Backend metadata reads use exact owner paths in batches of at most 100; immediate legacy
-controls may require a bounded child join. Browser and backend use the same canonical source projection for SHA-256
+contributions and impact. Full-history backend rebuilds read compact resolved loads from the private,
+server-owned `users/{uid}/trainingLoadCache` collection instead of joining one metadata document per event. Hash-prefix
+buckets start with one hex digit and split atomically at 100 entries or 400,000 JSON bytes; entries are bounded at
+100,000 bytes. Branch documents have `leaf: false`; a single leaf query retrieves the current buckets. Each entry
+contains only the resolved parent/per-leg results and source guards, never policy history or full evaluations.
+Unqueried cache entries and metadata control/candidate maps are exempt from indexing. Empty leaves may remain after
+deletions; all cache records are below the recursively deleted user root.
+
+A versioned `state` document becomes ready only after the first **full-history** build warms existing metadata.
+That cold build uses exact owner paths in batches of at most 100 and refreshes existing metadata with at most four
+concurrent transactions, rereading current sources and controls before every cache write. Interrupted imports warm
+as unavailable (or explicitly excluded), so one pending file does not block other workouts.
+Final persistence replaces that placeholder atomically. Existing untouched legacy workouts need no cache entry and keep
+recorded load. Future imports update their cache atomically; owner edits refresh it before invalidation even outside
+the derived-metrics rollout gate. Event deletion removes its cached entry. Cache maintenance checks the account
+root and deletion tombstone transactionally. A failed cache refresh retries without publishing invalidation first.
+Immediate legacy controls may still require a bounded child join, and ordinary source corrections/deletions refresh
+those legacy entries before invalidation. Focused MCP impact/editor reads keep their exact
+metadata reads.
+
+Steady-state full rebuild overhead is one cache-state read plus the populated leaf documents (Firestore bills a
+minimum of one read for an empty query). The emulator fixture with 1,001 single-leg controlled workouts uses 16
+leaves: **17 reads instead of 1,001**, a 98.3% reduction in this feature's load-join reads. This is not a reduction in
+the pre-existing event/activity reads or an estimate of the whole Firebase bill. Large multisport entries split
+sooner. First warmup still pays the metadata scan and cache preparation once; imports/edits add bounded transactional
+cache maintenance, and a split costs additional writes. Identical resolved results skip the cache write. Matching
+reparses avoid policy lookups; unchanged source projections do not enqueue a Training rebuild. No original-file
+reparse is required to warm this cache, and it does not recalculate historical TSS.
+
+For imports, source triggers check the pending marker and committed update times, leaving invalidation to the final
+metadata write. Completed changed sources use normal full-source ingress; owner-only load edits retain targeted
+load ingress. This prevents the import's source and load metadata from independently requesting the same rebuild.
+Independent edits, retries and stale-leg cleanup can still legitimately request additional work. Owner controls
+edited during a pending import are retried against current metadata. `loadRevision` ensures finalization invalidates
+an edit even if reimported source fields are identical. Metadata ingress uses cache-readiness time so late retries
+cannot disappear into an already-consumed debounce bucket. `sourceFirstImport` preserves dated selection across
+partial first-import retries; it is removed on successful finalization. Owner revision/updatedAt-only changes are ignored.
+Browser and backend use the same canonical source projection for SHA-256
 fingerprints, rejecting stale candidate/source combinations. Unrecognized leg IDs remain unavailable while a rewrite
 is in progress instead of reverting to recorded TSS. The editor checks both parent and leg fingerprints and blocks
 leg edits until stale activity details are reopened. The
 Sports Lib JSON reader preserves zero W/kg power-curve values so reopening a saved leg does not falsely change its
 source fingerprint. This read compatibility fix needs no historical reparse and exposes no additional MCP fields. The
-`onTrainingLoadMetadataWrite` trigger invalidates affected load-derived kinds and increments the event
+`onTrainingLoadMetadataWrite` trigger refreshes the private cache, invalidates affected kinds and increments the event
 mutation/workout input versions; timestamp/revision-only bookkeeping does not invalidate. Impact waits when a load
 edit is newer than Form. CTL 42 days, ATL 7 days and UTC-day bucketing are unchanged.
 
@@ -4937,7 +4977,11 @@ values are rewritten merely by deploying this change.
 Local verification covers the encoded synthetic recovery walk (7.6 HR TSS), MET inputs (9 TSS), library package
 exports, provider/manual/reparse writers, modeled-load builders, owner Rules and frozen MCP reads. The Firestore
 emulator verifies delayed policy selection, idempotent duplicates, changed/reused leg IDs, partial-write retries,
-missing legacy identity, edits during first import, concurrent reparse/control edits and deletion guards. The actual
+missing legacy identity, edits during first import, concurrent reparse/control edits and deletion guards. Cache tests
+cover the warm/cold read paths, transactionally split buckets, unchanged-write suppression, policy query avoidance,
+zero/excluded/reset projections, source-trigger coordination and private Rules. The 1,001-workout fixture verifies
+17 steady-state document reads. This optimization changes no public MCP schema, scope or mutation contract; Training
+planning/provider delivery remains unaffected. The actual
 editor and Settings were exercised with synthetic local data at desktop and
 320/390-pixel phone widths. No original user FIT file or production data was used.
 

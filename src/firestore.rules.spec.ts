@@ -48,6 +48,25 @@ describe('Firestore Security Rules', () => {
             return { version: 1, revision, excluded: false, controls: { leg: { override } },
                 editedLegKey: 'leg', updatedAt: serverTimestamp() };
         }
+        it('keeps compact load summaries private and rejects client writes to cache or coordination fields', async () => {
+            await seed();
+            const cachePath = 'users/owner/trainingLoadCache/b_a';
+            await testEnv.withSecurityRulesDisabled(async context => {
+                await context.firestore().doc(cachePath).set({ version: 1, leaf: true, entries: {} });
+                await context.firestore().doc(path).set({ version: 1, revision: 1, excluded: false, controls: {},
+                    sourceWritePending: true, sourceRevision: 1, sourceWriteTimes: { event: '1:2' } });
+            });
+            const owner = testEnv.authenticatedContext('owner').firestore();
+            await assertSucceeds(owner.doc(cachePath).get());
+            await assertFails(testEnv.unauthenticatedContext().firestore().doc(cachePath).get());
+            await assertFails(testEnv.authenticatedContext('other').firestore().doc(cachePath).get());
+            await assertFails(owner.doc(cachePath).set({ version: 1, leaf: true, entries: {} }));
+            await assertFails(owner.doc(cachePath).delete());
+            for (const fields of [{ sourceWritePending: false }, { sourceFirstImport: true }, { sourceRevision: 2 }, { loadRevision: 2 },
+                { sourceWriteTimes: {} }, { sourceDigest: 'forged' }])
+                await assertFails(owner.doc(path).update({ ...await edit(2), ...fields }));
+            await assertSucceeds(owner.doc(path).update(await edit(2)));
+        });
         it('permits owner zero overrides and revision-bound edits while keeping the overlay private', async () => {
             await seed();
             const owner = testEnv.authenticatedContext('owner').firestore();

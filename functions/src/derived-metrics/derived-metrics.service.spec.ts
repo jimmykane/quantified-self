@@ -257,6 +257,10 @@ const hoisted = vi.hoisted(() => {
     };
 });
 
+vi.mock('../training-load/training-load-cache', async importOriginal => ({ ...await importOriginal<any>(),
+    readTrainingLoadSummaries: vi.fn(async () => new Map()),
+}));
+
 vi.mock('firebase-admin', () => ({
     firestore: vi.fn(() => hoisted.firestoreInstance),
 }));

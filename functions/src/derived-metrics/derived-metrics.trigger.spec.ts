@@ -10,7 +10,11 @@ const hoisted = vi.hoisted(() => ({
     usersCollection: vi.fn(),
     tombstonesCollection: vi.fn(),
     firestore: vi.fn(),
+    metadata: vi.fn(),
+    refresh: vi.fn(),
 }));
+
+vi.mock('../training-load/training-load-cache', async importOriginal => ({ ...await importOriginal<any>(), refreshTrainingLoadSummary: hoisted.refresh }));
 
 vi.mock('firebase-functions/v2/firestore', () => ({
     onDocumentWritten: hoisted.onDocumentWritten,
@@ -67,7 +71,10 @@ describe('onDashboardDerivedMetricsEventWrite', () => {
             }
             return { exists: false, data: () => undefined };
         }));
+        hoisted.metadata.mockReset().mockResolvedValue({ data: () => undefined });
+        hoisted.refresh.mockReset().mockResolvedValue(undefined);
         hoisted.firestore.mockReturnValue({
+            doc: vi.fn(() => ({ get: hoisted.metadata })),
             collection: vi.fn((collectionId: string) => {
                 if (collectionId === 'userDeletionTombstones') {
                     return hoisted.tombstonesCollection();
@@ -80,6 +87,62 @@ describe('onDashboardDerivedMetricsEventWrite', () => {
         hoisted.enqueueDerivedMetricsIngressTask.mockResolvedValue(true);
         hoisted.isDerivedMetricsUidAllowed.mockReset();
         hoisted.isDerivedMetricsUidAllowed.mockReturnValue(true);
+    });
+
+    it('defers pending imports and suppresses delayed source triggers after final persistence', async () => {
+        const event = { params: { uid: 'user-1', eventId: 'e' }, data: {
+            before: { exists: false }, after: { exists: true, data: () => ({}), updateTime: { seconds: 2, nanoseconds: 3 } } } };
+        hoisted.metadata.mockResolvedValueOnce({ data: () => ({ sourceWritePending: true }) });
+        await (onDashboardDerivedMetricsEventWrite as any)(event);
+        hoisted.metadata.mockResolvedValueOnce({ data: () => ({ sourceWriteTimes: { event: '2:3' } }) });
+        await (onDashboardDerivedMetricsEventWrite as any)(event);
+        expect(hoisted.enqueueDerivedMetricsIngressTask).not.toHaveBeenCalled();
+        await (onDashboardDerivedMetricsEventWrite as any)(event);
+        expect(hoisted.enqueueDerivedMetricsIngressTask).toHaveBeenCalledTimes(1);
+    });
+
+    it('refreshes legacy overrides after ordinary source corrections and child deletions', async () => {
+        hoisted.metadata.mockResolvedValue({ data: () => ({ controls: { leg: { override: 0 } } }) });
+        await (onDashboardDerivedMetricsActivityWrite as any)({ params: { uid: 'user-1', activityId: 'leg' }, data: {
+            before: { exists: true, data: () => ({ eventID: 'e', stats: {} }) },
+            after: { exists: true, data: () => ({ eventID: 'e', stats: { Duration: 10 } }) } } });
+        await (onDashboardDerivedMetricsActivityWrite as any)({ params: { uid: 'user-1', activityId: 'leg' }, data: {
+            before: { exists: true, data: () => ({ eventID: 'e' }) }, after: { exists: false } } });
+        expect(hoisted.refresh).toHaveBeenNthCalledWith(1, 'user-1', 'e');
+        expect(hoisted.refresh).toHaveBeenNthCalledWith(2, 'user-1', 'e');
+        expect(hoisted.enqueueDerivedMetricsIngressTask).toHaveBeenCalledTimes(2);
+    });
+
+    it('publishes completed imports once through normal full-source ingress after the cache is ready', async () => {
+        await (onTrainingLoadMetadataWrite as any)({ params: { uid: 'user-1', eventId: 'e' }, data: {
+            before: { exists: true, data: () => ({ version: 1, controls: {}, sourceWritePending: true }) },
+            after: { exists: true, data: () => ({ version: 1, controls: {}, sourceWritePending: false, sourceRevision: 1 }) } } });
+        expect(hoisted.refresh).toHaveBeenCalledWith('user-1', 'e');
+        expect(hoisted.refresh.mock.invocationCallOrder[0]).toBeLessThan(hoisted.enqueueDerivedMetricsIngressTask.mock.invocationCallOrder[0]);
+        expect(hoisted.enqueueDerivedMetricsIngressTask).toHaveBeenCalledExactlyOnceWith('user-1', undefined, expect.any(Number));
+    });
+
+    it('invalidates a control saved during an unchanged import using readiness time rather than an expired bucket', async () => {
+        const oldTime = '2026-01-01T00:00:00Z'; const start = Date.now();
+        await (onTrainingLoadMetadataWrite as any)({ time: oldTime, params: { uid: 'user-1', eventId: 'e' }, data: {
+            before: { exists: true, data: () => ({ version: 1, controls: { leg: { override: 0 } }, sourceRevision: 1, loadRevision: 1, sourceWritePending: true }) },
+            after: { exists: true, data: () => ({ version: 1, controls: { leg: { override: 0 } }, sourceRevision: 1, loadRevision: 2, sourceWritePending: false }) } } });
+        expect(hoisted.enqueueDerivedMetricsIngressTask.mock.calls[0][2]).toBeGreaterThanOrEqual(start);
+        expect(hoisted.enqueueDerivedMetricsIngressTask.mock.calls[0][3]).toMatchObject({ taskScope: 'training-load' });
+    });
+
+    it('keeps cache maintenance active outside the derived rollout and retries failed refreshes before enqueue', async () => {
+        const event = { params: { uid: 'user-1', eventId: 'e' }, data: {
+            before: { exists: true, data: () => ({ version: 1, controls: {} }) },
+            after: { exists: true, data: () => ({ version: 1, controls: {}, excluded: true }) } } };
+        hoisted.isDerivedMetricsUidAllowed.mockReturnValue(false);
+        await (onTrainingLoadMetadataWrite as any)(event);
+        expect(hoisted.refresh).toHaveBeenCalledTimes(1);
+        expect(hoisted.enqueueDerivedMetricsIngressTask).not.toHaveBeenCalled();
+        hoisted.isDerivedMetricsUidAllowed.mockReturnValue(true);
+        hoisted.refresh.mockRejectedValueOnce(new Error('pending source'));
+        await expect((onTrainingLoadMetadataWrite as any)(event)).rejects.toThrow('pending source');
+        expect(hoisted.enqueueDerivedMetricsIngressTask).not.toHaveBeenCalled();
     });
 
     it('configures retry-safe Firestore trigger options', () => {
@@ -258,7 +321,7 @@ describe('onDashboardDerivedMetricsEventWrite', () => {
             before: { exists: true, data: () => ({ controls: {} }) },
             after: { exists: true, data: () => ({ controls: { leg: { override: 0 } } }) },
         } });
-        expect(hoisted.enqueueDerivedMetricsIngressTask).toHaveBeenCalledWith('user-1', undefined, undefined, expect.objectContaining({
+        expect(hoisted.enqueueDerivedMetricsIngressTask).toHaveBeenCalledWith('user-1', undefined, expect.any(Number), expect.objectContaining({
             incrementEventMutationVersion: true, taskScope: 'training-load',
             metricKinds: expect.arrayContaining([DERIVED_METRIC_KINDS.Form, DERIVED_METRIC_KINDS.Acwr,
                 DERIVED_METRIC_KINDS.TrainingSummary, DERIVED_METRIC_KINDS.TrainingBuildComparison]),

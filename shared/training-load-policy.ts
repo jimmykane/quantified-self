@@ -40,6 +40,13 @@ export interface TrainingLoadMetadata {
   /** Server-frozen pre-rewrite identities for legacy controls; never modeled as calculated candidates. */
   legacyLegs?: Record<string, TrainingLoadLeg>;
   parentFingerprint?: string;
+  /** Server-owned source-write coordination; source triggers wait for final candidates. */
+  sourceWritePending?: boolean;
+  sourceFirstImport?: boolean;
+  sourceWriteTimes?: Record<string, string>;
+  sourceDigest?: string;
+  sourceRevision?: number;
+  loadRevision?: number;
   updatedAt?: unknown;
   /** Explicit workout reset releases retained unmatched identities. */
   resetUnmatched?: boolean;
