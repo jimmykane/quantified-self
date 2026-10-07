@@ -48,7 +48,11 @@ export function reconcileTrainingLoadLegs(
     const { activityId: _association, ...preferences } = control;
     controls[key] = preferences;
   }
-  const previousEntries = Object.entries(priorLegs);
+  // Retained identities require an owner decision even if a later source happens
+  // to match again. Only current legs (including explicit associations above)
+  // may participate in automatic reconciliation.
+  const previousEntries = Object.entries(priorLegs).filter(([, leg]) => leg.activityId);
+  const retainedEntries = Object.entries(priorLegs).filter(([, leg]) => !leg.activityId);
   const matches = resolveActivityIdentityAssignments(previousEntries.map(([, leg]) => matchable(leg)), candidates.map(matchable));
   const legs: Record<string, TrainingLoadLeg> = {};
   candidates.forEach((candidate, index) => {
@@ -63,6 +67,7 @@ export function reconcileTrainingLoadLegs(
     // Keep the entire unmatched policy/control record for an explicit owner decision.
     legs[key] = { ...leg, activityId: null };
   });
+  for (const [key, leg] of retainedEntries) legs[key] = leg;
   if (Object.keys(legs).length > 200) throw new Error('Review unmatched Training load legs before reparsing again.');
   return { legs, controls };
 }

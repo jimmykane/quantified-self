@@ -299,6 +299,44 @@ describe.skipIf(!enabled)('Training load persistence in Firestore', () => {
     expect(resolveEffectiveTrainingLoad({}, result).score).toBe(0);
   });
 
+  it('keeps a returning unmatched leg pending review through repeated reparses until explicit reassociation', async () => {
+    const uid = setup(); const original = workout(); await source(uid, original);
+    await persistTrainingLoadMetadata(uid, original);
+    const ref = db.doc(metadataPath(uid));
+    await ref.update({ controls: { leg: { override: 0 } }, revision: 2 });
+    const current = workout('current', original.endDate.getTime());
+    const finishChanged = await prepareTrainingLoadMetadata(uid, current);
+    await source(uid, current); await finishChanged();
+    expect((await ref.get()).data()?.legs.leg.activityId).toBeNull();
+
+    const returned = workout('returned'); returned.addActivity(current.getActivities()[0]);
+    returned.endDate = current.endDate;
+    for (let pass = 0; pass < 2; pass++) {
+      const finish = await prepareTrainingLoadMetadata(uid, returned);
+      await source(uid, returned); await finish();
+      const metadata = (await ref.get()).data() as TrainingLoadMetadata;
+      expect(Object.keys(metadata.legs!).sort()).toEqual(['current', 'leg', 'returned']);
+      expect(metadata.legs!.leg.activityId).toBeNull();
+      expect(metadata.controls.leg).toEqual({ override: 0 });
+      const [projection] = await attachEventTrainingLoads(uid, [await db.doc(`users/${uid}/events/workout`).get()]);
+      expect(attachedEffectiveTrainingLoad(projection.data()!)).toMatchObject({
+        score: null, status: 'unavailable', reasons: ['activity-match-needs-review'],
+      });
+    }
+    const before = (await ref.get()).data()!;
+    await ref.update({ controls: { leg: { override: 0, activityId: 'returned' } }, revision: before.revision + 1,
+      updatedAt: admin.firestore.FieldValue.serverTimestamp() });
+    await refreshTrainingLoadSummary(uid, 'workout');
+    expect((await readTrainingLoadSummaries(uid))?.get('workout')?.load).toMatchObject({ score: 9, status: 'available' });
+    const finish = await prepareTrainingLoadMetadata(uid, returned);
+    await source(uid, returned); await finish();
+    const metadata = (await ref.get()).data() as TrainingLoadMetadata;
+    expect(Object.keys(metadata.legs!).sort()).toEqual(['current', 'leg']);
+    expect(metadata.legs!.leg.activityId).toBe('returned');
+    expect(metadata.controls.leg).toEqual({ override: 0 });
+    expect((await readTrainingLoadSummaries(uid))?.get('workout')?.load).toMatchObject({ score: 9, status: 'available' });
+  });
+
   it('accepts a first-import control created between the source and metadata writes', async () => {
     const uid = setup(); await db.doc(`users/${uid}`).set({ test: true });
     await db.doc(`users/${uid}/trainingLoadPolicies/walking-hiking/revisions/past`).set({

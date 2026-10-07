@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { defaultAppliedTrainingLoadPolicy, type TrainingLoadLeg, type TrainingLoadMetadata } from '../../../shared/training-load-policy';
+import { defaultAppliedTrainingLoadPolicy, resolveEffectiveTrainingLoad, unresolvedTrainingLoadLegs,
+  type TrainingLoadLeg, type TrainingLoadMetadata } from '../../../shared/training-load-policy';
 import { reconcileTrainingLoadLegs, trainingLoadSourceFingerprint } from './training-load-metadata';
 
 const leg = (activityId: string, startMs = 1000): TrainingLoadLeg => ({ activityId,
@@ -33,6 +34,23 @@ describe('training load reconciliation', () => {
     expect(Object.keys(next.legs!)).toEqual(['old']);
     expect(next.legs!.old).toMatchObject({ activityId: 'third', policy: { revision: 3 } });
     expect(next.controls).toEqual({ old: { override: 0 } });
+  });
+  it('keeps retained unmatched controls pending explicit review when their old identity reappears', () => {
+    const prior = previous();
+    prior.legs!.old.activityId = null;
+    prior.legs!.current = leg('current', 2000);
+    const reconciled = reconcileTrainingLoadLegs(prior, [leg('returned'), leg('current-new', 2000)]);
+    const next = { ...prior, ...reconciled };
+    expect(next.legs!.old.activityId).toBeNull();
+    expect(next.legs!.returned).toMatchObject({ activityId: 'returned', policy: { revision: 0 } });
+    expect(next.legs!.current.activityId).toBe('current-new');
+    expect(next.controls.old).toEqual({ override: 0 });
+    expect(unresolvedTrainingLoadLegs(next)).toEqual(['old']);
+    expect(resolveEffectiveTrainingLoad({}, next)).toMatchObject({
+      score: null, status: 'unavailable', reasons: ['activity-match-needs-review'],
+    });
+    const repeated = reconcileTrainingLoadLegs(next, [leg('returned'), leg('current-new', 2000)]);
+    expect(repeated).toEqual(reconciled);
   });
   it('releases dismissed or explicitly reset unmatched records while retaining current saved policies', () => {
     const prior = previous(); prior.legs!.old.activityId = null;
