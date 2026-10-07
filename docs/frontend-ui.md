@@ -78,6 +78,18 @@ or collapse, with no feedback during route hydration or while busy.
 Background profile updates refresh untouched consent switches while preserving explicit local edits. Privacy switches
 are disabled during saving, duplicate submissions are ignored, and failed saves retain the user's choice for retry.
 
+## Dashboard unit setup
+
+The Dashboard Default units prompt uses `appSettings.unitSetupCompleted === false` and is owner-only, including
+empty dashboards. New-account defaults set this flag; legacy accounts without it are not re-prompted. The browser
+region suggests the initial preset. Apply saves the preset and the completion flag in one settings merge while
+preserving weight, week start, and other app settings. Keep current units (formerly Not now) writes only the
+completion flag and permanently dismisses the prompt. Busy view models update before awaiting a write; repeat
+actions, preset changes, and Advanced settings navigation are blocked until it settles. Failed writes leave setup
+incomplete and keep an inline retryable error. A late result cannot update a different signed-in account.
+Successful saves publish a fresh User input while retaining its prototype so dashboard display inputs refresh.
+Advanced settings still opens `/settings?section=units`; saving changed unit preferences there completes setup.
+
 ## Recorded swim distance units
 
 `createSwimDistanceDisplayStat` in `shared/unit-aware-display.ts` selects Sports Lib's display-only

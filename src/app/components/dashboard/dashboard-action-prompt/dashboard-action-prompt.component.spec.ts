@@ -196,6 +196,8 @@ describe('DashboardActionPromptComponent', () => {
 
     expect(text).toContain('Saving...');
     expect(buttons.every(button => button.nativeElement.disabled)).toBe(true);
+    const styles = readFileSync(resolve(process.cwd(), 'src/app/components/dashboard/dashboard-action-prompt/dashboard-action-prompt.component.scss'), 'utf8');
+    expect(styles).toMatch(/\.dashboard-action-prompt__button-content\s*\{[^}]*display:\s*flex;[^}]*align-items:\s*center;[^}]*justify-content:\s*center;/s);
   });
 
   it('renders an error row when provided', () => {

@@ -59,6 +59,7 @@ import {
 import { ActivitySyncRouteId } from '@shared/activity-sync-routes';
 import { ActivityServiceConnectionState } from '../../services/app.user.service';
 import { AppWindowService } from '../../services/app.window.service';
+import { AppHapticsService } from '../../services/app.haptics.service';
 import {
   buildSuuntoServiceConnectionViewModel,
   SuuntoServiceConnectionViewModel,
@@ -141,6 +142,7 @@ export class DashboardComponent implements OnInit, OnDestroy {
   private logger = inject(LoggerService);
   private destroyRef = inject(DestroyRef);
   private windowService = inject(AppWindowService);
+  private hapticsService = inject(AppHapticsService);
   private sleepService = inject(AppSleepService);
 
 
@@ -423,9 +425,12 @@ export class DashboardComponent implements OnInit, OnDestroy {
   }
 
   onUnitSetupPresetChange(preset: UnitSetupPreset): void {
+    if (this.isSavingUnitSetup || preset === this.selectedUnitSetupPreset
+      || !this.unitSetupOptions.some(option => option.value === preset)) return;
     this.selectedUnitSetupPreset = preset;
     this.unitSetupError = null;
     this.syncDashboardActionPromptState();
+    this.hapticsService.selection();
   }
 
   onDashboardActionPromptPrimary(event: DashboardActionPromptEvent): void {
@@ -547,44 +552,55 @@ export class DashboardComponent implements OnInit, OnDestroy {
   }
 
   async applyUnitSetupPreset(): Promise<void> {
-    if (!this.user) {
+    if (this.isSavingUnitSetup || !shouldShowUnitSetupPrompt(this.user, this.targetUser)) {
       return;
     }
 
+    const user = this.user;
+    const preset = this.selectedUnitSetupPreset;
     this.isSavingUnitSetup = true;
     this.unitSetupError = null;
+    this.syncDashboardActionPromptState();
 
     try {
-      const nextUnitSettings = buildUnitSettingsForUnitSetupPreset(this.selectedUnitSetupPreset);
+      const nextUnitSettings = buildUnitSettingsForUnitSetupPreset(preset);
       // The distance setup prompt must not overwrite a separately chosen weight unit.
-      nextUnitSettings.weightUnits = this.user.settings?.unitSettings?.weightUnits === WeightUnits.Pounds
+      nextUnitSettings.weightUnits = user.settings?.unitSettings?.weightUnits === WeightUnits.Pounds
         ? WeightUnits.Pounds
         : WeightUnits.Kilograms;
+      nextUnitSettings.startOfTheWeek = user.settings?.unitSettings?.startOfTheWeek ?? nextUnitSettings.startOfTheWeek;
       const unitSetupCompletedAppSettings = {
         unitSetupCompleted: true,
       };
-      const nextAppSettings = {
-        ...(this.user.settings?.appSettings || {}),
-        ...unitSetupCompletedAppSettings,
-      };
-
-      await this.userService.updateUserProperties(this.user, {
+      await this.userService.updateUserProperties(user, {
         settings: {
           unitSettings: nextUnitSettings,
           appSettings: unitSetupCompletedAppSettings,
         },
       });
-      this.user.settings = {
-        ...(this.user.settings || {} as any),
+      if (this.destroyRef.destroyed || this.user?.uid !== user.uid) return;
+      user.settings = {
+        ...user.settings,
         unitSettings: nextUnitSettings,
-        appSettings: nextAppSettings as any,
+        appSettings: { ...user.settings?.appSettings, ...unitSetupCompletedAppSettings },
       };
+      // A fresh input also updates dashboard chart/table display preferences immediately.
+      this.user = Object.assign(Object.create(Object.getPrototypeOf(this.user)), this.user, {
+        settings: {
+          ...this.user.settings,
+          unitSettings: nextUnitSettings,
+          appSettings: { ...this.user.settings?.appSettings, ...unitSetupCompletedAppSettings },
+        },
+      });
       this.syncDashboardActionPromptState();
       this.snackBar.open('Unit preferences saved', undefined, { duration: 2000 });
-      this.analyticsService.logEvent('unit_setup_complete', { preset: this.selectedUnitSetupPreset });
+      this.analyticsService.logEvent('unit_setup_complete', { preset });
+      this.hapticsService.success();
     } catch (error) {
+      if (this.destroyRef.destroyed || this.user?.uid !== user.uid) return;
       this.unitSetupError = 'Could not save unit preferences.';
       this.logger.error('[DashboardComponent] Failed to apply unit setup preset', error);
+      this.hapticsService.error();
     } finally {
       this.isSavingUnitSetup = false;
       this.syncDashboardActionPromptState();
@@ -592,35 +608,36 @@ export class DashboardComponent implements OnInit, OnDestroy {
   }
 
   async dismissUnitSetupPrompt(): Promise<void> {
-    if (!this.user) {
+    if (this.isSavingUnitSetup || !shouldShowUnitSetupPrompt(this.user, this.targetUser)) {
       return;
     }
 
+    const user = this.user;
     this.isSavingUnitSetup = true;
     this.unitSetupError = null;
+    this.syncDashboardActionPromptState();
 
     try {
       const unitSetupCompletedAppSettings = {
         unitSetupCompleted: true,
       };
-      const nextAppSettings = {
-        ...(this.user.settings?.appSettings || {}),
-        ...unitSetupCompletedAppSettings,
-      };
-
-      await this.userService.updateUserProperties(this.user, {
+      await this.userService.updateUserProperties(user, {
         settings: {
           appSettings: unitSetupCompletedAppSettings,
         },
       });
-      this.user.settings = this.user.settings || {} as any;
-      this.user.settings.appSettings = nextAppSettings as any;
+      if (this.destroyRef.destroyed || this.user?.uid !== user.uid) return;
+      user.settings.appSettings = { ...user.settings.appSettings, ...unitSetupCompletedAppSettings };
+      this.user.settings.appSettings = { ...this.user.settings.appSettings, ...unitSetupCompletedAppSettings };
       this.syncDashboardActionPromptState();
       this.snackBar.open('You can change units in Settings anytime', undefined, { duration: 2500 });
       this.analyticsService.logEvent('unit_setup_skip');
+      this.hapticsService.success();
     } catch (error) {
+      if (this.destroyRef.destroyed || this.user?.uid !== user.uid) return;
       this.unitSetupError = 'Could not save this choice.';
       this.logger.error('[DashboardComponent] Failed to dismiss unit setup prompt', error);
+      this.hapticsService.error();
     } finally {
       this.isSavingUnitSetup = false;
       this.syncDashboardActionPromptState();
@@ -1362,6 +1379,8 @@ export class DashboardComponent implements OnInit, OnDestroy {
   }
 
   private async openUnitSettings(): Promise<void> {
+    if (this.isSavingUnitSetup) return;
+    this.hapticsService.selection();
     await this.router.navigate(['/settings'], {
       queryParams: { section: 'units' },
     });

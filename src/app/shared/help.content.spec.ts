@@ -1089,6 +1089,9 @@ describe('help.content', () => {
     expect(gettingStartedSection?.content).toContain('Distance values in dashboards, event charts, activity chips, and CSV exports');
     expect(gettingStartedSection?.content).toContain('Dashboard **Action prompts**');
     expect(gettingStartedSection?.content).toContain('dashboard **Default units** action prompt');
+    expect(gettingStartedSection?.content).toContain('**Keep current units** completes setup without changing units');
+    expect(gettingStartedSection?.content).toContain('preserves your weight and week-start choices');
+    expect(gettingStartedSection?.content).toContain('before your first activity');
     expect(gettingStartedSection?.content).toContain('**No activities yet**');
     expect(gettingStartedSection?.content).toContain('**Upload activity**');
     expect(gettingStartedSection?.content).toContain('**Connect service**');

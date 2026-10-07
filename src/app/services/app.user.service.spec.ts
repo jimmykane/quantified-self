@@ -679,6 +679,7 @@ describe('AppUserService', () => {
         expect(mergedUser.email).toBe('test@example.com');
         expect(mergedUser.acceptedPrivacyPolicy).toBe(false);
         expect(mergedUser.acceptedDataPolicy).toBe(false);
+        expect(mergedUser.settings.appSettings.unitSetupCompleted).toBe(false);
         expect(service.profileReadState()).toEqual({
             status: 'ready',
             uid: 'u1',
