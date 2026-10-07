@@ -695,6 +695,19 @@ Use the existing provider structure before inventing a parallel abstraction:
 - `shared/functions-manifest.ts` owns callable names and regions used by browser and Functions code.
 - `shared/provider-presentation.ts` owns display labels, branding variants, and icon keys.
 
+### Connection lifecycle module ownership
+
+`functions/src/service-connection-meta.ts` is the compatibility facade used by OAuth callbacks,
+scheduled repairs, and existing connection readers. `service-connection-lifecycle.ts` owns guarded
+connection transitions, Health lifecycle projections, provider-neutral route restoration, and
+pending-disconnect queue-release repair. Wahoo recovery fields, opaque-refresh failure tracking,
+reconnect queue release, and durable retry handling live in `wahoo/connection-recovery.ts`.
+The facade supplies Wahoo's connected-state fields to the same guarded connection transaction
+and invokes its continuation only after that write succeeds; clear-state recovery fields also
+remain in the existing transaction. Wahoo recovery calls generic restoration, while the generic
+lifecycle does not import Wahoo recovery or its queue-release implementation. This separation
+preserves the persisted fields, guards, repair schedules, and restoration/release ordering.
+
 ### Stripe billing provider boundary
 
 Stripe is an infrastructure provider rather than a user-connected activity source. The Invertase Stripe extension remains the owner of Checkout/customer records and webhook synchronization into Firestore. Custom Functions use Stripe Node `22.4.0` with API `2026-07-29.dahlia`; integration changes must regression-test the custom claims, subscription lifecycle, email, cleanup, price-maintenance, and renewal-amount paths while leaving extension configuration unchanged unless a separate migration explicitly requires it.
