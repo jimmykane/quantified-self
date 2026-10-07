@@ -97,6 +97,7 @@ describe('function target loader', () => {
       'onDashboardDerivedMetricsActivityWrite',
       'onDashboardDerivedMetricsEventWrite',
       'onDashboardDerivedMetricsSleepWrite',
+      'onTrainingLoadMetadataWrite',
       'onDashboardDerivedMetricsHealthWrite',
       'processDerivedMetricsTask',
       'processDerivedMetricsIngressTask',

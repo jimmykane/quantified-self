@@ -2,6 +2,7 @@
 <p>Choose how each sport contributes to fitness and fatigue. These preferences apply to workouts starting from the time you save them, including delayed uploads. Existing workouts keep their saved policy.</p>
 <p>Automatic uses the eligible methods available in the file. HR needs file calibration; MET estimates load from file calories, body mass and duration. A missing preferred method falls back to Automatic. Imported TSS takes precedence.</p>
 @if (message()) { <p role="status" aria-live="polite">{{ message() }}</p> }
+@if (busy()) { <p role="status">Saving sport preferences…</p> }
 @if (loaded()) {
   <div class="load-settings-grid">
     @for (row of rows; track row.id) {

@@ -7,6 +7,7 @@ import { DEFAULT_TRAINING_LOAD_POLICY, isTrainingLoadMethod, resolveEffectiveTra
   type EffectiveTrainingLoad, type TrainingLoadControl, type TrainingLoadMetadata, type TrainingLoadPolicy } from '@shared/training-load-policy';
 import { isTrainingDiscipline, type TrainingSportId } from '@shared/training-disciplines';
 import { AppUserService } from './app.user.service';
+import { browserTrainingLoadSourceFingerprint } from '@shared/training-load-source';
 
 export interface TrainingLoadView extends EffectiveTrainingLoad { updatedAtMs?: number; }
 export interface TrainingLoadPolicyHead extends TrainingLoadPolicy { id: TrainingSportId; revision: number; }
@@ -41,7 +42,11 @@ export class TrainingLoadService {
         activities = children.docs.map(child => ({ ...child.data(), id: child.id })) as typeof activities;
       }
       const timestamp = metadata?.updatedAt as { toMillis?: () => number } | undefined;
-      return [event.getID() as string, { ...resolveEffectiveTrainingLoad(event, metadata, activities),
+      const stale = !metadata?.excluded && !!metadata?.parentFingerprint && metadata.parentFingerprint !==
+        await browserTrainingLoadSourceFingerprint(event.toJSON());
+      const resolved = stale ? { score: null, status: 'unavailable' as const, method: null,
+        estimated: false, reasons: ['source-updating'] } : resolveEffectiveTrainingLoad(event, metadata, activities);
+      return [event.getID() as string, { ...resolved,
         updatedAtMs: timestamp?.toMillis?.() ?? 0 }] as const;
     })))).pipe(map(entries => new Map(entries)));
   }

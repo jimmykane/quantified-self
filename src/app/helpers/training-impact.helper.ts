@@ -63,6 +63,9 @@ export function buildTrainingSessionImpactView(
   const dayMs = resolveTrainingImpactUtcDayMs(event);
   const modeled = eventId ? source.loadsByEventId?.get(eventId) : undefined;
   if (modeled?.status === 'excluded') return unavailable('excluded', 'Excluded from modeled Training load. History and volume are retained.', eventId, dayMs);
+  if (modeled?.reasons.includes('source-updating')) return unavailable('updating', 'Updating Training impact…', eventId, dayMs);
+  if (modeled?.reasons.includes('activity-match-needs-review')) return unavailable('unavailable',
+    'Review unmatched legs in Training load before using this workout’s modeled load.', eventId, dayMs);
   const trainingStressScore = modeled ? modeled.score : resolveEffectiveTrainingLoad(event).score;
   if (trainingStressScore === null) {
     return unavailable('missing-tss', 'Training impact unavailable — this activity has no TSS.', eventId, dayMs);
@@ -89,7 +92,7 @@ export function buildTrainingSessionImpactView(
   }
   return {
     availability: 'ready',
-    message: '',
+    message: modeled?.status === 'partial' ? 'This contribution uses available legs only. Some included legs have no usable load.' : '',
     headline: sessionRoleHeadline(impact),
     eventId,
     dayMs,
@@ -120,7 +123,7 @@ export function buildTrainingDayImpactView(
     atlContribution: total.atlContribution + session.impact.atlContribution,
     formContribution: total.formContribution + session.impact.formContribution,
   }), { trainingStressScore: 0, ctlContribution: 0, atlContribution: 0, formContribution: 0 });
-  const unavailableSessionCount = sessions.length - readySessions.length;
+  const unavailableSessionCount = sessions.filter(session => session.availability !== 'ready' && session.availability !== 'excluded').length;
   const availability = resolveDayAvailability(source, sessions, readySessions.length);
   return {
     availability,
@@ -177,6 +180,7 @@ function resolveDayAvailability(
 ): TrainingImpactAvailability {
   if (source.status !== 'ready') return source.status;
   if (readySessionCount > 0) return 'ready';
+  if (sessions.length && sessions.every(session => session.availability === 'excluded')) return 'excluded';
   if (sessions.some(session => session.availability === 'updating')) return 'updating';
   if (sessions.some(session => session.availability === 'error')) return 'error';
   return 'unavailable';
@@ -187,10 +191,13 @@ function dayAvailabilityMessage(
   sessions: readonly TrainingSessionImpactView[],
 ): string {
   if (availability === 'ready') {
-    return sessions.some(session => session.availability !== 'ready')
-      ? 'Some completed activities have no available Training impact.'
-      : '';
+    if (sessions.some(session => session.availability !== 'ready' && session.availability !== 'excluded'))
+      return 'Some completed activities have no available Training impact.';
+    if (sessions.some(session => session.message && session.availability === 'ready'))
+      return 'This total uses available legs only. Some included legs have no usable load.';
+    return sessions.some(session => session.availability === 'excluded') ? 'Excluded activities do not contribute to modeled load.' : '';
   }
+  if (availability === 'excluded') return 'Selected activities are excluded from modeled Training load. History and volume are retained.';
   if (availability === 'updating') return 'Updating Training impact…';
   if (availability === 'error') return 'Training impact could not be loaded.';
   if (availability === 'private') return 'Training impact is private.';

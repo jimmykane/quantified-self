@@ -14,6 +14,16 @@ function metadata(): TrainingLoadMetadata {
   }])) };
 }
 describe('modeled Training load', () => {
+  it('sums fractional leg scores without applying the editor display precision to the model', () => {
+    const data = metadata(); data.legs!.walk.recordedTss = 0.04; data.legs!.ride.recordedTss = 9.02;
+    expect(resolveEffectiveTrainingLoad(source, data).score).toBeCloseTo(9.06, 10);
+    expect(resolveEffectiveTrainingLoad(source, data, activities, 'walk').score).toBe(0.04);
+  });
+  it('does not fall back to recorded scores for a stale leg outside the saved source revision', () => {
+    expect(resolveEffectiveTrainingLoad(source, metadata(),
+      [{ id: 'stale', type: 'Walking', stats: { 'Training Stress Score': 999 } }], 'stale'))
+      .toMatchObject({ score: null, status: 'unavailable', reasons: ['source-updating'] });
+  });
   it('retains historical numeric-string scores and releases ambiguity only on explicit reset', () => {
     expect(resolveEffectiveTrainingLoad({ stats: { 'Training Stress Score': '0' } }).score).toBe(0);
     const value = metadata(); value.legs!.old = { ...value.legs!.walk, activityId: null }; value.controls.old = { override: 4 };

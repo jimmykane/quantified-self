@@ -43,6 +43,19 @@ function ready(loads: Array<{ dayMs: number; load: number }>): TrainingImpactSna
 }
 
 describe('training impact view helper', () => {
+  it('keeps excluded-day, partial-leg, source-update and reassociation states distinct from missing TSS', () => {
+    const walk = event('walk', '2026-01-01T10:00:00Z', 87.3);
+    const state = ready([{ dayMs: Date.UTC(2026, 0, 1), load: 9 }]);
+    const load = { score: 0, status: 'excluded' as const, method: null, estimated: false, reasons: [] };
+    state.loadsByEventId = new Map([['walk', load]]);
+    expect(buildTrainingDayImpactView([walk], state)).toMatchObject({ availability: 'excluded', unavailableSessionCount: 0 });
+    state.loadsByEventId = new Map([['walk', { ...load, score: 9, status: 'partial' }]]);
+    expect(buildTrainingSessionImpactView(walk, state).message).toContain('available legs only');
+    for (const [reason, availability] of [['source-updating', 'updating'], ['activity-match-needs-review', 'unavailable']]) {
+      state.loadsByEventId = new Map([['walk', { ...load, score: null, status: 'unavailable', reasons: [reason] }]]);
+      expect(buildTrainingSessionImpactView(walk, state).availability).toBe(availability);
+    }
+  });
   it('uses modeled overrides and distinguishes user exclusions from missing or zero load', () => {
     const activity = event('walk', '2026-01-01T10:00:00Z', 87.3);
     const state = ready([{ dayMs: Date.UTC(2026, 0, 1), load: 9 }]);

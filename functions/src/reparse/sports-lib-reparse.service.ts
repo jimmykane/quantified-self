@@ -1,4 +1,4 @@
-import { persistTrainingLoadMetadata } from '../training-load/training-load-metadata';
+import { prepareTrainingLoadMetadata } from '../training-load/training-load-metadata';
 import * as admin from 'firebase-admin';
 import { FieldValue } from 'firebase-admin/firestore';
 import * as logger from 'firebase-functions/logger';
@@ -1522,7 +1522,7 @@ async function setReparseDocIfUserActive(
 
 function getFirestoreAdapter(uid: string): FirestoreAdapter {
     return {
-    persistTrainingLoad: event => persistTrainingLoadMetadata(uid, event),
+        prepareTrainingLoad: event => prepareTrainingLoadMetadata(uid, event),
         setDoc: async (path: string[], data: unknown) => {
             const documentPath = path.join('/');
             const isEventDocument = path.length === 4 && path[0] === 'users' && path[2] === 'events';

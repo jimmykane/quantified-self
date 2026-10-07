@@ -24,7 +24,7 @@ export interface TrainingLoadControl {
 }
 export interface TrainingLoadLeg {
   activityId: string | null;
-  identity: { startMs: number; endMs: number; type: string; duration: number | null; distance: number | null };
+  identity: { startMs: number | null; endMs: number | null; type: string; duration: number | null; distance: number | null };
   recordedTss: number | null;
   evaluations: TrainingStressScoreEvaluations | null;
   policy: AppliedTrainingLoadPolicy;
@@ -37,6 +37,8 @@ export interface TrainingLoadMetadata {
   controls: Record<string, TrainingLoadControl>;
   /** Server-owned; absent on a legacy activity edited before its first source reparse. */
   legs?: Record<string, TrainingLoadLeg>;
+  /** Server-frozen pre-rewrite identities for legacy controls; never modeled as calculated candidates. */
+  legacyLegs?: Record<string, TrainingLoadLeg>;
   parentFingerprint?: string;
   updatedAt?: unknown;
   /** Explicit workout reset releases retained unmatched identities. */
@@ -113,6 +115,7 @@ export function resolveEffectiveTrainingLoad(
   const legs = metadata?.legs ?? {};
   const resolveLeg = (id: string, activity?: TrainingLoadActivity): EffectiveTrainingLoad => {
     const entry = Object.entries(legs).find(([, leg]) => leg.activityId === id);
+    if (metadata?.legs && !entry) return unavailable('source-updating');
     const associated = Object.entries(metadata?.controls ?? {}).find(([, control]) => control.activityId === id);
     const key = associated?.[0] ?? entry?.[0] ?? id;
     const policy = legs[key]?.policy ?? entry?.[1].policy ?? defaultAppliedTrainingLoadPolicy(activity?.type);
@@ -147,7 +150,7 @@ export function resolveEffectiveTrainingLoad(
   if (results.every(result => result.status === 'excluded')) return excluded();
   const covered = results.filter(result => result.status === 'available');
   if (!covered.length) return unavailable(results.find(result => result.status === 'unavailable')?.reasons[0] ?? 'missing-tss');
-  return { score: Math.round(covered.reduce((sum, result) => sum + (result.score ?? 0), 0) * 10) / 10,
+  return { score: covered.reduce((sum, result) => sum + (result.score ?? 0), 0),
     status: results.some(result => result.status === 'unavailable') ? 'partial' : 'available',
     method: covered.length === 1 ? covered[0].method : 'SUM', estimated: covered.some(result => result.estimated),
     reasons: [...new Set(results.flatMap(result => result.reasons))] };
