@@ -85,6 +85,30 @@ coverage, queue processing, writes and telemetry continue through the existing h
 This internal import change has no effect on MCP contracts, Training planning or user-facing help. No additional
 instances are kept warm and runtime resources are unchanged.
 
+## Health/Sleep backfill and dispatcher isolation
+
+The remaining two #830 handlers now load directly from their existing owner modules, so all three affected
+Health/Sleep functions have target-aware loading:
+
+| Target | Owner module | Preserved runtime and trigger |
+| --- | --- | --- |
+| `processGarminHealthBackfillTask` | `tasks/garmin-health-backfill-worker` | Gen 2, 512 MiB, 1,800 seconds, Cloud Tasks |
+| `dispatchSleepSyncQueue` | `sleep/dispatcher` | Gen 1, 256 MiB, 300 seconds, maximum one instance, `*/30 * * * *` |
+
+Both retain `europe-west2` and the original Firebase handler objects. The backfill worker keeps its Garmin client
+ID/secret bindings, 10 attempts, 4 doublings, 900–14,400-second backoff, one concurrent dispatch and one dispatch
+per second. The dispatcher keeps no secrets and its default time-zone/retry settings. Neither gains explicit CPU,
+minimum-instance or concurrency settings. This is startup isolation, not a Gen 2 migration of the scheduler or
+an increase in its memory limit. Processing, lifecycle guards, account deletion, acknowledgement, retries and
+single-task pacing continue through the unchanged handlers.
+
+The compiled check captures their complete endpoint/trigger descriptors before importing the full registry and
+compares them with a separate fresh discovery process. It also checks both inherited-target discovery modes,
+standalone secret validation and the absence of the full entrypoint, Genkit, BigQuery, MCP and admin handlers.
+Monitoring coverage is **unchanged**: #830 still uses `cloud_function` for the dispatcher and `cloud_run_revision`
+for both workers. No dashboard, metric, policy, provider availability, Help or MCP contract change is needed.
+Deployment and #830 monitoring activation/readback remain separately approved operational work.
+
 ## Recorded-activity import dispatcher isolation
 
 The four existing source-queue dispatchers load directly from their shared owner module, `queue`, and export only
@@ -217,6 +241,10 @@ The check builds the Functions package and verifies:
   region and secret bindings;
 - the four ingestion targets avoid the full entrypoint, Genkit, BigQuery, MCP and admin modules, while retaining CPU,
   memory, timeout, concurrency, instance settings, secrets, trigger kinds, retry options and task rate limits;
+- the Garmin Health backfill worker and Sleep dispatcher avoid those unrelated modules, compare complete
+  runtime endpoint/trigger descriptors with fresh full discovery, and preserve the backfill's 1,800-second/single-task
+  contract and the dispatcher's Gen 1/256 MiB/30-minute schedule; inherited-target discovery and standalone secret
+  validation remain complete;
 - the four recorded-activity dispatchers avoid those unrelated modules, retain their Gen 1 scheduled-handler contracts,
   compare complete runtime endpoint/trigger snapshots with a separate fresh full-discovery process, and preserve
   complete discovery and standalone secret validation with each target inherited;
@@ -506,6 +534,31 @@ monitoring tests. This changes verification only, not any deployed handler or it
 
 Documentation-only changes have no separate automated suite. No provider calls, production deployment or cloud
 configuration apply was performed. This change is local on `develop`; pushing and deployment require approval.
+
+## Health/Sleep benchmark and verification (2026-10-07)
+
+Three isolated Node 22.23.3 processes per target used the compiled benchmark's `--probe` mode, `--expose-gc`,
+matching `FUNCTION_TARGET` and neither discovery flag. The baseline was clean local `develop` at `53a009285`,
+with the same machine and dependencies before and after this loader change.
+
+| Loading path | Import before | Import after | RSS before | RSS after | Modules before | Modules after |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: |
+| `processGarminHealthBackfillTask` | 1,025 ms | 361 ms | 239.5 MiB | 122.4 MiB | 3,152 | 1,423 |
+| `dispatchSleepSyncQueue` | 991 ms | 381 ms | 239.2 MiB | 121.3 MiB | 3,152 | 1,290 |
+| Complete entrypoint control | 985 ms | 1,066 ms | 239.1 MiB | 238.8 MiB | 3,152 | 3,152 |
+
+Each isolated target exports one handler; full discovery still exposes 168. All 168 complete endpoint/trigger
+descriptors matched the pre-change baseline byte-for-byte. Local startup RSS decreased by about 117–118 MiB;
+these import measurements are not production memory guarantees or billing savings. Keep current runtime settings
+and compare real container starts, memory, errors, dispatch recovery and observation heartbeats after deployment.
+
+Verification passed: 108 focused loader/bootstrap/secrets/worker/dispatcher/backfill/deployment-safety tests,
+seven offline Health/Sleep monitoring tests, the TypeScript build and compiled entrypoint check (168 endpoints /
+78 isolated targets), deployment-source safety, secret-binding validation for 69 endpoints, scoped ESLint and
+`git diff --check`. Documentation-only changes have no separate automated suite. No provider call, deployment or
+cloud configuration apply is part of this loading change. The existing #830 deployment command in
+[Sleep sync operations](sleep-sync-operations.md#cost-verification-and-activation) includes all three handlers and
+still requires separate explicit approval.
 
 ## Adding another optimized target
 

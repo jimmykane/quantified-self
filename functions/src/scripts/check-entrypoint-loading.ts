@@ -67,20 +67,26 @@ const PROVIDER_CONNECTION_AND_HEALTH_TARGETS = [
   'receiveGarminAPIHealthData',
 ];
 const QUEUE_AND_CLEANUP_TARGETS = [
+  'processGarminHealthBackfillTask',
   'processActivitySyncTask',
   'processRouteSyncTask',
   'cleanupEventFile',
   'dispatchGarminPingBatchOnWrite',
 ];
-const ACTIVITY_IMPORT_DISPATCHER_METADATA: Readonly<Record<string, {
+const GEN1_DISPATCHER_METADATA: Readonly<Record<string, {
   memoryMb: number;
   timeoutSeconds: number;
 }>> = {
+  dispatchSleepSyncQueue: { memoryMb: 256, timeoutSeconds: 300 },
   parseGarminAPIActivityQueue: { memoryMb: 1024, timeoutSeconds: 540 },
   parseSuuntoAppActivityQueue: { memoryMb: 1024, timeoutSeconds: 540 },
   parseCOROSAPIWorkoutQueue: { memoryMb: 256, timeoutSeconds: 300 },
   parseWahooAPIWorkoutQueue: { memoryMb: 1024, timeoutSeconds: 540 },
 };
+const RUNTIME_CONTRACT_TARGETS = [
+  ...Object.keys(GEN1_DISPATCHER_METADATA),
+  'processGarminHealthBackfillTask',
+];
 const INGESTION_TARGET_METADATA: Readonly<Record<string, {
   memoryMb: number;
   timeoutSeconds: number | null;
@@ -99,6 +105,11 @@ const INGESTION_TARGET_METADATA: Readonly<Record<string, {
     'COROSAPI_CLIENT_ID', 'COROSAPI_CLIENT_SECRET', 'GARMINAPI_CLIENT_ID', 'GARMINAPI_CLIENT_SECRET',
     'SUUNTOAPP_CLIENT_ID', 'SUUNTOAPP_CLIENT_SECRET', 'SUUNTOAPP_SUBSCRIPTION_KEY',
   ] },
+  processGarminHealthBackfillTask: {
+    memoryMb: 512, timeoutSeconds: 1800, trigger: 'task',
+    maxConcurrentDispatches: 1, maxDispatchesPerSecond: 1,
+    secrets: ['GARMINAPI_CLIENT_ID', 'GARMINAPI_CLIENT_SECRET'],
+  },
   processWorkoutTask: { memoryMb: 1024, timeoutSeconds: 540, trigger: 'task', secrets: [
     'COROSAPI_CLIENT_ID', 'COROSAPI_CLIENT_SECRET', 'GARMINAPI_CLIENT_ID', 'GARMINAPI_CLIENT_SECRET',
     'SUUNTOAPP_CLIENT_ID', 'SUUNTOAPP_CLIENT_SECRET', 'SUUNTOAPP_SUBSCRIPTION_KEY',
@@ -191,7 +202,7 @@ interface ProbeResult {
   matchesFullEntrypoint: boolean | null;
   preservesHandlerIdentity: boolean | null;
   forbiddenModules: string[];
-  activityImportDispatcherContracts: Record<string, unknown>;
+  isolatedRuntimeContracts: Record<string, unknown>;
 }
 
 interface DiscoveredEndpoint {
@@ -249,14 +260,14 @@ function probe(targetArgument: string): void {
   const target = process.env.FUNCTION_TARGET?.trim() || null;
   const runtimeTarget = resolveRuntimeFunctionTarget(process.env);
   const exports = sortedKeys(entrypoint);
-  const activityImportDispatcherContracts: Record<string, unknown> = {};
-  for (const dispatcher of Object.keys(ACTIVITY_IMPORT_DISPATCHER_METADATA)) {
-    if (!exports.includes(dispatcher)) continue;
-    const handler = entrypoint[dispatcher] as { __endpoint?: unknown; __trigger?: unknown };
+  const isolatedRuntimeContracts: Record<string, unknown> = {};
+  for (const contractTarget of RUNTIME_CONTRACT_TARGETS) {
+    if (!exports.includes(contractTarget)) continue;
+    const handler = entrypoint[contractTarget] as { __endpoint?: unknown; __trigger?: unknown };
     // Capture before loading full-entrypoint below. Same-process identity alone
     // cannot detect runtime-only metadata changes caused by module import order.
     // JSON also normalizes Firebase ResetValue objects to their wire value.
-    activityImportDispatcherContracts[dispatcher] = JSON.parse(JSON.stringify({
+    isolatedRuntimeContracts[contractTarget] = JSON.parse(JSON.stringify({
       endpoint: handler.__endpoint,
       trigger: handler.__trigger,
     })) as unknown;
@@ -320,7 +331,7 @@ function probe(targetArgument: string): void {
     matchesFullEntrypoint,
     preservesHandlerIdentity,
     forbiddenModules,
-    activityImportDispatcherContracts,
+    isolatedRuntimeContracts,
   };
   process.stdout.write(`${JSON.stringify(result)}\n`);
 }
@@ -403,9 +414,9 @@ async function check(): Promise<void> {
     discovery.exports.length === EXPECTED_FULL_EXPORT_COUNT,
     `Expected ${EXPECTED_FULL_EXPORT_COUNT} discovery exports, found ${discovery.exports.length}.`,
   );
-  assert(arraysEqual(sortedKeys(discovery.activityImportDispatcherContracts),
-    Object.keys(ACTIVITY_IMPORT_DISPATCHER_METADATA).sort()),
-  'Full discovery is missing a recorded-activity dispatcher contract.');
+  assert(arraysEqual(sortedKeys(discovery.isolatedRuntimeContracts),
+    [...RUNTIME_CONTRACT_TARGETS].sort()),
+  'Full discovery is missing an isolated runtime contract.');
 
   const unknown = runProbe(UNKNOWN_TARGET);
   assert(unknown.matchesFullEntrypoint, 'An unknown runtime target did not use the complete entrypoint.');
@@ -418,7 +429,7 @@ async function check(): Promise<void> {
   assert(canaryTarget, 'The optimized target registry is empty.');
   for (const target of [
     ...PROVIDER_CONNECTION_AND_HEALTH_TARGETS,
-    ...Object.keys(ACTIVITY_IMPORT_DISPATCHER_METADATA),
+    ...Object.keys(GEN1_DISPATCHER_METADATA),
     ...Object.keys(INGESTION_TARGET_METADATA),
     ...Object.keys(SCHEDULED_MAINTENANCE_TARGET_METADATA),
     ...Object.keys(ADMIN_TARGET_METADATA),
@@ -431,7 +442,7 @@ async function check(): Promise<void> {
     'impersonateUser',
     ...PROVIDER_CONNECTION_AND_HEALTH_TARGETS,
     ...QUEUE_AND_CLEANUP_TARGETS,
-    ...Object.keys(ACTIVITY_IMPORT_DISPATCHER_METADATA),
+    ...Object.keys(GEN1_DISPATCHER_METADATA),
     'listUsers',
     'scheduleAdminDashboardSnapshot',
     'grantAdminSubscriptionGift',
@@ -443,9 +454,9 @@ async function check(): Promise<void> {
           && arraysEqual(discovery.exports, guardedDiscovery.exports),
         `Firebase ${discoveryMode} discovery honored an inherited FUNCTION_TARGET=${target}.`,
       );
-      assert(isDeepStrictEqual(guardedDiscovery.activityImportDispatcherContracts,
-        discovery.activityImportDispatcherContracts),
-      `Firebase ${discoveryMode} discovery changed dispatcher metadata with inherited ${target}.`);
+      assert(isDeepStrictEqual(guardedDiscovery.isolatedRuntimeContracts,
+        discovery.isolatedRuntimeContracts),
+      `Firebase ${discoveryMode} discovery changed runtime metadata with inherited ${target}.`);
     }
   }
 
@@ -457,9 +468,9 @@ async function check(): Promise<void> {
     );
     assert(optimized.preservesHandlerIdentity, `${target} did not preserve its Firebase handler object.`);
     assert(optimized.matchesFullEntrypoint, `${target} differs from the full-entrypoint handler.`);
-    if (ACTIVITY_IMPORT_DISPATCHER_METADATA[target]) {
-      assert(isDeepStrictEqual(optimized.activityImportDispatcherContracts[target],
-        discovery.activityImportDispatcherContracts[target]),
+    if (RUNTIME_CONTRACT_TARGETS.includes(target)) {
+      assert(isDeepStrictEqual(optimized.isolatedRuntimeContracts[target],
+        discovery.isolatedRuntimeContracts[target]),
       `${target} isolated runtime endpoint/trigger metadata differs from fresh full discovery.`);
     }
     assert(
@@ -470,7 +481,7 @@ async function check(): Promise<void> {
 
   for (const target of [
     ...PROVIDER_CONNECTION_AND_HEALTH_TARGETS,
-    ...Object.keys(ACTIVITY_IMPORT_DISPATCHER_METADATA),
+    ...Object.keys(GEN1_DISPATCHER_METADATA),
     ...Object.keys(INGESTION_TARGET_METADATA),
     ...Object.keys(SCHEDULED_MAINTENANCE_TARGET_METADATA),
     ...Object.keys(ADMIN_TARGET_METADATA),
@@ -505,7 +516,7 @@ async function check(): Promise<void> {
   for (const target of OPTIMIZED_FUNCTION_TARGETS) {
     const endpoint = stack.endpoints[target];
     const expectedPlatform = target === 'receiveSuunto247Data' || target === 'receiveGarminAPIHealthData'
-      || ACTIVITY_IMPORT_DISPATCHER_METADATA[target]
+      || GEN1_DISPATCHER_METADATA[target]
       ? 'gcfv1' : 'gcfv2';
     assert(endpoint?.platform === expectedPlatform, `${target} runtime generation changed.`);
     assert(endpoint.entryPoint === target, `${target} entrypoint metadata changed.`);
@@ -619,8 +630,8 @@ async function check(): Promise<void> {
           === JSON.stringify(expected.maxDispatchesPerSecond ?? null),
         `${target} task rate limits changed.`);
       }
-    } else if (ACTIVITY_IMPORT_DISPATCHER_METADATA[target]) {
-      const expected = ACTIVITY_IMPORT_DISPATCHER_METADATA[target];
+    } else if (GEN1_DISPATCHER_METADATA[target]) {
+      const expected = GEN1_DISPATCHER_METADATA[target];
       assert(endpoint.availableMemoryMb === expected.memoryMb, `${target} memory configuration changed.`);
       assert(endpoint.timeoutSeconds === expected.timeoutSeconds, `${target} timeout configuration changed.`);
       assert(endpoint.cpu === undefined

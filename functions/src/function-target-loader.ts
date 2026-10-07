@@ -48,6 +48,10 @@ const TARGET_LOADERS: Readonly<Record<string, ModuleLoader>> = Object.freeze({
   projectGarminConnectionOnTokenWrite: loadServiceConnectionAccountProjection,
   processSleepSyncTask:
     () => module.require('./tasks/sleep-sync-worker') as FunctionModule,
+  processGarminHealthBackfillTask:
+    () => module.require('./tasks/garmin-health-backfill-worker') as FunctionModule,
+  dispatchSleepSyncQueue:
+    () => module.require('./sleep/dispatcher') as FunctionModule,
   processWorkoutTask:
     () => module.require('./tasks/workout-processor') as FunctionModule,
   parseGarminAPIActivityQueue: loadActivityImportDispatchers,

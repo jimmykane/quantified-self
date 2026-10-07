@@ -1215,6 +1215,11 @@ dashboard/11 metrics/six policies require separate approval and production readb
 See [Sleep sync operations](sleep-sync-operations.md#cloud-monitoring-830) for meanings,
 exclusions, thresholds, costs and activation steps. HTTP ACK, request-campaign completion
 and received Health/Sleep records are different outcomes; idle feeds are not an outage.
+All three affected handlers use direct owner-module target loading. The Garmin backfill
+worker retains Gen 2, 512 MiB, 1,800 seconds, Garmin secrets and one-at-a-time task pacing;
+the existing dispatcher retains Gen 1, 256 MiB, maximum one instance and its 30-minute
+schedule. Monitoring coverage is unchanged (`cloud_run_revision` workers / `cloud_function`
+dispatcher); see the [entrypoint verification](functions-entrypoint-loading.md#healthsleep-backfill-and-dispatcher-isolation).
 No provider availability, queue concurrency, retry policy, MCP/Assistant permissions or
 user-facing Help behavior changes.
 

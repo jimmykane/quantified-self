@@ -469,7 +469,11 @@ metrics (including distributions) can incur Logging/Monitoring ingestion/storage
 measure billed volume/cardinality rather than assuming alerts are free. No new Function,
 queue, scheduler, dependencies, Health/Sleep data storage or email-extension work is added.
 Worker/dispatcher generation, memory, secrets, timeout, retry and single-task limits are
-unchanged; only the ordinary worker already has a direct target-loader path.
+unchanged. All three affected handlers use direct owner-module target loading: the ordinary
+worker, Garmin backfill worker and existing Gen 1 dispatcher. See the
+[entrypoint contracts and local benchmark](functions-entrypoint-loading.md#healthsleep-backfill-and-dispatcher-isolation).
+This loading-only change leaves the dispatcher at 256 MiB and backfill at 512 MiB; it does
+not migrate the scheduler to Gen 2 or change the Monitoring resource filters.
 
 Local checks:
 

@@ -16,6 +16,8 @@ describe('function target loader', () => {
       'projectSuuntoConnectionOnTokenWrite',
       'projectGarminConnectionOnTokenWrite',
       'processSleepSyncTask',
+      'processGarminHealthBackfillTask',
+      'dispatchSleepSyncQueue',
       'processWorkoutTask',
       'parseGarminAPIActivityQueue',
       'parseSuuntoAppActivityQueue',
