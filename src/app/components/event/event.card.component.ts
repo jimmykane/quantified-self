@@ -185,7 +185,7 @@ export class EventCardComponent implements OnInit {
     const uid = this.currentUser()?.uid;
     const event = this.event();
     return this.isOwner() && uid && event && !isMergeOrBenchmarkEvent(event)
-      ? this.trainingImpactService.watch(uid)
+      ? this.trainingImpactService.watch(uid, [event])
       : of({ status: 'private', formPoints: null } as TrainingImpactSnapshotState);
   });
 

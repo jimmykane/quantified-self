@@ -1,3 +1,6 @@
+import { trainingLoadSourceFingerprint } from '../training-load/training-load-metadata';
+import { fetchTrainingLoadMetadata } from '../training-load/training-load-reader';
+import { resolveEffectiveTrainingLoad, type TrainingLoadMetadata } from '../../../shared/training-load-policy';
 import * as admin from 'firebase-admin';
 import { FieldPath } from 'firebase-admin/firestore';
 import {
@@ -21,8 +24,6 @@ import {
 } from '../../../shared/training-load';
 import { getUserDeletionGuardState } from '../shared/user-deletion-guard';
 
-const CURRENT_TSS_TYPE = 'Training Stress Score';
-const LEGACY_TSS_TYPE = 'Power Training Stress Score';
 const FIRESTORE_IN_LIMIT = 30;
 const TRAINING_IMPACT_RESPONSE_MAX_BYTES = 16 * 1024;
 
@@ -92,6 +93,7 @@ export interface McpTrainingImpactReads {
     eventIds: readonly string[],
   ): Promise<McpTrainingImpactDocument[]>;
   fetchFormSnapshot(uid: string): Promise<Record<string, unknown> | null>;
+  fetchLoadMetadata?(uid: string, eventIds: readonly string[]): Promise<Map<string, TrainingLoadMetadata>>;
 }
 
 export interface McpTrainingImpactContribution {
@@ -146,8 +148,10 @@ export interface McpTrainingImpactResult {
 
 interface ResolvedTrainingImpactCandidate {
   trainingStressScore: number | null;
+  loadUpdatedAtMs: number;
+  sourceUpdating: boolean;
   dayMs: number;
-  exclusion: 'benchmark_or_merge' | 'not_completed' | null;
+  exclusion: 'benchmark_or_merge' | 'not_completed' | 'user_excluded' | null;
 }
 
 interface TrainingImpactCounts {
@@ -186,8 +190,7 @@ export const firestoreTrainingImpactReads: McpTrainingImpactReads = {
           'eventID',
           'startDate',
           'endDate',
-          new FieldPath('stats', CURRENT_TSS_TYPE),
-          new FieldPath('stats', LEGACY_TSS_TYPE),
+          'stats', 'type',
         )
         .get()
     )));
@@ -204,7 +207,7 @@ export const firestoreTrainingImpactReads: McpTrainingImpactReads = {
         .doc(uid)
         .collection('events')
         .where(FieldPath.documentId(), 'in', ids)
-        .select('mergeType', 'isMerge')
+        .select('mergeType', 'isMerge', 'startDate', 'endDate', 'stats', 'type')
         .get()
     )));
     return snapshots.flatMap(snapshot => snapshot.docs.map(doc => ({
@@ -212,6 +215,7 @@ export const firestoreTrainingImpactReads: McpTrainingImpactReads = {
       data: doc.data() as Record<string, unknown>,
     })));
   },
+  fetchLoadMetadata: fetchTrainingLoadMetadata,
   fetchFormSnapshot: async uid => {
     const snapshot = await admin.firestore()
       .collection('users')
@@ -292,35 +296,6 @@ function timestampMs(value: unknown): number | null {
   return typeof value === 'number' && Number.isSafeInteger(value)
     ? value
     : null;
-}
-
-function finiteNumber(value: unknown): number | null {
-  if (value === null || value === undefined || value === '') return null;
-  const numeric = typeof value === 'number'
-    ? value
-    : typeof value === 'string'
-      ? Number(value)
-      : Number.NaN;
-  return Number.isFinite(numeric) ? numeric : null;
-}
-
-function persistedStatNumber(stats: unknown, statType: string): number | null {
-  if (!stats || typeof stats !== 'object' || Array.isArray(stats)) return null;
-  const rawValue = (stats as Record<string, unknown>)[statType];
-  const direct = finiteNumber(rawValue);
-  if (direct !== null) return direct;
-  if (!rawValue || typeof rawValue !== 'object' || Array.isArray(rawValue)) return null;
-  const record = rawValue as Record<string, unknown>;
-  return finiteNumber(record.value)
-    ?? finiteNumber(record.rawValue)
-    ?? finiteNumber(record._value);
-}
-
-function resolveTrainingStressScore(stats: unknown): number | null {
-  const current = persistedStatNumber(stats, CURRENT_TSS_TYPE);
-  if (current !== null && current >= 0) return current;
-  const legacy = persistedStatNumber(stats, LEGACY_TSS_TYPE);
-  return legacy !== null && legacy >= 0 ? legacy : null;
 }
 
 function utcDayMs(timeMs: number): number {
@@ -490,9 +465,10 @@ async function loadCandidates(
   localDate: string | null,
   timeZone: string | null,
 ): Promise<ResolvedTrainingImpactCandidate[]> {
-  const [activityDocuments, eventDocuments] = await Promise.all([
+  const [activityDocuments, eventDocuments, loadMetadata] = await Promise.all([
     reads.fetchActivities(input.uid, input.references.map(reference => reference.activityId)),
     reads.fetchEvents(input.uid, input.references.map(reference => reference.eventId)),
+    reads.fetchLoadMetadata?.(input.uid, input.references.map(reference => reference.eventId)) ?? Promise.resolve(new Map<string, TrainingLoadMetadata>()),
   ]);
   const activities = new Map(activityDocuments.map(document => [document.id, document.data]));
   const events = new Map(eventDocuments.map(document => [document.id, document.data]));
@@ -528,14 +504,22 @@ async function loadCandidates(
         'Every day Training impact activity must belong to the selected localDate and timeZone.',
       );
     }
+    const metadata = loadMetadata.get(reference.eventId);
+    const leg = Object.values(metadata?.legs ?? {}).find(item => item.activityId === reference.activityId);
+    const sourceUpdating = (!!metadata?.parentFingerprint && metadata.parentFingerprint !== trainingLoadSourceFingerprint(event))
+      || (!!leg?.sourceFingerprint && leg.sourceFingerprint !== trainingLoadSourceFingerprint(activity));
+    const modeled = resolveEffectiveTrainingLoad({}, metadata,
+      [{ ...activity, id: reference.activityId }], reference.activityId);
     return {
-      trainingStressScore: resolveTrainingStressScore(activity.stats),
+      trainingStressScore: modeled.score,
+      sourceUpdating,
+      loadUpdatedAtMs: timestampMs(metadata?.updatedAt) ?? 0,
       dayMs: utcDayMs(startTimeMs),
       exclusion: isBenchmarkEventForTrainingMetrics(event)
         ? 'benchmark_or_merge'
         : endTimeMs === null || endTimeMs > input.nowMs
           ? 'not_completed'
-          : null,
+          : modeled.status === 'excluded' ? 'user_excluded' : null,
     };
   });
 }
@@ -563,7 +547,7 @@ export async function getMcpTrainingImpact(
       counts.excludedSessionCount += 1;
       if (candidate.exclusion === 'benchmark_or_merge') {
         counts.benchmarkOrMergeSessionCount += 1;
-      } else {
+      } else if (candidate.exclusion === 'not_completed') {
         counts.notCompletedSessionCount += 1;
       }
       return false;
@@ -604,7 +588,10 @@ export async function getMcpTrainingImpact(
     );
   }
 
-  const snapshot = formSnapshotState(await reads.fetchFormSnapshot(input.uid));
+  const rawSnapshot = await reads.fetchFormSnapshot(input.uid);
+  const hasNewerLoad = candidates.some(candidate => candidate.sourceUpdating
+    || candidate.loadUpdatedAtMs > (timestampMs(rawSnapshot?.updatedAtMs) ?? 0));
+  const snapshot = formSnapshotState(hasNewerLoad ? null : rawSnapshot);
   if (snapshot.status !== 'ready') {
     counts.unavailableSessionCount = counts.eligibleSessionCount;
     if (!await reads.activeOwner(input.uid)) {

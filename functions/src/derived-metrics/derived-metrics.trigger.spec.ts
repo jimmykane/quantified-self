@@ -41,6 +41,7 @@ vi.mock('../../../shared/functions-manifest', () => ({
 }));
 
 import {
+    onTrainingLoadMetadataWrite,
     onDashboardDerivedMetricsActivityWrite,
     onDashboardDerivedMetricsEventWrite,
     onDashboardDerivedMetricsHealthWrite,
@@ -252,6 +253,17 @@ describe('onDashboardDerivedMetricsEventWrite', () => {
         expect(hoisted.enqueueDerivedMetricsIngressTask).toHaveBeenNthCalledWith(2, 'user-1');
     });
 
+    it('invalidates modeled load kinds after an owner edit', async () => {
+        await (onTrainingLoadMetadataWrite as any)({ params: { uid: 'user-1', eventId: 'e' }, data: {
+            before: { exists: true, data: () => ({ controls: {} }) },
+            after: { exists: true, data: () => ({ controls: { leg: { override: 0 } } }) },
+        } });
+        expect(hoisted.enqueueDerivedMetricsIngressTask).toHaveBeenCalledWith('user-1', undefined, undefined, expect.objectContaining({
+            incrementEventMutationVersion: true, taskScope: 'training-load',
+            metricKinds: expect.arrayContaining([DERIVED_METRIC_KINDS.Form, DERIVED_METRIC_KINDS.Acwr,
+                DERIVED_METRIC_KINDS.TrainingSummary, DERIVED_METRIC_KINDS.TrainingBuildComparison]),
+        }));
+    });
     it('enqueues a debounced ingress task for valid event writes', async () => {
         await (onDashboardDerivedMetricsEventWrite as any)({
             params: { uid: 'user-1', eventId: 'event-1' },

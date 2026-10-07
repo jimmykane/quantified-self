@@ -3876,7 +3876,7 @@ users/{uid}/derivedMetrics/{metricKind}
 ### Events
 
 Parent event documents provide event identity, date, tags, merged-event classification, parent TSS, and display metadata.
-Overall load and top contributors use parent-event TSS to avoid double-counting a multisport event.
+Overall load and top contributors use the shared effective-load resolver once per event. Reparsed or controlled multisport workouts sum included legs; legacy untouched events retain parent TSS. Parent-only TSS is never allocated across legs.
 
 The shared classifier treats `mergeType: 'benchmark'` and legacy `isMerge: true` as merged benchmark events. A
 `mergeType: 'multi'` parent is a standard multisport event and remains eligible so its child legs can be analysed.
@@ -4034,13 +4034,13 @@ settings, sleep, swim lengths, or activity documents for unrelated metrics.
 
 | Metric kind | Training use | Primary source |
 | --- | --- | --- |
-| `form` | Form/load chart, CTL/ATL state inputs, and exact Training impact recap counts | Parent event TSS |
+| `form` | Form/load chart, CTL/ATL state inputs, and exact Training impact recap counts | Effective modeled workout TSS |
 | `recovery_now` | Imported recovery-remaining card | Bounded parent event recovery stats |
-| `acwr` | Load metrics | Parent event TSS |
-| `ramp_rate` | State and load metrics | Parent event TSS |
-| `monotony_strain` | Load metrics | Parent event TSS |
-| `form_now`, `form_plus_7d` | Current/projected freshness values | Parent event TSS |
-| `freshness_forecast` | Zero-future-load scenario chart | Parent event TSS |
+| `acwr` | Load metrics | Effective modeled workout TSS |
+| `ramp_rate` | State and load metrics | Effective modeled workout TSS |
+| `monotony_strain` | Load metrics | Effective modeled workout TSS |
+| `form_now`, `form_plus_7d` | Current/projected freshness values | Effective modeled workout TSS |
+| `freshness_forecast` | Zero-future-load scenario chart | Effective modeled workout TSS |
 | `intensity_distribution` | Global intensity chart | Joined child activity power/HR zones |
 | `training_summary` | Overall comparison, ten-group Training Mix, and context/profile summaries | Joined normalized activities |
 | `training_capacity` | Imported FTP/VO2 observations plus separately labelled manual VO2 references | Joined activities and qualifying manual Health VO2 point measurements |
@@ -4754,7 +4754,7 @@ Overview only.
 
 It intentionally separates parent-event load from child-activity composition:
 
-- Parent events determine total TSS and top contributors. This avoids double-counting multisport legs.
+- The effective-load resolver determines workout totals and top contributors once per parent, summing included legs without double-counting.
 - Child activities determine the ten Training groups plus aggregate Other and unknown Unclassified composition/rhythm.
 
 The cards show:
@@ -4828,7 +4828,7 @@ point. Ramp has no sample until a prior seven-day CTL observation exists, and it
 This is presentation-only: no formula, stored data, planning behavior, MCP read/write schema,
 scope, consent, provider action or backend deployment change.
 
-Daily load is TSS on UTC days. CTL and ATL use exponentially decaying recurrences with 42-day and 7-day time constants:
+Daily load is effective modeled TSS on UTC days. CTL and ATL use exponentially decaying recurrences with 42-day and 7-day time constants:
 
 ```text
 CTL_today = CTL_previous + (load_today - CTL_previous) / 42
@@ -4847,10 +4847,84 @@ load metrics are intentionally independent of sleep, HRV, overnight heart rate, 
 signals appear only in Readiness today, which adds recovery context without changing Freshness/Form or the Training
 state.
 
+### File-only TSS evaluation and owner load controls
+
+Sports Lib 21.6.0 calculates and caches Automatic, HR and MET evaluations while file inputs and streams remain
+available. Each result records its score (including valid zero), actual method, imported/calculated provenance,
+estimate flag and missing-input/fallback reasons. Walking, Nordic Walking, Hiking and Trekking use imported TSS →
+calibrated HR → calorie MET → unavailable; calculated power and running pace are ineligible. Other sports retain
+their existing Automatic order with corrected HR eligibility. A preferred HR/MET calculation falls back through the
+eligible Automatic order. Valid nonnegative file-imported TSS wins regardless of preference; previous calculated
+TSS is never treated as imported on recalculation.
+
+HR uses continuous threshold-normalized TRIMP and requires explicit file calibration satisfying `0 < resting HR <
+threshold HR < maximum HR`. Session-matched FIT `time_in_zone` settings take priority over unambiguous
+`zones_target` and applicable profile settings. Walking uses general maximum HR, never the running-specific
+setting. Observed peak HR, guessed threshold ratios and weighted HR zones are ineligible. QS supplies no athlete
+settings. The synthetic one-hour recovery walk with calibration 190/55/165 produces approximately 7.6 HR TSS.
+
+MET remains an estimate: `hours = duration / 3600`, `MET = kcal / (file kg × hours)`, `TSS = 100 × hours × (MET /
+10)²`. Require valid file energy, body mass and duration; 210 kcal, 70 kg and one hour yield MET 3 and 9 TSS. Do
+not invent mass, subtract resting calories, use reference-MET tables, or adopt STT's linear score or zone weights.
+
+Owners open **Training load** from the activity action menu. The editor separates recorded, Automatic and modeled
+TSS, explains the actual method/fallback, and supports a preferred method, 0–9999 numeric override (one decimal),
+per-leg inclusion, whole-workout exclusion and reset. Exclusions retain history and volume. Missing load remains
+distinct from a valid zero and from exclusion. Multisport overrides belong to individual legs; included available
+legs sum once, with unavailable coverage retained. Reset restores the saved per-leg policy rather than today's
+Settings. A whole-workout reset also explicitly releases retained unmatched controls; per-leg reset retains any
+explicit association.
+
+Settings → Training load uses the existing ten sport families, including Walking & Hiking. Defaults are
+Automatic/included. Saving appends an immutable server-timestamped revision in
+`users/{uid}/trainingLoadPolicies/{family}/revisions/{revisionId}` and updates the revision-checked head. The leg
+editor can copy method/inclusion to future family defaults, never a numeric override. First import chooses the last
+revision effective at the leg's recorded start time, so old/delayed uploads do not acquire today's defaults. Each
+leg freezes that applied policy; duplicate uploads, resyncs and reparses preserve it.
+
+Private `users/{uid}/events/{eventId}/metaData/trainingLoad` stores server-owned candidates, source fingerprints,
+leg identities and applied policies beside owner-editable controls. Firestore Rules allow exact owner-scoped
+transactions with revision checks and deletion guards, while denying client writes to calculated fields, policy
+revision updates/deletes and cross-event associations. Backend EventWriter adapters prepare metadata for provider
+ingestion, manual upload and source-file reparse before old leg cleanup, checking the latest persisted source and
+controls in the transaction. Metadata preparation failures propagate to the caller for retry.
+
+Reconciliation uses the existing unique identity matcher with its unmatched-leg fallback disabled. Derived TSS is
+excluded from control identity. Ambiguous identities retain saved policies/controls and make modeled load
+unavailable until the owner explicitly reassociates or resets them. Reassociation survives the next reparse.
+Bounds: 100 source legs/controls per event and 200 retained identities; reaching the retained bound requires review
+before further reparse.
+
+`shared/training-load-policy.ts` owns the effective-load resolver for Form, weekly load, ACWR, comparisons, sport
+contributions and impact. Backend metadata reads use exact owner paths in batches of at most 100; immediate legacy
+controls may require a bounded child join. Source fingerprints reject stale candidate/source combinations. The
+`onTrainingLoadMetadataWrite` trigger invalidates affected load-derived kinds and increments the event
+mutation/workout input versions; timestamp/revision-only bookkeeping does not invalidate. Impact waits when a load
+edit is newer than Form. CTL 42 days, ATL 7 days and UTC-day bucketing are unchanged.
+
+Legacy activities keep existing values until original-file reparse. Override and exclusion work immediately; HR/MET
+selection requires stored evaluations or **Reimport activity from file**. Recorded-TSS statistics, metric rankings
+and raw statistic queries keep their meaning. Training and impact use modeled load. Existing MCP reads honor
+controls without exposing policy metadata, widening frozen public schemas or adding mutation capabilities; owner
+exclusions never increment benchmark counts. Built-in Assistant instructions distinguish recorded metrics from
+modeled load. This is a completed-load feature, with no plan/workout read or mutation contract impact and no
+provider delivery changes.
+
+Release order: publish the verified Sports Lib 21.6.0 artifact first, then install that registry version in both QS
+packages and release Functions/Rules/frontend together after separate approval. Local validation uses a packed
+library artifact. Publication, deployment and production reparse are separate explicit approvals; no historical
+values are rewritten merely by deploying this change.
+
+Local verification covers the encoded synthetic recovery walk (7.6 HR TSS), MET inputs (9 TSS), library package
+exports, provider/manual/reparse writers, modeled-load builders, owner Rules and frozen MCP reads. The Firestore
+emulator verifies delayed policy selection, idempotent duplicates, changed leg IDs, concurrent reparse/control
+edits and deletion guards. The actual editor and Settings were exercised with synthetic local data at desktop and
+320/390-pixel phone widths. No original user FIT file or production data was used.
+
 #### Activity and selected-day Training impact
 
 Owner-only activity details and selected-day Calendar surfaces reuse the current Form snapshot to explain how each
-completed activity's recorded TSS participates in this model. They do not query activity history or create a separate
+completed activity's modeled TSS participates in this model. They do not query activity history or create a separate
 derived snapshot. For one activity:
 
 ```text
@@ -4896,7 +4970,7 @@ header's bottom-padding hooks to leave an 8px join instead of stacking summary a
 surfaces retain their existing spacing. A surface-free **How it’s calculated** Material text button sits alongside the
 day result and wraps beneath it when needed. It controls a labelled hidden region through `aria-expanded` and
 `aria-controls`, with one selection-haptic owner per activation. The initially collapsed explanation contains the
-workout's recorded TSS, contribution formulas, all-training/day-decay meaning, fixed daily cutoff caveat, and existing
+workout's modeled TSS, contribution formulas, all-training/day-decay meaning, fixed daily cutoff caveat, and existing
 physiological-adaptation disclaimer. Disclosure state is component-local, survives same-event ready refreshes, and
 resets when the event/day context or availability changes; it adds no subscription, request, or setting.
 Full-day breakdowns and compact Calendar/Dashboard/day-sheet summaries retain their existing role/outcome wording,

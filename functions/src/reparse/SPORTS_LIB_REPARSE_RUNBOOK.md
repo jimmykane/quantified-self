@@ -7,6 +7,27 @@ Target version source of truth:
 - `SPORTS_LIB_REPARSE_TARGET_VERSION`
 - File: `functions/src/reparse/sports-lib-reparse.config.ts`
 
+### Sports Lib 21.6.0 file-calibrated Training load
+
+Publish sports-lib before releasing QS with aligned root and Functions dependencies. Local verification uses the
+packed 21.6.0 library; publication, deployment and production reparse each require separate approval.
+
+New provider imports and manual uploads cache Automatic/HR/MET evaluations in owner-only event metadata. Walking,
+Nordic Walking, Hiking and Trekking skip calculated pace and power. HR requires file-supplied resting, threshold and
+maximum HR; missing calibration can fall back to the calorie-derived MET estimate when its file inputs exist.
+Valid imported TSS retains precedence. See `docs/training-workspace.md` for the exact calculation and policy contract.
+
+Historical recordings keep their current recorded values until source-backed reparse. Numeric overrides and exclusions
+work immediately; HR/MET selection needs cached evaluations. Reparse refreshes calculated candidates after sanitized
+event/activity writes and before stale child removal. Its transaction preserves the latest controls and original dated
+policy snapshot, checks source fingerprints and deletion guards, and uses strict leg identity matching without TSS.
+An ambiguous match retains controls and leaves modeled load unavailable until owner reassociation or reset. Identical
+imports do not advance the metadata revision or timestamp. Changed metadata invalidates affected Training snapshots.
+
+Keep automatic event and route scanners disabled. This change needs no saved-route reparse. Use the existing targeted
+original-file action for an approved historical correction; do not bulk-rewrite recorded scores or distribute parent
+TSS across multisport legs. Validate the installed runtime/target version before any separately approved campaign.
+
 ### Sports Lib 21.5.0 recorded swim distance display
 
 Sports Lib 21.5.0 adds optional meter/yard display units to `DataSwimDistance`. Quantified Self selects these units

@@ -510,6 +510,7 @@ describe('UserSettingsComponent', () => {
         expect(component.settingsSectionOptions.map(section => section.id)).toEqual([
             'units',
             'dashboard',
+            'training',
             'charts',
             'map',
             'privacy',
@@ -525,7 +526,7 @@ describe('UserSettingsComponent', () => {
         expect(groups[1].querySelector('.settings-group-title').textContent).toBe('Privacy & account');
         const triggers = Array.from(fixture.nativeElement.querySelectorAll('.settings-section-trigger')) as HTMLButtonElement[];
         expect(triggers.map(button => button.getAttribute('aria-label'))).toEqual([
-            'Units & formatting', 'Dashboard', 'Charts', 'Maps', 'Privacy & emails', 'Account',
+            'Units & formatting', 'Dashboard', 'Training load', 'Charts', 'Maps', 'Privacy & emails', 'Account',
         ]);
         expect(triggers.every(button => button.classList.contains('mat-mdc-button'))).toBe(true);
         expect(triggers.every(button => button.type === 'button')).toBe(true);
@@ -574,6 +575,29 @@ describe('UserSettingsComponent', () => {
         fixture.detectChanges();
         expect(fixture.nativeElement.querySelector('.settings-save-bar button')).toBeTruthy();
         expect(fixture.nativeElement.querySelector('.settings-save-status').textContent).toContain('Unsaved changes');
+    });
+
+    it('loads Training preferences on first expansion and retains them when collapsed', async () => {
+        await renderSettings();
+        expect(fixture.nativeElement.querySelector('app-training-load-settings')).toBeNull();
+        await component.selectSettingsSection('training');
+        fixture.detectChanges();
+        await fixture.whenStable();
+        fixture.detectChanges();
+        const preferences = fixture.nativeElement.querySelector('app-training-load-settings');
+        expect(preferences).toBeTruthy();
+        expect(fixture.nativeElement.querySelector('#settings-training-content').hidden).toBe(false);
+        expect(component.userSettingsFormGroup.pristine).toBe(true);
+        expect(fixture.nativeElement.querySelector('.settings-save-bar')).toBeNull();
+
+        component.userSettingsFormGroup.get('displayName').markAsDirty();
+        fixture.detectChanges();
+        expect(fixture.nativeElement.querySelector('.settings-save-bar button')).toBeTruthy();
+        await component.selectSettingsSection('map');
+        fixture.detectChanges();
+        expect(fixture.nativeElement.querySelector('app-training-load-settings')).toBe(preferences);
+        expect(fixture.nativeElement.querySelector('#settings-training-content').hidden).toBe(true);
+        expect(hapticsServiceMock.selection).toHaveBeenCalledTimes(2);
     });
 
     it('makes Save changes the only submit action, including inside collapsed sections', async () => {
@@ -700,7 +724,7 @@ describe('UserSettingsComponent', () => {
         const profilePanel = fixture.nativeElement.querySelector('[aria-labelledby="settings-account-title"]');
         const mapPanel = fixture.nativeElement.querySelector('[aria-labelledby="settings-map-title"]');
 
-        expect(panels).toHaveLength(6);
+        expect(panels).toHaveLength(7);
         expect(profilePanel.hidden).toBe(false);
         expect(mapPanel.hidden).toBe(true);
 

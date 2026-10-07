@@ -13,6 +13,7 @@ export const EMULATOR_SUITES = {
     'src/training-plans/delivery/suunto/suunto.emulator.spec.ts',
   ],
   lifecycle: [
+    'src/training-load/training-load.persistence.emulator.spec.ts',
     'src/training-plans/large-schedule.emulator.spec.ts',
     'src/training-plans/strength.lifecycle.emulator.spec.ts',
     'src/training-plans/workout-library.emulator.spec.ts',

@@ -188,6 +188,7 @@ export {
   onDashboardDerivedMetricsActivityWrite,
   onDashboardDerivedMetricsEventWrite,
   onDashboardDerivedMetricsSleepWrite,
+  onTrainingLoadMetadataWrite,
   onDashboardDerivedMetricsHealthWrite,
 } from './derived-metrics/derived-metrics.trigger';
 export { restoreUserClaims, linkExistingStripeCustomer } from './stripe/claims';

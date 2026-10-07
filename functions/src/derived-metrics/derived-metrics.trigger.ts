@@ -22,9 +22,9 @@ function resolveEventTimeMs(event: { time?: unknown }): number | null {
 
 function resolveDerivedMetricsSourceId(
     event: Parameters<Parameters<typeof onDocumentWritten>[1]>[0],
-    source: 'event' | 'activity' | 'sleep' | 'health',
+    source: 'event' | 'activity' | 'sleep' | 'health' | 'training-load',
 ): string | null {
-    const sourceId = source === 'event'
+    const sourceId = source === 'event' || source === 'training-load'
         ? event.params?.eventId
         : source === 'activity'
             ? event.params?.activityId
@@ -36,7 +36,7 @@ function resolveDerivedMetricsSourceId(
 
 async function handleDerivedMetricsSourceWrite(
     event: Parameters<Parameters<typeof onDocumentWritten>[1]>[0],
-    source: 'event' | 'activity' | 'sleep' | 'health',
+    source: 'event' | 'activity' | 'sleep' | 'health' | 'training-load',
 ): Promise<void> {
     const uid = `${event.params?.uid || ''}`.trim();
     if (!uid) {
@@ -100,7 +100,16 @@ async function handleDerivedMetricsSourceWrite(
         });
         return;
     }
-    const targetedIngressOptions = sleepIngressOptions || (source === 'health'
+    const loadIngressOptions = source === 'training-load' ? {
+        taskScope: 'training-load',
+        metricKinds: [DERIVED_METRIC_KINDS.Form, DERIVED_METRIC_KINDS.Acwr, DERIVED_METRIC_KINDS.RampRate,
+            DERIVED_METRIC_KINDS.MonotonyStrain, DERIVED_METRIC_KINDS.FormNow, DERIVED_METRIC_KINDS.FormPlus7d,
+            DERIVED_METRIC_KINDS.FreshnessForecast, DERIVED_METRIC_KINDS.TrainingSummary,
+            DERIVED_METRIC_KINDS.TrainingExplanation, DERIVED_METRIC_KINDS.TrainingBuildComparison,
+            DERIVED_METRIC_KINDS.TrainingReadiness],
+        incrementEventMutationVersion: true,
+    } as const : undefined;
+    const targetedIngressOptions = loadIngressOptions || sleepIngressOptions || (source === 'health'
         ? {
             // A deterministic task may coalesce only identical invalidation sets.
             // Otherwise a Weight write can suppress a same-bucket VO2 write (or vice versa).
@@ -160,3 +169,12 @@ export const onDashboardDerivedMetricsHealthWrite = onDocumentWritten({
     concurrency: 1,
     retry: true,
 }, event => handleDerivedMetricsSourceWrite(event, 'health'));
+
+export const onTrainingLoadMetadataWrite = onDocumentWritten({
+    region: FUNCTIONS_MANIFEST.ensureDerivedMetrics.region,
+    document: 'users/{uid}/events/{eventId}/metaData/trainingLoad',
+    memory: DERIVED_METRICS_SOURCE_TRIGGER_MEMORY,
+    maxInstances: 50,
+    concurrency: 1,
+    retry: true,
+}, event => handleDerivedMetricsSourceWrite(event, 'training-load'));

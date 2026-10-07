@@ -2016,7 +2016,7 @@ that this does not measure physiological adaptation.
 Statuses distinguish `ready`, `partial`, `updating`, `unavailable`, and `excluded`. Reasons preserve partial coverage,
 missing TSS, benchmark/merge exclusion, incomplete activities, Form building/staleness/failure, no usable selected
 session, and a UTC Training day outside the retained snapshot. Zero TSS remains a valid modeled contribution. Current
-TSS takes precedence over the legacy Power Training Stress Score field. A ready Form payload must match the current
+Recorded metric reads keep their original meaning: current TSS takes precedence over legacy Power Training Stress Score. Training impact instead resolves owner-modeled per-leg load from private event metadata, including zero overrides, saved method/inclusion policies and workout exclusions. It never distributes a parent-only score to legs. Excluded-by-owner records increment only `excludedSessionCount`, not benchmark or incomplete counts; the frozen reason remains `no_usable_sessions` when no selected sessions are usable. Policy revisions, control maps, calibration and source fingerprints never appear in the public projection. A load edit newer than Form reports updating. These implementation changes add no public fields, scopes or mutation capability. A ready Form payload must match the current
 internal Form payload version, identify the Form kind, and assert merged-event exclusion; otherwise the tool fails closed
 as updating.
 

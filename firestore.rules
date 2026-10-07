@@ -96,6 +96,37 @@ service cloud.firestore {
            && !resource.data.keys().hasAny(['trainingSettings']);
       }
 
+      // Immutable dated load preferences. The head and its new revision are committed together.
+      match /trainingLoadPolicies/{family} {
+        function validPolicy() {
+          let data = request.resource.data;
+          return family in ['running', 'cycling', 'swimming', 'rowing', 'walking-hiking', 'nordic-skiing',
+            'strength', 'fitness-gym', 'paddling', 'other-training']
+            && data.keys().hasOnly(['revision', 'revisionId', 'method', 'included', 'effectiveAt'])
+            && data.revision is int && data.revision > 0
+            && data.revisionId is string && data.revisionId.matches('^[a-zA-Z0-9-]{1,64}$')
+            && data.method in ['AUTOMATIC', 'HR', 'MET'] && data.included is bool
+            && data.effectiveAt == request.time;
+        }
+        function matchingRevision() {
+          return getAfter(/databases/$(database)/documents/users/$(userID)/trainingLoadPolicies/$(family)/revisions/$(request.resource.data.revisionId)).data == request.resource.data;
+        }
+        allow read: if isOwner();
+        allow create: if isOwner() && mayCreateEventTagCatalogEntry() && validPolicy()
+          && request.resource.data.revision == 1 && matchingRevision();
+        allow update: if isOwner() && mayCreateEventTagCatalogEntry() && validPolicy()
+          && request.resource.data.revision == resource.data.revision + 1 && matchingRevision();
+        allow delete: if false;
+        match /revisions/{revisionId} {
+          allow read: if isOwner();
+          allow create: if isOwner() && mayCreateEventTagCatalogEntry()
+            && request.resource.data.revisionId == revisionId
+            && request.resource.data.effectiveAt == request.time
+            && getAfter(/databases/$(database)/documents/users/$(userID)/trainingLoadPolicies/$(family)).data == request.resource.data;
+          allow update, delete: if false;
+        }
+      }
+
       // Assistant usage is private and server-owned only.
       match /assistantUsage/{periodDocId} {
          allow read: if false;
@@ -219,6 +250,48 @@ service cloud.firestore {
             && hasValidUpdatedEventTags();
           allow delete: if request.auth.uid == userID;
 
+
+            match /metaData/trainingLoad {
+              function validControl(key, control, legs) {
+                let ownedActivity = /databases/$(database)/documents/users/$(userID)/activities/$(key);
+                let target = /databases/$(database)/documents/users/$(userID)/activities/$(control.get('activityId', '_'));
+                return key is string && key.matches('^[a-zA-Z0-9_-]{1,128}$')
+                  && (key in legs || (exists(ownedActivity) && get(ownedActivity).data.eventID == eventID))
+                  && control is map && control.keys().hasOnly(['method', 'included', 'override', 'activityId', 'dismissed'])
+                  && control.get('method', 'AUTOMATIC') in ['AUTOMATIC', 'HR', 'MET']
+                  && control.get('included', true) is bool
+                  && (!('override' in control) || (control.override is number && control.override >= 0 && control.override <= 9999))
+                  && (!('activityId' in control) || (key in legs && legs[key].activityId == null
+                    && control.activityId is string && exists(target) && get(target).data.eventID == eventID))
+                  && (!('dismissed' in control) || (key in legs && legs[key].activityId == null && control.dismissed == true
+                    && control.keys().hasOnly(['dismissed'])));
+              }
+              function validLoadEdit(before) {
+                let data = request.resource.data;
+                let key = data.get('editedLegKey', null);
+                let oldControls = before.get('controls', {});
+                let legs = before.get('legs', {});
+                return data.version == 1 && data.revision is int && data.revision == before.get('revision', 0) + 1
+                  && (key == null || key is string)
+                  && data.get('resetUnmatched', false) is bool
+                  && (data.get('resetUnmatched', false) == before.get('resetUnmatched', false) || data.controls.size() == 0)
+                  && data.updatedAt == request.time && data.excluded is bool && data.controls is map && data.controls.size() <= 100
+                  && (data.controls.size() == 0
+                    || (key is string && data.controls.diff(oldControls).affectedKeys().hasOnly([key])
+                      && (!(key in data.controls) || validControl(key, data.controls[key], legs)))
+                    || (key == null && data.controls == oldControls));
+              }
+              allow read: if isOwner();
+              allow create: if isOwner() && mayCreateEventTagCatalogEntry()
+                && exists(/databases/$(database)/documents/users/$(userID)/events/$(eventID))
+                && request.resource.data.keys().hasOnly(['version', 'revision', 'excluded', 'controls', 'updatedAt', 'editedLegKey', 'resetUnmatched'])
+                && validLoadEdit({});
+              allow update: if isOwner() && mayCreateEventTagCatalogEntry()
+                && exists(/databases/$(database)/documents/users/$(userID)/events/$(eventID))
+                && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['revision', 'excluded', 'controls', 'updatedAt', 'editedLegKey', 'resetUnmatched'])
+                && validLoadEdit(resource.data);
+              allow delete: if false;
+            }
 
             // Private reflection leaves never inherit the public parent event read.
             match /workoutReflections/{reflectionID} {

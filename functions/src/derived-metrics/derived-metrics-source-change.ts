@@ -4,9 +4,10 @@ import {
     DERIVED_METRICS_TRAINING_READINESS_SLEEP_FIELDS, DERIVED_METRICS_TRAINING_SLEEP_FIELDS,
 } from './derived-metrics-source-fields';
 
-export type DerivedMetricSource = 'event' | 'activity' | 'sleep' | 'health';
+export type DerivedMetricSource = 'event' | 'activity' | 'sleep' | 'health' | 'training-load';
 
 const fieldsBySource: Record<DerivedMetricSource, readonly string[]> = {
+    'training-load': ['version', 'excluded', 'controls', 'legs', 'parentFingerprint', 'resetUnmatched'],
     event: DERIVED_METRICS_EVENT_FIELDS,
     activity: [...DERIVED_METRICS_ACTIVITY_FIELDS, 'swimLengths'],
     sleep: [...new Set([...DERIVED_METRICS_TRAINING_SLEEP_FIELDS, ...DERIVED_METRICS_TRAINING_READINESS_SLEEP_FIELDS])],

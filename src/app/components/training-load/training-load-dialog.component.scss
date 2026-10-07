@@ -1,0 +1,10 @@
+:host { display: block; }
+mat-dialog-content { display: grid; gap: 16px; }
+mat-form-field { width: 100%; min-width: 0; }
+p { margin: 0; }
+.workout-load, dl > div, .leg-actions { display: flex; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
+dl { margin: 0; display: grid; gap: 8px; }
+dd { margin: 0; }
+.load-fields, .unmatched { display: grid; gap: 16px; min-width: 0; }
+.hint { color: var(--mat-sys-on-surface-variant); font-size: 0.875rem; }
+mat-dialog-actions { flex-wrap: wrap; }

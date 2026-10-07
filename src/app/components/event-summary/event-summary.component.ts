@@ -1,3 +1,4 @@
+import { TrainingLoadDialogComponent } from '../training-load/training-load-dialog.component';
 import { ChangeDetectionStrategy, Component, DestroyRef, Input, OnChanges, SimpleChanges, ChangeDetectorRef, inject } from '@angular/core';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { AppEventInterface } from '@shared/app-event.interface';
@@ -90,6 +91,13 @@ export class EventSummaryComponent implements OnChanges {
     if (changes['event'] || changes['selectedActivities'] || changes['unitSettings']) {
       this.rebuildTemplateState();
     }
+  }
+
+  openTrainingLoad(): void {
+    if (!this.isOwner) return;
+    this.hapticsService.selection();
+    this.dialog.open(TrainingLoadDialogComponent, { width: '600px', maxWidth: 'calc(100vw - 24px)',
+      data: { event: this.event, user: this.user, unitSettings: this.unitSettings } });
   }
 
   openEditDetails() {

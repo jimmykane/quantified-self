@@ -92,6 +92,43 @@ function sessionInput(overrides: Partial<McpTrainingImpactInput> = {}): McpTrain
 }
 
 describe('MCP Training impact service', () => {
+  it('models zero overrides and user exclusions without leaking policy data or calling them benchmarks', async () => {
+    const loadReads = reads();
+    loadReads.fetchLoadMetadata = vi.fn().mockResolvedValue(new Map([['event-1', {
+      version: 1, revision: 1, excluded: false, controls: { 'activity-1': { override: 0 } },
+    }]]));
+    const zero = await getMcpTrainingImpact(sessionInput(), loadReads);
+    expect(zero.contribution?.trainingStressScore).toBe(0);
+    expect(zero.sessionRole).toBe('no-load');
+    expect(JSON.stringify(zero)).not.toMatch(/controls|policy|revision|activity-1|event-1/);
+    loadReads.fetchLoadMetadata = vi.fn().mockResolvedValue(new Map([['event-1', {
+      version: 1, revision: 2, excluded: true, controls: {},
+    }]]));
+    const excluded = await getMcpTrainingImpact(sessionInput(), loadReads);
+    expect(excluded).toMatchObject({ status: 'excluded', reason: 'no_usable_sessions', contribution: null,
+      coverage: { excludedSessionCount: 1, benchmarkOrMergeSessionCount: 0, notCompletedSessionCount: 0 } });
+  });
+  it('holds impact while its Form snapshot predates the load edit', async () => {
+    const loadReads = reads();
+    loadReads.fetchLoadMetadata = vi.fn().mockResolvedValue(new Map([['event-1', {
+      version: 1, revision: 2, excluded: false, controls: { 'activity-1': { override: 5 } }, updatedAt: NOW,
+    }]]));
+    expect(await getMcpTrainingImpact(sessionInput(), loadReads)).toMatchObject({ status: 'updating', reason: 'form_updating', contribution: null });
+  });
+  it('waits for the day rebuild when a different selected workout was just excluded', async () => {
+    const loadReads = reads({ activities: [
+      activity('activity-1', 'event-1', '2026-01-01T10:00:00.000Z', 42),
+      activity('activity-2', 'event-2', '2026-01-01T12:00:00.000Z', 42),
+    ], events: [{ id: 'event-1', data: {} }, { id: 'event-2', data: {} }],
+    snapshot: formSnapshot([{ dayMs: DAY_ONE, load: 84 }]) });
+    loadReads.fetchLoadMetadata = vi.fn().mockResolvedValue(new Map([['event-2', {
+      version: 1, revision: 1, excluded: true, controls: {}, updatedAt: NOW,
+    }]]));
+    expect(await getMcpTrainingImpact(sessionInput({ mode: 'day', localDate: '2026-01-01', timeZone: 'UTC',
+      references: [{ activityId: 'activity-1', eventId: 'event-1' }, { activityId: 'activity-2', eventId: 'event-2' }],
+    }), loadReads)).toMatchObject({ status: 'updating', reason: 'form_updating', contribution: null,
+      coverage: { excludedSessionCount: 1, benchmarkOrMergeSessionCount: 0 } });
+  });
   it('returns a ready identity-free session contribution and actual UTC-day outcome', async () => {
     const result = await getMcpTrainingImpact(sessionInput(), reads());
 

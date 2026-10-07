@@ -66,6 +66,7 @@ import {
 } from '../../../shared/health';
 import { encodeHealthMetricSportsLibData } from '../../../shared/sports-lib-health-data';
 import { MANUAL_HEALTH_SOURCE_RECORD_TYPE } from '../../../shared/manual-health';
+import { attachEffectiveTrainingLoad, resolveEffectiveTrainingLoad } from '../../../shared/training-load-policy';
 
 function healthMeasurementDoc(options: {
     id: string;
@@ -5078,6 +5079,38 @@ describe('writeDerivedMetricSnapshotsReady', () => {
         const call = hoisted.transactionSet.mock.calls.find((setCall) => setCall?.[1]?.metricKind === metricKind);
         return (call?.[1] || {}) as Record<string, unknown>;
     }
+
+    it('uses modeled load for Form, ACWR and weekly load while retaining excluded workout volume', async () => {
+        const { writeDerivedMetricSnapshotsReady } = await import('./derived-metrics.service');
+        const nowMs = Date.UTC(2026, 0, 3, 12);
+        const sources = [
+            { id: 'corrected', load: 7.6, excluded: false },
+            { id: 'zero', load: 0, excluded: false },
+            { id: 'excluded', load: 999, excluded: true },
+        ].map(({ id, load, excluded }) => {
+            const data = { startDate: Date.UTC(2026, 0, 3, 8), stats: {
+                'Training Stress Score': 87.3, [DataActivityTypes.type]: [ActivityTypes.Walking], [DataDuration.type]: 3600,
+            } };
+            attachEffectiveTrainingLoad(data, resolveEffectiveTrainingLoad(data,
+                { version: 1, revision: 1, excluded, controls: { leg: { override: load } } },
+                [{ id: 'leg', type: ActivityTypes.Walking, stats: data.stats }]));
+            return { id, data: () => data };
+        });
+        await writeDerivedMetricSnapshotsReady('user-1', [DERIVED_METRIC_KINDS.Form,
+            DERIVED_METRIC_KINDS.Acwr, DERIVED_METRIC_KINDS.MonotonyStrain, DERIVED_METRIC_KINDS.TrainingSummary],
+        { formDocs: sources as never, trainingActivities: buildTrainingActivitySources(sources), recoveryNowDocs: [] },
+        { buildAtMs: nowMs });
+        expect(findPersistedPayload(DERIVED_METRIC_KINDS.Form).payload).toMatchObject({ dailyLoads: [
+            { dayMs: Date.UTC(2026, 0, 3), load: 7.6, activityCount: 2 },
+        ] });
+        expect(findPersistedPayload(DERIVED_METRIC_KINDS.Acwr).payload).toMatchObject({ acuteLoad7: 7.6 });
+        expect(findPersistedPayload(DERIVED_METRIC_KINDS.MonotonyStrain).payload).toMatchObject({ weeklyLoad7: 7.6 });
+        expect(findPersistedPayload(DERIVED_METRIC_KINDS.TrainingSummary).payload).toMatchObject({ disciplines:
+            expect.arrayContaining([expect.objectContaining({ discipline: 'walking-hiking', current28d:
+                expect.objectContaining({ activityCount: 3, durationSeconds: 10800 }) })]),
+        });
+        expect(sources.map(source => source.data().stats['Training Stress Score'])).toEqual([87.3, 87.3, 87.3]);
+    });
 
     it('rejects a reused Form context when exact daily counts do not match sourceEventCount', async () => {
         const { writeDerivedMetricSnapshotsReady } = await import('./derived-metrics.service');

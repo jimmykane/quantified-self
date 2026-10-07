@@ -1,3 +1,4 @@
+import { persistTrainingLoadMetadata } from './training-load/training-load-metadata';
 import * as functions from 'firebase-functions/v1';
 type Request = functions.https.Request;
 type Response = functions.Response;
@@ -354,6 +355,7 @@ export async function setEvent(userID: string, eventID: string, event: EventInte
 
 
   const adapter: FirestoreAdapter = {
+    persistTrainingLoad: event => persistTrainingLoadMetadata(userID, event, writeOptions.assertWriteAuthorizationInTransaction),
     setDoc: async (path: string[], data: any) => {
       // path is ['users', userID, 'events', eventID, ...]
       let ref: any = admin.firestore();
