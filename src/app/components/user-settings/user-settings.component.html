@@ -338,6 +338,9 @@
               <div>
                 <h4 class="settings-subsection-title">Unit preset</h4>
                 <p>Set distance, pace, speed, and swim units together. Weight stays independent.</p>
+                @if (selectedUnitPreset === null) {
+                <p class="settings-section-note" role="status">Custom unit choices</p>
+                }
               </div>
               <mat-button-toggle-group
                 appearance="standard"

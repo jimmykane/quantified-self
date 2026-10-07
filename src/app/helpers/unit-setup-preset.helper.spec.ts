@@ -4,6 +4,7 @@ import {
   getRawBrowserLocale,
   resolveStartOfTheWeekForUnitSetup,
   resolveSuggestedUnitSetupPreset,
+  resolveUnitSetupPreset,
   shouldShowUnitSetupPrompt,
 } from './unit-setup-preset.helper';
 import {
@@ -95,6 +96,21 @@ describe('unit setup preset helper', () => {
       weightUnits: WeightUnits.Kilograms,
       startOfTheWeek: DaysOfTheWeek.Monday,
     });
+  });
+
+  it.each(['kilometers', 'miles'] as const)('recognizes %s regardless of weight or week start', preset => {
+    const settings = buildUnitSettingsForUnitSetupPreset(preset, null);
+    expect(resolveUnitSetupPreset({ ...settings, weightUnits: WeightUnits.Pounds, startOfTheWeek: DaysOfTheWeek.Sunday }))
+      .toBe(preset);
+  });
+
+  it('recognizes mixed, multiple, or missing unit choices as custom', () => {
+    const settings = buildUnitSettingsForUnitSetupPreset('kilometers', null);
+    expect(resolveUnitSetupPreset({ ...settings, paceUnits: [PaceUnits.MinutesPerMile] })).toBeNull();
+    expect(resolveUnitSetupPreset({ ...settings, speedUnits: [SpeedUnits.KilometersPerHour, SpeedUnits.MilesPerHour] })).toBeNull();
+    expect(resolveUnitSetupPreset({ ...settings, swimPaceUnits: [] })).toBeNull();
+    expect(resolveUnitSetupPreset({ distanceUnits: DistanceUnits.Kilometers })).toBeNull();
+    expect(resolveUnitSetupPreset(null)).toBeNull();
   });
 
   it('shows the prompt only for owner dashboards with explicit incomplete setup', () => {

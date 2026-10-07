@@ -65,7 +65,10 @@ available across section switches, uses the theme surface and safe-area padding,
 Pristine implicit submits are ignored. Section summaries follow staged form values (including disabled consent fields),
 and untouched consent summaries refresh with the user input. Profile details and name live in Account, watermark
 text lives in Charts, and week start lives in Units & formatting. Customize units is a second Material disclosure;
-its fields remain mounted and preserve edits while hidden. Narrow column layouts use container queries to stack fields and preserve Material touch targets.
+its fields remain mounted and preserve edits while hidden. A unit preset is selected only when distance, speed,
+pace, swim pace, and vertical speed all match it; mixed choices show Custom unit choices and allow reapplying
+either preset. Presets preserve weight, week start, and regional format and require Save changes.
+Narrow column layouts use container queries to stack fields and preserve Material touch targets.
 
 Settings separates the inline **Theme** control from **Privacy & emails** (usage analytics and marketing emails). The Privacy
 section is addressable at `/settings?section=privacy`; its switches retain the existing legal-consent form controls

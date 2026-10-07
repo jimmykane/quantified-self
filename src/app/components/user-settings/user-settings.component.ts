@@ -41,6 +41,7 @@ import {
 import { AppThemePreference, isAppThemePreference, SYSTEM_THEME_PREFERENCE } from '../../models/app-theme-preference.type';
 import {
   buildUnitSettingsForUnitSetupPreset,
+  resolveUnitSetupPreset,
   UNIT_SETUP_PRESET_OPTIONS,
   UnitSetupPreset,
 } from '../../helpers/unit-setup-preset.helper';
@@ -178,7 +179,7 @@ export class UserSettingsComponent implements OnChanges, OnDestroy, OnInit {
     ...option,
     preview: buildAppFormatLocalePreview(option.value),
   }));
-  public selectedUnitPreset: UnitSetupPreset = 'kilometers';
+  public selectedUnitPreset: UnitSetupPreset | null = null;
   public verticalSpeedUnits = VerticalSpeedUnits;
   public paceUnits = PaceUnits;
   public swimPaceUnits = SwimPaceUnits;
@@ -408,7 +409,6 @@ export class UserSettingsComponent implements OnChanges, OnDestroy, OnInit {
     });
 
     this.initializedUserUID = this.user.uid;
-    this.selectedUnitPreset = this.resolveUnitPresetFromUnitSettings(settings.unitSettings);
     this.syncBrandTextControlState();
     this.refreshSectionSummaries();
     this.formSubscription = this.userSettingsFormGroup.valueChanges.subscribe(() => {
@@ -483,7 +483,7 @@ export class UserSettingsComponent implements OnChanges, OnDestroy, OnInit {
   }
 
   onUnitPresetChange(preset: UnitSetupPreset): void {
-    if (this.isSaving || this.isDeleting) return;
+    if (this.isSaving || this.isDeleting || preset === this.selectedUnitPreset) return;
     this.selectedUnitPreset = preset;
     const presetSettings = buildUnitSettingsForUnitSetupPreset(preset);
 
@@ -760,7 +760,13 @@ export class UserSettingsComponent implements OnChanges, OnDestroy, OnInit {
     const metrics = Array.isArray(value.dataTypesToUse) ? value.dataTypesToUse.length : 0;
     const map = Object.entries(this.mapTypes).find(([, type]) => type === value.mapType)?.[0]?.replace(/([a-z])([A-Z])/g, '$1 $2');
     const plan = this.isProUser ? 'Pro plan' : this.isBasicUser ? 'Basic plan' : 'Free plan';
-    this.selectedUnitPreset = this.resolveUnitPresetFromUnitSettings({ distanceUnits: value.distanceUnitsToUse } as UserUnitSettingsInterface);
+    this.selectedUnitPreset = resolveUnitSetupPreset({
+      distanceUnits: value.distanceUnitsToUse,
+      speedUnits: value.speedUnitsToUse,
+      paceUnits: value.paceUnitsToUse,
+      swimPaceUnits: value.swimPaceUnitsToUse,
+      verticalSpeedUnits: value.verticalSpeedUnitsToUse,
+    });
     this.sectionSummaries.set({
       units: [distance, weight, this.selectedFormatLocaleLabel].filter(Boolean).join(' · '),
       dashboard: `${value.eventsPerPage} activities per page`,
@@ -796,10 +802,6 @@ export class UserSettingsComponent implements OnChanges, OnDestroy, OnInit {
     }
 
     return left.every((value, index) => value === right[index]);
-  }
-
-  private resolveUnitPresetFromUnitSettings(unitSettings: UserUnitSettingsInterface): UnitSetupPreset {
-    return unitSettings?.distanceUnits === DistanceUnits.Miles ? 'miles' : 'kilometers';
   }
 
   private maxTrimmedLength(maxLength: number): ValidatorFn {

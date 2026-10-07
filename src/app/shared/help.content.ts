@@ -1291,7 +1291,9 @@ edits. A **Save changes** bar appears when you make changes and stays available 
 across all sections. Failed saves keep your choices so you can retry. Privacy & emails is immediately before Account.
 
 **Units & formatting** contains the unit preset, regional format, and start of week. Select **Customize units** to
-change individual preferences such as weight or swim pace. Your name and identity details are in **Account**;
+change individual preferences such as weight or swim pace. Mixed choices are labelled **Custom unit choices**.
+Choosing a preset replaces the individual distance, speed, pace, swim pace, and vertical speed choices; weight,
+week start, and regional format remain independent. Presets require **Save changes**. Your name and identity details are in **Account**;
 custom watermark text is in **Charts**. Account deletion remains separate at the bottom of Account.
 
 In [Settings → Privacy & emails](/settings?section=privacy), turn **Usage analytics** or **Marketing emails** off, then select **Save changes**. Theme is directly available at the top of Settings. Other Settings sections let you customize charts, maps, units, and regional formatting.

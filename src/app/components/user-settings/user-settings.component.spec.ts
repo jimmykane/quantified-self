@@ -29,6 +29,8 @@ import {
     ACTIVITIES_EXCLUDED_FROM_DESCENT,
     ActivityTypes,
     DistanceUnits,
+    GradeAdjustedPaceUnits,
+    GradeAdjustedSpeedUnits,
     PaceUnits,
     DataPotentialStamina,
     SpeedUnits,
@@ -1224,6 +1226,58 @@ describe('UserSettingsComponent', () => {
         expect(component.userSettingsFormGroup.get('swimPaceUnitsToUse').value).toEqual([SwimPaceUnits.MinutesPer100Yard]);
         expect(component.userSettingsFormGroup.get('verticalSpeedUnitsToUse').value).toEqual([VerticalSpeedUnits.FeetPerSecond]);
         expect(component.userSettingsFormGroup.dirty).toBe(true);
+    });
+
+    it('allows reapplying the same preset after customizing its unit choices', () => {
+        component.activeSection = 'units';
+        component.onUnitPresetChange('kilometers');
+        component.userSettingsFormGroup.get('paceUnitsToUse').setValue([PaceUnits.MinutesPerMile]);
+        fixture.detectChanges();
+        expect(component.selectedUnitPreset).toBeNull();
+        const group = fixture.nativeElement.querySelector('mat-button-toggle-group[aria-label="Unit preset"]');
+        expect(group.querySelector('[aria-checked="true"]')).toBeNull();
+        expect(group.parentElement.textContent).toContain('Custom unit choices');
+        const kilometers = Array.from(group.querySelectorAll('mat-button-toggle'))
+            .find((toggle: HTMLElement) => toggle.textContent.trim() === 'Kilometers') as HTMLElement;
+        hapticsServiceMock.selection.mockClear();
+        kilometers.querySelector('button').click();
+        fixture.detectChanges();
+        expect(component.selectedUnitPreset).toBe('kilometers');
+        expect(component.userSettingsFormGroup.get('paceUnitsToUse').value).toEqual([PaceUnits.MinutesPerKilometer]);
+        expect(hapticsServiceMock.selection).toHaveBeenCalledOnce();
+        expect(group.parentElement.textContent).not.toContain('Custom unit choices');
+        component.onUnitPresetChange('kilometers');
+        expect(hapticsServiceMock.selection).toHaveBeenCalledOnce();
+    });
+
+    it.each([
+        { preset: 'kilometers' as const, distance: DistanceUnits.Kilometers, speed: SpeedUnits.KilometersPerHour,
+            pace: PaceUnits.MinutesPerKilometer, swim: SwimPaceUnits.MinutesPer100Meter, vertical: VerticalSpeedUnits.MetersPerSecond,
+            gap: GradeAdjustedPaceUnits.MinutesPerKilometer, gas: GradeAdjustedSpeedUnits.KilometersPerHour },
+        { preset: 'miles' as const, distance: DistanceUnits.Miles, speed: SpeedUnits.MilesPerHour,
+            pace: PaceUnits.MinutesPerMile, swim: SwimPaceUnits.MinutesPer100Yard, vertical: VerticalSpeedUnits.FeetPerSecond,
+            gap: GradeAdjustedPaceUnits.MinutesPerMile, gas: GradeAdjustedSpeedUnits.MilesPerHour },
+    ])('stages and saves $preset while preserving independent preferences', async expected => {
+        component.userSettingsFormGroup.patchValue({weightUnitsToUse: WeightUnits.Pounds, startOfTheWeek: 0, formatLocale: 'en-GB'});
+        component.onUnitPresetChange(expected.preset === 'miles' ? 'kilometers' : 'miles');
+        component.onUnitPresetChange(expected.preset);
+        expect(TestBed.inject(AppUserService).updateUserProperties).not.toHaveBeenCalled();
+        component.activeSection = 'account';
+        await component.onSubmit(new Event('submit'));
+        expect(TestBed.inject(AppUserService).updateUserProperties).toHaveBeenCalledWith(
+            component.user,
+            expect.objectContaining({settings: expect.objectContaining({
+                unitSettings: {
+                    distanceUnits: expected.distance, speedUnits: [expected.speed], paceUnits: [expected.pace],
+                    swimPaceUnits: [expected.swim], verticalSpeedUnits: [expected.vertical],
+                    gradeAdjustedPaceUnits: [expected.gap], gradeAdjustedSpeedUnits: [expected.gas],
+                    weightUnits: WeightUnits.Pounds, startOfTheWeek: 0,
+                },
+                appSettings: expect.objectContaining({formatLocale: 'en-GB'}),
+            })}),
+        );
+        expect(component.selectedUnitPreset).toBe(expected.preset);
+        expect(component.userSettingsFormGroup.pristine).toBe(true);
     });
 
     it('keeps individual unit controls mounted behind Customize units', () => {
