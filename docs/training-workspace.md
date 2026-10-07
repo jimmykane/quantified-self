@@ -4877,6 +4877,13 @@ Excluded sessions do not count as missing-load sessions. Reset restores the save
 Settings. A whole-workout reset also explicitly releases retained unmatched controls; per-leg reset retains any
 explicit association.
 
+The Training load action and owner Training impact use the same event classifier as Form and MCP: explicit
+`mergeType: 'benchmark'` and legacy merged comparison records are excluded, while `mergeType: 'multi'` remains an
+eligible combined workout. Comparison records do not offer the load editor, and its handler also rejects them.
+Owner-excluded standard workouts retain the editor so they can be included again. Incidental benchmark display
+metadata does not override the persisted Training classification. This UI alignment changes no stored controls,
+calculations, database write paths, MCP schema/scope or Training planning/provider delivery contract.
+
 After saving controls, the editor reloads its metadata and sport policy heads before showing updated load or allowing
 another edit. If that refresh fails, it hides the old load and form, stops the loading indicator, and explains that the
 write succeeded but the editor must be reopened. A failed read also unsubscribes the other pending refresh read.

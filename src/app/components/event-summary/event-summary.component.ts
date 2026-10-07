@@ -29,6 +29,7 @@ import { firstValueFrom, take } from 'rxjs';
 import { EventTagService } from '../../services/event-tag.service';
 import { EventTagsDialogComponent } from '../event-tags/event-tags-dialog.component';
 import { AppHapticsService } from '../../services/app.haptics.service';
+import { isBenchmarkEventForTrainingMetrics } from '@shared/event-classification';
 import { resolveUnitAwareDisplayFromValue } from '@shared/unit-aware-display';
 
 @Component({
@@ -93,8 +94,12 @@ export class EventSummaryComponent implements OnChanges {
     }
   }
 
+  get canEditTrainingLoad(): boolean {
+    return this.isOwner && !!this.event && !isBenchmarkEventForTrainingMetrics(this.event);
+  }
+
   openTrainingLoad(): void {
-    if (!this.isOwner) return;
+    if (!this.canEditTrainingLoad) return;
     this.hapticsService.selection();
     this.dialog.open(TrainingLoadDialogComponent, { width: '600px', maxWidth: 'calc(100vw - 24px)',
       data: { event: this.event, user: this.user, unitSettings: this.unitSettings } });

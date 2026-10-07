@@ -11,7 +11,7 @@ import {
 import {
   type DashboardFormPoint,
 } from './dashboard-form.helper';
-import { isMergeOrBenchmarkEvent } from './event-visibility.helper';
+import { isBenchmarkEventForTrainingMetrics } from '@shared/event-classification';
 import type { TrainingImpactSnapshotState } from '../services/training-impact.service';
 
 export type TrainingImpactAvailability =
@@ -58,7 +58,7 @@ export function buildTrainingSessionImpactView(
   source: TrainingImpactSnapshotState,
 ): TrainingSessionImpactView {
   const eventId = `${event?.getID?.() || ''}`.trim() || null;
-  if (isMergeOrBenchmarkEvent(event)) {
+  if (isBenchmarkEventForTrainingMetrics(event)) {
     return unavailable('excluded', 'Merged benchmark events are excluded from Training.', eventId);
   }
   const dayMs = resolveTrainingImpactUtcDayMs(event);

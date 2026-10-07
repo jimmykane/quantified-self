@@ -5,7 +5,7 @@ import { DERIVED_METRIC_KINDS } from '@shared/derived-metrics';
 import { catchError, combineLatest, distinctUntilChanged, finalize, map, Observable, of, shareReplay, startWith, switchMap, tap } from 'rxjs';
 import type { DashboardFormPoint } from '../helpers/dashboard-form.helper';
 import { AppUserService } from './app.user.service';
-import { isMergeOrBenchmarkEvent } from '../helpers/event-visibility.helper';
+import { isBenchmarkEventForTrainingMetrics } from '@shared/event-classification';
 import {
   DashboardDerivedMetricsService,
   type DashboardDerivedMetricsState,
@@ -34,7 +34,7 @@ export class TrainingImpactService {
   watch(uid: string, events: readonly EventInterface[] = []): Observable<TrainingImpactSnapshotState> {
     const normalizedUid = `${uid || ''}`.trim();
     if (!normalizedUid) return of(PRIVATE_STATE);
-    const loadEvents = events.filter(event => !isMergeOrBenchmarkEvent(event));
+    const loadEvents = events.filter(event => !isBenchmarkEventForTrainingMetrics(event));
     return this.users.user$.pipe(
       map(viewer => `${viewer?.uid || ''}`.trim()),
       distinctUntilChanged(),

@@ -17,6 +17,7 @@ function event(
   return {
     isMerge: options.isMerge === true,
     hasBenchmark: options.isBenchmark === true,
+    mergeType: options.isBenchmark ? 'benchmark' : undefined,
     startDate: new Date(start),
     getID: () => id,
     getStat: (type: string) => {
@@ -44,6 +45,15 @@ function ready(loads: Array<{ dayMs: number; load: number }>): TrainingImpactSna
 }
 
 describe('training impact view helper', () => {
+  it('uses Form classification for multi merges and ignores incidental benchmark display metadata', () => {
+    const dayMs = Date.UTC(2026, 0, 1);
+    const source = ready([{ dayMs, load: 42 }]);
+    const workout = event('multi', '2026-01-01T10:00:00Z', 42);
+    for (const classification of [{ isMerge: true, mergeType: 'multi' }, { hasBenchmark: true }]) {
+      expect(buildTrainingSessionImpactView({ ...workout, ...classification }, source))
+        .toMatchObject({ availability: 'ready', impact: { trainingStressScore: 42 } });
+    }
+  });
   it('keeps excluded-day, partial-leg, source-update and reassociation states distinct from missing TSS', () => {
     const walk = event('walk', '2026-01-01T10:00:00Z', 87.3);
     const state = ready([{ dayMs: Date.UTC(2026, 0, 1), load: 9 }]);

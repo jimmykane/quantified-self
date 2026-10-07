@@ -71,10 +71,10 @@ describe('TrainingImpactService', () => {
     loads.watchEffective.mockClear(); viewer$.next({ uid: 'other' });
     instance.watch('owner').subscribe().unsubscribe(); expect(loads.watchEffective).not.toHaveBeenCalled();
   });
-  it('does not let benchmark metadata hold a completed day in updating state', () => {
+  it.each([{ isMerge: true }, { mergeType: 'benchmark', isMerge: false }])('does not let benchmark metadata hold a completed day in updating state %j', classification => {
     viewer$.next({ uid: 'owner' });
-    const workout = { getID: () => 'workout' } as EventInterface;
-    const benchmark = { getID: () => 'benchmark', isMerge: true } as EventInterface;
+    const workout = { getID: () => 'workout', isMerge: true, mergeType: 'multi' } as EventInterface;
+    const benchmark = { getID: () => 'benchmark', ...classification } as EventInterface;
     loads.watchEffective.mockImplementationOnce((...args: any[]) => of(new Map(
       (args[1] as EventInterface[]).map(event => [event.getID(), {
         score: 9, status: 'available', updatedAtMs: event === benchmark ? 200 : 50,
