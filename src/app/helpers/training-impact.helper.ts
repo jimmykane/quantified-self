@@ -62,6 +62,9 @@ export function buildTrainingSessionImpactView(
   }
   const dayMs = resolveTrainingImpactUtcDayMs(event);
   const modeled = eventId ? source.loadsByEventId?.get(eventId) : undefined;
+  // Navigation can retain the previous selection's snapshot while new load reads start.
+  if (eventId && source.status === 'ready' && source.loadsByEventId && !modeled)
+    return unavailable('updating', 'Updating Training impact…', eventId, dayMs);
   if (modeled?.status === 'excluded') return unavailable('excluded', 'Excluded from modeled Training load. History and volume are retained.', eventId, dayMs);
   if (modeled?.reasons.includes('source-updating')) return unavailable('updating', 'Updating Training impact…', eventId, dayMs);
   if (modeled?.reasons.includes('activity-match-needs-review')) return unavailable('unavailable',

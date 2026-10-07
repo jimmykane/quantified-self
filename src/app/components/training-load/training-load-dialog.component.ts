@@ -52,7 +52,9 @@ export class TrainingLoadDialogComponent implements OnInit {
         return !metadata?.legs || !!saved && (!saved.sourceFingerprint || saved.sourceFingerprint ===
           await browserTrainingLoadSourceFingerprint(activity.toJSON()));
       }));
-      this.sourceCurrent.set(sourceCurrent && legSourcesCurrent.every(Boolean));
+      const currentIds = new Set(this.activities.map(activity => activity.id));
+      const allSavedLegsPresent = Object.values(metadata?.legs ?? {}).every(leg => !leg.activityId || currentIds.has(leg.activityId));
+      this.sourceCurrent.set(sourceCurrent && allSavedLegsPresent && legSourcesCurrent.every(Boolean));
       this.metadata.set(metadata); this.policies.set(policies); this.loaded.set(true);
       if (!this.selectedId()) this.selectedId.set(this.activities[0]?.id ?? '');
       this.resetDraft();

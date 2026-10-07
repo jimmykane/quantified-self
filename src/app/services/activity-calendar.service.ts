@@ -137,19 +137,25 @@ function toActivityCalendarEvent(document: EventDocumentData): EventInterface | 
   const name = typeof document.name === 'string' ? document.name : '';
   const description = typeof document.description === 'string' ? document.description : null;
 
+  // The Calendar API historically returns this read-only projection as EventInterface;
+  // it deliberately omits mutation/serialization methods and rich Sports Lib hydration.
   return {
     name,
     description,
     tags: getEventTags({ tags: document.tags, benchmarkReviewTags: document.benchmarkReviewTags }),
     startDate,
     getID: () => id,
+    // Summary events are not serializable Sports Lib events. Retain source fields for load validation.
+    endDate: resolveDate(document.endDate) ?? undefined,
+    stats,
+    getActivities: () => [],
     getStat: (type) => {
       const value = statValues[type];
       return value === null || value === undefined ? null : { getValue: () => value };
     },
     getActivityTypesAsArray: () => activityTypes,
     getActivityTypesAsString: () => activityTypes.join(', '),
-  } as AppEventInterface;
+  } as unknown as AppEventInterface;
 }
 
 function resolveDate(value: unknown): Date | null {

@@ -66,6 +66,16 @@ describe('training impact view helper', () => {
     state.loadsByEventId = new Map([['walk', { score: null, status: 'unavailable', method: null, estimated: false, reasons: [] }]]);
     expect(buildTrainingSessionImpactView(activity, state).availability).toBe('missing-tss');
   });
+  it('waits for the newly selected workout instead of falling back to its recorded TSS', () => {
+    const activity = event('new-workout', '2026-01-01T10:00:00Z', 87.3);
+    const state = ready([{ dayMs: Date.UTC(2026, 0, 1), load: 120 }]);
+    state.loadsByEventId = new Map([['previous-workout', {
+      score: 9, status: 'available', method: 'MET', estimated: true, reasons: [],
+    }]]);
+    expect(buildTrainingSessionImpactView(activity, state)).toMatchObject({ availability: 'updating', impact: null });
+    expect(buildTrainingDayImpactView([activity], state)).toMatchObject({ availability: 'updating', trainingStressScore: 0 });
+  });
+
   it('maps an activity to its UTC Training day and contribution', () => {
     const activity = event('session', '2026-01-02T00:30:00+02:00', 42);
     const dayMs = Date.UTC(2026, 0, 1);
