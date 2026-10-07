@@ -53,6 +53,24 @@ describe('Firestore Security Rules', () => {
             await assertFails(owner.collection('users/owner/events/e/workoutReflections').get());
             await assertFails(owner.doc(path + '/nested/leaf').set(value));
         });
+        it('atomically saves event feedback with a private note and rolls back both on a stale note revision', async () => {
+            const owner = testEnv.authenticatedContext('owner').firestore();
+            const eventRef = owner.doc('users/owner/events/e');
+            const reflectionRef = owner.doc(path);
+            const batch = owner.batch();
+            batch.update(eventRef, { 'stats.Rated Perceived Exertion': 5, name: 'Run' });
+            batch.set(reflectionRef, value);
+            await assertSucceeds(batch.commit());
+            expect((await eventRef.get()).data()).toEqual({ privacy: 'public', name: 'Run', stats: { 'Rated Perceived Exertion': 5 } });
+            await assertFails(testEnv.unauthenticatedContext().firestore().doc(path).get());
+            const stale = owner.batch();
+            stale.update(eventRef, { 'stats.Rated Perceived Exertion': 9, name: 'Stale edit' });
+            stale.set(reflectionRef, { ...value, note: 'stale note' });
+            await assertFails(stale.commit());
+            expect((await eventRef.get()).data()?.stats).toEqual({ 'Rated Perceived Exertion': 5 });
+            expect((await eventRef.get()).data()?.name).toBe('Run');
+            expect((await reflectionRef.get()).data()?.note).toBe('private context');
+        });
         it('enforces target membership, note-only fields, revisions and permanent clearing', async () => {
             const owner = testEnv.authenticatedContext('owner').firestore();
             await assertSucceeds(owner.doc('users/owner/events/e/workoutReflections/activity_a').set(value));

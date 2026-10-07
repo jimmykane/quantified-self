@@ -2,8 +2,11 @@
 
 ## Optional post-workout reflection (Item 10)
 
-The owner action on a saved event summary opens a note-only Material dialog. No auto-prompt interrupts recording
-import. The user explicitly chooses the whole recording or a real activity in that event, including multi-activity
+The owner's Edit details action on a saved event summary opens one Material bottom sheet for event metadata and
+post-workout feedback: Feeling, the existing whole-recording RPE, and optional private reflection text. There is no
+separate reflection icon or dialog. All fields are staged until one Save changes action; Cancel discards the entire
+draft. No auto-prompt interrupts recording import. The user explicitly chooses the whole recording or a real activity
+for the note, including multi-activity
 recordings; benchmark/ambiguous merged events are excluded. Three optional prompts cover overall feel, sport-relevant
 conditions/technique, and fatigue/recovery. One bounded exact completion-link lookup can replace the last prompt with
 planned-versus-felt context, only for one exact matching target. A malformed or out-of-recording link, an ambiguous
@@ -23,9 +26,17 @@ automatic plan adaptation, injury diagnosis and provider feedback delivery remai
 `users/{uid}/events/{eventId}/workoutReflections`: `recording` or `activity_{actualActivityId}`. Each leaf contains exactly
 `schemaVersion: 1`, monotonic `revision`, UUID `mutationId`, `deleted`, and nullable `note`.
 Text is trimmed, limited to 2000 characters, rejects control characters except newline/tab/carriage return, and is
-untrusted athlete context. A save needs nonblank text. There is no reflection effort field. The dialog shows the
-existing whole-recording RPE as read-only context; its sole editor remains Edit details. Imported and planned RPE
-remain unchanged. This unreleased feature has no data migration or reparse requirement.
+untrusted athlete context. A note save needs nonblank text. There is no reflection effort field. The one RPE selector
+in Edit details edits the existing recording stat and preserves zero and imported fractional values until explicitly
+changed. Planned RPE is unchanged. This unreleased feature has no data migration or reparse requirement.
+
+The app-only saveEventDetails path in WorkoutReflectionService combines a sanitized patch limited to four editable
+event fields with an optional revision-checked note change in one Firestore transaction. Only changed name, description,
+Feeling or RPE fields are patched; unrelated event stats are preserved. Each edited event field checks its original
+value, while an already committed unchanged retry is accepted. Reflection conflicts prevent both writes. Details-only
+edits never read or rewrite a note and remain available while the optional note read is pending or has failed.
+The in-memory event is updated only after a successful commit. A staged Delete reflection review is applied by the
+same Save changes action; Keep reflection cancels that deletion. Account changes invalidate the whole draft.
 
 The editor reads its exact leaf with lazily loaded Firestore Lite REST using the same app's Auth/App Check providers,
 avoiding the full SDK's persisted missing-document state. That read is bounded to 30 seconds and rechecks the owner
@@ -33,10 +44,10 @@ after module loading and the response; failure never supplies revision zero. Own
 parent, target membership and leaf before writing. Rules additionally check
 active-account/deletion fences, benchmark exclusion, exact keys, text bounds and monotonically increasing
 revisions. Public event access never grants reflection access; collection listing and descendants are denied.
-Unknown/corrupt leaves fail closed. Skip/Cancel and an unchanged draft never write. Concurrent revisions require reload;
+Unknown/corrupt leaves fail closed. Cancel and an unchanged draft never write. Concurrent revisions require reload;
 an uncertain unchanged retry preserves its mutation UUID. UUID creation uses the shared browser compatibility guard;
-an unavailable UUID reports a browser error and preserves the editable draft without writing. Account changes clear private dialog state and invalidate
-pending results. Accepted target selections own selection haptics; async saves own success/error feedback.
+an unavailable UUID reports a browser error and preserves the editable draft without writing. Account changes clear private form state and invalidate
+pending results. Accepted target/rating selections own selection haptics; async saves own success/error feedback.
 
 Deletion overwrites text with null in a content-free monotonic tombstone, preventing a stale create/edit retry
 from resurrecting that deleted reflection. There is no recoverable reflection history. Current content remains until
@@ -62,6 +73,9 @@ QS shows the target and current/new text, with explicit permanent deletion, befo
 New chat, expiry, stale proposals/revisions and deletion fences fail closed. At most one current content proposal is kept.
 
 Planning review: recipes, planning mutation kinds, completion/link lifecycle and provider delivery are unchanged.
+Combining the app form has no MCP wire impact: scopes, schemas, projections, tool descriptions and the registered
+contract digest are unchanged. MCP/Assistant reflection changes still write only the private note; combining the app
+form does not grant either surface event-stat mutation authority or require a bundled-plugin rebuild.
 Reflection context never marks completion or enters readiness/load/durability calculations, and does not authorize
 adaptation. Exact-link reads are already covered by the current planning surface; no relevant plan-read extension is
 missing. Separate reflection coverage is implemented in this change, so no #583 deferral is required. Public contract,

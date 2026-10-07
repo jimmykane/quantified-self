@@ -3,7 +3,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { Auth } from 'app/firebase/auth';
 import { Firestore } from 'app/firebase/firestore';
 import { WorkoutReflectionService, WORKOUT_REFLECTION_READ_TIMEOUT_MS } from './workout-reflection.service';
-const mocks = vi.hoisted(() => ({ get: vi.fn(), set: vi.fn(), read: vi.fn(), cachedRead: vi.fn(), links: vi.fn(), liteFirestore: vi.fn() }));
+const mocks = vi.hoisted(() => ({ get: vi.fn(), set: vi.fn(), update: vi.fn(), read: vi.fn(), cachedRead: vi.fn(), links: vi.fn(), liteFirestore: vi.fn() }));
 vi.mock('firebase/firestore/lite', () => ({ getFirestore: mocks.liteFirestore,
   doc: (_db: unknown, path: string) => path, getDoc: mocks.read }));
 vi.mock('app/firebase/firestore', async () => {
@@ -11,7 +11,7 @@ vi.mock('app/firebase/firestore', async () => {
   return { ...actual, collection: (_db: unknown, ...path: string[]) => path.join('/'),
     query: (path: string, ...constraints: unknown[]) => ({ path, constraints }), where: (...args: unknown[]) => args,
     limit: (value: number) => value, getDocsFromServer: mocks.links, doc: (_db: unknown, ...path: string[]) => ({ path: path.join('/') }), getDocFromServer: mocks.cachedRead,
-    runTransaction: (_db: unknown, callback: (txn: unknown) => Promise<unknown>) => callback({ get: mocks.get, set: mocks.set }) };
+    runTransaction: (_db: unknown, callback: (txn: unknown) => Promise<unknown>) => callback({ get: mocks.get, set: mocks.set, update: mocks.update }) };
 });
 const recording = { uid: 'owner', eventId: 'e', activityId: 'a', target: 'activity' as const };
 const id = '11111111-1111-4111-8111-111111111111';
@@ -32,6 +32,26 @@ describe('Private reflection transactions', () => {
     expect(mocks.set).toHaveBeenCalledOnce();
     expect(mocks.set).toHaveBeenCalledWith({ path: 'users/owner/events/e/workoutReflections/activity_a' },
       expect.objectContaining({ revision: 1, note: 'private note' }));
+    expect(mocks.update).not.toHaveBeenCalled();
+  });
+  it('saves edited details and the note in one transaction without forwarding other event fields', async () => {
+    await service.saveEventDetails(recording, { name: { before: '', after: 'Run' } },
+      { expectedRevision: 0, mutationId: id, fields: { note: 'windy' }, deleted: false });
+    expect(mocks.update).toHaveBeenCalledWith({ path: 'users/owner/events/e' }, { name: 'Run' });
+    expect(mocks.set).toHaveBeenCalledWith({ path: 'users/owner/events/e/workoutReflections/activity_a' },
+      expect.objectContaining({ note: 'windy' }));
+  });
+  it('does not schedule either write when the reflection revision or event details conflict', async () => {
+    await expect(service.saveEventDetails(recording, { name: { before: '', after: 'Run' } },
+      { expectedRevision: 2, mutationId: id, fields: { note: 'windy' }, deleted: false })).rejects.toThrow('changed');
+    await expect(service.saveEventDetails(recording, { name: { before: 'old', after: 'Run' } },
+      { expectedRevision: 0, mutationId: id, fields: { note: 'windy' }, deleted: false })).rejects.toThrow('changed');
+    expect(mocks.update).not.toHaveBeenCalled(); expect(mocks.set).not.toHaveBeenCalled();
+  });
+  it('saves details without reading, creating or clearing an unchanged reflection', async () => {
+    await service.saveEventDetails(recording, { description: { before: '', after: 'description' } });
+    expect(mocks.get).toHaveBeenCalledOnce(); expect(mocks.set).not.toHaveBeenCalled();
+    expect(mocks.update).toHaveBeenCalledWith({ path: 'users/owner/events/e' }, { description: 'description' });
   });
 
   it('reads the exact leaf through uncached Lite with the same Firebase app', async () => {

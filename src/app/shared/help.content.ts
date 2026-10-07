@@ -742,11 +742,11 @@ HRV and Sleep each have their own date range and older/newer navigation. While a
     summary: 'Keep optional private text context for a recording or one activity.',
     content: `## Add or skip a reflection
 
-Open your saved recording and select **Post-workout reflection** in the summary actions. Choose **Whole recording** or one activity explicitly when the recording has several activities. Benchmarks and other people’s recordings do not offer reflection editing. Changing the selection discards an unsaved draft.
+Open your saved recording and select **Edit details** in the summary actions. The same form contains **Name**, **Description**, **Feeling**, **RPE** and an optional **Private reflection**. Choose **Whole recording** or one activity explicitly for the private note. Benchmarks and other people’s recordings do not offer reflection editing. Changing the selection discards only unsaved reflection text; your other edits remain staged.
 
-The form shows **Saved workout RPE** for the **whole recording** as read-only context, including when you reflect on one activity. Change that value in **Edit details**. If the recording has no valid RPE, it shows **Not recorded**.
+There is one **RPE** input for the **whole recording**, including when your private note refers to one activity. It edits the existing workout RPE. There is no separate reflection rating. An absent RPE shows **Not recorded**; imported fractional values are preserved unless you change them.
 
-Use any of the three optional prompts and write up to **2000 characters**. The reflection editor saves only a private note. Your existing workout RPE stays editable in **Edit details**. Select **Save reflection** to persist the note. **Skip** or **Cancel** writes nothing. Voice entry is not included.
+Use any of the three optional prompts and write up to **2000 characters**. Select **Save changes** once to save your edited event details and private note together. **Cancel** writes nothing. A conflict or failed save preserves your whole draft; event details and the note cannot be partially saved. Unchanged reflection text is not rewritten, and a reflection read failure still permits details-only edits. Voice entry is not included.
 
 An exact saved planned-workout link can add a comparison prompt; it does not prove completion or that today’s prescription matches the recorded session. Reflections never complete a planned workout, change a recipe, adapt your plan, alter load/readiness calculations, or diagnose an injury.
 
@@ -754,7 +754,7 @@ An exact saved planned-workout link can add a comparison prompt; it does not pro
 
 Reflections are private even when the recording is public. They are separate from Timeline notes, Health entries, event descriptions and provider data. They are not included in activity exports or sent to connected fitness services. Edit the same selection to replace its text. A concurrent edit requires reloading; a failed save keeps your draft for retry.
 
-**Delete** shows a permanent-delete review. **Delete permanently** removes the private note without a recoverable history. A content-free revision marker prevents stale edits restoring deleted text; deleting the recording or account removes that marker too. Reflections remain until you delete them, their recording or your account. Reparsing does not copy reflection context to newly identified activities.
+**Delete reflection** stages a permanent-delete review in the same form. **Keep reflection** cancels that deletion; **Cancel** discards the whole draft. **Save changes** confirms the deletion and any other staged event edits together. The private note cannot be restored. A content-free revision marker prevents stale edits restoring deleted text; deleting the recording or account removes that marker too. Reflections remain until you delete them, their recording or your account. Reparsing does not copy reflection context to newly identified activities.
 
 ## Optional AI access
 

@@ -1,6 +1,5 @@
-import { WorkoutReflectionDialogComponent } from '../workout-reflection/workout-reflection-dialog.component';
-import { isBenchmarkEvent } from '@shared/event-classification';
-import { ChangeDetectionStrategy, Component, Input, OnChanges, SimpleChanges, ChangeDetectorRef, inject } from '@angular/core';
+import { ChangeDetectionStrategy, Component, DestroyRef, Input, OnChanges, SimpleChanges, ChangeDetectorRef, inject } from '@angular/core';
+import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { AppEventInterface } from '@shared/app-event.interface';
 import {
   User,
@@ -24,10 +23,11 @@ import { resolvePreferredSpeedDerivedAverageTypeForActivity } from '../../helper
 import { SummaryPrimaryInfoMetric } from '../shared/summary-primary-info/summary-primary-info.component';
 import { EventDevicesService } from '../../services/event-devices.service';
 import { MatDialog } from '@angular/material/dialog';
-import { firstValueFrom } from 'rxjs';
+import { firstValueFrom, take } from 'rxjs';
 import { EventTagService } from '../../services/event-tag.service';
 import { EventTagsDialogComponent } from '../event-tags/event-tags-dialog.component';
 import { AppHapticsService } from '../../services/app.haptics.service';
+import { resolveUnitAwareDisplayFromValue } from '@shared/unit-aware-display';
 
 @Component({
   selector: 'app-event-summary',
@@ -71,6 +71,7 @@ export class EventSummaryComponent implements OnChanges {
   private templateStateInitialized = false;
   private eventTagsValue: string[] = [];
   private readonly hapticsService = inject(AppHapticsService);
+  private readonly destroyRef = inject(DestroyRef);
 
   constructor(
     private cd: ChangeDetectorRef,
@@ -88,23 +89,15 @@ export class EventSummaryComponent implements OnChanges {
     }
   }
 
-  get canReflect(): boolean {
-    return this.isOwner && !!this.user && !!this.event?.getID?.()
-      && !isBenchmarkEvent(this.event as unknown as Record<string, unknown>);
-  }
-
-  openReflection(): void {
-    if (!this.canReflect) return;
-    this.hapticsService.selection();
-    this.dialog.open(WorkoutReflectionDialogComponent, {
-      width: 'min(38rem, calc(100vw - 32px))', maxWidth: 'calc(100vw - 32px)',
-      data: { event: this.event, user: this.user },
-    });
-  }
-
   openEditDetails() {
-    this.bottomSheet.open(EventDetailsSummaryBottomSheetComponent, {
+    if (!this.isOwner || !this.user || !this.event?.getID?.()) return;
+    this.hapticsService.selection();
+    const ref = this.bottomSheet.open(EventDetailsSummaryBottomSheetComponent, {
       data: { event: this.event, user: this.user }
+    });
+    ref.afterDismissed().pipe(take(1), takeUntilDestroyed(this.destroyRef)).subscribe(saved => {
+      if (!saved) return;
+      this.rebuildTemplateState(); this.cd.markForCheck();
     });
   }
 
@@ -345,8 +338,9 @@ export class EventSummaryComponent implements OnChanges {
     this.feelingIconValue = this.resolveFeelingIcon(this.feelingValue);
 
     const rpeStat = this.event?.getStat(DataRPE.type) as DataRPE;
-    this.rpeValue = rpeStat ? rpeStat.getValue() as RPEBorgCR10SCale : null;
-    this.rpeLabelValue = this.rpeValue === null ? '' : (RPEBorgCR10SCale[this.rpeValue] || '');
+    const rpe = rpeStat ? rpeStat.getValue() : null;
+    this.rpeValue = typeof rpe === 'number' && Number.isFinite(rpe) && rpe >= 0 && rpe <= 10 ? rpe as RPEBorgCR10SCale : null;
+    this.rpeLabelValue = this.rpeValue === null ? '' : (resolveUnitAwareDisplayFromValue(DataRPE.type, this.rpeValue, this.unitSettings)?.text || '');
     this.cachedEventRef = this.event;
     this.cachedSelectedActivitiesRef = this.selectedActivities;
     this.templateStateInitialized = true;

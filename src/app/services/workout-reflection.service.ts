@@ -6,8 +6,11 @@ import { isBenchmarkEvent } from '@shared/event-classification';
 import { WORKOUT_REFLECTION_COLLECTION, decodeWorkoutReflection, nextWorkoutReflection, reflectionDocumentId,
   type WorkoutReflectionFields, type WorkoutReflectionTarget } from '@shared/workout-reflection';
 import { parseTrainingWorkoutCompletionV1, TRAINING_WORKOUT_COMPLETIONS_COLLECTION_ID } from '@shared/training-workout-completion';
+import { sanitizeEventFirestoreWritePayload } from '@shared/firestore-write-sanitizer';
+import { eventDetailsWritePatch, type EventDetailsChanges } from '../helpers/event-details-form.helper';
 
 export interface ReflectionRecording { uid: string; eventId: string; activityId: string; target: WorkoutReflectionTarget }
+export interface ReflectionChange { expectedRevision: number; mutationId: string; fields: WorkoutReflectionFields; deleted: boolean }
 export const WORKOUT_REFLECTION_READ_TIMEOUT_MS = 30_000;
 @Injectable({ providedIn: 'root' })
 export class WorkoutReflectionService {
@@ -38,22 +41,34 @@ export class WorkoutReflectionService {
   }
   async save(recording: ReflectionRecording, expectedRevision: number, mutationId: string,
     fields: WorkoutReflectionFields, deleted = false) {
+    return this.write(recording, { expectedRevision, mutationId, fields, deleted });
+  }
+  /** The app editor saves event feedback and its private note atomically. MCP note writes remain independent. */
+  async saveEventDetails(recording: ReflectionRecording, changes: EventDetailsChanges, reflection?: ReflectionChange) {
+    return this.write(recording, reflection, changes);
+  }
+  private async write(recording: ReflectionRecording, reflection?: ReflectionChange, changes: EventDetailsChanges = {}) {
     const ref = this.ref(recording);
     const result = await runTransaction(this.db, async transaction => {
       this.assertOwner(recording.uid);
-      const event = await transaction.get(doc(this.db, 'users', recording.uid, 'events', recording.eventId));
-      const activity = recording.target === 'activity'
+      const eventRef = doc(this.db, 'users', recording.uid, 'events', recording.eventId);
+      const event = await transaction.get(eventRef);
+      const activity = reflection && recording.target === 'activity'
         ? await transaction.get(doc(this.db, 'users', recording.uid, 'activities', recording.activityId)) : null;
-      const snapshot = await transaction.get(ref);
+      const snapshot = reflection ? await transaction.get(ref) : null;
       this.assertOwner(recording.uid);
-      if (!event.exists() || isBenchmarkEvent(event.data())
+      if (!event.exists() || (reflection && isBenchmarkEvent(event.data()))
         || (activity && (!activity.exists() || activity.data().eventID !== recording.eventId))) {
-        throw new Error('This recording is no longer available for reflection.');
+        throw new Error('This recording is no longer available for editing.');
       }
-      const current = snapshot.exists() ? decodeWorkoutReflection(snapshot.data()) : null;
-      if (snapshot.exists() && !current) throw new Error('Reload the reflection before editing.');
-      const next = nextWorkoutReflection(current, expectedRevision, mutationId, fields, deleted);
-      if (next !== current) transaction.set(ref, next);
+      const current = snapshot?.exists() ? decodeWorkoutReflection(snapshot.data()) : null;
+      if (snapshot?.exists() && !current) throw new Error('Reload the reflection before editing.');
+      const next = reflection ? nextWorkoutReflection(current, reflection.expectedRevision, reflection.mutationId,
+        reflection.fields, reflection.deleted) : null;
+      const patch = sanitizeEventFirestoreWritePayload(eventDetailsWritePatch(event.data(), changes));
+      // Resolve every precondition before scheduling either write: a conflict cannot partially save the form.
+      if (Object.keys(patch).length) transaction.update(eventRef, patch);
+      if (reflection && next !== current) transaction.set(ref, next);
       return next;
     });
     this.assertOwner(recording.uid);

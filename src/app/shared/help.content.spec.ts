@@ -405,10 +405,10 @@ describe('help.content', () => {
   it('makes reflection help discoverable and explains its independent privacy and deletion boundaries', () => {
     const section = HELP_SECTIONS.find(value => value.id === 'post-workout-reflections')!;
     expect(searchHelpSections(HELP_SECTIONS, 'post-workout reflection').map(value => value.id)).toContain(section.id);
-    for (const phrase of ['**Skip** or **Cancel** writes nothing', 'private even when the recording is public',
-      'The reflection editor saves only a private note', '**Delete permanently** removes the private note',
-      '**Saved workout RPE** for the **whole recording** as read-only context',
-      'Change that value in **Edit details**',
+    for (const phrase of ['**Cancel** writes nothing', 'private even when the recording is public',
+      '**Edit details** in the summary actions', '**Save changes** once', '**Keep reflection** cancels that deletion',
+      'one **RPE** input for the **whole recording**', 'There is no separate reflection rating',
+      'event details and the note cannot be partially saved',
       'on for fresh and New chats', 'cannot erase text a client already received or quoted']) {
       expect(section.content).toContain(phrase);
     }
