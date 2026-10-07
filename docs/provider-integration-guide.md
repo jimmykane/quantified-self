@@ -1186,12 +1186,14 @@ continues using `cloud_function` for dispatchers and `cloud_run_revision` for th
 [entrypoint contracts and local benchmark](functions-entrypoint-loading.md#recorded-activity-import-dispatcher-isolation).
 This startup optimization changes no provider behavior, availability, MCP contract or user-facing Help.
 
-Recorded completed-activity import monitoring (#829) has local fixed-label commit/attempt
+Recorded completed-activity import monitoring (#829) uses fixed-label commit/attempt
 telemetry, bounded read-only observations on the existing 30-minute dispatchers, and a
-separately owned Cloud Monitoring dashboard with six policies. It is not Training delivery
-monitoring and does not change any provider's availability. See
+separately owned Cloud Monitoring dashboard with six policies, activated with the existing
+Alerts email channel on 7 October 2026 after the approved five-Function deployment.
+It is not Training delivery monitoring and does not change any provider's availability. See
 [activity import monitoring](activity-import-monitoring.md) for sample limits, exclusions,
-unknown observations, thresholds, cost bounds and separately approved activation/readback.
+unknown observations, thresholds, cost bounds and the separately recorded production
+activation/readback evidence in #829. Future cloud changes still require separate approval.
 HTTP acknowledgements and historical retained `failed_jobs` totals are not import success
 or a new failure rate. No provider calls, retry/TTL changes or production apply are part of
 the local implementation. Unexpected observation/client-initialization errors remain

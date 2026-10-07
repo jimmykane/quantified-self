@@ -7,10 +7,13 @@ COROS's Training delivery availability is unrelated to its existing activity imp
 
 ## Implementation and activation boundary
 
-Local implementation provides `QS Activity Imports`, eleven versioned log metrics and
-six alert policies. Production activation/readback is still pending separate approval.
-Nothing in this implementation deploys Functions, applies policies, sends email, calls
-providers, changes queue retry/lease/TTL behavior or deletes data/resources.
+`QS Activity Imports`, eleven versioned log metrics and six alert policies were activated
+on 7 October 2026 after the separately approved deployment of the five compatible
+Functions. The existing enabled **Alerts** email channel is reused. Dated configuration,
+query and natural-traffic evidence is recorded in [#829](https://github.com/jimmykane/quantified-self/issues/829).
+The local implementation and offline preview never deploy Functions, apply policies,
+send email, call providers, change queue retry/lease/TTL behavior or delete data/resources;
+future production configuration changes still require separate approval.
 
 Deploy the compatible runtime before applying configuration. The affected endpoints are
 `processWorkoutTask`, `parseGarminAPIActivityQueue`, `parseSuuntoAppActivityQueue`,
@@ -178,5 +181,11 @@ MCP impact review: no exposed tools, metrics, read/write schemas, consent, permi
 proposals, completion projections, provider actions or bundled skills change. Existing
 Training completion calls, event writes and activity sanitizer paths remain unchanged.
 Help's import/service/troubleshooting articles were inspected; no user-facing behavior
-changes, so no new product Help copy is required. Runtime/config activation and live
-readback remain explicitly pending in #829, not a completed local test claim.
+changes, so no new product Help copy is required. Approved runtime/config activation and
+dated production readback are recorded in #829 separately from local test results. The
+API readback can add the default primary chart axis and an empty text style, or omit empty
+grouping fields; compare their effective behavior rather than treating those defaults as
+configuration changes. Natural idle/live
+observations are operational evidence, not provider receipt, full backlog coverage or a
+fabricated failure/email test. The unchanged Alerts channel's opened/closed email proof is
+reused from completed #655.
