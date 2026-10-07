@@ -6,10 +6,9 @@ import {
 } from './function-target-loader';
 
 describe('function target loader', () => {
-  it('optimizes the MCP, impersonation, ingestion, maintenance, provider connection/webhook, marketing, and Training endpoints', () => {
+  it('optimizes the MCP, ingestion, maintenance, provider connection/webhook, admin, marketing, and Training endpoints', () => {
     expect(OPTIMIZED_FUNCTION_TARGETS).toEqual([
       'mcpApi',
-      'impersonateUser',
       'getSuuntoAPIAuthRequestTokenRedirectURI',
       'requestAndSetSuuntoAPIAccessToken',
       'receiveSuunto247Data',
@@ -28,6 +27,22 @@ describe('function target loader', () => {
       'scheduleSuuntoSleepSync',
       'redriveRejectedRouteOriginalCleanup',
       'retryPendingServiceDisconnects',
+      'listUsers',
+      'getUserCount',
+      'getQueueStats',
+      'retrySportsLibReparseHeavyJob',
+      'setSportsLibReparseSettings',
+      'getAdminDashboardHistory',
+      'scheduleAdminDashboardSnapshot',
+      'getSubscriptionHistoryTrend',
+      'getUserGrowthTrend',
+      'setMaintenanceMode',
+      'getMaintenanceStatus',
+      'impersonateUser',
+      'stopImpersonation',
+      'getFinancialStats',
+      'previewAdminSubscriptionGift',
+      'grantAdminSubscriptionGift',
       'listMarketingCampaigns',
       'saveMarketingCampaign',
       'cloneMarketingCampaign',

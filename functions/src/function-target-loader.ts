@@ -3,6 +3,20 @@ type ModuleLoader = () => FunctionModule;
 
 const loadMarketingHandlers = (): FunctionModule =>
   module.require('./admin/marketing/handlers') as FunctionModule;
+const loadAdminUsersHandlers = (): FunctionModule =>
+  module.require('./admin/handlers/users.handlers') as FunctionModule;
+const loadAdminQueuesHandlers = (): FunctionModule =>
+  module.require('./admin/handlers/queues.handlers') as FunctionModule;
+const loadAdminDashboardHistoryHandlers = (): FunctionModule =>
+  module.require('./admin/handlers/dashboard-history.handlers') as FunctionModule;
+const loadAdminTrendsHandlers = (): FunctionModule =>
+  module.require('./admin/handlers/trends.handlers') as FunctionModule;
+const loadAdminMaintenanceHandlers = (): FunctionModule =>
+  module.require('./admin/handlers/maintenance.handlers') as FunctionModule;
+const loadAdminImpersonationHandlers = (): FunctionModule =>
+  module.require('./admin/handlers/impersonation.handlers') as FunctionModule;
+const loadAdminSubscriptionGiftHandlers = (): FunctionModule =>
+  module.require('./admin/handlers/subscription-gifts.handlers') as FunctionModule;
 const loadTrainingScheduleHistory = (): FunctionModule =>
   module.require('./training-plans/history-callables') as FunctionModule;
 const loadTrainingDeliveryCommands = (): FunctionModule =>
@@ -20,8 +34,6 @@ const loadServiceConnectionAccountProjection = (): FunctionModule =>
 
 const TARGET_LOADERS: Readonly<Record<string, ModuleLoader>> = Object.freeze({
   mcpApi: () => module.require('./mcp/server') as FunctionModule,
-  impersonateUser:
-    () => module.require('./admin/handlers/impersonation.handlers') as FunctionModule,
   getSuuntoAPIAuthRequestTokenRedirectURI:
     () => module.require('./suunto/auth/wrapper') as FunctionModule,
   requestAndSetSuuntoAPIAccessToken:
@@ -54,6 +66,24 @@ const TARGET_LOADERS: Readonly<Record<string, ModuleLoader>> = Object.freeze({
     () => module.require('./routes/rejected-original-cleanup') as FunctionModule,
   retryPendingServiceDisconnects:
     () => module.require('./schedule/retry-pending-service-disconnects') as FunctionModule,
+  listUsers: loadAdminUsersHandlers,
+  getUserCount: loadAdminUsersHandlers,
+  getQueueStats: loadAdminQueuesHandlers,
+  retrySportsLibReparseHeavyJob: loadAdminQueuesHandlers,
+  setSportsLibReparseSettings:
+    () => module.require('./admin/handlers/reparse-settings.handlers') as FunctionModule,
+  getAdminDashboardHistory: loadAdminDashboardHistoryHandlers,
+  scheduleAdminDashboardSnapshot: loadAdminDashboardHistoryHandlers,
+  getSubscriptionHistoryTrend: loadAdminTrendsHandlers,
+  getUserGrowthTrend: loadAdminTrendsHandlers,
+  setMaintenanceMode: loadAdminMaintenanceHandlers,
+  getMaintenanceStatus: loadAdminMaintenanceHandlers,
+  impersonateUser: loadAdminImpersonationHandlers,
+  stopImpersonation: loadAdminImpersonationHandlers,
+  getFinancialStats:
+    () => module.require('./admin/handlers/financials.handlers') as FunctionModule,
+  previewAdminSubscriptionGift: loadAdminSubscriptionGiftHandlers,
+  grantAdminSubscriptionGift: loadAdminSubscriptionGiftHandlers,
   listMarketingCampaigns: loadMarketingHandlers,
   saveMarketingCampaign: loadMarketingHandlers,
   cloneMarketingCampaign: loadMarketingHandlers,
