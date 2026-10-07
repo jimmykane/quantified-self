@@ -23,15 +23,15 @@ const evidenceTools = [
 ] satisfies AssistantMcpToolDefinition[];
 
 describe('Assistant evidence', () => {
-  it.each([null, 0])('labels reflection evidence as reported context and preserves unknown versus zero (%s)', effort => {
+  it.each([null, 'PRIVATE-TEXT'])('shows only bounded private-note evidence (%s)', note => {
     const evidence = buildAssistantEvidence({ name: 'get_workout_reflection', title: 'Workout reflection' }, {
-      activityRef: 'PRIVATE-REF', revision: 2, target: 'activity', effort, note: 'PRIVATE-TEXT',
-      provider: 'PRIVATE-PROVIDER', effortScale: 'borg_cr10', present: true,
+      activityRef: 'PRIVATE-REF', revision: 2, target: 'activity', note,
+      provider: 'PRIVATE-PROVIDER', effort: 5, effortScale: 'borg_cr10', present: true,
     });
     expect(evidence.summary).toContain('Athlete-reported context');
-    expect(evidence.facts[1].value).toContain(effort === null ? 'Not reported' : 'No exertion');
-    expect(evidence.facts[2].value).toContain('characters of private context');
-    expect(JSON.stringify(evidence)).not.toMatch(/PRIVATE|revision/);
+    expect(evidence.facts).toHaveLength(2);
+    expect(evidence.facts[1].value).toContain(note === null ? 'None' : 'characters of private context');
+    expect(JSON.stringify(evidence)).not.toMatch(/PRIVATE|revision|effort|Borg|severe/);
   });
 
   it('pairs manual measurement display values and units without references or revision internals', () => {

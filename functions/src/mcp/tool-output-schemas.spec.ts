@@ -568,7 +568,7 @@ const service = {
     workoutReflection: vi.fn(async (tool: string) => tool === 'delete_workout_reflection'
       ? { activityRef: ACTIVITY_REF, target: 'activity', revision: 2, deleted: true }
       : { activityRef: ACTIVITY_REF, target: 'activity', revision: 1, present: true,
-          effortScale: 'borg_cr10', effort: 0, note: 'reported context',
+          note: 'reported context',
           ...(tool === 'save_workout_reflection' ? { changed: true } : {}) }),
     manualMeasurement: vi.fn(async (tool: McpManualMeasurementTool) => {
       const measurement = { measurementRef: 'opaque-measurement-reference', revision: 1, metricId: 'body_weight',
@@ -1448,7 +1448,7 @@ const successfulToolArguments: Record<
   apply_saved_workout_change: { proposalRef: 'opaque-proposal-reference', permissionMode: 'schedule' },
   get_workout_reflection: { activityRef: ACTIVITY_REF, target: 'activity' },
   save_workout_reflection: { activityRef: ACTIVITY_REF, target: 'activity', expectedRevision: 0,
-    mutationId: '123e4567-e89b-42d3-a456-426614174000', effort: 0, note: 'reported context' },
+    mutationId: '123e4567-e89b-42d3-a456-426614174000', note: 'reported context' },
   delete_workout_reflection: { activityRef: ACTIVITY_REF, target: 'activity', expectedRevision: 1,
     mutationId: '123e4567-e89b-42d3-a456-426614174000' },
   get_activity_description: { activityRef: 'opaque-activity-ref' },

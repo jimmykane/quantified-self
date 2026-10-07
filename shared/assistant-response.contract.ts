@@ -237,20 +237,20 @@ export function isAssistantContentProposal(value: unknown, requireContentReview 
       || Number(args.expectedRevision) < 0 || Number(args.expectedRevision) >= Number.MAX_SAFE_INTEGER - 1
       || !isUuid(args.mutationId)) return false;
     const deleting = value.kind === 'delete_workout_reflection';
-    if (!hasOnlyKeys(args, ['activityRef', 'target', 'expectedRevision', 'mutationId', ...(deleting ? [] : ['effort', 'note'])])
+    if (!hasOnlyKeys(args, ['activityRef', 'target', 'expectedRevision', 'mutationId', ...(deleting ? [] : ['note'])])
       || (deleting && Number(args.expectedRevision) < 1)) return false;
     try {
       if (!deleting) {
-        const fields = validateReflectionFields({ effort: args.effort as number | null, note: args.note as string | null });
-        if (fields.effort === null && fields.note === null) return false;
+        const fields = validateReflectionFields({ note: args.note as string | null });
+        if (fields.note === null) return false;
       }
       if (requireContentReview && value.reflectionReview === undefined) return false;
       if (value.reflectionReview !== undefined) {
         if (!isRecord(value.reflectionReview) || !hasOnlyKeys(value.reflectionReview, ['before'])) return false;
         const before = value.reflectionReview.before;
         if (before !== null) {
-          if (!isRecord(before) || !hasOnlyKeys(before, ['effort', 'note'])) return false;
-          validateReflectionFields({ effort: before.effort as number | null, note: before.note as string | null });
+          if (!isRecord(before) || !hasOnlyKeys(before, ['note'])) return false;
+          validateReflectionFields({ note: before.note as string | null });
         } else if (deleting) return false;
       }
       return getUtf8ByteLength(value) <= 24 * 1024;

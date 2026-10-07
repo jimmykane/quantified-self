@@ -28,14 +28,14 @@ describe('Private reflection transactions', () => {
       data: () => path.includes('/activities/') ? { eventID: 'e' } : {} }));
   });
   it('writes only a private leaf and never event stats, completion or prescriptions', async () => {
-    await service.save(recording, 0, id, { effort: 0, note: null });
+    await service.save(recording, 0, id, { note: 'private note' });
     expect(mocks.set).toHaveBeenCalledOnce();
     expect(mocks.set).toHaveBeenCalledWith({ path: 'users/owner/events/e/workoutReflections/activity_a' },
-      expect.objectContaining({ effort: 0, revision: 1, note: null }));
+      expect.objectContaining({ revision: 1, note: 'private note' }));
   });
 
   it('reads the exact leaf through uncached Lite with the same Firebase app', async () => {
-    const saved = { schemaVersion: 1, revision: 4, deleted: false, mutationId: id, effort: 0, note: 'current' };
+    const saved = { schemaVersion: 1, revision: 4, deleted: false, mutationId: id, note: 'current' };
     mocks.cachedRead.mockResolvedValue({ exists: () => false });
     mocks.read.mockResolvedValue({ exists: () => true, data: () => saved });
     expect(await service.read(recording)).toEqual(saved);
@@ -61,7 +61,7 @@ describe('Private reflection transactions', () => {
     auth.currentUser = { uid: 'other' }; await expect(service.read(recording)).rejects.toThrow('account');
     auth.currentUser = { uid: 'owner' };
     mocks.get.mockResolvedValue({ exists: () => true, data: () => ({ eventID: 'other' }) });
-    await expect(service.save(recording, 0, id, { effort: 4, note: null })).rejects.toThrow('available');
+    await expect(service.save(recording, 0, id, { note: 'private note' })).rejects.toThrow('available');
     expect(mocks.set).not.toHaveBeenCalled();
   });
   it('uses only one exact completion link for the selected target and rejects ambiguity or excessive reads', async () => {

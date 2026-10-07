@@ -59,7 +59,7 @@ const defaultDependencies: AssistantContentProposalDependencies = {
 function summaryFor(kind: AssistantContentProposalKind, args: Record<string, unknown>): string {
   switch (kind) {
     case 'save_workout_reflection': return 'Save the athlete-reported reflection for the selected recording.';
-    case 'delete_workout_reflection': return 'Permanently delete the selected reflection text and effort.';
+    case 'delete_workout_reflection': return 'Permanently delete the selected reflection text.';
     case 'create_manual_measurement': return 'Create the reviewed manual Health measurement.';
     case 'update_manual_measurement': return 'Update the selected manual Health measurement.';
     case 'delete_manual_measurement': return 'Permanently delete the selected manual Health measurement.';

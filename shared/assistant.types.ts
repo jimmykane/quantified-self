@@ -198,7 +198,7 @@ export interface AssistantTimelineNoteFields {
 }
 
 export type AssistantContentProposalArguments =
-  | { activityRef: string; target: 'recording' | 'activity'; expectedRevision: number; mutationId: string; effort: number | null; note: string | null }
+  | { activityRef: string; target: 'recording' | 'activity'; expectedRevision: number; mutationId: string; note: string | null }
   | { activityRef: string; target: 'recording' | 'activity'; expectedRevision: number; mutationId: string }
   | ({ mutationId: string; metricId: ManualHealthMetricId; observedAt: string } & AssistantManualMeasurementInput)
   | ({ measurementRef: string; expectedRevision: number; observedAt?: string } & AssistantManualMeasurementInput)
@@ -222,7 +222,7 @@ export interface AssistantManualMeasurementInput {
 }
 
 export interface AssistantContentProposalPreview {
-  reflectionReview?: { before: { effort: number | null; note: string | null } | null };
+  reflectionReview?: { before: { note: string | null } | null };
   measurementReview?: { before: ManualHealthMeasurementFields | null; after: ManualHealthMeasurementFields | null };
   proposalRef: string;
   kind: AssistantContentProposalKind;

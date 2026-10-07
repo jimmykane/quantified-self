@@ -153,10 +153,10 @@ describe('Assistant callable', () => {
     const { store, conversation } = createDependencies();
     const args = { activityRef: 'reflection-activity', target: 'activity', expectedRevision: 1,
       mutationId: '11111111-1111-4111-8111-111111111111',
-      ...(kind === 'save_workout_reflection' ? { effort: 0, note: 'Felt easy' } : {}) };
+      ...(kind === 'save_workout_reflection' ? { note: 'Felt easy' } : {}) };
     const proposal = { proposalRef: 'reflection-proposal', kind, expiresAtMs: Date.now() + 60000,
       summary: 'Review Running reflection', requiresConfirmation: true as const, arguments: args,
-      reflectionReview: { before: { effort: null, note: 'Private text' } } };
+      reflectionReview: { before: { note: 'Private text' } } };
     const state = { conversation, pendingRequestId: null, reflectionChangesEnabled: true, pendingContentProposal: proposal };
     vi.mocked(store.getActiveConversationState).mockResolvedValue(state as never);
     const workoutReflection = vi.fn().mockResolvedValue({ deleted: true });

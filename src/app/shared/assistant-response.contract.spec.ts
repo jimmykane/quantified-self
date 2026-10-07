@@ -54,21 +54,21 @@ describe('private workout reflection review boundary', () => {
   const proposal = { proposalRef: 'reflection', kind: 'save_workout_reflection', expiresAtMs: 1000,
     summary: 'Save Run reflection on Oct 6 · activity', requiresConfirmation: true,
     arguments: { activityRef: 'opaque-activity', target: 'activity', expectedRevision: 0,
-      mutationId: '11111111-1111-4111-8111-111111111111', effort: 0, note: 'Reported context' },
+      mutationId: '11111111-1111-4111-8111-111111111111', note: 'Reported context' },
     reflectionReview: { before: null } };
-  it('requires explicit current review and strict target/effort/text fields', () => {
+  it('requires explicit current review and strict target/text fields', () => {
     expect(isAssistantContentProposal(proposal)).toBe(true);
     expect(isAssistantContentProposal({ ...proposal, reflectionReview: undefined })).toBe(false);
     for (const patch of [{ effort: 0.5 }, { effort: 11 }, { target: 'plan' }, { note: 'safe\n\u0000' },
-      { note: 'a'.repeat(2001) }, { provider: 'PRIVATE' }, { effort: null, note: null }]) {
+      { note: 'a'.repeat(2001) }, { provider: 'PRIVATE' }, { note: null }]) {
       expect(isAssistantContentProposal({ ...proposal, arguments: { ...proposal.arguments, ...patch } })).toBe(false);
     }
     expect(isAssistantContentProposal({ ...proposal, reflectionReview: { before: { effort: 1, note: 'Current', provider: 'PRIVATE' } } })).toBe(false);
   });
   it('requires nonzero current revision and present content for permanent deletion', () => {
-    const { effort, note, ...args } = proposal.arguments;
+    const { note, ...args } = proposal.arguments;
     const deletion = { ...proposal, kind: 'delete_workout_reflection', arguments: { ...args, expectedRevision: 1 },
-      reflectionReview: { before: { effort, note } } };
+      reflectionReview: { before: { note } } };
     expect(isAssistantContentProposal(deletion)).toBe(true);
     expect(isAssistantContentProposal({ ...deletion, arguments: args })).toBe(false);
     expect(isAssistantContentProposal({ ...deletion, reflectionReview: { before: null } })).toBe(false);

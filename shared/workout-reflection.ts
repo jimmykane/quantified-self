@@ -2,7 +2,7 @@
 export const WORKOUT_REFLECTION_COLLECTION = 'workoutReflections';
 export const WORKOUT_REFLECTION_NOTE_LIMIT = 2000;
 export type WorkoutReflectionTarget = 'recording' | 'activity';
-export interface WorkoutReflectionFields { effort: number | null; note: string | null }
+export interface WorkoutReflectionFields { note: string | null }
 export interface WorkoutReflection extends WorkoutReflectionFields {
   schemaVersion: 1;
   revision: number;
@@ -24,13 +24,12 @@ export function reflectionDocumentId(target: WorkoutReflectionTarget, activityId
   return target === 'recording' ? 'recording' : `activity_${activityId}`;
 }
 export function validateReflectionFields(value: WorkoutReflectionFields): WorkoutReflectionFields {
-  if (!value || Object.keys(value).some(key => !['effort', 'note'].includes(key))
-    || !(value.effort === null || (Number.isInteger(value.effort) && value.effort >= 0 && value.effort <= 10))
+  if (!value || Object.keys(value).some(key => key !== 'note')
     || !(value.note === null || (typeof value.note === 'string' && value.note.length <= WORKOUT_REFLECTION_NOTE_LIMIT
       && !hasDisallowedControlCharacter(value.note)))) {
-    throw new Error('Choose a whole-number effort from 0 to 10 and a note of at most 2000 characters.');
+    throw new Error('Write a reflection of at most 2000 characters.');
   }
-  return { effort: value.effort, note: value.note?.trim() || null };
+  return { note: value.note?.trim() || null };
 }
 export function decodeWorkoutReflection(value: unknown): WorkoutReflection | null {
   if (!value || typeof value !== 'object' || Array.isArray(value)) return null;
@@ -39,8 +38,8 @@ export function decodeWorkoutReflection(value: unknown): WorkoutReflection | nul
     || Number(record.revision) >= Number.MAX_SAFE_INTEGER || typeof record.deleted !== 'boolean'
     || typeof record.mutationId !== 'string' || !uuid.test(record.mutationId)) return null;
   try {
-    const fields = validateReflectionFields({ effort: record.effort as number | null, note: record.note as string | null });
-    if (record.deleted ? (fields.effort !== null || fields.note !== null) : (fields.effort === null && fields.note === null)) return null;
+    const fields = validateReflectionFields({ note: record.note as string | null });
+    if (record.deleted ? fields.note !== null : fields.note === null) return null;
     return { schemaVersion: 1, revision: Number(record.revision), deleted: record.deleted,
       mutationId: record.mutationId, ...fields };
   } catch { return null; }
@@ -50,12 +49,12 @@ export function nextWorkoutReflection(current: WorkoutReflection | null, expecte
   mutationId: string, fields: WorkoutReflectionFields, deleted = false): WorkoutReflection {
   if (!Number.isSafeInteger(expectedRevision) || expectedRevision < 0 || expectedRevision >= Number.MAX_SAFE_INTEGER - 1
     || !uuid.test(mutationId)) throw new Error('The reflection change is invalid.');
-  const validated = deleted ? { effort: null, note: null } : validateReflectionFields(fields);
-  if (!deleted && validated.effort === null && validated.note === null) {
-    throw new Error('Add effort or a note, or skip this reflection.');
+  const validated = deleted ? { note: null } : validateReflectionFields(fields);
+  if (!deleted && validated.note === null) {
+    throw new Error('Write a reflection, or skip it.');
   }
   if (current?.mutationId === mutationId && current.revision === expectedRevision + 1
-    && current.deleted === deleted && current.effort === validated.effort && current.note === validated.note) return current;
+    && current.deleted === deleted && current.note === validated.note) return current;
   if ((current?.revision ?? 0) !== expectedRevision || current?.mutationId === mutationId) {
     throw new Error('Reflection changed elsewhere. Reload it before editing.');
   }

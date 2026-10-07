@@ -406,14 +406,16 @@ describe('help.content', () => {
     const section = HELP_SECTIONS.find(value => value.id === 'post-workout-reflections')!;
     expect(searchHelpSections(HELP_SECTIONS, 'post-workout reflection').map(value => value.id)).toContain(section.id);
     for (const phrase of ['**Skip** or **Cancel** writes nothing', 'private even when the recording is public',
-      '**Not reported** stays unknown', '**Delete permanently** removes effort and text',
+      'The reflection editor saves only a private note', '**Delete permanently** removes the private note',
       '**Saved workout RPE** for the **whole recording** as read-only context',
-      'Change that value in **Edit details**', '**Private reflection effort**', 'never changes it',
+      'Change that value in **Edit details**',
       'on for fresh and New chats', 'cannot erase text a client already received or quoted']) {
       expect(section.content).toContain(phrase);
     }
     expect(HELP_SECTIONS.find(value => value.id === 'ai-insights')!.content)
       .toContain('Manual Health measurements and Private workout reflections on; other optional access off');
+    expect(section.content).not.toContain('Private reflection effort');
+    expect(HELP_SECTIONS.map(value => value.content).join('\n')).not.toContain('reflection effort/text');
   });
 
   it('documents the source-separated Health workspace and its bounded metric explorer', () => {

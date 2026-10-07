@@ -38,9 +38,9 @@ describe('Workout reflection editor', () => {
     component = fixture.componentInstance; fixture.detectChanges(); await fixture.whenStable(); fixture.detectChanges();
   });
   it('hydrates silently without importing existing RPE or completing a workout; Skip never writes', () => {
-    expect(fixture.nativeElement.textContent).toContain('Not reported');
+    expect(fixture.nativeElement.querySelectorAll('mat-select')).toHaveLength(1);
     expect(fixture.nativeElement.querySelector('[aria-label="Saved workout RPE"]').textContent).toContain('Not recorded');
-    expect(component.effort()).toBeNull(); expect(component.options[0].value).toBe(0);
+    expect(component.note()).toBe(''); expect(component.changed()).toBe(false);
     expect(haptics.selection).not.toHaveBeenCalled(); expect(service.save).not.toHaveBeenCalled();
     component.cancel(); expect(service.save).not.toHaveBeenCalled(); expect(ref.close).toHaveBeenCalled();
   });
@@ -60,7 +60,7 @@ describe('Workout reflection editor', () => {
     expect(context.textContent).toContain(resolveUnitAwareDisplayFromValue(DataRPE.type, value, component.data.user.settings.unitSettings)!.text);
     expect(context.textContent).not.toContain('Not recorded');
     expect(context.querySelector('input, select, mat-select, button')).toBeNull();
-    expect(component.effort()).toBeNull(); expect(component.changed()).toBe(false);
+    expect(component.note()).toBe(''); expect(component.changed()).toBe(false);
     expect(haptics.selection).not.toHaveBeenCalled(); expect(service.save).not.toHaveBeenCalled();
   });
   it('keeps whole-recording RPE as context for activity reflections and saves only private fields', async () => {
@@ -74,27 +74,28 @@ describe('Workout reflection editor', () => {
     expect(context.textContent).toContain('For the whole recording');
     expect(context.textContent).toContain('Edit details');
     expect(context.textContent).toContain(resolveUnitAwareDisplayFromValue(DataRPE.type, 5, component.data.user.settings.unitSettings)!.text);
-    expect(fixture.nativeElement.textContent).toContain('Private reflection effort');
-    expect(component.effort()).toBeNull();
+    expect(fixture.nativeElement.querySelectorAll('mat-select')).toHaveLength(1);
+    expect(fixture.nativeElement.textContent).not.toContain('Private reflection effort');
     component.note.set('Private session context'); await component.apply();
     expect(service.save).toHaveBeenCalledWith(expect.objectContaining({ target: 'activity', activityId: 'bike' }),
-      0, expect.any(String), { effort: null, note: 'Private session context' }, false);
+      0, expect.any(String), { note: 'Private session context' }, false);
     expect(workoutRpe.getValue()).toBe(5);
   });
-  it.each([null, undefined, '5', NaN, -1, 11, Infinity])('does not turn invalid workout RPE %s into reported effort', async value => {
+  it.each([null, undefined, '5', NaN, -1, 11, Infinity])('shows invalid workout RPE %s as not recorded', async value => {
     fixture.destroy(); getStat.mockReturnValue({ getValue: () => value });
     fixture = TestBed.createComponent(WorkoutReflectionDialogComponent);
     component = fixture.componentInstance; fixture.detectChanges(); await fixture.whenStable(); fixture.detectChanges();
-    expect(component.workoutRpeDisplay()).toBeNull(); expect(component.effort()).toBeNull();
+    expect(component.workoutRpeDisplay()).toBeNull(); expect(component.note()).toBe('');
     expect(fixture.nativeElement.querySelector('[aria-label="Saved workout RPE"]').textContent).toContain('Not recorded');
   });
-  it('displays a saved private effort independently from the workout RPE', async () => {
+  it('hydrates a saved note without adding another RPE input or changing workout RPE', async () => {
     fixture.destroy(); getStat.mockReturnValue(new DataRPE(5));
     service.read.mockResolvedValue({ schemaVersion: 1, revision: 1, deleted: false,
-      mutationId: '11111111-1111-4111-8111-111111111111', effort: 3, note: 'Private note' });
+      mutationId: '11111111-1111-4111-8111-111111111111', note: 'Private note' });
     fixture = TestBed.createComponent(WorkoutReflectionDialogComponent);
     component = fixture.componentInstance; fixture.detectChanges(); await fixture.whenStable(); fixture.detectChanges();
-    expect(component.effort()).toBe(3); expect(component.changed()).toBe(false);
+    expect(component.note()).toBe('Private note'); expect(component.changed()).toBe(false);
+    expect(fixture.nativeElement.querySelectorAll('mat-select')).toHaveLength(1);
     expect(fixture.nativeElement.querySelector('[aria-label="Saved workout RPE"]').textContent)
       .toContain(resolveUnitAwareDisplayFromValue(DataRPE.type, 5, component.data.user.settings.unitSettings)!.text);
   });
@@ -115,11 +116,11 @@ describe('Workout reflection editor', () => {
   });
 
   it('pins the explicit activity target and gives one selection and post-success feedback', async () => {
-    await component.select('activity_bike'); component.setEffort(0); component.note.set('wind');
+    await component.select('activity_bike'); component.note.set('wind');
     await component.apply();
     expect(service.save).toHaveBeenCalledWith(expect.objectContaining({ eventId: 'event', activityId: 'bike', target: 'activity' }),
-      0, expect.any(String), { effort: 0, note: 'wind' }, false);
-    expect(haptics.selection).toHaveBeenCalledTimes(3); expect(haptics.success).toHaveBeenCalledOnce();
+      0, expect.any(String), { note: 'wind' }, false);
+    expect(haptics.selection).toHaveBeenCalledTimes(2); expect(haptics.success).toHaveBeenCalledOnce();
     expect(component.prompts().join()).toContain('wind');
   });
   it('keeps a failed draft and reuses the mutation identity for an uncertain retry', async () => {
@@ -141,7 +142,7 @@ describe('Workout reflection editor', () => {
     expect(service.save).toHaveBeenCalledOnce(); expect(haptics.success).toHaveBeenCalledOnce();
   });
   it('requires deletion review and allows cancellation without writes', async () => {
-    component.saved.set({ schemaVersion: 1, revision: 4, deleted: false, mutationId: '11111111-1111-4111-8111-111111111111', effort: 5, note: 'private' });
+    component.saved.set({ schemaVersion: 1, revision: 4, deleted: false, mutationId: '11111111-1111-4111-8111-111111111111', note: 'private' });
     await component.apply(true); expect(service.save).not.toHaveBeenCalled();
     component.reviewDelete(); component.cancelDelete(); expect(service.save).not.toHaveBeenCalled();
     component.reviewDelete(); await component.apply(true);
@@ -165,6 +166,6 @@ describe('Workout reflection editor', () => {
   it('does not show planned comparison from an unknown link and keeps selection no-ops silent', async () => {
     await component.select('recording'); expect(haptics.selection).not.toHaveBeenCalled();
     expect(component.prompts().join()).not.toContain('linked');
-    expect(fixture.nativeElement.textContent).toContain('this never changes your workout RPE');
+    expect(fixture.nativeElement.textContent).toContain('Read-only here; change it in Edit details');
   });
 });

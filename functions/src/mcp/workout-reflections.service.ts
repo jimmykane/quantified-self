@@ -40,12 +40,11 @@ export async function runMcpWorkoutReflection(tool: McpWorkoutReflectionTool, in
       throw new McpContentWriteError('detail_not_available', 'The selected recording is no longer available.');
     }
     const [snapshot] = await transaction.getAll(reflectionRef,
-      { fieldMask: ['schemaVersion', 'revision', 'deleted', 'mutationId', 'effort', 'note'] });
+      { fieldMask: ['schemaVersion', 'revision', 'deleted', 'mutationId', 'note'] });
     const current = snapshot.exists ? decodeWorkoutReflection(snapshot.data()) : null;
     if (snapshot.exists && !current) throw new McpContentWriteError('detail_not_available', 'The saved reflection cannot be read safely.');
     const projection = { activityRef: args.activityRef, target: args.target, revision: current?.revision ?? 0,
-      present: !!current && !current.deleted, effortScale: 'borg_cr10' as const,
-      effort: current?.effort ?? null, note: current?.note ?? null };
+      present: !!current && !current.deleted, note: current?.note ?? null };
     if (!writing) return MCP_WORKOUT_REFLECTION_OUTPUTS.get_workout_reflection.parse(projection);
     const changeArgs = tool === 'save_workout_reflection'
       ? MCP_WORKOUT_REFLECTION_INPUTS.save_workout_reflection.parse(input.arguments)
@@ -55,16 +54,16 @@ export async function runMcpWorkoutReflection(tool: McpWorkoutReflectionTool, in
       || (current.deleted && !(current.mutationId === changeArgs.mutationId && current.revision === changeArgs.expectedRevision + 1)))) throw new McpContentWriteError('invalid_request', 'Read an existing reflection before deleting it.');
     const savedFields = tool === 'save_workout_reflection'
       ? MCP_WORKOUT_REFLECTION_INPUTS.save_workout_reflection.parse(input.arguments)
-      : { effort: null, note: null };
+      : { note: null };
     let next;
     try {
       next = nextWorkoutReflection(current, changeArgs.expectedRevision, changeArgs.mutationId,
-        { effort: savedFields.effort, note: savedFields.note }, deleted);
+        { note: savedFields.note }, deleted);
     } catch { throw new McpContentWriteError('invalid_request', 'Reflection changed or the supplied content is invalid. Read it again before editing.'); }
     if (next !== current) transaction.set(reflectionRef, next);
     return deleted ? MCP_WORKOUT_REFLECTION_OUTPUTS.delete_workout_reflection.parse({ activityRef: args.activityRef,
       target: args.target, revision: next.revision, deleted: true })
       : MCP_WORKOUT_REFLECTION_OUTPUTS.save_workout_reflection.parse({ ...projection, revision: next.revision,
-          present: true, effort: next.effort, note: next.note, changed: next !== current });
+          present: true, note: next.note, changed: next !== current });
   });
 }

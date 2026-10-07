@@ -988,7 +988,7 @@ describe('Assistant runtime', () => {
       ? { structuredContent: { activities: [{ activityRef, activityType: 'Running', startTimeMs: now - 86_400_000 }] } }
       : name === 'get_workout_reflection'
       ? { structuredContent: { activityRef, target: 'activity', revision: 2, present: true,
-        effortScale: 'borg_cr10', effort: null, note: 'Current private text' } }
+        note: 'Current private text' } }
       : { structuredContent: createAssistantContentProposal(prepareName, args, { now: () => now, createId: () => 'reflection-proposal' }) });
     const access = vi.fn().mockResolvedValue(undefined);
     const runtime = createAssistantRuntime({ now: () => new Date(now), createMcpSession: vi.fn().mockResolvedValue(session),
@@ -996,7 +996,7 @@ describe('Assistant runtime', () => {
         const prepare = model.tools.find(tool => tool.name === prepareName)!;
         const args = { activityRef, target: 'activity', expectedRevision: 2,
           mutationId: '11111111-1111-4111-8111-111111111111',
-          ...(operation === 'save' ? { effort: 0, note: 'Felt easy' } : {}) };
+          ...(operation === 'save' ? { note: 'Felt easy' } : {}) };
         await expect(prepare.execute(args)).rejects.toThrow('current reflection revision');
         await model.tools.find(tool => tool.name === 'get_workout_reflection')!.execute({ activityRef, target: 'activity' });
         await expect(prepare.execute(args)).rejects.toThrow('date in this turn');
@@ -1009,7 +1009,7 @@ describe('Assistant runtime', () => {
       prompt: 'Save my reflection for yesterday’s run.', timeZone: 'Europe/Helsinki', history: [],
       reflectionChangesEnabled: true, assertContentWriteAccess: access });
     expect(result.pendingContentProposal).toMatchObject({ summary: expect.stringContaining('Running on Oct 5, 2026'),
-      reflectionReview: { before: { effort: null, note: 'Current private text' } } });
+      reflectionReview: { before: { note: 'Current private text' } } });
     expect(access).toHaveBeenCalledTimes(4);
     expect(callTool.mock.calls.map(([name]) => name)).not.toEqual(expect.arrayContaining(['save_workout_reflection', 'delete_workout_reflection']));
   });

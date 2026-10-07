@@ -18,20 +18,12 @@
     <ul>@for (prompt of prompts(); track prompt) { <li>{{ prompt }}</li> }</ul>
     @if (exactlyLinked()) { <p>There is one exact saved planned-workout link for this selection. The current plan may have changed since recording.</p> }
     <mat-form-field appearance="outline" subscriptSizing="dynamic">
-      <mat-label>Private reflection effort</mat-label>
-      <mat-select placeholder="Not reported" [canSelectNullableOptions]="true" [value]="effort()" (selectionChange)="setEffort($event.value)" [disabled]="busy()">
-        <mat-option [value]="null">Not reported</mat-option>
-        @for (option of options; track option.value) { <mat-option [value]="option.value">{{ option.label }}</mat-option> }
-      </mat-select>
-      <mat-hint>Borg CR10: 0 means no exertion; 10 means maximal. Optional and saved separately; this never changes your workout RPE.</mat-hint>
-    </mat-form-field>
-    <mat-form-field appearance="outline" subscriptSizing="dynamic">
       <mat-label>Your reflection</mat-label>
       <textarea matInput rows="5" maxlength="2000" [ngModel]="note()" (ngModelChange)="note.set($event)" [disabled]="busy()"></textarea>
       <mat-hint align="end">{{ note().length }} / 2000</mat-hint>
     </mat-form-field>
     @if (deleteReview()) {
-      <p>Delete this reflection permanently? Its effort and text cannot be restored.</p>
+      <p>Delete this reflection permanently? Its text cannot be restored.</p>
       <button mat-button (click)="cancelDelete()" [disabled]="busy()">Keep reflection</button>
     }
   }

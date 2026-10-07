@@ -496,14 +496,14 @@ describe('AssistantPageComponent', () => {
     expect(component.contentProposalResult()).toContain('Nothing was changed');
   });
 
-  it('reviews private reported effort and text, then applies only explicit confirmation', async () => {
+  it('reviews private reflection text, then applies only explicit confirmation', async () => {
     const proposal: AssistantContentProposalPreview = {
       proposalRef: 'reflection-proposal', kind: 'save_workout_reflection',
       expiresAtMs: Date.now() + 60_000, summary: 'Save Run reflection · Oct 6 · this activity.',
       requiresConfirmation: true,
       arguments: { activityRef: 'opaque-reflection-activity', target: 'activity', expectedRevision: 2,
-        mutationId: '6d59c596-ddf1-4f29-9ed4-b822e6067dd9', effort: 0, note: 'Felt easy' },
-      reflectionReview: { before: { effort: null, note: 'Windy' } },
+        mutationId: '6d59c596-ddf1-4f29-9ed4-b822e6067dd9', note: 'Felt easy' },
+      reflectionReview: { before: { note: 'Windy' } },
     };
     component.conversation.set(chatResponse.conversation);
     component.pendingContentProposal.set(proposal);
@@ -511,8 +511,8 @@ describe('AssistantPageComponent', () => {
     const text = fixture.nativeElement.querySelector('.content-proposal').textContent;
     expect(text).toContain('Review workout reflection');
     expect(text).toContain('This activity only');
-    expect(text).toContain('Not reported');
-    expect(text).toContain('No exertion');
+    expect(text).not.toContain('Reported effort');
+    expect(text).not.toContain('Borg CR10');
     expect(text).toContain('Windy'); expect(text).toContain('Felt easy');
     expect(text).not.toContain('opaque-reflection-activity');
     expect(assistantService.applyContentProposal).not.toHaveBeenCalled();

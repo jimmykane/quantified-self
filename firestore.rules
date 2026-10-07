@@ -234,16 +234,15 @@ service cloud.firestore {
               }
               function validReflection() {
                 let data = request.resource.data;
-                return data.keys().hasOnly(['schemaVersion', 'revision', 'deleted', 'mutationId', 'effort', 'note'])
-                  && data.keys().hasAll(['schemaVersion', 'revision', 'deleted', 'mutationId', 'effort', 'note'])
+                return data.keys().hasOnly(['schemaVersion', 'revision', 'deleted', 'mutationId', 'note'])
+                  && data.keys().hasAll(['schemaVersion', 'revision', 'deleted', 'mutationId', 'note'])
                   && data.schemaVersion == 1 && data.revision is int && data.revision > 0 && data.revision < 9007199254740991
                   && data.deleted is bool && data.mutationId is string
                   && data.mutationId.matches('^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}$')
-                  && (data.effort == null || (data.effort is int && data.effort >= 0 && data.effort <= 10))
                   && (data.note == null || (data.note is string && data.note.size() <= 2000
                     && data.note.trim().size() > 0
                     && !data.note.matches('[\\s\\S]*[\x00-\x08\x0b\x0c\x0e-\x1f\x7f][\\s\\S]*')))
-                  && (data.deleted ? (data.effort == null && data.note == null) : (data.effort != null || data.note != null));
+                  && (data.deleted ? data.note == null : data.note != null);
               }
               allow get: if isOwner() && activeRecording();
               allow list: if false;

@@ -36,7 +36,7 @@ describe('Firestore Security Rules', () => {
     describe('Private workout reflection leaves', () => {
         const path = 'users/owner/events/e/workoutReflections/recording';
         const value = { schemaVersion: 1, revision: 1, deleted: false,
-            mutationId: '11111111-1111-4111-8111-111111111111', effort: 0, note: null };
+            mutationId: '11111111-1111-4111-8111-111111111111', note: 'private context' };
         beforeEach(async () => {
             await testEnv.withSecurityRulesDisabled(async context => {
                 await context.firestore().doc('users/owner').set({ active: true });
@@ -46,25 +46,25 @@ describe('Firestore Security Rules', () => {
         });
         it('keeps public recording reflections owner-only with no unbounded list', async () => {
             const owner = testEnv.authenticatedContext('owner').firestore();
-            await assertSucceeds(owner.doc(path).set({ ...value, effort: null, note: 'First line\nSecond line\t🧡' }));
+            await assertSucceeds(owner.doc(path).set({ ...value, note: 'First line\nSecond line\t🧡' }));
             await assertSucceeds(owner.doc(path).get());
             await assertFails(testEnv.authenticatedContext('other').firestore().doc(path).get());
             await assertFails(testEnv.unauthenticatedContext().firestore().doc(path).get());
             await assertFails(owner.collection('users/owner/events/e/workoutReflections').get());
             await assertFails(owner.doc(path + '/nested/leaf').set(value));
         });
-        it('enforces target membership, fields, effort, revisions and permanent clearing', async () => {
+        it('enforces target membership, note-only fields, revisions and permanent clearing', async () => {
             const owner = testEnv.authenticatedContext('owner').firestore();
             await assertSucceeds(owner.doc('users/owner/events/e/workoutReflections/activity_a').set(value));
             await assertFails(owner.doc('users/owner/events/e/workoutReflections/activity_wrong').set(value));
-            for (const patch of [{ effort: -1 }, { effort: 0.5 }, { effort: 11 }, { note: 'a'.repeat(2001) },
+            for (const patch of [{ effort: 5 }, { effort: null }, { effortScale: 'borg_cr10' }, { note: null }, { note: 'a'.repeat(2001) },
                 { provider: 'leak' }, { revision: 2 }, { deleted: true }, { note: '\u0000' }, { note: 'safe\n\u0000' }, { note: '  \n  ' }]) {
                 await assertFails(owner.doc(path).set({ ...value, ...patch }));
             }
             await assertSucceeds(owner.doc(path).set(value));
             await assertFails(owner.doc(path).update({ revision: 2 }));
             await assertFails(owner.doc(path).delete());
-            await assertSucceeds(owner.doc(path).set({ ...value, revision: 2, deleted: true, effort: null,
+            await assertSucceeds(owner.doc(path).set({ ...value, revision: 2, deleted: true, note: null,
                 mutationId: '22222222-2222-4222-8222-222222222222' }));
             await assertFails(owner.doc(path).set(value));
         });

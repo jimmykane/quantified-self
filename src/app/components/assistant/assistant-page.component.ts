@@ -221,7 +221,7 @@ export class AssistantPageComponent implements OnInit, OnDestroy {
       title: contentProposalTitle(proposal.kind),
       details: proposal.kind.endsWith('_manual_measurement')
         ? assistantMeasurementReviewDetails(proposal, this.userSettings.unitSettings())
-        : proposal.kind.endsWith('_workout_reflection') ? assistantReflectionReviewDetails(proposal, this.userSettings.unitSettings())
+        : proposal.kind.endsWith('_workout_reflection') ? assistantReflectionReviewDetails(proposal)
         : contentProposalDetails(proposal),
     };
   });

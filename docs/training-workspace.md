@@ -2,7 +2,7 @@
 
 ## Optional post-workout reflection (Item 10)
 
-The owner action on a saved event summary opens a text-first Material dialog. No auto-prompt interrupts recording
+The owner action on a saved event summary opens a note-only Material dialog. No auto-prompt interrupts recording
 import. The user explicitly chooses the whole recording or a real activity in that event, including multi-activity
 recordings; benchmark/ambiguous merged events are excluded. Three optional prompts cover overall feel, sport-relevant
 conditions/technique, and fatigue/recovery. One bounded exact completion-link lookup can replace the last prompt with
@@ -21,24 +21,24 @@ automatic plan adaptation, injury diagnosis and provider feedback delivery remai
 
 `shared/workout-reflection.ts` owns validation and optimistic/retry semantics. Private fixed leaves live under
 `users/{uid}/events/{eventId}/workoutReflections`: `recording` or `activity_{actualActivityId}`. Each leaf contains exactly
-`schemaVersion: 1`, monotonic `revision`, UUID `mutationId`, `deleted`, nullable `effort`, and nullable `note`.
-Effort is an explicitly reported integer 0–10 on Borg CR10; null is unknown, zero is no exertion. Text is trimmed,
-limited to 2000 characters, rejects control characters except newline/tab, and is untrusted athlete context.
-A save needs effort or nonblank text. The existing Feeling/RPE event-stat editor, imported RPE and planned step RPE
-stay independent. Item 13 may share deliberate Borg scale semantics, but not storage, consent or automatic copying.
+`schemaVersion: 1`, monotonic `revision`, UUID `mutationId`, `deleted`, and nullable `note`.
+Text is trimmed, limited to 2000 characters, rejects control characters except newline/tab/carriage return, and is
+untrusted athlete context. A save needs nonblank text. There is no reflection effort field. The dialog shows the
+existing whole-recording RPE as read-only context; its sole editor remains Edit details. Imported and planned RPE
+remain unchanged. This unreleased feature has no data migration or reparse requirement.
 
 The editor reads its exact leaf with lazily loaded Firestore Lite REST using the same app's Auth/App Check providers,
 avoiding the full SDK's persisted missing-document state. That read is bounded to 30 seconds and rechecks the owner
 after module loading and the response; failure never supplies revision zero. Owner SDK transactions read the current
 parent, target membership and leaf before writing. Rules additionally check
-active-account/deletion fences, benchmark exclusion, exact keys, effort/text bounds and monotonically increasing
+active-account/deletion fences, benchmark exclusion, exact keys, text bounds and monotonically increasing
 revisions. Public event access never grants reflection access; collection listing and descendants are denied.
 Unknown/corrupt leaves fail closed. Skip/Cancel and an unchanged draft never write. Concurrent revisions require reload;
 an uncertain unchanged retry preserves its mutation UUID. UUID creation uses the shared browser compatibility guard;
 an unavailable UUID reports a browser error and preserves the editable draft without writing. Account changes clear private dialog state and invalidate
-pending results. Accepted selection/effort changes own selection haptics; async saves own success/error feedback.
+pending results. Accepted target selections own selection haptics; async saves own success/error feedback.
 
-Deletion overwrites effort/text with null in a content-free monotonic tombstone, preventing a stale create/edit retry
+Deletion overwrites text with null in a content-free monotonic tombstone, preventing a stale create/edit retry
 from resurrecting that deleted reflection. There is no recoverable reflection history. Current content remains until
 reflection, recording or account deletion. The event cleanup hook deletes fixed leaves in transactions of at most 200,
 checking event absence on every page so recreated deterministic event IDs are protected. Account recursive cleanup
@@ -52,14 +52,13 @@ The additive surface is `get_workout_reflection`, `save_workout_reflection`, and
 independent `workout-reflections:read` / `workout-reflections:write`, both dependent on `activity-details:read`; writes
 also require reflection read. Existing activity, event, Training, Health, measurement, description and Timeline grants
 never authorize this content. Strict inputs select an existing owner/connection-bound activity reference and explicit
-recording/activity target. Outputs expose only that reference/target, revision/presence, explicitly labelled Borg CR10
-and selected effort/text; never whole events, links, provider data, raw IDs or receipts. Admin transactions recheck
+recording/activity target. Outputs expose only that reference/target, revision/presence and selected private text; never whole events, links, provider data, raw IDs or receipts. Admin transactions recheck
 stored grant/Assistant generation and account deletion. External writes use native host approval; server code cannot
 inspect automatic approval settings. Built-in Gemini sees current reads and local prepare-only tools through an independent
 chat choice, on for fresh and New chats and user-disableable. Existing off choices, legacy missing flags and old retries
 retain their selected access. This default does not expand external MCP grants or change tool schemas or calculations.
 Preparation requires current-turn activity/date discovery and an exact target/revision read;
-QS shows the target and current/new effort/text, with explicit permanent deletion, before app Apply. Permission changes,
+QS shows the target and current/new text, with explicit permanent deletion, before app Apply. Permission changes,
 New chat, expiry, stale proposals/revisions and deletion fences fail closed. At most one current content proposal is kept.
 
 Planning review: recipes, planning mutation kinds, completion/link lifecycle and provider delivery are unchanged.

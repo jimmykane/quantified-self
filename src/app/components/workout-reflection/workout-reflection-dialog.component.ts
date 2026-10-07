@@ -2,7 +2,7 @@ import { AppAuthService } from '../../authentication/app.auth.service';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { ChangeDetectionStrategy, Component, DestroyRef, OnInit, computed, inject, signal } from '@angular/core';
 import { MAT_DIALOG_DATA, MatDialogRef } from '@angular/material/dialog';
-import { DataRPE, RPEBorgCR10SCale, type EventInterface, type User } from '@sports-alliance/sports-lib';
+import { DataRPE, type EventInterface, type User } from '@sports-alliance/sports-lib';
 import { isBenchmarkEvent } from '@shared/event-classification';
 import { resolveUnitAwareDisplayFromValue } from '@shared/unit-aware-display';
 import { reflectionPrompts, type WorkoutReflection, type WorkoutReflectionTarget } from '@shared/workout-reflection';
@@ -31,7 +31,6 @@ export class WorkoutReflectionDialogComponent implements OnInit {
           activityId: activity.getID(), label: `Activity ${index + 1} · ${activity.type}`, sport: activity.type }] : []),
   ];
   readonly selected = signal(this.targets[0]);
-  readonly effort = signal<number | null>(null);
   readonly note = signal('');
   readonly saved = signal<WorkoutReflection | null>(null);
   readonly loading = signal(true);
@@ -48,17 +47,15 @@ export class WorkoutReflectionDialogComponent implements OnInit {
     return resolveUnitAwareDisplayFromValue(DataRPE.type, value, this.data.user.settings?.unitSettings);
   });
   readonly prompts = computed(() => reflectionPrompts(this.selected().sport, this.exactlyLinked()));
-  readonly hasContent = computed(() => this.effort() !== null || !!this.note().trim());
-  readonly changed = computed(() => this.hasContent() && (this.effort() !== (this.saved()?.effort ?? null)
-    || (this.note().trim() || null) !== (this.saved()?.note ?? null) || this.saved()?.deleted === true));
-  readonly options = Object.values(RPEBorgCR10SCale).filter((value): value is number => typeof value === 'number')
-    .map(value => ({ value, label: resolveUnitAwareDisplayFromValue(DataRPE.type, value, this.data.user.settings?.unitSettings)?.text || `${value}` }));
+  readonly hasContent = computed(() => !!this.note().trim());
+  readonly changed = computed(() => this.hasContent()
+    && ((this.note().trim() || null) !== (this.saved()?.note ?? null) || this.saved()?.deleted === true));
   private generation = 0;
   private attempt: { signature: string; id: string } | null = null;
   constructor() {
     inject(AppAuthService).user$.pipe(takeUntilDestroyed()).subscribe(user => {
       if (user?.uid === this.data.user.uid) return;
-      this.generation++; this.effort.set(null); this.note.set(''); this.saved.set(null);
+      this.generation++; this.note.set(''); this.saved.set(null);
       this.ref.close();
     });
   }
@@ -73,13 +70,9 @@ export class WorkoutReflectionDialogComponent implements OnInit {
     this.selected.set(target);
     await this.load();
   }
-  setEffort(value: number | null): void {
-    if (this.busy() || value === this.effort()) return;
-    this.effort.set(value); this.haptics.selection();
-  }
   async load(): Promise<void> {
     const generation = ++this.generation;
-    this.loading.set(true); this.readReady.set(false); this.error.set(''); this.effort.set(null); this.note.set('');
+    this.loading.set(true); this.readReady.set(false); this.error.set(''); this.note.set('');
     this.saved.set(null); this.exactlyLinked.set(false); this.deleteReview.set(false); this.attempt = null;
     const current = () => !this.destroyRef.destroyed && generation === this.generation;
     try {
@@ -87,7 +80,7 @@ export class WorkoutReflectionDialogComponent implements OnInit {
       const recording = this.recording();
       const value = await this.service.read(recording);
       if (!current()) return;
-      this.readReady.set(true); this.saved.set(value); this.effort.set(value?.effort ?? null); this.note.set(value?.note ?? '');
+      this.readReady.set(true); this.saved.set(value); this.note.set(value?.note ?? '');
       void this.service.hasExactWorkoutLink(recording).then(linked => {
         if (current()) this.exactlyLinked.set(linked);
       }).catch(() => { /* Unknown link context keeps the generic optional prompt. */ });
@@ -108,7 +101,7 @@ export class WorkoutReflectionDialogComponent implements OnInit {
   async apply(deleted = false): Promise<void> {
     if (this.busy() || this.loading() || !this.readReady() || (deleted ? !this.deleteReview() : !this.changed())) return;
     this.haptics.selection();
-    const fields = { effort: this.effort(), note: this.note().trim() || null };
+    const fields = { note: this.note().trim() || null };
     const revision = this.saved()?.revision ?? 0;
     const signature = JSON.stringify([this.selected().id, revision, deleted, fields]);
     if (signature !== this.attempt?.signature) {

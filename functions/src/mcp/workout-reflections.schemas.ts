@@ -7,18 +7,17 @@ export type McpWorkoutReflectionTool = typeof MCP_WORKOUT_REFLECTION_TOOLS[numbe
 const reference = z.string().min(1).max(512);
 const target = z.enum(['recording', 'activity']);
 const revision = z.number().int().min(0).max(Number.MAX_SAFE_INTEGER - 2);
-const fields = { effort: z.number().int().min(0).max(10).nullable(),
-  note: z.string().max(WORKOUT_REFLECTION_NOTE_LIMIT).refine(value => {
-    try { validateReflectionFields({ effort: null, note: value }); return true; } catch { return false; }
+const fields = { note: z.string().max(WORKOUT_REFLECTION_NOTE_LIMIT).refine(value => {
+    try { validateReflectionFields({ note: value }); return true; } catch { return false; }
   }).nullable() };
 const selected = { activityRef: reference, target };
 const change = { ...selected, expectedRevision: revision, mutationId: z.uuid() };
 export const MCP_WORKOUT_REFLECTION_INPUTS = {
   get_workout_reflection: z.strictObject(selected),
-  save_workout_reflection: z.strictObject({ ...change, ...fields }),
+  save_workout_reflection: z.strictObject({ ...change, note: fields.note.unwrap().refine(value => value.trim().length > 0) }),
   delete_workout_reflection: z.strictObject({ ...change, expectedRevision: revision.min(1) }),
 };
-const current = { ...selected, revision, present: z.boolean(), effortScale: z.literal('borg_cr10'), ...fields };
+const current = { ...selected, revision, present: z.boolean(), ...fields };
 export const MCP_WORKOUT_REFLECTION_OUTPUTS = {
   get_workout_reflection: z.strictObject(current),
   save_workout_reflection: z.strictObject({ ...current, changed: z.boolean() }),

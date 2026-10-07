@@ -36,11 +36,11 @@ export const MCP_SCOPE_CONTENT: Record<McpScope, {
 }> = {
   'workout-reflections:read': {
     title: 'Private workout reflections',
-    description: 'Read your athlete-reported effort and full private reflection text for an explicitly selected activity or recording. Text may contain sensitive health, personal or location information. Requires Individual activity details. Existing clients must reauthorize; revocation cannot erase copies already received. Imported RPE, planned targets and completion stay separate.',
+    description: 'Read your full private reflection text for an explicitly selected activity or recording. Text may contain sensitive health, personal or location information. Requires Individual activity details. Existing clients must reauthorize; revocation cannot erase copies already received. Imported RPE, planned targets and completion stay separate.',
   },
   'workout-reflections:write': {
     title: 'Change workout reflections',
-    description: 'Save or permanently delete explicitly reported effort and private reflection text using current revisions and your client’s native approval controls. Deletion clears the content permanently and retains only a content-free revision receipt. Requires Private workout reflections access. This never completes or adapts a planned workout or changes provider data.',
+    description: 'Save or permanently delete private reflection text using current revisions and your client’s native approval controls. Deletion clears the content permanently and retains only a content-free revision receipt. Requires Private workout reflections access. This never completes or adapts a planned workout or changes provider data.',
   },
   'training-plans:read': {
     title: 'Training plans and planned workouts',
