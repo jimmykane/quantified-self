@@ -4885,6 +4885,12 @@ revision effective at the leg's recorded start time, so old/delayed uploads do n
 leg freezes that applied policy; duplicate uploads, resyncs and reparses preserve it. Matched legs reuse that
 snapshot without querying policy history again; only new legs select a dated policy.
 
+The Settings editor retains dirty drafts while policy updates arrive. After a successful save it displays the newest
+observed policy head and uses that revision for the next edit. Pending save completions belong to the current account
+and editor lifetime; switching accounts or closing Settings prevents stale completions from changing form state or
+giving feedback. This coordination uses the existing policy listener and adds no database operations. It does not
+change persisted policy semantics or MCP contracts; policy history remains private.
+
 Private `users/{uid}/events/{eventId}/metaData/trainingLoad` stores server-owned candidates, source fingerprints,
 leg identities and applied policies beside owner-editable controls. Firestore Rules allow exact owner-scoped
 transactions with revision checks and deletion guards, while denying client writes to calculated fields, policy
