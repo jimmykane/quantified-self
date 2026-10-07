@@ -1330,6 +1330,74 @@ describe('service-connection-meta', () => {
     }));
   });
 
+  it.each([ServiceNames.WahooAPI, ServiceNames.SuuntoApp])(
+    'clears Wahoo recovery fields atomically with guarded connection cleanup for %s',
+    async serviceName => {
+      hoisted.metaData = {
+        connectionState: 'disconnect_pending',
+        connectionStateGeneration: 'disconnect-generation-1',
+        disconnectGeneration: 'disconnect-generation-1',
+        wahooRefreshFailureCount: 3,
+        wahooRefreshFailureLastAt: 123,
+        wahooRefreshRetryAt: 456,
+        wahooReconnectReleasePending: true,
+        wahooReconnectReleaseLastAttemptAt: 123,
+        wahooReconnectReleaseAttemptCount: 2,
+        wahooReconnectReleaseConnectionGeneration: 'old-connection-generation',
+        pendingDisconnectQueueReleasePending: true,
+        pendingDisconnectQueueReleaseGeneration: 'disconnect-generation-1',
+      };
+
+      await expect(clearServiceConnectionState('user-1', serviceName, {
+        expectedPendingDisconnectGeneration: 'disconnect-generation-1',
+        preservePendingDisconnectQueueReleaseRepair: true,
+      })).resolves.toBe(true);
+
+      expect(hoisted.runTransaction).toHaveBeenCalledTimes(1);
+      expect(hoisted.metaSet).toHaveBeenCalledTimes(1);
+      expect(hoisted.metaSet).toHaveBeenCalledWith(expect.any(Object), expect.objectContaining({
+        connectionState: 'delete-sentinel',
+        connectionStateGeneration: expect.any(String),
+        wahooRefreshFailureCount: 'delete-sentinel',
+        wahooRefreshFailureLastAt: 'delete-sentinel',
+        wahooRefreshRetryAt: 'delete-sentinel',
+        wahooReconnectReleasePending: 'delete-sentinel',
+        wahooReconnectReleaseLastAttemptAt: 'delete-sentinel',
+        wahooReconnectReleaseAttemptCount: 'delete-sentinel',
+        wahooReconnectReleaseConnectionGeneration: 'delete-sentinel',
+      }), { merge: true });
+      expect(Object.keys(hoisted.metaData).filter(key => key.startsWith('wahoo'))).toEqual([]);
+      expect(hoisted.metaData).toEqual(expect.objectContaining({
+        pendingDisconnectQueueReleasePending: true,
+        pendingDisconnectQueueReleaseGeneration: 'disconnect-generation-1',
+      }));
+      expect(hoisted.releaseQueueItemsDeferredForReconnectRequired).not.toHaveBeenCalled();
+    },
+  );
+
+  it('preserves Wahoo recovery when stale disconnect cleanup loses to a newer connection', async () => {
+    const currentMeta = {
+      connectionState: 'connected',
+      connectionStateGeneration: 'new-connection-generation',
+      wahooRefreshFailureCount: 1,
+      wahooRefreshFailureLastAt: 123,
+      wahooRefreshRetryAt: 456,
+      wahooReconnectReleasePending: true,
+      wahooReconnectReleaseLastAttemptAt: 123,
+      wahooReconnectReleaseAttemptCount: 2,
+      wahooReconnectReleaseConnectionGeneration: 'new-connection-generation',
+    };
+    hoisted.metaData = { ...currentMeta };
+
+    await expect(clearServiceConnectionState('user-1', ServiceNames.WahooAPI, {
+      expectedPendingDisconnectGeneration: 'old-disconnect-generation',
+    })).resolves.toBe(false);
+
+    expect(hoisted.metaSet).not.toHaveBeenCalled();
+    expect(hoisted.metaData).toEqual(currentMeta);
+    expect(hoisted.releaseQueueItemsDeferredForReconnectRequired).not.toHaveBeenCalled();
+  });
+
   it('accepts a missing token root only when the guarded credential generation is null', async () => {
     hoisted.refreshTokenGet.mockResolvedValueOnce({ exists: false, data: () => undefined });
 
