@@ -355,11 +355,11 @@ describe('UserSettingsComponent', () => {
         expect(component.settingsSectionOptions.map(section => section.id)).toEqual([
             'profile',
             'app',
-            'privacy',
             'dashboard',
             'map',
             'charts',
             'units',
+            'privacy',
             'account',
         ]);
     });
@@ -374,11 +374,11 @@ describe('UserSettingsComponent', () => {
         expect(tabLabels).toEqual([
             'Profile',
             'Appearance',
-            'Privacy',
             'Dashboard',
             'Maps',
             'Charts',
             'Units',
+            'Privacy',
             'Account',
         ]);
     });
@@ -430,10 +430,10 @@ describe('UserSettingsComponent', () => {
         }
     });
 
-    it('shows account as the final settings section for account actions', () => {
+    it('shows Privacy immediately before the final Account section', () => {
         const sectionIds = component.settingsSectionOptions.map(section => section.id);
 
-        expect(sectionIds[sectionIds.length - 2]).toBe('units');
+        expect(sectionIds[sectionIds.length - 2]).toBe('privacy');
         expect(sectionIds[sectionIds.length - 1]).toBe('account');
     });
 

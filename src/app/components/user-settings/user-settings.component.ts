@@ -87,11 +87,11 @@ export class UserSettingsComponent implements OnChanges, OnDestroy, OnInit {
   public readonly sectionOrder: SettingsSectionId[] = [
     'profile',
     'app',
-    'privacy',
     'dashboard',
     'map',
     'charts',
     'units',
+    'privacy',
     'account',
   ];
   public readonly settingsSectionOptions: SettingsSectionOption[] = [
@@ -106,12 +106,6 @@ export class UserSettingsComponent implements OnChanges, OnDestroy, OnInit {
       label: 'Appearance',
       description: 'Color theme',
       icon: 'tune',
-    },
-    {
-      id: 'privacy',
-      label: 'Privacy',
-      description: 'Usage analytics and marketing emails',
-      icon: 'privacy_tip',
     },
     {
       id: 'dashboard',
@@ -136,6 +130,12 @@ export class UserSettingsComponent implements OnChanges, OnDestroy, OnInit {
       label: 'Units',
       description: 'Distance, pace, speed, and weight',
       icon: 'straighten',
+    },
+    {
+      id: 'privacy',
+      label: 'Privacy',
+      description: 'Usage analytics and marketing emails',
+      icon: 'privacy_tip',
     },
     {
       id: 'account',
