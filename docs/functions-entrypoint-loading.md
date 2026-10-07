@@ -218,7 +218,8 @@ The check builds the Functions package and verifies:
 - the four ingestion targets avoid the full entrypoint, Genkit, BigQuery, MCP and admin modules, while retaining CPU,
   memory, timeout, concurrency, instance settings, secrets, trigger kinds, retry options and task rate limits;
 - the four recorded-activity dispatchers avoid those unrelated modules, retain their Gen 1 scheduled-handler contracts,
-  and preserve complete discovery and standalone secret validation with each target inherited;
+  compare complete runtime endpoint/trigger snapshots with a separate fresh full-discovery process, and preserve
+  complete discovery and standalone secret validation with each target inherited;
 - the four scheduled maintenance targets avoid those unrelated modules, preserve their complete scheduled-handler
   contracts and allow standalone secret validation with any of their targets inherited;
 - the two token projections and Garmin Health receiver avoid those unrelated modules, preserve their original trigger,
@@ -496,6 +497,12 @@ Verification passed:
 - all 168 full Firebase endpoint descriptors matched the pre-change baseline byte-for-byte;
 - inherited-target discovery and standalone secret validation for all four dispatchers;
 - deployment-source safety, secret-binding validation for 69 endpoints, scoped ESLint and `git diff --check`.
+
+Review follow-up made the fresh-process comparison permanent in CI/predeploy. Each dispatcher snapshot is captured
+before importing the full registry, avoiding a same-process module-cache comparison that could mask an import-order
+metadata change. Four synthetic runtime-only memory-descriptor changes were detected despite passing the older
+handler-identity checks; all four normal contracts matched. The review rerun passed 183 focused tests and nine
+monitoring tests. This changes verification only, not any deployed handler or its startup graph.
 
 Documentation-only changes have no separate automated suite. No provider calls, production deployment or cloud
 configuration apply was performed. This change is local on `develop`; pushing and deployment require approval.

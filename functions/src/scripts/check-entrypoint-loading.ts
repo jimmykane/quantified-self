@@ -1,5 +1,6 @@
 import { spawnSync } from 'node:child_process';
 import { resolve } from 'node:path';
+import { isDeepStrictEqual } from 'node:util';
 
 import {
   loadOptimizedFunctionTarget,
@@ -190,6 +191,7 @@ interface ProbeResult {
   matchesFullEntrypoint: boolean | null;
   preservesHandlerIdentity: boolean | null;
   forbiddenModules: string[];
+  activityImportDispatcherContracts: Record<string, unknown>;
 }
 
 interface DiscoveredEndpoint {
@@ -247,6 +249,18 @@ function probe(targetArgument: string): void {
   const target = process.env.FUNCTION_TARGET?.trim() || null;
   const runtimeTarget = resolveRuntimeFunctionTarget(process.env);
   const exports = sortedKeys(entrypoint);
+  const activityImportDispatcherContracts: Record<string, unknown> = {};
+  for (const dispatcher of Object.keys(ACTIVITY_IMPORT_DISPATCHER_METADATA)) {
+    if (!exports.includes(dispatcher)) continue;
+    const handler = entrypoint[dispatcher] as { __endpoint?: unknown; __trigger?: unknown };
+    // Capture before loading full-entrypoint below. Same-process identity alone
+    // cannot detect runtime-only metadata changes caused by module import order.
+    // JSON also normalizes Firebase ResetValue objects to their wire value.
+    activityImportDispatcherContracts[dispatcher] = JSON.parse(JSON.stringify({
+      endpoint: handler.__endpoint,
+      trigger: handler.__trigger,
+    })) as unknown;
+  }
   let matchesFullEntrypoint: boolean | null = null;
   let preservesHandlerIdentity: boolean | null = null;
 
@@ -306,6 +320,7 @@ function probe(targetArgument: string): void {
     matchesFullEntrypoint,
     preservesHandlerIdentity,
     forbiddenModules,
+    activityImportDispatcherContracts,
   };
   process.stdout.write(`${JSON.stringify(result)}\n`);
 }
@@ -388,6 +403,9 @@ async function check(): Promise<void> {
     discovery.exports.length === EXPECTED_FULL_EXPORT_COUNT,
     `Expected ${EXPECTED_FULL_EXPORT_COUNT} discovery exports, found ${discovery.exports.length}.`,
   );
+  assert(arraysEqual(sortedKeys(discovery.activityImportDispatcherContracts),
+    Object.keys(ACTIVITY_IMPORT_DISPATCHER_METADATA).sort()),
+  'Full discovery is missing a recorded-activity dispatcher contract.');
 
   const unknown = runProbe(UNKNOWN_TARGET);
   assert(unknown.matchesFullEntrypoint, 'An unknown runtime target did not use the complete entrypoint.');
@@ -425,6 +443,9 @@ async function check(): Promise<void> {
           && arraysEqual(discovery.exports, guardedDiscovery.exports),
         `Firebase ${discoveryMode} discovery honored an inherited FUNCTION_TARGET=${target}.`,
       );
+      assert(isDeepStrictEqual(guardedDiscovery.activityImportDispatcherContracts,
+        discovery.activityImportDispatcherContracts),
+      `Firebase ${discoveryMode} discovery changed dispatcher metadata with inherited ${target}.`);
     }
   }
 
@@ -436,6 +457,11 @@ async function check(): Promise<void> {
     );
     assert(optimized.preservesHandlerIdentity, `${target} did not preserve its Firebase handler object.`);
     assert(optimized.matchesFullEntrypoint, `${target} differs from the full-entrypoint handler.`);
+    if (ACTIVITY_IMPORT_DISPATCHER_METADATA[target]) {
+      assert(isDeepStrictEqual(optimized.activityImportDispatcherContracts[target],
+        discovery.activityImportDispatcherContracts[target]),
+      `${target} isolated runtime endpoint/trigger metadata differs from fresh full discovery.`);
+    }
     assert(
       optimized.forbiddenModules.length === 0,
       `${target} loaded unrelated modules: ${optimized.forbiddenModules.join(', ')}`,
