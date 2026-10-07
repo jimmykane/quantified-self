@@ -4891,7 +4891,8 @@ transactions with revision checks and deletion guards, while denying client writ
 revision updates/deletes and cross-event associations. Before provider ingestion, manual upload or source-file
 reparse overwrites any existing source document, backend EventWriter adapters durably freeze legacy identities in
 the server-owned `legacyLegs` field. This evidence survives partial-write retries and does not advance the load
-timestamp. Preparation also sets `sourceWritePending` before source writes. After source writes, a second transaction
+timestamp. Preparation atomically sets `sourceWritePending` and caches an unavailable load (or whole-workout
+exclusion) before source writes. This covers already-warm caches as well as the first full-history warmup. After source writes, a second transaction
 refreshes candidates, checks the persisted source, preserves the latest controls and atomically updates the compact
 load cache. It clears the pending marker, records exact source update times and advances `sourceRevision` only when
 the shared derived-source projection changes. Failed preparation/finalization must be retried through the original
@@ -4914,8 +4915,10 @@ server-owned `users/{uid}/trainingLoadCache` collection instead of joining one m
 buckets start with one hex digit and split atomically at 100 entries or 400,000 JSON bytes; entries are bounded at
 100,000 bytes. Branch documents have `leaf: false`; a single leaf query retrieves the current buckets. Each entry
 contains only the resolved parent/per-leg results and source guards, never policy history or full evaluations.
-Unqueried cache entries and metadata control/candidate maps are exempt from indexing. Empty leaves may remain after
-deletions; all cache records are below the recursively deleted user root.
+Unqueried cache entries and metadata control/candidate maps are exempt from indexing. Empty leaf documents are
+removed so deleted history stops adding rebuild reads. Buckets are flat documents without descendants; branch
+documents remain to route future writes and are omitted from the leaf query. All cache records are below the
+recursively deleted user root.
 
 A versioned `state` document becomes ready only after the first **full-history** build warms existing metadata.
 That cold build uses exact owner paths in batches of at most 100 and refreshes existing metadata with at most four
@@ -4926,7 +4929,8 @@ recorded load. Future imports update their cache atomically; owner edits refresh
 the derived-metrics rollout gate. Event deletion removes its cached entry. Cache maintenance checks the account
 root and deletion tombstone transactionally. A failed cache refresh retries without publishing invalidation first.
 Immediate legacy controls may still require a bounded child join, and ordinary source corrections/deletions refresh
-those legacy entries before invalidation. Focused MCP impact/editor reads keep their exact
+those legacy entries before invalidation, including outside the derived rollout gate. Moving a leg refreshes both
+its former and current legacy parents. Focused MCP impact/editor reads keep their exact
 metadata reads.
 
 Steady-state full rebuild overhead is one cache-state read plus the populated leaf documents (Firestore bills a
@@ -4934,17 +4938,22 @@ minimum of one read for an empty query). The emulator fixture with 1,001 single-
 leaves: **17 reads instead of 1,001**, a 98.3% reduction in this feature's load-join reads. This is not a reduction in
 the pre-existing event/activity reads or an estimate of the whole Firebase bill. Large multisport entries split
 sooner. First warmup still pays the metadata scan and cache preparation once; imports/edits add bounded transactional
-cache maintenance, and a split costs additional writes. Identical resolved results skip the cache write. Matching
-reparses avoid policy lookups; unchanged source projections do not enqueue a Training rebuild. No original-file
+cache maintenance, and a split costs additional writes. Identical refreshes skip the cache write. An import writes
+a pending cache result and then its final result, adding a bounded preparation read/write. Even an unchanged reimport
+advances load freshness and requests a targeted load rebuild when it clears a pending result: another build may
+have observed that pending state. Matching reparses still avoid policy lookups; unchanged source projections
+avoid full-source invalidation. No original-file
 reparse is required to warm this cache, and it does not recalculate historical TSS.
 
 For imports, source triggers check the pending marker and committed update times, leaving invalidation to the final
 metadata write. Completed changed sources use normal full-source ingress; owner-only load edits retain targeted
 load ingress. This prevents the import's source and load metadata from independently requesting the same rebuild.
 Independent edits, retries and stale-leg cleanup can still legitimately request additional work. Owner controls
-edited during a pending import are retried against current metadata. `loadRevision` ensures finalization invalidates
-an edit even if reimported source fields are identical. Metadata ingress uses cache-readiness time so late retries
-cannot disappear into an already-consumed debounce bucket. `sourceFirstImport` preserves dated selection across
+edited during a pending import refresh the current cached state: whole-workout exclusion takes effect immediately,
+while other modeled results remain unavailable until finalization. The shared resolver keeps this state consistent
+in rebuilds, the editor and MCP. `loadRevision` and `updatedAt` advance when finalization clears a pending result,
+even if reimported source fields are identical. Cache-dependent ingress selects its debounce bucket immediately
+before enqueueing, after cache maintenance and deletion guards, so late deliveries do not reuse an expired bucket. `sourceFirstImport` preserves dated selection across
 partial first-import retries; it is removed on successful finalization. Owner revision/updatedAt-only changes are ignored.
 Browser and backend use the same canonical source projection for SHA-256
 fingerprints, rejecting stale candidate/source combinations. Unrecognized leg IDs remain unavailable while a rewrite
@@ -4980,7 +4989,9 @@ emulator verifies delayed policy selection, idempotent duplicates, changed/reuse
 missing legacy identity, edits during first import, concurrent reparse/control edits and deletion guards. Cache tests
 cover the warm/cold read paths, transactionally split buckets, unchanged-write suppression, policy query avoidance,
 zero/excluded/reset projections, source-trigger coordination and private Rules. The 1,001-workout fixture verifies
-17 steady-state document reads. This optimization changes no public MCP schema, scope or mutation contract; Training
+17 steady-state document reads. Review regressions also cover warm-cache pending imports, exclusion/reset during
+interrupted imports, parser evaluation failures before reservation, removed/recreated empty leaves, leg moves and
+cache maintenance outside rollout. This optimization changes no public MCP schema, scope or mutation contract; Training
 planning/provider delivery remains unaffected. The actual
 editor and Settings were exercised with synthetic local data at desktop and
 320/390-pixel phone widths. No original user FIT file or production data was used.

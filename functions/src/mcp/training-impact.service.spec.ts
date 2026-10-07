@@ -109,6 +109,21 @@ describe('MCP Training impact service', () => {
       coverage: { eligibleSessionCount: 1, unavailableSessionCount: 1, missingTssSessionCount: 0 } });
     expect(createMcpOutputSchemaRegistry({ activityLocation: false, routeLocation: false }).get_training_impact.safeParse(result).success).toBe(true);
   });
+  it('uses the existing updating/excluded states for pending imports without exposing coordination metadata', async () => {
+    const loadReads = reads();
+    const metadata = { version: 1, revision: 1, excluded: false, sourceWritePending: true,
+      controls: { 'activity-1': { override: 0 } } };
+    loadReads.fetchLoadMetadata = vi.fn().mockResolvedValue(new Map([['event-1', metadata]]));
+    const pending = await getMcpTrainingImpact(sessionInput(), loadReads);
+    expect(pending).toMatchObject({ status: 'updating', contribution: null,
+      coverage: { unavailableSessionCount: 1, missingTssSessionCount: 0 } });
+    metadata.excluded = true;
+    const excluded = await getMcpTrainingImpact(sessionInput(), loadReads);
+    expect(excluded).toMatchObject({ status: 'excluded', coverage: { excludedSessionCount: 1, benchmarkOrMergeSessionCount: 0 } });
+    const schema = createMcpOutputSchemaRegistry({ activityLocation: false, routeLocation: false }).get_training_impact;
+    expect(schema.safeParse(pending).success).toBe(true); expect(schema.safeParse(excluded).success).toBe(true);
+    expect(JSON.stringify([pending, excluded])).not.toMatch(/sourceWritePending|controls|activity-1|event-1/);
+  });
   it('keeps unmatched load identities unavailable without classifying them as missing recorded TSS', async () => {
     const loadReads = reads();
     loadReads.fetchLoadMetadata = vi.fn().mockResolvedValue(new Map([['event-1', {

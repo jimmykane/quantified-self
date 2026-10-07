@@ -14,6 +14,15 @@ function metadata(): TrainingLoadMetadata {
   }])) };
 }
 describe('modeled Training load', () => {
+  it('keeps pending imports unavailable consistently while honoring whole-workout exclusion', () => {
+    const data = metadata(); data.sourceWritePending = true; data.controls.walk = { override: 0 };
+    expect(resolveEffectiveTrainingLoad(source, data)).toMatchObject({ score: null, reasons: ['source-updating'] });
+    expect(resolveEffectiveTrainingLoad(source, data, activities, 'walk')).toMatchObject({ score: null, reasons: ['source-updating'] });
+    data.excluded = true;
+    expect(resolveEffectiveTrainingLoad(source, data, activities, 'walk')).toMatchObject({ score: 0, status: 'excluded' });
+    data.excluded = false; data.sourceWritePending = false;
+    expect(resolveEffectiveTrainingLoad(source, data, activities, 'walk')).toMatchObject({ score: 0, status: 'available' });
+  });
   it('sums fractional leg scores without applying the editor display precision to the model', () => {
     const data = metadata(); data.legs!.walk.recordedTss = 0.04; data.legs!.ride.recordedTss = 9.02;
     expect(resolveEffectiveTrainingLoad(source, data).score).toBeCloseTo(9.06, 10);

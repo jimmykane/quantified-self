@@ -46,7 +46,7 @@ async function handleDerivedMetricsSourceWrite(
 
     const before = event.data?.before?.data?.();
     const after = event.data?.after?.data?.();
-    // Preparation only reserves the import. Owner edits made during it are retried below.
+    // Preparation only reserves the import. Owner edits made during it are projected below.
     if (source === 'training-load' && after?.sourceWritePending &&
         (!before || !hasDerivedMetricSourceChange(source, before, after)) && !Object.keys(after.controls ?? {}).length) return;
     // Creates, updates, and deletes can all change the derived comparison.
@@ -63,16 +63,42 @@ async function handleDerivedMetricsSourceWrite(
     const sourceId = resolveDerivedMetricsSourceId(event, source);
     // Cache maintenance is independent of the derived-metrics rollout gate.
     // Always reread current metadata before invalidating, including redelivered older events.
-    if (source === 'training-load' || (source === 'event' && !afterExists))
+    let cacheRefreshed = false;
+    if (source === 'training-load' || (source === 'event' && !afterExists)) {
         await refreshTrainingLoadSummary(uid, sourceId!);
+        cacheRefreshed = true;
+    }
+    if ((source === 'event' && afterExists) || source === 'activity') {
+        const eventIds = new Set(source === 'event' ? [sourceId] : [after?.eventID, before?.eventID]);
+        let coordinatedWrite = false;
+        for (const eventId of eventIds) {
+            if (typeof eventId !== 'string' || !eventId) continue;
+            const metadata = (await admin.firestore().doc(`users/${uid}/events/${eventId}/metaData/trainingLoad`).get()).data();
+            const key = source === 'event' ? 'event' : `activity:${sourceId}`;
+            const time = trainingLoadWriteTime(event.data?.after?.updateTime);
+            // The final metadata transaction owns import invalidation, even for delayed source deliveries.
+            if (afterExists && (source === 'event' || eventId === after?.eventID) &&
+                (metadata?.sourceWritePending || (time && metadata?.sourceWriteTimes?.[key] === time))) {
+                coordinatedWrite = true;
+                continue;
+            }
+            // Legacy controls resolve against live recorded children until their first reparse.
+            // Their compact projection must follow ordinary source corrections/deletions too.
+            if (metadata && !metadata.legs && Object.keys(metadata.controls ?? {}).length) {
+                await refreshTrainingLoadSummary(uid, eventId);
+                cacheRefreshed = true;
+            }
+        }
+        // A moved leg still invalidates its old parent even if the destination import owns its own refresh.
+        if (coordinatedWrite && !cacheRefreshed) return;
+    }
     if (!isDerivedMetricsUidAllowed(uid)) return;
 
     // Debounce mutation ingress by uid + short time bucket.
     // Deterministic Cloud Task naming ensures one pending ingress task per bucket.
     // The ingress helper schedules execution at bucket-close + short buffer.
     // Refresh retries may finish after the original debounce bucket was consumed.
-    // Use readiness time for metadata so a delayed control update cannot be lost.
-    const eventTimeMs = source === 'training-load' ? Date.now() : resolveEventTimeMs(event);
+    // Use readiness time after cache maintenance so a delayed update cannot be lost.
     const sleepIngressOptions = source === 'sleep'
         ? {
             taskScope: 'sleep',
@@ -110,20 +136,6 @@ async function handleDerivedMetricsSourceWrite(
         });
         return;
     }
-    if ((source === 'event' && afterExists) || source === 'activity') {
-        const eventId = source === 'event' ? sourceId : after?.eventID ?? before?.eventID;
-        if (eventId) {
-            const metadata = (await admin.firestore().doc(`users/${uid}/events/${eventId}/metaData/trainingLoad`).get()).data();
-            const key = source === 'event' ? 'event' : `activity:${sourceId}`;
-            const time = trainingLoadWriteTime(event.data?.after?.updateTime);
-            // The final metadata transaction owns import invalidation, even for delayed source deliveries.
-            if (afterExists && (metadata?.sourceWritePending || (time && metadata?.sourceWriteTimes?.[key] === time))) return;
-            // Legacy controls resolve against live recorded children until their first reparse.
-            // Their compact projection must follow ordinary source corrections/deletions too.
-            if (metadata && !metadata.legs && Object.keys(metadata.controls ?? {}).length)
-                await refreshTrainingLoadSummary(uid, eventId);
-        }
-    }
     const completedSourceWrite = source === 'training-load' && after?.sourceRevision !== undefined &&
         after.sourceRevision !== before?.sourceRevision;
     const loadIngressOptions = source === 'training-load' && !completedSourceWrite ? {
@@ -144,6 +156,7 @@ async function handleDerivedMetricsSourceWrite(
             incrementEventMutationVersion: false,
         } as const
         : undefined);
+    const eventTimeMs = cacheRefreshed ? Date.now() : resolveEventTimeMs(event);
     const queued = targetedIngressOptions
         ? await enqueueDerivedMetricsIngressTask(uid, undefined, eventTimeMs ?? undefined, targetedIngressOptions)
         : (Number.isFinite(eventTimeMs)

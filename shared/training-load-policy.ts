@@ -118,6 +118,7 @@ export function resolveEffectiveTrainingLoad(
   activityId?: string,
 ): EffectiveTrainingLoad {
   if (metadata?.excluded) return excluded();
+  if (metadata?.sourceWritePending) return unavailable('source-updating');
   if (metadata && unresolvedTrainingLoadLegs(metadata).length) return unavailable('activity-match-needs-review');
   const legs = metadata?.legs ?? {};
   const resolveLeg = (id: string, activity?: TrainingLoadActivity): EffectiveTrainingLoad => {

@@ -46,7 +46,7 @@ describe.skipIf(!enabled)('Training load persistence in Firestore', () => {
     }
     await db.terminate();
   });
-  it('commits metadata and cached load together, skips unchanged cache writes, and does not reread matched policy history', async () => {
+  it('commits pending and final load together, skips identical refreshes, and reuses matched policy history', async () => {
     const uid = setup(); await db.doc(`users/${uid}`).set({ test: true });
     const event = workout(); const finish = await prepareTrainingLoadMetadata(uid, event);
     expect((await db.doc(metadataPath(uid)).get()).data()?.sourceWritePending).toBe(true);
@@ -58,6 +58,8 @@ describe.skipIf(!enabled)('Training load persistence in Firestore', () => {
     expect(first).toMatchObject({ sourceWritePending: false, sourceRevision: 1 });
     const bucket = db.doc(`users/${uid}/trainingLoadCache/b_${trainingLoadCacheKey('workout')[0]}`);
     const cachedTime = (await bucket.get()).updateTime;
+    await persistTrainingLoadMetadata(uid, event);
+    expect((await bucket.get()).updateTime?.isEqual(cachedTime!)).toBe(true);
     const originalTransaction = db.runTransaction.bind(db);
     let policyQueries = 0;
     const policyQuery = db.collection(`users/${uid}/trainingLoadPolicies/walking-hiking/revisions`)
@@ -75,10 +77,21 @@ describe.skipIf(!enabled)('Training load persistence in Firestore', () => {
       await source(uid, event); await duplicate();
     } finally { spy.mockRestore(); }
     expect(policyQueries).toBe(0);
-    expect((await bucket.get()).updateTime?.isEqual(cachedTime!)).toBe(true);
+    expect((await bucket.get()).updateTime?.isEqual(cachedTime!)).toBe(false);
+    expect((await db.doc(metadataPath(uid)).get()).data()?.loadRevision).toBe(first.loadRevision + 1);
+    expect((await db.doc(metadataPath(uid)).get()).data()?.updatedAt.toMillis()).toBeGreaterThan(first.updatedAt.toMillis());
     expect((await db.doc(metadataPath(uid)).get()).data()?.sourceRevision).toBe(first.sourceRevision);
     const [projection] = await attachEventTrainingLoads(uid, [await db.doc(`users/${uid}/events/workout`).get()]);
     expect(attachedEffectiveTrainingLoad(projection.data()!)?.score).toBe(9);
+  });
+
+  it('does not reserve a pending import when candidate evaluation fails', async () => {
+    const uid = setup(); const event = workout(); await source(uid, event); await persistTrainingLoadMetadata(uid, event);
+    const before = (await db.doc(metadataPath(uid)).get()).data();
+    const evaluate = vi.spyOn(ActivityUtilities, 'getTrainingStressScoreEvaluations').mockImplementationOnce(() => { throw new Error('invalid input'); });
+    try { await expect(prepareTrainingLoadMetadata(uid, event)).rejects.toThrow('invalid input'); }
+    finally { evaluate.mockRestore(); }
+    expect((await db.doc(metadataPath(uid)).get()).data()).toEqual(before);
   });
 
   it('invalidates and caches a control edit made during an otherwise unchanged reimport', async () => {
@@ -86,13 +99,27 @@ describe.skipIf(!enabled)('Training load persistence in Firestore', () => {
     const ref = db.doc(metadataPath(uid)); const before = (await ref.get()).data()!;
     const finish = await prepareTrainingLoadMetadata(uid, event); await source(uid, event);
     await ref.update({ controls: { leg: { override: 0 } }, revision: before.revision + 2 });
-    await expect(refreshTrainingLoadSummary(uid, 'workout')).rejects.toThrow('pending');
+    await refreshTrainingLoadSummary(uid, 'workout');
     await finish();
     const after = (await ref.get()).data()!;
     expect(after.sourceRevision).toBe(before.sourceRevision);
     expect(after.loadRevision).toBe(before.loadRevision + 1);
     await completeTrainingLoadCacheWarmup(uid);
     expect((await readTrainingLoadSummaries(uid))?.get('workout')?.load.score).toBe(0);
+  });
+
+  it('applies exclusion and reset while an interrupted source import remains pending', async () => {
+    const uid = setup(); const event = workout(); await source(uid, event); await persistTrainingLoadMetadata(uid, event);
+    await completeTrainingLoadCacheWarmup(uid);
+    const finish = await prepareTrainingLoadMetadata(uid, event);
+    expect((await readTrainingLoadSummaries(uid))?.get('workout')?.load).toMatchObject({ score: null, reasons: ['source-updating'] });
+    const ref = db.doc(metadataPath(uid));
+    await ref.update({ excluded: true }); await refreshTrainingLoadSummary(uid, 'workout');
+    expect((await readTrainingLoadSummaries(uid))?.get('workout')?.load).toMatchObject({ score: 0, status: 'excluded' });
+    await ref.update({ excluded: false, controls: {} }); await refreshTrainingLoadSummary(uid, 'workout');
+    expect((await readTrainingLoadSummaries(uid))?.get('workout')?.load).toMatchObject({ score: null, reasons: ['source-updating'] });
+    await source(uid, event); await finish();
+    expect((await readTrainingLoadSummaries(uid))?.get('workout')?.load).toMatchObject({ score: 9, status: 'available' });
   });
 
   it('refreshes current owner edits, reset and deletion without trusting delayed trigger contents', async () => {
@@ -109,6 +136,9 @@ describe.skipIf(!enabled)('Training load persistence in Firestore', () => {
     expect((await readTrainingLoadSummaries(uid))?.get('workout')?.load.score).toBe(9);
     await parent.delete(); await refreshTrainingLoadSummary(uid, 'workout');
     expect((await readTrainingLoadSummaries(uid))?.has('workout')).toBe(false);
+    expect((await db.collection(`users/${uid}/trainingLoadCache`).where('leaf', '==', true).get()).empty).toBe(true);
+    await source(uid, event); await persistTrainingLoadMetadata(uid, event);
+    expect((await readTrainingLoadSummaries(uid))?.get('workout')?.load.score).toBe(9);
     await db.recursiveDelete(db.doc(`users/${uid}`));
     await Promise.all([refreshTrainingLoadSummary(uid, 'workout'), completeTrainingLoadCacheWarmup(uid)]);
     expect((await db.collection(`users/${uid}/trainingLoadCache`).get()).empty).toBe(true);
@@ -218,7 +248,8 @@ describe.skipIf(!enabled)('Training load persistence in Firestore', () => {
     const prepared = (await ref.get()).data() as TrainingLoadMetadata;
     expect(prepared.legs).toBeUndefined();
     expect((prepared.updatedAt as Timestamp).toMillis()).toBe(1000);
-    expect(resolveEffectiveTrainingLoad({}, prepared, [{ id: 'leg', type: ActivityTypes.Walking }]).score).toBe(12.3);
+    expect(prepared.controls.leg.override).toBe(12.3);
+    expect(resolveEffectiveTrainingLoad({}, prepared)).toMatchObject({ score: null, reasons: ['source-updating'] });
     await source(uid, changed); // A prior attempt wrote sources, but failed before final metadata.
     const retry = await prepareTrainingLoadMetadata(uid, changed);
     await ref.update({ 'controls.leg.override': 15, revision: 3 }); // Edit after preparation must also survive.

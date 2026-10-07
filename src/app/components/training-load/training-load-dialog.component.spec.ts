@@ -30,6 +30,15 @@ describe('Training load editor', () => {
     await component.ngOnInit();
   });
   afterEach(() => vi.unstubAllGlobals());
+  it('explains pending imports without displaying previous candidates as current', () => {
+    component.metadata.set({ version: 1, revision: 1, excluded: false, controls: {}, sourceWritePending: true });
+    expect(component.model).toMatchObject({ score: null, reasons: ['source-updating'] });
+    expect(component.automatic).toBeNull();
+    expect(component.explanation).toContain('Retry the import if it failed');
+    component.metadata.update(value => ({ ...value!, excluded: true }));
+    expect(component.model).toMatchObject({ score: 0, status: 'excluded' });
+    expect(component.explanation).toContain('Excluded from modeled load');
+  });
   it('keeps initialization and unchanged actions silent, and displays one decimal', async () => {
     component.selectLeg('walk'); await component.save();
     expect(selection).not.toHaveBeenCalled(); expect(success).not.toHaveBeenCalled(); expect(save).not.toHaveBeenCalled();

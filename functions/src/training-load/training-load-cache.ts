@@ -32,8 +32,9 @@ export const unavailableTrainingLoad = (): EffectiveTrainingLoad => ({ score: nu
 export function summarizeTrainingLoad(eventId: string, parent: Record<string, unknown>, metadata: TrainingLoadMetadata | null,
   legacyActivities: readonly (TrainingLoadActivity & Record<string, unknown>)[] = []): TrainingLoadSummary | null {
   if (metadata?.sourceWritePending) {
-    const load = metadata.excluded ? resolveEffectiveTrainingLoad(parent, metadata) : unavailableTrainingLoad();
-    return { eventId, parentFingerprint: trainingLoadSourceFingerprint(parent), excluded: metadata.excluded,
+    const load = resolveEffectiveTrainingLoad(parent, metadata);
+    // No source revision is certified while the import is pending. Keep retry writes idempotent.
+    return { eventId, parentFingerprint: '', excluded: metadata.excluded,
       load, missingLeg: load, legs: {} };
   }
   if (!metadata || (!metadata.legs && !metadata.excluded && !Object.keys(metadata.controls).length)) return null;
@@ -80,6 +81,10 @@ export async function prepareTrainingLoadCacheWrite(db: admin.firestore.Firestor
     const entries = { ...bucket?.entries };
     if (JSON.stringify(canonicalTrainingLoadValue(entries[key] ?? null)) === JSON.stringify(canonicalTrainingLoadValue(summary))) return { changed: false, write: () => {} };
     if (summary) entries[key] = summary; else delete entries[key];
+    if (!Object.keys(entries).length) {
+      // Buckets are flat documents with no descendants; deleting an empty leaf cannot orphan children.
+      return { changed: true, write: () => { transaction.delete(bucketRef(db, uid, prefix)); } };
+    }
     const writes = splitTrainingLoadBucket(prefix, entries);
     return { changed: true, write: () => { for (const [id, data] of writes) transaction.set(bucketRef(db, uid, id), data); } };
   }
@@ -87,7 +92,7 @@ export async function prepareTrainingLoadCacheWrite(db: admin.firestore.Firestor
 }
 
 /** Triggers reread current records in the transaction: delayed deliveries cannot overwrite newer owner edits. */
-export async function refreshTrainingLoadSummary(uid: string, eventId: string, allowPending = false): Promise<void> {
+export async function refreshTrainingLoadSummary(uid: string, eventId: string): Promise<void> {
   const db = admin.firestore();
   await db.runTransaction(async transaction => {
     const guard = await getUserDeletionGuardStateInTransaction(db, transaction, uid);
@@ -95,7 +100,6 @@ export async function refreshTrainingLoadSummary(uid: string, eventId: string, a
     const [parent, snapshot] = await transaction.getAll(db.doc(`users/${uid}/events/${eventId}`),
       db.doc(`users/${uid}/events/${eventId}/metaData/trainingLoad`));
     const metadata = snapshot.data() as TrainingLoadMetadata | undefined;
-    if (parent.exists && metadata?.sourceWritePending && !allowPending) throw new Error('Training load source write is pending; retry after import.');
     let activities: (TrainingLoadActivity & Record<string, unknown>)[] = [];
     if (parent.exists && metadata && !metadata.sourceWritePending && !metadata.legs && Object.keys(metadata.controls).length) {
       const children = await transaction.get(db.collection(`users/${uid}/activities`).where('eventID', '==', eventId).limit(101));

@@ -31,6 +31,17 @@ describe('compact private Training load summaries', () => {
     const update = await prepareTrainingLoadCacheWrite({ doc: (path: string) => path } as any, transaction as any, 'u', 'e', summary);
     expect(update.changed).toBe(false); update.write(); expect(writes).toBe(0);
   });
+  it('removes empty leaf documents so deleted history no longer adds rebuild reads', async () => {
+    const summary = summarizeTrainingLoad('e', parent, metadata)!;
+    const removed: string[] = []; const written: string[] = [];
+    const ref = `users/u/trainingLoadCache/b_${trainingLoadCacheKey('e')[0]}`;
+    const transaction = { get: async () => ({ data: () => ({ version: 1, leaf: true,
+      entries: { [trainingLoadCacheKey('e')]: summary } }) }),
+      delete: (path: string) => removed.push(path), set: (path: string) => written.push(path) };
+    const update = await prepareTrainingLoadCacheWrite({ doc: (path: string) => path } as any, transaction as any, 'u', 'e', null);
+    update.write();
+    expect(removed).toEqual([ref]); expect(written).toEqual([]);
+  });
   it('warms interrupted imports as unavailable without blocking other workouts or losing explicit exclusion', () => {
     const pending = { ...metadata, sourceWritePending: true };
     expect(summarizeTrainingLoad('e', parent, pending)?.load).toMatchObject({ score: null, reasons: ['source-updating'] });

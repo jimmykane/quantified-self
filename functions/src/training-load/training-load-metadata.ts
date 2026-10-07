@@ -93,18 +93,30 @@ export async function prepareTrainingLoadMetadata(
   if (activities.length > 100) throw new Error('Training load supports at most 100 legs per workout.');
   const eventRef = db.doc(`users/${uid}/events/${eventId}`);
   const metaRef = eventRef.collection('metaData').doc('trainingLoad');
+  // Native JSON imports may not have parse-time evaluations yet. Power evaluation
+  // can derive stats, so finish it before EventWriter snapshots source documents.
+  // The final metadata transaction then reads the cached, non-mutating results.
+  activities.forEach(activity => ActivityUtilities.getTrainingStressScoreEvaluations(activity));
   const firstImport = await db.runTransaction(async transaction => {
     const guard = await getUserDeletionGuardStateInTransaction(db, transaction, uid);
     if (guard.shouldSkip) throw new Error('Training load write blocked by account deletion.');
     if (authorize) await authorize(db, transaction);
     const [parent, snapshot] = await transaction.getAll(eventRef, metaRef);
     const previous = snapshot.data() as TrainingLoadMetadata | undefined;
-    if (!parent.exists || previous?.sourceFirstImport || previous?.legs || previous?.legacyLegs) {
-      if (!previous?.sourceWritePending) {
-        const pending = { sourceWritePending: true, ...(!parent.exists ? { sourceFirstImport: true } : {}), revision: (previous?.revision ?? 0) + 1 };
-        if (snapshot.exists) transaction.update(metaRef, pending);
-        else transaction.set(metaRef, { version: 1, excluded: false, controls: {}, ...pending });
+    const prepare = async (fields: Partial<TrainingLoadMetadata>, changed = true) => {
+      const pending: TrainingLoadMetadata = { version: 1, excluded: false, controls: {}, revision: 1, ...previous, ...fields };
+      const cacheWrite = await prepareTrainingLoadCacheWrite(db, transaction, uid, eventId,
+        summarizeTrainingLoad(eventId, parent.data() ?? {}, pending));
+      if (changed) {
+        if (snapshot.exists) transaction.update(metaRef, fields);
+        else transaction.set(metaRef, pending);
       }
+      cacheWrite.write();
+    };
+    if (!parent.exists || previous?.sourceFirstImport || previous?.legs || previous?.legacyLegs) {
+      const pending = { sourceWritePending: true, ...(!parent.exists ? { sourceFirstImport: true } : {}),
+        revision: (previous?.revision ?? 0) + (previous?.sourceWritePending ? 0 : 1) };
+      await prepare(pending, !previous?.sourceWritePending);
       return previous?.sourceFirstImport === true || !parent.exists;
     }
     const children = await transaction.get(db.collection(`users/${uid}/activities`)
@@ -117,15 +129,10 @@ export async function prepareTrainingLoadMetadata(
         policy: defaultAppliedTrainingLoadPolicy(data.type) } satisfies TrainingLoadLeg];
     }));
     const frozen = { legacyLegs, sourceWritePending: true, revision: (previous?.revision ?? 0) + 1 };
-    // No load timestamp: this changes only identity evidence, not modeled load.
-    if (snapshot.exists) transaction.update(metaRef, frozen);
-    else transaction.set(metaRef, { version: 1, excluded: false, controls: {}, ...frozen });
+    // Pending reads are unavailable; finalization advances freshness and owns invalidation.
+    await prepare(frozen);
     return false;
   });
-  // Native JSON imports may not have parse-time evaluations yet. Power evaluation
-  // can derive stats, so finish it before EventWriter snapshots source documents.
-  // The final metadata transaction then reads the cached, non-mutating results.
-  activities.forEach(activity => ActivityUtilities.getTrainingStressScoreEvaluations(activity));
   return () => persistTrainingLoadMetadata(uid, event, authorize, firstImport);
 }
 
@@ -203,16 +210,15 @@ export async function persistTrainingLoadMetadata(
     // semantic-change trigger correctly skips. Refresh only changed candidates/controls.
     const loadChanged = !previous || JSON.stringify(loadContent(previous)) !== JSON.stringify(loadContent(next));
     const sourceChanged = previous?.sourceDigest !== sourceDigest;
-    if (!loadChanged && previous?.updatedAt !== undefined) next.updatedAt = previous.updatedAt;
-    const changed = loadChanged || sourceChanged;
-    // Bookkeeping revisions do not rewrite identical cache entries or advance the load timestamp.
-    if (!changed) next.revision = previous!.revision;
     const cacheWrite = await prepareTrainingLoadCacheWrite(db, transaction, uid, eventId,
       summarizeTrainingLoad(eventId, parent.data()!, next));
+    const changed = loadChanged || sourceChanged || cacheWrite.changed;
+    if (!loadChanged && !cacheWrite.changed && previous?.updatedAt !== undefined) next.updatedAt = previous.updatedAt;
+    if (!changed) next.revision = previous!.revision;
     // A control can change while the source is pending without changing parser candidates.
     // Carry a server revision so finalization still invalidates that newly resolved load.
     next.loadRevision = (previous?.loadRevision ?? 0) + (cacheWrite.changed ? 1 : 0);
-    if (changed || cacheWrite.changed || previous?.sourceWritePending || JSON.stringify(previous?.sourceWriteTimes) !== JSON.stringify(sourceWriteTimes))
+    if (changed || previous?.sourceWritePending || JSON.stringify(previous?.sourceWriteTimes) !== JSON.stringify(sourceWriteTimes))
       transaction.set(metaRef, next);
     cacheWrite.write();
   });
