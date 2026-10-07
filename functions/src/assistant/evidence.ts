@@ -439,6 +439,12 @@ export function buildAssistantEvidence(
           ? [{ label: 'Steps allowing early Lap', value: String(result.analysis.summary.earlyLapSteps) }] : [])], links: [] };
   }
   if ((TRAINING_READ_TOOLS as readonly string[]).includes(tool.name)) {
+    if (tool.name === 'get_training_plan_phases') {
+      const result = TRAINING_READ_OUTPUTS.get_training_plan_phases.parse(structuredContent);
+      return { toolName: tool.name, title: 'Plan phases', summary: `${result.phases.items.length} authored plan phases; gaps are allowed.`,
+        facts: result.phases.items.slice(0, MAX_FACTS).map(phase => ({ label: truncate(phase.name, 80),
+          value: `${phase.startLocalDate} – ${phase.endLocalDate}` })), links: [] };
+    }
     if (tool.name === 'get_planned_workout_completion' || tool.name === 'get_planned_workout_completions') {
       const raw = tool.name === 'get_planned_workout_completions'
         ? structuredContent.completions : [structuredContent];

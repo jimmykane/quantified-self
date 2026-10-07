@@ -324,6 +324,23 @@ describe('AssistantPageComponent', () => {
     expect(component.trainingProposalResult()).toContain('Nothing was changed');
   });
 
+
+  it('shows full phase before/after metadata and range changes without applying during hydration', async () => {
+    const phases = { version: 1 as const, items: [{ id: 'base', name: 'Base', startLocalDate: '2026-10-01', endLocalDate: '2026-10-10',
+      description: 'Existing description', color: 'blue' as const }] };
+    component.conversation.set(chatResponse.conversation);
+    component.pendingTrainingProposal.set({ ...trainingProposal, permissionMode: 'schedule', providerPreviews: [],
+      changes: [{ index: 0, kind: 'set-plan-phases', summary: 'Replace phases' }], phaseReview: { planName: 'Autumn',
+        previousStartDate: '2026-10-01', previousEndDate: '2026-10-31', startDate: '2026-09-30', endDate: '2026-10-31',
+        before: phases, after: { version: 1, items: [{ ...phases.items[0], name: 'Build', description: '<script>Draft text</script>', color: 'green' }] } } });
+    assistantService.applyTrainingProposal.mockClear(); fixture.detectChanges();
+    const review = fixture.nativeElement.querySelector('.training-proposal') as HTMLElement;
+    expect(review.textContent).toContain('Existing description'); expect(review.textContent).toContain('<script>Draft text</script>');
+    expect(review.textContent).toContain('2026-09-30'); expect(review.textContent).toContain('blue'); expect(review.textContent).toContain('green');
+    expect(review.querySelector('script')).toBeNull(); expect(assistantService.applyTrainingProposal).not.toHaveBeenCalled();
+    await component.dismissPendingTrainingProposal();
+    expect(assistantService.applyTrainingProposal).toHaveBeenCalledWith(expect.objectContaining({ confirm: false, permissionMode: 'schedule' }));
+  });
   it('shows the actual Suunto mapping loss before the single in-app Apply action', () => {
     component.conversation.set(chatResponse.conversation);
     component.pendingTrainingProposal.set({ ...trainingProposal, providerPreviews: [{

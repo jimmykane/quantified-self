@@ -121,6 +121,7 @@
       [timelineNotesByDate]="notesByDate()"
       [plannedWorkoutsByDate]="hasTrainingPlanningUIAccess() ? plannedWorkoutsByDate() : null"
       [plannedWorkoutsComplete]="plannedWorkoutsComplete()"
+      [planPhasesByDate]="hasTrainingPlanningUIAccess() ? planPhasesByDate() : null"
       (daySelected)="openDay($event)">
     </app-activity-calendar-grid>
     @if (selectedDayData(); as dayData) {

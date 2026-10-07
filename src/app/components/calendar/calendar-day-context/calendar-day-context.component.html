@@ -29,6 +29,13 @@
       <div class="calendar-day-context-loading-timeline" aria-hidden="true"></div>
     </div>
   } @else {
+  @if (planPhase(); as context) {
+    <section class="calendar-day-phase" aria-label="Plan phase">
+      <p class="calendar-day-entry-title">Phase: {{ context.phase.name }}</p>
+      <p class="calendar-day-entry-supporting">{{ context.planName }} · {{ context.phase.startLocalDate }} – {{ context.phase.endLocalDate }}</p>
+      @if (context.phase.description) { <p class="calendar-day-entry-supporting">{{ context.phase.description }}</p> }
+    </section>
+  }
   @if (showActivityTotals()) {
     <div class="calendar-day-context-totals" role="group" [attr.aria-label]="title() + ' activity totals'"
       [attr.aria-busy]="activityState().status === 'loading'">

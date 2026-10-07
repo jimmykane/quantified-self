@@ -2134,6 +2134,54 @@ describe('PlansWorkspaceComponent', () => {
     expect(haptics.success).toHaveBeenCalledOnce();
   });
 
+
+  it('keeps phase drafts bound to captured revisions and reuses an exact retry without rebasing', async () => {
+    const live = new BehaviorSubject(schedule); watchSchedule.mockReturnValue(live);
+    const fixture = await renderPlans();
+    const plan = fixture.componentInstance.selectedPlan()!;
+    const createMutationId = vi.mocked(TestBed.inject(TrainingPlansService).createMutationId);
+    createMutationId.mockClear().mockReturnValueOnce('phase-first').mockReturnValueOnce('phase-changed');
+    const close = vi.fn();
+    const dialog = vi.spyOn((fixture.componentInstance as unknown as { dialog: MatDialog }).dialog, 'open')
+      .mockReturnValue({ close, afterClosed: () => new Subject() } as never);
+    await fixture.componentInstance.editPlanPhases(plan);
+    const onSave = dialog.mock.calls[0][1]!.data.onSave;
+    const operation = { kind: 'set-plan-phases', planId: plan.id, phases: { version: 1, items: [] },
+      startLocalDate: plan.startLocalDate, endLocalDate: plan.endLocalDate, confirmPlanRangeExtension: false };
+    mutate.mockRejectedValue(new Error('Offline'));
+    await onSave(operation);
+    live.next({ ...schedule, state: { ...schedule.state, revision: 99 }, plans: [{ ...plan, revision: 99 }] });
+    fixture.detectChanges();
+    await onSave(operation);
+    expect(mutate.mock.calls[1][0].mutationId).toBe(mutate.mock.calls[0][0].mutationId);
+    expect(mutate.mock.calls[1][0].expectedRevisions).toEqual(mutate.mock.calls[0][0].expectedRevisions);
+    expect(mutate.mock.calls[0][0].expectedRevisions).toContainEqual({ scope: 'plan', id: plan.id, revision: plan.revision });
+    expect(createMutationId).toHaveBeenCalledOnce();
+    await onSave({ ...operation, phases: { version: 1, items: [{ id: 'base', name: 'Base',
+      startLocalDate: plan.startLocalDate, endLocalDate: plan.startLocalDate }] } });
+    expect(mutate.mock.calls[2][0].mutationId).toBe('phase-changed');
+    expect(mutate.mock.calls[2][0].expectedRevisions).toEqual(mutate.mock.calls[0][0].expectedRevisions);
+    expect(createMutationId).toHaveBeenCalledTimes(2);
+    userSignal.set({ ...user, uid: 'different-owner' }); fixture.detectChanges();
+    expect(await onSave(operation)).toBe(false); expect(mutate).toHaveBeenCalledTimes(3); expect(close).toHaveBeenCalledOnce();
+  });
+  it('closes a phase editor on owner change and suppresses late mutation feedback', async () => {
+    const fixture = await renderPlans(); const plan = fixture.componentInstance.selectedPlan()!;
+    const close = vi.fn();
+    const dialog = vi.spyOn((fixture.componentInstance as unknown as { dialog: MatDialog }).dialog, 'open')
+      .mockReturnValue({ close, afterClosed: () => new Subject() } as never);
+    let finish!: (response: unknown) => void;
+    mutate.mockImplementationOnce(() => new Promise(resolve => { finish = resolve; }));
+    await fixture.componentInstance.editPlanPhases(plan);
+    const pending = dialog.mock.calls[0][1]!.data.onSave({ kind: 'set-plan-phases', planId: plan.id,
+      phases: { version: 1, items: [] }, startLocalDate: plan.startLocalDate, endLocalDate: plan.endLocalDate,
+      confirmPlanRangeExtension: false });
+    userSignal.set({ ...user, uid: 'different-owner' }); fixture.detectChanges();
+    expect(close).toHaveBeenCalledOnce();
+    finish({ plans: [plan] });
+    expect(await pending).toBe(false); expect(haptics.success).not.toHaveBeenCalled(); expect(haptics.error).not.toHaveBeenCalled();
+  });
+
   it('revision-checks color changes, disables pending controls, and recolors from the live plan', async () => {
     const live = new BehaviorSubject(schedule);
     watchSchedule.mockReturnValue(live);

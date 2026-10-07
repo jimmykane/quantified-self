@@ -231,6 +231,19 @@
             </div>
           </div>
           <div class="training-proposal-list">
+            @if (proposal.phaseReview; as review) {
+              <section aria-label="Review plan phases" class="training-phase-review">
+                <h3>{{ review.planName }}</h3>
+                <p>Plan dates: {{ review.previousStartDate }} – {{ review.previousEndDate }} → {{ review.startDate }} – {{ review.endDate }}</p>
+                @for (side of [{ label: 'Current phases', phases: review.before }, { label: 'Proposed phases', phases: review.after }]; track side.label) {
+                  <h4>{{ side.label }}</h4>
+                  @for (phase of side.phases.items; track phase.id) {
+                    <p><strong>{{ phase.name }}</strong> · {{ phase.startLocalDate }} – {{ phase.endLocalDate }} · {{ phase.color ?? 'Plan color' }}</p>
+                    @if (phase.description) { <p class="training-phase-description">{{ phase.description }}</p> }
+                  } @empty { <p>No phases.</p> }
+                }
+              </section>
+            }
             @for (change of proposal.changes; track change.index) {
               <div class="training-proposal-row">
                 <mat-icon aria-hidden="true">arrow_forward</mat-icon>

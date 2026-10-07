@@ -1,3 +1,4 @@
+import { buildCalendarPlanPhases } from '../../../helpers/training-plan-phases.helper';
 import { ChangeDetectionStrategy, Component, DestroyRef, ElementRef, HostListener, LOCALE_ID, computed, effect, inject, signal, viewChild } from '@angular/core';
 import { ViewportScroller } from '@angular/common';
 import { takeUntilDestroyed, toObservable, toSignal } from '@angular/core/rxjs-interop';
@@ -241,6 +242,11 @@ export class CalendarPageComponent {
     || this.completionState().status === 'error');
   readonly activitiesComplete = computed(() => this.eventState().status === 'ready' && this.eventState().complete !== false);
   readonly plannedWorkoutsComplete = computed(() => this.plansState().status === 'ready' && this.plansState().schedule?.workoutsComplete !== false);
+  readonly planPhasesByDate = computed(() => {
+    const schedule = this.plansState().schedule;
+    return this.hasTrainingPlanningUIAccess() && this.plansState().status === 'ready' && schedule
+      ? buildCalendarPlanPhases(schedule.plans, schedule.state.activePlanId) : {};
+  });
   readonly plannedWorkoutsByDate = computed<PlannedWorkoutCalendarOverlay>(() => {
     const schedule = this.plansState().schedule;
     if (!this.hasTrainingPlanningUIAccess() || !schedule) return {};

@@ -1,7 +1,7 @@
 {
   "formatVersion": 1,
-  "candidateSha256": "8e6281cb08714bb106e38ca14652ff7ce212c737be07fe56bc8270fd8a9a35ed",
+  "candidateSha256": "dd9659d46041827941b36c9e47d08eae1c91ba5edab41eca2d98fd6a9fb3538b",
   "lifecycleAction": "developer-refresh",
-  "summary": "Preserve registered contracts and pending Garmin replacement/prescription analysis additions. Add independent workout-reflection read/write grants and three strict note-only tools with revision/retry/deletion fences. Workout RPE stays in Edit details. Assistant starts on for fresh/New chats; prior off choices and legacy flags stay off. Model changes remain prepare-only for app review/Apply. No adaptation/provider changes. Separately release, rescan and sync bundled guidance.",
+  "summary": "Preserve all pending additions, including Garmin replacement, prescription analysis and note-only workout reflections. Add bounded plan-phase reads and a focused full before/after preview under existing planning grants, reusing native/app-confirmed idempotent Apply. Frozen schemas/baselines stay unchanged. RPE stays in Edit details. Phases do not alter metrics, recipes, completion or provider authority. Reader-first release, exact rescan and bundled-guidance sync remain separate.",
   "rescanRequired": true
 }

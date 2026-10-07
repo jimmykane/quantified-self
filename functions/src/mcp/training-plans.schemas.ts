@@ -19,7 +19,7 @@ import {
   type WorkoutTargetModeV1,
   type WorkoutTargetV1,
 } from '../../../shared/planned-workout';
-import { normalizeTrainingLocalDate, TRAINING_PLAN_COLORS } from '../../../shared/training-plans';
+import { normalizeTrainingLocalDate, TRAINING_PLAN_COLORS, TRAINING_PLAN_MAX_PHASES, parseTrainingPlanPhasesV1, parseTrainingPlanPhaseReviewV1 } from '../../../shared/training-plans';
 import { TRAINING_SYNC_OUTCOMES } from '../../../shared/training-delivery-summary';
 import { PLANNED_WORKOUT_PROVIDER_IDS } from '../../../shared/planned-workout-providers';
 import { STRENGTH_WORKOUT_VERSION, parseStrengthWorkoutDraftV1 } from '../../../shared/strength-workout';
@@ -27,18 +27,18 @@ import { STRENGTH_WORKOUT_VERSION, parseStrengthWorkoutDraftV1 } from '../../../
 export const TRAINING_PLANS_SCOPE = 'training-plans:read';
 export const TRAINING_PLANS_WRITE_SCOPE = 'training-plans:write';
 export const TRAINING_DELIVERY_WRITE_SCOPE = 'training-delivery:write';
-export const TRAINING_READ_EXTENSION_TOOLS = ['query_planned_workouts_by_date',
+export const TRAINING_READ_EXTENSION_TOOLS = ['get_training_plan_phases', 'query_planned_workouts_by_date',
   'get_planned_workout_completions', 'assess_planned_workout_compatibility', 'get_strength_workout_details',
   'get_planned_workout_v2', 'get_planned_workout_v3', 'list_saved_workouts', 'get_saved_workout', 'get_saved_workout_v2', 'get_workout_prescription_analysis'] as const;
 export const TRAINING_READ_TOOLS = ['list_training_plans', 'get_training_plan', 'query_planned_workouts',
   'get_planned_workout', 'get_training_sync_status', 'get_planned_workout_completion',
   ...TRAINING_READ_EXTENSION_TOOLS] as const;
 export type TrainingReadTool = typeof TRAINING_READ_TOOLS[number];
-export const TRAINING_PREVIEW_TOOLS = ['preview_create_planned_workout', 'preview_training_changes',
+export const TRAINING_PREVIEW_TOOLS = ['preview_training_plan_phases', 'preview_create_planned_workout', 'preview_training_changes',
   'preview_strength_workout_change', 'preview_planned_workout_v2_change', 'preview_planned_workout_v3_change', 'preview_saved_workout_change', 'preview_saved_workout_v2_change',
   'preview_training_deletion', 'preview_garmin_workout_replacement'] as const;
 export const TRAINING_WRITE_TOOLS = [...TRAINING_PREVIEW_TOOLS, 'apply_training_changes', 'apply_saved_workout_change'] as const;
-export const TRAINING_WRITE_EXTENSION_TOOLS = ['preview_strength_workout_change', 'preview_planned_workout_v2_change', 'preview_planned_workout_v3_change',
+export const TRAINING_WRITE_EXTENSION_TOOLS = ['preview_training_plan_phases', 'preview_strength_workout_change', 'preview_planned_workout_v2_change', 'preview_planned_workout_v3_change',
   'preview_saved_workout_change', 'preview_saved_workout_v2_change', 'apply_saved_workout_change', 'preview_training_deletion', 'preview_garmin_workout_replacement'] as const;
 export type TrainingWriteTool = typeof TRAINING_WRITE_TOOLS[number];
 export const trainingDate = z.string().length(10).refine(value => {
@@ -48,6 +48,20 @@ const ref = z.string().min(1).max(2048);
 const count = z.number().int().nonnegative().safe();
 const positive = z.number().positive();
 const nodeId = z.string().regex(/^[A-Za-z0-9][A-Za-z0-9_-]{0,127}$/);
+export const TRAINING_PLAN_PHASES_SCHEMA = z.strictObject({ version: z.literal(1), items: z.array(z.strictObject({
+  id: nodeId, name: z.string().trim().min(1).max(80), startLocalDate: trainingDate, endLocalDate: trainingDate,
+  description: z.string().trim().min(1).max(1000).optional(), color: z.enum(TRAINING_PLAN_COLORS).optional(),
+})).max(TRAINING_PLAN_MAX_PHASES) }).superRefine((value, context) => {
+  try { parseTrainingPlanPhasesV1(value); } catch { context.addIssue({ code: 'custom', message: 'Invalid phase dates, overlap, IDs, text or byte limit.' }); }
+});
+export const TRAINING_PLAN_PHASE_CHANGE_SCHEMA = z.strictObject({ kind: z.literal('set-plan-phases'),
+  plan: z.strictObject({ ref }), expectedPlanRevision: count.positive(), phases: TRAINING_PLAN_PHASES_SCHEMA,
+  startDate: trainingDate, endDate: trainingDate, confirmPlanRangeExtension: z.boolean() });
+const phaseReview = z.strictObject({ planName: z.string().min(1).max(120), previousStartDate: trainingDate,
+  previousEndDate: trainingDate, startDate: trainingDate, endDate: trainingDate,
+  before: TRAINING_PLAN_PHASES_SCHEMA, after: TRAINING_PLAN_PHASES_SCHEMA }).superRefine((value, context) => {
+  try { parseTrainingPlanPhaseReviewV1(value); } catch { context.addIssue({ code: 'custom', message: 'Invalid phase review.' }); }
+});
 const lifecycle = z.enum(['active', 'paused', 'archived']);
 const pagination = { limit: z.number().int().min(1).max(100).default(25), cursor: z.string().min(1).max(8192).optional() };
 const workoutQuery = { startDate: trainingDate, endDate: trainingDate,
@@ -59,6 +73,7 @@ const selectedProviders = z.array(z.enum(PLANNED_WORKOUT_PROVIDER_IDS)).min(1).m
 export const TRAINING_READ_INPUTS = {
   list_training_plans: z.strictObject({ search: z.string().max(120).optional(), lifecycle: lifecycle.optional(), ...pagination }),
   get_training_plan: z.strictObject({ planRef: ref }),
+  get_training_plan_phases: z.strictObject({ planRef: ref }),
   query_planned_workouts: z.strictObject(workoutQuery),
   query_planned_workouts_by_date: z.strictObject(workoutQuery),
   get_planned_workout: z.strictObject({ workoutRef: ref }),
@@ -240,6 +255,8 @@ export const TRAINING_STRENGTH_DETAILS_SCHEMA = z.strictObject({ version: z.lite
 export const TRAINING_STRENGTH_DRAFT_SCHEMA = TRAINING_STRENGTH_DETAILS_SCHEMA.omit({ workoutId: true, revision: true })
   .refine(value => { try { parseStrengthWorkoutDraftV1(value); return true; } catch { return false; } });
 export const TRAINING_READ_OUTPUTS = {
+  get_training_plan_phases: z.strictObject({ scheduleRevision: count, planRef: ref, planRevision: count.positive(),
+    startDate: trainingDate, endDate: trainingDate, phases: TRAINING_PLAN_PHASES_SCHEMA }),
   get_workout_prescription_analysis: z.strictObject({ source: z.enum(['scheduled', 'saved']), reference: ref,
     revision: count, scheduleRevision: count.nullable(), libraryRevision: count.nullable(),
     sport: z.enum(ActivityTypesHelper.getActivityTypesAsUniqueArray()),
@@ -410,6 +427,7 @@ const savedWorkoutChange = savedWorkoutChangeWithRecipe(TRAINING_RECIPE_WITH_POO
 const savedWorkoutV2Change = savedWorkoutChangeWithRecipe(TRAINING_RECIPE_WITH_EARLY_LAP_SCHEMA);
 
 export const TRAINING_WRITE_INPUTS = {
+  preview_training_plan_phases: z.strictObject({ expectedScheduleRevision: count, change: TRAINING_PLAN_PHASE_CHANGE_SCHEMA }),
   preview_garmin_workout_replacement: z.strictObject({ workoutRef: ref,
     expectedScheduleRevision: count, expectedWorkoutRevision: count.positive() }),
   preview_training_deletion: z.strictObject({ expectedScheduleRevision: count,
@@ -446,6 +464,9 @@ const trainingPreviewOutput = z.strictObject({ proposalRef: ref, expiresAtMs: co
     changes: z.array(proposedChange).min(1).max(25), providerPreviews: z.array(providerPreview).max(100) });
 
 export const TRAINING_WRITE_OUTPUTS = {
+  preview_training_plan_phases: trainingPreviewOutput.extend({ permissionMode: z.literal('schedule'), phaseReview,
+    changes: z.array(proposedChange.extend({ index: z.literal(0), kind: z.literal('set-plan-phases') })).length(1),
+    providerPreviews: z.array(providerPreview).length(0) }),
   preview_garmin_workout_replacement: trainingPreviewOutput.extend({
     permissionMode: z.literal('delivery'),
     changes: z.array(proposedChange.extend({ index: z.literal(0), kind: z.literal('garmin-workout-replacement') })).length(1),
@@ -474,7 +495,12 @@ export const TRAINING_WRITE_OUTPUTS = {
 export const TRAINING_ASSISTANT_PREVIEW_OUTPUT = z.union([
   TRAINING_WRITE_OUTPUTS.preview_training_changes,
   TRAINING_WRITE_OUTPUTS.preview_garmin_workout_replacement,
+  TRAINING_WRITE_OUTPUTS.preview_training_plan_phases,
 ]).superRefine((value, context) => {
+  if (value.changes.some(change => change.kind === 'set-plan-phases')
+    && !TRAINING_WRITE_OUTPUTS.preview_training_plan_phases.safeParse(value).success) {
+    context.addIssue({ code: 'custom', message: 'Phase edits require their complete dedicated before/after review.' });
+  }
   if ((value.changes.some(change => change.kind === 'garmin-workout-replacement')
     || value.providerPreviews.some(preview => preview.action === 'replace'))
     && !TRAINING_WRITE_OUTPUTS.preview_garmin_workout_replacement.safeParse(value).success) {

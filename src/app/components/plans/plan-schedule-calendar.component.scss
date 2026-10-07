@@ -171,6 +171,8 @@
   font: var(--mat-sys-label-small);
   overflow-wrap: anywhere;
 }
+.calendar-phase { padding: 2px 4px; color: var(--mat-sys-on-surface); background: color-mix(in srgb, var(--phase-color) 18%, transparent); font: var(--mat-sys-label-small); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.calendar-phase--boundary { border-block-start: 2px solid var(--phase-color); }
 
 .calendar-workouts {
   display: grid;

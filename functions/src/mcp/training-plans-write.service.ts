@@ -47,6 +47,7 @@ import { requiresDeliveryMappingApproval, type DeliveryRuntime } from '../traini
 import { decodeOpaqueValue, encodeOpaqueValue, McpDataError } from './data.service';
 import {
   TRAINING_CHANGE_SCHEMA,
+  TRAINING_PLAN_PHASE_CHANGE_SCHEMA,
   TRAINING_DELETION_CHANGE_SCHEMA,
   TRAINING_STRENGTH_INTERNAL_CHANGE_SCHEMA,
   TRAINING_WORKOUT_V2_CHANGE_SCHEMA, TRAINING_WORKOUT_V3_CHANGE_SCHEMA,
@@ -71,8 +72,11 @@ const proposalPayload = z.strictObject({ kind: z.literal('proposal'), id: entity
   createdAtMs: z.number().int().nonnegative().safe() });
 
 type TrainingChange = z.infer<typeof TRAINING_CHANGE_SCHEMA> | z.infer<typeof TRAINING_STRENGTH_INTERNAL_CHANGE_SCHEMA>
-  | z.infer<typeof TRAINING_WORKOUT_V2_CHANGE_SCHEMA> | z.infer<typeof TRAINING_WORKOUT_V3_CHANGE_SCHEMA> | z.infer<typeof TRAINING_DELETION_CHANGE_SCHEMA>;
-type PreviewResult = z.infer<typeof TRAINING_WRITE_OUTPUTS.preview_training_changes>;
+  | z.infer<typeof TRAINING_WORKOUT_V2_CHANGE_SCHEMA> | z.infer<typeof TRAINING_WORKOUT_V3_CHANGE_SCHEMA> | z.infer<typeof TRAINING_DELETION_CHANGE_SCHEMA>
+  | z.infer<typeof TRAINING_PLAN_PHASE_CHANGE_SCHEMA>;
+type PreviewResult = z.infer<typeof TRAINING_WRITE_OUTPUTS.preview_training_changes> & {
+  phaseReview?: z.infer<typeof TRAINING_WRITE_OUTPUTS.preview_training_plan_phases>['phaseReview'];
+};
 type ApplyResult = z.infer<typeof TRAINING_WRITE_OUTPUTS.apply_training_changes>;
 type ReplacementPreviewResult = z.infer<typeof TRAINING_WRITE_OUTPUTS.preview_garmin_workout_replacement>;
 
@@ -407,7 +411,7 @@ function expectedRevisions(snapshot: TrainingScheduleSnapshotV1, operation: Trai
   };
   switch (operation.kind) {
     case 'create-plan': if (operation.activate) addPlan(snapshot.state.activePlanId); break;
-    case 'rename-plan': case 'set-plan-color': case 'shift-plan': addPlan(operation.planId); break;
+    case 'rename-plan': case 'set-plan-color': case 'set-plan-phases': case 'shift-plan': addPlan(operation.planId); break;
     case 'set-plan-lifecycle': addPlan(operation.planId); if (operation.lifecycle === 'active') addPlan(snapshot.state.activePlanId); break;
     case 'create-workout': case 'bulk-create-workouts': addPlan(operation.planId); break;
     case 'update-workout': case 'move-workout': {
@@ -437,6 +441,7 @@ function describeOperation(operation: TrainingScheduleMutationOperationV1): stri
     case 'create-plan': return `Create plan “${operation.name}” from ${operation.startLocalDate} to ${operation.endLocalDate}${operation.activate ? ' and make it active' : ''}.`;
     case 'rename-plan': return `Rename a plan to “${operation.name}”.`;
     case 'set-plan-color': return `Change the plan color to ${operation.color}.`;
+    case 'set-plan-phases': return `Replace the plan phases with ${operation.phases.items.length} phase${operation.phases.items.length === 1 ? '' : 's'}; plan dates become ${operation.startLocalDate} to ${operation.endLocalDate}. Workouts and provider delivery settings stay unchanged.`;
     case 'set-plan-lifecycle': return `${operation.lifecycle === 'active' ? 'Activate' : operation.lifecycle === 'paused' ? 'Pause' : 'Archive'} the plan.`;
     case 'shift-plan': return `Shift the plan ${Math.abs(operation.days)} day${Math.abs(operation.days) === 1 ? '' : 's'} ${operation.days > 0 ? 'later' : 'earlier'}.`;
     case 'create-workout': return `Create “${operation.title}” on ${operation.localDate}${operation.planId ? ' in the selected plan' : ' as a standalone workout'}.`;
@@ -467,7 +472,7 @@ function describeScheduleEffects(
   if (operation.kind === 'shift-plan') {
     const shifted = [...before.workouts.values()].filter(workout => workout.planId === operation.planId).length;
     const plan = after.plans.get(operation.planId);
-    if (plan) details.push(`${shifted} associated workout${shifted === 1 ? '' : 's'} will move with the plan; its range becomes ${plan.startLocalDate} to ${plan.endLocalDate}.`);
+    if (plan) details.push(`${shifted} associated workout${shifted === 1 ? '' : 's'} and ${plan.phases?.items.length ?? 0} phase dates will move with the plan; its range becomes ${plan.startLocalDate} to ${plan.endLocalDate}.`);
   }
   const workoutId = operation.kind === 'create-workout' || operation.kind === 'copy-workout'
     ? operation.workoutId
@@ -542,6 +547,12 @@ function resolveScheduleOperation(
     }
     case 'rename-plan': return { kind: change.kind, planId: plan(change.plan)!, name: change.name };
     case 'set-plan-color': return { kind: change.kind, planId: plan(change.plan)!, color: change.color };
+    case 'set-plan-phases': {
+      const planId = plan(change.plan)!;
+      if (snapshot.plans.get(planId)?.revision !== change.expectedPlanRevision) invalid('The plan changed. Read its current phases and review again.');
+      return { kind: change.kind, planId, phases: change.phases, startLocalDate: change.startDate, endLocalDate: change.endDate,
+        confirmPlanRangeExtension: change.confirmPlanRangeExtension };
+    }
     case 'set-plan-lifecycle': return { kind: change.kind, planId: plan(change.plan)!, lifecycle: change.lifecycle };
     case 'shift-plan': return { kind: change.kind, planId: plan(change.plan)!, days: change.days };
     case 'create-workout': {
@@ -854,11 +865,14 @@ export async function previewGarminWorkoutReplacement(
 export async function previewTrainingChanges(
   input: TrainingWriteInput,
   provided?: TrainingWriteDependencies,
-  recipeMode: 'legacy' | 'strength' | 'v2' | 'v3' | 'deletion' = 'legacy',
+  recipeMode: 'legacy' | 'strength' | 'v2' | 'v3' | 'deletion' | 'phases' = 'legacy',
 ): Promise<PreviewResult> {
   const deps = provided ?? defaultDependencies();
   assertBytes(input.arguments);
-  const parsed = recipeMode === 'strength'
+  const parsed = recipeMode === 'phases'
+    ? z.strictObject({ expectedScheduleRevision: z.number().int().nonnegative().safe(),
+      changes: z.array(TRAINING_PLAN_PHASE_CHANGE_SCHEMA).length(1) }).safeParse(input.arguments)
+    : recipeMode === 'strength'
     ? z.strictObject({ expectedScheduleRevision: z.number().int().nonnegative().safe(),
       changes: z.array(TRAINING_STRENGTH_INTERNAL_CHANGE_SCHEMA).length(1) }).safeParse(input.arguments)
     : (recipeMode === 'v2' || recipeMode === 'v3')
@@ -1059,7 +1073,15 @@ export async function previewTrainingChanges(
     scheduleRevision: loaded.snapshot.state.revision,
     summary: `${publicChanges.length} Training change${publicChanges.length === 1 ? '' : 's'} proposed for client approval. Provider actions have independent results from authored changes.${hasUnsupportedDestination ? ' At least one requested provider action targets an unsupported workout version. No update will be sent there; an earlier copy may remain unchanged. Review each provider preview before confirming.' : ''}`,
     requiresConfirmation: true, changes: publicChanges, providerPreviews };
-  TRAINING_WRITE_OUTPUTS.preview_training_changes.parse(preview);
+  if (recipeMode === 'phases') {
+    const operation = scheduleRequests[0].request.operation;
+    if (operation.kind !== 'set-plan-phases') invalid('Invalid phase-only proposal.');
+    const before = loaded.snapshot.plans.get(operation.planId)!, after = simulated.plans.get(operation.planId)!;
+    preview.phaseReview = { planName: before.name, previousStartDate: before.startLocalDate, previousEndDate: before.endLocalDate,
+      startDate: after.startLocalDate, endDate: after.endLocalDate, before: before.phases ?? { version: 1, items: [] },
+      after: after.phases ?? { version: 1, items: [] } };
+    TRAINING_WRITE_OUTPUTS.preview_training_plan_phases.parse(preview);
+  } else TRAINING_WRITE_OUTPUTS.preview_training_changes.parse(preview);
   // A review must remain complete. Refuse oversized reviews before creating even a private proposal.
   if (assistantWorkoutReviews.length) {
     if (!isAssistantWorkoutReviews(assistantWorkoutReviews)) unavailable();
@@ -1167,6 +1189,15 @@ export async function previewPlannedWorkoutV3Change(input: TrainingWriteInput, p
   if (parsed.data.change.structure.sport === ActivityTypes.StrengthTraining) invalid('Use the complete strength workout preview.');
   return previewTrainingChanges({ ...input, arguments: { expectedScheduleRevision: parsed.data.expectedScheduleRevision,
     changes: [parsed.data.change] } }, provided, 'v3');
+}
+
+/** Additive phase-only proposal; the existing separately approved apply owns persistence. */
+export async function previewTrainingPlanPhases(input: TrainingWriteInput, provided?: TrainingWriteDependencies): Promise<PreviewResult> {
+  assertBytes(input.arguments);
+  const parsed = TRAINING_WRITE_INPUTS.preview_training_plan_phases.safeParse(input.arguments);
+  if (!parsed.success) invalid('Provide the current plan and schedule revisions, complete phase list, resulting plan dates and explicit extension choice.');
+  return previewTrainingChanges({ ...input, arguments: { expectedScheduleRevision: parsed.data.expectedScheduleRevision,
+    changes: [parsed.data.change] } }, provided, 'phases');
 }
 
 /**

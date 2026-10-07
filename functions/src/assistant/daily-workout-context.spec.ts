@@ -15,6 +15,7 @@ const NOW = new Date('2026-09-25T12:00:00.000Z');
 function fixtureRead() {
   return vi.fn(async (name: string) => {
     switch (name) {
+      case 'list_training_plans': return { scheduleRevision: 7, scanComplete: true, plans: [] };
       case 'get_daily_report': return { sleep: { durationSeconds: 29_520 }, readiness: { score: 61 } };
       case 'query_metric': return { metric: { type: DataDuration.type }, aggregation: {
         buckets: [
@@ -152,6 +153,30 @@ describe('daily workout context', () => {
     expect(facts).not.toContain('**Planned today:**');
   });
 
+
+  it.each(['known', 'gap', 'stale', 'missing', 'disabled'])('keeps target-day phase context %s and separate from measured readiness', async state => {
+    const base = fixtureRead();
+    const read = vi.fn(async (name: string, args: Record<string, unknown>) => {
+      if (name === 'get_training_metric') return { metricKind: args.metricKind, payload: {} };
+      if (name === 'list_training_plans') return { scheduleRevision: 7, scanComplete: true,
+        plans: [{ planRef: 'plan-ref', revision: 3, name: 'Autumn' }] };
+      if (name === 'get_training_plan_phases') {
+        if (state === 'missing') throw new Error('Not in this catalog');
+        return { scheduleRevision: state === 'stale' ? 8 : 7, planRevision: 3, phases: { version: 1, items: [{
+          id: 'base', name: 'Base', startLocalDate: '2026-10-24', endLocalDate: '2026-10-25',
+          description: 'private-description-canary',
+        }] } };
+      }
+      return base(name);
+    });
+    const result = await collectDailyWorkoutContext({ now: new Date('2026-10-24T12:00:00Z'), timeZone: 'Europe/Helsinki',
+      timelineNotesEnabled: false, trainingPlansEnabled: state !== 'disabled', read: read as never,
+      request: { targetDate: state === 'gap' ? '2026-10-26' : '2026-10-25', hypotheticalWithoutPlan: false, noAdditionalWorkoutToday: false } });
+    expect(result.plannedWorkouts.phaseContext?.status).toBe(state === 'known' ? 'known' : state === 'gap' ? 'none' : state === 'disabled' ? undefined : 'unavailable');
+    expect(dailyWorkoutFacts(result)).not.toContain('private-description-canary');
+    if (state === 'known') expect(dailyWorkoutFacts(result)).toContain('Base');
+    if (state === 'disabled') expect(read.mock.calls.map(call => call[0])).not.toContain('get_training_plan_phases');
+  });
   it('recognizes a today recommendation and its reassessment, but not an unrelated plan question', () => {
     const prompt = 'For today, suggest a cautious workout using sleep and my plan.';
     expect(requestsDailyWorkoutContext(prompt, [])).toBe(true);
@@ -218,7 +243,7 @@ describe('daily workout context', () => {
       'prepare_training_metrics', 'get_training_metric', 'get_training_metric',
       'get_training_metric',
       'get_daily_report', 'query_metric', 'query_activities', 'query_timeline_notes',
-      'query_planned_workouts_by_date', 'get_planned_workout_completions',
+      'query_planned_workouts_by_date', 'get_planned_workout_completions', 'list_training_plans',
     ]);
     expect(read.mock.calls.find(([name]) => name === 'query_metric')?.[1])
       .toMatchObject({ metric: DataDuration.type, aggregation: 'total', interval: 'daily',

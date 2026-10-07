@@ -6530,6 +6530,10 @@ export function createMcpDataService(
       const { previewTrainingChanges } = await import('./training-plans-write.service');
       return previewTrainingChanges(input);
     },
+    async previewTrainingPlanPhases(input: import('./training-plans-write.service').TrainingWriteInput) {
+      const { previewTrainingPlanPhases } = await import('./training-plans-write.service');
+      return previewTrainingPlanPhases(input);
+    },
     async previewGarminWorkoutReplacement(input: import('./training-plans-write.service').TrainingWriteInput) {
       const { previewGarminWorkoutReplacement } = await import('./training-plans-write.service');
       return previewGarminWorkoutReplacement(input);

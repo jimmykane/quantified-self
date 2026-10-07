@@ -55,6 +55,7 @@ grant. HTTP prechecks, tool registration and data reads enforce it. Revocation c
 | `list_saved_workouts` | Up to 25 undated owner-owned workout recipes per page, with optional title/status filters |
 | `get_workout_prescription_analysis` | Exact prescribed subtotals, explicit speed-based duration ranges, unknown contributions, authored purpose totals and repeat counts for one scheduled or saved recipe |
 | `get_saved_workout` | One full saved recipe, including complete Strength Training exercises when present |
+| `get_training_plan_phases` | Complete bounded authored phases with current plan/schedule revisions; legacy absence is empty |
 | `get_training_plan` | Metadata, range, revision and current workout count, without loading workouts |
 | `query_planned_workouts` | Legacy document-ordered inclusive-date query retained for registered-client compatibility |
 | `query_planned_workouts_by_date` | Inclusive dates in ascending local-date and stable reference order; calendar-visible (default standalone + active plan), standalone, selected plan or all |
@@ -584,6 +585,38 @@ These details enter only the strict app response/conversation contract; no regis
 mutation kind, provider action, digest or bundled guidance changes. MCP clients keep their existing complete v3 recipe,
 prescription-analysis and compatibility reads and their native approval UI. See
 [Training proposal review](training-workspace.md#assistant-workout-proposal-review-training-11).
+
+### Authored plan phases (Training 12)
+
+The additive `get_training_plan_phases` reads one opaque owner/connection-bound plan reference under existing
+`training-plans:read`. It returns schedule/plan revisions, plan start/end calendar labels and a strict version-1 phase
+list. Legacy absence returns an empty list. Phase IDs are stable plan-local structure; names, inclusive dates, optional
+descriptions and palette colors are authored private context, never model instructions or calculation inputs.
+At most 32 items and 32 KiB UTF-8 are admitted, sorted and non-overlapping within the plan range. A dedicated Firestore
+mask and transaction preserve neighboring-field exclusion and current owner/deletion/lock/grant/revision fences.
+Registered list/get plan responses remain unchanged.
+
+`preview_training_plan_phases` needs the parent read plus independent `training-plans:write`. It accepts exactly one
+full `set-plan-phases` change: opaque plan reference, exact plan revision, whole phase list, resulting plan dates and
+explicit extension confirmation, together with expected schedule revision. The preview performs no authored write or
+provider I/O and returns one schedule-only proposal with a required full before/after `phaseReview`, including both
+plan ranges, descriptions and colors. Removing every phase is explicit in that review. Range extension requires
+confirmation; shrinking cannot exclude current workouts or resulting phases. Existing `apply_training_changes` keeps
+native host approval, short expiry, owner/connection/grant binding, transactional revisions and idempotent receipt
+recovery. No new scope, registered union widening, provider action or callable is added.
+
+The Assistant receives only the focused preview and consented reads; app-owned Apply/Dismiss remains mandatory.
+Its daily context looks up the active phase for the requested local date and matches schedule/plan revisions before
+stating it. A gap is separate from unavailable evidence. Phase names never imply intensity, progression, rest,
+readiness or completion. Training, Activity and cross-domain bundled guidance discovers the runtime phase capabilities,
+asks for ambiguous dates and preserves existing IDs and unspecified metadata in a complete replacement.
+
+The detailed model, UI, history/shift/deletion behavior and reader-first backend rollout are owned by
+[Training plan phases](training-workspace.md#training-plan-phases-training-12). This source change requires separately
+approved backend release and registered-app refresh/rescan against the digest-bound pending record before clients can
+use the tools. Existing grants suffice once the catalog is refreshed; missing grants require reauthorization.
+Earlier pending additions and the frozen registered baseline/history are preserved. Bundled guidance validation/sync is
+separate; no real-profile installation, deployment or promotion is performed here.
 
 ## Purpose and boundary
 
@@ -1136,6 +1169,7 @@ The analytics and map entries follow the
 | `get_planned_workout_completions` | `training-plans:read`; optional activity refs also require `activity-details:read` | Exact current completion links for 1–25 workouts in input order; no inferred matching |
 | `assess_planned_workout_compatibility` | `training-plans:read` | Local mapping fidelity for one current workout; no connection/provider call or delivery guarantee |
 | `preview_create_planned_workout` | `training-plans:read` + `training-plans:write`; optional delivery also requires `training-delivery:write` | Focused one-workout proposal with optional atomic initial send; server-owned local key |
+| `preview_training_plan_phases` | `training-plans:read` + `training-plans:write` | One phase replacement with full before/after review and explicit range-extension choice; existing approval-gated apply |
 | `preview_training_changes` | `training-plans:read` plus the relevant Training write scope(s) | Strict bounded proposal with authored and per-provider effects; no authored mutation |
 | `preview_training_deletion` | `training-plans:read` + `training-plans:write` + `training-delivery:write` | One deletion with explicit older uncompleted service-copy cleanup choice; existing approval-gated apply |
 | `preview_garmin_workout_replacement` | `training-plans:read` + `training-delivery:write` | One explicit duplicate-warning recovery review after fresh paired not-found Check; existing approval-gated apply |

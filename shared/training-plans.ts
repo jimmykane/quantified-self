@@ -31,6 +31,50 @@ export type TrainingPlanLifecycle = typeof TRAINING_PLAN_LIFECYCLES[number];
 export const TRAINING_PLAN_COLORS = ['default', 'blue', 'purple', 'pink', 'orange', 'red', 'green'] as const;
 export type TrainingPlanColor = typeof TRAINING_PLAN_COLORS[number];
 
+export const TRAINING_PLAN_MAX_PHASES = 32;
+export const TRAINING_PLAN_PHASES_MAX_BYTES = 32 * 1024;
+
+/** Authored planning context only. Dates are inclusive calendar labels, never instants. */
+export interface TrainingPlanPhaseV1 {
+  id: string;
+  name: string;
+  startLocalDate: string;
+  endLocalDate: string;
+  description?: string;
+  color?: TrainingPlanColor;
+}
+
+export interface TrainingPlanPhasesV1 {
+  version: 1;
+  items: TrainingPlanPhaseV1[];
+}
+
+export interface TrainingPlanPhaseReviewV1 {
+  planName: string;
+  previousStartDate: string;
+  previousEndDate: string;
+  startDate: string;
+  endDate: string;
+  before: TrainingPlanPhasesV1;
+  after: TrainingPlanPhasesV1;
+}
+
+export function parseTrainingPlanPhaseReviewV1(value: unknown): TrainingPlanPhaseReviewV1 {
+  const record = asRecord(value, '$.phaseReview');
+  rejectUnknownFields(record, ['planName', 'previousStartDate', 'previousEndDate', 'startDate', 'endDate', 'before', 'after'], '$.phaseReview');
+  const previousStartDate = normalizeTrainingLocalDate(record.previousStartDate);
+  const previousEndDate = normalizeTrainingLocalDate(record.previousEndDate);
+  const startDate = normalizeTrainingLocalDate(record.startDate);
+  const endDate = normalizeTrainingLocalDate(record.endDate);
+  validateTrainingPlanDateRange(previousStartDate, previousEndDate);
+  validateTrainingPlanDateRange(startDate, endDate);
+  const before = parseTrainingPlanPhasesV1(record.before), after = parseTrainingPlanPhasesV1(record.after);
+  validateTrainingPlanPhaseRange(before, previousStartDate, previousEndDate);
+  validateTrainingPlanPhaseRange(after, startDate, endDate);
+  return { planName: readString(record.planName, '$.phaseReview.planName', 120), previousStartDate, previousEndDate,
+    startDate, endDate, before, after };
+}
+
 export const SCHEDULED_WORKOUT_LIFECYCLES = ['planned', 'skipped', 'deleted'] as const;
 export type ScheduledWorkoutLifecycle = typeof SCHEDULED_WORKOUT_LIFECYCLES[number];
 
@@ -48,6 +92,7 @@ export interface TrainingPlanV1 {
   name: string;
   /** QS presentation only; omitted/default uses the theme color. Never part of the workout recipe. */
   color?: TrainingPlanColor;
+  phases?: TrainingPlanPhasesV1;
   lifecycle: TrainingPlanLifecycle;
   startLocalDate: string;
   endLocalDate: string;
@@ -122,6 +167,15 @@ export interface SetTrainingPlanColorMutationV1 {
   kind: 'set-plan-color';
   planId: string;
   color: TrainingPlanColor;
+}
+
+export interface SetTrainingPlanPhasesMutationV1 {
+  kind: 'set-plan-phases';
+  planId: string;
+  phases: TrainingPlanPhasesV1;
+  startLocalDate: string;
+  endLocalDate: string;
+  confirmPlanRangeExtension: boolean;
 }
 
 export interface SetTrainingPlanLifecycleMutationV1 {
@@ -211,6 +265,7 @@ export type TrainingScheduleMutationOperationV1 =
   | CreateTrainingPlanMutationV1
   | RenameTrainingPlanMutationV1
   | SetTrainingPlanColorMutationV1
+  | SetTrainingPlanPhasesMutationV1
   | SetTrainingPlanLifecycleMutationV1
   | ShiftTrainingPlanMutationV1
   | CreateScheduledWorkoutMutationV1
@@ -418,6 +473,50 @@ export function validateTrainingPlanDateRange(startLocalDate: string, endLocalDa
   }
 }
 
+export function parseTrainingPlanPhasesV1(value: unknown): TrainingPlanPhasesV1 {
+  const record = asRecord(value, '$.phases');
+  rejectUnknownFields(record, ['version', 'items'], '$.phases');
+  if (record.version !== 1) throw new TrainingPlanContractError('$.phases.version', 'Unsupported phase version.');
+  if (!Array.isArray(record.items) || record.items.length > TRAINING_PLAN_MAX_PHASES) {
+    throw new TrainingPlanContractError('$.phases.items', `Expected at most ${TRAINING_PLAN_MAX_PHASES} phases.`);
+  }
+  const items = record.items.map((value, index): TrainingPlanPhaseV1 => {
+    const path = `$.phases.items[${index}]`;
+    const phase = asRecord(value, path);
+    rejectUnknownFields(phase, ['id', 'name', 'startLocalDate', 'endLocalDate', 'description', 'color'], path);
+    const startLocalDate = normalizeTrainingLocalDate(phase.startLocalDate, `${path}.startLocalDate`);
+    const endLocalDate = normalizeTrainingLocalDate(phase.endLocalDate, `${path}.endLocalDate`);
+    validateTrainingPlanDateRange(startLocalDate, endLocalDate);
+    const name = readString(phase.name, `${path}.name`, 80);
+    const description = phase.description === undefined ? undefined : readString(phase.description, `${path}.description`, 1000);
+    if (/[\u0000-\u001f\u007f]/u.test(name) || (description !== undefined && /[\u0000-\u0008\u000b\u000c\u000e-\u001f\u007f]/u.test(description))) {
+      throw new TrainingPlanContractError(path, 'Unsupported control character.');
+    }
+    return { id: readEntityId(phase.id, `${path}.id`), name, startLocalDate, endLocalDate,
+      ...(description === undefined ? {} : { description }),
+      ...(phase.color === undefined ? {} : { color: readLifecycle(phase.color, TRAINING_PLAN_COLORS, `${path}.color`) }) };
+  }).sort((left, right) => left.startLocalDate.localeCompare(right.startLocalDate) || left.id.localeCompare(right.id));
+  if (new Set(items.map(phase => phase.id)).size !== items.length) {
+    throw new TrainingPlanContractError('$.phases.items', 'Phase IDs must be unique within the plan.');
+  }
+  for (let index = 1; index < items.length; index++) {
+    if (items[index].startLocalDate <= items[index - 1].endLocalDate) {
+      throw new TrainingPlanContractError('$.phases.items', 'Phases cannot overlap, including their boundary dates.');
+    }
+  }
+  const parsed: TrainingPlanPhasesV1 = { version: 1, items };
+  if (new TextEncoder().encode(JSON.stringify(parsed)).byteLength > TRAINING_PLAN_PHASES_MAX_BYTES) {
+    throw new TrainingPlanContractError('$.phases', 'Phase metadata exceeds 32 KiB. Shorten the descriptions.');
+  }
+  return parsed;
+}
+
+export function validateTrainingPlanPhaseRange(phases: TrainingPlanPhasesV1, startLocalDate: string, endLocalDate: string): void {
+  if (phases.items.some(phase => phase.startLocalDate < startLocalDate || phase.endLocalDate > endLocalDate)) {
+    throw new TrainingPlanContractError('$.phases', 'Every phase must be inside the plan date range.');
+  }
+}
+
 export function isTrainingLocalDateWithinPlan(localDate: string, plan: Pick<TrainingPlanV1, 'startLocalDate' | 'endLocalDate'>): boolean {
   const normalized = normalizeTrainingLocalDate(localDate);
   return normalized >= plan.startLocalDate && normalized <= plan.endLocalDate;
@@ -464,7 +563,7 @@ export function parseTrainingPlanV1(value: unknown): TrainingPlanV1 {
   const record = asRecord(value, '$');
   rejectUnknownFields(record, [
     'schemaVersion', 'id', 'name', 'lifecycle', 'startLocalDate', 'endLocalDate',
-    'revision', 'lastCheckpointRevision', 'workoutCount', 'createdAtMs', 'updatedAtMs', 'color',
+    'revision', 'lastCheckpointRevision', 'workoutCount', 'createdAtMs', 'updatedAtMs', 'color', 'phases',
   ], '$');
   if (record.schemaVersion !== TRAINING_PLAN_SCHEMA_VERSION) {
     throw new TrainingPlanContractError('$.schemaVersion', 'Unsupported training-plan version.');
@@ -472,6 +571,8 @@ export function parseTrainingPlanV1(value: unknown): TrainingPlanV1 {
   const startLocalDate = normalizeTrainingLocalDate(record.startLocalDate, '$.startLocalDate');
   const endLocalDate = normalizeTrainingLocalDate(record.endLocalDate, '$.endLocalDate');
   validateTrainingPlanDateRange(startLocalDate, endLocalDate);
+  const phases = record.phases === undefined ? undefined : parseTrainingPlanPhasesV1(record.phases);
+  if (phases) validateTrainingPlanPhaseRange(phases, startLocalDate, endLocalDate);
   const revision = readInteger(record.revision, '$.revision', 1);
   const lastCheckpointRevision = readInteger(record.lastCheckpointRevision, '$.lastCheckpointRevision', 1);
   if (lastCheckpointRevision > revision) {
@@ -482,6 +583,7 @@ export function parseTrainingPlanV1(value: unknown): TrainingPlanV1 {
     id: readEntityId(record.id, '$.id'),
     name: readString(record.name, '$.name', 120),
     ...(record.color === undefined ? {} : { color: readLifecycle(record.color, TRAINING_PLAN_COLORS, '$.color') }),
+    ...(phases === undefined ? {} : { phases }),
     lifecycle: readLifecycle(record.lifecycle, TRAINING_PLAN_LIFECYCLES, '$.lifecycle'),
     startLocalDate,
     endLocalDate,
@@ -582,7 +684,7 @@ export function parseMutateTrainingScheduleRequestV1(value: unknown): MutateTrai
   rejectUnknownFields(record, ['mutationId', 'expectedRevisions', 'operation'], '$');
   const operationRecord = asRecord(record.operation, '$.operation');
   const kind = readLifecycle(operationRecord.kind, [
-    'create-plan', 'rename-plan', 'set-plan-color', 'set-plan-lifecycle', 'shift-plan', 'create-workout',
+    'create-plan', 'rename-plan', 'set-plan-color', 'set-plan-phases', 'set-plan-lifecycle', 'shift-plan', 'create-workout',
     'bulk-create-workouts', 'update-workout', 'move-workout', 'copy-workout', 'set-workout-lifecycle',
     'delete-workout', 'permanently-delete-workout',
   ] as const, '$.operation.kind');
@@ -617,6 +719,20 @@ export function parseMutateTrainingScheduleRequestV1(value: unknown): MutateTrai
         color: readLifecycle(operationRecord.color, TRAINING_PLAN_COLORS, '$.operation.color'),
       };
       break;
+    case 'set-plan-phases': {
+      rejectUnknownFields(operationRecord, ['kind', 'planId', 'phases', 'startLocalDate', 'endLocalDate', 'confirmPlanRangeExtension'], '$.operation');
+      const phases = parseTrainingPlanPhasesV1(operationRecord.phases);
+      const startLocalDate = normalizeTrainingLocalDate(operationRecord.startLocalDate, '$.operation.startLocalDate');
+      const endLocalDate = normalizeTrainingLocalDate(operationRecord.endLocalDate, '$.operation.endLocalDate');
+      validateTrainingPlanDateRange(startLocalDate, endLocalDate);
+      validateTrainingPlanPhaseRange(phases, startLocalDate, endLocalDate);
+      if (typeof operationRecord.confirmPlanRangeExtension !== 'boolean') {
+        throw new TrainingPlanContractError('$.operation.confirmPlanRangeExtension', 'Expected a boolean.');
+      }
+      operation = { kind, planId: readEntityId(operationRecord.planId, '$.operation.planId'), phases,
+        startLocalDate, endLocalDate, confirmPlanRangeExtension: operationRecord.confirmPlanRangeExtension };
+      break;
+    }
     case 'set-plan-lifecycle':
       rejectUnknownFields(operationRecord, ['kind', 'planId', 'lifecycle'], '$.operation');
       operation = {

@@ -1,5 +1,16 @@
 import { analyzeWorkoutStructureV1 } from '../../../shared/planned-workout-analysis';
 import type { AssistantWorkoutReview } from '../../../shared/assistant-workout-review';
+
+describe('Training phase preview routing', () => {
+  it.each(['Add a Base phase to my plan', 'Rename the recovery phase', 'Remove the taper phase from the plan',
+    'Change my plan phases'])('routes an explicit phase-only edit: %s', prompt => {
+    expect(selectAssistantTrainingPreviewTool(prompt)).toBe('preview_training_plan_phases');
+  });
+  it('keeps plan deletion and read-only phase questions outside phase-edit preparation', () => {
+    expect(selectAssistantTrainingPreviewTool('Delete my plan and all phases')).toBe('preview_training_deletion');
+    expect(selectAssistantTrainingPreviewTool('Which phase am I in today?')).not.toBe('preview_training_plan_phases');
+  });
+});
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { GenkitError } from 'genkit';
 import { retry } from 'genkit/model/middleware';

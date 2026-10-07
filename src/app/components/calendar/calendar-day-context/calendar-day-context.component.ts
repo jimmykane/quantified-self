@@ -30,6 +30,7 @@ import type { CalendarDayDetailsData } from '../calendar-day-details/calendar-da
 import { TrainingImpactComponent } from '../../training-impact/training-impact.component';
 import { buildTrainingDayImpactView, buildTrainingSessionImpactView } from '../../../helpers/training-impact.helper';
 import type { TrainingImpactSnapshotState } from '../../../services/training-impact.service';
+import { buildCalendarPlanPhases } from '../../../helpers/training-plan-phases.helper';
 
 interface HealthState {
   status: 'loading' | 'ready' | 'private' | 'hidden';
@@ -125,11 +126,17 @@ export class CalendarDayContextComponent {
     && this.activities().length === 0
     && this.notesStatus() === 'ready'
     && this.noteRows().length === 0
+    && !this.planPhase()
     && (!this.canPlan() || (this.plannedWorkoutsComplete() && this.plannedRows().length === 0)));
   readonly previewActivities = computed(() => this.calmMonth() ? this.activities() : this.activities().slice(0, 2));
   readonly previewNotes = computed(() => this.calmMonth() ? this.noteRows() : this.noteRows().slice(0, 2));
   readonly previewPlans = computed(() => this.calmMonth() ? this.plannedRows() : this.plannedRows().slice(0, 2));
   readonly canPlan = computed(() => this.data().planningEnabled !== false && this.users.user()?.uid === this.data().userId);
+  readonly planPhase = computed(() => {
+    if (!this.canPlan() || this.plannedStatus() !== 'ready') return null;
+    const schedule = this.data().scheduleSource?.();
+    return schedule ? buildCalendarPlanPhases(schedule.plans, schedule.state.activePlanId)[this.data().day.dateKey] ?? null : null;
+  });
   readonly healthState = signal<HealthState>({ status: 'loading', dateKey: null, ownerUid: null, summary: null, sleepPoint: null });
   readonly sleepFacts = computed(() => {
     const health = this.healthState();
