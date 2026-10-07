@@ -106,8 +106,23 @@ export async function refreshTrainingLoadSummary(uid: string, eventId: string): 
       if (children.size > 100) throw new Error('Training load leg bound exceeded.');
       activities = children.docs.map(child => ({ id: child.id, ...child.data() }));
     }
-    const write = await prepareTrainingLoadCacheWrite(db, transaction, uid, eventId,
-      parent.exists ? summarizeTrainingLoad(eventId, parent.data()!, metadata ?? null, activities) : null);
+    let summary = parent.exists ? summarizeTrainingLoad(eventId, parent.data()!, metadata ?? null, activities) : null;
+    if (summary && metadata?.legs && !metadata.sourceWritePending && !metadata.excluded) {
+      // A child can change or disappear without updating its parent statistics. Validate
+      // the saved leg set before certifying its aggregate, including on delayed owner edits.
+      // Exact IDs intentionally omit obsolete legs awaiting post-reparse cleanup.
+      const legs = Object.values(metadata.legs).filter(leg => leg.activityId);
+      if (legs.length > 100) throw new Error('Training load leg bound exceeded.');
+      const sources = legs.length ? await transaction.getAll(...legs.map(leg =>
+        db.doc(`users/${uid}/activities/${leg.activityId}`))) : [];
+      const stale = sources.some((source, index) => !source.exists || source.data()?.eventID !== eventId ||
+        (!!legs[index].sourceFingerprint && legs[index].sourceFingerprint !== trainingLoadSourceFingerprint(source.data()!)));
+      if (stale) {
+        const load = unavailableTrainingLoad();
+        summary = { eventId, parentFingerprint: '', excluded: false, load, missingLeg: load, legs: {} };
+      }
+    }
+    const write = await prepareTrainingLoadCacheWrite(db, transaction, uid, eventId, summary);
     write.write();
   });
 }

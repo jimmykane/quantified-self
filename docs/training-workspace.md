@@ -4930,15 +4930,22 @@ the derived-metrics rollout gate. Event deletion removes its cached entry. Cache
 root and deletion tombstone transactionally. A failed cache refresh retries without publishing invalidation first.
 Immediate legacy controls may still require a bounded child join, and ordinary source corrections/deletions refresh
 those legacy entries before invalidation, including outside the derived rollout gate. Moving a leg refreshes both
-its former and current legacy parents. Focused MCP impact/editor reads keep their exact
-metadata reads.
+its former and current parents. Parsed cache refreshes validate the saved active leg IDs against current child
+existence, event ownership and source fingerprints in the same transaction. A changed, deleted or moved leg makes
+the cached workout unavailable until a matching source is restored/reparsed; delayed owner edits cannot recertify
+stale candidates. Whole-workout exclusion still wins. Exact active IDs omit obsolete legs awaiting reparse cleanup.
+Uncoordinated child source changes refresh parsed entries too; device-label-only changes do not require this extra
+verification. Focused MCP impact/editor reads keep their exact metadata reads.
 
 Steady-state full rebuild overhead is one cache-state read plus the populated leaf documents (Firestore bills a
 minimum of one read for an empty query). The emulator fixture with 1,001 single-leg controlled workouts uses 16
 leaves: **17 reads instead of 1,001**, a 98.3% reduction in this feature's load-join reads. This is not a reduction in
 the pre-existing event/activity reads or an estimate of the whole Firebase bill. Large multisport entries split
 sooner. First warmup still pays the metadata scan and cache preparation once; imports/edits add bounded transactional
-cache maintenance, and a split costs additional writes. Identical refreshes skip the cache write. An import writes
+cache maintenance, and a split costs additional writes. Parsed cache refreshes add one exact source read per active
+leg (maximum 100), including owner edits and final metadata-trigger refreshes; whole-workout exclusions and pending
+imports skip those reads. This validation adds no reads to an already-warm full-history rebuild. Identical refreshes
+skip the cache write. An import writes
 a pending cache result and then its final result, adding a bounded preparation read/write. Even an unchanged reimport
 advances load freshness and requests a targeted load rebuild when it clears a pending result: another build may
 have observed that pending state. Matching reparses still avoid policy lookups; unchanged source projections
@@ -4991,7 +4998,9 @@ cover the warm/cold read paths, transactionally split buckets, unchanged-write s
 zero/excluded/reset projections, source-trigger coordination and private Rules. The 1,001-workout fixture verifies
 17 steady-state document reads. Review regressions also cover warm-cache pending imports, exclusion/reset during
 interrupted imports, parser evaluation failures before reservation, removed/recreated empty leaves, leg moves and
-cache maintenance outside rollout. This optimization changes no public MCP schema, scope or mutation contract; Training
+cache maintenance outside rollout. Further regressions cover changed/deleted/moved parsed legs with unchanged
+parent statistics, delayed owner edits against those stale sources, restoration by reparse, obsolete leg cleanup,
+and device-label edits avoiding source validation. This optimization changes no public MCP schema, scope or mutation contract; Training
 planning/provider delivery remains unaffected. The actual
 editor and Settings were exercised with synthetic local data at desktop and
 320/390-pixel phone widths. No original user FIT file or production data was used.
