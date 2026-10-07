@@ -744,7 +744,9 @@ HRV and Sleep each have their own date range and older/newer navigation. While a
 
 Open your saved recording and select **Post-workout reflection** in the summary actions. Choose **Whole recording** or one activity explicitly when the recording has several activities. Benchmarks and other people’s recordings do not offer reflection editing. Changing the selection discards an unsaved draft.
 
-Use any of the three optional prompts, write up to **2000 characters**, and optionally select your reported effort on **Borg CR10**, a whole number from **0** (no exertion) to **10** (maximal). **Not reported** stays unknown; it is different from zero. Imported RPE, prescribed RPE, and the existing Feeling/RPE event editor stay separate. Select **Save reflection** to persist it. **Skip** or **Cancel** writes nothing. Voice entry is not included.
+The form shows **Saved workout RPE** for the **whole recording** as read-only context, including when you reflect on one activity. Change that value in **Edit details**. If the recording has no valid RPE, it shows **Not recorded**.
+
+Use any of the three optional prompts, write up to **2000 characters**, and optionally select **Private reflection effort** on **Borg CR10**, a whole number from **0** (no exertion) to **10** (maximal). **Not reported** stays unknown; it is different from zero. This private effort starts separately from the saved workout RPE and never changes it. Imported RPE, prescribed RPE, and the existing Feeling/RPE event editor stay separate. Select **Save reflection** to persist the private note and optional effort. **Skip** or **Cancel** writes nothing. Voice entry is not included.
 
 An exact saved planned-workout link can add a comparison prompt; it does not prove completion or that today’s prescription matches the recorded session. Reflections never complete a planned workout, change a recipe, adapt your plan, alter load/readiness calculations, or diagnose an injury.
 
@@ -790,7 +792,7 @@ In the built-in Assistant, **Private workout reflections** in **Examples & data 
 - Ask follow-up questions in the same active conversation. The latest six completed turns provide bounded context, including message dates and confirmed Training changes. Freshly checked records take precedence over earlier answers. This is not memory across separate chats.
 - If you refresh while an answer is in progress, the page keeps the pending question visible and reconnects to the server-owned turn. While the outcome is uncertain, that browser tab temporarily keeps the account-bound, bounded question and request metadata in session storage. If the refresh cancelled the send before registration, it safely resends the same request ID; completed requests cannot be duplicated. A different signed-in account cannot restore the record, and it is cleared after completion, confirmed failure, reset, or expiry.
 - Every current answer must use at least one verified Quantified Self tool result. Expand **Data used** below an answer to inspect compact facts and app links produced from actual tool results.
-- Use **New chat** to clear the stored messages, return data access to its defaults (Manual Health measurements on; other optional access off), and start a new conversation generation. An older in-flight answer cannot restore a cleared conversation.
+- Use **New chat** to clear the stored messages, return data access to its defaults (Manual Health measurements and Private workout reflections on; other optional access off), and start a new conversation generation. An older in-flight answer cannot restore a cleared conversation.
 
 ## What the Assistant can read and propose
 

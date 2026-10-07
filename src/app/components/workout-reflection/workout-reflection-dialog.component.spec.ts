@@ -3,7 +3,8 @@ import { TestBed } from '@angular/core/testing';
 import { MAT_DIALOG_DATA, MatDialogRef, MatDialog } from '@angular/material/dialog';
 import { NoopAnimationsModule } from '@angular/platform-browser/animations';
 import { Subject } from 'rxjs';
-import { DistanceUnits } from '@sports-alliance/sports-lib';
+import { DataRPE, DistanceUnits } from '@sports-alliance/sports-lib';
+import { resolveUnitAwareDisplayFromValue } from '@shared/unit-aware-display';
 import { AppAuthService } from '../../authentication/app.auth.service';
 import { AppHapticsService } from '../../services/app.haptics.service';
 import { WorkoutReflectionService } from '../../services/workout-reflection.service';
@@ -17,15 +18,17 @@ describe('Workout reflection editor', () => {
   const browser = { createRandomUUID: vi.fn() };
   const ref = { close: vi.fn(), disableClose: false };
   const auth$ = new Subject<{ uid: string }>();
+  const getStat = vi.fn();
   let component: WorkoutReflectionDialogComponent;
   let fixture: ReturnType<typeof TestBed.createComponent<WorkoutReflectionDialogComponent>>;
   beforeEach(async () => {
     vi.clearAllMocks();
+    getStat.mockReturnValue(null);
     browser.createRandomUUID.mockReturnValue('11111111-1111-4111-8111-111111111111');
     service.read.mockResolvedValue(null); service.hasExactWorkoutLink.mockResolvedValue(false); service.save.mockResolvedValue({});
     TestBed.configureTestingModule({ imports: [WorkoutReflectionDialogComponent, NoopAnimationsModule], providers: [
       { provide: MAT_DIALOG_DATA, useValue: { user: { uid: 'owner', settings: { unitSettings: { distanceUnits: DistanceUnits.Miles } } },
-        event: { getID: () => 'event', getActivities: () => [
+        event: { getID: () => 'event', getStat, getActivities: () => [
           { getID: () => 'run', type: 'Running' }, { getID: () => 'bike', type: 'Cycling' } ] } } },
       { provide: MatDialogRef, useValue: ref }, { provide: AppHapticsService, useValue: haptics },
       { provide: WorkoutReflectionService, useValue: service }, { provide: AppAuthService, useValue: { user$: auth$ } },
@@ -36,9 +39,64 @@ describe('Workout reflection editor', () => {
   });
   it('hydrates silently without importing existing RPE or completing a workout; Skip never writes', () => {
     expect(fixture.nativeElement.textContent).toContain('Not reported');
+    expect(fixture.nativeElement.querySelector('[aria-label="Saved workout RPE"]').textContent).toContain('Not recorded');
     expect(component.effort()).toBeNull(); expect(component.options[0].value).toBe(0);
     expect(haptics.selection).not.toHaveBeenCalled(); expect(service.save).not.toHaveBeenCalled();
     component.cancel(); expect(service.save).not.toHaveBeenCalled(); expect(ref.close).toHaveBeenCalled();
+  });
+  it.each([
+    { value: 0, distanceUnits: undefined },
+    { value: 0, distanceUnits: DistanceUnits.Miles },
+    { value: 0.5, distanceUnits: undefined },
+    { value: 2.5, distanceUnits: DistanceUnits.Miles },
+    { value: 10, distanceUnits: undefined },
+  ])('shows workout RPE $value through canonical display with distance preference $distanceUnits', async ({ value, distanceUnits }) => {
+    fixture.destroy();
+    getStat.mockReturnValue(new DataRPE(value));
+    TestBed.inject(MAT_DIALOG_DATA).user.settings.unitSettings = distanceUnits ? { distanceUnits } : undefined;
+    fixture = TestBed.createComponent(WorkoutReflectionDialogComponent);
+    component = fixture.componentInstance; fixture.detectChanges(); await fixture.whenStable(); fixture.detectChanges();
+    const context = fixture.nativeElement.querySelector('[aria-label="Saved workout RPE"]');
+    expect(context.textContent).toContain(resolveUnitAwareDisplayFromValue(DataRPE.type, value, component.data.user.settings.unitSettings)!.text);
+    expect(context.textContent).not.toContain('Not recorded');
+    expect(context.querySelector('input, select, mat-select, button')).toBeNull();
+    expect(component.effort()).toBeNull(); expect(component.changed()).toBe(false);
+    expect(haptics.selection).not.toHaveBeenCalled(); expect(service.save).not.toHaveBeenCalled();
+  });
+  it('keeps whole-recording RPE as context for activity reflections and saves only private fields', async () => {
+    fixture.destroy();
+    const workoutRpe = new DataRPE(5);
+    getStat.mockReturnValue(workoutRpe);
+    fixture = TestBed.createComponent(WorkoutReflectionDialogComponent);
+    component = fixture.componentInstance; fixture.detectChanges(); await fixture.whenStable(); fixture.detectChanges();
+    await component.select('activity_bike'); fixture.detectChanges();
+    const context = fixture.nativeElement.querySelector('[aria-label="Saved workout RPE"]');
+    expect(context.textContent).toContain('For the whole recording');
+    expect(context.textContent).toContain('Edit details');
+    expect(context.textContent).toContain(resolveUnitAwareDisplayFromValue(DataRPE.type, 5, component.data.user.settings.unitSettings)!.text);
+    expect(fixture.nativeElement.textContent).toContain('Private reflection effort');
+    expect(component.effort()).toBeNull();
+    component.note.set('Private session context'); await component.apply();
+    expect(service.save).toHaveBeenCalledWith(expect.objectContaining({ target: 'activity', activityId: 'bike' }),
+      0, expect.any(String), { effort: null, note: 'Private session context' }, false);
+    expect(workoutRpe.getValue()).toBe(5);
+  });
+  it.each([null, undefined, '5', NaN, -1, 11, Infinity])('does not turn invalid workout RPE %s into reported effort', async value => {
+    fixture.destroy(); getStat.mockReturnValue({ getValue: () => value });
+    fixture = TestBed.createComponent(WorkoutReflectionDialogComponent);
+    component = fixture.componentInstance; fixture.detectChanges(); await fixture.whenStable(); fixture.detectChanges();
+    expect(component.workoutRpeDisplay()).toBeNull(); expect(component.effort()).toBeNull();
+    expect(fixture.nativeElement.querySelector('[aria-label="Saved workout RPE"]').textContent).toContain('Not recorded');
+  });
+  it('displays a saved private effort independently from the workout RPE', async () => {
+    fixture.destroy(); getStat.mockReturnValue(new DataRPE(5));
+    service.read.mockResolvedValue({ schemaVersion: 1, revision: 1, deleted: false,
+      mutationId: '11111111-1111-4111-8111-111111111111', effort: 3, note: 'Private note' });
+    fixture = TestBed.createComponent(WorkoutReflectionDialogComponent);
+    component = fixture.componentInstance; fixture.detectChanges(); await fixture.whenStable(); fixture.detectChanges();
+    expect(component.effort()).toBe(3); expect(component.changed()).toBe(false);
+    expect(fixture.nativeElement.querySelector('[aria-label="Saved workout RPE"]').textContent)
+      .toContain(resolveUnitAwareDisplayFromValue(DataRPE.type, 5, component.data.user.settings.unitSettings)!.text);
   });
   it('can render the actual dialog for phone/desktop visual QA without account data', async () => {
     if (!process.env.QS_REFLECTION_QA_HTML) return;
@@ -107,6 +165,6 @@ describe('Workout reflection editor', () => {
   it('does not show planned comparison from an unknown link and keeps selection no-ops silent', async () => {
     await component.select('recording'); expect(haptics.selection).not.toHaveBeenCalled();
     expect(component.prompts().join()).not.toContain('linked');
-    expect(fixture.nativeElement.textContent).toContain('Imported and prescribed RPE stay separate');
+    expect(fixture.nativeElement.textContent).toContain('this never changes your workout RPE');
   });
 });

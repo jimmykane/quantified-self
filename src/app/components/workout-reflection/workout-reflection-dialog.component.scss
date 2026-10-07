@@ -2,6 +2,8 @@
 mat-form-field { width: 100%; }
 p, ul { margin: 0; }
 li + li { margin-top: .5rem; }
+.workout-rpe-context { display: grid; gap: .25rem; }
+.workout-rpe-hint { color: var(--mat-sys-on-surface-variant); font: var(--mat-sys-body-small); }
 .action-content { display: flex; align-items: center; justify-content: center; gap: .5rem; }
 .action-content mat-icon, .action-content mat-spinner { width: 24px; height: 24px; }
 mat-dialog-actions { flex-wrap: wrap; gap: .5rem; }

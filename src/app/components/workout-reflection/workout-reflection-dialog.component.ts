@@ -40,6 +40,13 @@ export class WorkoutReflectionDialogComponent implements OnInit {
   readonly error = signal('');
   readonly deleteReview = signal(false);
   readonly exactlyLinked = signal(false);
+  readonly workoutRpeDisplay = computed(() => {
+    const stat = this.data.event.getStat?.(DataRPE.type);
+    if (!stat) return null;
+    const value = stat.getValue();
+    if (typeof value !== 'number' || !Number.isFinite(value) || value < 0 || value > 10) return null;
+    return resolveUnitAwareDisplayFromValue(DataRPE.type, value, this.data.user.settings?.unitSettings);
+  });
   readonly prompts = computed(() => reflectionPrompts(this.selected().sport, this.exactlyLinked()));
   readonly hasContent = computed(() => this.effort() !== null || !!this.note().trim());
   readonly changed = computed(() => this.hasContent() && (this.effort() !== (this.saved()?.effort ?? null)
