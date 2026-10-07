@@ -6,6 +6,8 @@ export interface PlannedWorkoutCalendarEntry {
   planName: string | null;
   color?: string;
   completed?: boolean;
+  /** False means absence of a completion link has not been established. */
+  completionKnown?: boolean;
 }
 
 export interface PlannedWorkoutCalendarDayOverlay {
@@ -23,6 +25,7 @@ export function buildPlannedWorkoutCalendarOverlay(
   plans: readonly TrainingPlanV1[] = [],
   activePlanId?: string | null,
   completedWorkoutIds: readonly string[] = [],
+  completionCoverageComplete = true,
 ): PlannedWorkoutCalendarOverlay {
   const plansById = new Map(plans.map(plan => [plan.id, plan]));
   const completedWorkoutIdSet = new Set(completedWorkoutIds);
@@ -42,6 +45,7 @@ export function buildPlannedWorkoutCalendarOverlay(
         planName: workout.planId ? plansById.get(workout.planId)?.name ?? 'Plan workout' : null,
         color: workout.planId ? trainingPlanAppearance(plansById.get(workout.planId)).color : STANDALONE_WORKOUT_COLOR,
         completed: completedWorkoutIdSet.has(workout.id),
+        ...(!completionCoverageComplete && !completedWorkoutIdSet.has(workout.id) ? { completionKnown: false } : {}),
       });
       grouped.set(workout.localDate, entries);
     });
@@ -66,6 +70,7 @@ export function buildPlannedWorkoutCalendarOverlay(
       plannedCount ? `${plannedCount} planned workout${plannedCount === 1 ? '' : 's'}` : '',
       skippedCount ? `${skippedCount} skipped workout${skippedCount === 1 ? '' : 's'}` : '',
       completedCount ? `${completedCount} completed workout${completedCount === 1 ? '' : 's'}, activity linked` : '',
+      !completionCoverageComplete ? 'Completion coverage unknown' : '',
     ].filter(Boolean);
     return [date, {
       entries: sorted,

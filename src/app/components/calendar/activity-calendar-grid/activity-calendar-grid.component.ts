@@ -33,6 +33,7 @@ export class ActivityCalendarGridComponent implements OnChanges {
   @Input() timelineNotesByDate: ReadonlyMap<string, CalendarDayTimelineNotes> = new Map();
   /** Null omits planning from both the visual and accessible calendar. */
   @Input() plannedWorkoutsByDate: PlannedWorkoutCalendarOverlay | null = null;
+  @Input() plannedWorkoutsComplete = true;
   @Output() daySelected = new EventEmitter<ActivityCalendarDayViewModel>();
   private readonly hapticsService = inject(AppHapticsService);
 

@@ -59,6 +59,8 @@ export interface CurrentTrainingScheduleV1 {
   workouts: ScheduledWorkoutV1[];
   /** Local read state only; never part of the persisted v1 schedule or MCP contract. */
   restoreUnavailable?: true;
+  /** Calendar-only bounded-read coverage; never persisted or exposed through MCP. */
+  workoutsComplete?: boolean;
 }
 
 export interface DeletedTrainingWorkoutsPageV1 {
@@ -106,6 +108,63 @@ export class TrainingPlansService {
   private readonly scheduleStreams = new Map<string, Observable<CurrentTrainingScheduleV1>>();
   private readonly completionStreams = new Map<string, Observable<TrainingWorkoutCompletionV1[]>>();
 
+  watchCalendarSchedule(userId: string, startLocalDate: string, endLocalDate: string): Observable<CurrentTrainingScheduleV1> {
+    if (!userId || !/^\d{4}-\d{2}-\d{2}$/.test(startLocalDate) || !/^\d{4}-\d{2}-\d{2}$/.test(endLocalDate)
+      || startLocalDate > endLocalDate) throw new Error('A valid owner and calendar range are required.');
+    const availabilityRef = doc(this.firestore, 'users', userId, TRAINING_PLAN_STATE_COLLECTION_ID,
+      TRAINING_PLAN_STATE_DOCUMENT_ID, 'availability', 'restore');
+    const workoutsRef = collection(this.firestore, 'users', userId, SCHEDULED_WORKOUTS_COLLECTION_ID);
+    return docData(availabilityRef, { waitForServer: true }).pipe(
+      timeout({ first: TRAINING_SCHEDULE_STATE_READ_TIMEOUT_MS }),
+      switchMap(availability => {
+        if (availability !== undefined) return of({ ...emptyTrainingSchedule(), restoreUnavailable: true as const });
+        return this.watchVerifiedCurrentState(userId).pipe(
+          switchMap(stateValue => {
+            const state = stateValue === undefined ? emptyTrainingSchedule().state : parseTrainingPlanStateV1(stateValue);
+            const activePlan$ = state.activePlanId === null ? of([] as TrainingPlanV1[])
+              : docData(doc(this.firestore, 'users', userId, TRAINING_PLANS_COLLECTION_ID, state.activePlanId), { waitForServer: true }).pipe(
+                timeout({ first: TRAINING_SCHEDULE_STATE_READ_TIMEOUT_MS }),
+                map(value => {
+                  if (!value) throw new Error('The active plan is unavailable.');
+                  const plan = parseTrainingPlanV1(value);
+                  if (plan.id !== state.activePlanId) throw new Error('The active plan identity is inconsistent.');
+                  return [plan];
+                }),
+              );
+            const workouts$ = collectionData(query(workoutsRef,
+              where('localDate', '>=', startLocalDate), where('localDate', '<=', endLocalDate),
+              orderBy('localDate', 'asc'), orderBy(documentId(), 'asc'), limit(401)), { idField: 'id', waitForServer: true }).pipe(
+                timeout({ first: TRAINING_SCHEDULE_STATE_READ_TIMEOUT_MS }),
+              );
+            return combineLatest([activePlan$, workouts$]).pipe(
+              map(([plans, values]) => ({ state, plans, workouts: values.slice(0, 400).map(parseScheduledWorkoutV1),
+                workoutsComplete: values.length <= 400 })),
+            );
+          }),
+          retry({ count: 2, delay: 1000 }),
+          catchError(error => from(getDoc(availabilityRef)).pipe(
+            timeout({ first: TRAINING_SCHEDULE_STATE_READ_TIMEOUT_MS }),
+            switchMap(snapshot => snapshot.exists() ? of({ ...emptyTrainingSchedule(), restoreUnavailable: true as const }) : throwError(() => error)),
+          )),
+        );
+      }),
+    );
+  }
+
+  /** Exact current workout identities, independent of their date at link time. */
+  watchWorkoutCompletionsForWorkouts(userId: string, workoutIds: readonly string[]): Observable<TrainingWorkoutCompletionV1[]> {
+    const ids = [...new Set(workoutIds)].sort();
+    if (!userId || ids.length > 400 || ids.some(id => !id || id.includes('/'))) throw new Error('Invalid completion selection.');
+    if (ids.length === 0) return of([]);
+    const ref = collection(this.firestore, 'users', userId, TRAINING_WORKOUT_COMPLETIONS_COLLECTION_ID);
+    const streams$: Observable<TrainingWorkoutCompletionV1[]>[] = [];
+    for (let offset = 0; offset < ids.length; offset += 30) {
+      streams$.push(collectionData(query(ref, where(documentId(), 'in', ids.slice(offset, offset + 30)), limit(30)),
+        { idField: 'workoutId', waitForServer: true }).pipe(map(values => values.map(parseTrainingWorkoutCompletionV1))));
+    }
+    return combineLatest(streams$).pipe(timeout({ first: TRAINING_SCHEDULE_STATE_READ_TIMEOUT_MS }), map(batches => batches.flat()));
+  }
+
   watchSchedule(userId: string | null | undefined): Observable<CurrentTrainingScheduleV1> {
     const uid = `${userId || ''}`.trim();
     if (!uid) return of(emptyTrainingSchedule());
@@ -113,7 +172,6 @@ export class TrainingPlansService {
     if (existing) return existing;
 
     const userPath = ['users', uid] as const;
-    const stateRef = doc(this.firestore, ...userPath, TRAINING_PLAN_STATE_COLLECTION_ID, TRAINING_PLAN_STATE_DOCUMENT_ID);
     const plansRef = collection(this.firestore, ...userPath, TRAINING_PLANS_COLLECTION_ID);
     const workoutsRef = collection(this.firestore, ...userPath, SCHEDULED_WORKOUTS_COLLECTION_ID);
     const availabilityRef = doc(this.firestore, ...userPath, TRAINING_PLAN_STATE_COLLECTION_ID,
@@ -123,15 +181,7 @@ export class TrainingPlansService {
       switchMap(availability => {
         if (availability !== undefined) return of({ ...emptyTrainingSchedule(), restoreUnavailable: true as const });
         return combineLatest([
-          // Even a server-acknowledged document/query watch can repeat a stale
-          // missing state. Keep its live invalidation signal but independently
-          // verify the exact state through uncached REST before publishing it.
-          docData(stateRef, { waitForServer: true }).pipe(
-            timeout({ first: TRAINING_SCHEDULE_STATE_READ_TIMEOUT_MS }),
-            switchMap(() => from(this.readCurrentState(uid)).pipe(
-              timeout({ first: TRAINING_SCHEDULE_STATE_READ_TIMEOUT_MS }),
-            )),
-          ),
+          this.watchVerifiedCurrentState(uid),
           collectionData(plansRef, { idField: 'id' }).pipe(
             timeout({ first: TRAINING_SCHEDULE_STATE_READ_TIMEOUT_MS }),
           ),
@@ -165,6 +215,19 @@ export class TrainingPlansService {
     );
     this.scheduleStreams.set(uid, schedule$);
     return schedule$;
+  }
+
+  /** Share state freshness and readiness bounds across full and bounded Calendar schedules. */
+  private watchVerifiedCurrentState(uid: string): Observable<unknown> {
+    const stateRef = doc(this.firestore, 'users', uid, TRAINING_PLAN_STATE_COLLECTION_ID, TRAINING_PLAN_STATE_DOCUMENT_ID);
+    // A server-acknowledged watch can still repeat stale state. Its emissions
+    // invalidate the independently verified exact state, including absence.
+    return docData(stateRef, { waitForServer: true }).pipe(
+      timeout({ first: TRAINING_SCHEDULE_STATE_READ_TIMEOUT_MS }),
+      switchMap(() => from(this.readCurrentState(uid)).pipe(
+        timeout({ first: TRAINING_SCHEDULE_STATE_READ_TIMEOUT_MS }),
+      )),
+    );
   }
 
   private async readCurrentState(uid: string): Promise<unknown> {

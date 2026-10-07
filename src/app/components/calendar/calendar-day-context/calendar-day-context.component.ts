@@ -87,7 +87,8 @@ export class CalendarDayContextComponent {
     }
   });
   private readonly healthOwnerUid = computed(() => this.data().userId);
-  readonly activityState = computed(() => this.data().activities?.() ?? { status: 'ready' as const, day: this.data().day });
+  readonly activityState = computed(() => this.data().activities?.() ?? { status: 'ready' as const, day: this.data().day, complete: true });
+  readonly activitiesComplete = computed(() => this.activityState().status === 'ready' && this.activityState().complete !== false);
   readonly day = computed(() => this.activityState().day);
   readonly trainingImpactState = computed(() => this.data().trainingImpact?.()
     ?? ({ status: 'private', formPoints: null } as TrainingImpactSnapshotState));
@@ -99,7 +100,7 @@ export class CalendarDayContextComponent {
     this.day().events, this.data().summariesSettings,
   ));
   readonly activityTotals = computed(() => formatActivityCalendarSummaryMetrics(
-    this.activityState().status === 'ready' ? this.activitySummary() : null,
+    this.activitiesComplete() ? this.activitySummary() : null,
     this.data().unitSettings, this.data().locale,
   ));
   readonly noteRows = computed(() => (this.data().timelineNotes?.() ?? [])
@@ -112,18 +113,19 @@ export class CalendarDayContextComponent {
   readonly plannedWorkouts = computed(() => this.data().plannedWorkoutsSource?.()
     ?? this.data().plannedWorkouts ?? []);
   readonly plannedStatus = computed(() => this.data().plannedWorkoutsStatusSource?.() ?? 'ready');
+  readonly plannedWorkoutsComplete = computed(() => this.plannedStatus() === 'ready' && this.data().plannedWorkoutsCompleteSource?.() !== false);
   readonly plannedRows = computed(() => this.plannedWorkouts().map(entry => ({
     ...entry,
     lifecycle: entry.completed ? 'Completed · activity linked'
-      : entry.workout.lifecycle === 'skipped' ? 'Skipped' : 'Planned',
+      : `${entry.workout.lifecycle === 'skipped' ? 'Skipped' : 'Planned'}${entry.completionKnown === false ? ' · completion unknown' : ''}`,
     summary: formatManualWorkoutStructure(entry.workout.structure, this.data().unitSettings, this.data().locale),
   })));
   readonly dashboardDayIsEmpty = computed(() => (this.dashboardTile() || this.calmMonth())
-    && this.activityState().status === 'ready'
+    && this.activitiesComplete()
     && this.activities().length === 0
     && this.notesStatus() === 'ready'
     && this.noteRows().length === 0
-    && (!this.canPlan() || (this.plannedStatus() === 'ready' && this.plannedRows().length === 0)));
+    && (!this.canPlan() || (this.plannedWorkoutsComplete() && this.plannedRows().length === 0)));
   readonly previewActivities = computed(() => this.calmMonth() ? this.activities() : this.activities().slice(0, 2));
   readonly previewNotes = computed(() => this.calmMonth() ? this.noteRows() : this.noteRows().slice(0, 2));
   readonly previewPlans = computed(() => this.calmMonth() ? this.plannedRows() : this.plannedRows().slice(0, 2));
@@ -164,10 +166,10 @@ export class CalendarDayContextComponent {
   readonly activitiesByStoryKey = computed(() => new Map(
     this.activities().map((activity, index) => [`activity:${activity.id || index}`, activity]),
   ));
-  readonly activityGroups = computed(() => buildActivityCalendarFamilyVolumeRows(
+  readonly activityGroups = computed(() => this.activitiesComplete() ? buildActivityCalendarFamilyVolumeRows(
     this.activitySummary(),
     this.data().unitSettings, this.data().locale,
-  ));
+  ) : []);
   readonly fullDayRoute = computed(() => ['/calendar/day', this.data().day.dateKey]);
   readonly fullDayQueryParams = computed(() => ({
     ...(this.dashboardTile() ? { from: 'dashboard' } : {}),

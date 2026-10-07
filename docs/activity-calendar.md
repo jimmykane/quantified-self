@@ -102,6 +102,16 @@ The top summary shows distance, duration, and ascent for the selected primary pe
 - User `removeAscentForEventTypes` and `removeDescentForEventTypes` summary settings are applied in addition to the shared sport rules.
 - Display values use the user's unit settings and the active locale.
 
+## Weekly planned and recorded summaries
+
+Week adds separate recorded, planned and remaining prescription sections, with scheduled/completed-link/skipped/unlinked
+counts. Exact links establish completion evidence; missing links do not establish missed execution. Planned and recorded
+volume never share a total. Recorded load is current/legacy parent TSS with explicit missing-source coverage; planned load
+is unavailable. Week uses bounded server-confirmed reads and labels truncated reads as observed subtotals. Other views
+retain their existing period summaries. Week carries incomplete coverage into grid labels and selected-day totals;
+the activity table loads independently. Detailed calculation, lifecycle,
+read bounds, revision warnings and MCP review belong to the single [Training source of truth](training-workspace.md#calendar-weekly-planned-and-recorded-summaries-training-09).
+
 ## UI and accessibility
 
 Use Angular Material controls for view selection, navigation, progress, retry, the explanatory info tooltip, and the Today day-details bottom sheet. Reuse app surface and glass-card tokens rather than introducing calendar-only colors or overlay containers.

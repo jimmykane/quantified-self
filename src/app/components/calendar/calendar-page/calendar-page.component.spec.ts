@@ -16,7 +16,7 @@ import {
   DaysOfTheWeek,
   type EventInterface,
 } from '@sports-alliance/sports-lib';
-import { BehaviorSubject, Subject, of, throwError } from 'rxjs';
+import { BehaviorSubject, Subject, of, throwError, map } from 'rxjs';
 import type { TimelineNote } from '@shared/timeline-notes';
 import type { WorkoutStructureV1 } from '@shared/planned-workout';
 import { AppTimelineNotesService } from '../../../services/app.timeline-notes.service';
@@ -117,8 +117,8 @@ describe('CalendarPageComponent', () => {
         { provide: ActivatedRoute, useValue: activatedRoute },
         { provide: AppUserService, useValue: { user: signal(user), user$: of(user) } },
         { provide: AppThemeService, useValue: { appTheme: signal(AppThemes.Normal) } },
-        { provide: ActivityCalendarService, useValue: { watchEvents } },
-        { provide: TrainingPlansService, useValue: { watchSchedule, watchWorkoutCompletions } },
+        { provide: ActivityCalendarService, useValue: { watchEvents, watchWeekEvents: vi.fn((...args) => watchEvents(...args).pipe(map(events => ({ events, complete: true })))) } },
+        { provide: TrainingPlansService, useValue: { watchSchedule, watchWorkoutCompletions, watchCalendarSchedule: vi.fn((...args) => watchSchedule(...args)), watchWorkoutCompletionsForWorkouts: vi.fn((...args) => watchWorkoutCompletions(...args)) } },
         { provide: CalendarDayDetailsNavigationService, useValue: dayDetailsNavigation },
         { provide: CalendarDayHealthService, useValue: { watch: vi.fn(() => of({ sessions: [], hrvSeries: [], derived: null, sleepError: false, hrvError: false, readinessError: false, recoveryError: false })) } },
         { provide: TrainingImpactService, useValue: { watch: vi.fn(() => of({ status: 'private', formPoints: null })) } },
@@ -136,6 +136,100 @@ describe('CalendarPageComponent', () => {
     vi.spyOn(TestBed.inject(Router), 'navigate').mockImplementation(navigate);
     vi.spyOn(MatBottomSheet.prototype, 'open').mockImplementation(openBottomSheet);
     vi.spyOn(MatDialog.prototype, 'open').mockImplementation(dialogs.open);
+  });
+
+  it('uses bounded week readers and keeps failed completion coverage unknown through retry', async () => {
+    queryParams.next(convertToParamMap({ view: 'week', date: '2026-08-03' }));
+    const plans = TestBed.inject(TrainingPlansService);
+    const calendar = TestBed.inject(ActivityCalendarService);
+    vi.mocked(plans.watchWorkoutCompletionsForWorkouts).mockReturnValueOnce(throwError(() => new Error('failed'))).mockReturnValue(of([]));
+    const fixture = TestBed.createComponent(CalendarPageComponent);
+    fixture.detectChanges(); await fixture.whenStable(); fixture.detectChanges();
+    expect(calendar.watchWeekEvents).toHaveBeenCalled();
+    expect(plans.watchCalendarSchedule).toHaveBeenCalledWith(planningUserUid, '2026-08-03', '2026-08-09');
+    expect(fixture.componentInstance.weekSummary().remainingCount).toBeNull();
+    expect(fixture.nativeElement.textContent).toContain('Completion coverage is unavailable');
+    const retry = Array.from(fixture.nativeElement.querySelectorAll('button')).find((button: HTMLButtonElement) => button.textContent.includes('Retry week summary')) as HTMLButtonElement;
+    retry.click(); fixture.detectChanges(); await fixture.whenStable(); fixture.detectChanges();
+    expect(fixture.componentInstance.weekSummary().remainingCount).toBe(0);
+    expect(haptics.selection).toHaveBeenCalledTimes(1);
+  });
+
+  it('withholds completed markers for conflicting links and labels failed completion reads unknown', async () => {
+    queryParams.next(convertToParamMap({ view: 'week', date: '2026-08-04' }));
+    const schedule = trainingSchedule();
+    const workout = schedule.workouts.find(workout => workout.id === 'active-workout')!;
+    watchSchedule.mockReturnValue(of(schedule));
+    const links = new Subject<{ workoutId: string; planId: string | null; workoutRevisionAtLink: number }[]>();
+    watchWorkoutCompletions.mockReturnValue(links);
+    const fixture = TestBed.createComponent(CalendarPageComponent);
+    fixture.detectChanges(); await fixture.whenStable(); fixture.detectChanges();
+    links.next([{ workoutId: workout.id, planId: workout.planId, workoutRevisionAtLink: workout.revision }]);
+    fixture.detectChanges(); await fixture.whenStable(); fixture.detectChanges();
+    expect(fixture.componentInstance.weekSummary().completedCount).toBe(1);
+    expect(fixture.nativeElement.querySelector('.planned-workout-marker--completed')).not.toBeNull();
+    links.next([{ workoutId: workout.id, planId: 'wrong-plan', workoutRevisionAtLink: workout.revision }]);
+    fixture.detectChanges(); await fixture.whenStable(); fixture.detectChanges();
+    expect(fixture.componentInstance.weekSummary().completedCount).toBeNull();
+    expect(fixture.nativeElement.querySelector('.planned-workout-marker--completed')).toBeNull();
+    expect(fixture.nativeElement.textContent).toContain('completion unknown');
+    links.error(new Error('failed'));
+    fixture.detectChanges(); await fixture.whenStable(); fixture.detectChanges();
+    expect(fixture.componentInstance.selectedDayPlanned().every(entry => entry.completionKnown === false)).toBe(true);
+    expect(fixture.nativeElement.textContent).toContain('completion unknown');
+  });
+
+  it.each([false, true])('keeps partial week activity and schedule coverage explicit with observed activities=%s', async observed => {
+    queryParams.next(convertToParamMap({ view: 'week', date: '2026-08-03' }));
+    const events = new Subject<{ events: EventInterface[]; complete: boolean }>();
+    vi.mocked(TestBed.inject(ActivityCalendarService).watchWeekEvents).mockReturnValue(events);
+    watchSchedule.mockReturnValue(of({ ...emptySchedule(), workoutsComplete: false }));
+    const fixture = TestBed.createComponent(CalendarPageComponent);
+    fixture.detectChanges(); await fixture.whenStable(); fixture.detectChanges();
+    events.next({ events: observed ? [createEvent()] : [], complete: false });
+    fixture.detectChanges(); await fixture.whenStable(); fixture.detectChanges();
+    const page = fixture.componentInstance;
+    expect(page.familyVolumeRows()).toEqual([]);
+    expect(page.selectedDayActivities().complete).toBe(false);
+    expect(fixture.nativeElement.textContent).toContain('Day totals are unknown');
+    expect(fixture.nativeElement.textContent).toContain('Only observed workouts are shown');
+    expect(fixture.nativeElement.textContent).not.toContain('No completed activities');
+    expect(fixture.nativeElement.textContent).not.toContain('No planned workouts for this day');
+    expect([...fixture.nativeElement.querySelectorAll('.calendar-day-context-totals strong')].map((element: HTMLElement) => element.textContent))
+      .toEqual(['--', '--', '--']);
+    const days = [...fixture.nativeElement.querySelectorAll('.activity-calendar-day-button')] as HTMLElement[];
+    expect(days.every(day => day.getAttribute('aria-label')?.includes('Activity coverage unknown'))).toBe(true);
+    expect(days.every(day => day.getAttribute('aria-label')?.includes('Planned workout coverage unknown'))).toBe(true);
+    expect(days.some(day => day.getAttribute('aria-label')?.includes('No activities'))).toBe(false);
+    events.next({ events: [], complete: true });
+    fixture.detectChanges(); await fixture.whenStable(); fixture.detectChanges();
+    expect(fixture.nativeElement.textContent).toContain('No completed activities');
+  });
+
+  it('cancels a late week read on navigation and clears the new summary while it loads', async () => {
+    queryParams.next(convertToParamMap({ view: 'week', date: '2026-08-03' }));
+    const first = new Subject<{ events: EventInterface[]; complete: boolean }>();
+    const second = new Subject<{ events: EventInterface[]; complete: boolean }>();
+    vi.mocked(TestBed.inject(ActivityCalendarService).watchWeekEvents).mockReturnValueOnce(first).mockReturnValueOnce(second);
+    const fixture = TestBed.createComponent(CalendarPageComponent);
+    fixture.detectChanges(); await fixture.whenStable(); fixture.detectChanges();
+    first.next({ events: [createEvent()], complete: true }); fixture.detectChanges();
+    queryParams.next(convertToParamMap({ view: 'week', date: '2026-08-17' })); fixture.detectChanges();
+    expect(fixture.componentInstance.weekSummary().recordedCount).toBeNull();
+    first.next({ events: [createEvent()], complete: true });
+    expect(fixture.componentInstance.eventState().status).toBe('loading');
+    second.next({ events: [], complete: true }); fixture.detectChanges(); await fixture.whenStable(); fixture.detectChanges();
+    expect(fixture.componentInstance.weekSummary().recordedCount).toBe(0);
+    expect(haptics.selection).not.toHaveBeenCalled();
+  });
+
+  it('owns one haptic for an accepted view change and stays silent for unchanged view and hydration', async () => {
+    const fixture = TestBed.createComponent(CalendarPageComponent);
+    fixture.detectChanges(); await fixture.whenStable();
+    fixture.componentInstance.selectView('month');
+    expect(haptics.selection).not.toHaveBeenCalled();
+    fixture.componentInstance.selectView('week');
+    expect(haptics.selection).toHaveBeenCalledTimes(1);
   });
 
   it('selects an adjoining date without changing the month query or anchor', async () => {

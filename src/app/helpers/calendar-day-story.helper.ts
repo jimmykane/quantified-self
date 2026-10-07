@@ -85,7 +85,7 @@ export function buildCalendarDayStory(input: CalendarDayStoryInput): CalendarDay
       items.push({
         key: `plan:${plan.workout.id}`, kind: 'plan', id: plan.workout.id,
         title: plan.workout.title,
-        detail: `${plan.planName || 'Standalone'} · ${plan.completed ? 'Activity linked' : plan.workout.lifecycle === 'skipped' ? 'Skipped' : 'Planned'}`,
+        detail: `${plan.planName || 'Standalone'} · ${plan.completed ? 'Activity linked' : plan.workout.lifecycle === 'skipped' ? 'Skipped' : 'Planned'}${plan.completionKnown === false ? ' · completion unknown' : ''}`,
         timeLabel: 'No time set', timeMs: null, icon: 'event_available',
         activityType: plan.workout.structure.sport, color: plan.color,
       });
@@ -108,7 +108,7 @@ export function buildCalendarDayStory(input: CalendarDayStoryInput): CalendarDay
       : `${input.notes.length} Timeline notes on this day.`);
   }
   if (input.planStatus === 'ready' && input.dateKey < localDateKey(input.nowMs)) {
-    const unlinked = input.plans.filter(plan => !plan.completed && plan.workout.lifecycle === 'planned').length;
+    const unlinked = input.plans.filter(plan => plan.completionKnown !== false && !plan.completed && plan.workout.lifecycle === 'planned').length;
     if (unlinked) highlights.push(`${unlinked} planned workout${unlinked === 1 ? '' : 's'} without a linked activity.`);
   }
   return { items, highlights: highlights.slice(0, 2) };
