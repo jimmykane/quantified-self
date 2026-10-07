@@ -2,6 +2,7 @@ import { resolveEffectiveTrainingLoad } from '@shared/training-load-policy';
 import type { EventInterface } from '@sports-alliance/sports-lib';
 import {
   buildTrainingSessionLoadImpact,
+  isTrainingLoadWithinTotal,
   resolveTrainingLoadDayImpact,
   type TrainingLoadDayImpact,
   type TrainingLoadPoint,
@@ -155,11 +156,7 @@ function selectedLoadsExceedForm(sessions: readonly TrainingSessionImpactView[])
     total.count++;
     days.set(impact.day.dayMs, total);
   }
-  return [...days.values()].some(({ selected, saved, count }) => {
-    // Allow only floating-point summation error, scaled to the load and term count.
-    const tolerance = Number.EPSILON * Math.max(1, selected, saved) * count;
-    return selected > saved + tolerance;
-  });
+  return [...days.values()].some(({ selected, saved, count }) => !isTrainingLoadWithinTotal(selected, saved, count));
 }
 
 export function sessionRoleHeadline(impact: TrainingSessionLoadImpact): string {

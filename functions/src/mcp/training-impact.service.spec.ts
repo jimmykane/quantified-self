@@ -590,4 +590,23 @@ describe('MCP Training impact service', () => {
       outcomes: [],
     });
   });
+
+  it.each(['session', 'day'] as const)('accepts equivalent decimal load totals in %s impact', async mode => {
+    const references = mode === 'session'
+      ? [{ activityId: 'activity-1', eventId: 'event-1' }]
+      : [{ activityId: 'activity-1', eventId: 'event-1' }, { activityId: 'activity-2', eventId: 'event-2' }];
+    const result = await getMcpTrainingImpact(sessionInput({ mode, references,
+      localDate: mode === 'day' ? '2026-01-01' : null, timeZone: mode === 'day' ? 'UTC' : null }), reads({
+      activities: mode === 'session'
+        ? [activity('activity-1', 'event-1', '2026-01-01T10:00:00.000Z', 33.1 + 33.2)]
+        : [activity('activity-1', 'event-1', '2026-01-01T10:00:00.000Z', 33.1),
+          activity('activity-2', 'event-2', '2026-01-01T12:00:00.000Z', 33.2)],
+      events: references.map(reference => ({ id: reference.eventId, data: {} })),
+      snapshot: formSnapshot([{ dayMs: DAY_ONE, load: 66.3 }]),
+    }));
+    expect(result).toMatchObject({ status: 'ready', reason: null, contribution: { trainingStressScore: 66.3 },
+      coverage: { modeledSessionCount: references.length, unavailableSessionCount: 0 } });
+    expect(createMcpOutputSchemaRegistry({ activityLocation: false, routeLocation: false })
+      .get_training_impact.safeParse(result).success).toBe(true);
+  });
 });

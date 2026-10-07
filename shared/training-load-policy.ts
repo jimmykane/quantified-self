@@ -157,11 +157,19 @@ export function resolveEffectiveTrainingLoad(
   const results = [...new Set(ids)].map(id => resolveLeg(id, activities.find(activity => activity.id === id)));
   if (results.every(result => result.status === 'excluded')) return excluded();
   const covered = results.filter(result => result.status === 'available');
-  if (!covered.length) return unavailable(results.find(result => result.status === 'unavailable')?.reasons[0] ?? 'missing-tss');
-  return { score: covered.reduce((sum, result) => sum + (result.score ?? 0), 0),
+  if (!covered.length) {
+    const reasons = results.filter(result => result.status === 'unavailable')
+      .map(result => result.reasons[0] ?? 'missing-tss').sort();
+    return unavailable(reasons[0] ?? 'missing-tss');
+  }
+  // Firestore maps have no meaningful leg order. Use a stable, ascending sum
+  // without rounding scores, so parsed and restored metadata produce identical totals.
+  const score = covered.map(result => result.score ?? 0).sort((left, right) => left - right)
+    .reduce((sum, value) => sum + value, 0);
+  return { score,
     status: results.some(result => result.status === 'unavailable') ? 'partial' : 'available',
     method: covered.length === 1 ? covered[0].method : 'SUM', estimated: covered.some(result => result.estimated),
-    reasons: [...new Set(results.flatMap(result => result.reasons))] };
+    reasons: [...new Set(results.flatMap(result => result.reasons))].sort() };
 }
 
 // An in-memory projection only. Symbols cannot leak through ordinary Firestore/JSON/MCP serialization.

@@ -31,6 +31,21 @@ describe('compact private Training load summaries', () => {
     const update = await prepareTrainingLoadCacheWrite({ doc: (path: string) => path } as any, transaction as any, 'u', 'e', summary);
     expect(update.changed).toBe(false); update.write(); expect(writes).toBe(0);
   });
+  it('does not rewrite a multisport summary solely because stored leg order changed', async () => {
+    const saved: TrainingLoadMetadata = { ...metadata, controls: { 'leg-0': { included: false } },
+      legs: Object.fromEntries(Array.from({ length: 100 }, (_, index) => [`leg-${index}`, {
+        ...metadata.legs!.leg, activityId: `activity-${index}`, recordedTss: index === 99 ? 9999 : 0.1,
+      }])) };
+    const summary = summarizeTrainingLoad('e', parent, saved)!;
+    const reloaded = summarizeTrainingLoad('e', parent, {
+      ...saved, legs: Object.fromEntries(Object.entries(saved.legs!).reverse()),
+    })!;
+    let writes = 0;
+    const transaction = { get: async () => ({ data: () => ({ version: 1, leaf: true,
+      entries: { [trainingLoadCacheKey('e')]: summary } }) }), set: () => { writes++; } };
+    const update = await prepareTrainingLoadCacheWrite({ doc: (path: string) => path } as any, transaction as any, 'u', 'e', reloaded);
+    expect(update.changed).toBe(false); update.write(); expect(writes).toBe(0);
+  });
   it('removes empty leaf documents so deleted history no longer adds rebuild reads', async () => {
     const summary = summarizeTrainingLoad('e', parent, metadata)!;
     const removed: string[] = []; const written: string[] = [];
