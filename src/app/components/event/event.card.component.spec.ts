@@ -275,7 +275,7 @@ describe('EventCardComponent', () => {
     it('builds owner-only Training impact state without exposing it to public viewers', () => {
         expect(component.isOwner()).toBe(true);
         expect(component.trainingImpact()?.availability).toBe('missing-tss');
-        expect(mockTrainingImpactService.watch).toHaveBeenCalledWith('testUser');
+        expect(mockTrainingImpactService.watch).toHaveBeenCalledWith('testUser', [component.event()]);
         const impact = fixture.nativeElement.querySelector('app-training-impact') as HTMLElement;
         expect(impact.hasAttribute('after-summary')).toBe(true);
         expect(impact.getAttribute('variant')).toBe('strip');

@@ -87,7 +87,7 @@ describe('TrainingImpactComponent', () => {
     expect(details.getAttribute('role')).toBe('region');
     expect(details.getAttribute('aria-labelledby')).toBe(button.id);
     expect(details.hidden).toBe(true);
-    expect(details.textContent).toContain('this workout’s 84 TSS');
+    expect(details.textContent).toContain('this workout’s 84 modeled TSS');
     expect(details.textContent).toContain('fixed daily cutoff');
     expect(details.textContent).toContain('not measured physiological adaptation');
     const tooltip = fixture.debugElement.query(By.directive(MatTooltip)).injector.get(MatTooltip);
@@ -185,7 +185,7 @@ describe('TrainingImpactComponent', () => {
     expect(Array.from(element.querySelectorAll('.training-impact-metrics strong')).map(value => value.textContent))
       .toEqual(['0', '0', '0', '0']);
     expect(element.querySelector('.training-impact-result-line')?.textContent).toContain('decreased by 1.98 CTL');
-    expect(element.querySelector('.training-impact-calculation')?.textContent).toContain('this workout’s 0 TSS');
+    expect(element.querySelector('.training-impact-calculation')?.textContent).toContain('this workout’s 0 modeled TSS');
   });
 
   it('retains the disclosure on same-event refresh but resets it on event, day, or availability changes', () => {

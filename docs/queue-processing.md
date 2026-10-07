@@ -41,3 +41,7 @@ All queue configuration is centralized in `functions/src/shared/queue-config.ts`
 *   `functions/src/garmin/queue.ts`: Specialized parsing logic for Garmin formats.
 *   `functions/src/wahoo/queue-store.ts`: Idempotent Wahoo webhook/history queue upserts and dispatch.
 *   `functions/src/wahoo/processor.ts`: Secure Wahoo FIT download, parsing, and event persistence.
+
+### Training load candidate preservation during ingestion and reparse
+
+The EventWriter backend adapters prepare private Training load evaluations after source writes and before stale activity cleanup. Keep the parsed Activity instances alive until this hook completes. Preparation failures must propagate to the queue/manual reparse caller, rather than marking an event successfully processed without refreshed candidates. The transaction verifies source fingerprints, owner/deletion state and the latest controls, retaining the leg's dated applied policy. Reparse must not reconstruct imported provenance from a previous calculated TSS or use derived TSS to match saved controls. Ambiguous leg identity requires owner review, with no unmatched-leg fallback. See [Training load controls](training-workspace.md#file-only-tss-evaluation-and-owner-load-controls) for calculation, persistence and release rules. Library publication, deployment and a production reparse each require separate approval.

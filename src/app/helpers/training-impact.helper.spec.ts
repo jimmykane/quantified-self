@@ -43,6 +43,16 @@ function ready(loads: Array<{ dayMs: number; load: number }>): TrainingImpactSna
 }
 
 describe('training impact view helper', () => {
+  it('uses modeled overrides and distinguishes user exclusions from missing or zero load', () => {
+    const activity = event('walk', '2026-01-01T10:00:00Z', 87.3);
+    const state = ready([{ dayMs: Date.UTC(2026, 0, 1), load: 9 }]);
+    state.loadsByEventId = new Map([['walk', { score: 0, status: 'available', method: 'OVERRIDE', estimated: false, reasons: [] }]]);
+    expect(buildTrainingSessionImpactView(activity, state).impact?.trainingStressScore).toBe(0);
+    state.loadsByEventId = new Map([['walk', { score: 0, status: 'excluded', method: null, estimated: false, reasons: [] }]]);
+    expect(buildTrainingSessionImpactView(activity, state)).toMatchObject({ availability: 'excluded', impact: null });
+    state.loadsByEventId = new Map([['walk', { score: null, status: 'unavailable', method: null, estimated: false, reasons: [] }]]);
+    expect(buildTrainingSessionImpactView(activity, state).availability).toBe('missing-tss');
+  });
   it('maps an activity to its UTC Training day and contribution', () => {
     const activity = event('session', '2026-01-02T00:30:00+02:00', 42);
     const dayMs = Date.UTC(2026, 0, 1);

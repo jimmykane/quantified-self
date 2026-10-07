@@ -1,3 +1,4 @@
+import { resolveEffectiveTrainingLoad } from '@shared/training-load-policy';
 import type { EventInterface } from '@sports-alliance/sports-lib';
 import {
   buildTrainingSessionLoadImpact,
@@ -7,7 +8,6 @@ import {
   type TrainingSessionLoadImpact,
 } from '@shared/training-load';
 import {
-  resolveDashboardFormTrainingStressScore,
   type DashboardFormPoint,
 } from './dashboard-form.helper';
 import { isMergeOrBenchmarkEvent } from './event-visibility.helper';
@@ -61,7 +61,9 @@ export function buildTrainingSessionImpactView(
     return unavailable('excluded', 'Merged benchmark events are excluded from Training.', eventId);
   }
   const dayMs = resolveTrainingImpactUtcDayMs(event);
-  const trainingStressScore = resolveDashboardFormTrainingStressScore(event);
+  const modeled = eventId ? source.loadsByEventId?.get(eventId) : undefined;
+  if (modeled?.status === 'excluded') return unavailable('excluded', 'Excluded from modeled Training load. History and volume are retained.', eventId, dayMs);
+  const trainingStressScore = modeled ? modeled.score : resolveEffectiveTrainingLoad(event).score;
   if (trainingStressScore === null) {
     return unavailable('missing-tss', 'Training impact unavailable — this activity has no TSS.', eventId, dayMs);
   }

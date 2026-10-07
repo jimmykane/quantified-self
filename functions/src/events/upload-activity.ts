@@ -1,3 +1,4 @@
+import { persistTrainingLoadMetadata } from '../training-load/training-load-metadata';
 import { onRequest } from 'firebase-functions/v2/https';
 import * as logger from 'firebase-functions/logger';
 import * as admin from 'firebase-admin';
@@ -340,6 +341,7 @@ function generateUploadEventID(userID: string, payload: Buffer, resolvedExtensio
 
 function getFirestoreAdapter(userID: string): FirestoreAdapter {
   return {
+    persistTrainingLoad: event => persistTrainingLoadMetadata(userID, event),
     setDoc: async (path: string[], data: unknown) => {
       const documentPath = path.join('/');
       const documentRef = admin.firestore().doc(documentPath);

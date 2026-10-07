@@ -67,6 +67,15 @@ describe('EventWriter', () => {
         };
     });
 
+    it('prepares load metadata after source writes and propagates a metadata failure', async () => {
+        adapter.persistTrainingLoad = vi.fn(async parsed => {
+            expect(adapter.setDoc).toHaveBeenCalled();
+            expect(parsed).toBe(eventMock);
+            throw new Error('source changed');
+        });
+        await expect(writer.writeAllEventData('user-1', eventMock)).rejects.toThrow('source changed');
+        expect(adapter.persistTrainingLoad).toHaveBeenCalledOnce();
+    });
     it('should write activities, streams, and event in order', async () => {
         await writer.writeAllEventData('user-1', eventMock);
 
