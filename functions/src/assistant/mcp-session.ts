@@ -11,6 +11,7 @@ import {
 import type { McpDataErrorCode } from '../mcp/data.service';
 import { MCP_OAUTH_SCOPES } from '../mcp/oauth.service';
 import type { AssistantLocationAccess } from '../../../shared/assistant.types';
+import { assistantRecoveryDurationSeconds, type AssistantWorkoutReview } from '../../../shared/assistant-workout-review';
 import {
   ASSISTANT_CONTENT_PROPOSAL_TOOLS,
   assistantContentProposalInputJsonSchema,
@@ -164,6 +165,7 @@ export class AssistantTrainingMetricsPreparingError extends Error {
 }
 
 export interface AssistantMcpSession {
+  getTrainingWorkoutReviews?: (proposalRef: string, prompt: string) => Promise<AssistantWorkoutReview[]>;
   instructions: string;
   tools: AssistantMcpToolDefinition[];
   callTool: (
@@ -497,6 +499,20 @@ export async function createAssistantMcpSession(
     let preparedContentProposalRef: string | null = null;
     const readyTrainingKinds = new Set<string>();
     return {
+      getTrainingWorkoutReviews: async (proposalRef, prompt) => {
+        const { loadAssistantTrainingWorkoutReviews } = await import('../mcp/training-plans-write.service');
+        const seconds = assistantRecoveryDurationSeconds(prompt);
+        try {
+          return await loadAssistantTrainingWorkoutReviews({ uid, connectionId: auth.connectionId, scopes: auth.scopes, proposalRef,
+            ...(seconds === null ? {} : { recoveryDurationSeconds: seconds }) });
+        } catch (error) {
+          if (error && typeof error === 'object' && 'code' in error && error.code === 'invalid_request') {
+            throw new AssistantRecoverableMcpToolError('invalid_request',
+              'Prepare a fresh complete workout review. For a recovery-duration-only request preserve every other field, including the exact destination.');
+          }
+          throw error;
+        }
+      },
       // The Assistant keeps its compact evidence budget; detailed sample pagination is an external-client workflow.
       instructions: (client.getInstructions() || '').replace(MCP_ACTIVITY_SAMPLES_INSTRUCTIONS, '').trim(),
       tools,

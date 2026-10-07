@@ -233,6 +233,7 @@ export interface AssistantContentProposalPreview {
 }
 
 export interface AssistantTrainingProposalPreview {
+  workoutReviews?: import('./assistant-workout-review').AssistantWorkoutReview[];
   proposalRef: string;
   permissionMode: 'schedule' | 'delivery' | 'combined';
   expiresAtMs: number;

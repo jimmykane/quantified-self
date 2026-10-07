@@ -1,0 +1,51 @@
+@let view = model();
+<section class="workout-review" aria-label="Workout proposal details">
+  <h3>{{ view.title }}</h3>
+  <p class="workout-context">{{ view.date }} · {{ view.destination }} · {{ view.structure.sport }}</p>
+  <div class="review-pair totals" aria-label="Prescription totals before and after">
+    <div><strong>Before</strong><p>{{ view.beforeSummary }}</p>@if (view.beforeCounts) { <p>{{ view.beforeCounts }}</p> }</div>
+    <div><strong>Proposed</strong><p>{{ view.afterSummary }}</p>@if (view.afterCounts) { <p>{{ view.afterCounts }}</p> }</div>
+  </div>
+  @for (item of view.metadata; track item.label) {
+    <div class="metadata-change"><strong>{{ item.label }}</strong><span>{{ item.before }} → {{ item.after }}</span></div>
+    @if (item.precision) { <p class="precision-details">{{ item.precision }}</p> }
+  }
+  @if (view.changes.length) {
+    <button mat-button type="button" [attr.aria-expanded]="changesExpanded()" [attr.aria-controls]="regionId" (click)="toggleChanges()">
+      {{ changesExpanded() ? 'Hide' : 'Show' }} {{ view.changeSummary }}
+    </button>
+    <ol class="changes-list" [id]="regionId" [hidden]="!changesExpanded()" aria-label="Ordered workout changes">
+      @for (change of view.changes; track change.id) {
+        <li [class.selected]="selectedStepId() === change.id" [attr.data-review-step-id]="change.id">
+          <strong>{{ change.label }} · {{ change.fieldsText }}</strong>
+          <div class="review-pair">
+            <div><span class="change-location">Before · {{ change.beforeLocation }}</span><p>{{ change.beforeText }}</p></div>
+            <div><span class="change-location">Proposed · {{ change.afterLocation }}</span><p>{{ change.afterText }}</p></div>
+          </div>
+          @if (change.precision) { <p class="precision-details">{{ change.precision }}</p> }
+        </li>
+      }
+    </ol>
+  } @else {
+    <p>Step definitions are unchanged.</p>
+  }
+  <app-workout-profile [structure]="view.structure" [unitSettings]="unitSettings()" [contextKey]="contextKey()"
+    [initiallyExpanded]="false" [changedStepIds]="view.changedIds" (stepSelected)="selectedStepId.set($event.stepId)"></app-workout-profile>
+  <p class="mapping-context">Local mapping only. Existing sync may reconcile edits; this review does not enable sync or confirm delivery.</p>
+  <ul class="compatibility-list" aria-label="Provider compatibility before and after">
+    @for (provider of view.compatibility; track provider.provider) {
+      <li><strong>{{ provider.label }}</strong></li>
+    }
+  </ul>
+  @if (view.mappingIssueCount) {
+    <button mat-button type="button" [attr.aria-expanded]="mappingExpanded()" [attr.aria-controls]="mappingRegionId" (click)="toggleMapping()">
+      {{ mappingExpanded() ? 'Hide' : 'Show' }} mapping limitations ({{ view.mappingIssueCount }})
+    </button>
+    <div [id]="mappingRegionId" [hidden]="!mappingExpanded()">
+      <p class="mapping-context">Connection, sync consent, Pro access and device support are checked separately.</p>
+      @for (provider of view.compatibility; track provider.provider) {
+        @for (issue of provider.issues; track $index) { <p>{{ provider.provider }} · {{ issue }}</p> }
+      }
+    </div>
+  }
+</section>

@@ -7,6 +7,8 @@ import { HttpsError } from 'firebase-functions/v2/https';
 import { z } from 'zod';
 import { ActivityTypes } from '@sports-alliance/sports-lib';
 import { readSuuntoStrengthWeightUnits } from '../training-plans/delivery/store';
+import { assertAssistantRecoveryDurationSeconds, isAssistantWorkoutReviews, type AssistantWorkoutReview, type AssistantWorkoutSnapshot } from '../../../shared/assistant-workout-review';
+import { assessDeliveryCompatibility } from './training-plans.service';
 import {
   TRAINING_PLAN_DELETION_LOCKS_COLLECTION_ID,
   parseMutateTrainingScheduleRequestV1,
@@ -102,6 +104,8 @@ interface StoredPlanDeletion {
 }
 
 interface StoredProposal {
+  assistantWorkoutReviews?: AssistantWorkoutReview[];
+  assistantRecoveryDurationSeconds?: number;
   schemaVersion: 1;
   uid: string;
   connectionId: string;
@@ -877,6 +881,8 @@ export async function previewTrainingChanges(
   }
   const locals = new Map<string, { kind: 'plan' | 'workout'; id: string }>();
   const scheduleRequests: StoredScheduleOperation[] = [];
+  const assistantWorkoutReviews: AssistantWorkoutReview[] = [];
+  let assistantRecoveryDurationSeconds: number | undefined;
   let planDeletion: StoredPlanDeletion | undefined;
   const providerTemplates: Array<{ index: number; change: Extract<TrainingChange, { kind: 'provider-delivery' }> }> = [];
   let simulated = loaded.snapshot;
@@ -932,6 +938,20 @@ export async function previewTrainingChanges(
     try { simulated = applyTrainingScheduleMutation(simulated, request, deps.now() + index).after; }
     catch (error) { invalid(publicErrorMessage(error) ?? `Training change ${index + 1} is invalid.`); }
     scheduleRequests.push({ index, request });
+    if (input.connectionId.startsWith('first-party-assistant-v1:')) {
+      const review = projectAssistantWorkoutReview(index, operation, before, simulated);
+      if (review) assistantWorkoutReviews.push(review);
+      if (review?.before && review.after && operation.kind === 'update-workout' && parsed.data.changes.length === 1
+        && before.workouts.get(operation.workoutId)?.planId === simulated.workouts.get(operation.workoutId)?.planId) {
+        const recovery = review.after.structure.nodes.flatMap(node => node.kind === 'step' ? [node] : node.steps)
+          .find(step => step.purpose === 'recovery' && step.ending.kind === 'time');
+        if (recovery?.ending.kind === 'time') {
+          const seconds = recovery.ending.seconds;
+          try { assertAssistantRecoveryDurationSeconds(seconds, [review]); assistantRecoveryDurationSeconds = seconds; }
+          catch { /* A broader edit remains reviewable, but cannot satisfy a duration-only request. */ }
+        }
+      }
+    }
     const deletionTarget = recipeMode === 'deletion' && operation.kind === 'delete-workout'
       ? before.workouts.get(operation.workoutId) : null;
     publicChanges.push({ index, kind: operation.kind, summary: (deletionTarget
@@ -1040,12 +1060,19 @@ export async function previewTrainingChanges(
     summary: `${publicChanges.length} Training change${publicChanges.length === 1 ? '' : 's'} proposed for client approval. Provider actions have independent results from authored changes.${hasUnsupportedDestination ? ' At least one requested provider action targets an unsupported workout version. No update will be sent there; an earlier copy may remain unchanged. Review each provider preview before confirming.' : ''}`,
     requiresConfirmation: true, changes: publicChanges, providerPreviews };
   TRAINING_WRITE_OUTPUTS.preview_training_changes.parse(preview);
+  // A review must remain complete. Refuse oversized reviews before creating even a private proposal.
+  if (assistantWorkoutReviews.length) {
+    if (!isAssistantWorkoutReviews(assistantWorkoutReviews)) unavailable();
+    assertBytes({ ...preview, workoutReviews: assistantWorkoutReviews });
+  }
   const stored: StoredProposal = { schemaVersion: 1, uid: input.uid, connectionId: input.connectionId,
     accessGeneration: loaded.accessGeneration, requiredScopes: required, createdAtMs, expiresAtMs,
     expireAt: Timestamp.fromMillis(expiresAtMs), status: 'pending', leaseUntilMs: null, nextScheduleOperation: 0,
     scheduleRequests, ...(planDeletion ? { planDeletion } : {}), providerOperations,
     localEntities: [...locals].map(([localKey, value]) => ({ localKey, ...value })),
-    preview, changeResults: [], providerResults: [] };
+    preview, changeResults: [], providerResults: [],
+    ...(assistantWorkoutReviews.length ? { assistantWorkoutReviews } : {}) };
+  if (assistantRecoveryDurationSeconds !== undefined) stored.assistantRecoveryDurationSeconds = assistantRecoveryDurationSeconds;
   await deps.db.runTransaction(async tx => {
     const generation = await assertAuthorityInTransaction(deps, tx, input.uid, input.connectionId, required, loaded.accessGeneration);
     if (generation !== loaded.accessGeneration) invalid('The MCP permission grant changed. Prepare the Training change again.');
@@ -1054,6 +1081,55 @@ export async function previewTrainingChanges(
     tx.create(deps.db.collection('users').doc(input.uid).collection(PROPOSALS).doc(proposalId), stored);
   });
   return preview;
+}
+
+function projectAssistantWorkoutReview(index: number, operation: TrainingScheduleMutationOperationV1,
+  before: TrainingScheduleSnapshotV1, after: TrainingScheduleSnapshotV1): AssistantWorkoutReview | null {
+  const id = 'workoutId' in operation ? operation.workoutId : null;
+  if (!id) return null;
+  const previous = operation.kind === 'copy-workout' ? before.workouts.get(operation.sourceWorkoutId) : before.workouts.get(id);
+  const current = after.workouts.get(id);
+  if ([previous, current].some(workout => workout?.structure.sport === ActivityTypes.StrengthTraining)) return null;
+  if (!previous && !current) return null;
+  const project = (workout: ScheduledWorkoutV1 | undefined, snapshot: TrainingScheduleSnapshotV1): AssistantWorkoutSnapshot | null => workout ? {
+    title: workout.title, localDate: workout.localDate, lifecycle: workout.lifecycle,
+    destination: workout.planId ? `Plan: ${snapshot.plans.get(workout.planId)?.name ?? 'Selected plan'}` : 'Standalone',
+    structure: parseWorkoutStructureV1(workout.structure),
+  } : null;
+  return { index, before: project(previous, before), after: project(current, after),
+    compatibility: PLANNED_WORKOUT_PROVIDER_IDS.map(provider => {
+      const prior = previous ? assessDeliveryCompatibility(provider, previous.structure) : null;
+      const next = current ? assessDeliveryCompatibility(provider, current.structure) : null;
+      return { provider, before: prior?.level ?? null, after: next?.level ?? null,
+        issues: (next ?? prior)!.issues.map(issue => issue.message) };
+    }) };
+}
+
+/** App-owned projection retrieval; deliberately absent from the registered MCP catalog and model tools. */
+export async function loadAssistantTrainingWorkoutReviews(input: Omit<TrainingWriteInput, 'arguments'> & { proposalRef: string; recoveryDurationSeconds?: number },
+  provided?: TrainingWriteDependencies): Promise<AssistantWorkoutReview[]> {
+  if (!input.connectionId.startsWith('first-party-assistant-v1:')) invalid('Assistant review requires its current conversation.');
+  const deps = provided ?? defaultDependencies();
+  const reference = decodeProposalRef(input.proposalRef, input.uid, input.connectionId);
+  return deps.db.runTransaction(async tx => {
+    const doc = await tx.get(deps.db.collection('users').doc(input.uid).collection(PROPOSALS).doc(reference.id));
+    const proposal = doc.data() as StoredProposal | undefined;
+    if (!proposal || proposal.schemaVersion !== 1 || proposal.uid !== input.uid || proposal.connectionId !== input.connectionId
+      || proposal.createdAtMs !== reference.createdAtMs || !Number.isSafeInteger(proposal.expiresAtMs)
+      || proposal.expiresAtMs <= deps.now() || proposal.preview.proposalRef !== input.proposalRef
+      || proposal.preview.expiresAtMs !== proposal.expiresAtMs || proposal.status !== 'pending') invalid('The workout review expired or is no longer available.');
+    assertScopes(input.scopes, proposal.requiredScopes);
+    await assertAuthorityInTransaction(deps, tx, input.uid, input.connectionId, proposal.requiredScopes, proposal.accessGeneration);
+    if (input.recoveryDurationSeconds !== undefined && proposal.assistantRecoveryDurationSeconds !== input.recoveryDurationSeconds) {
+      invalid('Change only the timed recovery definitions; preserve the complete current workout and destination.');
+    }
+    const state = await tx.get(deps.db.collection('users').doc(input.uid).collection('trainingPlanState').doc('current'));
+    if ((state.get('revision') ?? 0) !== proposal.preview.scheduleRevision) invalid('The schedule changed. Prepare a fresh workout review.');
+    const reviews = proposal.assistantWorkoutReviews ?? [];
+    if (!isAssistantWorkoutReviews(reviews)) unavailable();
+    assertBytes({ ...proposal.preview, workoutReviews: reviews });
+    return reviews;
+  }, { readOnly: true });
 }
 
 /** Additive strength authoring path; the registered v1 recipe schema stays unchanged. */

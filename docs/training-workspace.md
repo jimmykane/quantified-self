@@ -1078,9 +1078,63 @@ MCP impact: no schema, scope, consent, recipe variant, projection, provider acti
 Focused `get_planned_workout`/`get_planned_workout_v2` regressions retain exact mixed distance/HR and untargeted
 60/75/90-second fixtures, two saved-reference targets, a valid zero-percent relative pace range, canonical ordering and
 scope/connection isolation. Presentation
-fields stay local. The component accepts `changedStepIds` and emits canonical occurrence selection for a future
-Assistant review consumer; current summary-only proposal previews are unchanged and do not supply full recipes.
+fields stay local. The component accepts `changedStepIds` and emits canonical occurrence selection for the
+first-party Assistant review below. Registered MCP proposal previews retain their summary-only wire shape.
 The registered read/write and confirmation contracts remain authoritative.
+
+### Assistant workout proposal review (Training 11)
+
+The first-party Assistant captures complete non-strength scheduled-workout before/after recipes from the existing
+server proposal simulation, including title, local date, plan name or Standalone, lifecycle and all authored nodes.
+Create, edit, copy, move and workout lifecycle operations reuse the same revision-bound requests that Apply executes.
+The projection contains public structural IDs, never entity IDs, grant generations, provider artifacts or delivery digests.
+It is stored privately beside the existing proposal, then loaded through an app-only method with owner, conversation,
+grant, expiry and schedule checks. The model receives only the existing MCP preview. The app-owned confirmation remains
+mandatory; preview writes only the existing expiring private proposal, never authored workouts or provider settings.
+
+`shared/assistant-workout-review.ts` compares exact fields and stable IDs independently of display rounding. Proposed
+order leads the changed-definition list; removed IDs retain their prior order afterwards. Surviving IDs are compared
+within their repeat parent, so insertion/deletion alone cannot mark every later step as moved. Purpose, ending (including
+early Lap presence), ordered targets/reference snapshots, notes, repeat counts, placement and metadata changes remain
+explicit. Unmatched IDs are added/removed rather than called unchanged. The UI uses the shared analyzer for both totals
+and definition/execution counts, preserving estimated ranges, partial subtotals, unknown contributions and early-Lap
+limits. Sports Lib and owner preferences format the values; each changed numeric field is checked independently for
+rounding collisions, including target reference snapshots and pool length. Exact saved values remain disclosed even
+when another field, note or prescription changes visibly. Review snapshots must already be canonical; sport aliases
+and recipes that need normalization are rejected at the app response boundary.
+The proposed profile reuses `WorkoutProfileComponent` with canonical changed IDs and selection. Large change lists
+have a labelled Material disclosure and bounded shared-scrollbar region; no definition is omitted. Batches with more
+than three workout reviews initially collapse each change list. Provider states remain visible while mapping limitations
+have their own disclosure.
+Changing owner unit preferences refreshes displayed values without resetting the open disclosures or selected step.
+
+The server also records whether a single update changes only timed recovery definitions to one duration, checking the
+exact destination identity as well as the complete prescription and metadata. For the narrowly recognized request
+`change recovery to 75 seconds` (and equivalent set/make, all/the, seconds/sec/s wording), app review retrieval and the
+runtime reject any other change before it can become the current proposal. Arbitrary natural-language intent is not a
+general edit-scope classifier; broader requests still require explicit full review. Untargeted work lasting 60/75/90
+seconds, distance blocks, unrelated targets, notes, IDs, ordering and early-Lap flags stay exact in a recovery-only edit.
+This request and explicit step, target, repeat or note edits select the full v3 preview so existing early-Lap flags
+remain representable; removing a recipe step does not route to whole-workout deletion. Explicit strength-workout
+edits keep their exercise-aware tool, and create-plus-edit requests keep the existing batch tool ahead of the generic
+recipe-field route.
+
+Four local provider assessments show exact/degraded/unsupported before and after, using the same compatibility helper
+as the existing MCP read. They need no connection or HTTP call and grant no provider action. Explicit send/enable/etc.
+previews remain separate, and existing sync can reconcile an approved edit subject to its existing fences. Local mapping
+is not availability, account acceptance or watch receipt. Strength retains its existing exercise-aware proposal path;
+its compatibility projection is not presented as a complete recipe. Library proposals retain their existing review.
+At most 25 complete workout reviews fit inside the existing 256 KiB proposal-response budget; an oversized review is
+rejected before proposal creation rather than truncated. Conversation replay preserves the exact review through refresh
+or a lost answer; Apply retains current-proposal, revision, generation, expiry and idempotent-receipt checks.
+
+MCP impact review: **no registered wire impact**. Existing full v3 recipe, analysis and compatibility reads retain their
+strict projections and independent Training read permission. No tool, scope, consent, mutation kind, provider action,
+registered digest, bundled skill or plugin refresh changes. The only additional response field is the allowlisted
+first-party `workoutReviews`; its strict shared contract rejects unknown nested fields and unmatched operation indices.
+Verification covers exact mixed distance/HR and relative/two-target fixtures, structural edits, precision, unknown totals,
+25-operation bounds, zero authored/provider preview writes, owner/grant/expiry/stale-schedule fences, replay, accessible
+disclosures and haptic ownership. Production deployment and physical device/provider checks remain separate actions.
 
 ### Persistence, mutation, and history
 

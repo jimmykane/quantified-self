@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { ActivityTypes, DistanceUnits, WeightUnits } from '@sports-alliance/sports-lib';
 import { normalizeUserUnitSettings } from '../../../shared/unit-aware-display';
-import { readTrainingPlans, TRAINING_READ_LIMITS, type TrainingReadCodec, type TrainingReads } from './training-plans.service';
+import { assessDeliveryCompatibility, readTrainingPlans, TRAINING_READ_LIMITS, type TrainingReadCodec, type TrainingReads } from './training-plans.service';
 import { TRAINING_PLANS_SCOPE, TRAINING_READ_OUTPUTS, TRAINING_RECIPE_SCHEMA, type TrainingReadTool } from './training-plans.schemas';
 import { trainingDeliverySummaryIdentity } from '../../../shared/training-delivery-summary';
 import { projectStrengthWorkoutToV1 } from '../../../shared/strength-workout';
@@ -237,17 +237,23 @@ describe('Training plan MCP reads', () => {
     f.structures.w1 = recipe;
     const before = JSON.stringify(recipe);
     const workoutRef = f.codec.encode({ kind: 'workout', id: 'w1', createdAtMs: 1 }, 'owner', 'connection');
-    for (const tool of ['get_planned_workout', 'get_planned_workout_v2'] as const) {
+    for (const tool of ['get_planned_workout', 'get_planned_workout_v2', 'get_planned_workout_v3'] as const) {
       const result = TRAINING_READ_OUTPUTS[tool].parse(await f.run(tool, { workoutRef }));
       expect(JSON.parse(JSON.stringify(result.workout.structure))).toEqual(JSON.parse(before));
       expect(result.workout.displaySteps.map(step => step.nodeId)).toEqual([
         'hr-kilometre', 'changes', 'effort-60', 'effort-75', 'effort-90', 'two-targets', 'open-pace',
       ]);
       expect(result.workout.displaySteps.map(step => step.text).join(' ')).toContain('01m 15s');
-      expect(JSON.stringify(result)).not.toMatch(/occurrenceKey|selectedMetric|repeatPasses|estimatedDuration|chartWidth/);
+      expect(JSON.stringify(result)).not.toMatch(/occurrenceKey|selectedMetric|repeatPasses|estimatedDuration|chartWidth|workoutReviews|assistantRecoveryDurationSeconds/);
       await expect(f.run(tool, { workoutRef }, [])).rejects.toThrow();
       await expect(f.run(tool, { workoutRef }, [TRAINING_PLANS_SCOPE], 'foreign-connection')).rejects.toThrow();
     }
+    const mapping = TRAINING_READ_OUTPUTS.assess_planned_workout_compatibility.parse(await f.run('assess_planned_workout_compatibility', { workoutRef }));
+    expect(mapping.assessments).toEqual((['garmin', 'coros', 'wahoo', 'suunto'] as const).map(provider => {
+      const local = assessDeliveryCompatibility(provider, recipe);
+      return { provider, level: local.level, issues: local.issues.map(issue => ({ severity: issue.severity,
+        code: issue.code, field: issue.path, message: issue.message })) };
+    }));
     expect(JSON.stringify(f.structures.w1)).toBe(before);
   });
 
