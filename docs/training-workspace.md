@@ -5019,7 +5019,10 @@ emulator verifies delayed policy selection, idempotent duplicates, changed/reuse
 missing legacy identity, edits during first import, concurrent reparse/control edits and deletion guards. Cache tests
 cover the warm/cold read paths, transactionally split buckets, unchanged-write suppression, policy query avoidance,
 zero/excluded/reset projections, source-trigger coordination and private Rules. The 1,001-workout fixture verifies
-17 steady-state document reads. Review regressions also cover warm-cache pending imports, exclusion/reset during
+17 steady-state document reads. The persistence emulator suite allows 30 seconds per test for real transaction
+contention and retry backoff, matching the other transaction suites; this is not a production latency target.
+Its atomicity, retained-control and read-count assertions remain required. This test-only timing allowance changes
+no runtime behavior, database operations or MCP contracts. Review regressions also cover warm-cache pending imports, exclusion/reset during
 interrupted imports, parser evaluation failures before reservation, removed/recreated empty leaves, leg moves and
 cache maintenance outside rollout. Further regressions cover changed/deleted/moved parsed legs with unchanged
 parent statistics, delayed owner edits against those stale sources, restoration by reparse, obsolete leg cleanup,
