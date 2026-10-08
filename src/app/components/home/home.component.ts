@@ -1,20 +1,34 @@
-import { Component, OnInit, DestroyRef, PLATFORM_ID, inject, signal } from '@angular/core';
-import { isPlatformBrowser } from '@angular/common';
+import { Component, OnInit, DestroyRef, PLATFORM_ID, afterEveryRender, computed, inject, signal } from '@angular/core';
+import { DOCUMENT, Location, isPlatformBrowser } from '@angular/common';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { Router, RouterLink } from '@angular/router';
 import { MatButtonModule } from '@angular/material/button';
 import { MatCardModule } from '@angular/material/card';
 import { MatIconModule } from '@angular/material/icon';
+import { MatFormFieldModule } from '@angular/material/form-field';
+import { MatSelectModule } from '@angular/material/select';
+import { MatTabsModule } from '@angular/material/tabs';
 import { MAT_TOOLTIP_DEFAULT_OPTIONS, MatTooltipModule } from '@angular/material/tooltip';
 import { ASSISTANT_REQUEST_LIMITS, ROUTE_USAGE_LIMITS, USAGE_LIMITS } from '@shared/limits';
 import { AppAuthService } from '../../authentication/app.auth.service';
 import { AppHapticsService } from '../../services/app.haptics.service';
-import { AppChartSharedModule } from '../../modules/app-chart-shared.module';
 import { getNumberFormatter } from '../../helpers/number-format.helper';
 import { CompactRowComponent } from '../shared/compact-row/compact-row.component';
 import { PublicFeaturePreviewComponent } from '../public-seo/public-feature-preview.component';
 import { HEALTH_FEATURE_CONTENT } from '../public-seo/health-feature.content';
 import { TRAINING_PLANS_HOME_CONTENT } from '../public-seo/training-plans-home.content';
+
+const HOME_FEATURES = [
+  { id: 'training', label: 'Training' },
+  { id: 'workouts', label: 'Workouts' },
+  { id: 'plans', label: 'Plans' },
+  { id: 'health', label: 'Health' },
+  { id: 'assistant', label: 'Assistant' },
+  { id: 'maps', label: 'Maps' },
+  { id: 'comparisons', label: 'Comparisons' },
+  { id: 'integrations', label: 'Integrations' },
+] as const;
+type HomeFeatureId = typeof HOME_FEATURES[number]['id'];
 
 @Component({
   selector: 'app-home',
@@ -22,7 +36,8 @@ import { TRAINING_PLANS_HOME_CONTENT } from '../public-seo/training-plans-home.c
   styleUrls: ['./home.component.scss'],
   standalone: true,
   imports: [RouterLink, MatButtonModule, MatCardModule, MatIconModule, MatTooltipModule,
-    AppChartSharedModule, PublicFeaturePreviewComponent, CompactRowComponent],
+    MatFormFieldModule, MatSelectModule, MatTabsModule,
+    PublicFeaturePreviewComponent, CompactRowComponent],
   providers: [{ provide: MAT_TOOLTIP_DEFAULT_OPTIONS, useValue: {
     showDelay: 0, hideDelay: 0, touchendHideDelay: 1500, touchGestures: 'off',
   } }],
@@ -32,7 +47,16 @@ export class HomeComponent implements OnInit {
   private readonly router = inject(Router);
   private readonly destroyRef = inject(DestroyRef);
   private readonly haptics = inject(AppHapticsService);
+  private readonly location = inject(Location);
+  private readonly document = inject(DOCUMENT);
   private readonly isBrowser = isPlatformBrowser(inject(PLATFORM_ID));
+  private featureScrollFrame: number | null = null;
+  private featureScrollPending = false;
+  readonly hasFeatureSelection = signal(false);
+  private readonly featureScroll = afterEveryRender(() => this.flushFeatureScroll());
+  readonly features = HOME_FEATURES;
+  readonly selectedFeature = signal<HomeFeatureId>('training');
+  readonly selectedFeatureLabel = computed(() => this.features.find(feature => feature.id === this.selectedFeature())!.label);
   readonly expandedFaq = signal<string | null>(null);
   readonly healthFeature = HEALTH_FEATURE_CONTENT;
   readonly trainingPlansFeature = TRAINING_PLANS_HOME_CONTENT;
@@ -62,9 +86,66 @@ export class HomeComponent implements OnInit {
 
   ngOnInit(): void {
     if (!this.isBrowser) return;
+    this.syncFeatureFromUrl(this.location.path(true));
+    this.destroyRef.onDestroy(this.location.onUrlChange(url => this.syncFeatureFromUrl(url)));
+    this.destroyRef.onDestroy(() => this.cancelFeatureScrollFrame());
     this.authService.user$.pipe(takeUntilDestroyed(this.destroyRef)).subscribe(user => {
       if (user) void this.router.navigate(['/dashboard']);
     });
+  }
+
+  selectFeature(id: string, event?: MouseEvent): void {
+    // Let modified links open their shareable feature URL in another tab.
+    if (event && (event.ctrlKey || event.metaKey || event.shiftKey || event.altKey || event.button !== 0)) return;
+    event?.preventDefault();
+    const feature = this.features.find(candidate => candidate.id === id);
+    if (!feature) return;
+    this.hasFeatureSelection.set(true);
+    if (feature.id === this.selectedFeature()) {
+      this.scrollToFeature();
+      return;
+    }
+    this.selectedFeature.set(feature.id);
+    this.haptics.selection();
+    const path = this.location.path(true).split('#')[0];
+    this.location.go(`${path}#home-${feature.id}`);
+  }
+
+  private syncFeatureFromUrl(url: string): void {
+    const fragment = url.split('#')[1];
+    const feature = this.features.find(candidate => `home-${candidate.id}` === fragment);
+    this.selectedFeature.set(feature?.id ?? 'training');
+    this.hasFeatureSelection.set(!!feature);
+    this.featureScrollPending = !!feature;
+    if (feature) this.scrollToFeature();
+  }
+
+  private scrollToFeature(): void {
+    this.featureScrollPending = true;
+  }
+
+  private flushFeatureScroll(): void {
+    if (!this.featureScrollPending) return;
+    // Its deferred metrics change the hero height; position the feature after the shared overview renders.
+    if (this.document.querySelector('.hero-preview .preview-placeholder--training')) return;
+    this.featureScrollPending = false;
+    this.cancelFeatureScrollFrame();
+    const scroll = () => this.document.getElementById('home-feature-panel')
+      ?.scrollIntoView?.({ block: 'start', behavior: 'instant' });
+    scroll();
+    // Give the shell a rendering frame after native scroll events, then align with its rendered header offset.
+    this.featureScrollFrame = this.document.defaultView?.requestAnimationFrame(() => {
+      this.featureScrollFrame = this.document.defaultView?.requestAnimationFrame(() => {
+        this.featureScrollFrame = null;
+        scroll();
+      }) ?? null;
+    }) ?? null;
+  }
+
+  private cancelFeatureScrollFrame(): void {
+    if (this.featureScrollFrame === null) return;
+    this.document.defaultView?.cancelAnimationFrame(this.featureScrollFrame);
+    this.featureScrollFrame = null;
   }
 
   toggleFaq(id: string): void {

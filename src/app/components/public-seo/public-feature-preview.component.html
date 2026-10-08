@@ -26,7 +26,7 @@
 }
 
 @if (previewKey() === 'training-snapshot') {
-  @defer (on viewport) {
+  @defer (on viewport; when activate()) {
     <app-training-snapshot-preview></app-training-snapshot-preview>
   } @placeholder {
     <div class="preview-placeholder preview-placeholder--training" aria-hidden="true"></div>
