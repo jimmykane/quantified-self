@@ -33,6 +33,7 @@ describe('HomeTrainingPreviewComponent', () => {
     const component = fixture.componentInstance;
     expect(selection).not.toHaveBeenCalled();
     expect(fixture.nativeElement.textContent).toContain('Completed · activity linked');
+    expect(fixture.nativeElement.querySelector('.workout-totals').textContent).toBe('Workout prescription · 48m 00s');
     fixture.nativeElement.querySelector('button[aria-label^="Wednesday"]').click();
     fixture.detectChanges();
     expect(component.selected().workout).toBeNull();
@@ -43,7 +44,9 @@ describe('HomeTrainingPreviewComponent', () => {
     component.selectView('calendar');
     expect(selection).toHaveBeenCalledOnce();
     component.selectDay(9);
+    fixture.detectChanges();
     expect(component.selected().status).toBe('Planned');
+    expect(fixture.nativeElement.querySelector('.workout-totals').textContent).toBe('Workout prescription · 35m 00s');
     component.selectDay(5);
     expect(component.selected().status).toBe('Skipped');
   });

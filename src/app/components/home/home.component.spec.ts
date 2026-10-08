@@ -96,6 +96,8 @@ describe('HomeComponent', () => {
     expect(memberships[1].features).toContain('Up to 1,000 activities');
     expect(memberships[1].features).toContain(`Up to ${ROUTE_USAGE_LIMITS.basic} saved routes`);
     expect(fixture.nativeElement.querySelectorAll('.membership-grid mat-card')).toHaveLength(3);
+    expect(Array.from(fixture.nativeElement.querySelectorAll('.membership-grid h3'))
+      .map((heading: Element) => heading.textContent)).toEqual(['Starter', 'Basic', 'Pro']);
     const steps = fixture.nativeElement.querySelector('.getting-started-steps');
     expect(steps.querySelectorAll('li')).toHaveLength(3);
     expect(steps.textContent).toContain('connect a supported provider with Pro');

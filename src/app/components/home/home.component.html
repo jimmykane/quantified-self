@@ -142,7 +142,7 @@
     <div class="membership-grid">
       @for (membership of memberships; track membership.name) {
         <mat-card appearance="outlined">
-          <mat-card-header><mat-card-title>{{ membership.name }}</mat-card-title><mat-card-subtitle>{{ membership.label }}</mat-card-subtitle></mat-card-header>
+          <mat-card-header><h3 mat-card-title>{{ membership.name }}</h3><mat-card-subtitle>{{ membership.label }}</mat-card-subtitle></mat-card-header>
           <mat-card-content><p>{{ membership.copy }}</p><ul>@for (feature of membership.features; track feature) { <li>{{ feature }}</li> }</ul></mat-card-content>
           <mat-card-actions><a mat-stroked-button [routerLink]="membership.route">{{ membership.action }}</a></mat-card-actions>
         </mat-card>

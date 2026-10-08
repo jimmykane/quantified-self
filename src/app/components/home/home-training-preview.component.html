@@ -29,7 +29,7 @@
   <div class="selected-workout" aria-live="polite">
     <p class="sample-status">{{ selected().label }} · {{ selected().status }}</p>
     <h3>{{ selected().workout?.title ?? (selectedDay() === 7 ? 'Time to recover' : 'Room for what comes next') }}</h3>
-    @if (totals(); as summary) { <p class="workout-totals">{{ summary }}</p> }
+    @if (totals(); as summary) { <p class="workout-totals">Workout prescription · {{ summary }}</p> }
     @if (!selected().workout) { <p>No workout is scheduled in this sample.</p> }
     @if (view() === 'calendar' && selected().workout) {
       <button mat-button type="button" (click)="selectView('profile')">See workout profile <mat-icon iconPositionEnd>arrow_forward</mat-icon></button>
