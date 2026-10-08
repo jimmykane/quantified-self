@@ -32,14 +32,14 @@ function allocation(cwd) {
   return files;
 }
 
-test('opted-in specs exist, are explicit helper paths and cannot overlap', () => {
+test('opted-in specs exist, are explicit application paths and cannot overlap', () => {
   assert.deepEqual(Object.keys(registry).sort(), ['dom', 'node']);
   const all = Object.values(registry).flat();
   assert.equal(all.length, new Set(all).size, 'Duplicate or overlapping opt-ins');
   for (const files of Object.values(registry)) {
     assert(files.length > 0);
     for (const file of files) {
-      assert.match(file, /^src\/app\/helpers\/[a-z0-9.-]+\.spec\.ts$/);
+      assert.match(file, /^src\/app\/(?:[a-z0-9-]+\/)+[a-z0-9.-]+\.spec\.ts$/);
       assert(statSync(resolve(root, file)).isFile(), `Stale opt-in: ${file}`);
     }
   }

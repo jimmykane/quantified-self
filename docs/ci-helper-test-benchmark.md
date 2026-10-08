@@ -185,3 +185,22 @@ Additional checks passed:
 Ignored `tmp/vitest-benchmark/helpers-split-full-frontend.*` retains the full run and exact assertion-parity evidence.
 The registry, discovery guard, workflow integration and operational documentation are included in the implementation.
 No dependency upgrade, test assertion change, product behavior change or MCP/Training/provider contract change is involved.
+
+## Develop follow-up verification
+
+The first scheduled follow-up synchronized the committed frontend changes through `6c9dcbbc0`. The changed
+`src/app/shared/help.content.spec.ts` is a pure content/search contract with no Angular runtime dependency.
+Its 75 assertions now run in Node through an exact registry entry. Other unclassified application specs retain
+the Angular fallback; no directory-wide classification was added. The eight existing Node helper specs whose
+imports include the changed help content or Suunto presentation source were rechecked in Node.
+
+The nine affected files / 220 tests passed both before and after the new opt-in with identical assertion names
+and statuses. The complete frontend suite then passed 592 files / 8,634 tests with no skips or runner errors.
+All assertions from the previous full run remain present and passing; the one added assertion comes from the
+develop help-content regression. The current allocation is 164 Node, 10 DOM and 418 Angular files.
+
+The 16 allocation/workflow checks passed. A V8 coverage smoke passed four files / 97 tests across all projects,
+including the newly adopted help content source, a Node helper, a DOM helper, an Angular pipe and an uncovered
+Angular service. Raw reports and assertion comparisons are retained under ignored
+`tmp/helper-test-benchmark/adoption-1-*`. Earlier benchmark timings describe the original allocation; this
+follow-up does not establish a new performance comparison.

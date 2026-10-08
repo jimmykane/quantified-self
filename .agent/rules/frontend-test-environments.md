@@ -13,7 +13,8 @@ runner configuration and verification commands.
   Inspect transitive runtime imports and test assumptions, add the exact spec path to the sorted `node` list in
   `tools/frontend-test-environments.json`, and verify it in that project. Keep framework fixture builders out
   of pure helper tests when equivalent plain fixtures suffice. Record why a new helper needs a heavier environment
-  when it cannot use Node.
+  when it cannot use Node. Other pure application specs, such as static content contracts under `src/app/shared/`,
+  can use the same explicit Node opt-in after their imports and assertions are verified.
 - Use `helpers-dom` and the registry's `dom` list for DOM APIs or browser locale/storage semantics that require
   jsdom. Use `angular` for TestBed, Angular component/service/router compilation or the existing global setup.
   Unclassified specs retain the Angular fallback until verified; do not classify an entire directory by name.

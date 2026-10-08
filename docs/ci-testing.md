@@ -20,14 +20,15 @@ override. Test isolation and unhandled-error failure behavior remain enabled; th
 extended timeout masking a failure. `test-runner-config.spec.ts` covers these configuration boundaries.
 
 Frontend tests use the same global two-worker bound, with isolated forks across three Vitest projects:
-`helpers-node` runs 163 verified helper specs in Node with no setup file, `helpers-dom` runs 10 DOM/locale specs
-in jsdom with no Angular setup, and `angular` retains the Angular compiler plugin and `src/test-setup.ts` for
-all remaining ordinary specs. The Angular project is the fallback for new or unclassified files. The shared
+`helpers-node` runs 164 verified pure specs (helpers and help content) in Node with no setup file,
+`helpers-dom` runs 10 DOM/locale specs in jsdom with no Angular setup, and `angular` retains the Angular compiler
+plugin and `src/test-setup.ts` for all remaining ordinary specs. The Angular project is the fallback for new or
+unclassified files. The shared
 runner still uses `npm run test -- --run`, so every project runs on every ordinary app test invocation.
 
-`tools/frontend-test-environments.json` is the explicit Node/DOM opt-in registry. To move another helper, first
-verify its tests and transitive imports in the intended environment, then add its exact repository-relative path
-to the registry. DOM rendering and browser-locale assumptions require jsdom; component/service/router imports may
+`tools/frontend-test-environments.json` is the explicit Node/DOM opt-in registry. To move another pure application
+spec, first verify its tests and transitive imports in the intended environment, then add its exact repository-relative
+path to the registry. DOM rendering and browser-locale assumptions require jsdom; component/service/router imports may
 require the Angular pipeline. Do not route the whole helper directory to Node or add fake browser/Angular globals
 to conceal an unsupported import. Removing a registry entry returns that spec to Angular automatically.
 
