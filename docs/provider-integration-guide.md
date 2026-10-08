@@ -1307,6 +1307,8 @@ dispatcher, actual immediate/reconciliation dispatch failures, and an isolated G
 dispatcher loader with unchanged resources. It excludes lifecycle/revision/permission
 skips; incomplete zero samples are unknown, not healthy. No probe calls providers,
 refreshes credentials, pins accounts, writes queue state or changes dispatch decisions.
+Firestore sub-millisecond commit timestamps remain valid and their observed age rounds
+down; COROS account-ID fallback accepts only absent/empty values, matching its worker.
 The import probe does not invent an outbound Pro gate. The independent dashboard/alerts
 and separately approved deployment/activation stay tracked in #833; this work does not
 claim live alert coverage or change provider behavior. See

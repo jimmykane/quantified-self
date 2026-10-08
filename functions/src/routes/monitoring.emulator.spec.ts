@@ -139,6 +139,32 @@ describe.skipIf(!process.env.FIRESTORE_EMULATOR_HOST)('route observations with r
         for (const fields of select.mock.calls) for (const forbidden of ['accessToken', 'refreshToken', 'errors', 'geometry', 'originalFiles']) expect(fields).not.toContain(forbidden);
         expect(JSON.stringify(observed())).not.toContain('PRIVATE');
     });
+    it('accepts sub-millisecond Firestore update times and rounds age down to a lower bound', async () => {
+        const seeded = await seedProbe();
+        // Production commit timestamps can retain microseconds even when the emulator rounds to milliseconds.
+        const toMillis = Timestamp.prototype.toMillis;
+        vi.spyOn(Timestamp.prototype, 'toMillis').mockImplementation(function (this: Timestamp) {
+            return Math.floor(toMillis.call(this)) + 0.125;
+        });
+        const timestamps = await Promise.all([seeded.imported.get(), seeded.delivery.get()]);
+        await observeRouteQueues(state.db, async () => true, seeded.now);
+        for (const [index, [lane, destination]] of [['import', 'qs'], ['delivery', 'wahoo']].entries()) {
+            expect(sampleFor(lane, destination)).toMatchObject({ dueSample: 1, unknownSample: 0 });
+            expect(sampleFor(lane, destination)?.ageLowerBoundMs).toBe(Math.floor(seeded.now - timestamps[index].updateTime!.toMillis()));
+        }
+    });
+    it.each([0, false, 'wrong_account'])('does not accept a malformed or mismatched COROS token identity (%s)', async openId => {
+        const seeded = await seedProbe(ServiceNames.COROSAPI);
+        await state.db.collection(seeded.destinationCollection).doc('qa').collection('tokens').doc('PRIVATE_DEST').update({ openId });
+        await observeRouteQueues(state.db, async () => true, seeded.now);
+        expect(sampleFor('delivery', 'coros')).toMatchObject({ dueSample: 0, excludedSample: 1 });
+    });
+    it.each([null, ''])('retains the COROS legacy document-ID fallback only for an absent token identity (%s)', async openId => {
+        const seeded = await seedProbe(ServiceNames.COROSAPI);
+        await state.db.collection(seeded.destinationCollection).doc('qa').collection('tokens').doc('PRIVATE_DEST').update({ openId });
+        await observeRouteQueues(state.db, async () => true, seeded.now);
+        expect(sampleFor('delivery', 'coros')).toMatchObject({ dueSample: 1, unknownSample: 0 });
+    });
     it.each(['deleted_owner', 'tombstone', 'disconnect', 'no_pro', 'source_token_identity', 'source_generation'])('excludes %s from eligible backlog', async reason => {
         const seeded = await seedProbe();
         if (reason === 'deleted_owner') await state.db.doc('users/qa').delete();

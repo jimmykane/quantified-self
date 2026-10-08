@@ -84,8 +84,11 @@ invent one. Unsupported/contradictory route categories never count as eligible w
 This is local-state eligibility, not a claim that an OAuth credential or route file will
 be accepted by a provider; actual worker failures remain separate observations.
 
-Age starts at the later of creation and the observed queue update time. A positive
-count/age is a lower bound even in an incomplete sample. A truncated or unknown sample
+Age starts at the later of creation and the observed queue update time. Exact timestamp
+equality retains Firestore's sub-millisecond precision; emitted age is rounded down to
+whole milliseconds so it remains a lower bound. COROS's legacy account-ID fallback
+accepts only an absent/empty ID, never malformed falsy values such as `0` or `false`.
+A positive count/age is a lower bound even in an incomplete sample. A truncated or unknown sample
 with no positive eligible records omits count/age entirely; it must not clear an alert
 as healthy zero. Read failures and timeout emit unavailable for all four fixed groups.
 Already-started reads may finish after the deadline, but no further account reads or
@@ -116,7 +119,8 @@ privacy, logger failure (including preserving a worker ACK), success/skip/ACK se
 stale replacements, deletion fences, failed persistence, retried transactions, retries,
 exhaustion, cleanup failure phases, bounded masks/deadlines, partial samples, actual
 immediate/reconciliation failures, deterministic duplicates, pinned-account mismatches,
-credential rotation, permission loss, source revisions, reconnects and direction settings.
+credential rotation, permission loss, source revisions, reconnects, direction settings,
+sub-millisecond commit timestamps and malformed versus absent COROS token identities.
 The real Firestore tests use loopback emulators with synthetic `demo-*` projects and
 match the app's `ignoreUndefinedProperties` setting. They are registered in CI's
 `mcp-data` group, not silently skipped outside the emulator workflow.

@@ -87,7 +87,8 @@ function destinationEligibility(service: string, tokens: FirebaseFirestore.Query
         const scopes = new Set(token.scope.split(/\s+/));
         return scopes.has('routes_read') && scopes.has('routes_write') ? 'new' : 'excluded';
     }
-    if (!root.exists || normalizeCOROSOpenId(token.openId || selected.id) !== selected.id
+    const openId = token.openId === undefined || token.openId === null || token.openId === '' ? selected.id : token.openId;
+    if (!root.exists || normalizeCOROSOpenId(openId) !== selected.id
         || !doesOAuthCredentialGenerationAuthorizeToken(root.data(), token.tokenCredentialGeneration)) return 'excluded';
     return 'new';
 }
@@ -175,8 +176,10 @@ export async function observeRouteQueues(db: FirebaseFirestore.Firestore, proAcc
                         if (eligible !== 'new') return eligible;
                     }
                     const updated = current.updateTime.toMillis();
-                    if (!Number.isSafeInteger(updated) || updated < 0 || updated > now + ROUTE_QUEUE_PROBE_TIMEOUT_MS) return 'unknown';
-                    return Math.max(0, now - Math.max(updated, Number(row.dateCreated)));
+                    // Firestore commit timestamps can contain fractional milliseconds. Preserve exact
+                    // updateTime equality above, then round the age down so it remains a lower bound.
+                    if (!Number.isFinite(updated) || updated < 0 || updated > now + ROUTE_QUEUE_PROBE_TIMEOUT_MS) return 'unknown';
+                    return Math.max(0, Math.floor(now - Math.max(updated, Number(row.dateCreated))));
                 }, { readOnly: true });
                 if (stopped) return;
                 if (eligibility === 'unknown') group.unknownSample++;
