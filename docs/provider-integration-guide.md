@@ -1246,9 +1246,12 @@ transport failures and retry exhaustion stay visible.
 Both handlers have isolated target loading with unchanged
 runtime generations/resources. Their separately approved 8 October 2026 deployment
 passed active-state/configuration readback, retaining the existing scheduler and task
-retry/rate limits. Local definitions include a separate dashboard,
-twelve log metrics and seven policy definitions; bundle activation and positive
-heartbeat-series readback still need separate approval and evidence in #832.
+retry/rate limits. The separate dashboard, twelve log metrics and seven enabled
+policies were subsequently activated with separate approval using the existing Alerts
+email channel. Production configuration and all fourteen dashboard queries passed API
+readback on 8 October; unrelated resources and notification channels stayed unchanged.
+Positive post-creation heartbeat-series evidence for all three destinations remains
+the final operational acceptance item in #832; pre-creation logs do not satisfy it.
 See [activity delivery monitoring](activity-delivery-monitoring.md) for semantics,
 privacy, exclusions, costs, tests and activation steps. No provider support,
 availability, retry/TTL/concurrency, Help or MCP/Assistant contract changes.

@@ -8,8 +8,10 @@ upload destination. This is neither inbound import monitoring (#829), Health/Sle
 ingestion (#830), route delivery (#831), nor Training planned-workout delivery (#655).
 
 The two affected Functions were deployed with separate approval on 8 October 2026.
-The dashboard, log metrics and alert policies are not activated by that deployment;
-applying this bundle and production metric readback remain separate operational steps in #832.
+The twelve log metrics, dashboard and seven enabled alert policies were subsequently
+activated with separate approval using the existing Alerts email channel. Configuration
+readback passed; the first post-creation destination heartbeat time series remains the
+final operational evidence in #832, distinct from the successful deployment/apply.
 There is no additional scheduler, paid warm instance or email Function. Cloud
 Monitoring sends opening/closing notifications to the existing enabled Alerts email
 channel, independently of the Firebase mail extension.
@@ -209,6 +211,30 @@ validity and each dashboard query through the API. After the next normal dispatc
 run, verify a post-metric-creation heartbeat **time series** for Suunto, Wahoo and COROS;
 pre-creation raw logs are not enough. Record aggregate-only dated evidence in #832,
 then close it. Alert email exercises or production data changes need separate approval.
+
+### Production activation readback — 8 October 2026
+
+The approved apply completed at approximately 06:49 UTC. Readback at 06:49:54 UTC
+confirmed exactly one owned dashboard, twelve owned log metrics and seven enabled,
+valid policies, matching the source-controlled definitions. API default omission of
+zero tile positions and default STRING label types, and label-descriptor ordering,
+were normalized for comparison; no semantic configuration difference was accepted.
+All fourteen dashboard time-series queries passed API validation. Baseline hashes
+confirmed that all four notification channels and the unrelated four dashboards,
+nineteen policies and thirty-six log metrics remained unchanged. No channel was
+created, no resource deleted, and no test email, provider request or manual dispatcher
+invocation was performed.
+
+The dashboard is [QS Activity Delivery](https://console.cloud.google.com/monitoring/dashboards/builder/0511b72f-0b84-4d20-9daf-022f6f354eae?project=quantified-self-io).
+It uses the existing enabled **Alerts** email channel, whose prior opening/closing
+notification proof from completed #655 is reused rather than sending a new test email.
+
+The deployed dispatcher naturally completed at 06:30 UTC and emitted idle observations
+for all three destinations, with no unknown or truncated sample. Those logs preceded
+the heartbeat metric's creation at 06:48:09 UTC and are **not** post-creation time-series
+proof. At the configuration readback, the new heartbeat metric had no series yet.
+Keep #832 In Progress until a later normal run produces visible Suunto, Wahoo and COROS
+series; do not infer zero backlog or operational completion from an empty metric query.
 
 ## MCP, Assistant and Help impact
 
