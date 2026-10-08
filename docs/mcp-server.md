@@ -328,6 +328,12 @@ required. The separately approved Guide-only v7 QA passed exact readback and the
 watch check; it created no QS workout or completion link and used no MCP mutation. Normal QS delivery still needs
 merge and separately approved Functions deployment. #773 retains the native-target implementation/additive-contract
 decision once an exact partner format exists; measured-field evidence must not close native-target criteria.
+The pool-only v9 work/rest layout is likewise private Guide presentation: native step-window distance/elapsed
+fields and clearer countdown labels do not add returned metrics or authored recipe fields. Rest screens omit
+freshly reset swim averages; timing, targets, recorded-lap boundaries, completions and consent remain unchanged.
+Existing strict read/proposal contracts reject provider-field injection, and independently granted activity-lap
+reads need no extension because the recorded boundaries are unchanged. No new tool/scope/mutation/provider action,
+Assistant routing, contract promotion, catalog refresh or bundled-plugin change is required.
 The manual editor's additional canonical running/cycling profiles also require no MCP contract change: the existing
 recipe schema already accepts the complete Sports Lib activity-type enum, and focused coverage proves an exact Mountain
 Biking sport survives the read projection. Suunto numeric activity recommendations and Garmin's broad

@@ -129,6 +129,13 @@ describe('help.content', () => {
       expect(content).toContain(phrase);
     expect(searchHelpSections(HELP_SECTIONS, 'ZoneSense').map(section => section.id)).toContain('training-plans');
   });
+  it('explains manual pool progress and rest screens without promising measurement or fixed-position fixes', () => {
+    const content = HELP_SECTIONS.find(section => section.id === 'training-plans')!.content;
+    for (const phrase of ['**manual pool-swim work**', '**Swum**', '**Elapsed**', '**Dist rem**', '**Time rem**',
+      'not newly reset swim averages or the preceding swim\'s statistics', 'Active **Recovery** keeps swim readings',
+      'does not offer a configurable field editor or guarantee fixed positions', 'do not fix delayed pool-length detection',
+      'retain the existing lap-boundary behavior even when a rest screen no longer shows averages']) expect(content).toContain(phrase);
+  });
   it('explains pool-only measured SWOLF without target, pool-length or sensor promises', () => {
     const content = HELP_SECTIONS.find(section => section.id === 'training-plans')!.content;
     for (const phrase of ['pool-only **Avg SWOLF**', '**Avg SWOLF is a measured reading, not a target.**',

@@ -17,7 +17,7 @@ import { SuuntoHttpFixture } from '../test-support/suunto-http-fixture';
 import { buildSuuntoHealthWebhookAccountBinding, getSuuntoHealthWebhookAccountBindingRef } from '../../../suunto/health-webhook-binding';
 import { readSuuntoGuideCompletions, retainSuuntoGuideCompletions } from '../../../suunto/guide-completion';
 import { suuntoFitFixture, suuntoMultiSessionFitFixture } from '../test-support/suunto-fit-fixture';
-import { guideExternalId, assessSuuntoGuideV2ForRecovery, assessSuuntoGuideV3ForRecovery, assessSuuntoGuideV4ForRecovery, assessSuuntoGuideV5ForRecovery, assessSuuntoGuideV6ForRecovery, guidePayloadForRecovery } from './mapping';
+import { guideExternalId, assessSuuntoGuideV2ForRecovery, assessSuuntoGuideV3ForRecovery, assessSuuntoGuideV4ForRecovery, assessSuuntoGuideV5ForRecovery, assessSuuntoGuideV6ForRecovery, assessSuuntoGuideV7ForRecovery, guidePayloadForRecovery } from './mapping';
 import { deliveryIdentity } from '../intent';
 import { retainGarminFITWorkoutReferences } from '../../completion/fit-workout-evidence';
 import { standardWorkoutReferenceFitFixture } from '../test-support/suunto-fit-fixture';
@@ -45,10 +45,11 @@ describe.skipIf(!process.env.FIRESTORE_EMULATOR_HOST)('Suunto worker with real F
   const send = async () => { await command('send'); await drain(); const row = await ledger(); await processTrainingDelivery(runtime, uid, row.id); await drain(); return ledger(); };
   // Simulate a journal and provider archive written by the previous deployed
   // serializer. The fixture, Firestore and all provider HTTP remain local/demo.
-  const startedLegacy = async (version: 'v2' | 'v3' | 'v4' | 'v5' | 'v6' = 'v2') => {
+  const startedLegacy = async (version: 'v2' | 'v3' | 'v4' | 'v5' | 'v6' | 'v7' = 'v2') => {
     const row = await ledger(); const operation = row.attempt!;
     operation.digest = (version === 'v2' ? assessSuuntoGuideV2ForRecovery : version === 'v3' ? assessSuuntoGuideV3ForRecovery
-      : version === 'v4' ? assessSuuntoGuideV4ForRecovery : version === 'v5' ? assessSuuntoGuideV5ForRecovery : assessSuuntoGuideV6ForRecovery)(operation.workout!, operation.destinationKey,
+      : version === 'v4' ? assessSuuntoGuideV4ForRecovery : version === 'v5' ? assessSuuntoGuideV5ForRecovery
+        : version === 'v6' ? assessSuuntoGuideV6ForRecovery : assessSuuntoGuideV7ForRecovery)(operation.workout!, operation.destinationKey,
       operation.timeZone, 'Quantified Self', operation.strength).digest;
     const payload = guidePayloadForRecovery(operation, 'Quantified Self')!;
     const [id, remote] = [...server.guides.entries()][0];
@@ -595,7 +596,7 @@ describe.skipIf(!process.env.FIRESTORE_EMULATOR_HOST)('Suunto worker with real F
     } };
     const original = await send(); expect(original.status).toBe('retrying');
     expect(logger.warn).toHaveBeenCalledWith('[TrainingDelivery]', expect.objectContaining({
-      event: 'failure', guideMappingVersion: sport === 'strength' ? 'suunto-guides-v8' : 'suunto-guides-v7', deliveryPhase: 'execute',
+      event: 'failure', guideMappingVersion: sport === 'strength' ? 'suunto-guides-v8' : sport === 'swimming' ? 'suunto-guides-v9' : 'suunto-guides-v7', deliveryPhase: 'execute',
     }));
     const legacy = await startedLegacy(version);
     expect(JSON.stringify(legacy.payload).includes('notification')).toBe(version !== 'v2');
@@ -636,7 +637,7 @@ describe.skipIf(!process.env.FIRESTORE_EMULATOR_HOST)('Suunto worker with real F
       expect(guide.steps.at(-1)).toMatchObject({ createManualLap: true });
     }
     expect(logger.info).toHaveBeenCalledWith('[TrainingDelivery]', expect.objectContaining({
-      event: 'accepted', guideMappingVersion: sport === 'strength' ? 'suunto-guides-v8' : 'suunto-guides-v7', deliveryPhase: 'execute',
+      event: 'accepted', guideMappingVersion: sport === 'strength' ? 'suunto-guides-v8' : sport === 'swimming' ? 'suunto-guides-v9' : 'suunto-guides-v7', deliveryPhase: 'execute',
     }));
     const logs = JSON.stringify([...vi.mocked(logger.info).mock.calls, ...vi.mocked(logger.warn).mock.calls]);
     for (const value of [uid, legacy.id, legacy.operation.digest, legacy.operation.destinationKey, 'notification', 'Squat']) {
@@ -1042,6 +1043,49 @@ describe.skipIf(!process.env.FIRESTORE_EMULATOR_HOST)('Suunto worker with real F
     expect(server.guides.get(legacy.id)!.guide).toEqual(legacy.payload);
   });
 
+  it('recovers an uncertain v7 pool send, then updates work/rest screens once without changing consent or recipe', async () => {
+    const structure = { version: 1, sport: ActivityTypes.Swimming, nodes: [
+      { kind: 'step', id: 'work', purpose: 'work', ending: { kind: 'manual' }, targets: [] },
+      { kind: 'step', id: 'rest', purpose: 'rest', ending: { kind: 'time', seconds: 15 }, targets: [] },
+    ] };
+    await user().collection('scheduledWorkouts').doc('w').update({ structure });
+    server.afterHandle = async request => { if (request.method === 'POST') {
+      server.afterHandle = null; throw new SuuntoGuideHttpError('uncertain', false);
+    } };
+    const original = await send(); expect(original.status).toBe('retrying');
+    const legacy = await startedLegacy('v7');
+    expect(JSON.stringify(legacy.payload)).not.toContain('"window":"step"');
+    await command('retry'); await drain();
+    const consent = (await user().collection('trainingDeliverySettings').get()).docs.map(doc => doc.data());
+    await processTrainingDelivery(runtime, uid, original.id); await drain();
+    expect((await ledger()).actual?.ids.guide).toBe(legacy.id);
+    expect(server.calls.filter(call => call.method === 'POST')).toHaveLength(1);
+    expect(server.calls.filter(call => call.method === 'PUT')).toHaveLength(0);
+    expect(logger.info).toHaveBeenCalledWith('[TrainingDelivery]', expect.objectContaining({
+      event: 'recovered_acceptance', guideMappingVersion: 'suunto-guides-v7', deliveryPhase: 'recover',
+    }));
+    await processTrainingDelivery(runtime, uid, original.id); await drain();
+    expect((await ledger()).status).toBe('delivered');
+    const steps = server.guides.get(legacy.id)!.guide.steps;
+    expect(steps[0]).toMatchObject({ fields: [
+      { type: 'pace', title: 'Avg pace', window: 'manualLap', aggregate: 'average' },
+      { type: 'distance', title: 'Swum', window: 'step' }, { type: 'duration', title: 'Elapsed', window: 'step' },
+      { type: 'strokeRate' }, { type: 'swolf' },
+    ] });
+    expect(steps[1]).toMatchObject({ fields: [
+      { type: 'heartRate', title: 'HR' }, { type: 'stepDurationCountdown', value: 15, title: 'Time rem' },
+    ] });
+    expect(logger.info).toHaveBeenCalledWith('[TrainingDelivery]', expect.objectContaining({
+      event: 'accepted', guideMappingVersion: 'suunto-guides-v9', deliveryPhase: 'execute',
+    }));
+    expect((await user().collection('scheduledWorkouts').doc('w').get()).get('structure')).toEqual(structure);
+    expect((await user().collection('trainingDeliverySettings').get()).docs.map(doc => doc.data())).toEqual(consent);
+    await mark(); await processTrainingDelivery(runtime, uid, original.id); await drain();
+    expect(server.calls.filter(call => call.method === 'POST')).toHaveLength(1);
+    expect(server.calls.filter(call => call.method === 'PUT')).toHaveLength(1);
+    expect(server.guides.size).toBe(1);
+  });
+
   it('recovers an uncertain v6 pool send, then adds SWOLF once without changing consent or recipe', async () => {
     const structure = { version: 1, sport: ActivityTypes.Swimming, nodes: [
       { kind: 'step', id: 'work', purpose: 'work', ending: { kind: 'time', seconds: 90 }, targets: [], note: 'Aim 30-40 cycles/min' },
@@ -1065,7 +1109,7 @@ describe.skipIf(!process.env.FIRESTORE_EMULATOR_HOST)('Suunto worker with real F
     expect((await ledger()).status).toBe('delivered');
     expect(server.guides.get(legacy.id)!.guide.steps[0]).toMatchObject({ fields: [
       { type: 'pace', title: 'Avg pace', window: 'manualLap', aggregate: 'average' },
-      { type: 'stepDurationCountdown', value: 90, title: 'Remain' },
+      { type: 'stepDurationCountdown', value: 90, title: 'Time rem' },
       { type: 'text', value: 'Aim 30-40 cycles/min' },
       { type: 'strokeRate', title: 'Avg strk', window: 'manualLap', aggregate: 'average' },
       { type: 'swolf', title: 'Avg SWOLF', window: 'manualLap', aggregate: 'average' },

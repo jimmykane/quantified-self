@@ -167,8 +167,11 @@ describe('delivery intent', () => {
       expect(resolveDeliveryIntent(context, ledger).status).toBe('approval_required');
     }
   });
-  it.each([assessSuuntoGuideV2ForRecovery, assessSuuntoGuideV3ForRecovery, assessSuuntoGuideV4ForRecovery, assessSuuntoGuideV5ForRecovery, assessSuuntoGuideV6ForRecovery]
-    .flatMap(assessLegacy => [ActivityTypes.Running, ActivityTypes.Swimming].map(sport => ({ assessLegacy, sport }))))(
+  it.each([
+    ...[assessSuuntoGuideV2ForRecovery, assessSuuntoGuideV3ForRecovery, assessSuuntoGuideV4ForRecovery, assessSuuntoGuideV5ForRecovery, assessSuuntoGuideV6ForRecovery]
+      .flatMap(assessLegacy => [ActivityTypes.Running, ActivityTypes.Swimming].map(sport => ({ assessLegacy, sport }))),
+    { assessLegacy: assessSuuntoGuideV7ForRecovery, sport: ActivityTypes.Swimming },
+  ])(
     'keeps exact legacy loss approval for $sport across Suunto display upgrades, never across edits or authority changes', ({ assessLegacy, sport }) => {
     const transport = new SuuntoGuideTransport(async () => { throw Error('No HTTP during assessment'); }, 'Quantified Self');
     const workout = { ...base.workout!, structure: { ...base.workout!.structure, sport, nodes: [{ ...base.workout!.structure.nodes[0],
@@ -180,7 +183,8 @@ describe('delivery intent', () => {
     const ledger = { connectionEpoch: 0, destinationKey: 'account-a', acceptedDigest: prior.digest,
       acceptedContentDigest: deliveryContentDigest(workout, 'Europe/Helsinki') } as DeliveryLedgerV1;
     expect(transport.assess(workout, 'account-a', 'Europe/Helsinki')).toMatchObject({
-      mappingVersion: 'suunto-guides-v7', compatibleApprovalDigests: expect.arrayContaining([prior.digest]),
+      mappingVersion: sport === ActivityTypes.Swimming ? 'suunto-guides-v9' : 'suunto-guides-v7',
+      compatibleApprovalDigests: expect.arrayContaining([prior.digest]),
     });
     expect(resolveDeliveryIntent(context, ledger)).toMatchObject({ desired: 'present', status: 'pending', approvalDigest: null });
     const currentDigest = transport.assess(workout, 'account-a', 'Europe/Helsinki').digest;

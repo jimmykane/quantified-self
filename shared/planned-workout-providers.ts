@@ -450,6 +450,8 @@ export function assessPlannedWorkoutProviderMappingV1(
 
   if (provider === 'suunto') {
     let screens = 1; let earlyLap = false;
+    // Keep the established lap-boundary policy/budget across pool presentation
+    // updates, even when rest screens omit their freshly reset averages.
     const usesAverages = structureSteps(structure).some(({ step }) => suuntoGuideOptionalReadingsV1(step, structure.sport)
       .some(type => isSuuntoGuideManualLapAverageV1(type, structure.sport)));
     for (const node of structure.nodes) {

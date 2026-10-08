@@ -441,7 +441,7 @@ Average labels `Avg pace`, `Avg pwr` and `Avg strk` identify documented `manualL
 Swimming stroke rate is contextual watch data, never a cadence target or rowing-stroke mapping. Only running/cycling
 receive documented power/cadence sensor counterparts; missing/unsupported sensors stay unavailable, not zero.
 
-Current `suunto-guides-v7` additionally requests measured pool-swim `swolf` with `window: 'manualLap'`,
+The `suunto-guides-v7` mapping additionally requests measured pool-swim `swolf` with `window: 'manualLap'`,
 `aggregate: 'average'` and label `Avg SWOLF`. It is not a native target. Untargeted pool screens prioritize pace,
 stroke rate, SWOLF, then optional HR after countdowns/targets/notes; authored target counterparts retain priority.
 Open water and all non-pool layouts are unchanged. Native pool length and stroke determine the reading; QS does
@@ -451,6 +451,17 @@ digests; lost v2-v6 ACKs recover before updating the same Guide. The separately 
 upload passed exact readback, and the athlete confirmed the requested SWOLF watch check. That is measured-field
 evidence, not native targeting or QS completion-link proof. Normal delivery still needs merge and separately approved
 Functions deployment. See [measured SWOLF behavior](training-workspace.md#pool-swim-measured-swolf-773).
+
+The pool-only v9 screen upgrade requests native step-window `distance` (`Swum`) and `duration` (`Elapsed`)
+for manual work, after authored target counterparts and within the five-field budget. Numeric endings show
+`Dist rem`/`Time rem`. Stationary `rest` shows HR/countdown/targets/notes, not freshly reset swim averages;
+active `recovery` retains swim readings. Long manual instructions stay text-only. Field order is controlled,
+but Suunto's adaptive layout does not promise fixed positions. No measurement-lag, preceding-interval-statistics,
+target or transition fix is implied. Frozen v7 payload recovery and its recorded-lap policy are retained before
+any eligible same-identity update. Non-pool mappings/digests, consent, completion and queue policy are unchanged.
+Private diagnostic labels include v9; existing provider/event-based monitoring filters already cover it.
+See [pool screen presentation and verification](training-workspace.md#pool-swim-workrest-screen-presentation).
+This local change needs separately approved deployment; no live watch-layout proof is claimed.
 
 For additional authored targets, [#773](https://github.com/jimmykane/quantified-self/issues/773) records the
 6 October contract review. The published JSON reference defines only the existing HR, power, speed/pace and cadence

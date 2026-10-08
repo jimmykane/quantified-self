@@ -2,7 +2,7 @@ import { ActivityTypes } from '@sports-alliance/sports-lib';
 import type { WorkoutStepV1, WorkoutTargetV1 } from './planned-workout';
 
 export type SuuntoGuideLiveReadingTypeV1 = 'heartRate' | 'power' | 'pace' | 'speed' | 'cadence';
-export type SuuntoGuideReadingTypeV1 = SuuntoGuideLiveReadingTypeV1 | 'strokeRate' | 'swolf';
+export type SuuntoGuideReadingTypeV1 = SuuntoGuideLiveReadingTypeV1 | 'strokeRate' | 'swolf' | 'distance' | 'duration';
 
 /** Cosmetic substitutions shared by screen selection and serialization. */
 export function suuntoGuideWatchTextV1(value: string): string {
@@ -37,8 +37,8 @@ export function isSuuntoGuideManualLapAverageV1(type: SuuntoGuideReadingTypeV1, 
     || (type === 'power' && suuntoGuideLiveReadingsV1(sport)[0] === 'power');
 }
 
-/** Share current compatibility/screen selection. Historical v5/v6 serializers
- * explicitly disable SWOLF to preserve immutable delivery/approval digests. */
+/** Frozen v5-v7 screen selection and recorded-lap policy. Historical v5/v6
+ * disable SWOLF to preserve immutable delivery/approval digests. */
 export function suuntoGuideOptionalReadingsV1(step: WorkoutStepV1, sport: ActivityTypes,
   includePoolSwolf = true): SuuntoGuideReadingTypeV1[] {
   if (step.ending.kind === 'manual' && step.targets.length === 0 && step.note
@@ -57,4 +57,23 @@ export function suuntoGuideOptionalReadingsV1(step: WorkoutStepV1, sport: Activi
   const candidates = [...new Set<SuuntoGuideReadingTypeV1>(step.targets.length
     ? [...counterparts, 'heartRate', ...defaults] : defaults)];
   return candidates.slice(0, 5 - prescribedFields);
+}
+
+/** Pool-only presentation. Authored targets/text always reserve their slots.
+ * Rest readings describe the current rest, not the preceding swim interval. */
+export function suuntoGuidePoolScreenReadingsV1(step: WorkoutStepV1): SuuntoGuideReadingTypeV1[] {
+  if (step.ending.kind === 'manual' && step.targets.length === 0 && step.note
+    && Array.from(suuntoGuideWatchTextV1(step.note)).length > 40) return [];
+  const available = 5 - (step.ending.kind === 'manual' ? 0 : 1) - step.targets.length - (step.note ? 1 : 0);
+  if (step.purpose === 'rest') return available > 0 ? ['heartRate'] : [];
+  if (step.ending.kind !== 'manual') return suuntoGuideOptionalReadingsV1(step, ActivityTypes.Swimming);
+  const counterparts = step.targets.flatMap(target => {
+    const type = suuntoGuideMeasuredTargetV1(target, ActivityTypes.Swimming);
+    return type ? [type] : [];
+  });
+  const candidates = [...new Set<SuuntoGuideReadingTypeV1>([
+    ...counterparts, ...(step.targets.length ? [] : ['pace' as const]),
+    'distance', 'duration', 'pace', 'strokeRate', 'swolf', 'heartRate',
+  ])];
+  return candidates.slice(0, available);
 }

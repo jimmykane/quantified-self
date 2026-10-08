@@ -2605,7 +2605,7 @@ target gauge, averaging, alert, sensor or watch behavior. Do not ask an athlete 
 
 ##### Pool-swim measured SWOLF (#773)
 
-Current mapping `suunto-guides-v7` adds the published measured field
+The `suunto-guides-v7` mapping added the published measured field
 `{ type: 'swolf', title: 'Avg SWOLF', window: 'manualLap', aggregate: 'average' }` only for canonical `Swimming`.
 This is watch-side measured data, not an authored SWOLF target, a calculated QS metric or a promised sensor value.
 It depends on the watch's physical pool-length setting and stroke context: do not compare different pool lengths
@@ -2618,8 +2618,8 @@ not fit. Authored target counterparts keep priority, including current HR for an
 remain text-only. Existing recorded-lap resets, first-step/no-opening-lap behavior, fixed repeats and early-Lap
 conditions are retained. No targets, recipe units, timing, completion links or completed totals change.
 
-New sends and eligible already-consented future updates use v7 after the Functions release; past/completed Guides
-stay protected. Payloads for non-pool sports (including strength) remain byte-equivalent to the previous layout.
+The v7 introduction updated eligible already-consented future Guides; past/completed Guides stay protected.
+Payloads for non-pool sports (including strength) remain byte-equivalent to the previous layout.
 The recovery-only v6 serializer is frozen with a checked-in synthetic pool fixture. Exact v2-v6 uncertain attempts
 recover against their own historical payload/digest before any v7 update; loss approval carries only for the exact
 unchanged prescription. An uncertain or mismatched remote copy never permits a duplicate create. Serializer,
@@ -2637,6 +2637,45 @@ existing workouts. Normal QS deliveries still require merge and a separately app
 open for the missing native-target partner contract and its implementation. MCP has no wire impact: private
 `swolf`/`guideFields` injections are rejected by scheduled/saved recipe reads and proposals, while canonical v1
 recipes round-trip unchanged. Do not treat API acceptance alone as watch evidence.
+
+##### Pool swim work/rest screen presentation
+
+The next pool-only mapping, `suunto-guides-v9`, uses documented native `distance` and `duration` fields with
+`window: 'step'` on manual work/swim steps, labelled `Swum` and `Elapsed`. These describe the current Guide step,
+not the whole recording or a remaining-distance target. A separate Lap press must not reset these step-window
+fields unless it actually ends the step. Existing manual-lap averages retain their existing reset behavior.
+Untargeted manual work prefers average pace, step distance, elapsed time, average stroke rate and SWOLF in that
+order. Authored targets and instructions reserve their slots first; target counterparts precede optional progress,
+so a crowded screen may omit progress or swim readings. Long untargeted manual notes remain text-only.
+
+Pool numeric endings keep their exact countdown values and conditions, labelled `Dist rem` or `Time rem`.
+Pool `rest` screens prefer current HR and the authored countdown/targets/notes, without current-rest pace,
+stroke-rate or SWOLF averages. They do not claim to retain the preceding interval's statistics. Active `recovery`
+steps keep swim readings. The primary measured reading is followed by the ending and authored fields, then optional
+readings, within five fields. The watch adapts physical layout to field count/types; fixed coordinates and a
+user-configurable field editor are not provided. This is not a fix for pool-length detection latency, unavailable
+watch metrics, or automatic distance transitions; no distance estimate or sensor sample is fabricated.
+
+Presentation changes deliberately retain v7's recorded-lap policy, including all-rest Guides, repeats, manual
+predecessors, first/final boundaries and early-Lap branches. Compatibility's frozen selection is retained for that
+policy and the 1000-screen budget. No canonical recipe, timing, target, completion or recorded activity changes.
+Strength stays on v8 and other sports on v7 with unchanged payloads/digests. A frozen v7 serializer and a pre-change
+SHA-256 regression preserve exact old payload recovery. Existing uncertain v2-v8 attempts recover under their own
+digests before any eligible v9 update; unknown acceptance never permits a speculative new copy. Normal consented
+future sync can update the same Guide after separately approved deployment; past/completed copies stay protected.
+
+Verification covers the five-field/target/note matrix, step-window fields, rest/recovery distinction, unchanged
+transitions and recorded-lap boundaries, old digest recovery, lost ACK and idempotent in-place updates. The existing
+queue outcomes/alerts cover v9 without filter changes; private diagnostic version allowlists include v9.
+MCP impact review: this is provider-private presentation, with no new recipe/read field, metric, tool, mutation,
+scope, consent or provider action. Strict reads/proposals and the published contract remain unchanged; independently
+granted recorded-lap reads continue to describe the same laps. No contract promotion or client refresh is needed.
+No live send, deployment or physical watch-layout verification is included in this change.
+Local verification passed: Functions TypeScript build; focused current/historical serializers, delivery intent,
+transport and diagnostics; Suunto Firestore lifecycle emulator (101 tests); strict MCP Training reads/schemas and
+contract compatibility; app Help/shared-workout specs; monitoring definitions. The compiled contract check is
+compatible and still reports its pre-existing developer-refresh advisory; this private presentation introduces
+no contract/catalog changes and does not promote that baseline.
 
 ##### Current readings and boundary notifications (#784)
 
@@ -2730,15 +2769,17 @@ marker is private readback metadata, never persisted in authored recipes or proj
 file GETs by default; lifecycle tests cover lost responses, rescheduling, duplicate dispatch and strict mismatch cases.
 
 Existing `[TrainingDelivery]` Suunto acceptance, recovered-acceptance, stale-suppression, failure and checkpoint-failure
-events include two transient allowlisted labels: `guideMappingVersion` (`suunto-guides-v7`, `suunto-guides-v6`, `suunto-guides-v5`, `suunto-guides-v4`, `suunto-guides-v3`, `suunto-guides-v2`, `unknown`,
+events include two transient allowlisted labels: `guideMappingVersion` (`suunto-guides-v9`, `suunto-guides-v8`, `suunto-guides-v7`, `suunto-guides-v6`, `suunto-guides-v5`, `suunto-guides-v4`, `suunto-guides-v3`, `suunto-guides-v2`, `unknown`,
 or `not_applicable` for removal) and `deliveryPhase` (`execute` or `recover`). The version is proved by recomputing the
 immutable upsert operation's exact payload digest, including strength details, rather than copying the current adapter's
 version onto a legacy attempt. An unrecognized digest or classification failure yields `unknown` and cannot alter
 delivery/recovery. Classification runs once per claimed operation without credentials or HTTP; the phase switches to
 `execute` if recovery resumes a safe request. Other providers' existing events are unchanged.
 For rollout triage, combine `jsonPayload.message="[TrainingDelivery]"`, `jsonPayload.provider="suunto"` and
-`jsonPayload.event="failure"` with `jsonPayload.guideMappingVersion="suunto-guides-v7"` for current failures, or
-the exact v2-v6 label and `jsonPayload.deliveryPhase="recover"` for legacy recovery.
+`jsonPayload.event="failure"` with the current sport-specific mapping (`suunto-guides-v9` for pool screens,
+`suunto-guides-v8` for strength, `suunto-guides-v7` for other sports), or the exact historical label and
+`jsonPayload.deliveryPhase="recover"` for legacy recovery. The aggregate monitoring metrics filter provider/event,
+not Guide mapping version, and already cover v9 without additional policies or queue changes.
 Checkpoint failures use `jsonPayload.event="checkpoint_failed"`. These labels are not stored in Firestore or exposed
 to the browser/MCP, and contain no UID, account/Guide/workout identity, digest, recipe, instruction, sensor reading,
 credential, provider body or raw error. They report serializer/recovery provenance, not app/watch receipt or completion.
