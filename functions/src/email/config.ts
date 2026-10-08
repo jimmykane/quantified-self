@@ -6,12 +6,13 @@ import {
     isDeviceSyncEnabledForRole,
 } from '../../../shared/limits';
 import { ROLE_DISPLAY_NAMES } from '../shared/pricing';
+import { DEFAULT_MARKETING_SENDER_NAME, MARKETING_SENDER_EMAIL } from '../../../shared/admin-marketing';
 
 export const TRANSACTIONAL_EMAIL_FROM = 'Quantified Self <hello@quantified-self.io>';
 export const TRANSACTIONAL_EMAIL_REPLY_TO = 'support@quantified-self.io';
 export const FOUNDER_EMAIL_FROM = 'Dimitrios from Quantified Self <hello@quantified-self.io>';
 export const FOUNDER_EMAIL_REPLY_TO = 'dimitrios@quantified-self.io';
-export const MARKETING_EMAIL_FROM = 'Dimitrios from Quantified Self <updates@quantified-self.io>';
+export const MARKETING_EMAIL_FROM = `${DEFAULT_MARKETING_SENDER_NAME} <${MARKETING_SENDER_EMAIL}>`;
 export const MARKETING_EMAIL_REPLY_TO = 'Dimitrios <dimitrios@quantified-self.io>';
 
 export const EMAIL_LINKS = {

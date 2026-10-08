@@ -1,15 +1,35 @@
 # CI test coverage
 
 `.github/workflows/_run-tests.yml` is the shared test gate for branch pushes, fork pull requests, beta/main builds and
-approved manual deployment workflows. `unit_tests` runs credential/plugin checks, ordinary Functions tests, compiled
-entrypoint/MCP contract checks, lint, Firestore/Storage Rules tests and frontend tests. The final `run_tests` job waits
-for both `unit_tests` and the complete emulator matrix, then fails unless both succeeded (including failed, cancelled
-or skipped dependencies). It preserves the protected-branch check name `run-tests / run_tests`; an emulator failure
-must not leave the required check green. Reusable-workflow deployment dependencies also wait for all jobs.
+approved manual deployment workflows. Independent jobs run the same mandatory checks on separate Ubuntu runners:
+
+| Job | Required checks |
+| --- | --- |
+| `unit_tests` | Credentials, workflow/emulator coverage contracts, monitoring definitions, plugin validation and frontend lint |
+| `functions_tests` | Functions install/lint, complete ordinary suite, build, compiled entrypoint and MCP contract checks |
+| `frontend_tests` | Frontend environment allocation and the complete suite across all three projects |
+| `rules_tests` | Firestore and Storage Rules tests with Java/Firebase emulators |
+| `functions_emulators` | Complete four-group Functions emulator matrix |
+
+Only the final `run_tests` job depends on these jobs. It uses `always()` and fails unless every dependency succeeded,
+including failed, cancelled, skipped or missing results. It preserves the protected-branch check name
+`run-tests / run_tests`; no individual successful job can make the required gate green. Reusable-workflow deployment
+dependencies continue to wait for the complete gate.
+
+Keep suite jobs independent when adding CI checks. Add any new mandatory job to the final gate and its executable
+failure tests. Do not put frontend or Rules tests back after the Functions suite, or raise per-runner worker limits
+to obtain parallelism. Node setup caches npm downloads using the applicable lockfiles; each runner still uses `npm ci`.
+Functions installs root dependencies too because its compiled shared sources resolve them there. Only Rules and
+emulator runners need Java/Firebase Tools; the Rules job shares the existing emulator binary cache.
+
+The previous serial job took about 32 minutes in [run 37779620977](https://github.com/jimmykane/quantified-self/actions/runs/37779620977):
+Functions install/lint/tests/build/contracts took 14m38s and frontend tests took 14m19s. These observed step durations
+motivate running the suites concurrently; they do not establish a measured speedup for the split. Extra runners
+repeat dependency setup and consume concurrent runner capacity. Measure the full required gate after CI completes.
 
 ## Ordinary unit runner
 
-Both unit and emulator jobs use Node 22, matching `functions/package.json` rather than testing Functions on an older
+All check jobs use Node 22, matching `functions/package.json` rather than testing Functions on an older
 runtime. `npm run test:workflows` checks that alignment against the actual YAML.
 
 Ordinary Functions tests use at most two isolated Vitest fork workers, with a minimum of one. This bounds concurrent
@@ -59,7 +79,8 @@ Skipped internal PR callers use the distinct name `Internal PR - covered by push
 publish the protected push check's name. They may appear as a skipped entry, but perform no test/dependency setup.
 
 `npm run test:workflows` parses the real YAML and tests fork/internal event routing, check names, permissions,
-deployment dependencies and all success/failure/cancelled/skipped combinations of the final gate. `js-yaml` is an
+deployment dependencies and the actual gate script's rejection of every job's failed, cancelled, skipped, missing
+or unknown result. It also protects job independence and the placement of the existing checks. `js-yaml` is an
 explicit dev dependency reusing the already locked parser; it adds no app or Functions runtime dependency.
 
 ## Deployment triggers

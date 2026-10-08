@@ -14,6 +14,13 @@ import {
 } from './policies.content';
 
 describe('help.content', () => {
+  it('explains campaign sender names, fixed addresses and retesting after sender edits', () => {
+    const copy = HELP_SECTIONS.find(section => section.id === 'data-and-privacy')!.content;
+    expect(copy).toContain('Set **Sender name**');
+    expect(copy).toContain('**updates@quantified-self.io**');
+    expect(copy).toContain('**Dimitrios <dimitrios@quantified-self.io>**');
+    expect(copy).toContain('including only its sender name, clears its earlier test result');
+  });
   it('points users to the Privacy section and explains saving analytics and email opt-outs', () => {
     const copy = HELP_SECTIONS.find(section => section.id === 'data-and-privacy')!.content;
     expect(copy).toContain('[Settings → Privacy & emails](/settings?section=privacy)');
