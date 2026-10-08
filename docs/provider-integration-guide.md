@@ -1244,8 +1244,10 @@ Recognized Suunto `NEW`/`PROCESSING` waits also remain distinct from actual fail
 their existing Cloud Task retry/resume behavior is unchanged, and unknown statuses,
 transport failures and retry exhaustion stay visible.
 Both handlers have isolated target loading with unchanged
-runtime generations/resources. Local implementation includes a separate dashboard,
-twelve log metrics and seven policy definitions; deployment/activation and positive
+runtime generations/resources. Their separately approved 8 October 2026 deployment
+passed active-state/configuration readback, retaining the existing scheduler and task
+retry/rate limits. Local definitions include a separate dashboard,
+twelve log metrics and seven policy definitions; bundle activation and positive
 heartbeat-series readback still need separate approval and evidence in #832.
 See [activity delivery monitoring](activity-delivery-monitoring.md) for semantics,
 privacy, exclusions, costs, tests and activation steps. No provider support,

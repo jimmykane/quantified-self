@@ -7,8 +7,9 @@ and COROS are delivery destinations; Garmin is a source, not a recorded-activity
 upload destination. This is neither inbound import monitoring (#829), Health/Sleep
 ingestion (#830), route delivery (#831), nor Training planned-workout delivery (#655).
 
-Local implementation does not activate cloud resources. Deployment, applying this
-bundle and production readback remain separately approved operational steps in #832.
+The two affected Functions were deployed with separate approval on 8 October 2026.
+The dashboard, log metrics and alert policies are not activated by that deployment;
+applying this bundle and production metric readback remain separate operational steps in #832.
 There is no additional scheduler, paid warm instance or email Function. Cloud
 Monitoring sends opening/closing notifications to the existing enabled Alerts email
 channel, independently of the Firebase mail extension.
@@ -173,6 +174,15 @@ seconds, its existing secrets/retries/rate limits; the dispatcher retains Gen 1,
 256 MiB, 300 seconds, maximum one instance, no secrets and its 30-minute schedule.
 See [entrypoint verification](functions-entrypoint-loading.md#recorded-activity-delivery-dispatcher-isolation).
 There is no generation migration, schema/Rules/TTL change or new deployment export.
+
+The approved deployment from commit `66bc89cb2` completed on 8 October 2026 at
+06:29 UTC. Readback confirmed both Functions active on Node.js 22 with the above
+resources, the worker's latest Cloud Run revision ready, and unchanged task-queue
+retry/rate limits. The existing enabled scheduler remains every 30 minutes with
+its `America/Los_Angeles` time zone; its job is in `europe-west3`, while the Function
+and Pub/Sub topic remain in `europe-west2`. No manual invocation, direct provider QA request,
+test email or monitoring-bundle apply was performed. This is deployment/configuration
+evidence, not post-creation metric-series or provider-delivery proof.
 
 Preview is offline and needs no credentials or network:
 

@@ -123,8 +123,9 @@ discovery and verifies both inherited-target discovery paths, standalone secrets
 absence of the complete entrypoint, Genkit, BigQuery, MCP and admin modules. #832's
 telemetry uses `cloud_function` for this dispatcher and `cloud_run_revision` for the
 worker. Monitoring is additive; existing delivery, cleanup, polling, retry and claim
-behavior stays unchanged. Deployment and cloud alert activation require separate
-approval. See [recorded-activity delivery monitoring](activity-delivery-monitoring.md).
+behavior stays unchanged. Both handlers were deployed with separate approval on
+8 October 2026 and passed active-state/configuration readback. Cloud alert activation
+still requires separate approval. See [recorded-activity delivery monitoring](activity-delivery-monitoring.md).
 
 Three local Node 22.23.3 cold-import runs on 2026-10-08 measured medians of 1,098 ms /
 239.2 MiB RSS for full discovery, 365 ms / 120.7 MiB for `processActivitySyncTask`,
