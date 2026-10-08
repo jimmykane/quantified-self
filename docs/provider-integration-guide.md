@@ -1326,13 +1326,18 @@ from `94bc51e35` completed on 8 October by 10:18 UTC using the existing Alerts e
 channel. API readback confirmed the owned resources and eight valid enabled policies;
 all 19 chart and 12 condition queries passed, plus native-series checks for both route
 queues. Unrelated monitoring configuration and all notification channels remained
-unchanged. Positive post-creation heartbeat and sample count/age evidence from the
-next natural run remains tracked in #833; earlier raw logs are not metric/alert proof.
+unchanged. The natural 10:30 UTC run initialized all four heartbeat groups; Monitoring
+readback at 10:31–10:32 UTC confirmed positive post-creation heartbeat points and real
+idle zero count/age observations for import/QS and delivery/Garmin, Wahoo and COROS.
+The actual heartbeat conditions saw those points, and both dashboard hourly-mean
+queries returned zero for every group. All eight policies remained valid/enabled.
+This completes #833's operational evidence without claiming complete queue coverage
+or provider receipt from bounded samples.
 No new Functions deployment, provider call, route mutation or test email was needed
 to apply the bundle. Its route CLI resolves symlinked entrypoint paths without changing
 approval or provisioning semantics. Provider behavior, Help and MCP contracts remain unchanged. See
-[route monitoring](route-monitoring.md) for semantics, verification, resources and
-the remaining acceptance criteria. Help and MCP/Assistant contracts are unchanged.
+[route monitoring](route-monitoring.md) for semantics, completed verification,
+resources and operational diagnosis. Help and MCP/Assistant contracts are unchanged.
 
 Garmin's temporary `garminWebhookProbe` tested URL transport and discarded incoming payloads. PR #800 removes its
 source and deployment exports. After saved portal URLs use the protected production receivers and real ingestion

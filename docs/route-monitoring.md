@@ -17,8 +17,9 @@ dispatcher. With separate approval, the independent `tools/route-monitoring/` bu
 was applied from pinned commit `94bc51e35` on 2026-10-08, completing by 10:18 UTC
 (13:18 Helsinki): one **QS Routes** dashboard, 16 versioned log metrics and eight
 enabled policies using the existing Alerts email channel. Configuration and query
-readback passed; positive post-creation heartbeat evidence remains in #833's scope,
-so the issue stays In progress until that natural-run verification is recorded.
+readback passed. The natural 10:30 UTC run initialized all four post-creation
+heartbeats and idle count/age series; Monitoring readback at 10:31–10:32 UTC
+completed #833's operational verification.
 
 The authoritative provider lifecycle remains in [Provider Integration Guide](provider-integration-guide.md).
 No entitlement, provider support, transport, revision, lease, scheduling, retry, rate,
@@ -224,7 +225,7 @@ diagnostics must not become original-file paths or account/route identifiers in 
 Permission, provider, lifecycle or retry fixes belong to their owner workstream, not
 an alert-side change to delivery policy.
 
-## Verification and remaining evidence
+## Verification and completion evidence
 
 The approved follow-up deployment updated only `dispatchRouteDeliverySyncQueue`,
 `processRouteSyncTask`, `insertSuuntoAppRouteToQueue`, `addSuuntoAppRoutesToQueue`, and
@@ -242,8 +243,9 @@ endpoint checks. The same source had previously passed 45 isolated Firestore emu
 tests. At 09:51 UTC, the post-update log query had no new route observations. The natural
 10:00 UTC dispatcher run subsequently emitted a completed reconciliation and all four
 idle, complete samples with zero eligible count/age, no unknown rows and no truncation.
-This proves the log emission only; post-creation metric-series and policy behavior remain
-unverified. Deployment success is not evidence of backlog, provider receipt or working alerts. No
+At that point this proved log emission only, not post-creation metric-series or policy
+behavior; the later monitoring verification below completes that evidence. Deployment
+success alone is not evidence of backlog, provider receipt or working alerts. No
 scheduler was manually invoked and no production route or provider copy was created,
 deleted or replayed for this verification.
 
@@ -263,11 +265,17 @@ unchanged. All 55 offline monitoring/workflow tests passed. No test email, tempo
 policy, fault injection, manual scheduler run, route mutation, replay or deletion was
 used. Existing same-channel notification proof is reused.
 
-The newly created route log metrics were still empty at that readback, which is not
-positive telemetry proof. The next natural dispatcher run is due at 10:30 UTC
-(13:30 Helsinki). Verify post-creation points for import/QS and delivery/Garmin,
-Wahoo and COROS, including the idle sampled-count and sampled-age series when
-present, before closing #833. Earlier 10:00 UTC logs cannot initialize these metrics.
+The newly created route log metrics were still empty at the configuration readback;
+valid empty queries and the earlier 10:00 UTC logs were not positive metric proof.
+The natural 10:30 UTC dispatcher run (13:30 Helsinki) emitted all four complete idle
+samples. At 10:31–10:32 UTC, Monitoring returned positive post-creation heartbeat
+points and real zero-valued count/age distribution observations for import/QS and
+delivery/Garmin, Wahoo and COROS. The four heartbeat conditions' actual queries
+returned positive heartbeat data, and both dashboard hourly-mean queries returned
+zero for every group. These are observations of an idle bounded sample, not a claim
+of complete queue coverage or provider receipt. All eight policies remained valid
+and enabled. No scheduler invocation, cloud reapplication, route mutation, provider
+call, fault injection or new email test was used for this verification.
 
 Focused tests cover canonical fixed labels, malformed/prototype keys and task payloads,
 privacy, logger failure (including preserving a worker ACK), success/skip/ACK separation,
@@ -296,16 +304,12 @@ npm --prefix functions run deploy:safety:compiled
 git diff --check
 ```
 
-Remaining work tracked directly in #833:
-
-- Verify positive natural post-creation heartbeat and count/age series for all four
-  groups without creating/deleting production routes or replaying sends. The approved
-  application and configuration/query readback are complete; no repeat deployment or
-  application is needed for this evidence check.
-
-Monitoring impact decision: **covered and activated**, with positive natural metric
-evidence still tracked in #833. The 8 October preflight found no route-owner resources
-or name collisions; production readback preserved all four earlier owned bundles.
+All #833 acceptance criteria are verified; no implementation or activation step
+remains. Monitoring impact decision: **covered, activated and verified**, including
+positive natural post-creation metric evidence. The 8 October preflight found no
+route-owner resources or name collisions; production readback preserved all four
+earlier owned bundles. Operational follow-up is threshold tuning against measured
+volume, not further activation or provider lifecycle work.
 
 Help was reviewed: operational instrumentation does not change the saved-route or
 connection UI, so no Help change is required. **No MCP wire impact:** no tools, schemas,
