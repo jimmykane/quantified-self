@@ -34,7 +34,7 @@ describe('marketing content', () => {
 
   it.each(['', '   ', null, 42, 'A'.repeat(121), '\r\nDimitrios', 'Dimitrios\n',
     'Name\r\nBcc: person@example.com', 'Name\t', 'Name\u007f', 'Name\u0085', 'Name\u2028'])('rejects invalid sender names %#', senderName => {
-    expect(() => validateMarketingDraft({ ...draft, senderName })).toThrow('Sender name');
+    expect(() => validateMarketingDraft({ ...draft, senderName })).toThrow(/sender name/i);
   });
 
   it('renders safe email HTML and plaintext from the allowlisted editor document', () => {

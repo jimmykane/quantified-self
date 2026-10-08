@@ -6,7 +6,7 @@ import type {
   MarketingTextMark,
 } from '../../../shared/admin-marketing';
 import { validateMarketingSchedule } from '../../../shared/marketing-schedule';
-import { DEFAULT_MARKETING_SENDER_NAME, MARKETING_SENDER_NAME_MAX_LENGTH } from '../../../shared/admin-marketing';
+import { DEFAULT_MARKETING_SENDER_NAME, marketingSenderNameError } from '../../../shared/admin-marketing';
 
 const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
 const MAX_NODES = 500;
@@ -28,13 +28,8 @@ function cleanLine(value: unknown, label: string, max: number): string {
 export function validateMarketingSenderName(value: unknown): string {
   if (value === undefined) return DEFAULT_MARKETING_SENDER_NAME;
   if (typeof value !== 'string') throw new Error('Sender name must be text.');
-  // Check before trimming so leading/trailing header controls cannot disappear.
-  if (Array.from(value).some(character => {
-    const code = character.charCodeAt(0);
-    return code < 32 || (code >= 127 && code <= 159) || code === 0x2028 || code === 0x2029;
-  }) || !value.trim() || value.trim().length > MARKETING_SENDER_NAME_MAX_LENGTH) {
-    throw new Error(`Sender name must contain 1-${MARKETING_SENDER_NAME_MAX_LENGTH} printable characters.`);
-  }
+  const error = marketingSenderNameError(value);
+  if (error) throw new Error(error);
   return value.trim();
 }
 

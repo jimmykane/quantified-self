@@ -82,9 +82,9 @@
           <mat-form-field appearance="outline" class="sender-field" subscriptSizing="dynamic">
             <mat-label>Sender name</mat-label>
             <input matInput id="campaign-sender-name" [(ngModel)]="draft.senderName" (ngModelChange)="markDirty()"
-              #senderName="ngModel" required [maxlength]="senderNameMaxLength" [disabled]="!!busy || !canEdit" autocomplete="off">
+              [errorStateMatcher]="senderNameMatcher" required [maxlength]="senderNameMaxLength" [disabled]="!!busy || !canEdit" autocomplete="off">
             <mat-hint>The name recipients see. Sends from {{ senderEmail }}.</mat-hint>
-            @if (senderName.invalid) { <mat-error>Enter a sender name.</mat-error> }
+            @if (senderNameError) { <mat-error>{{ senderNameError }}</mat-error> }
           </mat-form-field>
           <div class="compose-grid">
             <section class="writing-column" aria-labelledby="message-heading">

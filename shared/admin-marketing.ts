@@ -6,6 +6,19 @@ export const DEFAULT_MARKETING_SENDER_NAME = 'Dimitrios from Quantified Self';
 export const MARKETING_SENDER_NAME_MAX_LENGTH = 120;
 export const MARKETING_SENDER_EMAIL = 'updates@quantified-self.io';
 
+/** Shared by the form and server; inspect controls before trimming. */
+export function marketingSenderNameError(value: unknown): string {
+  if (typeof value !== 'string') return 'Sender name must be text.';
+  if (Array.from(value).some(character => {
+    const code = character.charCodeAt(0);
+    return code < 32 || (code >= 127 && code <= 159) || code === 0x2028 || code === 0x2029;
+  })) return 'Sender name cannot contain line breaks or control characters.';
+  const name = value.trim();
+  if (!name) return 'Enter a sender name.';
+  return name.length > MARKETING_SENDER_NAME_MAX_LENGTH
+    ? `Use ${MARKETING_SENDER_NAME_MAX_LENGTH} characters or fewer for the sender name.` : '';
+}
+
 export interface MarketingTextMark {
   type: 'bold' | 'italic' | 'link';
   attrs?: { href?: string };

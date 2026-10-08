@@ -73,6 +73,36 @@ describe('AdminMarketingComponent', () => {
     component.ngOnDestroy();
   });
 
+  it('shows sender validation at the field even before the subject and body exist', async () => {
+    const { haptics } = setup();
+    const fixture = TestBed.createComponent(AdminMarketingComponent);
+    fixture.detectChanges(); await fixture.whenStable(); fixture.detectChanges();
+    await fixture.whenStable(); fixture.detectChanges();
+    const root = fixture.nativeElement as HTMLElement;
+    const input = root.querySelector<HTMLInputElement>('#campaign-sender-name')!;
+    const edit = async (value: string) => {
+      input.value = value;
+      input.dispatchEvent(new Event('input', { bubbles: true }));
+      input.dispatchEvent(new Event('blur'));
+      fixture.detectChanges(); await fixture.whenStable(); fixture.detectChanges();
+    };
+    await edit('   ');
+    expect(input.getAttribute('aria-invalid')).toBe('true');
+    expect(root.querySelector('.sender-field mat-error')?.textContent).toContain('Enter a sender name.');
+    await edit('Name\u0085');
+    expect(input.getAttribute('aria-invalid')).toBe('true');
+    expect(root.querySelector('.sender-field mat-error')?.textContent).toContain('control characters');
+    expect(Array.from(root.querySelectorAll<HTMLButtonElement>('.actions button'))
+      .find(button => button.textContent?.trim() === 'Save draft')?.disabled).toBe(true);
+    await edit('Dimitrios');
+    expect(input.getAttribute('aria-invalid')).toBe('false');
+    expect(root.querySelector('.sender-field mat-error')).toBeNull();
+    expect(haptics.selection).not.toHaveBeenCalled();
+    expect(haptics.success).not.toHaveBeenCalled();
+    expect(haptics.error).not.toHaveBeenCalled();
+    fixture.destroy();
+  });
+
   it('refreshes sender-only saved changes while preserving an unsaved sender and test recipient', async () => {
     const updated = { ...pausedCampaign, senderName: 'Dimitrios' };
     const { component } = setup(vi.fn(async () => ({ data: { ...listing, campaigns: [updated] } })));
@@ -826,6 +856,21 @@ describe('AdminMarketingComponent', () => {
       expect(component.preview).toEqual(preview);
       expect(call).toHaveBeenCalledWith('previewMarketingCampaign', { draft: expect.objectContaining({ name: 'Preview', subject: 'Subject', senderName: 'Dimitrios' }) });
       expect(haptics.success).not.toHaveBeenCalled();
+    } finally { vi.useRealTimers(); component.ngOnDestroy(); }
+  });
+  it('blocks test sending when an older preview service omits the sender details', async () => {
+    const call = vi.fn(async () => ({ data: { subject: 'Subject', html: '<p>Hello</p>', text: 'Hello' } }));
+    const { component } = setup(call);
+    component.draft.subject = 'Subject'; component.draft.senderName = 'Dimitrios';
+    component.draft.content = { type: 'doc', content: [{ type: 'paragraph', content: [{ type: 'text', text: 'Hello' }] }] };
+    component.testTo = 'qa@example.org';
+    vi.useFakeTimers();
+    try {
+      component.schedulePreview(); await vi.advanceTimersByTimeAsync(900);
+      expect(component.preview).toBeNull();
+      expect(component.previewError).toContain('sender details');
+      expect(component.canSendTest).toBe(false);
+      expect(call).not.toHaveBeenCalledWith('sendMarketingTest', expect.anything());
     } finally { vi.useRealTimers(); component.ngOnDestroy(); }
   });
   it('keeps the email template CSS in a sandboxed preview beside a saved draft', async () => {

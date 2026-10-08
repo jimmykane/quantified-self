@@ -8,10 +8,11 @@ import { MatCheckboxModule } from '@angular/material/checkbox';
 import { MatFormFieldModule } from '@angular/material/form-field';
 import { MatIconModule } from '@angular/material/icon';
 import { MatInputModule } from '@angular/material/input';
+import { ErrorStateMatcher } from '@angular/material/core';
 import { MatProgressSpinnerModule } from '@angular/material/progress-spinner';
 import { RouterModule } from '@angular/router';
 import type { MarketingCampaignDraft, MarketingCampaignListResponse, MarketingCampaignPreview, MarketingCampaignView, MarketingDocument, MarketingPlan } from '../../../../../shared/admin-marketing';
-import { canDeleteMarketingCampaign, DEFAULT_MARKETING_SENDER_NAME, MARKETING_SENDER_EMAIL, MARKETING_SENDER_NAME_MAX_LENGTH } from '../../../../../shared/admin-marketing';
+import { canDeleteMarketingCampaign, DEFAULT_MARKETING_SENDER_NAME, marketingSenderNameError, MARKETING_SENDER_EMAIL, MARKETING_SENDER_NAME_MAX_LENGTH } from '../../../../../shared/admin-marketing';
 import { AppFunctionsService } from '../../../services/app.functions.service';
 import { PageHeaderComponent } from '../../shared/page-header/page-header.component';
 import { AppHapticsService } from '../../../services/app.haptics.service';
@@ -73,6 +74,9 @@ export class AdminMarketingComponent implements OnInit, OnDestroy {
   notice = '';
   readonly senderEmail = MARKETING_SENDER_EMAIL;
   readonly senderNameMaxLength = MARKETING_SENDER_NAME_MAX_LENGTH;
+  readonly senderNameMatcher: ErrorStateMatcher = {
+    isErrorState: control => !!control && !control.disabled && (control.dirty || control.touched) && !!this.senderNameError,
+  };
   preview: MarketingCampaignPreview | null = null;
   trustedPreviewHtml: SafeHtml | null = null;
   previewBusy = false;
@@ -326,6 +330,10 @@ export class AdminMarketingComponent implements OnInit, OnDestroy {
       const result = await this.functions.call<unknown, MarketingCampaignPreview>(
         'previewMarketingCampaign', { draft: previewDraft });
       if (this.destroyed || sequence !== this.previewSequence) return;
+      if (typeof result.data.from !== 'string' || !result.data.from.trim() ||
+          typeof result.data.replyTo !== 'string' || !result.data.replyTo.trim()) {
+        throw new Error('Email sender details are unavailable. Update the marketing Functions, then refresh and try again.');
+      }
       this.preview = result.data;
       // The admin-only renderer validates and escapes draft content before adding the fixed
       // email template. Keep its CSS intact inside an iframe with scripts and forms disabled.
@@ -341,9 +349,7 @@ export class AdminMarketingComponent implements OnInit, OnDestroy {
     }
   }
   get senderNameError(): string {
-    if (!this.draft.senderName?.trim()) return 'Enter a sender name.';
-    return this.draft.senderName.trim().length > this.senderNameMaxLength
-      ? `Use ${this.senderNameMaxLength} characters or fewer for the sender name.` : '';
+    return marketingSenderNameError(this.draft.senderName);
   }
   async prepare(): Promise<void> { await this.campaignAction('prepareMarketingCampaign', 'Preparing audience', 'Audience frozen. Review counts, then send a test.'); }
   async sendTest(): Promise<void> {
