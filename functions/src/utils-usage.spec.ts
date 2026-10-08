@@ -91,7 +91,7 @@ const hoisted = vi.hoisted(() => {
     const bucketGetMetadata = vi.fn().mockResolvedValue([{ generation: '1' }]);
     const bucketFile = vi.fn((path: string) => ({
         path,
-        save: (data: unknown) => bucketSave(path, data),
+        save: (data: unknown, options: unknown) => bucketSave(path, data, options),
         copy: (destination: unknown) => bucketCopy(path, destination),
         delete: (options: unknown) => bucketDelete(path, options),
         getMetadata: bucketGetMetadata,
@@ -486,6 +486,39 @@ describe('utils higher-level helpers', () => {
             expect(bulkWriter.set).not.toHaveBeenCalled();
         });
 
+        it('checksums a direct original-file upload and preserves its generation', async () => {
+            hoisted.getUser.mockResolvedValue({ customClaims: { stripeRole: 'pro' } });
+            const event = {
+                getID: () => 'event-1',
+                setID: vi.fn(),
+                getActivities: () => [],
+            };
+            const metaData = {
+                serviceName: 'WAHOOAPI',
+                toJSON: () => ({ meta: true }),
+            } as unknown as SetEventParameters[3];
+            const originalFile = {
+                data: Buffer.from('123456789'),
+                extension: 'fit',
+                startDate: new Date(),
+            };
+            const path = 'users/user-1/events/event-1/original.fit';
+            writeAllEventDataMock.mockImplementationOnce(async () => {
+                const [, storageAdapter] = eventWriterConstructorMock.mock.calls.at(-1);
+                await expect(storageAdapter.uploadFile(path, originalFile.data))
+                    .resolves.toEqual({ generation: '1' });
+                return mockSavedOriginalFiles;
+            });
+
+            await setEvent('user-1', 'event-1', event as unknown as SetEventParameters[2], metaData, originalFile);
+
+            expect(hoisted.bucketSave).toHaveBeenCalledWith(path, originalFile.data, {
+                validation: 'crc32c',
+                metadata: { crc32c: '4waSgw==' },
+            });
+            expect(hoisted.bucketCopy).not.toHaveBeenCalled();
+        });
+
         it('promotes a staged original file only after all guarded writes succeed', async () => {
             hoisted.getUser.mockResolvedValue({ customClaims: { stripeRole: 'pro' } });
             hoisted.transactionGet.mockResolvedValue({ exists: false, data: () => undefined });
@@ -527,7 +560,10 @@ describe('utils higher-level helpers', () => {
                 .map(([path]: [string]) => path)
                 .find((path: string) => path.startsWith('event-write-staging/'));
             expect(stagingPath).toBeDefined();
-            expect(hoisted.bucketSave).toHaveBeenCalledWith(stagingPath, originalFile.data);
+            expect(hoisted.bucketSave).toHaveBeenCalledWith(stagingPath, originalFile.data, {
+                validation: 'crc32c',
+                metadata: { crc32c: expect.any(String) },
+            });
             expect(hoisted.bucketCopy).toHaveBeenCalledWith(
                 stagingPath,
                 expect.objectContaining({ path: 'users/user-1/events/event-1/original.fit' }),
@@ -594,9 +630,9 @@ describe('utils higher-level helpers', () => {
             expect(hoisted.bucketDelete).toHaveBeenCalledWith(stagingPath, { ignoreNotFound: true });
         });
 
-        it('removes a staging object when Storage reports an upload failure', async () => {
+        it.each(['storage unavailable', 'CRC32C mismatch'])('removes a staging object on upload failure: %s', async message => {
             hoisted.getUser.mockResolvedValue({ customClaims: { stripeRole: 'pro' } });
-            hoisted.bucketSave.mockRejectedValueOnce(new Error('storage unavailable'));
+            hoisted.bucketSave.mockRejectedValueOnce(new Error(message));
             const event = {
                 getID: () => 'event-1',
                 setID: vi.fn(),
@@ -628,7 +664,7 @@ describe('utils higher-level helpers', () => {
                 undefined,
                 undefined,
                 { stageOriginalFilesUntilEventWrite: true },
-            )).rejects.toThrow('storage unavailable');
+            )).rejects.toThrow(message);
 
             const stagingPath = hoisted.bucketFile.mock.calls
                 .map(([path]: [string]) => path)

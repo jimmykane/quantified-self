@@ -1,4 +1,5 @@
 import * as admin from 'firebase-admin';
+import { saveChecksummedStorageFile } from '../shared/storage-file-save';
 import * as logger from 'firebase-functions/logger';
 import { randomUUID } from 'node:crypto';
 import { FieldValue } from 'firebase-admin/firestore';
@@ -126,7 +127,7 @@ async function uploadSyncedRouteOriginalFile(
     const bucket = metadata.bucket
         ? admin.storage().bucket(metadata.bucket)
         : admin.storage().bucket();
-    await bucket.file(metadata.path).save(originalFile.data as Buffer);
+    await saveChecksummedStorageFile(bucket.file(metadata.path), originalFile.data as Buffer);
 }
 
 async function deleteOriginalRouteFiles(

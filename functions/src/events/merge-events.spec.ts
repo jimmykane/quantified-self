@@ -1289,6 +1289,9 @@ describe('mergeEvents', () => {
       'u1',
       'merge_event_original_file_upload:users/probe/events/adapter-probe/original.fit',
     );
-    expect(hoisted.mockStorageSave).toHaveBeenCalled();
+    expect(hoisted.mockStorageSave).toHaveBeenCalledWith(Buffer.from([0x09]), {
+      validation: 'crc32c',
+      metadata: { crc32c: expect.any(String) },
+    });
   });
 });
