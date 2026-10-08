@@ -1058,6 +1058,28 @@ and migration limits are in [Garmin integration](garmin-integration.md#delivery-
 
 Do not use a provider's short-lived file URL as durable application data. Download it in the worker, validate it, and store the original file through the existing event/file flow so reprocessing, export, and sync use the owned copy.
 
+### Original-file upload integrity
+
+Activity imports, manual activity uploads, comparisons, merges, and manual/provider route uploads use
+`functions/src/shared/storage-file-save.ts`. The helper calculates CRC32C over the exact bytes passed to
+Cloud Storage and supplies the base64 checksum in `metadata.crc32c` with `validation: 'crc32c'`.
+Cloud Storage checks the supplied checksum before committing the object; the SDK also validates the
+returned checksum. This explicit metadata avoids depending on an SDK's default checksum-header behavior.
+Already compressed files are hashed and retained as compressed bytes. Object paths, generation
+tracking, original-file provenance, and deletion/connection guards remain unchanged.
+
+Provider activity originals staged under `event-write-staging/` receive the same validation before
+promotion. Promotion remains a server-side copy, which Cloud Storage validates against the source
+object's checksum. An upload rejection propagates through the existing retry and cleanup paths;
+failed staged uploads cannot be promoted. No checksum field is added to Firestore or MCP responses.
+Diagnostic debug-bucket uploads remain separate from retained original files.
+
+Functions declares `@google-cloud/storage` directly at `^7.22.0` and Firebase Admin at `^13.7.0`.
+Verify with `npm --prefix functions test -- src/shared/storage-file-save.spec.ts src/utils-usage.spec.ts`;
+the checksum spec exercises the real SDK against a loopback HTTP server, including corrupted uploads,
+without calling Firebase, providers, or production buckets. Existing objects require no migration.
+Backend deployment remains a separately approved release action.
+
 ### Persisting events
 
 - Resolve a deterministic event ID before writing. Put provider identity fields in safe event metadata for future deduplication and attribution.

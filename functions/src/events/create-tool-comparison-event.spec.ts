@@ -566,7 +566,10 @@ describe('createToolComparisonEvent', () => {
       'user-1',
       'tool_comparison_original_file_upload:users/user-1/events/event-1/original.fit',
     );
-    expect(hoisted.mockStorageSave).toHaveBeenCalledWith(Buffer.from([1]));
+    expect(hoisted.mockStorageSave).toHaveBeenCalledWith(Buffer.from([1]), {
+      validation: 'crc32c',
+      metadata: { crc32c: expect.any(String) },
+    });
   });
 
   it('returns a conflict when deletion starts inside EventWriter document persistence', async () => {

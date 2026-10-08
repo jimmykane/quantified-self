@@ -19,6 +19,7 @@ import {
   setEventDocumentIfUserActive,
 } from '../utils';
 import { EventWriter, FirestoreAdapter, OriginalFile, StorageAdapter } from '../shared/event-writer';
+import { saveChecksummedStorageFile } from '../shared/storage-file-save';
 import { generateActivityID } from '../shared/id-generator';
 import { EVENT_PROCESSING_ENTITY, ProcessingMetaData } from '../shared/processing-metadata.interface';
 import { SPORTS_LIB_VERSION } from '../shared/sports-lib-version.node';
@@ -584,7 +585,7 @@ function getStorageAdapter(userID: string): StorageAdapter {
     uploadFile: async (path: string, data: unknown) => {
       await assertEventWriteUserActive(userID, `tool_comparison_original_file_upload:${path}`);
       const file = admin.storage().bucket().file(path);
-      await file.save(data as Buffer);
+      await saveChecksummedStorageFile(file, data as Buffer);
       const [metadata] = await file.getMetadata();
       return { generation: metadata.generation };
     },
