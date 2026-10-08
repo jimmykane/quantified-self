@@ -26,6 +26,17 @@ const draft = {
 };
 
 describe('marketing content', () => {
+  it('defaults legacy drafts and normalizes personal sender names', () => {
+    expect(validateMarketingDraft(draft).senderName).toBe('Dimitrios from Quantified Self');
+    expect(validateMarketingDraft({ ...draft, senderName: '  Élodie, from QS  ' }).senderName).toBe('Élodie, from QS');
+    expect(validateMarketingDraft({ ...draft, senderName: 'A'.repeat(120) }).senderName).toHaveLength(120);
+  });
+
+  it.each(['', '   ', null, 42, 'A'.repeat(121), '\r\nDimitrios', 'Dimitrios\n',
+    'Name\r\nBcc: person@example.com', 'Name\t', 'Name\u007f', 'Name\u0085', 'Name\u2028'])('rejects invalid sender names %#', senderName => {
+    expect(() => validateMarketingDraft({ ...draft, senderName })).toThrow('Sender name');
+  });
+
   it('renders safe email HTML and plaintext from the allowlisted editor document', () => {
     const result = renderMarketingContent(validateMarketingDraft(draft));
     expect(result.bodyHtml).toContain('<strong>A new </strong>');

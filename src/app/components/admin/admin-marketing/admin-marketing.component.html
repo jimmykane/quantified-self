@@ -79,6 +79,13 @@
             <mat-form-field appearance="outline"><mat-label>Internal name</mat-label><input matInput [(ngModel)]="draft.name" (ngModelChange)="markDirty()" [disabled]="!!busy || !canEdit" maxlength="120"></mat-form-field>
             <mat-form-field appearance="outline"><mat-label>Email subject</mat-label><input matInput [(ngModel)]="draft.subject" (ngModelChange)="markDirty()" [disabled]="!!busy || !canEdit" maxlength="180"></mat-form-field>
           </div>
+          <mat-form-field appearance="outline" class="sender-field" subscriptSizing="dynamic">
+            <mat-label>Sender name</mat-label>
+            <input matInput id="campaign-sender-name" [(ngModel)]="draft.senderName" (ngModelChange)="markDirty()"
+              #senderName="ngModel" required [maxlength]="senderNameMaxLength" [disabled]="!!busy || !canEdit" autocomplete="off">
+            <mat-hint>The name recipients see. Sends from {{ senderEmail }}.</mat-hint>
+            @if (senderName.invalid) { <mat-error>Enter a sender name.</mat-error> }
+          </mat-form-field>
           <div class="compose-grid">
             <section class="writing-column" aria-labelledby="message-heading">
               <div class="section-heading"><h3 id="message-heading">Message</h3><span>Format text as you write</span></div>
@@ -119,7 +126,11 @@
                 <mat-button-toggle value="text">Plain text</mat-button-toggle>
               </mat-button-toggle-group>
               @if (preview) {
-                <p class="preview-subject"><strong>Subject</strong> {{ preview.subject }}</p>
+                <dl class="preview-headers">
+                  <div><dt>From</dt><dd>{{ preview.from }}</dd></div>
+                  <div><dt>Reply-to</dt><dd>{{ preview.replyTo }}</dd></div>
+                  <div><dt>Subject</dt><dd>{{ preview.subject }}</dd></div>
+                </dl>
                 @if (activePreview === 'text') { <pre class="text-preview">{{ preview.text }}</pre> }
                 @else { <div class="preview-frame" [class.phone]="activePreview === 'phone'"><iframe #emailPreviewFrame title="Rendered campaign email" sandbox="allow-same-origin allow-popups allow-popups-to-escape-sandbox" [attr.srcdoc]="trustedPreviewHtml" (load)="resizePreviewFrame()"></iframe></div> }
               } @else if (previewBusy) {
@@ -169,7 +180,7 @@
             <p class="unsaved-note">{{ dirty ? 'Save your edits, then send a new test.' : 'Send a test of the saved message and wait for SMTP acceptance before resuming.' }}</p>
           }
           <div class="actions">
-            @if (canEdit) { <button mat-flat-button type="button" [disabled]="!!busy || !!scheduleError || (selected?.status === 'paused' && !dirty)" (click)="save()">{{ selected?.status === 'paused' ? 'Save changes' : 'Save draft' }}</button> }
+            @if (canEdit) { <button mat-flat-button type="button" [disabled]="!!busy || !!scheduleError || !!senderNameError || (selected?.status === 'paused' && !dirty)" (click)="save()">{{ selected?.status === 'paused' ? 'Save changes' : 'Save draft' }}</button> }
             @if (selected?.status === 'draft' || canRetryPreparation) { <button mat-stroked-button type="button" [disabled]="!!busy || dirty" (click)="prepare()">{{ canRetryPreparation ? 'Retry preparation' : 'Prepare audience' }}</button> }
             @if (selected?.status === 'ready') {
               <button mat-flat-button type="button" [disabled]="!!busy || selected?.lastTestState !== 'SUCCESS'" (click)="change('start')">{{ selected?.schedule ? 'Start scheduled sending' : 'Start sending' }}</button>

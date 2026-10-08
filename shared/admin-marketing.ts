@@ -2,6 +2,10 @@ export type MarketingPlan = 'free' | 'basic' | 'pro';
 export type MarketingCampaignStatus = 'draft' | 'deleting' | 'preparing' | 'ready' | 'running' | 'paused' | 'completed';
 export type MarketingRecipientStatus = 'pending' | 'queued' | 'accepted' | 'failed' | 'skipped';
 
+export const DEFAULT_MARKETING_SENDER_NAME = 'Dimitrios from Quantified Self';
+export const MARKETING_SENDER_NAME_MAX_LENGTH = 120;
+export const MARKETING_SENDER_EMAIL = 'updates@quantified-self.io';
+
 export interface MarketingTextMark {
   type: 'bold' | 'italic' | 'link';
   attrs?: { href?: string };
@@ -40,11 +44,21 @@ export interface MarketingDailySchedule {
 export interface MarketingCampaignDraft {
   name: string;
   subject: string;
+  /** Missing on legacy campaigns/clients; the server applies the default name. */
+  senderName?: string;
   content: MarketingDocument;
   cta: { label: string; url: string } | null;
   filters: MarketingAudienceFilters;
   /** Missing/null keeps existing campaigns on immediate sending. */
   schedule?: MarketingDailySchedule | null;
+}
+
+export interface MarketingCampaignPreview {
+  subject: string;
+  from: string;
+  replyTo: string;
+  html: string;
+  text: string;
 }
 
 export interface MarketingCampaignStats {

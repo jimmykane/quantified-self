@@ -10,8 +10,8 @@ import { MatIconModule } from '@angular/material/icon';
 import { MatInputModule } from '@angular/material/input';
 import { MatProgressSpinnerModule } from '@angular/material/progress-spinner';
 import { RouterModule } from '@angular/router';
-import type { MarketingCampaignDraft, MarketingCampaignListResponse, MarketingCampaignView, MarketingDocument, MarketingPlan } from '../../../../../shared/admin-marketing';
-import { canDeleteMarketingCampaign } from '../../../../../shared/admin-marketing';
+import type { MarketingCampaignDraft, MarketingCampaignListResponse, MarketingCampaignPreview, MarketingCampaignView, MarketingDocument, MarketingPlan } from '../../../../../shared/admin-marketing';
+import { canDeleteMarketingCampaign, DEFAULT_MARKETING_SENDER_NAME, MARKETING_SENDER_EMAIL, MARKETING_SENDER_NAME_MAX_LENGTH } from '../../../../../shared/admin-marketing';
 import { AppFunctionsService } from '../../../services/app.functions.service';
 import { PageHeaderComponent } from '../../shared/page-header/page-header.component';
 import { AppHapticsService } from '../../../services/app.haptics.service';
@@ -29,7 +29,7 @@ import { ConfirmationDialogComponent, ConfirmationDialogData } from '../../confi
 import { firstValueFrom } from 'rxjs';
 
 function emptyDraft(): MarketingCampaignDraft {
-  return { name: '', subject: '', content: { type: 'doc', content: [{ type: 'paragraph', content: [] }] },
+  return { name: '', subject: '', senderName: DEFAULT_MARKETING_SENDER_NAME, content: { type: 'doc', content: [{ type: 'paragraph', content: [] }] },
     cta: null, filters: { plans: ['free', 'basic', 'pro'], signupFrom: null, signupTo: null }, schedule: null };
 }
 function deleteLabel(campaign: MarketingCampaignView | null): string {
@@ -71,7 +71,9 @@ export class AdminMarketingComponent implements OnInit, OnDestroy {
   readonly deletingCampaignId = signal<string | null>(null);
   error = '';
   notice = '';
-  preview: { subject: string; html: string; text: string } | null = null;
+  readonly senderEmail = MARKETING_SENDER_EMAIL;
+  readonly senderNameMaxLength = MARKETING_SENDER_NAME_MAX_LENGTH;
+  preview: MarketingCampaignPreview | null = null;
   trustedPreviewHtml: SafeHtml | null = null;
   previewBusy = false;
   previewError = '';
@@ -173,7 +175,7 @@ export class AdminMarketingComponent implements OnInit, OnDestroy {
   }
   private loadCampaign(campaign: MarketingCampaignView, testRecipient: string): void {
     this.selected = campaign;
-    this.draft = { name: campaign.name, subject: campaign.subject, content: campaign.content,
+    this.draft = { name: campaign.name, subject: campaign.subject, senderName: campaign.senderName ?? DEFAULT_MARKETING_SENDER_NAME, content: campaign.content,
       cta: campaign.cta, filters: { ...campaign.filters, plans: [...campaign.filters.plans] }, schedule: campaign.schedule || null };
     this.scheduleMode = campaign.schedule ? 'daily' : 'now';
     this.scheduleTime = campaign.schedule?.time || '09:00';
@@ -188,7 +190,7 @@ export class AdminMarketingComponent implements OnInit, OnDestroy {
     this.schedulePreview();
   }
   private updateSelected(campaign: MarketingCampaignView): void {
-    const savedDraft = { name: campaign.name, subject: campaign.subject, content: campaign.content,
+    const savedDraft = { name: campaign.name, subject: campaign.subject, senderName: campaign.senderName ?? DEFAULT_MARKETING_SENDER_NAME, content: campaign.content,
       cta: campaign.cta, filters: campaign.filters, schedule: campaign.schedule || null };
     if (!this.dirty && JSON.stringify(this.collectDraft()) !== JSON.stringify(savedDraft)) {
       this.loadCampaign(campaign, this.testTo);
@@ -245,7 +247,7 @@ export class AdminMarketingComponent implements OnInit, OnDestroy {
     this.markDirty();
   }
   private collectDraft(): MarketingCampaignDraft {
-    return { name: this.draft.name, subject: this.draft.subject,
+    return { name: this.draft.name, subject: this.draft.subject, senderName: this.draft.senderName,
       content: this.draft.content,
       cta: this.showCta ? { label: this.ctaLabel, url: this.ctaUrl } : null,
       filters: { plans: [...this.draft.filters.plans], signupFrom: this.draft.filters.signupFrom || null,
@@ -273,7 +275,7 @@ export class AdminMarketingComponent implements OnInit, OnDestroy {
     finally { this.busy = ''; }
   }
   async save(): Promise<void> {
-    if (!this.canEdit || this.scheduleError) return;
+    if (!this.canEdit || this.scheduleError || this.senderNameError) return;
     await this.run('Saving', async () => (await this.functions.call('saveMarketingCampaign',
       { id: this.selected?.id || null, draft: this.collectDraft() })).data as MarketingCampaignView,
       campaign => { this.choose(campaign, false); this.notice = campaign.status === 'paused'
@@ -301,6 +303,11 @@ export class AdminMarketingComponent implements OnInit, OnDestroy {
       this.previewBusy = false;
       return;
     }
+    if (this.senderNameError) {
+      this.previewBusy = false;
+      this.previewError = this.senderNameError;
+      return;
+    }
     if (this.showCta && (!this.ctaLabel.trim() || !this.ctaUrl.trim())) {
       this.previewBusy = false;
       this.previewError = 'Add both a button label and HTTPS destination to preview this email.';
@@ -316,7 +323,7 @@ export class AdminMarketingComponent implements OnInit, OnDestroy {
         signupFrom: null, signupTo: null } };
     this.previewBusy = true;
     try {
-      const result = await this.functions.call<unknown, { subject: string; html: string; text: string }>(
+      const result = await this.functions.call<unknown, MarketingCampaignPreview>(
         'previewMarketingCampaign', { draft: previewDraft });
       if (this.destroyed || sequence !== this.previewSequence) return;
       this.preview = result.data;
@@ -332,6 +339,11 @@ export class AdminMarketingComponent implements OnInit, OnDestroy {
     } finally {
       if (sequence === this.previewSequence) this.previewBusy = false;
     }
+  }
+  get senderNameError(): string {
+    if (!this.draft.senderName?.trim()) return 'Enter a sender name.';
+    return this.draft.senderName.trim().length > this.senderNameMaxLength
+      ? `Use ${this.senderNameMaxLength} characters or fewer for the sender name.` : '';
   }
   async prepare(): Promise<void> { await this.campaignAction('prepareMarketingCampaign', 'Preparing audience', 'Audience frozen. Review counts, then send a test.'); }
   async sendTest(): Promise<void> {
