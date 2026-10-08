@@ -107,13 +107,29 @@ describe('CalendarMonthTotalsComponent', () => {
     expect(fixture.nativeElement.querySelector('.calendar-totals-caption').textContent).toContain('Some workouts may be missing');
   });
 
-  it('does not convert workouts without set times into zero duration', async () => {
-    const value = input(); value.schedule.data.workouts[1].structure.nodes[0] = {
+  it.each(['done', 'remaining'])('omits unknown duration for %s workouts and retains known totals', async id => {
+    const value = input(); value.schedule.data.workouts.find(workout => workout.id === id).structure.nodes[0] = {
       kind: 'step', id: 'open', purpose: 'work', ending: { kind: 'manual' }, targets: [],
     };
     const fixture = await render(buildCalendarPeriodSummary(value));
-    expect(fixture.nativeElement.querySelector('.calendar-totals-caption').textContent).toContain('Some workouts have no set time');
-    expect(fixture.nativeElement.querySelector('.calendar-totals-caption').getAttribute('aria-label')).toContain('steps with no set time');
+    expect(fixture.nativeElement.querySelector('.calendar-totals-caption').textContent)
+      .toBe(id === 'remaining' ? '1 skipped' : '30m left · 1 skipped');
+    expect(values(fixture)).toEqual(['3', '1', '1']);
+    expect(fixture.nativeElement.querySelector('.calendar-totals-caption').getAttribute('aria-label'))
+      .toContain('steps with no set time');
+  });
+
+  it('omits the caption and its space when there are no complete time totals or skipped workouts', async () => {
+    const value = input();
+    value.schedule.data.workouts = value.schedule.data.workouts.slice(0, 2);
+    value.completions.data = [];
+    value.schedule.data.workouts.forEach(workout => {
+      workout.structure.nodes[0] = { kind: 'step', id: 'open', purpose: 'work', ending: { kind: 'manual' }, targets: [] };
+    });
+    const fixture = await render(buildCalendarPeriodSummary(value));
+    expect(values(fixture)).toEqual(['2', '0', '2']);
+    expect(fixture.nativeElement.querySelector('.calendar-totals-caption')).toBeNull();
+    expect(fixture.nativeElement.querySelector('.calendar-workout-totals--with-caption')).toBeNull();
   });
 
   it('qualifies estimated and early-lap times and keeps their explanations accessible', async () => {
@@ -134,7 +150,7 @@ describe('CalendarMonthTotalsComponent', () => {
     const summary = buildCalendarPeriodSummary(input());
     const fixture = await render({ ...summary, planned: null, plannedText: 'Totals unavailable' });
     expect(values(fixture)).toEqual(['3', '1', '1']);
-    expect(fixture.nativeElement.querySelector('.calendar-totals-caption').textContent).toContain('Workout time unavailable');
+    expect(fixture.nativeElement.querySelector('.calendar-totals-caption').textContent).toBe('30m left · 1 skipped');
   });
 
   it('keeps skipped-only months available with no invented planned or remaining time', async () => {

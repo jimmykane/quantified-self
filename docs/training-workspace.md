@@ -1037,10 +1037,14 @@ packed Sports Lib package. That gate is tracked by GitHub issue #654 under epic 
 Calendar **Month** retains its original thin recorded Distance/Duration/Ascent strip below the grid and day panel.
 When the anchored month has eligible workouts, an extra thin row below it shows the scheduled workout count,
 with-activity and remaining counts, plus planned/remaining time and skipped counts. Activity totals remain visible
-with their original icons and 53px height; the workout row is 60px tall, including a 24px caption touch target.
+with their original icons and 53px height; the workout row is 60px tall when it includes a 24px caption touch target,
+or 53px without a caption.
 Empty months omit the workout row and caption. Live refreshes and selected-day changes keep both available totals
 visible without a source toggle. Unknown completion counts stay unavailable, partial schedule counts are lower
-bounds, and estimated/early-Lap times remain qualified. The caption button provides the full totals and coverage
+bounds, and estimated/early-Lap times remain qualified. Unknown time totals are omitted from the compact caption;
+known times and nonzero skipped counts remain visible. If none are available, the caption and its space are omitted.
+The calendar card has no bottom padding.
+The caption button provides the full totals and coverage
 explanation on tap, hover or keyboard focus; its accessible name retains the visible skipped count. The monthly
 calculations, bounded readers and completion markers remain intact. Workout-read failures retain a retry action.
 Calendar **Week** keeps recorded parent-event volume above its day grid. A flat,

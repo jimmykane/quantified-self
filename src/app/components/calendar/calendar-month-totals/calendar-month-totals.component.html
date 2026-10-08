@@ -15,6 +15,7 @@
 </section>
 @if (hasWorkouts()) {
   <section class="calendar-period-summary calendar-workout-totals"
+    [class.calendar-workout-totals--with-caption]="!!caption()"
     [attr.aria-label]="periodLabel() + ' workout totals'" [attr.aria-busy]="summary().loading">
     <div class="calendar-totals-metrics">
       @for (metric of workoutMetrics(); track metric.label) {
@@ -24,8 +25,10 @@
         </div>
       }
     </div>
+    @if (caption()) {
     <button class="calendar-totals-caption" type="button" [matTooltip]="captionDetails()"
       #captionTooltip="matTooltip" matTooltipTouchGestures="off" (click)="captionTooltip.show()"
       [attr.aria-label]="captionDetails()">{{ caption() }}</button>
+    }
   </section>
 }

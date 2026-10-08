@@ -32,11 +32,13 @@ export class CalendarMonthTotalsComponent {
       return summary.completionStatus === 'loading' ? 'Checking activities…' : 'Activity matches unavailable';
     }
     if (!summary.scheduleComplete) return 'Some workouts may be missing';
-    if (!summary.planned || !summary.remaining) return 'Workout time unavailable';
     const planned = formatWorkoutTime(summary.planned);
     const remaining = formatWorkoutTime(summary.remaining);
-    if (planned === null || remaining === null) return 'Some workouts have no set time';
-    return `${planned} planned · ${remaining} left · ${summary.skippedCount?.toLocaleString()} skipped`;
+    const parts: string[] = [];
+    if (planned !== null) parts.push(`${planned} planned`);
+    if (remaining !== null) parts.push(`${remaining} left`);
+    if (summary.skippedCount !== null && summary.skippedCount > 0) parts.push(`${summary.skippedCount.toLocaleString()} skipped`);
+    return parts.join(' · ');
   });
   readonly captionDetails = computed(() => {
     const summary = this.summary();

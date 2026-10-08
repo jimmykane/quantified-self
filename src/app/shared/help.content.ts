@@ -321,7 +321,7 @@ If the month has workouts, an extra row below the activity totals shows how many
 
 **With an activity** counts workouts with a matching recording. **Remaining** means a workout has no matching activity and has not been skipped; you may have done it without an activity match. **Planned** totals include workouts with an activity and leave out skipped workouts. A matching recording does not tell QS whether you followed every step. The recording stays in the period when it happened, even if the workout was scheduled for another date. If you edited a workout after recording its activity, QS points that out.
 
-Workout time can be an estimate or a total of only the steps with a set time. Steps without a set time are identified, and steps you can end early with Lap may take less time. Distance includes only the distance set in the workout. Training load comes from recorded activities. If a Week or Month read is incomplete, QS tells you that some activities or workouts may be missing. If a read fails, use **Try again**. Remaining counts stay unavailable until activity matches can be checked.
+Workout time can be an estimate or a total of only the steps with a set time. Month shows planned time and time left when the full total can be calculated; other time totals stay out of the compact row. The full details identify steps without a set time. Steps you can end early with Lap may take less time. Distance includes only the distance set in the workout. Training load comes from recorded activities. If a Week or Month read is incomplete, QS tells you that some activities or workouts may be missing. If a read fails, use **Try again**. Remaining counts stay unavailable until activity matches can be checked.
 
 ## Read activity days
 

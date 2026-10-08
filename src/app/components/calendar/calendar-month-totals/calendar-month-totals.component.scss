@@ -46,12 +46,13 @@
 }
 
 .calendar-workout-totals {
-  height: 60px;
-  grid-template-rows: minmax(0, 1fr) 24px;
-
   .calendar-period-summary-metric { gap: 0; }
   .calendar-period-summary-metric + .calendar-period-summary-metric::before { height: 28px; }
   .calendar-period-summary-label { font-size: 11px; line-height: 12px; }
+}
+.calendar-workout-totals--with-caption {
+  height: 60px;
+  grid-template-rows: minmax(0, 1fr) 24px;
 }
 .calendar-totals-caption {
   min-height: 24px;
