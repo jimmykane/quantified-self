@@ -452,7 +452,7 @@ upload passed exact readback, and the athlete confirmed the requested SWOLF watc
 evidence, not native targeting or QS completion-link proof. Normal delivery still needs merge and separately approved
 Functions deployment. See [measured SWOLF behavior](training-workspace.md#pool-swim-measured-swolf-773).
 
-The pool-only v9 screen upgrade requests native step-window `distance` (`Swum`) and `duration` (`Elapsed`)
+The historical pool-only v9 screen upgrade requests native step-window `distance` (`Swum`) and `duration` (`Elapsed`)
 for manual work, after authored target counterparts and within the five-field budget. Numeric endings show
 `Dist rem`/`Time rem`. Stationary `rest` shows HR/countdown/targets/notes, not freshly reset swim averages;
 active `recovery` retains swim readings. Long manual instructions stay text-only. Field order is controlled,
@@ -463,6 +463,17 @@ any eligible same-identity update. Non-pool mappings/digests, consent, completio
 Private diagnostic labels include v9; existing provider/event-based monitoring filters already cover it.
 See [pool screen presentation and verification](training-workspace.md#pool-swim-workrest-screen-presentation).
 This local change needs separately approved deployment; no live watch-layout proof is claimed.
+
+Current Suunto `suunto-guides-v10` improves manual swim notifications and stationary Rest for both pool and open
+water: generated text explains that Lap finishes the current interval/rest, and Rest requests native cumulative
+`distance` (`Total`, `window: 'workout'`) after reserving authored ending/targets/notes and current HR. It omits
+freshly reset swim averages, not active-recovery readings. Pool Work keeps v9 fields; open-water Work keeps v7
+fields. V9 pool recovery remains frozen, alongside all older attempts; exact recovery precedes one eligible
+same-identity update. No previous-interval data, delayed-distance fix, forced haptics, extra countdown steps or
+live watch evidence is claimed. Non-swim payloads, recorded laps, consent, queue policy and completion remain
+unchanged; provider/event-based monitoring already covers v10. See the single detailed
+[swim presentation source of truth](training-workspace.md#swim-manual-instructions-and-cumulative-rest-distance).
+Deployment and live testing still require separate approval.
 
 For additional authored targets, [#773](https://github.com/jimmykane/quantified-self/issues/773) records the
 6 October contract review. The published JSON reference defines only the existing HR, power, speed/pace and cadence

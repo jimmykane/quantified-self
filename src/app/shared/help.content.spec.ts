@@ -136,6 +136,13 @@ describe('help.content', () => {
       'does not offer a configurable field editor or guarantee fixed positions', 'do not fix delayed pool-length detection',
       'retain the existing lap-boundary behavior even when a rest screen no longer shows averages']) expect(content).toContain(phrase);
   });
+  it('explains swim manual-step timing and native cumulative Rest distance without promising finished-interval statistics', () => {
+    const content = HELP_SECTIONS.find(section => section.id === 'training-plans')!.content;
+    for (const phrase of ['**pool and open-water swimming**', '**Total**', 'native cumulative distance for the whole recording',
+      'not the distance or pace of the last interval', 'Open-water Work/recovery fields are unchanged',
+      '**Swim now. Press Lap to finish this interval.**', '**Rest now. Press Lap to finish this rest.**',
+      'Lap finishes the current step, not starts it', 'Other sports and older Guides keep **Press lap when ready**']) expect(content).toContain(phrase);
+  });
   it('explains pool-only measured SWOLF without target, pool-length or sensor promises', () => {
     const content = HELP_SECTIONS.find(section => section.id === 'training-plans')!.content;
     for (const phrase of ['pool-only **AvgSWOLF**', '**Avg SWOLF** on older Guides', '**SWOLF is a measured reading, not a target.**',

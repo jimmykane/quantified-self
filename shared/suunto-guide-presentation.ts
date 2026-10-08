@@ -59,7 +59,7 @@ export function suuntoGuideOptionalReadingsV1(step: WorkoutStepV1, sport: Activi
   return candidates.slice(0, 5 - prescribedFields);
 }
 
-/** Pool-only presentation. Authored targets/text always reserve their slots.
+/** Frozen v9 pool-only presentation. Authored targets/text always reserve their slots.
  * Rest readings describe the current rest, not the preceding swim interval. */
 export function suuntoGuidePoolScreenReadingsV1(step: WorkoutStepV1): SuuntoGuideReadingTypeV1[] {
   if (step.ending.kind === 'manual' && step.targets.length === 0 && step.note
@@ -76,4 +76,16 @@ export function suuntoGuidePoolScreenReadingsV1(step: WorkoutStepV1): SuuntoGuid
     'distance', 'duration', 'pace', 'strokeRate', 'swolf', 'heartRate',
   ])];
   return candidates.slice(0, available);
+}
+
+/** Current swim-only presentation. Keep v7/v9 selection above immutable for
+ * recovery and recorded-lap policy. Workout distance survives a new Rest lap;
+ * it is not a previous-interval statistic or a synthesized sensor value. */
+export function suuntoGuideSwimScreenReadingsV1(step: WorkoutStepV1, sport: ActivityTypes): Array<SuuntoGuideReadingTypeV1 | 'workoutDistance'> {
+  if (step.purpose !== 'rest') return sport === ActivityTypes.Swimming
+    ? suuntoGuidePoolScreenReadingsV1(step) : suuntoGuideOptionalReadingsV1(step, sport);
+  if (step.ending.kind === 'manual' && step.targets.length === 0 && step.note
+    && Array.from(suuntoGuideWatchTextV1(step.note)).length > 40) return [];
+  const available = 5 - (step.ending.kind === 'manual' ? 0 : 1) - step.targets.length - (step.note ? 1 : 0);
+  return (['heartRate', 'workoutDistance'] as const).slice(0, available);
 }
