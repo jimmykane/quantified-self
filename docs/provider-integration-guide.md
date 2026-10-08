@@ -1213,9 +1213,11 @@ classified processing failures, unavailable observations and missing heartbeats 
 Its three affected Functions and owned dashboard/11 metrics/six enabled policies were
 deployed/applied with separate approval and verified through production API/query readback,
 reusing the existing Alerts email channel. It was not activated by the #829 deployment.
-Initial post-creation heartbeat-series evidence remains distinct from earlier raw logs;
-dated activation and remaining observation evidence are recorded in #830. Future changes
-still require separate approval.
+Final 8 October read-only verification confirmed positive post-creation heartbeat,
+sampled-count and sampled-age series for all four lanes, plus all thirteen chart and
+fourteen condition queries. Dated activation and observation evidence are recorded
+in completed #830; idle bounded samples do not prove global coverage, and earlier raw
+logs were not substituted for metric-series proof. Future changes still require separate approval.
 See [Sleep sync operations](sleep-sync-operations.md#cloud-monitoring-830) for meanings,
 exclusions, thresholds, costs and activation steps. HTTP ACK, request-campaign completion
 and received Health/Sleep records are different outcomes; idle feeds are not an outage.

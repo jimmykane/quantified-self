@@ -357,9 +357,10 @@ Status: **activated in production on 7 October 2026**, after the separately appr
 three-Function deployment and configuration apply. The existing Alerts email channel
 is reused. All 11 metrics, dashboard queries and six enabled policies passed API readback;
 dated activation and observation evidence is recorded in [#830](https://github.com/jimmykane/quantified-self/issues/830).
-Initial log-metric heartbeats still need post-creation observations; raw pre-creation logs
-are not retrospective metric samples. The #829 Activity Import dashboard and #655
-Training dashboard do not provide this area's coverage.
+Positive post-creation heartbeat, sampled-count and sampled-age series for all four
+provider/workload lanes were verified on 8 October 2026; raw pre-creation logs were not
+used as retrospective metric samples. This completes #830's activation evidence.
+The #829 Activity Import dashboard and #655 Training dashboard do not provide this area's coverage.
 
 `tools/health-sleep-monitoring/definitions.mjs` owns **QS Health & Sleep**, 11 versioned
 log-based metrics and six alert policies, tagged `qs-health-sleep-monitoring-v1`.
@@ -512,6 +513,20 @@ counter interpolation. Verify representative threshold/missing-data behavior aga
 safe aggregate samples and reuse #655's same-channel delivery proof only if that channel
 is unchanged. No fault injection, test email, provider call or temporary resource deletion
 is authorized by these instructions. Keep activation/readback evidence on #830.
+
+Final read-only verification at 07:11 UTC on 8 October 2026 (10:11 Helsinki) confirmed
+the eleven owned metrics, one dashboard and six valid enabled policies still match
+their source definitions and use the existing enabled Alerts email channel. All
+thirteen chart and fourteen condition queries, including aggregations, passed API
+validation. In the preceding four-hour window, each of the four lanes had eight
+positive heartbeat points and eight positive distribution-count observations in
+both `sampled_due` and `sampled_age`. The latest interval was 07:00:00–07:01:00 UTC:
+heartbeat count one and a distribution observation with mean zero for count/age
+in every lane. These are real post-creation idle samples, not inferred from empty
+queries or counter interpolation. An idle bounded sample is not global backlog
+coverage. The earlier approved deployment/apply and same-channel email proof are
+reused; this verification performed no cloud write, manual dispatch, provider call,
+fault injection, test email or data deletion. #830's operational acceptance is complete.
 
 Help was reviewed: this is admin operational visibility only, so product explanations
 remain unchanged. MCP impact is **none**: no tools, metrics exposed to users, schemas,
