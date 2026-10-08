@@ -56,7 +56,9 @@ describe('saveChecksummedStorageFile', () => {
         expect(save).toHaveBeenCalledTimes(1);
     });
 
-    it.each([false, true])('uses the real SDK with server-side corruption detection (corrupt=%s)', async corrupt => {
+    it.each([
+        'valid', 'corrupt-payload', 'mismatch-response', 'missing-response',
+    ])('validates the upload and response through the real SDK (%s)', async scenario => {
         let suppliedChecksum: string | undefined;
         let uploadedBytes: Buffer | undefined;
         let storedBytes: Buffer | undefined;
@@ -78,7 +80,7 @@ describe('saveChecksummedStorageFile', () => {
             if (request.method === 'PUT' && request.url === '/session') {
                 uploadedBytes = body;
                 const received = Buffer.from(body);
-                if (corrupt) received[0] ^= 1;
+                if (scenario === 'corrupt-payload') received[0] ^= 1;
                 const checksum = new CRC32C();
                 checksum.update(received);
                 if (checksum.toString() !== suppliedChecksum) {
@@ -87,12 +89,21 @@ describe('saveChecksummedStorageFile', () => {
                     return;
                 }
                 storedBytes = received;
-                response.writeHead(200, { 'Content-Type': 'application/json' }).end(JSON.stringify({
+                const metadata = {
                     name: 'original.gpx',
                     size: received.length.toString(),
                     generation: '1',
-                    crc32c: suppliedChecksum,
-                }));
+                    crc32c: scenario === 'missing-response' ? undefined
+                        : scenario === 'mismatch-response' ? 'AAAAAA==' : suppliedChecksum,
+                };
+                response.writeHead(200, { 'Content-Type': 'application/json' })
+                    .end(JSON.stringify(metadata));
+                return;
+            }
+            if (request.method === 'DELETE'
+                && new URL(request.url || '', 'http://127.0.0.1').pathname === '/storage/v1/b/test-bucket/o/original.gpx') {
+                storedBytes = undefined;
+                response.writeHead(204).end();
                 return;
             }
             response.writeHead(500).end('Unexpected SDK request');
@@ -105,18 +116,21 @@ describe('saveChecksummedStorageFile', () => {
                 retryOptions: { autoRetry: false, maxRetries: 0 },
             });
             const upload = saveChecksummedStorageFile(storage.bucket('test-bucket').file('original.gpx'), source);
-            if (corrupt) {
-                await expect(upload).rejects.toMatchObject({ code: 400 });
-                expect(storedBytes).toBeUndefined();
-            } else {
+            if (scenario === 'valid') {
                 await expect(upload).resolves.toBeUndefined();
                 expect(storedBytes).toEqual(source);
+            } else {
+                await expect(upload).rejects.toMatchObject({
+                    code: scenario === 'corrupt-payload' ? 400 : 'FILE_NO_UPLOAD',
+                });
+                expect(storedBytes).toBeUndefined();
             }
             const expectedChecksum = new CRC32C();
             expectedChecksum.update(source);
             expect(suppliedChecksum).toBe(expectedChecksum.toString());
             expect(uploadedBytes).toEqual(source);
-            expect(requests).toEqual(['POST', 'PUT']);
+            expect(requests).toEqual(scenario.endsWith('-response')
+                ? ['POST', 'PUT', 'DELETE'] : ['POST', 'PUT']);
         } finally {
             server.closeAllConnections();
             await new Promise<void>(resolve => server.close(() => resolve()));
