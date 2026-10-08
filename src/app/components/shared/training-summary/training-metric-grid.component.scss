@@ -104,7 +104,8 @@
 // Match the column count and dividers to this component, not the viewport.
 @container (max-width: 640px) {
   .training-metric-grid--workspace,
-  .training-metric-grid--preview-load {
+  .training-metric-grid--preview-load,
+  .training-metric-grid--preview-context {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
@@ -122,15 +123,15 @@
     border-top: 1px solid var(--mat-sys-outline-variant);
   }
 
-  .training-metric-grid--preview-context {
-    grid-template-columns: 1fr;
-  }
-
-  .training-metric-grid--preview-context > div {
+  .training-metric-grid--preview-context > div:nth-child(odd) {
     border-left: 0;
   }
 
-  .training-metric-grid--preview-context > div:not(:first-child) {
+  .training-metric-grid--preview-context > div:nth-child(even) {
+    border-left: 1px solid var(--mat-sys-outline-variant);
+  }
+
+  .training-metric-grid--preview-context > div:nth-child(n + 3) {
     border-top: 1px solid var(--mat-sys-outline-variant);
   }
 }
