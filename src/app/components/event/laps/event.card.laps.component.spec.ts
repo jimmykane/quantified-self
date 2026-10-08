@@ -24,6 +24,7 @@ import {
     LapTypes,
     Privacy,
     SpeedUnits,
+    SwimPaceUnits,
     UserUnitSettingsInterface
 } from '@sports-alliance/sports-lib';
 import { readFileSync } from 'node:fs';
@@ -111,6 +112,49 @@ describe('EventCardLapsComponent', () => {
         component.unitSettings = {} as UserUnitSettingsInterface;
         component.event = { getActivities: () => [] } as EventInterface;
         fixture.detectChanges();
+    });
+
+    it('expands only recorded lengths, retains disclosure and selection across units, and labels rest rows', () => {
+        const laps = [createRenderableLap(LapTypes.Manual), createRenderableLap(LapTypes.Manual)];
+        const activity = { ...createActivity(laps), type: 'Swimming', getSwimLengths: () => [
+            { index: 1, lapIndex: 1, type: 'active', stroke: 'freestyle', startDate: 0, endDate: 30_000,
+                timerTime: 30, distance: 22.86, strokes: 10, avgCadence: 20 },
+            { index: 2, lapIndex: 2, type: 'idle', startDate: 30_000, endDate: 60_000, timerTime: 30, distance: 0 },
+        ] } as unknown as ActivityInterface;
+        component.selectedActivities = [activity];
+        component.ngOnChanges();
+        fixture.detectChanges();
+        const table = component.lapTableGroups[0].tables[0];
+        expect(table.columns).toContain('lengths');
+        const active = table.dataSource.data.find(row => row.lap === laps[0])!;
+        const rest = table.dataSource.data.find(row => row.lap === laps[1])!;
+        expect(rest.isRest).toBe(true);
+        expect(fixture.nativeElement.querySelector('.lap-rest-row').textContent).toContain('Rest');
+        expect(haptics.selection).not.toHaveBeenCalled();
+        const button = fixture.nativeElement.querySelector('button[aria-label="Show lengths for lap 1"]');
+        button.click();
+        fixture.detectChanges();
+        expect(button.getAttribute('aria-expanded')).toBe('true');
+        expect(fixture.nativeElement.querySelector('.lap-length-detail-row:not([hidden]) app-event-card-swim-lengths')).toBeTruthy();
+        expect(haptics.selection).toHaveBeenCalledTimes(1);
+        component.toggleLapSelection(table, active);
+        component.unitSettings = { ...getDefaultUserUnitSettings(), swimPaceUnits: [SwimPaceUnits.MinutesPer100Yard] };
+        component.ngOnChanges();
+        fixture.detectChanges();
+        const refreshed = component.lapTableGroups[0].tables[0];
+        expect(refreshed.selectedCount).toBe(1);
+        expect(refreshed.dataSource.data.find(row => row.lap === laps[0])?.lengthsExpanded).toBe(true);
+        expect(fixture.nativeElement.querySelector('button[aria-label="Hide lengths for lap 1"]')).toBeTruthy();
+        expect(component.swolfColumnLabel).toBe('SWOLF (25 yd)');
+        const summaryCell = fixture.nativeElement.querySelector('mat-footer-cell.mat-column-Normalized-SWOLF');
+        expect(summaryCell.textContent).toContain('40 · 1/1');
+        expect(haptics.selection).toHaveBeenCalledTimes(2);
+        fixture.nativeElement.querySelector('button[aria-label="Hide lengths for lap 1"]').click();
+        fixture.detectChanges();
+        expect(fixture.nativeElement.querySelector('.lap-length-detail-row:not([hidden])')).toBeNull();
+        expect(haptics.selection).toHaveBeenCalledTimes(3);
+        component.toggleLapLengths({ '#': 'Avg', isLapAverage: true });
+        expect(haptics.selection).toHaveBeenCalledTimes(3);
     });
 
     it('should create', () => {

@@ -83,6 +83,7 @@
     "src/app/helpers/event-lap-table-columns.helper.spec.ts",
     "src/app/helpers/event-lap-type.helper.spec.ts",
     "src/app/helpers/event-stat-aggregation.helper.spec.ts",
+    "src/app/helpers/event-swim-analytics.helper.spec.ts",
     "src/app/helpers/event-swim-length.helper.spec.ts",
     "src/app/helpers/event-tags.helper.spec.ts",
     "src/app/helpers/event-visibility.helper.spec.ts",

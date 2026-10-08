@@ -1151,6 +1151,11 @@ describe('help.content', () => {
   it('should document event swim length tables', () => {
     const gettingStartedSection = HELP_SECTIONS.find(section => section.id === 'getting-started');
 
+    expect(gettingStartedSection?.content).toContain('individual recorded FIT pool lengths');
+    expect(gettingStartedSection?.content).toContain('**Total strokes**');
+    expect(gettingStartedSection?.content).toContain('**SWOLF (25 yd)**');
+    expect(gettingStartedSection?.content).toContain('Swimming **Avg** values exclude rest');
+    expect(gettingStartedSection?.content).toContain('not divided into invented splits');
     expect(gettingStartedSection?.content).toContain('Event swim length tables');
     expect(gettingStartedSection?.content).toContain('**Swim Lengths** table');
     expect(gettingStartedSection?.content).toContain('per-length pool data');
@@ -1163,7 +1168,7 @@ describe('help.content', () => {
     expect(gettingStartedSection?.content).toContain('Stored distances remain in meters');
     expect(gettingStartedSection?.content).toContain('**Swim** time (excluding idle/rest lengths)');
     expect(gettingStartedSection?.content).toContain('**Total** keeps the combined time');
-    expect(gettingStartedSection?.content).toContain('Set swim pace excludes rest too');
+    expect(gettingStartedSection?.content).toContain('Set swim pace, stroke totals, average stroke rate, and efficiency exclude rest too');
     expect(gettingStartedSection?.content).toContain('Each length keeps its recorded duration and all available details');
     expect(gettingStartedSection?.content).toContain('falling back to elapsed time when timer time is missing');
     expect(gettingStartedSection?.content).toContain('unrecorded rest is not inferred');

@@ -396,8 +396,10 @@ export class DataTypeIconComponent {
       case 'Stroke':
         return 'pool';
       case 'Strokes':
+      case 'Total strokes':
         return 'front_hand';
       case 'SWOLF':
+      case 'Normalized SWOLF':
         return 'scoreboard';
       case DataAerobicTrainingEffect.type:
       case 'Anaerobic Training Effect':

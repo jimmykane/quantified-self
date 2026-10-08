@@ -170,7 +170,7 @@ function getDisplaySwimLengthLapIndex(length: AppSwimLength, laps: LapInterface[
   return matches.length === 1 ? matches[0].index + 1 : recordedIndex;
 }
 
-function getRecordedLapActive(lap: LapInterface): boolean | null {
+export function getRecordedLapActive(lap: LapInterface): boolean | null {
   const stat = lap.getStat?.(DataActiveLap.type);
   const value = stat ? stat.getValue() : null;
   return typeof value === 'boolean' ? value : null;
@@ -199,6 +199,13 @@ export function getSwimStrokeLabel(swimLengths: readonly AppSwimLength[]): strin
 
 /** lapIndex is one-based in the complete activity lap list, before filtering by lap type. */
 export function getSwimLapStrokeLabels(activity: ActivityInterface): Map<LapInterface, string> {
+  return new Map([...getSwimLapLengths(activity)].map(([lap, lengths]) => [
+    lap, getRecordedLapActive(lap) === false ? '' : getSwimStrokeLabel(lengths),
+  ]));
+}
+
+/** Recorded length membership, using the complete lap list rather than displayed row numbers. */
+export function getSwimLapLengths(activity: ActivityInterface): Map<LapInterface, AppSwimLength[]> {
   const lengthsByLapIndex = new Map<number, AppSwimLength[]>();
   for (const length of getActivitySwimLengths(activity)) {
     if (!Number.isInteger(length.lapIndex) || length.lapIndex < 1) {
@@ -209,8 +216,7 @@ export function getSwimLapStrokeLabels(activity: ActivityInterface): Map<LapInte
     lengthsByLapIndex.set(length.lapIndex, lengths);
   }
   return new Map((activity.getLaps?.() || []).map((lap, index) => [
-    lap, getRecordedLapActive(lap) === false
-      ? '' : getSwimStrokeLabel(lengthsByLapIndex.get(index + 1) || []),
+    lap, lengthsByLapIndex.get(index + 1) || [],
   ]));
 }
 

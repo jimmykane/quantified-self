@@ -13,6 +13,7 @@ import {
   DataSwimPaceMinutesPer100Yard,
   DistanceUnits,
   EventInterface,
+  LapInterface,
   SwimPaceUnits,
   UserUnitSettingsInterface
 } from '@sports-alliance/sports-lib';
@@ -86,6 +87,50 @@ describe('EventCardSwimLengthsComponent', () => {
     component.unitSettings = {} as UserUnitSettingsInterface;
     component.event = { getActivities: () => [] } as EventInterface;
     fixture.detectChanges();
+  });
+
+  it.each([6, 10])('renders each recorded 25-yard length of a %s-length interval inline without duplicating set headers', count => {
+    const laps = [{}, {}] as LapInterface[];
+    const activity = { ...createActivity(Array.from({ length: count }, (_, index) => createSwimLength({
+      index: index + 1, lapIndex: 2, timerTime: 30, distance: 22.86, avgSpeed: null, strokes: 10,
+    }))), getLaps: () => laps } as ActivityInterface;
+    component.lap = laps[1];
+    component.selectedActivities = [activity];
+    component.unitSettings = { swimPaceUnits: [SwimPaceUnits.MinutesPer100Yard] } as UserUnitSettingsInterface;
+    component.ngOnChanges();
+    fixture.detectChanges();
+    expect(component.lapLengthTable?.rows).toHaveLength(count);
+    expect(component.lapLengthTable?.rows.at(-1)?.Split).toBe(`${count * 25} yd`);
+    expect(component.lapLengthTable?.rows[0]).toMatchObject({ Duration: '30s', Distance: '25 yd', Strokes: '10', 'Swim Pace': '02:00 min/100yd', 'Normalized SWOLF': '40', SWOLF: '39' });
+    expect(fixture.nativeElement.querySelectorAll('mat-row')).toHaveLength(count);
+    expect(fixture.nativeElement.querySelector('mat-accordion')).toBeNull();
+    expect(haptics.selection).not.toHaveBeenCalled();
+    component.unitSettings = { swimPaceUnits: [SwimPaceUnits.MinutesPer100Meter] } as UserUnitSettingsInterface;
+    component.ngOnChanges();
+    expect(component.lapLengthTable?.rows[0]['Normalized SWOLF']).toBe('43.7');
+  });
+
+  it('excludes rest from group cadence, strokes, and efficiency while retaining recorded length values', () => {
+    component.selectedActivities = [createActivity([
+      createSwimLength({ index: 1, timerTime: 30, avgCadence: 20, strokes: 10, swolf: 40 }),
+      createSwimLength({ index: 2, timerTime: 60, avgCadence: 40, strokes: 30, swolf: 90 }),
+      createSwimLength({ index: 3, type: 'idle', timerTime: 120, distance: 0, avgCadence: 100, strokes: 200, swolf: 200 }),
+    ])];
+    component.ngOnChanges();
+    const group = component.swimLengthViews[0].groups[0];
+    expect(group.summaryRow).toMatchObject({ 'Average Stroke Rate': '33 spm', Strokes: '40', SWOLF: '65', 'Normalized SWOLF': '65' });
+    expect(group.rows[2]).toMatchObject({ isRest: true, Split: 'Rest', Strokes: '200', SWOLF: '200', 'Normalized SWOLF': '' });
+    group.expanded = true;
+    fixture.detectChanges();
+    expect(fixture.nativeElement.querySelectorAll('.swim-length-rest-row')).toHaveLength(1);
+  });
+  it('keeps the exact yard set pace after adding ten recorded 25-yard distances', () => {
+    component.selectedActivities = [createActivity(Array.from({ length: 10 }, (_, i) => createSwimLength({
+      index: i + 1, distance: 22.86, timerTime: 35,
+    })))];
+    component.unitSettings = { swimPaceUnits: [SwimPaceUnits.MinutesPer100Yard] } as UserUnitSettingsInterface;
+    component.ngOnChanges();
+    expect(component.swimLengthViews[0].groups[0].summaryRow['Swim Pace']).toBe('02:20 min/100yd');
   });
 
   it('should create', () => {
@@ -474,7 +519,7 @@ describe('EventCardSwimLengthsComponent', () => {
     expect(template).toContain('class="swim-length-group-panel mat-elevation-z0 qs-overlay-flat"');
     expect(template).toContain('collapsedHeight="auto"');
     expect(template).toContain('group.restDuration');
-    expect(template).toContain("@if (column.name !== '#')");
+    expect(template).toContain("@else if (column.name !== '#')");
     expect(template).toContain('class="swim-length-table-value"');
     expect(template).toContain("[class.swim-length-index-cell]=\"column.name === '#'");
     expect(template).toContain("[class.swim-length-lap-cell]=\"column.name === 'Lap'");

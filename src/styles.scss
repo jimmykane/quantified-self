@@ -755,16 +755,16 @@ td.mat-cell {
   font-size: 0.95rem;
 }
 
-/* Row Hover Effects */
-.mat-mdc-row:hover .mat-mdc-cell:not(.mat-column-sticky),
-tr.mat-row:hover td:not(.mat-table-sticky) {
+/* Style only this row's cells: a detail row can contain an independently scrolling nested table. */
+.mat-mdc-row:hover > .mat-mdc-cell:not(.mat-column-sticky),
+tr.mat-row:hover > td:not(.mat-table-sticky) {
   background: rgba(0, 0, 0, 0.04);
   background: var(--mat-sys-state-hover, rgba(0, 0, 0, 0.04));
   cursor: pointer;
 }
 
-.dark-theme .mat-mdc-row:hover .mat-mdc-cell:not(.mat-column-sticky),
-.dark-theme tr.mat-row:hover td:not(.mat-table-sticky) {
+.dark-theme .mat-mdc-row:hover > .mat-mdc-cell:not(.mat-column-sticky),
+.dark-theme tr.mat-row:hover > td:not(.mat-table-sticky) {
   background: rgba(255, 255, 255, 0.04);
 }
 
