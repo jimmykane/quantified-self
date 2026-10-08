@@ -183,7 +183,8 @@ export class EventCardSwimLengthsComponent implements OnChanges {
       Lap: this.formatOptionalInteger(swimLength.lapIndex),
       Split: '',
       Duration: this.formatDuration(swimLength),
-      Distance: this.formatDistance(swimLength.distance),
+      Distance: this.formatSwimDistanceValue(isRestSwimLength(swimLength)
+        ? this.getFiniteDataValue(swimLength.distance) : getSwimLengthDistance(swimLength)),
       Type: this.formatLabel(swimLength.type),
       Stroke: this.formatLabel(swimLength.stroke),
       Strokes: this.formatOptionalInteger(swimLength.strokes),
@@ -277,9 +278,12 @@ export class EventCardSwimLengthsComponent implements OnChanges {
     const firstIndex = swimLengths[0]?.index ?? 0;
     const lastSwimLength = swimLengths[swimLengths.length - 1];
     const totalDuration = this.sumDataValues(swimLengths, swimLength => swimLength.timerTime ?? swimLength.elapsedTime);
-    const totalDistance = this.sumDataValues(swimLengths, swimLength => swimLength.distance);
-    const activeDuration = this.sumDataValues(activeSwimLengths, swimLength => swimLength.timerTime ?? swimLength.elapsedTime);
-    const activeDistance = this.sumDataValues(activeSwimLengths, swimLength => swimLength.distance);
+    const totalDistance = this.sumNumericValues(swimLengths, swimLength => isRestSwimLength(swimLength)
+      ? this.getFiniteDataValue(swimLength.distance) : getSwimLengthDistance(swimLength));
+    const activeDuration = activeSwimLengths.every(length => getSwimLengthDuration(length) !== null)
+      ? this.sumNumericValues(activeSwimLengths, getSwimLengthDuration) : null;
+    const activeDistance = activeSwimLengths.every(length => getSwimLengthDistance(length) !== null)
+      ? this.sumNumericValues(activeSwimLengths, getSwimLengthDistance) : null;
     const totalEnergy = this.sumDataValues(swimLengths, swimLength => swimLength.calories);
     const totalStrokes = activeSwimLengths.every(length => length.strokes !== null && length.strokes >= 0)
       ? this.sumNumericValues(activeSwimLengths, swimLength => swimLength.strokes) : null;
@@ -300,8 +304,7 @@ export class EventCardSwimLengthsComponent implements OnChanges {
       'Average Stroke Rate': avgCadence === null ? '' : this.formatStrokeRate(new DataStrokeRate(avgCadence)),
       'Average Heart Rate': avgHeartRate === null ? '' : this.formatHeartRate(new DataHeartRate(avgHeartRate)),
       SWOLF: this.formatDecimal(avgSwolf),
-      'Normalized SWOLF': activeSwimLengths.every(length => length.strokes !== null && getSwimLengthDuration(length) !== null && getSwimLengthDistance(length) !== null)
-        ? this.formatOptionalStat(getNormalizedSwolf(activeDuration, activeDistance, totalStrokes, this.unitSettings)) : '',
+      'Normalized SWOLF': this.formatOptionalStat(getNormalizedSwolf(activeDuration, activeDistance, totalStrokes, this.unitSettings)),
       Energy: totalEnergy === null ? '' : this.formatUnitAwareStat(new DataEnergy(totalEnergy)),
     };
   }
@@ -334,10 +337,6 @@ export class EventCardSwimLengthsComponent implements OnChanges {
     return seconds === null ? '' : resolveUnitAwareDisplayStat(new DataDuration(seconds), this.unitSettings, {
       durationMilliseconds: true,
     })?.text ?? '';
-  }
-
-  private formatDistance(distance: AppSwimLength['distance']): string {
-    return this.formatSwimDistanceValue(this.getFiniteDataValue(distance));
   }
 
   private formatSwimDistanceValue(distance: number | null): string {

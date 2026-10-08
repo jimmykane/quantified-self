@@ -148,21 +148,33 @@ stroke rate is a fallback only without that metadata, preserving active zero-str
 
 Swimming defaults add **Total strokes** and **Normalized SWOLF** to the existing per-sport catalog. Saved lists,
 including empty lists, retain precedence. The display-only `DataNormalizedSwolf` extends Sports Lib's numeric data
-class; it uses `ActivityUtilities.computeSwimSwolf` and rounds the displayed result to one decimal. The header labels
+class. Stroke, total strokes and normalized SWOLF choices are limited to swimming in both the chooser and the
+resolved column list, so cycling crank cycles cannot appear under the swim strokes label. The normalized SWOLF
+class uses `ActivityUtilities.computeSwimSwolf` and rounds the displayed result to one decimal. The header labels
 its reference via the shared swim-distance display: 25 meters or 22.86 canonical meters (25 yards), following the
 first normalized swim-pace preference. The score is `(activeSeconds + totalStrokes) * referenceMeters / activeMeters`.
 Recorded provider SWOLF stays separate. Complete active timing, distance and counts are required for length-derived
-SWOLF and totals; missing fields remain unavailable. Without length records, valid native lap strokes/time/distance
-or native pace/stroke rate can supply the score; no stroke count is inferred from cadence. Physical pool length and
-stroke still affect efficiency comparisons.
+SWOLF and totals. When Active Lengths is a valid integer, the available active-length count must also match before
+using length-derived interval metrics or average weights. Expansion always retains the actual recorded rows.
+Missing fields or a mismatched count can fall back to valid native interval metrics only without recorded rest
+lengths; mixed swim/rest intervals keep unavailable active metrics blank instead of using combined lap totals.
+Native lap strokes/time/distance or native pace/stroke rate can supply the score; no stroke count is inferred from
+cadence. Physical pool length and stroke still affect efficiency comparisons.
 
 Swim lap performance values use active length records when present, preserving native lap duration/distance totals.
 Top and selected swim averages exclude known rest: pace and SWOLF weight by active distance; cadence/stroke rate
 weight by active duration. Available cadence fields use that time weighting, with stroke-count/time fallback if no
-rate is recorded. Zero stroke rates contribute normally for active drills. Selected accumulated averages retain
-existing duration/distance/energy coverage and report contributing lap counts. Other sports retain their average
-semantics. Set summaries also exclude rest from stroke totals, cadence and efficiency. Importers, persisted numeric
-metrics, chart timing, Training metrics and MCP read/write contracts are unchanged; these are event-view calculations.
+rate is recorded. Zero stroke rates contribute normally for active drills.
+An existing legacy cadence column also uses the active rate and its recorded sample-duration coverage; a missing
+native cadence column remains unavailable instead of becoming a duplicate of stroke rate.
+Selected accumulated averages retain existing duration/distance/energy coverage and report contributing lap counts.
+Other sports retain their average
+semantics. Active length distance uses recorded pool length when its distance is missing, consistently in length
+rows, interval analytics, set totals, splits, pace and normalized SWOLF. Rest rows retain only their recorded distance.
+Set pace and normalized SWOLF require complete active timing and distance; available individual rows and recorded
+timing remain visible when a performance input is missing. Set summaries also exclude rest from stroke totals,
+cadence and efficiency. Importers, persisted numeric metrics, chart timing, Training metrics and MCP read/write
+contracts are unchanged; these are event-view calculations.
 
 ## Activity details spacing
 

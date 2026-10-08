@@ -1,21 +1,21 @@
 import { describe, expect, it } from 'vitest';
 import {
-  ActivityInterface, DataActiveLap, DataDistance, DataDuration, DataStrokeRateAvg,
-  DataSwimPaceAvg, LapInterface, SwimPaceUnits,
+  ActivityInterface, DataActiveLap, DataActiveLengths, DataCadenceAvg, DataDistance, DataDuration, DataInterface, DataStrokeRateAvg,
+  DataSwimPaceAvg, DataTotalCycles, LapInterface, SwimPaceUnits,
 } from '@sports-alliance/sports-lib';
 import { getSwimLapAnalytics, getSwimLapDisplayMetric, getNormalizedSwolf, getSwolfColumnLabel, isRestSwimLap } from './event-swim-analytics.helper';
 import { getDefaultUserUnitSettings } from '@shared/unit-aware-display';
-import { formatEventLapMetric, getAverageEventLapMetrics, getSelectedEventLapSummaryMetrics, getDefaultEventLapMetricTypes, getSelectedEventLapMetricTypes } from './event-lap-table-columns.helper';
+import { formatEventLapMetric, getAverageEventLapMetrics, getSelectedEventLapSummaryMetrics, getDefaultEventLapMetricTypes, getSelectedEventLapMetricTypes, getEventLapMetricOptionGroups, EVENT_LAP_STROKE_COLUMN } from './event-lap-table-columns.helper';
 import { EVENT_LAP_STROKES_COLUMN, EVENT_LAP_SWOLF_COLUMN } from './event-swim-analytics.helper';
 import { normalizeSwimLength } from './event-swim-length.helper';
 
 const units = getDefaultUserUnitSettings();
-function lap(distance = 25, duration = 30, cadence = 20, active?: boolean): LapInterface {
+function lap(distance = 25, duration = 30, cadence = 20, active?: boolean, stats: Record<string, DataInterface> = {}): LapInterface {
   return {
     getDuration: () => new DataDuration(duration), getDistance: () => new DataDistance(distance),
-    getStat: (type: string) => type === DataActiveLap.type && active !== undefined ? new DataActiveLap(active)
+    getStat: (type: string) => stats[type] ?? (type === DataActiveLap.type && active !== undefined ? new DataActiveLap(active)
       : type === DataStrokeRateAvg.type ? new DataStrokeRateAvg(cadence)
-        : type === DataSwimPaceAvg.type ? new DataSwimPaceAvg(100 * duration / distance) : undefined,
+        : type === DataSwimPaceAvg.type ? new DataSwimPaceAvg(100 * duration / distance) : undefined),
   } as unknown as LapInterface;
 }
 function length(index: number, overrides: Record<string, unknown> = {}) {
@@ -31,6 +31,18 @@ describe('swim interval analytics', () => {
     expect(getDefaultEventLapMetricTypes('swimming')).toEqual(expect.arrayContaining([EVENT_LAP_STROKES_COLUMN, EVENT_LAP_SWOLF_COLUMN]));
     expect(getDefaultEventLapMetricTypes('running')).not.toContain(EVENT_LAP_STROKES_COLUMN);
     expect(getSelectedEventLapMetricTypes({ lapTableColumnsBySportFamily: { swimming: [DataDuration.type] } }, 'swimming')).toEqual([DataDuration.type]);
+  });
+  it('limits swim-specific display columns to swimming without relabeling other sports cycles', () => {
+    const swimTypes = [EVENT_LAP_STROKE_COLUMN, EVENT_LAP_STROKES_COLUMN, EVENT_LAP_SWOLF_COLUMN];
+    expect(getEventLapMetricOptionGroups('swimming').flatMap(group => group.metrics.map(metric => metric.type)))
+      .toEqual(expect.arrayContaining(swimTypes));
+    (['cycling', 'running', 'other'] as const).forEach(family => {
+      const offered = getEventLapMetricOptionGroups(family).flatMap(group => group.metrics.map(metric => metric.type));
+      swimTypes.forEach(type => expect(offered).not.toContain(type));
+      expect(getSelectedEventLapMetricTypes({ lapTableColumnsBySportFamily: { [family]: [DataDuration.type, ...swimTypes] } }, family))
+        .toEqual([DataDuration.type]);
+    });
+    expect(getSelectedEventLapMetricTypes({ lapTableColumnsBySportFamily: { swimming: swimTypes } }, 'swimming')).toEqual(swimTypes);
   });
   it('uses active time / distance weights in the top and selected swim averages, retaining total duration coverage', () => {
     const laps = [lap(), lap(), lap(0, 120, 0, false)];
@@ -86,6 +98,17 @@ describe('swim interval analytics', () => {
     expect(getSwimLapDisplayMetric(analytics.get(laps[1]), DataStrokeRateAvg.type)).toBeUndefined();
     expect(analytics.get(laps[1])?.isRest).toBe(true);
   });
+  it('uses active-only values and sample duration for an existing legacy cadence column', () => {
+    const laps = [lap(50, 120, 99, true, { [DataCadenceAvg.type]: new DataCadenceAvg(99) }),
+      lap(25, 30, 88, true, { [DataCadenceAvg.type]: new DataCadenceAvg(88) })];
+    const swim = activity(laps, [length(1, { distance: 25, avgCadence: 20 }),
+      length(2, { distance: 25, timerTime: 270, avgCadence: null }), length(3, { type: 'idle', avgCadence: 99 }),
+      length(4, { lapIndex: 2, distance: 25, avgCadence: 40 })]);
+    const result = getSwimLapAnalytics(swim).get(laps[0]);
+    expect(getSwimLapDisplayMetric(result, DataCadenceAvg.type)?.getValue()).toBe(20);
+    expect(getAverageEventLapMetrics(laps, [DataCadenceAvg.type], units, 'Swimming', swim))
+      .toEqual([{ type: DataCadenceAvg.type, display: '30 rpm' }]);
+  });
   it('does not invent missing lengths, strokes, or active timing from combined lap totals', () => {
     const laps = [lap()];
     const result = getSwimLapAnalytics(activity(laps, [length(1, { strokes: null }), length(2, { type: 'idle' })])).get(laps[0]);
@@ -95,6 +118,34 @@ describe('swim interval analytics', () => {
     expect(missing?.activeDuration).toBeNull();
     expect(missing?.pace).toBeNull();
     expect(getSwimLapAnalytics(activity(laps, [])).get(laps[0])?.lengths).toEqual([]);
+  });
+  it('retains native interval metrics when recorded active lengths have missing fields', () => {
+    const laps = [lap(25, 30, 20, true, { [DataTotalCycles.type]: new DataTotalCycles(10) })];
+    const swim = activity(laps, [length(1, { distance: 25, timerTime: null, elapsedTime: null, strokes: null, avgCadence: null })]);
+    const result = getSwimLapAnalytics(swim).get(laps[0]);
+    expect(result).toMatchObject({ activeDuration: 30, activeDistance: 25, cadenceDuration: 30 });
+    expect(result?.pace?.getValue()).toBe(120);
+    expect(result?.cadence?.getValue()).toBe(20);
+    expect(result?.strokes?.getValue()).toBe(10);
+    expect(result?.swolf?.getValue()).toBe(40);
+    expect(getAverageEventLapMetrics(laps, [DataStrokeRateAvg.type, DataSwimPaceAvg.type], units, 'Swimming', swim))
+      .toEqual([{ type: DataStrokeRateAvg.type, display: '20 spm' }, { type: DataSwimPaceAvg.type, display: '02:00 min/100m' }]);
+  });
+  it('does not substitute partial lengths for whole interval metrics when the recorded active count differs', () => {
+    const laps = [lap(150, 180, 20, true, {
+      [DataActiveLengths.type]: new DataActiveLengths(6), [DataTotalCycles.type]: new DataTotalCycles(60),
+    })];
+    const swim = activity(laps, Array.from({ length: 5 }, (_, i) => length(i + 1, { distance: 25, timerTime: 40, strokes: 9, avgCadence: 15 })));
+    const result = getSwimLapAnalytics(swim).get(laps[0]);
+    expect(result?.lengths).toHaveLength(5);
+    expect(result).toMatchObject({ activeDuration: 180, activeDistance: 150, cadenceDuration: 180 });
+    expect(result?.strokes?.getValue()).toBe(60);
+    expect(result?.pace?.getValue()).toBe(120);
+    expect(result?.cadence?.getValue()).toBe(20);
+    expect(result?.swolf?.getValue()).toBe(40);
+    const mixed = getSwimLapAnalytics(activity(laps, [...swim.getSwimLengths(), length(6, { type: 'idle', distance: 0 })])).get(laps[0]);
+    expect(mixed).toMatchObject({ activeDuration: null, activeDistance: null, cadenceDuration: null, strokes: null, pace: null, cadence: null, swolf: null });
+    expect(mixed?.lengths).toHaveLength(6);
   });
   it('keeps an exact 250-yard rep pace at 2:20 after summing ten lengths', () => {
     const laps = [lap()];

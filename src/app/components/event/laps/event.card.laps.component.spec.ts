@@ -15,6 +15,7 @@ import {
     DataSpeedAvg,
     DataSpeedMax,
     DataSpeedMin,
+    DataTotalCycles,
     DistanceUnits,
     EventImporterJSON,
     EventInterface,
@@ -38,6 +39,7 @@ import { EVENT_LAP_STROKE_COLUMN, normalizeEventDetailsSettings } from '../../..
 import { getDefaultUserUnitSettings } from '../../../../../shared/unit-aware-display';
 import { AppHapticsService } from '../../../services/app.haptics.service';
 import { HapticTapDirective } from '../../../directives/haptic-tap.directive';
+import { EVENT_LAP_STROKES_COLUMN, EVENT_LAP_SWOLF_COLUMN } from '../../../helpers/event-swim-analytics.helper';
 
 function createActivity(laps: LapInterface[]): ActivityInterface {
     return {
@@ -226,6 +228,27 @@ describe('EventCardLapsComponent', () => {
         eventDetailsSettings.set(normalizeEventDetailsSettings({ lapTableColumnsBySportFamily: { swimming: [DataDuration.type] } }));
         fixture.detectChanges();
         expect(component.getColumnsToDisplay('Swimming')).toEqual(['#', DataDuration.type]);
+    });
+
+    it('does not offer swim columns or show cycling crank cycles as total strokes', () => {
+        const cyclingLap = {
+            ...createRenderableLap(LapTypes.Manual),
+            getStat: (type: string) => type === DataTotalCycles.type ? new DataTotalCycles(500) : undefined,
+        } as LapInterface;
+        const cycling = { ...createActivity([cyclingLap]), type: 'Cycling' } as ActivityInterface;
+        component.canCustomize = true;
+        eventDetailsSettings.set(normalizeEventDetailsSettings({ lapTableColumnsBySportFamily: {
+            cycling: [DataDuration.type, EVENT_LAP_STROKES_COLUMN, EVENT_LAP_SWOLF_COLUMN, EVENT_LAP_STROKE_COLUMN],
+        } }));
+        fixture.detectChanges();
+        component.selectedActivities = [cycling];
+        component.ngOnChanges();
+        fixture.detectChanges();
+        expect(component.getColumns(cycling, LapTypes.Manual)).toEqual(['selection', '#', DataDuration.type]);
+        const offered = component.lapColumnMenuGroups[0].metricGroups.flatMap(group => group.metrics.map(metric => metric.type));
+        expect(offered).not.toContain(EVENT_LAP_STROKES_COLUMN);
+        expect(offered).not.toContain(EVENT_LAP_SWOLF_COLUMN);
+        expect(offered).not.toContain(EVENT_LAP_STROKE_COLUMN);
     });
 
     it('gives column feedback only for accepted changes and confirmed saves, keeping initialization and no-ops silent', async () => {

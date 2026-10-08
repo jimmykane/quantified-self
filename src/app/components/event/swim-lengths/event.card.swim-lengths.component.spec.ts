@@ -132,6 +132,36 @@ describe('EventCardSwimLengthsComponent', () => {
     component.ngOnChanges();
     expect(component.swimLengthViews[0].groups[0].summaryRow['Swim Pace']).toBe('02:20 min/100yd');
   });
+  it.each([
+    { units: SwimPaceUnits.MinutesPer100Meter, pool: 25, distance: '25 m', total: '50 m', pace: '02:00 min/100m' },
+    { units: SwimPaceUnits.MinutesPer100Yard, pool: 22.86, distance: '25 yd', total: '50 yd', pace: '02:00 min/100yd' },
+  ])('uses recorded pool size consistently for active distances, pace and set efficiency: $units', example => {
+    component.unitSettings = { swimPaceUnits: [example.units] } as UserUnitSettingsInterface;
+    component.selectedActivities = [createActivity([
+      createSwimLength({ index: 1, distance: example.pool, timerTime: 30, strokes: 10 }),
+      createSwimLength({ index: 2, distance: null, poolLength: example.pool, timerTime: 30, strokes: 10 }),
+      createSwimLength({ index: 3, type: 'idle', distance: null, poolLength: example.pool, timerTime: 60 }),
+    ])];
+    component.ngOnChanges();
+    const group = component.swimLengthViews[0].groups[0];
+    expect(group.summaryRow).toMatchObject({ Distance: example.total, 'Swim Pace': example.pace, 'Normalized SWOLF': '40' });
+    expect(group.rows[1]).toMatchObject({ Distance: example.distance, Split: example.total, 'Normalized SWOLF': '40' });
+    expect(group.rows[2]).toMatchObject({ Distance: '', Split: 'Rest', 'Normalized SWOLF': '' });
+  });
+  it.each([
+    { timerTime: null, elapsedTime: null },
+    { distance: null, poolLength: null },
+  ])('does not calculate set performance from incomplete active time or distance: %j', missing => {
+    component.selectedActivities = [createActivity([
+      createSwimLength({ index: 1, timerTime: 30 }), createSwimLength({ index: 2, ...missing }),
+    ])];
+    component.ngOnChanges();
+    const group = component.swimLengthViews[0].groups[0];
+    expect(group.rows).toHaveLength(2);
+    expect(group.summaryRow['Swim Pace']).toBe('');
+    expect(group.summaryRow['Normalized SWOLF']).toBe('');
+    expect(group.rows[0].Duration).toBe('30s');
+  });
 
   it('should create', () => {
     expect(component).toBeTruthy();

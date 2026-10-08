@@ -144,6 +144,7 @@ interface OrderedEventLapMetricOptionGroup extends EventLapMetricOptionGroup {
 const EVENT_LAP_METRIC_TYPES = new Set<string>();
 /** Recorded categorical metadata, derived from the lap's swim lengths. */
 export const EVENT_LAP_STROKE_COLUMN = 'Stroke';
+const SWIM_ONLY_LAP_METRIC_TYPES = new Set([EVENT_LAP_STROKE_COLUMN, EVENT_LAP_STROKES_COLUMN, EVENT_LAP_SWOLF_COLUMN]);
 const EVENT_LAP_CATALOG_METRICS: EventLapCatalogMetric[] = [];
 
 const resolveEventLapMetricVariant = (type: string): EventLapMetricVariant | null => {
@@ -288,11 +289,11 @@ const DURATION_WEIGHTED_LAP_METRIC_TYPES = new Set([
 
 export const EVENT_LAP_TABLE_FIXED_COLUMN = '#';
 
-export const getEventLapMetricOptionGroups = (): EventLapMetricOptionGroup[] => (
+export const getEventLapMetricOptionGroups = (family?: AppEventLapSportFamily): EventLapMetricOptionGroup[] => (
   EVENT_LAP_METRIC_OPTION_GROUPS.map((group) => ({
     ...group,
-    metrics: [...group.metrics],
-  }))
+    metrics: group.metrics.filter(metric => !family || family === 'swimming' || !SWIM_ONLY_LAP_METRIC_TYPES.has(metric.type)),
+  })).filter(group => group.metrics.length > 0)
 );
 
 export const getEventLapSportFamilyPresentation = (
@@ -396,9 +397,9 @@ export const getSelectedEventLapMetricTypes = (
 ): string[] => {
   const normalizedSettings = normalizeEventDetailsSettings(settings);
   const selectedMetricTypes = normalizedSettings.lapTableColumnsBySportFamily?.[family];
-  return selectedMetricTypes === undefined
+  return (selectedMetricTypes === undefined
     ? getDefaultEventLapMetricTypes(family)
-    : selectedMetricTypes;
+    : selectedMetricTypes).filter(type => family === 'swimming' || !SWIM_ONLY_LAP_METRIC_TYPES.has(type));
 };
 
 export const formatEventLapMetric = (
@@ -508,7 +509,7 @@ const getEventLapSummaryValue = (
     if (weightingMetricType) {
       weight = !analytics ? getFiniteEventLapMetricValue(lap, weightingMetricType, context)
         : distanceWeighted ? analytics.activeDistance
-          : metricType === DataStrokeRateAvg.type ? analytics.cadenceDuration : analytics.activeDuration;
+          : [DataStrokeRateAvg.type, DataCadenceAvg.type].includes(metricType) ? analytics.cadenceDuration : analytics.activeDuration;
     }
     if (value === null || weight === null || weight <= 0) {
       return;

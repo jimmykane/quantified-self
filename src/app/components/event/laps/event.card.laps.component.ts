@@ -496,11 +496,11 @@ export class EventCardLapsComponent extends DataTableAbstractDirective implement
     const existingGroupsByFamily = new Map(
       this.lapColumnMenuGroups.map((group) => [group.family, group]),
     );
-    const metricGroups = getEventLapMetricOptionGroups().map(group => ({
-      ...group, metrics: group.metrics.map(metric => metric.type === EVENT_LAP_SWOLF_COLUMN
-        ? { ...metric, label: this.swolfColumnLabel } : metric),
-    }));
     this.lapColumnMenuGroups = Array.from(sportFamilies).map((family) => {
+      const metricGroups = getEventLapMetricOptionGroups(family).map(group => ({
+        ...group, metrics: group.metrics.map(metric => metric.type === EVENT_LAP_SWOLF_COLUMN
+          ? { ...metric, label: this.swolfColumnLabel } : metric),
+      }));
       const presentation = getEventLapSportFamilyPresentation(family);
       const existingGroup = existingGroupsByFamily.get(family);
       const selectedMetricTypes = getSelectedEventLapMetricTypes(

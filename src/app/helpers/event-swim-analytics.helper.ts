@@ -1,5 +1,5 @@
 import {
-  ActivityInterface, ActivityUtilities, DataCadenceAvg,
+  ActivityInterface, ActivityUtilities, DataActiveLengths, DataCadenceAvg,
   DataInterface, DataNumber, DataStrokeRateAvg, DataSwimPaceAvg, DataTotalCycles,
   LapInterface, SwimPaceUnits, UserUnitSettingsInterface,
 } from '@sports-alliance/sports-lib';
@@ -24,6 +24,8 @@ export interface SwimLapAnalytics {
   activeDuration: number | null;
   activeDistance: number | null;
   cadenceDuration: number | null;
+  /** Keep the legacy cadence column available only when it was recorded. */
+  hasRecordedCadence: boolean;
   strokes: DataTotalCycles | null;
   cadence: DataStrokeRateAvg | null;
   pace: DataSwimPaceAvg | null;
@@ -128,28 +130,37 @@ export function getSwimLapAnalytics(
   return new Map([...getSwimLapLengths(activity)].map(([lap, lengths]) => {
     const isRest = isRestSwimLap(lap, lengths);
     const active = lengths.filter(length => !isRestSwimLength(length));
-    const duration = lengths.length ? completeSum(active, getSwimLengthDuration) : finite(lap.getDuration?.());
-    const distance = lengths.length ? completeSum(active, getSwimLengthDistance) : finite(lap.getDistance?.());
+    const recordedActiveCount = finite(lap.getStat?.(DataActiveLengths.type));
+    // Retain every recorded row for expansion, but never present a known partial
+    // collection of lengths as the full interval's totals or average weights.
+    const completeLengths = lengths.length > 0
+      && (!Number.isInteger(recordedActiveCount) || recordedActiveCount === active.length);
+    const nativeFallback = active.length === lengths.length;
+    const lengthDuration = completeLengths ? completeSum(active, getSwimLengthDuration) : null;
+    const lengthDistance = completeLengths ? completeSum(active, getSwimLengthDistance) : null;
+    const duration = lengthDuration ?? (nativeFallback ? finite(lap.getDuration?.()) : null);
+    const distance = lengthDistance ?? (nativeFallback ? finite(lap.getDistance?.()) : null);
     const recordedStrokes = finite(lap.getStat?.(DataTotalCycles.type));
-    const strokes = lengths.length
-      ? completeSum(active, length => length.strokes) ?? (active.length === lengths.length ? recordedStrokes : null)
-      : recordedStrokes;
+    const strokes = (completeLengths ? completeSum(active, length => length.strokes) : null)
+      ?? (nativeFallback ? recordedStrokes : null);
     const recordedPace = finite(lap.getStat?.(DataSwimPaceAvg.type));
-    const pace = lengths.length
-      ? duration !== null && distance !== null && duration > 0 && distance > 0 ? 100 * duration / distance : null
-      : recordedPace;
-    const recordedCadence = finite(lap.getStat?.(DataStrokeRateAvg.type)) ?? finite(lap.getStat?.(DataCadenceAvg.type));
-    const cadenceMetrics = getActiveSwimLengthCadenceMetrics(active);
-    const cadence = lengths.length ? cadenceMetrics?.value
-      ?? (strokes !== null && duration > 0 ? 60 * strokes / duration : null) : recordedCadence;
+    const pace = lengthDuration > 0 && lengthDistance > 0 ? 100 * lengthDuration / lengthDistance
+      : nativeFallback ? recordedPace : null;
+    const nativeCadence = finite(lap.getStat?.(DataCadenceAvg.type));
+    const recordedCadence = finite(lap.getStat?.(DataStrokeRateAvg.type)) ?? nativeCadence;
+    const cadenceMetrics = completeLengths ? getActiveSwimLengthCadenceMetrics(active) : null;
+    const cadence = cadenceMetrics?.value
+      ?? (strokes !== null && lengthDuration > 0 ? 60 * strokes / lengthDuration : null)
+      ?? (nativeFallback ? recordedCadence : null);
     const swolf = getNormalizedSwolf(duration, distance, strokes, settings)
-      ?? (!lengths.length && pace > 0 && cadence !== null
+      ?? (nativeFallback && pace > 0 && cadence !== null
         ? new DataNormalizedSwolf(ActivityUtilities.computeSwimSwolf(pace, cadence, getSwolfReferenceDistance(settings))) : null);
     return [lap, {
       lengths, isRest,
       activeDuration: isRest ? null : duration,
       activeDistance: isRest ? null : distance,
       cadenceDuration: isRest || cadence === null ? null : cadenceMetrics?.duration ?? duration,
+      hasRecordedCadence: nativeCadence !== null,
       strokes: isRest || strokes === null ? null : new DataTotalCycles(strokes),
       cadence: isRest || cadence === null ? null : new DataStrokeRateAvg(cadence),
       pace: isRest || pace === null ? null : new DataSwimPaceAvg(pace),
@@ -167,6 +178,8 @@ export function getSwimLapDisplayMetric(
   switch (metricType) {
     case EVENT_LAP_STROKES_COLUMN: return analytics.strokes;
     case EVENT_LAP_SWOLF_COLUMN: return analytics.swolf;
+    case DataCadenceAvg.type: return analytics.isRest || !analytics.hasRecordedCadence ? undefined
+      : analytics.cadence ? new DataCadenceAvg(analytics.cadence.getValue()) : null;
     case DataStrokeRateAvg.type: return analytics.isRest ? undefined : analytics.cadence;
     case DataSwimPaceAvg.type: return analytics.isRest ? undefined : analytics.pace;
     default: return undefined;

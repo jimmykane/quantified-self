@@ -1154,8 +1154,15 @@ describe('help.content', () => {
     expect(gettingStartedSection?.content).toContain('individual recorded FIT pool lengths');
     expect(gettingStartedSection?.content).toContain('**Total strokes**');
     expect(gettingStartedSection?.content).toContain('**SWOLF (25 yd)**');
+    expect(gettingStartedSection?.content).toContain('Stroke, total strokes and normalized SWOLF columns are available only for swimming');
     expect(gettingStartedSection?.content).toContain('Swimming **Avg** values exclude rest');
     expect(gettingStartedSection?.content).toContain('not divided into invented splits');
+    expect(gettingStartedSection?.content).toContain('Incomplete length details can use valid native interval metrics');
+    expect(gettingStartedSection?.content).toContain('recorded active-length count differs');
+    expect(gettingStartedSection?.content).toContain('Mixed swim/rest intervals require complete active length details');
+    expect(gettingStartedSection?.content).toContain('Missing active-length distance can use its recorded pool length');
+    expect(gettingStartedSection?.content).toContain('Rest lengths never gain distance from pool size');
+    expect(gettingStartedSection?.content).toContain('Set pace and calculated SWOLF require complete active time and distance');
     expect(gettingStartedSection?.content).toContain('Event swim length tables');
     expect(gettingStartedSection?.content).toContain('**Swim Lengths** table');
     expect(gettingStartedSection?.content).toContain('per-length pool data');
