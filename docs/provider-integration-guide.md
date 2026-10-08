@@ -1309,8 +1309,13 @@ skips; incomplete zero samples are unknown, not healthy. No probe calls provider
 refreshes credentials, pins accounts, writes queue state or changes dispatch decisions.
 Firestore sub-millisecond commit timestamps remain valid and their observed age rounds
 down; COROS account-ID fallback accepts only absent/empty values, matching its worker.
-The import probe does not invent an outbound Pro gate. The independent dashboard/alerts
-and separately approved deployment/activation stay tracked in #833; this work does not
+The import probe does not invent a blanket Pro gate: unchanged/unlisted inbound work
+may be retired, while new/changed imported-route persistence still requires Pro.
+Restoration markers do not hide
+incoming imports, enabled outbound directions or manual copies that workers may process;
+disabled automatic directions and persisted restoration deferrals remain excluded.
+The independent dashboard/alerts and separately approved deployment/activation stay
+tracked in #833; this work does not
 claim live alert coverage or change provider behavior. See
 [route monitoring](route-monitoring.md) for semantics, verification, resources and
 the remaining acceptance criteria. Help and MCP/Assistant contracts are unchanged.

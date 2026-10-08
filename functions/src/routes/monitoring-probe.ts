@@ -28,7 +28,7 @@ const QUEUE_FIELDS = ['routeId', 'sourceServiceName', 'destinationServiceName', 
     'processed', 'retryCount', 'dateCreated', 'dispatchedToCloudTask', 'providerOperationStartedAt', 'processingLeaseExpiresAt',
     'resultStatus', 'destinationDeliveryAcceptedAt', 'destinationProviderRouteId', 'destinationDeliveries', 'manualReconciliationRequiredAt'];
 const STATE_FIELDS = [...new Set([...QUEUE_FIELDS, 'expireAt', 'serviceSyncSettings.routeDeliverySyncRoutes', 'connectionState',
-    'connectionStateGeneration', 'disconnectState', 'disconnectOperationGeneration', 'routeRestorePending',
+    'connectionStateGeneration', 'disconnectState', 'disconnectOperationGeneration',
     ACTIVE_OAUTH_CREDENTIAL_GENERATION_FIELD, 'tokenCredentialGeneration', 'serviceName', 'userName', 'providerUserId',
     'sourceSummary.sourceServiceName', 'sourceSummary.providerRouteId', 'sourceSummary.providerUserId',
     'sourceSummary.modifiedAt', 'sourceSummary.importedAt', 'importedAt'])];
@@ -126,7 +126,8 @@ export async function observeRouteQueues(db: FirebaseFirestore.Firestore, proAcc
                     || lane === 'delivery' && (!documentID(row.savedRouteID) || !nonEmpty(row.sourceRevisionKey))) { group.unknownSample++; continue; }
                 if (lane === 'delivery' && (getRouteDeliverySyncRouteAllowlistConfigError(row.routeId as RouteDeliverySyncRouteId)
                     || !isRouteDeliverySyncRouteUserAllowlisted(row.routeId as RouteDeliverySyncRouteId, uid))) { group.excludedSample++; continue; }
-                // Only outgoing copies require Pro at processing time; the inbound worker does not.
+                // Outgoing copies have a blanket Pro gate. Inbound work can retire
+                // unchanged/unlisted routes without saving; its upsert still requires Pro.
                 if (lane === 'delivery') {
                     if (!entitlements.has(uid)) entitlements.set(uid, proAccess(uid));
                     if (!await entitlements.get(uid)) { group.excludedSample++; continue; }
@@ -151,7 +152,7 @@ export async function observeRouteQueues(db: FirebaseFirestore.Firestore, proAcc
                     // Do not clear a backlog alert as healthy zero just because the query raced an edit.
                     if (!current.updateTime || !doc.updateTime?.isEqual(current.updateTime)) return 'unknown';
                     if (sourceMeta.get('connectionState') === 'disconnect_pending' || root.get('disconnectState') === 'disconnect_pending'
-                        || root.get('disconnectOperationGeneration') || sourceMeta.get('routeRestorePending')) return 'excluded';
+                        || root.get('disconnectOperationGeneration')) return 'excluded';
                     const fence = parseRouteDeliverySourceLifecycleFence({ connectionStateGeneration: sourceMeta.get('connectionStateGeneration'),
                         tokenCredentialGeneration: token.get('tokenCredentialGeneration'), rootOAuthCredentialGeneration: root.get(ACTIVE_OAUTH_CREDENTIAL_GENERATION_FIELD) });
                     if (!root.exists || !token.exists || sourceMeta.get('connectionState') !== 'connected'
@@ -163,7 +164,7 @@ export async function observeRouteQueues(db: FirebaseFirestore.Firestore, proAcc
                             || captured[1] !== fence.tokenCredentialGeneration || captured[2] !== fence.rootOAuthCredentialGeneration)) return 'excluded';
                         const [saved, destination, meta] = delivery;
                         if (!saved.exists || meta.get('connectionState') === 'disconnect_pending' || meta.get('connectionState') === 'reconnect_required'
-                            || meta.get('routeRestorePending') || destination.get('disconnectState') === 'disconnect_pending' || destination.get('disconnectOperationGeneration')) return 'excluded';
+                            || destination.get('disconnectState') === 'disconnect_pending' || destination.get('disconnectOperationGeneration')) return 'excluded';
                         const sourceSummary = saved.get('sourceSummary');
                         if (sourceSummary?.sourceServiceName !== ServiceNames.SuuntoApp
                             || nonEmpty(row.sourceProviderRouteId) && sourceSummary?.providerRouteId !== row.sourceProviderRouteId

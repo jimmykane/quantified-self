@@ -77,10 +77,15 @@ tasks, leases, provider-operation claims, persisted acceptance, deferrals and ma
 blockers. A single read-only transaction rechecks the queue's exact update time, owner,
 deletion tombstone and source identity/lifecycle. Delivery additionally checks rollout,
 Pro, automatic direction settings (manual copies bypass those settings only), saved-route
-provenance and revision, source generations, reconnect/restore/disconnect states,
+provenance and revision, source generations, reconnect/disconnect states,
 pinned destination accounts, credential-generation guards and stored route permissions.
-The import worker has no processing-time Pro gate, so the import observation does not
-invent one. Unsupported/contradictory route categories never count as eligible work.
+The import worker has no blanket processing-time Pro gate: unchanged/unlisted routes
+can be retired without an upsert, while new/changed imported-route persistence still
+requires Pro. The probe therefore does not exclude all non-Pro inbound work or grant
+write access. A route-restoration marker alone does not block incoming imports, enabled
+outbound directions or manual copies; the probe matches those worker rules rather than
+hiding their backlog. Disabled automatic directions and persisted restoration deferrals
+remain excluded. Unsupported/contradictory route categories never count as eligible work.
 This is local-state eligibility, not a claim that an OAuth credential or route file will
 be accepted by a provider; actual worker failures remain separate observations.
 
@@ -120,6 +125,7 @@ stale replacements, deletion fences, failed persistence, retried transactions, r
 exhaustion, cleanup failure phases, bounded masks/deadlines, partial samples, actual
 immediate/reconciliation failures, deterministic duplicates, pinned-account mismatches,
 credential rotation, permission loss, source revisions, reconnects, direction settings,
+restoration with enabled versus disabled directions and manual copies,
 sub-millisecond commit timestamps and malformed versus absent COROS token identities.
 The real Firestore tests use loopback emulators with synthetic `demo-*` projects and
 match the app's `ignoreUndefinedProperties` setting. They are registered in CI's

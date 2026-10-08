@@ -986,6 +986,19 @@ describe('route-delivery-sync/process-queue-item', () => {
     expect(mockSendPreparedRoute).not.toHaveBeenCalled();
   });
 
+  it.each([ServiceNames.SuuntoApp, ServiceNames.GarminAPI].flatMap(service =>
+    [false, true].map(manual => ({ service, manual }))))('allows eligible delivery during $service restoration (manual=$manual)', async ({ service, manual }) => {
+    mockGetServiceConnectionMeta.mockImplementation(async (_userID, serviceName) => (
+      serviceName === service ? { connectionState: 'connected', routeRestorePending: true } : null
+    ));
+    mockIsRouteEnabled.mockResolvedValue(!manual);
+
+    expect(await processRouteDeliverySyncQueueItem({ ...baseQueueItem, manual })).toBe(QueueResult.Processed);
+    expect(mockSendPreparedRoute).toHaveBeenCalledOnce();
+    expect(mockFinalizeDisabledSyncRouteIfCurrent).not.toHaveBeenCalled();
+    expect(observed().map(([, fields]) => fields.outcome)).toEqual(['success']);
+  });
+
   it('parks a route when reconnect-required wins after the earlier lifecycle read', async () => {
     const queueItem: RouteDeliverySyncQueueItemInterface = {
       ...baseQueueItem,

@@ -177,14 +177,13 @@ describe.skipIf(!process.env.FIRESTORE_EMULATOR_HOST)('route observations with r
         if (reason !== 'source_generation' && reason !== 'no_pro') expect(sampleFor('import', 'qs')).toMatchObject({ dueSample: 0, excludedSample: 1 });
         if (reason === 'no_pro') expect(sampleFor('import', 'qs')).toMatchObject({ dueSample: 1 });
     });
-    it.each(['disabled', 'stale_revision', 'wrong_source', 'permission', 'reconnect', 'restore', 'lease', 'claimed'])('excludes delivery %s, retaining import independence', async reason => {
+    it.each(['disabled', 'stale_revision', 'wrong_source', 'permission', 'reconnect', 'lease', 'claimed'])('excludes delivery %s, retaining import independence', async reason => {
         const seeded = await seedProbe();
         if (reason === 'disabled') await state.db.doc('users/qa/config/settings').set({});
         if (reason === 'stale_revision') await state.db.doc('users/qa/routes/PRIVATE_ROUTE').update({ 'sourceSummary.modifiedAt': 124 });
         if (reason === 'wrong_source') await state.db.doc('users/qa/routes/PRIVATE_ROUTE').update({ 'sourceSummary.providerUserId': 'other_owner' });
         if (reason === 'permission') await state.db.collection(seeded.destinationCollection).doc('qa').collection('tokens').doc('PRIVATE_DEST').update({ scope: 'workouts_read' });
         if (reason === 'reconnect') await state.db.doc(`users/qa/meta/${ServiceNames.WahooAPI}`).update({ connectionState: 'reconnect_required' });
-        if (reason === 'restore') await state.db.doc(`users/qa/meta/${ServiceNames.WahooAPI}`).update({ routeRestorePending: true });
         if (reason === 'lease') await seeded.delivery.update({ processingLeaseExpiresAt: seeded.now + 60_000 });
         if (reason === 'claimed') await seeded.delivery.update({ destinationDeliveryAcceptedAt: seeded.now });
         await observeRouteQueues(state.db, async () => true, seeded.now);
@@ -202,6 +201,27 @@ describe.skipIf(!process.env.FIRESTORE_EMULATOR_HOST)('route observations with r
         await seeded.delivery.update({ manual: true });
         await observeRouteQueues(state.db, async () => true, seeded.now);
         expect(sampleFor('delivery', 'wahoo')).toMatchObject({ dueSample: 1 });
+    });
+    it.each([ServiceNames.SuuntoApp, ServiceNames.WahooAPI, ServiceNames.GarminAPI, ServiceNames.COROSAPI].flatMap(service =>
+        [false, true].map(manual => ({ service, manual }))))('restoration on $service does not hide eligible work (manual=$manual)', async ({ service, manual }) => {
+        const destination = service === ServiceNames.SuuntoApp ? ServiceNames.WahooAPI : service;
+        const label = destination === ServiceNames.WahooAPI ? 'wahoo' : destination === ServiceNames.GarminAPI ? 'garmin' : 'coros';
+        const seeded = await seedProbe(destination);
+        await state.db.doc(`users/qa/meta/${service}`).update({ routeRestorePending: true });
+        // Restoration only parks disabled automatic directions. Manual sends bypass
+        // those settings, while an enabled direction can run before restoration finishes.
+        if (manual) {
+            await seeded.delivery.update({ manual: true });
+            await state.db.doc('users/qa/config/settings').set({});
+        }
+        await observeRouteQueues(state.db, async () => true, seeded.now);
+        expect(sampleFor('import', 'qs')).toMatchObject({ dueSample: 1, excludedSample: 0, unknownSample: 0 });
+        expect(sampleFor('delivery', label)).toMatchObject({ dueSample: 1, excludedSample: 0, unknownSample: 0 });
+        vi.clearAllMocks();
+        await seeded.delivery.update({ manual: false });
+        await state.db.doc('users/qa/config/settings').set({});
+        await observeRouteQueues(state.db, async () => true, seeded.now);
+        expect(sampleFor('delivery', label)).toMatchObject({ dueSample: 0, excludedSample: 1 });
     });
     it.each([ServiceNames.WahooAPI, ServiceNames.COROSAPI])('fences %s pinned-account mismatch and credential rotation', async destination => {
         const seeded = await seedProbe(destination);
