@@ -10,8 +10,9 @@ ingestion (#830), route delivery (#831), nor Training planned-workout delivery (
 The two affected Functions were deployed with separate approval on 8 October 2026.
 The twelve log metrics, dashboard and seven enabled alert policies were subsequently
 activated with separate approval using the existing Alerts email channel. Configuration
-readback passed; the first post-creation destination heartbeat time series remains the
-final operational evidence in #832, distinct from the successful deployment/apply.
+readback and positive post-creation heartbeat time series for all three destinations
+passed. This completes #832's operational activation evidence, distinct from the
+successful deployment/apply alone.
 There is no additional scheduler, paid warm instance or email Function. Cloud
 Monitoring sends opening/closing notifications to the existing enabled Alerts email
 channel, independently of the Firebase mail extension.
@@ -232,9 +233,23 @@ notification proof from completed #655 is reused rather than sending a new test 
 The deployed dispatcher naturally completed at 06:30 UTC and emitted idle observations
 for all three destinations, with no unknown or truncated sample. Those logs preceded
 the heartbeat metric's creation at 06:48:09 UTC and are **not** post-creation time-series
-proof. At the configuration readback, the new heartbeat metric had no series yet.
-Keep #832 In Progress until a later normal run produces visible Suunto, Wahoo and COROS
-series; do not infer zero backlog or operational completion from an empty metric query.
+proof. At the initial configuration readback, the new heartbeat metric had no series yet.
+
+The next normal run completed at 07:00:07 UTC (10:00 Helsinki). Read-only Monitoring
+API verification at 07:01:16 UTC confirmed one positive heartbeat count for each of
+Suunto, Wahoo and COROS, in the 07:00:16–07:01:16 UTC interval, after metric creation.
+The corresponding logs reported an idle bounded sample with no unknown, excluded or
+truncated records for every destination. These are genuine metric series, not inferred
+from raw logs or synthesized zeroes. A natural automatic Garmin-to-Suunto delivery also
+produced a positive committed `delivered` series after activation, separately from the
+worker acknowledgement and latency series. No production fault or manual upload was
+introduced to obtain this evidence.
+
+The deployment, configuration/query readback, live heartbeat and reused same-channel
+email proof complete #832. Idle lower-bound samples do not establish global backlog
+coverage or receipt on a provider's app/watch, and absence of failure series is not a
+fabricated failure test. Future tuning, cloud changes, email exercises and queue/data
+mutations continue to require their own authorization.
 
 ## MCP, Assistant and Help impact
 

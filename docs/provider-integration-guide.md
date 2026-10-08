@@ -1250,8 +1250,11 @@ retry/rate limits. The separate dashboard, twelve log metrics and seven enabled
 policies were subsequently activated with separate approval using the existing Alerts
 email channel. Production configuration and all fourteen dashboard queries passed API
 readback on 8 October; unrelated resources and notification channels stayed unchanged.
-Positive post-creation heartbeat-series evidence for all three destinations remains
-the final operational acceptance item in #832; pre-creation logs do not satisfy it.
+The next natural 07:00 UTC run produced positive post-creation heartbeat time series
+for Suunto, Wahoo and COROS, verified through Monitoring at 07:01 UTC. A natural
+Garmin-to-Suunto committed delivery also reached its distinct success metric. This
+completes #832's operational evidence without manual processing, fault injection or
+new test emails; idle bounded samples do not claim complete backlog or device receipt.
 See [activity delivery monitoring](activity-delivery-monitoring.md) for semantics,
 privacy, exclusions, costs, tests and activation steps. No provider support,
 availability, retry/TTL/concurrency, Help or MCP/Assistant contract changes.
