@@ -1301,7 +1301,8 @@ slice, deployed on 2026-10-08, adds fixed-category post-persistence outcomes and
 `processRouteDeliverySyncTask`, plus private-data-free rejected-original cleanup
 diagnostics. Worker attempts include payload/read failures; observation-only logger
 failure cannot turn an ACK into a retry. An ACK, stale revision, deferred item, or durable
-manual-review blocker is not a successful route send. The local follow-up adds masked,
+manual-review blocker is not a successful route send. The follow-up, deployed from
+`67cce336d` on 2026-10-08 at 09:50 UTC, adds masked,
 bounded import/delivery eligibility observations on the existing 30-minute outbound
 dispatcher, actual immediate/reconciliation dispatch failures, and an isolated Gen 1
 dispatcher loader with unchanged resources. It excludes lifecycle/revision/permission
@@ -1314,9 +1315,11 @@ may be retired, while new/changed imported-route persistence still requires Pro.
 Restoration markers do not hide
 incoming imports, enabled outbound directions or manual copies that workers may process;
 disabled automatic directions and persisted restoration deferrals remain excluded.
-The independent dashboard/alerts and separately approved deployment/activation stay
-tracked in #833; this work does not
-claim live alert coverage or change provider behavior. See
+The five affected route Functions were read back as ACTIVE with unchanged resources,
+secrets and triggers; native task-queue rates/retries and the 30-minute scheduler were
+also preserved. The independent dashboard/alerts, separately approved activation and
+natural post-update telemetry evidence stay tracked in #833; this work does not claim
+live alert coverage or change provider behavior. See
 [route monitoring](route-monitoring.md) for semantics, verification, resources and
 the remaining acceptance criteria. Help and MCP/Assistant contracts are unchanged.
 

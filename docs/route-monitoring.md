@@ -10,9 +10,10 @@ Training planned-workout delivery (#655).
 The first slice, deployed on 2026-10-08, adds versioned, fixed-category `[RouteQueue]` observations to
 `processRouteSyncTask`, `processRouteDeliverySyncTask`, the existing queue transition
 helpers, and rejected-original cleanup. No route monitoring dashboard, metric, alert
-policy, email, or production configuration has been created by that slice. The next
-local slice adds bounded eligibility observations and dispatch-failure telemetry, and
-isolates the existing route dispatcher. This new code is not deployed. The independent
+policy, email, or production monitoring configuration has been created by that slice.
+The follow-up, deployed from commit `67cce336d` on 2026-10-08 at 09:50 UTC, adds bounded
+eligibility observations and dispatch-failure telemetry, and isolates the existing route
+dispatcher. The independent
 route monitoring bundle and separately approved activation remain in #833's scope;
 the issue stays In progress.
 
@@ -104,7 +105,7 @@ refresh tokens, call providers, or authorize processing.
 
 `processRouteDeliverySyncTask` and `cleanupRejectedRouteOriginalFile` now use isolated
 owner-module loaders, joining already-isolated `processRouteSyncTask` and
-`redriveRejectedRouteOriginalCleanup`. The local dispatcher follow-up loads directly
+`redriveRejectedRouteOriginalCleanup`. The deployed dispatcher follow-up loads directly
 from `route-delivery-sync/dispatcher`, retaining Gen 1, `europe-west2`, 256 MiB,
 300 seconds, maximum one instance, no secrets and its unchanged 30-minute cron.
 Full Firebase discovery still exports 168 endpoints; 82 targets now have isolated loaders.
@@ -118,6 +119,25 @@ Do not use local cold-import RSS measurements to lower runtime memory without
 separate worker-load evidence.
 
 ## Verification and next slice
+
+The approved follow-up deployment updated only `dispatchRouteDeliverySyncQueue`,
+`processRouteSyncTask`, `insertSuuntoAppRouteToQueue`, `addSuuntoAppRoutesToQueue`, and
+`backfillRouteDeliverySyncRoute`. API readback confirmed all five ACTIVE on Node.js 22
+with new revisions and unchanged generation, memory, timeout, concurrency, instance
+limits, secret bindings and trigger configuration. Both native route task queues remain
+RUNNING with unchanged rate/retry settings; the existing dispatcher scheduler remains
+ENABLED with its unchanged `*/30 * * * *` schedule and `America/Los_Angeles` time zone.
+No other Function update timestamps changed. The required query indexes were already
+READY; no indexes, Rules, Hosting or monitoring resources were deployed.
+
+The pinned snapshot passed the Functions build, 246 targeted unit tests, deployment-file
+safety, all 168 endpoint / 82 isolated-target entrypoint contracts and all 69 secret-bound
+endpoint checks. The same source had previously passed 45 isolated Firestore emulator
+tests. At 09:51 UTC, the post-update log query had no new route observations; the next
+natural dispatcher run was due at 10:00 UTC. Live samples remain unverified: deployment
+success is not evidence of backlog, provider receipt or functioning alert policies. No
+scheduler was manually invoked and no production route or provider copy was created,
+deleted or replayed for this verification.
 
 Focused tests cover canonical fixed labels, malformed/prototype keys and task payloads,
 privacy, logger failure (including preserving a worker ACK), success/skip/ACK separation,
@@ -146,8 +166,8 @@ Remaining work tracked directly in #833:
   sustained-backlog/processing/DLQ/manual-review/cleanup/telemetry policies using
   `tools/monitoring/` provisioning. Prove idempotent reapply, ownership and preservation
   of existing bundles; use fixed labels only.
-- With separate approval, deploy the affected Functions, apply the bundle with the
-  existing enabled email channel, and verify configuration plus positive natural
+- With separate approval, apply the bundle with the existing enabled email channel,
+  and verify configuration plus positive natural
   post-creation samples without creating/deleting production routes or replaying sends.
 
 Help was reviewed: operational instrumentation does not change the saved-route or
