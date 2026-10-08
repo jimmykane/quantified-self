@@ -136,6 +136,15 @@ failures or create/delete temporary test policies without exact separate approva
 
 ## Diagnosis and release evidence
 
+Original-file checksum coverage is **unchanged** at the monitoring boundary. Explicit CRC32C upload
+validation rejects corrupted bytes through the same Storage-error path already handled by activity
+workers: retry/failure attempts and any newly committed dead letters retain their fixed provider,
+event, and outcome labels. Existing processing-failure and dead-letter policies therefore cover these
+failures without new queues, metrics, labels, or alert configuration. Staging cleanup and guarded
+promotion remain unchanged. See [original-file upload integrity](provider-integration-guide.md#original-file-upload-integrity)
+for the byte/checksum contract and local verification; no live rollout or monitoring activation is
+claimed by those tests.
+
 1. Open **QS Activity Imports** in Cloud Monitoring and **Admin → Queue Monitor**.
    Separate native dispatched/retry work from the bounded Firestore sample.
 2. Inspect fixed provider/outcome charts and dispatcher executions. An empty/unknown
