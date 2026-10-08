@@ -70,6 +70,12 @@ describe('HomeComponent', () => {
     expect(fixture.nativeElement.querySelector('nav[aria-label="Homepage navigation"]')).toBeTruthy();
   });
 
+  it('exposes every supported provider logo and its name to assistive technology', () => {
+    const logos = Array.from(fixture.nativeElement.querySelectorAll('.logos-container [role="img"]')) as HTMLElement[];
+    expect(logos.map(logo => logo.getAttribute('aria-label'))).toEqual(['Garmin', 'Suunto', 'COROS', 'Wahoo']);
+    expect(logos.every(logo => logo.getAttribute('aria-hidden') === 'false')).toBe(true);
+  });
+
   it('keeps the homepage concise while retaining specialist discovery links and deferred app previews', () => {
     const sections = Array.from(fixture.nativeElement.querySelectorAll('.landing-page > section'))
       .map((section: Element) => section.className);
