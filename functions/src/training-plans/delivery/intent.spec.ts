@@ -7,7 +7,8 @@ import { FakeTrainingTransport } from './test-support/fake-transport';
 import { GarminTrainingTransport } from './garmin/transport';
 import { SuuntoGuideTransport } from './suunto/transport';
 import { assessSuuntoGuideV2ForRecovery, assessSuuntoGuideV3ForRecovery, assessSuuntoGuideV4ForRecovery, assessSuuntoGuideV5ForRecovery,
-  assessSuuntoGuideV6ForRecovery, assessSuuntoGuideV7ForRecovery, assessSuuntoGuideV9ForRecovery } from './suunto/mapping';
+  assessSuuntoGuideV6ForRecovery, assessSuuntoGuideV7ForRecovery, assessSuuntoGuideV9ForRecovery,
+  assessSuuntoGuideV10ForRecovery, assessSuuntoGuideV11ForRecovery } from './suunto/mapping';
 
 const base: DeliveryContext = {
   workout: { schemaVersion: 1, id: 'workout', planId: null, revision: 1, localDate: '2026-09-10', lifecycle: 'planned',
@@ -175,13 +176,19 @@ describe('delivery intent', () => {
     { assessLegacy: assessSuuntoGuideV9ForRecovery, sport: ActivityTypes.Swimming, manual: false },
     ...[ActivityTypes.Running, ActivityTypes.Cycling, ActivityTypes.Walking]
       .map(sport => ({ assessLegacy: assessSuuntoGuideV7ForRecovery, sport, manual: true })),
+    ...[ActivityTypes.Running, ActivityTypes.Cycling, ActivityTypes.Walking]
+      .map(sport => ({ assessLegacy: assessSuuntoGuideV11ForRecovery, sport, manual: true })),
+    ...[ActivityTypes.Swimming, ActivityTypes.OpenWaterSwimming]
+      .map(sport => ({ assessLegacy: assessSuuntoGuideV10ForRecovery, sport, manual: true })),
   ])(
     'keeps exact legacy loss approval for $sport across Suunto display upgrades, never across edits or authority changes (manual=$manual)', ({ assessLegacy, sport, manual }) => {
     const transport = new SuuntoGuideTransport(async () => { throw Error('No HTTP during assessment'); }, 'Quantified Self');
+    const restPresentation = assessLegacy === assessSuuntoGuideV10ForRecovery || assessLegacy === assessSuuntoGuideV11ForRecovery;
     const workout = { ...base.workout!, structure: { ...base.workout!.structure, sport, nodes: [
       ...(manual ? [{ kind: 'step' as const, id: 'manual', purpose: 'warmup' as const, ending: { kind: 'manual' as const }, targets: [] }] : []),
       { ...base.workout!.structure.nodes[0],
-      note: 'A'.repeat(45) }] } };
+      note: 'A'.repeat(45) }, ...(restPresentation ? [{ kind: 'step' as const, id: 'rest', purpose: 'rest' as const,
+        ending: { kind: 'time' as const, seconds: 15 }, targets: [] }] : [])] } };
     const destination = base.connection.destinationKey;
     const prior = assessLegacy(workout, destination, 'Europe/Helsinki', 'Quantified Self');
     const context: DeliveryContext = { ...base, workout, transport,
@@ -189,7 +196,7 @@ describe('delivery intent', () => {
     const ledger = { connectionEpoch: 0, destinationKey: 'account-a', acceptedDigest: prior.digest,
       acceptedContentDigest: deliveryContentDigest(workout, 'Europe/Helsinki') } as DeliveryLedgerV1;
     expect(transport.assess(workout, 'account-a', 'Europe/Helsinki')).toMatchObject({
-      mappingVersion: manual ? 'suunto-guides-v11' : [ActivityTypes.Swimming, ActivityTypes.OpenWaterSwimming].includes(sport) ? 'suunto-guides-v10' : 'suunto-guides-v7',
+      mappingVersion: restPresentation ? 'suunto-guides-v12' : manual ? 'suunto-guides-v11' : [ActivityTypes.Swimming, ActivityTypes.OpenWaterSwimming].includes(sport) ? 'suunto-guides-v10' : 'suunto-guides-v7',
       compatibleApprovalDigests: expect.arrayContaining([prior.digest]),
     });
     expect(resolveDeliveryIntent(context, ledger)).toMatchObject({ desired: 'present', status: 'pending', approvalDigest: null });

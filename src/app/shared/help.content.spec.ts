@@ -151,6 +151,16 @@ describe('help.content', () => {
       'prioritize your notes or exercise/set instructions', 'past and completed copies stay unchanged']) expect(content).toContain(phrase);
     expect(content).not.toContain('Other sports and older Guides keep **Press lap when ready**');
   });
+  it('explains Rest-first countdown, bounded actual repeats and current versus previous-effort readings', () => {
+    const content = HELP_SECTIONS.find(section => section.id === 'training-plans')!.content;
+    for (const phrase of ['During Work and active Recovery', 'puts its native countdown first', '**Rest rem**',
+      'Your exact duration, targets and notes are kept', 'Work and active Recovery keep their existing readings',
+      '**Rest 3/10**', '**Next: Work 4/10**', 'not an inferred distance for a manual interval',
+      'Each repeat set has its own count', 'very large Guides keep compact repeats without counters or Next hints',
+      'not freshly reset averages or previous-effort statistics', 'not a previous-interval summary',
+      'Rowing and strength screens are unchanged', 'Sync your Suunto app and watch']) expect(content).toContain(phrase);
+    expect(searchHelpSections(HELP_SECTIONS, 'Rest rem').map(section => section.id)).toContain('training-plans');
+  });
   it('explains pool-only measured SWOLF without target, pool-length or sensor promises', () => {
     const content = HELP_SECTIONS.find(section => section.id === 'training-plans')!.content;
     for (const phrase of ['pool-only **AvgSWOLF**', '**Avg SWOLF** on older Guides', '**SWOLF is a measured reading, not a target.**',

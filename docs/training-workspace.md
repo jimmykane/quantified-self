@@ -2729,7 +2729,7 @@ are not live sensor, distance-detection or haptic proof.
 
 ##### Manual instructions in other sports
 
-The private `suunto-guides-v11` presentation extends the manual-step clarification to supported non-swim interval
+The historical private `suunto-guides-v11` presentation extends the manual-step clarification to supported non-swim interval
 Guides. With no authored note, warm-up, Work, active Recovery, cool-down and Other steps say
 `Press Lap to finish this interval.`; stationary manual Rest says `Rest now. Press Lap to finish this rest.`.
 An otherwise empty manual screen uses `Lap to finish` instead of `Press lap`. The current step is already active;
@@ -2738,7 +2738,7 @@ This is text-only: readings, field order/budget, targets, numeric/early-Lap noti
 boundaries, completion behavior and workout time remain unchanged. The swimming-specific Rest presentation is
 not extended to other sports.
 
-Only non-swim/non-strength recipes containing a manual step without a note select v11 for delivery. Numeric-only
+Before the v12 Rest presentation below, only non-swim/non-strength recipes containing a manual step without a note selected v11 for delivery. Numeric-only
 recipes and manual recipes with exclusively authored instructions retain exact v7 digests/payloads; swimming
 retains v10 and strength retains v8. Frozen v10 serialization and pre-change full-artifact hashes protect both swim
 profiles. Exact v7 recovery precedes any eligible same-identity v11 update; old acceptance does not authorize
@@ -2764,6 +2764,58 @@ sending authority without another POST/PUT. Unknown digests, changed provider co
 uncertain across repeated Retry; Stop during a lost-ACK send recovers the owned identity before withdrawing it,
 without recreating or upgrading it. Authored notes identical to the generated wording remain untouched, including
 mixed recipes with other unannotated manual steps. These tests required no additional runtime behavior change.
+
+##### Rest-first interval screens (v12)
+
+The private `suunto-guides-v12` presentation makes stationary Rest glanceable for Running/Trail Running/Treadmill,
+Walking/Hiking, Cycling/MTB/Indoor Cycling/E-biking/Handcycle and pool/open-water swimming. It does **not** apply
+to active Recovery: Work and Recovery retain their existing readings and authored targets. Strength and rowing
+remain unchanged. This is local implementation, not deployed/watch-verified behavior.
+
+- Timed Rest puts the native countdown first (`Rest rem`), giving it Suunto's primary-field priority. Distance-ended
+  Rest likewise leads with its existing native countdown. Exact durations, ranges and notes remain unchanged;
+  manual Rest has no invented countdown. Long manual instructions remain text-only.
+- Countdown, authored targets and instructions reserve their slots first. Current measured target counterparts
+  follow in authored order, then current HR, within five fields. Power/cadence readings retain the existing
+  running/cycling sensor boundary; a swimming/walking power/cadence target never establishes sensor support.
+  Rest omits freshly reset lap-average pace/power/stroke/SWOLF readings. It does **not** claim previous-effort pace,
+  elapsed time, strokes or distance. Native cumulative swim distance (`Total`, `window: 'workout'`) remains optional.
+- A simple repeated Work/Rest pair can show `Work 3/10` and `Rest 3/10`, counting actual prescribed repeat passes,
+  not provider laps or completed workouts. Each repeat set has its own denominator. Complex sequences do not get
+  misleading single-interval counters. Where a slot remains, `Next: Work 4/10` or `Next: Cool down` previews the
+  next phase; it does not infer an intended 100 m distance from a manually ended prescription. No hint is added
+  after the last Rest unless another prescribed step actually follows.
+- Numbering/context expands native repeats only within 1,000 screens and the existing 256 KiB archive JSON
+  readback budget, including Suunto's observed default-notification enrichment. Larger Guides fall back to compact
+  native repeats and the Rest-first fields without optional counters/next hints. Notification titles stay within
+  13 code points. Authored notes/targets are never discarded to make room for context.
+- Decoration starts from the frozen v11 execution graph. Automatic/manual/early-Lap conditions, branch IDs,
+  recorded laps, repeat executions, completion transition and notification **text** are unchanged. No extra
+  countdown steps, five-second beep sequence, forced vibration or pool-length detection fix is introduced.
+
+Eligible Rest recipes select v12; unaffected recipes keep v7/v8/v10/v11 identities. Exact v10/v11 (and earlier)
+lost-acknowledgement recovery precedes any normal same-identity future update. The old accepted copy never
+authorizes another POST. Pinning, sending consent, approval/content fences and past/completed-copy protection
+remain intact. An update needs the separately approved Functions release and watch/app resync.
+
+MCP impact is **no wire impact**: screen ordering, generated phase/counter labels and native readings remain
+provider-private, not new recipe/read fields, targets, metrics, proposals, scopes or actions. Existing strict
+read/write/proposal schemas and the registered contract remain unchanged; no plugin rebuild or catalog refresh
+is needed. Monitoring is **covered/unchanged**: provider/event outcome and failure filters already cover v12;
+only the private exact-digest diagnostic version allowlist expands. No queue, credential, Rules or index changes.
+
+Verification covers supported sport/ending/target/note combinations, immutable v11 artifact hash, bounded field
+and archive budgets, unchanged active Recovery/execution graphs, synthetic ZIP transport and isolated demo
+Firestore lifecycle recovery. Tests are not physical screen-position, sensor or sound/vibration proof.
+
+Local verification: Functions TypeScript and frontend beta builds; 1,753 focused provider/delivery/intent/runtime/
+diagnostic tests; 145 Suunto lifecycle tests on isolated demo Firestore with synthetic provider HTTP only (no
+skips); the six other delivery-emulator suites passed 280 tests. Strict MCP/schema/read/contract regressions
+passed 321 tests, Help passed 77 and monitoring definitions passed 13. The compiled MCP contract is compatible
+with the unchanged pre-existing developer-refresh advisory. Recovery covers frozen v10/v11 acceptance before
+one same-ID update, current-v12 lost create/enriched update responses, strict unknown/missing/content-mismatch
+handling, consent withdrawal without speculative recreation and past/completed-copy preservation. Full loss-
+approval equivalence is retained only for unchanged content/authority, never newly edited instructions.
 
 ##### Current readings and boundary notifications (#784)
 
@@ -2857,17 +2909,17 @@ marker is private readback metadata, never persisted in authored recipes or proj
 file GETs by default; lifecycle tests cover lost responses, rescheduling, duplicate dispatch and strict mismatch cases.
 
 Existing `[TrainingDelivery]` Suunto acceptance, recovered-acceptance, stale-suppression, failure and checkpoint-failure
-events include two transient allowlisted labels: `guideMappingVersion` (`suunto-guides-v11`, `suunto-guides-v10`, `suunto-guides-v9`, `suunto-guides-v8`, `suunto-guides-v7`, `suunto-guides-v6`, `suunto-guides-v5`, `suunto-guides-v4`, `suunto-guides-v3`, `suunto-guides-v2`, `unknown`,
+events include two transient allowlisted labels: `guideMappingVersion` (`suunto-guides-v12`, `suunto-guides-v11`, `suunto-guides-v10`, `suunto-guides-v9`, `suunto-guides-v8`, `suunto-guides-v7`, `suunto-guides-v6`, `suunto-guides-v5`, `suunto-guides-v4`, `suunto-guides-v3`, `suunto-guides-v2`, `unknown`,
 or `not_applicable` for removal) and `deliveryPhase` (`execute` or `recover`). The version is proved by recomputing the
 immutable upsert operation's exact payload digest, including strength details, rather than copying the current adapter's
 version onto a legacy attempt. An unrecognized digest or classification failure yields `unknown` and cannot alter
 delivery/recovery. Classification runs once per claimed operation without credentials or HTTP; the phase switches to
 `execute` if recovery resumes a safe request. Other providers' existing events are unchanged.
 For rollout triage, combine `jsonPayload.message="[TrainingDelivery]"`, `jsonPayload.provider="suunto"` and
-`jsonPayload.event="failure"` with the current recipe-specific mapping (`suunto-guides-v11` for generated non-swim manual instructions, `suunto-guides-v10` for pool/open-water swimming,
+`jsonPayload.event="failure"` with the current recipe-specific mapping (`suunto-guides-v12` for eligible Rest presentation, `suunto-guides-v11` for other generated non-swim manual instructions, `suunto-guides-v10` for other pool/open-water swimming,
 `suunto-guides-v8` for strength, `suunto-guides-v7` for non-swim interval sports), or the exact historical label and
 `jsonPayload.deliveryPhase="recover"` for legacy recovery. The aggregate monitoring metrics filter provider/event,
-not Guide mapping version, and already cover v10/v11 without additional policies or queue changes.
+not Guide mapping version, and already cover v10/v11/v12 without additional policies or queue changes.
 Checkpoint failures use `jsonPayload.event="checkpoint_failed"`. These labels are not stored in Firestore or exposed
 to the browser/MCP, and contain no UID, account/Guide/workout identity, digest, recipe, instruction, sensor reading,
 credential, provider body or raw error. They report serializer/recovery provenance, not app/watch receipt or completion.

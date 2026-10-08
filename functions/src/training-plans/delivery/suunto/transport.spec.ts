@@ -11,7 +11,8 @@ import { SuuntoHttpFixture } from '../test-support/suunto-http-fixture';
 import { packageGuide, readGuideArchive } from './archive';
 import type { SuuntoGuideFieldsStepV1, SuuntoGuideJsonV1 } from '../../providers/suunto-guide.serializer';
 import { assessSuuntoGuideV2ForRecovery, assessSuuntoGuideV3ForRecovery, assessSuuntoGuideV4ForRecovery, assessSuuntoGuideV6ForRecovery,
-  assessSuuntoGuideV7ForRecovery, assessSuuntoGuideV9ForRecovery, guideExternalId, guideMapping, guidePayloadForRecovery } from './mapping';
+  assessSuuntoGuideV7ForRecovery, assessSuuntoGuideV9ForRecovery, assessSuuntoGuideV10ForRecovery,
+  assessSuuntoGuideV11ForRecovery, guideExternalId, guideMapping, guidePayloadForRecovery } from './mapping';
 
 describe('Suunto Guide lifecycle — synthetic transport', () => {
   const now = Date.parse('2026-12-29T12:00:00Z'); const owner = 'Quantified Self';
@@ -125,7 +126,7 @@ describe('Suunto Guide lifecycle — synthetic transport', () => {
     expect(server.calls).toHaveLength(0);
   });
   it.each([ActivityTypes.Running, ActivityTypes.Cycling, ActivityTypes.Rowing])(
-    'recovers exact v7 %s manual instructions before one v11 update, with stable identity and ZIP readback', async sport => {
+    'recovers exact v7 %s manual instructions before one presentation update, with stable identity and ZIP readback', async sport => {
     next({ structure: { version: 1, sport, nodes: [{ kind: 'repeat', id: 'sets', count: 3, steps: [
       { kind: 'step', id: 'work', purpose: 'work', ending: { kind: 'manual' }, targets: [] },
       { kind: 'step', id: 'rest', purpose: 'rest', ending: { kind: 'time', seconds: 15 }, targets: [] },
@@ -151,6 +152,42 @@ describe('Suunto Guide lifecycle — synthetic transport', () => {
     expect(server.calls.filter(request => request.method === 'POST')).toHaveLength(0);
     expect(server.calls.filter(request => request.method === 'PUT')).toHaveLength(1);
   });
+  it.each([
+    { sport: ActivityTypes.Running, legacy: assessSuuntoGuideV11ForRecovery },
+    { sport: ActivityTypes.Walking, legacy: assessSuuntoGuideV11ForRecovery },
+    { sport: ActivityTypes.Cycling, legacy: assessSuuntoGuideV11ForRecovery },
+    { sport: ActivityTypes.Swimming, legacy: assessSuuntoGuideV10ForRecovery },
+    { sport: ActivityTypes.OpenWaterSwimming, legacy: assessSuuntoGuideV10ForRecovery },
+  ])('recovers frozen $sport Rest before an idempotent v12 update and fails closed for changed content', async ({ sport, legacy }) => {
+    next({ structure: { version: 1, sport, nodes: [{ kind: 'repeat', id: 'sets', count: 3, steps: [
+      { kind: 'step', id: 'work', purpose: 'work', ending: { kind: 'manual' }, targets: [] },
+      { kind: 'step', id: 'rest', purpose: 'rest', ending: { kind: 'time', seconds: 15 }, targets: [] },
+    ] }] } });
+    const recipe = structuredClone(op.workout!.structure);
+    op.digest = legacy(op.workout!, op.destinationKey, op.timeZone, owner).digest;
+    const old = guidePayloadForRecovery(op, owner)!;
+    server.guides.set('legacy-rest', { guide: old, pinned: true });
+    op.progress = { version: 1, step: 'create', state: 'started' };
+    const recovered = await recover();
+    if (recovered.kind !== 'accepted') throw new Error('Historical Rest copy not recovered');
+    expect(server.calls.every(request => request.method === 'GET')).toBe(true);
+    op.artifact = recovered.artifact;
+    next(); expect(transport.diagnosticMappingVersion(op)).toBe('suunto-guides-v12');
+    await execute();
+    const current = server.guides.get('legacy-rest')!;
+    expect(current.pinned).toBe(true);
+    expect(current.guide.externalId).toBe(old.externalId);
+    expect(current.guide.steps[1]).toMatchObject({ title: 'Rest 1/3' });
+    expect(await readGuideArchive(await packageGuide(current.guide))).toEqual(current.guide);
+    next(); await execute();
+    expect(op.workout!.structure).toEqual(recipe);
+    expect(server.calls.filter(request => request.method === 'POST')).toHaveLength(0);
+    expect(server.calls.filter(request => request.method === 'PUT')).toHaveLength(1);
+    // A current digest can never authorize an altered prescription.
+    op.workout!.title = 'Changed without a new digest';
+    await expect(execute()).rejects.toMatchObject({ kind: 'terminal' });
+    expect(server.calls.filter(request => ['POST', 'PUT', 'DELETE'].includes(request.method))).toHaveLength(1);
+  });
   it('recovers the exact v7 pool copy before upgrading its screens once in place', async () => {
     next({ structure: { version: 1, sport: ActivityTypes.Swimming, nodes: [
       { kind: 'repeat', id: 'sets', count: 10, steps: [
@@ -158,7 +195,7 @@ describe('Suunto Guide lifecycle — synthetic transport', () => {
         { kind: 'step', id: 'rest', purpose: 'rest', ending: { kind: 'time', seconds: 15 }, targets: [] },
       ] },
     ] } });
-    expect(transport.diagnosticMappingVersion(op)).toBe('suunto-guides-v10');
+    expect(transport.diagnosticMappingVersion(op)).toBe('suunto-guides-v12');
     const currentDigest = op.digest;
     op.digest = assessSuuntoGuideV7ForRecovery(op.workout!, op.destinationKey, op.timeZone, owner).digest;
     expect(op.digest).not.toBe(currentDigest);

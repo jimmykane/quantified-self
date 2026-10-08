@@ -2,7 +2,9 @@ import { createHash } from 'node:crypto';
 import { ActivityTypes } from '@sports-alliance/sports-lib';
 import { describe, expect, it } from 'vitest';
 import type { WorkoutStructureV1, WorkoutStepV1, WorkoutEndingV1 } from '../../../../shared/planned-workout';
-import { serializeSuuntoGuideJsonV1, serializeSuuntoGuideV7ForRecovery, type SuuntoGuideFieldsStepV1,
+// Retain the historical v10/v11 baseline; current Rest layout is covered in
+// suunto-rest-presentation.spec.ts without changing recovery expectations.
+import { serializeSuuntoGuideV11ForRecovery, serializeSuuntoGuideV7ForRecovery, type SuuntoGuideFieldsStepV1,
   type SuuntoGuideStepV1 } from './suunto-guide.serializer';
 
 const options = { name: 'Pool screens', owner: 'Quantified Self', url: 'https://quantified-self.io/training/plans',
@@ -19,7 +21,7 @@ const pace = { kind: 'speed', mode: 'absolute', presentation: 'pace', minimumMet
   maximumMetersPerSecond: 1.2 } as const;
 const power = { kind: 'power', mode: 'absolute', minimumWatts: 100, maximumWatts: 150 } as const;
 function screen(changes: Partial<WorkoutStepV1> = {}) {
-  return serializeSuuntoGuideJsonV1({ version: 1, sport: ActivityTypes.Swimming,
+  return serializeSuuntoGuideV11ForRecovery({ version: 1, sport: ActivityTypes.Swimming,
     nodes: [{ ...work, ...changes }] }, options).artifact.steps[0] as SuuntoGuideFieldsStepV1;
 }
 function boundaries(steps: SuuntoGuideStepV1[]): unknown[] {
@@ -65,7 +67,7 @@ describe('pool-only Guide screens', () => {
   it.each(cases)('preserves authored content and budget: $purpose $ending $targets $note', changes => {
     const input = { version: 1, sport: ActivityTypes.Swimming, nodes: [{ ...work, ...changes }] };
     const before = JSON.stringify(input);
-    const result = serializeSuuntoGuideJsonV1(input, options);
+    const result = serializeSuuntoGuideV11ForRecovery(input, options);
     const current = result.artifact.steps[0] as SuuntoGuideFieldsStepV1;
     const old = serializeSuuntoGuideV7ForRecovery(input, options).artifact.steps[0] as SuuntoGuideFieldsStepV1;
     expect(current.fields.filter(field => field.type.startsWith('target')))
@@ -123,7 +125,7 @@ describe('pool screen delivery recovery', () => {
         ] },
         { ...work, id: 'end', purpose: restOnly ? 'rest' : 'cooldown', ending: { kind: 'time', seconds: 30 } },
       ] };
-      const current = serializeSuuntoGuideJsonV1(structure, options).artifact;
+      const current = serializeSuuntoGuideV11ForRecovery(structure, options).artifact;
       const old = serializeSuuntoGuideV7ForRecovery(structure, options).artifact;
       expect(boundaries(current.steps)).toEqual(boundaries(old.steps));
       if (restOnly) {

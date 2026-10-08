@@ -2,7 +2,7 @@ import { createHash } from 'node:crypto';
 import { ActivityTypes } from '@sports-alliance/sports-lib';
 import { describe, expect, it } from 'vitest';
 import type { WorkoutStepV1, WorkoutStructureV1 } from '../../../../shared/planned-workout';
-import { serializeSuuntoGuideJsonV1, serializeSuuntoGuideV7ForRecovery, serializeSuuntoGuideV9ForRecovery, serializeSuuntoGuideV10ForRecovery,
+import { serializeSuuntoGuideV11ForRecovery, serializeSuuntoGuideV7ForRecovery, serializeSuuntoGuideV9ForRecovery, serializeSuuntoGuideV10ForRecovery,
   type SuuntoGuideFieldsStepV1, type SuuntoGuideStepV1 } from './suunto-guide.serializer';
 
 const options = { name: 'Pool screens', owner: 'Quantified Self', url: 'https://quantified-self.io/training/plans',
@@ -21,9 +21,9 @@ it('freezes the historical v9 payload before changing swim presentation', () => 
     .toBe('2ef79e4d6cb4599712eaf1072c42593622fa62f529f864292590ddaf3bdae197');
 });
 
-describe.each([ActivityTypes.Swimming, ActivityTypes.OpenWaterSwimming])('swim Rest presentation: %s', sport => {
+describe.each([ActivityTypes.Swimming, ActivityTypes.OpenWaterSwimming])('frozen v10/v11 swim Rest: %s', sport => {
   it('explains that Lap finishes the current swim and keeps the 15-second Rest notifications', () => {
-    const result = serializeSuuntoGuideJsonV1(structure(sport), options);
+    const result = serializeSuuntoGuideV11ForRecovery(structure(sport), options);
     const fields = screens(result.artifact.steps);
     for (const step of fields.filter(step => step.title === 'Work')) {
       expect(step.notification).toEqual({ title: 'Work', text: 'Swim now. Press Lap to finish this interval.' });
@@ -38,20 +38,20 @@ describe.each([ActivityTypes.Swimming, ActivityTypes.OpenWaterSwimming])('swim R
     expect(result.level).toBe('exact');
   });
   it('uses separate, unambiguous wording for manual Rest', () => {
-    const result = serializeSuuntoGuideJsonV1({ version: 1, sport, nodes: [{ ...rest, ending: { kind: 'manual' } }] }, options);
+    const result = serializeSuuntoGuideV11ForRecovery({ version: 1, sport, nodes: [{ ...rest, ending: { kind: 'manual' } }] }, options);
     expect(result.artifact.steps[0]).toMatchObject({ notification: {
       title: 'Rest', text: 'Rest now. Press Lap to finish this rest.',
     } });
   });
   it('preserves authored notes over generated notifications', () => {
     for (const step of [work, rest]) {
-      const result = serializeSuuntoGuideJsonV1({ version: 1, sport, nodes: [{ ...step, note: 'Freestyle, easy turns' }] }, options);
+      const result = serializeSuuntoGuideV11ForRecovery({ version: 1, sport, nodes: [{ ...step, note: 'Freestyle, easy turns' }] }, options);
       expect(result.artifact.steps[0]).toMatchObject({ notification: { text: 'Freestyle, easy turns' } });
     }
   });
   it('keeps active recovery readings rather than treating recovery as stationary Rest', () => {
     const input: WorkoutStructureV1 = { version: 1, sport, nodes: [{ ...work, purpose: 'recovery' }] };
-    const step = serializeSuuntoGuideJsonV1(input, options).artifact.steps[0] as SuuntoGuideFieldsStepV1;
+    const step = serializeSuuntoGuideV11ForRecovery(input, options).artifact.steps[0] as SuuntoGuideFieldsStepV1;
     expect(step.fields.some(field => 'aggregate' in field)).toBe(true);
     expect(step.fields).not.toContainEqual({ type: 'distance', title: 'Total', window: 'workout' });
     if (sport === ActivityTypes.OpenWaterSwimming) {
@@ -66,7 +66,7 @@ describe.each([ActivityTypes.Swimming, ActivityTypes.OpenWaterSwimming])('swim R
   it.each(cases)('reserves the ending, target ranges and notes before optional Total: $ending $targets $note', changes => {
     const input: WorkoutStructureV1 = { version: 1, sport, nodes: [{ ...rest, ...changes }] };
     const before = structuredClone(input);
-    const result = serializeSuuntoGuideJsonV1(input, options);
+    const result = serializeSuuntoGuideV11ForRecovery(input, options);
     const step = result.artifact.steps[0] as SuuntoGuideFieldsStepV1;
     const old = serializeSuuntoGuideV7ForRecovery(input, options).artifact.steps[0] as SuuntoGuideFieldsStepV1;
     expect(step.fields.filter(field => field.type.startsWith('target'))).toEqual(old.fields.filter(field => field.type.startsWith('target')));
@@ -83,7 +83,7 @@ describe.each([ActivityTypes.Swimming, ActivityTypes.OpenWaterSwimming])('swim R
   });
   it('leaves long manual instructions text-only without shortening them for Total', () => {
     const note = 'A'.repeat(54);
-    const step = serializeSuuntoGuideJsonV1({ version: 1, sport, nodes: [{ ...rest, ending: { kind: 'manual' }, note }] }, options)
+    const step = serializeSuuntoGuideV11ForRecovery({ version: 1, sport, nodes: [{ ...rest, ending: { kind: 'manual' }, note }] }, options)
       .artifact.steps[0] as SuuntoGuideFieldsStepV1;
     expect(step.fields).toEqual([{ type: 'text', value: note }]);
     expect(step.notification?.text).toBe(note);
@@ -94,7 +94,7 @@ describe.each([ActivityTypes.Swimming, ActivityTypes.OpenWaterSwimming])('swim R
       { kind: 'repeat', id: 'sets', count: 10, steps: [work, { ...rest, ending: { kind: 'time', seconds: 15, allowEarlyLap: early } }] },
       { ...rest, id: 'last', ending: { kind: 'manual' } },
     ] };
-    const current = serializeSuuntoGuideJsonV1(input, options).artifact;
+    const current = serializeSuuntoGuideV11ForRecovery(input, options).artifact;
     const old = (sport === ActivityTypes.Swimming ? serializeSuuntoGuideV9ForRecovery : serializeSuuntoGuideV7ForRecovery)(input, options).artifact;
     expect(boundaries(current.steps)).toEqual(boundaries(old.steps));
     for (const step of screens(current.steps)) {
@@ -111,7 +111,7 @@ describe.each([ActivityTypes.Swimming, ActivityTypes.OpenWaterSwimming])('swim R
         { ...rest, id: 'distance', ending: { kind: 'distance', meters: 100, allowEarlyLap: early } },
       ] },
     ] };
-    const current = serializeSuuntoGuideJsonV1(input, options).artifact;
+    const current = serializeSuuntoGuideV11ForRecovery(input, options).artifact;
     const old = (sport === ActivityTypes.Swimming ? serializeSuuntoGuideV9ForRecovery : serializeSuuntoGuideV7ForRecovery)(input, options).artifact;
     expect(boundaries(current.steps)).toEqual(boundaries(old.steps));
     for (const step of screens(current.steps).filter(step => step.title === 'Rest')) {

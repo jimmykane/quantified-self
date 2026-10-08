@@ -228,7 +228,7 @@ describe('Suunto current readings and documented notifications', () => {
     ] as const)('uses phase-aware %s notifications for %s seconds', (purpose, seconds, title, text) => {
         const mapped = mappedStep(ActivityTypes.Running, { purpose, ending: { kind: 'time', seconds } });
         expect(mapped.notification).toEqual({ title, text });
-        expect(mapped.fields).toContainEqual({ type: 'stepDurationCountdown', value: seconds, title: 'Remain' });
+        expect(mapped.fields).toContainEqual({ type: 'stepDurationCountdown', value: seconds, title: purpose === 'rest' ? 'Rest rem' : 'Remain' });
         expect(mapped.transitions).toEqual([{ condition: { type: 'stepDuration', value: seconds } }]);
     });
     it('uses the same Sports Lib duration in metric and imperial settings without dropping seconds', () => {

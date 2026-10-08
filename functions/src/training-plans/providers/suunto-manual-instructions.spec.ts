@@ -2,7 +2,7 @@ import { createHash } from 'node:crypto';
 import { ActivityTypes } from '@sports-alliance/sports-lib';
 import { describe, expect, it } from 'vitest';
 import { WORKOUT_STEP_PURPOSES, type WorkoutStepV1, type WorkoutStructureV1 } from '../../../../shared/planned-workout';
-import { serializeSuuntoGuideJsonV1, serializeSuuntoGuideV7ForRecovery, serializeSuuntoGuideV10ForRecovery,
+import { serializeSuuntoGuideV11ForRecovery, serializeSuuntoGuideV7ForRecovery, serializeSuuntoGuideV10ForRecovery,
   type SuuntoGuideFieldsStepV1, type SuuntoGuideStepV1 } from './suunto-guide.serializer';
 
 const options = { name: 'Manual instructions', owner: 'Quantified Self', url: 'https://quantified-self.io/training/plans',
@@ -18,11 +18,11 @@ const normalizeWording = (steps: SuuntoGuideStepV1[]): SuuntoGuideStepV1[] => st
       || step.notification?.text === 'Rest now. Press Lap to finish this rest.'
       ? { notification: { ...step.notification, text: 'Press lap when ready' } } : {}) });
 
-describe.each(nonSwimSports)('clear Suunto manual instructions: %s', sport => {
+describe.each(nonSwimSports)('frozen v11 manual instructions: %s', sport => {
   it.each(WORKOUT_STEP_PURPOSES)('explains that Lap finishes the active %s without changing readings or boundaries', purpose => {
     const recipe: WorkoutStructureV1 = { version: 1, sport, nodes: [{ ...manual, purpose }] };
     const before = structuredClone(recipe);
-    const current = serializeSuuntoGuideJsonV1(recipe, options);
+    const current = serializeSuuntoGuideV11ForRecovery(recipe, options);
     const old = serializeSuuntoGuideV7ForRecovery(recipe, options);
     const step = current.artifact.steps[0] as SuuntoGuideFieldsStepV1;
     expect(step.notification?.text).toBe(purpose === 'rest'
@@ -38,12 +38,12 @@ describe.each(nonSwimSports)('clear Suunto manual instructions: %s', sport => {
     { kind: 'time', seconds: 90, allowEarlyLap: true }, { kind: 'distance', meters: 100, allowEarlyLap: true },
   ] as const)('keeps numeric/early-Lap %s instructions byte-identical to v7', ending => {
     const recipe: WorkoutStructureV1 = { version: 1, sport, nodes: [{ ...manual, ending }] };
-    expect(serializeSuuntoGuideJsonV1(recipe, options)).toEqual(serializeSuuntoGuideV7ForRecovery(recipe, options));
+    expect(serializeSuuntoGuideV11ForRecovery(recipe, options)).toEqual(serializeSuuntoGuideV7ForRecovery(recipe, options));
   });
   it.each(['Wait for the coach before starting', 'A'.repeat(40), 'B'.repeat(54),
     'Lap to finish', 'Press Lap to finish this interval.', 'Rest now. Press Lap to finish this rest.'])('preserves authored instructions: %s', note => {
     const recipe: WorkoutStructureV1 = { version: 1, sport, nodes: [{ ...manual, note }] };
-    expect(serializeSuuntoGuideJsonV1(recipe, options)).toEqual(serializeSuuntoGuideV7ForRecovery(recipe, options));
+    expect(serializeSuuntoGuideV11ForRecovery(recipe, options)).toEqual(serializeSuuntoGuideV7ForRecovery(recipe, options));
   });
   it('preserves authored lookalike text when another step requires the new generated wording', () => {
     const recipe: WorkoutStructureV1 = { version: 1, sport, nodes: [manual,
@@ -51,7 +51,7 @@ describe.each(nonSwimSports)('clear Suunto manual instructions: %s', sport => {
       { ...manual, id: 'coached-work', note: 'Press Lap to finish this interval.' },
       { ...manual, id: 'coached-rest', purpose: 'rest', note: 'Rest now. Press Lap to finish this rest.' },
     ] };
-    const current = serializeSuuntoGuideJsonV1(recipe, options);
+    const current = serializeSuuntoGuideV11ForRecovery(recipe, options);
     const old = serializeSuuntoGuideV7ForRecovery(recipe, options);
     const first = current.artifact.steps[0] as SuuntoGuideFieldsStepV1;
     expect(first.notification?.text).toBe('Press Lap to finish this interval.');
@@ -71,7 +71,7 @@ describe.each(nonSwimSports)('clear Suunto manual instructions: %s', sport => {
       ] },
       { ...manual, id: 'cooldown', purpose: 'cooldown' },
     ] };
-    const current = serializeSuuntoGuideJsonV1(recipe, options);
+    const current = serializeSuuntoGuideV11ForRecovery(recipe, options);
     const old = serializeSuuntoGuideV7ForRecovery(recipe, options);
     expect({ ...current, artifact: { ...current.artifact, steps: normalizeWording(current.artifact.steps) } }).toEqual(old);
   });
@@ -83,7 +83,7 @@ it.each([
 ] as const)('preserves the pre-change v10 %s artifact and frozen recovery', (sport, digest) => {
   const recipe: WorkoutStructureV1 = { version: 1, sport, nodes: [{ kind: 'repeat', id: 'sets', count: 3,
     steps: [manual, { ...manual, id: 'rest', purpose: 'rest', ending: { kind: 'time', seconds: 15 } }] }] };
-  const current = serializeSuuntoGuideJsonV1(recipe, options);
+  const current = serializeSuuntoGuideV11ForRecovery(recipe, options);
   expect(createHash('sha256').update(JSON.stringify(current.artifact)).digest('hex')).toBe(digest);
   expect(current).toEqual(serializeSuuntoGuideV10ForRecovery(recipe, options));
 });

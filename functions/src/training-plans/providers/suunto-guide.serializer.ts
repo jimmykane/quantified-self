@@ -14,6 +14,7 @@ import {
 } from '../../../../shared/planned-workout';
 import { normalizeTrainingLocalDate } from '../../../../shared/training-plans';
 import { parseStrengthWorkoutDetailsV1 } from '../../../../shared/strength-workout';
+import { presentSuuntoRestScreens } from './suunto-rest-presentation';
 import {
     createStableProviderExternalId,
     resolveProviderSerializationIssuesV1,
@@ -587,6 +588,14 @@ export function serializeSuuntoGuideJsonV1(
     structureValue: unknown,
     options: SerializeSuuntoGuideOptionsV1,
 ): ProviderSerializationResultV1<SuuntoGuideJsonV1> {
+    const result = serializeSuuntoGuideV11ForRecovery(structureValue, options);
+    const steps = presentSuuntoRestScreens(parseWorkoutStructureV1(structureValue), result.artifact.steps,
+        value => Buffer.byteLength(JSON.stringify({ ...result.artifact, steps: value }), 'utf8'));
+    return { ...result, artifact: { ...result.artifact, steps } };
+}
+
+/** Recovery only: freeze manual instruction v11 before Rest presentation. */
+export function serializeSuuntoGuideV11ForRecovery(structureValue: unknown, options: SerializeSuuntoGuideOptionsV1) {
     return serializeGuide(structureValue, options, 'manual-instructions-v11');
 }
 

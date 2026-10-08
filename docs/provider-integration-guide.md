@@ -464,7 +464,7 @@ Private diagnostic labels include v9; existing provider/event-based monitoring f
 See [pool screen presentation and verification](training-workspace.md#pool-swim-workrest-screen-presentation).
 This local change needs separately approved deployment; no live watch-layout proof is claimed.
 
-Current Suunto swim mapping `suunto-guides-v10` improves manual swim notifications and stationary Rest for both pool and open
+The historical Suunto swim mapping `suunto-guides-v10` improves manual swim notifications and stationary Rest for both pool and open
 water: generated text explains that Lap finishes the current interval/rest, and Rest requests native cumulative
 `distance` (`Total`, `window: 'workout'`) after reserving authored ending/targets/notes and current HR. It omits
 freshly reset swim averages, not active-recovery readings. Pool Work keeps v9 fields; open-water Work keeps v7
@@ -482,6 +482,17 @@ v10 and strength v8 stay byte-identical. Only affected recipes select v11, with 
 same-identity update. Metrics, recorded laps, consent, approval, completion and queues are unchanged; existing
 provider/event-based monitoring covers v11. See [manual instructions and verification](training-workspace.md#manual-instructions-in-other-sports).
 This is local implementation, not deployment or new live evidence.
+
+The current eligible Rest presentation uses private `suunto-guides-v12`: countdown first, current target readings/HR,
+actual pass labels for simple repeated Work/Rest pairs, and a next-phase hint where space permits. Running/walking/
+cycling variants and pool/open-water swimming are covered; active Recovery and Work retain their existing readings.
+Authored targets/notes, exact timing and the frozen execution/lap graph stay intact. No previous-effort statistics,
+guessed manual distance or forced countdown beeps/vibration are added. Oversized Guides keep compact native repeats
+rather than exceeding screen/archive readback bounds. Exact v10/v11 recovery precedes one eligible same-ID update,
+with pinning, current authority, approval and past/completed-copy protection unchanged. Other recipes retain their
+historical mapping identities. Existing provider/event monitoring covers v12 without queue or alert-policy changes.
+See [Rest-first screens and verification](training-workspace.md#rest-first-interval-screens-v12).
+This needs separately approved Functions deployment and physical watch verification; it is not live evidence.
 
 For additional authored targets, [#773](https://github.com/jimmykane/quantified-self/issues/773) records the
 6 October contract review. The published JSON reference defines only the existing HR, power, speed/pace and cadence
