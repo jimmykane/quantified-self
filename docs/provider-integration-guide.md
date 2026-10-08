@@ -1265,8 +1265,9 @@ Route import and outbound-copy monitoring (#833) is a separate workstream. Its f
 local slice adds fixed-category post-persistence outcomes and whole-task attempts to
 `routeSyncQueue` / `processRouteSyncTask` and `routeDeliverySyncQueue` /
 `processRouteDeliverySyncTask`, plus private-data-free rejected-original cleanup
-diagnostics. An ACK, stale revision, deferred item, or durable manual-review blocker
-is not a successful route send. The remaining bounded eligibility probe, independent
+diagnostics. Worker attempts include payload/read failures; observation-only logger
+failure cannot turn an ACK into a retry. An ACK, stale revision, deferred item, or durable
+manual-review blocker is not a successful route send. The remaining bounded eligibility probe, independent
 dashboard/alerts and separately approved activation stay tracked in #833; this slice
 does not claim live alert coverage or change provider behavior. See
 [route monitoring](route-monitoring.md) for semantics, verification, resources and

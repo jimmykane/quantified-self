@@ -25,10 +25,11 @@ export const processRouteSyncTask = onTaskDispatched({
     const startedAt = Date.now();
     let observedItem: unknown;
     let outcome: RouteQueueAttempt = 'failed';
-    const { queueItemId } = request.data as RouteSyncTaskPayload;
-    logger.info(`[RouteSyncTaskWorker] Starting task for queue item ${queueItemId}`);
+    let queueItemId: string | undefined;
 
     try {
+        ({ queueItemId } = request.data as RouteSyncTaskPayload);
+        logger.info(`[RouteSyncTaskWorker] Starting task for queue item ${queueItemId}`);
         const queueRef = admin.firestore().collection(ROUTE_SYNC_QUEUE_COLLECTION_NAME).doc(queueItemId);
         const queueDoc = await queueRef.get();
 

@@ -16,7 +16,7 @@ const observed = () => vi.mocked(logger.info).mock.calls.filter(([message]) => m
 describe.each([
     ['import', processRouteSyncTask, mock.import], ['delivery', processRouteDeliverySyncTask, mock.delivery],
 ] as const)('%s task observations', (lane, functionObject, processor) => {
-    const invoke = () => (functionObject as unknown as (request: unknown) => Promise<void>)({ data: { queueItemId: 'PRIVATE' } });
+    const invoke = (request: unknown = { data: { queueItemId: 'PRIVATE' } }) => (functionObject as unknown as (request: unknown) => Promise<void>)(request);
     beforeEach(() => {
         vi.clearAllMocks();
         Object.values(mock).forEach(fn => fn.mockReset());
@@ -44,6 +44,27 @@ describe.each([
         mock.get.mockRejectedValueOnce(new Error('PRIVATE'));
         await expect(invoke()).rejects.toThrow('PRIVATE');
         expect(observed()[0][1]).toMatchObject({ lane, outcome: 'failed' });
+    });
+    it.each([null, undefined])('observes malformed payload %s and still fails without processing', async data => {
+        await expect(invoke({ data })).rejects.toThrow(TypeError);
+        expect(observed()).toHaveLength(1);
+        expect(observed()[0][1]).toMatchObject({ lane, outcome: 'failed', source: 'unknown', destination: 'unknown' });
+        expect(processor).not.toHaveBeenCalled();
+        expect(mock.get).not.toHaveBeenCalled();
+    });
+    it('acknowledges committed work even when only the telemetry logger fails', async () => {
+        processor.mockResolvedValueOnce('PROCESSED');
+        vi.mocked(logger.info).mockImplementation(message => {
+            if (message === '[RouteQueue]') throw new Error('PRIVATE_LOGGER_FAILURE');
+        });
+        try {
+            await expect(invoke()).resolves.toBeUndefined();
+            expect(processor).toHaveBeenCalledOnce();
+            expect(observed()).toHaveLength(1);
+            expect(observed()[0][1]).toMatchObject({ lane, outcome: 'acknowledged' });
+        } finally {
+            vi.mocked(logger.info).mockReset();
+        }
     });
     it.each(['already_processed', 'already_failed', 'cleanup_removed'])('ACKs %s without delivery success', async outcome => {
         mock.get.mockResolvedValueOnce(outcome === 'already_processed' ? { exists: true, data: () => ({ processed: true }) } : { exists: false });

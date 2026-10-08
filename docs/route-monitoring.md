@@ -22,7 +22,7 @@ TTL, disconnect, or deletion behavior changes. There is no new scheduler or queu
 
 | Event | Meaning |
 | --- | --- |
-| `worker_attempt` | Whole task latency and ACK/retry/error classification, including initial Firestore reads. ACK is **not** committed import/delivery success. |
+| `worker_attempt` | Whole task latency and ACK/retry/error classification, including payload unpacking and initial Firestore reads. Malformed payloads still fail and use fixed unknown source/destination labels. ACK is **not** committed import/delivery success. |
 | `committed / success` | Explicit successful import persistence, or outgoing acceptance plus metadata and guarded queue finalization. |
 | `committed / skipped` | Persisted expected skip, including the guarded disabled-route transition. Never route success or a processing-failure page. |
 | `committed / retry` | Actual retry-state persistence; not a successful route send. |
@@ -65,9 +65,10 @@ separate worker-load evidence.
 
 ## Verification and next slice
 
-Focused tests cover canonical fixed labels, malformed/prototype keys, privacy, logger
-failure, success/skip/ACK separation, stale replacements, deletion fences, failed
-persistence, retried transactions, retries, exhaustion, and cleanup failure phases.
+Focused tests cover canonical fixed labels, malformed/prototype keys and task payloads,
+privacy, logger failure (including preserving a worker ACK), success/skip/ACK separation,
+stale replacements, deletion fences, failed persistence, retried transactions, retries,
+exhaustion, and cleanup failure phases.
 The real Firestore tests use loopback emulators with synthetic `demo-*` projects and
 match the app's `ignoreUndefinedProperties` setting. They are registered in CI's
 `mcp-data` group, not silently skipped outside the emulator workflow.
