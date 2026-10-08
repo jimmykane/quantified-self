@@ -352,12 +352,15 @@ function collectStepIssues(
     });
 }
 
-function sportReadingField(type: SuuntoGuideReadingType, sport: ActivityTypes): SuuntoGuideFieldV1 {
+function sportReadingField(type: SuuntoGuideReadingType, sport: ActivityTypes, presentation: GuidePresentation): SuuntoGuideFieldV1 {
     if (type === 'distance' || type === 'duration') {
         return { type, title: type === 'distance' ? 'Swum' : 'Elapsed', window: 'step' };
     }
     if (type === 'strokeRate' || type === 'swolf' || ((type === 'pace' || type === 'power') && isSuuntoGuideManualLapAverageV1(type, sport))) {
-        return { type, title: type === 'pace' ? 'Avg pace' : type === 'power' ? 'Avg pwr' : type === 'swolf' ? 'Avg SWOLF' : 'Avg strk',
+        // Multi-field titles should be below nine characters. Keep the original
+        // v7 label frozen so uncertain older sends retain their exact digest.
+        const swolfTitle = presentation === 'pool-screens-v9' ? 'AvgSWOLF' : 'Avg SWOLF';
+        return { type, title: type === 'pace' ? 'Avg pace' : type === 'power' ? 'Avg pwr' : type === 'swolf' ? swolfTitle : 'Avg strk',
             window: 'manualLap', aggregate: 'average' };
     }
     const titles: Record<SuuntoGuideLiveFieldType, string> = {
@@ -413,9 +416,9 @@ function stepToSuunto(step: WorkoutStepV1, sport: ActivityTypes, presentation: G
             heartRate: 'HR', power: 'Power', pace: 'Pace', speed: 'Speed', cadence: 'Cadence',
         };
         const live: SuuntoGuideFieldV1[] = presentation === 'pool-screens-v9'
-            ? suuntoGuidePoolScreenReadingsV1(step).map(type => sportReadingField(type, sport))
+            ? suuntoGuidePoolScreenReadingsV1(step).map(type => sportReadingField(type, sport, presentation))
             : ['sport-screens-v5', 'early-lap-v6', 'pool-swolf-v7'].includes(presentation)
-            ? suuntoGuideOptionalReadingsV1(step, sport, presentation === 'pool-swolf-v7').map(type => sportReadingField(type, sport))
+            ? suuntoGuideOptionalReadingsV1(step, sport, presentation === 'pool-swolf-v7').map(type => sportReadingField(type, sport, presentation))
             : candidates.slice(0, 5 - fields.length)
             .map(type => type === 'pace' && presentation === 'block-pace-v4'
                 ? { type, title: 'Avg pace', window: 'manualLap', aggregate: 'average' }

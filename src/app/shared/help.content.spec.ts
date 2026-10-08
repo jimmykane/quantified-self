@@ -138,12 +138,13 @@ describe('help.content', () => {
   });
   it('explains pool-only measured SWOLF without target, pool-length or sensor promises', () => {
     const content = HELP_SECTIONS.find(section => section.id === 'training-plans')!.content;
-    for (const phrase of ['pool-only **Avg SWOLF**', '**Avg SWOLF is a measured reading, not a target.**',
+    for (const phrase of ['pool-only **AvgSWOLF**', '**Avg SWOLF** on older Guides', '**SWOLF is a measured reading, not a target.**',
       "your watch's pool-length setting", 'Compare it only within the same pool length and stroke',
       'does not send the selected pool length to Suunto', 'calculate a substitute SWOLF',
       'instead of optional HR', 'with current HR for an HR target', 'without SWOLF',
       'requires the updated Functions release']) expect(content).toContain(phrase);
     expect(searchHelpSections(HELP_SECTIONS, 'Avg SWOLF').map(section => section.id)).toContain('training-plans');
+    expect(searchHelpSections(HELP_SECTIONS, 'AvgSWOLF').map(section => section.id)).toContain('training-plans');
   });
   it('explains shared horizontal pinch zoom on Event details charts', () => {
     const content = HELP_SECTIONS.find(section => section.id === 'getting-started')!.content;

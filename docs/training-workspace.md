@@ -2647,6 +2647,9 @@ fields unless it actually ends the step. Existing manual-lap averages retain the
 Untargeted manual work prefers average pace, step distance, elapsed time, average stroke rate and SWOLF in that
 order. Authored targets and instructions reserve their slots first; target counterparts precede optional progress,
 so a crowded screen may omit progress or swim readings. Long untargeted manual notes remain text-only.
+New screens use the eight-character label `AvgSWOLF`, following [Suunto's multi-field guidance](https://apizone.suunto.com/suuntoplus-guide-description) to keep titles below
+nine characters. Recovery reproduces the original v7 `Avg SWOLF` label unchanged; neither the metric nor its window
+or averaging behavior changes.
 
 Pool numeric endings keep their exact countdown values and conditions, labelled `Dist rem` or `Time rem`.
 Pool `rest` screens prefer current HR and the authored countdown/targets/notes, without current-rest pace,
@@ -2676,6 +2679,9 @@ transport and diagnostics; Suunto Firestore lifecycle emulator (101 tests); stri
 contract compatibility; app Help/shared-workout specs; monitoring definitions. The compiled contract check is
 compatible and still reports its pre-existing developer-refresh advisory; this private presentation introduces
 no contract/catalog changes and does not promote that baseline.
+Review verification tightened multi-field titles to fewer than nine code points and reproduced the compact-label
+regression before fixing it. The reviewed build, 583 focused serializer/delivery tests, 101 Suunto lifecycle emulator
+tests, 389 MCP/schema/provider tests and 74 Help tests passed; v7 payload hash/recovery and non-pool mappings stayed unchanged.
 
 ##### Current readings and boundary notifications (#784)
 

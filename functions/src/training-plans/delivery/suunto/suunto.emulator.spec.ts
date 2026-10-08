@@ -632,7 +632,7 @@ describe.skipIf(!process.env.FIRESTORE_EMULATOR_HOST)('Suunto worker with real F
         { type: 'pace', title: 'Avg pace', window: 'manualLap', aggregate: 'average' },
         { type: 'stepDurationCountdown', value: 600 },
         { type: 'strokeRate', title: 'Avg strk', window: 'manualLap', aggregate: 'average' },
-        { type: 'swolf', title: 'Avg SWOLF', window: 'manualLap', aggregate: 'average' }, { type: 'heartRate' },
+        { type: 'swolf', title: 'AvgSWOLF', window: 'manualLap', aggregate: 'average' }, { type: 'heartRate' },
       ] });
       expect(guide.steps.at(-1)).toMatchObject({ createManualLap: true });
     }
@@ -1112,7 +1112,7 @@ describe.skipIf(!process.env.FIRESTORE_EMULATOR_HOST)('Suunto worker with real F
       { type: 'stepDurationCountdown', value: 90, title: 'Time rem' },
       { type: 'text', value: 'Aim 30-40 cycles/min' },
       { type: 'strokeRate', title: 'Avg strk', window: 'manualLap', aggregate: 'average' },
-      { type: 'swolf', title: 'Avg SWOLF', window: 'manualLap', aggregate: 'average' },
+      { type: 'swolf', title: 'AvgSWOLF', window: 'manualLap', aggregate: 'average' },
     ] });
     expect((await user().collection('scheduledWorkouts').doc('w').get()).get('structure')).toEqual(structure);
     expect((await user().collection('trainingDeliverySettings').get()).docs.map(doc => doc.data())).toEqual(consent);

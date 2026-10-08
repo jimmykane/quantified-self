@@ -126,7 +126,7 @@ describe('Suunto v7 sport and prescription screen matrix (pool recovery; other s
             { type: 'pace', title: 'Avg pace', window: 'manualLap', aggregate: 'average' },
             { type: 'stepDurationCountdown', value: 60, title: sport === ActivityTypes.Swimming ? 'Time rem' : 'Remain' },
             { type: 'strokeRate', title: 'Avg strk', window: 'manualLap', aggregate: 'average' },
-            ...(sport === ActivityTypes.Swimming ? [{ type: 'swolf', title: 'Avg SWOLF', window: 'manualLap', aggregate: 'average' }] : []),
+            ...(sport === ActivityTypes.Swimming ? [{ type: 'swolf', title: 'AvgSWOLF', window: 'manualLap', aggregate: 'average' }] : []),
             { type: 'heartRate', title: 'HR' },
         ]);
     });
@@ -167,7 +167,7 @@ describe('Pool SWOLF measured screen (#773)', () => {
             { type: 'stepDurationCountdown', value: 60, title: 'Time rem' },
             { type: 'text', value: 'Aim 30-40 cycles/min' },
             { type: 'strokeRate', title: 'Avg strk', window: 'manualLap', aggregate: 'average' },
-            { type: 'swolf', title: 'Avg SWOLF', window: 'manualLap', aggregate: 'average' },
+            { type: 'swolf', title: 'AvgSWOLF', window: 'manualLap', aggregate: 'average' },
         ]);
         expect(mapped.notification).toEqual({ title: 'Work', text: 'Aim 30-40 cycles/min' });
     });

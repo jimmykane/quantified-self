@@ -456,8 +456,9 @@ The pool-only v9 screen upgrade requests native step-window `distance` (`Swum`) 
 for manual work, after authored target counterparts and within the five-field budget. Numeric endings show
 `Dist rem`/`Time rem`. Stationary `rest` shows HR/countdown/targets/notes, not freshly reset swim averages;
 active `recovery` retains swim readings. Long manual instructions stay text-only. Field order is controlled,
-but Suunto's adaptive layout does not promise fixed positions. No measurement-lag, preceding-interval-statistics,
-target or transition fix is implied. Frozen v7 payload recovery and its recorded-lap policy are retained before
+and the compact `AvgSWOLF` label keeps new multi-field titles below nine characters without altering the frozen v7
+`Avg SWOLF` payload. Suunto's adaptive layout does not promise fixed positions. No measurement-lag,
+preceding-interval-statistics, target or transition fix is implied. Frozen v7 payload recovery and its recorded-lap policy are retained before
 any eligible same-identity update. Non-pool mappings/digests, consent, completion and queue policy are unchanged.
 Private diagnostic labels include v9; existing provider/event-based monitoring filters already cover it.
 See [pool screen presentation and verification](training-workspace.md#pool-swim-workrest-screen-presentation).

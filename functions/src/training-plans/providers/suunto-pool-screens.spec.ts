@@ -35,7 +35,7 @@ describe('pool-only Guide screens', () => {
       { type: 'distance', title: 'Swum', window: 'step' },
       { type: 'duration', title: 'Elapsed', window: 'step' },
       { type: 'strokeRate', title: 'Avg strk', window: 'manualLap', aggregate: 'average' },
-      { type: 'swolf', title: 'Avg SWOLF', window: 'manualLap', aggregate: 'average' },
+      { type: 'swolf', title: 'AvgSWOLF', window: 'manualLap', aggregate: 'average' },
     ]);
     expect(mapped.notification).toEqual({ title: 'Work', text: 'Press lap when ready' });
     expect(mapped.transitions).toEqual([{ condition: { type: 'manualLap' } }]);
@@ -74,7 +74,7 @@ describe('pool-only Guide screens', () => {
     expect(new Set(current.fields.map(field => field.type)).size).toBe(current.fields.length);
     expect(withoutFields(result.artifact.steps)).toEqual(withoutFields(serializeSuuntoGuideV7ForRecovery(input, options).artifact.steps));
     for (const field of current.fields) {
-      if ('title' in field) expect(Array.from(field.title).length).toBeLessThanOrEqual(9);
+      if ('title' in field) expect(Array.from(field.title).length).toBeLessThan(9);
       if (field.type === 'distance' || field.type === 'duration') expect(field).toMatchObject({ window: 'step' });
       else if ('window' in field) expect(field).toMatchObject({ window: 'manualLap', aggregate: 'average' });
     }
@@ -95,6 +95,14 @@ describe('pool-only Guide screens', () => {
 });
 
 describe('pool screen delivery recovery', () => {
+  it('uses a compact current SWOLF label without changing the historical label', () => {
+    const current = screen().fields.find(field => field.type === 'swolf');
+    const old = serializeSuuntoGuideV7ForRecovery({ version: 1, sport: ActivityTypes.Swimming,
+      nodes: [work] }, options).artifact.steps[0] as SuuntoGuideFieldsStepV1;
+    expect(current).toEqual({ type: 'swolf', title: 'AvgSWOLF', window: 'manualLap', aggregate: 'average' });
+    expect(old.fields.find(field => field.type === 'swolf'))
+      .toEqual({ type: 'swolf', title: 'Avg SWOLF', window: 'manualLap', aggregate: 'average' });
+  });
   it('freezes the complete pre-layout v7 payload', () => {
     const artifact = serializeSuuntoGuideV7ForRecovery(recipe, options).artifact;
     expect(createHash('sha256').update(JSON.stringify(artifact)).digest('hex'))
