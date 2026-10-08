@@ -81,6 +81,7 @@ const GEN1_DISPATCHER_METADATA: Readonly<Record<string, {
 }>> = {
   dispatchSleepSyncQueue: { memoryMb: 256, timeoutSeconds: 300 },
   dispatchActivitySyncQueue: { memoryMb: 256, timeoutSeconds: 300 },
+  dispatchRouteDeliverySyncQueue: { memoryMb: 256, timeoutSeconds: 300 },
   parseGarminAPIActivityQueue: { memoryMb: 1024, timeoutSeconds: 540 },
   parseSuuntoAppActivityQueue: { memoryMb: 1024, timeoutSeconds: 540 },
   parseCOROSAPIWorkoutQueue: { memoryMb: 256, timeoutSeconds: 300 },

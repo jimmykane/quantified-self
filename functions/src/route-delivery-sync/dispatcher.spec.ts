@@ -1,6 +1,8 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { PROVIDER_OPERATION_IN_FLIGHT_QUEUE_DISPATCH_MARKER } from '../queue-utils';
 import { MAX_PENDING_TASKS } from '../shared/queue-config';
+import { ServiceNames } from '@sports-alliance/sports-lib';
+vi.unmock('@sports-alliance/sports-lib');
 
 interface QueueQueryChainMock {
   where: typeof mockQueueWhere;
@@ -26,6 +28,8 @@ const {
   mockGetUserDeletionGuardState,
   mockMarkQueueItemDispatchedIfUserActive,
   mockMarkQueueItemDeletedForUserCleanup,
+  mockObserveRouteQueues,
+  mockRecordRouteQueuesUnavailable,
 } = vi.hoisted(() => {
   const mockLoggerInfo = vi.fn();
   const mockLoggerError = vi.fn();
@@ -58,6 +62,8 @@ const {
     mockGetUserDeletionGuardState: vi.fn(),
     mockMarkQueueItemDispatchedIfUserActive: vi.fn(),
     mockMarkQueueItemDeletedForUserCleanup: vi.fn(),
+    mockObserveRouteQueues: vi.fn(),
+    mockRecordRouteQueuesUnavailable: vi.fn(),
   };
 });
 
@@ -71,6 +77,11 @@ vi.mock('firebase-functions/v1', () => ({
       },
     })),
   })),
+}));
+
+vi.mock('../routes/monitoring-probe', () => ({
+  observeRouteQueues: mockObserveRouteQueues,
+  recordRouteQueuesUnavailable: mockRecordRouteQueuesUnavailable,
 }));
 
 vi.mock('firebase-functions/logger', () => ({
@@ -115,7 +126,7 @@ vi.mock('../queue/cleanup-tombstone', () => ({
   },
 }));
 
-import { reconcileRouteDeliverySyncQueueDispatches } from './dispatcher';
+import { dispatchRouteDeliverySyncQueue, reconcileRouteDeliverySyncQueueDispatches } from './dispatcher';
 
 describe('route-delivery-sync/dispatcher', () => {
   beforeEach(() => {
@@ -152,6 +163,34 @@ describe('route-delivery-sync/dispatcher', () => {
 
     expect(result).toEqual({ inspected: 0, dispatched: 0, skippedRecent: 0 });
     expect(mockQueueCollection).not.toHaveBeenCalled();
+  });
+
+  const events = () => mockLoggerInfo.mock.calls.filter(([message]) => message === '[RouteQueue]');
+  it.each(['enqueue', 'marker', 'guard'])('observes a %s failure once while preserving reconciliation continuation', async phase => {
+    const error = new Error('PRIVATE_ERROR');
+    if (phase === 'enqueue') mockEnqueueRouteDeliverySyncTask.mockRejectedValueOnce(error);
+    if (phase === 'marker') mockMarkQueueItemDispatchedIfUserActive.mockRejectedValueOnce(error);
+    if (phase === 'guard') mockGetUserDeletionGuardState.mockRejectedValueOnce(error);
+    mockQueueGet.mockResolvedValue({ empty: false, docs: [{ id: 'PRIVATE_JOB',
+      data: () => ({ dispatchedToCloudTask: null, dateCreated: 1, userID: 'PRIVATE_UID', savedRouteID: 'PRIVATE_ROUTE',
+        routeId: 'SuuntoApp_to_WahooAPI', sourceServiceName: ServiceNames.SuuntoApp, destinationServiceName: ServiceNames.WahooAPI }), ref: { path: 'private' } }] });
+    expect(await reconcileRouteDeliverySyncQueueDispatches()).toEqual({ inspected: 1, dispatched: 0, skippedRecent: 0 });
+    expect(events()).toHaveLength(1);
+    expect(events()[0][1]).toMatchObject({ event: 'dispatch_failure', dispatchMode: 'reconciliation', phase, destination: 'wahoo' });
+    expect(JSON.stringify(events())).not.toContain('PRIVATE');
+  });
+
+  it('runs the probe even when native queue depth fails, preserving the scheduler error', async () => {
+    const error = new Error('original'); mockGetCloudTaskQueueDepthForQueue.mockRejectedValueOnce(error);
+    await expect(dispatchRouteDeliverySyncQueue({} as never)).rejects.toBe(error);
+    expect(mockObserveRouteQueues).toHaveBeenCalledOnce();
+    expect(events().map(([, fields]) => [fields.event, fields.outcome])).toEqual([['dispatch_run', 'failed']]);
+  });
+  it('probe failure is unavailable, not a failed dispatch or a scheduler retry', async () => {
+    mockObserveRouteQueues.mockRejectedValueOnce(new Error('observation'));
+    await expect(dispatchRouteDeliverySyncQueue({} as never)).resolves.toBeUndefined();
+    expect(mockRecordRouteQueuesUnavailable).toHaveBeenCalledOnce();
+    expect(events().map(([, fields]) => [fields.event, fields.outcome])).toEqual([['dispatch_run', 'completed']]);
   });
 
   it('paginates a stable oldest-first queue window and dispatches older undispatched items outside the first page', async () => {

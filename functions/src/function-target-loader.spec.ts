@@ -27,6 +27,7 @@ describe('function target loader', () => {
       'dispatchActivitySyncQueue',
       'processRouteSyncTask',
       'processRouteDeliverySyncTask',
+      'dispatchRouteDeliverySyncQueue',
       'cleanupRejectedRouteOriginalFile',
       'cleanupEventFile',
       'uploadActivity',

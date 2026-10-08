@@ -66,6 +66,8 @@ const TARGET_LOADERS: Readonly<Record<string, ModuleLoader>> = Object.freeze({
     () => module.require('./tasks/route-sync-worker') as FunctionModule,
   processRouteDeliverySyncTask:
     () => module.require('./tasks/route-delivery-sync-worker') as FunctionModule,
+  dispatchRouteDeliverySyncQueue:
+    () => module.require('./route-delivery-sync/dispatcher') as FunctionModule,
   cleanupRejectedRouteOriginalFile:
     () => module.require('./routes/rejected-original-cleanup') as FunctionModule,
   cleanupEventFile:

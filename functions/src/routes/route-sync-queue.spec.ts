@@ -152,6 +152,27 @@ describe('enqueueRouteSyncQueueItem', () => {
     );
   });
 
+  it.each(['new', 'existing'])('records %s dispatch errors without changing the error or marker', async kind => {
+    if (kind === 'existing') hoisted.state.existingQueueData = { processed: false, dateCreated: 1, dispatchedToCloudTask: null };
+    const error = new Error('PRIVATE_TRANSPORT');
+    hoisted.enqueueRouteSyncTask.mockRejectedValueOnce(error);
+    await expect(enqueueRouteSyncQueueItem({ sourceServiceName: ServiceNames.SuuntoApp,
+      providerUserId: 'PRIVATE_ACCOUNT', providerRouteId: 'PRIVATE_ROUTE', manual: false, firebaseUserID: 'PRIVATE_UID' })).rejects.toBe(error);
+    expect(hoisted.markQueueItemDispatchedIfUserActive).not.toHaveBeenCalled();
+    const events = hoisted.loggerInfo.mock.calls.filter(([message]) => message === '[RouteQueue]');
+    expect(events).toHaveLength(1);
+    expect(events[0][1]).toMatchObject({ lane: 'import', source: 'suunto', destination: 'qs', event: 'dispatch_failure', phase: 'enqueue' });
+    expect(JSON.stringify(events)).not.toContain('PRIVATE');
+  });
+
+  it('does not label a deterministic task duplicate as failed', async () => {
+    hoisted.enqueueRouteSyncTask.mockResolvedValueOnce(false);
+    expect(await enqueueRouteSyncQueueItem({ sourceServiceName: ServiceNames.SuuntoApp,
+      providerUserId: 'suunto', providerRouteId: 'route', manual: false, firebaseUserID: 'qa' })).toMatchObject({ enqueued: true });
+    expect(hoisted.markQueueItemDispatchedIfUserActive).not.toHaveBeenCalled();
+    expect(hoisted.loggerInfo.mock.calls.filter(([message]) => message === '[RouteQueue]')).toHaveLength(0);
+  });
+
   it('keeps pending-disconnect deferred route items queued without redispatching', async () => {
     hoisted.state.existingQueueData = {
       id: 'route-sync-queue-id',

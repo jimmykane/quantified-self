@@ -331,6 +331,28 @@ inherited-target secret checks. This is local verification, not a deployment or
 worker peak-memory measurement. See [route monitoring](route-monitoring.md) for
 the remaining #833 scope and activation boundary.
 
+### Route dispatcher follow-up (2026-10-08)
+
+`dispatchRouteDeliverySyncQueue` now loads directly from
+`route-delivery-sync/dispatcher`. It retains Gen 1, `europe-west2`, 256 MiB,
+300 seconds, maximum one instance, no secrets, the existing 30-minute cron and
+unchanged retry metadata. The bounded import/delivery observations share this
+existing scheduler; no new endpoint or scheduler is introduced. Full discovery
+still exports 168 endpoints; the isolated target table now contains 82.
+
+Three fresh Node 22.23.3 processes per scenario, using the same compiled probe
+mode above and synthetic demo project configuration, produced these medians:
+
+| Target | Import | RSS after import | Modules | Exports |
+| --- | --- | --- | --- | --- |
+| Complete discovery | 1,403 ms | 239.5 MiB | 3,157 | 168 |
+| `dispatchRouteDeliverySyncQueue` | 484 ms | 130.0 MiB | 1,450 | 1 |
+
+These are local cold-import observations, not peak worker memory or a deployment.
+The compiled entrypoint check verifies identical full/isolated handler identity,
+Gen 1 endpoint/trigger options, discovery, secret bindings and unrelated-module
+exclusions. Do not use these startup measurements to lower runtime memory.
+
 ## Initial local benchmark
 
 Three isolated Node 22.23.2 runs on 2026-09-18 produced these medians:

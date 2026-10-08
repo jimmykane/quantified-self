@@ -1296,14 +1296,20 @@ privacy, exclusions, costs, tests and activation steps. No provider support,
 availability, retry/TTL/concurrency, Help or MCP/Assistant contract changes.
 
 Route import and outbound-copy monitoring (#833) is a separate workstream. Its first
-local slice adds fixed-category post-persistence outcomes and whole-task attempts to
+slice, deployed on 2026-10-08, adds fixed-category post-persistence outcomes and whole-task attempts to
 `routeSyncQueue` / `processRouteSyncTask` and `routeDeliverySyncQueue` /
 `processRouteDeliverySyncTask`, plus private-data-free rejected-original cleanup
 diagnostics. Worker attempts include payload/read failures; observation-only logger
 failure cannot turn an ACK into a retry. An ACK, stale revision, deferred item, or durable
-manual-review blocker is not a successful route send. The remaining bounded eligibility probe, independent
-dashboard/alerts and separately approved activation stay tracked in #833; this slice
-does not claim live alert coverage or change provider behavior. See
+manual-review blocker is not a successful route send. The local follow-up adds masked,
+bounded import/delivery eligibility observations on the existing 30-minute outbound
+dispatcher, actual immediate/reconciliation dispatch failures, and an isolated Gen 1
+dispatcher loader with unchanged resources. It excludes lifecycle/revision/permission
+skips; incomplete zero samples are unknown, not healthy. No probe calls providers,
+refreshes credentials, pins accounts, writes queue state or changes dispatch decisions.
+The import probe does not invent an outbound Pro gate. The independent dashboard/alerts
+and separately approved deployment/activation stay tracked in #833; this work does not
+claim live alert coverage or change provider behavior. See
 [route monitoring](route-monitoring.md) for semantics, verification, resources and
 the remaining acceptance criteria. Help and MCP/Assistant contracts are unchanged.
 

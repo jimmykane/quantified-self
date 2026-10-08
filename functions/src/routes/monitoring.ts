@@ -67,6 +67,37 @@ export function recordRouteQueueDispatch(lane: RouteQueueLane, outcome: 'complet
     emit(lane, null, 'dispatch_run', { outcome });
 }
 
+/** Preserve the original result/error; deduplicated tasks and lifecycle skips are not failures. */
+export async function observeRouteDispatch<T>(lane: RouteQueueLane, item: unknown,
+    phase: 'guard' | 'enqueue' | 'marker', operation: () => Promise<T>): Promise<T> {
+    try { return await operation(); }
+    catch (error) {
+        recordRouteDispatchFailure(lane, item, 'immediate', phase);
+        throw error;
+    }
+}
+
+export function recordRouteDispatchFailure(lane: RouteQueueLane, item: unknown,
+    mode: 'immediate' | 'reconciliation', phase: 'guard' | 'enqueue' | 'marker' | 'cleanup'): void {
+    emit(lane, item, 'dispatch_failure', { dispatchMode: mode, phase });
+}
+
+export interface RouteQueueSample {
+    sampled: number;
+    excludedSample: number;
+    unknownSample: number;
+    truncated: boolean;
+    dueSample?: number;
+    ageLowerBoundMs?: number;
+}
+
+export function recordRouteQueueSample(lane: RouteQueueLane, destination: 'qs' | 'garmin' | 'wahoo' | 'coros', sample?: RouteQueueSample): void {
+    try {
+        logger.info('[RouteQueue]', { telemetryVersion: 1, lane, source: 'suunto', destination,
+            event: sample ? 'queue_sample' : 'queue_sample_unavailable', ...(sample || {}) });
+    } catch { /* Observations must never change queue behavior. */ }
+}
+
 export function recordRouteOriginalCleanup(outcome: 'deleted' | 'stale_discarded' | 'malformed_discarded' | 'failed' | 'backoff_failed', phase: 'validate' | 'route_read' | 'storage_delete' | 'intent_delete' | 'backoff'): void {
     // Cleanup diagnostics deliberately have no path, bucket, route/user ID, geometry, or error text.
     try { logger.info('[RouteQueue]', { telemetryVersion: 1, lane: 'cleanup', event: 'original_cleanup', outcome, phase }); } catch { /* best effort */ }
