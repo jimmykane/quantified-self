@@ -1261,6 +1261,17 @@ See [activity delivery monitoring](activity-delivery-monitoring.md) for semantic
 privacy, exclusions, costs, tests and activation steps. No provider support,
 availability, retry/TTL/concurrency, Help or MCP/Assistant contract changes.
 
+Route import and outbound-copy monitoring (#833) is a separate workstream. Its first
+local slice adds fixed-category post-persistence outcomes and whole-task attempts to
+`routeSyncQueue` / `processRouteSyncTask` and `routeDeliverySyncQueue` /
+`processRouteDeliverySyncTask`, plus private-data-free rejected-original cleanup
+diagnostics. An ACK, stale revision, deferred item, or durable manual-review blocker
+is not a successful route send. The remaining bounded eligibility probe, independent
+dashboard/alerts and separately approved activation stay tracked in #833; this slice
+does not claim live alert coverage or change provider behavior. See
+[route monitoring](route-monitoring.md) for semantics, verification, resources and
+the remaining acceptance criteria. Help and MCP/Assistant contracts are unchanged.
+
 Garmin's temporary `garminWebhookProbe` tested URL transport and discarded incoming payloads. PR #800 removes its
 source and deployment exports. After saved portal URLs use the protected production receivers and real ingestion
 is verified, retire the existing cloud Function through the exact, separately approved

@@ -31,6 +31,7 @@ import { getQueueCleanupTombstoneDocumentRef } from './queue/cleanup-tombstone';
 import { recordImportCommit, recordImportCompletion } from './queue/import-monitoring';
 import { recordHealthSleepCommit, recordHealthSleepCompletion, recordHealthSleepRetry } from './sleep/monitoring';
 import { recordActivityDeliveryCompletion } from './activity-sync/monitoring';
+import { recordRouteQueueCommit, recordRouteQueueCompletion, recordRouteQueueRetry } from './routes/monitoring';
 
 
 export enum QueueResult {
@@ -251,7 +252,10 @@ export async function moveToDeadLetterQueue(queueItem: QueueItemInterface, error
             await batch.commit();
         }
 
-        if (!bulkWriter) recordImportCommit(queueItem.ref?.parent?.id, 'dead_lettered');
+        if (!bulkWriter) {
+            recordImportCommit(queueItem.ref?.parent?.id, 'dead_lettered');
+            recordRouteQueueCommit(queueItem, 'dead_lettered');
+        }
         logger.info(`Moved item ${queueItem.id} to Dead Letter Queue (failed_jobs)`);
         return QueueResult.MovedToDLQ;
     } catch (e) {
@@ -320,6 +324,7 @@ export async function moveToDeadLetterQueueIfCurrentAndNotCleanupTombstoned(
         logger.info(`[${params.logPrefix}] Moved queue item ${params.queueItem.id} to failed_jobs.`);
         recordImportCommit(params.collectionName, 'dead_lettered');
         recordHealthSleepCommit(params.queueItem, 'dead_lettered');
+        recordRouteQueueCommit(params.queueItem, 'dead_lettered');
         return QueueResult.MovedToDLQ;
     } catch (error) {
         logger.error(`[${params.logPrefix}] Failed guarded DLQ transition for ${params.queueItem.id}.`, {
@@ -489,6 +494,8 @@ export async function moveToDeadLetterQueueIfCurrentUserActive(
         }
         recordImportCommit(queueItem.ref?.parent?.id, 'dead_lettered');
         recordHealthSleepCommit(queueItem, 'dead_lettered');
+        recordRouteQueueCommit(queueItem, 'dead_lettered');
+        if (params.manualReconciliation) recordRouteQueueCommit(queueItem, 'manual_reconciliation');
         return QueueResult.MovedToDLQ;
     } catch (error) {
         logger.error(new Error(`Failed to move item ${queueItem.id} to DLQ: ${error}`));
@@ -889,6 +896,8 @@ export async function increaseRetryCountIfCurrentUserActive(
         if (movedToDlq) {
             recordImportCommit(params.queueItem.ref?.parent?.id, 'dead_lettered');
             recordHealthSleepCommit(params.queueItem, 'dead_lettered');
+            recordRouteQueueCommit(params.queueItem, 'dead_lettered');
+            if (params.manualReconciliation) recordRouteQueueCommit(params.queueItem, 'manual_reconciliation');
             if (params.manualReconciliation) {
                 logger.error(`Item ${params.queueItem.id} exceeded max retries (${MAX_RETRY_COUNT}). Copied it to DLQ and retained a terminal manual-reconciliation marker.`);
             } else {
@@ -900,6 +909,7 @@ export async function increaseRetryCountIfCurrentUserActive(
         params.queueItem.dispatchedToCloudTask = nextDispatchMarker;
         params.queueItem.providerOperationStartedAt = null;
         recordHealthSleepRetry(params.queueItem, params.error);
+        recordRouteQueueRetry(params.queueItem, params.error);
         logger.info(`Updated retry count for ${params.queueItem.id} to ${nextRetryCount}`);
         return QueueResult.RetryIncremented;
     } catch (error) {
@@ -969,6 +979,7 @@ export async function increaseRetryCountForQueueItem(
         }
 
         queueItem.ref = ref;
+        if (!bulkWriter) recordRouteQueueRetry(queueItem, error);
         logger.info(`Updated retry count for ${queueItem.id} to ${queueItem.retryCount}`);
         return QueueResult.RetryIncremented;
     } catch {
@@ -1008,6 +1019,7 @@ async function updateToProcessedIfCurrentUserActive(
             recordImportCompletion(queueItem.ref?.parent?.id, additionalData);
             recordHealthSleepCompletion(queueItem, additionalData);
             recordActivityDeliveryCompletion(queueItem, additionalData);
+            recordRouteQueueCompletion(queueItem, additionalData);
         }
         return QueueResult.Processed;
     } catch (error) {
@@ -1091,6 +1103,7 @@ export async function updateToProcessed(queueItem: QueueItemInterface, bulkWrite
         if (!bulkWriter) {
             recordImportCompletion(ref.parent?.id, additionalData);
             recordActivityDeliveryCompletion({ ...queueItem, ref }, additionalData);
+            recordRouteQueueCompletion({ ...queueItem, ref }, additionalData);
         }
         logger.info(`Updated to processed  ${queueItem.id}`);
         return QueueResult.Processed;

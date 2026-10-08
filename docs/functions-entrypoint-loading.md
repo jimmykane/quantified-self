@@ -301,6 +301,36 @@ Set `ENTRYPOINT_BENCHMARK_RUNS` to change the default five runs. Run it with Nod
 The command benchmarks the complete entrypoint and every target in the production routing table. It reports the minimum,
 median and maximum import time, RSS, RSS delta, heap usage and CommonJS module count.
 
+## Route monitoring entrypoint verification (2026-10-08)
+
+The #833 telemetry slice isolates two more existing targets:
+`processRouteDeliverySyncTask` loads `tasks/route-delivery-sync-worker`, retaining
+Gen 2, `europe-west2`, 1 GiB, 540 seconds, the same COROS/Suunto/Garmin/Wahoo
+secret bindings and existing task retries. `cleanupRejectedRouteOriginalFile` loads
+`routes/rejected-original-cleanup`, retaining Gen 2, 256 MiB, 60 seconds, concurrency
+one, maximum 20 instances and retryable document-updated trigger at
+`routeOriginalFileCleanup/{cleanupID}`. No resources, generations or schedules change.
+The existing import worker and cleanup redrive remain isolated. Full discovery still
+contains 168 endpoints; the target table now has 81 isolated exports.
+
+Three fresh Node 22.23.3 processes per target used compiled `--probe` mode with
+`--expose-gc`, matching `FUNCTION_TARGET`, synthetic demo project configuration and
+no inherited discovery override. Median local cold-import results:
+
+| Target | Import | RSS after import | Modules | Exports |
+| --- | --- | --- | --- | --- |
+| Complete discovery | 1,263 ms | 237.4 MiB | 3,155 | 168 |
+| `processRouteSyncTask` | 575 ms | 123.6 MiB | 1,452 | 1 |
+| `processRouteDeliverySyncTask` | 378 ms | 120.5 MiB | 1,445 | 1 |
+| `cleanupRejectedRouteOriginalFile` | 170 ms | 86.9 MiB | 757 | 1 |
+| `redriveRejectedRouteOriginalCleanup` | 166 ms | 86.9 MiB | 757 | 1 |
+
+The compiled entrypoint check passed trigger/resource/secret contracts, original
+handler identity, isolated exports, unrelated-module exclusions, discovery and the
+inherited-target secret checks. This is local verification, not a deployment or
+worker peak-memory measurement. See [route monitoring](route-monitoring.md) for
+the remaining #833 scope and activation boundary.
+
 ## Initial local benchmark
 
 Three isolated Node 22.23.2 runs on 2026-09-18 produced these medians:

@@ -70,6 +70,8 @@ const QUEUE_AND_CLEANUP_TARGETS = [
   'processGarminHealthBackfillTask',
   'processActivitySyncTask',
   'processRouteSyncTask',
+  'processRouteDeliverySyncTask',
+  'cleanupRejectedRouteOriginalFile',
   'cleanupEventFile',
   'dispatchGarminPingBatchOnWrite',
 ];
@@ -128,6 +130,14 @@ const INGESTION_TARGET_METADATA: Readonly<Record<string, {
   processRouteSyncTask: { memoryMb: 1024, timeoutSeconds: 540, trigger: 'task', secrets: [
     'SUUNTOAPP_CLIENT_ID', 'SUUNTOAPP_CLIENT_SECRET', 'SUUNTOAPP_SUBSCRIPTION_KEY',
   ] },
+  processRouteDeliverySyncTask: { memoryMb: 1024, timeoutSeconds: 540, trigger: 'task', secrets: [
+    'COROSAPI_CLIENT_ID', 'COROSAPI_CLIENT_SECRET', 'GARMINAPI_CLIENT_ID', 'GARMINAPI_CLIENT_SECRET',
+    'SUUNTOAPP_CLIENT_ID', 'SUUNTOAPP_CLIENT_SECRET', 'SUUNTOAPP_SUBSCRIPTION_KEY', 'WAHOOAPI_CLIENT_ID', 'WAHOOAPI_CLIENT_SECRET',
+  ] },
+  cleanupRejectedRouteOriginalFile: {
+    memoryMb: 256, timeoutSeconds: 60, trigger: 'event', concurrency: 1, maxInstances: 20,
+    eventDocument: 'routeOriginalFileCleanup/{cleanupID}', eventType: 'google.cloud.firestore.document.v1.updated', eventRetry: true,
+  },
   cleanupEventFile: {
     memoryMb: 1024, timeoutSeconds: 300, trigger: 'event', concurrency: 5, maxInstances: 10,
     eventDocument: 'users/{userId}/events/{eventId}',

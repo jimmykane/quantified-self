@@ -5,7 +5,7 @@ This bundle monitors **outbound recorded activities** in `activitySyncQueue`,
 routes, historical sends and retained manual FIT uploads are included. Suunto, Wahoo
 and COROS are delivery destinations; Garmin is a source, not a recorded-activity
 upload destination. This is neither inbound import monitoring (#829), Health/Sleep
-ingestion (#830), route delivery (#831), nor Training planned-workout delivery (#655).
+ingestion (#830), route delivery (#833), nor Training planned-workout delivery (#655).
 
 The two affected Functions were deployed with separate approval on 8 October 2026.
 The twelve log metrics, dashboard and seven enabled alert policies were subsequently

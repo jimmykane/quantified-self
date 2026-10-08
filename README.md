@@ -248,6 +248,7 @@ Unified health history under `users/{uid}/healthSourceRecords` and `healthSample
 - [Training workspace architecture and maintenance](docs/training-workspace.md)
 - [Recorded activity import monitoring and activation](docs/activity-import-monitoring.md)
 - [Recorded activity delivery monitoring and activation](docs/activity-delivery-monitoring.md)
+- [Route import and delivery monitoring](docs/route-monitoring.md)
 - [Frontend UI composition and shared route headers](docs/frontend-ui.md)
 - [Event chart sport defaults and visibility persistence](docs/event-chart-visibility.md)
 - [Supported activities and metrics catalog](docs/supported-activities.md)

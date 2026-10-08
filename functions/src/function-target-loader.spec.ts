@@ -26,6 +26,8 @@ describe('function target loader', () => {
       'processActivitySyncTask',
       'dispatchActivitySyncQueue',
       'processRouteSyncTask',
+      'processRouteDeliverySyncTask',
+      'cleanupRejectedRouteOriginalFile',
       'cleanupEventFile',
       'uploadActivity',
       'fanOutSuuntoHealthWebhookIngress',

@@ -26,6 +26,7 @@ export const EMULATOR_SUITES = {
   ],
   'mcp-data': [
     'src/activity-sync/monitoring.emulator.spec.ts',
+    'src/routes/monitoring.emulator.spec.ts',
     'src/sleep/monitoring.emulator.spec.ts',
     'src/queue/import-monitoring.emulator.spec.ts',
     'src/mcp/training-plans.emulator.spec.ts',
