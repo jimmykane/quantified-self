@@ -145,7 +145,7 @@ export class EventSearchComponent extends LoadingAbstractDirective implements On
     return !(control?.valid && control?.touched);
   }
 
-  async search() {
+  async search(includeMergedEvents = this.includeMergedEvents) {
     if (!this.searchFormGroup.valid) {
       this.validateAllFormFields(this.searchFormGroup);
       return;
@@ -163,7 +163,7 @@ export class EventSearchComponent extends LoadingAbstractDirective implements On
       endDate: this.selectedEndDate,
       activityTypes: this.selectedActivityTypes,
       dateRange: this.selectedDateRange,
-      includeMergedEvents: this.includeMergedEvents
+      includeMergedEvents
     });
   }
 
@@ -252,8 +252,8 @@ export class EventSearchComponent extends LoadingAbstractDirective implements On
       return;
     }
     this.hapticsService?.selection();
-    this.includeMergedEvents = includeMergedEvents;
-    return this.search();
+    // The parent owns the accepted filter state, including save-failure rollback.
+    return this.search(includeMergedEvents);
   }
 
   private resolveCurrentRangeDates(): { startDate: Date | null; endDate: Date | null } {

@@ -1,11 +1,102 @@
-import { ChangeDetectorRef } from '@angular/core';
+import { ChangeDetectorRef, Component } from '@angular/core';
+import { TestBed } from '@angular/core/testing';
+import { CommonModule } from '@angular/common';
+import { ReactiveFormsModule } from '@angular/forms';
+import { NoopAnimationsModule } from '@angular/platform-browser/animations';
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { DateRanges, DaysOfTheWeek } from '@sports-alliance/sports-lib';
-import { describe, expect, it, vi } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { of } from 'rxjs';
 import { getDatesForDateRange } from '../../helpers/date-range-helper';
-import { EventSearchComponent } from './event-search.component';
+import { EventSearchComponent, Search } from './event-search.component';
+import { ActivityTypesFilterMenuComponent } from '../activity-types-filter-menu/activity-types-filter-menu.component';
+import { MaterialModule } from '../../modules/material.module';
+import { AppChartSharedModule } from '../../modules/app-chart-shared.module';
+import { AppHapticsService } from '../../services/app.haptics.service';
+
+@Component({
+  selector: 'app-merged-filter-test-host',
+  standalone: false,
+  template: `<app-event-search class="table-toolbar-layout compact-filter-layout"
+    [compact]="true" [toolbarRangeLayout]="true" [selectedDateRange]="range"
+    [startOfTheWeek]="weekStart" [selectedActivityTypes]="[]" [showMergedEventsToggle]="true"
+    [includeMergedEvents]="includeMerged" [mergedEventsToggleDisabled]="disabled"
+    (searchChange)="onSearch($event)"></app-event-search>`,
+})
+class MergedFilterTestHost {
+  range = DateRanges.thisWeek;
+  weekStart = DaysOfTheWeek.Monday;
+  includeMerged = true;
+  disabled = false;
+  acceptSearch = false;
+  requests: Search[] = [];
+
+  onSearch(search: Search): void {
+    this.requests.push(search);
+    if (this.acceptSearch) {
+      this.includeMerged = search.includeMergedEvents !== false;
+    }
+  }
+}
+
+describe('Merged toolbar filter rendering', () => {
+  const haptics = { selection: vi.fn() };
+
+  beforeEach(async () => {
+    haptics.selection.mockClear();
+    await TestBed.configureTestingModule({
+      declarations: [MergedFilterTestHost, EventSearchComponent, ActivityTypesFilterMenuComponent],
+      imports: [CommonModule, ReactiveFormsModule, NoopAnimationsModule, MaterialModule, AppChartSharedModule],
+      providers: [{ provide: AppHapticsService, useValue: haptics }],
+    }).compileComponents();
+  });
+
+  it('keeps the merged checkmark aligned when the parent rejects a filter change', async () => {
+    const fixture = TestBed.createComponent(MergedFilterTestHost);
+    fixture.detectChanges();
+    const button = fixture.nativeElement.querySelector('.merged-events-button') as HTMLButtonElement;
+
+    button.click();
+    await fixture.whenStable();
+    fixture.detectChanges();
+
+    expect(fixture.componentInstance.requests).toEqual([
+      expect.objectContaining({ includeMergedEvents: false }),
+    ]);
+    expect(button.getAttribute('aria-pressed')).toBe('true');
+    expect(button.textContent).toContain('check_box');
+    expect(button.textContent).not.toContain('check_box_outline_blank');
+    expect(haptics.selection).toHaveBeenCalledTimes(1);
+  });
+
+  it('follows parent preferences silently and accepts one action after being enabled', async () => {
+    const fixture = TestBed.createComponent(MergedFilterTestHost);
+    fixture.detectChanges();
+    const host = fixture.componentInstance;
+    const button = fixture.nativeElement.querySelector('.merged-events-button') as HTMLButtonElement;
+
+    host.includeMerged = false;
+    host.disabled = true;
+    fixture.detectChanges();
+    expect(button.getAttribute('aria-pressed')).toBe('false');
+    expect(button.disabled).toBe(true);
+    button.click();
+    expect(host.requests).toEqual([]);
+    expect(haptics.selection).not.toHaveBeenCalled();
+
+    host.disabled = false;
+    host.acceptSearch = true;
+    fixture.detectChanges();
+    button.click();
+    await fixture.whenStable();
+    fixture.detectChanges();
+
+    expect(host.requests).toEqual([expect.objectContaining({ includeMergedEvents: true })]);
+    expect(button.getAttribute('aria-pressed')).toBe('true');
+    expect(haptics.selection).toHaveBeenCalledTimes(1);
+  });
+});
 
 describe('EventSearchComponent', () => {
   const createComponent = (
@@ -217,7 +308,7 @@ describe('EventSearchComponent', () => {
     }
   });
 
-  it('should include merged events when merged toggle changes', async () => {
+  it('requests merged activities without overwriting the parent-owned filter', async () => {
     const { component, hapticsService } = createComponent();
     component.includeMergedEvents = false;
     const searchSpy = vi.spyOn(component, 'search').mockResolvedValue(undefined);
@@ -228,7 +319,8 @@ describe('EventSearchComponent', () => {
     await component.onMergedEventsToggleChange(event);
 
     expect(searchSpy).toHaveBeenCalledTimes(1);
-    expect(component.includeMergedEvents).toBe(true);
+    expect(searchSpy).toHaveBeenCalledWith(true);
+    expect(component.includeMergedEvents).toBe(false);
     expect(hapticsService.selection).toHaveBeenCalledTimes(1);
   });
 
@@ -246,6 +338,8 @@ describe('EventSearchComponent', () => {
       dateRange: initialRange,
     }));
 
+    // Acknowledge the requested value as the parent does after accepting a search.
+    component.includeMergedEvents = false;
     await component.onMergedEventsChange(true);
     expect(emitSpy).toHaveBeenLastCalledWith(expect.objectContaining({
       includeMergedEvents: true,
