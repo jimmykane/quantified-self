@@ -66,7 +66,10 @@ describe.skipIf(!enabled)('marketing campaign durability (emulators)', () => {
     for (const user of [included, optedOut, adminUser]) batch.set(db.doc(`users/${user.uid}/legal/agreements`), { acceptedMarketingPolicy: true });
     await batch.commit();
     const created = await saveCampaign(null, draft, adminUser.uid);
+    // A campaign prepared before sender names existed needs no migration.
+    await db.collection('marketingCampaigns').doc(created.id).update({ senderName: admin.firestore.FieldValue.delete() });
     const prepared = await prepareCampaign(created.id);
+    expect(prepared.senderName).toBe('Dimitrios from Quantified Self');
     expect(prepared.stats.eligible).toBe(2);
     expect(prepared.exclusions.disabledOrAdmin).toBe(1);
     await db.doc(`users/${late.uid}/legal/agreements`).set({ acceptedMarketingPolicy: true });
@@ -159,7 +162,7 @@ describe.skipIf(!enabled)('marketing campaign durability (emulators)', () => {
   });
 
   it('requires an accepted test and supports pause, resume and explicit retry', async () => {
-    const campaign = await saveCampaign(null, draft, 'admin');
+    const campaign = await saveCampaign(null, { ...draft, senderName: 'Dimitrios' }, 'admin');
     const ref = db.collection('marketingCampaigns').doc(campaign.id);
     await ref.update({ status: 'ready' });
     await expect(setCampaignStatus(campaign.id, 'start')).rejects.toThrow();
@@ -185,6 +188,8 @@ describe.skipIf(!enabled)('marketing campaign durability (emulators)', () => {
     await setCampaignStatus(campaign.id, 'resume');
     await dispatchCampaigns(secret);
     expect((await recipient.get()).get('mailId')).toBe(`marketing_${campaign.id}_${retryUser.uid}_2`);
+    expect((await db.collection('mail').doc(`marketing_${campaign.id}_${retryUser.uid}_2`).get()).get('from'))
+      .toBe('Dimitrios <updates@quantified-self.io>');
     expect((await db.doc(`marketingDispatchDays/${utcDay(new Date())}`).get()).get('used')).toBe(1);
   });
 
@@ -269,6 +274,19 @@ describe.skipIf(!enabled)('marketing campaign durability (emulators)', () => {
     expect(edited.lastTestMailId).toBeNull();
   });
 
+  it('persists and clones sender names, preserves them for older clients and rejects invalid saves', async () => {
+    const campaign = await saveCampaign(null, { ...draft, senderName: '  Dimitrios  ' }, 'admin');
+    const ref = db.collection('marketingCampaigns').doc(campaign.id);
+    expect(campaign.senderName).toBe('Dimitrios');
+    expect((await ref.get()).get('senderName')).toBe('Dimitrios');
+    expect((await cloneCampaign(campaign.id, 'admin')).senderName).toBe('Dimitrios');
+    expect((await saveCampaign(campaign.id, draft, 'admin')).senderName).toBe('Dimitrios');
+    await expect(saveCampaign(campaign.id, { ...draft, senderName: '\r\nBcc: other@example.org' }, 'admin')).rejects.toThrow('Sender name');
+    expect((await ref.get()).get('senderName')).toBe('Dimitrios');
+    expect((await saveCampaign(campaign.id, { ...draft, senderName: 'Dimitrios from Quantified Self' }, 'admin')).senderName)
+      .toBe('Dimitrios from Quantified Self');
+  });
+
   it('edits paused content while preserving the audience, queued mail, and progress, and requires a fresh accepted test', async () => {
     const user = await admin.auth().createUser({ email: `paused-admin-${randomUUID()}@example.com` });
     const campaign = await saveCampaign(null, draft, user.uid);
@@ -278,9 +296,9 @@ describe.skipIf(!enabled)('marketing campaign durability (emulators)', () => {
     const stats = { eligible: 5, pending: 1, queued: 1, accepted: 1, failed: 1, skipped: 1 };
     const startedAt = '2026-09-20T12:00:00.000Z';
     await recipient.set({ uid: recipient.id, status: 'queued', mailId: mail.id, attempt: 1 });
-    await mail.set({ message: { subject: draft.subject, html: '<p>Original queued message</p>' }, delivery: { state: 'PENDING' } });
+    await mail.set({ from: 'Dimitrios from Quantified Self <updates@quantified-self.io>', message: { subject: draft.subject, html: '<p>Original queued message</p>' }, delivery: { state: 'PENDING' } });
     await ref.update({ status: 'paused', stats, startedAt, snapshotId: 'fixed-snapshot', lastTestMailId: 'previous-test', lastTestState: 'SUCCESS' });
-    const editedDraft = { ...draft, name: 'Updated campaign', subject: 'Updated subject',
+    const editedDraft = { ...draft, name: 'Updated campaign', subject: 'Updated subject', senderName: 'Dimitrios',
       content: { type: 'doc', content: [{ type: 'paragraph', content: [{ type: 'text', text: 'Updated message.' }] }] },
       cta: { label: 'Read more', url: 'https://quantified-self.io/help' } };
 
@@ -298,12 +316,15 @@ describe.skipIf(!enabled)('marketing campaign durability (emulators)', () => {
     expect((await recipient.get()).data()).toMatchObject({ status: 'queued', mailId: mail.id, attempt: 1 });
     expect((await mail.get()).get('message.subject')).toBe(draft.subject);
     expect((await mail.get()).get('message.html')).toBe('<p>Original queued message</p>');
+    expect((await mail.get()).get('from')).toBe('Dimitrios from Quantified Self <updates@quantified-self.io>');
     await expect(setCampaignStatus(campaign.id, 'resume')).rejects.toThrow('Send a test email');
 
     await db.doc('marketingControl/global').set({ dailyCap: 2 });
     await db.doc(`marketingDispatchDays/${utcDay(new Date())}`).set({ used: 0 });
     const test = await sendTest(campaign.id, user.uid, secret, 'preview@example.org');
     const testRef = db.collection('mail').doc(test.mailId);
+    expect((await testRef.get()).get('from')).toBe('Dimitrios <updates@quantified-self.io>');
+    expect((await testRef.get()).get('replyTo')).toBe('Dimitrios <dimitrios@quantified-self.io>');
     expect((await testRef.get()).get('message.html')).toContain('Updated message.');
     expect((await testRef.get()).get('message.text')).toContain('Read more: https://quantified-self.io/help');
     expect((await db.doc(`marketingDispatchDays/${utcDay(new Date())}`).get()).get('used')).toBe(1);
@@ -314,30 +335,30 @@ describe.skipIf(!enabled)('marketing campaign durability (emulators)', () => {
     expect((await setCampaignStatus(campaign.id, 'resume')).status).toBe('running');
     await expect(saveCampaign(campaign.id, editedDraft, user.uid)).rejects.toThrow('Pause a running campaign');
     await setCampaignStatus(campaign.id, 'pause');
-    await saveCampaign(campaign.id, { ...editedDraft, subject: 'Another edit' }, user.uid);
+    await saveCampaign(campaign.id, { ...editedDraft, senderName: 'Dimitrios from QS' }, user.uid);
     await recordMailDelivery(test.mailId, { delivery: { state: 'PENDING' } },
       { delivery: { state: 'SUCCESS' }, marketing: { testCampaignId: campaign.id } });
     await expect(setCampaignStatus(campaign.id, 'resume')).rejects.toThrow('Send a test email');
   });
 
-  it.each(['start', 'resume'] as const)('rejects a stale browser message on %s even when the latest saved test succeeded', async action => {
+  it.each([['start', 'subject'], ['resume', 'subject'], ['start', 'senderName'], ['resume', 'senderName']] as const)('rejects a stale browser %s request after a %s edit even when the latest saved test succeeded', async (action, field) => {
     const campaign = await saveCampaign(null, draft, 'admin');
     const ref = db.collection('marketingCampaigns').doc(campaign.id);
     const testId = `marketing_test_${campaign.id}_emulator`;
     await db.collection('mail').doc(testId).set({ delivery: { state: 'SUCCESS' } });
-    const latest = { ...draft, subject: 'Saved and tested by another admin' };
+    const latest = { ...draft, [field]: 'Saved and tested by another admin' };
     const status = action === 'start' ? 'ready' : 'paused';
-    await ref.update({ subject: latest.subject, status, lastTestMailId: testId });
+    await ref.update({ [field]: latest[field], status, lastTestMailId: testId });
     await expect(setCampaignStatus(campaign.id, action, draft)).rejects.toThrow('saved message changed');
     expect((await ref.get()).get('status')).toBe(status);
     expect((await setCampaignStatus(campaign.id, action, latest)).status).toBe('running');
   });
 
-  it('does not send or charge for a saved test of text that differs from the browser composer', async () => {
+  it('does not send or charge for a saved test with a stale sender name', async () => {
     const user = await admin.auth().createUser({ email: `stale-composer-${randomUUID()}@example.com` });
     const campaign = await saveCampaign(null, draft, user.uid);
     const ref = db.collection('marketingCampaigns').doc(campaign.id);
-    const latest = { ...draft, subject: 'Another saved message' };
+    const latest = { ...draft, senderName: 'Dimitrios' };
     await ref.update({ status: 'paused' });
     await saveCampaign(campaign.id, latest, user.uid);
     await db.doc('marketingControl/global').set({ dailyCap: 2 });
@@ -348,6 +369,7 @@ describe.skipIf(!enabled)('marketing campaign durability (emulators)', () => {
     expect((await ref.get()).get('lastTestMailId')).toBeNull();
     const test = await sendTest(campaign.id, user.uid, secret, user.email, latest);
     expect((await db.collection('mail').doc(test.mailId).get()).get('message.subject')).toBe(`[TEST] ${latest.subject}`);
+    expect((await db.collection('mail').doc(test.mailId).get()).get('from')).toBe('Dimitrios <updates@quantified-self.io>');
     expect((await day.get()).get('used')).toBe(1);
   });
 
@@ -380,7 +402,7 @@ describe.skipIf(!enabled)('marketing campaign durability (emulators)', () => {
       await started;
       await setCampaignStatus(campaign.id, 'pause');
       expect((await recipient.get()).get('status')).toBe('pending');
-      await saveCampaign(campaign.id, { ...draft, subject: 'Latest subject',
+      await saveCampaign(campaign.id, { ...draft, subject: 'Latest subject', senderName: 'Dimitrios',
         content: { type: 'doc', content: [{ type: 'paragraph', content: [{ type: 'text', text: 'Latest body.' }] }] },
         cta: { label: 'Latest button', url: 'https://quantified-self.io/help' } }, 'admin');
       const testId = `marketing_test_${campaign.id}_emulator`;
@@ -391,6 +413,7 @@ describe.skipIf(!enabled)('marketing campaign durability (emulators)', () => {
       expect(await dispatch).toBe(1);
       const mail = await db.collection('mail').doc((await recipient.get()).get('mailId')).get();
       expect(mail.get('message.subject')).toBe('Latest subject');
+      expect(mail.get('from')).toBe('Dimitrios <updates@quantified-self.io>');
       expect(mail.get('message.html')).toContain('Latest body.');
       expect(mail.get('message.text')).toContain('Latest button: https://quantified-self.io/help');
       expect(mail.get('message.html')).not.toContain('Hello test.');
@@ -408,10 +431,11 @@ describe.skipIf(!enabled)('marketing campaign durability (emulators)', () => {
     await db.doc(`marketingDispatchDays/${utcDay(new Date())}`).set({ used: 0 });
     const campaignsBefore = (await db.collection('marketingCampaigns').get()).size;
     const target = `unsaved-${randomUUID()}@example.org`;
-    const testDraft = { ...draft, cta: { label: 'Open Quantified Self', url: 'https://quantified-self.io/dashboard' } };
+    const testDraft = { ...draft, senderName: 'Élodie, from QS', cta: { label: 'Open Quantified Self', url: 'https://quantified-self.io/dashboard' } };
     const result = await sendTest(null, user.uid, secret, target, testDraft);
     const mail = await db.collection('mail').doc(result.mailId).get();
     expect(mail.get('to')).toBe(target);
+    expect(mail.get('from')).toBe('"Élodie, from QS" <updates@quantified-self.io>');
     expect(mail.get('message.subject')).toBe(`[TEST] ${draft.subject}`);
     const rendered = new JSDOM(mail.get('message.html')).window.document;
     const letter = rendered.querySelector('table.letter');
