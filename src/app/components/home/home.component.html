@@ -1,364 +1,178 @@
 <div class="landing-page">
+  <nav class="home-navigation" aria-label="Homepage navigation">
+    <span class="home-wordmark">Quantified Self.io</span>
+    <div class="home-navigation-links">
+      <a mat-button href="#home-training" appHapticTap>Product</a>
+      <a mat-button routerLink="/integrations">Integrations</a>
+      <a mat-button routerLink="/pricing">Membership</a>
+      <a mat-button routerLink="/help">Help</a>
+    </div>
+  </nav>
 
-  <!-- 1. Hero Section -->
-  <section class="hero-section">
+  <section class="hero-section" aria-labelledby="home-title">
     <div class="hero-content">
-      <div class="brand-badge">
-        <p><mat-icon svgIcon="logo" class="brand-logo"></mat-icon></p>
-        <p class="brand-name">Quantified Self.io</p>
-      </div>
-
-      <h1 class="hero-title">
-        <span>Your Training Data, Connected.</span>
-        <span class="hero-title-divider" aria-hidden="true"></span>
-        <span class="highlight-text">One Dashboard. Every Activity in Context.</span>
-      </h1>
-
-      <p class="hero-subtitle">
-        Bring Garmin, Suunto, COROS, and Wahoo activities together. Understand readiness, training load, sleep, routes,
-        and performance trends in context—and keep supported activities synced across services.
-      </p>
-
+      <p class="eyebrow">Connected data. Clearer training.</p>
+      <h1 id="home-title">Your training, connected and <span class="highlight-text">understood.</span></h1>
+      <p class="hero-subtitle">Bring your activities, sleep, and health data together. Explore your progress,
+        build your next workout, and keep your training in context.</p>
       <div class="hero-actions" data-nosnippet>
-        <a mat-flat-button class="cta-button primary qs-mat-primary" routerLink="/login">
-          Get Started Free
-          <mat-icon iconPositionEnd>arrow_forward</mat-icon>
-        </a>
-        <a mat-stroked-button routerLink="/features/training-analysis">
-          Explore Training Analysis
-          <mat-icon iconPositionEnd>monitoring</mat-icon>
-        </a>
+        <a mat-flat-button class="qs-mat-primary" routerLink="/login">Get Started Free <mat-icon iconPositionEnd>arrow_forward</mat-icon></a>
+        <a mat-stroked-button routerLink="/features/training-analysis">Explore Training Analysis</a>
       </div>
-
-      <!-- Quick Trust Indicators -->
-      <div class="trust-indicators">
-        <div class="indicator">
-          <span data-nosnippet><mat-icon aria-hidden="true">check_circle</mat-icon></span>
-          <span>Your Data Stays Yours</span>
-        </div>
+      <ul class="trust-indicators" aria-label="Your data in Quantified Self">
+        <li><mat-icon aria-hidden="true">code</mat-icon> Open source</li>
+        <li><mat-icon aria-hidden="true">download</mat-icon> Original-file exports</li>
+        <li><mat-icon aria-hidden="true">verified_user</mat-icon> Your connections</li>
+      </ul>
+    </div>
+    @defer (on viewport) {
+      <app-home-training-preview></app-home-training-preview>
+    } @placeholder {
+      <div class="hero-preview-placeholder" data-nosnippet aria-label="Training week sample preview">
+        <h2><mat-icon aria-hidden="true">calendar_month</mat-icon> Your training week</h2>
+        <p>Calendar and workout profile · Fictional sample data</p>
+        <p>Explore a week of planned and completed workouts, then inspect the prescription behind a session.</p>
+        <p>Nothing is saved.</p>
       </div>
+    }
+  </section>
+
+  <section class="integrations-section" aria-labelledby="home-integrations-title">
+    <h2 id="home-integrations-title">Bring your history together. Keep supported activities moving.</h2>
+    <div class="logos-container" aria-label="Supported providers">
+      <mat-icon svgIcon="garmin" class="partner-logo" matTooltip="Garmin Connect" role="img" aria-label="Garmin"></mat-icon>
+      <mat-icon svgIcon="suunto" class="partner-logo" matTooltip="Suunto App" role="img" aria-label="Suunto"></mat-icon>
+      <mat-icon svgIcon="coros" class="partner-logo wide" matTooltip="COROS" role="img" aria-label="COROS"></mat-icon>
+      <mat-icon svgIcon="wahoo" class="partner-logo wide" matTooltip="Wahoo" role="img" aria-label="Wahoo"></mat-icon>
+    </div>
+    <p>Upload your own files, or connect providers with Pro. Explore the supported imports, activity transfers, and route paths.</p>
+    <a mat-button routerLink="/integrations">See supported imports and transfers <mat-icon iconPositionEnd>arrow_forward</mat-icon></a>
+  </section>
+
+  <section id="home-training" class="feature-section training-section" aria-labelledby="home-training-title">
+    <div class="feature-copy">
+      <p class="eyebrow">Understand your training</p>
+      <h2 id="home-training-title">See the pattern behind the effort.</h2>
+      <p>Follow your load, recovery, and progress—with the evidence behind each signal.</p>
+      <div class="compact-row-stack">
+        <app-compact-row density="compact" icon="monitor_heart" title="Readiness in context"
+          summary="See load, sleep, and overnight readings together, with sources kept clear."></app-compact-row>
+        <app-compact-row density="compact" icon="query_stats" title="Your progress, by sport"
+          summary="Compare training builds, power capacity, and long-session durability."></app-compact-row>
+        <app-compact-row density="compact" icon="layers" title="Inspect every workout" [showDivider]="false"
+          summary="Explore synchronized charts, laps, zones, and selected-range statistics."></app-compact-row>
+      </div>
+      <a mat-button routerLink="/features/training-analysis">Explore Training Analysis <mat-icon iconPositionEnd>arrow_forward</mat-icon></a>
+    </div>
+    <app-public-feature-preview previewKey="training-readiness"></app-public-feature-preview>
+  </section>
+
+  <section class="feature-section training-plans-section" aria-labelledby="home-plans-title">
+    <div class="feature-copy">
+      <p class="eyebrow">Plan what comes next</p>
+      <h2 id="home-plans-title">From one workout to your next build.</h2>
+      <p>Create a session, save it to your library, and arrange your plan into phases.</p>
+      <div class="compact-row-stack">
+        <app-compact-row density="compact" icon="repeat" title="Build the workout you mean"
+          summary="Time, distance, repeats, targets, and strength sets—with a visual profile."></app-compact-row>
+        <app-compact-row density="compact" icon="library_books" title="Save it. Use it again."
+          summary="Keep favorites in your Workout Library and place independent copies on your calendar."></app-compact-row>
+        <app-compact-row density="compact" icon="sync" title="Take it to your device" [showDivider]="false"
+          summary="Send compatible workouts to Garmin, Suunto, or Wahoo with Pro."></app-compact-row>
+      </div>
+      <a mat-button routerLink="/features/training-plans">Explore Training Plans <mat-icon iconPositionEnd>arrow_forward</mat-icon></a>
+    </div>
+    <div class="planning-summary">
+      <mat-icon aria-hidden="true">edit_calendar</mat-icon>
+      <h3>A plan that fits your training.</h3>
+      <p>Start with a standalone workout, or organize dated plans into Base, Build, Recovery, and Taper phases.</p>
+      <p>See active-plan workouts and standalone sessions beside completed activities in Calendar.</p>
+      <p class="planning-note">Planned workouts stay separate from recorded totals and Training analysis.</p>
+      <a mat-stroked-button routerLink="/features/training-plans">Explore the Calendar and workout editor</a>
     </div>
   </section>
 
-  <!-- 2. Integration / Ecosystem Ticker -->
-  <section class="integrations-section animate-on-scroll public-below-fold">
-    <h2 class="section-label">Bring It In. Keep It Moving.</h2>
-    <p class="integration-intro">
-      Connect your accounts or upload files yourself. Quantified Self brings your history together and moves supported
-      workouts and routes between Garmin, Suunto, COROS, and Wahoo.
-    </p>
-    <div class="logos-container">
-      <mat-icon svgIcon="garmin" class="partner-logo" matTooltip="Garmin Connect"></mat-icon>
-      <mat-icon svgIcon="suunto" class="partner-logo" matTooltip="Suunto App - Sync Routes & Activities"></mat-icon>
-      <mat-icon svgIcon="coros" class="partner-logo wide" matTooltip="COROS"></mat-icon>
-      <mat-icon svgIcon="wahoo" class="partner-logo wide" matTooltip="Wahoo"></mat-icon>
+  <section class="feature-section health-assistant-section" aria-label="Health and Assistant">
+    <div class="health-section">
+      <p class="eyebrow">Health beyond training</p>
+      <h2>Get to know your usual.</h2>
+      <p>Follow sleep, heart rate, HRV, and your own measurements. Add context with Timeline notes.</p>
+      <app-public-feature-preview previewKey="health-sleep"></app-public-feature-preview>
+      <a mat-button routerLink="/features/health">Explore Health <mat-icon iconPositionEnd>arrow_forward</mat-icon></a>
     </div>
-
-    <div class="compact-row-stack integration-followup-list">
-      <app-compact-row
-        class="integration-capability animate-on-scroll"
-        icon="history"
-        iconTone="secondary"
-        title="Sync Your History"
-        summary="Connect Garmin, Suunto, COROS, and Wahoo. New activities arrive automatically, and you can import the activity history already stored with each provider."
-      ></app-compact-row>
-
-      <app-compact-row
-        class="integration-capability animate-on-scroll"
-        icon="published_with_changes"
-        iconTone="secondary"
-        title="Move Workouts and Routes"
-        summary="Choose automatic delivery between supported providers. You can also send past activities by date range without enabling future sync."
-      >
-        <div class="integration-capability-details">
-          <div data-nosnippet>
-          <app-provider-data-flow-matrix
-            caption="Supported provider paths"
-            [rows]="providerDataFlowRows"
-            [interactive]="false"
-            [compact]="true"
-            [showRouteState]="false">
-          </app-provider-data-flow-matrix>
-          </div>
-          <p>
-            <strong>Activity paths:</strong> Automatically deliver new workouts or backfill past activities by date range.
-          </p>
-          <p>
-            <strong>Route paths:</strong> Deliver imported Suunto routes automatically or on demand. Saved FIT/GPX routes
-            can also be sent manually to Garmin, Suunto, COROS, or Wahoo.
-          </p>
-        </div>
-      </app-compact-row>
-
-      <app-compact-row
-        class="integration-capability animate-on-scroll"
-        icon="upload_file"
-        title="Upload Your Own Files"
-        [showDivider]="false"
-        summary="Import FIT, TCX, GPX, JSON, and SML activity files into Quantified Self. You can also send FIT activities directly to Suunto, COROS, or Wahoo for one-off transfers."
-      ></app-compact-row>
-    </div>
-
-    <a mat-stroked-button class="integrations-cta" routerLink="/integrations">
-      Explore Integrations
-    </a>
-  </section>
-
-  <!-- 3. Key Features Grid -->
-  <section class="features-section public-below-fold">
-    <h2 class="section-title animate-on-scroll">Training Load, Readiness, and Recovery</h2>
-    <p class="section-subtitle animate-on-scroll">
-      See your current load, fitness, fatigue, form, recovery, intensity balance, and efficiency—then explore the charts
-      behind every signal.
-    </p>
-
-    <div class="compact-row-stack training-preview-stack">
-      <app-compact-row
-        class="training-preview-row animate-on-scroll"
-        icon="monitor_heart"
-        iconTone="secondary"
-        title="Your Training Snapshot"
-        summary="Current state, recovery-aware readiness, recent volume, and exact load-model values in the same hierarchy used by Training."
-        [showDivider]="false"
-      >
-        <app-public-feature-preview
-          class="training-preview-data"
-          previewKey="training-snapshot"
-        ></app-public-feature-preview>
-        <app-public-feature-preview previewKey="training-readiness"></app-public-feature-preview>
-      </app-compact-row>
-    </div>
-
-    <div class="compact-row-stack features-grid">
-      <!-- Feature 1: Derived Curated Charts -->
-      <app-compact-row
-        class="feature-card animate-on-scroll"
-        icon="query_stats"
-        title="Charts Behind Every Signal"
-        summary="See how Form, freshness, intensity, efficiency, and power change over time, with readiness, recovery, and sleep views available in Training."
-      >
-        <app-public-feature-preview previewKey="training-signals"></app-public-feature-preview>
-      </app-compact-row>
-
-      <!-- Sport-specific Training views -->
-      <app-compact-row class="feature-card animate-on-scroll" icon="compare_arrows"
-        title="See How Your Training Evolves"
-        summary="Explore your sport's training mix, compare matching builds, and follow power capacity and long-session durability with the evidence behind each result.">
-        <app-public-feature-preview previewKey="training-explorer"></app-public-feature-preview>
-      </app-compact-row>
-
-      <!-- Dashboard Manager -->
-      <app-compact-row
-        class="feature-card animate-on-scroll"
-        icon="dashboard_customize"
-        title="Build the Dashboard You Need"
-        summary="Start from a preset or arrange Curated, KPI, Custom, and Map tiles yourself. Each tile keeps its own filters; maps add style and marker-clustering controls."
-      >
-        <app-public-feature-preview previewKey="dashboard"></app-public-feature-preview>
-      </app-compact-row>
-
-      <!-- Feature 4: Deep Analysis -->
-      <app-compact-row
-        class="feature-card animate-on-scroll"
-        icon="layers"
-        title="Analyze Every Workout"
-        summary="Compare heart rate, power, altitude, depth, pace, and more in synchronized charts. Inspect intensity zones, grade-colored elevation, inverse depth, aerobic durability, and cadence versus power. Switch between distance, duration, or time where supported, then select a range for stats or zoom in."
-      >
-        <app-public-feature-preview previewKey="workout-analysis"></app-public-feature-preview>
-      </app-compact-row>
-    </div>
-
-    <div class="section-actions training-actions animate-on-scroll">
-      <a mat-stroked-button routerLink="/features/training-analysis">
-        Explore Training Analysis
-        <mat-icon iconPositionEnd>monitoring</mat-icon>
-      </a>
+    <div class="ai-insights-section">
+      <p class="eyebrow">Ask about your training</p>
+      <h2>A conversation with your data.</h2>
+      <p>Ask a question, follow the evidence, and explore what your current readings can tell you.</p>
+      <app-public-feature-preview previewKey="assistant-example"></app-public-feature-preview>
+      <a mat-button routerLink="/features/ai-insights">Explore the Assistant <mat-icon iconPositionEnd>arrow_forward</mat-icon></a>
     </div>
   </section>
 
-  <section class="features-section training-plans-section public-below-fold" aria-labelledby="home-training-plans-title">
-    <h2 id="home-training-plans-title" class="section-title animate-on-scroll">{{ trainingPlansFeature.title }}</h2>
-    <p class="section-subtitle animate-on-scroll">{{ trainingPlansFeature.intro }}</p>
+  <section class="discovery-section" aria-label="More ways to explore">
+    <app-compact-row layout="stacked" density="compact" icon="map" title="Your activities on a map" [showDivider]="false"
+      summary="Explore your GPS history by date and sport.">
+      <a mat-button routerLink="/features/activity-map">Explore Activity Map <mat-icon iconPositionEnd>arrow_forward</mat-icon></a>
+    </app-compact-row>
+    <app-compact-row layout="stacked" density="compact" icon="compare_arrows" title="Compare watches and sensors" [showDivider]="false"
+      summary="Inspect same-session recordings side by side.">
+      <a mat-button routerLink="/features/workout-data-comparison">Compare Workouts and Devices <mat-icon iconPositionEnd>arrow_forward</mat-icon></a>
+    </app-compact-row>
+    <app-compact-row layout="stacked" density="compact" icon="devices" title="Bring ChatGPT or Claude" [showDivider]="false"
+      summary="Explore the data you approve through permission-scoped MCP. Changes require separate access and your client’s approval; location access remains separate.">
+      <a mat-button routerLink="/features/mcp-server">Connect ChatGPT or Claude <mat-icon iconPositionEnd>arrow_forward</mat-icon></a>
+    </app-compact-row>
+  </section>
 
-    <div class="compact-row-stack training-plans-row-stack">
-      @for (row of trainingPlansFeature.rows; track row.title; let last = $last) {
-        <app-compact-row
-          class="animate-on-scroll"
-          [icon]="row.icon"
-          [iconTone]="row.iconTone"
-          [title]="row.title"
-          [summary]="row.copy"
-          [showDivider]="!last"
-        ></app-compact-row>
+  <section class="getting-started-section" aria-labelledby="home-start-title">
+    <h2 id="home-start-title">Start with the data you already have.</h2>
+    <p>A connected watch is optional. Your own activity files work too.</p>
+    <ol class="getting-started-steps">
+      <li><h3>Create your account</h3><p>Start free and complete onboarding.</p></li>
+      <li><h3>Connect or upload</h3><p>Upload FIT, TCX, GPX, JSON, or SML files, or connect a supported provider with Pro.</p></li>
+      <li><h3>Explore your training</h3><p>Open Calendar, inspect a workout, and build what comes next.</p></li>
+    </ol>
+  </section>
+
+  <section class="membership-section" aria-labelledby="home-membership-title">
+    <p class="eyebrow">Membership</p>
+    <h2 id="home-membership-title">Start free. Grow when you need to.</h2>
+    <p>Choose the history and automation that fit your training.</p>
+    <a mat-button routerLink="/pricing">View current pricing <mat-icon iconPositionEnd>arrow_forward</mat-icon></a>
+    <div class="membership-grid">
+      @for (membership of memberships; track membership.name) {
+        <mat-card appearance="outlined">
+          <mat-card-header><mat-card-title>{{ membership.name }}</mat-card-title><mat-card-subtitle>{{ membership.label }}</mat-card-subtitle></mat-card-header>
+          <mat-card-content><p>{{ membership.copy }}</p><ul>@for (feature of membership.features; track feature) { <li>{{ feature }}</li> }</ul></mat-card-content>
+          <mat-card-actions><a mat-stroked-button [routerLink]="membership.route">{{ membership.action }}</a></mat-card-actions>
+        </mat-card>
       }
     </div>
+    <p class="membership-note">Paid prices and billing options are shown on the membership page.</p>
+  </section>
 
-    <aside class="training-plans-mcp-example animate-on-scroll" aria-labelledby="home-training-plans-example-title">
-      <mat-icon aria-hidden="true">auto_awesome</mat-icon>
-      <div>
-        <h3 id="home-training-plans-example-title">{{ trainingPlansFeature.mcpExample.title }}</h3>
-        <blockquote>
-          <p>“{{ trainingPlansFeature.mcpExample.prompt }}”</p>
-        </blockquote>
+  <section class="sovereignty-section" aria-labelledby="home-data-title">
+    <mat-icon aria-hidden="true">verified_user</mat-icon>
+    <div><h2 id="home-data-title">Your data. Yours to keep.</h2><p>Open-source code. Original-file exports. Connections you control.</p></div>
+    <a mat-button routerLink="/help" fragment="data-and-privacy">How QS works <mat-icon iconPositionEnd>arrow_forward</mat-icon></a>
+  </section>
+
+  <section class="faq-section" aria-labelledby="home-faq-title">
+    <h2 id="home-faq-title">A few things you might be wondering.</h2>
+    @for (faq of faqs; track faq.id) {
+      <div class="faq-row">
+        <h3><button mat-button type="button" [attr.aria-expanded]="expandedFaq() === faq.id"
+          [attr.aria-controls]="'home-faq-' + faq.id" (click)="toggleFaq(faq.id)">
+          <span class="faq-question">{{ faq.question }}<mat-icon aria-hidden="true">{{ expandedFaq() === faq.id ? 'expand_less' : 'expand_more' }}</mat-icon></span>
+        </button></h3>
+        <div [id]="'home-faq-' + faq.id" [hidden]="expandedFaq() !== faq.id"><p>{{ faq.answer }}</p></div>
       </div>
-    </aside>
-
-    <app-public-feature-preview
-      class="training-plans-home-preview animate-on-scroll"
-      [previewKey]="trainingPlansFeature.preview"
-    ></app-public-feature-preview>
-
-    <div class="section-actions animate-on-scroll">
-      <a mat-stroked-button [routerLink]="trainingPlansFeature.cta.routerLink">
-        {{ trainingPlansFeature.cta.label }}
-        <mat-icon iconPositionEnd>{{ trainingPlansFeature.cta.icon }}</mat-icon>
-      </a>
-    </div>
+    }
   </section>
 
-  <!-- Health: shared public content and deferred app chart renderers. -->
-  <section class="features-section health-section public-below-fold" aria-labelledby="home-health-title">
-    <h2 id="home-health-title" class="section-title animate-on-scroll">{{ healthFeature.title }}</h2>
-    <p class="section-subtitle animate-on-scroll">{{ healthFeature.intro }}</p>
-    <div class="compact-row-stack">
-      @for (row of healthFeature.rows; track row.preview; let last = $last) {
-        <app-compact-row class="animate-on-scroll"
-          [icon]="row.icon" [title]="row.title" [summary]="row.copy" [showDivider]="!last">
-          <app-public-feature-preview [previewKey]="row.preview"></app-public-feature-preview>
-        </app-compact-row>
-      }
-    </div>
-    <div class="section-actions animate-on-scroll">
-      <a mat-stroked-button routerLink="/features/health">Explore Health</a>
-    </div>
+  <section class="final-cta-section" aria-labelledby="home-next-title">
+    <h2 id="home-next-title">Your next training chapter starts here.</h2>
+    <p>Bring your history together. Understand today. Plan what comes next.</p>
+    <a mat-flat-button class="qs-mat-primary" routerLink="/login">Get Started Free <mat-icon iconPositionEnd>arrow_forward</mat-icon></a>
   </section>
-
-  <section class="features-section ai-insights-section public-below-fold">
-    <div class="ai-insights-header animate-on-scroll">
-      <h2 class="section-title">Ask About Your Training</h2>
-      <p class="section-subtitle">
-        Explore sleep, readiness, training, measurements, and recent activities in one conversation. The Assistant
-        answers from your current data—not generic fitness advice.
-      </p>
-    </div>
-
-    <div class="compact-row-stack features-grid">
-      <app-compact-row
-        class="feature-card animate-on-scroll"
-        icon="chat"
-        title="Ask in Your Own Words"
-        summary="Start with today, a trend, or a recent workout. Ask follow-up questions without starting over."
-      ></app-compact-row>
-
-      <app-compact-row
-        class="feature-card animate-on-scroll"
-        icon="hub"
-        title="Bring Your Data Together"
-        summary="The Assistant draws from sleep, recovery, training, measurements, and activities when your question needs the broader context."
-      ></app-compact-row>
-
-      <app-compact-row
-        class="feature-card animate-on-scroll"
-        icon="fact_check"
-        title="Check the Evidence"
-        summary="Each answer shows the data behind it, so you can see exactly what supports it."
-      ></app-compact-row>
-    </div>
-
-    <app-public-feature-preview
-      class="ai-insights-examples animate-on-scroll"
-      previewKey="assistant-example"
-    ></app-public-feature-preview>
-
-    <div class="section-actions ai-insights-actions animate-on-scroll">
-      <a mat-stroked-button routerLink="/features/ai-insights">
-        Explore the Assistant
-      </a>
-    </div>
-
-    <p class="ai-insights-cta-note animate-on-scroll">Your data, current evidence, conversational answers.</p>
-
-    <div class="compact-row-stack mcp-access-stack">
-      <app-compact-row
-        class="mcp-access-row animate-on-scroll"
-        icon="devices"
-        title="Analyze with ChatGPT or Claude"
-        [showDivider]="false"
-        summary="Connect ChatGPT or Claude through permission-scoped MCP. Ask them to analyze your training or prepare a bounded Training-plan proposal grounded in your approved data. Timeline note, activity-tag, and Training changes each require separate access and your client’s approval; location access remains separate."
-      >
-        <a
-          compactRowAction
-          mat-stroked-button
-          routerLink="/features/mcp-server"
-          >Connect ChatGPT or Claude</a
-        >
-        <app-public-feature-preview previewKey="mcp-flow"></app-public-feature-preview>
-      </app-compact-row>
-    </div>
-  </section>
-
-  <!-- 5. Map Your Activities (MyTracks Highlight) -->
-  <section class="footprint-section animate-on-scroll public-below-fold">
-    <div class="footprint-content">
-      <div class="footprint-text">
-        <mat-icon class="footprint-icon">map</mat-icon>
-        <h2>Map Your Activities</h2>
-        <p>
-          See every GPS activity together, then filter by date or activity type and explore the trips across your
-          history.
-        </p>
-      </div>
-      <app-public-feature-preview
-        class="footprint-map-stage"
-        previewKey="activity-map"
-      ></app-public-feature-preview>
-      <p class="footprint-map-caption">
-        <span data-nosnippet>Real activity traces · open-water swimming, trail running, and mountain biking.</span>
-      </p>
-      <a class="footprint-cta" mat-stroked-button routerLink="/features/activity-map">
-        Explore Activity Map
-        <mat-icon iconPositionEnd>explore</mat-icon>
-      </a>
-    </div>
-  </section>
-
-  <!-- 6. Hardware Benchmark Section (Precise Analysis) -->
-  <section class="analysis-section container public-below-fold">
-    <div class="analysis-header animate-on-scroll">
-      <mat-icon class="analysis-header-icon">rate_review</mat-icon>
-      <h2 class="section-title">Built for Device Reviewers</h2>
-      <p class="section-subtitle">
-        Compare same-session recordings from watches, bike computers, and sensors. Set reference and test devices,
-        auto-align their timelines, and turn GNSS and sensor differences into repeatable evidence.
-      </p>
-      <div class="analysis-actions">
-        <a mat-stroked-button class="analysis-link" routerLink="/features/workout-data-comparison">
-          Compare Workouts and Devices
-        </a>
-      </div>
-    </div>
-
-    <app-public-feature-preview
-      class="analysis-grid animate-on-scroll"
-      previewKey="reviewer-benchmark"
-    ></app-public-feature-preview>
-  </section>
-
-  <!-- 7. Data Sovereignty (Full Width) -->
-  <section class="sovereignty-section public-below-fold">
-    <div class="content-wrapper">
-      <div class="text-content">
-        <mat-icon class="large-icon">security</mat-icon>
-        <h2>Your Data. Yours to Keep.</h2>
-        <p>
-          Download your original activity files whenever you want—whether you’re creating a backup, changing services,
-          or analyzing them elsewhere.
-        </p>
-        <a mat-stroked-button routerLink="/login">
-          Start Analyzing Now
-        </a>
-      </div>
-    </div>
-  </section>
-
 </div>

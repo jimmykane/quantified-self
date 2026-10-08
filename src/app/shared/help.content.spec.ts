@@ -43,6 +43,14 @@ describe('help.content', () => {
     expect(copy).toContain('sender name, subject, body, formatting, links or button');
     expect(copy).toContain('resume with the existing successful test');
   });
+  it('explains the homepage sample and routes visitors to real onboarding rather than a demo account', () => {
+    const copy = HELP_SECTIONS.find(section => section.id === 'getting-started')!.content;
+    expect(copy).toContain('[homepage](/)');
+    expect(copy).toContain('fictional sample data');
+    expect(copy).toContain('nothing is saved');
+    expect(copy).toContain('Provider connections and history imports require Pro');
+    expect(copy).not.toContain('/demo');
+  });
   it('points users to the Privacy section and explains saving analytics and email opt-outs', () => {
     const copy = HELP_SECTIONS.find(section => section.id === 'data-and-privacy')!.content;
     expect(copy).toContain('[Settings → Privacy & emails](/settings?section=privacy)');
