@@ -109,6 +109,30 @@ Monitoring coverage is **unchanged**: #830 still uses `cloud_function` for the d
 for both workers. No dashboard, metric, policy, provider availability, Help or MCP contract change is needed.
 Deployment and #830 monitoring activation/readback remain separately approved operational work.
 
+## Recorded-activity delivery dispatcher isolation
+
+`dispatchActivitySyncQueue` loads directly from `activity-sync/dispatcher`, alongside
+the already isolated `processActivitySyncTask` worker. The dispatcher remains Gen 1
+in `europe-west2`, 256 MiB, 300 seconds, maximum one instance, no secrets and
+`*/30 * * * *` with unchanged default time-zone/retry settings. The original Firebase
+handler object is preserved; full discovery still exposes 168 endpoints. This is not
+a scheduler generation migration or a memory increase.
+
+The compiled check compares isolated endpoint/trigger descriptors with fresh full
+discovery and verifies both inherited-target discovery paths, standalone secrets and
+absence of the complete entrypoint, Genkit, BigQuery, MCP and admin modules. #832's
+telemetry uses `cloud_function` for this dispatcher and `cloud_run_revision` for the
+worker. Monitoring is additive; existing delivery, cleanup, polling, retry and claim
+behavior stays unchanged. Deployment and cloud alert activation require separate
+approval. See [recorded-activity delivery monitoring](activity-delivery-monitoring.md).
+
+Three local Node 22.23.3 cold-import runs on 2026-10-08 measured medians of 1,098 ms /
+239.2 MiB RSS for full discovery, 365 ms / 120.7 MiB for `processActivitySyncTask`,
+and 378 ms / 127.1 MiB for `dispatchActivitySyncQueue`. Isolated handlers each exported
+one Function (1,439 / 1,421 loaded modules), versus 168 exports / 3,154 modules in full
+discovery. These are local import measurements, not production latency, memory or
+billing guarantees; no memory/runtime limit was changed.
+
 ## Recorded-activity import dispatcher isolation
 
 The four existing source-queue dispatchers load directly from their shared owner module, `queue`, and export only

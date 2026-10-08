@@ -64,6 +64,9 @@ jobs:
       - name: Test Health/Sleep monitoring configuration
         run: npm run test:health-sleep-monitoring
 
+      - name: Test recorded activity delivery monitoring configuration
+        run: npm run test:activity-delivery-monitoring
+
       - name: Validate local Quantified Self plugin
         env:
           QS_CHATGPT_APP_ID: plugin_asdk_app_ci_fixture

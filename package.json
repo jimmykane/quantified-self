@@ -33,6 +33,7 @@
     "test:training-monitoring": "node --test tools/training-monitoring/monitoring.test.mjs",
     "test:import-monitoring": "node --test tools/import-monitoring/monitoring.test.mjs",
     "test:health-sleep-monitoring": "node --test tools/health-sleep-monitoring/monitoring.test.mjs",
+    "test:activity-delivery-monitoring": "node --test tools/activity-delivery-monitoring/monitoring.test.mjs",
     "test-coverage": "vitest run --coverage",
     "lint": "ng lint",
     "plugin:tools": "npm --prefix tools/quantified-self-plugin ci",

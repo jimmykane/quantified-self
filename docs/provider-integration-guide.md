@@ -1229,6 +1229,22 @@ user-facing Help behavior changes.
 
 Provider parity includes operational visibility, not only a user-facing connection.
 
+Recorded-activity **outbound delivery** monitoring (#832) covers `activitySyncQueue`,
+`processActivitySyncTask` and `dispatchActivitySyncQueue`, separately from the above
+inbound imports, Health/Sleep and Training workouts. Fixed-label post-commit outcomes
+distinguish confirmed delivery, accepted/pending provider processing, actual retries,
+new DLQ transitions and new durable manual-reconciliation cases; HTTP ACK is not
+delivery success. A bounded field-masked read-only probe reuses the existing
+30-minute dispatcher, excludes normal backoff/future/lifecycle waits, and checks
+overdue accepted Wahoo/COROS polls without resending. Its sample is a lower bound,
+not global coverage. Both handlers have isolated target loading with unchanged
+runtime generations/resources. Local implementation includes a separate dashboard,
+twelve log metrics and seven policy definitions; deployment/activation and positive
+heartbeat-series readback still need separate approval and evidence in #832.
+See [activity delivery monitoring](activity-delivery-monitoring.md) for semantics,
+privacy, exclusions, costs, tests and activation steps. No provider support,
+availability, retry/TTL/concurrency, Help or MCP/Assistant contract changes.
+
 Garmin's temporary `garminWebhookProbe` tested URL transport and discarded incoming payloads. PR #800 removes its
 source and deployment exports. After saved portal URLs use the protected production receivers and real ingestion
 is verified, retire the existing cloud Function through the exact, separately approved

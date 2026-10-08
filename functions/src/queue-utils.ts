@@ -30,6 +30,7 @@ import { SLEEP_SYNC_QUEUE_COLLECTION_NAME } from './sleep/constants';
 import { getQueueCleanupTombstoneDocumentRef } from './queue/cleanup-tombstone';
 import { recordImportCommit, recordImportCompletion } from './queue/import-monitoring';
 import { recordHealthSleepCommit, recordHealthSleepCompletion, recordHealthSleepRetry } from './sleep/monitoring';
+import { recordActivityDeliveryCompletion } from './activity-sync/monitoring';
 
 
 export enum QueueResult {
@@ -1006,6 +1007,7 @@ async function updateToProcessedIfCurrentUserActive(
         if (transitionResult === QueueItemUserGuardedUpdateResult.Updated) {
             recordImportCompletion(queueItem.ref?.parent?.id, additionalData);
             recordHealthSleepCompletion(queueItem, additionalData);
+            recordActivityDeliveryCompletion(queueItem, additionalData);
         }
         return QueueResult.Processed;
     } catch (error) {
@@ -1086,7 +1088,10 @@ export async function updateToProcessed(queueItem: QueueItemInterface, bulkWrite
             await ref.update(updateData);
         }
 
-        if (!bulkWriter) recordImportCompletion(ref.parent?.id, additionalData);
+        if (!bulkWriter) {
+            recordImportCompletion(ref.parent?.id, additionalData);
+            recordActivityDeliveryCompletion({ ...queueItem, ref }, additionalData);
+        }
         logger.info(`Updated to processed  ${queueItem.id}`);
         return QueueResult.Processed;
     } catch {

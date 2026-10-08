@@ -24,6 +24,7 @@ describe('function target loader', () => {
       'parseCOROSAPIWorkoutQueue',
       'parseWahooAPIWorkoutQueue',
       'processActivitySyncTask',
+      'dispatchActivitySyncQueue',
       'processRouteSyncTask',
       'cleanupEventFile',
       'uploadActivity',

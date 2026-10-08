@@ -15,6 +15,7 @@ import { processActivitySyncQueueItem } from '../activity-sync/process-queue-ite
 import { isQueueItemDeletedForUserCleanup } from '../queue/cleanup-tombstone';
 import { shouldSkipQueueWorkForDeletedUser } from '../queue/user-deletion-skip';
 import { FUNCTION_SECRET_BINDINGS } from '../secrets';
+import { activityDeliveryFailureOutcome, recordActivityDeliveryAttempt, type ActivityDeliveryAttempt } from '../activity-sync/monitoring';
 
 interface ActivitySyncTaskPayload {
     queueItemId: string;
@@ -166,90 +167,114 @@ export const processActivitySyncTask = onTaskDispatched({
     timeoutSeconds: 540,
     region: 'europe-west2',
 }, async (request) => {
-    const { queueItemId } = request.data as ActivitySyncTaskPayload;
-    logger.info(`[ActivitySyncTaskWorker] Starting task for queue item ${queueItemId}`);
-
-    const queueRef = admin.firestore().collection(ACTIVITY_SYNC_QUEUE_COLLECTION_NAME).doc(queueItemId);
-    const queueDoc = await queueRef.get();
-
-    if (!queueDoc.exists) {
-        const failedJobDoc = await admin.firestore().collection('failed_jobs').doc(queueItemId).get();
-        if (failedJobDoc.exists) {
-            logger.warn(`[ActivitySyncTaskWorker] Queue item ${queueItemId} not found in ${ACTIVITY_SYNC_QUEUE_COLLECTION_NAME} but exists in failed_jobs. Stopping retry.`);
-            return;
-        }
-        if (await isQueueItemDeletedForUserCleanup(ACTIVITY_SYNC_QUEUE_COLLECTION_NAME, queueItemId)) {
-            logger.warn(`[ActivitySyncTaskWorker] Queue item ${queueItemId} was deleted during queue cleanup. Stopping retry.`);
-            return;
-        }
-
-        throw new Error(`[ActivitySyncTaskWorker] Queue item ${queueItemId} not found in ${ACTIVITY_SYNC_QUEUE_COLLECTION_NAME}`);
-    }
-
-    const queueItem = queueDoc.data() as ActivitySyncQueueItemInterface | undefined;
-    if (!queueItem) {
-        throw new Error(`[ActivitySyncTaskWorker] Queue item ${queueItemId} has no data.`);
-    }
-    if (queueItem.processed) {
-        logger.info(`[ActivitySyncTaskWorker] Item ${queueItemId} already processed, skipping.`);
-        return;
-    }
-
+    const startedAt = Date.now();
+    let observedItem: unknown;
+    let outcome: ActivityDeliveryAttempt = 'failed';
+    let committedRetry = false;
     try {
-        const processingQueueItem = Object.assign({
-            id: queueDoc.id,
-            ref: queueDoc.ref,
-        }, queueItem) as ActivitySyncQueueItemInterface;
-        const scheduledProviderStatusPollAtMs = getScheduledExpectedProviderStatusPollAtMs(processingQueueItem);
-        if (scheduledProviderStatusPollAtMs !== null) {
-            // The prior worker committed the retry transition but its response
-            // may have been retried before the planned poll is due. Re-enqueue
-            // the same deterministic delayed task rather than polling the provider
-            // early and consuming another polling budget entry.
-            await enqueuePendingProviderStatusPoll(processingQueueItem, queueItemId, {
-                scheduledAtMs: scheduledProviderStatusPollAtMs,
-                reschedulingExistingPoll: true,
-            });
+        const { queueItemId } = request.data as ActivitySyncTaskPayload;
+        logger.info(`[ActivitySyncTaskWorker] Starting task for queue item ${queueItemId}`);
+
+        const queueRef = admin.firestore().collection(ACTIVITY_SYNC_QUEUE_COLLECTION_NAME).doc(queueItemId);
+        const queueDoc = await queueRef.get();
+
+        if (!queueDoc.exists) {
+            const failedJobDoc = await admin.firestore().collection('failed_jobs').doc(queueItemId).get();
+            if (failedJobDoc.exists) {
+                outcome = 'already_failed';
+                logger.warn(`[ActivitySyncTaskWorker] Queue item ${queueItemId} not found in ${ACTIVITY_SYNC_QUEUE_COLLECTION_NAME} but exists in failed_jobs. Stopping retry.`);
+                return;
+            }
+            if (await isQueueItemDeletedForUserCleanup(ACTIVITY_SYNC_QUEUE_COLLECTION_NAME, queueItemId)) {
+                outcome = 'cleanup_removed';
+                logger.warn(`[ActivitySyncTaskWorker] Queue item ${queueItemId} was deleted during queue cleanup. Stopping retry.`);
+                return;
+            }
+
+            throw new Error(`[ActivitySyncTaskWorker] Queue item ${queueItemId} not found in ${ACTIVITY_SYNC_QUEUE_COLLECTION_NAME}`);
+        }
+
+        const queueItem = queueDoc.data() as ActivitySyncQueueItemInterface | undefined;
+        observedItem = queueItem;
+        if (!queueItem) {
+            throw new Error(`[ActivitySyncTaskWorker] Queue item ${queueItemId} has no data.`);
+        }
+        if (queueItem.processed) {
+            outcome = 'already_processed';
+            logger.info(`[ActivitySyncTaskWorker] Item ${queueItemId} already processed, skipping.`);
             return;
         }
-        const result = await processActivitySyncQueueItem(processingQueueItem);
 
-        switch (result) {
-            case QueueResult.Processed:
-                logger.info(`[ActivitySyncTaskWorker] Successfully processed item ${queueItemId}`);
-                break;
-            case QueueResult.AcknowledgedStale:
-                logger.info(`[ActivitySyncTaskWorker] Acknowledged stale delivery for item ${queueItemId}; this worker did not mark it processed.`);
-                break;
-            case QueueResult.Skipped:
-                logger.error(`[ActivitySyncTaskWorker] Item ${queueItemId} requires manual reconciliation; stopping automatic retries.`);
-                break;
-            case QueueResult.Deferred:
-                logger.warn(`[ActivitySyncTaskWorker] Deferred item ${queueItemId}; it remains queued for a future dispatcher run.`);
-                break;
-            case QueueResult.ProviderStatusPending: {
-                await enqueuePendingProviderStatusPoll(processingQueueItem, queueItemId);
-                break;
-            }
-            case QueueResult.MovedToDLQ:
-                logger.warn(`[ActivitySyncTaskWorker] Item ${queueItemId} was moved to DLQ.`);
-                break;
-            case QueueResult.RetryIncremented: {
-                const retryReason = getSafeRetryReason(queueItem);
-                logger.warn(`[ActivitySyncTaskWorker] Item ${queueItemId} failed and retry count was incremented.`, {
-                    ...(retryReason ? { retryReason } : {}),
+        try {
+            const processingQueueItem = Object.assign({
+                id: queueDoc.id,
+                ref: queueDoc.ref,
+            }, queueItem) as ActivitySyncQueueItemInterface;
+            const scheduledProviderStatusPollAtMs = getScheduledExpectedProviderStatusPollAtMs(processingQueueItem);
+            if (scheduledProviderStatusPollAtMs !== null) {
+                // The prior worker committed the retry transition but its response
+                // may have been retried before the planned poll is due. Re-enqueue
+                // the same deterministic delayed task rather than polling the provider
+                // early and consuming another polling budget entry.
+                await enqueuePendingProviderStatusPoll(processingQueueItem, queueItemId, {
+                    scheduledAtMs: scheduledProviderStatusPollAtMs,
+                    reschedulingExistingPoll: true,
                 });
-                throw new Error(`Item ${queueItemId} failed and was scheduled for retry${retryReason ? `: ${retryReason}` : '.'}`);
+                outcome = 'provider_pending';
+                return;
             }
-            case QueueResult.Failed:
-                logger.error(`[ActivitySyncTaskWorker] Fatal failure updating state for item ${queueItemId}`);
-                throw new Error(`Fatal failure updating state for activity sync item ${queueItemId}`);
-            default:
-                logger.error(`[ActivitySyncTaskWorker] Unexpected result for item ${queueItemId}: ${result}`);
-                throw new Error(`Unexpected result for activity sync item ${queueItemId}: ${result}`);
+            const result = await processActivitySyncQueueItem(processingQueueItem);
+
+            switch (result) {
+                case QueueResult.Processed:
+                    outcome = 'acknowledged';
+                    logger.info(`[ActivitySyncTaskWorker] Successfully processed item ${queueItemId}`);
+                    break;
+                case QueueResult.AcknowledgedStale:
+                    outcome = 'stale';
+                    logger.info(`[ActivitySyncTaskWorker] Acknowledged stale delivery for item ${queueItemId}; this worker did not mark it processed.`);
+                    break;
+                case QueueResult.Skipped:
+                    outcome = 'manual_reconciliation';
+                    logger.error(`[ActivitySyncTaskWorker] Item ${queueItemId} requires manual reconciliation; stopping automatic retries.`);
+                    break;
+                case QueueResult.Deferred:
+                    outcome = 'deferred';
+                    logger.warn(`[ActivitySyncTaskWorker] Deferred item ${queueItemId}; it remains queued for a future dispatcher run.`);
+                    break;
+                case QueueResult.ProviderStatusPending: {
+                    await enqueuePendingProviderStatusPoll(processingQueueItem, queueItemId);
+                    outcome = 'provider_pending';
+                    break;
+                }
+                case QueueResult.MovedToDLQ:
+                    outcome = 'dead_lettered';
+                    logger.warn(`[ActivitySyncTaskWorker] Item ${queueItemId} was moved to DLQ.`);
+                    break;
+                case QueueResult.RetryIncremented: {
+                    outcome = 'retry';
+                    committedRetry = true;
+                    const retryReason = getSafeRetryReason(queueItem);
+                    logger.warn(`[ActivitySyncTaskWorker] Item ${queueItemId} failed and retry count was incremented.`, {
+                        ...(retryReason ? { retryReason } : {}),
+                    });
+                    throw new Error(`Item ${queueItemId} failed and was scheduled for retry${retryReason ? `: ${retryReason}` : '.'}`);
+                }
+                case QueueResult.Failed:
+                    logger.error(`[ActivitySyncTaskWorker] Fatal failure updating state for item ${queueItemId}`);
+                    throw new Error(`Fatal failure updating state for activity sync item ${queueItemId}`);
+                default:
+                    logger.error(`[ActivitySyncTaskWorker] Unexpected result for item ${queueItemId}: ${result}`);
+                    throw new Error(`Unexpected result for activity sync item ${queueItemId}: ${result}`);
+            }
+        } catch (error) {
+            logger.error(`[ActivitySyncTaskWorker] Error processing item ${queueItemId}:`, error);
+            throw error;
         }
     } catch (error) {
-        logger.error(`[ActivitySyncTaskWorker] Error processing item ${queueItemId}:`, error);
+        if (!committedRetry) outcome = activityDeliveryFailureOutcome(error);
         throw error;
+    } finally {
+        recordActivityDeliveryAttempt(observedItem, outcome, Date.now() - startedAt);
     }
 });
