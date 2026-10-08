@@ -13,9 +13,10 @@ helpers, and rejected-original cleanup. No route monitoring dashboard, metric, a
 policy, email, or production monitoring configuration has been created by that slice.
 The follow-up, deployed from commit `67cce336d` on 2026-10-08 at 09:50 UTC, adds bounded
 eligibility observations and dispatch-failure telemetry, and isolates the existing route
-dispatcher. The independent
-route monitoring bundle and separately approved activation remain in #833's scope;
-the issue stays In progress.
+dispatcher. The independent bundle in `tools/route-monitoring/` is now implemented
+locally: one **QS Routes** dashboard, 16 versioned log metrics and eight policies.
+It has not been applied to production; activation and metric-series evidence remain
+in #833's scope, so the issue stays In progress.
 
 The authoritative provider lifecycle remains in [Provider Integration Guide](provider-integration-guide.md).
 No entitlement, provider support, transport, revision, lease, scheduling, retry, rate,
@@ -118,6 +119,106 @@ See [entrypoint contracts and benchmarks](functions-entrypoint-loading.md#route-
 Do not use local cold-import RSS measurements to lower runtime memory without
 separate worker-load evidence.
 
+## Dashboard and initial alert thresholds
+
+The dashboard has 19 charts plus a semantics/runbook panel. Native task depth,
+HTTP attempts and p95 dispatch delay cover exactly `processRouteSyncTask` and
+`processRouteDeliverySyncTask` in `europe-west2`, separately by queue. These charts
+include normal retries and are diagnostic, not proof of provider success. Worker
+commits, attempts, latency, failures, new permanent/manual-review transitions and
+original cleanup are Gen 2 signals. Dispatch failures cover both Gen 1 and Gen 2:
+the webhook/scheduler and immediate callable/worker enqueues must not be conflated.
+The Gen 1 dispatcher supplies all four lane/destination heartbeat and backlog groups.
+
+Policies use fixed lane/destination aggregates except cleanup, which aggregates
+failure phases. Missing threshold data is inactive, not fabricated zero; unknown
+observations and missing operational heartbeats have independent policies. Each
+threshold requires a 60-second retest window and opens/closes notifications through
+one explicitly selected existing email channel. Thresholds are initial settings to
+tune against measured route volume, not partner quotas or unique-route counts.
+
+| Policy | Initial condition | Important exclusion / interpretation |
+| --- | --- | --- |
+| Sustained eligible work | Two positive samples with age >= 1 hour per lane/destination in 90 minutes | Fresh undispatched work only; excludes future dates, retries, leases, provider claims and lifecycle waits. A bounded sample is not complete backlog coverage. |
+| Repeated dispatch failures | Three actual failures per lane/destination/runtime generation in 90 minutes | Gen 1 and Gen 2 have separate conditions. Deduplicated tasks, stale-marker refusals and successful lifecycle exclusions do not count. Whole-run failures can have unknown destination. |
+| Repeated processing failures | Ten failed-attempt or actual committed-retry observations per lane/destination in 15 minutes | A generic retry attempt alone is insufficient; recognized contention, ACKs, skips and deferrals do not count. |
+| New permanent failures | Three newly committed DLQ transitions per lane/destination in 30 minutes | Never retained `failed_jobs` totals or already-failed acknowledgements. |
+| New unresolved provider outcomes | Three newly durable replay blockers per lane/destination in 30 minutes | May overlap DLQ. Ambiguous/accepted side effects remain protected; an alert never authorizes resend. |
+| Repeated original cleanup failures | Three failure-phase observations in 30 minutes | Cleanup and backoff-persistence failures may describe the same attempt. Stale/malformed intent discards are expected. The chart retains the fixed phase for diagnosis. |
+| Observations unavailable | Two unavailable/unknown samples per lane/destination in 90 minutes | Includes truncated samples with no proven eligible count. Known saturation with a positive count is diagnostic alone. |
+| Required observation heartbeat missing | No operational observation for two hours, independently for import/QS and delivery/Garmin/Wahoo/COROS | Idle lanes still emit. This never pages merely for no new routes. An initial post-activation series is required for each group. |
+
+Sample count and last-write-age charts use hourly distribution means, not summed
+workout totals or interpolated histogram percentiles that could show a positive value
+for an idle zero observation. Means are diagnostic summaries of lower-bound observations,
+not complete counts or oldest ages. The backlog policy instead counts the exact emitted
+positive/age predicates. See Google's [aggregation contract](https://docs.cloud.google.com/monitoring/api/ref_v3/rest/v1/projects.dashboards#Aggregation)
+and [metric-absence initialization requirement](https://docs.cloud.google.com/monitoring/alerts/metric-absence).
+
+## Provisioning and activation
+
+`tools/route-monitoring/cli.mjs` reuses `tools/monitoring/` without changing shared
+provisioning behavior. Preview is fully offline: no credentials, network, filesystem
+output, email or cloud writes. Definitions carry owner `qs-route-monitoring-v1` and
+metric names `qs_route_*_v1`, independent of Training, import, Health/Sleep and activity
+delivery bundles. Preflight reads the selected enabled email channel and all paginated
+inventories before the first write. Title/owner collisions, duplicate managed resources,
+different policy identities, malformed inventories and immutable metric schema drift
+fail closed. Serial reapply preserves dashboard etags and condition IDs, with no duplicate
+POSTs or DELETEs; unrelated configuration and notification channels are not modified.
+
+Preview:
+
+```bash
+node tools/route-monitoring/cli.mjs --project=quantified-self-io
+```
+
+Only after explicit approval to apply this specific bundle, replace the placeholder
+with the existing Alerts email channel's numeric ID and run:
+
+```bash
+node tools/route-monitoring/cli.mjs \
+  --project=quantified-self-io \
+  --notification-channel='projects/quantified-self-io/notificationChannels/EXISTING_ALERTS_CHANNEL_ID' \
+  --confirm-project=quantified-self-io --apply
+```
+
+The CLI deliberately offers no purge/delete/disable/replay options. Existing Functions
+are already deployed; this step creates/updates monitoring configuration only. No new
+Functions deployment, Hosting, Rules, indexes, provider calls or email-test policy is
+needed for the bundle. Production activation must record:
+
+1. API readback of one owned dashboard, 16 metrics and eight valid enabled policies
+   bound to the selected channel; compare unrelated resource identities/configuration.
+2. All 19 chart and 12 condition queries, including each native queue, both dispatch
+   runtime generations and exact cleanup/heartbeat groups. Empty failure series can be
+   normal; a valid empty query is not positive telemetry proof.
+3. Positive post-creation metric points from the next natural 30-minute run for all
+   four heartbeats and the idle count/age series when present. Earlier raw logs do not
+   backfill newly created log metrics or establish metric-absence initialization.
+4. Reuse the existing same-channel email evidence where valid. New fault injection,
+   temporary policies, test emails, route mutations or resource deletion require
+   separate exact-scope approval.
+
+### Cost and diagnosis
+
+The local bundle adds no scanner, scheduler, provider traffic or Firestore reads.
+It consumes existing telemetry plus native task metrics; the already-deployed bounded
+probe's cost is described above. Activation is not guaranteed free: log-based metric
+time series, alert conditions and queries follow current [Google Cloud Observability pricing](https://cloud.google.com/products/observability/pricing).
+Keep the six extracted labels fixed and bounded; Cloud Run resource revisions can
+still introduce additional series. Check actual billing/series volume before tuning
+thresholds or adding dimensions. Never add customer identities to reduce ambiguity.
+
+Start an incident with lane/destination and the relevant queue, then correlate fixed
+outcomes, native task transport and private lifecycle diagnostics in Logs Explorer.
+ACK/dispatch completion is not provider acceptance. Missing/unknown samples cannot
+clear a backlog as healthy zero. Inspect accepted-operation journals privately before
+any recovery; do not clear claims, purge queues or blindly replay. Cleanup phase
+diagnostics must not become original-file paths or account/route identifiers in email.
+Permission, provider, lifecycle or retry fixes belong to their owner workstream, not
+an alert-side change to delivery policy.
+
 ## Verification and next slice
 
 The approved follow-up deployment updated only `dispatchRouteDeliverySyncQueue`,
@@ -133,9 +234,11 @@ READY; no indexes, Rules, Hosting or monitoring resources were deployed.
 The pinned snapshot passed the Functions build, 246 targeted unit tests, deployment-file
 safety, all 168 endpoint / 82 isolated-target entrypoint contracts and all 69 secret-bound
 endpoint checks. The same source had previously passed 45 isolated Firestore emulator
-tests. At 09:51 UTC, the post-update log query had no new route observations; the next
-natural dispatcher run was due at 10:00 UTC. Live samples remain unverified: deployment
-success is not evidence of backlog, provider receipt or functioning alert policies. No
+tests. At 09:51 UTC, the post-update log query had no new route observations. The natural
+10:00 UTC dispatcher run subsequently emitted a completed reconciliation and all four
+idle, complete samples with zero eligible count/age, no unknown rows and no truncation.
+This proves the log emission only; post-creation metric-series and policy behavior remain
+unverified. Deployment success is not evidence of backlog, provider receipt or working alerts. No
 scheduler was manually invoked and no production route or provider copy was created,
 deleted or replayed for this verification.
 
@@ -150,8 +253,14 @@ sub-millisecond commit timestamps and malformed versus absent COROS token identi
 The real Firestore tests use loopback emulators with synthetic `demo-*` projects and
 match the app's `ignoreUndefinedProperties` setting. They are registered in CI's
 `mcp-data` group, not silently skipped outside the emulator workflow.
+The offline bundle tests evaluate actual log-filter definitions against synthetic
+idle/old/unknown/saturated/retry/DLQ/cleanup/dispatch entries, verify chart dimensions and
+policy scope, and exercise paginated ownership preflight plus serial no-duplicate
+reapplication while preserving the four other monitoring bundles. They run in CI's
+existing unit job; no emulator or production credentials are needed for these tools.
 
 ```bash
+npm run test:route-monitoring
 npm --prefix functions test -- src/routes/monitoring.spec.ts src/routes/monitoring-probe.spec.ts src/routes/route-sync-queue.spec.ts src/route-delivery-sync/queue.spec.ts src/route-delivery-sync/dispatcher.spec.ts src/tasks/route-queue-monitoring.spec.ts src/queue-utils.spec.ts src/route-delivery-sync/process-queue-item.spec.ts src/routes/rejected-original-cleanup.spec.ts
 node --test tools/functions-emulator-suites.test.mjs
 npm run test:functions-emulators -- mcp-data
@@ -162,13 +271,13 @@ git diff --check
 
 Remaining work tracked directly in #833:
 
-- Add a separately owned route dashboard, native transport depth/delay charts, independent
-  sustained-backlog/processing/DLQ/manual-review/cleanup/telemetry policies using
-  `tools/monitoring/` provisioning. Prove idempotent reapply, ownership and preservation
-  of existing bundles; use fixed labels only.
 - With separate approval, apply the bundle with the existing enabled email channel,
   and verify configuration plus positive natural
   post-creation samples without creating/deleting production routes or replaying sends.
+
+Monitoring impact decision: **covered locally**, with production activation/evidence
+still tracked in #833. A read-only preflight on 8 October found no existing route-owner
+resources or route name collisions; the four earlier owned bundles remain present.
 
 Help was reviewed: operational instrumentation does not change the saved-route or
 connection UI, so no Help change is required. **No MCP wire impact:** no tools, schemas,

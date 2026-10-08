@@ -1317,9 +1317,14 @@ incoming imports, enabled outbound directions or manual copies that workers may 
 disabled automatic directions and persisted restoration deferrals remain excluded.
 The five affected route Functions were read back as ACTIVE with unchanged resources,
 secrets and triggers; native task-queue rates/retries and the 30-minute scheduler were
-also preserved. The independent dashboard/alerts, separately approved activation and
-natural post-update telemetry evidence stay tracked in #833; this work does not claim
-live alert coverage or change provider behavior. See
+also preserved. Its natural 10:00 UTC run emitted all four complete idle sample groups.
+The independent source-controlled bundle now provides one local dashboard, 16 log metrics
+and eight policies, including both dispatch generations and rejected-original cleanup.
+Offline tests cover filtering, ownership, pagination and serial reapplication without
+touching the four earlier monitoring bundles. Production apply, query readback and
+post-creation metric-series evidence remain tracked in #833; raw log emission is not
+metric/alert verification. No cloud configuration was applied by this local slice, and
+provider behavior, Help and MCP contracts remain unchanged. See
 [route monitoring](route-monitoring.md) for semantics, verification, resources and
 the remaining acceptance criteria. Help and MCP/Assistant contracts are unchanged.
 

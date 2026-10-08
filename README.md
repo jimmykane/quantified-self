@@ -168,6 +168,7 @@ Never commit environment files, service-account JSON, API tokens, private keys, 
 | Activity import monitoring configuration | `npm run test:import-monitoring` | Offline four-provider dashboard/policies; no production changes by default |
 | Health/Sleep monitoring configuration | `npm run test:health-sleep-monitoring` | Offline ordinary-ingestion/serialized-backfill dashboard and policies; no production changes by default |
 | Recorded-activity delivery monitoring configuration | `npm run test:activity-delivery-monitoring` | Offline outbound delivery dashboard/policies, including pending and manual-reconciliation outcomes; no production changes by default |
+| Route import/delivery monitoring configuration | `npm run test:route-monitoring` | Offline route dashboard, bounded labels, eight policies and safe provisioning; no cloud changes by default |
 | Functions lint | `npm --prefix functions run lint` | Runs ESLint with `--fix` and may edit files |
 | Install Git hooks | `npm run hooks:install` | Reinstalls the repository Lefthook hooks; `npm ci` normally installs them automatically |
 | Test the local credential guard | `npm run credentials:test` | Checks the staged-file rejection policy without reading credential values |

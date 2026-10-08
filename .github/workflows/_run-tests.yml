@@ -67,6 +67,9 @@ jobs:
       - name: Test recorded activity delivery monitoring configuration
         run: npm run test:activity-delivery-monitoring
 
+      - name: Test route import and delivery monitoring configuration
+        run: npm run test:route-monitoring
+
       - name: Validate local Quantified Self plugin
         env:
           QS_CHATGPT_APP_ID: plugin_asdk_app_ci_fixture
