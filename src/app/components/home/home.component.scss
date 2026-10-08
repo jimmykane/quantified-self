@@ -35,7 +35,7 @@
 .planning-note { font: var(--mat-sys-body-small); }
 .health-assistant-section a { margin-top: 1rem; }
 .discovery-section { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 1.5rem; padding-block: 2rem; border-bottom: 1px solid var(--mat-sys-outline-variant); }
-.discovery-section a { justify-self: start; max-width: 100%; height: auto; min-height: 44px; white-space: normal; }
+.discovery-section a { justify-self: start; }
 .getting-started-section, .membership-section, .faq-section, .final-cta-section { padding-block: 3rem; }
 .getting-started-section, .membership-section, .final-cta-section { text-align: center; }
 .getting-started-steps { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 2rem; padding-left: 1.5rem; margin-top: 2rem; text-align: left; }
@@ -79,4 +79,3 @@
   .getting-started-steps { gap: 0.5rem; }
   .logos-container { gap: 1rem 1.5rem; }
 }
-@media (pointer: coarse) { .landing-page a { min-height: 44px; } }
