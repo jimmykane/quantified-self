@@ -37,10 +37,11 @@ MCP fields/scopes, queue lifecycle, write paths or monitoring changes. Dynamic a
 Help remains accurate against the installed dynamic catalog. Both packages still use their installed 131-type catalog;
 this task does not adopt a package, deploy, enable scanners, start reparsing or change FIT Parser source.
 
-### Sports Lib 21.6.0 file-calibrated Training load
+### Sports Lib 21.6.1 file-calibrated Training load
+
 
 Publish sports-lib before releasing QS with aligned root and Functions dependencies. Local verification uses the
-packed 21.6.0 library; publication, deployment and production reparse each require separate approval.
+packed 21.6.1 library; publication, deployment and production reparse each require separate approval.
 
 New provider imports and manual uploads cache Automatic/HR/MET evaluations in owner-only event metadata. Walking,
 Nordic Walking, Hiking and Trekking skip calculated pace and power. HR requires file-supplied resting, threshold and
