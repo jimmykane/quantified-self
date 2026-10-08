@@ -253,16 +253,21 @@ function transport() {
     metrics: others.flatMap(b => b.metrics) };
   const calls = [];
   const request = async (method, url, body) => {
+    const endpoint = new URL(url);
+    if (endpoint.protocol !== 'https:' || endpoint.port || endpoint.username || endpoint.password
+        || !['logging.googleapis.com', 'monitoring.googleapis.com'].includes(endpoint.hostname)) {
+      throw new Error('Unexpected synthetic request');
+    }
     calls.push({ method, url, body });
     if (method === 'GET') {
-      if (url.endsWith('/notificationChannels/123')) return { type: 'email', enabled: true };
-      for (const key of Object.keys(state)) if (url.endsWith(`/${key}`)) return { [key]: structuredClone(state[key]) };
-    } else if (url.includes('logging.googleapis.com')) {
+      if (endpoint.pathname.endsWith('/notificationChannels/123')) return { type: 'email', enabled: true };
+      for (const key of Object.keys(state)) if (endpoint.pathname.endsWith(`/${key}`)) return { [key]: structuredClone(state[key]) };
+    } else if (endpoint.hostname === 'logging.googleapis.com') {
       const at = state.metrics.findIndex(m => m.name === body.name);
       if (at < 0) state.metrics.push(structuredClone(body)); else state.metrics[at] = structuredClone(body);
       return body;
     } else {
-      const key = url.includes('/dashboards') ? 'dashboards' : 'alertPolicies';
+      const key = endpoint.pathname.includes('/dashboards') ? 'dashboards' : 'alertPolicies';
       const name = method === 'POST' ? `projects/${project}/${key}/route-${state[key].length}` : body.name;
       const saved = { ...structuredClone(body), name, ...(key === 'dashboards' ? { etag: 'next-etag' } : {
         conditions: body.conditions.map((c, i) => ({ ...c, name: c.name || `${name}/conditions/${i}` })),
@@ -275,6 +280,42 @@ function transport() {
   };
   return { state, calls, request };
 }
+test('synthetic transport rejects look-alike API URLs before reading or changing state', async () => {
+  const source = transport(); const original = structuredClone(source.state);
+  const path = `/v2/projects/${project}/metrics`;
+  const badUrls = [
+    `https://logging.googleapis.com.evil.test${path}`,
+    `https://evil-logging.googleapis.com${path}`,
+    `https://logging.googleapis.com@evil.test${path}`,
+    `https://evil.test/logging.googleapis.com${path}`,
+    `https://evil.test${path}?host=logging.googleapis.com`,
+    `https://monitoring.googleapis.com.evil.test${path}`,
+    `https://evil.test${path}?host=monitoring.googleapis.com`,
+    `https://user:password@logging.googleapis.com${path}`,
+    `https://logging.googleapis.com:8443${path}`,
+    `http://logging.googleapis.com${path}`,
+  ];
+  for (const url of badUrls) {
+    for (const method of ['GET', 'PUT']) {
+      await assert.rejects(source.request(method, url, bundle().metrics[0]), /Unexpected synthetic request/);
+    }
+  }
+  assert.deepEqual(source.state, original);
+  assert.deepEqual(source.calls, []);
+  await assert.rejects(source.request('PUT', 'not-an-absolute-url', bundle().metrics[0]), { code: 'ERR_INVALID_URL' });
+  assert.deepEqual(source.state, original);
+  assert.deepEqual(source.calls, []);
+});
+test('synthetic transport preserves canonical HTTPS hosts, default ports and query strings', async () => {
+  const source = transport(); const original = structuredClone(source.state);
+  const metrics = await source.request('GET', `https://LOGGING.googleapis.com:443/v2/projects/${project}/metrics?pageToken=next`);
+  assert.deepEqual(metrics, { metrics: original.metrics });
+  const selected = await source.request('GET', `https://MONITORING.googleapis.com:443/v3/${channel}`);
+  assert.deepEqual(selected, { type: 'email', enabled: true });
+  const metric = bundle().metrics[0];
+  await source.request('PUT', `https://LOGGING.googleapis.com:443/v2/projects/${project}/metrics/${metric.name}`, metric);
+  assert.deepEqual(source.state.metrics.at(-1), metric);
+});
 test('serial create/reapply does not duplicate, delete or modify other bundles, and preserves condition IDs/etag', async () => {
   const source = transport(); const original = structuredClone(source.state);
   const first = await applyRouteMonitoring(bundle(), source.request);
