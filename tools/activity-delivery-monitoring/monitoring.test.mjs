@@ -32,6 +32,9 @@ test('fixed dimensions, committed semantics and exact native queue scope', () =>
   }
   const failures = config.metrics.find(metric => metric.name.endsWith('worker_failures_v1'));
   assert.doesNotMatch(failures.filter, /provider_pending|expected_contention|acknowledged|manual_reconciliation/);
+  const dispatch = config.metrics.find(metric => metric.name.endsWith('dispatch_failures_v1'));
+  assert.match(dispatch.description, /deduplication and stale marker refusals are not failures/);
+  assert.doesNotMatch(config.policies.find(policy => policy.userLabels.policy_id === 'dispatch').documentation.content, /unconfirmed dispatch/);
   for (const key of ['new_dead_letters', 'new_reconciliation']) assert.match(config.metrics.find(m => m.name === `qs_activity_delivery_${key}_v1`).filter, /event="committed"/);
 });
 test('sustained alerts use bounded metrics, idle heartbeats and explicit missing-data behavior', () => {

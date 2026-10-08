@@ -389,6 +389,7 @@ describe('activity-sync/dispatcher', () => {
     expect(updateFirst).not.toHaveBeenCalled();
     expect(updateSecond).toHaveBeenCalledWith({ dispatchedToCloudTask: nowMs });
     expect(mockLoggerError).toHaveBeenCalled();
+    expect(mockLoggerInfo).toHaveBeenCalledWith('[ActivityDelivery]', expect.objectContaining({ event: 'dispatch_run', outcome: 'failed' }));
   });
 
   it('does not mark queue item as dispatched when Cloud Task enqueue returns false', async () => {
@@ -415,6 +416,7 @@ describe('activity-sync/dispatcher', () => {
     });
     expect(mockEnqueueActivitySyncTask).toHaveBeenCalledWith('undispatched-item', 301);
     expect(updateUndispatched).not.toHaveBeenCalled();
+    expect(mockLoggerInfo).not.toHaveBeenCalledWith('[ActivityDelivery]', expect.objectContaining({ event: 'dispatch_run', outcome: 'failed' }));
   });
 
   it('does not write the dispatch marker when deletion starts after Cloud Task enqueue', async () => {

@@ -30,7 +30,8 @@ export function recordActivityDeliveryQueueUnavailable(): void {
 export function activityDeliveryProbeCandidate(row: Record<string, unknown>, now: number, taskDepth?: number): 'new' | 'poll' | 'excluded' | 'unknown' {
     if (!Number.isSafeInteger(row.dateCreated) || Number(row.dateCreated) < 0
         || !Number.isSafeInteger(row.retryCount) || Number(row.retryCount) < 0
-        || ['dispatchedToCloudTask', 'providerOperationStartedAt', 'processingLeaseExpiresAt'].some(field => row[field] != null && !Number.isSafeInteger(row[field]))) return 'unknown';
+        || ['dispatchedToCloudTask', 'providerOperationStartedAt', 'processingLeaseExpiresAt'].some(field => row[field] != null
+            && (!Number.isSafeInteger(row[field]) || Number(row[field]) < 0))) return 'unknown';
     if (row.processed !== false || Number(row.dateCreated) > now || Number(row.processingLeaseExpiresAt) > now
         || row.resultStatus === 'deferred' || row.resultStatus === 'manual_reconciliation_required') return 'excluded';
     if (row.destinationUploadID != null && (typeof row.destinationUploadID !== 'string' || !row.destinationUploadID.trim())) return 'unknown';
@@ -70,8 +71,10 @@ export async function observeActivityDeliveryQueue(db: FirebaseFirestore.Firesto
             if (classification === 'unknown' || typeof uid !== 'string' || !uid.trim() || uid.includes('/')
                 || row.manual != null && typeof row.manual !== 'boolean') { group.unknownSample++; continue; }
             const route = getActivityDeliveryRoute(row.routeId as ActivityDeliveryRouteId)!;
-            if (!isActivitySyncRouteUserAllowlisted(row.routeId as ActivityDeliveryRouteId, uid)) { group.excludedSample++; continue; }
             if (classification === 'new') {
+                // Accepted uploads must still be reconciled if the new-send
+                // allowlist changes, matching the worker's resume boundary.
+                if (!isActivitySyncRouteUserAllowlisted(row.routeId as ActivityDeliveryRouteId, uid)) { group.excludedSample++; continue; }
                 if (!entitlements.has(uid)) entitlements.set(uid, proAccess(uid));
                 if (!await entitlements.get(uid)) { group.excludedSample++; continue; }
             }

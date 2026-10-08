@@ -14,7 +14,10 @@ describe('activity delivery probe exclusions and bounds', () => {
         }
     });
     it('unknown numbers never turn into zero backlog', () => {
-        for (const change of [{ retryCount: NaN }, { dateCreated: '1' }, { dispatchedToCloudTask: 'PRIVATE' }, { destinationUploadID: {} }]) expect(activityDeliveryProbeCandidate({ ...row, ...change }, now)).toBe('unknown');
+        for (const change of [{ retryCount: NaN }, { dateCreated: '1' }, { dispatchedToCloudTask: 'PRIVATE' },
+            { dispatchedToCloudTask: -1 }, { providerOperationStartedAt: -1 }, { processingLeaseExpiresAt: -1 }, { destinationUploadID: {} }]) {
+            expect(activityDeliveryProbeCandidate({ ...row, ...change }, now)).toBe('unknown');
+        }
     });
     it.each([ServiceNames.WahooAPI, ServiceNames.COROSAPI])('requires an empty native queue and a two-hour overdue saved %s poll', destinationServiceName => {
         const poll = { ...row, retryCount: 3, destinationServiceName, destinationUploadID: 'PRIVATE', destinationProviderUserID: 'PRIVATE_ACCOUNT', dispatchedToCloudTask: now - 7_200_000 };

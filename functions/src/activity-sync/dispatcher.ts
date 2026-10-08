@@ -247,7 +247,8 @@ export async function reconcileActivitySyncQueueDispatches(nowMs = Date.now(), r
 
             const wasTaskEnqueued = await enqueueActivitySyncTask(candidate.doc.id, candidate.dateCreated);
             if (!wasTaskEnqueued) {
-                recordActivityDeliveryDispatch('failed');
+                // The enqueue helper returns false only for deterministic task
+                // deduplication. Transport failures throw and are recorded below.
                 logger.info(`[ActivitySyncDispatcher] Task not enqueued for ${candidate.doc.id}; leaving dispatch marker unchanged.`);
                 continue;
             }

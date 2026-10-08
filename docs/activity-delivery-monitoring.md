@@ -64,8 +64,9 @@ claims and lifecycle skips are excluded. Accepted Wahoo/COROS status polls quali
 only when their saved due marker is **at least two hours overdue**, the dispatcher
 successfully observed **zero native tasks**, and no active operation remains. COROS
 also requires its saved provider-account resume ID. Already accepted polls do not
-require renewed new-upload entitlement or the automatic route setting. They are
-observed, never reset or resent. Missing native depth/resume information is unknown.
+require renewed new-upload entitlement, new-send allowlisting or the automatic route
+setting. They are observed, never reset or resent. Missing native depth/resume
+information is unknown.
 
 Each eligible row is re-read in a read-only transaction with owner, deletion,
 settings and connection snapshots; a changed queue revision is excluded. Token
@@ -96,7 +97,7 @@ not sums of a backlog. Distribution alignment/reduction follows the
 | Policy | Initial condition, per destination unless noted |
 | --- | --- |
 | Sustained eligible work | Two samples with eligible work at least one hour old within 90 minutes |
-| Repeated dispatch failures | Three failed/unconfirmed dispatch observations within 90 minutes, globally |
+| Repeated dispatch failures | Three dispatch/deletion-guard read failures within 90 minutes, globally |
 | Repeated processing failures | Ten failed attempts/actual committed retries within 15 minutes |
 | New permanent failures | Three new DLQ commits within 30 minutes |
 | New unresolved provider outcomes | Three new durable manual-reconciliation cases within 30 minutes |
@@ -108,11 +109,11 @@ inactive. The separate absence policy detects operational observation loss, neve
 the absence of athlete uploads. Absence detection requires an initial series, so
 positive heartbeat proof is part of activation. Thresholds are starting values to
 tune against volume; an existing backlog alone does not emit new-failure metrics.
-Dispatch's boolean enqueue contract cannot distinguish a deterministic-name
-deduplication from an unconfirmed enqueue. Its separate dispatch metric therefore
-describes repeated **unconfirmed** scheduling, not a provider failure; normal worker
-poll acknowledgements do not feed that signal. Correlate it with native transport
-and persisted markers before taking action.
+The enqueue helper returns `false` only for deterministic-name deduplication;
+actual transport failures throw. Deduplication and stale marker refusals do not
+feed the dispatch-failure metric, nor do normal worker poll acknowledgements.
+Correlate dispatch errors with native transport and persisted markers before
+taking action; a dispatch failure is not a provider rejection.
 
 Incident response: inspect the aggregate dashboard/native task transport, then the
 affected persisted job privately. Pending processing, ambiguous acceptance and DLQ
@@ -147,9 +148,10 @@ git diff --check
 
 The isolated demo Firestore suite covers idle samples, all three destinations,
 historical/manual routes, entitlement, deletion/disconnect/route exclusion, pending
-polls, overdue polls, changed revisions, field masking and twenty-row saturation.
+polls, overdue polls after new-send allowlist changes, malformed scheduling metadata,
+changed revisions, field masking and twenty-row saturation.
 Unit tests protect post-commit success/manual/DLQ semantics, failure/no-replay paths,
-timeouts and logging isolation. Offline provisioning tests exercise create/reapply,
+expected task deduplication, timeouts and logging isolation. Offline provisioning tests exercise create/reapply,
 ownership/immutable-schema rejection and preservation of all other monitoring bundles.
 These tests run in CI; no production fault injection or test upload is required.
 

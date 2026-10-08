@@ -1237,7 +1237,10 @@ new DLQ transitions and new durable manual-reconciliation cases; HTTP ACK is not
 delivery success. A bounded field-masked read-only probe reuses the existing
 30-minute dispatcher, excludes normal backoff/future/lifecycle waits, and checks
 overdue accepted Wahoo/COROS polls without resending. Its sample is a lower bound,
-not global coverage. Both handlers have isolated target loading with unchanged
+not global coverage. Deterministic task deduplication does not count as a dispatch
+failure. Accepted polls stay observable if new-send allowlisting changes, while
+invalid scheduling metadata reports unknown rather than healthy zero.
+Both handlers have isolated target loading with unchanged
 runtime generations/resources. Local implementation includes a separate dashboard,
 twelve log metrics and seven policy definitions; deployment/activation and positive
 heartbeat-series readback still need separate approval and evidence in #832.

@@ -4,13 +4,18 @@ import { ServiceNames } from '@sports-alliance/sports-lib';
 import * as logger from 'firebase-functions/logger';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { observeActivityDeliveryQueue } from './monitoring-probe';
+import { isActivitySyncRouteUserAllowlisted } from './allowlist';
 vi.mock('firebase-functions/logger', () => ({ info: vi.fn() }));
+vi.mock('./allowlist', () => ({ isActivitySyncRouteUserAllowlisted: vi.fn(() => true) }));
 vi.unmock('@sports-alliance/sports-lib');
 
 describe.skipIf(!process.env.FIRESTORE_EMULATOR_HOST)('activity delivery observations in isolated Firestore', () => {
     if (process.env.FIRESTORE_EMULATOR_HOST && !/^(127\.0\.0\.1|localhost):\d+$/.test(process.env.FIRESTORE_EMULATOR_HOST)) throw new Error('Loopback emulator required.');
     let db: Firestore;
-    beforeEach(() => { vi.clearAllMocks(); db = new Firestore({ projectId: `demo-delivery-monitor-${randomUUID().slice(0, 8)}` }); });
+    beforeEach(() => {
+        vi.clearAllMocks(); vi.mocked(isActivitySyncRouteUserAllowlisted).mockReturnValue(true);
+        db = new Firestore({ projectId: `demo-delivery-monitor-${randomUUID().slice(0, 8)}` });
+    });
     afterEach(async () => { await db.terminate(); });
     async function seed(id = 'qa', destination = 'WahooAPI', source = 'GarminAPI', historical = false) {
         const user = db.collection('users').doc(id);
@@ -87,6 +92,25 @@ describe.skipIf(!process.env.FIRESTORE_EMULATOR_HOST)('activity delivery observa
         expect(sample(destination === 'WahooAPI' ? 'wahoo' : 'coros')).toMatchObject({ dueSample: 1, overduePollSample: 1, ageLowerBoundMs: 7_200_000 });
         expect(proAccess).not.toHaveBeenCalled();
         expect((await ref.get()).updateTime!.isEqual(before.updateTime!)).toBe(true);
+    });
+    it('a new-send allowlist change excludes new work but cannot hide an already accepted overdue poll', async () => {
+        const ref = await seed('accepted');
+        await ref.update({ destinationUploadID: 'PRIVATE_UPLOAD', retryCount: 2, dispatchedToCloudTask: Date.now() - 10_800_000 });
+        await seed('new');
+        const now = (await ref.get()).updateTime!.toMillis() + 7_200_000;
+        vi.mocked(isActivitySyncRouteUserAllowlisted).mockReturnValue(false);
+        const pro = vi.fn().mockResolvedValue(true);
+        await observeActivityDeliveryQueue(db, pro, 0, now);
+        expect(sample()).toMatchObject({ dueSample: 1, overduePollSample: 1, excludedSample: 1, unknownSample: 0 });
+        expect(isActivitySyncRouteUserAllowlisted).toHaveBeenCalledTimes(1);
+        expect(pro).not.toHaveBeenCalled();
+        expect(JSON.stringify(vi.mocked(logger.info).mock.calls)).not.toContain('PRIVATE');
+    });
+    it('negative scheduling metadata is unknown, not a healthy empty backlog', async () => {
+        const ref = await seed(); await ref.update({ processingLeaseExpiresAt: -1 });
+        await observeActivityDeliveryQueue(db, async () => true, 0);
+        expect(sample()).toMatchObject({ unknownSample: 1 });
+        expect(sample()).not.toHaveProperty('dueSample');
     });
     it('replacement writes reset the lower-bound age, and stale sampled revisions cannot borrow it', async () => {
         const ref = await seed(); await ref.update({ dateCreated: 2 });
