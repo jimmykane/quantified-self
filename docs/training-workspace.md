@@ -4849,7 +4849,7 @@ state.
 
 ### File-only TSS evaluation and owner load controls
 
-Sports Lib 21.6.0 calculates and caches Automatic, HR and MET evaluations while file inputs and streams remain
+Sports Lib 21.6.1 calculates and caches Automatic, HR and MET evaluations while file inputs and streams remain
 available. Each result records its score (including valid zero), actual method, imported/calculated provenance,
 estimate flag and missing-input/fallback reasons. Walking, Nordic Walking, Hiking and Trekking use imported TSS →
 calibrated HR → calorie MET → unavailable; calculated power and running pace are ineligible. Other sports retain
@@ -5030,7 +5030,7 @@ checked against the strict output validator, including partial days. Built-in As
 recorded metrics from modeled load. This is a completed-load feature, with no plan/workout read or mutation contract impact and no
 provider delivery changes.
 
-Release order: publish the verified Sports Lib 21.6.0 artifact first, then install that registry version in both QS
+Release order: publish the verified Sports Lib 21.6.1 artifact first, then install that registry version in both QS
 packages and release Functions/Rules/frontend together after separate approval. Local validation uses a packed
 library artifact. Publication, deployment and production reparse are separate explicit approvals; no historical
 values are rewritten merely by deploying this change.
