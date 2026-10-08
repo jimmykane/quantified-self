@@ -204,3 +204,12 @@ including the newly adopted help content source, a Node helper, a DOM helper, an
 Angular service. Raw reports and assertion comparisons are retained under ignored
 `tmp/helper-test-benchmark/adoption-1-*`. Earlier benchmark timings describe the original allocation; this
 follow-up does not establish a new performance comparison.
+
+The second scheduled follow-up inspected local develop through `884a7f3d3` and synchronized its latest
+frontend change, `f9fb991dc4`. The help-content import graph remains free of Angular runtime dependencies;
+its additional manual-Suunto regression stays in the existing Node project. Help content and its affected
+search helper passed two files / 81 tests, preserving all 80 previous assertions and adding the new regression.
+The 16 allocation/workflow checks passed. No registry, runner, plugin or discovery behavior changed, so the
+complete frontend/coverage results above remain the first follow-up's evidence; this check verifies the
+changed specs. Raw reports and the current import review are retained under ignored
+`tmp/helper-test-benchmark/adoption-2-*`. Allocation remains 164 Node, 10 DOM and 418 Angular files.
