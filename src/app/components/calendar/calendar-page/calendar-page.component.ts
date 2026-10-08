@@ -240,6 +240,11 @@ export class CalendarPageComponent {
   });
   readonly canRetrySummary = computed(() => this.eventState().status === 'error' || this.plansState().status === 'error'
     || this.completionState().status === 'error');
+  readonly showMonthWorkoutRetry = computed(() => !this.isDayRoute && this.routeState().view === 'month'
+    && this.hasTrainingPlanningUIAccess() && (
+      (this.plansState().status === 'error' && !this.plansState().restoreInProgress)
+      || (this.prescriptionSummary().completionStatus === 'error' && (this.prescriptionSummary().scheduledCount ?? 0) > 0)
+    ));
   readonly activitiesComplete = computed(() => this.eventState().status === 'ready' && this.eventState().complete !== false);
   readonly plannedWorkoutsComplete = computed(() => this.plansState().status === 'ready' && this.plansState().schedule?.workoutsComplete !== false);
   readonly planPhasesByDate = computed(() => {

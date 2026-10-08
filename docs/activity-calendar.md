@@ -104,7 +104,12 @@ The top summary shows distance, duration, and ascent for the selected primary pe
 
 ## Planned and recorded summaries
 
-Week and Month keep recorded activity counts and totals first. A flat **Planned workouts** expansion panel appears only
+Month retains the original compact Distance/Duration/Ascent strip below the grid and selected-day panel.
+Monthly planned/recorded calculations and completion coverage remain available, with planned workouts and matches
+visible on calendar days; the monthly summary panel is not mounted while its placement is being redesigned.
+Failed workout reads retain a compact retry action.
+
+Week keeps recorded activity counts and totals first. A flat **Planned workouts** expansion panel appears only
 when the period contains scheduled workouts; its heading shows scheduled and remaining counts. It starts collapsed,
 keeps the same minimum header height when opened, grows to fit larger text, and retains the user's choice on live
 updates until the period changes. The planning

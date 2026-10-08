@@ -313,9 +313,9 @@ const ACTIVITY_CALENDAR_HELP_CONTENT = `## Open and navigate the calendar
 
 ## Compare planned and recorded training
 
-In the full Calendar’s **Week** and **Month** views, your activity count and recorded totals appear first. Month also retains recorded ascent, following your sport and summary exclusions. Month totals exclude adjacent dates shown only to complete the grid; those dates remain selectable.
+In the full Calendar’s **Week** view, your activity count and recorded totals appear first. **Month** keeps a compact strip of recorded **Distance**, **Duration**, and **Ascent** below the calendar, following your sport and summary exclusions. Month totals exclude adjacent dates shown only to complete the grid; those dates remain selectable. Select a date to see its planned workouts and activities.
 
-**Planned workouts** appears only when there are workouts from your active plan or Standalone in that week or month. Its heading shows how many are scheduled and how many remain. Tap it to see the details; it starts closed when you open another period. Empty planning sections and zero counts stay hidden.
+**Planned workouts** appears only when there are workouts from your active plan or Standalone in that week. Its heading shows how many are scheduled and how many remain. Tap it to see the details; it starts closed when you open another period. Empty planning sections and zero counts stay hidden.
 
 **With an activity** counts workouts with a matching recording. **Remaining** means a workout has no matching activity and has not been skipped; you may have done it without an activity match. **Planned** totals include workouts with an activity and leave out skipped workouts. A matching recording does not tell QS whether you followed every step. The recording stays in the period when it happened, even if the workout was scheduled for another date. If you edited a workout after recording its activity, QS points that out.
 

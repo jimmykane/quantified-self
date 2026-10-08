@@ -1034,7 +1034,10 @@ packed Sports Lib package. That gate is tracked by GitHub issue #654 under epic 
 
 ### Calendar period planned and recorded summaries (Training 09)
 
-The existing Calendar **Week** and **Month** views keep recorded parent-event volume above their day grids. A flat,
+Calendar **Month** retains its original thin recorded Distance/Duration/Ascent strip below the grid and day panel.
+The monthly summary calculations, bounded readers, and workout completion markers remain intact; its expanded
+summary UI is temporarily unmounted while a new placement is chosen. Workout-read failures retain a retry action.
+Calendar **Week** keeps recorded parent-event volume above its day grid. A flat,
 initially collapsed **Planned workouts** panel appears only for a period with eligible workouts; its heading shows
 scheduled and remaining counts. Opening it exposes planned and remaining non-skipped totals plus nonzero or unknown
 status counts. **With an activity** describes exact stored completion evidence without implying adherence. Zero planning

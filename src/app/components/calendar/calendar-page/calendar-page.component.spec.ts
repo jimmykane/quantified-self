@@ -151,7 +151,8 @@ describe('CalendarPageComponent', () => {
     expect(plans.watchCalendarSchedule).toHaveBeenCalledWith(planningUserUid,
       view === 'week' ? '2026-08-03' : '2026-07-27', view === 'week' ? '2026-08-09' : '2026-09-06');
     expect(fixture.componentInstance.prescriptionSummary().remainingCount).toBeNull();
-    expect(fixture.nativeElement.textContent).toContain('Workout activity matches could not be checked');
+    expect(fixture.nativeElement.textContent).toContain(view === 'week'
+      ? 'Workout activity matches could not be checked' : 'Some workout details could not be loaded');
     const retry = Array.from(fixture.nativeElement.querySelectorAll('button')).find((button: HTMLButtonElement) => button.textContent.includes('Try again')) as HTMLButtonElement;
     retry.click(); fixture.detectChanges(); await fixture.whenStable(); fixture.detectChanges();
     expect(fixture.componentInstance.prescriptionSummary().remainingCount).toBe(2);
@@ -248,8 +249,8 @@ describe('CalendarPageComponent', () => {
     const fixture = TestBed.createComponent(CalendarPageComponent);
     fixture.detectChanges(); await fixture.whenStable(); fixture.detectChanges();
     const page = fixture.componentInstance;
-    expect(fixture.nativeElement.querySelector('#calendar-period-summary-title')?.textContent).toBe('Month summary');
-    expect(fixture.nativeElement.querySelector('[aria-label="Recorded month volume"]')).toBeTruthy();
+    expect(fixture.nativeElement.querySelector('app-calendar-period-summary')).toBeNull();
+    expect(fixture.nativeElement.querySelectorAll('.calendar-period-summary-metric')).toHaveLength(3);
     expect(page.prescriptionSummary()).toMatchObject({ period: 'month', recordedCount: 2,
       scheduledCount: 3, completedCount: 1, skippedCount: 1, remainingCount: 1 });
     expect(page.prescriptionSummary().planned?.summary.duration.completeExactSeconds).toBe(3600);
@@ -324,16 +325,15 @@ describe('CalendarPageComponent', () => {
     expect(fixture.nativeElement.querySelector('.calendar-progress-slot')).toBeTruthy();
     expect(fixture.nativeElement.querySelectorAll('.activity-calendar-day-button')).toHaveLength(
       fixture.componentInstance.calendarModel().months[0].days.length);
-    const summaryMetrics = [...fixture.nativeElement.querySelectorAll('.recorded-metrics > div')]
+    const summaryMetrics = [...fixture.nativeElement.querySelectorAll('.calendar-period-summary-metric')]
       .map((metric: HTMLElement) => ({
-        label: metric.querySelector('dt')?.textContent?.trim(),
-        value: metric.querySelector('dd')?.textContent?.trim(),
+        label: metric.querySelector('.calendar-period-summary-label span')?.textContent?.trim(),
+        value: metric.querySelector('.calendar-period-summary-value')?.textContent?.trim(),
       }));
     expect(summaryMetrics).toEqual([
-      { label: 'Duration', value: '01h 00m 00s' },
       { label: 'Distance', value: '10.00 Km' },
+      { label: 'Duration', value: '1h' },
       { label: 'Ascent', value: '450 m' },
-      { label: 'Training load', value: 'Unavailable' },
     ]);
     const selectedDayTotals = [...fixture.nativeElement.querySelectorAll('.calendar-selected-day .calendar-day-context-totals > div')]
       .map((metric: HTMLElement) => ({
@@ -355,6 +355,21 @@ describe('CalendarPageComponent', () => {
     expect(fixture.componentInstance.eventState().status).toBe('ready');
     expect(fixture.componentInstance.plansState().status).toBe('error');
     expect(fixture.componentInstance.plannedWorkoutsByDate()).toEqual({});
+    expect(fixture.componentInstance.showMonthWorkoutRetry()).toBe(false);
+    expect(fixture.nativeElement.querySelector('.calendar-status--error')).toBeNull();
+  });
+
+  it('keeps month workout failures retryable without mounting the period summary', async () => {
+    watchSchedule.mockReturnValueOnce(throwError(() => new Error('offline'))).mockReturnValue(of(trainingSchedule()));
+    const fixture = TestBed.createComponent(CalendarPageComponent);
+    fixture.detectChanges(); await fixture.whenStable(); fixture.detectChanges();
+    expect(fixture.nativeElement.querySelector('app-calendar-period-summary')).toBeNull();
+    expect(fixture.nativeElement.querySelector('[role="alert"]')?.textContent).toContain('Some workout details could not be loaded');
+    const retry = [...fixture.nativeElement.querySelectorAll('button')].find((button: HTMLButtonElement) => button.textContent.includes('Try again'));
+    retry.click(); fixture.detectChanges(); await fixture.whenStable(); fixture.detectChanges();
+    expect(fixture.componentInstance.showMonthWorkoutRetry()).toBe(false);
+    expect(fixture.nativeElement.querySelector('[role="alert"]')).toBeNull();
+    expect(fixture.nativeElement.querySelector('.planned-workout-markers')).toBeTruthy();
   });
 
   it('shows zero selected-day totals for an empty date without changing month totals', async () => {
@@ -365,7 +380,7 @@ describe('CalendarPageComponent', () => {
     expect(fixture.componentInstance.selectedDay()?.dateKey).toBe('2026-08-04');
     expect([...fixture.nativeElement.querySelectorAll('.calendar-selected-day .calendar-day-context-totals strong')]
       .map((value: HTMLElement) => value.textContent?.trim())).toEqual(['0.0 m', '0m', '0 m']);
-    expect(fixture.nativeElement.querySelector('.recorded-metrics')?.textContent).toContain('10.00 Km');
+    expect(fixture.nativeElement.querySelector('.calendar-period-summary')?.textContent).toContain('10.00 Km');
   });
 
   it('opens a bounded standalone day with its context and no calendar grid', async () => {

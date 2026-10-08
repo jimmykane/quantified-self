@@ -793,8 +793,8 @@ describe('help.content', () => {
     expect(calendarSection?.content).toContain('intentionally have no hover or touch tooltip');
     expect(calendarSection?.content).toContain('recorded **Distance**, **Duration**, and **Ascent**');
     expect(calendarSection?.content).toContain('Month totals exclude adjacent dates');
-    expect(calendarSection?.content).toContain('**Week** and **Month** views, your activity count');
-    expect(calendarSection?.content).toContain('Month also retains recorded ascent');
+    expect(calendarSection?.content).toContain('**Week** view, your activity count');
+    expect(calendarSection?.content).toContain('**Month** keeps a compact strip of recorded **Distance**, **Duration**, and **Ascent**');
     expect(calendarSection?.content).toContain('**Try again**');
     expect(calendarSection?.content).toContain('Empty planning sections and zero counts stay hidden');
     expect(calendarSection?.content).toContain('it starts closed when you open another period');
