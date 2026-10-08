@@ -498,6 +498,7 @@ interface UploadActivityFileResult {
     workoutKey?: string;
     uploadId?: string;
     providerUserId?: string;
+    providerStatus?: unknown;
     blobContinuation?: SuuntoActivityBlobContinuation;
 }
 
@@ -998,6 +999,7 @@ async function increaseActivitySyncRetryCountIfCurrent(
     bulkWriter: admin.firestore.BulkWriter | undefined,
     maxRetryDlqContext?: string,
     retryDispatchMarkerAtMs?: (nextRetryCount: number) => number | null,
+    observedProviderPending = false,
 ): Promise<QueueResult.MovedToDLQ | QueueResult.RetryIncremented | QueueResult.Processed | QueueResult.Failed> {
     const manualReconciliation = getActivitySyncManualReconciliationState(queueItem, maxRetryDlqContext);
     const result = await increaseRetryCountIfCurrentUserActive({
@@ -1017,7 +1019,7 @@ async function increaseActivitySyncRetryCountIfCurrent(
         recordActivityDeliveryCommit(queueItem, 'dead_lettered');
         if (manualReconciliation) recordActivityDeliveryCommit(queueItem, 'manual_reconciliation');
     } else if (result === QueueResult.RetryIncremented) {
-        recordActivityDeliveryCommit(queueItem, error instanceof ProviderOperationError && isExpectedActivityUploadPending(error) ? 'provider_pending'
+        recordActivityDeliveryCommit(queueItem, observedProviderPending || error instanceof ProviderOperationError && isExpectedActivityUploadPending(error) ? 'provider_pending'
             : activityDeliveryFailureOutcome(error) === 'expected_contention' ? 'expected_contention' : 'retry');
     }
     return result;
@@ -1563,6 +1565,10 @@ export async function processActivitySyncQueueItem(
     };
 
     let duringDestinationUpload = false;
+    // Observation only: Suunto retains its existing task-retry flow. Only an
+    // explicit recognized provider status can suppress a failure observation;
+    // unknown/malformed status and transport deadlines remain actual retries.
+    let observedProviderPending = false;
 
     try {
         if (await shouldSkipQueueWorkForDeletedUser(
@@ -1828,6 +1834,8 @@ export async function processActivitySyncQueueItem(
             expectedWahooWorkoutType.workoutTypeId,
         );
         if (uploadResult.status === 'pending') {
+            observedProviderPending = queueItem.destinationServiceName === ServiceNames.SuuntoApp
+                && (uploadResult.providerStatus === 'NEW' || uploadResult.providerStatus === 'PROCESSING');
             throw buildPendingDestinationUploadError(queueItem, uploadResult);
         }
         duringDestinationUpload = false;
@@ -2272,6 +2280,8 @@ export async function processActivitySyncQueueItem(
                 normalizedError,
                 bulkWriter,
                 actionableError.dlqContext || 'DESTINATION_PROVIDER_RETRY_EXHAUSTED',
+                undefined,
+                observedProviderPending,
             );
             if (retryResult === QueueResult.MovedToDLQ) {
                 await safelyWriteMetadata(() => setActivitySyncFailedMetadata({

@@ -1240,6 +1240,9 @@ overdue accepted Wahoo/COROS polls without resending. Its sample is a lower boun
 not global coverage. Deterministic task deduplication does not count as a dispatch
 failure. Accepted polls stay observable if new-send allowlisting changes, while
 invalid scheduling metadata reports unknown rather than healthy zero.
+Recognized Suunto `NEW`/`PROCESSING` waits also remain distinct from actual failures;
+their existing Cloud Task retry/resume behavior is unchanged, and unknown statuses,
+transport failures and retry exhaustion stay visible.
 Both handlers have isolated target loading with unchanged
 runtime generations/resources. Local implementation includes a separate dashboard,
 twelve log metrics and seven policy definitions; deployment/activation and positive

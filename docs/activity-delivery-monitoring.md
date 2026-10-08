@@ -25,7 +25,7 @@ untrusted label. All twelve current automatic/manual route contracts are tested.
 | --- | --- |
 | Committed `delivered` | Guarded queue finalization persisted explicit `resultStatus: success` |
 | Committed `skipped` | An explicit terminal skip, not delivered |
-| `provider_pending` | Accepted Wahoo/COROS upload awaiting a status-only poll, not delivered or a failure |
+| `provider_pending` | Accepted Wahoo/COROS status-only polling or recognized Suunto `NEW`/`PROCESSING` wait, not delivered or a failure |
 | `retry` | A real committed retry, excluding normal pending polls and expected contention |
 | `expected_contention` | A known provider-operation/token-refresh wait, not an outage |
 | `dead_lettered` | A newly committed guarded DLQ transition, not retained failed-job totals |
@@ -38,6 +38,10 @@ A failed finalization can resume the accepted provider operation without uploadi
 again. Normal retries are counted once via the committed transition, not again by
 the worker's intentionally thrown retry response. Queue polling latency and native
 HTTP attempts include expected waits and are diagnostic rather than success rates.
+Suunto retains its existing Cloud Task retry/backoff flow and resume identifiers;
+its explicit `NEW`/`PROCESSING` results emit pending instead of failure telemetry.
+Unknown/malformed status, transport failures and exhausted retries still emit actual
+failure/DLQ observations. This classification does not change polling or retry budgets.
 
 Telemetry is best-effort after existing commits, not an audit ledger or an exactly-once
 counter: logging can fail, and a committed write followed by container loss can omit

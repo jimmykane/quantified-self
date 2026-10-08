@@ -1982,6 +1982,60 @@ describe('activity-sync/process-queue-item', () => {
     expect(mockUploadActivityFileToSuunto).toHaveBeenCalledTimes(1);
   });
 
+  it.each(['NEW', 'PROCESSING', 'UNKNOWN', undefined, 'UNRECOGNIZED'])('observes Suunto status %s without changing retry scheduling or reposting the file', async providerStatus => {
+    const queueItem = { ...baseQueueItem, ref: createMockActivitySyncQueueItemRef() };
+    mockUploadActivityFileToSuunto.mockResolvedValueOnce({
+      status: 'pending', providerStatus, uploadId: 'PRIVATE_UPLOAD', providerUserId: 'PRIVATE_ACCOUNT',
+    });
+    expect(await processActivitySyncQueueItem(queueItem)).toBe(QueueResult.RetryIncremented);
+    expect(queueItem.dispatchedToCloudTask).toBeNull();
+    expect(queueItem.providerOperationStartedAt).toBeNull();
+    expect(mockIncreaseRetryCountIfCurrentParams).toHaveBeenCalledWith(expect.objectContaining({ retryDispatchMarkerAtMs: undefined }));
+    const observations = vi.mocked(logger.info).mock.calls.filter(([message]) => message === '[ActivityDelivery]');
+    expect(observations).toEqual([['[ActivityDelivery]', expect.objectContaining({
+      event: 'committed', outcome: providerStatus === 'NEW' || providerStatus === 'PROCESSING' ? 'provider_pending' : 'retry',
+    })]]);
+    expect(JSON.stringify(observations)).not.toContain('PRIVATE');
+    await processActivitySyncQueueItem(queueItem);
+    expect(mockGetSuuntoActivityUploadStatus).toHaveBeenCalledWith(queueItem.userID, 'PRIVATE_UPLOAD', 'PRIVATE_ACCOUNT');
+    expect(mockUploadActivityFileToSuunto).toHaveBeenCalledTimes(1);
+  });
+
+  it('does not suppress a Suunto status transport deadline just because an upload was accepted', async () => {
+    const queueItem = { ...baseQueueItem, ref: createMockActivitySyncQueueItemRef() };
+    mockUploadActivityFileToSuunto.mockRejectedValueOnce(new ProviderOperationError({
+      serviceName: ServiceNames.SuuntoApp, operation: 'activity_upload_status', disposition: 'retryable', retryMode: 'resume',
+      code: 'deadline-exceeded', message: 'PRIVATE_TRANSPORT', providerOperationId: 'PRIVATE_UPLOAD', providerUserId: 'PRIVATE_ACCOUNT',
+    }));
+    expect(await processActivitySyncQueueItem(queueItem)).toBe(QueueResult.RetryIncremented);
+    expect(vi.mocked(logger.info).mock.calls.filter(([message]) => message === '[ActivityDelivery]')).toEqual([
+      ['[ActivityDelivery]', expect.objectContaining({ event: 'committed', outcome: 'retry' })],
+    ]);
+  });
+
+  it('keeps exhausted recognized Suunto pending work visible as a new permanent failure', async () => {
+    const queueItem = { ...baseQueueItem, ref: createMockActivitySyncQueueItemRef() };
+    mockUploadActivityFileToSuunto.mockResolvedValueOnce({
+      status: 'pending', providerStatus: 'PROCESSING', uploadId: 'PRIVATE_UPLOAD', providerUserId: 'PRIVATE_ACCOUNT',
+    });
+    mockIncreaseRetryCountForQueueItem.mockResolvedValueOnce(QueueResult.MovedToDLQ);
+    expect(await processActivitySyncQueueItem(queueItem)).toBe(QueueResult.MovedToDLQ);
+    expect(vi.mocked(logger.info).mock.calls.filter(([message]) => message === '[ActivityDelivery]')).toEqual([
+      ['[ActivityDelivery]', expect.objectContaining({ event: 'committed', outcome: 'dead_lettered' })],
+      ['[ActivityDelivery]', expect.objectContaining({ event: 'committed', outcome: 'manual_reconciliation' })],
+    ]);
+  });
+
+  it.each([QueueResult.Processed, QueueResult.Failed])('emits no pending commit when Suunto retry persistence returns %s', async result => {
+    const queueItem = { ...baseQueueItem, ref: createMockActivitySyncQueueItemRef() };
+    mockUploadActivityFileToSuunto.mockResolvedValueOnce({
+      status: 'pending', providerStatus: 'PROCESSING', uploadId: 'PRIVATE_UPLOAD', providerUserId: 'PRIVATE_ACCOUNT',
+    });
+    mockIncreaseRetryCountForQueueItem.mockResolvedValueOnce(result);
+    expect(await processActivitySyncQueueItem(queueItem)).toBe(result);
+    expect(vi.mocked(logger.info).mock.calls.filter(([message]) => message === '[ActivityDelivery]')).toEqual([]);
+  });
+
   it('moves an accepted Suunto upload to DLQ with resume identifiers when state persistence fails', async () => {
     const queueItem: ActivitySyncQueueItemInterface = {
       ...baseQueueItem,
