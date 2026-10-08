@@ -3,8 +3,6 @@ import { By } from '@angular/platform-browser';
 import { Router } from '@angular/router';
 import { Location } from '@angular/common';
 import { SpyLocation } from '@angular/common/testing';
-import { OverlayContainer } from '@angular/cdk/overlay';
-import { MatSelect } from '@angular/material/select';
 import { RouterTestingModule } from '@angular/router/testing';
 import { MatIconTestingModule } from '@angular/material/icon/testing';
 import { MatTooltip } from '@angular/material/tooltip';
@@ -51,17 +49,21 @@ describe('HomeComponent', () => {
     expect(router.navigate).not.toHaveBeenCalled();
   });
 
-  it('pairs a concise hero with the shared Training overview and real analysis/signup links', async () => {
+  it('restores the branded hero and keeps the shared Training overview in its feature section', async () => {
     const hero = fixture.nativeElement.querySelector('.hero-section') as HTMLElement;
-    expect(hero.querySelector('h1')?.textContent).toBe('Your training, connected and understood.');
-    expect(hero.querySelector('.hero-preview')?.textContent).toContain('Sample data');
-    expect(hero.querySelector('.preview-placeholder--training')).toBeTruthy();
-    expect(hero.querySelector('app-training-summary-cards')).toBeNull();
-    const [heroBlock] = await fixture.getDeferBlocks();
-    await heroBlock.render(DeferBlockState.Complete);
+    expect(hero.querySelector('h1')?.textContent).toBe('Your Training Data, Connected. One Dashboard. Every Activity in Context.');
+    expect(hero.querySelector('.brand-name')?.textContent).toBe('Quantified Self.io');
+    expect(hero.querySelector('app-public-feature-preview')).toBeNull();
+    const training = fixture.nativeElement.querySelector('#home-training') as HTMLElement;
+    expect(training.textContent).toContain('Sample data');
+    expect(training.querySelector('.preview-placeholder--training')).toBeTruthy();
+    expect(training.querySelector('app-training-summary-cards')).toBeNull();
+    const [providerBlock, trainingBlock] = await fixture.getDeferBlocks();
+    expect(providerBlock).toBeTruthy();
+    await trainingBlock.render(DeferBlockState.Complete);
     fixture.detectChanges();
-    expect(hero.querySelector('app-training-summary-cards')).toBeTruthy();
-    expect(hero.querySelectorAll('app-training-metric-grid')).toHaveLength(2);
+    expect(training.querySelector('app-training-summary-cards')).toBeTruthy();
+    expect(training.querySelectorAll('app-training-metric-grid')).toHaveLength(2);
     expect(hero.querySelector('a[href="/login"]')?.textContent).toContain('Get Started Free');
     expect(hero.querySelector('a[href="/features/training-analysis"]')?.textContent).toContain('Explore Training Analysis');
     expect(fixture.nativeElement.textContent).not.toMatch(/explore the demo|try the demo/i);
@@ -88,17 +90,16 @@ describe('HomeComponent', () => {
   it('retains every shared product visual and detailed feature section', () => {
     const sections = Array.from(fixture.nativeElement.querySelectorAll('.landing-page > section'))
       .map((section: Element) => section.className);
-    expect(sections).toEqual(['hero-section', 'getting-started-section', 'membership-section',
-      'sovereignty-section', 'faq-section', 'final-cta-section']);
-    const featureSections = Array.from(fixture.nativeElement.querySelectorAll('.home-feature-panels > section'))
-      .map((section: Element) => section.id);
-    expect(featureSections).toEqual(fixture.componentInstance.features.map(feature => 'home-' + feature.id));
+    expect(sections).toEqual(['hero-section', 'integrations-section', 'feature-section training-section',
+      'feature-section workouts-section', 'feature-section training-plans-section', 'feature-section health-section',
+      'feature-section ai-insights-section', 'feature-section footprint-section', 'feature-section analysis-section',
+      'getting-started-section', 'membership-section', 'sovereignty-section', 'faq-section', 'final-cta-section']);
     const previews = fixture.debugElement.queryAll(By.directive(PublicFeaturePreviewComponent));
     expect(previews.map(preview => preview.componentInstance.previewKey()))
-      .toEqual(['training-snapshot', 'training-readiness', 'training-signals',
+      .toEqual(['provider-flow', 'training-snapshot', 'training-readiness', 'training-signals',
         'training-explorer', 'dashboard', 'workout-analysis', 'training-plans',
         'health-sleep', 'health-hrv', 'health-weight', 'assistant-example', 'mcp-flow',
-        'activity-map', 'reviewer-benchmark', 'provider-flow']);
+        'activity-map', 'reviewer-benchmark']);
     expect(previews.every(preview => !!preview.nativeElement.querySelector(':scope > div[data-nosnippet]'))).toBe(true);
     expect(fixture.nativeElement.querySelector('app-training-explorer-preview')).toBeNull();
     expect(fixture.nativeElement.querySelector('app-workout-profile')).toBeNull();
@@ -154,111 +155,87 @@ describe('HomeComponent', () => {
     expect(selection).toHaveBeenCalledTimes(3);
   });
 
-  it('defaults to Training with one complete feature visible and the other content retained', () => {
-    const sections = Array.from(fixture.nativeElement.querySelectorAll('.home-feature-panels > section')) as HTMLElement[];
-    expect(sections.filter(section => !section.hidden).map(section => section.id)).toEqual(['home-training']);
-    expect(fixture.nativeElement.querySelector('#home-training').textContent).toContain('Build the Dashboard You Need');
-    expect(fixture.nativeElement.querySelector('#home-training').textContent).not.toContain('Analyze Every Workout');
-    expect(fixture.nativeElement.querySelector('#home-workouts').textContent).toContain('aerobic durability, and cadence versus power');
-    expect(fixture.nativeElement.querySelector('#home-feature-panel .membership-section')).toBeNull();
+  it('keeps every feature visible with direct jump links rather than selection controls', () => {
+    const links = Array.from(fixture.nativeElement.querySelectorAll('.home-navigation a')) as HTMLAnchorElement[];
+    expect(links.map(link => link.getAttribute('href')))
+      .toEqual(fixture.componentInstance.features.map(feature => '#home-' + feature.id));
+    for (const feature of fixture.componentInstance.features) {
+      const section = fixture.nativeElement.querySelector('#home-' + feature.id) as HTMLElement;
+      expect(section.hidden).toBe(false);
+      expect(section.hasAttribute('hidden')).toBe(false);
+    }
+    expect(fixture.nativeElement.querySelector('mat-tab-nav-panel')).toBeNull();
+    expect(fixture.nativeElement.querySelector('mat-select')).toBeNull();
     expect(selection).not.toHaveBeenCalled();
   });
 
   it.each(['training', 'workouts', 'plans', 'health', 'assistant', 'maps', 'comparisons', 'integrations'])(
-    'selects %s from the desktop tabs and synchronizes the mobile control', async id => {
-      const previews = fixture.nativeElement.querySelectorAll('app-public-feature-preview');
-      fixture.nativeElement.querySelector(`.home-feature-tabs a[href="#home-${id}"]`).click();
+    'jumps directly to %s without hiding or replacing any shared preview', async id => {
+      const previews = Array.from(fixture.nativeElement.querySelectorAll('app-public-feature-preview'));
+      const target = fixture.nativeElement.querySelector('#home-' + id) as HTMLElement;
+      const scrollIntoView = vi.fn();
+      target.scrollIntoView = scrollIntoView;
+      fixture.nativeElement.querySelector(`.home-navigation a[href="#home-${id}"]`).click();
       fixture.detectChanges();
       await fixture.whenStable();
-      const sections = Array.from(fixture.nativeElement.querySelectorAll('.home-feature-panels > section')) as HTMLElement[];
-      expect(sections.filter(section => !section.hidden).map(section => section.id)).toEqual(['home-' + id]);
-      expect(fixture.debugElement.query(By.directive(MatSelect)).componentInstance.value).toBe(id);
-      expect(fixture.nativeElement.querySelector(`a[href="#home-${id}"]`).getAttribute('aria-selected')).toBe('true');
-      expect(Array.from(fixture.nativeElement.querySelectorAll('app-public-feature-preview'))).toEqual(Array.from(previews));
-      expect(fixture.debugElement.queryAll(By.directive(PublicFeaturePreviewComponent))[0].componentInstance.activate()).toBe(true);
-      if (id === 'training') expect(selection).not.toHaveBeenCalled();
-      else {
-        expect(selection).toHaveBeenCalledOnce();
-        expect(location.path(true)).toBe('/#home-' + id);
-      }
+      expect(scrollIntoView).toHaveBeenCalledWith({ block: 'start', behavior: 'instant' });
+      expect(location.path(true)).toBe('/#home-' + id);
+      expect(selection).toHaveBeenCalledOnce();
+      expect(Array.from(fixture.nativeElement.querySelectorAll('app-public-feature-preview'))).toEqual(previews);
+      expect(fixture.nativeElement.querySelectorAll('section[hidden]')).toHaveLength(0);
     },
   );
 
-  it('uses the Material phone dropdown to select a complete feature with one haptic owner', async () => {
-    const combobox = fixture.nativeElement.querySelector('.home-feature-select [role="combobox"]') as HTMLElement;
-    combobox.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', keyCode: 13, bubbles: true }));
-    fixture.detectChanges();
-    await fixture.whenStable();
-    const overlay = TestBed.inject(OverlayContainer).getContainerElement();
-    const options = Array.from(overlay.querySelectorAll('[role="option"]')) as HTMLElement[];
-    expect(options).toHaveLength(8);
-    options.find(option => option.textContent?.trim() === 'Health')!.click();
-    fixture.detectChanges();
-    await fixture.whenStable();
-    expect(combobox.textContent).toContain('Health');
-    expect(fixture.componentInstance.selectedFeature()).toBe('health');
-    expect(fixture.nativeElement.querySelector('#home-health').hidden).toBe(false);
-    expect(fixture.nativeElement.querySelectorAll('#home-health app-public-feature-preview')).toHaveLength(3);
-    expect(selection).toHaveBeenCalledOnce();
-  });
-
-  it('restores direct feature links, query parameters and browser history without selection haptics', () => {
+  it('restores direct section links, query parameters and browser history silently', () => {
     fixture.destroy();
     location.go('/?source=homepage#home-plans');
     fixture = TestBed.createComponent(HomeComponent);
+    const plansScroll = vi.fn();
+    const comparisonScroll = vi.fn();
     fixture.detectChanges();
-    expect(fixture.componentInstance.selectedFeature()).toBe('plans');
-    expect(fixture.nativeElement.querySelector('#home-plans').hidden).toBe(false);
-    expect(selection).not.toHaveBeenCalled();
-    fixture.componentInstance.selectFeature('comparisons');
+    fixture.nativeElement.querySelector('#home-plans').scrollIntoView = plansScroll;
+    fixture.nativeElement.querySelector('#home-comparisons').scrollIntoView = comparisonScroll;
+    fixture.componentInstance.jumpToFeature('comparisons');
     fixture.detectChanges();
+    expect(comparisonScroll).toHaveBeenCalled();
     expect(location.path(true)).toBe('/?source=homepage#home-comparisons');
     expect(selection).toHaveBeenCalledOnce();
     location.simulateUrlPop('/?source=homepage#home-plans');
     fixture.detectChanges();
-    expect(fixture.componentInstance.selectedFeature()).toBe('plans');
+    expect(plansScroll).toHaveBeenCalled();
     location.simulateUrlPop('/?source=homepage#home-comparisons');
     fixture.detectChanges();
-    expect(fixture.componentInstance.selectedFeature()).toBe('comparisons');
+    expect(comparisonScroll).toHaveBeenCalledTimes(2);
     expect(selection).toHaveBeenCalledOnce();
   });
 
-  it('keeps initialization, invalid and unchanged selections silent and cleans up history listeners', () => {
+  it('keeps initialization, invalid and unchanged destinations silent and cleans up history listeners', () => {
     const component = fixture.componentInstance;
-    component.selectFeature('training');
-    component.selectFeature('invalid');
+    component.jumpToFeature('invalid');
     expect(location.path(true)).toBe('');
     expect(selection).not.toHaveBeenCalled();
+    component.jumpToFeature('training');
+    fixture.detectChanges();
+    expect(selection).toHaveBeenCalledOnce();
+    component.jumpToFeature('training');
+    fixture.detectChanges();
+    expect(selection).toHaveBeenCalledOnce();
     location.simulateUrlPop('/#unknown');
     fixture.detectChanges();
-    expect(component.selectedFeature()).toBe('training');
+    expect(fixture.nativeElement.querySelectorAll('section[hidden]')).toHaveLength(0);
     fixture.destroy();
     location.simulateUrlPop('/#home-health');
-    expect(component.selectedFeature()).toBe('training');
+    expect(selection).toHaveBeenCalledOnce();
   });
 
-  it('preserves modified feature links and leaves public-route haptics to the shell', () => {
+  it('preserves modified section links and leaves public-route haptics to the shell', () => {
     const event = new MouseEvent('click', { ctrlKey: true, cancelable: true });
-    fixture.componentInstance.selectFeature('health', event);
+    fixture.componentInstance.jumpToFeature('health', event);
     expect(event.defaultPrevented).toBe(false);
-    expect(fixture.componentInstance.selectedFeature()).toBe('training');
+    expect(location.path(true)).toBe('');
     expect(selection).not.toHaveBeenCalled();
     expect(fixture.nativeElement.querySelector('a[href="/features/training-analysis"]').hasAttribute('appHapticTap')).toBe(false);
     expect(fixture.debugElement.queryAll(By.directive(MatTooltip))
       .every(host => host.injector.get(MatTooltip).touchGestures === 'off')).toBe(true);
-  });
-
-  it('waits for the shared overview to render before scrolling to a selected feature', async () => {
-    const panel = fixture.nativeElement.querySelector('#home-feature-panel') as HTMLElement;
-    const scrollIntoView = vi.fn();
-    panel.scrollIntoView = scrollIntoView;
-    fixture.componentInstance.selectFeature('comparisons');
-    fixture.detectChanges();
-    expect(scrollIntoView).not.toHaveBeenCalled();
-    const [heroBlock] = await fixture.getDeferBlocks();
-    await heroBlock.render(DeferBlockState.Complete);
-    fixture.detectChanges();
-    expect(scrollIntoView).toHaveBeenCalledWith({ block: 'start', behavior: 'instant' });
-    expect(selection).toHaveBeenCalledOnce();
   });
 });

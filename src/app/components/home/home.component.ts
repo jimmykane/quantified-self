@@ -1,13 +1,10 @@
-import { Component, OnInit, DestroyRef, PLATFORM_ID, afterEveryRender, computed, inject, signal } from '@angular/core';
+import { Component, OnInit, DestroyRef, PLATFORM_ID, afterEveryRender, inject, signal } from '@angular/core';
 import { DOCUMENT, Location, isPlatformBrowser } from '@angular/common';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { Router, RouterLink } from '@angular/router';
 import { MatButtonModule } from '@angular/material/button';
 import { MatCardModule } from '@angular/material/card';
 import { MatIconModule } from '@angular/material/icon';
-import { MatFormFieldModule } from '@angular/material/form-field';
-import { MatSelectModule } from '@angular/material/select';
-import { MatTabsModule } from '@angular/material/tabs';
 import { MAT_TOOLTIP_DEFAULT_OPTIONS, MatTooltipModule } from '@angular/material/tooltip';
 import { ASSISTANT_REQUEST_LIMITS, ROUTE_USAGE_LIMITS, USAGE_LIMITS } from '@shared/limits';
 import { AppAuthService } from '../../authentication/app.auth.service';
@@ -28,7 +25,6 @@ const HOME_FEATURES = [
   { id: 'comparisons', label: 'Comparisons' },
   { id: 'integrations', label: 'Integrations' },
 ] as const;
-type HomeFeatureId = typeof HOME_FEATURES[number]['id'];
 
 @Component({
   selector: 'app-home',
@@ -36,7 +32,6 @@ type HomeFeatureId = typeof HOME_FEATURES[number]['id'];
   styleUrls: ['./home.component.scss'],
   standalone: true,
   imports: [RouterLink, MatButtonModule, MatCardModule, MatIconModule, MatTooltipModule,
-    MatFormFieldModule, MatSelectModule, MatTabsModule,
     PublicFeaturePreviewComponent, CompactRowComponent],
   providers: [{ provide: MAT_TOOLTIP_DEFAULT_OPTIONS, useValue: {
     showDelay: 0, hideDelay: 0, touchendHideDelay: 1500, touchGestures: 'off',
@@ -51,12 +46,10 @@ export class HomeComponent implements OnInit {
   private readonly document = inject(DOCUMENT);
   private readonly isBrowser = isPlatformBrowser(inject(PLATFORM_ID));
   private featureScrollFrame: number | null = null;
-  private featureScrollPending = false;
-  readonly hasFeatureSelection = signal(false);
+  private featureScrollTarget: string | null = null;
+  private currentFeatureFragment = '';
   private readonly featureScroll = afterEveryRender(() => this.flushFeatureScroll());
   readonly features = HOME_FEATURES;
-  readonly selectedFeature = signal<HomeFeatureId>('training');
-  readonly selectedFeatureLabel = computed(() => this.features.find(feature => feature.id === this.selectedFeature())!.label);
   readonly expandedFaq = signal<string | null>(null);
   readonly healthFeature = HEALTH_FEATURE_CONTENT;
   readonly trainingPlansFeature = TRAINING_PLANS_HOME_CONTENT;
@@ -86,54 +79,45 @@ export class HomeComponent implements OnInit {
 
   ngOnInit(): void {
     if (!this.isBrowser) return;
-    this.syncFeatureFromUrl(this.location.path(true));
-    this.destroyRef.onDestroy(this.location.onUrlChange(url => this.syncFeatureFromUrl(url)));
+    this.syncFeatureAnchorFromUrl(this.location.path(true));
+    this.destroyRef.onDestroy(this.location.onUrlChange(url => this.syncFeatureAnchorFromUrl(url)));
     this.destroyRef.onDestroy(() => this.cancelFeatureScrollFrame());
     this.authService.user$.pipe(takeUntilDestroyed(this.destroyRef)).subscribe(user => {
       if (user) void this.router.navigate(['/dashboard']);
     });
   }
 
-  selectFeature(id: string, event?: MouseEvent): void {
+  jumpToFeature(id: string, event?: MouseEvent): void {
     // Let modified links open their shareable feature URL in another tab.
     if (event && (event.ctrlKey || event.metaKey || event.shiftKey || event.altKey || event.button !== 0)) return;
     event?.preventDefault();
     const feature = this.features.find(candidate => candidate.id === id);
     if (!feature) return;
-    this.hasFeatureSelection.set(true);
-    if (feature.id === this.selectedFeature()) {
-      this.scrollToFeature();
+    const fragment = `home-${feature.id}`;
+    if (fragment === this.currentFeatureFragment) {
+      this.featureScrollTarget = fragment;
       return;
     }
-    this.selectedFeature.set(feature.id);
     this.haptics.selection();
     const path = this.location.path(true).split('#')[0];
-    this.location.go(`${path}#home-${feature.id}`);
+    this.location.go(`${path}#${fragment}`);
   }
 
-  private syncFeatureFromUrl(url: string): void {
-    const fragment = url.split('#')[1];
-    const feature = this.features.find(candidate => `home-${candidate.id}` === fragment);
-    this.selectedFeature.set(feature?.id ?? 'training');
-    this.hasFeatureSelection.set(!!feature);
-    this.featureScrollPending = !!feature;
-    if (feature) this.scrollToFeature();
-  }
-
-  private scrollToFeature(): void {
-    this.featureScrollPending = true;
+  private syncFeatureAnchorFromUrl(url: string): void {
+    this.currentFeatureFragment = url.split('#')[1] ?? '';
+    this.featureScrollTarget = this.features.some(feature => `home-${feature.id}` === this.currentFeatureFragment)
+      ? this.currentFeatureFragment : null;
   }
 
   private flushFeatureScroll(): void {
-    if (!this.featureScrollPending) return;
-    // Its deferred metrics change the hero height; position the feature after the shared overview renders.
-    if (this.document.querySelector('.hero-preview .preview-placeholder--training')) return;
-    this.featureScrollPending = false;
+    if (!this.featureScrollTarget) return;
+    const target = this.document.getElementById(this.featureScrollTarget);
+    if (!target) return;
+    this.featureScrollTarget = null;
     this.cancelFeatureScrollFrame();
-    const scroll = () => this.document.getElementById('home-feature-panel')
-      ?.scrollIntoView?.({ block: 'start', behavior: 'instant' });
+    const scroll = () => target.scrollIntoView?.({ block: 'start', behavior: 'instant' });
     scroll();
-    // Give the shell a rendering frame after native scroll events, then align with its rendered header offset.
+    // Align again once the shell has rendered its visible header offset after scrolling.
     this.featureScrollFrame = this.document.defaultView?.requestAnimationFrame(() => {
       this.featureScrollFrame = this.document.defaultView?.requestAnimationFrame(() => {
         this.featureScrollFrame = null;

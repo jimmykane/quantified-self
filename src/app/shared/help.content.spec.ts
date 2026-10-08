@@ -49,8 +49,9 @@ describe('help.content', () => {
     expect(copy).toContain('fictional sample data');
     expect(copy).toContain('nothing is saved');
     expect(copy).toContain('Provider connections and history imports require Pro');
-    expect(copy).toContain('**Explore features** dropdown');
-    expect(copy).toContain('one complete feature at a time');
+    expect(copy).toContain('jump links below its introduction');
+    expect(copy).toContain('every feature section visible');
+    expect(copy).not.toContain('dropdown');
     expect(copy).toContain('[Comparisons](/#home-comparisons)');
     expect(copy).toContain('Back and Forward');
     expect(copy).not.toContain('/demo');

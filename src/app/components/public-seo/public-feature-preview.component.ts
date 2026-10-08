@@ -37,7 +37,5 @@ import { TrainingPlansPreviewComponent } from './training-plans-preview.componen
 })
 export class PublicFeaturePreviewComponent {
   readonly previewKey = input.required<PublicFeaturePreviewKey>();
-  /** Also resolve the hero before scrolling a directly selected homepage feature into view. */
-  readonly activate = input(false);
   readonly providerDataFlowRows = buildPublicProviderDataFlowRows();
 }
