@@ -339,7 +339,7 @@ describe('Firebase Hosting configuration', () => {
   });
 
   it('marks recently updated public discovery surfaces in sitemap', () => {
-    expect(sitemapLastmodForUrl(`${siteOrigin}/`)).toBe('2026-10-07');
+    expect(sitemapLastmodForUrl(`${siteOrigin}/`)).toBe('2026-10-08');
     expect(sitemapLastmodForUrl(`${siteOrigin}/features/health`)).toBe('2026-09-08');
     expect(sitemapLastmodForUrl(`${siteOrigin}/features`)).toBe('2026-10-07');
     expect(sitemapLastmodForUrl(`${siteOrigin}/features/activity-calendar`)).toBe('2026-10-07');
@@ -364,7 +364,7 @@ describe('Firebase Hosting configuration', () => {
     expect(sitemapLastmodForUrl(`${siteOrigin}/features/fit-gpx-tcx-file-analyzer`)).toBe('2026-09-02');
     expect(sitemapXml).not.toContain(`${siteOrigin}/features/workout-file-comparison`);
     expect(sitemapXml).not.toContain(`${siteOrigin}/features/sports-watch-benchmark`);
-    expect(sitemapLastmodForUrl(`${siteOrigin}/help`)).toBe('2026-10-07');
+    expect(sitemapLastmodForUrl(`${siteOrigin}/help`)).toBe('2026-10-08');
     expect(sitemapLastmodForUrl(`${siteOrigin}/policies`)).toBe('2026-10-07');
     expect(sitemapLastmodForUrl(`${siteOrigin}/privacy`)).toBe('2026-10-07');
     expect(sitemapLastmodForUrl(`${siteOrigin}/terms`)).toBe('2026-10-07');

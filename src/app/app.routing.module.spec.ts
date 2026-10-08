@@ -649,10 +649,10 @@ describe('AppRoutingModule routes', () => {
     expect(homeRoute?.canMatch).toBeUndefined();
     expect(homeRoute?.pathMatch).toBe('full');
     expect(homeRoute?.data).toMatchObject({
-      title: 'Training Dashboard',
+      title: 'Training Analysis & Workout Planning',
       animation: 'Home',
     });
-    expect(homeRoute?.data?.['description']).toBe('Connect Garmin, Suunto, COROS and Wahoo. Analyze training, sleep and HRV in one dashboard; log blood pressure and weight, and add timeline notes.');
+    expect(homeRoute?.data?.['description']).toBe('Bring your activities, sleep and health data together. Analyze training, build structured workouts and plan your next session with Quantified Self.');
     expect(homeRoute?.data?.['jsonLd']?.['description']).toBe(homeRoute?.data?.['description']);
     expect(homeRoute?.data?.['jsonLd']?.['featureList']).toContain('Manual blood pressure, weight, body composition, blood oxygen, and VO₂ max logging');
     expect(homeRoute?.data?.['jsonLd']?.['featureList']).toContain('Timeline notes for travel, sickness, stress, and time away');
