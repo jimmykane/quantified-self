@@ -141,7 +141,15 @@ describe('help.content', () => {
     for (const phrase of ['**pool and open-water swimming**', '**Total**', 'native cumulative distance for the whole recording',
       'not the distance or pace of the last interval', 'Open-water Work/recovery fields are unchanged',
       '**Swim now. Press Lap to finish this interval.**', '**Rest now. Press Lap to finish this rest.**',
-      'Lap finishes the current step, not starts it', 'Other sports and older Guides keep **Press lap when ready**']) expect(content).toContain(phrase);
+      'Lap finishes the current step, not starts it', 'Older Guides may still say **Press lap when ready**']) expect(content).toContain(phrase);
+  });
+  it('clarifies manual Suunto transitions across sports without replacing authored or strength instructions', () => {
+    const content = HELP_SECTIONS.find(section => section.id === 'training-plans')!.content;
+    for (const phrase of ['Manual steps in other supported sports say **Press Lap to finish this interval.**',
+      'including warm-up, Work, active Recovery and cool-down', 'manual Rest says **Rest now. Press Lap to finish this rest.**',
+      'The step starts immediately', 'persistent **Lap to finish** reminder',
+      'prioritize your notes or exercise/set instructions', 'past and completed copies stay unchanged']) expect(content).toContain(phrase);
+    expect(content).not.toContain('Other sports and older Guides keep **Press lap when ready**');
   });
   it('explains pool-only measured SWOLF without target, pool-length or sensor promises', () => {
     const content = HELP_SECTIONS.find(section => section.id === 'training-plans')!.content;

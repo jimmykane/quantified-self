@@ -2,7 +2,7 @@ import { createHash } from 'node:crypto';
 import { ActivityTypes } from '@sports-alliance/sports-lib';
 import { describe, expect, it } from 'vitest';
 import type { WorkoutStepV1, WorkoutStructureV1 } from '../../../../shared/planned-workout';
-import { serializeSuuntoGuideJsonV1, serializeSuuntoGuideV7ForRecovery, serializeSuuntoGuideV9ForRecovery,
+import { serializeSuuntoGuideJsonV1, serializeSuuntoGuideV7ForRecovery, serializeSuuntoGuideV9ForRecovery, serializeSuuntoGuideV10ForRecovery,
   type SuuntoGuideFieldsStepV1, type SuuntoGuideStepV1 } from './suunto-guide.serializer';
 
 const options = { name: 'Pool screens', owner: 'Quantified Self', url: 'https://quantified-self.io/training/plans',
@@ -13,6 +13,8 @@ const structure = (sport: ActivityTypes): WorkoutStructureV1 => ({ version: 1, s
   nodes: [{ kind: 'repeat', id: 'sets', count: 3, steps: [work, rest] }] });
 const screens = (steps: SuuntoGuideStepV1[]): SuuntoGuideFieldsStepV1[] => steps.flatMap(step =>
   step.type === 'repeat' ? step.steps : [step]);
+const boundaries = (steps: SuuntoGuideStepV1[]): unknown[] => steps.map(step => step.type === 'repeat'
+  ? { ...step, steps: boundaries(step.steps) } : Object.fromEntries(Object.entries(step).filter(([key]) => !['fields', 'notification'].includes(key))));
 
 it('freezes the historical v9 payload before changing swim presentation', () => {
   expect(createHash('sha256').update(JSON.stringify(serializeSuuntoGuideV9ForRecovery(structure(ActivityTypes.Swimming), options).artifact)).digest('hex'))
@@ -94,8 +96,6 @@ describe.each([ActivityTypes.Swimming, ActivityTypes.OpenWaterSwimming])('swim R
     ] };
     const current = serializeSuuntoGuideJsonV1(input, options).artifact;
     const old = (sport === ActivityTypes.Swimming ? serializeSuuntoGuideV9ForRecovery : serializeSuuntoGuideV7ForRecovery)(input, options).artifact;
-    const boundaries = (steps: SuuntoGuideStepV1[]): unknown[] => steps.map(step => step.type === 'repeat'
-      ? { ...step, steps: boundaries(step.steps) } : Object.fromEntries(Object.entries(step).filter(([key]) => !['fields', 'notification'].includes(key))));
     expect(boundaries(current.steps)).toEqual(boundaries(old.steps));
     for (const step of screens(current.steps)) {
       expect(step.notification).toMatchObject({ title: step.title, text: expect.any(String) });
@@ -103,9 +103,25 @@ describe.each([ActivityTypes.Swimming, ActivityTypes.OpenWaterSwimming])('swim R
     }
     expect(screens(current.steps).at(-1)).toMatchObject({ title: 'Complete', notification: { title: 'Complete', text: 'Guide complete' } });
   });
+  it.each([false, true])('preserves historical Lap boundaries even in an all-Rest Guide (early=%s)', early => {
+    const input: WorkoutStructureV1 = { version: 1, sport, nodes: [
+      { ...rest, id: 'manual', ending: { kind: 'manual' } },
+      { kind: 'repeat', id: 'rests', count: 10, steps: [
+        { ...rest, id: 'timed', ending: { kind: 'time', seconds: 15, allowEarlyLap: early } },
+        { ...rest, id: 'distance', ending: { kind: 'distance', meters: 100, allowEarlyLap: early } },
+      ] },
+    ] };
+    const current = serializeSuuntoGuideJsonV1(input, options).artifact;
+    const old = (sport === ActivityTypes.Swimming ? serializeSuuntoGuideV9ForRecovery : serializeSuuntoGuideV7ForRecovery)(input, options).artifact;
+    expect(boundaries(current.steps)).toEqual(boundaries(old.steps));
+    for (const step of screens(current.steps).filter(step => step.title === 'Rest')) {
+      expect(step.fields.some(field => 'aggregate' in field)).toBe(false);
+      expect(step.fields).toContainEqual({ type: 'distance', title: 'Total', window: 'workout' });
+    }
+  });
 });
 
 it.each([ActivityTypes.Running, ActivityTypes.Cycling, ActivityTypes.StrengthTraining, ActivityTypes.Rowing, ActivityTypes.Walking])(
-  'keeps non-swim manual/Rest payloads byte-equivalent to v7: %s', sport => {
-    expect(serializeSuuntoGuideJsonV1(structure(sport), options)).toEqual(serializeSuuntoGuideV7ForRecovery(structure(sport), options));
+  'keeps frozen v10 non-swim manual/Rest payloads byte-equivalent to v7: %s', sport => {
+    expect(serializeSuuntoGuideV10ForRecovery(structure(sport), options)).toEqual(serializeSuuntoGuideV7ForRecovery(structure(sport), options));
   });

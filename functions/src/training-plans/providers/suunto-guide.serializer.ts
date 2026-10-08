@@ -43,9 +43,9 @@ export type SuuntoGuideFieldV1 =
     | { type: 'targetCadence'; min: number; max: number; title: string };
 
 export type SuuntoGuideLiveFieldType = 'heartRate' | 'power' | 'pace' | 'speed' | 'cadence';
-type GuidePresentation = 'legacy-v2' | 'live-v3' | 'block-pace-v4' | 'sport-screens-v5' | 'early-lap-v6' | 'pool-swolf-v7' | 'pool-screens-v9' | 'swim-rest-v10';
+type GuidePresentation = 'legacy-v2' | 'live-v3' | 'block-pace-v4' | 'sport-screens-v5' | 'early-lap-v6' | 'pool-swolf-v7' | 'pool-screens-v9' | 'swim-rest-v10' | 'manual-instructions-v11';
 function supportsEarlyLap(presentation: GuidePresentation): boolean {
-    return presentation === 'early-lap-v6' || presentation === 'pool-swolf-v7' || presentation === 'pool-screens-v9' || presentation === 'swim-rest-v10';
+    return presentation === 'early-lap-v6' || presentation === 'pool-swolf-v7' || presentation === 'pool-screens-v9' || presentation === 'swim-rest-v10' || presentation === 'manual-instructions-v11';
 }
 
 export interface SuuntoGuideFieldsStepV1 {
@@ -375,6 +375,8 @@ function notificationText(step: WorkoutStepV1, presentation: GuidePresentation):
     // Authored instructions take priority; keep their existing font adaptation
     // and loss review. Generated text is not translated or unit-converted by the watch.
     if (step.note) return truncateCodePoints(watchText(step.note), 54);
+    if (step.ending.kind === 'manual' && presentation === 'manual-instructions-v11') return step.purpose === 'rest'
+        ? 'Rest now. Press Lap to finish this rest.' : 'Press Lap to finish this interval.';
     if (step.ending.kind === 'manual') return presentation === 'swim-rest-v10'
         ? step.purpose === 'rest' ? 'Rest now. Press Lap to finish this rest.' : 'Swim now. Press Lap to finish this interval.'
         : 'Press lap when ready';
@@ -404,7 +406,7 @@ function notificationText(step: WorkoutStepV1, presentation: GuidePresentation):
 function stepToSuunto(step: WorkoutStepV1, sport: ActivityTypes, presentation: GuidePresentation): SuuntoGuideFieldsStepV1 {
     // Only swim notification/Rest selection changes in v10. Preserve v9 pool
     // progress and v7 open-water Work/recovery fields, including countdown labels.
-    const fieldPresentation = presentation === 'swim-rest-v10'
+    const fieldPresentation = presentation === 'manual-instructions-v11' ? 'pool-swolf-v7' : presentation === 'swim-rest-v10'
         ? sport === ActivityTypes.Swimming ? 'pool-screens-v9' : 'pool-swolf-v7' : presentation;
     const fields = [
         ...endingFields(step.ending, fieldPresentation),
@@ -415,7 +417,8 @@ function stepToSuunto(step: WorkoutStepV1, sport: ActivityTypes, presentation: G
         fields.push({ type: 'text', value: truncateCodePoints(watchText(step.note), maximum) });
     }
     if (fields.length === 0 && fieldPresentation !== 'pool-screens-v9'
-        && !(presentation === 'swim-rest-v10' && step.purpose === 'rest')) fields.push({ type: 'text', value: 'Press lap' });
+        && !(presentation === 'swim-rest-v10' && step.purpose === 'rest')) fields.push({ type: 'text',
+            value: presentation === 'manual-instructions-v11' ? 'Lap to finish' : 'Press lap' });
 
     if (presentation !== 'legacy-v2' && !fields.some(field => field.type === 'text' && codePointLength(field.value) > 40)) {
         const defaults = sportLiveFields(sport);
@@ -428,7 +431,7 @@ function stepToSuunto(step: WorkoutStepV1, sport: ActivityTypes, presentation: G
             ? suuntoGuideSwimScreenReadingsV1(step, sport).map(type => sportReadingField(type, sport, fieldPresentation))
             : presentation === 'pool-screens-v9'
             ? suuntoGuidePoolScreenReadingsV1(step).map(type => sportReadingField(type, sport, presentation))
-            : ['sport-screens-v5', 'early-lap-v6', 'pool-swolf-v7'].includes(presentation)
+            : ['sport-screens-v5', 'early-lap-v6', 'pool-swolf-v7', 'manual-instructions-v11'].includes(presentation)
             ? suuntoGuideOptionalReadingsV1(step, sport, presentation === 'pool-swolf-v7').map(type => sportReadingField(type, sport, presentation))
             : candidates.slice(0, 5 - fields.length)
             .map(type => type === 'pace' && presentation === 'block-pace-v4'
@@ -485,7 +488,7 @@ function structureToSteps(structure: WorkoutStructureV1, presentation: GuidePres
             .some(type => isSuuntoGuideManualLapAverageV1(type, structure.sport)))) : steps.some(node =>
         (node.type === 'repeat' ? node.steps : [node]).some(step =>
             step.fields.some(field => 'window' in field && field.window === 'manualLap')));
-    if (!['block-pace-v4', 'sport-screens-v5', 'early-lap-v6', 'pool-swolf-v7', 'pool-screens-v9', 'swim-rest-v10'].includes(presentation)
+    if (!['block-pace-v4', 'sport-screens-v5', 'early-lap-v6', 'pool-swolf-v7', 'pool-screens-v9', 'swim-rest-v10', 'manual-instructions-v11'].includes(presentation)
         || !usesLapAverages) return steps;
 
     if (supportsEarlyLap(presentation) && structure.nodes.some(node =>
@@ -575,11 +578,16 @@ export function serializeSuuntoGuideV9ForRecovery(structureValue: unknown, optio
     return serializeGuide(structureValue, options, 'pool-screens-v9');
 }
 
+/** Recovery only: preserve the exact swim notifications and Rest v10 payload. */
+export function serializeSuuntoGuideV10ForRecovery(structureValue: unknown, options: SerializeSuuntoGuideOptionsV1) {
+    return serializeGuide(structureValue, options, 'swim-rest-v10');
+}
+
 export function serializeSuuntoGuideJsonV1(
     structureValue: unknown,
     options: SerializeSuuntoGuideOptionsV1,
 ): ProviderSerializationResultV1<SuuntoGuideJsonV1> {
-    return serializeGuide(structureValue, options, 'swim-rest-v10');
+    return serializeGuide(structureValue, options, 'manual-instructions-v11');
 }
 
 /** Recovery only: preserve Training 01's exact average-pace screens and lap boundaries. */
@@ -607,9 +615,10 @@ function serializeGuide(structureValue: unknown, options: SerializeSuuntoGuideOp
     presentation: GuidePresentation): ProviderSerializationResultV1<SuuntoGuideJsonV1> {
     const structure = parseWorkoutStructureV1(structureValue);
     // Select after strict parsing, once. V9 is pool-only; v10 affects both swim
-    // profiles. All other sports keep their exact v7 presentation.
+    // profiles. V11 changes only non-swim manual wording, keeping v7 readings.
     if (presentation === 'pool-screens-v9' && structure.sport !== ActivityTypes.Swimming) presentation = 'pool-swolf-v7';
     if (presentation === 'swim-rest-v10' && ![ActivityTypes.Swimming, ActivityTypes.OpenWaterSwimming].includes(structure.sport)) presentation = 'pool-swolf-v7';
+    if (presentation === 'manual-instructions-v11' && [ActivityTypes.Swimming, ActivityTypes.OpenWaterSwimming].includes(structure.sport)) presentation = 'swim-rest-v10';
     const early = structure.nodes.some(node => (node.kind === 'step' ? [node] : node.steps)
         .some(step => allowsEarlyLapV1(step.ending)));
     if (early && !supportsEarlyLap(presentation)) throw new ProviderWorkoutMappingError('suunto', 'unsupported', [{

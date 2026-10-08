@@ -340,6 +340,11 @@ Timing, target ranges, recorded-lap policy, completion, approval and consent sta
 reject injected provider fields. V9 recovery remains frozen. This has no MCP wire/catalog/plugin impact and
 requires no new tool, mutation, returned metric, client refresh or contract promotion. See
 [the Training presentation and verification notes](training-workspace.md#swim-manual-instructions-and-cumulative-rest-distance).
+The private v11 non-swim manual notification/reminder clarification likewise changes no authored/returned data,
+target, timing, recorded-lap boundary, scope, consent, proposal or provider action. Numeric-only/authored-instruction
+digests, swim v10 and strength v8 remain unchanged. Strict Training read/proposal regressions and the compiled
+contract protect the same wire surface; no client refresh, contract promotion or plugin rebuild is required. See
+[manual instructions and recovery verification](training-workspace.md#manual-instructions-in-other-sports).
 The manual editor's additional canonical running/cycling profiles also require no MCP contract change: the existing
 recipe schema already accepts the complete Sports Lib activity-type enum, and focused coverage proves an exact Mountain
 Biking sport survives the read projection. Suunto numeric activity recommendations and Garmin's broad

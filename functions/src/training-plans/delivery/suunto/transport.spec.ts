@@ -105,6 +105,52 @@ describe('Suunto Guide lifecycle — synthetic transport', () => {
     expect(current).toEqual(assessSuuntoGuideV7ForRecovery(op.workout!, op.destinationKey, op.timeZone, owner));
     expect(transport.assess(op.workout!, op.destinationKey, op.timeZone, undefined, WeightUnits.Pounds)).toEqual(current);
   });
+  it.each([ActivityTypes.Running, ActivityTypes.Cycling, ActivityTypes.Rowing])(
+    'versions only changed manual %s instructions, not numeric endings or authored notes', sport => {
+    next({ structure: { version: 1, sport, nodes: [{ kind: 'step', id: 'manual', purpose: 'warmup',
+      ending: { kind: 'manual' }, targets: [] }] } });
+    const current = transport.assess(op.workout!, op.destinationKey, op.timeZone);
+    expect(current.mappingVersion).toBe('suunto-guides-v11');
+    expect(transport.diagnosticMappingVersion(op)).toBe('suunto-guides-v11');
+    expect(transport.assess(op.workout!, op.destinationKey, op.timeZone, undefined, WeightUnits.Pounds)).toEqual(current);
+    for (const step of [
+      { kind: 'step', id: 'manual', purpose: 'warmup', ending: { kind: 'manual' }, targets: [], note: 'Stay relaxed' },
+      { kind: 'step', id: 'timed', purpose: 'work', ending: { kind: 'time', seconds: 90 }, targets: [] },
+      { kind: 'step', id: 'distance', purpose: 'work', ending: { kind: 'distance', meters: 100 }, targets: [] },
+    ] satisfies WorkoutStepV1[]) {
+      next({ structure: { version: 1, sport, nodes: [step] } });
+      expect(transport.assess(op.workout!, op.destinationKey, op.timeZone))
+        .toEqual(assessSuuntoGuideV7ForRecovery(op.workout!, op.destinationKey, op.timeZone, owner));
+    }
+    expect(server.calls).toHaveLength(0);
+  });
+  it.each([ActivityTypes.Running, ActivityTypes.Cycling, ActivityTypes.Rowing])(
+    'recovers exact v7 %s manual instructions before one v11 update, with stable identity and ZIP readback', async sport => {
+    next({ structure: { version: 1, sport, nodes: [{ kind: 'repeat', id: 'sets', count: 3, steps: [
+      { kind: 'step', id: 'work', purpose: 'work', ending: { kind: 'manual' }, targets: [] },
+      { kind: 'step', id: 'rest', purpose: 'rest', ending: { kind: 'time', seconds: 15 }, targets: [] },
+    ] }] } });
+    op.digest = assessSuuntoGuideV7ForRecovery(op.workout!, op.destinationKey, op.timeZone, owner).digest;
+    const old = guidePayloadForRecovery(op, owner)!;
+    expect(JSON.stringify(old)).toContain('Press lap when ready');
+    server.guides.set('legacy-manual', { guide: old, pinned: true });
+    op.progress = { version: 1, step: 'create', state: 'started' };
+    const recovered = await recover();
+    if (recovered.kind !== 'accepted') throw new Error('Historical manual copy not recovered');
+    expect(server.calls.every(request => request.method === 'GET')).toBe(true);
+    op.artifact = recovered.artifact;
+    next(); await execute();
+    const current = server.guides.get('legacy-manual')!;
+    expect(current.pinned).toBe(true);
+    expect(current.guide.externalId).toBe(old.externalId);
+    expect(JSON.stringify(current.guide)).toContain('Press Lap to finish this interval.');
+    expect(JSON.stringify(current.guide)).not.toContain('Press lap when ready');
+    expect(await readGuideArchive(await packageGuide(current.guide))).toEqual(current.guide);
+    next(); await execute();
+    expect(server.guides.size).toBe(1);
+    expect(server.calls.filter(request => request.method === 'POST')).toHaveLength(0);
+    expect(server.calls.filter(request => request.method === 'PUT')).toHaveLength(1);
+  });
   it('recovers the exact v7 pool copy before upgrading its screens once in place', async () => {
     next({ structure: { version: 1, sport: ActivityTypes.Swimming, nodes: [
       { kind: 'repeat', id: 'sets', count: 10, steps: [
