@@ -55,6 +55,9 @@ jobs:
       - name: Check CI trigger and required-result contracts
         run: npm run test:workflows
 
+      - name: Check frontend test environment allocation
+        run: npm run test:frontend-config
+
       - name: Check Training monitoring definitions and safe provisioning
         run: npm run test:training-monitoring
 

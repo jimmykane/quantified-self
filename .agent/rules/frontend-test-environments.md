@@ -1,0 +1,35 @@
+---
+trigger: always_on
+description: Keep frontend helper tests in the lightest correct environment without weakening coverage.
+---
+
+# Frontend test environments
+
+Apply when adding/changing frontend specs or helper runtime imports, or changing frontend Vitest configuration,
+discovery checks or CI execution. See [CI test coverage](../../docs/ci-testing.md#ordinary-unit-runner) for the
+runner configuration and verification commands.
+
+- Run new pure helper specs under `src/app/helpers/` in `helpers-node`, registering them in the same change.
+  Inspect transitive runtime imports and test assumptions, add the exact spec path to the sorted `node` list in
+  `tools/frontend-test-environments.json`, and verify it in that project. Keep framework fixture builders out
+  of pure helper tests when equivalent plain fixtures suffice. Record why a new helper needs a heavier environment
+  when it cannot use Node. Other pure application specs, such as static content contracts under `src/app/shared/`,
+  can use the same explicit Node opt-in after their imports and assertions are verified.
+- Use `helpers-dom` and the registry's `dom` list for DOM APIs or browser locale/storage semantics that require
+  jsdom. Use `angular` for TestBed, Angular component/service/router compilation or the existing global setup.
+  Unclassified specs retain the Angular fallback until verified; do not classify an entire directory by name.
+- Recheck an opted-in spec's environment when its helper's transitive runtime imports or browser assumptions
+  change. Move its exact registry entry to the correct project (or remove it to restore Angular) when needed.
+  Do not alter product locale fallbacks, weaken assertions, skip tests or add fake browser/framework globals
+  merely to make a spec pass in a lighter environment. Explicit mocks for the behavior under test remain valid.
+- Keep the Angular compiler plugin and `src/test-setup.ts` scoped to `angular`; Node/DOM helpers have no global
+  setup file. Preserve isolated forks and the global two-worker cap. Optimize setup and imports without reducing
+  required coverage or ignoring runner errors.
+- Discovery guards must use Vitest's glob library and matching options, including `dot: true` and the existing
+  Functions/Rules exclusions. Node's native glob API omits hidden specs. Preserve the hidden-file/future-file
+  regression fixtures and ensure each ordinary spec belongs to exactly one project.
+- With Node 22 selected, run the affected specs in their chosen project using
+  `npm run test -- --run --project=<project-name> <spec-path>`, plus `npm run test:frontend-config` and
+  `npm run test:workflows` after registry or runner changes. Runner/plugin/discovery changes also require the
+  complete frontend suite and a coverage smoke across all projects. Compare exact files and assertion
+  names/statuses when benchmarking; report timings only for equivalent passing workloads without skips.

@@ -31,6 +31,14 @@ test('Functions CI runs the complete suite serially and keeps runner errors fata
   assert.doesNotMatch(functionsStep.run, /dangerouslyIgnoreUnhandledErrors|passWithNoTests|\|\|\s*true/);
 });
 
+test('app CI checks discovery and runs every frontend project', () => {
+  const steps = shared.jobs.unit_tests.steps;
+  assert.ok(steps.some(step => step.run === 'npm run test:frontend-config'));
+  const app = steps.find(step => step.name === 'Run app tests');
+  assert.equal(app.run, 'npm run test -- --run');
+  assert.equal(app.env.NODE_OPTIONS, '--max-old-space-size=3072');
+});
+
 // The job expressions use only equality, boolean operators and literals;
 // evaluate their actual YAML values rather than a second implementation of them.
 function evaluate(expression, github, extraContext = {}) {
