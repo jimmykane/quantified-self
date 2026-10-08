@@ -1,0 +1,80 @@
+:host { display: block; min-width: 0; }
+
+.calendar-period-summary {
+  box-sizing: border-box;
+  display: grid;
+  height: 53px;
+  border-top: 1px solid var(--mat-sys-outline-variant);
+  color: var(--mat-sys-on-surface);
+}
+
+.calendar-totals-metrics { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); min-width: 0; }
+.calendar-period-summary-metric {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
+  position: relative;
+}
+.calendar-period-summary-metric + .calendar-period-summary-metric::before {
+  content: '';
+  position: absolute;
+  inset-inline-start: 0;
+  height: 36px;
+  border-left: 1px solid var(--mat-sys-outline-variant);
+}
+.calendar-period-summary-label {
+  display: inline-flex;
+  max-width: 100%;
+  align-items: center;
+  gap: 5px;
+  color: var(--mat-sys-on-surface-variant);
+  font: var(--mat-sys-label-small);
+  letter-spacing: 0;
+  white-space: nowrap;
+}
+.calendar-period-summary-label mat-icon { width: 16px; height: 16px; font-size: 16px; line-height: 16px; }
+.calendar-period-summary-value {
+  max-width: 100%;
+  overflow: hidden;
+  font: 600 19px/22px 'Barlow Condensed', sans-serif;
+  letter-spacing: 0;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.calendar-workout-totals {
+  height: 60px;
+  grid-template-rows: minmax(0, 1fr) 24px;
+
+  .calendar-period-summary-metric { gap: 0; }
+  .calendar-period-summary-metric + .calendar-period-summary-metric::before { height: 28px; }
+  .calendar-period-summary-label { font-size: 11px; line-height: 12px; }
+}
+.calendar-totals-caption {
+  min-height: 24px;
+  min-width: 0;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  cursor: help;
+  overflow: hidden;
+  color: var(--mat-sys-on-surface-variant);
+  font-family: inherit;
+  font-size: 11px;
+  line-height: 16px;
+  letter-spacing: 0;
+  text-align: center;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+.calendar-totals-caption:focus-visible { outline: 2px solid var(--mat-sys-primary); outline-offset: 1px; }
+
+@media (max-width: 900px) {
+  .calendar-period-summary-label { gap: 3px; }
+  .calendar-period-summary-label mat-icon { width: 15px; height: 15px; font-size: 15px; }
+  .calendar-period-summary-metric + .calendar-period-summary-metric::before { height: 32px; }
+}

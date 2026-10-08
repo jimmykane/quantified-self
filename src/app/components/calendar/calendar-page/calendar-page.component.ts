@@ -54,6 +54,7 @@ import {
   type PlannedWorkoutCalendarOverlay,
 } from '../../../helpers/planned-workout-calendar.helper';
 import { CalendarPeriodSummaryComponent } from '../calendar-period-summary/calendar-period-summary.component';
+import { CalendarMonthTotalsComponent } from '../calendar-month-totals/calendar-month-totals.component';
 import { buildCalendarPeriodSummary, resolveCalendarCompletionCoverage, type CalendarPeriodSource } from '../../../helpers/calendar-period-summary.helper';
 import type { TrainingWorkoutCompletionV1 } from '@shared/training-workout-completion';
 import { AppHapticsService } from '../../../services/app.haptics.service';
@@ -85,6 +86,7 @@ interface CalendarViewOption {
   imports: [
     SharedModule,
     CalendarPeriodSummaryComponent,
+    CalendarMonthTotalsComponent,
     ActivityCalendarGridComponent,
     CalendarDayContextComponent,
     ActivityCalendarVolumeListComponent,

@@ -63,6 +63,10 @@
 
   @if (!isDayRoute && routeState().view === 'week') {
     <app-calendar-period-summary [summary]="prescriptionSummary()" [canRetry]="canRetrySummary()" (retryRequested)="retry()"></app-calendar-period-summary>
+  } @else if (!isDayRoute && routeState().view === 'month') {
+    <app-calendar-month-totals [summary]="prescriptionSummary()" [activityMetrics]="periodSummaryMetrics()"
+      [periodLabel]="calendarModel().periodLabel" [activityStatus]="eventState().status"
+      [activitiesComplete]="activitiesComplete()"></app-calendar-month-totals>
   } @else {
   <section class="calendar-period-summary"
     [attr.aria-label]="(isDayRoute ? dayTitle() : calendarModel().periodLabel) + ' activity totals'"

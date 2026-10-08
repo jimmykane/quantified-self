@@ -1035,8 +1035,14 @@ packed Sports Lib package. That gate is tracked by GitHub issue #654 under epic 
 ### Calendar period planned and recorded summaries (Training 09)
 
 Calendar **Month** retains its original thin recorded Distance/Duration/Ascent strip below the grid and day panel.
-The monthly summary calculations, bounded readers, and workout completion markers remain intact; its expanded
-summary UI is temporarily unmounted while a new placement is chosen. Workout-read failures retain a retry action.
+When the anchored month has eligible workouts, an extra thin row below it shows the scheduled workout count,
+with-activity and remaining counts, plus planned/remaining time and skipped counts. Activity totals remain visible
+with their original icons and 53px height; the workout row is 60px tall, including a 24px caption touch target.
+Empty months omit the workout row and caption. Live refreshes and selected-day changes keep both available totals
+visible without a source toggle. Unknown completion counts stay unavailable, partial schedule counts are lower
+bounds, and estimated/early-Lap times remain qualified. The caption button provides the full totals and coverage
+explanation on tap, hover or keyboard focus; its accessible name retains the visible skipped count. The monthly
+calculations, bounded readers and completion markers remain intact. Workout-read failures retain a retry action.
 Calendar **Week** keeps recorded parent-event volume above its day grid. A flat,
 initially collapsed **Planned workouts** panel appears only for a period with eligible workouts; its heading shows
 scheduled and remaining counts. Opening it exposes planned and remaining non-skipped totals plus nonzero or unknown

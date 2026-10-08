@@ -250,11 +250,17 @@ describe('CalendarPageComponent', () => {
     fixture.detectChanges(); await fixture.whenStable(); fixture.detectChanges();
     const page = fixture.componentInstance;
     expect(fixture.nativeElement.querySelector('app-calendar-period-summary')).toBeNull();
-    expect(fixture.nativeElement.querySelectorAll('.calendar-period-summary-metric')).toHaveLength(3);
+    expect(fixture.nativeElement.querySelectorAll('.calendar-activity-totals .calendar-period-summary-metric')).toHaveLength(3);
+    expect(fixture.nativeElement.querySelectorAll('.calendar-workout-totals .calendar-period-summary-metric')).toHaveLength(3);
     expect(page.prescriptionSummary()).toMatchObject({ period: 'month', recordedCount: 2,
       scheduledCount: 3, completedCount: 1, skippedCount: 1, remainingCount: 1 });
     expect(page.prescriptionSummary().planned?.summary.duration.completeExactSeconds).toBe(3600);
     expect(page.prescriptionSummary().remaining?.summary.duration.completeExactSeconds).toBe(1800);
+    expect([...fixture.nativeElement.querySelectorAll('.calendar-activity-totals .calendar-period-summary-value')]
+      .map((element: HTMLElement) => element.textContent.trim())).toEqual(['20.00 Km', '2h', '900 m']);
+    expect([...fixture.nativeElement.querySelectorAll('.calendar-workout-totals .calendar-period-summary-value')]
+      .map((element: HTMLElement) => element.textContent.trim())).toEqual(['3', '1', '1']);
+    expect(fixture.nativeElement.querySelector('.calendar-totals-caption').textContent).toContain('1h planned · 30m left · 1 skipped');
     expect(page.prescriptionSummary().recordedMetrics.find(metric => metric.label === 'Ascent')?.text).toBe('900 m');
     expect(page.plannedWorkoutsByDate()['2026-07-31'].entries[0].workout.id).toBe('before');
     if (process.env.CALENDAR_PERIOD_QA_DIR) writeFileSync(`${process.env.CALENDAR_PERIOD_QA_DIR}/month.html`,
@@ -269,6 +275,8 @@ describe('CalendarPageComponent', () => {
     expect(page.selectedDay()?.dateKey).toBe('2026-07-31');
     expect(page.prescriptionSummary().recordedCount).toBe(2);
     expect(page.prescriptionSummary().scheduledCount).toBe(3);
+    expect([...fixture.nativeElement.querySelectorAll('.calendar-workout-totals .calendar-period-summary-value')]
+      .map((element: HTMLElement) => element.textContent.trim())).toEqual(['3', '1', '1']);
     expect(TestBed.inject(TrainingPlansService).watchCalendarSchedule).toHaveBeenCalledOnce();
   });
 

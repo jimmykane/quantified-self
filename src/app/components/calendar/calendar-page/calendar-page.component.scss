@@ -350,6 +350,7 @@
   .calendar-progress-slot, .calendar-status, .calendar-status-announcement { order: 1; }
   .calendar-day-layout { order: 2; }
   .calendar-period-summary { order: 3; }
+  app-calendar-month-totals { order: 3; margin-top: 8px; }
   .calendar-period-navigation { min-height: 44px; margin-bottom: 8px; border: 0; grid-template-columns: 44px minmax(0, 1fr) auto 44px; }
   .calendar-period-navigation h2 { font: var(--mat-sys-title-medium); }
   .calendar-today-button--desktop { min-height: 36px; }
