@@ -2716,13 +2716,16 @@ authored/returned metric, scope, tool, consent, proposal or mutation kind. Stric
 recorded-lap reads, Assistant routing and the published contract remain unchanged; no contract promotion, catalog
 refresh or bundled-plugin build is required. This change includes no live Guide send or deployment.
 
-Local verification: Functions TypeScript and frontend beta builds; 700 focused current/historical serializer,
-delivery intent/transport/runtime/diagnostic tests; 103 Suunto Firestore lifecycle emulator tests with synthetic
+Local verification: Functions TypeScript and frontend beta builds; 704 focused current/historical serializer,
+delivery intent/transport/runtime/diagnostic tests; 107 Suunto Firestore lifecycle emulator tests with synthetic
 provider HTTP only; 389 strict MCP/schema/provider regressions; 75 Help tests; 13 monitoring-definition tests.
 The compiled MCP contract remains compatible with the unchanged pre-existing developer-refresh advisory.
 Recovery covers frozen v9 pool and v7 open-water lost acknowledgements before one in-place update, with unchanged
-recipe/consent and no duplicate POST. Repeated/manual/early-Lap tests preserve notification requests and lap
-boundaries without adding workout time. Automated checks are not live sensor, distance-detection or haptic proof.
+recipe/consent and no duplicate POST. Follow-up review adds genuine v9 pool/v7 open-water archive fixtures for
+past/completed protection: repeated reconciliation leaves the archive, pinning, identity, recipe and consent
+unchanged, with no additional provider write. Repeated/manual/early-Lap tests preserve notification requests and
+lap boundaries without adding workout time, including all-Rest Guides in both swim profiles. Automated checks
+are not live sensor, distance-detection or haptic proof.
 
 ##### Current readings and boundary notifications (#784)
 
