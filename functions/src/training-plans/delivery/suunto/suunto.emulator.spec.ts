@@ -43,6 +43,18 @@ describe.skipIf(!process.env.FIRESTORE_EMULATOR_HOST)('Suunto worker with real F
       ...(action === 'send' ? { timeZone: 'Europe/Helsinki' } : {}) }, false);
   };
   const send = async () => { await command('send'); await drain(); const row = await ledger(); await processTrainingDelivery(runtime, uid, row.id); await drain(); return ledger(); };
+  const currentRecipes = [
+    { sport: ActivityTypes.Running, manual: false, version: 'v7' },
+    { sport: ActivityTypes.Running, manual: true, version: 'v11' },
+    { sport: ActivityTypes.Cycling, manual: true, version: 'v11' },
+    { sport: ActivityTypes.Rowing, manual: true, version: 'v11' },
+  ] as const;
+  const useManualRecipe = async (sport: ActivityTypes) => user().collection('scheduledWorkouts').doc('w').update({
+    structure: { version: 1, sport, nodes: [{ kind: 'repeat', id: 'sets', count: 3, steps: [
+      { kind: 'step', id: 'work', purpose: 'work', ending: { kind: 'manual' }, targets: [] },
+      { kind: 'step', id: 'rest', purpose: 'rest', ending: { kind: 'time', seconds: 15 }, targets: [] },
+    ] }] },
+  });
   // Simulate a journal and provider archive written by the previous deployed
   // serializer. The fixture, Firestore and all provider HTTP remain local/demo.
   const startedLegacy = async (version: 'v2' | 'v3' | 'v4' | 'v5' | 'v6' | 'v7' | 'v9' = 'v2') => {
@@ -470,14 +482,33 @@ describe.skipIf(!process.env.FIRESTORE_EMULATOR_HOST)('Suunto worker with real F
       expect(server.calls.some(request => request.method === 'POST')).toBe(false);
     }
   });
-  it('recovers lost create acceptance on explicit Retry without a duplicate', async () => {
+  it.each(currentRecipes)('recovers $version $sport lost create acceptance on explicit Retry without a duplicate', async ({ sport, manual, version }) => {
+    if (manual) await useManualRecipe(sport);
     server.afterHandle = async request => { if (request.method === 'POST') { server.afterHandle = null; throw new SuuntoGuideHttpError('uncertain', false); } };
     const row = await send(); expect(row.status).toBe('retrying');
     expect(row.attempt?.progress).toMatchObject({ step: 'create', state: 'started' });
+    const [id, remote] = [...server.guides.entries()][0];
+    const prescription = structuredClone(remote.guide);
+    if (manual) expect(remote.guide.steps[0]).toMatchObject({ type: 'repeat', steps: [
+      expect.objectContaining({ notification: expect.objectContaining({ text: 'Press Lap to finish this interval.' }) }),
+      expect.anything(),
+    ] });
     await command('retry'); await drain(); await processTrainingDelivery(runtime, uid, row.id); await drain();
-    expect((await ledger()).status).toBe('delivered'); expect(server.calls.filter(call => call.method === 'POST')).toHaveLength(1);
+    expect(await ledger()).toMatchObject({ status: 'delivered', acceptedDigest: row.attempt!.digest,
+      attempt: null, actual: { ids: { guide: id } } });
+    expect(logger.info).toHaveBeenCalledWith('[TrainingDelivery]', expect.objectContaining({
+      event: 'recovered_acceptance', guideMappingVersion: `suunto-guides-${version}`, deliveryPhase: 'recover',
+    }));
+    const consent = (await user().collection('trainingDeliverySettings').get()).docs.map(doc => doc.data());
+    await mark(); await processTrainingDelivery(runtime, uid, row.id); await drain();
+    expect(server.guides.size).toBe(1); expect(server.guides.get(id)!.guide).toEqual(prescription);
+    expect(server.calls.filter(call => call.method === 'POST')).toHaveLength(1);
+    expect(server.calls.some(call => ['PUT', 'DELETE'].includes(call.method))).toBe(false);
+    expect((await user().collection('scheduledWorkouts').doc('w').get()).get('structure')).toEqual(row.attempt!.workout!.structure);
+    expect((await user().collection('trainingDeliverySettings').get()).docs.map(doc => doc.data())).toEqual(consent);
   });
-  it('recovers default-enriched edit/reschedule acceptance once and clears retry work without changing consent', async () => {
+  it.each(currentRecipes)('recovers $version $sport default-enriched edit/reschedule acceptance once and clears retry work without changing consent', async ({ sport, manual, version }) => {
+    if (manual) await useManualRecipe(sport);
     const original = await send(); const id = original.actual!.ids.guide;
     server.guides.get(id)!.pinned = true;
     const consent = (await user().collection('trainingDeliverySettings').get()).docs.map(doc => doc.data());
@@ -497,6 +528,9 @@ describe.skipIf(!process.env.FIRESTORE_EMULATOR_HOST)('Suunto worker with real F
     await drain();
     expect(await ledger()).toMatchObject({ status: 'delivered', attempt: null, lease: null,
       actual: { ids: original.actual!.ids, localDate: '2026-09-18' } });
+    expect(logger.info).toHaveBeenCalledWith('[TrainingDelivery]', expect.objectContaining({
+      event: 'recovered_acceptance', guideMappingVersion: `suunto-guides-${version}`, deliveryPhase: 'recover',
+    }));
     expect(server.guides.get(id)).toMatchObject({ pinned: true, guide: {
       name: 'Edited and rescheduled', localDate: '2026-09-18' } });
     expect((await user().collection('trainingDeliverySettings').get()).docs.map(doc => doc.data())).toEqual(retriedConsent);
@@ -731,16 +765,18 @@ describe.skipIf(!process.env.FIRESTORE_EMULATOR_HOST)('Suunto worker with real F
     expect(server.calls.filter(call => call.method === 'POST')).toHaveLength(1);
     expect(server.calls.filter(call => call.method === 'PUT')).toHaveLength(version === 'v4' ? 1 : 2);
   });
-  it.each((['v2', 'v3', 'v4', 'v6'] as const).flatMap(version =>
+  it.each((['v2', 'v3', 'v4', 'v6', 'v11'] as const).flatMap(version =>
     ['digest', 'content', 'missing'].map(change => [version, change] as const)))(
     'keeps a %s uncertain create unresolved on %s mismatch, even on Retry', async (version, change) => {
     if (version === 'v6') await user().collection('scheduledWorkouts').doc('w').update({ 'structure.sport': ActivityTypes.Swimming });
+    if (version === 'v11') await useManualRecipe(ActivityTypes.Running);
     server.afterHandle = async request => { if (request.method === 'POST') {
       server.afterHandle = null; throw new SuuntoGuideHttpError('uncertain', false);
     } };
-    const original = await send(); const legacy = await startedLegacy(version);
+    const original = await send();
+    const id = version === 'v11' ? [...server.guides.keys()][0] : (await startedLegacy(version)).id;
     if (change === 'digest') await user().collection(DELIVERY_LEDGER).doc(original.id).update({ 'attempt.digest': 'unrecognized-version-digest' });
-    if (change === 'content') server.guides.get(legacy.id)!.guide.name = 'Different prescription';
+    if (change === 'content') server.guides.get(id)!.guide.name = 'Different prescription';
     if (change === 'missing') server.guides.clear();
     await command('retry'); await drain(); await processTrainingDelivery(runtime, uid, original.id); await drain();
     expect((await ledger()).status).toBe('needs_attention');
@@ -752,12 +788,14 @@ describe.skipIf(!process.env.FIRESTORE_EMULATOR_HOST)('Suunto worker with real F
     expect(server.calls.filter(call => call.method === 'POST')).toHaveLength(1);
     expect(server.calls.filter(call => call.method === 'PUT')).toHaveLength(0);
   });
-  it.each(['v2', 'v3', 'v4', 'v6'] as const)('recovers the %s identity after consent withdrawal without upgrading or recreating it', async version => {
+  it.each(['v2', 'v3', 'v4', 'v6', 'v11'] as const)('recovers the %s identity after consent withdrawal without upgrading or recreating it', async version => {
     if (version === 'v6') await user().collection('scheduledWorkouts').doc('w').update({ 'structure.sport': ActivityTypes.Swimming });
+    if (version === 'v11') await useManualRecipe(ActivityTypes.Running);
     server.afterHandle = async request => { if (request.method === 'POST') {
       server.afterHandle = null; throw new SuuntoGuideHttpError('uncertain', false);
     } };
-    const original = await send(); await startedLegacy(version);
+    const original = await send();
+    if (version !== 'v11') await startedLegacy(version);
     await command('stop'); await drain(); now = original.retryAtMs + 1;
     await processTrainingDelivery(runtime, uid, original.id); await drain();
     await processTrainingDelivery(runtime, uid, original.id); await drain();

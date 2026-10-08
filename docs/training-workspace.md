@@ -2752,12 +2752,18 @@ required. Monitoring is **covered/unchanged**: provider/event-based outcome/fail
 include these sends, while private exact-digest diagnostic classification now allowlists v11. Verification uses
 only local/demo Firestore and synthetic provider HTTP, with no live send, push or deployment.
 
-Local verification: Functions TypeScript and frontend beta builds; 911 focused serializer/delivery/runtime/diagnostic
-tests; 114 Suunto lifecycle Firestore emulator tests; 389 strict MCP/schema/provider regressions; 76 Help tests;
+Local verification: Functions TypeScript and frontend beta builds; 963 focused serializer/delivery/runtime/diagnostic
+tests; 124 Suunto lifecycle Firestore emulator tests; 389 strict MCP/schema/provider regressions; 76 Help tests;
 13 monitoring-definition tests. Both swim v10 hashes remain unchanged. All supported sport/purpose combinations,
 numeric/early-Lap byte equivalence, authored text, repeats, exact v7 lost-ACK recovery, same-ID updates, old-copy
 protection and current content/approval/authority fences passed. The compiled MCP contract remains compatible
 with the unchanged pre-existing developer-refresh advisory. Offline checks do not establish physical alert behavior.
+Follow-up review closes the current-v11 recovery coverage gap: lost create and enriched edit/reschedule
+acknowledgements recover once for Running, Cycling and Rowing, retaining identity, pinning, prescription and
+sending authority without another POST/PUT. Unknown digests, changed provider content and missing copies remain
+uncertain across repeated Retry; Stop during a lost-ACK send recovers the owned identity before withdrawing it,
+without recreating or upgrading it. Authored notes identical to the generated wording remain untouched, including
+mixed recipes with other unannotated manual steps. These tests required no additional runtime behavior change.
 
 ##### Current readings and boundary notifications (#784)
 

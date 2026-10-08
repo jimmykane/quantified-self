@@ -40,9 +40,26 @@ describe.each(nonSwimSports)('clear Suunto manual instructions: %s', sport => {
     const recipe: WorkoutStructureV1 = { version: 1, sport, nodes: [{ ...manual, ending }] };
     expect(serializeSuuntoGuideJsonV1(recipe, options)).toEqual(serializeSuuntoGuideV7ForRecovery(recipe, options));
   });
-  it.each(['Wait for the coach before starting', 'A'.repeat(40), 'B'.repeat(54)])('preserves authored instructions: %s', note => {
+  it.each(['Wait for the coach before starting', 'A'.repeat(40), 'B'.repeat(54),
+    'Lap to finish', 'Press Lap to finish this interval.', 'Rest now. Press Lap to finish this rest.'])('preserves authored instructions: %s', note => {
     const recipe: WorkoutStructureV1 = { version: 1, sport, nodes: [{ ...manual, note }] };
     expect(serializeSuuntoGuideJsonV1(recipe, options)).toEqual(serializeSuuntoGuideV7ForRecovery(recipe, options));
+  });
+  it('preserves authored lookalike text when another step requires the new generated wording', () => {
+    const recipe: WorkoutStructureV1 = { version: 1, sport, nodes: [manual,
+      { ...manual, id: 'coached', note: 'Lap to finish' },
+      { ...manual, id: 'coached-work', note: 'Press Lap to finish this interval.' },
+      { ...manual, id: 'coached-rest', purpose: 'rest', note: 'Rest now. Press Lap to finish this rest.' },
+    ] };
+    const current = serializeSuuntoGuideJsonV1(recipe, options);
+    const old = serializeSuuntoGuideV7ForRecovery(recipe, options);
+    const first = current.artifact.steps[0] as SuuntoGuideFieldsStepV1;
+    expect(first.notification?.text).toBe('Press Lap to finish this interval.');
+    expect(first.fields).toContainEqual({ type: 'text', value: 'Lap to finish' });
+    // Revert only the known generated step, not any authored string with the
+    // same text. The rest of the complete payload must remain byte-identical.
+    expect({ ...current, artifact: { ...current.artifact,
+      steps: [old.artifact.steps[0], ...current.artifact.steps.slice(1)] } }).toEqual(old);
   });
   it.each([false, true])('keeps repeated mixed manual/timed/early-Lap boundaries and all targets/notes (early=%s)', early => {
     const recipe: WorkoutStructureV1 = { version: 1, sport, nodes: [
