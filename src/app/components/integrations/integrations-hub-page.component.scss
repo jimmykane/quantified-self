@@ -185,4 +185,23 @@ h2 {
   .hero-actions a {
     width: 100%;
   }
+
+  // Stacked providers follow their own content height; matching desktop rows
+  // must not stretch every phone card to the longest provider description.
+  .integration-grid {
+    grid-template-columns: minmax(0, 1fr);
+    grid-auto-rows: auto;
+  }
+
+  .integration-card {
+    min-height: 0;
+    grid-template-rows: auto auto auto;
+  }
+
+  .integration-card mat-card-actions a {
+    max-width: 100%;
+    height: auto;
+    min-height: 44px;
+    white-space: normal;
+  }
 }

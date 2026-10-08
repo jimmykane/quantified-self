@@ -1,7 +1,7 @@
 :host { display: block; min-width: 0; color: var(--mat-sys-on-surface); background: var(--mat-sys-surface); }
 .landing-page { max-width: 1200px; margin-inline: auto; padding-inline: clamp(1rem, 4vw, 3rem); overflow-wrap: anywhere; }
 .landing-page, .landing-page * { box-sizing: border-box; }
-.landing-page section, .feature-section > *, .discovery-section > * { min-width: 0; }
+.landing-page section, .feature-section > * { min-width: 0; }
 .landing-page a { max-width: 100%; height: auto; min-height: 44px; white-space: normal; }
 .landing-page h2 { margin: 0 0 1rem; font: var(--mat-sys-headline-small); font-weight: 700; }
 .landing-page p { color: var(--mat-sys-on-surface-variant); line-height: 1.65; }
@@ -10,8 +10,8 @@
 .home-navigation-links { display: flex; flex-wrap: wrap; }
 .hero-section { display: grid; grid-template-columns: minmax(0, 0.9fr) minmax(0, 1.1fr); align-items: center; gap: 2.5rem; padding-block: 3rem; }
 .hero-content h1 { margin: 0.75rem 0 1.25rem; font-size: clamp(2.25rem, 4vw, 3.75rem); line-height: 1.1; font-weight: 800; letter-spacing: -0.04em; }
-.hero-preview-placeholder { min-height: 25rem; padding: 1.25rem; border: 1px solid var(--mat-sys-outline-variant); border-radius: 16px; background: var(--mat-sys-surface-container-lowest); }
-.hero-preview-placeholder h2 { display: flex; align-items: center; gap: 0.5rem; font: var(--mat-sys-title-medium); }
+.hero-preview h2 { font: var(--mat-sys-title-medium); margin-bottom: 0.35rem; }
+.hero-preview > p { margin: 0; font: var(--mat-sys-body-small); }
 .highlight-text { color: var(--mat-sys-primary); }
 .eyebrow { margin: 0 0 0.75rem; font: var(--mat-sys-label-medium); font-weight: 700; letter-spacing: 0.12em; text-transform: uppercase; }
 .hero-subtitle { font: var(--mat-sys-body-large); }
@@ -28,14 +28,17 @@
 .feature-section { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); align-items: start; gap: 3rem; padding-block: 3rem; border-bottom: 1px solid var(--mat-sys-outline-variant); scroll-margin-top: 5rem; }
 .feature-copy > p:not(.eyebrow) { margin: 0 0 1rem; }
 .compact-row-stack { margin-block: 1.25rem; }
+.integration-details { text-align: left; }
+.integration-details p { margin-inline: 0; max-width: none; }
+.feature-visuals { grid-column: 1 / -1; }
+.feature-visuals.compact-row-stack { margin-block: 0; }
+.section-heading { max-width: 50rem; }
+.planning-context { display: flex; align-items: flex-start; gap: 1rem; border-top: 1px solid var(--mat-sys-outline-variant); padding-top: 1.5rem; }
+.planning-context > mat-icon { flex-shrink: 0; color: var(--mat-sys-primary); }
+.planning-context h3 { margin: 0; font: var(--mat-sys-title-medium); }
+.planning-context blockquote { margin: 0.75rem 0 0; }
+.sample-caption { font: var(--mat-sys-body-small); }
 .feature-section app-public-feature-preview { margin-top: 0; }
-.planning-summary { padding: 1.5rem; border-block: 1px solid var(--mat-sys-outline-variant); }
-.planning-summary > mat-icon { color: var(--mat-sys-primary); }
-.planning-summary h3 { font: var(--mat-sys-title-large); }
-.planning-note { font: var(--mat-sys-body-small); }
-.health-assistant-section a { margin-top: 1rem; }
-.discovery-section { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 1.5rem; padding-block: 2rem; border-bottom: 1px solid var(--mat-sys-outline-variant); }
-.discovery-section a { justify-self: start; }
 .getting-started-section, .membership-section, .faq-section, .final-cta-section { padding-block: 3rem; }
 .getting-started-section, .membership-section, .final-cta-section { text-align: center; }
 .getting-started-steps { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 2rem; padding-left: 1.5rem; margin-top: 2rem; text-align: left; }
@@ -70,7 +73,7 @@
 @media (max-width: 799.98px) {
   .hero-section, .feature-section { grid-template-columns: minmax(0, 1fr); padding-block: 2rem; }
   .hero-content { max-width: 38rem; }
-  .discovery-section, .getting-started-steps, .membership-grid { grid-template-columns: minmax(0, 1fr); }
+  .getting-started-steps, .membership-grid { grid-template-columns: minmax(0, 1fr); }
   .hero-actions { flex-direction: column; align-items: stretch; }
   .home-wordmark { display: none; }
   .home-navigation-links { width: 100%; justify-content: space-between; }

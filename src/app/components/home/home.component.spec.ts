@@ -45,15 +45,17 @@ describe('HomeComponent', () => {
     expect(router.navigate).not.toHaveBeenCalled();
   });
 
-  it('pairs a concise hero with a deferred local sample and real analysis/signup links', async () => {
+  it('pairs a concise hero with the shared Training overview and real analysis/signup links', async () => {
     const hero = fixture.nativeElement.querySelector('.hero-section') as HTMLElement;
     expect(hero.querySelector('h1')?.textContent).toBe('Your training, connected and understood.');
-    expect(hero.querySelector('.hero-preview-placeholder')).toBeTruthy();
-    expect(hero.querySelector('app-home-training-preview')).toBeNull();
+    expect(hero.querySelector('.hero-preview')?.textContent).toContain('Sample data');
+    expect(hero.querySelector('.preview-placeholder--training')).toBeTruthy();
+    expect(hero.querySelector('app-training-summary-cards')).toBeNull();
     const [heroBlock] = await fixture.getDeferBlocks();
     await heroBlock.render(DeferBlockState.Complete);
     fixture.detectChanges();
-    expect(hero.querySelector('app-home-training-preview')).toBeTruthy();
+    expect(hero.querySelector('app-training-summary-cards')).toBeTruthy();
+    expect(hero.querySelectorAll('app-training-metric-grid')).toHaveLength(2);
     expect(hero.querySelector('a[href="/login"]')?.textContent).toContain('Get Started Free');
     expect(hero.querySelector('a[href="/features/training-analysis"]')?.textContent).toContain('Explore Training Analysis');
     expect(fixture.nativeElement.textContent).not.toMatch(/explore the demo|try the demo/i);
@@ -76,23 +78,35 @@ describe('HomeComponent', () => {
     expect(logos.every(logo => logo.getAttribute('aria-hidden') === 'false')).toBe(true);
   });
 
-  it('keeps the homepage concise while retaining specialist discovery links and deferred app previews', () => {
+  it('retains every shared product visual and detailed feature section', () => {
     const sections = Array.from(fixture.nativeElement.querySelectorAll('.landing-page > section'))
       .map((section: Element) => section.className);
     expect(sections).toEqual(['hero-section', 'integrations-section', 'feature-section training-section',
-      'feature-section training-plans-section', 'feature-section health-assistant-section',
-      'discovery-section', 'getting-started-section', 'membership-section', 'sovereignty-section',
-      'faq-section', 'final-cta-section']);
+      'feature-section training-plans-section', 'feature-section health-section',
+      'feature-section ai-insights-section', 'feature-section footprint-section', 'feature-section analysis-section',
+      'getting-started-section', 'membership-section', 'sovereignty-section', 'faq-section', 'final-cta-section']);
     const previews = fixture.debugElement.queryAll(By.directive(PublicFeaturePreviewComponent));
     expect(previews.map(preview => preview.componentInstance.previewKey()))
-      .toEqual(['training-readiness', 'health-sleep', 'assistant-example']);
+      .toEqual(['training-snapshot', 'provider-flow', 'training-readiness', 'training-signals',
+        'training-explorer', 'dashboard', 'workout-analysis', 'training-plans',
+        'health-sleep', 'health-hrv', 'health-weight', 'assistant-example', 'mcp-flow',
+        'activity-map', 'reviewer-benchmark']);
     expect(previews.every(preview => !!preview.nativeElement.querySelector(':scope > div[data-nosnippet]'))).toBe(true);
     expect(fixture.nativeElement.querySelector('app-training-explorer-preview')).toBeNull();
     expect(fixture.nativeElement.querySelector('app-workout-profile')).toBeNull();
     expect(fixture.nativeElement.querySelector('a[href="/features/workout-data-comparison"]')).toBeTruthy();
     expect(fixture.nativeElement.querySelector('a[href="/features/activity-map"]')).toBeTruthy();
     expect(fixture.nativeElement.querySelector('a[href="/features/mcp-server"]')).toBeTruthy();
-    expect(fixture.nativeElement.textContent).toContain('location access remains separate');
+    const copy = fixture.nativeElement.textContent as string;
+    expect(copy).toContain('Charts Behind Every Signal');
+    expect(copy).toContain('Curated, KPI, Custom, and Map tiles');
+    expect(copy).toContain('aerobic durability, and cadence versus power');
+    expect(copy).toContain('blood pressure, weight, body composition');
+    expect(copy).toContain('reference and test devices');
+    expect(copy).toContain('location access remains separate');
+    expect(fixture.nativeElement.querySelectorAll('.training-plans-section app-compact-row')).toHaveLength(6);
+    expect(fixture.nativeElement.querySelector('#home-plans-example-title')?.textContent)
+      .toContain("Create Today's Workout");
   });
 
   it('uses shared tier limits and clearly distinguishes free uploads from Pro connections', () => {

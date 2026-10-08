@@ -93,7 +93,7 @@ describe('PublicFeaturePreviewComponent', () => {
     await fixture.whenStable();
     expect(element.querySelector('app-workout-profile')?.closest('div[data-nosnippet]')).toBe(wrapper);
     expect(element.textContent).toContain('This sample is read-only; nothing is saved');
-    expect(element.textContent).toContain('Workout totals');
+    expect(element.textContent).toContain('Workout prescription');
     expect(selection).toHaveBeenCalledOnce();
   });
 

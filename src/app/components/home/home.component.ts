@@ -13,7 +13,8 @@ import { AppChartSharedModule } from '../../modules/app-chart-shared.module';
 import { getNumberFormatter } from '../../helpers/number-format.helper';
 import { CompactRowComponent } from '../shared/compact-row/compact-row.component';
 import { PublicFeaturePreviewComponent } from '../public-seo/public-feature-preview.component';
-import { HomeTrainingPreviewComponent } from './home-training-preview.component';
+import { HEALTH_FEATURE_CONTENT } from '../public-seo/health-feature.content';
+import { TRAINING_PLANS_HOME_CONTENT } from '../public-seo/training-plans-home.content';
 
 @Component({
   selector: 'app-home',
@@ -21,7 +22,7 @@ import { HomeTrainingPreviewComponent } from './home-training-preview.component'
   styleUrls: ['./home.component.scss'],
   standalone: true,
   imports: [RouterLink, MatButtonModule, MatCardModule, MatIconModule, MatTooltipModule,
-    AppChartSharedModule, PublicFeaturePreviewComponent, CompactRowComponent, HomeTrainingPreviewComponent],
+    AppChartSharedModule, PublicFeaturePreviewComponent, CompactRowComponent],
   providers: [{ provide: MAT_TOOLTIP_DEFAULT_OPTIONS, useValue: {
     showDelay: 0, hideDelay: 0, touchendHideDelay: 1500, touchGestures: 'off',
   } }],
@@ -33,6 +34,8 @@ export class HomeComponent implements OnInit {
   private readonly haptics = inject(AppHapticsService);
   private readonly isBrowser = isPlatformBrowser(inject(PLATFORM_ID));
   readonly expandedFaq = signal<string | null>(null);
+  readonly healthFeature = HEALTH_FEATURE_CONTENT;
+  readonly trainingPlansFeature = TRAINING_PLANS_HOME_CONTENT;
   readonly memberships = [
     { name: 'Starter', label: 'Free', copy: 'A place to begin.', route: '/login', action: 'Start free',
       features: [`Up to ${getNumberFormatter().format(USAGE_LIMITS.free)} activities`,

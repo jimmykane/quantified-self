@@ -408,7 +408,7 @@ export const HELP_SECTIONS: HelpSection[] = [
 
 ## Explore before signing in
 
-- The [homepage](/) has a Calendar and workout-profile example with fictional sample data. Select a day or switch to Workout to inspect its prescription; nothing is saved.
+- The [homepage](/) shows shared Training, Health, dashboard, workout-analysis, map, and device-comparison previews. The Training Plans section has a Calendar and workout-profile example with fictional sample data. Select a day or switch to Workout profile to inspect its prescription; nothing is saved.
 - The homepage links to the public Training, Plans, Health, and Assistant overviews. Use **Get Started Free** to sign in and begin onboarding. Provider connections and history imports require Pro.
 
 ## Where things live
