@@ -75,11 +75,12 @@
       }
       @if (showMergedEventsToggle) {
       <div class="merge-toggle-group">
-        <mat-button-toggle-group appearance="standard" hideSingleSelectionIndicator multiple
-          [value]="includeMergedEvents ? ['merged'] : []" [disabled]="mergedEventsToggleDisabled"
-          (change)="onMergedEventsToggleChange($event)">
-          <mat-button-toggle value="merged" aria-label="Merged">Merged</mat-button-toggle>
-        </mat-button-toggle-group>
+        <button mat-button type="button" class="merged-events-button"
+          [attr.aria-label]="mergedEventsToggleLabel" [attr.aria-pressed]="includeMergedEvents"
+          [disabled]="mergedEventsToggleDisabled" (click)="onMergedEventsChange(!includeMergedEvents)">
+          <mat-icon aria-hidden="true">{{ includeMergedEvents ? 'check_box' : 'check_box_outline_blank' }}</mat-icon>
+          <span>Merged</span>
+        </button>
         @if (mergedEventsToggleDisabled && !includeMergedEvents) {
         <span class="merge-toggle-hint">{{ mergedEventsToggleHint }}</span>
         }

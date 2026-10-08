@@ -219,6 +219,7 @@ describe('EventSearchComponent', () => {
 
   it('should include merged events when merged toggle changes', async () => {
     const { component, hapticsService } = createComponent();
+    component.includeMergedEvents = false;
     const searchSpy = vi.spyOn(component, 'search').mockResolvedValue(undefined);
     const event = {
       value: ['merged'],
@@ -229,6 +230,51 @@ describe('EventSearchComponent', () => {
     expect(searchSpy).toHaveBeenCalledTimes(1);
     expect(component.includeMergedEvents).toBe(true);
     expect(hapticsService.selection).toHaveBeenCalledTimes(1);
+  });
+
+  it('toggles merged activities through the toolbar button without changing the date range', async () => {
+    const { component, hapticsService } = createComponent(undefined, searchComponent => {
+      searchComponent.compact = true;
+      searchComponent.toolbarRangeLayout = true;
+    });
+    const emitSpy = vi.spyOn(component.searchChange, 'emit');
+    const initialRange = component.selectedDateRange;
+
+    await component.onMergedEventsChange(false);
+    expect(emitSpy).toHaveBeenLastCalledWith(expect.objectContaining({
+      includeMergedEvents: false,
+      dateRange: initialRange,
+    }));
+
+    await component.onMergedEventsChange(true);
+    expect(emitSpy).toHaveBeenLastCalledWith(expect.objectContaining({
+      includeMergedEvents: true,
+      dateRange: initialRange,
+    }));
+    expect(emitSpy).toHaveBeenCalledTimes(2);
+    expect(hapticsService.selection).toHaveBeenCalledTimes(2);
+  });
+
+  it('does not repeat search or haptics for an unchanged merged filter', async () => {
+    const { component, hapticsService } = createComponent();
+    const searchSpy = vi.spyOn(component, 'search').mockResolvedValue(undefined);
+
+    await component.onMergedEventsChange(true);
+
+    expect(searchSpy).not.toHaveBeenCalled();
+    expect(hapticsService.selection).not.toHaveBeenCalled();
+  });
+
+  it('does not toggle a disabled merged toolbar button', async () => {
+    const { component, hapticsService } = createComponent();
+    component.mergedEventsToggleDisabled = true;
+    const searchSpy = vi.spyOn(component, 'search').mockResolvedValue(undefined);
+
+    await component.onMergedEventsChange(false);
+
+    expect(component.includeMergedEvents).toBe(true);
+    expect(searchSpy).not.toHaveBeenCalled();
+    expect(hapticsService.selection).not.toHaveBeenCalled();
   });
 
   it('should not search when merged toggle is disabled', async () => {

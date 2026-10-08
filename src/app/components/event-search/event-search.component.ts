@@ -243,12 +243,16 @@ export class EventSearchComponent extends LoadingAbstractDirective implements On
   }
 
   async onMergedEventsToggleChange(event: MatButtonToggleChange) {
-    if (this.mergedEventsToggleDisabled) {
+    const selected = Array.isArray(event.value) ? event.value : [];
+    return this.onMergedEventsChange(selected.includes('merged'));
+  }
+
+  async onMergedEventsChange(includeMergedEvents: boolean) {
+    if (this.mergedEventsToggleDisabled || this.includeMergedEvents === includeMergedEvents) {
       return;
     }
     this.hapticsService?.selection();
-    const selected = Array.isArray(event.value) ? event.value : [];
-    this.includeMergedEvents = selected.includes('merged');
+    this.includeMergedEvents = includeMergedEvents;
     return this.search();
   }
 
