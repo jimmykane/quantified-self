@@ -334,6 +334,12 @@ freshly reset swim averages; timing, targets, recorded-lap boundaries, completio
 Existing strict read/proposal contracts reject provider-field injection, and independently granted activity-lap
 reads need no extension because the recorded boundaries are unchanged. No new tool/scope/mutation/provider action,
 Assistant routing, contract promotion, catalog refresh or bundled-plugin change is required.
+The current v10 mapping extends private swim presentation to pool and open water: clearer manual-step
+notifications and native cumulative recording distance on stationary Rest do not add a recipe/read field.
+Timing, target ranges, recorded-lap policy, completion, approval and consent stay unchanged; strict schemas still
+reject injected provider fields. V9 recovery remains frozen. This has no MCP wire/catalog/plugin impact and
+requires no new tool, mutation, returned metric, client refresh or contract promotion. See
+[the Training presentation and verification notes](training-workspace.md#swim-manual-instructions-and-cumulative-rest-distance).
 The manual editor's additional canonical running/cycling profiles also require no MCP contract change: the existing
 recipe schema already accepts the complete Sports Lib activity-type enum, and focused coverage proves an exact Mountain
 Biking sport survives the read projection. Suunto numeric activity recommendations and Garmin's broad

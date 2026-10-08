@@ -3,7 +3,7 @@ import { describe, expect, it } from 'vitest';
 import { WorkoutStructureValidationError,
     type WorkoutEndingV1, type WorkoutStructureV1, type WorkoutStepV1 } from '../../../../shared/planned-workout';
 import { packageGuide, readGuideArchive } from '../delivery/suunto/archive';
-import { serializeSuuntoGuideJsonV1, serializeSuuntoGuideV2ForRecovery, serializeSuuntoGuideV3ForRecovery, serializeSuuntoGuideV4ForRecovery, serializeSuuntoGuideV5ForRecovery, serializeSuuntoGuideV6ForRecovery, serializeSuuntoGuideV7ForRecovery,
+import { serializeSuuntoGuideJsonV1, serializeSuuntoGuideV2ForRecovery, serializeSuuntoGuideV3ForRecovery, serializeSuuntoGuideV4ForRecovery, serializeSuuntoGuideV5ForRecovery, serializeSuuntoGuideV6ForRecovery, serializeSuuntoGuideV7ForRecovery, serializeSuuntoGuideV9ForRecovery,
     type SuuntoGuideFieldsStepV1 } from './suunto-guide.serializer';
 import cyclingV4 from './fixtures/suunto-cycling-v4-recovery.json';
 import swimmingV4 from './fixtures/suunto-swimming-v4-recovery.json';
@@ -54,7 +54,7 @@ describe('Suunto authored-target contract boundary (#773)', () => {
         'does not approve or silently discard an uncontracted %s target', kind => {
             const invalidStep = { ...step, targets: [{ kind, mode: 'absolute', minimum: 30, maximum: 40 }] };
             const serializers = [serializeSuuntoGuideJsonV1, serializeSuuntoGuideV2ForRecovery, serializeSuuntoGuideV3ForRecovery,
-                serializeSuuntoGuideV4ForRecovery, serializeSuuntoGuideV5ForRecovery, serializeSuuntoGuideV6ForRecovery, serializeSuuntoGuideV7ForRecovery];
+                serializeSuuntoGuideV4ForRecovery, serializeSuuntoGuideV5ForRecovery, serializeSuuntoGuideV6ForRecovery, serializeSuuntoGuideV7ForRecovery, serializeSuuntoGuideV9ForRecovery];
             for (const nodes of [[invalidStep], [{ kind: 'repeat', id: 'sets', count: 2, steps: [invalidStep] }]]) {
                 for (const serialize of serializers) {
                     expect(() => serialize({ version: 1, sport: ActivityTypes.Swimming, nodes },
@@ -238,12 +238,13 @@ describe('Suunto current readings and documented notifications', () => {
             expect(mappedStep(ActivityTypes.Cycling, { ending: { kind: 'time', seconds: 90 } }).notification!.text).toBe(`For ${duration}`);
         }
     });
-    it.each([ActivityTypes.Running, ActivityTypes.Cycling, ActivityTypes.Swimming, ActivityTypes.Rowing])(
+    it.each([ActivityTypes.Running, ActivityTypes.Cycling, ActivityTypes.Swimming, ActivityTypes.OpenWaterSwimming, ActivityTypes.Rowing])(
         'keeps %s distance notification unit-neutral and manual guidance actionable', sport => {
             expect(mappedStep(sport, { ending: { kind: 'distance', meters: 100 } }).notification)
                 .toEqual({ title: 'Work', text: 'Follow distance countdown' });
             expect(mappedStep(sport, { ending: { kind: 'manual' } }).notification)
-                .toEqual({ title: 'Work', text: 'Press lap when ready' });
+                .toEqual({ title: 'Work', text: [ActivityTypes.Swimming, ActivityTypes.OpenWaterSwimming].includes(sport)
+                    ? 'Swim now. Press Lap to finish this interval.' : 'Press lap when ready' });
         });
     it('does not round fractional intervals or omit day-length seconds in generated durations', () => {
         for (const seconds of [0.5, 1.5, 86400, 86401, Number.MAX_VALUE]) {

@@ -22,9 +22,9 @@ function screen(changes: Partial<WorkoutStepV1> = {}) {
   return serializeSuuntoGuideJsonV1({ version: 1, sport: ActivityTypes.Swimming,
     nodes: [{ ...work, ...changes }] }, options).artifact.steps[0] as SuuntoGuideFieldsStepV1;
 }
-function withoutFields(steps: SuuntoGuideStepV1[]): unknown[] {
-  return steps.map(step => step.type === 'repeat' ? { ...step, steps: withoutFields(step.steps) }
-    : Object.fromEntries(Object.entries(step).filter(([key]) => key !== 'fields')));
+function boundaries(steps: SuuntoGuideStepV1[]): unknown[] {
+  return steps.map(step => step.type === 'repeat' ? { ...step, steps: boundaries(step.steps) }
+    : Object.fromEntries(Object.entries(step).filter(([key]) => key !== 'fields' && key !== 'notification')));
 }
 
 describe('pool-only Guide screens', () => {
@@ -37,7 +37,7 @@ describe('pool-only Guide screens', () => {
       { type: 'strokeRate', title: 'Avg strk', window: 'manualLap', aggregate: 'average' },
       { type: 'swolf', title: 'AvgSWOLF', window: 'manualLap', aggregate: 'average' },
     ]);
-    expect(mapped.notification).toEqual({ title: 'Work', text: 'Press lap when ready' });
+    expect(mapped.notification).toEqual({ title: 'Work', text: 'Swim now. Press Lap to finish this interval.' });
     expect(mapped.transitions).toEqual([{ condition: { type: 'manualLap' } }]);
   });
   it.each([
@@ -51,8 +51,9 @@ describe('pool-only Guide screens', () => {
     'shows HR and the actual rest ending, not newly reset swim averages: %s', ending => {
       const mapped = screen({ purpose: 'rest', ending });
       expect(mapped.fields[0]).toEqual({ type: 'heartRate', title: 'HR' });
-      expect(mapped.fields.map(field => field.type)).toEqual(ending.kind === 'manual' ? ['heartRate']
-        : ['heartRate', ending.kind === 'time' ? 'stepDurationCountdown' : 'stepDistanceCountdown']);
+      expect(mapped.fields.map(field => field.type)).toEqual(ending.kind === 'manual' ? ['heartRate', 'distance']
+        : ['heartRate', ending.kind === 'time' ? 'stepDurationCountdown' : 'stepDistanceCountdown', 'distance']);
+      expect(mapped.fields.at(-1)).toEqual({ type: 'distance', title: 'Total', window: 'workout' });
     });
   it('does not treat active recovery as stationary rest', () => {
     expect(screen({ purpose: 'recovery' }).fields).toEqual(screen().fields);
@@ -72,10 +73,13 @@ describe('pool-only Guide screens', () => {
     expect(current.fields.filter(field => field.type === 'text')).toEqual(changes.note ? [{ type: 'text', value: changes.note }] : []);
     expect(current.fields.length).toBeLessThanOrEqual(5);
     expect(new Set(current.fields.map(field => field.type)).size).toBe(current.fields.length);
-    expect(withoutFields(result.artifact.steps)).toEqual(withoutFields(serializeSuuntoGuideV7ForRecovery(input, options).artifact.steps));
+    expect(boundaries(result.artifact.steps)).toEqual(boundaries(serializeSuuntoGuideV7ForRecovery(input, options).artifact.steps));
+    expect(current.notification).toEqual(changes.ending.kind === 'manual' && !changes.note
+      ? { title: current.title, text: changes.purpose === 'rest' ? 'Rest now. Press Lap to finish this rest.' : 'Swim now. Press Lap to finish this interval.' }
+      : old.notification);
     for (const field of current.fields) {
       if ('title' in field) expect(Array.from(field.title).length).toBeLessThan(9);
-      if (field.type === 'distance' || field.type === 'duration') expect(field).toMatchObject({ window: 'step' });
+      if (field.type === 'distance' || field.type === 'duration') expect(field).toMatchObject({ window: field.title === 'Total' ? 'workout' : 'step' });
       else if ('window' in field) expect(field).toMatchObject({ window: 'manualLap', aggregate: 'average' });
     }
     expect(result.level).toBe('exact');
@@ -121,7 +125,7 @@ describe('pool screen delivery recovery', () => {
       ] };
       const current = serializeSuuntoGuideJsonV1(structure, options).artifact;
       const old = serializeSuuntoGuideV7ForRecovery(structure, options).artifact;
-      expect(withoutFields(current.steps)).toEqual(withoutFields(old.steps));
+      expect(boundaries(current.steps)).toEqual(boundaries(old.steps));
       if (restOnly) {
         expect(JSON.stringify(current.steps)).not.toContain('"window":"manualLap"');
         expect(JSON.stringify(current.steps)).toContain('"createManualLap":true');
