@@ -6,7 +6,7 @@ import { MatIconTestingModule } from '@angular/material/icon/testing';
 import { MatTooltip } from '@angular/material/tooltip';
 import { NoopAnimationsModule } from '@angular/platform-browser/animations';
 import { BehaviorSubject } from 'rxjs';
-import { USAGE_LIMITS, ROUTE_USAGE_LIMITS } from '@shared/limits';
+import { ASSISTANT_REQUEST_LIMITS, USAGE_LIMITS, ROUTE_USAGE_LIMITS } from '@shared/limits';
 import { AppAuthService } from '../../authentication/app.auth.service';
 import { AppHapticsService } from '../../services/app.haptics.service';
 import { PublicFeaturePreviewComponent } from '../public-seo/public-feature-preview.component';
@@ -95,6 +95,7 @@ describe('HomeComponent', () => {
     expect(memberships[0].features).toContain(`Up to ${ROUTE_USAGE_LIMITS.free} saved routes`);
     expect(memberships[1].features).toContain('Up to 1,000 activities');
     expect(memberships[1].features).toContain(`Up to ${ROUTE_USAGE_LIMITS.basic} saved routes`);
+    expect(memberships[1].features).toContain(`Up to ${ASSISTANT_REQUEST_LIMITS.basic} Assistant requests per billing period`);
     expect(fixture.nativeElement.querySelectorAll('.membership-grid mat-card')).toHaveLength(3);
     expect(Array.from(fixture.nativeElement.querySelectorAll('.membership-grid h3'))
       .map((heading: Element) => heading.textContent)).toEqual(['Starter', 'Basic', 'Pro']);

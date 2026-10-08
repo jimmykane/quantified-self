@@ -1,7 +1,8 @@
 :host { display: block; min-width: 0; color: var(--mat-sys-on-surface); background: var(--mat-sys-surface); }
-.landing-page { max-width: 1200px; margin-inline: auto; padding-inline: clamp(1rem, 4vw, 3rem); }
+.landing-page { max-width: 1200px; margin-inline: auto; padding-inline: clamp(1rem, 4vw, 3rem); overflow-wrap: anywhere; }
 .landing-page, .landing-page * { box-sizing: border-box; }
 .landing-page section, .feature-section > *, .discovery-section > * { min-width: 0; }
+.landing-page a { max-width: 100%; height: auto; min-height: 44px; white-space: normal; }
 .landing-page h2 { margin: 0 0 1rem; font: var(--mat-sys-headline-small); font-weight: 700; }
 .landing-page p { color: var(--mat-sys-on-surface-variant); line-height: 1.65; }
 .home-navigation { display: flex; align-items: center; justify-content: space-between; gap: 1rem; padding-block: 1rem; border-bottom: 1px solid var(--mat-sys-outline-variant); }

@@ -6,7 +6,7 @@ import { MatButtonModule } from '@angular/material/button';
 import { MatCardModule } from '@angular/material/card';
 import { MatIconModule } from '@angular/material/icon';
 import { MAT_TOOLTIP_DEFAULT_OPTIONS, MatTooltipModule } from '@angular/material/tooltip';
-import { ROUTE_USAGE_LIMITS, USAGE_LIMITS } from '@shared/limits';
+import { ASSISTANT_REQUEST_LIMITS, ROUTE_USAGE_LIMITS, USAGE_LIMITS } from '@shared/limits';
 import { AppAuthService } from '../../authentication/app.auth.service';
 import { AppHapticsService } from '../../services/app.haptics.service';
 import { AppChartSharedModule } from '../../modules/app-chart-shared.module';
@@ -39,7 +39,8 @@ export class HomeComponent implements OnInit {
         `Up to ${getNumberFormatter().format(ROUTE_USAGE_LIMITS.free)} saved routes`, 'Plans and standalone workouts'] },
     { name: 'Basic', label: 'More history', copy: 'For consistent training.', route: '/pricing', action: 'Explore Basic',
       features: [`Up to ${getNumberFormatter().format(USAGE_LIMITS.basic)} activities`,
-        `Up to ${getNumberFormatter().format(ROUTE_USAGE_LIMITS.basic)} saved routes`, 'More Assistant requests'] },
+        `Up to ${getNumberFormatter().format(ROUTE_USAGE_LIMITS.basic)} saved routes`,
+        `Up to ${getNumberFormatter().format(ASSISTANT_REQUEST_LIMITS.basic)} Assistant requests per billing period`] },
     { name: 'Pro', label: 'Keep it connected', copy: 'For your complete workflow.', route: '/pricing', action: 'Explore Pro',
       features: ['Unlimited activities and routes', 'Supported cross-provider sync', 'Compatible workout delivery'] },
   ];
