@@ -487,8 +487,10 @@ The current eligible Rest presentation uses private `suunto-guides-v12`: countdo
 actual pass labels for simple repeated Work/Rest pairs, and a next-phase hint where space permits. Running/walking/
 cycling variants and pool/open-water swimming are covered; active Recovery and Work retain their existing readings.
 Authored targets/notes, exact timing and the frozen execution/lap graph stay intact. No previous-effort statistics,
-guessed manual distance or forced countdown beeps/vibration are added. Oversized Guides keep compact native repeats
-rather than exceeding screen/archive readback bounds. Exact v10/v11 recovery precedes one eligible same-ID update,
+guessed manual distance or forced countdown beeps/vibration are added. Large Guides first keep their native execution
+graph without optional numbering; the compact Rest layout is also checked against enriched archive readback bounds.
+If optional labels still cannot fit, preserve the frozen layout and all authored fields, without raising memory limits.
+Exact v10/v11 recovery precedes one eligible same-ID update,
 with pinning, current authority, approval and past/completed-copy protection unchanged. Other recipes retain their
 historical mapping identities. Existing provider/event monitoring covers v12 without queue or alert-policy changes.
 See [Rest-first screens and verification](training-workspace.md#rest-first-interval-screens-v12).

@@ -1,7 +1,8 @@
 import { createHash } from 'node:crypto';
 import { ActivityTypes } from '@sports-alliance/sports-lib';
 import { describe, expect, it } from 'vitest';
-import type { WorkoutStepV1, WorkoutStructureV1 } from '../../../../shared/planned-workout';
+import { parseWorkoutStructureV1, type WorkoutStepV1, type WorkoutStructureV1 } from '../../../../shared/planned-workout';
+import { packageGuide, readGuideArchive } from '../delivery/suunto/archive';
 import { serializeSuuntoGuideJsonV1, serializeSuuntoGuideV11ForRecovery,
   type SuuntoGuideFieldsStepV1, type SuuntoGuideStepV1 } from './suunto-guide.serializer';
 import { hasSuuntoRestPresentation, presentSuuntoRestScreens } from './suunto-rest-presentation';
@@ -152,6 +153,43 @@ it('falls back before exceeding the real archive JSON readback budget, not just 
   expect(current.steps.some(node => node.type === 'repeat')).toBe(true);
   expect(Buffer.byteLength(JSON.stringify(current))).toBeLessThanOrEqual(256 * 1024);
   expect(execution(current.steps)).toEqual(execution(serializeSuuntoGuideV11ForRecovery(input, options).artifact.steps));
+});
+it.each([false, true])('keeps an already near-limit early-Lap Guide readable (provider enrichment=%s)', async enriched => {
+  const input = parseWorkoutStructureV1(recipe(ActivityTypes.Running, [work, {
+    kind: 'repeat', id: 'sets', count: 18, steps: Array.from({ length: 11 }, (_, index) => ({
+      ...rest, id: `rest-${index}`, ending: { kind: 'time', seconds: 15, allowEarlyLap: true },
+      targets: [hr, pace], note: 'A'.repeat(enriched ? 32 : 40),
+    })),
+  }]));
+  const serializationOptions = { ...options, ...(!enriched ? { description: '界'.repeat(256) } : {}) };
+  const old = serializeSuuntoGuideV11ForRecovery(input, serializationOptions).artifact;
+  const current = serializeSuuntoGuideJsonV1(input, serializationOptions).artifact;
+  const readback = (guide: typeof old) => enriched ? { ...guide, steps: guide.steps.map(node => node.type === 'fields'
+    ? { ...node, ...(node.notification ? { notification: { ...node.notification, type: 'default' as const } } : {}) } : node) } : guide;
+  // This is a valid canonical recipe whose frozen layout fits the actual ZIP
+  // reader. Optional Rest labels must not turn an accepted copy into uncertainty.
+  expect(Buffer.byteLength(JSON.stringify(readback(old)))).toBeLessThanOrEqual(256 * 1024);
+  await expect(readGuideArchive(await packageGuide(readback(old)))).resolves.toEqual(readback(old));
+  expect(Buffer.byteLength(JSON.stringify(readback(current)))).toBeLessThanOrEqual(256 * 1024);
+  await expect(readGuideArchive(await packageGuide(readback(current)))).resolves.toEqual(readback(current));
+  expect(current).toEqual(old);
+});
+it('budgets compact repeat children too when the executed screen count skips numbering', () => {
+  const input = recipe(ActivityTypes.Running, Array.from({ length: 6 }, (_, index) => ({
+    kind: 'repeat', id: `sets-${index}`, count: 100,
+    steps: [{ ...work, id: `work-${index}` }, { ...rest, id: `rest-${index}` }],
+  })));
+  const old = serializeSuuntoGuideV11ForRecovery(input, options).artifact;
+  const before = structuredClone(old);
+  let checkedEnrichedChildren = false;
+  const output = presentSuuntoRestScreens(input, old.steps, steps => {
+    const children = steps.flatMap(node => node.type === 'repeat' ? node.steps : [node]);
+    checkedEnrichedChildren ||= children.every(screen => screen.notification?.type === 'default');
+    return JSON.stringify(steps).includes('Rest rem') ? 256 * 1024 + 1 : 1;
+  });
+  expect(checkedEnrichedChildren).toBe(true);
+  expect(output).toEqual(old.steps);
+  expect(old).toEqual(before);
 });
 it('does not mutate frozen source screens when numbering is unavailable', () => {
   const input = recipe(ActivityTypes.Running); const old = serializeSuuntoGuideV11ForRecovery(input, options).artifact;

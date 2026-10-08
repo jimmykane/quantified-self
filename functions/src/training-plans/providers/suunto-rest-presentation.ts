@@ -65,8 +65,19 @@ export function presentSuuntoRestScreens(structure: WorkoutStructureV1, steps: S
   const compact = steps.map(node => node.type === 'repeat' ? { ...node, steps: node.steps.map(screen =>
     screen.title === 'Rest' ? { ...screen, fields: restFields(screen, structure.sport) } : screen) }
     : node.title === 'Rest' ? { ...node, fields: restFields(node, structure.sport) } : node);
+  // Budget every presentation candidate, including native repeat children.
+  // Even the compact Rest label can grow a near-limit early-Lap graph. If it
+  // cannot fit, preserve the frozen layout instead of dropping authored fields
+  // or widening the transport's existing readback/memory bound.
+  const fitsReadback = (candidate: SuuntoGuideStepV1[]): boolean => {
+    const enrich = <T extends SuuntoGuideFieldsStepV1>(screen: T) => ({ ...screen,
+      ...(screen.notification ? { notification: { ...screen.notification, type: 'default' } } : {}) });
+    return jsonBytes(candidate.map(node => node.type === 'repeat'
+      ? { ...node, steps: node.steps.map(enrich) } : enrich(node))) <= MAX_JSON_BYTES;
+  };
+  const fallback = () => fitsReadback(compact) ? compact : steps;
   const screenCount = steps.reduce((total, node) => total + (node.type === 'repeat' ? node.times * node.steps.length : 1), 0);
-  if (screenCount > MAX_SCREENS) return compact;
+  if (screenCount > MAX_SCREENS) return fallback();
 
   const occurrences: Occurrence[] = structure.nodes.flatMap(node => {
     if (node.kind === 'step') return [{ step: node }];
@@ -94,9 +105,5 @@ export function presentSuuntoRestScreens(structure: WorkoutStructureV1, steps: S
       fields: occurrence.step.purpose === 'rest'
         ? restFields(screen, structure.sport, occurrences[occurrenceIndex + 1]) : screen.fields };
   });
-  // Suunto may enrich every notification with its default type. Reserve those
-  // bytes too so a successfully uploaded Guide remains readable for recovery.
-  const readback = numbered.map(screen => ({ ...screen,
-    ...(screen.notification ? { notification: { ...screen.notification, type: 'default' } } : {}) }));
-  return jsonBytes(readback) <= MAX_JSON_BYTES ? numbered : compact;
+  return fitsReadback(numbered) ? numbered : fallback();
 }

@@ -2786,9 +2786,13 @@ remain unchanged. This is local implementation, not deployed/watch-verified beha
   next phase; it does not infer an intended 100 m distance from a manually ended prescription. No hint is added
   after the last Rest unless another prescribed step actually follows.
 - Numbering/context expands native repeats only within 1,000 screens and the existing 256 KiB archive JSON
-  readback budget, including Suunto's observed default-notification enrichment. Larger Guides fall back to compact
-  native repeats and the Rest-first fields without optional counters/next hints. Notification titles stay within
-  13 code points. Authored notes/targets are never discarded to make room for context.
+  readback budget, including Suunto's observed default-notification enrichment. Larger Guides first fall back to
+  the native execution graph with Rest-first fields, without optional counters/next hints. That compact candidate
+  is also byte-checked, including notifications inside repeats and when numbering is skipped for screen count.
+  If even these optional labels would exceed the readback budget, retain the exact frozen layout; do not drop
+  authored fields, reject a previously valid recipe or increase the decompression/memory limit. This protects
+  previously readable Guides, not a new guarantee that every already-oversized historical Guide fits. Notification
+  titles stay within 13 code points. Authored notes/targets are never discarded to make room for context.
 - Decoration starts from the frozen v11 execution graph. Automatic/manual/early-Lap conditions, branch IDs,
   recorded laps, repeat executions, completion transition and notification **text** are unchanged. No extra
   countdown steps, five-second beep sequence, forced vibration or pool-length detection fix is introduced.
@@ -2807,6 +2811,11 @@ only the private exact-digest diagnostic version allowlist expands. No queue, cr
 Verification covers supported sport/ending/target/note combinations, immutable v11 artifact hash, bounded field
 and archive budgets, unchanged active Recovery/execution graphs, synthetic ZIP transport and isolated demo
 Firestore lifecycle recovery. Tests are not physical screen-position, sensor or sound/vibration proof.
+
+The follow-up review reproduced near-limit early-Lap recipes that fit with the frozen layout but exceeded the
+archive limit after compact Rest-label changes, with and without default-notification enrichment. Regression
+tests use strict canonical parsing and actual ZIP package/readback, and prove exact frozen-layout fallback.
+MCP wire contracts and the provider/event-based monitoring coverage remain unchanged by this internal guard.
 
 Local verification: Functions TypeScript and frontend beta builds; 1,753 focused provider/delivery/intent/runtime/
 diagnostic tests; 145 Suunto lifecycle tests on isolated demo Firestore with synthetic provider HTTP only (no

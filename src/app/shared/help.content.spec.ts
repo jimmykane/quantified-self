@@ -156,7 +156,8 @@ describe('help.content', () => {
     for (const phrase of ['During Work and active Recovery', 'puts its native countdown first', '**Rest rem**',
       'Your exact duration, targets and notes are kept', 'Work and active Recovery keep their existing readings',
       '**Rest 3/10**', '**Next: Work 4/10**', 'not an inferred distance for a manual interval',
-      'Each repeat set has its own count', 'very large Guides keep compact repeats without counters or Next hints',
+      'Each repeat set has its own count', 'very large Guides keep their existing step structure without counters or Next hints',
+      'retain the previous layout when the new labels cannot fit safely', 'Your targets and instructions are never removed',
       'not freshly reset averages or previous-effort statistics', 'not a previous-interval summary',
       'Rowing and strength screens are unchanged', 'Sync your Suunto app and watch']) expect(content).toContain(phrase);
     expect(searchHelpSections(HELP_SECTIONS, 'Rest rem').map(section => section.id)).toContain('training-plans');
