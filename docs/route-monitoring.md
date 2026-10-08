@@ -13,10 +13,12 @@ helpers, and rejected-original cleanup. No route monitoring dashboard, metric, a
 policy, email, or production monitoring configuration has been created by that slice.
 The follow-up, deployed from commit `67cce336d` on 2026-10-08 at 09:50 UTC, adds bounded
 eligibility observations and dispatch-failure telemetry, and isolates the existing route
-dispatcher. The independent bundle in `tools/route-monitoring/` is now implemented
-locally: one **QS Routes** dashboard, 16 versioned log metrics and eight policies.
-It has not been applied to production; activation and metric-series evidence remain
-in #833's scope, so the issue stays In progress.
+dispatcher. With separate approval, the independent `tools/route-monitoring/` bundle
+was applied from pinned commit `94bc51e35` on 2026-10-08, completing by 10:18 UTC
+(13:18 Helsinki): one **QS Routes** dashboard, 16 versioned log metrics and eight
+enabled policies using the existing Alerts email channel. Configuration and query
+readback passed; positive post-creation heartbeat evidence remains in #833's scope,
+so the issue stays In progress until that natural-run verification is recorded.
 
 The authoritative provider lifecycle remains in [Provider Integration Guide](provider-integration-guide.md).
 No entitlement, provider support, transport, revision, lease, scheduling, retry, rate,
@@ -219,7 +221,7 @@ diagnostics must not become original-file paths or account/route identifiers in 
 Permission, provider, lifecycle or retry fixes belong to their owner workstream, not
 an alert-side change to delivery policy.
 
-## Verification and next slice
+## Verification and remaining evidence
 
 The approved follow-up deployment updated only `dispatchRouteDeliverySyncQueue`,
 `processRouteSyncTask`, `insertSuuntoAppRouteToQueue`, `addSuuntoAppRoutesToQueue`, and
@@ -241,6 +243,28 @@ This proves the log emission only; post-creation metric-series and policy behavi
 unverified. Deployment success is not evidence of backlog, provider receipt or working alerts. No
 scheduler was manually invoked and no production route or provider copy was created,
 deleted or replayed for this verification.
+
+The separately approved monitoring application on 8 October used the exact reviewed
+bundle from `94bc51e35`, without another Functions deployment. The 16 log metrics
+were created between 10:16:33 and 10:17:00 UTC. API readback at 10:18–10:19 UTC
+confirmed one owned dashboard, 16 matching metric schemas and eight valid, enabled
+policies with 12 conditions and the selected existing email channel. Google's metric
+descriptor label order differs from request order; comparing labels by key confirmed
+the exact schemas, rather than mistaking that ordering for drift.
+
+All 19 dashboard chart queries and 12 condition queries passed, with no execution
+errors. Six additional exact-queue queries found native depth, HTTP attempts and
+dispatch-delay series for both route queues. Digest comparisons confirmed that every
+unrelated dashboard, policy, log metric and all four notification channels remained
+unchanged. All 55 offline monitoring/workflow tests passed. No test email, temporary
+policy, fault injection, manual scheduler run, route mutation, replay or deletion was
+used. Existing same-channel notification proof is reused.
+
+The newly created route log metrics were still empty at that readback, which is not
+positive telemetry proof. The next natural dispatcher run is due at 10:30 UTC
+(13:30 Helsinki). Verify post-creation points for import/QS and delivery/Garmin,
+Wahoo and COROS, including the idle sampled-count and sampled-age series when
+present, before closing #833. Earlier 10:00 UTC logs cannot initialize these metrics.
 
 Focused tests cover canonical fixed labels, malformed/prototype keys and task payloads,
 privacy, logger failure (including preserving a worker ACK), success/skip/ACK separation,
@@ -271,13 +295,14 @@ git diff --check
 
 Remaining work tracked directly in #833:
 
-- With separate approval, apply the bundle with the existing enabled email channel,
-  and verify configuration plus positive natural
-  post-creation samples without creating/deleting production routes or replaying sends.
+- Verify positive natural post-creation heartbeat and count/age series for all four
+  groups without creating/deleting production routes or replaying sends. The approved
+  application and configuration/query readback are complete; no repeat deployment or
+  application is needed for this evidence check.
 
-Monitoring impact decision: **covered locally**, with production activation/evidence
-still tracked in #833. A read-only preflight on 8 October found no existing route-owner
-resources or route name collisions; the four earlier owned bundles remain present.
+Monitoring impact decision: **covered and activated**, with positive natural metric
+evidence still tracked in #833. The 8 October preflight found no route-owner resources
+or name collisions; production readback preserved all four earlier owned bundles.
 
 Help was reviewed: operational instrumentation does not change the saved-route or
 connection UI, so no Help change is required. **No MCP wire impact:** no tools, schemas,

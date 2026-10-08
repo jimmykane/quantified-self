@@ -1318,13 +1318,18 @@ disabled automatic directions and persisted restoration deferrals remain exclude
 The five affected route Functions were read back as ACTIVE with unchanged resources,
 secrets and triggers; native task-queue rates/retries and the 30-minute scheduler were
 also preserved. Its natural 10:00 UTC run emitted all four complete idle sample groups.
-The independent source-controlled bundle now provides one local dashboard, 16 log metrics
+The independent source-controlled bundle provides one dashboard, 16 log metrics
 and eight policies, including both dispatch generations and rejected-original cleanup.
 Offline tests cover filtering, ownership, pagination and serial reapplication without
-touching the four earlier monitoring bundles. Production apply, query readback and
-post-creation metric-series evidence remain tracked in #833; raw log emission is not
-metric/alert verification. No cloud configuration was applied by this local slice, and
-provider behavior, Help and MCP contracts remain unchanged. See
+touching the four earlier monitoring bundles. Its separately approved production apply
+from `94bc51e35` completed on 8 October by 10:18 UTC using the existing Alerts email
+channel. API readback confirmed the owned resources and eight valid enabled policies;
+all 19 chart and 12 condition queries passed, plus native-series checks for both route
+queues. Unrelated monitoring configuration and all notification channels remained
+unchanged. Positive post-creation heartbeat and sample count/age evidence from the
+next natural run remains tracked in #833; earlier raw logs are not metric/alert proof.
+No new Functions deployment, provider call, route mutation or test email was needed
+to apply the bundle. Provider behavior, Help and MCP contracts remain unchanged. See
 [route monitoring](route-monitoring.md) for semantics, verification, resources and
 the remaining acceptance criteria. Help and MCP/Assistant contracts are unchanged.
 
