@@ -168,6 +168,9 @@ inventories before the first write. Title/owner collisions, duplicate managed re
 different policy identities, malformed inventories and immutable metric schema drift
 fail closed. Serial reapply preserves dashboard etags and condition IDs, with no duplicate
 POSTs or DELETEs; unrelated configuration and notification channels are not modified.
+The route CLI compares resolved entrypoint paths so a symlinked checkout or macOS
+`/tmp` alias cannot silently skip setup. Importing it as a module still performs no
+setup; project/channel/confirmation validation and the cloud-write boundary are unchanged.
 
 Preview:
 

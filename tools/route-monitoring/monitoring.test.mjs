@@ -1,6 +1,8 @@
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
-import { readFileSync } from 'node:fs';
+import { mkdtempSync, readFileSync, rmSync, symlinkSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import test from 'node:test';
 import { buildRouteMonitoring, OWNER, metricType } from './definitions.mjs';
 import { applyRouteMonitoring } from './cli.mjs';
@@ -207,6 +209,41 @@ test('offline preview and invalid arguments do not require credentials or networ
   const packageJson = JSON.parse(readFileSync('package.json', 'utf8'));
   assert.equal(packageJson.scripts['test:route-monitoring'], 'node --test tools/route-monitoring/monitoring.test.mjs');
   assert.match(readFileSync('.github/workflows/_run-tests.yml', 'utf8'), /run: npm run test:route-monitoring/);
+});
+
+test('CLI invoked through a symlinked checkout runs preview and rejects unconfirmed apply', () => {
+  const temporary = mkdtempSync(join(tmpdir(), 'qs-route-cli-'));
+  try {
+    const alias = join(temporary, 'checkout alias');
+    symlinkSync(process.cwd(), alias, 'dir');
+    const cli = join(alias, 'tools/route-monitoring/cli.mjs');
+    for (const flags of [[], ['--preserve-symlinks-main']]) {
+      const preview = spawnSync(process.execPath, [...flags, cli, `--project=${project}`], {
+        encoding: 'utf8', env: { PATH: '/no-credentials' },
+      });
+      assert.equal(preview.status, 0, preview.stderr);
+      assert.equal(JSON.parse(preview.stdout).dashboard.displayName, 'QS Routes');
+      const unconfirmed = spawnSync(process.execPath, [...flags, cli, `--project=${project}`, '--apply'], {
+        encoding: 'utf8', env: { PATH: '/no-credentials' },
+      });
+      assert.equal(unconfirmed.status, 1);
+      assert.match(unconfirmed.stderr, /Route monitoring setup failed/);
+    }
+  } finally {
+    // Only the unique fixture directory and its symlink, never the linked checkout.
+    rmSync(temporary, { recursive: true, force: true });
+  }
+});
+
+test('importing the CLI from eval with non-file arguments never starts setup', () => {
+  const url = new URL('./cli.mjs', import.meta.url).href;
+  const result = spawnSync(process.execPath, ['--input-type=module', '--eval',
+    `await import(${JSON.stringify(url)}); console.log('imported');`, '--', 'not-an-entrypoint-file'], {
+    encoding: 'utf8', env: { PATH: '/no-credentials' },
+  });
+  assert.equal(result.status, 0, result.stderr);
+  assert.equal(result.stdout.trim(), 'imported');
+  assert.equal(result.stderr, '');
 });
 
 function transport() {

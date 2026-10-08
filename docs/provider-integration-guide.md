@@ -1329,7 +1329,8 @@ queues. Unrelated monitoring configuration and all notification channels remaine
 unchanged. Positive post-creation heartbeat and sample count/age evidence from the
 next natural run remains tracked in #833; earlier raw logs are not metric/alert proof.
 No new Functions deployment, provider call, route mutation or test email was needed
-to apply the bundle. Provider behavior, Help and MCP contracts remain unchanged. See
+to apply the bundle. Its route CLI resolves symlinked entrypoint paths without changing
+approval or provisioning semantics. Provider behavior, Help and MCP contracts remain unchanged. See
 [route monitoring](route-monitoring.md) for semantics, verification, resources and
 the remaining acceptance criteria. Help and MCP/Assistant contracts are unchanged.
 
