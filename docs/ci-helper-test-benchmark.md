@@ -144,6 +144,8 @@ An explicit Node/DOM opt-in manifest controls helper allocation. Every remaining
 to the Angular project. Functions and Rules exclusions are preserved. `npm run test:frontend-config` checks
 selection parity against the old discovery pattern so no new spec disappears or runs twice. A directory-wide
 Node rule would misclassify the 18 exceptions above.
+The guard uses Vitest's glob library and options, including discovery of hidden files and directories.
+`tinyglobby` is declared as a dev dependency at its existing locked version; no dependency upgrade is involved.
 
 The existing `npm run test -- --run` CI command executes all projects in one process. The initial investigation
 verified the complete helper workload. Implementation verification is recorded below; hosted CI timing still
@@ -166,12 +168,19 @@ took about 24 seconds, chiefly because of compiler startup.
 
 Additional checks passed:
 
-- `npm run test:frontend-config`: five checks, including current discovery parity and future-file fallback.
+- `npm run test:frontend-config`: five checks, including current discovery parity and future-file fallback for
+  ordinary and hidden specs. A hidden-file regression failed with Node's native glob API before the guard was
+  switched to Vitest's glob library/options, then passed after the fix.
 - `npm run test:workflows`: eleven checks, including execution of all projects by the ordinary app CI command.
 - Standalone TypeScript checking and ESLint for `vitest.config.ts`.
 - Representative smoke: four files / 38 tests spanning Node, DOM, chart queue and Angular component rendering.
 - V8 coverage smoke: three files / 22 tests spanning every project, with the tested Node/Angular sources and an
   uncovered Angular service included in the coverage report.
+- Review verification: five Node helper files / 31 tests covering frame scheduling, locale/formatter caches,
+  explicit tooltip viewport inputs and unit setup passed without browser or Angular setup. An npm install
+  dry run confirmed package/lockfile consistency.
+- Vitest's own `list --filesOnly --json` output exactly matched the guard's allocation: 592 files, comprising
+  163 Node, 10 DOM and 419 Angular files, with no duplicates.
 
 Ignored `tmp/vitest-benchmark/helpers-split-full-frontend.*` retains the full run and exact assertion-parity evidence.
 The registry, discovery guard, workflow integration and operational documentation are included in the implementation.

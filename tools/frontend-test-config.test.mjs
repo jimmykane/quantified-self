@@ -1,9 +1,10 @@
 import assert from 'node:assert/strict';
-import { globSync, mkdirSync, mkdtempSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import test from 'node:test';
+import { globSync } from 'tinyglobby';
 import { loadConfigFromFile } from 'vite';
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '..');
@@ -14,10 +15,15 @@ const projects = config.test.projects;
 const registry = JSON.parse(readFileSync(resolve(root, 'tools/frontend-test-environments.json'), 'utf8'));
 const ordinaryExcludes = ['functions/**', 'node_modules/**', 'src/firestore.rules.spec.ts', 'src/storage.rules.spec.ts'];
 
+function discover(include, exclude, cwd) {
+  // Match Vitest's glob options, including hidden files and directories.
+  return globSync(include, { cwd, ignore: exclude, dot: true, expandDirectories: false });
+}
+
 function allocation(cwd) {
   const files = new Map();
   for (const project of projects) {
-    for (const file of globSync(project.test.include, { cwd, exclude: project.test.exclude })) {
+    for (const file of discover(project.test.include, project.test.exclude, cwd)) {
       const owners = files.get(file) ?? [];
       owners.push(project.test.name);
       files.set(file, owners);
@@ -40,7 +46,7 @@ test('opted-in specs exist, are explicit helper paths and cannot overlap', () =>
 });
 
 test('every currently discovered ordinary spec belongs to exactly one project', () => {
-  const expected = globSync('**/*.spec.ts', { cwd: root, exclude: ordinaryExcludes }).sort();
+  const expected = discover('**/*.spec.ts', ordinaryExcludes, root).sort();
   const actual = allocation(root);
   assert.deepEqual([...actual.keys()].sort(), expected, 'Discovery must match the original runner');
   for (const [file, owners] of actual) assert.equal(owners.length, 1, `Duplicated spec: ${file}`);
@@ -52,7 +58,8 @@ test('future specs fall back to Angular while Functions and Rules stay excluded'
   const fixture = mkdtempSync(resolve(tmpdir(), 'qs-frontend-discovery-'));
   t.after(() => rmSync(fixture, { recursive: true, force: true }));
   const future = ['src/app/helpers/future-helper.spec.ts', 'src/app/components/future.component.spec.ts',
-    'scripts/future-script.spec.ts', 'shared/future-contract.spec.ts'];
+    'scripts/future-script.spec.ts', 'shared/future-contract.spec.ts',
+    '.hidden/future.spec.ts', 'src/.hidden/future.spec.ts', 'src/app/helpers/.future.spec.ts'];
   const excluded = ['functions/src/future.spec.ts', 'node_modules/dependency/future.spec.ts',
     'src/firestore.rules.spec.ts', 'src/storage.rules.spec.ts'];
   for (const file of [registry.node[0], registry.dom[0], ...future, ...excluded]) {

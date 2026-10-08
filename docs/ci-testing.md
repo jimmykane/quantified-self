@@ -33,10 +33,12 @@ to conceal an unsupported import. Removing a registry entry returns that spec to
 
 `npm run test:frontend-config` loads the real configuration and compares project discovery with the original
 ordinary-test boundary. It rejects missing files, duplicates and overlapping opt-ins, exercises future-file
-fallback plus Functions/Rules exclusions, and checks plugin/setup isolation, aliases, dependency inlining and
-the global worker bound. CI runs this check before the suites. The root retains the original include/exclude
+fallback (including hidden specs) plus Functions/Rules exclusions, and checks plugin/setup isolation, aliases,
+dependency inlining and the global worker bound. CI runs this check before the suites. The root retains the original include/exclude
 boundary for coverage, and reporters/coverage remain global across projects. A focused command can use
 `npm run test -- --run --project helpers-node <spec>` without initializing the Angular project.
+The guard uses Vitest's `tinyglobby` library with matching discovery options, including `dot: true`.
+It is an explicit dev dependency reusing the already locked version; no package versions change.
 
 See the [helper test environment benchmark](ci-helper-test-benchmark.md) for the verified allocation and local
 performance measurements. This changes the test runner only; application behavior, Training/MCP contracts,
