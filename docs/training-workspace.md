@@ -14,9 +14,6 @@ target, or more than 25 returned links keeps the generic prompt. Valid links to 
 for this selection. It does not infer a completion, fetch a provider prescription, or establish that the current
 authored workout matches the historical recording.
 
-The inspiration is the question progression in OpenAthlete's post-activity feedback agent at pinned commit
-`33e22980043640a132c670d3ca8ccbe26d588db5`
-([source](https://github.com/openathleteorg/openathlete/blob/33e22980043640a132c670d3ca8ccbe26d588db5/apps/api/src/mastra/agents/post-activity-feedback.agent.ts)).
 QS uses optional athlete-authored context, without copying an adaptation pipeline or voice transport. Voice entry,
 automatic plan adaptation, injury diagnosis and provider feedback delivery remain outside this implementation.
 
