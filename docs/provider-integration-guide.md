@@ -464,7 +464,7 @@ Private diagnostic labels include v9; existing provider/event-based monitoring f
 See [pool screen presentation and verification](training-workspace.md#pool-swim-workrest-screen-presentation).
 This local change needs separately approved deployment; no live watch-layout proof is claimed.
 
-Current Suunto `suunto-guides-v10` improves manual swim notifications and stationary Rest for both pool and open
+Current Suunto swim mapping `suunto-guides-v10` improves manual swim notifications and stationary Rest for both pool and open
 water: generated text explains that Lap finishes the current interval/rest, and Rest requests native cumulative
 `distance` (`Total`, `window: 'workout'`) after reserving authored ending/targets/notes and current HR. It omits
 freshly reset swim averages, not active-recovery readings. Pool Work keeps v9 fields; open-water Work keeps v7
@@ -474,6 +474,14 @@ live watch evidence is claimed. Non-swim payloads, recorded laps, consent, queue
 unchanged; provider/event-based monitoring already covers v10. See the single detailed
 [swim presentation source of truth](training-workspace.md#swim-manual-instructions-and-cumulative-rest-distance).
 Deployment and live testing still require separate approval.
+
+For other supported interval sports, v11 changes generated manual notifications to `Press Lap to finish this interval.`
+and manual Rest to `Rest now. Press Lap to finish this rest.`. The empty-screen reminder becomes `Lap to finish`.
+Authored notes/exercise instructions win; numeric-only and fully annotated recipes retain v7 identities, while swim
+v10 and strength v8 stay byte-identical. Only affected recipes select v11, with exact v7 recovery before one eligible
+same-identity update. Metrics, recorded laps, consent, approval, completion and queues are unchanged; existing
+provider/event-based monitoring covers v11. See [manual instructions and verification](training-workspace.md#manual-instructions-in-other-sports).
+This is local implementation, not deployment or new live evidence.
 
 For additional authored targets, [#773](https://github.com/jimmykane/quantified-self/issues/773) records the
 6 October contract review. The published JSON reference defines only the existing HR, power, speed/pace and cadence

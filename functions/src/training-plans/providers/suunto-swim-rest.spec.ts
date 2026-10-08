@@ -2,7 +2,7 @@ import { createHash } from 'node:crypto';
 import { ActivityTypes } from '@sports-alliance/sports-lib';
 import { describe, expect, it } from 'vitest';
 import type { WorkoutStepV1, WorkoutStructureV1 } from '../../../../shared/planned-workout';
-import { serializeSuuntoGuideJsonV1, serializeSuuntoGuideV7ForRecovery, serializeSuuntoGuideV9ForRecovery,
+import { serializeSuuntoGuideJsonV1, serializeSuuntoGuideV7ForRecovery, serializeSuuntoGuideV9ForRecovery, serializeSuuntoGuideV10ForRecovery,
   type SuuntoGuideFieldsStepV1, type SuuntoGuideStepV1 } from './suunto-guide.serializer';
 
 const options = { name: 'Pool screens', owner: 'Quantified Self', url: 'https://quantified-self.io/training/plans',
@@ -122,6 +122,6 @@ describe.each([ActivityTypes.Swimming, ActivityTypes.OpenWaterSwimming])('swim R
 });
 
 it.each([ActivityTypes.Running, ActivityTypes.Cycling, ActivityTypes.StrengthTraining, ActivityTypes.Rowing, ActivityTypes.Walking])(
-  'keeps non-swim manual/Rest payloads byte-equivalent to v7: %s', sport => {
-    expect(serializeSuuntoGuideJsonV1(structure(sport), options)).toEqual(serializeSuuntoGuideV7ForRecovery(structure(sport), options));
+  'keeps frozen v10 non-swim manual/Rest payloads byte-equivalent to v7: %s', sport => {
+    expect(serializeSuuntoGuideV10ForRecovery(structure(sport), options)).toEqual(serializeSuuntoGuideV7ForRecovery(structure(sport), options));
   });

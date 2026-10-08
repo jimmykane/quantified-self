@@ -3,7 +3,7 @@ import { describe, expect, it } from 'vitest';
 import { WorkoutStructureValidationError,
     type WorkoutEndingV1, type WorkoutStructureV1, type WorkoutStepV1 } from '../../../../shared/planned-workout';
 import { packageGuide, readGuideArchive } from '../delivery/suunto/archive';
-import { serializeSuuntoGuideJsonV1, serializeSuuntoGuideV2ForRecovery, serializeSuuntoGuideV3ForRecovery, serializeSuuntoGuideV4ForRecovery, serializeSuuntoGuideV5ForRecovery, serializeSuuntoGuideV6ForRecovery, serializeSuuntoGuideV7ForRecovery, serializeSuuntoGuideV9ForRecovery,
+import { serializeSuuntoGuideJsonV1, serializeSuuntoGuideV2ForRecovery, serializeSuuntoGuideV3ForRecovery, serializeSuuntoGuideV4ForRecovery, serializeSuuntoGuideV5ForRecovery, serializeSuuntoGuideV6ForRecovery, serializeSuuntoGuideV7ForRecovery, serializeSuuntoGuideV9ForRecovery, serializeSuuntoGuideV10ForRecovery,
     type SuuntoGuideFieldsStepV1 } from './suunto-guide.serializer';
 import cyclingV4 from './fixtures/suunto-cycling-v4-recovery.json';
 import swimmingV4 from './fixtures/suunto-swimming-v4-recovery.json';
@@ -54,7 +54,7 @@ describe('Suunto authored-target contract boundary (#773)', () => {
         'does not approve or silently discard an uncontracted %s target', kind => {
             const invalidStep = { ...step, targets: [{ kind, mode: 'absolute', minimum: 30, maximum: 40 }] };
             const serializers = [serializeSuuntoGuideJsonV1, serializeSuuntoGuideV2ForRecovery, serializeSuuntoGuideV3ForRecovery,
-                serializeSuuntoGuideV4ForRecovery, serializeSuuntoGuideV5ForRecovery, serializeSuuntoGuideV6ForRecovery, serializeSuuntoGuideV7ForRecovery, serializeSuuntoGuideV9ForRecovery];
+                serializeSuuntoGuideV4ForRecovery, serializeSuuntoGuideV5ForRecovery, serializeSuuntoGuideV6ForRecovery, serializeSuuntoGuideV7ForRecovery, serializeSuuntoGuideV9ForRecovery, serializeSuuntoGuideV10ForRecovery];
             for (const nodes of [[invalidStep], [{ kind: 'repeat', id: 'sets', count: 2, steps: [invalidStep] }]]) {
                 for (const serialize of serializers) {
                     expect(() => serialize({ version: 1, sport: ActivityTypes.Swimming, nodes },
@@ -72,7 +72,7 @@ describe('Suunto authored-target contract boundary (#773)', () => {
         });
 });
 
-describe('Suunto v7 sport and prescription screen matrix (pool recovery; other sports unchanged)', () => {
+describe('Suunto frozen v7/v10 sport and prescription screen matrix', () => {
     const hr = { kind: 'heart-rate', mode: 'absolute', minimumBpm: 120, maximumBpm: 140 } as const;
     const power = { kind: 'power', mode: 'absolute', minimumWatts: 150.5, maximumWatts: 180.25 } as const;
     const pace = { kind: 'speed', mode: 'absolute', minimumMetersPerSecond: 1.1,
@@ -97,7 +97,8 @@ describe('Suunto v7 sport and prescription screen matrix (pool recovery; other s
         const recipe = { version: 1, sport, nodes: [{ ...step, ending, targets: prescription.targets, ...(note ? { note } : {}) }] };
         const before = JSON.stringify(recipe);
         const result = serializeSuuntoGuideV7ForRecovery(recipe, options);
-        if (sport !== ActivityTypes.Swimming) expect(serializeSuuntoGuideJsonV1(recipe, options)).toEqual(result);
+        if (sport !== ActivityTypes.Swimming) expect(serializeSuuntoGuideV10ForRecovery(recipe, options)).toEqual(result);
+        if (sport !== ActivityTypes.Swimming && (ending.kind !== 'manual' || note)) expect(serializeSuuntoGuideJsonV1(recipe, options)).toEqual(result);
         const mapped = result.artifact.steps[0] as SuuntoGuideFieldsStepV1;
         const mandatory = serializeSuuntoGuideV2ForRecovery(recipe, options).artifact.steps[0] as SuuntoGuideFieldsStepV1;
         const measured = mapped.fields.filter(field => !field.type.startsWith('target') && field.type !== 'text'
@@ -244,7 +245,7 @@ describe('Suunto current readings and documented notifications', () => {
                 .toEqual({ title: 'Work', text: 'Follow distance countdown' });
             expect(mappedStep(sport, { ending: { kind: 'manual' } }).notification)
                 .toEqual({ title: 'Work', text: [ActivityTypes.Swimming, ActivityTypes.OpenWaterSwimming].includes(sport)
-                    ? 'Swim now. Press Lap to finish this interval.' : 'Press lap when ready' });
+                    ? 'Swim now. Press Lap to finish this interval.' : 'Press Lap to finish this interval.' });
         });
     it('does not round fractional intervals or omit day-length seconds in generated durations', () => {
         for (const seconds of [0.5, 1.5, 86400, 86401, Number.MAX_VALUE]) {
@@ -322,7 +323,7 @@ describe('Suunto current readings and documented notifications', () => {
         expect(mappedStep(ActivityTypes.Swimming, { ending: { kind: 'distance', meters: 100 } }).transitions)
             .toEqual([{ condition: { type: 'stepDistance', value: 100 } }]);
         expect(mappedStep(ActivityTypes.Running, { ending: { kind: 'manual' } }).fields)
-            .toContainEqual({ type: 'text', value: 'Press lap' });
+            .toContainEqual({ type: 'text', value: 'Lap to finish' });
         const result = serializeSuuntoGuideJsonV1({ version: 1, sport: ActivityTypes.Running,
             nodes: [{ ...step, note: '🚴'.repeat(55) }] }, { ...options, allowDegraded: true });
         const mapped = result.artifact.steps[0] as SuuntoGuideFieldsStepV1;
