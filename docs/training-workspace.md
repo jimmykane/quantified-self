@@ -4807,6 +4807,9 @@ The existing exact-value grid adds compact history columns below CTL, ATL, Ramp,
 The shared grid uses its own inline-size container for responsive columns and dividers: at 640px or less it shows
 two load-metric columns, including narrow desktop side panels, rather than squeezing four columns into them.
 Wider grids retain four columns; the public context preview retains its existing one-column narrow layout.
+The workspace grid stays content-sized instead of stretching to a neighboring chart's height. Its cells use compact
+12px vertical / 16px horizontal padding and a 4px history inset; charts remain aligned within each row when details
+wrap. Missing histories do not reserve a synthetic chart. Public preview padding remains unchanged.
 CTL/ATL/Form/Ramp reuse the current-day Form context's last available sample in each of up to eight UTC weeks;
 ACWR and Strain reuse their prepared `trend8Weeks` observations. These are weekly metric observations, not summed
 weekly load. No extra activity-history query or derived snapshot is introduced. A metric without observed history

@@ -30,6 +30,16 @@ describe('TrainingMetricGridComponent', () => {
     expect(narrowStyles).toContain('.training-metric-grid--preview-context > div:not(:first-child)');
   });
 
+  it('keeps workspace rows compact without stretching the panel or changing preview padding', () => {
+    const styles = readFileSync(resolve(process.cwd(), 'src/app/components/shared/training-summary/training-metric-grid.component.scss'), 'utf8');
+    expect(styles).toMatch(/:host\s*\{[^}]*align-self:\s*start;/s);
+    expect(styles).toMatch(/\.training-metric-grid\s*\{[^}]*align-content:\s*start;/s);
+    expect(styles).toMatch(/\.training-metric-grid--workspace > div\s*\{\s*padding:\s*12px 16px;\s*\}/s);
+    expect(styles).toMatch(/\.training-metric-grid--workspace app-metric-history-chart\s*\{\s*padding-top:\s*4px;\s*\}/s);
+    expect(styles).toMatch(/\.training-metric-grid app-metric-history-chart\s*\{[^}]*margin-top:\s*auto;/s);
+    expect(styles).toMatch(/\.training-metric-grid--preview-context > div\s*\{\s*padding:\s*\.9rem 1rem;/s);
+  });
+
   it('renders exact metric values through the shared numeric formatter', () => {
     fixture.componentRef.setInput('metrics', [
       { id: 'ctl', label: 'CTL', valueText: '62' },
