@@ -136,6 +136,7 @@ export class DashboardHealthChartComponent {
                     this.context.set(null);
                     this.evidence = null;
                     this.sampleRangeCorrectionPending = false;
+                    if (this.exampleOnly()) this.error.set(false);
                     this.loading.set(false);
                     return;
                 }

@@ -77,6 +77,18 @@ describe('public Health overview', () => {
     expect(selection).toHaveBeenCalledOnce(); expect(watch).not.toHaveBeenCalled();
   });
 
+  it('returns focus to the opened metric when a pointer click leaves focus on a category control', async () => {
+    const category = fixture.nativeElement.querySelector('mat-chip-option button') as HTMLButtonElement;
+    const historyButton = fixture.nativeElement.querySelector('button[aria-label="View Body weight history"]') as HTMLButtonElement;
+    category.focus();
+    // A click need not focus its button. Retained focus is not the navigation origin.
+    historyButton.click(); fixture.detectChanges(); await fixture.whenStable();
+    expect(document.activeElement?.id).toBe('health-sample-history-title');
+    fixture.nativeElement.querySelector('.sample-history button').click(); fixture.detectChanges(); await fixture.whenStable();
+    expect(document.activeElement).toBe(historyButton);
+    expect(selection).toHaveBeenCalledTimes(2);
+  });
+
   it('formats sample Weight in canonical default and pound units through Sports Lib', () => {
     const units = normalizeUserUnitSettings({ weightUnits: WeightUnits.Pounds });
     fixture.componentInstance.viewHistory('body_weight'); fixture.detectChanges();

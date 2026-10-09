@@ -1,5 +1,4 @@
 import { ChangeDetectionStrategy, Component, ElementRef, afterEveryRender, computed, inject, input, signal } from '@angular/core';
-import { DOCUMENT } from '@angular/common';
 import { MatButtonModule } from '@angular/material/button';
 import { MatIconModule } from '@angular/material/icon';
 import { AppThemes, User, type UserUnitSettingsInterface } from '@sports-alliance/sports-lib';
@@ -28,7 +27,6 @@ export class HealthOverviewPreviewComponent {
   private readonly haptics = inject(AppHapticsService);
   private readonly theme = inject(AppThemeService);
   private readonly host = inject<ElementRef<HTMLElement>>(ElementRef);
-  private readonly document = inject(DOCUMENT);
   private returnTarget: HTMLElement | null = null;
   private pendingFocus: 'history' | 'overview' | null = null;
   readonly darkTheme = computed(() => this.theme.appTheme() === AppThemes.Dark);
@@ -60,9 +58,11 @@ export class HealthOverviewPreviewComponent {
 
   viewHistory(metric: HealthWorkspaceMetricSelection): void {
     if (metric === this.selectedMetric() || metric !== 'sleep' && !this.groups.some(group => group.metrics.some(item => item.id === metric))) return;
-    const active = this.document.activeElement as HTMLElement | null;
-    this.returnTarget = active && this.host.nativeElement.contains(active) ? active : null;
     this.selectedMetric.set(metric);
+    const actionLabel = `View ${this.selectedLabel()} history`;
+    // Pointer clicks can leave focus on another control. Resolve the metric action itself.
+    this.returnTarget = Array.from(this.host.nativeElement.querySelectorAll<HTMLButtonElement>('app-health-category-overview mat-card-actions button'))
+      .find(button => button.getAttribute('aria-label') === actionLabel) ?? null;
     this.pendingFocus = 'history';
     this.haptics.selection();
   }
