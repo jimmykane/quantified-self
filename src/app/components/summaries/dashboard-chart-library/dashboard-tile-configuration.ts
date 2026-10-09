@@ -356,13 +356,13 @@ export class DashboardTileConfiguration {
     [DASHBOARD_AEROBIC_DURABILITY_KPI_CHART_TYPE]: 'timeline',
   };
   public readonly kpiChartDescriptionByType: Record<DashboardKpiChartType, string> = {
-    [DASHBOARD_ACWR_KPI_CHART_TYPE]: 'Acute/chronic workload ratio with 8-week sparkline.',
-    [DASHBOARD_RAMP_RATE_KPI_CHART_TYPE]: '7-day CTL change with 8-week sparkline.',
-    [DASHBOARD_MONOTONY_STRAIN_KPI_CHART_TYPE]: 'Weekly strain KPI with monotony context and sparkline.',
+    [DASHBOARD_ACWR_KPI_CHART_TYPE]: 'Acute/chronic workload ratio with 8-week history columns.',
+    [DASHBOARD_RAMP_RATE_KPI_CHART_TYPE]: '7-day CTL change with 8-week history columns.',
+    [DASHBOARD_MONOTONY_STRAIN_KPI_CHART_TYPE]: 'Weekly strain history columns with current monotony context.',
     [DASHBOARD_LOAD_STATUS_KPI_CHART_TYPE]: 'Current training state from Form, ramp, fitness, and fatigue.',
     [DASHBOARD_FORM_NOW_KPI_CHART_TYPE]: 'Current TSB readiness from derived load state.',
-    [DASHBOARD_FITNESS_CTL_KPI_CHART_TYPE]: 'Current CTL from the derived Form model with 8-week sparkline.',
-    [DASHBOARD_FATIGUE_ATL_KPI_CHART_TYPE]: 'Current ATL from the derived Form model with 8-week sparkline.',
+    [DASHBOARD_FITNESS_CTL_KPI_CHART_TYPE]: 'Current CTL from the derived Form model with 8-week history columns.',
+    [DASHBOARD_FATIGUE_ATL_KPI_CHART_TYPE]: 'Current ATL from the derived Form model with 8-week history columns.',
     [DASHBOARD_FITNESS_TREND_KPI_CHART_TYPE]: 'Recent CTL direction from the derived Form model.',
     [DASHBOARD_FATIGUE_TREND_KPI_CHART_TYPE]: 'Recent ATL direction from the derived Form model.',
     [DASHBOARD_RECOVERY_DEBT_KPI_CHART_TYPE]: 'Estimated zero-load days until neutral current TSB.',

@@ -17,12 +17,14 @@ import type {
   DashboardTrainingDisciplineSummary,
   DashboardTrainingRecoveryComparison,
   DashboardTrainingRecoveryWindow,
+  DashboardFreshnessForecastPoint,
 } from '../../helpers/dashboard-derived-metrics.helper';
 import {
   resolveDashboardFormNowContextFromPoints,
   resolveDashboardRampRateContextFromPoints,
 } from '../../helpers/dashboard-derived-metrics.helper';
-import { buildCurrentTrainingStateContext } from '../../helpers/current-training-state.helper';
+import { buildCurrentTrainingStateContext, type CurrentTrainingStateContext } from '../../helpers/current-training-state.helper';
+import type { MetricHistory, MetricHistoryPoint } from '../../helpers/metric-history-chart.helper';
 import {
   resolveActivityTypeIconColor,
   resolveActivityTypeMaterialIcon,
@@ -1822,7 +1824,7 @@ export class TrainingWorkspaceComponent implements OnInit, OnDestroy {
       freshnessPlusSevenDaysText: this.formatNumber(finalForecastPoint?.formSameDay ?? this.derivedState.formPlus7d?.value, 1, true),
     };
     this.trainingSummaryCards = this.buildTrainingSummaryCards();
-    this.trainingLoadMetricItems = this.buildTrainingLoadMetricItems();
+    this.trainingLoadMetricItems = this.buildTrainingLoadMetricItems(currentTrainingState, forecastPoints);
     this.trainingLoadGuidance = buildTrainingLoadGuidance(
       currentFormNow?.value ?? latestCurrentPoint?.formSameDay ?? null,
       finalForecastPoint?.formSameDay ?? this.derivedState.formPlus7d?.value ?? null,
@@ -2823,16 +2825,31 @@ export class TrainingWorkspaceComponent implements OnInit, OnDestroy {
     ];
   }
 
-  private buildTrainingLoadMetricItems(): TrainingSummaryMetric[] {
+  private buildTrainingLoadMetricItems(
+    current?: CurrentTrainingStateContext,
+    forecast: readonly DashboardFreshnessForecastPoint[] = [],
+  ): TrainingSummaryMetric[] {
+    const history = (points: readonly MetricHistoryPoint[] | undefined, digits = 0, signed = false): MetricHistory | undefined => points?.length ? {
+      caption: '8-week history',
+      points: points.map(point => ({ ...point, valueText: this.formatNumber(point.value, digits, signed) })),
+    } : undefined;
+    const latestCurrentPoint = [...forecast].reverse().find(point => !point.isForecast);
+    const futurePoints = forecast.filter(point => point.isForecast);
+    const forecastHistory: MetricHistory | undefined = futurePoints.length ? {
+      caption: 'Next 7 days', mode: 'forecast',
+      points: [...(latestCurrentPoint ? [latestCurrentPoint] : []), ...futurePoints].map(point => ({
+        time: point.dayMs, value: point.formSameDay, valueText: this.formatNumber(point.formSameDay, 1, true),
+      })),
+    } : undefined;
     return [
-      { id: 'ctl', label: 'CTL', valueText: this.loadMetrics.ctlText },
-      { id: 'atl', label: 'ATL', valueText: this.loadMetrics.atlText },
-      { id: 'ramp', label: 'Ramp', valueText: this.loadMetrics.rampText },
-      { id: 'acwr', label: 'ACWR', valueText: this.loadMetrics.acwrText },
-      { id: 'monotony', label: 'Monotony', valueText: this.loadMetrics.monotonyText },
-      { id: 'strain', label: 'Strain', valueText: this.loadMetrics.strainText },
-      { id: 'now', label: 'Now', valueText: this.loadMetrics.freshnessNowText },
-      { id: 'plus-seven-days', label: '+7 days', valueText: this.loadMetrics.freshnessPlusSevenDaysText },
+      { id: 'ctl', label: 'CTL', valueText: this.loadMetrics.ctlText, detailText: '42-day load', history: history(current?.fitness?.trend8Weeks) },
+      { id: 'atl', label: 'ATL', valueText: this.loadMetrics.atlText, detailText: '7-day load', history: history(current?.fatigue?.trend8Weeks) },
+      { id: 'ramp', label: 'Ramp', valueText: this.loadMetrics.rampText, detailText: '7-day fitness change', history: history(current?.rampRate?.trend8Weeks, 2, true) },
+      { id: 'acwr', label: 'ACWR', valueText: this.loadMetrics.acwrText, detailText: 'Acute ÷ chronic load', history: history(this.derivedState.acwr?.trend8Weeks, 2) },
+      { id: 'monotony', label: 'Monotony', valueText: this.loadMetrics.monotonyText, detailText: 'Weekly load variability' },
+      { id: 'strain', label: 'Strain', valueText: this.loadMetrics.strainText, detailText: 'Load × monotony', history: history(this.derivedState.monotonyStrain?.trend8Weeks) },
+      { id: 'now', label: 'Now', valueText: this.loadMetrics.freshnessNowText, detailText: 'Fitness − fatigue', history: history(current?.formNow?.trend8Weeks, 0, true) },
+      { id: 'plus-seven-days', label: '+7 days', valueText: this.loadMetrics.freshnessPlusSevenDaysText, detailText: 'No-additional-load scenario', history: forecastHistory },
     ];
   }
 

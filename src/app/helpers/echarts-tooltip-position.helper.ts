@@ -14,7 +14,7 @@ function toFiniteCoordinate(value: unknown): number {
 export function getViewportConstrainedTooltipPosition(
   point: number[] | undefined,
   _params: unknown,
-  _dom: HTMLElement,
+  _dom: unknown,
   _rect: unknown,
   size: EChartsTooltipPositionSize | undefined
 ): [number, number] {
@@ -43,4 +43,23 @@ export function getViewportConstrainedTooltipPosition(
     clamp(nextX, edgePadding, maxX),
     clamp(nextY, edgePadding, maxY),
   ];
+}
+
+/** ECharts gives position callbacks chart-local coordinates and chart size, not browser size.
+ * Tiny plots need room outside their chart. Reuse the shared clamp in viewport coordinates,
+ * then return chart-local coordinates for ECharts to translate into the shared tooltip host. */
+export function buildViewportHostedTooltipPosition(chartContainer: HTMLElement): typeof getViewportConstrainedTooltipPosition {
+  return (point, params, dom, rect, size) => {
+    const doc = chartContainer.ownerDocument;
+    const width = doc.documentElement.clientWidth || doc.defaultView?.innerWidth || 0;
+    const height = doc.documentElement.clientHeight || doc.defaultView?.innerHeight || 0;
+    if (width <= 0 || height <= 0) return getViewportConstrainedTooltipPosition(point, params, dom, rect, size);
+    // Read current bounds on every interaction: the grid can resize or scroll without new data.
+    const bounds = chartContainer.getBoundingClientRect();
+    const [left, top] = getViewportConstrainedTooltipPosition(
+      [bounds.left + toFiniteCoordinate(point?.[0]), bounds.top + toFiniteCoordinate(point?.[1])],
+      params, dom, rect, { ...size, viewSize: [width, height] },
+    );
+    return [left - bounds.left, top - bounds.top];
+  };
 }

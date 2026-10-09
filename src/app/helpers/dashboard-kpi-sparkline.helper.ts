@@ -25,6 +25,14 @@ export type DashboardKpiContext = { chartType: string } & Partial<Pick<Dashboard
 
 export interface KpiSparklineStyle { lineColor: string; areaColor: string; areaOpacity: number; }
 
+/** Weekly scalar histories use columns. Recovery debt instead shows underlying Form;
+ * capacity and durability keep their existing evidence-series renderers. */
+export function usesDashboardKpiHistoryColumns(chartType: string): boolean {
+  return chartType !== DASHBOARD_RECOVERY_DEBT_KPI_CHART_TYPE
+    && chartType !== DASHBOARD_AEROBIC_CAPACITY_KPI_CHART_TYPE
+    && chartType !== DASHBOARD_AEROBIC_DURABILITY_KPI_CHART_TYPE;
+}
+
 /** One source for the full tile, selected preview and decorative list sparkline. */
 export function resolveDashboardKpiTrend(input: DashboardKpiContext): Array<{ time: number; value: number | null }> {
   switch (input.chartType) {
@@ -255,4 +263,3 @@ function resolveDirectionalColor(
   }
   return options.neutralColor;
 }
-
