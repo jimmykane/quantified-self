@@ -106,13 +106,29 @@ even when a competing deletion finishes between those operations.
 
 **Medium impact — mail reads and ownership, fixed for explicit UID records.**
 Mail cleanup previously fetched entire histories and deleted email matches without
-respecting another explicit UID. It now pages 100 records, checks UID markers,
+respecting another explicit UID. It now pages 100 records, queries `uid`, `toUids`
+and `marketing.uid`, rejects conflicting explicit owners,
 pins batch deletes to the queried document revision and verifies remaining owned
 matches. Confirmation mail remains retained. Legacy records without UID metadata
 still rely on their email match; this is an attribution limitation, not proof of
 immutable account ownership. Do not infer complete historical email coverage from
 the receipt. Removing that ambiguity requires a separately scoped mail ownership
-migration, not broadening destructive matching in this cleanup.
+migration, not broadening destructive matching in this cleanup. Registration welcome
+and all four subscription lifecycle writers now store an inert `uid` field;
+existing records are not backfilled. Registration mail also embeds the UID in its
+exact document ID, while subscription mail uses subscription/event IDs. The old
+CSV development-update script and manual template-test script write email-only
+records and can address recipients without an app account. The installed Delete
+User Data extension never selected `mail`; email cleanup was already owned by the
+custom Gen 1 handler. Keep historical-mail policy separate from extension parity.
+
+**Client and campaign writers, fixed.** Existing browser sessions can outlive the
+callable response. Rules now apply the active deletion tombstone check to every
+previously permitted account write, including profiles, settings, legal records,
+event/route/activity edits and checkout sessions. Reads remain available under
+their existing rules. The MCP campaign script rechecks the shared deletion guard
+inside each mail transaction after recipient selection; skipped deleted users
+are counted separately. These changes require their own approved rollout.
 
 Two **hardened native generations** may overlap temporarily. They use the same
 fixed scope and durable checkpoints; superseded attempts retry. This adds work,
@@ -139,13 +155,20 @@ implementation distinguishes account incarnations at the same path.
    independent Firestore, Storage, MCP and mail cleanup still proceeds.
 3. Existing provider/account ownership exclusions remain in force, including
    shared accounts and provider IDs reassigned to another active owner. Source
-   queue/DLQ tombstones are persisted before recursive operational deletion.
+   queue/DLQ tombstones commit atomically with the guarded root deletion.
    Queue and MCP top-level targets are checkpointed in the marker's server-only
    `operationalTargets` subcollection before recursive deletion. A retry can
    therefore find children after their query-visible parent has disappeared;
    paths stay within an explicit collection allowlist and current parent
-   ownership is rechecked before replay. Changed ownership retains the target
-   and blocks completion for operator review. Provider-only lookups also require
+   ownership is rechecked before replay. Every descendant/root delete uses a
+   transaction that reads the selected parent revision (or continued absence),
+   current cleanup attempt, and provider-only connected-token ownership before
+   committing. Native recursive enumeration uses a custom BulkWriter with at
+   most ten concurrent transactions; the root waits for all descendant deletes.
+   Checkpoints retain minimal owner/provider/source-queue metadata, so a missing
+   parent cannot bypass reconnect checks. Older provider-only checkpoints without
+   attribution fail closed. Changed ownership retains the target and blocks
+   completion for operator review. Provider-only lookups also require
    the identifier to belong to the matching provider, not merely share its text.
    Discovery, deletion and readback page exact UID/provider queries at 100 rows;
    they do not scan unrelated queue collections. Canonical safe numeric legacy
@@ -238,11 +261,23 @@ raw Eventarc `oldValue` payload, original email, tenant isolation and missing da
 A real Firestore overlap test proves a stale Gen 1 attempt cannot replace the Gen 2
 receipt or erase another owner. Further regressions cover an 801-record mail
 history, confirmation/other-UID retention, and reassignment between query and
-batch commit. These tests do not run Functions/Extensions
+batch commit. Further review covers ownership reassignment before recursive
+queue deletion, reconnect after a provider-only parent disappears, an operational
+tree exceeding the SDK's 5,000-document stream page, `uid` mail ownership after
+email changes, and client Rules/transaction-time campaign fences. These tests do not run Functions/Extensions
 emulators or claim live Auth-to-Eventarc delivery.
 
-After separate deployment approval, first deploy the hardened legacy owner and
-callable, then verify their revision and retry/secret/runtime options:
+After separate deployment approval, first deploy the client write fence and
+UID-bearing registration/subscription mail writers. Historical mail needs its
+separate ownership decision; no backfill or policy migration is performed here.
+Do not run the old unguarded campaign script against deleting accounts.
+
+```sh
+firebase deploy --project quantified-self-io --only firestore:rules,functions:sendRegistrationWelcomeEmail,functions:onSubscriptionUpdated
+```
+
+Then deploy the hardened legacy owner and callable, and verify their revision
+and retry/secret/runtime options:
 
 ```sh
 firebase deploy --project quantified-self-io --only functions:cleanupUserAccounts,functions:deleteSelf
