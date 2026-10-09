@@ -156,6 +156,7 @@ async function getSuuntoSleepBackfillTokens(
                 });
             }
         } catch (error) {
+            if (execution) throw error;
             logger.warn('[SleepBackfill] Could not use a connected Suunto token.', {
                 userID,
                 errorName: error instanceof Error ? error.name : 'UnknownError',
@@ -254,6 +255,7 @@ async function getCorosSleepBackfillToken(userID: string, execution?: HistoryExe
             return { providerUserId };
         }
     } catch (error) {
+        if (execution) throw error;
         logger.warn(`[SleepBackfill] Could not use the active COROS token for ${userID}`, error);
     }
 
@@ -735,6 +737,8 @@ export async function queueSuuntoSleepHealthHistory(userID: string, options: Sle
             if (failure?.status === 'rejected') throw failure.reason;
         }
     } catch (error) {
+        // Let the coordinator retain the reservation and classify retry/auth details.
+        if (options.execution) throw error;
         const message = includeHealth
             ? 'Could not queue Suunto Sleep and Health history.'
             : error instanceof Error ? error.message : `${error}`;

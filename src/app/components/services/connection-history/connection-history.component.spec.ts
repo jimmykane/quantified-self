@@ -62,12 +62,65 @@ describe('recent history status', () => {
     const fixture = TestBed.createComponent(ConnectionHistoryStatusComponent); fixture.componentRef.setInput('status', status);
     let finish!: () => void; users.retryConnectionHistoryImport.mockReturnValue(new Promise<void>(resolve => finish = resolve));
     const pending = fixture.componentInstance.retry(); await fixture.componentInstance.retry();
-    expect(users.retryConnectionHistoryImport).toHaveBeenCalledExactlyOnceWith('opaque'); expect(haptics.success).not.toHaveBeenCalled();
+    expect(users.retryConnectionHistoryImport).toHaveBeenCalledExactlyOnceWith('opaque', expect.any(Function)); expect(haptics.success).not.toHaveBeenCalled();
     finish(); await pending; expect(haptics.success).toHaveBeenCalledTimes(1);
   });
   it('keeps connection-independent failures visible and recoverable', async () => {
     const fixture = TestBed.createComponent(ConnectionHistoryStatusComponent); fixture.componentRef.setInput('status', status);
     users.retryConnectionHistoryImport.mockRejectedValue(new Error()); await fixture.componentInstance.retry(); fixture.detectChanges();
     expect(fixture.componentInstance.error()).toContain('Could not retry'); expect(haptics.error).toHaveBeenCalledTimes(1);
+  });
+  it.each(['success', 'failure'])('suppresses late retry %s feedback after teardown', async outcome => {
+    const fixture = TestBed.createComponent(ConnectionHistoryStatusComponent);
+    fixture.componentRef.setInput('status', status);
+    let resolve!: () => void;
+    let reject!: (error: Error) => void;
+    users.retryConnectionHistoryImport.mockReturnValue(new Promise<void>((yes, no) => { resolve = yes; reject = no; }));
+    const pending = fixture.componentInstance.retry();
+    fixture.destroy();
+    if (outcome === 'success') resolve(); else reject(new Error('Delayed failure'));
+    await pending;
+    expect(haptics.success).not.toHaveBeenCalled();
+    expect(haptics.error).not.toHaveBeenCalled();
+    expect(fixture.componentInstance.error()).toBe('');
+  });
+  it('keeps replacement-run controls independent of an earlier pending retry', async () => {
+    const fixture = TestBed.createComponent(ConnectionHistoryStatusComponent);
+    fixture.componentRef.setInput('status', status);
+    let rejectOld!: (error: Error) => void;
+    let resolveNew!: () => void;
+    users.retryConnectionHistoryImport
+      .mockReturnValueOnce(new Promise<void>((_, reject) => rejectOld = reject))
+      .mockReturnValueOnce(new Promise<void>(resolve => resolveNew = resolve));
+    const oldPending = fixture.componentInstance.retry();
+    fixture.componentRef.setInput('status', { ...status, runId: 'replacement' });
+    expect(users.retryConnectionHistoryImport.mock.calls[0][1]()).toBe(false);
+    expect(fixture.componentInstance.retrying()).toBe(false);
+    const newPending = fixture.componentInstance.retry();
+    expect(users.retryConnectionHistoryImport).toHaveBeenCalledTimes(2);
+    rejectOld(new Error('Old run failed')); await oldPending;
+    expect(fixture.componentInstance.retrying()).toBe(true);
+    expect(fixture.componentInstance.error()).toBe('');
+    expect(haptics.error).not.toHaveBeenCalled();
+    resolveNew(); await newPending;
+    expect(fixture.componentInstance.retrying()).toBe(false);
+    expect(haptics.success).toHaveBeenCalledOnce();
+  });
+  it('does not project an earlier run’s retry error onto replacement status', async () => {
+    const fixture = TestBed.createComponent(ConnectionHistoryStatusComponent);
+    fixture.componentRef.setInput('status', status);
+    users.retryConnectionHistoryImport.mockRejectedValueOnce(new Error('Retry failed'));
+    await fixture.componentInstance.retry();
+    expect(fixture.componentInstance.error()).toContain('Could not retry');
+    fixture.componentRef.setInput('status', { ...status, runId: 'replacement' });
+    expect(fixture.componentInstance.error()).toBe('');
+  });
+  it('treats account-bound cancellation as silent rather than an import failure', async () => {
+    const fixture = TestBed.createComponent(ConnectionHistoryStatusComponent);
+    fixture.componentRef.setInput('status', status);
+    users.retryConnectionHistoryImport.mockRejectedValue(new Error('Operation cancelled because its account or view changed.'));
+    await fixture.componentInstance.retry();
+    expect(fixture.componentInstance.error()).toBe('');
+    expect(haptics.error).not.toHaveBeenCalled();
   });
 });

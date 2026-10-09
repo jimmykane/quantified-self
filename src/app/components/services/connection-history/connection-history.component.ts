@@ -1,4 +1,4 @@
-import { Component, computed, inject, input, output, signal } from '@angular/core';
+import { Component, computed, DestroyRef, inject, input, output, signal } from '@angular/core';
 import { DatePipe } from '@angular/common';
 import { MatCheckboxModule } from '@angular/material/checkbox';
 import { MatExpansionModule } from '@angular/material/expansion';
@@ -20,6 +20,7 @@ import { AppHapticsService } from '../../../services/app.haptics.service';
 import { AppUserService } from '../../../services/app.user.service';
 
 const labels: Record<HistoryResource, string> = { activities: 'activities', sleep: 'Sleep', health: 'Health' };
+interface HistoryRetryView { runId: string; service: ServiceNames; }
 function resourceLabel(resources: readonly HistoryResource[]): string {
   return resources.map(resource => labels[resource]).join(', ').replace(/, ([^,]*)$/, ', and $1');
 }
@@ -53,10 +54,16 @@ export class ConnectionHistoryStatusComponent {
   readonly status = input<ConnectionHistoryStatusProjection | null>(null);
   readonly disabled = input(false);
   readonly reconnect = output<void>();
-  readonly retrying = signal(false);
-  readonly error = signal('');
+  private readonly pendingRetry = signal<HistoryRetryView | null>(null);
+  private readonly retryFailure = signal<(HistoryRetryView & { message: string }) | null>(null);
+  readonly retrying = computed(() => this.matchesCurrentRun(this.pendingRetry()));
+  readonly error = computed(() => {
+    const failure = this.retryFailure();
+    return this.matchesCurrentRun(failure) ? failure!.message : '';
+  });
   readonly haptics = inject(AppHapticsService);
   private readonly users = inject(AppUserService);
+  private readonly destroyRef = inject(DestroyRef);
   readonly rangeLabel = computed(() => {
     const status = this.status();
     return status ? historyRangeLabel(this.service(), status.rangePreset) : '';
@@ -77,16 +84,27 @@ export class ConnectionHistoryStatusComponent {
   })));
   readonly needsReconnect = computed(() => this.steps().some(step => /reconnect|authorization|permission/i.test(step.message || '')));
   reviewReconnect(): void { if (!this.disabled()) { this.haptics.selection(); this.reconnect.emit(); } }
+  private matchesCurrentRun(view: HistoryRetryView | null): boolean {
+    return !!view && view.runId === this.status()?.runId && view.service === this.service();
+  }
   async retry(): Promise<void> {
     const status = this.status();
-    if (!status?.canRetry || this.disabled() || this.retrying()) return;
-    this.haptics.selection(); this.retrying.set(true); this.error.set('');
+    if (this.destroyRef.destroyed || !status?.canRetry || this.disabled() || this.retrying()) return;
+    const view = { runId: status.runId, service: this.service() };
+    const isCurrentView = () => !this.destroyRef.destroyed
+      && this.pendingRetry() === view && this.matchesCurrentRun(view);
+    this.haptics.selection(); this.pendingRetry.set(view); this.retryFailure.set(null);
     try {
-      await this.users.retryConnectionHistoryImport(status.runId);
-      this.haptics.success();
-    } catch {
-      this.error.set('Could not retry this import. Please try again, or reconnect if your authorization has changed.');
+      await this.users.retryConnectionHistoryImport(status.runId, isCurrentView);
+      if (isCurrentView()) this.haptics.success();
+    } catch (error) {
+      const cancelled = error as { code?: unknown; message?: unknown } | null;
+      if (!isCurrentView() || (cancelled?.code === undefined
+        && cancelled?.message === 'Operation cancelled because its account or view changed.')) return;
+      this.retryFailure.set({ ...view, message: 'Could not retry this import. Please try again, or reconnect if your authorization has changed.' });
       this.haptics.error();
-    } finally { this.retrying.set(false); }
+    } finally {
+      if (!this.destroyRef.destroyed && this.pendingRetry() === view) this.pendingRetry.set(null);
+    }
   }
 }

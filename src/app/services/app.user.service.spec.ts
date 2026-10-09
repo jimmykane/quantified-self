@@ -2405,6 +2405,37 @@ describe('AppUserService', () => {
         const startDate = new Date('2023-01-01');
         const endDate = new Date('2023-01-31');
 
+        describe('retryConnectionHistoryImport', () => {
+            it('rejects an unaccepted retry while preserving the current view', async () => {
+                mockFunctionsService.call.mockResolvedValueOnce({ data: { accepted: false } });
+                await expect(service.retryConnectionHistoryImport('run-id')).rejects.toThrow('History retry was not accepted.');
+            });
+            it('pins retry dispatch to the initiating Firebase account and view', async () => {
+                let currentView = true;
+                mockFunctionsService.call.mockResolvedValueOnce({ data: { accepted: true } });
+                await service.retryConnectionHistoryImport('run-id', () => currentView);
+                expect(mockFunctionsService.call).toHaveBeenCalledWith('retryConnectionHistoryImport', { runId: 'run-id' }, { canExecute: expect.any(Function) });
+                const canExecute = mockFunctionsService.call.mock.calls.at(-1)![2].canExecute;
+                expect(canExecute()).toBe(true);
+                currentView = false; expect(canExecute()).toBe(false);
+                currentView = true;
+                const original = mockAuth.currentUser;
+                mockAuth.currentUser = { ...original, uid: 'other-owner' }; expect(canExecute()).toBe(false);
+                mockAuth.currentUser = null; expect(canExecute()).toBe(false);
+                mockAuth.currentUser = { ...original }; expect(canExecute()).toBe(false);
+            });
+            it.each(['account', 'view'])('cancels a late accepted response after the %s changes', async change => {
+                let currentView = true;
+                let finish!: (value: { data: { accepted: boolean } }) => void;
+                mockFunctionsService.call.mockReturnValueOnce(new Promise(resolve => finish = resolve));
+                const pending = service.retryConnectionHistoryImport('run-id', () => currentView);
+                if (change === 'account') mockAuth.currentUser = { ...mockAuth.currentUser };
+                else currentView = false;
+                finish({ data: { accepted: true } });
+                await expect(pending).rejects.toThrow('Operation cancelled because its account or view changed.');
+            });
+        });
+
         describe.each(['activity', 'suunto-sleep', 'coros-sleep', 'garmin-health'] as const)('%s history account guard', kind => {
             async function request(expectedUserID = 'u1') {
                 switch (kind) {

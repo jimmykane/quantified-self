@@ -46,7 +46,11 @@ An unavailable early Garmin Activity or Sleep window does not cancel later windo
 
 Each operation retains its original range/cursor and a durable bounded completion receipt. An operation receipt survives a crash before the run advances. Queue admission remains idempotent if a failure occurs before a receipt can be persisted. Provider requests are at-least-once across an ambiguous network/commit failure; Garmin's existing duplicate-request handling is reused. Submission never proves delivery.
 
+Automatic Sleep/Health operations preserve credential-read and queue-admission errors for the coordinator's retry/authorization classification. Failed automatic admission keeps its claimed reservation and cooldown; manual callable error mapping and cooldown recovery retain their existing behavior.
+
 Invocation-local history context travels through the reused HTTP clients and canonical event, Sleep and Health writers. It verifies Pro entitlement, deletion state, exact credentials/connection and, for coordination, lease ownership before requests and transactional persistence. Original files use the canonical staging path. Context is constructed exclusively on the server from the private run, never from a callable payload. Legacy/manual ingestion without history context keeps its existing lifecycle protections.
+
+Frontend retries capture the initiating Firebase user object and the displayed run. Account/view changes cancel delayed dispatch through the existing callable guard and suppress late feedback after a response. Pending controls and retry errors are scoped to that run and provider, so a replacement run can be retried independently. Closing the view does not undo work already accepted by the server.
 
 Queued children from a superseded connection finish through the existing revision-guarded skip transition. Retry and dead-letter paths recheck history ownership before processing and inside their transaction, including when a provider handler has converted the original error to a safe error. Transient guard-read failures remain retryable. An early Sleep skip cannot use lease fields fetched from another worker as proof of ownership, and stale children cannot complete replacement revisions.
 

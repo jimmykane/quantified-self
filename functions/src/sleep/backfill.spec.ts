@@ -254,6 +254,8 @@ import {
     backfillCorosAPISleep,
     backfillGarminAPIHealth,
     queueGarminSleepHealthHistory,
+    queueSuuntoSleepHealthHistory,
+    queueCorosSleepHealthHistory,
     backfillSuuntoAppSleep,
     chunkSleepBackfillRange,
 } from './backfill';
@@ -353,6 +355,40 @@ describe('backfillSuuntoAppSleep', () => {
 
     afterEach(() => {
         vi.useRealTimers();
+    });
+
+    it.each(['Suunto', 'COROS'])('preserves automatic %s token-read failures for the coordinator to classify', async provider => {
+        if (provider === 'Suunto') seedSuuntoToken(); else seedCorosToken();
+        const error = Object.assign(new Error('Temporary credential read failure'), { retryAt: nowMs + 120000 });
+        hoisted.getTokenData.mockRejectedValueOnce(error);
+        const tokenPath = provider === 'Suunto'
+            ? 'suuntoAppAccessTokens/user-1/tokens/suunto-token-1'
+            : 'corosAPIAccessTokens/user-1/tokens/coros-token-1';
+        const execution = {
+            runId: 'run', tokenPath, providerUserId: provider === 'Suunto' ? 'suunto-user-1' : 'coros-token-1',
+            cooldownStartedAtMs: nowMs, requiredDocumentFieldValues: [], beforeRequest: vi.fn(), inTransaction: vi.fn(), onQueued: vi.fn(),
+        };
+        const operation = provider === 'Suunto' ? queueSuuntoSleepHealthHistory : queueCorosSleepHealthHistory;
+        await expect(operation('user-1', { execution, startMs: nowMs - 86400000, endMs: nowMs })).rejects.toBe(error);
+        expect(hoisted.addSleepSyncQueueItem).not.toHaveBeenCalled();
+        expect(hoisted.updateSleepSyncState).not.toHaveBeenCalled();
+    });
+
+    it.each([401, 429])('preserves automatic Suunto queue failure %s and its claimed cooldown', async statusCode => {
+        seedSuuntoToken();
+        const error = Object.assign(new Error('Queue admission unavailable'), { statusCode, retryAt: nowMs + 120000 });
+        hoisted.addSleepSyncQueueItem.mockRejectedValueOnce(error);
+        const execution = {
+            runId: 'run', tokenPath: 'suuntoAppAccessTokens/user-1/tokens/suunto-token-1', providerUserId: 'suunto-user-1',
+            cooldownStartedAtMs: nowMs, requiredDocumentFieldValues: [], beforeRequest: vi.fn(), inTransaction: vi.fn(), onQueued: vi.fn(),
+        };
+        await expect(queueSuuntoSleepHealthHistory('user-1', {
+            execution, startMs: nowMs - 86400000, endMs: nowMs, resources: ['sleep'],
+        })).rejects.toBe(error);
+        expect(hoisted.transactionSet).toHaveBeenCalledWith(expect.anything(), expect.objectContaining({
+            connectionHistoryReservation: 'run', nextBackfillAllowedAtMs: nowMs + SLEEP_BACKFILL_COOLDOWN_MS,
+        }), { merge: true });
+        expect(hoisted.updateSleepSyncState).not.toHaveBeenCalled();
     });
 
     it('queues Suunto Sleep and Health windows from 2000 to now, recent windows first', async () => {
