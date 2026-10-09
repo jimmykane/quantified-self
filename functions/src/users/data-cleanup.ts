@@ -1,5 +1,6 @@
 import * as admin from 'firebase-admin';
 import { FieldValue, Timestamp } from 'firebase-admin/firestore';
+import { createHash, randomUUID } from 'node:crypto';
 import type { Bucket } from '@google-cloud/storage';
 import { USER_DELETION_TOMBSTONES_COLLECTION } from '../shared/user-deletion-guard';
 
@@ -20,43 +21,93 @@ function marker(db: admin.firestore.Firestore, uid: string): admin.firestore.Doc
     return db.collection(USER_DELETION_TOMBSTONES_COLLECTION).doc(uid);
 }
 
-/** Also fences administrator-initiated Auth deletion and upgrades old expiring markers. */
-export async function beginAccountDataCleanup(db: admin.firestore.Firestore, uid: string): Promise<AccountDeletionIdentifiers> {
-    const ref = marker(db, uid);
-    const snapshot = await ref.get();
-    const saved = snapshot.data()?.providerIdentifiers;
-    await ref.set({
-        cleanupStatus: 'pending',
-        lastAttemptAt: FieldValue.serverTimestamp(),
-        expireAt: FieldValue.delete(),
-        completedAt: FieldValue.delete(),
-    }, { merge: true });
-    const strings = (key: keyof AccountDeletionIdentifiers): string[] =>
-        Array.isArray(saved?.[key]) ? saved[key].filter((value: unknown) => typeof value === 'string' && value.length > 0) : [];
-    return {
-        suuntoUserNames: strings('suuntoUserNames'), corosOpenIds: strings('corosOpenIds'),
-        garminUserIDs: strings('garminUserIDs'), wahooUserIDs: strings('wahooUserIDs'),
-    };
+export interface AccountDeletionAttempt extends AccountDeletionIdentifiers { attemptId: string; }
+export const ACCOUNT_DELETION_TARGETS_COLLECTION = 'operationalTargets';
+export interface AccountDeletionTarget {
+    path: string;
+    fieldName: string;
+    value: string;
+    providerKeyed: boolean;
 }
 
-/** Persist before removing credentials/queues; retries must retain provider-only lookup authority. */
+/** Atomically restore lookup authority and supersede any older invocation. */
+export async function beginAccountDataCleanup(db: admin.firestore.Firestore, uid: string): Promise<AccountDeletionAttempt> {
+    const ref = marker(db, uid);
+    const attemptId = randomUUID();
+    return db.runTransaction(async tx => {
+        const snapshot = await tx.get(ref);
+        const saved = snapshot.data()?.providerIdentifiers;
+        tx.set(ref, {
+            cleanupStatus: 'pending', cleanupAttemptId: attemptId,
+            lastAttemptAt: FieldValue.serverTimestamp(),
+            expireAt: FieldValue.delete(), completedAt: FieldValue.delete(),
+        }, { merge: true });
+        const strings = (key: keyof AccountDeletionIdentifiers): string[] =>
+            Array.isArray(saved?.[key]) ? saved[key].filter((value: unknown) => typeof value === 'string' && value.length > 0) : [];
+        return {
+            attemptId,
+            suuntoUserNames: strings('suuntoUserNames'), corosOpenIds: strings('corosOpenIds'),
+            garminUserIDs: strings('garminUserIDs'), wahooUserIDs: strings('wahooUserIDs'),
+        };
+    });
+}
+
+async function requireCurrentAttempt(tx: admin.firestore.Transaction, ref: admin.firestore.DocumentReference, attemptId: string): Promise<void> {
+    const snapshot = await tx.get(ref);
+    if (!attemptId || snapshot.data()?.cleanupAttemptId !== attemptId || snapshot.data()?.cleanupStatus !== 'pending') {
+        throw new Error('Account cleanup attempt was superseded.');
+    }
+}
+
+/** Persist before removing credentials/queues; retries retain provider-only lookup authority. */
 export async function checkpointAccountDeletionIdentifiers(
-    db: admin.firestore.Firestore, uid: string, identifiers: AccountDeletionIdentifiers,
+    db: admin.firestore.Firestore, uid: string, identifiers: AccountDeletionIdentifiers, attemptId: string,
 ): Promise<void> {
     const ref = marker(db, uid);
     const entries = Object.entries(identifiers).filter(([, values]) => values.length > 0);
-    if (!entries.length) return;
-    const providerIdentifiers = Object.fromEntries(entries
-        .map(([key, values]) => [key, FieldValue.arrayUnion(...values)]));
-    await ref.set({ providerIdentifiers }, { merge: true });
+    const providerIdentifiers = Object.fromEntries(entries.map(([key, values]) => [key, FieldValue.arrayUnion(...values)]));
+    await db.runTransaction(async tx => {
+        await requireCurrentAttempt(tx, ref, attemptId);
+        if (entries.length) tx.set(ref, { providerIdentifiers }, { merge: true });
+    });
 }
 
-export async function completeAccountDataCleanup(db: admin.firestore.Firestore, uid: string): Promise<void> {
-    // Only the owner orchestrator calls this after every mandatory stage and absence check.
-    await marker(db, uid).set({
-        cleanupStatus: 'complete', completedAt: FieldValue.serverTimestamp(),
-        expireAt: Timestamp.fromMillis(Date.now() + COMPLETED_RETENTION_MS),
-    }, { merge: true });
+/** A subcollection avoids the 1 MiB marker limit for accounts with many queue rows. */
+export async function checkpointAccountDeletionTarget(
+    db: admin.firestore.Firestore, uid: string, attemptId: string, target: AccountDeletionTarget,
+): Promise<admin.firestore.DocumentReference> {
+    const ref = marker(db, uid);
+    const targetRef = ref.collection(ACCOUNT_DELETION_TARGETS_COLLECTION).doc(createHash('sha256').update(target.path).digest('hex'));
+    await db.runTransaction(async tx => {
+        await requireCurrentAttempt(tx, ref, attemptId);
+        tx.set(targetRef, { ...target, attemptId });
+    });
+    return targetRef;
+}
+
+export async function removeAccountDeletionTargetCheckpoint(
+    db: admin.firestore.Firestore, uid: string, attemptId: string, checkpoint: admin.firestore.DocumentReference,
+): Promise<void> {
+    await db.runTransaction(async tx => {
+        await requireCurrentAttempt(tx, marker(db, uid), attemptId);
+        const current = await tx.get(checkpoint);
+        if (current.exists && current.get('attemptId') !== attemptId) throw new Error('Account cleanup target was superseded.');
+        // Server-only leaf checkpoint; its target tree has already been verified absent.
+        tx.delete(checkpoint);
+    });
+}
+
+export async function completeAccountDataCleanup(db: admin.firestore.Firestore, uid: string, attemptId: string): Promise<void> {
+    const ref = marker(db, uid);
+    await db.runTransaction(async tx => {
+        await requireCurrentAttempt(tx, ref, attemptId);
+        const targets = await tx.get(ref.collection(ACCOUNT_DELETION_TARGETS_COLLECTION).limit(1));
+        if (!targets.empty) throw new Error('Account operational cleanup targets remain.');
+        tx.set(ref, {
+            cleanupStatus: 'complete', completedAt: FieldValue.serverTimestamp(),
+            expireAt: Timestamp.fromMillis(Date.now() + COMPLETED_RETENTION_MS),
+        }, { merge: true });
+    });
 }
 
 export async function deleteAccountFirestoreRoot(db: admin.firestore.Firestore, uid: string, collection: typeof ACCOUNT_DELETION_ROOT_COLLECTIONS[number]): Promise<void> {
@@ -67,7 +118,10 @@ export async function deleteAccountFirestoreRoot(db: admin.firestore.Firestore, 
 /** listDocuments includes missing parents; an ordinary collection query does not. */
 export async function assertAccountFirestoreRootAbsent(db: admin.firestore.Firestore, uid: string, collection: typeof ACCOUNT_DELETION_ROOT_COLLECTIONS[number]): Promise<void> {
     marker(db, uid);
-    const root = db.collection(collection).doc(uid);
+    await assertAccountFirestoreTreeAbsent(db.collection(collection).doc(uid));
+}
+
+export async function assertAccountFirestoreTreeAbsent(root: admin.firestore.DocumentReference): Promise<void> {
     if ((await root.get()).exists) throw new Error('Account Firestore root remains.');
     const pending = [root];
     while (pending.length) {
@@ -83,9 +137,20 @@ export async function assertAccountCleanupQueryEmpty(
     query: admin.firestore.Query,
     shouldDelete?: (doc: admin.firestore.QueryDocumentSnapshot) => Promise<boolean>,
 ): Promise<void> {
-    const snapshot = await (shouldDelete ? query : query.limit(1)).get();
-    for (const doc of snapshot.docs) {
-        if (!shouldDelete || await shouldDelete(doc)) throw new Error('Account operational cleanup remains.');
+    if (!shouldDelete) {
+        if (!(await query.limit(1).get()).empty) throw new Error('Account operational cleanup remains.');
+        return;
+    }
+    let cursor: admin.firestore.QueryDocumentSnapshot | undefined;
+    while (true) {
+        let pageQuery = query.limit(100);
+        if (cursor) pageQuery = pageQuery.startAfter(cursor);
+        const page = await pageQuery.get();
+        for (const doc of page.docs) {
+            if (await shouldDelete(doc)) throw new Error('Account operational cleanup remains.');
+        }
+        if (page.docs.length < 100) return;
+        cursor = page.docs[page.docs.length - 1];
     }
 }
 

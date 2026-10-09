@@ -57,22 +57,36 @@ export const deleteSelf = functions
 
         try {
             let userEmail: string | undefined;
+            let authAlreadyMissing = false;
             try {
                 const userRecord = await admin.auth().getUser(uid);
                 userEmail = userRecord.email ?? undefined;
             } catch (lookupError) {
+                authAlreadyMissing = isAuthUserNotFoundError(lookupError);
                 logger.warn(`Could not fetch user email before deletion for ${uid}. Continuing with deletion.`, lookupError);
             }
 
             try {
-                await deletionMarkerRef.set({
+                const pendingMarker = {
                     createdAt: FieldValue.serverTimestamp(),
                     source: 'deleteSelf',
                     cleanupStatus: 'pending',
                     // Unfinished deletion must never lose its writer fence to TTL.
                     expireAt: FieldValue.delete(),
                     completedAt: FieldValue.delete(),
-                }, { merge: true });
+                };
+                if (authAlreadyMissing) {
+                    await firestore.runTransaction(async transaction => {
+                        const existing = await transaction.get(deletionMarkerRef);
+                        // A stale authenticated retry emits no new Auth event. Preserve
+                        // a verified receipt instead of reopening it indefinitely.
+                        if (existing.get('cleanupStatus') !== 'complete') {
+                            transaction.set(deletionMarkerRef, pendingMarker, { merge: true });
+                        }
+                    });
+                } else {
+                    await deletionMarkerRef.set(pendingMarker, { merge: true });
+                }
             } catch (markerError) {
                 logger.error(`Failed to write user deletion marker for ${uid}. Aborting deletion.`, markerError);
                 throw markerError;

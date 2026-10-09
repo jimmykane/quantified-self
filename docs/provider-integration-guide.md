@@ -1212,6 +1212,8 @@ Unified health history is retained on provider disconnect and removed on account
 
 The deletion owner checkpoints provider identities before removing credentials or UID-owned queue sources. Failed discovery/checkpoint reads preserve those sources; mandatory local failures continue independent cleanup and then fail the Auth event for retry. Pending tombstones have no expiry. Completion follows scoped Firestore/Storage/operational absence verification, including deferred original-file and disconnect intents, and only completed markers receive a seven-day TTL. Provider deauthorization/archival remain best-effort and remote copies can remain. See [Delete User Data migration and recovery](delete-user-data-migration.md) for exact scope, release boundaries and deferred monitoring #836.
 
+Operational queue and MCP targets are checkpointed before recursive deletion so retries can remove descendants after a parent disappears from ownership queries. Replay validates the fixed collection allowlist and current ownership; provider-only identifiers remain scoped to their own provider. Completion and checkpoint removal require the current cleanup attempt, preventing stale invocations from releasing the fence. Exact UID/provider queries are paged at 100 rows for discovery, deletion and readback; unrelated queues are not globally scanned, and canonical safe numeric legacy provider IDs are covered alongside strings. See the native-cleanup runbook for recovery and release gates.
+
 ## 9. Frontend, help, public pages, and attribution
 
 The frontend should reuse the Services and provider-presentation patterns rather than create a one-off integration page.

@@ -9,6 +9,7 @@ const {
     mailDocMock,
     deletionMarkerSetMock,
     deletionMarkerDeleteMock,
+    deletionMarkerGetMock,
     deletionMarkerDocMock,
     firestoreCollectionMock,
     loggerInfoMock,
@@ -21,9 +22,11 @@ const {
     }));
     const deletionMarkerSetMock = vi.fn().mockResolvedValue(undefined);
     const deletionMarkerDeleteMock = vi.fn().mockResolvedValue(undefined);
+    const deletionMarkerGetMock = vi.fn().mockResolvedValue({ get: () => undefined });
     const deletionMarkerDocMock = vi.fn((_id?: string) => ({
         set: deletionMarkerSetMock,
-        delete: deletionMarkerDeleteMock
+        delete: deletionMarkerDeleteMock,
+        get: deletionMarkerGetMock
     }));
     const firestoreCollectionMock = vi.fn((name?: string) => {
         if (name === 'mail') {
@@ -50,6 +53,7 @@ const {
         mailDocMock,
         deletionMarkerSetMock,
         deletionMarkerDeleteMock,
+        deletionMarkerGetMock,
         deletionMarkerDocMock,
         firestoreCollectionMock,
         loggerInfoMock: vi.fn(),
@@ -63,7 +67,11 @@ const testEnv = firebaseFunctionsTest();
 // Mock admin
 vi.mock('firebase-admin', () => {
     const firestoreMock = vi.fn(() => ({
-        collection: firestoreCollectionMock
+        collection: firestoreCollectionMock,
+        runTransaction: async (handler: (tx: unknown) => Promise<unknown>) => handler({
+            get: deletionMarkerGetMock,
+            set: (_ref: unknown, data: unknown, options: unknown) => deletionMarkerSetMock(data, options),
+        }),
     }));
 
     return {
@@ -130,6 +138,7 @@ describe('deleteSelf Cloud Function', () => {
         mailSetMock.mockResolvedValue(undefined);
         deletionMarkerSetMock.mockResolvedValue(undefined);
         deletionMarkerDeleteMock.mockResolvedValue(undefined);
+        deletionMarkerGetMock.mockReset().mockResolvedValue({ get: () => undefined });
     });
 
     afterEach(() => {
@@ -299,6 +308,18 @@ describe('deleteSelf Cloud Function', () => {
         expect(deleteUserMock).toHaveBeenCalledWith(uid);
         expect(mailSetMock).not.toHaveBeenCalled();
         expect(result).toEqual({ success: true });
+    });
+
+    it('preserves completed cleanup when a stale callable retry finds Auth already absent', async () => {
+        const error = { errorInfo: { code: 'auth/user-not-found' } };
+        getUserMock.mockRejectedValueOnce(error);
+        deleteUserMock.mockRejectedValueOnce(error);
+        deletionMarkerGetMock.mockResolvedValueOnce({ get: () => 'complete' });
+        const result = await (deleteSelf as unknown as (data: unknown, context: unknown) => Promise<unknown>)({}, {
+            rawRequest: {}, auth: { uid: 'test-uid', token: {} }, app: { appId: 'mock-app-id' },
+        });
+        expect(result).toEqual({ success: true });
+        expect(deletionMarkerSetMock).not.toHaveBeenCalled();
     });
 
     it('should throw "internal" error if deleteUser fails', async () => {

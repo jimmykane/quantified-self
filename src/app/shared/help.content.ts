@@ -1482,7 +1482,7 @@ Deleting your account permanently removes:
 - uploaded files,
 - and any active subscription.
 
-This action cannot be undone.
+This action cannot be undone in the app. Deleted uploaded files can remain in protected recovery storage for up to 30 days before expiry.
 
 ## Exports and legal requests
 

@@ -30,8 +30,11 @@ const {
     cleanupServiceDisconnectTasksForUserMock,
 } = vi.hoisted(() => {
     const dataCleanupMocks = {
-        beginAccountDataCleanup: vi.fn().mockResolvedValue({ suuntoUserNames: [], corosOpenIds: [], garminUserIDs: [], wahooUserIDs: [] }),
+        beginAccountDataCleanup: vi.fn().mockResolvedValue({ attemptId: 'synthetic-attempt', suuntoUserNames: [], corosOpenIds: [], garminUserIDs: [], wahooUserIDs: [] }),
         checkpointAccountDeletionIdentifiers: vi.fn().mockResolvedValue(undefined),
+        checkpointAccountDeletionTarget: vi.fn().mockResolvedValue({ delete: vi.fn().mockResolvedValue(undefined) }),
+        removeAccountDeletionTargetCheckpoint: vi.fn().mockResolvedValue(undefined),
+        assertAccountFirestoreTreeAbsent: vi.fn().mockResolvedValue(undefined),
         completeAccountDataCleanup: vi.fn().mockResolvedValue(undefined),
         deleteAccountFirestoreRoot: vi.fn().mockResolvedValue(undefined),
         assertAccountFirestoreRootAbsent: vi.fn().mockResolvedValue(undefined),
@@ -49,7 +52,9 @@ const {
 
     // Mock for tokens subcollection - returns empty by default
     const tokensGetMock = vi.fn().mockResolvedValue({ empty: true, docs: [] });
-    const tokensCollectionMock = vi.fn((collectionId?: string) => ({
+    const tokensCollectionMock = vi.fn((collectionId?: string) => collectionId === 'operationalTargets' ? {
+        limit: () => ({ get: async () => ({ docs: [] }) }),
+    } : ({
         path: `subcollection/${collectionId || ''}`,
         get: tokensGetMock,
         limit: vi.fn(() => ({ get: tokensGetMock })),
@@ -93,20 +98,23 @@ const {
         get: collectionGroupLimitGetMock,
     }));
 
-    const collectionMock = vi.fn((collectionName) => {
-        if (collectionName === 'mail') {
-            return {
-                where: whereMock,
-                doc: docMock,
-                limit: limitMock
-            };
-        }
-        return {
-            doc: docMock,
-            where: whereMock,
-            limit: limitMock
+    // Model Firestore collection scoping even when a scenario shares its query mock.
+    const scopedQuery = (collectionName: string, query: { get: () => Promise<{ docs: { ref?: { path?: string } }[] }>; startAfter?: (...args: unknown[]) => unknown }) => {
+        const scoped = {
+            get: async () => {
+            const snapshot = await query.get();
+            return { ...snapshot, docs: snapshot.docs.filter(doc => !doc.ref?.path || doc.ref.path.split('/')[0] === collectionName) };
+        },
+            limit: vi.fn(() => scoped),
+            startAfter: (...args: unknown[]) => scopedQuery(collectionName, query.startAfter!(...args) as typeof query),
         };
-    });
+        return scoped;
+    };
+    const collectionMock = vi.fn((collectionName) => ({
+        doc: docMock,
+        where: (...args: unknown[]) => scopedQuery(collectionName, whereMock(...args)),
+        limit: (...args: unknown[]) => scopedQuery(collectionName, limitMock(...args)),
+    }));
 
     const batchMock = {
         delete: vi.fn(),
@@ -132,6 +140,7 @@ const {
 
     const firestore = Object.assign(vi.fn(() => ({
         collection: collectionMock,
+        doc: vi.fn((path: string) => ({ path })),
         collectionGroup: collectionGroupMock,
         batch: vi.fn(() => batchMock),
         recursiveDelete: recursiveDeleteMock,
@@ -213,6 +222,7 @@ vi.mock('../queue/cleanup-tombstone', () => ({
 }));
 
 vi.mock('../mcp/oauth.service', () => ({
+    MCP_OAUTH_COLLECTIONS: { authorizationRequests: 'mcpOAuthAuthorizationRequests', authorizationCodes: 'mcpOAuthAuthorizationCodes', accessTokens: 'mcpOAuthAccessTokens', refreshTokens: 'mcpOAuthRefreshTokens', rateLimits: 'mcpOAuthRateLimits' },
     cleanupMcpOAuthStateForUser: cleanupMcpOAuthStateForUserMock,
 }));
 
@@ -221,7 +231,7 @@ vi.mock('../routes/rejected-original-cleanup', () => ({
     cleanupRejectedRouteOriginalFilesForUser: cleanupRejectedRouteOriginalFilesForUserMock,
 }));
 
-vi.mock('./data-cleanup', () => ({ ...dataCleanupMocks, ACCOUNT_DELETION_ROOT_COLLECTIONS: ['users', 'customers'] }));
+vi.mock('./data-cleanup', () => ({ ...dataCleanupMocks, ACCOUNT_DELETION_ROOT_COLLECTIONS: ['users', 'customers'], ACCOUNT_DELETION_TARGETS_COLLECTION: 'operationalTargets' }));
 
 vi.mock('../service-disconnect-cleanup', () => ({
     SERVICE_DISCONNECT_CLEANUP_COLLECTION: 'serviceDisconnectCleanup',
@@ -291,9 +301,11 @@ function mockCollectionWhereResultsByName(
             ...baseCollection,
             where: vi.fn((field: string, operator: string, value: string) => {
                 whereMock(field, operator, value);
-                return {
+                const query = {
                     get: vi.fn().mockResolvedValue(resolver(collectionName, field, operator, value) || { docs: [] }),
+                    limit: vi.fn(() => query),
                 };
+                return query;
             }),
         };
     });
@@ -311,7 +323,7 @@ describe('cleanupUserAccounts', () => {
 
         for (const [key, mock] of Object.entries(dataCleanupMocks)) {
             mock.mockReset().mockResolvedValue(key === 'beginAccountDataCleanup'
-                ? { suuntoUserNames: [], corosOpenIds: [], garminUserIDs: [], wahooUserIDs: [] } : undefined);
+                ? { attemptId: 'synthetic-attempt', suuntoUserNames: [], corosOpenIds: [], garminUserIDs: [], wahooUserIDs: [] } : key === 'checkpointAccountDeletionTarget' ? { delete: vi.fn().mockResolvedValue(undefined) } : undefined);
         }
         // Setup default mocks
         getServiceConfigMock.mockReturnValue({ tokenCollectionName: 'mockCollection' });
@@ -393,13 +405,13 @@ describe('cleanupUserAccounts', () => {
 
     it('recovers provider-only work from the durable checkpoint after credentials disappear', async () => {
         dataCleanupMocks.beginAccountDataCleanup.mockResolvedValueOnce({
-            suuntoUserNames: ['retained-provider'], corosOpenIds: [], garminUserIDs: [], wahooUserIDs: [],
+            attemptId: 'synthetic-attempt', suuntoUserNames: ['retained-provider'], corosOpenIds: [], garminUserIDs: [], wahooUserIDs: [],
         });
         await cleanupUserAccounts(testEnv.auth.makeUserRecord({ uid: 'testUser123' }), {} as functions.EventContext);
         expect(whereMock).toHaveBeenCalledWith('userName', '==', 'retained-provider');
         expect(dataCleanupMocks.checkpointAccountDeletionIdentifiers).toHaveBeenCalledWith(expect.anything(), 'testUser123', {
             suuntoUserNames: ['retained-provider'], corosOpenIds: [], garminUserIDs: [], wahooUserIDs: [],
-        });
+        }, 'synthetic-attempt');
     });
 
     it('keeps the fence pending when scoped absence cannot be verified', async () => {
@@ -434,7 +446,7 @@ describe('cleanupUserAccounts', () => {
             'account_deletion',
             { missingTokensBehavior: 'ignore' },
         );
-        expect(cleanupMcpOAuthStateForUserMock).toHaveBeenCalledWith('testUser123');
+        expect(cleanupMcpOAuthStateForUserMock).toHaveBeenCalledWith('testUser123', expect.any(Function));
         expect(cleanupRejectedRouteOriginalFilesForUserMock).toHaveBeenCalledWith('testUser123');
         expect(cleanupServiceDisconnectTasksForUserMock).toHaveBeenCalledWith('testUser123');
         expect(cleanupServiceConnectionForUserMock).toHaveBeenCalledWith(
@@ -488,7 +500,7 @@ describe('cleanupUserAccounts', () => {
             wrapped(user, { eventId: 'eventId' } as unknown as functions.EventContext),
         ).rejects.toThrow('MCP OAuth cleanup failed');
 
-        expect(cleanupMcpOAuthStateForUserMock).toHaveBeenCalledWith('testUser123');
+        expect(cleanupMcpOAuthStateForUserMock).toHaveBeenCalledWith('testUser123', expect.any(Function));
         expect(firestoreMock().collection).toHaveBeenCalledWith('mail');
         expect(whereMock).toHaveBeenCalledWith('toUids', 'array-contains', 'testUser123');
         expect(firestoreMock().collection).toHaveBeenCalledWith(ORPHANED_SERVICE_TOKENS_COLLECTION_NAME);
@@ -520,7 +532,7 @@ describe('cleanupUserAccounts', () => {
         ).rejects.toThrow('Storage cleanup unavailable');
 
         expect(cleanupRejectedRouteOriginalFilesForUserMock).toHaveBeenCalledWith('testUser123');
-        expect(cleanupMcpOAuthStateForUserMock).toHaveBeenCalledWith('testUser123');
+        expect(cleanupMcpOAuthStateForUserMock).toHaveBeenCalledWith('testUser123', expect.any(Function));
         expect(firestoreMock().collection).toHaveBeenCalledWith('mail');
         expect(firestoreMock().collection).toHaveBeenCalledWith('activitySyncQueue');
     });
@@ -735,12 +747,12 @@ describe('cleanupUserAccounts', () => {
         ));
         let failed = false;
         recursiveDeleteMock.mockImplementation(async ref => {
-            if (ref === queueRef && !failed) { failed = true; throw new Error('Transient cleanup failure'); }
+            if (ref.path === queueRef.path && !failed) { failed = true; throw new Error('Transient cleanup failure'); }
         });
         try {
             await expect(cleanupUserAccounts(user, { eventId: 'first' } as unknown as functions.EventContext)).rejects.toThrow('Transient cleanup failure');
             await cleanupUserAccounts(user, { eventId: 'retry' } as unknown as functions.EventContext);
-            expect(recursiveDeleteMock.mock.calls.filter(([ref]) => ref === queueRef)).toHaveLength(2);
+            expect(recursiveDeleteMock.mock.calls.filter(([ref]) => ref.path === queueRef.path)).toHaveLength(2);
             expect(markQueueItemDeletedForUserCleanupMock).toHaveBeenCalledWith(
                 'trainingDeliveryQueue', 'delivery-job', 'account_deletion_cleanup',
             );
@@ -1311,136 +1323,60 @@ describe('cleanupUserAccounts', () => {
         }));
     });
 
-    it('should remove legacy provider-keyed orphan queue and DLQ docs for recovered provider identifiers', async () => {
-        const wrapped = cleanupUserAccounts;
+    it('removes legacy provider-only queue and DLQ rows through exact provider queries', async () => {
         const user = testEnv.auth.makeUserRecord({ uid: 'testUser123' });
-        const routeQueueQuery = createPaginatedLimitQueryMock([{ docs: [] }]);
-        const sleepQueueQuery = createPaginatedLimitQueryMock([{
-            docs: [{
-                id: 'legacy-provider-only-sleep',
-                ref: { path: 'sleepSyncQueue/legacy-provider-only-sleep' },
-                data: () => ({
-                    provider: 'SuuntoApp',
-                    providerUserId: 'legacy-suunto-provider',
-                }),
-            }],
-        }]);
-        const failedJobsQuery = createPaginatedLimitQueryMock([{
-            docs: [{
-                id: 'legacy-provider-only-dlq',
-                ref: { path: 'failed_jobs/legacy-provider-only-dlq' },
-                data: () => ({
-                    originalCollection: 'suuntoAppWorkoutQueue',
-                    userName: 'legacy-suunto-provider',
-                }),
-            }],
-        }]);
-
-        tokensGetMock.mockResolvedValue({ empty: true, size: 0, docs: [] });
-        whereMock.mockImplementation((field: string, _operator: string, value: string) => ({
-            get: vi.fn().mockResolvedValue(
-                field === 'uid' && value === 'testUser123'
-                    ? {
-                        docs: [{
-                            id: 'archived-suunto-token',
-                            ref: { path: `${ORPHANED_SERVICE_TOKENS_COLLECTION_NAME}/archived-suunto-token` },
-                            data: () => ({
-                                serviceName: ServiceNames.SuuntoApp,
-                                token: { userName: 'legacy-suunto-provider' },
-                            }),
-                        }],
-                    }
-                    : { docs: [] }
-            )
-        }));
-        mockCollectionLimitQueriesByName({
-            routeSyncQueue: routeQueueQuery,
-            sleepSyncQueue: sleepQueueQuery,
-            failed_jobs: failedJobsQuery,
+        dataCleanupMocks.beginAccountDataCleanup.mockResolvedValueOnce({
+            attemptId: 'synthetic-attempt', suuntoUserNames: ['legacy-suunto-provider'], corosOpenIds: [], garminUserIDs: [], wahooUserIDs: [],
         });
-
-        await wrapped(user, { eventId: 'eventId' } as unknown as functions.EventContext);
-
-        expect(collectionGroupMock).toHaveBeenCalledWith('tokens');
-        expect(collectionGroupWhereMock).toHaveBeenCalledWith('userName', '==', 'legacy-suunto-provider');
-        expect(collectionGroupWhereMock).toHaveBeenCalledWith('serviceName', '==', ServiceNames.SuuntoApp);
-        expect(recursiveDeleteMock).toHaveBeenCalledWith(expect.objectContaining({
-            path: 'sleepSyncQueue/legacy-provider-only-sleep',
-        }));
-        expect(recursiveDeleteMock).toHaveBeenCalledWith(expect.objectContaining({
-            path: 'failed_jobs/legacy-provider-only-dlq',
-        }));
-        expect(markQueueItemDeletedForUserCleanupMock).toHaveBeenCalledWith(
-            'sleepSyncQueue',
-            'legacy-provider-only-sleep',
-            'account_deletion_cleanup',
-        );
-        expect(markQueueItemDeletedForUserCleanupMock).toHaveBeenCalledWith(
-            'suuntoAppWorkoutQueue',
-            'legacy-provider-only-dlq',
-            'account_deletion_cleanup',
-        );
+        const restore = mockCollectionWhereResultsByName((collection, field, _operator, value) => {
+            if (value !== 'legacy-suunto-provider') return null;
+            if (collection === 'sleepSyncQueue' && field === 'providerUserId') return { docs: [{
+                id: 'legacy-sleep', ref: { path: 'sleepSyncQueue/legacy-sleep' },
+                data: () => ({ provider: 'SuuntoApp', providerUserId: value }),
+            }] };
+            if (collection === 'failed_jobs' && field === 'userName') return { docs: [{
+                id: 'legacy-dlq', ref: { path: 'failed_jobs/legacy-dlq' },
+                data: () => ({ originalCollection: 'suuntoAppWorkoutQueue', userName: value }),
+            }] };
+            return null;
+        });
+        try {
+            await cleanupUserAccounts(user, {} as functions.EventContext);
+            expect(recursiveDeleteMock).toHaveBeenCalledWith(expect.objectContaining({ path: 'sleepSyncQueue/legacy-sleep' }));
+            expect(recursiveDeleteMock).toHaveBeenCalledWith(expect.objectContaining({ path: 'failed_jobs/legacy-dlq' }));
+            expect(markQueueItemDeletedForUserCleanupMock).toHaveBeenCalledWith('suuntoAppWorkoutQueue', 'legacy-dlq', 'account_deletion_cleanup');
+            expect(limitMock).not.toHaveBeenCalled(); // No global collection scan.
+        } finally { restore(); }
     });
 
-    it('should paginate legacy provider-keyed orphan sweeps beyond the first page', async () => {
-        const wrapped = cleanupUserAccounts;
+    it('pages an exact provider query past preserved other-owner rows', async () => {
         const user = testEnv.auth.makeUserRecord({ uid: 'testUser123' });
-        const firstPageDocs = Array.from({ length: 500 }, (_, index) => ({
-            id: `first-page-sleep-${index}`,
-            ref: { path: `sleepSyncQueue/first-page-sleep-${index}` },
-            data: () => ({
-                provider: 'SuuntoApp',
-                providerUserId: `other-provider-${index}`,
-            }),
-        }));
-        const routeQueueQuery = createPaginatedLimitQueryMock([{ docs: [] }]);
-        const sleepQueueQuery = createPaginatedLimitQueryMock([
-            { docs: firstPageDocs },
-            {
-                docs: [{
-                    id: 'second-page-provider-only-sleep',
-                    ref: { path: 'sleepSyncQueue/second-page-provider-only-sleep' },
-                    data: () => ({
-                        provider: 'SuuntoApp',
-                        providerUserId: 'paged-legacy-suunto-provider',
-                    }),
-                }],
-            },
-        ]);
-
-        tokensGetMock.mockResolvedValue({ empty: true, size: 0, docs: [] });
-        whereMock.mockImplementation((field: string, _operator: string, value: string) => ({
-            get: vi.fn().mockResolvedValue(
-                field === 'uid' && value === 'testUser123'
-                    ? {
-                        docs: [{
-                            id: 'archived-suunto-token',
-                            ref: { path: `${ORPHANED_SERVICE_TOKENS_COLLECTION_NAME}/archived-suunto-token` },
-                            data: () => ({
-                                serviceName: ServiceNames.SuuntoApp,
-                                token: { userName: 'paged-legacy-suunto-provider' },
-                            }),
-                        }],
-                    }
-                    : { docs: [] }
-            )
-        }));
-        mockCollectionLimitQueriesByName({
-            routeSyncQueue: routeQueueQuery,
-            sleepSyncQueue: sleepQueueQuery,
+        dataCleanupMocks.beginAccountDataCleanup.mockResolvedValueOnce({
+            attemptId: 'synthetic-attempt', suuntoUserNames: ['paged-provider'], corosOpenIds: [], garminUserIDs: [], wahooUserIDs: [],
         });
-
-        await wrapped(user, { eventId: 'eventId' } as unknown as functions.EventContext);
-
-        expect(sleepQueueQuery.startAfter).toHaveBeenCalledWith(firstPageDocs[firstPageDocs.length - 1]);
-        expect(recursiveDeleteMock).toHaveBeenCalledWith(expect.objectContaining({
-            path: 'sleepSyncQueue/second-page-provider-only-sleep',
+        const first = Array.from({ length: 100 }, (_, index) => ({
+            id: `foreign-${index}`, ref: { path: `sleepSyncQueue/foreign-${index}` },
+            data: () => ({ provider: 'SuuntoApp', providerUserId: 'paged-provider', firebaseUserID: 'another-owner' }),
         }));
-        expect(markQueueItemDeletedForUserCleanupMock).toHaveBeenCalledWith(
-            'sleepSyncQueue',
-            'second-page-provider-only-sleep',
-            'account_deletion_cleanup',
-        );
+        const query = createPaginatedLimitQueryMock([{ docs: first }, { docs: [{
+            id: 'owned', ref: { path: 'sleepSyncQueue/owned' },
+            data: () => ({ provider: 'SuuntoApp', providerUserId: 'paged-provider' }),
+        }] }]);
+        const collectionMock = firestoreMock().collection;
+        const base = collectionMock.getMockImplementation()!;
+        collectionMock.mockImplementation((collection: string) => {
+            const source = base(collection);
+            return { ...source, where: (field: string, operator: string, value: string) =>
+                collection === 'sleepSyncQueue' && field === 'providerUserId' && value === 'paged-provider'
+                    ? query : source.where(field, operator, value) };
+        });
+        try {
+            await cleanupUserAccounts(user, {} as functions.EventContext);
+            expect(query.limit).toHaveBeenCalledWith(100);
+            expect(query.startAfter).toHaveBeenCalledWith(first[99]);
+            expect(recursiveDeleteMock).toHaveBeenCalledWith(expect.objectContaining({ path: 'sleepSyncQueue/owned' }));
+            expect(recursiveDeleteMock).not.toHaveBeenCalledWith(expect.objectContaining({ path: 'sleepSyncQueue/foreign-0' }));
+        } finally { collectionMock.mockImplementation(base); }
     });
 
     it('should skip legacy provider-keyed orphan sweeps when no provider identifiers were recovered', async () => {
