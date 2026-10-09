@@ -128,8 +128,11 @@ describe('Suunto History to Queue', () => {
             expect(logger.error).toHaveBeenCalledWith(expect.objectContaining({ message: 'Queue failure' }));
         });
 
-        it('preserves a busy reservation as already-exists without logging an error', async () => {
-            const error = new HttpsError('already-exists', 'A recent-history import is already running. Please wait for it to finish.');
+        it.each([
+            'A recent-history import is already running. Please wait for it to finish.',
+            'Another history import is running.',
+        ])('preserves the busy reservation response "%s" without logging an error', async message => {
+            const error = new HttpsError('already-exists', message);
             vi.mocked(history.addHistoryToQueue).mockRejectedValueOnce(error);
             const request = createMockRequest({ data: {
                 startDate: new Date(Date.now() - 86400000).toISOString(),
@@ -141,6 +144,21 @@ describe('Suunto History to Queue', () => {
             expect(history.addHistoryToQueue).toHaveBeenCalledTimes(1);
             expect(logger.info).toHaveBeenCalledWith('[SuuntoHistoryImport] History import is already running.');
             expect(logger.error).not.toHaveBeenCalled();
+        });
+
+        it('does not downgrade a generic failure that happens to have an already-exists code', async () => {
+            const error = Object.assign(new Error('Unexpected queue failure'), { code: 'already-exists' });
+            vi.mocked(history.addHistoryToQueue).mockRejectedValueOnce(error);
+            const request = createMockRequest({ data: {
+                startDate: new Date(Date.now() - 86400000).toISOString(),
+                endDate: new Date().toISOString(),
+            } });
+
+            await expect(addSuuntoAppHistoryToQueue(request as any)).rejects.toMatchObject({
+                code: 'internal', httpErrorCode: { status: 500 },
+            });
+            expect(logger.error).toHaveBeenCalledWith(error);
+            expect(logger.info).not.toHaveBeenCalled();
         });
 
         it('should throw error if App Check fails', async () => {

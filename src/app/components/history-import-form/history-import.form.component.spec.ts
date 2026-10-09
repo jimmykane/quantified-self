@@ -910,6 +910,26 @@ describe('HistoryImportFormComponent', () => {
             expect(component.formGroup.enabled).toBe(true);
         });
 
+        it.each([ServiceNames.WahooAPI, ServiceNames.GarminAPI, ServiceNames.SuuntoApp, ServiceNames.COROSAPI])('keeps a late %s busy reply scoped to the original account', async provider => {
+            const user$ = new Subject<{ uid: string; stripeRole: string }>();
+            mockAuthService.user$ = user$;
+            await reopen(provider);
+            let reject!: (error: Error) => void;
+            mockUserService.importServiceHistoryForCurrentUser.mockReturnValueOnce(new Promise((_resolve, failure) => reject = failure));
+            const submission = submit('activity');
+            user$.next({ uid: 'different-owner', stripeRole: 'pro' });
+            reject(Object.assign(new Error('A recent-history import is already running. Please wait for it to finish.'), { code: 'functions/already-exists' }));
+            await submission;
+            fixture.detectChanges();
+
+            expect(component.isActivityHistoryImportRunning()).toBe(false);
+            expect(component.formGroup.enabled).toBe(true);
+            expect(mockLoggerService.error).not.toHaveBeenCalled();
+            expect(snackBar.open).not.toHaveBeenCalled();
+            expect(haptics.success).not.toHaveBeenCalled();
+            expect(haptics.error).not.toHaveBeenCalled();
+        });
+
         it.each([ServiceNames.WahooAPI, ServiceNames.GarminAPI, ServiceNames.SuuntoApp, ServiceNames.COROSAPI])('keeps %s locked by live metadata after its local retry buffer expires', async provider => {
             await reopen(provider);
             vi.useFakeTimers();
