@@ -406,6 +406,13 @@ export const HELP_SECTIONS: HelpSection[] = [
 2. Complete onboarding and accept the required policies.
 3. Start with manual uploads, or upgrade to Pro if you want service connections and history imports.
 
+## Explore before signing in
+
+- The [homepage](/) shows shared Training, Health, dashboard, workout-analysis, map, and device-comparison previews. The Training Plans section has a Calendar and workout-profile example with fictional sample data. Select a day or switch to Workout profile to inspect its prescription; nothing is saved.
+- The Health example uses the same category cards and charts as the signed-in workspace. Choose a category or **View history**, then use **Health overview** to return. Its readings are fictional, and it never loads your account data or saves changes.
+- The homepage keeps every feature section visible as you scroll. Use the jump links below its introduction to go directly to Training, Workouts, Plans, Health, Assistant, Maps, Comparisons, or Integrations. Focus moves to the chosen section's heading, so Tab continues through that section's controls. Each section has a shareable link, such as [Comparisons](/#home-comparisons); your browser's Back and Forward buttons restore the exact place you were reading, including the homepage view before your first jump.
+- The homepage links to the public Training, Plans, Health, and Assistant overviews. Use **Get Started Free** to sign in and begin onboarding. Provider connections and history imports require Pro.
+
 ## Where things live
 
 - **Dashboard** is your main activity overview.
@@ -923,6 +930,8 @@ In the built-in Assistant, **Private workout reflections** in **Examples & data 
 - Manual activity uploads (\`.fit\`, \`.gpx\`, \`.tcx\`, \`.json\`, \`.sml\`)
 - Manual route uploads (\`.fit\`, \`.gpx\`)
 - Core dashboard and event analysis tools
+- Training plans and standalone structured workouts without a provider connection
+- Up to **${ASSISTANT_REQUEST_LIMITS.free}** built-in Assistant requests per calendar month
 - Free permission-scoped MCP connections, including approval-gated Training plan and workout changes
 
 ### Basic
@@ -930,6 +939,7 @@ In the built-in Assistant, **Private workout reflections** in **Examples & data 
 - Everything in Starter
 - Up to **${getNumberFormatter('en-US').format(USAGE_LIMITS.basic)} activities**
 - Up to **${ROUTE_USAGE_LIMITS.basic} saved routes**
+- Up to **${ASSISTANT_REQUEST_LIMITS.basic}** built-in Assistant requests per billing period
 - **My Tracks (Beta)** access
 - Paid-only chart customization such as custom watermark text
 
@@ -938,6 +948,8 @@ In the built-in Assistant, **Private workout reflections** in **Examples & data 
 - Everything in Basic
 - **Unlimited activities**
 - **Unlimited saved routes**
+- Up to **${ASSISTANT_REQUEST_LIMITS.pro}** built-in Assistant requests per billing period
+- Compatible planned-workout delivery to connected Garmin, Suunto, and Wahoo accounts
 - Garmin, Suunto, COROS, and Wahoo integration workflows
 - History import workflows (provider limits still apply)
 - Suunto FIT activity upload and GPX/FIT route upload tools

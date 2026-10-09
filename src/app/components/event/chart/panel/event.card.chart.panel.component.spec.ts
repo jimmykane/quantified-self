@@ -31,6 +31,7 @@ import { getOrCreateEChartsTooltipHost } from '../../../../helpers/echarts-toolt
 import { getViewportConstrainedTooltipPosition } from '../../../../helpers/echarts-tooltip-position.helper';
 import { MaterialModule } from '../../../../modules/material.module';
 import { resolveDeviceChartColor } from '../../../../helpers/device-chart-appearance.helper';
+import { getDefaultUserUnitSettings } from '@shared/unit-aware-display';
 
 describe('EventCardChartPanelComponent', () => {
   let fixture: ComponentFixture<EventCardChartPanelComponent>;
@@ -449,7 +450,7 @@ describe('EventCardChartPanelComponent', () => {
     const option = getRenderedOption();
     expect(fixture.nativeElement.querySelector('.event-chart-panel__actions')).toBeNull();
     expect(option?.tooltip?.show).toBe(false);
-    expect(option?.yAxis?.axisLabel?.show).toBe(false);
+    expect(option?.yAxis?.axisLabel?.show).toBe(true);
     expect(option?.series?.[0]?.silent).toBe(true);
     expect(chart.on).not.toHaveBeenCalled();
     expect(zr.on).not.toHaveBeenCalled();
@@ -469,10 +470,48 @@ describe('EventCardChartPanelComponent', () => {
     expect(fixture.nativeElement.querySelector('.event-chart-panel__actions')).toBeNull();
     expect(option?.tooltip?.show).toBe(true);
     expect(option?.tooltip?.triggerOn).toBe('mousemove|click');
-    expect(option?.yAxis?.axisLabel?.show).toBe(false);
+    expect(option?.yAxis?.axisLabel?.show).toBe(true);
     expect(option?.series?.[0]?.silent).toBe(false);
     expect(chart.on).toHaveBeenCalledWith('datazoom', expect.any(Function));
     expect(intersectionObserverObserveSpies).toHaveLength(1);
+  });
+
+  it.each([DataHeartRate.type, DataAltitude.type, DataPower.type, DataDepth.type])(
+    'keeps readable axes in the mobile %s preview', async dataType => {
+      setMobileViewport();
+      component.previewMode = true;
+      component.previewInteractions = true;
+      component.panel = buildTestPanel(dataType, [0, 60, 120]);
+
+      await renderComponent();
+
+      const option = getRenderedOption();
+      expect(option?.yAxis?.axisLabel).toEqual(expect.objectContaining({
+        show: true, hideOverlap: true, showMinLabel: true, showMaxLabel: true, fontSize: 11, margin: 8,
+      }));
+      expect(option?.xAxis?.axisLabel).toEqual(expect.objectContaining({
+        hideOverlap: true, fontSize: 11, margin: 10,
+      }));
+      expect(option?.grid).toEqual(expect.objectContaining({
+        outerBoundsMode: 'same', outerBoundsContain: 'axisLabel',
+      }));
+      expect(option?.yAxis?.inverse).toBe(dataType === DataDepth.type);
+    },
+  );
+
+  it.each([
+    [DistanceUnits.Kilometers, '10.00'],
+    [DistanceUnits.Miles, '6.22'],
+  ] as const)('formats preview axis values for %s without repeating the unit', async (distanceUnits, expected) => {
+    component.previewMode = true;
+    component.userUnitSettings = { ...getDefaultUserUnitSettings(), distanceUnits };
+    component.panel = buildTestPanel(DataDistance.type, [0, 10000]);
+
+    await renderComponent();
+
+    const option = getRenderedOption();
+    expect(option?.yAxis?.axisLabel?.show).toBe(true);
+    expect(option?.yAxis?.axisLabel?.formatter(10000)).toBe(expected);
   });
 
   it('clears the active tooltip before replacing series for an overlay', async () => {

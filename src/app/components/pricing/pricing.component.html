@@ -7,7 +7,7 @@
   } @else {
   <h1>{{ currentRole === 'pro' || currentRole === 'basic' ? 'Your Subscription' : 'Choose Your Plan' }}</h1>
   @if (currentRole !== 'pro' && currentRole !== 'basic') {
-  <p class="pricing-intro">Start free, then upgrade whenever you need more history, automation, or sync.</p>
+  <p class="pricing-intro">Analysis, training plans, workouts, and manual uploads are included with Starter. Upgrade for more history, higher Assistant allowances, or connected provider services.</p>
   }
 
   @if (currentRole === 'pro' || currentRole === 'basic') {
@@ -143,11 +143,11 @@
           </h2>
         </mat-card-title>
         @if (product.metadata['role'] === 'free') {
-        <mat-card-subtitle>Everything you need to get started. Free forever.</mat-card-subtitle>
+        <mat-card-subtitle>Core tools, free forever.</mat-card-subtitle>
         } @else if (product.metadata['role'] === 'basic') {
-        <mat-card-subtitle>For consistent training and deeper tracking.</mat-card-subtitle>
+        <mat-card-subtitle>Everything in Starter, with more history and Assistant requests.</mat-card-subtitle>
         } @else if (product.metadata['role'] === 'pro') {
-        <mat-card-subtitle>Full automation and unlimited tracking.</mat-card-subtitle>
+        <mat-card-subtitle>Everything in Basic, plus automatic imports, sync, and workout delivery.</mat-card-subtitle>
         } @else if (product.description && product.description !== product.name) {
         <mat-card-subtitle>{{ product.description }}</mat-card-subtitle>
         }

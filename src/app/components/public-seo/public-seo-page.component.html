@@ -2,7 +2,11 @@
   <section class="hero-section" aria-labelledby="public-seo-title">
     <p class="eyebrow">{{ page.eyebrow }}</p>
     <h1 id="public-seo-title">{{ page.h1 }}</h1>
-    <p class="hero-copy">{{ page.intro }}</p>
+    <p class="hero-copy">{{ page.intro }}
+      @if (page.accessNote) {
+      <span class="hero-access-note">{{ page.accessNote }}</span>
+      }
+    </p>
 
     <div class="topic-strip" aria-label="Page topics">
       @for (chip of page.chips; track chip) {

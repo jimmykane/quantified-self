@@ -639,6 +639,18 @@ Health tile reads depend on owner, metric and window, independently of source se
 Changing those display choices reprojects retained evidence without resubscribing or resetting loading state.
 Persisting an automatically selected source preserves the existing chart model instead of building it twice.
 
+Public Home and Health feature previews reuse `HealthCategoryOverviewComponent`, its category controls, and the shared
+Health/Sleep chart renderers through `HealthOverviewPreviewComponent`. The explicit `exampleOnly` input bypasses
+account subscriptions and refreshes even when the supplied identity matches an owner; switching into that mode clears
+retained private evidence. Examples use fixed fictional dates and canonical values from the shared example projection.
+Opening sample history preserves the overview's category and returns keyboard focus to its originating action.
+These controls never save settings or measurements. Existing detailed Sleep, HRV, and manual-measurement previews remain.
+`health-example-days.helper.ts` owns the invented month shared by overview cards and detailed public examples.
+Keep observations sparse for weigh-ins and fitness estimates, preserve stage/asleep/in-bed duration totals and morning
+wake times, and use the same nightly HRV values in both renderers. Daily movement and energy totals remain coherent.
+Older baseline variation is deterministic and independent by metric; never repeat one waveform across metrics or
+commit account records, identities, or exports as sample fixtures.
+
 The loading bar sits at the date toolbar's lower edge without reserving an extra flex row. The latest-value/source row follows its content height, retaining Material button touch targets when a selector is present. Embedded Sleep (`hideTitle`) removes its own top padding because the dashboard wrapper already supplies that spacing; standalone Sleep keeps its existing layout.
 
 Health category chips retain the existing single-row overflow rail. `ChartSourcePickerComponent` keeps source attribution beside the latest value in owner Health/HRV tiles and their previews. Sleep overview places the picker in its date-control row when there are alternatives; its renderer already includes provider attribution. A sole selected source is plain text. Alternatives open a shared `qs-menu-panel` Material menu with wrapped full provider/account and reading details, checked state, keyboard navigation and focus restoration. This nested menu keeps the mobile add-chart sheet open. `chart-source.helper.ts` shortens only the visible label; identities and full provenance remain unchanged. Opening owns one selection haptic and makes no data request; the chart owns feedback for an accepted source change. Both renderers receive the workspace's shared Timeline notes context. New metric tiles are removed from public view models before rendering; private Health loading additionally requires a matching signed-in owner. Existing Sleep/HRV public renderers and deterministic homepage examples remain separate from these owner reads.

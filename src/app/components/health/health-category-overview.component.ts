@@ -27,6 +27,7 @@ export class HealthCategoryOverviewComponent {
   readonly user = input.required<AppUserInterface>();
   readonly groups = input.required<readonly HealthMetricCatalogGroup[]>();
   readonly showSleep = input(false);
+  readonly exampleOnly = input(false);
   readonly darkTheme = input(false);
   readonly referenceDate = input<string | null>(null);
   readonly providerFilter = input<readonly HealthProvider[]>([]);

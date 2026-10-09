@@ -3,8 +3,8 @@ import { signal } from '@angular/core';
 import { By } from '@angular/platform-browser';
 import { MatDialog } from '@angular/material/dialog';
 import { AppHapticsService } from '../../services/app.haptics.service';
-import { AppThemes, DataWeight, DistanceUnits } from '@sports-alliance/sports-lib';
-import { normalizeUserUnitSettings } from '@shared/unit-aware-display';
+import { AppThemes, DataWeight, WeightUnits } from '@sports-alliance/sports-lib';
+import { normalizeUserUnitSettings, resolveUnitAwareDisplayStat } from '@shared/unit-aware-display';
 import { describe, expect, it, vi } from 'vitest';
 import type { EChartsType } from 'echarts/core';
 import { AppThemeService } from '../../services/app.theme.service';
@@ -113,13 +113,14 @@ describe('HealthPreviewComponent', () => {
 
   it('uses Sports Lib weight display with default and non-default unit preferences', async () => {
     const fixture = await render('weight');
-    for (const settings of [null, normalizeUserUnitSettings({ distanceUnits: DistanceUnits.Miles })]) {
+    const canonical = Number(buildHealthPreviewSeries('weight').points.at(-1)?.value);
+    for (const settings of [null, normalizeUserUnitSettings({ weightUnits: WeightUnits.Pounds })]) {
       fixture.componentRef.setInput('unitSettings', settings);
       fixture.detectChanges();
       const model = fixture.componentInstance.model();
-      const value = new DataWeight(Number(model.displayedPoints.at(-1)?.value));
-      expect(model.displayUnit).toBe(value.getDisplayUnit());
-      expect(model.ariaLabel).toContain(String(value.getDisplayValue()));
+      const value = resolveUnitAwareDisplayStat(new DataWeight(canonical), settings)!;
+      expect(model.displayUnit).toBe(value.unit);
+      expect(model.ariaLabel).toContain(value.value);
     }
   });
 });
