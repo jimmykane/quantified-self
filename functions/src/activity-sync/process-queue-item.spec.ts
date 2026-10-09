@@ -6,6 +6,8 @@ import { ACTIVITY_SYNC_ROUTE_IDS, ACTIVITY_SYNC_ROUTES, HISTORICAL_MANUAL_ACTIVI
 import { ActivitySyncQueueItemInterface } from '../queue/queue-item.interface';
 import { ProviderOperationError } from '../shared/provider-operation-error';
 import { MAX_RETRY_COUNT } from '../shared/queue-config';
+import { createCOROSActivityFITFixture } from '../../test-utils/coros-activity-fit';
+import { prepareCOROSActivityFITUpload } from '../coros/activity-fit';
 
 type MockActivitySyncQueueItemRef = NonNullable<ActivitySyncQueueItemInterface['ref']>;
 
@@ -1758,6 +1760,77 @@ describe('activity-sync/process-queue-item', () => {
     );
     expect(mockDownload).toHaveBeenCalledTimes(1);
     expect(mockUploadActivityFileToCOROS).toHaveBeenCalledTimes(1);
+  });
+
+  it.each([82, 32])('queued sport %i refreshes an old receipt for the actual converted copy and then only polls', async sport => {
+    const input = createCOROSActivityFITFixture({ sport });
+    const original = Buffer.from(input);
+    mockDownload.mockResolvedValue([input]);
+    const queueItem: ActivitySyncQueueItemInterface = {
+      ...baseQueueItem, routeId: ACTIVITY_SYNC_ROUTE_IDS.GarminAPI_to_COROSAPI,
+      destinationServiceName: ServiceNames.COROSAPI, destinationRestartProviderUserID: 'coros-user-1',
+    };
+    expect(await processActivitySyncQueueItem(queueItem)).toBe(QueueResult.ProviderStatusPending);
+    const sent = mockUploadActivityFileToCOROS.mock.calls[0][1] as Buffer;
+    expect(sent).toEqual(prepareCOROSActivityFITUpload(input));
+    expect(mockRecordActivitySyncOutboundFingerprint).toHaveBeenCalledExactlyOnceWith({
+      userID: 'user-1', destinationServiceName: ServiceNames.COROSAPI, fileBuffer: sent,
+    });
+    expect(queueItem.outboundFingerprintID).toBe('exact-v1-new');
+    expect(mockUpdateQueueItemIfUserActive).toHaveBeenCalledWith(expect.objectContaining({
+      phase: 'before_activity_sync_outbound_fingerprint_marker',
+      updateData: { outboundFingerprintID: 'exact-v1-new' },
+    }));
+    expect(mockRecordActivitySyncOutboundFingerprint.mock.invocationCallOrder[0])
+      .toBeLessThan(mockUploadActivityFileToCOROS.mock.invocationCallOrder[0]);
+    expect(input).toEqual(original);
+    expect(await processActivitySyncQueueItem(queueItem)).toBe(QueueResult.Processed);
+    expect(mockDownload).toHaveBeenCalledTimes(1);
+    expect(mockUploadActivityFileToCOROS).toHaveBeenCalledTimes(1);
+    expect(mockRecordActivitySyncOutboundFingerprint).toHaveBeenCalledTimes(1);
+    expect(mockGetCOROSActivityUploadStatus).toHaveBeenCalledTimes(1);
+  });
+
+  it('does not convert a legacy accepted COROS upload while repairing its missing receipt', async () => {
+    const input = createCOROSActivityFITFixture();
+    mockDownload.mockResolvedValue([input]);
+    const queueItem: ActivitySyncQueueItemInterface = {
+      ...baseQueueItem, routeId: ACTIVITY_SYNC_ROUTE_IDS.GarminAPI_to_COROSAPI,
+      destinationServiceName: ServiceNames.COROSAPI, destinationUploadID: '9223372036854775806',
+      destinationProviderUserID: 'coros-user-1', outboundFingerprintID: undefined,
+    };
+    expect(await processActivitySyncQueueItem(queueItem)).toBe(QueueResult.Processed);
+    expect(mockRecordActivitySyncOutboundFingerprint).toHaveBeenCalledWith(expect.objectContaining({ fileBuffer: input }));
+    expect(mockUploadActivityFileToCOROS).not.toHaveBeenCalled();
+    expect(mockGetCOROSActivityUploadStatus).toHaveBeenCalledTimes(1);
+  });
+
+  it('does not send a converted queue copy when its fingerprint marker loses ownership', async () => {
+    mockDownload.mockResolvedValue([createCOROSActivityFITFixture()]);
+    mockUpdateQueueItemIfUserActive.mockImplementation(async params => (
+      params.phase === 'before_activity_sync_outbound_fingerprint_marker' ? 'not_current' : 'updated'
+    ));
+    const queueItem: ActivitySyncQueueItemInterface = {
+      ...baseQueueItem, routeId: ACTIVITY_SYNC_ROUTE_IDS.GarminAPI_to_COROSAPI,
+      destinationServiceName: ServiceNames.COROSAPI,
+    };
+    await expect(processActivitySyncQueueItem(queueItem)).rejects.toThrow('changed before provider upload but remains unclaimed');
+    expect(mockUploadActivityFileToCOROS).not.toHaveBeenCalled();
+    expect(mockGetCOROSActivityUploadStatus).not.toHaveBeenCalled();
+    expect(queueItem.outboundFingerprintID).toBe('exact-v1-existing');
+  });
+
+  it.each([ServiceNames.SuuntoApp, ServiceNames.WahooAPI])('leaves snorkeling FIT unchanged for %s', async destinationServiceName => {
+    const input = createCOROSActivityFITFixture();
+    mockDownload.mockResolvedValue([input]);
+    const queueItem: ActivitySyncQueueItemInterface = {
+      ...baseQueueItem, destinationServiceName,
+      routeId: destinationServiceName === ServiceNames.SuuntoApp
+        ? ACTIVITY_SYNC_ROUTE_IDS.GarminAPI_to_SuuntoApp : ACTIVITY_SYNC_ROUTE_IDS.GarminAPI_to_WahooAPI,
+    };
+    await processActivitySyncQueueItem(queueItem);
+    const upload = destinationServiceName === ServiceNames.SuuntoApp ? mockUploadActivityFileToSuunto : mockUploadActivityFileToWahoo;
+    expect(upload.mock.calls[0][1]).toBe(input);
   });
 
   it('keeps exhausted COROS pending polling visible as a terminal failure', async () => {

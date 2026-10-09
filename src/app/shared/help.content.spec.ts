@@ -1664,7 +1664,11 @@ describe('help.content', () => {
     expect(serviceConnectionsSection?.content).toContain('Run, Indoor Run, Trail Run, Track Run, and Hike');
     expect(serviceConnectionsSection?.content).toContain('Pool Swim and Open Water Swim');
     expect(serviceConnectionsSection?.content).toContain('Stand Up Paddling may appear as **Other**');
-    expect(serviceConnectionsSection?.content).toContain("Sailing and Snorkeling are not in COROS's documented import list");
+    expect(serviceConnectionsSection?.content).toContain('**Snorkeling as Open Water Swim**');
+    expect(serviceConnectionsSection?.content).toContain('**Sailing as GPS Cardio**');
+    expect(serviceConnectionsSection?.content).toContain('for both direct uploads and activity sync');
+    expect(serviceConnectionsSection?.content).toContain('your retained original FIT and activity type in Quantified Self stay unchanged');
+    expect(serviceConnectionsSection?.content).toContain('GPS-less, mixed/multi-session, malformed and other activity types');
     expect(serviceConnectionsSection?.content).toContain('COROS currently reports these processing failures only as a generic failed status');
     expect(serviceConnectionsSection?.content).toContain('https://support.coros.com/hc/en-us/articles/360040256971-How-to-Import-Activities-to-Your-COROS-Account');
     expect(serviceConnectionsSection?.content).toContain('uploading selected GPX or FIT routes to COROS');

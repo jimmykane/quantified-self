@@ -1,13 +1,14 @@
 import { FitEncoder } from 'fit-file-parser/encoder';
 import { readFitMessages, readFitUnsignedField } from 'fit-file-parser/raw';
+import * as logger from 'firebase-functions/logger';
+import { MAX_ACTIVITY_CALLABLE_UPLOAD_BYTES } from '../shared/activity-processing-config';
 
-// Local #600 proof only. Deliberately not imported by any upload/queue path:
-// valid FIT encoding does not establish COROS partner-API acceptance.
+// Fixed mappings verified through controlled COROS imports and owner app checks (#600).
 const SNORKELING = 82;
 const SAILING = 32;
 const SWIMMING = 5;
 const OPEN_WATER = 18; // FIT sub_sport; 17 is lap_swimming, not open water.
-const MAX_BYTES = 30 * 1024 * 1024;
+const MAX_BYTES = MAX_ACTIVITY_CALLABLE_UPLOAD_BYTES;
 const CATEGORY_FIELDS = new Map([
   [12, { sport: 0, subSport: 1 }],
   [18, { sport: 5, subSport: 6 }],
@@ -16,6 +17,8 @@ const CATEGORY_FIELDS = new Map([
 
 interface FieldDefinition { number: number; size: number; baseType: number }
 interface Definition {
+  global: number;
+  littleEndian: boolean;
   fields: FieldDefinition[];
   developerSize: number;
   additions: Array<{ number: number; value: number }>;
@@ -30,17 +33,43 @@ interface Patch { offset: number; remove: number; bytes: Buffer }
  * single-session snorkeling activity. Does not upload, persist, or mutate input.
  * Refuse other/mixed sports and malformed files instead of guessing a category.
  */
-export function createCOROSSnorkelingFITProof(input: Buffer): Buffer {
-  return createCategoryProof(input, SNORKELING, SWIMMING, OPEN_WATER, 'snorkeling');
+export function createCOROSSnorkelingFIT(input: Buffer, requireGPS = false): Buffer {
+  return createCategoryCopy(input, SNORKELING, SWIMMING, OPEN_WATER, 'snorkeling', requireGPS);
 }
 
-/** Experimental generic/generic copy; COROS GPS Cardio acceptance is NOT established. */
-export function createCOROSSailingGenericFITProof(input: Buffer): Buffer {
-  return createCategoryProof(input, SAILING, 0, 0, 'sailing');
+/** Generic/generic FIT imports as GPS Cardio in the verified outdoor sailing case. */
+export function createCOROSSailingFIT(input: Buffer, requireGPS = false): Buffer {
+  return createCategoryCopy(input, SAILING, 0, 0, 'sailing', requireGPS);
 }
 
-function createCategoryProof(input: Buffer, sourceSport: number, targetSport: number,
-  targetSubSport: number, sourceName: string): Buffer {
+/**
+ * Only adapt the two verified outdoor cases. Unrelated, GPS-less, mixed or invalid
+ * inputs retain the existing provider-inference/rejection path, not a guessed type.
+ * No original is mutated or retained. Fingerprint and send the returned buffer.
+ */
+export function prepareCOROSActivityFITUpload(input: Buffer): Buffer {
+  let output: Buffer;
+  let sourceSport: number | undefined;
+  try {
+    const parsed = readFitMessages(input, { messageNumbers: [18], maxInputBytes: MAX_BYTES });
+    if (parsed.messages.length !== 1) return input;
+    const session = parsed.messages[0];
+    sourceSport = readFitUnsignedField(session.fields.find(field => field.fieldNumber === 5), 0, 1, session.littleEndian);
+    if (sourceSport === SNORKELING) output = createCOROSSnorkelingFIT(input, true);
+    else if (sourceSport === SAILING) output = createCOROSSailingFIT(input, true);
+    else return input;
+  } catch {
+    // A fallback must not reject files the existing upload path might accept.
+    return input;
+  }
+  logger.info('[COROS] Applied activity FIT category fallback.', {
+    mapping: sourceSport === SNORKELING ? 'snorkeling_to_open_water_swim' : 'sailing_to_gps_cardio',
+  });
+  return output;
+}
+
+function createCategoryCopy(input: Buffer, sourceSport: number, targetSport: number,
+  targetSubSport: number, sourceName: string, requireGPS: boolean): Buffer {
   const parsed = readFitMessages(input, { messageNumbers: [0, 12, 18, 19], maxInputBytes: MAX_BYTES });
   const value = (message: typeof parsed.messages[number], number: number) => readFitUnsignedField(
     message.fields.find(field => field.fieldNumber === number), 0, 1, message.littleEndian,
@@ -49,14 +78,14 @@ function createCategoryProof(input: Buffer, sourceSport: number, targetSport: nu
   const sessions = parsed.messages.filter(message => message.globalMessageNumber === 18);
   if (parsed.issues.length || fileIds.length !== 1 || value(fileIds[0], 0) !== 4
     || sessions.length !== 1 || value(sessions[0], 5) !== sourceSport) {
-    throw new Error(`Proof requires a valid single-session ${sourceName} activity FIT.`);
+    throw new Error(`Conversion requires a valid single-session ${sourceName} activity FIT.`);
   }
   for (const message of parsed.messages) {
     const category = CATEGORY_FIELDS.get(message.globalMessageNumber);
     if (!category) continue;
     const sport = value(message, category.sport);
     if (sport !== undefined && sport !== sourceSport) {
-      throw new Error('Proof refuses conflicting FIT sport classifications.');
+      throw new Error('Conversion refuses conflicting FIT sport classifications.');
     }
     // Validate the scalar shape even though the selected fallback replaces it.
     value(message, category.subSport);
@@ -72,6 +101,7 @@ function createCategoryProof(input: Buffer, sourceSport: number, targetSport: nu
     if (input[offset] !== byte) patches.push({ offset, remove: 1, bytes: Buffer.from([byte]) });
   };
   const dataEnd = input[0] + input.readUInt32LE(4);
+  let hasGPS = false;
   let cursor = input[0];
   while (cursor < dataEnd) {
     const start = cursor;
@@ -97,13 +127,13 @@ function createCategoryProof(input: Buffer, sourceSport: number, targetSport: nu
         { number: category.sport, value: targetSport },
         { number: category.subSport, value: targetSubSport },
       ].filter(field => !fields.some(existing => existing.number === field.number)) : [];
-      definitions.set(local, { fields, developerSize, category, additions, offset: start, patched: false });
+      definitions.set(local, { global, littleEndian, fields, developerSize, category, additions, offset: start, patched: false });
       continue;
     }
     const definition = definitions.get(local)!; // Strict reader proved definition/record bounds.
     if (definition.category && !definition.patched) {
       if (definition.fields.length + definition.additions.length > 255) {
-        throw new Error('Proof cannot extend a full FIT field definition.');
+        throw new Error('Conversion cannot extend a full FIT field definition.');
       }
       if (definition.additions.length) {
         replace(definition.offset + 5, definition.fields.length + definition.additions.length);
@@ -112,18 +142,31 @@ function createCategoryProof(input: Buffer, sourceSport: number, targetSport: nu
       }
       definition.patched = true;
     }
+    let latitude: number | undefined;
+    let longitude: number | undefined;
     for (const field of definition.fields) {
       if (compressed && field.number === 253) continue;
       if (definition.category) {
         if (field.number === definition.category.sport) replace(cursor, targetSport);
         if (field.number === definition.category.subSport) replace(cursor, targetSubSport);
       }
+      if (definition.global === 20 && (field.number === 0 || field.number === 1)
+        && field.size === 4 && field.baseType === 0x85) {
+        const coordinate = definition.littleEndian ? input.readInt32LE(cursor) : input.readInt32BE(cursor);
+        if (coordinate !== 0x7fffffff) {
+          if (field.number === 0) latitude = coordinate;
+          else longitude = coordinate;
+        }
+      }
       cursor += field.size;
     }
+    if (latitude !== undefined && longitude !== undefined && Math.abs(latitude) <= 0x40000000) hasGPS = true;
     if (definition.additions.length) patches.push({ offset: cursor, remove: 0,
       bytes: Buffer.from(definition.additions.map(field => field.value)) });
     cursor += definition.developerSize;
   }
+
+  if (requireGPS && !hasGPS) throw new Error('Outdoor category conversion requires recorded GPS coordinates.');
 
   patches.sort((left, right) => left.offset - right.offset);
   const parts: Buffer[] = [];
@@ -134,7 +177,7 @@ function createCategoryProof(input: Buffer, sourceSport: number, targetSport: nu
   }
   parts.push(input.subarray(cursor, dataEnd));
   const outputSize = input.length + patches.reduce((growth, patch) => growth + patch.bytes.length - patch.remove, 0);
-  if (outputSize > MAX_BYTES) throw new Error('Converted proof exceeds the FIT size bound.');
+  if (outputSize > MAX_BYTES) throw new Error('Converted copy exceeds the FIT size bound.');
   const output = Buffer.concat([...parts, Buffer.alloc(2)]);
   output.writeUInt32LE(output.length - input[0] - 2, 4);
   if (input[0] === 14) output.writeUInt16LE(FitEncoder.calculateCRC(output.subarray(0, 12)), 12);

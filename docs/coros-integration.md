@@ -127,49 +127,57 @@ For COROS-bound shared rows, provider status `1` is an expected asynchronous wai
 
 A matching status response with result `0000` and status `-1` uses the existing queued `restart` retry path, not immediate DLQ. The worker clears the confirmed-failed upload identifiers while retaining the original account in `destinationRestartProviderUserID`; a later task may resend the retained FIT only to that still-active account. It does not reset the shared retry count or add an adapter retry loop. Pending polls and restart failures consume the same ten-increment durable budget, so this is not ten new uploads. At exhaustion the last failed upload/account identifiers remain available for DLQ reconciliation. Structured failure logs retain each failed operation ID and status. Explicit unsupported-file result `5096`, unknown status, and mismatched operation IDs remain permanent; a pending or uncertain operation is never blindly resent. Direct callable error codes and manual retry controls are unchanged.
 
-### Local fallback proof (#600; not enabled)
+### Recorded-activity category fallbacks (#600)
 
-The selected categories are Snorkeling → Open Water Swim and Sailing → GPS Cardio.
-`functions/src/coros/snorkeling-fit-proof.ts` is an **unwired local proof**, not an
-upload adapter. Its snorkeling export accepts only a structurally valid, single-session
-snorkeling activity FIT. It copies FIT sport `82` to swimming `5` / open-water sub_sport `18`
-in Session, Lap and optional Sport messages, inserting missing enum fields and
-recalculating header/file CRCs. Sub_sport `17` means pool/lap swimming, not open water.
-Unrelated bytes, unknown/vendor fields, developer data, byte order and compressed
-timestamps are retained; no GPS, strokes or swimming metrics are fabricated.
-GPS-less inputs can be inspected locally, but their COROS eligibility is undecided.
-Originals and QS activity types are never changed. Synthetic regression fixtures
-contain no account exports. Other sports, mixed sessions and malformed inputs are refused.
+Both direct FIT uploads and new/restarted queued uploads call
+`functions/src/coros/activity-fit.ts` before writing the outbound fingerprint and
+sending the file. The fixed mappings are:
 
-The separate sailing export accepts only a single-session sailing FIT (sport `32`)
-and produces an experimental generic/generic copy (`0` / `0`) using the same
-byte-preserving implementation. This is **not a verified GPS Cardio encoding**.
-Both exports refuse other/mixed sports, and neither is called by production uploads.
+| Source FIT sport | Sent FIT sport / sub_sport | COROS category |
+| --- | --- | --- |
+| Snorkeling (`82`) | Swimming / Open Water (`5` / `18`) | Open Water Swim |
+| Sailing (`32`) | Generic / Generic (`0` / `0`) | GPS Cardio |
 
-These establish valid candidate encodings, **not COROS acceptance or category
-readback**. A native GPS Cardio export, partner confirmation or separately authorized
-controlled import must establish sailing's recognized destination classification.
-COROS `mode=18/subMode=1` must not be used as FIT sport `18`; the activity upload API
-has no documented mode override. Do not connect this proof to either upload path yet.
+The adapter only converts structurally valid, single-session activity FITs with
+consistent category fields and at least one valid recorded latitude/longitude
+pair. GPS-less, mixed/multi-session, malformed and unrelated files pass through
+unchanged for the existing provider inference/rejection behavior; no support for
+those cases is claimed. FIT sub_sport `17` is pool swimming, not open water.
+COROS's API `mode=18/subMode=1` is not a FIT sport enum or an upload parameter.
 
-Before production integration, obtain explicit approval for one controlled import of
-each candidate, verify terminal success/category/data preservation, and determine
-GPS-less behavior. Then cover both direct and queued uploads, compute echo fingerprints
-from the actual sent copy, make the category change visible to users and preserve
-existing polling, bounded retries, same-account pinning and duplicate guards. Deployment
-and replay remain separate approvals. Issue #600 stays open. Reviewed app Help's COROS
-activity-type section: unchanged while original-only delivery remains production behavior.
-Monitoring is unchanged: this proof has no worker, queue, provider call or telemetry;
-the #832 bundle/runbook still cover all existing COROS delivery outcomes.
+Only Session, Lap and optional Sport classification fields change, with missing
+enum fields inserted and header/file CRCs recalculated. Original files and QS
+activity types stay unchanged. Recorded timing, distance, GPS, depth, sensor,
+unknown/vendor and developer fields retain their bytes; no metrics are fabricated.
+COROS may not display every retained field. Synthetic regression fixtures contain
+no private exports.
 
-For the explicitly authorized controlled test, use the actual converted copy for
-the existing outbound fingerprint receipt, retain active-account/deletion/disconnect
-and entitlement checks, and send each candidate only once. Reconcile the returned
-upload IDs using status-only GETs; do not treat `0000`/status `1` as completion or
-resend a pending/uncertain operation. Read back the resulting activity category
-(`10` / `1` for Open Water Swim, `18` / `1` for GPS Cardio), timing and recorded data.
-The operator test must not complete or rewrite the original queue rows or FIT files.
-No test files, identifiers, credentials or private samples belong in this repository.
+On 9 October 2026, separately authorized controlled imports of one retained
+Snorkeling and one Sailing activity both reached status `2`. The owner confirmed
+Open Water Swim and matching snorkeling details, then GPS Cardio, matching sailing
+summary and its visible route. Sailing took about two hours and an explicitly
+authorized single same-copy resend returned the same upload ID while pending.
+Neither imported copy appeared in the inspected history API responses, so category
+confirmation came from the owner's app checks, not inferred API readback.
+This proves the two tested files, not universal COROS acceptance. No test identifiers,
+files, screenshots or credentials belong in this repository.
+
+Fingerprint receipts are computed from the actual sent copy. A converted fresh
+send/restart replaces a legacy original-file queue fingerprint marker through the
+existing guarded update; previously accepted operations keep their receipt and
+status-only reconciliation without conversion or another POST. Same-account
+pinning, Pro, deletion/disconnect checks, polling, duplicates and bounded retries
+are unchanged. INFO `[COROS] Applied activity FIT category fallback.` logs only one
+fixed mapping label, never files, coordinates or account identifiers. App Help
+discloses the category change and unsupported cases.
+
+Monitoring coverage is **unchanged**: the #832 bundle/runbook already includes
+COROS, committed delivery/pending/retry/DLQ outcomes and overdue status-only polls.
+No metric dimensions, scheduler, queue policy, Rules, indexes, secrets, persistent
+schema, Training or MCP contracts change. Functions deployment and any historical
+replay require separate explicit approval; this implementation does not deploy,
+replay or complete old queue records. Roll back by reverting the adapter wiring,
+preserving all accepted operation IDs and their polling state.
 
 ## Echo suppression
 
