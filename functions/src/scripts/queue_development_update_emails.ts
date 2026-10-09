@@ -158,13 +158,17 @@ export async function queueSingleEmail(
         });
 
         transaction.set(trackingRef, {
+            // This separate receipt also holds recipient data and must be
+            // discoverable by account cleanup after the mail itself expires.
+            uid,
             email: user.email,
             firstName: user.firstName,
             lastName: user.lastName,
             template: TEMPLATE_NAME,
             runId,
             queuedAt: admin.firestore.FieldValue.serverTimestamp(),
-            mailDocumentId: mailRef.id
+            mailDocumentId: mailRef.id,
+            expireAt: getExpireAtTimestamp(TTL_CONFIG.MAIL_IN_DAYS),
         });
 
         return 'queued' as const;

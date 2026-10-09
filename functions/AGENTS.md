@@ -20,6 +20,9 @@ Workflows:
 - Mail account cleanup is UID-only: do not reintroduce email-address matching. Historical email-only records are
   outside its completion scope, even when they lack TTL. An explicitly selected external test inbox with no app
   account may omit UID, but must retain expiry; never invent a UID for a non-account recipient.
+- Mail-related tracking/deduplication records that retain recipient data must also carry UID ownership and expiry,
+  and participate in explicit UID-based account cleanup. A mail document's TTL does not remove a separate tracking
+  record; never assume an `expireAt` field activates TTL for another collection.
 - When adding or renaming a Function credential, register it with `defineSecret()` in `src/secrets.ts`, bind it only to
   the endpoints that require it, keep `.secret.local.example` and `docs/function-secret-management.md` current, and run
   `npm run secrets:check`. Never generate `functions/.env` in CI or permit local environment, secret, service-account,

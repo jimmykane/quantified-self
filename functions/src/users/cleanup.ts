@@ -75,6 +75,7 @@ export { ORPHANED_SERVICE_TOKENS_COLLECTION_NAME } from '../orphaned-service-tok
 
 const SPORTS_LIB_REPARSE_JOBS_COLLECTION = 'sportsLibReparseJobs';
 const SPORTS_LIB_ROUTE_REPARSE_JOBS_COLLECTION = 'sportsLibRouteReparseJobs';
+const DEVELOPMENT_UPDATE_EMAIL_TRACKING_COLLECTION = 'development_update_email_tracking';
 
 /**
  * Helper to delete a token document and its subcollections.
@@ -173,6 +174,7 @@ const ACCOUNT_OPERATIONAL_COLLECTIONS = new Set([
     COROS_INTEGER_CLAIMS, SUUNTO_HEALTH_WEBHOOK_INGRESS_COLLECTION_NAME,
     SUUNTO_HEALTH_WEBHOOK_ACCOUNT_BINDINGS_COLLECTION_NAME, 'failed_jobs',
     SPORTS_LIB_REPARSE_JOBS_COLLECTION, SPORTS_LIB_ROUTE_REPARSE_JOBS_COLLECTION,
+    DEVELOPMENT_UPDATE_EMAIL_TRACKING_COLLECTION,
 ]);
 
 function validateOperationalTarget(target: AccountDeletionTarget): void {
@@ -969,6 +971,10 @@ async function cleanupTopLevelQueueState(uid: string, identifiers: UserProviderI
     const failedJobFirebaseUidDeleteFilter: OperationalDocDeleteFilter = async (doc) =>
         getExplicitFirebaseUidAssociation('failed_jobs', doc.data() as Record<string, unknown>) === uid;
 
+    // Campaign deduplication receipts contain recipient data independently of
+    // mail. Only explicit UID ownership grants deletion authority; never infer
+    // it from the email-derived document ID or historical email-only records.
+    await recursiveDeleteQueryResults(db, uid, 'mail campaign tracking', DEVELOPMENT_UPDATE_EMAIL_TRACKING_COLLECTION, 'uid', firebaseUIDValues, deletedRefKeys, failures, attemptId);
     await recursiveDeleteQueryResults(db, uid, 'activity sync queue', ACTIVITY_SYNC_QUEUE_COLLECTION_NAME, 'userID', firebaseUIDValues, deletedRefKeys, failures, attemptId);
     await recursiveDeleteQueryResults(db, uid, 'training delivery queue', DELIVERY_QUEUE, 'uid', firebaseUIDValues, deletedRefKeys, failures, attemptId);
     await recursiveDeleteQueryResults(db, uid, 'COROS Training integer claim', COROS_INTEGER_CLAIMS, 'uid', firebaseUIDValues, deletedRefKeys, failures, attemptId);

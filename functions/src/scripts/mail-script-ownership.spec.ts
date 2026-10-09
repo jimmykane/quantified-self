@@ -17,6 +17,7 @@ vi.mock('firebase-functions/logger', () => ({ info: vi.fn(), error: vi.fn() }));
 
 import { queueSingleEmail } from './queue_development_update_emails';
 import { sendTestEmails } from './test-all-emails';
+import { TTL_CONFIG } from '../shared/ttl-config';
 
 describe('manual mail UID ownership', () => {
     const recipient = { email: 'member@example.invalid', firstName: 'Test', lastName: 'User', originalIndex: 0 };
@@ -56,6 +57,12 @@ describe('manual mail UID ownership', () => {
         expect(queue.set).toHaveBeenCalledWith(expect.objectContaining({ path: 'mail/mail-1' }), expect.objectContaining({
             uid: 'user-1', to: recipient.email, template: expect.objectContaining({ name: 'development_update' }),
         }));
+        const tracking = queue.set.mock.calls.find(([ref]) => ref.path.startsWith('development_update_email_tracking/'))?.[1];
+        expect(tracking).toMatchObject({ uid: 'user-1', mailDocumentId: 'mail-1' });
+        for (const [, data] of queue.set.mock.calls) {
+            expect(data.expireAt.toMillis()).toBeGreaterThan(Date.now() + (TTL_CONFIG.MAIL_IN_DAYS - 1) * 86_400_000);
+            expect(data.expireAt.toMillis()).toBeLessThanOrEqual(Date.now() + TTL_CONFIG.MAIL_IN_DAYS * 86_400_000);
+        }
         expect(queue.get).toHaveBeenCalledWith(expect.objectContaining({ path: 'users/user-1' }));
         expect(queue.get).toHaveBeenCalledWith(expect.objectContaining({ path: 'userDeletionTombstones/user-1' }));
 
@@ -96,6 +103,7 @@ describe('manual mail UID ownership', () => {
         for (const [, data] of queue.set.mock.calls) {
             expect(data).toMatchObject({ uid: 'user-1', to: recipient.email });
             expect(data).not.toHaveProperty('toUids');
+            expect(data.expireAt.toMillis()).toBeGreaterThan(Date.now() + (TTL_CONFIG.MAIL_IN_DAYS - 1) * 86_400_000);
         }
         expect(queue.get).toHaveBeenCalledWith(expect.objectContaining({ path: 'userDeletionTombstones/user-1' }));
     });
@@ -110,6 +118,7 @@ describe('manual mail UID ownership', () => {
         for (const [, data] of queue.set.mock.calls) {
             expect(data.to).toBe(recipient.email);
             expect(data).not.toHaveProperty('uid');
+            expect(data.expireAt.toMillis()).toBeGreaterThan(Date.now() + (TTL_CONFIG.MAIL_IN_DAYS - 1) * 86_400_000);
         }
     });
 

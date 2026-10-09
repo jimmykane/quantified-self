@@ -1197,6 +1197,7 @@ describe('cleanupUserAccountsV2', () => {
                                 docs: [
                                     { id: 'reparse-job-1', ref: { path: 'sportsLibReparseJobs/reparse-job-1' }, data: () => ({}) },
                                     { id: 'route-reparse-job-1', ref: { path: 'sportsLibRouteReparseJobs/route-reparse-job-1' }, data: () => ({}) },
+                                    { id: 'mail-tracking-1', ref: { path: 'development_update_email_tracking/mail-tracking-1' }, data: () => ({}) },
                                 ],
                             }
                         : { docs: [] }
@@ -1225,6 +1226,10 @@ describe('cleanupUserAccountsV2', () => {
         expect(recursiveDeleteMock).toHaveBeenCalledWith(expect.objectContaining({ path: 'suuntoAppWorkoutQueue/provider-job-1' }));
         expect(recursiveDeleteMock).toHaveBeenCalledWith(expect.objectContaining({ path: 'sportsLibReparseJobs/reparse-job-1' }));
         expect(recursiveDeleteMock).toHaveBeenCalledWith(expect.objectContaining({ path: 'sportsLibRouteReparseJobs/route-reparse-job-1' }));
+        expect(recursiveDeleteMock).toHaveBeenCalledWith(expect.objectContaining({ path: 'development_update_email_tracking/mail-tracking-1' }));
+        expect(markQueueItemDeletedForUserCleanupMock).not.toHaveBeenCalledWith(
+            'development_update_email_tracking', expect.anything(), expect.anything(), expect.anything(),
+        );
         expect(markQueueItemDeletedForUserCleanupMock).toHaveBeenCalledWith(
             'sleepSyncQueue',
             'suunto-health-job-1',

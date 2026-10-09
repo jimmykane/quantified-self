@@ -513,6 +513,57 @@ describe.skipIf(!host)('native account deletion (loopback Firestore emulator)', 
         } finally { for (const ref of [...owned, ...foreign, source, deadLetter]) await db.recursiveDelete(ref); }
     }, 60_000);
 
+    it('recovers paged UID-owned campaign tracking after parent loss while preserving other owners and historical receipts', async () => {
+        const uid = owner();
+        const other = owner();
+        const collection = db.collection('development_update_email_tracking');
+        const owned = Array.from({ length: 101 }, (_, index) => collection.doc(`${uid}-${String(index).padStart(3, '0')}`));
+        const foreign = collection.doc(`${uid}-foreign`);
+        const historical = collection.doc(`${uid}-historical`);
+        const batch = db.batch();
+        for (const ref of owned) {
+            batch.set(ref, { uid, email: 'synthetic@example.invalid' });
+            batch.set(ref.collection('unknown').doc('child'), { synthetic: true });
+        }
+        batch.set(foreign, { uid: other, email: 'synthetic@example.invalid' });
+        batch.set(historical, { email: 'synthetic@example.invalid' });
+        await batch.commit();
+        const remove = db.recursiveDelete.bind(db);
+        let fail = true;
+        const interruption = vi.spyOn(db, 'recursiveDelete').mockImplementation(async (ref, writer) => {
+            if (ref.path === owned[0].path && fail) {
+                await owned[0].delete();
+                throw new Error('synthetic tracking interruption');
+            }
+            return remove(ref, writer);
+        });
+        try {
+            await expect(cleanupUserAccounts({ uid } as admin.auth.UserRecord)).rejects.toThrow('tracking interruption');
+            expect((await owned[0].get()).exists).toBe(false);
+            expect((await owned[0].collection('unknown').get()).empty).toBe(false);
+            const marker = db.doc(`userDeletionTombstones/${uid}`);
+            expect((await marker.get()).get('cleanupStatus')).toBe('pending');
+            const checkpoints = await marker.collection('operationalTargets').get();
+            expect(checkpoints.size).toBe(1);
+            expect(checkpoints.docs[0].data()).toMatchObject({ path: owned[0].path, ownerUid: uid });
+            expect(checkpoints.docs[0].data()).not.toHaveProperty('email');
+            fail = false;
+            await cleanupUserAccounts({ uid } as admin.auth.UserRecord);
+            for (const ref of owned) {
+                expect((await ref.get()).exists).toBe(false);
+                expect((await ref.collection('unknown').get()).empty).toBe(true);
+            }
+            expect((await foreign.get()).get('uid')).toBe(other);
+            expect((await historical.get()).exists).toBe(true);
+            expect((await marker.collection('operationalTargets').get()).empty).toBe(true);
+            expect((await marker.get()).get('cleanupStatus')).toBe('complete');
+            expect((await db.doc(`queueCleanupTombstones/${collection.id}__${owned[0].id}`).get()).exists).toBe(false);
+        } finally {
+            interruption.mockRestore();
+            for (const ref of [...owned, foreign, historical]) await remove(ref);
+        }
+    }, 60_000);
+
     it('preserves literal custom UIDs during queue discovery, deletion and readback', async () => {
         const other = owner();
         const uid = ` ${other} `;
