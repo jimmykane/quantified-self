@@ -2,6 +2,7 @@ import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 import * as admin from 'firebase-admin';
 import { Timestamp } from 'firebase-admin/firestore';
 import { randomUUID } from 'node:crypto';
+import { GARMIN_API_WORKOUT_QUEUE_COLLECTION_NAME } from '../garmin/constants';
 import { WAHOO_API_WORKOUT_QUEUE_COLLECTION_NAME } from '../wahoo/constants';
 import {
     assertAccountCleanupQueryEmpty, assertAccountFirestoreRootAbsent, beginAccountDataCleanup,
@@ -84,12 +85,12 @@ describe.skipIf(!host)('native account deletion (loopback Firestore emulator)', 
         await otherRow.set({ firebaseUserID: other, userName: provider });
         const remove = db.recursiveDelete.bind(db);
         let fail = true;
-        const interruption = vi.spyOn(db, 'recursiveDelete').mockImplementation(async ref => {
+        const interruption = vi.spyOn(db, 'recursiveDelete').mockImplementation(async (ref, writer) => {
             if (ref.path === legacyRow.path && fail) {
                 await legacyRow.delete(); // Fault injection: root gone, descendants still exist.
                 throw new Error('synthetic queue interruption');
             }
-            return remove(ref);
+            return remove(ref, writer);
         });
         try {
             await expect(cleanupUserAccounts({ uid } as admin.auth.UserRecord)).rejects.toThrow('interruption');
@@ -108,6 +109,105 @@ describe.skipIf(!host)('native account deletion (loopback Firestore emulator)', 
             interruption.mockRestore();
             await remove(otherRow);
         }
+    }, 30_000);
+
+    it('preserves a shared queue tree reassigned after selection and does not tombstone the new owner', async () => {
+        const uid = owner();
+        const other = owner();
+        const root = db.doc(`${GARMIN_API_WORKOUT_QUEUE_COLLECTION_NAME}/${uid}-reassigned`);
+        const child = root.collection('attempts').doc('owned');
+        const tombstone = db.doc(`queueCleanupTombstones/${GARMIN_API_WORKOUT_QUEUE_COLLECTION_NAME}__${root.id}`);
+        await root.set({ firebaseUserID: uid, userID: `provider-${uid}`, activityFileID: 'synthetic' });
+        await child.set({ owner: uid });
+        const remove = db.recursiveDelete.bind(db);
+        let changed = false;
+        const intercept = vi.spyOn(db, 'recursiveDelete').mockImplementation(async (ref, writer) => {
+            if (ref.path === root.path && !changed) {
+                changed = true;
+                const batch = db.batch();
+                batch.update(root, { firebaseUserID: other });
+                batch.set(child, { owner: other });
+                await batch.commit();
+            }
+            return remove(ref, writer);
+        });
+        try {
+            await expect(cleanupUserAccounts({ uid } as admin.auth.UserRecord)).rejects.toThrow();
+            expect(changed).toBe(true);
+            expect((await root.get()).get('firebaseUserID')).toBe(other);
+            expect((await child.get()).get('owner')).toBe(other);
+            expect((await tombstone.get()).exists).toBe(false);
+            expect((await db.doc(`userDeletionTombstones/${uid}`).get()).get('cleanupStatus')).toBe('pending');
+        } finally { intercept.mockRestore(); await remove(root); await tombstone.delete(); }
+    }, 30_000);
+
+    it('recursively deletes an operational tree beyond the SDK stream page with guarded transactions', async () => {
+        const uid = owner();
+        const root = db.doc(`activitySyncQueue/${uid}-large-tree`);
+        const children = root.collection('attempts');
+        await root.set({ userID: uid });
+        for (let offset = 0; offset < 5001; offset += 400) {
+            const batch = db.batch();
+            for (let index = offset; index < Math.min(offset + 400, 5001); index++) {
+                batch.set(children.doc(String(index).padStart(5, '0')), { synthetic: true });
+            }
+            await batch.commit();
+        }
+        try {
+            await cleanupUserAccounts({ uid } as admin.auth.UserRecord);
+            expect((await root.get()).exists).toBe(false);
+            expect((await children.limit(1).get()).empty).toBe(true);
+            expect((await db.doc(`queueCleanupTombstones/activitySyncQueue__${root.id}`).get()).exists).toBe(true);
+            expect((await db.doc(`userDeletionTombstones/${uid}`).get()).get('cleanupStatus')).toBe('complete');
+        } finally { await db.recursiveDelete(root); }
+    }, 120_000);
+
+    it('preserves an orphaned provider-only tree when the provider reconnects before recovery', async () => {
+        const uid = owner();
+        const other = owner();
+        const provider = `provider-${uid}`;
+        const root = db.doc(`suuntoAppWorkoutQueue/${uid}-reconnected`);
+        const source = db.doc(`suuntoAppWorkoutQueue/${uid}-source`);
+        const token = db.doc(`SuuntoAppTestTokens/${other}/tokens/connected`);
+        const child = root.collection('attempts').doc('retained');
+        await source.set({ firebaseUserID: uid, userName: provider });
+        await root.set({ userName: provider });
+        await child.set({ synthetic: true });
+        const remove = db.recursiveDelete.bind(db);
+        const intercept = vi.spyOn(db, 'recursiveDelete').mockImplementation(async (ref, writer) => {
+            if (ref.path === root.path) {
+                await root.delete();
+                throw new Error('synthetic orphan interruption');
+            }
+            return remove(ref, writer);
+        });
+        try {
+            await expect(cleanupUserAccounts({ uid } as admin.auth.UserRecord)).rejects.toThrow();
+            intercept.mockRestore();
+            await token.set({ serviceName: 'Suunto app', userName: provider });
+            await expect(cleanupUserAccounts({ uid } as admin.auth.UserRecord)).rejects.toThrow();
+            expect((await child.get()).exists).toBe(true);
+            expect((await token.get()).exists).toBe(true);
+            expect((await db.doc(`userDeletionTombstones/${uid}`).get()).get('cleanupStatus')).toBe('pending');
+        } finally { intercept.mockRestore(); await remove(root); await remove(source); await token.delete(); }
+    }, 30_000);
+
+    it('discovers UID-owned mail after an email change and preserves conflicting ownership', async () => {
+        const uid = owner();
+        const other = owner();
+        const email = `${uid}@example.invalid`;
+        const owned = db.doc(`mail/${uid}-old-address`);
+        const foreign = db.doc(`mail/${uid}-reused-address`);
+        const conflict = db.doc(`mail/${uid}-conflict`);
+        await owned.set({ uid, to: `old-${email}` });
+        await foreign.set({ uid: other, to: email });
+        await conflict.set({ uid: other, toUids: [uid], marketing: { uid } });
+        try {
+            await cleanupUserAccounts({ uid, email } as admin.auth.UserRecord);
+            expect((await owned.get()).exists).toBe(false);
+            expect((await foreign.get()).get('uid')).toBe(other);
+            expect((await conflict.get()).get('uid')).toBe(other);
+        } finally { await owned.delete(); await foreign.delete(); await conflict.delete(); }
     }, 30_000);
 
     it('refuses full-handler completion while an acknowledged reconciler retains a deferred lease', async () => {
@@ -291,12 +391,12 @@ describe.skipIf(!host)('native account deletion (loopback Firestore emulator)', 
         await root.collection('unknown').doc('retained').set({ synthetic: true });
         const remove = db.recursiveDelete.bind(db);
         let fail = true;
-        const interruption = vi.spyOn(db, 'recursiveDelete').mockImplementation(async ref => {
+        const interruption = vi.spyOn(db, 'recursiveDelete').mockImplementation(async (ref, writer) => {
             if (ref.path === root.path && fail) {
                 await root.delete(); // Fault injection into real account cleanup.
                 throw new Error('synthetic MCP interruption');
             }
-            return remove(ref);
+            return remove(ref, writer);
         });
         try {
             await expect(cleanupUserAccounts({ uid } as admin.auth.UserRecord)).rejects.toThrow('MCP interruption');
@@ -351,8 +451,8 @@ describe.skipIf(!host)('native account deletion (loopback Firestore emulator)', 
         const child = root.collection('tokens').doc('missing').collection('unknown').doc('late');
         const remove = db.recursiveDelete.bind(db);
         let lateWrite = true;
-        const writer = vi.spyOn(db, 'recursiveDelete').mockImplementation(async ref => {
-            await remove(ref);
+        const writer = vi.spyOn(db, 'recursiveDelete').mockImplementation(async (ref, writer) => {
+            await remove(ref, writer);
             if (ref.path === root.path && lateWrite) {
                 lateWrite = false;
                 await child.set({ synthetic: true });

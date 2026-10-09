@@ -165,6 +165,7 @@ describe('checkAndSendSubscriptionEmails', () => {
         expect(docSpy).toHaveBeenCalledWith(`welcome_email_${subId}`);
         expect(setSpy).toHaveBeenCalledWith(expect.objectContaining({
             to: 'test@example.com',
+            uid,
             from: 'Quantified Self <hello@quantified-self.io>',
             replyTo: 'support@quantified-self.io',
             template: {
@@ -209,6 +210,7 @@ describe('checkAndSendSubscriptionEmails', () => {
 
         expect(docSpy).toHaveBeenCalledWith(`upgrade_${eventId}`);
         expect(setSpy).toHaveBeenCalledWith(expect.objectContaining({
+            uid,
             from: 'Quantified Self <hello@quantified-self.io>',
             replyTo: 'support@quantified-self.io',
             template: {
@@ -236,6 +238,7 @@ describe('checkAndSendSubscriptionEmails', () => {
 
         expect(docSpy).toHaveBeenCalledWith(`downgrade_${eventId}`);
         expect(setSpy).toHaveBeenCalledWith(expect.objectContaining({
+            uid,
             from: 'Quantified Self <hello@quantified-self.io>',
             replyTo: 'support@quantified-self.io',
             template: {
@@ -311,6 +314,7 @@ describe('checkAndSendSubscriptionEmails', () => {
 
         expect(docSpy).toHaveBeenCalledWith(`cancellation_${subId}_${timestamp.seconds}`);
         expect(setSpy).toHaveBeenCalledWith(expect.objectContaining({
+            uid,
             from: 'Quantified Self <hello@quantified-self.io>',
             replyTo: 'support@quantified-self.io',
             template: {

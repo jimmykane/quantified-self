@@ -89,6 +89,8 @@ export async function queueRegistrationWelcomeEmail(
 
         transaction.create(mailRef, {
             to: userRecord.email,
+            // Inert ownership metadata keeps cleanup independent of email changes.
+            uid,
             from: FOUNDER_EMAIL_FROM,
             replyTo: FOUNDER_EMAIL_REPLY_TO,
             template: {

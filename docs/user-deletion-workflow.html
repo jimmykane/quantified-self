@@ -269,13 +269,13 @@
                         <td><strong>Operational Queues</strong></td>
                         <td><code>activitySyncQueue/*</code><br><code>routeSyncQueue/*</code><br><code>sleepSyncQueue/*</code><br><code>suuntoAppWorkoutQueue/*</code><br><code>COROSAPIWorkoutQueue/*</code><br><code>garminAPIActivityQueue/*</code><br><code>wahooAPIWorkoutQueue/*</code><br><code>failed_jobs/*</code><br><code>sportsLibReparseJobs/*</code><br><code>sportsLibRouteReparseJobs/*</code></td>
                         <td><code>cleanupUserAccountsV2</code></td>
-                        <td>Top-level queue docs are outside the extension paths, so cleanup queries by Firebase UID and known provider ids, writes short-lived cleanup tombstones, then recursively deletes queue roots, including Sleep and Suunto <code>suunto_health_poll</code> work in <code>sleepSyncQueue</code>, route sync, and route reparse jobs</td>
+                        <td>Top-level queue docs are outside the extension paths, so cleanup queries by Firebase UID and known provider ids, checks the parent revision and ownership in each recursive delete transaction and commits short-lived cleanup tombstones with root removal, including Sleep and Suunto <code>suunto_health_poll</code> work in <code>sleepSyncQueue</code>, route sync, and route reparse jobs</td>
                     </tr>
                     <tr>
                         <td><strong>Email Logs</strong></td>
                         <td><code>mail/{docId}</code></td>
                         <td><code>cleanupUserAccountsV2</code></td>
-                        <td>Queries by UID and Email</td>
+                        <td>Queries by <code>uid</code>, <code>toUids</code>, <code>marketing.uid</code> and Email; preserves conflicting UID owners and confirmation mail. New registration/subscription mail stores UID ownership; historical email-only attribution remains limited.</td>
                     </tr>
                     <tr>
                         <td><strong>Other Files</strong></td>

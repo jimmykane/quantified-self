@@ -47,11 +47,14 @@ export async function markQueueItemDeletedForUserCleanup(
     collectionName: string,
     queueItemId: string,
     reason: QueueCleanupTombstoneReason,
+    transaction?: admin.firestore.Transaction,
 ): Promise<boolean> {
     try {
         const db = admin.firestore();
-        await getQueueCleanupTombstoneDocumentRef(db, collectionName, queueItemId)
-            .set(buildQueueCleanupTombstoneData(collectionName, queueItemId, reason), { merge: true });
+        const ref = getQueueCleanupTombstoneDocumentRef(db, collectionName, queueItemId);
+        const data = buildQueueCleanupTombstoneData(collectionName, queueItemId, reason);
+        if (transaction) transaction.set(ref, data, { merge: true });
+        else await ref.set(data, { merge: true });
         return true;
     } catch (error) {
         logger.error(

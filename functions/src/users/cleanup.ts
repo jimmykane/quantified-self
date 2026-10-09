@@ -57,7 +57,7 @@ import { cleanupRejectedRouteOriginalFilesForUser, REJECTED_ROUTE_ORIGINAL_CLEAN
 import { cleanupServiceDisconnectTasksForUser, SERVICE_DISCONNECT_CLEANUP_COLLECTION } from '../service-disconnect-cleanup';
 import {
     ACCOUNT_DELETION_ROOT_COLLECTIONS, ACCOUNT_DELETION_TARGETS_COLLECTION, beginAccountDataCleanup, checkpointAccountDeletionIdentifiers,
-    checkpointAccountDeletionTarget, removeAccountDeletionTargetCheckpoint, assertAccountFirestoreTreeAbsent, type AccountDeletionTarget,
+    checkpointAccountDeletionTarget, removeAccountDeletionTargetCheckpoint, assertAccountFirestoreTreeAbsent, deleteAccountOperationalTree, type AccountDeletionTarget,
     completeAccountDataCleanup, deleteAccountFirestoreRoot, assertAccountFirestoreRootAbsent,
     deleteAccountStorageFiles, assertAccountStorageAbsent, assertAccountCleanupQueryEmpty,
 } from './data-cleanup';
@@ -186,11 +186,51 @@ function validateOperationalTarget(target: AccountDeletionTarget): void {
 
 async function deleteOperationalTarget(
     db: admin.firestore.Firestore, uid: string, attemptId: string, target: AccountDeletionTarget,
+    selected?: admin.firestore.DocumentSnapshot,
 ): Promise<void> {
     validateOperationalTarget(target);
-    const checkpoint = await checkpointAccountDeletionTarget(db, uid, attemptId, target);
     const ref = db.doc(target.path);
-    await db.recursiveDelete(ref);
+    const current = selected || await ref.get();
+    const collectionName = target.path.split('/')[0];
+    if (current.exists) {
+        const data = current.data()!;
+        const ownerUid = getExplicitFirebaseUidAssociation(collectionName, data)
+            || (!target.providerKeyed && target.value === uid ? uid : null);
+        if ((ownerUid && ownerUid !== uid)
+            || (target.fieldName && asFirebaseUidString(data[target.fieldName]) !== target.value)) {
+            throw new Error('Account operational target ownership changed.');
+        }
+        target = { ...target, ownerUid,
+            providerLookup: ownerUid ? null : providerQueueLookupFromCollectionData(collectionName, data),
+            sourceQueues: sourceQueuesForOperationalDoc(collectionName, data),
+        };
+    }
+    const ownerUid = target.ownerUid || (!target.providerKeyed && target.value === uid ? uid : null);
+    const lookup = target.providerLookup as ProviderQueueLookup | undefined;
+    if ((ownerUid && ownerUid !== uid) || (!ownerUid && !lookup)) {
+        throw new Error('Account operational target ownership is unavailable.');
+    }
+    if (lookup && (providerLookupForService(lookup.serviceName, lookup.providerUserID)?.tokenField !== lookup.tokenField)) {
+        throw new Error('Account operational provider attribution is invalid.');
+    }
+    const sourceQueues = target.sourceQueues || (CLOUD_TASK_SOURCE_QUEUE_COLLECTIONS.has(collectionName) ? [collectionName] : []);
+    if (sourceQueues.some(source => !CLOUD_TASK_SOURCE_QUEUE_COLLECTIONS.has(source))) {
+        throw new Error('Account operational source queue is outside the configured scope.');
+    }
+    const checkpoint = await checkpointAccountDeletionTarget(db, uid, attemptId, target);
+    await deleteAccountOperationalTree(db, uid, attemptId, current, async (transaction, isRoot) => {
+        if (!ownerUid && lookup && await hasConnectedTokenForProviderLookup(db, lookup, uid, transaction)) {
+            throw new Error('Account operational target provider ownership changed.');
+        }
+        if (isRoot) {
+            for (const source of sourceQueues) {
+                if (!(await markQueueItemDeletedForUserCleanup(source, ref.id,
+                    QUEUE_CLEANUP_TOMBSTONE_REASONS.AccountDeletionCleanup, transaction))) {
+                    throw new Error('Queue cleanup tombstone could not be written.');
+                }
+            }
+        }
+    });
     await assertAccountFirestoreTreeAbsent(ref);
     // Server-only leaf checkpoint, removed only after the entire target tree is absent.
     await removeAccountDeletionTargetCheckpoint(db, uid, attemptId, checkpoint);
@@ -221,7 +261,7 @@ async function resumeOperationalTargets(
                         throw new Error('Account operational target ownership changed.');
                     }
                 }
-                await deleteOperationalTarget(db, uid, attemptId, target);
+                await deleteOperationalTarget(db, uid, attemptId, target, current);
             });
         }
         if (page.docs.length < 100) break;
@@ -481,14 +521,10 @@ async function recursiveDeleteQueryResults(
                     for (const doc of docs) {
                         const refKey = getRefDeduplicationKey(doc.ref);
                         if (deletedRefKeys.has(refKey) || !(await deleteFilter(doc))) continue;
-                        if (!(await markQueueCleanupTombstoneForDeletedOperationalDoc(collectionName, doc))) {
-                            failures.push({ stage: 'queue_tombstone', error: new Error('Queue cleanup tombstone could not be written.') });
-                            continue;
-                        }
                         await runCleanupStage(failures, 'operational_document', async () => {
                             await deleteOperationalTarget(db, uid, attemptId, {
                                 path: doc.ref.path, fieldName, value, providerKeyed: Boolean(shouldDeleteDoc),
-                            });
+                            }, doc);
                             deletedRefKeys.add(refKey);
                             deletedDocCount += 1;
                         });
@@ -536,36 +572,11 @@ function sourceQueueCollectionFromFailedJobData(data: Record<string, unknown>): 
     return null;
 }
 
-async function markQueueCleanupTombstoneForDeletedOperationalDoc(
-    collectionName: string,
-    doc: admin.firestore.QueryDocumentSnapshot,
-): Promise<boolean> {
-    const sourceQueueCollectionName = CLOUD_TASK_SOURCE_QUEUE_COLLECTIONS.has(collectionName)
-        ? collectionName
-        : collectionName === 'failed_jobs'
-            ? sourceQueueCollectionFromFailedJobData(doc.data() as Record<string, unknown>)
-            : null;
-
-    if (!sourceQueueCollectionName && collectionName !== 'failed_jobs') {
-        return true;
-    }
-
-    if (!sourceQueueCollectionName) {
-        const tombstoneResults = await Promise.all([...CLOUD_TASK_SOURCE_QUEUE_COLLECTIONS].map((sourceCollectionName) =>
-            markQueueItemDeletedForUserCleanup(
-                sourceCollectionName,
-                doc.id,
-                QUEUE_CLEANUP_TOMBSTONE_REASONS.AccountDeletionCleanup,
-            )
-        ));
-        return tombstoneResults.every(Boolean);
-    }
-
-    return markQueueItemDeletedForUserCleanup(
-        sourceQueueCollectionName,
-        doc.id,
-        QUEUE_CLEANUP_TOMBSTONE_REASONS.AccountDeletionCleanup,
-    );
+function sourceQueuesForOperationalDoc(collectionName: string, data: Record<string, unknown>): string[] {
+    if (CLOUD_TASK_SOURCE_QUEUE_COLLECTIONS.has(collectionName)) return [collectionName];
+    if (collectionName !== 'failed_jobs') return [];
+    const source = sourceQueueCollectionFromFailedJobData(data);
+    return source ? [source] : [...CLOUD_TASK_SOURCE_QUEUE_COLLECTIONS];
 }
 
 function providerLookupForService(serviceName: ServiceNames, providerUserID: unknown): ProviderQueueLookup | null {
@@ -693,12 +704,13 @@ async function hasConnectedTokenForProviderLookup(
     db: admin.firestore.Firestore,
     lookup: ProviderQueueLookup,
     excludedUid?: string,
+    transaction?: admin.firestore.Transaction,
 ): Promise<boolean> {
     for (const value of providerQueryValues(lookup.providerUserID)) {
-        const snapshot = await db.collectionGroup('tokens')
+        const query = db.collectionGroup('tokens')
             .where(lookup.tokenField, '==', value)
-            .where('serviceName', '==', lookup.serviceName)
-            .get();
+            .where('serviceName', '==', lookup.serviceName);
+        const snapshot = transaction ? await transaction.get(query) : await query.get();
         if (getSnapshotDocs(snapshot).some(doc => tokenSnapshotHasServiceName(doc, lookup.serviceName)
             && (!excludedUid || doc.ref.parent.parent?.id !== excludedUid))) return true;
     }
@@ -1106,6 +1118,7 @@ async function cleanupDeletedUser(user: admin.auth.UserRecord): Promise<void> {
             mailCollection.where('toUids', 'array-contains', uid),
             // Campaign mail uses an explicit owner without duplicate recipients.
             mailCollection.where('marketing.uid', '==', uid),
+            mailCollection.where('uid', '==', uid),
         ];
         if (user.email) queries.push(mailCollection.where('to', '==', user.email));
         const isDeletable = (doc: admin.firestore.QueryDocumentSnapshot): boolean => {
@@ -1113,6 +1126,7 @@ async function cleanupDeletedUser(user: admin.auth.UserRecord): Promise<void> {
             if (doc.id === `account_deleted_confirmation_${uid}` || data.template?.name === 'account_deleted_confirmation') return false;
             // An email address can be reused. Explicit ownership takes precedence
             // over an email-only match, including conflicting legacy markers.
+            if (typeof data.uid === 'string' && data.uid !== uid) return false;
             if (typeof data.marketing?.uid === 'string' && data.marketing.uid !== uid) return false;
             if (Array.isArray(data.toUids) && data.toUids.length > 0 && !data.toUids.includes(uid)) return false;
             return true;

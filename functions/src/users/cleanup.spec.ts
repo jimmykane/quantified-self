@@ -7,6 +7,7 @@ import { ServiceNames } from '@sports-alliance/sports-lib';
 // Hoist mocks
 const {
     dataCleanupMocks,
+    hydrateQuerySnapshot,
     authBuilderMock,
     runWithMock,
     deauthorizeServiceMock,
@@ -33,6 +34,7 @@ const {
     const dataCleanupMocks = {
         beginAccountDataCleanup: vi.fn().mockResolvedValue({ attemptId: 'synthetic-attempt', suuntoUserNames: [], corosOpenIds: [], garminUserIDs: [], wahooUserIDs: [] }),
         checkpointAccountDeletionIdentifiers: vi.fn().mockResolvedValue(undefined),
+        deleteAccountOperationalTree: vi.fn(),
         checkpointAccountDeletionTarget: vi.fn().mockResolvedValue({ delete: vi.fn().mockResolvedValue(undefined) }),
         removeAccountDeletionTargetCheckpoint: vi.fn().mockResolvedValue(undefined),
         assertAccountFirestoreTreeAbsent: vi.fn().mockResolvedValue(undefined),
@@ -99,13 +101,21 @@ const {
         get: collectionGroupLimitGetMock,
     }));
 
+    const hydrateQuerySnapshot = (snapshot: { docs: Array<{ id?: string; ref?: unknown; data?: () => Record<string, unknown> }> }, args: unknown[] = []) => ({
+        ...snapshot,
+        docs: snapshot.docs.map(doc => ({
+            ...doc, exists: true,
+            ref: typeof doc.ref === 'object' && doc.ref ? { ...doc.ref, id: doc.id } : doc.ref,
+            data: () => ({ ...(typeof args[0] === 'string' ? { [args[0]]: args[1] === 'array-contains' ? [args[2]] : args[2] } : {}), ...doc.data?.() }),
+        })),
+    });
     // Model Firestore collection scoping even when a scenario shares its query mock.
     const scopedQuery = (collectionName: string, query: { get: () => Promise<{ docs: { ref?: { path?: string } }[] }>; startAfter?: (...args: unknown[]) => unknown }) => {
         const scoped = {
             get: async () => {
-            const snapshot = await query.get();
-            return { ...snapshot, docs: snapshot.docs.filter(doc => !doc.ref?.path || doc.ref.path.split('/')[0] === collectionName) };
-        },
+                const snapshot = hydrateQuerySnapshot(await query.get());
+                return { ...snapshot, docs: snapshot.docs.filter(doc => !doc.ref?.path || doc.ref.path.split('/')[0] === collectionName) };
+            },
             limit: vi.fn(() => scoped),
             startAfter: (...args: unknown[]) => scopedQuery(collectionName, query.startAfter!(...args) as typeof query),
         };
@@ -113,7 +123,10 @@ const {
     };
     const collectionMock = vi.fn((collectionName) => ({
         doc: docMock,
-        where: (...args: unknown[]) => scopedQuery(collectionName, whereMock(...args)),
+        where: (...args: unknown[]) => {
+            const query = whereMock(...args);
+            return scopedQuery(collectionName, { ...query, get: async () => hydrateQuerySnapshot(await query.get(), args) });
+        },
         limit: (...args: unknown[]) => scopedQuery(collectionName, limitMock(...args)),
     }));
 
@@ -141,7 +154,7 @@ const {
 
     const firestore = Object.assign(vi.fn(() => ({
         collection: collectionMock,
-        doc: vi.fn((path: string) => ({ path })),
+        doc: vi.fn((path: string) => ({ path, id: path.split('/').pop() })),
         collectionGroup: collectionGroupMock,
         batch: vi.fn(() => batchMock),
         recursiveDelete: recursiveDeleteMock,
@@ -162,6 +175,7 @@ const {
 
     return {
         dataCleanupMocks,
+        hydrateQuerySnapshot,
         authBuilderMock,
         runWithMock,
         deauthorizeServiceMock,
@@ -312,7 +326,7 @@ function mockCollectionWhereResultsByName(
             where: vi.fn((field: string, operator: string, value: string) => {
                 whereMock(field, operator, value);
                 const query = {
-                    get: vi.fn().mockResolvedValue(resolver(collectionName, field, operator, value) || { docs: [] }),
+                    get: vi.fn().mockResolvedValue(hydrateQuerySnapshot((resolver(collectionName, field, operator, value) || { docs: [] }) as Parameters<typeof hydrateQuerySnapshot>[0], [field, operator, value])),
                     limit: vi.fn(() => query),
                 };
                 return query;
@@ -335,6 +349,10 @@ describe('cleanupUserAccountsV2', () => {
             mock.mockReset().mockResolvedValue(key === 'beginAccountDataCleanup'
                 ? { attemptId: 'synthetic-attempt', suuntoUserNames: [], corosOpenIds: [], garminUserIDs: [], wahooUserIDs: [] } : key === 'checkpointAccountDeletionTarget' ? { delete: vi.fn().mockResolvedValue(undefined) } : undefined);
         }
+        dataCleanupMocks.deleteAccountOperationalTree.mockImplementation(async (_db, _uid, _attempt, root, beforeDelete) => {
+            await beforeDelete({ get: (ref: { get: () => Promise<unknown> }) => ref.get(), set: vi.fn() }, true);
+            await recursiveDeleteMock(root.ref);
+        });
         // Setup default mocks
         getServiceConfigMock.mockReturnValue({ tokenCollectionName: 'mockCollection' });
         deauthorizeServiceMock.mockReset().mockResolvedValue(undefined);
@@ -821,7 +839,7 @@ describe('cleanupUserAccountsV2', () => {
             await cleanupUserAccounts(user, { eventId: 'retry' } as unknown as functions.EventContext);
             expect(recursiveDeleteMock.mock.calls.filter(([ref]) => ref.path === queueRef.path)).toHaveLength(2);
             expect(markQueueItemDeletedForUserCleanupMock).toHaveBeenCalledWith(
-                'trainingDeliveryQueue', 'delivery-job', 'account_deletion_cleanup',
+                'trainingDeliveryQueue', 'delivery-job', 'account_deletion_cleanup', expect.anything(),
             );
         } finally {
             recursiveDeleteMock.mockReset().mockResolvedValue({});
@@ -1200,12 +1218,12 @@ describe('cleanupUserAccountsV2', () => {
         expect(markQueueItemDeletedForUserCleanupMock).toHaveBeenCalledWith(
             'sleepSyncQueue',
             'suunto-health-job-1',
-            'account_deletion_cleanup',
+            'account_deletion_cleanup', expect.anything(),
         );
         expect(markQueueItemDeletedForUserCleanupMock).toHaveBeenCalledWith(
             'activitySyncQueue',
             'activity-job-1',
-            'account_deletion_cleanup',
+            'account_deletion_cleanup', expect.anything(),
         );
     });
 
@@ -1266,7 +1284,7 @@ describe('cleanupUserAccountsV2', () => {
         expect(markQueueItemDeletedForUserCleanupMock).not.toHaveBeenCalledWith(
             SUUNTO_HEALTH_WEBHOOK_INGRESS_COLLECTION_NAME,
             expect.any(String),
-            expect.any(String),
+            expect.any(String), expect.anything(),
         );
     });
 
@@ -1300,7 +1318,7 @@ describe('cleanupUserAccountsV2', () => {
         expect(markQueueItemDeletedForUserCleanupMock).toHaveBeenCalledWith(
             'activitySyncQueue',
             'activity-job-no-tombstone',
-            'account_deletion_cleanup',
+            'account_deletion_cleanup', expect.anything(),
         );
         expect(recursiveDeleteMock).not.toHaveBeenCalledWith(expect.objectContaining({
             path: 'activitySyncQueue/activity-job-no-tombstone',
@@ -1411,7 +1429,9 @@ describe('cleanupUserAccountsV2', () => {
             await cleanupUserAccounts(user, {} as functions.EventContext);
             expect(recursiveDeleteMock).toHaveBeenCalledWith(expect.objectContaining({ path: 'sleepSyncQueue/legacy-sleep' }));
             expect(recursiveDeleteMock).toHaveBeenCalledWith(expect.objectContaining({ path: 'failed_jobs/legacy-dlq' }));
-            expect(markQueueItemDeletedForUserCleanupMock).toHaveBeenCalledWith('suuntoAppWorkoutQueue', 'legacy-dlq', 'account_deletion_cleanup');
+            expect(markQueueItemDeletedForUserCleanupMock).toHaveBeenCalledWith(
+                'suuntoAppWorkoutQueue', 'legacy-dlq', 'account_deletion_cleanup', expect.anything(),
+            );
             expect(limitMock).not.toHaveBeenCalled(); // No global collection scan.
         } finally { restore(); }
     });
@@ -1426,7 +1446,7 @@ describe('cleanupUserAccountsV2', () => {
             data: () => ({ provider: 'SuuntoApp', providerUserId: 'paged-provider', firebaseUserID: 'another-owner' }),
         }));
         const query = createPaginatedLimitQueryMock([{ docs: first }, { docs: [{
-            id: 'owned', ref: { path: 'sleepSyncQueue/owned' },
+            id: 'owned', exists: true, ref: { path: 'sleepSyncQueue/owned', id: 'owned' },
             data: () => ({ provider: 'SuuntoApp', providerUserId: 'paged-provider' }),
         }] }]);
         const collectionMock = firestoreMock().collection;
@@ -1492,7 +1512,7 @@ describe('cleanupUserAccountsV2', () => {
         expect(markQueueItemDeletedForUserCleanupMock).not.toHaveBeenCalledWith(
             'sleepSyncQueue',
             'unassociated-provider-only-sleep',
-            'account_deletion_cleanup',
+            'account_deletion_cleanup', expect.anything(),
         );
     });
 
@@ -1593,7 +1613,7 @@ describe('cleanupUserAccountsV2', () => {
             expect(markQueueItemDeletedForUserCleanupMock).toHaveBeenCalledWith(
                 'sleepSyncQueue',
                 'sleep-failed-job-for-user',
-                'account_deletion_cleanup',
+                'account_deletion_cleanup', expect.anything(),
             );
         } finally {
             restoreCollectionMock();
@@ -1625,27 +1645,27 @@ describe('cleanupUserAccountsV2', () => {
         expect(markQueueItemDeletedForUserCleanupMock).toHaveBeenCalledWith(
             'activitySyncQueue',
             'failed-job-without-source',
-            'account_deletion_cleanup',
+            'account_deletion_cleanup', expect.anything(),
         );
         expect(markQueueItemDeletedForUserCleanupMock).toHaveBeenCalledWith(
             'sleepSyncQueue',
             'failed-job-without-source',
-            'account_deletion_cleanup',
+            'account_deletion_cleanup', expect.anything(),
         );
         expect(markQueueItemDeletedForUserCleanupMock).toHaveBeenCalledWith(
             'suuntoAppWorkoutQueue',
             'failed-job-without-source',
-            'account_deletion_cleanup',
+            'account_deletion_cleanup', expect.anything(),
         );
         expect(markQueueItemDeletedForUserCleanupMock).toHaveBeenCalledWith(
             'COROSAPIWorkoutQueue',
             'failed-job-without-source',
-            'account_deletion_cleanup',
+            'account_deletion_cleanup', expect.anything(),
         );
         expect(markQueueItemDeletedForUserCleanupMock).toHaveBeenCalledWith(
             'garminAPIActivityQueue',
             'failed-job-without-source',
-            'account_deletion_cleanup',
+            'account_deletion_cleanup', expect.anything(),
         );
         expect(recursiveDeleteMock).toHaveBeenCalledWith(expect.objectContaining({
             path: 'failed_jobs/failed-job-without-source',
@@ -1695,7 +1715,7 @@ describe('cleanupUserAccountsV2', () => {
         expect(markQueueItemDeletedForUserCleanupMock).not.toHaveBeenCalledWith(
             'suuntoAppWorkoutQueue',
             'other-user-provider-job',
-            'account_deletion_cleanup',
+            'account_deletion_cleanup', expect.anything(),
         );
     });
 
@@ -1784,7 +1804,7 @@ describe('cleanupUserAccountsV2', () => {
         expect(markQueueItemDeletedForUserCleanupMock).not.toHaveBeenCalledWith(
             'sleepSyncQueue',
             'active-provider-sleep',
-            'account_deletion_cleanup',
+            'account_deletion_cleanup', expect.anything(),
         );
     });
 

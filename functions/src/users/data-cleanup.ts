@@ -28,6 +28,10 @@ export interface AccountDeletionTarget {
     fieldName: string;
     value: string;
     providerKeyed: boolean;
+    // Minimal attribution survives a missing parent; never store queue payloads or credentials.
+    ownerUid?: string | null;
+    providerLookup?: { serviceName: string; tokenField: string; providerUserID: string } | null;
+    sourceQueues?: string[];
 }
 
 /** Atomically restore lookup authority and supersede any older invocation. */
@@ -95,6 +99,56 @@ export async function removeAccountDeletionTargetCheckpoint(
         // Server-only leaf checkpoint; its target tree has already been verified absent.
         tx.delete(checkpoint);
     });
+}
+
+/** Keep native recursive enumeration; serialize each delete with ownership/revision checks. */
+export async function deleteAccountOperationalTree(
+    db: admin.firestore.Firestore, uid: string, attemptId: string,
+    root: admin.firestore.DocumentSnapshot,
+    beforeDelete: (transaction: admin.firestore.Transaction, isRoot: boolean) => Promise<void>,
+): Promise<void> {
+    const writer = db.bulkWriter();
+    const flush = writer.flush.bind(writer);
+    // Limit transaction pressure even when recursiveDelete streams a large subtree.
+    const lanes: Promise<unknown>[] = Array.from({ length: 10 }, () => Promise.resolve());
+    let laneIndex = 0;
+    let firstError: unknown;
+    let rootOperation: Promise<admin.firestore.WriteResult> | undefined;
+    writer.delete = ref => {
+        const isRoot = ref.path === root.ref.path;
+        const lane = laneIndex++ % lanes.length;
+        const prior = isRoot ? Promise.all(lanes) : lanes[lane];
+        const operation = prior.then(async () => {
+            if (firstError) throw firstError;
+            return db.runTransaction(async transaction => {
+                await requireCurrentAttempt(transaction, marker(db, uid), attemptId);
+                const current = await transaction.get(root.ref);
+                if (current.exists !== root.exists
+                    || (root.exists && !current.updateTime!.isEqual(root.updateTime!))) {
+                    throw new Error('Account operational target ownership changed.');
+                }
+                await beforeDelete(transaction, isRoot);
+                transaction.delete(ref);
+                const writeTime = Timestamp.now();
+                return { writeTime, isEqual: (other: admin.firestore.WriteResult) => writeTime.isEqual(other.writeTime) };
+            });
+        });
+        // Attach immediately: SDK consumers also observe the original rejection.
+        void operation.catch(error => { firstError ??= error; });
+        if (isRoot) rootOperation = operation;
+        else lanes[lane] = operation;
+        return operation;
+    };
+    writer.flush = async () => {
+        await Promise.allSettled([...lanes, ...(rootOperation ? [rootOperation] : [])]);
+        await flush();
+    };
+    try {
+        await db.recursiveDelete(root.ref, writer);
+    } finally {
+        writer.flush = flush;
+        await writer.close();
+    }
 }
 
 export async function completeAccountDataCleanup(db: admin.firestore.Firestore, uid: string, attemptId: string): Promise<void> {
