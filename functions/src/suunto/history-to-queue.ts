@@ -76,6 +76,10 @@ export const addSuuntoAppHistoryToQueue = onCall({
       logger.warn(`Partial import success: ${stats.successCount} imported, ${stats.failureCount} failed.`);
     }
   } catch (e: any) {
+    if (e instanceof HttpsError && e.code === 'already-exists') {
+      logger.info('[SuuntoHistoryImport] History import is already running.');
+      throw e;
+    }
     logger.error(e);
     throw new HttpsError('internal', e.message);
   }

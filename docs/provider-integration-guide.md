@@ -33,6 +33,8 @@ Treat this table as a high-level orientation, not a partner API specification. T
 
 Provider overview cards must name combined history imports consistently with their focused tools. COROS uses **Sleep & daily Health history** and **Import history** because its daily-data replay always queues both domains. Garmin and Suunto use their corresponding combined labels while Health is available, with availability-aware fallback wording where those providers support a Sleep-only path.
 
+All four providers' manual activity-history tools honor active manual leases and show **Import already running** for `already-exists` conflicts with either a manual lease or an automatic recent-history reservation. Preserve that typed error as HTTP 409 at callable boundaries; do not wrap expected contention into HTTP 500 or log it as an ERROR. Genuine provider/ingestion failures keep their existing handling. See [shared history operations](connection-history-import.md#shared-operations) for the unchanged lifecycle/monitoring boundaries and backend-first release order.
+
 Existing-user Health catch-up is available through the dry-run-first `backfill-existing-health`
 operator script for Garmin, Suunto, and COROS. It preserves Pro eligibility, queues existing
 workers in bounded batches, and keeps deletion-safe submission receipts without treating
@@ -1441,7 +1443,7 @@ The Activity Sync queue view also breaks out historical sends (`deliveryMode: hi
 ### What to monitor after release
 
 - OAuth starts, callback failures, provider denial/cancel rates, duplicate or ambiguous provider identities, and token-refresh failures;
-- webhook authentication failures, accepted/skipped payloads, duplicate/superseded revisions, and history lease collisions (Garmin/Wahoo contention remains observable at the callable boundary, while the frontend presents it as a wait status);
+- webhook authentication failures, accepted/skipped payloads, duplicate/superseded revisions, and history lease/reservation collisions (expected manual contention remains HTTP 409, with INFO diagnostics for Suunto/Garmin, while all four providers' frontend presents it as a wait status);
 - queue depth, age/lag, retries, stuck work, DLQ growth, and Cloud Task dispatch failures;
 - provider 429s, pagination errors, signed-file download rejects, timeouts, parsing failures, and original-file retention failures;
 - disconnect-pending age, deauthorization failures, entitlement enforcement, and cleanup/deletion failures.
