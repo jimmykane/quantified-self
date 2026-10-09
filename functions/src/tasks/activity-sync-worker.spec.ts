@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import type { ActivitySyncQueueItemInterface } from '../queue/queue-item.interface';
 
 interface TaskRequestMock {
   data: {
@@ -262,6 +263,41 @@ describe('processActivitySyncTask', () => {
       'Item queue-item-1 failed and was scheduled for retry: Provider request failed. Bearer [redacted] token=[redacted] [url]',
     );
   });
+
+  it.each([undefined, 'COROS is processing the activity.'])(
+    'reports the current retry failure rather than the original snapshot (%s)',
+    async (previousError) => {
+      const originalErrors = previousError
+        ? [{ error: previousError, atRetryCount: 8, date: 1 }]
+        : undefined;
+      const queueItem = { processed: false, errors: originalErrors };
+      mockQueueGet.mockResolvedValueOnce({
+        exists: true,
+        id: 'queue-item-1',
+        ref: { path: 'activitySyncQueue/queue-item-1' },
+        data: () => queueItem,
+      });
+      mockProcessActivitySyncQueueItem.mockImplementationOnce(async (processingQueueItem: ActivitySyncQueueItemInterface) => {
+        // The guarded retry transition replaces the processor's error array.
+        processingQueueItem.errors = [
+          ...(processingQueueItem.errors || []),
+          { error: 'COROS could not process this activity file.', atRetryCount: 9, date: 2 },
+        ];
+        return 'RETRY_INCREMENTED';
+      });
+
+      await expect(invokeWorker({ data: { queueItemId: 'queue-item-1' } })).rejects.toThrow(
+        'Item queue-item-1 failed and was scheduled for retry: COROS could not process this activity file.',
+      );
+      expect(mockLoggerWarn).toHaveBeenCalledWith(
+        '[ActivitySyncTaskWorker] Item queue-item-1 failed and retry count was incremented.',
+        { retryReason: 'COROS could not process this activity file.' },
+      );
+      expect(queueItem.errors).toBe(originalErrors);
+      expect(mockQueueGet).toHaveBeenCalledTimes(1);
+      expect(mockEnqueueActivitySyncTask).not.toHaveBeenCalled();
+    },
+  );
 
   it('stops Cloud Task retries when processing defers the queue item', async () => {
     mockQueueGet.mockResolvedValueOnce({

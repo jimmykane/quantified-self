@@ -254,7 +254,7 @@ export const processActivitySyncTask = onTaskDispatched({
                 case QueueResult.RetryIncremented: {
                     outcome = 'retry';
                     committedRetry = true;
-                    const retryReason = getSafeRetryReason(queueItem);
+                    const retryReason = getSafeRetryReason(processingQueueItem);
                     logger.warn(`[ActivitySyncTaskWorker] Item ${queueItemId} failed and retry count was incremented.`, {
                         ...(retryReason ? { retryReason } : {}),
                     });
