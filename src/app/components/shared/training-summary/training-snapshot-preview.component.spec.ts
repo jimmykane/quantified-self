@@ -1,22 +1,22 @@
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { MatIconTestingModule } from '@angular/material/icon/testing';
-import { describe, expect, it, beforeEach, vi } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { EChartsLoaderService } from '../../../services/echarts-loader.service';
 import { TrainingSnapshotPreviewComponent } from './training-snapshot-preview.component';
 
 describe('TrainingSnapshotPreviewComponent', () => {
-  let fixture: ComponentFixture<TrainingSnapshotPreviewComponent>;
-
-  beforeEach(async () => {
+  async function renderPreview(): Promise<ComponentFixture<TrainingSnapshotPreviewComponent>> {
     await TestBed.configureTestingModule({
       imports: [TrainingSnapshotPreviewComponent, MatIconTestingModule],
       providers: [{ provide: EChartsLoaderService, useValue: { init: vi.fn().mockResolvedValue(null), dispose: vi.fn() } }],
     }).compileComponents();
-    fixture = TestBed.createComponent(TrainingSnapshotPreviewComponent);
+    const fixture = TestBed.createComponent(TrainingSnapshotPreviewComponent);
     fixture.detectChanges();
-  });
+    return fixture;
+  }
 
-  it('reuses the Training summary components with deterministic example data', () => {
+  it('reuses the Training summary components with deterministic example data', async () => {
+    const fixture = await renderPreview();
     const text = fixture.nativeElement.textContent as string;
     expect(fixture.nativeElement.querySelector('app-training-summary-cards')).toBeTruthy();
     expect(fixture.nativeElement.querySelectorAll('app-training-metric-grid')).toHaveLength(2);
@@ -37,7 +37,9 @@ describe('TrainingSnapshotPreviewComponent', () => {
   });
 
   it('keeps example Form and Ramp history consistent with the same dated CTL and ATL observations', () => {
-    const metrics = fixture.componentInstance.loadMetrics;
+    TestBed.configureTestingModule({ providers: [TrainingSnapshotPreviewComponent] });
+    const component = TestBed.inject(TrainingSnapshotPreviewComponent);
+    const metrics = component.loadMetrics;
     const fitness = metrics.find(metric => metric.id === 'fitness')!.history!;
     const fatigue = metrics.find(metric => metric.id === 'fatigue')!.history!;
     const form = metrics.find(metric => metric.id === 'form-now')!.history!;
