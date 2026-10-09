@@ -1,4 +1,12 @@
 {
+  "src/app/components/home/home-reveal.directive.spec.ts": {
+    "environment": "angular",
+    "reason": "Compiles a directive host with TestBed to verify host class bindings, afterNextRender viewport handling, SSR behavior and DestroyRef teardown."
+  },
+  "src/app/components/public-seo/health-overview-preview.component.spec.ts": {
+    "environment": "angular",
+    "reason": "Compiles the real Health overview and history renderers with TestBed to verify signal inputs, chart bindings, category navigation, focus restoration and haptic feedback."
+  },
   "src/app/components/services/connection-history/connection-history.component.spec.ts": {
     "environment": "angular",
     "reason": "Compiles both history component templates with TestBed and verifies signal input bindings, rendered controls, haptics, and DestroyRef teardown during pending retries."
