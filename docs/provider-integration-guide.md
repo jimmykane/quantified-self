@@ -955,6 +955,9 @@ submission, subject to each provider's available-history limit. Garmin still sta
 in confirmation and status state. Status and deadline refreshes also refresh the picker's
 current-day maximum. The same timer also refreshes at local midnight, including idle dialogs,
 so open pickers stay current without changing the selected range or producing haptic feedback.
+Date controls also validate the current calendar bounds in the form model before admission, so a delayed
+midnight timer or template update cannot submit a range outside the refreshed provider limit. Keep the
+selected dates and show a field error so the user can adjust the range before trying again.
 Stored activity-history metadata describes the last request and its next-available date.
 Show this as **History import cooldown**; the metadata remains after queued processing completes.
 Retained Garmin acknowledgements state that the request was accepted without renewing a delivery-time promise on reopen.

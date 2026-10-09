@@ -776,6 +776,40 @@ describe('HistoryImportFormComponent', () => {
             },
         );
 
+        it.each([ServiceNames.COROSAPI, ServiceNames.GarminAPI])(
+            'revalidates the %s minimum before submission when the midnight refresh is delayed', async provider => {
+                vi.useFakeTimers();
+                vi.setSystemTime(new Date(2026, 9, 10, 23, 59, 59));
+                await reopen(provider);
+                component.formGroup.get('startDate')!.setValue(dayjs(component.minDate));
+                fixture.detectChanges();
+                const selectedStart = component.formGroup.get('startDate')!.value;
+                expect(component.formGroup.valid).toBe(true);
+
+                vi.setSystemTime(new Date(2026, 9, 11, 0, 0, 1));
+                await submit('activity');
+
+                expect(mockUserService.importServiceHistoryForCurrentUser).not.toHaveBeenCalled();
+                expect(component.formGroup.get('startDate')!.hasError('historyDateMin')).toBe(true);
+                expect(component.formGroup.get('startDate')!.value).toBe(selectedStart);
+                expect(haptics.selection).not.toHaveBeenCalled();
+                expect(haptics.success).not.toHaveBeenCalled();
+                expect(haptics.error).not.toHaveBeenCalled();
+
+                fixture.detectChanges();
+                expect(fixture.nativeElement.textContent).toContain(`Start date must be on or after ${formatDate(component.minDate!, 'mediumDate', 'en-US')}`);
+                expect(fixture.nativeElement.querySelector('.qs-form-actions button').disabled).toBe(true);
+
+                component.formGroup.get('startDate')!.setValue(dayjs(component.minDate));
+                fixture.detectChanges();
+                expect(component.formGroup.valid).toBe(true);
+                await submit('activity');
+                expect(mockUserService.importServiceHistoryForCurrentUser).toHaveBeenCalledTimes(1);
+                expect(haptics.selection).toHaveBeenCalledTimes(1);
+                expect(haptics.success).toHaveBeenCalledTimes(1);
+            },
+        );
+
         it.each([ServiceNames.COROSAPI, ServiceNames.SuuntoApp, ServiceNames.WahooAPI, ServiceNames.GarminAPI])(
             'shows the stored %s cooldown without claiming that its import is still running', async provider => {
                 await reopen(provider);
@@ -1881,11 +1915,13 @@ describe('HistoryImportFormComponent', () => {
         });
 
         it('should normalize dates to start of day and end of day on submission', async () => {
+            fixture.destroy();
+            fixture = TestBed.createComponent(HistoryImportFormComponent);
+            component = fixture.componentInstance;
             component.serviceName = ServiceNames.SuuntoApp;
             component.userMetaForService = {} as UserServiceMetaInterface;
-            component.isPro = true;
-            (component as any).processChanges();
-            component.formGroup.enable();
+            fixture.detectChanges();
+            await fixture.whenStable();
 
             // Set arbitrary dates
             const start = new Date(2024, 0, 15, 12, 30); // Jan 15, 12:30
@@ -1896,13 +1932,19 @@ describe('HistoryImportFormComponent', () => {
                 endDate: end,
                 accepted: true
             });
+            fixture.detectChanges();
+            expect(component.formGroup.valid).toBe(true);
 
             const mockEvent = { preventDefault: vi.fn() } as any;
             await component.onSubmit(mockEvent);
 
             // Verify normalization
+            expect(mockUserService.importServiceHistoryForCurrentUser).toHaveBeenCalledTimes(1);
             const sentStart = mockUserService.importServiceHistoryForCurrentUser.mock.calls[0][1];
             const sentEnd = mockUserService.importServiceHistoryForCurrentUser.mock.calls[0][2];
+
+            expect(sentStart.getTime()).toBe(dayjs(start).startOf('day').valueOf());
+            expect(sentEnd.getTime()).toBe(dayjs(end).endOf('day').valueOf());
 
             expect(sentStart.getHours()).toBe(0);
             expect(sentStart.getMinutes()).toBe(0);

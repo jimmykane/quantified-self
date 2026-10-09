@@ -140,9 +140,11 @@ export class HistoryImportFormComponent implements OnInit, OnDestroy, OnChanges 
     this.formGroup = new UntypedFormGroup({
       startDate: new UntypedFormControl(this.getDefaultHistoryStartDate(), [
         Validators.required,
+        this.dateBoundsValidator,
       ]),
       endDate: new UntypedFormControl(dayjs().endOf('day'), [
         Validators.required,
+        this.dateBoundsValidator,
       ]),
       accepted: new UntypedFormControl(false, [
         Validators.requiredTrue,
@@ -195,6 +197,15 @@ export class HistoryImportFormComponent implements OnInit, OnDestroy, OnChanges 
     }
 
     return null;
+  };
+
+  // Keep admission independent of the datepicker's next template-binding update.
+  private dateBoundsValidator: ValidatorFn = (control: AbstractControl): ValidationErrors | null => {
+    if (!control.value) return null;
+    const date = dayjs(control.value);
+    if (!date.isValid()) return null; // Required/datepicker parsing handles missing or malformed values.
+    if (this.minDate && date.isBefore(dayjs(this.minDate), 'day')) return { historyDateMin: true };
+    return date.isAfter(this.today, 'day') ? { historyDateMax: true } : null;
   };
 
   get isMissingGarminPermissions(): boolean {

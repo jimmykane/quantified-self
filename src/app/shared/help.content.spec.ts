@@ -18,7 +18,7 @@ describe('help.content', () => {
     const copy = HELP_SECTIONS.find(section => section.id === 'service-connections')!.content;
     for (const phrase of ['History import buttons lock as soon as a request starts', 'reopening the tool in the same app',
       'separate requests and cooldowns', 'records may arrive later', '**Checking import status**', '**Retry status check**',
-      'keeps the action disabled until that time']) {
+      'keeps the action disabled until that time', 'keeps your selection and shows a date error']) {
       expect(copy).toContain(phrase);
     }
   });

@@ -137,6 +137,10 @@
       <mat-datepicker-toggle matSuffix [for]="startDate"></mat-datepicker-toggle>
       <mat-datepicker #startDate></mat-datepicker>
       <mat-error *ngIf="formGroup.get('startDate')?.hasError('required')">Start date is required</mat-error>
+      <mat-error *ngIf="formGroup.get('startDate')?.hasError('historyDateMin') || formGroup.get('startDate')?.hasError('matDatepickerMin')">
+        Start date must be on or after {{ minDate | date: 'mediumDate' }}
+      </mat-error>
+      <mat-error *ngIf="formGroup.get('startDate')?.hasError('historyDateMax')">Start date cannot be after today</mat-error>
     </mat-form-field>
     <mat-form-field appearance="outline">
       <mat-label>End Date</mat-label>
@@ -145,6 +149,12 @@
       <mat-datepicker-toggle matSuffix [for]="endDate"></mat-datepicker-toggle>
       <mat-datepicker #endDate></mat-datepicker>
       <mat-error *ngIf="formGroup.get('endDate')?.hasError('required')">End date is required</mat-error>
+      <mat-error *ngIf="formGroup.get('endDate')?.hasError('historyDateMin')">
+        End date must be on or after {{ minDate | date: 'mediumDate' }}
+      </mat-error>
+      <mat-error *ngIf="formGroup.get('endDate')?.hasError('historyDateMax') || formGroup.get('endDate')?.hasError('matDatepickerMax')">
+        End date cannot be after today
+      </mat-error>
       <mat-error *ngIf="formGroup.get('endDate')?.hasError('dateRangeInvalid')">End date cannot be before start
         date</mat-error>
     </mat-form-field>
