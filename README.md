@@ -38,10 +38,10 @@ The main repository areas are:
 
 ## Prerequisites
 
-For the frontend and the repository's CI-compatible workflow, install:
+For frontend tests and the repository's full development workflow, install:
 
 - Git.
-- Node.js 20.19 or later in the Node 20 line. The committed `.nvmrc` selects Node 20, so `nvm use` is the easiest way to match CI.
+- Node.js 22, matching the CI test jobs and Cloud Functions runtime.
 - npm, which is included with Node.js.
 - [Gitleaks](https://github.com/gitleaks/gitleaks), used by the pre-commit credential scan.
 - A [Mapbox public access token](https://docs.mapbox.com/help/getting-started/access-tokens/) for maps and geocoding.
@@ -52,7 +52,7 @@ For Firebase emulators and Rules tests, also install:
 - Java 21, matching the CI environment.
 
 > [!NOTE]
-> `functions/package.json` declares Node.js 22 as the Cloud Functions runtime. Installing Functions dependencies under Node 20 may show an engine warning. Use Node 22 when developing or deploying Functions runtime behavior; the root `.nvmrc` remains the frontend and CI default.
+> The root `.nvmrc` still selects Node 20 for local frontend development. Select Node 22 explicitly with `nvm use 22` for frontend tests and Functions development; the CI test jobs use Node 22 and `functions/package.json` declares the same runtime.
 
 ## Quick start
 
@@ -61,7 +61,8 @@ For Firebase emulators and Rules tests, also install:
 ```bash
 git clone https://github.com/jimmykane/quantified-self.git
 cd quantified-self
-nvm use
+nvm install 22
+nvm use 22
 npm ci
 npm --prefix functions ci
 ```

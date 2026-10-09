@@ -1,20 +1,18 @@
 import { ComponentFixture, TestBed } from '@angular/core/testing';
-import { describe, expect, it, beforeEach, vi } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { TrainingMetricGridComponent } from './training-metric-grid.component';
 import { EChartsLoaderService } from '../../../services/echarts-loader.service';
 
 describe('TrainingMetricGridComponent', () => {
-  let fixture: ComponentFixture<TrainingMetricGridComponent>;
-
-  beforeEach(async () => {
+  async function createFixture(): Promise<ComponentFixture<TrainingMetricGridComponent>> {
     await TestBed.configureTestingModule({
       imports: [TrainingMetricGridComponent],
       providers: [{ provide: EChartsLoaderService, useValue: { init: vi.fn().mockResolvedValue(null), dispose: vi.fn() } }],
     }).compileComponents();
-    fixture = TestBed.createComponent(TrainingMetricGridComponent);
-  });
+    return TestBed.createComponent(TrainingMetricGridComponent);
+  }
 
   it('adapts columns and dividers to narrow desktop panels as well as phone widths', () => {
     // JSDOM does not lay out container queries; browser QA verifies the actual geometry.
@@ -40,7 +38,8 @@ describe('TrainingMetricGridComponent', () => {
     expect(styles).toMatch(/\.training-metric-grid--preview-context > div\s*\{\s*padding:\s*\.9rem 1rem;/s);
   });
 
-  it('renders exact metric values through the shared numeric formatter', () => {
+  it('renders exact metric values through the shared numeric formatter', async () => {
+    const fixture = await createFixture();
     fixture.componentRef.setInput('metrics', [
       { id: 'ctl', label: 'CTL', valueText: '62' },
       { id: 'recovery', label: 'Recovery left', valueText: '8h 20m', detailText: 'Imported estimate' },
@@ -55,7 +54,8 @@ describe('TrainingMetricGridComponent', () => {
     expect(element.textContent).toContain('Imported estimate');
   });
 
-  it('selects the preview-context layout without a workspace surface', () => {
+  it('selects the preview-context layout without a workspace surface', async () => {
+    const fixture = await createFixture();
     fixture.componentRef.setInput('mode', 'preview-context');
     fixture.componentRef.setInput('metrics', [{ id: 'efficiency', label: 'Efficiency', valueText: '+3.2%' }]);
     fixture.detectChanges();
@@ -65,7 +65,8 @@ describe('TrainingMetricGridComponent', () => {
     expect(element.querySelector('.qs-glass-card-panel')).toBeNull();
   });
 
-  it('adds history below the existing value only when observed data exists', () => {
+  it('adds history below the existing value only when observed data exists', async () => {
+    const fixture = await createFixture();
     fixture.componentRef.setInput('metrics', [
       { id: 'zero', label: 'Form', valueText: '0', history: { caption: '8-week history', points: [{ time: 1, value: 0, valueText: '0' }] } },
       { id: 'missing', label: 'CTL', valueText: '--', history: { caption: '8-week history', points: [{ time: 1, value: null, valueText: '--' }] } },

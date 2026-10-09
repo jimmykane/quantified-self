@@ -27,6 +27,8 @@ runner configuration and verification commands.
   required coverage or ignoring runner errors.
 - In mixed component suites, keep shared setup free of unconditional fixture rendering. Use explicit setup for
   logic tests and real fixtures for template bindings, controls, view queries, effects or Angular lifecycle behavior.
+  Static source/style contract checks must not configure TestBed or create components; keep fixture setup local
+  to the tests that need it, even when those checks share an Angular spec file.
   A component injected through TestBed still belongs in `angular`; initialize the hooks it needs and preserve
   TestBed teardown. Only use this approach after checking for component/view-scoped dependencies, and compare
   unchanged assertions and covered source locations when benchmarking. See the

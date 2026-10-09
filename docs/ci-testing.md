@@ -49,12 +49,25 @@ override. Test isolation and unhandled-error failure behavior remain enabled; th
 extended timeout masking a failure. `test-runner-config.spec.ts` covers these configuration boundaries.
 
 Frontend tests use the same global two-worker bound, with isolated forks across three Vitest projects:
-`helpers-node` runs 165 verified pure specs (helpers and help content) in Node with no setup file,
-`helpers-dom` runs 10 DOM/locale specs in jsdom with no Angular setup, and `angular` retains the Angular compiler
+`helpers-node` runs verified pure specs (helpers and help content) in Node with no setup file,
+`helpers-dom` runs DOM/locale specs in jsdom with no Angular setup, and `angular` retains the Angular compiler
 plugin and `src/test-setup.ts` for all remaining ordinary specs. The Angular project is the fallback for new or
 unclassified files. The shared
 local runner still uses `npm run test -- --run`, covering every project in one invocation. CI divides that same
 discovered workload across two runners with `--shard=1/2` and `--shard=2/2` and the shared plan described below.
+
+Allocation counts change as specs are added. With Node 22 selected, inspect the current allocation from the actual
+Vitest discovery instead of maintaining counts in this document:
+
+```sh
+node --input-type=module <<'NODE'
+import { discoverSpecs } from './tools/frontend-test-shards.mjs';
+const specs = await discoverSpecs(process.cwd());
+for (const project of ['helpers-node', 'helpers-dom', 'angular']) {
+  console.log(`${project}: ${specs.filter(spec => spec.project === project).length} specs`);
+}
+NODE
+```
 
 `tools/frontend-test-environments.json` is the explicit Node/DOM opt-in registry. To move another pure application
 spec, first verify its tests and transitive imports in the intended environment, then add its exact repository-relative
