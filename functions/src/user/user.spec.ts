@@ -78,7 +78,8 @@ vi.mock('firebase-admin', () => {
 
 vi.mock('firebase-admin/firestore', () => ({
     FieldValue: {
-        serverTimestamp: vi.fn(() => 'SERVER_TIMESTAMP')
+        serverTimestamp: vi.fn(() => 'SERVER_TIMESTAMP'),
+        delete: vi.fn(() => 'DELETE_FIELD')
     },
     Timestamp: {
         fromDate: vi.fn((date: Date) => ({ seconds: Math.floor(date.getTime() / 1000), nanoseconds: 0 }))
@@ -177,7 +178,9 @@ describe('deleteSelf Cloud Function', () => {
         expect(deletionMarkerSetMock).toHaveBeenCalledWith({
             createdAt: 'SERVER_TIMESTAMP',
             source: 'deleteSelf',
-            expireAt: expect.any(Object)
+            cleanupStatus: 'pending',
+            expireAt: 'DELETE_FIELD',
+            completedAt: 'DELETE_FIELD'
         }, { merge: true });
         expect(admin.firestore().collection).toHaveBeenCalledWith('mail');
         expect(mailDocMock).toHaveBeenCalledWith(`account_deleted_confirmation_${uid}`);
@@ -318,6 +321,6 @@ describe('deleteSelf Cloud Function', () => {
             expect(e.message).to.equal('Unable to delete user');
         }
 
-        expect(deletionMarkerDeleteMock).toHaveBeenCalledTimes(1);
+        expect(deletionMarkerDeleteMock).not.toHaveBeenCalled();
     });
 });

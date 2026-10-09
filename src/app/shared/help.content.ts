@@ -1716,7 +1716,7 @@ You can copy the endpoint and manage connected clients in [**Connections -> MCP*
 
 Open [Settings → Data management](/settings?section=data-management), then choose **Delete account…**. Review the consequences and confirm in the dialog. Opening Account or your profile does not show the deletion controls.
 
-If your account has an email address, self-deletion sends a confirmation email after the request completes.
+If your account has an email address, self-deletion sends a confirmation email after sign-in access is removed. Data cleanup continues in the background; this email does not confirm that every file or record has already been removed.
 
 Deleting your account permanently removes:
 
