@@ -6,7 +6,7 @@ import { HealthMetricQueryService } from '../../services/health-metric-query.ser
 import { AppUserInterface } from '../../models/app-user.interface';
 import { Router } from '@angular/router';
 import { TimelineNotesWorkspaceComponent } from '../timeline-notes/timeline-notes-workspace.component';
-import { ChangeDetectionStrategy, Component, DestroyRef, ElementRef, computed, effect, inject, signal, untracked, viewChild } from '@angular/core';
+import { ChangeDetectionStrategy, Component, DestroyRef, ElementRef, Injector, afterNextRender, computed, effect, inject, signal, untracked, viewChild } from '@angular/core';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { MatButtonModule } from '@angular/material/button';
 import { MatButtonToggleModule } from '@angular/material/button-toggle';
@@ -124,6 +124,7 @@ import {
 import { healthMetricIcon } from '../../helpers/health-metric-icon.helper';
 import { HealthMetricsBottomSheetComponent, type HealthMetricsData } from './health-metrics-bottom-sheet.component';
 import type { AppDashboardSleepTrendRange } from '../../models/app-user.interface';
+import { HealthCategoryOverviewComponent } from './health-category-overview.component';
 
 type HealthLoadStatus = 'loading' | 'ready' | 'denied' | 'error';
 
@@ -188,6 +189,7 @@ const SELECTED_HRV_CONTEXT_DAYS = 60;
     HealthMetricChartComponent,
     HealthPrioritySummaryComponent,
     HealthSourceObservationTableComponent,
+    HealthCategoryOverviewComponent,
   ],
   templateUrl: './health-workspace.component.html',
   styleUrls: ['./health-workspace.component.scss'],
@@ -231,6 +233,9 @@ export class HealthWorkspaceComponent {
   readonly metricPickerOpen = signal(false);
   private readonly destroyRef = inject(DestroyRef);
   private readonly metricDetail = viewChild<ElementRef<HTMLElement>>('metricDetail');
+  private readonly overview = viewChild<HealthCategoryOverviewComponent, ElementRef<HTMLElement>>('overview', { read: ElementRef });
+  private readonly injector = inject(Injector);
+  readonly metricDetailOpen = signal(false);
   private manualDialogRef: MatDialogRef<unknown> | null = null;
   private manualAccountGeneration = 0;
   private readonly snackBar = inject(MatSnackBar);
@@ -320,6 +325,11 @@ export class HealthWorkspaceComponent {
   readonly selectedProviders = signal<HealthProvider[]>([]);
   private readonly sourceInventory = signal<{ uid: string | null; providers: HealthProvider[] }>({ uid: null, providers: [] });
   readonly refreshRevision = signal(0);
+  readonly overviewEndDate = computed(() => {
+    this.refreshRevision();
+    this.metricDetailOpen();
+    return this.todayDate;
+  });
   readonly manualMutationBusy = signal(false);
   readonly availableHealthMetricIds = signal<readonly HealthMetricId[] | null>(null);
   readonly healthMetricAvailabilityStatus = signal<HealthLoadStatus>('loading');
@@ -607,7 +617,8 @@ export class HealthWorkspaceComponent {
       ...providerView(provider),
       selected: selected.length === 0 || selected.includes(provider),
       sync: statuses.get(provider) || null,
-      hasDataInView: this.isLoading() ? null : inView.has(provider),
+      // Overview cards load independently; one remembered metric cannot describe their availability.
+      hasDataInView: !this.metricDetailOpen() || this.isLoading() ? null : inView.has(provider),
     })).sort((left, right) => left.label.localeCompare(right.label));
   });
   readonly allProvidersSelected = computed(() => this.effectiveProviderFilters().length === 0);
@@ -918,6 +929,7 @@ export class HealthWorkspaceComponent {
         return;
       }
       this.workspacePreferenceUserID = uid;
+      this.metricDetailOpen.set(false);
       this.sourceInventory.set({ uid, providers: [] });
       this.selectedProviders.set([]);
       this.metricPreferenceTouched = false;
@@ -1208,9 +1220,30 @@ export class HealthWorkspaceComponent {
     // Opening an already selected metric is still navigation from the highlights.
     this.haptics.selection();
     this.selectAndSaveMetric(metric);
-    const heading = this.metricDetail()?.nativeElement;
-    heading?.focus({ preventScroll: true });
-    heading?.scrollIntoView?.({ block: 'start', inline: 'nearest', behavior: 'auto' });
+    this.metricDetailOpen.set(true);
+    afterNextRender(() => {
+      if (!this.metricDetailOpen()) return;
+      const heading = this.metricDetail()?.nativeElement;
+      heading?.focus({ preventScroll: true });
+      heading?.scrollIntoView?.({ block: 'start', inline: 'nearest', behavior: 'auto' });
+    }, { injector: this.injector });
+  }
+
+  showOverview(): void {
+    if (!this.metricDetailOpen()) return;
+    this.haptics.selection();
+    this.metricDetailOpen.set(false);
+    afterNextRender(() => {
+      if (this.metricDetailOpen()) return;
+      const heading = this.overview()?.nativeElement.querySelector<HTMLElement>('#health-overview-title');
+      heading?.focus({ preventScroll: true });
+      heading?.scrollIntoView?.({ block: 'start', inline: 'nearest', behavior: 'auto' });
+    }, { injector: this.injector });
+  }
+
+  rememberOverviewProviders(event: { uid: string; providers: HealthProvider[] }): void {
+    if (event.uid !== this.signedInUserID()) return;
+    this.rememberProviders(event.uid, event.providers);
   }
 
   selectMetric(metric: HealthWorkspaceMetricSelection): void {
@@ -1614,6 +1647,7 @@ export class HealthWorkspaceComponent {
   }
 
   private revealManualMeasurement(metricId: ManualHealthMetricId, value: ManualHealthMeasurementDialogValue): void {
+    this.metricDetailOpen.set(true);
     const metricIdsAdded: HealthMetricId[] = metricId === HEALTH_METRIC_IDS.BloodPressureSystolic
       ? [metricId, HEALTH_METRIC_IDS.BloodPressureDiastolic, ...(value.pulseValue !== undefined ? [HEALTH_METRIC_IDS.PulseRate] : [])]
       : [metricId];

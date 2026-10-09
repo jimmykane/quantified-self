@@ -5,7 +5,7 @@ import { describe, expect, it } from 'vitest';
 import { HEALTH_METRIC_CATALOG, HealthMetricId, HealthSourceRecord } from '@shared/health';
 import { projectLoadedHealthRange } from '@shared/health-query';
 import { AppDashboardHealthMetricSettings } from '../models/app-user.interface';
-import { buildDashboardHealthContext, DashboardHealthEvidence } from './dashboard-health-context.helper';
+import { buildDashboardHealthContext, filterDashboardHealthEvidence, DashboardHealthEvidence } from './dashboard-health-context.helper';
 import { DASHBOARD_HEALTH_GROUPS } from './dashboard-health-tile.helper';
 import { resolveHealthWorkspaceWindow } from './health-workspace.helper';
 
@@ -20,6 +20,16 @@ function evidence(metric:HealthMetricId, accounts=['first'], range:AppDashboardH
   return {window,health:{result,limitReached:null,sourceRecordCount:records.length,sampleChunkCount:0,samplePointCount:0,serializedBytes:0,hasMatchingSourceRecords:!!records.length,hasSampleBackedMetric:false,providers:['GarminAPI'],sampleBackedProviders:[]},history:null,activities:null,sessions:[],errors:[]};
 }
 describe('dashboard Health semantics',()=>{
+  it('filters overview evidence before selecting a source and never broadens a missing pinned reading', () => {
+    const data = evidence('body_weight');
+    const first = buildDashboardHealthContext(data, { metric: 'body_weight', range: '30d' });
+    expect(filterDashboardHealthEvidence(data, [])).toBe(data);
+    const filtered = filterDashboardHealthEvidence(data, ['QuantifiedSelf']);
+    const view = buildDashboardHealthContext(filtered, { metric: 'body_weight', range: '30d', sourceKey: first.selectedKey! });
+    expect(view.hasData).toBe(false); expect(view.sources).toEqual([]); expect(view.selectedKey).toBe(first.selectedKey);
+    expect(filtered.health?.hasMatchingSourceRecords).toBe(false);
+    expect(data.health?.result.observations.length).toBeGreaterThan(0);
+  });
   it.each(DASHBOARD_HEALTH_GROUPS.flatMap(group=>group.metrics.map(metric=>metric.id)))('projects the selectable %s metric using its real Health chart model',metric=>{
     const view=buildDashboardHealthContext(evidence(metric),{metric,range:'30d'});
     expect(view.hasData).toBe(true); expect(view.selected?.model.series.metricId).toBe(metric);

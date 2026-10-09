@@ -365,11 +365,17 @@ describe('help.content', () => {
     expect(content).not.toMatch(/Workout Import|WORKOUT_IMPORT/);
     expect(content).toContain('Retry may still require support');
   });
-  it('explains the compact mobile Health metric title picker and remembered selection', () => {
+  it('explains the category overview, recorded source choices and manual history actions', () => {
+    const health = HELP_SECTIONS.find(section => section.id === 'health')!.content;
+    for (const phrase of ['**Category overview**', 'latest 30 days', '**Body**', '**Vitals**', '**Movement & energy**',
+      '**Recovery & sleep**', '**Fitness**', '**View history**', '**Back to overview**', 'manual and synced readings separately',
+      'only manual rows can be edited or deleted', 'not training targets']) expect(health).toContain(phrase);
+  });
+  it('explains the Health metric title picker on both layouts and remembered selection', () => {
     const health = HELP_SECTIONS.find(section => section.id === 'health')?.content;
     expect(health).toContain('tap the metric title and its arrow');
     expect(health).toContain('closing the picker changes nothing');
-    expect(health).toContain('Desktop keeps the metric list beside the chart');
+    expect(health).toContain('Detailed history uses the full workspace width on mobile and desktop');
     expect(health).toContain('Your metric selection is remembered in your account settings');
   });
   it('makes optional full-text notes access discoverable without implying chart visibility is consent', () => {
