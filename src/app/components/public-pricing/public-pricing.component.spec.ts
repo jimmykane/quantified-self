@@ -1,10 +1,11 @@
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { By } from '@angular/platform-browser';
-import { Router } from '@angular/router';
+import { Router, provideRouter } from '@angular/router';
 import { Subject, of, throwError } from 'rxjs';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { AppPaymentService, StripeProduct } from '../../services/app.payment.service';
 import { LoggerService } from '../../services/logger.service';
+import { AppHapticsService } from '../../services/app.haptics.service';
 import { PublicPricingComponent, buildPublicPricingCatalog } from './public-pricing.component';
 
 const PAID_PRODUCTS: StripeProduct[] = [
@@ -71,16 +72,18 @@ describe('PublicPricingComponent', () => {
     let fixture: ComponentFixture<PublicPricingComponent>;
     let router: { navigate: ReturnType<typeof vi.fn> };
     let paymentService: { getProducts: ReturnType<typeof vi.fn> };
+    let haptics: { selection: ReturnType<typeof vi.fn> };
 
     beforeEach(async () => {
-        router = { navigate: vi.fn().mockResolvedValue(true) };
         paymentService = { getProducts: vi.fn().mockReturnValue(of(PAID_PRODUCTS)) };
+        haptics = { selection: vi.fn() };
 
         await TestBed.configureTestingModule({
             imports: [PublicPricingComponent],
             providers: [
                 { provide: AppPaymentService, useValue: paymentService },
-                { provide: Router, useValue: router },
+                provideRouter([]),
+                { provide: AppHapticsService, useValue: haptics },
                 {
                     provide: LoggerService,
                     useValue: {
@@ -90,6 +93,7 @@ describe('PublicPricingComponent', () => {
             ],
         }).compileComponents();
 
+        router = { navigate: vi.spyOn(TestBed.inject(Router), 'navigate').mockResolvedValue(true) };
         fixture = TestBed.createComponent(PublicPricingComponent);
     });
 
@@ -146,6 +150,67 @@ describe('PublicPricingComponent', () => {
         expect(router.navigate).toHaveBeenCalledWith(['/login'], {
             queryParams: { returnUrl: '/dashboard' },
         });
+        expect(haptics.selection).toHaveBeenCalledTimes(4);
+    });
+
+    it('preserves all catalog features and original controls with billing above the features', () => {
+        fixture.detectChanges();
+        const cards = fixture.nativeElement.querySelectorAll('mat-card') as NodeListOf<HTMLElement>;
+        const catalog = buildPublicPricingCatalog(PAID_PRODUCTS);
+
+        for (const [index, card] of Array.from(cards).entries()) {
+            const plan = catalog.plans[index];
+            const billing = card.querySelector('.plan-billing')!;
+            const features = card.querySelector('.features-list')!;
+            expect(billing.compareDocumentPosition(features) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+            expect(Array.from(features.querySelectorAll('li')).map(row => row.textContent?.replace(/\s+/g, ' ').trim()))
+                .toEqual(plan.features.map(feature => `${feature.icon} ${feature.label}`));
+            expect(Array.from(billing.querySelectorAll('button')).map(button => button.textContent?.trim()))
+                .toEqual(plan.prices.map(price => price.ctaLabel));
+            for (const button of billing.querySelectorAll('button')) {
+                expect(button.querySelector('.price')).toBeNull();
+                if (plan.role !== 'free') {
+                    expect(button.classList.contains('subscribe-btn')).toBe(true);
+                    expect(button.classList.contains('qs-mat-primary')).toBe(true);
+                }
+            }
+        }
+        expect(haptics.selection).not.toHaveBeenCalled();
+    });
+
+    it('shows shared and paid feature explanations below the existing cards with feature and help links', () => {
+        fixture.detectChanges();
+        const root = fixture.nativeElement as HTMLElement;
+        const cards = root.querySelector('.products-grid')!;
+        const details = root.querySelector('.plan-details')!;
+        expect(cards.compareDocumentPosition(details) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+        expect(root.querySelectorAll('.plan-capabilities article')).toHaveLength(8);
+        expect(root.textContent).toContain('My Tracks (Beta)');
+        expect(root.textContent).toContain('custom chart watermark text');
+        expect(root.querySelector('a[href="/features/training-plans"]')).not.toBeNull();
+        expect(root.querySelector('a[href="/help#plans-and-billing"]')).not.toBeNull();
+    });
+
+    it('discloses provider compatibility with accessible FAQ toggles and one haptic per action', () => {
+        fixture.detectChanges();
+        const button = fixture.nativeElement.querySelectorAll('.plan-faq button')[1] as HTMLButtonElement;
+        const answer = fixture.nativeElement.querySelector('#plan-answer-1') as HTMLElement;
+        expect(answer.hidden).toBe(true);
+        expect(button.getAttribute('aria-expanded')).toBe('false');
+
+        button.click();
+        fixture.detectChanges();
+        expect(answer.hidden).toBe(false);
+        expect(button.getAttribute('aria-controls')).toBe(answer.id);
+        expect(button.getAttribute('aria-expanded')).toBe('true');
+        expect(answer.textContent).toContain('COROS planned-workout delivery is coming soon');
+        expect(haptics.selection).toHaveBeenCalledTimes(1);
+
+        button.click();
+        fixture.detectChanges();
+        expect(answer.hidden).toBe(true);
+        expect(button.getAttribute('aria-expanded')).toBe('false');
+        expect(haptics.selection).toHaveBeenCalledTimes(2);
     });
 
     it('renders the selected plan-card presentation without design preview controls', () => {

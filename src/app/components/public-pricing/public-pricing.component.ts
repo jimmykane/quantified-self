@@ -1,14 +1,17 @@
 import { CommonModule } from '@angular/common';
-import { Component, inject } from '@angular/core';
+import { Component, inject, signal } from '@angular/core';
 import { MatButtonModule } from '@angular/material/button';
 import { MatCardModule } from '@angular/material/card';
 import { MatIconModule } from '@angular/material/icon';
 import { MatProgressSpinnerModule } from '@angular/material/progress-spinner';
-import { Router } from '@angular/router';
+import { Router, RouterLink } from '@angular/router';
 import { getAssistantRequestLimitForRole, getRouteUsageLimitForRole, getUsageLimitForRole } from '@shared/limits';
 import { Observable, catchError, defer, map, of, shareReplay, timeout } from 'rxjs';
 import { AppPaymentService, StripePrice, StripeProduct } from '../../services/app.payment.service';
 import { LoggerService } from '../../services/logger.service';
+import { AppChartSharedModule } from '../../modules/app-chart-shared.module';
+import { AppHapticsService } from '../../services/app.haptics.service';
+import { PUBLIC_PRICING_FAQS, PUBLIC_PRICING_SHARED_FEATURES } from './public-pricing.content';
 
 type PublicPlanRole = 'free' | 'basic' | 'pro';
 type RecurringInterval = 'day' | 'week' | 'month' | 'year';
@@ -76,6 +79,8 @@ const PUBLIC_PLAN_COPY: Record<PublicPlanRole, { title: string; subtitle: string
         MatButtonModule,
         MatIconModule,
         MatProgressSpinnerModule,
+        RouterLink,
+        AppChartSharedModule,
     ],
     templateUrl: './public-pricing.component.html',
     styleUrls: ['../pricing/pricing.component.scss', './public-pricing.component.scss'],
@@ -84,6 +89,11 @@ export class PublicPricingComponent {
     private readonly paymentService = inject(AppPaymentService);
     private readonly logger = inject(LoggerService);
     private readonly router = inject(Router);
+    private readonly haptics = inject(AppHapticsService);
+
+    readonly sharedFeatures = PUBLIC_PRICING_SHARED_FEATURES;
+    readonly faqs = PUBLIC_PRICING_FAQS;
+    readonly openFaq = signal<number | null>(null);
 
     readonly catalog$: Observable<PublicPricingCatalog> = defer(() => this.paymentService.getProducts()).pipe(
         timeout({ first: PUBLIC_PRODUCTS_TIMEOUT_MS }),
@@ -99,6 +109,11 @@ export class PublicPricingComponent {
         void this.router.navigate(['/login'], {
             queryParams: { returnUrl: '/dashboard' },
         });
+    }
+
+    toggleFaq(index: number): void {
+        this.openFaq.update((current) => current === index ? null : index);
+        this.haptics.selection();
     }
 }
 
