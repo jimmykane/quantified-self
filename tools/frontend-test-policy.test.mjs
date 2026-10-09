@@ -73,6 +73,9 @@ test('runtime testing/compiler/setup imports fail in both lighter environments',
   const { write, check } = fixture(t);
   const sources = [
     "import { TestBed as Bed } from '@angular/core/testing'; Bed.inject(Object);",
+    "import { HttpTestingController } from '@angular/common/http/testing';",
+    "export { provideHttpClientTesting } from '@angular/common/http/testing';",
+    "void import('@angular/common/http/testing');",
     "import '@angular/compiler';",
     "export { TestBed } from '@angular/core/testing';",
     "void import('@angular/platform-browser-dynamic/testing');",
@@ -93,6 +96,20 @@ test('runtime testing/compiler/setup imports fail in both lighter environments',
   assert.match(check([{ file: helper, project: 'helpers-node' }]).errors[0], /global setup/);
 });
 
+test('literal indexed framework mocks are inspected in both lighter environments', t => {
+  const { write, check } = fixture(t);
+  for (const source of [
+    "vi['mock']('@angular/core/testing', () => ({}));",
+    "vi[`importActual`]('@angular/common/http/testing');",
+    "vi['doMock']('@analogjs/vitest-angular/setup-testbed', () => ({}));",
+  ]) {
+    write(helper, source);
+    for (const project of ['helpers-node', 'helpers-dom']) {
+      assert.match(check([{ file: helper, project }]).errors[0], /must not load Angular/);
+    }
+  }
+});
+
 test('transitive imports, aliases and cycles cannot hide framework setup', t => {
   const { write, check } = fixture(t);
   write(helper, "import './bridge';");
@@ -104,9 +121,27 @@ test('transitive imports, aliases and cycles cannot hide framework setup', t => 
   assert.match(errors[0], /shared\/runtime.ts imports @angular\/core\/testing/);
 });
 
+test('local JavaScript runtime imports are inspected instead of their declaration files', t => {
+  const { write, check } = fixture(t);
+  for (const [runtime, declaration] of [
+    ['bridge.js', 'bridge.d.ts'], ['bridge.mjs', 'bridge.d.mts'], ['bridge.cjs', 'bridge.d.cts'],
+  ]) {
+    write(`shared/${runtime}`, "import '@angular/common/http/testing'; export const value = 1;");
+    write(`shared/${declaration}`, "import type { ComponentFixture } from '@angular/core/testing'; export declare const value: ComponentFixture<unknown>;");
+    write(helper, `import { value } from '@shared/${runtime}';`);
+    for (const project of ['helpers-node', 'helpers-dom']) {
+      const errors = check([{ file: helper, project }]).errors;
+      assert.equal(errors.length, 1);
+      assert(errors[0].includes(`shared/${runtime} imports @angular/common/http/testing`));
+    }
+    write(`shared/${runtime}`, 'export const value = 1;');
+    assert.deepEqual(check([{ file: helper, project: 'helpers-node' }]).errors, []);
+  }
+});
+
 test('type-only imports and plain Angular core decorators do not require Angular setup', t => {
   const { write, check } = fixture(t);
-  write(helper, "import type { ComponentFixture } from '@angular/core/testing';\nimport { type TestBed } from '@angular/core/testing';\nexport type { TestBed } from '@angular/core/testing';\nimport { Injectable } from '@angular/core';");
+  write(helper, "import type { ComponentFixture } from '@angular/core/testing';\nimport { type TestBed } from '@angular/core/testing';\nexport type { TestBed } from '@angular/core/testing';\nimport type { HttpTestingController } from '@angular/common/http/testing';\nimport { Injectable } from '@angular/core';");
   assert.deepEqual(check([{ file: helper, project: 'helpers-node' }]).errors, []);
 });
 

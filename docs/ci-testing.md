@@ -98,7 +98,9 @@ their truth; reviewers still decide whether the heavier setup is necessary. Keep
 light suites where practical. Remove reason entries when their specs are deleted or moved to Node.
 The guard rejects runtime Angular testing/compiler/global-setup imports in Node/DOM suites, including local transitive
 imports, aliases and module mocks, while allowing type-only imports and plain Angular core decorators. It inspects
-literal module names and does not traverse third-party package internals; the selected project's actual tests must
+literal module names, including nested testing entry points and indexed mock calls such as `vi['mock'](...)`.
+Local JavaScript imports are inspected through their runtime files rather than accompanying declarations.
+It does not traverse third-party package internals; the selected project's actual tests must
 still pass without fabricated globals.
 Direct fixture creation/rendering in shared hooks of new/changed Angular specs produces review warnings, including CI
 annotations. This is a heuristic: it cannot determine every test's rendering needs or follow every setup helper.

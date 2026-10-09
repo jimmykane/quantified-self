@@ -5,7 +5,17 @@ import ts from 'typescript';
 
 export const reasonsFile = 'tools/frontend-test-environment-reasons.json';
 const weight = { 'helpers-node': 0, 'helpers-dom': 1, angular: 2 };
-const forbidden = /^(?:@angular\/[^/]+\/testing(?:\/|$)|@angular\/compiler(?:-cli)?(?:\/|$)|@analogjs\/(?:vitest-angular|vite-plugin-angular)(?:\/|$)|zone\.js(?:\/|$))/;
+const forbidden = /^(?:@angular\/[^/]+\/(?:[^/]+\/)*testing(?:\/|$)|@angular\/compiler(?:-cli)?(?:\/|$)|@analogjs\/(?:vitest-angular|vite-plugin-angular)(?:\/|$)|zone\.js(?:\/|$))/;
+const moduleCalls = new Set(['importActual', 'importMock', 'mock', 'doMock', 'requireActual', 'requireMock']);
+// TypeScript otherwise prefers .d.ts over the JavaScript that Vitest actually loads.
+const runtimeResolutionHost = { ...ts.sys,
+  fileExists: file => !/\.d\.[cm]?ts$/.test(file) && ts.sys.fileExists(file) };
+
+function memberName(node) {
+  if (ts.isPropertyAccessExpression(node)) return node.name.text;
+  if (ts.isElementAccessExpression(node) && node.argumentExpression
+    && ts.isStringLiteralLike(node.argumentExpression)) return node.argumentExpression.text;
+}
 
 export function isExplicitOrdinarySpec(file) {
   return typeof file === 'string' && /^[a-zA-Z0-9._/-]+\.spec\.ts$/.test(file)
@@ -32,8 +42,7 @@ function runtimeImports(source) {
         || node.exportClause.elements.some(item => !item.isTypeOnly)) module = node.moduleSpecifier;
     } else if (ts.isCallExpression(node) && (node.expression.kind === ts.SyntaxKind.ImportKeyword
       || ts.isIdentifier(node.expression) && node.expression.text === 'require'
-      || ts.isPropertyAccessExpression(node.expression)
-        && ['importActual', 'importMock', 'mock', 'doMock', 'requireActual', 'requireMock'].includes(node.expression.name.text))) module = node.arguments[0];
+      || moduleCalls.has(memberName(node.expression)))) module = node.arguments[0];
     if (module && ts.isStringLiteralLike(module)) imports.push(module.text);
     ts.forEachChild(node, visit);
   }
@@ -124,7 +133,7 @@ export function checkPolicy({ root, specs, baseFiles, baseRegistry, reasons, cha
           errors.push(`${file}: ${relative(root, path)} imports ${specifier}; Node/DOM suites must not load Angular testing/compiler/global setup`);
           continue;
         }
-        const target = ts.resolveModuleName(specifier, path, options, ts.sys).resolvedModule?.resolvedFileName;
+        const target = ts.resolveModuleName(specifier, path, options, runtimeResolutionHost).resolvedModule?.resolvedFileName;
         if (!target || target.includes('/node_modules/')) continue;
         const local = relative(root, target).replaceAll('\\', '/');
         if (local === 'src/test-setup.ts') errors.push(`${file}: ${relative(root, path)} imports src/test-setup.ts; keep global setup scoped to Angular`);
