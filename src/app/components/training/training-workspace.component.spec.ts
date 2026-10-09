@@ -1,6 +1,6 @@
 import { TrainingBuildMetricsComponent } from '../shared/training-summary/training-build-metrics.component';
 import { TrainingMixDetailsComponent } from '../shared/training-summary/training-mix-details.component';
-import { ComponentFixture, TestBed } from '@angular/core/testing';
+import { ComponentFixture, TestBed, type TestModuleMetadata } from '@angular/core/testing';
 import { Component, LOCALE_ID, NO_ERRORS_SCHEMA, signal } from '@angular/core';
 import { MatMenuModule } from '@angular/material/menu';
 import { MatTooltipModule } from '@angular/material/tooltip';
@@ -169,6 +169,9 @@ describe('TrainingWorkspaceComponent', () => {
 
   beforeEach(() => {
     analyticsService = { logEvent: vi.fn() };
+  });
+
+  function configureFixtureTestingModule(metadata: TestModuleMetadata) {
     TestBed.configureTestingModule({
       imports: [
         TrainingMetricTextComponent,
@@ -183,7 +186,8 @@ describe('TrainingWorkspaceComponent', () => {
       ],
       providers: [{ provide: AppAnalyticsService, useValue: analyticsService }],
     });
-  });
+    return TestBed.configureTestingModule(metadata);
+  }
 
   it('renders the fixed training workspace without dashboard tile rendering', async () => {
     const trainingSummaryAsOfDayMs = Date.UTC(2026, 7, 6);
@@ -208,7 +212,7 @@ describe('TrainingWorkspaceComponent', () => {
     };
     const derivedMetrics = { watch: vi.fn(() => of(derivedState)), ensureForDashboard: vi.fn() };
 
-    await TestBed.configureTestingModule({
+    await configureFixtureTestingModule({
       declarations: [TrainingWorkspaceComponent],
       providers: [
         { provide: AppAuthService, useValue: { user$: of({ uid: 'user-1' }) } },
@@ -318,7 +322,7 @@ describe('TrainingWorkspaceComponent', () => {
     });
     const derivedMetrics = { watch: vi.fn(() => of(derivedState)), ensureForDashboard: vi.fn() };
 
-    await TestBed.configureTestingModule({
+    await configureFixtureTestingModule({
       imports: [TrainingMetricTextComponent, TrainingBuildMetricsComponent, TrainingMixDetailsComponent],
       declarations: [TrainingWorkspaceComponent],
       providers: [
@@ -573,7 +577,7 @@ describe('TrainingWorkspaceComponent', () => {
     };
     const derivedMetrics = { watch: vi.fn(() => of(derivedState)), ensureForDashboard: vi.fn() };
 
-    await TestBed.configureTestingModule({
+    await configureFixtureTestingModule({
       imports: [TrainingMetricTextComponent, TrainingBuildMetricsComponent, TrainingMixDetailsComponent],
       declarations: [TrainingWorkspaceComponent],
       providers: [
@@ -667,7 +671,7 @@ describe('TrainingWorkspaceComponent', () => {
     const derivedMetrics = { watch: vi.fn(() => of(derivedState)), ensureForDashboard: vi.fn() };
 
     try {
-      await TestBed.configureTestingModule({
+      await configureFixtureTestingModule({
         declarations: [TrainingWorkspaceComponent],
         imports: [TrainingMetricTextComponent, TrainingBuildMetricsComponent, TrainingMixDetailsComponent, MetricIndicatorComponent],
         providers: [
@@ -785,7 +789,7 @@ describe('TrainingWorkspaceComponent', () => {
     const derivedMetrics = { watch: vi.fn(() => of(derivedState)), ensureForDashboard: vi.fn() };
 
     try {
-      await TestBed.configureTestingModule({
+      await configureFixtureTestingModule({
         imports: [TrainingMetricTextComponent, TrainingBuildMetricsComponent, TrainingMixDetailsComponent],
         declarations: [TrainingWorkspaceComponent],
         providers: [
@@ -846,7 +850,7 @@ describe('TrainingWorkspaceComponent', () => {
       durationSeconds: 8 * 60 * 60, isNap: false, stages: [], stageDurationsSeconds: {},
       score: { value: 80 }, createdAtMs: nowMs, updatedAtMs: nowMs,
     };
-    await TestBed.configureTestingModule({
+    await configureFixtureTestingModule({
       imports: [TrainingMetricTextComponent, TrainingBuildMetricsComponent, TrainingMixDetailsComponent],
       declarations: [TrainingWorkspaceComponent],
       providers: [
@@ -902,7 +906,7 @@ describe('TrainingWorkspaceComponent', () => {
     const sleepService = {
       watchForDashboard: vi.fn(() => throwError(() => new Error('sleep read failed'))),
     };
-    await TestBed.configureTestingModule({
+    await configureFixtureTestingModule({
       imports: [TrainingMetricTextComponent, TrainingBuildMetricsComponent, TrainingMixDetailsComponent],
       declarations: [TrainingWorkspaceComponent],
       providers: [
@@ -959,7 +963,7 @@ describe('TrainingWorkspaceComponent', () => {
         throwError(() => new Error('listener disconnected')),
       )),
     };
-    await TestBed.configureTestingModule({
+    await configureFixtureTestingModule({
       imports: [TrainingMetricTextComponent, TrainingBuildMetricsComponent, TrainingMixDetailsComponent],
       declarations: [TrainingWorkspaceComponent],
       providers: [
@@ -990,7 +994,7 @@ describe('TrainingWorkspaceComponent', () => {
       trainingReadinessStatus: 'failed',
     };
     const derivedMetrics = { watch: vi.fn(() => of(derivedState)), ensureForDashboard: vi.fn() };
-    await TestBed.configureTestingModule({
+    await configureFixtureTestingModule({
       imports: [TrainingMetricTextComponent, TrainingBuildMetricsComponent, TrainingMixDetailsComponent],
       declarations: [TrainingWorkspaceComponent],
       providers: [
@@ -1024,7 +1028,7 @@ describe('TrainingWorkspaceComponent', () => {
     const derivedMetrics = { watch: vi.fn(() => of(derivedState)), ensureForDashboard: vi.fn() };
 
     try {
-      await TestBed.configureTestingModule({
+      await configureFixtureTestingModule({
         imports: [TrainingMetricTextComponent, TrainingBuildMetricsComponent, TrainingMixDetailsComponent],
         declarations: [TrainingWorkspaceComponent],
         providers: [
@@ -1067,7 +1071,7 @@ describe('TrainingWorkspaceComponent', () => {
   it('renders the workspace and requests snapshots when the derived stream has not emitted yet', async () => {
     const derivedMetrics = { watch: vi.fn(() => NEVER), ensureForDashboard: vi.fn() };
 
-    await TestBed.configureTestingModule({
+    await configureFixtureTestingModule({
       imports: [TrainingMetricTextComponent, TrainingBuildMetricsComponent, TrainingMixDetailsComponent],
       declarations: [TrainingWorkspaceComponent],
       providers: [
@@ -1126,7 +1130,7 @@ describe('TrainingWorkspaceComponent', () => {
     };
     const derivedMetrics = { watch: vi.fn(() => of(derivedState)), ensureForDashboard: vi.fn() };
 
-    await TestBed.configureTestingModule({
+    await configureFixtureTestingModule({
       imports: [TrainingMetricTextComponent, TrainingBuildMetricsComponent, TrainingMixDetailsComponent],
       declarations: [TrainingWorkspaceComponent],
       providers: [
@@ -1278,7 +1282,7 @@ describe('TrainingWorkspaceComponent', () => {
       ensureForDashboard: vi.fn(),
     };
 
-    await TestBed.configureTestingModule({
+    await configureFixtureTestingModule({
       imports: [TrainingMetricTextComponent, TrainingBuildMetricsComponent, TrainingMixDetailsComponent],
       declarations: [TrainingWorkspaceComponent],
       providers: [
@@ -1389,7 +1393,7 @@ describe('TrainingWorkspaceComponent', () => {
     };
     const derivedMetrics = { watch: vi.fn(() => of(derivedState)), ensureForDashboard: vi.fn() };
 
-    await TestBed.configureTestingModule({
+    await configureFixtureTestingModule({
       imports: [TrainingMetricTextComponent, TrainingBuildMetricsComponent, TrainingMixDetailsComponent],
       declarations: [TrainingWorkspaceComponent],
       providers: [
@@ -1444,7 +1448,7 @@ describe('TrainingWorkspaceComponent', () => {
     });
     const derivedMetrics = { watch: vi.fn(() => of(derivedState)), ensureForDashboard: vi.fn() };
 
-    await TestBed.configureTestingModule({
+    await configureFixtureTestingModule({
       imports: [TrainingMetricTextComponent, TrainingBuildMetricsComponent, TrainingMixDetailsComponent],
       declarations: [TrainingWorkspaceComponent],
       providers: [
@@ -1495,7 +1499,7 @@ describe('TrainingWorkspaceComponent', () => {
     const derivedState = new BehaviorSubject(createRouteReadyDerivedState({ trainingSummary, trainingDurability }));
     const derivedMetrics = { watch: vi.fn(() => derivedState.asObservable()), ensureForDashboard: vi.fn() };
 
-    await TestBed.configureTestingModule({
+    await configureFixtureTestingModule({
       imports: [TrainingMetricTextComponent, TrainingBuildMetricsComponent, TrainingMixDetailsComponent],
       declarations: [TrainingWorkspaceComponent],
       providers: [
@@ -1547,7 +1551,7 @@ describe('TrainingWorkspaceComponent', () => {
     };
     const derivedMetrics = { watch: vi.fn(() => of(derivedState)), ensureForDashboard: vi.fn() };
 
-    await TestBed.configureTestingModule({
+    await configureFixtureTestingModule({
       imports: [TrainingMetricTextComponent, TrainingBuildMetricsComponent, TrainingMixDetailsComponent],
       declarations: [TrainingWorkspaceComponent],
       providers: [
@@ -2602,7 +2606,7 @@ describe('TrainingWorkspaceComponent', () => {
     const eventId = 'event-1';
     const selection = { mode: 'event' as const, durationWeeks: 12 as const, eventId };
 
-    await TestBed.configureTestingModule({
+    await configureFixtureTestingModule({
       imports: [TrainingMetricTextComponent, TrainingBuildMetricsComponent, TrainingMixDetailsComponent],
       declarations: [TrainingWorkspaceComponent],
       providers: [
@@ -2763,7 +2767,7 @@ describe('TrainingWorkspaceComponent', () => {
     const derivedMetrics = { watch: vi.fn(() => derivedState$), ensureForDashboard: vi.fn() };
     const haptics = { selection: vi.fn() };
 
-    await TestBed.configureTestingModule({
+    await configureFixtureTestingModule({
       imports: [TrainingMetricTextComponent, TrainingBuildMetricsComponent, TrainingMixDetailsComponent],
       declarations: [TrainingWorkspaceComponent],
       providers: [
