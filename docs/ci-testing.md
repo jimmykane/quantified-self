@@ -8,7 +8,7 @@ approved manual deployment workflows. Independent jobs run the same mandatory ch
 | `unit_tests` | Credentials, workflow/emulator coverage contracts, monitoring definitions, plugin validation and frontend lint |
 | `functions_tests` | Functions install/lint and the complete ordinary suite |
 | `functions_build` | Independent Functions build, compiled entrypoint and MCP contract checks |
-| `frontend_plan` | Frontend allocation/shard guards and one automatically balanced plan for the tested commit |
+| `frontend_plan` | Frontend allocation/policy/shard guards and one automatically balanced plan for the tested commit |
 | `frontend_tests` | Two runners covering the complete suite across all three projects |
 | `rules_tests` | Firestore and Storage Rules tests with Java/Firebase emulators |
 | `functions_emulators` | Complete lifecycle, completion and MCP/data emulator groups |
@@ -74,6 +74,47 @@ spec, first verify its tests and transitive imports in the intended environment,
 path to the registry. DOM rendering and browser-locale assumptions require jsdom; component/service/router imports may
 require the Angular pipeline. Do not route the whole helper directory to Node or add fake browser/Angular globals
 to conceal an unsupported import. Removing a registry entry returns that spec to Angular automatically.
+Opt-ins accept exact ordinary repository paths, including hidden specs, shared contracts and scripts; glob patterns,
+absolute/parent paths, Functions, Rules and dependency paths are rejected. Discovery still enforces the original boundary.
+
+### Enforced classification for new tests
+
+`npm run test:frontend-policy` checks the actual discovery against the merge base with `origin/develop`.
+Every new ordinary spec must explicitly opt into Node/DOM or have an Angular reason in the sorted
+`tools/frontend-test-environment-reasons.json` map. Existing Angular specs keep their fallback; moving an existing
+Node spec to DOM/Angular, or a DOM spec to Angular, also requires a matching reason. For example:
+
+```json
+{
+  "src/app/components/example/example.component.spec.ts": {
+    "environment": "angular",
+    "reason": "Renders input bindings and verifies component teardown."
+  }
+}
+```
+
+Reasons must identify actual browser/framework behavior. The guard validates their structure and environment, not
+their truth; reviewers still decide whether the heavier setup is necessary. Keep pure/static assertions in separate
+light suites where practical. Remove reason entries when their specs are deleted or moved to Node.
+The guard rejects runtime Angular testing/compiler/global-setup imports in Node/DOM suites, including local transitive
+imports, aliases and module mocks, while allowing type-only imports and plain Angular core decorators. It inspects
+literal module names, including nested testing entry points and indexed mock calls such as `vi['mock'](...)`.
+Local imports use Vite's resolver and the selected project's merged root/project resolve options, so inspection
+follows runtime file priority, aliases and extensionless modules rather than TypeScript siblings or declarations.
+JSON, styles and `?raw`/`?url` imports are data and are not parsed as executable source.
+It does not traverse third-party package internals; the selected project's actual tests must
+still pass without fabricated globals.
+Direct fixture creation/rendering in shared hooks of new/changed Angular specs produces review warnings, including CI
+annotations. This is a heuristic: it cannot determine every test's rendering needs or follow every setup helper.
+
+With Node 22 selected, run `npm run test:frontend-policy` locally, or
+`npm run test:frontend-policy -- --base <revision>` for another base. Missing refs/history fail with fetch instructions.
+CI runs `test:frontend-policy-guards` and the policy in `frontend_plan` before publishing the plan or starting either
+shard. PR runs use their base SHA; feature pushes use `origin/develop` so a follow-up push cannot grandfather a spec
+introduced earlier on that branch. Develop/main pushes use the previous SHA. Checkout retains the full history.
+The policy uses the existing Vitest discovery, including hidden files and Functions/Rules exclusions; it changes no
+runner allocation, worker limits, isolation, shard selection or coverage behavior. Product behavior, Training/MCP
+contracts, provider actions and help content have no impact.
 
 `npm run test:frontend-config` loads the real configuration and compares project discovery with the original
 ordinary-test boundary. It rejects missing files, duplicates and overlapping opt-ins, exercises future-file

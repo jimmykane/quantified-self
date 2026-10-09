@@ -107,6 +107,29 @@ test('all frontend runners share one discovered plan and only a fully verified g
   assert.ok(!gate.some(step => step.run === 'npm ci'), 'Report validation must use Node built-ins');
 });
 
+test('frontend policy is mandatory before planning and compares the complete feature branch', () => {
+  const steps = shared.jobs.frontend_plan.steps;
+  assert.equal(steps.find(step => step.uses === 'actions/checkout@v4').with['fetch-depth'], 0);
+  const guards = steps.find(step => step.run === 'npm run test:frontend-policy-guards');
+  const policy = steps.find(step => step.run === 'npm run test:frontend-policy');
+  const plan = steps.find(step => step.name === 'Plan balanced frontend shards');
+  assert(guards && policy && plan);
+  assert(steps.indexOf(guards) < steps.indexOf(policy));
+  assert(steps.indexOf(policy) < steps.indexOf(plan));
+  assert.equal(policy.env.QS_FRONTEND_TEST_POLICY_BASE,
+    "${{ github.event.pull_request.base.sha || ((github.ref == 'refs/heads/develop' || github.ref == 'refs/heads/main') && github.event.before) || 'origin/develop' }}");
+  assert.equal(policy['continue-on-error'], undefined);
+  assert.equal(policy.if, undefined);
+  const expression = policy.env.QS_FRONTEND_TEST_POLICY_BASE;
+  assert.equal(evaluate(expression, { event: { pull_request: { base: { sha: 'pr-base' } } } }), 'pr-base');
+  const noPR = { pull_request: { base: { sha: '' } } };
+  assert.equal(evaluate(expression, { event: { ...noPR, before: 'last-push' }, ref: 'refs/heads/codex/example' }), 'origin/develop');
+  for (const branch of ['develop', 'main']) {
+    assert.equal(evaluate(expression, { event: { ...noPR, before: 'last-push' }, ref: `refs/heads/${branch}` }), 'last-push');
+  }
+  assert.equal(evaluate(expression, { event: noPR, ref: 'refs/heads/develop' }), 'origin/develop');
+});
+
 test('delivery runners share one plan, isolated emulators and strict reports before either timing cache is saved', () => {
   const planner = shared.jobs.delivery_plan;
   assert.equal(planner.needs, undefined);
