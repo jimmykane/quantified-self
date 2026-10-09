@@ -89,24 +89,36 @@
         }
       </mat-button-toggle-group>
 
-      <mat-form-field appearance="outline" subscriptSizing="dynamic" class="training-all-sports-selector">
-        <mat-label>All sports</mat-label>
-        <mat-select
-          #desktopAllSportsSelect
-          [value]="desktopAllSportsSelectorValue"
-          (selectionChange)="selectDesktopTrainingDestination($event.value, desktopAllSportsSelect)">
-          @for (option of trainingDestinationOptions; track option.id) {
-            @if (option.id !== 'overview') {
-              <mat-option [value]="option.id">
-                @if (option.materialIcon) {
-                  <mat-icon aria-hidden="true" [style.color]="option.iconColor">{{ option.materialIcon }}</mat-icon>
-                }
-                <span>{{ option.label }}</span>
-              </mat-option>
+      <button
+        mat-button
+        type="button"
+        appHapticTap
+        class="training-all-sports-selector"
+        [matMenuTriggerFor]="desktopAllSportsMenu"
+        [attr.aria-label]="'Choose training sport. Current view: ' + trainingDestinationLabel">
+        <mat-icon aria-hidden="true" [style.color]="selectedTrainingDestinationOption?.iconColor">
+          {{ selectedTrainingDestinationOption?.materialIcon || 'monitoring' }}
+        </mat-icon>
+        <span>{{ isOverviewDestination ? 'All sports' : trainingDestinationLabel }}</span>
+        <mat-icon iconPositionEnd aria-hidden="true">expand_more</mat-icon>
+      </button>
+      <mat-menu #desktopAllSportsMenu="matMenu" class="qs-menu-panel" xPosition="before">
+        @for (option of trainingDestinationOptions; track option.id) {
+          <button
+            mat-menu-item
+            type="button"
+            role="menuitemradio"
+            [attr.aria-label]="'View ' + option.label"
+            [attr.aria-checked]="option.id === selectedTrainingDestination"
+            [class.training-destination-current-option]="option.id === selectedTrainingDestination"
+            (click)="selectTrainingDestination(option.id, 'desktop_selector')">
+            @if (option.materialIcon) {
+              <mat-icon aria-hidden="true" [style.color]="option.iconColor">{{ option.materialIcon }}</mat-icon>
             }
-          }
-        </mat-select>
-      </mat-form-field>
+            <span>{{ option.label }}</span>
+          </button>
+        }
+      </mat-menu>
 
       <button
         mat-button

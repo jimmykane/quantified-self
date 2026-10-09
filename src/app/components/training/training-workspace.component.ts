@@ -5,7 +5,6 @@ import { BreakpointObserver } from '@angular/cdk/layout';
 import { toSignal } from '@angular/core/rxjs-interop';
 import { MatBottomSheet, MatBottomSheetRef } from '@angular/material/bottom-sheet';
 import { MatDialog, MatDialogRef } from '@angular/material/dialog';
-import { MatSelect } from '@angular/material/select';
 import { MatSnackBar } from '@angular/material/snack-bar';
 import { AppThemes, DataAscent, DataAvgStrokeDistance, DataDistance, DataJumpDistance, DataStrokeRate, DataSwimDistance, SwimPaceUnits, type UserUnitSettingsInterface } from '@sports-alliance/sports-lib';
 import { Subscription } from 'rxjs';
@@ -368,7 +367,7 @@ export class TrainingWorkspaceComponent implements OnInit, OnDestroy {
   public sportShortcuts: TrainingVisibleDiscipline[] = [];
   public visibleSportShortcuts: TrainingVisibleDiscipline[] = [];
   public visibleSportShortcutOptions: TrainingDestinationOptionViewModel[] = [];
-  public desktopAllSportsSelectorValue: TrainingDestinationId | null = null;
+  public selectedTrainingDestinationOption: TrainingDestinationOptionViewModel | null = null;
   public sportShortcutsCompactLabel = 'Automatic shortcuts';
   public sportShortcutsAccessibleLabel = 'Choose sport shortcuts. Automatic selection.';
   public isOverviewDestination = true;
@@ -837,7 +836,7 @@ export class TrainingWorkspaceComponent implements OnInit, OnDestroy {
     this.sportShortcuts = [];
     this.visibleSportShortcuts = [];
     this.visibleSportShortcutOptions = [];
-    this.desktopAllSportsSelectorValue = null;
+    this.selectedTrainingDestinationOption = null;
     this.sportShortcutsCompactLabel = 'Automatic shortcuts';
     this.sportShortcutsAccessibleLabel = 'Choose sport shortcuts. Automatic selection.';
     this.isOverviewDestination = true;
@@ -1204,9 +1203,8 @@ export class TrainingWorkspaceComponent implements OnInit, OnDestroy {
     this.visibleSportShortcutOptions = this.visibleSportShortcuts
       .map(id => this.trainingDestinationOptions.find(option => option.id === id))
       .filter((option): option is TrainingDestinationOptionViewModel => option !== undefined);
-    this.desktopAllSportsSelectorValue = this.isOtherPowerDestination
-      ? this.selectedTrainingDestination
-      : null;
+    this.selectedTrainingDestinationOption = this.trainingDestinationOptions
+      .find(option => option.id === this.selectedTrainingDestination) || null;
   }
 
   private reconcilePreferredTrainingDestination(): void {
@@ -1270,15 +1268,6 @@ export class TrainingWorkspaceComponent implements OnInit, OnDestroy {
     this.refreshSportSpecificViewModels();
     this.changeDetector.markForCheck();
     this.queuePreferredTrainingDestinationWrite(destination, source);
-  }
-
-  public selectDesktopTrainingDestination(value: unknown, select: MatSelect): void {
-    this.selectTrainingDestination(value, 'desktop_selector');
-    // MatSelect updates its own value before selectionChange. When a selected
-    // sport is then injected into the shortcut row, the bound value remains
-    // null and Angular has no changed input to write back, so clear it through
-    // the component's public value API to avoid showing the destination twice.
-    select.value = this.desktopAllSportsSelectorValue;
   }
 
   public refreshDurabilityChartsAfterTabAnimation(): void {

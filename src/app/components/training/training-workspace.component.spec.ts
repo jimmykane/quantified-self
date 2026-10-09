@@ -36,6 +36,7 @@ import { TrainingSummaryCardsComponent } from '../shared/training-summary/traini
 import { TrainingMetricGridComponent } from '../shared/training-summary/training-metric-grid.component';
 import { getDateTimeFormatter } from '../../helpers/date-time-format.helper';
 import { HapticTapDirective } from '../../directives/haptic-tap.directive';
+import { OverlayContainer } from '@angular/cdk/overlay';
 import { buildDashboardFormPointsFromDailyLoads } from '../../helpers/dashboard-form.helper';
 
 @Component({ selector: 'app-timeline-notes-workspace', standalone: true, template: '<button>Timeline notes</button>' })
@@ -442,17 +443,77 @@ describe('TrainingWorkspaceComponent', () => {
     expect(template).toContain('matTooltip="All sports"');
   });
 
-  it('uses Material option icon projection for desktop all-sports options', () => {
+  it('uses a text-button menu with direct Material sport icons instead of an outlined form field', () => {
     const template = readFileSync(
       resolve(process.cwd(), 'src/app/components/training/training-workspace.component.html'),
       'utf8',
     );
 
-    const desktopSelectMarkup = template.match(/<mat-select\s+[\s\S]*?<\/mat-select>/)?.[0] || '';
-    expect(desktopSelectMarkup).toMatch(/<mat-option \[value\]="option\.id">\s*@if \(option\.materialIcon\) \{\s*<mat-icon/s);
-    expect(desktopSelectMarkup).not.toContain('training-destination-option');
-    expect(desktopSelectMarkup).not.toContain('<app-activity-type-icon');
+    const menuMarkup = template.match(/<mat-menu #desktopAllSportsMenu[\s\S]*?<\/mat-menu>/)?.[0] || '';
+    expect(menuMarkup).toContain('class="qs-menu-panel"');
+    expect(menuMarkup).toMatch(/@if \(option\.materialIcon\) \{\s*<mat-icon/s);
+    expect(menuMarkup).toContain('role="menuitemradio"');
+    expect(menuMarkup).toContain('[attr.aria-checked]');
+    expect(template).toMatch(/<button\s+mat-button[\s\S]*?class="training-all-sports-selector"/);
+    expect(template).not.toContain('desktopAllSportsSelect');
+    expect(menuMarkup).not.toContain('training-destination-option');
+    expect(menuMarkup).not.toContain('<app-activity-type-icon');
     expect(template).not.toContain('alignDesktopTrainingDestinationOptions');
+  });
+
+  it('retains the selected sport icon and label in the desktop button and avoids feedback for repeated choices', async () => {
+    const haptics = { selection: vi.fn() };
+    await configureFixtureTestingModule({
+      imports: [MatButtonModule],
+      declarations: [TrainingWorkspaceComponent, HapticTapDirective],
+      providers: [
+        { provide: AppAuthService, useValue: { user$: of({ uid: 'user-1' }) } },
+        { provide: DashboardDerivedMetricsService, useValue: { watch: vi.fn(() => of(createRouteReadyDerivedState())), ensureForDashboard: vi.fn() } },
+        { provide: AppHapticsService, useValue: haptics },
+        { provide: AppSleepService, useValue: createSleepService() },
+        { provide: AppThemeService, useValue: { appTheme: () => AppThemes.Normal } },
+      ],
+      schemas: [NO_ERRORS_SCHEMA],
+    }).compileComponents();
+    const fixture = TestBed.createComponent(TrainingWorkspaceComponent);
+    fixture.detectChanges();
+    await fixture.whenStable();
+    const trigger = fixture.nativeElement.querySelector('.training-all-sports-selector') as HTMLButtonElement;
+    const overlay = TestBed.inject(OverlayContainer).getContainerElement();
+    expect(trigger.textContent).toContain('All sports');
+    expect(trigger.classList).toContain('mat-mdc-button');
+    expect(fixture.nativeElement.querySelector('.training-all-sports-selector mat-select')).toBeNull();
+    expect(haptics.selection).not.toHaveBeenCalled();
+    trigger.click();
+    fixture.detectChanges();
+    expect(trigger.getAttribute('aria-expanded')).toBe('true');
+    expect(haptics.selection).toHaveBeenCalledOnce();
+    (overlay.querySelector('[aria-label="View Cycling"]') as HTMLButtonElement).click();
+    fixture.detectChanges();
+    expect(fixture.componentInstance.selectedTrainingDestination).toBe('cycling');
+    expect(trigger.textContent).toContain('Cycling');
+    const selectedOption = fixture.componentInstance.selectedTrainingDestinationOption!;
+    const sportIcon = trigger.querySelector('mat-icon:not([iconPositionEnd])') as HTMLElement;
+    expect(sportIcon.textContent?.trim()).toBe(selectedOption.materialIcon);
+    const expectedColour = document.createElement('span');
+    expect(selectedOption.iconColor).toBeTruthy();
+    expectedColour.style.color = selectedOption.iconColor!;
+    expect(sportIcon.style.color).toBe(expectedColour.style.color);
+    expect(trigger.querySelector('[iconPositionEnd]')?.textContent?.trim()).toBe('expand_more');
+    expect(haptics.selection).toHaveBeenCalledTimes(2);
+    trigger.click();
+    fixture.detectChanges();
+    expect(haptics.selection).toHaveBeenCalledTimes(3);
+    const selectedItem = overlay.querySelector('[aria-label="View Cycling"]') as HTMLButtonElement;
+    expect(selectedItem.getAttribute('aria-checked')).toBe('true');
+    selectedItem.click();
+    fixture.detectChanges();
+    expect(haptics.selection).toHaveBeenCalledTimes(3);
+    fixture.componentInstance.selectTrainingDestination('overview', 'shortcut');
+    fixture.detectChanges();
+    expect(trigger.textContent).toContain('All sports');
+    expect(sportIcon.textContent?.trim()).toBe('monitoring');
+    expect(sportIcon.style.color).toBe('');
   });
 
   it('separates adjacent Training Mix sport contexts with matching dividers', () => {
@@ -1723,7 +1784,7 @@ describe('TrainingWorkspaceComponent', () => {
     });
   });
 
-  it('clears the desktop selector after placing an off-shortcut sport in the toggle row', () => {
+  it('retains the desktop destination presentation after placing an off-shortcut sport in the toggle row', () => {
     const component = new TrainingWorkspaceComponent(
       {} as any,
       {} as any,
@@ -1732,14 +1793,13 @@ describe('TrainingWorkspaceComponent', () => {
       { open: vi.fn() } as any,
       { markForCheck: vi.fn() } as any,
     );
-    const select = { value: 'walking-hiking' };
-
-    component.selectDesktopTrainingDestination('walking-hiking', select as any);
+    component.selectTrainingDestination('walking-hiking', 'desktop_selector');
 
     expect(component.selectedTrainingDestination).toBe('walking-hiking');
     expect(component.visibleSportShortcuts[0]).toBe('walking-hiking');
-    expect(component.desktopAllSportsSelectorValue).toBeNull();
-    expect(select.value).toBeNull();
+    expect(component.selectedTrainingDestinationOption?.id).toBe('walking-hiking');
+    expect(component.selectedTrainingDestinationOption?.label).toBe('Walking & Hiking');
+    expect(component.selectedTrainingDestinationOption?.materialIcon).toBeTruthy();
   });
 
   it('keeps the selected shortcut in a stable slot while automatic sport evidence hydrates', () => {

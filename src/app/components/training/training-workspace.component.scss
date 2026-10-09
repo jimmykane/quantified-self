@@ -27,7 +27,8 @@
 .training-destination-shortcuts mat-button-toggle { min-width: 0; }
 .training-destination-shortcuts mat-icon,
 .training-destination-shortcuts app-activity-type-icon { width: 18px; height: 18px; margin-right: 6px; vertical-align: middle; }
-.training-all-sports-selector { flex: 0 0 210px; width: 210px; margin-left: auto; }
+.training-all-sports-selector { flex: 0 0 auto; margin-left: auto; }
+.training-destination-current-option { color: var(--mat-sys-on-secondary-container); background: var(--mat-sys-secondary-container); }
 .training-destination-desktop > .training-sport-visibility-action { flex: 0 0 auto; }
 .training-destination-mobile { display: none; }
 .training-destination-scope { display: flex; align-items: center; justify-content: space-between; gap: 12px; min-height: 20px; color: var(--mat-sys-on-surface-variant); font-size: var(--training-inter-caption-font-size); }

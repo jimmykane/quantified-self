@@ -4375,9 +4375,12 @@ The route has three destination kinds:
   the account's saved destination before that evidence disappeared.
 
 Desktop uses one intrinsic-width Material button-toggle group for **All training** plus at most four sport shortcuts,
-with the complete **All sports** selector and shortcut editor grouped at the opposite edge. The toggle outline must end
-with its final choice rather than stretch across unused row space. The complete selector renders each sport as a direct
-Material option icon plus label, allowing `mat-option` to own the row geometry and reserve its native icon slot; compact
+with the complete **All sports** menu button and shortcut editor grouped at the opposite edge. Both actions use Material
+text buttons, not an outlined form field. The sport button shows **All sports** on Overview, or the selected destination's
+label and coloured registry icon even when it is also a visible shortcut. Its menu includes **All training**, marks the
+current destination, and uses the shared `qs-menu-panel` surface. The toggle outline must end
+with its final choice rather than stretch across unused row space. The complete menu renders each sport as a direct
+Material icon plus label, allowing `mat-menu-item` to own the row geometry and reserve its native icon slot; compact
 shortcut icons keep their smaller navigation size. Selecting a
 sport outside the four saved slots temporarily places it in the visible toggle group without mutating the saved shortcut
 set. At intermediate desktop/tablet

@@ -1034,6 +1034,8 @@ describe('help.content', () => {
     expect(trainingSection?.content).toContain('intentional easing, terrain changes, coasting, or a pace change');
     expect(trainingSection?.content).toContain('no suitable comparison rather than zero');
     expect(trainingSection?.content).toContain('**All sports**');
+    expect(trainingSection?.content).toContain('text button beside **Shortcuts**');
+    expect(trainingSection?.content).toContain('keeps its name and coloured sport icon');
     expect(trainingSection?.content).toContain('compact swipeable sport buttons');
     expect(trainingSection?.content).toContain('compact **All sports** arrow button opens every currently available sport');
     expect(trainingSection?.content).toContain('**Fitness & Gym** appears when recorded');
