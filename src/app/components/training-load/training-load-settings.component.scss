@@ -2,6 +2,6 @@
 p { line-height: 1.5; }
 .load-settings-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 24px; }
 .load-settings-family { display: flex; flex-direction: column; gap: 16px; min-width: 0; }
-h3 { margin: 0; }
+h5 { margin: 0; }
 button { height: auto; min-height: 40px; white-space: normal; }
 @media (max-width: 760px) { .load-settings-grid { grid-template-columns: minmax(0, 1fr); } }

@@ -7,6 +7,19 @@ describe('compact private Training load summaries', () => {
   const metadata: TrainingLoadMetadata = { version: 1, revision: 2, excluded: false, controls: { leg: { override: 0 } },
     legs: { leg: { activityId: 'activity', identity: { startMs: 1, endMs: 2, duration: 1, distance: 1, type: 'Walking' },
       recordedTss: 87, evaluations: null, policy: defaultAppliedTrainingLoadPolicy('Walking'), sourceFingerprint: 'source' } } };
+  it('keeps feedback outside source validation while guarding recorded load and calculation inputs', () => {
+    const source = { startDate: 1, endDate: 3600001, type: 'Walking',
+      stats: { 'Training Stress Score': 9, Energy: 210, Weight: 70 } };
+    const fingerprint = trainingLoadSourceFingerprint(source);
+    for (const feedback of [{ Feeling: 3 }, { 'Rated Perceived Exertion': 1 },
+      { Feeling: 5, 'Rated Perceived Exertion': 8 }]) {
+      expect(trainingLoadSourceFingerprint({ ...source, stats: { ...source.stats, ...feedback } })).toBe(fingerprint);
+    }
+    for (const changed of [{ 'Training Stress Score': 10 }, { Energy: 211 }, { Weight: 71 }]) {
+      expect(trainingLoadSourceFingerprint({ ...source, stats: { ...source.stats, ...changed } })).not.toBe(fingerprint);
+    }
+    expect(trainingLoadSourceFingerprint({ ...source, endDate: 7200001 })).not.toBe(fingerprint);
+  });
   it('retains zero overrides, per-leg results and source guards without private policy/candidate data', () => {
     const summary = summarizeTrainingLoad('event', parent, metadata)!;
     expect(summary.load).toMatchObject({ score: 0, status: 'available' });

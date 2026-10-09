@@ -14,8 +14,12 @@ export function canonicalTrainingLoadValue(value: unknown): unknown {
 }
 
 export function serializeTrainingLoadSource(data: { startDate?: unknown; endDate?: unknown; type?: unknown; stats?: unknown }): string {
+  // Workout feedback is editable independently and is never a TSS calculation input.
+  const stats = data.stats && typeof data.stats === 'object' && !Array.isArray(data.stats)
+    ? Object.fromEntries(Object.entries(data.stats).filter(([key]) => key !== 'Feeling' && key !== 'Rated Perceived Exertion'))
+    : data.stats ?? {};
   return JSON.stringify(canonicalTrainingLoadValue({ startMs: trainingLoadTimeMs(data.startDate),
-    endMs: trainingLoadTimeMs(data.endDate), type: data.type ?? null, stats: data.stats ?? {} }));
+    endMs: trainingLoadTimeMs(data.endDate), type: data.type ?? null, stats }));
 }
 
 export async function browserTrainingLoadSourceFingerprint(data: Parameters<typeof serializeTrainingLoadSource>[0]): Promise<string> {
