@@ -813,7 +813,10 @@ describe('DashboardDerivedMetricsService', () => {
 
     expect(hoisted.docMock.mock.calls.some((call) => call.at(-1) === getDerivedMetricDocId(DERIVED_METRIC_KINDS.TrainingBuildComparison))).toBe(true);
     expect(hoisted.docMock.mock.calls.some((call) => call.at(-1) === getDerivedMetricDocId(DERIVED_METRIC_KINDS.TrainingReadiness))).toBe(true);
-    expect(hoisted.docMock.mock.calls.some((call) => call.at(-1) === getDerivedMetricDocId(DERIVED_METRIC_KINDS.BodyWeightTrend))).toBe(true);
+    expect(hoisted.docMock.mock.calls.some((call) => call.at(-1) === getDerivedMetricDocId(DERIVED_METRIC_KINDS.BodyWeightTrend))).toBe(false);
+    expect(TRAINING_WORKSPACE_DERIVED_METRIC_KINDS).toEqual(
+      Object.values(DERIVED_METRIC_KINDS).filter(kind => kind !== DERIVED_METRIC_KINDS.BodyWeightTrend),
+    );
     expect(hoisted.docMock.mock.calls.some((call) => call.at(-1) === getDerivedMetricDocId(DERIVED_METRIC_KINDS.TrainingExplanation))).toBe(true);
     expect(hoisted.docMock.mock.calls.some((call) => call.at(-1) === getDerivedMetricDocId(DERIVED_METRIC_KINDS.TrainingDurability))).toBe(true);
     expect(hoisted.docMock.mock.calls.some((call) => call.at(-1) === getDerivedMetricDocId(DERIVED_METRIC_KINDS.TrainingPowerSystems))).toBe(true);
@@ -984,7 +987,6 @@ describe('DashboardDerivedMetricsService', () => {
         DERIVED_METRIC_KINDS.TrainingDurability,
         DERIVED_METRIC_KINDS.TrainingBuildComparison,
         DERIVED_METRIC_KINDS.TrainingReadiness,
-        DERIVED_METRIC_KINDS.BodyWeightTrend,
         DERIVED_METRIC_KINDS.TrainingSwimPerformance,
       ],
     });

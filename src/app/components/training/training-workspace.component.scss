@@ -315,24 +315,6 @@ dd { margin: 5px 0 0; font-size: var(--training-card-stat-font-size); font-weigh
 .training-capacity-interpretation > p > strong { font-size: 14px; line-height: 1.35; }
 .training-capacity-interpretation-positive { border-left: 3px solid var(--mat-sys-tertiary); }
 .training-capacity-interpretation-caution { border-left: 3px solid var(--mat-sys-secondary); }
-.training-body-weight-panel { min-width: 0; padding: 20px; }
-.training-body-weight-panel > header { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; margin-bottom: 14px; }
-.training-body-weight-panel > header p, .training-body-weight-panel > header > span { margin: 4px 0 0; color: var(--mat-sys-on-surface-variant); font-size: var(--training-inter-caption-font-size); line-height: 1.35; }
-.training-body-weight-panel > header > span { margin-top: 0; white-space: nowrap; text-align: right; }
-.training-body-weight-series { min-width: 0; padding: 14px 0; border-top: 1px solid var(--qs-glass-panel-border, var(--mat-sys-outline-variant)); }
-.training-body-weight-series h4 { margin: 0 0 8px; color: var(--mat-sys-on-surface); font-size: var(--training-inter-caption-font-size); font-weight: 650; }
-.training-body-weight-series + .training-body-weight-series { margin-top: 4px; }
-.training-body-weight-summary { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); border-top: 1px solid var(--qs-glass-panel-border, var(--mat-sys-outline-variant)); }
-.training-body-weight-summary > div { min-width: 0; padding: 12px 10px; border-bottom: 1px solid var(--qs-glass-panel-border, var(--mat-sys-outline-variant)); }
-.training-body-weight-summary > div:first-child { padding-left: 0; }
-.training-body-weight-summary > div:last-child { padding-right: 0; }
-.training-body-weight-summary > div + div { border-left: 1px solid var(--qs-glass-panel-border, var(--mat-sys-outline-variant)); }
-.training-body-weight-summary span, .training-body-weight-summary strong, .training-body-weight-summary small { display: block; min-width: 0; }
-.training-body-weight-summary span, .training-body-weight-summary small { color: var(--mat-sys-on-surface-variant); font-size: var(--training-inter-fine-font-size); line-height: 1.35; }
-.training-body-weight-summary strong { margin: 5px 0 4px; font-size: var(--training-card-stat-font-size); line-height: 1.1; overflow-wrap: anywhere; }
-.training-body-weight-trend-dates { display: flex; justify-content: space-between; gap: 10px; color: var(--mat-sys-on-surface-variant); font-size: var(--training-inter-fine-font-size); }
-.training-body-weight-coverage, .training-body-weight-source { margin: 10px 0 0; color: var(--mat-sys-on-surface-variant); font-size: var(--training-inter-caption-font-size); line-height: 1.4; }
-.training-body-weight-source { font-size: var(--training-inter-micro-font-size); }
 .training-capacity-loading { grid-column: 1 / -1; min-height: 128px; padding: 20px; display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 14px; align-items: center; }
 .training-capacity-loading p { margin: 4px 0 0; color: var(--mat-sys-on-surface-variant); font-size: var(--training-inter-body-font-size); }
 .training-insights-grid > .training-capacity-loading { min-height: 0; padding: 18px 20px; }
@@ -424,11 +406,4 @@ dd { margin: 5px 0 0; font-size: var(--training-card-stat-font-size); font-weigh
   .training-recovery-history-summary button {
     justify-self: start;
   }
-}
-
-@media (max-width: 640px) {
-  .training-body-weight-panel { padding: 18px; }
-  .training-body-weight-summary { grid-template-columns: 1fr; }
-  .training-body-weight-summary > div, .training-body-weight-summary > div:first-child, .training-body-weight-summary > div:last-child { padding: 12px 0; border-left: 0; }
-  .training-body-weight-summary > div + div { border-left: 0; }
 }

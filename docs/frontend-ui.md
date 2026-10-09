@@ -325,7 +325,7 @@ beside the metric list, with a minimum plot height for multi-row grids. Mobile, 
 retain their existing chart heights. The existing ECharts host observes the resized plot; no manual resize loop or
 extra padding is needed.
 
-Dashboard plots, Health metric/Sleep-stage plots, and Training's readiness, body-weight, power-systems,
+Dashboard plots, Health metric/Sleep-stage plots, and Training's readiness, power-systems,
 swimming-performance, and durability plots opt into `EChartsHostController.deferUntilNearViewport`.
 `ChartViewportQueue` observes the nearest scroll container (including the app shell and bottom sheets) with a 600px
 preload margin and admits one plot per animation frame after the shared ECharts library is ready, so a cold
@@ -369,10 +369,10 @@ the host dismisses the active tooltip through ECharts: mobile click-triggered to
 private text after an edit, hide/remove or owner change. No chart recreation or resize is required. Full data/theme/range changes
 continue through ordinary rendering. Range registrations remain deduplicated, and disposal releases the retained
 option and registration. Explicit time bounds avoid traversing samples during overlay projection. Health, Sleep,
-Form, Forecast and the five Training trend adapters share this path, without chart-local fetches or haptics.
+Form, Forecast and the four Training trend adapters share this path, without chart-local fetches or haptics.
 
 `date-time-format.helper.ts` reuses at most 64 Intl date formatters for explicit timezone/locale/option combinations,
-with least-recently-used eviction. Health chart labels and workspace dates, Training readiness/body-weight dates,
+with least-recently-used eviction. Health chart labels and workspace dates, Training readiness dates,
 and dashboard calendar grouping use it. Formatted readings are never cached. Calls that omit a timezone remain
 uncached so a device timezone change does not retain an old local-time formatter. Recorded offsets, locale options,
 canonical metric value/unit formatting and range semantics are unchanged.

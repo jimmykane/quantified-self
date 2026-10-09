@@ -250,7 +250,10 @@ export function getDefaultDashboardDerivedMetricKinds(): DerivedMetricKind[] {
   return [...DASHBOARD_DERIVED_METRIC_KINDS];
 }
 
-export const TRAINING_WORKSPACE_DERIVED_METRIC_KINDS = [...ALL_DERIVED_METRIC_KINDS];
+// Body context is retired from Training; explicit snapshot consumers remain supported.
+export const TRAINING_WORKSPACE_DERIVED_METRIC_KINDS = ALL_DERIVED_METRIC_KINDS.filter(
+  kind => kind !== DERIVED_METRIC_KINDS.BodyWeightTrend,
+);
 
 export interface DashboardDerivedMetricsScopeOptions {
   metricKinds?: readonly DerivedMetricKind[];

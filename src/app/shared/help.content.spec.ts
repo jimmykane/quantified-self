@@ -1008,10 +1008,10 @@ describe('help.content', () => {
     expect(trainingSection?.content).toContain('do not mean that the workspace is filtered');
     expect(trainingSection?.content).toContain('neutral higher/lower language');
     expect(trainingSection?.content).toContain('plots a readable 12-week durability trend');
-    expect(trainingSection?.content).toContain('**Body-weight trend**');
-    expect(trainingSection?.content).toContain('appears last on Training as secondary, neutral context');
-    expect(trainingSection?.content).toContain('multiple measurements on one UTC day to a median');
-    expect(trainingSection?.content).toContain('does not change the Training state, Form, Readiness');
+    expect(trainingSection?.content).not.toContain('**Body-weight trend**');
+    expect(trainingSection?.content).toContain('Body measurements are available in [Health](/health), not Training');
+    expect(trainingSection?.content).toContain('does not delete recorded measurements');
+    expect(trainingSection?.content).toContain('change the Training state, Form, or Readiness');
     expect(trainingSection?.content).toContain('A Cycling Power Curve proves that power was recorded');
     expect(trainingSection?.content).toContain('**Power systems** is available to every signed-in Training user');
     expect(trainingSection?.content).toContain('It estimates current CP, W′, and Pmax');

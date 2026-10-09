@@ -3,7 +3,6 @@ import { describe, expect, it, vi } from 'vitest';
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { TrainingReadinessTrendChartComponent } from '../components/training/training-readiness-trend-chart.component';
-import { TrainingBodyWeightTrendChartComponent } from '../components/training/training-body-weight-trend-chart.component';
 import { TrainingPowerSystemsTrendChartComponent } from '../components/training/training-power-systems-trend-chart.component';
 import { TrainingDurabilityTrajectoryChartComponent } from '../components/training/training-durability-trajectory-chart.component';
 import { TrainingSwimPerformanceChartComponent } from '../components/training/training-swim-performance-chart.component';
@@ -15,7 +14,6 @@ import { HealthMetricSeriesChartComponent } from '../components/health/health-me
 describe('explicit Timeline note chart adapters', () => {
   it.each([
     [TrainingReadinessTrendChartComponent, 'refresh', false],
-    [TrainingBodyWeightTrendChartComponent, 'refresh', false],
     [TrainingPowerSystemsTrendChartComponent, 'refresh', false],
     [TrainingDurabilityTrajectoryChartComponent, 'refresh', true],
     [TrainingSwimPerformanceChartComponent, 'refresh', true],
@@ -78,7 +76,7 @@ describe('explicit Timeline note chart adapters', () => {
     expectNoteBindings('src/app/components/training/training-workspace.component.html', [
       'app-training-readiness-trend-chart', 'app-form-chart', 'app-freshness-forecast-chart',
       'app-training-power-systems-trend-chart', 'app-training-swim-performance-chart',
-      'app-training-durability-trajectory-chart', 'app-training-body-weight-trend-chart',
+      'app-training-durability-trajectory-chart',
     ], 'timelineNotes.context()');
     expect(source('src/app/components/health/health-priority-summary.component.html')).toContain('[timelineNotes]="timelineNotes()"');
     expectNoteBindings('src/app/components/tile/chart/tile.chart.component.html', [

@@ -1,7 +1,7 @@
 import { TrainingBuildMetricsComponent } from '../shared/training-summary/training-build-metrics.component';
 import { TrainingMixDetailsComponent } from '../shared/training-summary/training-mix-details.component';
 import { ComponentFixture, TestBed } from '@angular/core/testing';
-import { Component, LOCALE_ID, NO_ERRORS_SCHEMA } from '@angular/core';
+import { Component, LOCALE_ID, NO_ERRORS_SCHEMA, signal } from '@angular/core';
 import { MatMenuModule } from '@angular/material/menu';
 import { MatTooltipModule } from '@angular/material/tooltip';
 import { readFileSync } from 'node:fs';
@@ -123,6 +123,18 @@ function createExcludedCyclingDurabilityPayload(): DerivedTrainingDurabilityMetr
 
 describe('TrainingWorkspaceComponent', () => {
   let analyticsService: { logEvent: ReturnType<typeof vi.fn> };
+
+  it.each(['missing', 'stale', 'failed'] as const)('ignores retired body-weight %s status in the Training route disclosure', status => {
+    const component = Object.create(TrainingWorkspaceComponent.prototype) as TrainingWorkspaceComponent;
+    Object.assign(component, {
+      isOverviewDestination: true,
+      isPowerSystemsSectionVisible: false,
+      derivedState: createRouteReadyDerivedState({ bodyWeightTrendStatus: status }),
+      derivedMetricsStatusExpanded: signal(false),
+    });
+    (component as unknown as { refreshDerivedMetricsRouteStatus(): void }).refreshDerivedMetricsRouteStatus();
+    expect(component.derivedMetricsRouteStatus).toBeNull();
+  });
 
   it('maps only real load histories, not strain as monotony, and keeps forecasts separate', () => {
     const component = Object.create(TrainingWorkspaceComponent.prototype) as TrainingWorkspaceComponent;
@@ -252,12 +264,14 @@ describe('TrainingWorkspaceComponent', () => {
     expect(element.textContent).toContain('How your load is changing');
     expect(element.textContent).toContain('Where your effort is going');
     expect(element.textContent).not.toContain('Settings vs recent evidence');
-    expect(element.textContent).toContain('Recorded body weight');
+    expect(element.textContent).not.toContain('Recorded body weight');
+    expect(element.textContent).not.toContain('Body context');
     const performanceGrid = element.querySelector('.training-performance-grid');
     const bodyContextSection = element.querySelector('.training-body-context-section');
     expect(performanceGrid).toBeNull();
-    expect(bodyContextSection?.querySelector('.training-body-weight-panel')).not.toBeNull();
-    expect(element.querySelector('main.training-workspace')?.lastElementChild).toBe(bodyContextSection);
+    expect(bodyContextSection).toBeNull();
+    expect(element.querySelector('app-training-body-weight-trend-chart')).toBeNull();
+    expect(element.querySelector('main.training-workspace')?.lastElementChild?.getAttribute('aria-labelledby')).toBe('training-mix-title');
     expect(element.querySelector('app-durability-reading-guide[context="training"]')).toBeNull();
     expect(element.querySelector('app-tile-chart')).toBeNull();
     expect(fixture.componentInstance.freshnessForecastInfoTooltip).toContain('training load only');
@@ -1041,7 +1055,6 @@ describe('TrainingWorkspaceComponent', () => {
             'form_plus_7d',
             'freshness_forecast',
             'training_readiness',
-            'body_weight_trend',
           ],
         },
       );
