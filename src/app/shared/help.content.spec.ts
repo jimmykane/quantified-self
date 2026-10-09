@@ -377,6 +377,9 @@ describe('help.content', () => {
     expect(health).toContain('closing the picker changes nothing');
     expect(health).toContain('Detailed history uses the full workspace width on mobile and desktop');
     expect(health).toContain('Your metric selection is remembered in your account settings');
+    expect(health).toContain('browser’s **Back** and **Forward** controls');
+    expect(health).toContain('inspected date window and source filters stay in place');
+    expect(health).toContain('Choosing the current metric or cancelling the picker adds no entry');
   });
   it('makes optional full-text notes access discoverable without implying chart visibility is consent', () => {
     const content = HELP_SECTIONS.map(section => section.content).join(' ');
@@ -568,7 +571,7 @@ describe('help.content', () => {
     expect(healthSection?.content).toContain('Use **1d**, **14d**, **30d**, or **90d** for detailed sample readings');
     expect(healthSection?.content).toContain('**1y** remains available for readings with daily summaries');
     expect(healthSection?.content).toContain('identifies **Today**, **Yesterday**, or the inspected date');
-    expect(healthSection?.content).toContain('selected metric and range are saved to your account without adding URL query parameters');
+    expect(healthSection?.content).toContain('selected metric and range are saved to your account');
     expect(healthSection?.content).toContain('older/newer position and provider filters remain local');
     expect(healthSection?.content).toContain('never creates a cross-provider headline average');
     expect(healthSection?.content).toContain('**Choose a Highlight source.**');

@@ -4,13 +4,15 @@ import { DashboardLibraryModule } from '../../modules/dashboard-library.module';
 import { DashboardConfigurationService } from '../../services/dashboard-configuration.service';
 import { Component, Input, signal } from '@angular/core';
 import { ComponentFixture, TestBed } from '@angular/core/testing';
+import { Location } from '@angular/common';
+import { provideLocationMocks } from '@angular/common/testing';
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { MatSnackBar } from '@angular/material/snack-bar';
 import { MatDialog } from '@angular/material/dialog';
 import { MatBottomSheet } from '@angular/material/bottom-sheet';
 import { By } from '@angular/platform-browser';
-import { provideRouter, Router } from '@angular/router';
+import { NavigationEnd, provideRouter, Router } from '@angular/router';
 import { AppThemes, DistanceUnits } from '@sports-alliance/sports-lib';
 import type { UserUnitSettingsInterface } from '@sports-alliance/sports-lib';
 import { getDefaultUserUnitSettings, normalizeUserUnitSettings } from '@shared/unit-aware-display';
@@ -41,7 +43,7 @@ import {
 } from '@shared/activity-health';
 import { SLEEP_PROVIDERS, SleepSession } from '@shared/sleep';
 import { projectLoadedHealthRange } from '@shared/health-query';
-import { BehaviorSubject, of, Subject, throwError } from 'rxjs';
+import { BehaviorSubject, filter, firstValueFrom, of, Subject, throwError } from 'rxjs';
 import { AppChartsModule } from '../../modules/app-charts.module';
 import { AppEventService } from '../../services/app.event.service';
 import { AppHealthService, HealthWorkspaceRangeLoad } from '../../services/app.health.service';
@@ -421,6 +423,7 @@ describe('HealthWorkspaceComponent', () => {
     } = {},
     savedMetric?: AppHealthWorkspaceMetric,
     highlightSources?: AppHealthHighlightSources,
+    initialUrl = '/',
   ): Promise<void> {
     haptics = { selection: vi.fn(), success: vi.fn(), error: vi.fn() };
     sourcesDismissed = new Subject();
@@ -498,6 +501,7 @@ describe('HealthWorkspaceComponent', () => {
       imports: [HealthWorkspaceComponent],
       providers: [
         provideRouter([]),
+        provideLocationMocks(),
         {provide:DashboardConfigurationService,useValue:{save:vi.fn().mockResolvedValue(undefined)}},
         { provide: AppHapticsService, useValue: haptics },
         { provide: MatBottomSheet, useValue: { open: openBottomSheet } },
@@ -566,6 +570,8 @@ describe('HealthWorkspaceComponent', () => {
       .compileComponents();
 
     router = TestBed.inject(Router);
+    router.initialNavigation();
+    await router.navigateByUrl(initialUrl);
     fixture = TestBed.createComponent(HealthWorkspaceComponent);
     component = fixture.componentInstance;
     fixture.detectChanges();
@@ -605,6 +611,124 @@ describe('HealthWorkspaceComponent', () => {
     await createComponent(); component.selectPriorityMetric('body_weight'); fixture.detectChanges(); await fixture.whenStable();
     haptics.selection.mockClear(); setCurrentUserID('user-2'); fixture.detectChanges(); await fixture.whenStable();
     expect(component.metricDetailOpen()).toBe(false); expect(haptics.selection).not.toHaveBeenCalled();
+    expect(router.parseUrl(router.url).queryParamMap.has('metric')).toBe(false);
+  });
+
+  it('clears pending metric navigation when the signed-in account changes', async () => {
+    await createComponent();
+    component.selectPriorityMetric(HEALTH_METRIC_IDS.BodyWeight);
+    setCurrentUserID('user-2');
+    haptics.selection.mockClear();
+    fixture.detectChanges(); await fixture.whenStable(); fixture.detectChanges();
+    expect(component.metricDetailOpen()).toBe(false);
+    expect(router.parseUrl(router.url).queryParamMap.has('metric')).toBe(false);
+    expect(haptics.selection).not.toHaveBeenCalled();
+  });
+
+  async function moveBrowserHistory(direction: 'back' | 'forward'): Promise<void> {
+    const navigation = firstValueFrom(router.events.pipe(filter(event => event instanceof NavigationEnd)));
+    TestBed.inject(Location)[direction]();
+    await navigation;
+    fixture.detectChanges(); await fixture.whenStable(); fixture.detectChanges();
+  }
+
+  it('restores metrics and overview with browser Back/Forward while retaining the inspected window and sources', async () => {
+    await createComponent(undefined, '14d', {}, undefined, undefined, '/?from=health#readings');
+    component.navigateWindow('older');
+    component.toggleProvider(HEALTH_PROVIDERS.GarminAPI);
+    const inspectedEndDate = component.routeState().endDate;
+    component.selectPriorityMetric(HEALTH_METRIC_IDS.BodyWeight);
+    fixture.detectChanges(); await fixture.whenStable();
+    component.openMetricPicker(); metricsDismissed.next('sleep');
+    fixture.detectChanges(); await fixture.whenStable();
+    expect(router.url).toContain('metric=sleep');
+    expect(router.url).toContain('from=health');
+    expect(router.url).toContain('#readings');
+    const writes = updateHealthWorkspacePreferences.mock.calls.length;
+    const navigate = vi.spyOn(router, 'navigate');
+    haptics.selection.mockClear();
+
+    await moveBrowserHistory('back');
+    expect(component.routeState()).toEqual({ metric: 'body_weight', range: '14d', endDate: inspectedEndDate });
+    expect(component.metricDetailOpen()).toBe(true);
+    await moveBrowserHistory('back');
+    expect(component.metricDetailOpen()).toBe(false);
+    expect((fixture.nativeElement as HTMLElement).querySelector<HTMLElement>('.health-history')!.hidden).toBe(true);
+    await moveBrowserHistory('forward');
+    expect(component.selectedMetric()).toBe('body_weight');
+    expect(component.metricDetailOpen()).toBe(true);
+    await moveBrowserHistory('forward');
+    expect(component.routeState()).toEqual({ metric: 'sleep', range: '14d', endDate: inspectedEndDate });
+    expect(component.selectedProviders()).toEqual([HEALTH_PROVIDERS.GarminAPI]);
+    expect(component.metricDetailOpen()).toBe(true);
+    expect(updateHealthWorkspacePreferences).toHaveBeenCalledTimes(writes);
+    expect(navigate).not.toHaveBeenCalled();
+    expect(haptics.selection).not.toHaveBeenCalled();
+  });
+
+  it('records opening the remembered metric and returning to overview without duplicating unchanged choices', async () => {
+    await createComponent(undefined, '14d', {}, HEALTH_METRIC_IDS.Steps);
+    component.selectPriorityMetric(HEALTH_METRIC_IDS.Steps);
+    fixture.detectChanges(); await fixture.whenStable();
+    const navigate = vi.spyOn(router, 'navigate');
+    component.selectMetric(HEALTH_METRIC_IDS.Steps);
+    component.selectPriorityMetric(HEALTH_METRIC_IDS.Steps);
+    fixture.detectChanges(); await fixture.whenStable();
+    expect(navigate).not.toHaveBeenCalled();
+    expect(updateHealthWorkspacePreferences).not.toHaveBeenCalled();
+    component.showOverview();
+    fixture.detectChanges(); await fixture.whenStable();
+    expect(router.parseUrl(router.url).queryParamMap.has('metric')).toBe(false);
+    await moveBrowserHistory('back');
+    expect(component.selectedMetric()).toBe('steps');
+    expect(component.metricDetailOpen()).toBe(true);
+    await moveBrowserHistory('forward');
+    expect(component.metricDetailOpen()).toBe(false);
+  });
+
+  it('opens a valid metric URL without writes and protects it from late saved-metric hydration', async () => {
+    await createComponent(undefined, '14d', {}, undefined, undefined, '/?metric=steps');
+    expect(component.routeState()).toMatchObject({ metric: 'steps', range: '14d' });
+    expect(component.metricDetailOpen()).toBe(true);
+    hydrateSavedMetric(HEALTH_METRIC_IDS.BodyWeight);
+    fixture.detectChanges(); await fixture.whenStable();
+    expect(component.selectedMetric()).toBe('steps');
+    expect(updateHealthWorkspacePreferences).not.toHaveBeenCalled();
+    expect(haptics.selection).not.toHaveBeenCalled();
+  });
+
+  it('invalidates an open metric picker when browser Back returns to overview', async () => {
+    await createComponent(undefined, '14d', {}, HEALTH_METRIC_IDS.Steps);
+    component.selectPriorityMetric(HEALTH_METRIC_IDS.Steps);
+    fixture.detectChanges(); await fixture.whenStable(); fixture.detectChanges();
+    component.openMetricPicker();
+    await moveBrowserHistory('back');
+    expect(dismissBottomSheet).toHaveBeenCalledOnce();
+    const writes = updateHealthWorkspacePreferences.mock.calls.length;
+    haptics.selection.mockClear();
+    metricsDismissed.next('sleep');
+    expect(component.selectedMetric()).toBe('steps');
+    expect(component.metricDetailOpen()).toBe(false);
+    expect(updateHealthWorkspacePreferences).toHaveBeenCalledTimes(writes);
+    expect(haptics.selection).not.toHaveBeenCalled();
+  });
+
+  it.each(['unregistered', ''])('ignores an invalid metric URL (%s) and uses the saved overview selection', async metric => {
+    await createComponent(undefined, '14d', {}, HEALTH_METRIC_IDS.Steps, undefined, `/?metric=${metric}`);
+    expect(component.routeState()).toMatchObject({ metric: 'steps', range: '14d' });
+    expect(component.metricDetailOpen()).toBe(false);
+    expect(updateHealthWorkspacePreferences).not.toHaveBeenCalled();
+    expect(haptics.selection).not.toHaveBeenCalled();
+  });
+
+  it('replaces an unavailable URL metric with the existing catalog fallback without a new entry or preference write', async () => {
+    await createComponent(undefined, '14d', { metricIds: [HEALTH_METRIC_IDS.Steps], hasSleep: false },
+      undefined, undefined, '/?metric=body_fat');
+    expect(component.selectedMetric()).toBe('steps');
+    expect(router.parseUrl(router.url).queryParamMap.get('metric')).toBe('steps');
+    expect(component.metricDetailOpen()).toBe(true);
+    expect(updateHealthWorkspacePreferences).not.toHaveBeenCalled();
+    expect(haptics.selection).not.toHaveBeenCalled();
   });
   it('advances the overview window after a midnight refresh or returning from history', async () => {
     await createComponent();
@@ -1147,7 +1271,7 @@ describe('HealthWorkspaceComponent', () => {
     });
   });
 
-  it('restores and persists the account-owned metric and range without adding query parameters', async () => {
+  it('restores account preferences and records metric switches in the URL while keeping the range account-owned', async () => {
     await createComponent(undefined, '90d', {}, HEALTH_METRIC_IDS.Steps);
 
     expect(component.routeState().metric).toBe(HEALTH_METRIC_IDS.Steps);
@@ -1164,7 +1288,8 @@ describe('HealthWorkspaceComponent', () => {
       metric: HEALTH_METRIC_IDS.HeartRateVariability,
       range: '14d',
     });
-    expect(router.url).not.toContain('?');
+    expect(router.parseUrl(router.url).queryParamMap.get('metric')).toBe(HEALTH_METRIC_IDS.HeartRateVariability);
+    expect(router.parseUrl(router.url).queryParamMap.has('range')).toBe(false);
     expect(component.isSavingPreferences()).toBe(false);
   });
 
@@ -1790,7 +1915,7 @@ describe('HealthWorkspaceComponent', () => {
     expect(loadMetricRange).toHaveBeenCalledTimes(3);
   });
 
-  it('opens Sleep as local workspace state and reuses the normalized Sleep trend surface', async () => {
+  it('opens Sleep in metric history and reuses the normalized Sleep trend surface', async () => {
     await createComponent();
     component.selectMetric('sleep');
     fixture.detectChanges();
@@ -1798,7 +1923,7 @@ describe('HealthWorkspaceComponent', () => {
     fixture.detectChanges();
 
     expect(component.routeState()).toEqual({ metric: 'sleep', range: '30d', endDate: todayDate });
-    expect(router.url).not.toContain('?');
+    expect(router.parseUrl(router.url).queryParamMap.get('metric')).toBe('sleep');
     expect((fixture.nativeElement as HTMLElement).querySelector('.sleep-chart-stub')).toBeTruthy();
     expect((fixture.nativeElement as HTMLElement).querySelector('table caption')?.textContent)
       .toContain('Normalized Sleep sessions by source');
