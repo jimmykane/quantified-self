@@ -79,10 +79,14 @@ describe('ChartsSleepTrendComponent', () => {
   });
 
   it('omits a duplicated title when the Health tile supplies its own header', () => {
-    fixture.componentRef.setInput('hideTitle', true); fixture.detectChanges();
+    fixture.componentRef.setInput('hideTitle', true);
+    fixture.componentRef.setInput('overview', true); fixture.detectChanges();
     expect(fixture.nativeElement.querySelector('.title-row')).toBeNull();
     expect(fixture.nativeElement.querySelector('.sleep-stats')).not.toBeNull();
+    expect(fixture.nativeElement.querySelector('.sleep-layout-overview')).not.toBeNull();
+    fixture.componentRef.setInput('overview', false);
     fixture.componentRef.setInput('hideTitle', false); fixture.detectChanges();
+    expect(fixture.nativeElement.querySelector('.sleep-layout-overview')).toBeNull();
     expect(fixture.nativeElement.querySelector('.title-row')?.textContent).toContain('Sleep');
   });
 

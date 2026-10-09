@@ -49,11 +49,11 @@
         </div>
       }
       <app-health-metric-series-chart [model]="chart.model" [startTimeMs]="view.window.startTimeMs" [endTimeMs]="view.window.endTimeMs"
-        [darkTheme]="darkTheme()" [unitSettings]="user().settings.unitSettings" [fillHeight]="!overview()" [compact]="overview()" [thumbnail]="thumbnail()"
+        [darkTheme]="darkTheme()" [unitSettings]="user().settings.unitSettings" [fillHeight]="true" [compact]="overview()" [thumbnail]="thumbnail()"
         [timelineNotes]="thumbnail() || showingExample() ? null : timelineNotes()" [statusOverlay]="chart.statusOverlay" [statusDescription]="chart.statusDescription" />
     } @else if (settings().metric === 'sleep' && view.hasData) {
       @if (thumbnail()) { <app-dashboard-chart-thumbnail [preview]="sleepThumbnail()" [darkTheme]="darkTheme()" /> }
-      @else { <app-sleep-trend-chart [hideTitle]="true" [sleepTrend]="view.sleep" [sleepRange]="settings().range === 'today' ? '14d' : $any(settings().range)" [sleepWindowLabel]="view.window.label" [darkTheme]="darkTheme()" [unitSettings]="user().settings.unitSettings" [timelineNotes]="showingExample() ? null : timelineNotes()" /> }
+      @else { <app-sleep-trend-chart [hideTitle]="true" [overview]="overview()" [sleepTrend]="view.sleep" [sleepRange]="settings().range === 'today' ? '14d' : $any(settings().range)" [sleepWindowLabel]="view.window.label" [darkTheme]="darkTheme()" [unitSettings]="user().settings.unitSettings" [timelineNotes]="showingExample() ? null : timelineNotes()" /> }
     } @else if (!thumbnail()) {
       <div class="health-tile-empty" role="status"><p>{{ view.availability.reason }}</p>@if (view.sampleOnly) { <button mat-button (click)="selectRange('90d')">Show 90 days</button> }</div>
     } @else { <span class="health-thumbnail-empty">—</span> }

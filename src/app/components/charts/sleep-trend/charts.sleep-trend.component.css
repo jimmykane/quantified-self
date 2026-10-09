@@ -21,6 +21,19 @@
   padding-top: 0;
 }
 
+/* Health overview cards align the normalized Sleep plot with scalar plots. */
+.sleep-layout-overview {
+  padding-bottom: 0;
+}
+
+.sleep-layout-overview .sleep-chart {
+  flex: none;
+  height: var(--health-overview-plot-height, 220px);
+  width: calc(100% - 2 * var(--qs-dashboard-chart-content-inset, 16px));
+  align-self: center;
+  margin-block-start: auto;
+}
+
 .sleep-header {
   display: grid;
   gap: 4px;
