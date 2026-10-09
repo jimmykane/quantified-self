@@ -9,6 +9,7 @@ type Field = [number, number, Buffer];
 function fixture(options: {
   headerSize?: 12 | 14; bigEndian?: boolean; sport?: number; sessionCount?: number;
   withSubSport?: boolean; developer?: boolean; compressed?: boolean; withGPS?: boolean;
+  compressedLap?: boolean; fullSessionDefinition?: boolean; malformedSport?: boolean;
 } = {}): Buffer {
   const parts: Buffer[] = [];
   const u16 = (value: number) => {
@@ -28,7 +29,8 @@ function fixture(options: {
     parts.push(Buffer.concat([Buffer.from([0]), ...fields.map(field => field[2]),
       ...(developer ? [Buffer.from([0xa1, 0xb2, 0xc3])] : [])]));
     if (compressed) parts.push(Buffer.concat([Buffer.from([0x85]),
-      ...fields.filter(field => field[0] !== 253).map(field => field[2])]));
+      ...fields.filter(field => field[0] !== 253).map(field => field[2]),
+      ...(developer ? [Buffer.from([0xa1, 0xb2, 0xc3])] : [])]));
   };
   const category: Field[] = options.withSubSport ? [[6, 0, Buffer.from([0])]] : [];
   message(0, [[0, 0, Buffer.from([4])], [1, 0x84, u16(23)]]);
@@ -40,11 +42,16 @@ function fixture(options: {
     ...(options.withSubSport ? [[1, 0, Buffer.from([0])]] as Field[] : [])]);
   message(19, [[253, 0x86, u32(1000)], [25, 0, Buffer.from([options.sport ?? 82])],
     [26, 2, Buffer.from([7])], [7, 0x86, u32(90000)],
-    ...(options.withSubSport ? [[39, 0, Buffer.from([0])]] as Field[] : [])], options.developer);
+    ...(options.withSubSport ? [[39, 0, Buffer.from([0])]] as Field[] : [])], options.developer, options.compressedLap);
   for (let i = 0; i < (options.sessionCount ?? 1); i++) {
-    message(18, [[253, 0x86, u32(1000)], [2, 0x86, u32(910)], [5, 0, Buffer.from([options.sport ?? 82])],
+    const extraFields: Field[] = options.fullSessionDefinition
+      ? Array.from({ length: 256 }, (_, n) => n).filter(n => ![253, 2, 5, 6, 7, 9, 200].includes(n))
+        .map(n => [n, 13, Buffer.from([0])])
+      : [];
+    message(18, [[253, 0x86, u32(1000)], [2, 0x86, u32(910)],
+      [5, 0, Buffer.from(options.malformedSport ? [82, 82] : [options.sport ?? 82])],
       ...category, [7, 0x86, u32(90000)], [9, 0x86, u32(123456)],
-      [200, 13, Buffer.from([0xde, 0xad, 0xbe, 0xef])]], options.developer);
+      [200, 13, Buffer.from([0xde, 0xad, 0xbe, 0xef])], ...extraFields], options.developer);
   }
   message(34, [[1, 0x84, u16(options.sessionCount ?? 1)]]);
   const data = Buffer.concat(parts), header = Buffer.alloc(options.headerSize ?? 14);
@@ -115,6 +122,28 @@ describe('COROS local snorkeling FIT proof (not enabled for uploads)', () => {
       .toEqual(readFitMessages(input).messages.filter(m => m.globalMessageNumber === 20));
     expect(readFitMessages(output).messages.find(m => m.globalMessageNumber === 18)!.fields.map(f => f.fieldNumber).sort())
       .toEqual([253, 2, 5, 6, 7, 9, 200].sort());
+  });
+
+  it('patches every data record sharing one definition, including compressed lap headers', () => {
+    const input = fixture({ compressedLap: true, developer: true });
+    const output = createCOROSSnorkelingFITProof(input);
+    const before = readFitMessages(input).messages.filter(m => m.globalMessageNumber === 19);
+    const after = readFitMessages(output).messages.filter(m => m.globalMessageNumber === 19);
+    expect(after).toHaveLength(2);
+    expect(after[1].compressedTimestamp).toBe(before[1].compressedTimestamp);
+    expect(after.map(m => m.developerFields)).toEqual(before.map(m => m.developerFields));
+    for (const lap of after) {
+      expect(lap.fields.find(f => f.fieldNumber === 25)!.bytes[0]).toBe(5);
+      expect(lap.fields.find(f => f.fieldNumber === 39)!.bytes[0]).toBe(18);
+    }
+  });
+
+  it('refuses a full definition instead of wrapping its field count', () => {
+    expect(() => createCOROSSnorkelingFITProof(fixture({ fullSessionDefinition: true }))).toThrow('full FIT field definition');
+  });
+
+  it('refuses array-shaped sport fields instead of editing just their first byte', () => {
+    expect(() => createCOROSSnorkelingFITProof(fixture({ malformedSport: true }))).toThrow('expected unsigned type');
   });
 
   it.each([1, 2, 5, 32, 53, 81, 83])('refuses non-snorkeling sport %i, including sailing/diving', sport => {

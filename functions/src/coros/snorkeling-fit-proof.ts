@@ -122,8 +122,9 @@ export function createCOROSSnorkelingFITProof(input: Buffer): Buffer {
     cursor = patch.offset + patch.remove;
   }
   parts.push(input.subarray(cursor, dataEnd));
+  const outputSize = input.length + patches.reduce((growth, patch) => growth + patch.bytes.length - patch.remove, 0);
+  if (outputSize > MAX_BYTES) throw new Error('Converted proof exceeds the FIT size bound.');
   const output = Buffer.concat([...parts, Buffer.alloc(2)]);
-  if (output.length > MAX_BYTES) throw new Error('Converted proof exceeds the FIT size bound.');
   output.writeUInt32LE(output.length - input[0] - 2, 4);
   if (input[0] === 14) output.writeUInt16LE(FitEncoder.calculateCRC(output.subarray(0, 12)), 12);
   output.writeUInt16LE(FitEncoder.calculateCRC(output.subarray(0, -2)), output.length - 2);
