@@ -91,6 +91,9 @@ test('only Angular specs load the compiler plugin and global browser setup', () 
 test('projects retain aliases, isolated forks and the global two-worker bound', () => {
   assert.equal(config.test.maxWorkers, 2);
   assert.equal(config.test.minWorkers, 1);
+  assert.equal(typeof config.test.sequence.sequencer, 'function');
+  assert.equal(config.test.sequence.sequencer.name, 'FrontendSequencer');
+  assert.equal(typeof config.test.sequence.sequencer.prototype.shard, 'function');
   assert.equal(config.test.pool, 'forks');
   assert.deepEqual(config.test.include, ['**/*.spec.ts']);
   assert.deepEqual(config.test.exclude, ordinaryExcludes);
