@@ -213,6 +213,7 @@ export class HistoryImportFormComponent implements OnInit, OnDestroy, OnChanges 
 
   private processChanges() {
     if (this.isDestroyed) return;
+    this.today = dayjs().endOf('day');
     this.syncSharedImportState();
     this.isSubmitting = this.activityState.status === 'pending';
     this.isHistoryImportPending.set(this.activityState.status === 'success'
@@ -380,8 +381,7 @@ export class HistoryImportFormComponent implements OnInit, OnDestroy, OnChanges 
     limitDate.setHours(0, 0, 0, 0);
 
     if (this.serviceName === ServiceNames.COROSAPI) {
-      limitDate.setMonth(limitDate.getMonth() - this.corosHistoryLimitMonths);
-      this.minDate = limitDate;
+      this.minDate = dayjs(limitDate).subtract(this.corosHistoryLimitMonths, 'month').toDate();
       return;
     }
 

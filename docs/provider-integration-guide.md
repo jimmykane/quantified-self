@@ -948,10 +948,12 @@ and failed queue rows so a stale preview cannot reset or recreate already-submit
 Activity history is separate from this Health/Sleep policy. Garmin and Suunto activity-history
 pickers default to the latest two calendar years through today. COROS defaults to its full
 rolling three-month provider limit. Wahoo defaults to the latest two years, or a narrower
-provider limit when one is supplied. Users can select a longer or shorter range before
+provider limit when one is supplied. COROS month-end minima clamp to the last valid day
+of the earlier month, matching the default selection and server policy. Users can select a longer or shorter range before
 submission, subject to each provider's available-history limit. Garmin still starts its
 30-day activity-history cooldown after an accepted request. Keep the selected dates visible
-in confirmation and status state.
+in confirmation and status state. Status and deadline refreshes also refresh the picker's
+current-day maximum, so an open dialog can select today's activities when its cooldown ends on a later day.
 
 - Use the same queue format and processor as webhooks. Separate processing paths drift and create inconsistent duplicate or cleanup behavior.
 - Require the appropriate entitlement and connection state at request time, then re-check in the worker.

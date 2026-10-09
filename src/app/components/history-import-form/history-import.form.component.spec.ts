@@ -6,7 +6,7 @@ import { MatFormFieldModule } from '@angular/material/form-field';
 import { MatInputModule } from '@angular/material/input';
 import { MatCheckboxModule } from '@angular/material/checkbox';
 import { ReactiveFormsModule } from '@angular/forms';
-import { MatNativeDateModule } from '@angular/material/core';
+import { MatDayjsDateModule } from '../../shared/adapters/mat-dayjs-date.module';
 import { MatIconModule } from '@angular/material/icon';
 import { MatButtonModule } from '@angular/material/button';
 import { MatCardModule } from '@angular/material/card';
@@ -116,7 +116,7 @@ describe('HistoryImportFormComponent', () => {
                 MatInputModule,
                 MatCheckboxModule,
                 ReactiveFormsModule,
-                MatNativeDateModule,
+                MatDayjsDateModule,
                 MatIconModule,
                 MatButtonModule,
                 MatCardModule,
@@ -514,6 +514,56 @@ describe('HistoryImportFormComponent', () => {
                 expect(zone.hasPendingMacrotasks).toBe(false);
             },
         );
+
+        it.each([ServiceNames.COROSAPI, ServiceNames.SuuntoApp, ServiceNames.WahooAPI, ServiceNames.GarminAPI])(
+            'allows the current day when the %s cooldown expires on a later day', async provider => {
+                await reopen(provider);
+                vi.useFakeTimers();
+                const cooldownMs = provider === ServiceNames.GarminAPI ? component.garminCooldownDays * 86_400_000 : 86_400_000;
+                fixture.componentRef.setInput('userMetaForService', {
+                    didLastHistoryImport: Date.now(),
+                    processedActivitiesFromLastHistoryImportCount: HISTORY_IMPORT_ACTIVITIES_PER_DAY_LIMIT,
+                });
+                fixture.detectChanges();
+                expect(component.formGroup.disabled).toBe(true);
+
+                await vi.advanceTimersByTimeAsync(cooldownMs);
+                fixture.detectChanges();
+                expect(component.formGroup.enabled).toBe(true);
+                const endDate = component.formGroup.get('endDate')!;
+                endDate.setValue(dayjs().endOf('day'));
+                fixture.detectChanges();
+                expect(endDate.hasError('matDatepickerMax')).toBe(false);
+                expect(component.today.isSame(dayjs(), 'day')).toBe(true);
+
+                endDate.setValue(dayjs().add(1, 'day').endOf('day'));
+                fixture.detectChanges();
+                expect(endDate.hasError('matDatepickerMax')).toBe(true);
+            },
+        );
+
+        it.each([
+            ['2026-12-31', '2026-09-30'],
+            ['2026-05-31', '2026-02-28'],
+            ['2024-05-31', '2024-02-29'],
+        ])('allows the default COROS range at month end on %s', async (currentDate, minimumDate) => {
+            vi.useFakeTimers();
+            vi.setSystemTime(new Date(`${currentDate}T12:00:00`));
+            fixture.destroy();
+            fixture = TestBed.createComponent(HistoryImportFormComponent);
+            component = fixture.componentInstance;
+            component.serviceName = ServiceNames.COROSAPI;
+            component.providerConnected = true;
+            fixture.detectChanges();
+            await fixture.whenStable();
+            component.formGroup.get('accepted')!.setValue(true);
+            fixture.detectChanges();
+
+            expect(dayjs(component.minDate).format('YYYY-MM-DD')).toBe(minimumDate);
+            expect(dayjs(component.formGroup.get('startDate')!.value).format('YYYY-MM-DD')).toBe(minimumDate);
+            expect(component.formGroup.get('startDate')!.hasError('matDatepickerMin')).toBe(false);
+            expect(component.formGroup.valid).toBe(true);
+        });
 
         it.each([
             [ServiceNames.GarminAPI, 'getGarminHealthSyncAvailabilityForCurrentUser', 'backfillGarminHealthForCurrentUser', 'Sleep & available Health history'],
