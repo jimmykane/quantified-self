@@ -123,6 +123,7 @@ export class HistoryImportFormComponent implements OnInit, OnDestroy, OnChanges 
   private isDestroyed = false;
   private activityHistoryLeaseTimer: ReturnType<typeof globalThis.setTimeout> | null = null;
   private currentUserID: string | null = null;
+  private currentUser: User | null = null;
   private sleepSyncStateSubscription: Subscription | null = null;
   private sleepSyncStateKey: string | null = null;
   private healthAvailabilityRequestKey: string | null = null;
@@ -152,16 +153,14 @@ export class HistoryImportFormComponent implements OnInit, OnDestroy, OnChanges 
 
     const user = await this.authService.getUser();
     if (this.isDestroyed) return;
-    this.isPro = AppUserUtilities.hasProAccess(user);
+    this.currentUser = user;
     this.currentUserID = this.coerceUserID(user);
 
     this.processChanges();
     this.authSubscription = this.authService.user$.subscribe(user => {
-      const userID = this.coerceUserID(user);
-      const isPro = AppUserUtilities.hasProAccess(user);
-      if (this.isDestroyed || (userID === this.currentUserID && isPro === this.isPro)) return;
-      this.currentUserID = userID;
-      this.isPro = isPro;
+      if (this.isDestroyed) return;
+      this.currentUser = user;
+      this.currentUserID = this.coerceUserID(user);
       this.processChanges();
       this.changeDetectorRef.markForCheck();
     });
@@ -214,6 +213,7 @@ export class HistoryImportFormComponent implements OnInit, OnDestroy, OnChanges 
 
   private processChanges() {
     if (this.isDestroyed) return;
+    this.isPro = AppUserUtilities.hasProAccess(this.currentUser);
     this.today = dayjs().endOf('day');
     this.syncSharedImportState();
     this.isSubmitting = this.activityState.status === 'pending';
@@ -318,9 +318,11 @@ export class HistoryImportFormComponent implements OnInit, OnDestroy, OnChanges 
   private scheduleCooldownRefresh(): void {
     if (this.cooldownTimer !== null) globalThis.clearTimeout(this.cooldownTimer);
     this.cooldownTimer = null;
-    // Refresh date limits at local midnight even when no import deadline is pending.
+    // Refresh date limits and expiring grace access even without an import deadline.
+    const graceExpiryMs = AppUserUtilities.isProUser(this.currentUser)
+      ? null : AppUserUtilities.getGracePeriodExpiryMs(this.currentUser);
     const futureDates = [this.activityState.nextAllowedAtMs, this.nextImportAvailableDate?.getTime(), this.sleepBackfillNextAllowedAtMs,
-      this.activityEstimatedCompletionAtMs, dayjs().add(1, 'day').startOf('day').valueOf()]
+      this.activityEstimatedCompletionAtMs, graceExpiryMs, dayjs().add(1, 'day').startOf('day').valueOf()]
       .filter((value): value is number => typeof value === 'number' && value > Date.now());
     if (!futureDates.length || this.isDestroyed) return;
     this.cooldownTimer = this.ngZone.runOutsideAngular(() => globalThis.setTimeout(() => {
@@ -396,7 +398,7 @@ export class HistoryImportFormComponent implements OnInit, OnDestroy, OnChanges 
   async onSubmit(event: Event) {
     event.preventDefault();
     if (this.isDestroyed || !this.formGroup) return;
-    this.syncActivityHistoryImportRunning();
+    this.processChanges();
     if (!this.isPro || !this.currentUserID || this.isLoadingParent || this.isSubmitting || this.formGroup.disabled || this.isHistoryImportPending() || this.isActivityHistoryImportRunning()) return;
     if (!this.formGroup.valid) {
       this.validateAllFormFields(this.formGroup);
@@ -713,8 +715,10 @@ export class HistoryImportFormComponent implements OnInit, OnDestroy, OnChanges 
   async onSleepBackfill(event: Event) {
     event.preventDefault();
     event.stopPropagation();
+    if (this.isDestroyed || !this.formGroup) return;
+    this.processChanges();
     const provider = this.sleepBackfillProvider;
-    if (this.isDestroyed || !this.currentUserID || !provider || !this.canSubmitSleepBackfill) {
+    if (!this.currentUserID || !provider || !this.canSubmitSleepBackfill) {
       return;
     }
     const historyName = this.historyBackfillScopeTitle;

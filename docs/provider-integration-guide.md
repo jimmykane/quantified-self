@@ -958,6 +958,9 @@ so open pickers stay current without changing the selected range or producing ha
 Stored activity-history metadata describes the last request and its next-available date.
 Show this as **History import cooldown**; the metadata remains after queued processing completes.
 Retained Garmin acknowledgements state that the request was accepted without renewing a delivery-time promise on reopen.
+Import controls also refresh on account access updates and Pro grace-period expiry using the same background timer.
+Recheck access when an action is clicked because background timers may be delayed. Access changes must preserve
+already dispatched requests and their retained results.
 
 - Use the same queue format and processor as webhooks. Separate processing paths drift and create inconsistent duplicate or cleanup behavior.
 - Require the appropriate entitlement and connection state at request time, then re-check in the worker.

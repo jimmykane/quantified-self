@@ -1105,7 +1105,7 @@ Activity-history date pickers for Garmin and Suunto default to the latest **2 ca
 
 ## Sleep data
 
-History import buttons lock as soon as a request starts. Closing the dialog after the request is sent does not cancel it; reopening the tool in the same app keeps the pending state and shows the request result when it arrives. Activity history and Sleep/Health history have separate requests and cooldowns. A started or queued request means the import was accepted; records may arrive later.
+History import buttons lock as soon as a request starts. Closing the dialog after the request is sent does not cancel it; reopening the tool in the same app keeps the pending state and shows the request result when it arrives. Activity history and Sleep/Health history have separate requests and cooldowns. A started or queued request means the import was accepted; records may arrive later. Starting another import requires current Pro access or an unexpired Pro grace period.
 
 Sleep/Health import stays disabled while **Checking import status**, until the server confirms when another import is allowed. If that check fails or does not respond within ten seconds, use **Retry status check** before importing. During a cooldown, the tool shows the next available date and keeps the action disabled until that time.
 

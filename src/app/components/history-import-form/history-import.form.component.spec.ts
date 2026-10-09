@@ -234,6 +234,109 @@ describe('HistoryImportFormComponent', () => {
             expect(haptics.error).not.toHaveBeenCalled();
         });
 
+        it('expires Pro grace access while the dialog stays open without another profile update', async () => {
+            vi.useFakeTimers();
+            mockAuthService.user$ = new Subject<{ uid: string; stripeRole: string; gracePeriodUntil: number }>();
+            mockAuthService.getUser.mockResolvedValue({ uid: '123', stripeRole: 'free', gracePeriodUntil: Date.now() + 1_000 });
+            await reopen();
+            expect(component.isPro).toBe(true);
+            expect(component.formGroup.enabled).toBe(true);
+            expect(component.canSubmitSleepBackfill).toBe(true);
+
+            await vi.advanceTimersByTimeAsync(1_000);
+            fixture.detectChanges();
+            expect(component.isPro).toBe(false);
+            expect(component.formGroup.disabled).toBe(true);
+            expect(component.canSubmitSleepBackfill).toBe(false);
+            expect(fixture.nativeElement.textContent).toContain('History import is a Pro feature');
+            expect(haptics.selection).not.toHaveBeenCalled();
+            expect(haptics.success).not.toHaveBeenCalled();
+            expect(haptics.error).not.toHaveBeenCalled();
+        });
+
+        it.each(['activity', 'sleep'] as const)('rechecks Pro grace expiry before %s submission when a background timer has not fired', async domain => {
+            vi.useFakeTimers();
+            mockAuthService.user$ = new Subject<{ uid: string; stripeRole: string; gracePeriodUntil: number }>();
+            const expiresAtMs = Date.now() + 1_000;
+            mockAuthService.getUser.mockResolvedValue({ uid: '123', stripeRole: 'free', gracePeriodUntil: expiresAtMs });
+            await reopen();
+            vi.setSystemTime(expiresAtMs);
+
+            await submit(domain);
+            expect(mockUserService.importServiceHistoryForCurrentUser).not.toHaveBeenCalled();
+            expect(mockUserService.backfillCorosSleepForCurrentUser).not.toHaveBeenCalled();
+            expect(haptics.selection).not.toHaveBeenCalled();
+            expect(haptics.success).not.toHaveBeenCalled();
+            expect(haptics.error).not.toHaveBeenCalled();
+        });
+
+        it.each([
+            ['extended', 1_000, 2_000],
+            ['shortened', 2_000, 1_000],
+        ] as const)('uses the latest %s grace deadline even when Pro eligibility is unchanged', async (_change, initialDuration, updatedDuration) => {
+            vi.useFakeTimers();
+            const user$ = new Subject<{ uid: string; stripeRole: string; gracePeriodUntil: number }>();
+            mockAuthService.user$ = user$;
+            const startedAtMs = Date.now();
+            mockAuthService.getUser.mockResolvedValue({ uid: '123', stripeRole: 'free', gracePeriodUntil: startedAtMs + initialDuration });
+            await reopen();
+            await vi.advanceTimersByTimeAsync(500);
+            user$.next({ uid: '123', stripeRole: 'free', gracePeriodUntil: startedAtMs + updatedDuration });
+
+            const firstDeadline = Math.min(initialDuration, updatedDuration);
+            await vi.advanceTimersByTimeAsync(firstDeadline - 500);
+            expect(component.isPro).toBe(updatedDuration > firstDeadline);
+            await vi.advanceTimersByTimeAsync(Math.max(initialDuration, updatedDuration) - firstDeadline);
+            expect(component.isPro).toBe(false);
+            expect(component.formGroup.disabled).toBe(true);
+            expect(haptics.selection).not.toHaveBeenCalled();
+            expect(haptics.error).not.toHaveBeenCalled();
+        });
+
+        it('keeps paid Pro access available after its old grace deadline expires', async () => {
+            vi.useFakeTimers();
+            mockAuthService.user$ = new Subject<{ uid: string; stripeRole: string; gracePeriodUntil: number }>();
+            mockAuthService.getUser.mockResolvedValue({ uid: '123', stripeRole: 'pro', gracePeriodUntil: Date.now() + 1_000 });
+            await reopen();
+            await vi.advanceTimersByTimeAsync(1_000);
+            fixture.detectChanges();
+            expect(component.isPro).toBe(true);
+            expect(component.formGroup.enabled).toBe(true);
+            expect(component.canSubmitSleepBackfill).toBe(true);
+            expect(haptics.selection).not.toHaveBeenCalled();
+            expect(haptics.error).not.toHaveBeenCalled();
+        });
+
+        it.each(['activity', 'sleep'] as const)('preserves an accepted %s request through grace expiry and restored access', async domain => {
+            vi.useFakeTimers();
+            const user$ = new Subject<{ uid: string; stripeRole: string; gracePeriodUntil?: number }>();
+            mockAuthService.user$ = user$;
+            mockAuthService.getUser.mockResolvedValue({ uid: '123', stripeRole: 'free', gracePeriodUntil: Date.now() + 1_000 });
+            await reopen();
+            const call = domain === 'activity' ? mockUserService.importServiceHistoryForCurrentUser : mockUserService.backfillCorosSleepForCurrentUser;
+            let resolve!: (value: unknown) => void;
+            call.mockReturnValueOnce(new Promise(value => resolve = value));
+            const submission = submit(domain);
+
+            await vi.advanceTimersByTimeAsync(1_000);
+            expect(component.isPro).toBe(false);
+            await submit(domain);
+            user$.next({ uid: '123', stripeRole: 'pro' });
+            expect(component.isPro).toBe(true);
+            await submit(domain);
+            expect(call).toHaveBeenCalledTimes(1);
+
+            resolve(domain === 'activity'
+                ? { stats: { successCount: 11 } }
+                : { queued: 4, nextAllowedAtMs: Date.now() + 60_000 });
+            await submission;
+            expect(domain === 'activity' ? component.pendingImportResult()?.successCount : component.pendingSleepBackfillResult()?.queued)
+                .toBe(domain === 'activity' ? 11 : 4);
+            expect(haptics.selection).toHaveBeenCalledTimes(1);
+            expect(haptics.success).toHaveBeenCalledTimes(1);
+            expect(haptics.error).not.toHaveBeenCalled();
+        });
+
         it.each(['activity', 'sleep'] as const)('keeps %s locked on reopen and retains late success without stale feedback', async domain => {
             await reopen();
             const call = domain === 'activity' ? mockUserService.importServiceHistoryForCurrentUser : mockUserService.backfillCorosSleepForCurrentUser;
