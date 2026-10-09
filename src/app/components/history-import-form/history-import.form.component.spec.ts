@@ -25,7 +25,7 @@ import { of, Subject } from 'rxjs';
 import { ServiceNames, UserServiceMetaInterface } from '@sports-alliance/sports-lib';
 import { NoopAnimationsModule } from '@angular/platform-browser/animations';
 import { Component, Input, NO_ERRORS_SCHEMA } from '@angular/core';
-import { CommonModule } from '@angular/common'; // Added CommonModule
+import { CommonModule, formatDate } from '@angular/common'; // Added CommonModule
 import { HISTORY_IMPORT_ACTIVITIES_PER_DAY_LIMIT } from '@shared/history-import.constants';
 import dayjs from 'dayjs';
 import { SleepSyncState } from '@shared/sleep';
@@ -155,11 +155,11 @@ describe('HistoryImportFormComponent', () => {
     describe('shared request lifecycle', () => {
         afterEach(() => vi.useRealTimers());
 
-        async function reopen() {
+        async function reopen(provider = ServiceNames.COROSAPI) {
             fixture.destroy();
             fixture = TestBed.createComponent(HistoryImportFormComponent);
             component = fixture.componentInstance;
-            component.serviceName = ServiceNames.COROSAPI;
+            component.serviceName = provider;
             component.providerConnected = true;
             fixture.detectChanges();
             await fixture.whenStable();
@@ -226,16 +226,19 @@ describe('HistoryImportFormComponent', () => {
             expect(fixture.nativeElement.textContent).toContain('request did not complete successfully');
         });
 
-        it('releases the activity lock if the dialog closes before dispatch', async () => {
+        it('dispatches activity immediately and retains a request when the dialog closes right after the click', async () => {
             await reopen();
-            vi.useFakeTimers();
+            let resolve!: (value: unknown) => void;
+            mockUserService.importServiceHistoryForCurrentUser.mockReturnValueOnce(new Promise(value => resolve = value));
             const submission = submit('activity');
+            expect(mockUserService.importServiceHistoryForCurrentUser).toHaveBeenCalledTimes(1);
             fixture.destroy();
-            await vi.advanceTimersByTimeAsync(100);
+            resolve({ stats: { successCount: 11 } });
             await submission;
-            expect(mockUserService.importServiceHistoryForCurrentUser).not.toHaveBeenCalled();
             await reopen();
-            expect(component.formGroup.enabled).toBe(true);
+            expect(component.formGroup.disabled).toBe(true);
+            expect(fixture.nativeElement.textContent).toContain('11 activities scheduled');
+            expect(snackBar.open).not.toHaveBeenCalled();
         });
 
         it.each(['activity', 'sleep'] as const)('displays %s cooldowns without error reports and retains them through reopen until expiry', async domain => {
@@ -407,6 +410,122 @@ describe('HistoryImportFormComponent', () => {
             expect(fixture.nativeElement.querySelector('app-status-info[title="Import started"]')).toBeNull();
         });
 
+        it.each([ServiceNames.COROSAPI, ServiceNames.SuuntoApp, ServiceNames.WahooAPI, ServiceNames.GarminAPI])(
+            'unlocks %s metadata cooldown at the exact timer deadline', async provider => {
+                await reopen(provider);
+                vi.useFakeTimers();
+                const cooldownMs = provider === ServiceNames.GarminAPI ? component.garminCooldownDays * 86_400_000 : 86_400_000;
+                fixture.componentRef.setInput('userMetaForService', {
+                    didLastHistoryImport: Date.now() - cooldownMs + 1_000,
+                    processedActivitiesFromLastHistoryImportCount: HISTORY_IMPORT_ACTIVITIES_PER_DAY_LIMIT,
+                });
+                fixture.detectChanges();
+                expect(component.formGroup.disabled).toBe(true);
+                await vi.advanceTimersByTimeAsync(1_000);
+                fixture.detectChanges();
+                expect(component.isAllowedToDoHistoryImport).toBe(true);
+                expect(component.formGroup.enabled).toBe(true);
+            },
+        );
+
+        it.each([
+            [ServiceNames.GarminAPI, 'getGarminHealthSyncAvailabilityForCurrentUser', 'backfillGarminHealthForCurrentUser', 'Sleep & available Health history'],
+            [ServiceNames.SuuntoApp, 'getSuuntoHealthSyncAvailabilityForCurrentUser', 'backfillSuuntoSleepForCurrentUser', 'Sleep & 24/7 Health history'],
+        ] as const)('retains the accepted %s Health scope when availability changes on reopen', async (provider, availability, backfill, scope) => {
+            mockUserService[availability].mockResolvedValueOnce(true);
+            await reopen(provider);
+            mockUserService[backfill].mockResolvedValueOnce({
+                queued: 10, sleepQueued: 10, healthQueued: 20,
+                startDate: '2026-07-09', endDate: '2026-10-09', nextAllowedAtMs: Date.now() + 60_000,
+            });
+            await submit('sleep');
+            await reopen(provider);
+            expect(component.isSleepAndHealthBackfill).toBe(false);
+            expect(component.historyBackfillResultText).toBe(`${scope} import started for 10 Sleep date ranges and 20 Health requests`);
+        });
+
+        it('handles the actual Garmin activity cooldown message across reopenings', async () => {
+            await reopen(ServiceNames.GarminAPI);
+            const nextAllowedAtMs = Date.now() + 60_000;
+            mockUserService.importServiceHistoryForCurrentUser.mockRejectedValueOnce(Object.assign(
+                new Error(`History import cannot happen before ${new Date(nextAllowedAtMs).toISOString()}`),
+                { code: 'functions/permission-denied' },
+            ));
+            await submit('activity');
+            await reopen(ServiceNames.GarminAPI);
+            expect(mockLoggerService.error).not.toHaveBeenCalled();
+            expect(haptics.error).not.toHaveBeenCalled();
+            expect(component.formGroup.disabled).toBe(true);
+            expect(component.nextImportAvailableDate.getTime()).toBe(nextAllowedAtMs);
+        });
+
+        it.each([ServiceNames.COROSAPI, ServiceNames.GarminAPI])('shows the retained %s next-available date after reopening later', async provider => {
+            await reopen(provider);
+            vi.useFakeTimers();
+            mockUserService.importServiceHistoryForCurrentUser.mockResolvedValueOnce({ stats: { successCount: HISTORY_IMPORT_ACTIVITIES_PER_DAY_LIMIT } });
+            await submit('activity');
+            const deadline = component.nextImportAvailableDate.getTime();
+            await vi.advanceTimersByTimeAsync(3_600_000);
+            await reopen(provider);
+            const text = fixture.nativeElement.textContent;
+            expect(text).toContain(`Next import available on ${formatDate(deadline, 'medium', 'en-US')}`);
+            expect(text).not.toContain('Next import available in 30 days');
+        });
+
+        it.each([ServiceNames.WahooAPI, ServiceNames.GarminAPI])('retains a late %s running response and blocks immediate retries across reopening', async provider => {
+            await reopen(provider);
+            vi.useFakeTimers();
+            let reject!: (error: Error) => void;
+            mockUserService.importServiceHistoryForCurrentUser.mockReturnValueOnce(new Promise((_resolve, failure) => reject = failure));
+            const submission = submit('activity');
+            fixture.destroy();
+            reject(Object.assign(new Error('History import is already running.'), { code: 'functions/already-exists' }));
+            await submission;
+            await reopen(provider);
+            expect(component.isActivityHistoryImportRunning()).toBe(true);
+            expect(component.formGroup.disabled).toBe(true);
+            expect(fixture.nativeElement.querySelector('app-status-info[title="Import already running"]')).not.toBeNull();
+            await submit('activity');
+            expect(mockUserService.importServiceHistoryForCurrentUser).toHaveBeenCalledTimes(1);
+            expect(snackBar.open).not.toHaveBeenCalled();
+            expect(haptics.error).not.toHaveBeenCalled();
+            await vi.advanceTimersByTimeAsync(5_000);
+            fixture.detectChanges();
+            expect(component.formGroup.enabled).toBe(true);
+        });
+
+        it.each([ServiceNames.WahooAPI, ServiceNames.GarminAPI])('keeps %s locked by live metadata after its local retry buffer expires', async provider => {
+            await reopen(provider);
+            vi.useFakeTimers();
+            mockUserService.importServiceHistoryForCurrentUser.mockRejectedValueOnce(Object.assign(
+                new Error('History import is already running.'), { code: 'functions/already-exists' },
+            ));
+            await submit('activity');
+            fixture.componentRef.setInput('userMetaForService', { historyImportLeaseExpiresAt: Date.now() + 10_000 });
+            fixture.detectChanges();
+            await vi.advanceTimersByTimeAsync(5_000);
+            expect(component.formGroup.disabled).toBe(true);
+            await vi.advanceTimersByTimeAsync(5_000);
+            expect(component.formGroup.enabled).toBe(true);
+        });
+
+        it.each([0.25, 1.25])('keeps the %.2f-day completion estimate anchored to acceptance across reopening', async days => {
+            await reopen();
+            vi.useFakeTimers();
+            const acceptedAtMs = Date.now();
+            const durationMs = days * 86_400_000;
+            const expectedTime = dayjs(acceptedAtMs + durationMs).format('h:mm A');
+            mockUserService.importServiceHistoryForCurrentUser.mockResolvedValueOnce({ stats: { successCount: component.processingCapacityPerDay * days } });
+            await submit('activity');
+            await vi.advanceTimersByTimeAsync(3_600_000);
+            await reopen();
+            expect(component.estimatedCompletionVerbal).toContain(expectedTime);
+            await vi.advanceTimersByTimeAsync(durationMs - 3_600_000);
+            fixture.detectChanges();
+            expect(fixture.nativeElement.textContent).toContain('The initial processing estimate has passed');
+            expect(component.formGroup.disabled).toBe(true);
+        });
+
         it.each(['activity', 'sleep'] as const)('releases a cancelled %s request without error feedback', async domain => {
             await reopen();
             const call = domain === 'activity' ? mockUserService.importServiceHistoryForCurrentUser : mockUserService.backfillCorosSleepForCurrentUser;
@@ -542,19 +661,24 @@ describe('HistoryImportFormComponent', () => {
             expect(haptics.selection).not.toHaveBeenCalled();
         });
 
-        it('skips submission when live metadata becomes busy during the render delay', async () => {
+        it('keeps the dispatched request locked when live metadata becomes busy', async () => {
             vi.useFakeTimers();
+            let resolveImport!: (value: boolean) => void;
+            mockUserService.importServiceHistoryForCurrentUser.mockReturnValueOnce(new Promise<boolean>(resolve => { resolveImport = resolve; }));
             const submission = component.onSubmit(new Event('submit'));
             fixture.componentRef.setInput('userMetaForService', { historyImportLeaseExpiresAt: Date.now() + 5_000 });
             fixture.detectChanges();
-            await vi.advanceTimersByTimeAsync(100);
+            await component.onSubmit(new Event('submit'));
+            expect(mockUserService.importServiceHistoryForCurrentUser).toHaveBeenCalledTimes(1);
+            expect(component.isSubmitting).toBe(true);
+            resolveImport(true);
             await submission;
 
-            expect(mockUserService.importServiceHistoryForCurrentUser).not.toHaveBeenCalled();
+            expect(mockUserService.importServiceHistoryForCurrentUser).toHaveBeenCalledTimes(1);
             expect(component.formGroup.disabled).toBe(true);
             expect(component.isSubmitting).toBe(false);
             expect(haptics.selection).toHaveBeenCalledTimes(1);
-            expect(haptics.success).not.toHaveBeenCalled();
+            expect(haptics.success).toHaveBeenCalledTimes(1);
             expect(haptics.error).not.toHaveBeenCalled();
         });
 

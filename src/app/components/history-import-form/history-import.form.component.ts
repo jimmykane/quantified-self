@@ -47,6 +47,9 @@ export interface HistoryImportResult {
 
 type HealthAvailabilityState = 'idle' | 'loading' | 'available' | 'unavailable' | 'error';
 
+// Keep contention feedback visible and prevent immediate repeats while live metadata catches up.
+const HISTORY_IMPORT_BUSY_RETRY_DELAY_MS = 5_000;
+
 
 @Component({
   selector: 'app-history-import-form',
@@ -238,12 +241,12 @@ export class HistoryImportFormComponent implements OnInit, OnDestroy, OnChanges 
         }
         this.nextImportAvailableDate = new Date(this.userMetaForService.didLastHistoryImport + ((this.userMetaForService.processedActivitiesFromLastHistoryImportCount / HISTORY_IMPORT_ACTIVITIES_PER_DAY_LIMIT) * 24 * 60 * 60 * 1000)) // 7 days for  285,7142857143 per day
         this.isAllowedToDoHistoryImport =
-          this.nextImportAvailableDate < (new Date())
+          this.nextImportAvailableDate.getTime() <= Date.now()
           || this.userMetaForService.processedActivitiesFromLastHistoryImportCount === 0;
         break;
       case ServiceNames.GarminAPI:
         this.nextImportAvailableDate = new Date(this.userMetaForService.didLastHistoryImport + (GARMIN_HISTORY_IMPORT_COOLDOWN_DAYS * 24 * 60 * 60 * 1000));
-        this.isAllowedToDoHistoryImport = this.nextImportAvailableDate < new Date()
+        this.isAllowedToDoHistoryImport = this.nextImportAvailableDate.getTime() <= Date.now()
         if (this.isMissingGarminPermissions) {
           this.isAllowedToDoHistoryImport = true; // Still allow showing the form
         }
@@ -311,7 +314,8 @@ export class HistoryImportFormComponent implements OnInit, OnDestroy, OnChanges 
   private scheduleCooldownRefresh(): void {
     if (this.cooldownTimer !== null) globalThis.clearTimeout(this.cooldownTimer);
     this.cooldownTimer = null;
-    const futureDates = [this.activityState.nextAllowedAtMs, this.nextImportAvailableDate?.getTime(), this.sleepBackfillNextAllowedAtMs]
+    const futureDates = [this.activityState.nextAllowedAtMs, this.nextImportAvailableDate?.getTime(), this.sleepBackfillNextAllowedAtMs,
+      this.activityEstimatedCompletionAtMs]
       .filter((value): value is number => typeof value === 'number' && value > Date.now());
     if (!futureDates.length || this.isDestroyed) return;
     this.cooldownTimer = globalThis.setTimeout(() => {
@@ -346,9 +350,11 @@ export class HistoryImportFormComponent implements OnInit, OnDestroy, OnChanges 
     const expiresAt = providerName
       ? this.userMetaForService?.historyImportLeaseExpiresAt
       : undefined;
-    const remainingMs = typeof expiresAt === 'number' && Number.isFinite(expiresAt)
-      ? expiresAt - Date.now()
+    const retryAllowedAtMs = providerName && this.activityState.status === 'running'
+      ? this.activityState.retryAllowedAtMs ?? 0
       : 0;
+    const leaseExpiry = typeof expiresAt === 'number' && Number.isFinite(expiresAt) ? expiresAt : 0;
+    const remainingMs = Math.max(leaseExpiry, retryAllowedAtMs) - Date.now();
     this.isActivityHistoryImportRunning.set(remainingMs > 0);
     if (remainingMs <= 0 || this.isDestroyed) return;
     this.activityHistoryLeaseTimer = globalThis.setTimeout(() => {
@@ -411,9 +417,6 @@ export class HistoryImportFormComponent implements OnInit, OnDestroy, OnChanges 
     this.formGroup.disable({ emitEvent: false });
     this.changeDetectorRef.detectChanges();
 
-    // Force UI render cycle
-    await new Promise(resolve => setTimeout(resolve, 100));
-
     try {
       if (!this.isCurrentView(userID, serviceName, generation)) return;
       this.syncActivityHistoryImportRunning();
@@ -432,7 +435,7 @@ export class HistoryImportFormComponent implements OnInit, OnDestroy, OnChanges 
           ? result.stats.successCount / HISTORY_IMPORT_ACTIVITIES_PER_DAY_LIMIT * 86_400_000
           : null;
       this.importState.finish(key, operation, {
-        status: 'success', result, range: { startDate, endDate },
+        status: 'success', result, range: { startDate, endDate }, acceptedAtMs: Date.now(),
         ...(cooldownMs !== null ? { nextAllowedAtMs: Date.now() + cooldownMs } : {}),
       });
       if (!this.isCurrentView(userID, serviceName, generation)) return;
@@ -470,7 +473,9 @@ export class HistoryImportFormComponent implements OnInit, OnDestroy, OnChanges 
       }
       if ((serviceName === ServiceNames.WahooAPI || serviceName === ServiceNames.GarminAPI)
         && (e?.code === 'functions/already-exists' || e?.code === 'already-exists')) {
-        this.importState.finish(key, operation, { status: 'idle' });
+        this.importState.finish(key, operation, {
+          status: 'running', retryAllowedAtMs: Date.now() + HISTORY_IMPORT_BUSY_RETRY_DELAY_MS,
+        });
         if (!this.isCurrentView(userID, serviceName, generation)) return;
         this.snackBar.open(this.historyImportRunningMessage, undefined, {
           duration: 4000,
@@ -530,8 +535,13 @@ export class HistoryImportFormComponent implements OnInit, OnDestroy, OnChanges 
 
   get estimatedCompletionVerbal(): string {
     const stats = this.pendingImportResult();
-    if (!stats || stats.successCount === 0) {
+    const completionAtMs = this.activityEstimatedCompletionAtMs;
+    if (!stats || completionAtMs === null) {
       return '';
+    }
+
+    if (completionAtMs <= Date.now()) {
+      return 'The initial processing estimate has passed. Activities may still be arriving.';
     }
 
     const count = stats.successCount;
@@ -546,13 +556,21 @@ export class HistoryImportFormComponent implements OnInit, OnDestroy, OnChanges 
 
     if (totalHours < 24) {
       // "Estimated to finish by 4:00 PM today/tomorrow"
-      const completionDate = dayjs().add(totalHours, 'hour');
+      const completionDate = dayjs(completionAtMs);
       return `Estimated to finish by ${completionDate.format('h:mm A')} ${completionDate.fromNow()}.`;
     }
 
     // > 1 day
-    const completionDate = dayjs().add(totalDays, 'day');
-    return `Estimated to finish ${completionDate.fromNow()} (${completionDate.format('dddd')}).`;
+    const completionDate = dayjs(completionAtMs);
+    return `Estimated to finish ${completionDate.fromNow()} (${completionDate.format('dddd [at] h:mm A')}).`;
+  }
+
+  private get activityEstimatedCompletionAtMs(): number | null {
+    const count = this.pendingImportResult()?.successCount;
+    const acceptedAtMs = this.activityState.acceptedAtMs;
+    return typeof count === 'number' && count > 0 && typeof acceptedAtMs === 'number'
+      ? acceptedAtMs + count / this.processingCapacityPerDay * 86_400_000
+      : null;
   }
 
   get sleepBackfillProvider(): SleepProvider | null {
@@ -609,19 +627,7 @@ export class HistoryImportFormComponent implements OnInit, OnDestroy, OnChanges 
     } else if (!this.isSleepAndHealthBackfill) {
       this.historyBackfillScopeTitle = 'Sleep history';
     } else {
-      switch (this.serviceName) {
-        case ServiceNames.COROSAPI:
-          this.historyBackfillScopeTitle = 'Sleep & daily Health history';
-          break;
-        case ServiceNames.SuuntoApp:
-          this.historyBackfillScopeTitle = 'Sleep & 24/7 Health history';
-          break;
-        case ServiceNames.GarminAPI:
-          this.historyBackfillScopeTitle = 'Sleep & available Health history';
-          break;
-        default:
-          this.historyBackfillScopeTitle = 'Sleep & Health history';
-      }
+      this.historyBackfillScopeTitle = this.getCombinedHistoryBackfillScopeTitle();
     }
 
     this.historyBackfillAriaLabel = this.checksHealthBackfillAvailability
@@ -648,12 +654,21 @@ export class HistoryImportFormComponent implements OnInit, OnDestroy, OnChanges 
     }
     const sleepQueued = result.sleepQueued ?? result.queued;
     const healthQueued = result.healthQueued;
-    this.historyBackfillResultText = this.isSleepAndHealthBackfill
-      && typeof healthQueued === 'number' && healthQueued > 0
+    const acceptedScope = this.getCombinedHistoryBackfillScopeTitle();
+    this.historyBackfillResultText = typeof healthQueued === 'number' && healthQueued > 0
       ? healthQueued === sleepQueued
-        ? `${this.historyBackfillScopeTitle} import started for ${sleepQueued} date ranges`
-        : `${this.historyBackfillScopeTitle} import started for ${sleepQueued} Sleep date ranges and ${healthQueued} Health requests`
+        ? `${acceptedScope} import started for ${sleepQueued} date ranges`
+        : `${acceptedScope} import started for ${sleepQueued} Sleep date ranges and ${healthQueued} Health requests`
       : `Sleep history import started for ${sleepQueued} date ranges`;
+  }
+
+  private getCombinedHistoryBackfillScopeTitle(): string {
+    switch (this.serviceName) {
+      case ServiceNames.COROSAPI: return 'Sleep & daily Health history';
+      case ServiceNames.SuuntoApp: return 'Sleep & 24/7 Health history';
+      case ServiceNames.GarminAPI: return 'Sleep & available Health history';
+      default: return 'Sleep & Health history';
+    }
   }
 
   get isMissingGarminSleepBackfillPermissions(): boolean {
@@ -725,7 +740,7 @@ export class HistoryImportFormComponent implements OnInit, OnDestroy, OnChanges 
       if (!this.isCurrentView(userID, serviceName, generation)) return;
       this.updateHistoryBackfillPresentation();
       const startedHistoryName = typeof result.healthQueued === 'number'
-        ? (result.healthQueued > 0 ? this.historyBackfillScopeTitle : 'Sleep history')
+        ? (result.healthQueued > 0 ? this.getCombinedHistoryBackfillScopeTitle() : 'Sleep history')
         : historyName;
       const sleepQueued = result.sleepQueued ?? result.queued;
       this.snackBar.open(`${this.sleepBackfillProviderLabel} ${startedHistoryName} import started for ${sleepQueued} date ranges.`, undefined, {

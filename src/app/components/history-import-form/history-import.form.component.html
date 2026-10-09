@@ -44,8 +44,10 @@
     }
   </app-status-info>
 
-  <app-status-info type="pending" [title]="garminCooldownDays + '-Day Cooldown'">
-    Next import available in {{ garminCooldownDays }} days.
+  }
+  @if (!isAllowedToDoHistoryImport && nextImportAvailableDate) {
+  <app-status-info type="pending" title="Next Available Import">
+    Next import available on {{ nextImportAvailableDate | date: 'medium' }}.
   </app-status-info>
   }
 </div>

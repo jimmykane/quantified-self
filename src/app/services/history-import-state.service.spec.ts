@@ -35,6 +35,17 @@ describe('HistoryImportStateService', () => {
     expect(service.begin(key)).not.toBeNull();
   });
 
+  it('retains contention without treating it as success and enables retry at the exact local deadline', () => {
+    vi.useFakeTimers();
+    const service = TestBed.inject(HistoryImportStateService);
+    const key = service.key('owner', 'Garmin', 'activity');
+    const operation = service.begin(key)!;
+    service.finish(key, operation, { status: 'running', retryAllowedAtMs: Date.now() + 5_000 });
+    expect(service.begin(key)).toBeNull();
+    vi.advanceTimersByTime(5_000);
+    expect(service.begin(key)).not.toBeNull();
+  });
+
   it.each(['activity', 'sleep'] as const)('recognizes only the exact %s cooldown contract', domain => {
     const code = domain === 'activity' ? 'permission-denied' : 'resource-exhausted';
     const prefix = domain === 'activity' ? 'History import is not allowed until ' : 'Sleep backfill is not allowed until ';
@@ -47,5 +58,14 @@ describe('HistoryImportStateService', () => {
       { code, message: prefix + date + ' extra' }]) {
       expect(historyImportCooldownAt(error, domain)).toBeNull();
     }
+  });
+
+  it.each(['permission-denied', 'functions/permission-denied'])('recognizes the existing Garmin activity cooldown for %s', code => {
+    const date = '2026-11-08T06:54:05.536Z';
+    const message = `History import cannot happen before ${date}`;
+    expect(historyImportCooldownAt({ code, message }, 'activity')).toBe(Date.parse(date));
+    expect(historyImportCooldownAt({ code, message }, 'sleep')).toBeNull();
+    expect(historyImportCooldownAt({ code, message: message + ' extra' }, 'activity')).toBeNull();
+    expect(historyImportCooldownAt({ code: 'functions/internal', message }, 'activity')).toBeNull();
   });
 });

@@ -3,9 +3,11 @@ import { BehaviorSubject, Observable } from 'rxjs';
 
 export type HistoryImportDomain = 'activity' | 'sleep';
 export interface HistoryImportRequestState<T> {
-  status: 'idle' | 'pending' | 'success' | 'cooldown' | 'error';
+  status: 'idle' | 'pending' | 'success' | 'cooldown' | 'running' | 'error';
   result?: T;
+  acceptedAtMs?: number;
   nextAllowedAtMs?: number;
+  retryAllowedAtMs?: number;
   range?: { startDate: Date; endDate: Date };
 }
 
@@ -31,6 +33,7 @@ export class HistoryImportStateService {
     const entry = this.entry(key);
     const state = entry.state$.value;
     if (state.status === 'pending' || (state.nextAllowedAtMs ?? 0) > Date.now()
+      || (state.retryAllowedAtMs ?? 0) > Date.now()
       || (state.status === 'success' && state.nextAllowedAtMs === undefined)) return null;
     const operation = Symbol('history import');
     entry.operation = operation;
@@ -61,9 +64,13 @@ export function historyImportCooldownAt(error: unknown, domain: HistoryImportDom
   const expectedCode = domain === 'activity' ? 'permission-denied' : 'resource-exhausted';
   if (candidate?.code !== expectedCode && candidate?.code !== `functions/${expectedCode}`) return null;
   if (typeof candidate.message !== 'string') return null;
-  const prefix = domain === 'activity' ? 'History import is not allowed until ' : 'Sleep backfill is not allowed until ';
-  if (!candidate.message.startsWith(prefix)) return null;
-  const timestamp = candidate.message.slice(prefix.length);
+  const message = candidate.message;
+  const prefixes = domain === 'activity'
+    ? ['History import is not allowed until ', 'History import cannot happen before ']
+    : ['Sleep backfill is not allowed until '];
+  const prefix = prefixes.find(value => message.startsWith(value));
+  if (!prefix) return null;
+  const timestamp = message.slice(prefix.length);
   if (!/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/.test(timestamp)) return null;
   const ms = Date.parse(timestamp);
   return Number.isFinite(ms) && new Date(ms).toISOString() === timestamp ? ms : null;
