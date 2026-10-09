@@ -27,7 +27,7 @@
   </nav>
 
   <section id="home-integrations" class="integrations-section" aria-labelledby="home-integrations-title">
-    <h2 appHomeReveal id="home-integrations-title">Bring It In. Keep It Moving.</h2>
+    <h2 appHomeReveal id="home-integrations-title" tabindex="-1">Bring It In. Keep It Moving.</h2>
     <div appHomeReveal class="logos-container" aria-label="Supported providers">
       <mat-icon svgIcon="garmin" class="partner-logo" matTooltip="Garmin Connect" role="img" aria-label="Garmin" aria-hidden="false"></mat-icon>
       <mat-icon svgIcon="suunto" class="partner-logo" matTooltip="Suunto App" role="img" aria-label="Suunto" aria-hidden="false"></mat-icon>
@@ -53,7 +53,7 @@
   <section id="home-training" class="feature-section training-section" aria-labelledby="home-training-title">
     <div appHomeReveal class="feature-copy section-heading">
       <p class="eyebrow">Understand your training</p>
-      <h2 id="home-training-title">Training Load, Readiness, and Recovery</h2>
+      <h2 id="home-training-title" tabindex="-1">Training Load, Readiness, and Recovery</h2>
       <p>See your current load, fitness, fatigue, form, recovery, intensity balance, and efficiency—then explore the charts behind every signal.</p>
       <p>Readiness brings load, sleep, and overnight readings together, with sources kept clear. Your Training snapshot keeps current state, recent volume, and exact load-model values in the same hierarchy used by Training.</p>
       <a mat-button routerLink="/features/training-analysis">Explore Training Analysis <mat-icon iconPositionEnd>arrow_forward</mat-icon></a>
@@ -85,7 +85,7 @@
     aria-labelledby="home-workouts-title">
     <header appHomeReveal class="feature-visuals section-heading">
       <p class="eyebrow">Explore every activity</p>
-      <h2 id="home-workouts-title">Analyze Every Workout</h2>
+      <h2 id="home-workouts-title" tabindex="-1">Analyze Every Workout</h2>
       <p>Compare heart rate, power, altitude, depth, pace, and more in synchronized charts. Inspect intensity zones, grade-colored elevation, inverse depth, aerobic durability, and cadence versus power. Switch between distance, duration, or time where supported, then select a range for stats or zoom in.</p>
       <a mat-button routerLink="/features/training-analysis">Explore Training Analysis <mat-icon iconPositionEnd>arrow_forward</mat-icon></a>
     </header>
@@ -95,7 +95,7 @@
   <section id="home-plans" class="feature-section training-plans-section" aria-labelledby="home-plans-title">
     <div appHomeReveal class="feature-copy section-heading">
       <p class="eyebrow">Plan what comes next</p>
-      <h2 id="home-plans-title">{{ trainingPlansFeature.title }}</h2>
+      <h2 id="home-plans-title" tabindex="-1">{{ trainingPlansFeature.title }}</h2>
       <p>{{ trainingPlansFeature.intro }}</p>
       <a mat-button [routerLink]="trainingPlansFeature.cta.routerLink">{{ trainingPlansFeature.cta.label }} <mat-icon iconPositionEnd>{{ trainingPlansFeature.cta.icon }}</mat-icon></a>
     </div>
@@ -118,7 +118,7 @@
   <section id="home-health" class="feature-section health-section" aria-labelledby="home-health-title">
     <header appHomeReveal class="feature-visuals section-heading">
       <p class="eyebrow">Health beyond training</p>
-      <h2 id="home-health-title">{{ healthFeature.title }}</h2>
+      <h2 id="home-health-title" tabindex="-1">{{ healthFeature.title }}</h2>
       <p>{{ healthFeature.intro }}</p>
     </header>
     <div class="feature-visuals compact-row-stack">
@@ -134,7 +134,7 @@
   <section id="home-assistant" class="feature-section ai-insights-section" aria-labelledby="home-assistant-title">
     <div appHomeReveal class="feature-copy section-heading">
       <p class="eyebrow">Ask about your training</p>
-      <h2 id="home-assistant-title">Ask About Your Training</h2>
+      <h2 id="home-assistant-title" tabindex="-1">Ask About Your Training</h2>
       <p>Explore sleep, readiness, training, measurements, and recent activities in one conversation. The Assistant answers from your current data, with the evidence behind it.</p>
       <a mat-button routerLink="/features/ai-insights">Explore the Assistant <mat-icon iconPositionEnd>arrow_forward</mat-icon></a>
     </div>
@@ -157,7 +157,7 @@
   <section id="home-maps" class="feature-section footprint-section" aria-labelledby="home-map-title">
     <div appHomeReveal class="feature-copy feature-visuals section-heading">
       <p class="eyebrow">Your activities on a map</p>
-      <h2 id="home-map-title">Map Your Activities</h2>
+      <h2 id="home-map-title" tabindex="-1">Map Your Activities</h2>
       <p>See every GPS activity together, then filter by date or activity type and explore the trips across your history.</p>
       <p class="sample-caption" data-nosnippet>Real activity traces · open-water swimming, trail running, and mountain biking.</p>
       <a mat-button routerLink="/features/activity-map">Explore Activity Map <mat-icon iconPositionEnd>arrow_forward</mat-icon></a>
@@ -168,7 +168,7 @@
   <section id="home-comparisons" class="feature-section analysis-section" aria-labelledby="home-comparison-title">
     <header appHomeReveal class="feature-visuals section-heading">
       <p class="eyebrow">Compare watches and sensors</p>
-      <h2 id="home-comparison-title">Built for Device Reviewers</h2>
+      <h2 id="home-comparison-title" tabindex="-1">Built for Device Reviewers</h2>
       <p>Compare same-session recordings from watches, bike computers, and sensors. Set reference and test devices, auto-align their timelines, and turn GNSS and sensor differences into repeatable evidence.</p>
       <a mat-button routerLink="/features/workout-data-comparison">Compare Workouts and Devices <mat-icon iconPositionEnd>arrow_forward</mat-icon></a>
     </header>

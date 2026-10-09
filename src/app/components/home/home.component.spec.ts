@@ -177,10 +177,14 @@ describe('HomeComponent', () => {
       const target = fixture.nativeElement.querySelector('#home-' + id) as HTMLElement;
       const scrollIntoView = vi.fn();
       target.scrollIntoView = scrollIntoView;
+      const heading = fixture.nativeElement.querySelector('#' + target.getAttribute('aria-labelledby')) as HTMLElement;
+      const focus = vi.spyOn(heading, 'focus');
       fixture.nativeElement.querySelector(`.home-navigation a[href="#home-${id}"]`).click();
       fixture.detectChanges();
       await fixture.whenStable();
       expect(scrollIntoView).toHaveBeenCalledWith({ block: 'start', behavior: 'instant' });
+      expect(heading.tabIndex).toBe(-1);
+      expect(focus).toHaveBeenCalledExactlyOnceWith({ preventScroll: true });
       expect(location.path(true)).toBe('/#home-' + id);
       expect(selection).toHaveBeenCalledOnce();
       expect(Array.from(fixture.nativeElement.querySelectorAll('app-public-feature-preview'))).toEqual(previews);
@@ -209,6 +213,36 @@ describe('HomeComponent', () => {
     fixture.detectChanges();
     expect(comparisonScroll).toHaveBeenCalledTimes(2);
     expect(selection).toHaveBeenCalledOnce();
+  });
+
+  it('moves focus into the chosen feature so keyboard navigation continues from that section', async () => {
+    document.body.appendChild(fixture.nativeElement);
+    const link = fixture.nativeElement.querySelector('.home-navigation a[href="#home-health"]') as HTMLAnchorElement;
+    const heading = fixture.nativeElement.querySelector('#home-health-title') as HTMLElement;
+    const scrollIntoView = vi.fn();
+    fixture.nativeElement.querySelector('#home-health').scrollIntoView = scrollIntoView;
+    link.focus();
+    link.click();
+    fixture.detectChanges();
+    await fixture.whenStable();
+    expect(document.activeElement).toBe(heading);
+    expect(heading.tabIndex).toBe(-1);
+    expect(scrollIntoView).toHaveBeenCalled();
+    link.focus();
+    link.click();
+    fixture.detectChanges();
+    await fixture.whenStable();
+    expect(document.activeElement).toBe(heading);
+    expect(selection).toHaveBeenCalledOnce();
+    fixture.nativeElement.remove();
+  });
+
+  it('keeps focus unchanged during browser history restoration', () => {
+    const focus = vi.spyOn(HTMLElement.prototype, 'focus');
+    location.simulateUrlPop('/#home-health');
+    fixture.detectChanges();
+    expect(focus).not.toHaveBeenCalled();
+    expect(selection).not.toHaveBeenCalled();
   });
 
   it('returns Back to the exact unanchored view and Forward to the point left within a feature', () => {

@@ -59,6 +59,7 @@ export class HomeComponent implements OnInit {
   private readonly isBrowser = isPlatformBrowser(inject(PLATFORM_ID));
   private featureScrollFrame: number | null = null;
   private featureScrollTarget: string | HomeScrollPosition | null = null;
+  private featureFocusTarget: string | null = null;
   private readonly featureHistoryPositions = new Map<number, HomeScrollPosition>();
   private currentHistoryEntry: number | null = null;
   private nextHistoryEntry = 0;
@@ -113,6 +114,7 @@ export class HomeComponent implements OnInit {
     const fragment = `home-${feature.id}`;
     if (fragment === this.currentFeatureFragment) {
       this.featureScrollTarget = fragment;
+      this.featureFocusTarget = fragment;
       return;
     }
     this.haptics.selection();
@@ -127,6 +129,7 @@ export class HomeComponent implements OnInit {
     this.location.replaceState(currentUrl, '', { ...historyState, qsHomeFeature: entry });
     const path = currentUrl.split('#')[0];
     this.location.go(`${path}#${fragment}`, '', { qsHomeFeature: { id: this.nextHistoryEntry++ } });
+    this.featureFocusTarget = fragment;
   }
 
   private syncFeatureAnchorFromUrl(url: string, state: unknown): void {
@@ -137,6 +140,7 @@ export class HomeComponent implements OnInit {
       this.featureHistoryPositions.set(this.currentHistoryEntry, this.readScrollPosition());
     }
     this.cancelFeatureScrollFrame();
+    this.featureFocusTarget = null;
     this.currentHistoryEntry = entryId;
     if (entryId !== null) this.nextHistoryEntry = Math.max(this.nextHistoryEntry, entryId + 1);
     this.currentFeatureFragment = url.split('#')[1] ?? '';
@@ -157,6 +161,11 @@ export class HomeComponent implements OnInit {
     if (typeof destination === 'string' && !target) return;
     this.featureScrollTarget = null;
     this.cancelFeatureScrollFrame();
+    if (target && this.featureFocusTarget === destination) {
+      const headingId = target.getAttribute('aria-labelledby');
+      if (headingId) this.document.getElementById(headingId)?.focus({ preventScroll: true });
+    }
+    this.featureFocusTarget = null;
     const scroll = () => {
       if (target) {
         target.scrollIntoView?.({ block: 'start', behavior: 'instant' });
