@@ -1101,7 +1101,10 @@ export class EventCardChartPanelComponent implements AfterViewInit, OnChanges, O
         }
       },
       axisLabel: {
-        show: !this.previewMode,
+        show: true,
+        hideOverlap: true,
+        showMinLabel: true,
+        showMaxLabel: true,
         color: options.axisLabelColor,
         fontFamily: ECHARTS_GLOBAL_FONT_FAMILY,
         fontSize: options.axisLabelFontSize,

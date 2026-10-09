@@ -57,15 +57,15 @@ const PUBLIC_PRODUCTS_TIMEOUT_MS = 10_000;
 const PUBLIC_PLAN_COPY: Record<PublicPlanRole, { title: string; subtitle: string }> = {
     free: {
         title: 'Starter',
-        subtitle: 'Everything you need to get started. Free forever.',
+        subtitle: 'Core tools, free forever.',
     },
     basic: {
         title: 'Basic',
-        subtitle: 'For consistent training and deeper tracking.',
+        subtitle: 'Everything in Starter, with more history and Assistant requests.',
     },
     pro: {
         title: 'Pro',
-        subtitle: 'Full automation and unlimited tracking.',
+        subtitle: 'Everything in Basic, plus automatic imports, sync, and workout delivery.',
     },
 };
 

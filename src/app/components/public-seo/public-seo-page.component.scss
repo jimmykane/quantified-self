@@ -72,6 +72,12 @@ h3 {
   font-size: 1.12rem;
 }
 
+.hero-access-note {
+  display: block;
+  margin-top: 0.75rem;
+  font: var(--mat-sys-body-medium);
+}
+
 .topic-strip,
 .action-row {
   display: flex;

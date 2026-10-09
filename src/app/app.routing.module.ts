@@ -761,7 +761,7 @@ const topLevelRoutes: Routes = [
     path: '',
     loadComponent: () => import('./components/home/home.component').then(component => component.HomeComponent),
     data: {
-      title: 'Training Dashboard',
+      title: 'Training Analysis & Workout Planning',
       animation: 'Home',
       description: HOME_SEO_DESCRIPTION,
       jsonLd: HOME_SEO_JSON_LD,

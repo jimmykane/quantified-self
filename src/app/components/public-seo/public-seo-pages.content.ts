@@ -49,6 +49,7 @@ export interface PublicSeoPage {
   description: string;
   h1: string;
   intro: string;
+  accessNote?: string;
   chips: readonly string[];
   actions: readonly PublicSeoAction[];
   sections: readonly PublicSeoSection[];
@@ -103,7 +104,7 @@ export const PUBLIC_SEO_PAGES: Record<PublicSeoPageKey, PublicSeoPage> = {
     featureList: HEALTH_FEATURE_CONTENT.seo.featureList,
     h1: HEALTH_FEATURE_CONTENT.title,
     intro: HEALTH_FEATURE_CONTENT.intro,
-    chips: ['Sleep stages', 'Resting heart rate', 'HRV personal range', 'Body measurements', 'Manual readings'],
+    chips: ['Category overview', 'Sleep stages', 'Resting heart rate', 'HRV personal range', 'Body measurements', 'Manual readings'],
     actions: [
       routeAction('Health Guide', '/help', 'flat', 'arrow_forward', 'health'),
       routeAction('Explore Integrations', '/integrations'),
@@ -136,9 +137,9 @@ export const PUBLIC_SEO_PAGES: Record<PublicSeoPageKey, PublicSeoPage> = {
     key: 'featuresHub',
     path: PUBLIC_FEATURE_PATHS.hub,
     eyebrow: 'Features',
-    title: 'Features for Endurance Training Data',
-    description: 'Bring Garmin, Suunto, COROS, Wahoo, and workout files together for training analysis, maps, dashboards, comparisons, and AI answers.',
-    h1: 'Features for endurance training data',
+    title: 'Activity, Training & Health Features',
+    description: 'Bring Garmin, Suunto, COROS, Wahoo, and files together for activity analysis, workout planning, health tracking, maps, comparisons, and AI answers.',
+    h1: 'Features for your activities, training, and health',
     intro: 'Use Quantified Self to centralize provider activities, uploaded files, and saved routes, review workout history in an activity calendar, analyze training context, compare recordings, benchmark devices, and ask questions through the built-in Assistant or an MCP client you explicitly authorize.',
     chips: ['Activity calendar', 'Training analysis', 'Training plans', 'Supported activity types', 'Assistant', 'MCP server', 'Workout comparison', 'Route files', 'Benchmarks'],
     actions: [
@@ -260,9 +261,9 @@ export const PUBLIC_SEO_PAGES: Record<PublicSeoPageKey, PublicSeoPage> = {
     key: 'activityCalendar',
     path: PUBLIC_FEATURE_PATHS.activityCalendar,
     eyebrow: 'Activity Calendar',
-    title: 'Activity Calendar for Endurance Training',
-    description: 'Review completed running, cycling, swimming, skiing, and other workouts with separate planned overlays in selectable Week, Month, and Year calendar views.',
-    h1: 'Activity calendar for endurance training',
+    title: 'Activity Calendar for Workouts and Plans',
+    description: 'Review completed activities and workouts with separate planned overlays in selectable Week, Month, and Year calendar views.',
+    h1: 'Activity calendar for workouts and plans',
     intro: 'Turn Garmin, Suunto, COROS, Wahoo, and uploaded workout history into a visual calendar. Move between Week, Month, and Year views, select every day, and keep planned workouts visually separate from recorded activities and completed totals.',
     chips: ['Week view', 'Month view', 'Year view', 'Every day selectable', 'Planned overlays', 'Completed totals stay separate'],
     actions: [
@@ -356,9 +357,9 @@ export const PUBLIC_SEO_PAGES: Record<PublicSeoPageKey, PublicSeoPage> = {
     key: 'trainingAnalysis',
     path: PUBLIC_FEATURE_PATHS.trainingAnalysis,
     eyebrow: 'Training Analysis',
-    title: 'Training Analysis for Endurance Athletes',
+    title: 'Training Analysis, Readiness & Recovery',
     description: 'Understand training load, readiness, intensity, durability, sleep, power, and sport-specific trends from your recorded activities.',
-    h1: 'Training analysis for endurance athletes',
+    h1: 'Training analysis, readiness, and recovery',
     intro: 'See how your recent training compares with your usual workload, then explore readiness, load, intensity, durability, sleep, power, and sport-specific trends in one curated workspace.',
     chips: ['Training readiness', 'Sport-aware training mix', 'Gravity MTB', 'Context summaries', 'Durability', 'Best build'],
     actions: [
@@ -478,6 +479,7 @@ export const PUBLIC_SEO_PAGES: Record<PublicSeoPageKey, PublicSeoPage> = {
     description: TRAINING_PLANS_SEO_CONTENT.description,
     h1: TRAINING_PLANS_SEO_CONTENT.h1,
     intro: TRAINING_PLANS_SEO_CONTENT.intro,
+    accessNote: TRAINING_PLANS_SEO_CONTENT.accessNote,
     chips: ['Plans included', 'Standalone workouts', 'Named phases', 'MCP planning', 'Provider delivery for Pro', 'Plan calendar', 'Completed totals stay separate'],
     actions: [
       routeAction('Start Free', '/login', 'flat', 'arrow_forward'),
@@ -555,7 +557,7 @@ export const PUBLIC_SEO_PAGES: Record<PublicSeoPageKey, PublicSeoPage> = {
     key: 'trainingDashboard',
     path: PUBLIC_FEATURE_PATHS.trainingDashboard,
     eyebrow: 'Training Dashboard',
-    title: 'Custom Training Dashboard for Endurance Athletes',
+    title: 'Custom Activity and Training Dashboard',
     description: 'Build a custom training dashboard with KPI, chart, and map tiles, independent filters, training trends, and flexible layouts.',
     h1: 'Build the training dashboard you need',
     intro: 'Start from a dashboard preset or arrange Curated, KPI, Custom, and Map tiles around the questions you track. Each tile keeps its own filters, while shared chart and map components keep the same interaction and styling used throughout Quantified Self.',

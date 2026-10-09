@@ -43,6 +43,24 @@ describe('help.content', () => {
     expect(copy).toContain('sender name, subject, body, formatting, links or button');
     expect(copy).toContain('resume with the existing successful test');
   });
+  it('explains the homepage sample and routes visitors to real onboarding rather than a demo account', () => {
+    const copy = HELP_SECTIONS.find(section => section.id === 'getting-started')!.content;
+    expect(copy).toContain('[homepage](/)');
+    expect(copy).toContain('fictional sample data');
+    expect(copy).toContain('nothing is saved');
+    expect(copy).toContain('Provider connections and history imports require Pro');
+    expect(copy).toContain('jump links below its introduction');
+    expect(copy).toContain('every feature section visible');
+    expect(copy).not.toContain('dropdown');
+    expect(copy).toContain('[Comparisons](/#home-comparisons)');
+    expect(copy).toContain('Back and Forward');
+    expect(copy).toContain('restore the exact place you were reading');
+    expect(copy).toContain('homepage view before your first jump');
+    expect(copy).toContain("Focus moves to the chosen section's heading, so Tab continues through that section's controls");
+    expect(copy).toContain('same category cards and charts as the signed-in workspace');
+    expect(copy).toContain('never loads your account data or saves changes');
+    expect(copy).not.toContain('/demo');
+  });
   it('points users to the Privacy section and explains saving analytics and email opt-outs', () => {
     const copy = HELP_SECTIONS.find(section => section.id === 'data-and-privacy')!.content;
     expect(copy).toContain('[Settings → Privacy & emails](/settings?section=privacy)');

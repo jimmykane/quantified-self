@@ -14,6 +14,7 @@ class HealthChartStubComponent {
   readonly user = input.required();
   readonly settings = input.required<AppDashboardHealthMetricSettings>();
   readonly overview = input(false);
+  readonly exampleOnly = input(false);
   readonly hideTitle = input(false);
   readonly darkTheme = input(false);
   readonly referenceDate = input(null);
@@ -46,11 +47,21 @@ describe('Health category overview', () => {
     expect(component.cards().map(card => card.id)).toEqual(['body_weight', 'heart_rate_variability', 'resting_heart_rate', 'steps', 'vo2_max', 'sleep']);
     const chart = fixture.debugElement.query(By.directive(HealthChartStubComponent)).componentInstance as HealthChartStubComponent;
     expect(chart.overview()).toBe(true);
+    expect(chart.exampleOnly()).toBe(false);
     expect(chart.settings()).toEqual({ metric: 'body_weight', range: '30d' });
     fixture.componentRef.setInput('providerFilter', ['GarminAPI']); fixture.componentRef.setInput('darkTheme', true); fixture.detectChanges();
     expect(chart.providerFilter()).toEqual(['GarminAPI']); expect(chart.darkTheme()).toBe(true);
     fixture.componentRef.setInput('referenceDate', '2026-10-10'); fixture.detectChanges();
     expect(chart.referenceDate()).toBe('2026-10-10');
+    expect(haptics.selection).not.toHaveBeenCalled();
+  });
+  it('uses the same cards in explicit public example mode and labels their readings as fictional', () => {
+    const fixture = create();
+    fixture.componentRef.setInput('exampleOnly', true); fixture.detectChanges();
+    const charts = fixture.debugElement.queryAll(By.directive(HealthChartStubComponent));
+    expect(charts).toHaveLength(6);
+    expect(charts.every(chart => chart.componentInstance.exampleOnly())).toBe(true);
+    expect(fixture.nativeElement.textContent).toContain('Fictional sample readings');
     expect(haptics.selection).not.toHaveBeenCalled();
   });
   it('filters by category using Material semantic selection and keeps unchanged actions silent', () => {

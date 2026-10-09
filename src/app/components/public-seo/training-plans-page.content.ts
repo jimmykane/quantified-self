@@ -1,4 +1,5 @@
 import type { PublicFeaturePreviewKey } from './public-feature-preview.types';
+import { TRAINING_PLANS_ACCESS_NOTE } from './training-plans-access.content';
 
 /** Concise metadata shared by the public Training Plans route and its structured data. */
 export const TRAINING_PLANS_SEO_CONTENT = {
@@ -6,6 +7,7 @@ export const TRAINING_PLANS_SEO_CONTENT = {
   description: 'Create free training plans and standalone workouts for running, cycling, swimming and more. Organize phases by date, with completed activities kept separate.',
   h1: 'Plan workouts for running, cycling, swimming and more',
   intro: 'Build a dated plan with named phases or start with one standalone workout. Work directly in Quantified Self, keep scheduled work separate from completed activities, and connect other tools only when you choose.',
+  accessNote: TRAINING_PLANS_ACCESS_NOTE,
   featureList: [
     'Running, cycling, swimming, walking, hiking, rowing and strength plans included on the free tier',
     'Standalone structured workouts without a plan',

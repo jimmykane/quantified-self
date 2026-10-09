@@ -32,13 +32,14 @@
 
 .preview-placeholder--health { min-height: 15rem; }
 .preview-placeholder--health-sleep { min-height: 28rem; }
+.preview-placeholder--health-overview { min-height: 73rem; }
 
 .preview-placeholder--dashboard {
   min-height: 30rem;
 }
 
 .preview-placeholder--reviewer {
-  min-height: 116rem;
+  min-height: 70rem;
 }
 
 .preview-placeholder--assistant,
@@ -55,7 +56,7 @@
 }
 
 .map-stage {
-  height: clamp(20rem, 48vw, 32.5rem);
+  height: var(--public-preview-map-height, clamp(20rem, 48vw, 32.5rem));
   overflow: hidden;
 }
 
@@ -63,6 +64,17 @@
   height: 100%;
   border: 0;
   border-radius: 0;
+}
+
+@media (max-width: 799.98px) {
+  .preview-placeholder--reviewer { min-height: 106rem; }
+}
+
+@media (max-width: 980px) { .preview-placeholder--health-overview { min-height: 106rem; } }
+@media (max-width: 600px) { .preview-placeholder--health-overview { min-height: 190rem; } }
+
+@media (max-width: 599.98px) {
+  .preview-placeholder--reviewer { min-height: 135rem; }
 }
 
 @media (max-width: 440px) {
@@ -76,9 +88,5 @@
 
   .preview-placeholder--workout {
     min-height: 64rem;
-  }
-
-  .preview-placeholder--reviewer {
-    min-height: 161rem;
   }
 }

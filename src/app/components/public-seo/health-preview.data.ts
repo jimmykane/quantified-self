@@ -1,13 +1,13 @@
 import { HEALTH_METRIC_IDS, HEALTH_PROVIDERS, HEALTH_RECORDING_METHODS, HEALTH_VALUE_ORIGINS, HEALTH_VALUE_TYPES, getHealthMetricDefinition } from '@shared/health';
 import { MANUAL_HEALTH_AGGREGATION, MANUAL_POINT_SEMANTIC_VARIANT } from '@shared/manual-health';
 import type { DashboardSleepTrendContext, DashboardSleepTrendPoint } from '../../helpers/dashboard-sleep-chart.helper';
-import type { HealthWorkspaceSeries } from '../../helpers/health-workspace.helper';
+import { localCalendarDate, type HealthWorkspaceSeries } from '../../helpers/health-workspace.helper';
 import type { TimelineNote } from '@shared/timeline-notes';
+import { healthExampleDay, healthExampleValue } from '../../helpers/health-example-days.helper';
 
 export type HealthPreviewKind = 'sleep' | 'hrv' | 'weight';
-const DAY = 86_400_000;
-export const HEALTH_PREVIEW_END = Date.UTC(2026, 7, 31, 23, 59, 59);
-export const HEALTH_PREVIEW_START = Date.UTC(2026, 7, 18);
+export const HEALTH_PREVIEW_END = new Date(2026, 7, 31, 23, 59, 59).getTime();
+export const HEALTH_PREVIEW_START = new Date(2026, 7, 18).getTime();
 
 /** Fictional, closed periods: public examples never read or write account notes. */
 export const HEALTH_PREVIEW_NOTES: readonly TimelineNote[] = [
@@ -27,7 +27,6 @@ export function buildHealthPreviewSeries(kind: HealthPreviewKind): HealthWorkspa
   const metricId = kind === 'hrv' ? HEALTH_METRIC_IDS.HeartRateVariability
     : kind === 'weight' ? HEALTH_METRIC_IDS.BodyWeight : HEALTH_METRIC_IDS.SleepDuration;
   const count = kind === 'hrv' ? 74 : 14;
-  const variations = [0, 3, -2, 1, 5, -4, 2, 0, -3, 4, -1, 2, -2, 1];
   const provider = kind === 'weight' ? HEALTH_PROVIDERS.QuantifiedSelf : HEALTH_PROVIDERS.SuuntoApp;
   return {
     id: `sample-health-${kind}`, metricId, provider,
@@ -43,23 +42,27 @@ export function buildHealthPreviewSeries(kind: HealthPreviewKind): HealthWorkspa
     normalizationStatus: 'canonical', nativeOnly: false, valueType: HEALTH_VALUE_TYPES.Number,
     chartKind: kind === 'sleep' ? 'bar' : 'line', sampleBased: false,
     points: Array.from({ length: count }, (_, index) => {
-      const timestampMs = Date.UTC(2026, 7, 31, 7) - (count - 1 - index) * DAY;
-      const variation = variations[index % variations.length];
-      const value = kind === 'sleep' ? 27_000 + variation * 660
-        : kind === 'weight' ? 73.8 - index * 0.035 + variation * 0.005
-          : 58 + variation + (index >= 63 && index <= 66 ? -10 : 0);
-      return { timestampMs, calendarDate: new Date(timestampMs).toISOString().slice(0, 10), timezoneOffsetSeconds: 0, value, qualityCode: null };
-    }),
+      const date = new Date(2026, 7, 31 - (count - 1 - index), 7);
+      const timestampMs = date.getTime();
+      const value = healthExampleValue(metricId, count - 1 - index);
+      if (value === null) return null;
+      return { timestampMs, calendarDate: localCalendarDate(timestampMs), timezoneOffsetSeconds: -date.getTimezoneOffset() * 60, value, qualityCode: null };
+    }).filter(point => point !== null),
     deviceLabel: null, coverageText: 'Sample data', freshnessText: 'August 2026', hasConflict: false,
   };
 }
 
+const latestNight = healthExampleDay(0);
+const latestWakeTime = new Date(2026, 7, 31, 0, latestNight.wakeMinutes).getTime();
 export const HEALTH_PREVIEW_SLEEP: DashboardSleepTrendPoint = {
   id: 'sample-night', sourceSessionIds: ['sample-night'], sleepDate: '2026-08-31', provider: 'SuuntoApp', providerLabel: 'Suunto', categoryLabel: '31 Aug',
-  startTimeMs: Date.UTC(2026, 7, 30, 23, 30), endTimeMs: Date.UTC(2026, 7, 31, 7, 20),
-  totalSeconds: 27_660, deepSeconds: 5_100, lightSeconds: 15_660, remSeconds: 6_900, awakeSeconds: 540, unknownSeconds: 0,
-  score: null, averageHeartRateBpm: null, minimumHeartRateBpm: null, restingHeartRateBpm: null,
-  averageHrvMs: null, maxSpo2Percent: null, averageRespirationBrpm: null,
+  startTimeMs: latestWakeTime - (latestNight.sleepMinutes + latestNight.awakeMinutes) * 60_000, endTimeMs: latestWakeTime,
+  totalSeconds: latestNight.sleepMinutes * 60, deepSeconds: latestNight.deepMinutes * 60,
+  lightSeconds: (latestNight.sleepMinutes - latestNight.deepMinutes - latestNight.remMinutes) * 60,
+  remSeconds: latestNight.remMinutes * 60, awakeSeconds: latestNight.awakeMinutes * 60, unknownSeconds: 0,
+  score: latestNight.sleepScore, averageHeartRateBpm: latestNight.sleepHeartRateBpm,
+  minimumHeartRateBpm: latestNight.sleepHeartRateBpm - 5, restingHeartRateBpm: null,
+  averageHrvMs: latestNight.hrvMs, maxSpo2Percent: null, averageRespirationBrpm: null,
   isNap: false, napSeconds: 0, napCount: 0, napAverageHrvMs: null, napAverageHeartRateBpm: null, napStartTimeMs: null, napEndTimeMs: null,
 };
 
@@ -67,18 +70,19 @@ export const HEALTH_PREVIEW_SLEEP: DashboardSleepTrendPoint = {
 export function buildHealthPreviewSleepTrend(): DashboardSleepTrendContext {
   const nightlyHrv = new Map(buildHealthPreviewSeries('hrv').points.map(point => [point.calendarDate, Number(point.value)]));
   const points = buildHealthPreviewSeries('sleep').points.map((point, index) => {
+    const night = healthExampleDay(13 - index);
     const totalSeconds = Number(point.value);
-    const deepSeconds = 4_500 + (index % 4) * 600;
-    const remSeconds = 6_600 + (index % 3) * 300;
-    const endTimeMs = point.timestampMs + 20 * 60_000;
+    const deepSeconds = night.deepMinutes * 60;
+    const remSeconds = night.remMinutes * 60;
+    const endTimeMs = new Date(2026, 7, 18 + index, 0, night.wakeMinutes).getTime();
     return {
       ...HEALTH_PREVIEW_SLEEP,
       id: `sample-night-${index}`, sourceSessionIds: [`sample-night-${index}`], sleepDate: point.calendarDate,
       categoryLabel: `${18 + index} Aug`,
-      endTimeMs, startTimeMs: endTimeMs - (totalSeconds + HEALTH_PREVIEW_SLEEP.awakeSeconds) * 1000,
-      totalSeconds, deepSeconds, remSeconds, lightSeconds: totalSeconds - deepSeconds - remSeconds,
-      score: 78 + index % 8, averageHrvMs: nightlyHrv.get(point.calendarDate) ?? null,
-      averageHeartRateBpm: 49 + index % 4, minimumHeartRateBpm: 43 + index % 3,
+      endTimeMs, startTimeMs: endTimeMs - (totalSeconds + night.awakeMinutes * 60) * 1000,
+      totalSeconds, deepSeconds, remSeconds, awakeSeconds: night.awakeMinutes * 60, lightSeconds: totalSeconds - deepSeconds - remSeconds,
+      score: night.sleepScore, averageHrvMs: nightlyHrv.get(point.calendarDate) ?? null,
+      averageHeartRateBpm: night.sleepHeartRateBpm, minimumHeartRateBpm: night.sleepHeartRateBpm - 5,
     };
   });
   return { points, latestPoint: points.at(-1) ?? null, hasRealPoints: true };

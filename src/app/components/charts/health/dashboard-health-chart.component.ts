@@ -33,6 +33,8 @@ export class DashboardHealthChartComponent {
     readonly thumbnailContext = input<{ uid: string; context: DashboardHealthContext } | null>(null);
     /** Library-only illustrations; saved tiles always render account evidence. */
     readonly preview = input(false);
+    /** Public fixtures never subscribe to account evidence, even for a signed-in owner. */
+    readonly exampleOnly = input(false);
     readonly hideTitle = input(false);
     /** Fixed-period cards in the Health category overview reuse the same account evidence. */
     readonly overview = input(false);
@@ -87,7 +89,7 @@ export class DashboardHealthChartComponent {
             && (!settings.sourceKey || shared.context.selectedKey === settings.sourceKey)
             ? shared.context : this.context();
     });
-    readonly showingExample = computed(() => this.preview() && !this.previewEvidence()?.hasData);
+    readonly showingExample = computed(() => this.exampleOnly() || this.preview() && !this.previewEvidence()?.hasData);
     readonly displayContext = computed(() => this.showingExample()
         ? buildDashboardHealthExample(this.settings(), this.window(), this.user().settings.unitSettings)
         : this.previewEvidence());
@@ -109,7 +111,7 @@ export class DashboardHealthChartComponent {
     private readonly viewKey = computed(() => JSON.stringify([this.user().settings.unitSettings,
         this.user().settings.appSettings?.healthWorkspace?.highlightSources?.heart_rate_variability,
         this.effectiveSettings().sourceKey, this.providerFilter(), this.overview()]));
-    private readonly requestKey = computed(() => JSON.stringify([this.user().uid, this.data.isOwner(this.user().uid),
+    private readonly requestKey = computed(() => JSON.stringify([this.user().uid, this.exampleOnly(), this.exampleOnly() ? false : this.data.isOwner(this.user().uid),
         this.settings().metric, this.settings().range, this.effectiveEndDate(), this.visible(), this.priority(), this.retry()]));
     constructor() {
         // Embedded views are detached during construction. Resolve their dashboard
@@ -130,10 +132,11 @@ export class DashboardHealthChartComponent {
                     this.sampleRangeCorrectionPending = false;
                 }
                 const version = ++this.version;
-                if (!visible || !this.data.isOwner(user.uid)) {
+                if (this.exampleOnly() || !visible || !this.data.isOwner(user.uid)) {
                     this.context.set(null);
                     this.evidence = null;
                     this.sampleRangeCorrectionPending = false;
+                    if (this.exampleOnly()) this.error.set(false);
                     this.loading.set(false);
                     return;
                 }
@@ -222,7 +225,7 @@ export class DashboardHealthChartComponent {
         this.endDate.set(navigateHealthWorkspaceWindow(this.window(), direction).endDate);
     }
     reload(): void {
-        if (this.loading() || this.disabled()) return;
+        if (this.exampleOnly() || this.loading() || this.disabled()) return;
         this.haptics.selection();
         this.data.invalidate(this.user().uid);
         // An errored observable is closed, so invalidation alone cannot restart it.

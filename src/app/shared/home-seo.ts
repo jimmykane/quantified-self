@@ -1,7 +1,7 @@
 import { HEALTH_FEATURE_CONTENT } from '../components/public-seo/health-feature.content';
 
 /** Shared by the home route and SEO fallback; no chart or account dependencies. */
-export const HOME_SEO_DESCRIPTION = 'Connect Garmin, Suunto, COROS and Wahoo. Analyze training, sleep and HRV in one dashboard; log blood pressure and weight, and add timeline notes.';
+export const HOME_SEO_DESCRIPTION = 'Bring your activities, sleep and health data together. Analyze training, build structured workouts and plan your next session with Quantified Self.';
 
 export const HOME_SEO_JSON_LD = {
   '@context': 'https://schema.org',

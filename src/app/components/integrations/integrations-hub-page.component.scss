@@ -7,17 +7,17 @@
 .integrations-hub-page {
   max-width: 72rem;
   margin: 0 auto;
-  padding: 1.5rem 1rem 3rem;
+  padding: 0.5rem 1rem 2rem;
 }
 
 .hero-section,
 .content-section {
-  padding: 2rem 0;
+  padding: 1.25rem 0;
 }
 
 .hero-section {
   display: grid;
-  gap: 1.25rem;
+  gap: 0.75rem;
 }
 
 .eyebrow {
@@ -38,14 +38,15 @@ p {
 h1 {
   max-width: 48rem;
   margin-bottom: 0;
-  font-size: 4rem;
+  font-size: clamp(2rem, 4vw, 3rem);
   line-height: 1.02;
   letter-spacing: 0;
 }
 
 h2 {
   margin-bottom: 0.5rem;
-  font-size: 2.35rem;
+  font: var(--mat-sys-headline-small);
+  font-weight: 700;
   line-height: 1.1;
   letter-spacing: 0;
 }
@@ -73,7 +74,7 @@ h2 {
 
 .section-heading {
   max-width: 46rem;
-  margin-bottom: 1.25rem;
+  margin-bottom: 0.75rem;
 }
 
 .section-heading p {
@@ -140,7 +141,7 @@ h2 {
 .integration-card mat-card-content {
   display: flex;
   flex-direction: column;
-  gap: 0.75rem;
+  gap: 0.5rem;
   min-height: 0;
 }
 
@@ -151,7 +152,7 @@ h2 {
 
 .integration-card p,
 .integration-card ul {
-  margin-bottom: 0;
+  margin: 0;
 }
 
 .integration-card ul {
@@ -166,23 +167,42 @@ h2 {
 
 @media (max-width: 48rem) {
   .integrations-hub-page {
-    padding: 1.25rem 0.875rem 2.5rem;
+    padding: 0.25rem 0.875rem 1.5rem;
   }
 
   h1 {
-    font-size: 2.55rem;
+    font-size: 2rem;
   }
 
   h2 {
-    font-size: 1.85rem;
+    font-size: 1.5rem;
   }
 
   .hero-section,
   .content-section {
-    padding: 1.5rem 0;
+    padding: 1rem 0;
   }
 
   .hero-actions a {
     width: 100%;
+  }
+
+  // Stacked providers follow their own content height; matching desktop rows
+  // must not stretch every phone card to the longest provider description.
+  .integration-grid {
+    grid-template-columns: minmax(0, 1fr);
+    grid-auto-rows: auto;
+  }
+
+  .integration-card {
+    min-height: 0;
+    grid-template-rows: auto auto auto;
+  }
+
+  .integration-card mat-card-actions a {
+    max-width: 100%;
+    height: auto;
+    min-height: 44px;
+    white-space: normal;
   }
 }

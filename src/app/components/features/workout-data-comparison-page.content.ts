@@ -146,7 +146,7 @@ export const WORKOUT_DATA_COMPARISON_ROUTE_DATA: ComparisonRouteData = {
     audience: [
       {
         '@type': 'Audience',
-        audienceType: 'Endurance athletes',
+        audienceType: 'People comparing activity data',
       },
       {
         '@type': 'Audience',
