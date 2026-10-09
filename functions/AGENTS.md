@@ -9,6 +9,17 @@ Functions-only rules:
 Workflows:
 - `../.agent/workflows/start-emulators.md`
 
+- Always persist the real Firebase UID on account mail when it is created, and preserve it through retries and
+  updates. Prefer an inert top-level `uid`; existing `toUids` and `marketing.uid` ownership are supported too.
+  This includes registration, subscription, confirmation, marketing, CSV and manual/test senders. An email address
+  or UID embedded only in the document ID is not a substitute for an ownership field. Never add `toUids` just as
+  metadata if it changes delivery recipients; use `uid` instead.
+- Account mail must also include `expireAt` using `TTL_CONFIG.MAIL_IN_DAYS`. Apply the shared deletion guard inside
+  account-mail write transactions; deletion confirmations deliberately follow Auth deletion. Tests for changed
+  mail writers must assert UID ownership and expiry. Auth lookup failures must not silently produce unattributed mail.
+- Mail account cleanup is UID-only: do not reintroduce email-address matching. Historical email-only records are
+  outside its completion scope, even when they lack TTL. An explicitly selected external test inbox with no app
+  account may omit UID, but must retain expiry; never invent a UID for a non-account recipient.
 - When adding or renaming a Function credential, register it with `defineSecret()` in `src/secrets.ts`, bind it only to
   the endpoints that require it, keep `.secret.local.example` and `docs/function-secret-management.md` current, and run
   `npm run secrets:check`. Never generate `functions/.env` in CI or permit local environment, secret, service-account,

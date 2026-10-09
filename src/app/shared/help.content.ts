@@ -1484,6 +1484,8 @@ Deleting your account permanently removes:
 
 This action cannot be undone in the app. Deleted uploaded files can remain in protected recovery storage for up to 30 days before expiry.
 
+Some older email delivery records may remain after account deletion. Those with a 90-day expiry are removed automatically after that date.
+
 ## Exports and legal requests
 
 - Use CSV export and per-activity downloads for day-to-day backups.

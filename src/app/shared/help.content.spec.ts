@@ -39,6 +39,8 @@ describe('help.content', () => {
     expect(copy).toContain('Data cleanup continues in the background');
     expect(copy).toContain('does not confirm that every file or record has already been removed');
     expect(copy).toContain('protected recovery storage for up to 30 days');
+    expect(copy).toContain('Some older email delivery records may remain after account deletion');
+    expect(copy).toContain('Those with a 90-day expiry are removed automatically after that date');
     expect(copy).toContain('This action cannot be undone');
   });
   it('explains campaign sender names, fixed addresses and retesting after sender edits', () => {

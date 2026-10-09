@@ -399,12 +399,13 @@ describe('cleanupUserAccountsV2', () => {
         vi.clearAllMocks();
     });
 
-    it('unwraps the real Eventarc deleted-user envelope with the original email', async () => {
+    it('unwraps the real Eventarc deleted-user envelope and selects mail by the original UID', async () => {
         const event = { ...authEvent(testEnv.auth.makeUserRecord({ uid: 'testUser123' })),
             data: { oldValue: { uid: 'testUser123', email: 'deleted@example.invalid' } } };
         await cleanupUserAccountsV2(event as unknown as AuthEvent<User>);
         expect(dataCleanupMocks.beginAccountDataCleanup).toHaveBeenCalledWith(expect.anything(), 'testUser123');
-        expect(whereMock).toHaveBeenCalledWith('to', '==', 'deleted@example.invalid');
+        expect(whereMock).toHaveBeenCalledWith('uid', '==', 'testUser123');
+        expect(whereMock).not.toHaveBeenCalledWith('to', '==', 'deleted@example.invalid');
         expect(dataCleanupMocks.completeAccountDataCleanup).toHaveBeenCalledWith(expect.anything(), 'testUser123', 'synthetic-attempt');
     });
 
@@ -641,61 +642,48 @@ describe('cleanupUserAccountsV2', () => {
         expect(deauthorizeServiceMock).toHaveBeenCalledWith('testUser123', ServiceNames.GarminAPI);
     });
 
-    it('should query and delete emails for the user', async () => {
-        const wrapped = cleanupUserAccounts;
+    it('queries every supported UID owner field without selecting by email', async () => {
         const user = testEnv.auth.makeUserRecord({ uid: 'testUser123', email: 'test@example.com' });
+        const docsByField: Record<string, { id: string; ref: { path: string }; data: () => object }[]> = {
+            toUids: [{ id: 'recipient', ref: { path: 'mail/recipient' }, data: () => ({ toUids: [user.uid] }) }],
+            'marketing.uid': [{ id: 'campaign', ref: { path: 'mail/campaign' }, data: () => ({ marketing: { uid: user.uid } }) }],
+            uid: [{ id: 'account', ref: { path: 'mail/account' }, data: () => ({ uid: user.uid }) }],
+        };
+        whereMock.mockImplementation((field: string) => ({
+            get: vi.fn().mockResolvedValue({ docs: docsByField[field] || [] }),
+        }));
 
-        const uidDocs = { docs: [{ id: 'mail1', ref: 'ref1', data: () => ({}) }] };
-        const emailDocs = { docs: [{ id: 'mail2', ref: 'ref2', data: () => ({}) }] };
+        await cleanupUserAccounts(user, { eventId: 'eventId' } as unknown as functions.EventContext);
 
-        // Fix: where() returns an object with get(), which returns the promise.
-        // The mock definition logic for whereMock was:
-        // const whereMock = vi.fn().mockReturnValue({
-        //     get: vi.fn().mockResolvedValue(querySnapshotMock)
-        // });
-
-        // We need to override the inner `get` behavior.
-        const getMock = vi.fn();
-        getMock
-            .mockResolvedValueOnce(uidDocs)
-            .mockResolvedValueOnce({ docs: [] })
-            .mockResolvedValueOnce(emailDocs);
-
-        whereMock.mockImplementation((field: string) => ({ get: ['toUids', 'marketing.uid', 'to'].includes(field) ? getMock : vi.fn().mockResolvedValue({ docs: [] }) }));
-
-        await wrapped(user, { eventId: 'eventId' } as unknown as functions.EventContext);
-
-        expect(firestoreMock().collection).toHaveBeenCalledWith('mail');
-
-        // Verify Queries
-        expect(whereMock).toHaveBeenCalledWith('toUids', 'array-contains', 'testUser123');
-        expect(whereMock).toHaveBeenCalledWith('to', '==', 'test@example.com');
-
-        // Verify Deletion
-        // expect(firestoreMock().batch).toHaveBeenCalled(); // Removed as firestoreMock returns new instance with new batch spy each time
-        expect(batchMock.delete).toHaveBeenCalledWith('ref1', { lastUpdateTime: undefined });
-        expect(batchMock.delete).toHaveBeenCalledWith('ref2', { lastUpdateTime: undefined });
-        expect(batchMock.commit).toHaveBeenCalled();
+        expect(whereMock).toHaveBeenCalledWith('toUids', 'array-contains', user.uid);
+        expect(whereMock).toHaveBeenCalledWith('marketing.uid', '==', user.uid);
+        expect(whereMock).toHaveBeenCalledWith('uid', '==', user.uid);
+        expect(whereMock).not.toHaveBeenCalledWith('to', '==', user.email);
+        expect(batchMock.delete.mock.calls.map(([ref]) => ref.path).sort()).toEqual([
+            'mail/account', 'mail/campaign', 'mail/recipient',
+        ]);
     });
 
     it.each([
         {},
         { uid: null, marketing: { uid: null } },
         { uid: '', marketing: { uid: '' }, toUids: [] },
-    ])('deletes email-only mail with missing ownership metadata: %j', async ownership => {
+    ])('leaves email-only mail outside cleanup regardless of missing ownership: %j', async ownership => {
         const user = testEnv.auth.makeUserRecord({ uid: 'testUser123', email: 'test@example.com' });
-        const get = vi.fn().mockResolvedValueOnce({ docs: [{
+        const getLegacyMail = vi.fn().mockResolvedValue({ docs: [{
             id: 'legacy-email', ref: 'legacy-ref', updateTime: 'selected-revision',
             data: () => ({ to: user.email, ...ownership }),
-        }] }).mockResolvedValue({ docs: [] });
+        }] });
         whereMock.mockImplementation((field: string) => ({
-            get: field === 'to' ? get : vi.fn().mockResolvedValue({ docs: [] }),
+            get: field === 'to' ? getLegacyMail : vi.fn().mockResolvedValue({ docs: [] }),
         }));
 
         await cleanupUserAccounts(user, { eventId: 'eventId' } as unknown as functions.EventContext);
 
-        expect(batchMock.delete).toHaveBeenCalledWith('legacy-ref', { lastUpdateTime: 'selected-revision' });
-        expect(batchMock.commit).toHaveBeenCalled();
+        expect(whereMock).not.toHaveBeenCalledWith('to', '==', user.email);
+        expect(getLegacyMail).not.toHaveBeenCalled();
+        expect(batchMock.delete).not.toHaveBeenCalled();
+        expect(dataCleanupMocks.completeAccountDataCleanup).toHaveBeenCalled();
     });
 
     it('deletes a large campaign mail history in bounded batches', async () => {
@@ -720,7 +708,7 @@ describe('cleanupUserAccountsV2', () => {
         );
     });
 
-    it('preserves explicit other-owner mail sharing the deleted email and pins owned revisions', async () => {
+    it('preserves conflicting UID markers and pins owned mail revisions', async () => {
         const user = testEnv.auth.makeUserRecord({ uid: 'testUser123', email: 'shared@example.invalid' });
         const revision = { seconds: 1, nanoseconds: 2 };
         const docs = [
@@ -729,7 +717,7 @@ describe('cleanupUserAccountsV2', () => {
             { id: 'literal-custom-uid', ref: 'literal-custom-uid', data: () => ({ uid: ' ' }) },
             { id: 'owned', ref: 'owned', updateTime: revision, data: () => ({ marketing: { uid: user.uid } }) },
         ];
-        whereMock.mockImplementation((field: string) => ({ get: vi.fn().mockResolvedValue({ docs: field === 'to' ? docs : [] }) }));
+        whereMock.mockImplementation((field: string) => ({ get: vi.fn().mockResolvedValue({ docs: field === 'marketing.uid' ? docs : [] }) }));
 
         await cleanupUserAccounts(user, { eventId: 'eventId' } as unknown as functions.EventContext);
 
@@ -741,7 +729,7 @@ describe('cleanupUserAccountsV2', () => {
         const getMock = vi.fn()
             .mockResolvedValueOnce({ docs: [] })
             .mockResolvedValueOnce({ docs: [{ id: 'marketing-mail', ref: 'mail-ref', data: () => ({}) }] });
-        whereMock.mockImplementation((field: string) => ({ get: ['toUids', 'marketing.uid', 'to'].includes(field) ? getMock : vi.fn().mockResolvedValue({ docs: [] }) }));
+        whereMock.mockImplementation((field: string) => ({ get: ['toUids', 'marketing.uid'].includes(field) ? getMock : vi.fn().mockResolvedValue({ docs: [] }) }));
         batchMock.commit.mockRejectedValueOnce(new Error('Mail batch failed'));
 
         await expect(cleanupUserAccounts(user, { eventId: 'eventId' } as unknown as functions.EventContext))
@@ -768,7 +756,7 @@ describe('cleanupUserAccountsV2', () => {
                 }
             ]
         };
-        const emailDocs = {
+        const campaignDocs = {
             docs: [
                 {
                     id: 'mail2',
@@ -786,10 +774,9 @@ describe('cleanupUserAccountsV2', () => {
         const getMock = vi.fn();
         getMock
             .mockResolvedValueOnce(uidDocs)
-            .mockResolvedValueOnce({ docs: [] })
-            .mockResolvedValueOnce(emailDocs);
+            .mockResolvedValueOnce(campaignDocs);
 
-        whereMock.mockImplementation((field: string) => ({ get: ['toUids', 'marketing.uid', 'to'].includes(field) ? getMock : vi.fn().mockResolvedValue({ docs: [] }) }));
+        whereMock.mockImplementation((field: string) => ({ get: ['toUids', 'marketing.uid'].includes(field) ? getMock : vi.fn().mockResolvedValue({ docs: [] }) }));
 
         await wrapped(user, { eventId: 'eventId' } as unknown as functions.EventContext);
 
@@ -1141,24 +1128,26 @@ describe('cleanupUserAccountsV2', () => {
     it('should handle null email correctly and skip email query', async () => {
         const wrapped = cleanupUserAccounts;
         const user = testEnv.auth.makeUserRecord({ uid: 'testUser123' });
-        // User without email - only uid query should run
+        // All UID ownership queries remain available without an email address.
 
         const getMock = vi.fn().mockResolvedValue({ docs: [] });
-        whereMock.mockImplementation((field: string) => ({ get: ['toUids', 'marketing.uid', 'to'].includes(field) ? getMock : vi.fn().mockResolvedValue({ docs: [] }) }));
+        whereMock.mockImplementation((field: string) => ({ get: ['toUids', 'marketing.uid'].includes(field) ? getMock : vi.fn().mockResolvedValue({ docs: [] }) }));
 
         await wrapped(user, { eventId: 'eventId' } as unknown as functions.EventContext);
 
-        // Should only query by toUids, not by email
         expect(whereMock).toHaveBeenCalledWith('toUids', 'array-contains', 'testUser123');
+        expect(whereMock).toHaveBeenCalledWith('marketing.uid', '==', 'testUser123');
+        expect(whereMock).toHaveBeenCalledWith('uid', '==', 'testUser123');
+        expect(whereMock.mock.calls.some(([field]) => field === 'to')).toBe(false);
     });
 
     it('should log when no email documents found', async () => {
         const wrapped = cleanupUserAccounts;
         const user = testEnv.auth.makeUserRecord({ uid: 'testUser123', email: 'test@test.com' });
 
-        // Both queries return empty
+        // All UID queries return empty
         const getMock = vi.fn().mockResolvedValue({ docs: [] });
-        whereMock.mockImplementation((field: string) => ({ get: ['toUids', 'marketing.uid', 'to'].includes(field) ? getMock : vi.fn().mockResolvedValue({ docs: [] }) }));
+        whereMock.mockImplementation((field: string) => ({ get: ['toUids', 'marketing.uid'].includes(field) ? getMock : vi.fn().mockResolvedValue({ docs: [] }) }));
 
         await wrapped(user, { eventId: 'eventId' } as unknown as functions.EventContext);
 

@@ -109,11 +109,13 @@ Mail cleanup previously fetched entire histories and deleted email matches witho
 respecting another explicit UID. It now pages 100 records, queries `uid`, `toUids`
 and `marketing.uid`, rejects conflicting explicit owners,
 pins batch deletes to the queried document revision and verifies remaining owned
-matches. Confirmation mail remains retained. The approved policy deliberately
-deletes historical mail by `to == deletedUser.email` when UID metadata is absent,
-null or empty. Missing ownership metadata does not block deletion or completion;
-there is no prerequisite backfill. The app does not support email changes, and
-explicitly conflicting UID ownership still takes precedence over an email match.
+matches. Confirmation mail remains retained. Mail selection is UID-only: there
+is no email-address fallback. Historical email-only records, including old
+development-update campaign mail, are outside the account-cleanup scope and do
+not block completion. Records with a valid `expireAt` use the existing 90-day TTL;
+records without expiry remain until separately remediated. The production audit
+confirmed both cases exist, so completion does not certify removal of all mail
+ever addressed to the user. No backfill or historical-mail deletion is included.
 
 Registration welcome, all four subscription lifecycle writers and deletion
 confirmations now store an inert `uid` field without changing delivery recipients.
@@ -126,6 +128,8 @@ Both scripts check the shared deletion guard inside the write transaction for
 registered accounts and abort on Auth lookup failures other than user-not-found.
 Existing records are not backfilled. The installed Delete User Data extension
 never selected `mail`; email cleanup was already owned by the custom Gen 1 handler.
+`functions/AGENTS.md` requires all account-mail writers to preserve explicit UID
+ownership and expiry, including administrative scripts, retries and confirmations.
 
 **Client and campaign writers, fixed.** Existing browser sessions can outlive the
 callable response. Rules now apply the active deletion tombstone check to every
@@ -207,8 +211,9 @@ implementation distinguishes account incarnations at the same path.
 Provider deauthorization and credential archival retain their existing
 best-effort policy. Archived orphaned credentials may remain for bounded remote
 revocation follow-up; queue tombstones, completion checkpoints and the deletion
-confirmation email have their existing operational retention. Provider apps or
-watches can retain previously sent workouts. Stripe remains responsible for
+confirmation email have their existing operational retention. Historical email-only
+mail is excluded from this receipt, with expiry only where a valid TTL field
+exists. Provider apps or watches can retain previously sent workouts. Stripe remains responsible for
 remote customer/subscription cleanup: its inspected `Auto delete` setting means
 customers are **not** promised to be retained in Stripe. None of those remote
 results is certified by the local completion marker. Read-only bucket inspection
@@ -262,10 +267,11 @@ and Storage I/O in Firestore tests are synthetic. No live provider or account
 mutation establishes this evidence. Functions build, secret/entrypoint checks,
 cold-import benchmark and the public Help contract accompany the PR. All existing
 owner behavior cases invoke the real Gen 2 SDK handler; additional tests cover the
-raw Eventarc `oldValue` payload, original email, tenant isolation and missing data.
+raw Eventarc `oldValue` payload, original UID, tenant isolation and missing data.
 A real Firestore overlap test proves a stale Gen 1 attempt cannot replace the Gen 2
 receipt or erase another owner. Further regressions cover an 801-record mail
-history, confirmation/other-UID retention, and reassignment between query and
+history, confirmation/other-UID retention, intentionally retained email-only
+records with and without TTL, and reassignment between query and
 batch commit. Further review covers ownership reassignment before recursive
 queue deletion, reconnect after a provider-only parent disappears, an operational
 tree exceeding the SDK's 5,000-document stream page, `uid` mail ownership after
@@ -273,8 +279,8 @@ email changes, and client Rules/transaction-time campaign fences. These tests do
 emulators or claim live Auth-to-Eventarc delivery.
 
 After separate deployment approval, first deploy the client write fence and
-UID-bearing registration/subscription mail writers. Historical mail is cleaned
-by the approved email fallback without waiting for a UID backfill.
+UID-bearing registration/subscription mail writers. Account mail cleanup uses
+explicit UID ownership only; historical email-only records are excluded.
 Do not run the old unguarded campaign script against deleting accounts.
 
 ```sh
