@@ -158,9 +158,10 @@ export class HistoryImportFormComponent implements OnInit, OnDestroy, OnChanges 
     this.processChanges();
     this.authSubscription = this.authService.user$.subscribe(user => {
       const userID = this.coerceUserID(user);
-      if (this.isDestroyed || userID === this.currentUserID) return;
+      const isPro = AppUserUtilities.hasProAccess(user);
+      if (this.isDestroyed || (userID === this.currentUserID && isPro === this.isPro)) return;
       this.currentUserID = userID;
-      this.isPro = AppUserUtilities.hasProAccess(user);
+      this.isPro = isPro;
       this.processChanges();
       this.changeDetectorRef.markForCheck();
     });
@@ -339,7 +340,7 @@ export class HistoryImportFormComponent implements OnInit, OnDestroy, OnChanges 
   }
 
   private updateActivityHistoryFormState(): void {
-    if (this.isAllowedToDoHistoryImport && !this.isMissingGarminPermissions
+    if (this.isPro && this.isAllowedToDoHistoryImport && !this.isMissingGarminPermissions
       && !!this.currentUserID && !this.isSubmitting && !this.isHistoryImportPending() && !this.isActivityHistoryImportRunning()) {
       this.formGroup.enable();
     } else {
@@ -396,7 +397,7 @@ export class HistoryImportFormComponent implements OnInit, OnDestroy, OnChanges 
     event.preventDefault();
     if (this.isDestroyed || !this.formGroup) return;
     this.syncActivityHistoryImportRunning();
-    if (!this.currentUserID || this.isLoadingParent || this.isSubmitting || this.formGroup.disabled || this.isHistoryImportPending() || this.isActivityHistoryImportRunning()) return;
+    if (!this.isPro || !this.currentUserID || this.isLoadingParent || this.isSubmitting || this.formGroup.disabled || this.isHistoryImportPending() || this.isActivityHistoryImportRunning()) return;
     if (!this.formGroup.valid) {
       this.validateAllFormFields(this.formGroup);
       return;

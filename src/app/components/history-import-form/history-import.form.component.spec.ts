@@ -100,7 +100,7 @@ describe('HistoryImportFormComponent', () => {
         };
         mockAuthService = {
             getUser: vi.fn().mockResolvedValue({ uid: '123', stripeRole: 'pro' }),
-            user$: of({ uid: '123' })
+            user$: of({ uid: '123', stripeRole: 'pro' })
         };
         mockSleepService = {
             watchSyncState: vi.fn().mockReturnValue(of(null)),
@@ -172,6 +172,67 @@ describe('HistoryImportFormComponent', () => {
                 ? component.onSubmit(new Event('submit'))
                 : component.onSleepBackfill(new Event('click'));
         }
+
+        it.each([false, true])('refreshes history eligibility when the same account changes from Pro=%s', async initiallyPro => {
+            const user$ = new Subject<any>();
+            mockAuthService.user$ = user$;
+            mockAuthService.getUser.mockResolvedValue({ uid: '123', stripeRole: initiallyPro ? 'pro' : 'free' });
+            await reopen();
+            const startDate = component.formGroup.get('startDate')!.value;
+            const endDate = component.formGroup.get('endDate')!.value;
+            expect(component.isPro).toBe(initiallyPro);
+
+            user$.next({ uid: '123', stripeRole: initiallyPro ? 'free' : 'pro' });
+            fixture.detectChanges();
+            expect(component.isPro).toBe(!initiallyPro);
+            expect(component.formGroup.enabled).toBe(!initiallyPro);
+            expect(component.canSubmitSleepBackfill).toBe(!initiallyPro);
+            expect(component.formGroup.get('startDate')!.value).toBe(startDate);
+            expect(component.formGroup.get('endDate')!.value).toBe(endDate);
+            expect(haptics.selection).not.toHaveBeenCalled();
+            expect(haptics.success).not.toHaveBeenCalled();
+            expect(haptics.error).not.toHaveBeenCalled();
+
+            if (initiallyPro) {
+                expect(fixture.nativeElement.textContent).toContain('History import is a Pro feature');
+                await submit('activity');
+                await submit('sleep');
+                expect(mockUserService.importServiceHistoryForCurrentUser).not.toHaveBeenCalled();
+                expect(mockUserService.backfillCorosSleepForCurrentUser).not.toHaveBeenCalled();
+                expect(haptics.selection).not.toHaveBeenCalled();
+            } else {
+                expect(fixture.nativeElement.querySelector('.history-import-form')).not.toBeNull();
+                expect(fixture.nativeElement.querySelector('.sleep-backfill-button')).not.toBeNull();
+            }
+        });
+
+        it.each(['activity', 'sleep'] as const)('preserves a pending %s request through same-account access changes', async domain => {
+            const user$ = new Subject<any>();
+            mockAuthService.user$ = user$;
+            await reopen();
+            const call = domain === 'activity' ? mockUserService.importServiceHistoryForCurrentUser : mockUserService.backfillCorosSleepForCurrentUser;
+            let resolve!: (value: unknown) => void;
+            call.mockReturnValueOnce(new Promise(value => resolve = value));
+            const submission = submit(domain);
+            expect(call).toHaveBeenCalledTimes(1);
+
+            user$.next({ uid: '123', stripeRole: 'free' });
+            user$.next({ uid: '123', stripeRole: 'pro' });
+            fixture.detectChanges();
+            expect(domain === 'activity' ? component.isSubmitting : component.isSleepBackfillSubmitting()).toBe(true);
+            await submit(domain);
+            expect(call).toHaveBeenCalledTimes(1);
+
+            resolve(domain === 'activity'
+                ? { stats: { successCount: 11 } }
+                : { queued: 4, nextAllowedAtMs: Date.now() + 60_000 });
+            await submission;
+            expect(domain === 'activity' ? component.pendingImportResult()?.successCount : component.pendingSleepBackfillResult()?.queued)
+                .toBe(domain === 'activity' ? 11 : 4);
+            expect(haptics.selection).toHaveBeenCalledTimes(1);
+            expect(haptics.success).toHaveBeenCalledTimes(1);
+            expect(haptics.error).not.toHaveBeenCalled();
+        });
 
         it.each(['activity', 'sleep'] as const)('keeps %s locked on reopen and retains late success without stale feedback', async domain => {
             await reopen();
