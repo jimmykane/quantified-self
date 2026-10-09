@@ -240,27 +240,31 @@ describe('processActivitySyncTask', () => {
       .toThrow('Item queue-item-1 failed and was scheduled for retry.');
   });
 
-  it('surfaces a redacted retry reason in Cloud Task errors', async () => {
+  it('redacts the current retry reason in logs and Cloud Task errors', async () => {
     mockQueueGet.mockResolvedValueOnce({
       exists: true,
       id: 'queue-item-1',
       ref: { path: 'activitySyncQueue/queue-item-1' },
-      data: () => ({
-        processed: false,
-        errors: [{
-          error: 'Provider request failed. Bearer sensitive-token token=another-secret https://api.example.test/status?x-sig=secret',
-          atRetryCount: 1,
-          date: 1,
-        }],
-      }),
+      data: () => ({ processed: false }),
     });
-    mockProcessActivitySyncQueueItem.mockResolvedValueOnce('RETRY_INCREMENTED');
+    mockProcessActivitySyncQueueItem.mockImplementationOnce(async (processingQueueItem: ActivitySyncQueueItemInterface) => {
+      processingQueueItem.errors = [{
+        error: 'Provider request failed. Bearer sensitive-token token=another-secret https://api.example.test/status?x-sig=secret',
+        atRetryCount: 1,
+        date: 1,
+      }];
+      return 'RETRY_INCREMENTED';
+    });
 
     const error = await invokeWorker({ data: { queueItemId: 'queue-item-1' } }).catch((caughtError) => caughtError as Error);
 
     expect(error).toBeInstanceOf(Error);
     expect(error.message).toBe(
       'Item queue-item-1 failed and was scheduled for retry: Provider request failed. Bearer [redacted] token=[redacted] [url]',
+    );
+    expect(mockLoggerWarn).toHaveBeenCalledWith(
+      '[ActivitySyncTaskWorker] Item queue-item-1 failed and retry count was incremented.',
+      { retryReason: 'Provider request failed. Bearer [redacted] token=[redacted] [url]' },
     );
   });
 
