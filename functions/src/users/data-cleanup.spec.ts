@@ -41,6 +41,18 @@ describe('account Storage cleanup', () => {
         await expect(assertAccountStorageAbsent('test-owner', bucket)).rejects.toThrow('objects remain');
     });
 
+    it.each(["$'", '$&', '$$', '$`'])('treats replacement-pattern UID %s literally in Storage targets', async uid => {
+        const owned = file(`users/${uid}/owned.fit`);
+        const getFiles = vi.fn().mockResolvedValue([[owned], undefined]);
+        const bucket = bucketWith(getFiles);
+
+        await deleteAccountStorageFiles(uid, bucket);
+
+        expect(bucket.file).toHaveBeenCalledWith(`users/${uid}`);
+        expect(getFiles).toHaveBeenCalledWith({ prefix: `users/${uid}/`, maxResults: 100, autoPaginate: false, pageToken: undefined });
+        expect(owned.delete).toHaveBeenCalledWith({ ifGenerationMatch: '12345678901234567' });
+    });
+
     it('continues independent objects but retries a replaced generation and never deletes a prefix collision', async () => {
         const changed = file('users/test-owner/changed.fit', 412);
         const sibling = file('users/test-owner-extra/private.fit');
