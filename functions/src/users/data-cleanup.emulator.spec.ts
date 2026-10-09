@@ -223,7 +223,7 @@ describe.skipIf(!host)('native account deletion (loopback Firestore emulator)', 
         } finally { await db.recursiveDelete(intent); }
     }, 30_000);
 
-    it('completes cleanup of paged UID-owned and email-only mail while preserving confirmations and other owners', async () => {
+    it('deletes 801 UID-owned messages and completes while retaining email-only mail regardless of TTL', async () => {
         const uid = owner();
         const other = owner();
         const email = `${uid}@example.invalid`;
@@ -232,16 +232,18 @@ describe.skipIf(!host)('native account deletion (loopback Firestore emulator)', 
         const confirmation = mail.doc(`account_deleted_confirmation_${uid}`);
         await retained.set({ to: email, marketing: { uid: other } });
         await confirmation.set({ uid, to: email, template: { name: 'account_deleted_confirmation' } });
+        const legacyPayloads = [
+            { to: email, expireAt: Timestamp.fromMillis(Date.now() + 90 * 24 * 60 * 60 * 1000) },
+            { to: email }, // Historical campaign mail without UID or TTL is intentionally out of scope.
+            { to: email, uid: null, marketing: { uid: null } },
+            { to: email, uid: '', marketing: { uid: '' }, toUids: [] },
+        ];
+        const legacy = legacyPayloads.map((_, index) => mail.doc(`${uid}-legacy-${index}`));
+        await Promise.all(legacy.map((ref, index) => ref.set(legacyPayloads[index])));
         for (let offset = 0; offset < 801; offset += 400) {
             const batch = db.batch();
             for (let index = offset; index < Math.min(offset + 400, 801); index++) {
-                const ownership = [
-                    { marketing: { uid } },
-                    {}, // Legacy registration, subscription and CSV campaign mail.
-                    { uid: null, marketing: { uid: null } },
-                    { uid: '', marketing: { uid: '' }, toUids: [] },
-                ][index % 4];
-                batch.set(mail.doc(`${uid}-${index}`), { to: email, ...ownership });
+                batch.set(mail.doc(`${uid}-${index}`), { to: email, marketing: { uid } });
             }
             await batch.commit();
         }
@@ -249,8 +251,11 @@ describe.skipIf(!host)('native account deletion (loopback Firestore emulator)', 
             await cleanupUserAccounts({ uid, email } as admin.auth.UserRecord);
             expect((await mail.where('marketing.uid', '==', uid).get()).empty).toBe(true);
             expect((await mail.where('to', '==', email).get()).docs.map(doc => doc.id).sort()).toEqual(
-                [retained.id, confirmation.id].sort(),
+                [retained.id, confirmation.id, ...legacy.map(ref => ref.id)].sort(),
             );
+            for (let index = 0; index < legacy.length; index++) {
+                expect((await legacy[index].get()).data()).toEqual(legacyPayloads[index]);
+            }
             expect((await db.doc(`userDeletionTombstones/${uid}`).get()).get('cleanupStatus')).toBe('complete');
         } finally {
             // Synthetic leaf Trigger Email records have no descendants.
