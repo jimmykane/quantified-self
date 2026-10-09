@@ -12,7 +12,7 @@ const NO_TARGET = '__NO_TARGET__';
 // Exercise a property inherited from Object.prototype so the fallback check
 // also guards against accidental prototype-based routing.
 const UNKNOWN_TARGET = 'toString';
-const EXPECTED_FULL_EXPORT_COUNT = 180;
+const EXPECTED_FULL_EXPORT_COUNT = 181;
 const MARKETING_TARGETS = new Set([
   'listMarketingCampaigns',
   'saveMarketingCampaign',
@@ -107,6 +107,7 @@ const GEN1_DISPATCHER_METADATA: Readonly<Record<string, {
 };
 const RUNTIME_CONTRACT_TARGETS = [
   ...CONNECTION_HISTORY_TARGETS,
+  'cleanupUserAccountsV2',
   ...Object.keys(GEN1_DISPATCHER_METADATA),
   'processGarminHealthBackfillTask',
   'observeDerivedMetricsHealth',
@@ -274,11 +275,14 @@ interface DiscoveredEndpoint {
   minInstances?: number | null;
   cpu?: number | 'gcf_gen1';
   entryPoint?: string;
+  serviceAccountEmail?: string | null;
   secretEnvironmentVariables?: Array<{ key?: string }>;
   callableTrigger?: unknown;
   scheduleTrigger?: { schedule?: string; timeZone?: string; retryConfig?: Record<string, unknown> };
   eventTrigger?: {
     eventType?: string;
+    region?: string;
+    eventFilters?: Record<string, unknown>;
     eventFilterPathPatterns?: { document?: string };
     retry?: boolean;
   };
@@ -354,6 +358,7 @@ function probe(targetArgument: string): void {
   const assistantProposalTarget = runtimeTarget === 'applyAssistantTrainingProposal';
   const derivedRefreshTarget = runtimeTarget === 'ensureDerivedMetrics';
   const mcpTarget = runtimeTarget === 'mcpApi';
+  const accountCleanupTarget = runtimeTarget === 'cleanupUserAccountsV2';
   const forbiddenModules = normalizedModules.filter(path => {
     if (path.endsWith('/lib/functions/src/full-entrypoint.js')) return true;
     if (runtimeTarget === 'observeDerivedMetricsHealth' && (
@@ -375,9 +380,14 @@ function probe(targetArgument: string): void {
       || (path.includes('/node_modules/genkit/') && !assistantProposalTarget)
       || (path.includes('/node_modules/@google-cloud/bigquery/') && !adminTarget?.allowsBigQuery)
       || (path.includes('/lib/functions/src/mcp/')
-        && !assistantProposalTarget && !derivedRefreshTarget && !mcpTarget && !adminTarget?.allowsMcp)
+        && !assistantProposalTarget && !derivedRefreshTarget && !mcpTarget && !adminTarget?.allowsMcp
+        && !(accountCleanupTarget && path.endsWith('/lib/functions/src/mcp/oauth.service.js')))
     ) return true;
     if (!path.includes('/lib/functions/src/admin/')) return false;
+    if (accountCleanupTarget) {
+      return !path.endsWith('/lib/functions/src/admin/marketing/cleanup.js')
+        && !path.endsWith('/lib/functions/src/admin/marketing/core.js');
+    }
     if (adminTarget) {
       return !(
         path.endsWith('/lib/functions/src/admin/handlers/' + adminTarget.ownerModule + '.js')
@@ -607,7 +617,25 @@ async function check(): Promise<void> {
     const secretKeys = (endpoint.secretEnvironmentVariables || [])
       .map(secret => secret.key || '')
       .sort();
-    if (target === 'mcpApi') {
+    if (target === 'cleanupUserAccountsV2') {
+      assert(endpoint.availableMemoryMb === 512 && endpoint.timeoutSeconds === 540,
+        `${target} memory or timeout changed.`);
+      assert(endpoint.cpu === 1 && endpoint.concurrency === 1,
+        `${target} CPU or per-instance cleanup concurrency changed.`);
+      assert(endpoint.serviceAccountEmail === 'quantified-self-io@appspot.gserviceaccount.com',
+        `${target} no longer uses the inspected Gen 1 runtime identity.`);
+      assert(endpoint.eventTrigger?.eventType === 'google.firebase.auth.user.v2.deleted'
+        && endpoint.eventTrigger.retry === true && endpoint.eventTrigger.region === 'global'
+        && JSON.stringify(endpoint.eventTrigger.eventFilters) === '{}',
+      `${target} Auth deletion trigger changed.`);
+      assert(endpoint.httpsTrigger === undefined && endpoint.callableTrigger === undefined
+        && endpoint.taskQueueTrigger === undefined && endpoint.scheduleTrigger === undefined,
+      `${target} exposed an unexpected trigger.`);
+      assert(arraysEqual(secretKeys, [
+        'COROSAPI_CLIENT_ID', 'COROSAPI_CLIENT_SECRET', 'GARMINAPI_CLIENT_ID', 'GARMINAPI_CLIENT_SECRET',
+        'SUUNTOAPP_CLIENT_ID', 'SUUNTOAPP_CLIENT_SECRET', 'WAHOOAPI_CLIENT_ID', 'WAHOOAPI_CLIENT_SECRET',
+      ]), `${target} secret bindings changed.`);
+    } else if (target === 'mcpApi') {
       assert(endpoint.availableMemoryMb === 1024, `${target} memory configuration changed.`);
       assert(endpoint.timeoutSeconds === 120, `${target} timeout configuration changed.`);
       assert(endpoint.concurrency === 4

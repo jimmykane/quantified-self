@@ -29,6 +29,7 @@ const EXPECTED_BINDINGS: Record<string, string[]> = {
   changeMarketingCampaignStatus: ['MARKETING_UNSUBSCRIBE_SIGNING_KEY'],
   cleanupStripeCustomer: ['STRIPE_SECRET_KEY'],
   cleanupUserAccounts: [...COROS, ...GARMIN, ...SUUNTO, ...WAHOO],
+  cleanupUserAccountsV2: [...COROS, ...GARMIN, ...SUUNTO, ...WAHOO],
   deauthorizeCOROSAPI: COROS,
   deauthorizeGarminAPI: GARMIN,
   deauthorizeGarminAPIUsers: ['GARMINAPI_WEBHOOK_SECRET'],

@@ -1,9 +1,12 @@
-# Delete User Data: native cleanup and cutover
+# Account data cleanup: Gen 2 preparation and cutover
 
-This is the first, deletion-only extension migration. It prepares the existing
-`cleanupUserAccounts` owner to cover the installed extension's fixed scope. It
-neither deploys Functions nor removes or updates an extension. Trigger generation,
-region, provider secrets and billing ownership stay unchanged in this phase.
+This change prepares the custom native `cleanupUserAccountsV2` owner using
+Firebase's official `onUserDeleted` API from `firebase-functions/v2/identity`.
+It covers the installed extension's fixed scope and preserves the verified
+completion contract below. This is a custom Function conversion, not an import
+of the Delete User Data function kit or an official extension migration.
+No Function is deployed and no extension is updated, detached or removed here.
+The Gen 1 `cleanupUserAccounts` export remains for the staged cutover.
 See [the deletion matrix](user-deletion-workflow.html) and
 [provider lifecycle guidance](provider-integration-guide.md#account-deletion).
 
@@ -18,8 +21,22 @@ cleanup trigger has no retry policy. An observed timeout left a large nested
 user tree after other account-cleanup stages had returned successfully.
 This document contains no incident account identifiers or exports.
 
-The owner remains the existing Gen 1 Auth `onDelete` function in `europe-west2`,
-with 512 MB, 540 seconds, retry enabled and its existing eight provider secrets.
+The new owner is a Gen 2 Auth deletion trigger in `europe-west2`, with a global
+Auth Eventarc source, 512 MiB, 540 seconds, retry enabled, one CPU and concurrency
+one per instance. It retains the eight provider secrets and explicitly runs as
+`quantified-self-io@appspot.gserviceaccount.com`, the inspected Gen 1 identity,
+rather than switching to the Compute default account. `IS_NOT_TENANT` makes the
+SDK reject events from Identity Platform tenants; these UID paths belong only to
+default-project accounts. The SDK dependency is upgraded to `firebase-functions`
+7.4.0; the existing Admin 13.7.0 is within its supported peer range. Firebase CLI
+15.31.0 recognizes this event type and its required global trigger location.
+
+Firebase currently marks these [Gen 2 Auth events](https://firebase.google.com/docs/functions/auth-events)
+**Preview**, with limited support and no SLA. Local preparation does not establish
+production event delivery. The [Gen 2 migration guide](https://firebase.google.com/docs/functions/2nd-gen-upgrade)
+requires a new export name and recommends preserving the runtime identity.
+Both exports share the same cleanup implementation and attempt/checkpoint guards;
+retiring the old trigger requires separate approval after live verification.
 The Firestore database is `(default)` in `europe-west3`; the Storage target is
 exactly the bucket named `quantified-self-io`, the exact object `users/<uid>`
 and the folder `users/<uid>/` with a trailing slash. Prefix neighbours must never match. No arbitrary path, bucket, field,
@@ -97,7 +114,7 @@ A running Storage upload cannot be transactionally fenced with Firestore. The
 final listing detects objects visible at verification, while existing writer
 lifecycle guards and deletion-surviving original-file reservations cover late
 writes. This is not a guarantee against arbitrary unguarded future Admin writes.
-Gen 1 event retries are finite: a timeout or exhausted retry window can leave a
+Event retries are finite: a timeout or exhausted retry window can leave a
 pending non-expiring fence requiring operator recovery, rather than falsely
 recording success or releasing writers.
 
@@ -137,20 +154,42 @@ retries and token descendants below missing parents. Storage unit fixtures cover
 failures, missing objects and a late object during final readback. Provider I/O
 and Storage I/O in Firestore tests are synthetic. No live provider or account
 mutation establishes this evidence. Functions build, secret/entrypoint checks,
-cold-import benchmark and the public Help contract accompany the PR.
+cold-import benchmark and the public Help contract accompany the PR. All existing
+owner behavior cases invoke the real Gen 2 SDK handler; additional tests cover the
+raw Eventarc `oldValue` payload, original email, tenant isolation and missing data.
+A real Firestore overlap test proves a stale Gen 1 attempt cannot replace the Gen 2
+receipt or erase another owner. These tests do not run Functions/Extensions
+emulators or claim live Auth-to-Eventarc delivery.
 
-After separate deployment approval, deploy only the prepared owners:
+After separate deployment approval, first deploy the hardened legacy owner and
+callable, then verify their revision and retry/secret/runtime options:
 
 ```sh
 firebase deploy --project quantified-self-io --only functions:cleanupUserAccounts,functions:deleteSelf
 ```
 
+Only after that verification, deploy the new owner under the approved scope:
+
+```sh
+firebase deploy --project quantified-self-io --only functions:cleanupUserAccountsV2
+```
+
+This ordering matters: an older deployed Gen 1 handler can remove credentials
+before the new handler checkpoints their provider identifiers. Do not enable Gen 2
+while that older implementation is still active. The prepared legacy and Gen 2
+handlers safely share the attempt guards; a superseded pass requests retry and
+cannot overwrite a newer completion receipt. Concurrency one limits work per
+instance, not across instances or generations.
+
 Before production cutover, activate and verify the account-cleanup coverage in
 #836; local tests do not replace overdue-pending alerts. Before deployment approval, verify the runtime identity can recursively delete/read
 both Firestore roots and list/read/delete objects in the exact bucket; do not
 copy the extension's broad RTDB/PubSub roles. Keep the installed extension and
-its manifest/env declarations during overlap. After deployment, read back the
-trigger, retry, timeout, memory, region, secrets and bucket permissions. Any
+its manifest/env declarations during overlap. After deployment, read back both
+owners' generation, trigger type/location, default-project tenant behavior, retry,
+timeout, memory, CPU/concurrency, region, runtime identity, secrets and bucket
+permissions. Check native errors and Cloud Run metrics for `cleanupUserAccountsV2`
+as well as the legacy function; the #836 activation must include both during overlap. Any
 live test-account deletion needs its own exact target/scope approval. Record
 complete Firestore/Storage/operational absence and actual native execution
 success before proposing retirement. Concurrent native/extension passes use
@@ -160,18 +199,18 @@ Retiring extension `delete-user-data` from project `quantified-self-io` is a
 later, separately approved resource deletion. Inventory its three Functions,
 Pub/Sub resources and service account first; define the exact retirement scope,
 then update source-controlled declarations with the reviewed cutover. Preserve
-email and Stripe instances. Do not run `ext:migrate` during this phase: it can
+email and Stripe instances. Retiring Gen 1 function `cleanupUserAccounts` in
+`europe-west2` is another separately approved resource deletion; prepare removal of
+its export and secret binding in source only when that cutover is approved.
+Do not run `ext:migrate` during this phase: it can
 deploy/update/uninstall resources. Do not treat `ext:export --mode functions`
 as read-only either; it can detach extension-managed secrets. Restoring the
 previous Function revision leaves unfinished markers active and does not
 restore deleted data; preserve checkpoints for a later verified retry.
 
-Gen 2 migration and SDK uplift are separate from this deletion reliability fix.
-The installed SDK is not upgraded here. The Google function-kit's published
-stable placeholder is not an executable replacement; its reviewed release
-candidate still catches per-path cleanup failures, so merely importing it does
-not implement this completion contract. Follow Firebase's
+The official extension-to-function-kit path remains separate. Follow Firebase's
 [migration guide](https://firebase.google.com/docs/extensions/users/migrate) and
 [migration best practices](https://firebase.google.com/docs/extensions/migration-best-practices)
-when preparing that later phase. Extension management ends 31 March 2027;
-deployed resources continuing to run is not a substitute for verified ownership.
+if that path is chosen. It is not implemented or executed by this PR. The installed
+extension and its manifest remain unchanged. Extension management ends 31 March
+2027; resources continuing to run is not a substitute for verified ownership.

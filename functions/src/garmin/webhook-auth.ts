@@ -1,5 +1,5 @@
 import { createHash, timingSafeEqual } from 'node:crypto';
-import type { Request, Response } from 'express';
+import type { Request } from 'express';
 import * as logger from 'firebase-functions/logger';
 import { SECRET_PARAMS } from '../secrets';
 
@@ -12,8 +12,8 @@ function readCredential(): string | null {
 
 /** Authenticate before reading the payload or touching account/queue state. */
 export function authenticateGarminWebhook(
-  request: Request,
-  response: Response,
+  request: Pick<Request, 'method' | 'path'>,
+  response: { status(code: number): { send(body: string): unknown } },
   functionName: string,
 ): boolean {
   if (request.method !== 'POST') {

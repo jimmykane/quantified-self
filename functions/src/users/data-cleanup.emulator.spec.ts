@@ -34,10 +34,16 @@ vi.mock('./data-cleanup', async importOriginal => ({
     deleteAccountStorageFiles: vi.fn(async () => undefined),
     assertAccountStorageAbsent: vi.fn(async () => undefined),
 }));
-import { cleanupUserAccounts } from './cleanup';
+import { cleanupUserAccounts as cleanupUserAccountsV1, cleanupUserAccountsV2 } from './cleanup';
+import * as dataCleanup from './data-cleanup';
 vi.unmock('firebase-admin');
 vi.unmock('firebase-admin/firestore');
 const host = process.env.FIRESTORE_EMULATOR_HOST;
+const cleanupUserAccounts = (user: admin.auth.UserRecord) => cleanupUserAccountsV2.run({
+    data: user, id: `synthetic-delete-${user.uid}`, type: 'google.firebase.auth.user.v2.deleted',
+    source: '//identitytoolkit.googleapis.com/projects/demo-account-deletion',
+    time: '2026-10-09T00:00:00Z', specversion: '1.0',
+});
 
 describe.skipIf(!host)('native account deletion (loopback Firestore emulator)', () => {
     let db: admin.firestore.Firestore;
@@ -86,14 +92,14 @@ describe.skipIf(!host)('native account deletion (loopback Firestore emulator)', 
             return remove(ref);
         });
         try {
-            await expect(cleanupUserAccounts({ uid } as admin.auth.UserRecord, {} as never)).rejects.toThrow('interruption');
+            await expect(cleanupUserAccounts({ uid } as admin.auth.UserRecord)).rejects.toThrow('interruption');
             fail = false;
             expect((await legacyRow.get()).exists).toBe(false);
             expect((await legacyRow.collection('attempts').get()).empty).toBe(false);
             expect((await uidRow.get()).exists).toBe(false);
             expect((await db.doc(`users/${uid}`).get()).exists).toBe(false);
             expect((await db.doc(`userDeletionTombstones/${uid}`).get()).data()?.cleanupStatus).toBe('pending');
-            await cleanupUserAccounts({ uid } as admin.auth.UserRecord, {} as never);
+            await cleanupUserAccounts({ uid } as admin.auth.UserRecord);
             expect((await legacyRow.get()).exists).toBe(false);
             expect((await legacyRow.collection('attempts').get()).empty).toBe(true);
             expect((await otherRow.get()).exists).toBe(true);
@@ -109,10 +115,10 @@ describe.skipIf(!host)('native account deletion (loopback Firestore emulator)', 
         const intent = db.doc(`routeOriginalFileCleanup/${uid}`);
         await intent.set({ userID: uid, syntheticLease: true });
         try {
-            await expect(cleanupUserAccounts({ uid } as admin.auth.UserRecord, {} as never)).rejects.toThrow('remains');
+            await expect(cleanupUserAccounts({ uid } as admin.auth.UserRecord)).rejects.toThrow('remains');
             expect((await db.doc(`userDeletionTombstones/${uid}`).get()).data()?.expireAt).toBeUndefined();
             await db.recursiveDelete(intent);
-            await cleanupUserAccounts({ uid } as admin.auth.UserRecord, {} as never);
+            await cleanupUserAccounts({ uid } as admin.auth.UserRecord);
             expect((await db.doc(`userDeletionTombstones/${uid}`).get()).data()?.cleanupStatus).toBe('complete');
         } finally { await db.recursiveDelete(intent); }
     }, 30_000);
@@ -208,7 +214,7 @@ describe.skipIf(!host)('native account deletion (loopback Firestore emulator)', 
         await foreignSource.set({ userID: uid, firebaseUserID: owner(), provider: 'SuuntoApp', providerUserId: foreignProvider });
         await foreignLegacy.set({ userName: foreignProvider });
         try {
-            await cleanupUserAccounts({ uid } as admin.auth.UserRecord, {} as never);
+            await cleanupUserAccounts({ uid } as admin.auth.UserRecord);
             expect((await owned.get()).exists).toBe(false);
             expect((await foreign.get()).exists).toBe(true);
             expect((await conflicted.get()).exists).toBe(true);
@@ -232,11 +238,11 @@ describe.skipIf(!host)('native account deletion (loopback Firestore emulator)', 
             return remove(ref);
         });
         try {
-            await expect(cleanupUserAccounts({ uid } as admin.auth.UserRecord, {} as never)).rejects.toThrow('MCP interruption');
+            await expect(cleanupUserAccounts({ uid } as admin.auth.UserRecord)).rejects.toThrow('MCP interruption');
             expect((await root.get()).exists).toBe(false);
             expect((await root.collection('unknown').get()).empty).toBe(false);
             fail = false;
-            await cleanupUserAccounts({ uid } as admin.auth.UserRecord, {} as never);
+            await cleanupUserAccounts({ uid } as admin.auth.UserRecord);
             expect((await root.collection('unknown').get()).empty).toBe(true);
             expect((await db.doc(`userDeletionTombstones/${uid}`).get()).data()?.cleanupStatus).toBe('complete');
         } finally { interruption.mockRestore(); await remove(root); }
@@ -257,7 +263,7 @@ describe.skipIf(!host)('native account deletion (loopback Firestore emulator)', 
             path: reassigned.path, fieldName: 'userID', value: uid, providerKeyed: false,
         });
         try {
-            await expect(cleanupUserAccounts({ uid } as admin.auth.UserRecord, {} as never)).rejects.toThrow('ownership changed');
+            await expect(cleanupUserAccounts({ uid } as admin.auth.UserRecord)).rejects.toThrow('ownership changed');
             expect((await root.collection('unknown').get()).empty).toBe(true);
             expect((await reassigned.get()).data()?.userID).toBe(other);
             expect((await checkpoint.get()).exists).toBe(true);
@@ -273,7 +279,7 @@ describe.skipIf(!host)('native account deletion (loopback Firestore emulator)', 
         await checkpointAccountDeletionTarget(db, uid, attempt.attemptId, {
             path: `users/${other}`, fieldName: 'uid', value: uid, providerKeyed: false,
         });
-        await expect(cleanupUserAccounts({ uid } as admin.auth.UserRecord, {} as never)).rejects.toThrow('outside the configured scope');
+        await expect(cleanupUserAccounts({ uid } as admin.auth.UserRecord)).rejects.toThrow('outside the configured scope');
         expect((await db.doc(`users/${other}`).get()).exists).toBe(true);
         expect((await db.doc(`userDeletionTombstones/${uid}`).get()).data()?.expireAt).toBeUndefined();
     }, 30_000);
@@ -292,11 +298,11 @@ describe.skipIf(!host)('native account deletion (loopback Firestore emulator)', 
             }
         });
         try {
-            await expect(cleanupUserAccounts({ uid } as admin.auth.UserRecord, {} as never)).rejects.toThrow('descendants remain');
+            await expect(cleanupUserAccounts({ uid } as admin.auth.UserRecord)).rejects.toThrow('descendants remain');
             expect((await root.collection('tokens').get()).empty).toBe(true);
             expect((await child.get()).exists).toBe(true);
             expect((await db.doc(`userDeletionTombstones/${uid}`).get()).data()?.expireAt).toBeUndefined();
-            await cleanupUserAccounts({ uid } as admin.auth.UserRecord, {} as never);
+            await cleanupUserAccounts({ uid } as admin.auth.UserRecord);
             expect((await child.get()).exists).toBe(false);
             expect((await db.doc(`userDeletionTombstones/${uid}`).get()).data()?.cleanupStatus).toBe('complete');
         } finally { writer.mockRestore(); await remove(root); }
@@ -324,7 +330,7 @@ describe.skipIf(!host)('native account deletion (loopback Firestore emulator)', 
         batch.set(deadLetter, { originalCollection: WAHOO_API_WORKOUT_QUEUE_COLLECTION_NAME, wahooUserID: Number(providerId) });
         await batch.commit();
         try {
-            await cleanupUserAccounts({ uid } as admin.auth.UserRecord, {} as never);
+            await cleanupUserAccounts({ uid } as admin.auth.UserRecord);
             for (const ref of owned) {
                 expect((await ref.get()).exists).toBe(false);
                 expect((await ref.collection('unknown').get()).empty).toBe(true);
@@ -346,12 +352,50 @@ describe.skipIf(!host)('native account deletion (loopback Firestore emulator)', 
         await owned.set({ userID: uid });
         await foreign.set({ userID: other });
         try {
-            await cleanupUserAccounts({ uid } as admin.auth.UserRecord, {} as never);
+            await cleanupUserAccounts({ uid } as admin.auth.UserRecord);
             expect((await owned.get()).exists).toBe(false);
             expect((await foreign.get()).exists).toBe(true);
             expect((await db.doc(`users/${other}`).get()).exists).toBe(true);
             expect((await db.doc(`userDeletionTombstones/${uid}`).get()).data()?.cleanupStatus).toBe('complete');
         } finally { await db.recursiveDelete(owned); await db.recursiveDelete(foreign); }
+    }, 30_000);
+
+    it('keeps the verified Gen 2 receipt when an overlapping Gen 1 attempt resumes', async () => {
+        const uid = owner();
+        const other = owner();
+        await db.doc(`users/${uid}/unknown/missing/deep/owned`).set({ synthetic: true });
+        await db.doc(`users/${other}`).set({ synthetic: true });
+        let paused!: () => void;
+        let resume!: () => void;
+        const ready = new Promise<void>(resolve => { paused = resolve; });
+        const resumed = new Promise<void>(resolve => { resume = resolve; });
+        const checkpoint = dataCleanup.checkpointAccountDeletionIdentifiers;
+        const spy = vi.spyOn(dataCleanup, 'checkpointAccountDeletionIdentifiers').mockImplementationOnce(async (...args) => {
+            paused();
+            await resumed;
+            return checkpoint(...args);
+        });
+        const legacy = cleanupUserAccountsV1({ uid } as admin.auth.UserRecord, {} as never);
+        // Attach immediately: a failure must never become an unhandled rejection.
+        const legacyResult = legacy.then(() => null, error => error);
+        try {
+            await ready;
+            await cleanupUserAccounts({ uid } as admin.auth.UserRecord);
+            const receipt = (await db.doc(`userDeletionTombstones/${uid}`).get()).data()!;
+            expect(receipt.cleanupStatus).toBe('complete');
+            resume();
+            expect(await legacyResult).toEqual(expect.objectContaining({ message: 'Account cleanup attempt was superseded.' }));
+            const after = (await db.doc(`userDeletionTombstones/${uid}`).get()).data()!;
+            expect(after.cleanupStatus).toBe('complete');
+            expect(after.cleanupAttemptId).toBe(receipt.cleanupAttemptId);
+            expect(after.completedAt.isEqual(receipt.completedAt)).toBe(true);
+            await assertAccountFirestoreRootAbsent(db, uid, 'users');
+            expect((await db.doc(`users/${other}`).get()).exists).toBe(true);
+        } finally {
+            resume();
+            await legacyResult;
+            spy.mockRestore();
+        }
     }, 30_000);
 
     it('orders a competing transaction-owned writer behind the deletion marker', async () => {
