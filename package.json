@@ -29,6 +29,7 @@
     "test:disconnect": "firebase emulators:exec --project demo-disconnect --only firestore '\"$npm_node_execpath\" node_modules/vitest/vitest.mjs run --config functions/vitest.config.ts src/service-disconnect-cleanup.integration.spec.ts'",
     "test:functions-emulators": "node tools/test-functions-emulators.mjs",
     "test:emulator-coverage": "node --test tools/functions-emulator-suites.test.mjs",
+    "test:delivery-shards": "node --test tools/delivery-test-shards.test.mjs",
     "test:workflows": "node --test tools/testing-workflow.test.mjs",
     "test:frontend-config": "node --test tools/frontend-test-config.test.mjs",
     "test:frontend-shards": "node --test tools/frontend-test-shards.test.mjs",

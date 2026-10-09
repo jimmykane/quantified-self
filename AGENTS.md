@@ -12,6 +12,7 @@ Always-on rules:
 - `.agent/rules/backend-crud-boundary.md`
 - `.agent/rules/canonical-metric-display.md`
 - `.agent/rules/frontend-test-environments.md` for frontend specs, helper runtime imports, or frontend test runner/CI changes
+- `.agent/rules/functions-emulator-shards.md` for Functions emulator specs or their test runner/CI changes
 - `.agent/rules/queue-monitoring-coverage.md` for provider/service integrations and queue lifecycle changes
 - `.agent/rules/firestore-write-sanitization.md` for any frontend/functions write path that persists event or activity data
 - Never patch or directly modify files under `node_modules/`.
