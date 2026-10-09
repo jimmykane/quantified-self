@@ -42,6 +42,18 @@ test('Functions CI runs the complete suite serially and keeps runner errors fata
   assert.doesNotMatch(functionsStep.run, /dangerouslyIgnoreUnhandledErrors|passWithNoTests|\|\|\s*true/);
 });
 
+test('MCP push checks retain both complete suites with a non-interactive report and fatal runner errors', () => {
+  const scripts = JSON.parse(readFileSync(resolve(root, 'package.json'), 'utf8')).scripts;
+  const command = scripts['hooks:mcp:pre-push'];
+  assert.ok(command.startsWith('npm --prefix functions run mcp:contract:check && npm --prefix functions test -- '));
+  for (const argument of ['src/mcp/tool-output-schemas.spec.ts', 'src/mcp/server.spec.ts',
+    '--maxWorkers=1', '--fileParallelism=false', '--testTimeout=15000', '--reporter=json',
+    '--outputFile=../tmp/mcp-pre-push-results.json']) {
+    assert.ok(command.split(' ').includes(argument), `MCP push check must retain ${argument}`);
+  }
+  assert.doesNotMatch(command, /dangerouslyIgnoreUnhandledErrors|passWithNoTests|testNamePattern|--retry|\|\|/);
+});
+
 test('Functions build and compiled checks run independently with the same comparison revision', () => {
   const steps = shared.jobs.functions_build.steps;
   const functionsStep = steps.find(step => step.name === 'Build and verify functions');
