@@ -235,6 +235,7 @@ Unified health history under `users/{uid}/healthSourceRecords` and `healthSample
 
 - [CI test coverage and emulator isolation](docs/ci-testing.md)
 - [Helper test environment benchmark](docs/ci-helper-test-benchmark.md)
+- [Component fixture benchmark](docs/ci-component-fixture-benchmark.md)
 - [Reusable event tag catalog and backfill](docs/event-tag-catalog.md)
 - [Firebase Functions target-aware entrypoint loading](docs/functions-entrypoint-loading.md)
 - [Temporary Garmin dispatch cost measurements](docs/garmin-dispatch-cost-measurements.md)

@@ -112,6 +112,8 @@ describe('UserSettingsComponent', () => {
     };
 
     beforeEach(async () => {
+        component = undefined;
+        fixture = undefined;
         queryParamMapSubject = new BehaviorSubject(convertToParamMap({}));
         mockRouter = {
             navigate: vi.fn().mockImplementation(async (_commands, extras) => {
@@ -147,6 +149,7 @@ describe('UserSettingsComponent', () => {
             declarations: [UserSettingsComponent],
             imports: [ReactiveFormsModule, MaterialModule, SharedModule, NoopAnimationsModule],
             providers: [
+                UserSettingsComponent,
                 { provide: AppAuthService, useValue: { user$: of(null) } },
                 { provide: Clipboard, useValue: clipboardMock },
                 { provide: ActivatedRoute, useValue: mockActivatedRoute },
@@ -170,15 +173,31 @@ describe('UserSettingsComponent', () => {
             ],
             schemas: [NO_ERRORS_SCHEMA]
         }).compileComponents();
+    });
 
+    // Form/payload/route tests need DI and lifecycle hooks, but not the Material view.
+    // TestBed owns and destroys the provided instance, including its subscriptions.
+    async function createSettings(): Promise<void> {
+        component = TestBed.inject(UserSettingsComponent);
+        component.user = mockUser as User;
+        component.ngOnChanges();
+        component.ngOnInit();
+        // Match the original async beforeEach's initialization promise settlement.
+        await Promise.resolve();
+    }
+
+    // UI tests keep the real template, controls, Angular lifecycle and teardown.
+    async function renderSettings(): Promise<void> {
         fixture = TestBed.createComponent(UserSettingsComponent);
         component = fixture.componentInstance;
         component.user = mockUser as User;
-        component.ngOnChanges(); // Initialize form before detectChanges
+        component.ngOnChanges();
         fixture.detectChanges();
-    });
+        await Promise.resolve();
+    }
 
-    it('exposes Theme directly and stages a selection without saving', () => {
+    it('exposes Theme directly and stages a selection without saving', async () => {
+        await renderSettings();
         const theme = fixture.nativeElement.querySelector('.settings-theme-control');
         expect(theme.closest('.settings-panel-section')).toBeNull();
         const dark = Array.from(theme.querySelectorAll('mat-button-toggle'))
@@ -193,13 +212,15 @@ describe('UserSettingsComponent', () => {
     });
 
     it('hides Save while pristine and ignores an implicit submit', async () => {
+        await renderSettings();
         expect(fixture.nativeElement.querySelector('.settings-save-bar')).toBeNull();
         await component.onSubmit(new Event('submit'));
         expect(TestBed.inject(AppUserService).updateUserProperties).not.toHaveBeenCalled();
         expect(hapticsServiceMock.success).not.toHaveBeenCalled();
     });
 
-    it('places name in Account, watermark in Charts, and week start in Units', () => {
+    it('places name in Account, watermark in Charts, and week start in Units', async () => {
+        await renderSettings();
         const account = fixture.nativeElement.querySelector('#settings-account-content');
         const charts = fixture.nativeElement.querySelector('#settings-charts-content');
         const units = fixture.nativeElement.querySelector('#settings-units-content');
@@ -213,6 +234,7 @@ describe('UserSettingsComponent', () => {
     });
 
     it('updates summaries from staged settings and retains them while consent switches are locked', async () => {
+        await createSettings();
         const form = component.userSettingsFormGroup;
         form.patchValue({ distanceUnitsToUse: DistanceUnits.Miles, weightUnitsToUse: WeightUnits.Pounds,
             acceptedTrackingPolicy: false, acceptedMarketingPolicy: true, dataTypesToUse: ['Heart Rate'], eventsPerPage: 50 });
@@ -230,7 +252,8 @@ describe('UserSettingsComponent', () => {
         expect(component.sectionSummaries().units).toContain('Miles');
     });
 
-    it('refreshes untouched remote consent summaries without losing local edits', () => {
+    it('refreshes untouched remote consent summaries without losing local edits', async () => {
+        await createSettings();
         const name = component.userSettingsFormGroup.get('displayName');
         name.setValue('Local name'); name.markAsDirty();
         component.user = { ...component.user, acceptedMarketingPolicy: true };
@@ -242,7 +265,8 @@ describe('UserSettingsComponent', () => {
     });
 
     it.each([{ section: 'profile', active: 'account' }, { section: 'app', active: null }])(
-        'retains the old $section link without an extra disclosure or haptic', ({ section, active }) => {
+        'retains the old $section link without an extra disclosure or haptic', async ({ section, active }) => {
+            await renderSettings();
             queryParamMapSubject.next(convertToParamMap({ section }));
             fixture.detectChanges();
             expect(component.activeSection).toBe(active);
@@ -250,7 +274,8 @@ describe('UserSettingsComponent', () => {
             expect(hapticsServiceMock.selection).not.toHaveBeenCalled();
         });
 
-    it('opens Customize units without dirtying the form and retains edits across collapse', () => {
+    it('opens Customize units without dirtying the form and retains edits across collapse', async () => {
+        await renderSettings();
         component.activeSection = 'units'; fixture.detectChanges();
         const toggle = fixture.nativeElement.querySelector('.settings-customize-units') as HTMLButtonElement;
         const custom = fixture.nativeElement.querySelector('#settings-custom-units') as HTMLElement;
@@ -271,6 +296,7 @@ describe('UserSettingsComponent', () => {
     });
 
     it('keeps an accessible save error and staged choices for retry, then hides Save after success', async () => {
+        await renderSettings();
         const update = vi.mocked(TestBed.inject(AppUserService).updateUserProperties);
         update.mockRejectedValueOnce(new Error('offline')).mockResolvedValueOnce([]);
         const name = component.userSettingsFormGroup.get('displayName');
@@ -288,7 +314,8 @@ describe('UserSettingsComponent', () => {
         expect(hapticsServiceMock.success).toHaveBeenCalledOnce();
     });
 
-    it('defaults comparison line patterns off and emits one selection haptic for accepted toggle changes', () => {
+    it('defaults comparison line patterns off and emits one selection haptic for accepted toggle changes', async () => {
+        await renderSettings();
         component.activeSection = 'charts';
         fixture.detectChanges();
         const control = component.userSettingsFormGroup.get('useDistinctComparisonLinePatterns');
@@ -308,6 +335,7 @@ describe('UserSettingsComponent', () => {
     });
 
     it('disables the line pattern control during save and restores it after completion', async () => {
+        await createSettings();
         const control = component.userSettingsFormGroup.get('useDistinctComparisonLinePatterns');
         control.setValue(true);
         let finishSave!: () => void;
@@ -327,6 +355,7 @@ describe('UserSettingsComponent', () => {
     });
 
     it.each([false, true])('hydrates saved patterns %s and saves an explicit toggle change', async (enabled) => {
+        await createSettings();
         component.user = {
             ...component.user,
             settings: { ...component.user.settings, chartSettings: {
@@ -350,6 +379,7 @@ describe('UserSettingsComponent', () => {
     });
 
     it('does not overwrite a remotely changed pattern preference when saving unrelated settings', async () => {
+        await createSettings();
         component.userSettingsFormGroup.get('displayName').setValue('Edited name');
         component.userSettingsFormGroup.get('displayName').markAsDirty();
         const update = vi.mocked(TestBed.inject(AppUserService).updateUserProperties).mockResolvedValue([]);
@@ -359,7 +389,8 @@ describe('UserSettingsComponent', () => {
         expect(chartSettings).not.toHaveProperty('useDistinctComparisonLinePatterns');
     });
 
-    it('refreshes untouched patterns while preserving unrelated dirty edits without haptics', () => {
+    it('refreshes untouched patterns while preserving unrelated dirty edits without haptics', async () => {
+        await createSettings();
         const form = component.userSettingsFormGroup;
         form.get('displayName').setValue('Edited name');
         form.get('displayName').markAsDirty();
@@ -374,7 +405,8 @@ describe('UserSettingsComponent', () => {
         expect(hapticsServiceMock.selection).not.toHaveBeenCalled();
     });
 
-    it('keeps explicitly edited line patterns through a background preference refresh', () => {
+    it('keeps explicitly edited line patterns through a background preference refresh', async () => {
+        await createSettings();
         const control = component.userSettingsFormGroup.get('useDistinctComparisonLinePatterns');
         control.setValue(true);
         control.markAsDirty();
@@ -387,7 +419,8 @@ describe('UserSettingsComponent', () => {
         expect(hapticsServiceMock.selection).not.toHaveBeenCalled();
     });
 
-    it('should create', () => {
+    it('should create', async () => {
+        await renderSettings();
         expect(component).toBeTruthy();
     });
 
@@ -398,7 +431,8 @@ describe('UserSettingsComponent', () => {
         expect(template).not.toContain('Show All Data Points');
     });
 
-    it('shows email in the Account identity strip when available', () => {
+    it('shows email in the Account identity strip when available', async () => {
+        await renderSettings();
         component.activeSection = 'account';
         component.user = { ...(component.user as any), email: 'runner@example.com' } as any;
         component.ngOnChanges();
@@ -409,7 +443,8 @@ describe('UserSettingsComponent', () => {
         expect(emailLine?.textContent).toContain('runner@example.com');
     });
 
-    it('hides the Account identity strip email when unavailable', () => {
+    it('hides the Account identity strip email when unavailable', async () => {
+        await renderSettings();
         component.activeSection = 'account';
         component.user = { ...(component.user as any), email: null } as any;
         component.ngOnChanges();
@@ -419,7 +454,8 @@ describe('UserSettingsComponent', () => {
         expect(emailLine).toBeNull();
     });
 
-    it('copies the Account user ID to the clipboard', () => {
+    it('copies the Account user ID to the clipboard', async () => {
+        await renderSettings();
         component.activeSection = 'account';
         fixture.detectChanges();
 
@@ -430,7 +466,8 @@ describe('UserSettingsComponent', () => {
         expect(snackBarMock.open).toHaveBeenCalledWith('User ID copied.', undefined, { duration: 2000 });
     });
 
-    it('shows the profile identity strip only while Account is active', () => {
+    it('shows the profile identity strip only while Account is active', async () => {
+        await renderSettings();
         component.activeSection = 'account';
         fixture.detectChanges();
 
@@ -444,7 +481,8 @@ describe('UserSettingsComponent', () => {
         expect(profilePanel.hidden).toBe(true);
     });
 
-    it('does not expose the About You profile description in user settings', () => {
+    it('does not expose the About You profile description in user settings', async () => {
+        await renderSettings();
         component.user = { ...(component.user as any), description: 'Legacy profile bio' } as any;
         component.ngOnChanges();
         fixture.detectChanges();
@@ -456,7 +494,8 @@ describe('UserSettingsComponent', () => {
         expect(component.userSettingsFormGroup.get('description')).toBeNull();
     });
 
-    it('does not expose account public or private privacy state in user settings', () => {
+    it('does not expose account public or private privacy state in user settings', async () => {
+        await renderSettings();
         component.user = { ...(component.user as any), privacy: 'public' } as any;
         component.ngOnChanges();
         fixture.detectChanges();
@@ -466,7 +505,8 @@ describe('UserSettingsComponent', () => {
         expect(component.userSettingsFormGroup.get('privacy')).toBeNull();
     });
 
-    it('should expose settings navigation sections in display order', () => {
+    it('should expose settings navigation sections in display order', async () => {
+        await createSettings();
         expect(component.settingsSectionOptions.map(section => section.id)).toEqual([
             'units',
             'dashboard',
@@ -477,7 +517,8 @@ describe('UserSettingsComponent', () => {
         ]);
     });
 
-    it('renders every settings disclosure in two ordered groups with Material buttons', () => {
+    it('renders every settings disclosure in two ordered groups with Material buttons', async () => {
+        await renderSettings();
         const groups = fixture.nativeElement.querySelectorAll('.settings-group');
         expect(groups).toHaveLength(2);
         expect(groups[0].querySelector('.settings-group-title').textContent).toBe('Preferences');
@@ -497,13 +538,15 @@ describe('UserSettingsComponent', () => {
         }
     });
 
-    it('renders the settings heading before the overview', () => {
+    it('renders the settings heading before the overview', async () => {
+        await renderSettings();
         const pageHeader = fixture.nativeElement.querySelector('.settings-page-header');
         expect(pageHeader).toBeTruthy();
         expect(pageHeader.nextElementSibling.classList.contains('settings-overview')).toBe(true);
     });
 
     it('expands and collapses a section through its button without discarding edits', async () => {
+        await renderSettings();
         const trigger = fixture.nativeElement.querySelector('button[aria-label="Account"]') as HTMLButtonElement;
         trigger.click();
         await fixture.whenStable(); fixture.detectChanges();
@@ -525,6 +568,7 @@ describe('UserSettingsComponent', () => {
     });
 
     it('keeps save available for edits when Account is open', async () => {
+        await renderSettings();
         component.userSettingsFormGroup.get('displayName').markAsDirty();
         await component.selectSettingsSection('account');
         fixture.detectChanges();
@@ -532,7 +576,8 @@ describe('UserSettingsComponent', () => {
         expect(fixture.nativeElement.querySelector('.settings-save-status').textContent).toContain('Unsaved changes');
     });
 
-    it('makes Save changes the only submit action, including inside collapsed sections', () => {
+    it('makes Save changes the only submit action, including inside collapsed sections', async () => {
+        await renderSettings();
         component.userSettingsFormGroup.markAsDirty();
         fixture.detectChanges();
         const buttons = Array.from(fixture.nativeElement.querySelectorAll('form button')) as HTMLButtonElement[];
@@ -543,6 +588,7 @@ describe('UserSettingsComponent', () => {
     });
 
     it.each([false, true])('blocks edits and deletion during save and restores interaction after failure=%s', async fail => {
+        await renderSettings();
         const name = component.userSettingsFormGroup.get('displayName');
         name.setValue('Pending name');
         name.markAsDirty();
@@ -572,7 +618,8 @@ describe('UserSettingsComponent', () => {
         expect(name.dirty).toBe(fail);
     });
 
-    it('keeps subsection headings beneath their group and disclosure headings', () => {
+    it('keeps subsection headings beneath their group and disclosure headings', async () => {
+        await renderSettings();
         const panels = Array.from(fixture.nativeElement.querySelectorAll('.settings-panel-section')) as HTMLElement[];
         for (const panel of panels) {
             const headings = Array.from(panel.querySelectorAll('h1,h2,h3,h4,h5,h6'));
@@ -583,6 +630,7 @@ describe('UserSettingsComponent', () => {
     });
 
     it('ignores disclosure actions while saving or deleting', async () => {
+        await createSettings();
         component.isSaving = true;
         await component.toggleSettingsSection('privacy');
         component.isSaving = false; component.isDeleting = true;
@@ -602,7 +650,8 @@ describe('UserSettingsComponent', () => {
         expect(styles).not.toContain('position: fixed');
     });
 
-    it('uses dynamic Material subscript sizing for settings form fields', () => {
+    it('uses dynamic Material subscript sizing for settings form fields', async () => {
+        await renderSettings();
         const sectionsWithFormFields = ['account', 'dashboard', 'map', 'charts', 'units'] as const;
 
         for (const section of sectionsWithFormFields) {
@@ -618,7 +667,8 @@ describe('UserSettingsComponent', () => {
         }
     });
 
-    it('shows Privacy immediately before the final Account section', () => {
+    it('shows Privacy immediately before the final Account section', async () => {
+        await createSettings();
         const sectionIds = component.settingsSectionOptions.map(section => section.id);
 
         expect(sectionIds[sectionIds.length - 2]).toBe('privacy');
@@ -626,6 +676,7 @@ describe('UserSettingsComponent', () => {
     });
 
     it('should update section query param when a settings section is selected', async () => {
+        await createSettings();
         component.activeSection = 'account';
         const selection = component.selectSettingsSection('map');
 
@@ -640,7 +691,8 @@ describe('UserSettingsComponent', () => {
         expect(component.activeSection).toBe('map');
     });
 
-    it('keeps settings panels mounted while switching the visible section', () => {
+    it('keeps settings panels mounted while switching the visible section', async () => {
+        await renderSettings();
         component.activeSection = 'account';
         fixture.detectChanges();
 
@@ -661,7 +713,8 @@ describe('UserSettingsComponent', () => {
         expect(mapPanel.hidden).toBe(false);
     });
 
-    it('should update the active section from account query param changes', () => {
+    it('should update the active section from account query param changes', async () => {
+        await createSettings();
         component.activeSection = 'account';
 
         queryParamMapSubject.next(convertToParamMap({ section: 'account' }));
@@ -669,7 +722,8 @@ describe('UserSettingsComponent', () => {
         expect(component.activeSection).toBe('account');
     });
 
-    it('maps the legacy delete-account section query to account', () => {
+    it('maps the legacy delete-account section query to account', async () => {
+        await createSettings();
         component.activeSection = 'account';
 
         queryParamMapSubject.next(convertToParamMap({ section: 'delete-account' }));
@@ -677,7 +731,8 @@ describe('UserSettingsComponent', () => {
         expect(component.activeSection).toBe('account');
     });
 
-    it('collapses the overview when the section query param is missing', () => {
+    it('collapses the overview when the section query param is missing', async () => {
+        await createSettings();
         component.activeSection = 'units';
 
         queryParamMapSubject.next(convertToParamMap({}));
@@ -685,7 +740,8 @@ describe('UserSettingsComponent', () => {
         expect(component.activeSection).toBeNull();
     });
 
-    it('shows delete account as an action only while the account section is active', () => {
+    it('shows delete account as an action only while the account section is active', async () => {
+        await renderSettings();
         component.activeSection = 'units';
         fixture.detectChanges();
 
@@ -704,7 +760,8 @@ describe('UserSettingsComponent', () => {
         expect(fixture.nativeElement.querySelector('.settings-save-bar')).toBeNull();
     });
 
-    it('should initialize acceptedTrackingPolicy from user data', () => {
+    it('should initialize acceptedTrackingPolicy from user data', async () => {
+        await createSettings();
         component.user.acceptedTrackingPolicy = true;
         component.ngOnChanges();
         expect(component.userSettingsFormGroup.get('acceptedTrackingPolicy').value).toBe(true);
@@ -715,6 +772,7 @@ describe('UserSettingsComponent', () => {
     });
 
     it('opens both consent switches through the Privacy disclosure and direct section link', async () => {
+        await renderSettings();
         component.activeSection = 'account';
         fixture.detectChanges();
         const privacyTab = fixture.nativeElement.querySelector('#settings-privacy-title') as HTMLButtonElement;
@@ -742,6 +800,7 @@ describe('UserSettingsComponent', () => {
         { field: 'acceptedTrackingPolicy', label: 'Usage analytics', other: 'acceptedMarketingPolicy' },
         { field: 'acceptedMarketingPolicy', label: 'Marketing emails', other: 'acceptedTrackingPolicy' },
     ])('turns $label off through the visible switch and saves explicit false consent', async ({ field, label, other }) => {
+        await renderSettings();
         component.user = { ...component.user, acceptedTrackingPolicy: true, acceptedMarketingPolicy: true };
         component.ngOnChanges();
         queryParamMapSubject.next(convertToParamMap({ section: 'privacy' }));
@@ -766,6 +825,7 @@ describe('UserSettingsComponent', () => {
     });
 
     it('does not navigate or emit selection feedback for unchanged sections or busy consent controls', async () => {
+        await createSettings();
         await component.selectSettingsSection(component.activeSection);
         expect(mockRouter.navigate).not.toHaveBeenCalled();
         component.isSaving = true;
@@ -777,7 +837,8 @@ describe('UserSettingsComponent', () => {
         expect(component.activeSection).toBeNull();
     });
 
-    it.each(['acceptedTrackingPolicy', 'acceptedMarketingPolicy'])('refreshes untouched %s while preserving unrelated edits', (field) => {
+    it.each(['acceptedTrackingPolicy', 'acceptedMarketingPolicy'])('refreshes untouched %s while preserving unrelated edits', async (field) => {
+        await createSettings();
         component.user = { ...component.user, [field]: true };
         component.ngOnChanges();
         const form = component.userSettingsFormGroup;
@@ -795,7 +856,8 @@ describe('UserSettingsComponent', () => {
         expect(hapticsServiceMock.selection).not.toHaveBeenCalled();
     });
 
-    it.each(['acceptedTrackingPolicy', 'acceptedMarketingPolicy'])('preserves an explicit %s edit during a background update', (field) => {
+    it.each(['acceptedTrackingPolicy', 'acceptedMarketingPolicy'])('preserves an explicit %s edit during a background update', async (field) => {
+        await createSettings();
         component.user = { ...component.user, [field]: true };
         component.ngOnChanges();
         const control = component.userSettingsFormGroup.get(field);
@@ -810,6 +872,7 @@ describe('UserSettingsComponent', () => {
     });
 
     it.each([false, true])('locks privacy switches during save and restores them after failure=%s', async (fail) => {
+        await renderSettings();
         component.user = { ...component.user, acceptedTrackingPolicy: true, acceptedMarketingPolicy: true };
         component.ngOnChanges();
         queryParamMapSubject.next(convertToParamMap({ section: 'privacy' }));
@@ -843,7 +906,8 @@ describe('UserSettingsComponent', () => {
         expect(hapticsServiceMock[fail ? 'error' : 'success']).toHaveBeenCalledTimes(1);
     });
 
-    it('should initialize acceptedMarketingPolicy from user data', () => {
+    it('should initialize acceptedMarketingPolicy from user data', async () => {
+        await createSettings();
         component.user.acceptedMarketingPolicy = true;
         component.ngOnChanges();
         expect(component.userSettingsFormGroup.get('acceptedMarketingPolicy').value).toBe(true);
@@ -853,7 +917,8 @@ describe('UserSettingsComponent', () => {
         expect(component.userSettingsFormGroup.get('acceptedMarketingPolicy').value).toBe(false);
     });
 
-    it('should initialize missing optional legal preferences as false', () => {
+    it('should initialize missing optional legal preferences as false', async () => {
+        await createSettings();
         delete (component.user as any).acceptedTrackingPolicy;
         delete (component.user as any).acceptedMarketingPolicy;
 
@@ -863,7 +928,8 @@ describe('UserSettingsComponent', () => {
         expect(component.userSettingsFormGroup.get('acceptedMarketingPolicy').value).toBe(false);
     });
 
-    it('should initialize brandText from user data', () => {
+    it('should initialize brandText from user data', async () => {
+        await createSettings();
         (component.user as any).stripeRole = 'basic';
         (component.user as any).brandText = 'My Team';
         component.ngOnChanges();
@@ -871,7 +937,8 @@ describe('UserSettingsComponent', () => {
         expect(component.userSettingsFormGroup.get('brandText').value).toBe('My Team');
     });
 
-    it('should initialize brandText as empty string when user has no value', () => {
+    it('should initialize brandText as empty string when user has no value', async () => {
+        await createSettings();
         (component.user as any).stripeRole = 'basic';
         delete (component.user as any).brandText;
         component.ngOnChanges();
@@ -879,7 +946,8 @@ describe('UserSettingsComponent', () => {
         expect(component.userSettingsFormGroup.get('brandText').value).toBe('');
     });
 
-    it('should allow brandText editing for basic and pro users and disable for free users', () => {
+    it('should allow brandText editing for basic and pro users and disable for free users', async () => {
+        await createSettings();
         (component.user as any).stripeRole = 'basic';
         component.ngOnChanges();
         expect(component.canEditBrandText).toBe(true);
@@ -896,7 +964,8 @@ describe('UserSettingsComponent', () => {
         expect(component.userSettingsFormGroup.get('brandText').disabled).toBe(true);
     });
 
-    it('should allow brandText editing during active grace period', () => {
+    it('should allow brandText editing during active grace period', async () => {
+        await createSettings();
         (component.user as any).stripeRole = 'free';
         (component.user as any).gracePeriodUntil = Date.now() + 60_000;
         component.ngOnChanges();
@@ -906,6 +975,7 @@ describe('UserSettingsComponent', () => {
     });
 
     it('should save acceptedTrackingPolicy when form is submitted', async () => {
+        await createSettings();
         const userService = TestBed.inject(AppUserService);
         const updateUserPropertiesSpy = vi.spyOn(userService, 'updateUserProperties').mockResolvedValue(true as any);
         const analyticsService = TestBed.inject(AppAnalyticsService) as any;
@@ -931,6 +1001,7 @@ describe('UserSettingsComponent', () => {
     });
 
     it('should save acceptedMarketingPolicy when form is submitted', async () => {
+        await createSettings();
         const userService = TestBed.inject(AppUserService);
         const updateUserPropertiesSpy = vi.spyOn(userService, 'updateUserProperties').mockResolvedValue(true as any);
 
@@ -954,6 +1025,7 @@ describe('UserSettingsComponent', () => {
     });
 
     it('should not save missing optional legal preferences when consent controls are unchanged', async () => {
+        await createSettings();
         const userService = TestBed.inject(AppUserService);
         const updateUserPropertiesSpy = vi.spyOn(userService, 'updateUserProperties').mockResolvedValue(true as any);
         delete (component.user as any).acceptedTrackingPolicy;
@@ -969,6 +1041,7 @@ describe('UserSettingsComponent', () => {
     });
 
     it('should save dirty missing optional legal preferences as strict false booleans', async () => {
+        await createSettings();
         const userService = TestBed.inject(AppUserService);
         const updateUserPropertiesSpy = vi.spyOn(userService, 'updateUserProperties').mockResolvedValue(true as any);
         delete (component.user as any).acceptedTrackingPolicy;
@@ -990,6 +1063,7 @@ describe('UserSettingsComponent', () => {
     });
 
     it('should not include profile description when settings are saved', async () => {
+        await createSettings();
         const userService = TestBed.inject(AppUserService);
         const updateUserPropertiesSpy = vi.spyOn(userService, 'updateUserProperties').mockResolvedValue(true as any);
 
@@ -1005,6 +1079,7 @@ describe('UserSettingsComponent', () => {
     });
 
     it('should initialize and save distance unit preference when form is submitted', async () => {
+        await createSettings();
         const userService = TestBed.inject(AppUserService);
         const updateUserPropertiesSpy = vi.spyOn(userService, 'updateUserProperties').mockResolvedValue(true as any);
 
@@ -1030,6 +1105,7 @@ describe('UserSettingsComponent', () => {
     });
 
     it('saves pounds independently and keeps them when applying a distance preset', async () => {
+        await createSettings();
         const userService = TestBed.inject(AppUserService);
         const updateUserPropertiesSpy = vi.spyOn(userService, 'updateUserProperties').mockResolvedValue(true as any);
         component.ngOnChanges();
@@ -1047,7 +1123,8 @@ describe('UserSettingsComponent', () => {
         );
     });
 
-    it('keeps weight-unit hydration silent and gives one selection feedback for a deliberate choice', () => {
+    it('keeps weight-unit hydration silent and gives one selection feedback for a deliberate choice', async () => {
+        await renderSettings();
         component.activeSection = 'units';
         fixture.detectChanges();
         expect(hapticsServiceMock.selection).not.toHaveBeenCalled();
@@ -1059,6 +1136,7 @@ describe('UserSettingsComponent', () => {
     });
 
     it('should complete unit setup when saving a changed unit preference', async () => {
+        await createSettings();
         const userService = TestBed.inject(AppUserService);
         const updateUserPropertiesSpy = vi.spyOn(userService, 'updateUserProperties').mockResolvedValue(true as any);
 
@@ -1085,6 +1163,7 @@ describe('UserSettingsComponent', () => {
     });
 
     it('should not complete unit setup when saving without unit changes', async () => {
+        await createSettings();
         const userService = TestBed.inject(AppUserService);
         const updateUserPropertiesSpy = vi.spyOn(userService, 'updateUserProperties').mockResolvedValue(true as any);
 
@@ -1099,14 +1178,16 @@ describe('UserSettingsComponent', () => {
         expect(payload.settings.appSettings.unitSetupCompleted).toBeUndefined();
     });
 
-    it('should expose kilometers and miles labels for distance unit choices', () => {
+    it('should expose kilometers and miles labels for distance unit choices', async () => {
+        await createSettings();
         expect(component.distanceUnitOptions).toEqual([
             { label: 'Kilometers', value: DistanceUnits.Kilometers },
             { label: 'Miles', value: DistanceUnits.Miles },
         ]);
     });
 
-    it('initializes missing regional formatting as Automatic', () => {
+    it('initializes missing regional formatting as Automatic', async () => {
+        await createSettings();
         expect(component.userSettingsFormGroup.get('formatLocale').value).toBe('auto');
         expect(component.selectedFormatLocaleLabel).toBe('Automatic (browser)');
         expect(component.formatLocaleOptions).toHaveLength(10);
@@ -1116,7 +1197,8 @@ describe('UserSettingsComponent', () => {
         expect(component.formatLocaleOptions.every(option => option.preview.date && option.preview.number)).toBe(true);
     });
 
-    it('shows the unit preset before regional formatting and individual overrides', () => {
+    it('shows the unit preset before regional formatting and individual overrides', async () => {
+        await renderSettings();
         component.activeSection = 'units';
         fixture.detectChanges();
 
@@ -1140,7 +1222,8 @@ describe('UserSettingsComponent', () => {
         expect(styles).toMatch(/\.regional-format-option__content\s*\{[^}]*grid-template-columns:\s*1fr/s);
     });
 
-    it('uses selection haptics only when the regional format changes deliberately', () => {
+    it('uses selection haptics only when the regional format changes deliberately', async () => {
+        await createSettings();
         expect(hapticsServiceMock.selection).not.toHaveBeenCalled();
 
         component.onFormatLocaleChange();
@@ -1149,6 +1232,7 @@ describe('UserSettingsComponent', () => {
     });
 
     it('saves and applies a changed regional format', async () => {
+        await createSettings();
         const userService = TestBed.inject(AppUserService);
         const updateUserPropertiesSpy = vi.spyOn(userService, 'updateUserProperties').mockResolvedValue(true as any);
         localeServiceMock.cachePreference.mockReturnValue('updated');
@@ -1172,6 +1256,7 @@ describe('UserSettingsComponent', () => {
     });
 
     it('does not reconcile or reload an unchanged regional format', async () => {
+        await createSettings();
         const userService = TestBed.inject(AppUserService);
         vi.spyOn(userService, 'updateUserProperties').mockResolvedValue(true as any);
 
@@ -1183,6 +1268,7 @@ describe('UserSettingsComponent', () => {
     });
 
     it('reports when a saved regional format cannot be cached by the browser', async () => {
+        await createSettings();
         const userService = TestBed.inject(AppUserService);
         vi.spyOn(userService, 'updateUserProperties').mockResolvedValue(true as any);
         localeServiceMock.cachePreference.mockReturnValue('storage-unavailable');
@@ -1202,6 +1288,7 @@ describe('UserSettingsComponent', () => {
     });
 
     it('does not cache or reload a changed regional format when the account save fails', async () => {
+        await createSettings();
         const userService = TestBed.inject(AppUserService);
         vi.spyOn(userService, 'updateUserProperties').mockRejectedValueOnce(new Error('offline'));
         component.userSettingsFormGroup.get('formatLocale').setValue('el-GR');
@@ -1214,7 +1301,8 @@ describe('UserSettingsComponent', () => {
         expect(hapticsServiceMock.error).toHaveBeenCalledOnce();
     });
 
-    it('should apply a simple miles unit preset to advanced controls', () => {
+    it('should apply a simple miles unit preset to advanced controls', async () => {
+        await createSettings();
         component.ngOnChanges();
 
         component.onUnitPresetChange('miles');
@@ -1228,7 +1316,8 @@ describe('UserSettingsComponent', () => {
         expect(component.userSettingsFormGroup.dirty).toBe(true);
     });
 
-    it('allows reapplying the same preset after customizing its unit choices', () => {
+    it('allows reapplying the same preset after customizing its unit choices', async () => {
+        await renderSettings();
         component.activeSection = 'units';
         component.onUnitPresetChange('kilometers');
         component.userSettingsFormGroup.get('paceUnitsToUse').setValue([PaceUnits.MinutesPerMile]);
@@ -1258,6 +1347,7 @@ describe('UserSettingsComponent', () => {
             pace: PaceUnits.MinutesPerMile, swim: SwimPaceUnits.MinutesPer100Yard, vertical: VerticalSpeedUnits.FeetPerSecond,
             gap: GradeAdjustedPaceUnits.MinutesPerMile, gas: GradeAdjustedSpeedUnits.MilesPerHour },
     ])('stages and saves $preset while preserving independent preferences', async expected => {
+        await createSettings();
         component.userSettingsFormGroup.patchValue({weightUnitsToUse: WeightUnits.Pounds, startOfTheWeek: 0, formatLocale: 'en-GB'});
         component.onUnitPresetChange(expected.preset === 'miles' ? 'kilometers' : 'miles');
         component.onUnitPresetChange(expected.preset);
@@ -1280,7 +1370,8 @@ describe('UserSettingsComponent', () => {
         expect(component.userSettingsFormGroup.pristine).toBe(true);
     });
 
-    it('keeps individual unit controls mounted behind Customize units', () => {
+    it('keeps individual unit controls mounted behind Customize units', async () => {
+        await renderSettings();
         component.activeSection = 'units';
         fixture.detectChanges();
 
@@ -1303,6 +1394,7 @@ describe('UserSettingsComponent', () => {
     });
 
     it('should save trimmed brandText for paid users', async () => {
+        await createSettings();
         const userService = TestBed.inject(AppUserService);
         const updateUserPropertiesSpy = vi.spyOn(userService, 'updateUserProperties').mockResolvedValue(true as any);
 
@@ -1318,6 +1410,7 @@ describe('UserSettingsComponent', () => {
     });
 
     it('should save null brandText when paid user submits only whitespace', async () => {
+        await createSettings();
         const userService = TestBed.inject(AppUserService);
         const updateUserPropertiesSpy = vi.spyOn(userService, 'updateUserProperties').mockResolvedValue(true as any);
 
@@ -1333,6 +1426,7 @@ describe('UserSettingsComponent', () => {
     });
 
     it('should not include brandText in payload for free users', async () => {
+        await createSettings();
         const userService = TestBed.inject(AppUserService);
         const updateUserPropertiesSpy = vi.spyOn(userService, 'updateUserProperties').mockResolvedValue(true as any);
 
@@ -1349,6 +1443,7 @@ describe('UserSettingsComponent', () => {
     });
 
     it('should save trimmed brandText during active grace period', async () => {
+        await createSettings();
         const userService = TestBed.inject(AppUserService);
         const updateUserPropertiesSpy = vi.spyOn(userService, 'updateUserProperties').mockResolvedValue(true as any);
 
@@ -1365,6 +1460,7 @@ describe('UserSettingsComponent', () => {
     });
 
     it('should not include legacy showPoints in saved map settings', async () => {
+        await createSettings();
         const userService = TestBed.inject(AppUserService);
         const updateUserPropertiesSpy = vi.spyOn(userService, 'updateUserProperties').mockResolvedValue(true as any);
 
@@ -1377,6 +1473,7 @@ describe('UserSettingsComponent', () => {
     });
 
     it('does not rewrite dashboard-specific settings when saving general settings', async () => {
+        await createSettings();
         const userService = TestBed.inject(AppUserService);
         const updateUserPropertiesSpy = vi.spyOn(userService, 'updateUserProperties').mockResolvedValue(true as any);
         const dashboardActionPrompts = {
@@ -1431,6 +1528,7 @@ describe('UserSettingsComponent', () => {
     });
 
     it('should reject brandText values longer than 60 chars after trim', async () => {
+        await createSettings();
         const userService = TestBed.inject(AppUserService);
         const updateUserPropertiesSpy = vi.spyOn(userService, 'updateUserProperties').mockResolvedValue(true as any);
 
@@ -1447,6 +1545,7 @@ describe('UserSettingsComponent', () => {
     });
 
     it('should correctly save chart settings including visible metrics', async () => {
+        await createSettings();
         const userService = TestBed.inject(AppUserService);
         const updateUserPropertiesSpy = vi.spyOn(userService, 'updateUserProperties').mockResolvedValue(true as any);
 
@@ -1480,14 +1579,16 @@ describe('UserSettingsComponent', () => {
         );
     });
 
-    it('should expose stamina metrics as selectable chart metrics', () => {
+    it('should expose stamina metrics as selectable chart metrics', async () => {
+        await createSettings();
         const advancedGroup = component.dataGroups.find((group) => group.name === 'Advanced Data');
 
         expect(advancedGroup?.data).toContain(DataStamina.type);
         expect(advancedGroup?.data).toContain(DataPotentialStamina.type);
     });
 
-    it('should initialize removeAscentForActivitiesSummaries with mandatory exclusions merged with user settings', () => {
+    it('should initialize removeAscentForActivitiesSummaries with mandatory exclusions merged with user settings', async () => {
+        await createSettings();
         component.user.settings.summariesSettings = {
             removeAscentForEventTypes: ['Running']
         } as any;
@@ -1506,7 +1607,8 @@ describe('UserSettingsComponent', () => {
         // Should be unique
         expect(new Set(formValue).size).toBe(formValue.length);
     });
-    it('should initialize removeDescentForActivitiesSummaries with mandatory exclusions merged with user settings', () => {
+    it('should initialize removeDescentForActivitiesSummaries with mandatory exclusions merged with user settings', async () => {
+        await createSettings();
         component.user.settings.summariesSettings = {
             removeDescentForEventTypes: ['Running']
         } as any;
@@ -1526,7 +1628,8 @@ describe('UserSettingsComponent', () => {
         expect(new Set(formValue).size).toBe(formValue.length);
     });
 
-    it('should make every Diving-group activity mandatory for both elevation exclusions', () => {
+    it('should make every Diving-group activity mandatory for both elevation exclusions', async () => {
+        await createSettings();
         component.ngOnChanges();
         const ascentFormValue = component.userSettingsFormGroup.get('removeAscentForActivitiesSummaries').value;
         const descentFormValue = component.userSettingsFormGroup.get('removeDescentForActivitiesSummaries').value;
@@ -1545,7 +1648,8 @@ describe('UserSettingsComponent', () => {
         });
     });
 
-    it('keeps save actions visible and disabled when form is invalid', () => {
+    it('keeps save actions visible and disabled when form is invalid', async () => {
+        await renderSettings();
         component.ngOnChanges();
         component.userSettingsFormGroup.markAsDirty();
         component.userSettingsFormGroup.get('dataTypesToUse').setValue([]);
@@ -1556,7 +1660,8 @@ describe('UserSettingsComponent', () => {
         expect(saveButton.disabled).toBe(true);
     });
 
-    it('allows an empty display name', () => {
+    it('allows an empty display name', async () => {
+        await createSettings();
         component.ngOnChanges();
         component.userSettingsFormGroup.get('displayName').setValue('');
 
@@ -1564,7 +1669,8 @@ describe('UserSettingsComponent', () => {
         expect(component.userSettingsFormGroup.valid).toBe(true);
     });
 
-    it('should not open delete dialog when a deletion is already in progress', () => {
+    it('should not open delete dialog when a deletion is already in progress', async () => {
+        await createSettings();
         const dialog = TestBed.inject(MatDialog) as { open: ReturnType<typeof vi.fn> };
         component.isDeleting = true;
 
@@ -1573,7 +1679,8 @@ describe('UserSettingsComponent', () => {
         expect(dialog.open).not.toHaveBeenCalled();
     });
 
-    it('shows validation helper when required profile controls are invalid', () => {
+    it('shows validation helper when required profile controls are invalid', async () => {
+        await createSettings();
         component.ngOnChanges();
         component.userSettingsFormGroup.get('dataTypesToUse').setValue([]);
         expect(component.userSettingsFormGroup.invalid).toBe(true);
@@ -1586,6 +1693,7 @@ describe('UserSettingsComponent', () => {
     });
 
     it('logs invalid control diagnostics when submit is blocked by validation', async () => {
+        await createSettings();
         const logger = TestBed.inject(LoggerService);
         const warnSpy = vi.spyOn(logger, 'warn');
 
@@ -1609,7 +1717,8 @@ describe('UserSettingsComponent', () => {
         );
     });
 
-    it('preserves dirty chart edits when the same user input refreshes', () => {
+    it('preserves dirty chart edits when the same user input refreshes', async () => {
+        await createSettings();
         component.ngOnChanges();
         component.userSettingsFormGroup.get('chartStrokeWidth').setValue(5);
         component.userSettingsFormGroup.get('chartStrokeWidth').markAsDirty();
@@ -1624,6 +1733,7 @@ describe('UserSettingsComponent', () => {
     });
 
     it('marks the form pristine after successful save', async () => {
+        await createSettings();
         const userService = TestBed.inject(AppUserService);
         vi.spyOn(userService, 'updateUserProperties').mockResolvedValue(true as any);
 
@@ -1641,6 +1751,7 @@ describe('UserSettingsComponent', () => {
     });
 
     it('uses an error haptic when a settings save fails', async () => {
+        await createSettings();
         const userService = TestBed.inject(AppUserService);
         vi.spyOn(userService, 'updateUserProperties').mockRejectedValueOnce(new Error('offline'));
 
@@ -1654,7 +1765,8 @@ describe('UserSettingsComponent', () => {
         expect(hapticsServiceMock.error).toHaveBeenCalledOnce();
     });
 
-    it('normalizes malformed legacy settings so required chart/unit controls stay valid', () => {
+    it('normalizes malformed legacy settings so required chart/unit controls stay valid', async () => {
+        await createSettings();
         component.user = {
             ...(component.user as any),
             settings: {
@@ -1692,7 +1804,8 @@ describe('UserSettingsComponent', () => {
         expect(component.userSettingsFormGroup.get('eventsPerPage').value).toBe(10);
     });
 
-    it('exposes invalid control diagnostics with labels', () => {
+    it('exposes invalid control diagnostics with labels', async () => {
+        await createSettings();
         component.ngOnChanges();
         component.userSettingsFormGroup.get('dataTypesToUse').setValue([]);
         component.userSettingsFormGroup.get('dataTypesToUse').markAsTouched();
