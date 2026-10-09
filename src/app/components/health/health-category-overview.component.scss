@@ -1,0 +1,33 @@
+:host { display: block; min-width: 0; }
+:host([hidden]) { display: none; }
+
+.health-overview-heading { display: flex; align-items: baseline; justify-content: space-between; gap: 0.5rem; flex-wrap: wrap; margin-bottom: 0.75rem; }
+.health-overview-heading h2 { font: var(--mat-sys-title-large); font-weight: 600; margin: 0; }
+.health-overview-heading p, .health-overview-empty { font: var(--mat-sys-body-small); color: var(--mat-sys-on-surface-variant); margin: 0; }
+mat-chip-listbox { display: block; margin-bottom: 1rem; }
+.health-overview-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 1rem; }
+.health-overview-card { min-width: 0; }
+mat-card-header { padding: 1rem 1rem 0; }
+mat-card-title { display: flex; align-items: center; gap: 0.5rem; font: var(--mat-sys-title-medium); min-width: 0; }
+mat-card-title span { overflow-wrap: anywhere; }
+mat-card-title mat-icon { flex: 0 0 24px; color: var(--mat-sys-primary); }
+mat-card-content { flex: 1; min-width: 0; padding: 0.5rem 0.5rem 0; }
+mat-card-actions { padding: 0.5rem; }
+.health-overview-empty { grid-column: 1 / -1; padding-block: 1rem; }
+.health-category-browse { margin-top: 1.25rem; }
+.health-category-browse h3 { font: var(--mat-sys-title-small); margin: 0 0 0.5rem; }
+.health-category-links { display: flex; flex-wrap: wrap; gap: 0.25rem 0.5rem; }
+.health-category-link-content { display: flex; align-items: center; justify-content: center; gap: 0.5rem; white-space: normal; }
+.health-category-link-content mat-icon { flex: 0 0 20px; width: 20px; height: 20px; font-size: 20px; }
+.health-category-count { color: var(--mat-sys-on-surface-variant); font-family: 'Barlow Condensed', sans-serif; }
+
+@media (max-width: 980px) { .health-overview-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+@media (max-width: 480px) {
+  .health-overview-grid { gap: 0.5rem; }
+  mat-card-header { padding: 0.75rem 0.5rem 0; }
+  mat-card-title { font: var(--mat-sys-label-large); gap: 0.25rem; }
+  mat-card-title mat-icon { flex-basis: 18px; width: 18px; height: 18px; font-size: 18px; }
+  mat-card-content { padding: 0.25rem 0 0; }
+  mat-card-actions { padding: 0.25rem 0; }
+  mat-card-actions button { padding-inline: 0.5rem; font: var(--mat-sys-label-medium); min-height: 44px; }
+}

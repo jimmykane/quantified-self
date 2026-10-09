@@ -1,4 +1,4 @@
-<section class="health-tile" [class.health-thumbnail]="thumbnail()" [class.health-preview]="preview() && !thumbnail()" [attr.aria-busy]="loading()">
+<section class="health-tile" [class.health-thumbnail]="thumbnail()" [class.health-preview]="preview() && !thumbnail()" [class.health-overview]="overview()" [attr.aria-busy]="loading()">
   @if (!thumbnail()) {
     @if (!hideTitle()) { <header class="health-tile-header" [class.reserve-actions]="reserveActions()">
       <div class="qs-dashboard-chart-title">{{ title() }}</div>
@@ -11,13 +11,13 @@
         <app-chart-source-picker class="health-sleep-source" [choices]="context()!.sources" [selectedKey]="context()!.selectedKey"
           [chartTitle]="title()" [disabled]="disabled()" (selected)="selectSource($event)" />
       } @else { <span class="health-tile-window">{{ window().label }}</span> }
-      <div class="health-range-controls">
+      @if (!overview()) { <div class="health-range-controls">
         <button mat-icon-button aria-label="Show older period" [disabled]="disabled()" (click)="navigate('older')"><mat-icon>chevron_left</mat-icon></button>
         <mat-select class="health-range" [aria-label]="title() + ' date range'" [value]="settings().range" [disabled]="disabled()" (selectionChange)="selectRange($event.value)">
           @for (range of ranges; track range.value) { <mat-option [value]="range.value" [disabled]="isRangeDisabled(range.value)">{{ range.label }}</mat-option> }
         </mat-select>
         <button mat-icon-button aria-label="Show newer period" [disabled]="disabled() || !window().canNavigateNewer" (click)="navigate('newer')"><mat-icon>chevron_right</mat-icon></button>
-      </div>
+      </div> }
       <div class="health-loading-slot"><mat-progress-bar mode="indeterminate" [style.visibility]="loading() ? 'visible' : 'hidden'" [attr.aria-label]="'Loading ' + title()" /></div>
     </div>
     @if (context(); as view) {
@@ -44,11 +44,12 @@
                 [chartTitle]="title()" [disabled]="disabled()" (selected)="selectSource($event)" />
             }
           </div>
+          @if (overview() && recordedDate()) { <span class="health-recorded-date">Recorded {{ recordedDate() }}</span> }
           @if (chart.status; as status) { <span class="health-status"><span class="health-status-dot" [style.background-color]="chart.statusOverlay?.statusColor"></span>{{ status.label }}</span><span class="health-status-detail">{{ status.detailText }}</span> }
         </div>
       }
       <app-health-metric-series-chart [model]="chart.model" [startTimeMs]="view.window.startTimeMs" [endTimeMs]="view.window.endTimeMs"
-        [darkTheme]="darkTheme()" [unitSettings]="user().settings.unitSettings" [fillHeight]="true" [thumbnail]="thumbnail()"
+        [darkTheme]="darkTheme()" [unitSettings]="user().settings.unitSettings" [fillHeight]="!overview()" [compact]="overview()" [thumbnail]="thumbnail()"
         [timelineNotes]="thumbnail() || showingExample() ? null : timelineNotes()" [statusOverlay]="chart.statusOverlay" [statusDescription]="chart.statusDescription" />
     } @else if (settings().metric === 'sleep' && view.hasData) {
       @if (thumbnail()) { <app-dashboard-chart-thumbnail [preview]="sleepThumbnail()" [darkTheme]="darkTheme()" /> }

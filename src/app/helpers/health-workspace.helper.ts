@@ -452,6 +452,53 @@ export function buildHealthMetricCatalogGroups(
   })).filter(group => group.metrics.length > 0);
 }
 
+export type HealthOverviewCategoryId = 'body' | 'vitals' | 'movement' | 'recovery' | 'fitness';
+
+export interface HealthOverviewMetric {
+  id: HealthWorkspaceMetricSelection;
+  label: string;
+}
+
+export interface HealthOverviewCategory {
+  id: HealthOverviewCategoryId;
+  label: string;
+  icon: string;
+  metrics: readonly HealthOverviewMetric[];
+}
+
+/** Presentation groups only: keep the stored catalog and its metric semantics unchanged. */
+export function buildHealthOverviewCategories(
+  groups: readonly HealthMetricCatalogGroup[],
+  includeSleep: boolean,
+): HealthOverviewCategory[] {
+  const definitions: readonly { id: HealthOverviewCategoryId; label: string; icon: string; groups: readonly string[] }[] = [
+    { id: 'body', label: 'Body', icon: 'monitor_weight', groups: ['body'] },
+    { id: 'vitals', label: 'Vitals', icon: 'cardiology', groups: ['cardiovascular'] },
+    { id: 'movement', label: 'Movement & energy', icon: 'directions_walk', groups: ['movement', 'energy'] },
+    { id: 'recovery', label: 'Recovery & sleep', icon: 'bedtime', groups: ['wellness', 'sleep'] },
+    { id: 'fitness', label: 'Fitness', icon: 'directions_run', groups: ['fitness'] },
+  ];
+  return definitions.map(category => ({
+    id: category.id, label: category.label, icon: category.icon,
+    metrics: [
+      ...(category.id === 'recovery' && includeSleep ? [{ id: 'sleep' as const, label: 'Sleep overview' }] : []),
+      ...groups.filter(group => category.groups.includes(group.id)).flatMap(group =>
+        group.metrics.map(metric => ({ id: metric.id, label: metric.label }))),
+    ],
+  })).filter(category => category.metrics.length > 0);
+}
+
+/** A bounded landing selection; category filters reveal every available catalog entry. */
+export function selectHealthOverviewMetrics(categories: readonly HealthOverviewCategory[]): HealthOverviewMetric[] {
+  const available = new Map(categories.flatMap(category => category.metrics).map(metric => [metric.id, metric]));
+  const preferred: readonly HealthWorkspaceMetricSelection[] = [
+    HEALTH_METRIC_IDS.BodyWeight, HEALTH_METRIC_IDS.HeartRateVariability,
+    HEALTH_METRIC_IDS.RestingHeartRate, HEALTH_METRIC_IDS.Steps, HEALTH_METRIC_IDS.Vo2Max, 'sleep',
+  ];
+  const ordered = [...preferred, ...available.keys()];
+  return [...new Set(ordered)].flatMap(id => available.has(id) ? [available.get(id)!] : []).slice(0, 6);
+}
+
 export function filterHealthRangeResultByProviders(
   result: HealthRangeResult,
   selectedProviders: readonly HealthProvider[],
