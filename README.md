@@ -240,6 +240,7 @@ Unified health history under `users/{uid}/healthSourceRecords` and `healthSample
 - [Reusable event tag catalog and backfill](docs/event-tag-catalog.md)
 - [Firebase Functions target-aware entrypoint loading](docs/functions-entrypoint-loading.md)
 - [Temporary Garmin dispatch cost measurements](docs/garmin-dispatch-cost-measurements.md)
+- [Optional connection history import](docs/connection-history-import.md)
 - [Admin dashboard aggregate user history](docs/admin-dashboard-history.md)
 - [Unified health data foundation](docs/unified-health-data.md)
 - [Private Timeline notes](docs/timeline-notes.md)

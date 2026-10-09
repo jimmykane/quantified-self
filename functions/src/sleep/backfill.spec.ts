@@ -100,6 +100,7 @@ vi.mock('firebase-admin', () => ({
         };
 
         return {
+            doc: (path: string) => ({ path, get: async () => hoisted.tokenDocs.find(doc => path.endsWith('/' + doc.id)) }),
             getAll: vi.fn(async (...refs: Array<{ path?: string }>) => refs.map(ref => snapshotForPath(ref?.path || ''))),
             runTransaction: vi.fn(async (handler: (transaction: unknown) => Promise<unknown>) => {
                 return handler({
@@ -252,6 +253,9 @@ vi.mock('../request-helper', () => ({
 import {
     backfillCorosAPISleep,
     backfillGarminAPIHealth,
+    queueGarminSleepHealthHistory,
+    queueSuuntoSleepHealthHistory,
+    queueCorosSleepHealthHistory,
     backfillSuuntoAppSleep,
     chunkSleepBackfillRange,
 } from './backfill';
@@ -353,6 +357,40 @@ describe('backfillSuuntoAppSleep', () => {
         vi.useRealTimers();
     });
 
+    it.each(['Suunto', 'COROS'])('preserves automatic %s token-read failures for the coordinator to classify', async provider => {
+        if (provider === 'Suunto') seedSuuntoToken(); else seedCorosToken();
+        const error = Object.assign(new Error('Temporary credential read failure'), { retryAt: nowMs + 120000 });
+        hoisted.getTokenData.mockRejectedValueOnce(error);
+        const tokenPath = provider === 'Suunto'
+            ? 'suuntoAppAccessTokens/user-1/tokens/suunto-token-1'
+            : 'corosAPIAccessTokens/user-1/tokens/coros-token-1';
+        const execution = {
+            runId: 'run', tokenPath, providerUserId: provider === 'Suunto' ? 'suunto-user-1' : 'coros-token-1',
+            cooldownStartedAtMs: nowMs, requiredDocumentFieldValues: [], beforeRequest: vi.fn(), inTransaction: vi.fn(), onQueued: vi.fn(),
+        };
+        const operation = provider === 'Suunto' ? queueSuuntoSleepHealthHistory : queueCorosSleepHealthHistory;
+        await expect(operation('user-1', { execution, startMs: nowMs - 86400000, endMs: nowMs })).rejects.toBe(error);
+        expect(hoisted.addSleepSyncQueueItem).not.toHaveBeenCalled();
+        expect(hoisted.updateSleepSyncState).not.toHaveBeenCalled();
+    });
+
+    it.each([401, 429])('preserves automatic Suunto queue failure %s and its claimed cooldown', async statusCode => {
+        seedSuuntoToken();
+        const error = Object.assign(new Error('Queue admission unavailable'), { statusCode, retryAt: nowMs + 120000 });
+        hoisted.addSleepSyncQueueItem.mockRejectedValueOnce(error);
+        const execution = {
+            runId: 'run', tokenPath: 'suuntoAppAccessTokens/user-1/tokens/suunto-token-1', providerUserId: 'suunto-user-1',
+            cooldownStartedAtMs: nowMs, requiredDocumentFieldValues: [], beforeRequest: vi.fn(), inTransaction: vi.fn(), onQueued: vi.fn(),
+        };
+        await expect(queueSuuntoSleepHealthHistory('user-1', {
+            execution, startMs: nowMs - 86400000, endMs: nowMs, resources: ['sleep'],
+        })).rejects.toBe(error);
+        expect(hoisted.transactionSet).toHaveBeenCalledWith(expect.anything(), expect.objectContaining({
+            connectionHistoryReservation: 'run', nextBackfillAllowedAtMs: nowMs + SLEEP_BACKFILL_COOLDOWN_MS,
+        }), { merge: true });
+        expect(hoisted.updateSleepSyncState).not.toHaveBeenCalled();
+    });
+
     it('queues Suunto Sleep and Health windows from 2000 to now, recent windows first', async () => {
         seedSuuntoToken();
         const expectedWindows = chunkSleepBackfillRange(startMs, nowMs, windowDays).reverse();
@@ -369,6 +407,8 @@ describe('backfillSuuntoAppSleep', () => {
         });
         expect(hoisted.addSleepSyncQueueItem).toHaveBeenCalledTimes(expectedWindows.length * 2);
         expect(hoisted.transactionSet).toHaveBeenCalledWith(expect.anything(), {
+            connectionHistoryReservation: expect.anything(),
+            connectionHistoryReservationExpiresAt: expect.anything(),
             provider: SLEEP_PROVIDERS.SuuntoApp,
             status: 'ready',
             lastBackfillQueuedAtMs: nowMs,
@@ -759,6 +799,8 @@ describe('backfillCorosAPISleep', () => {
         });
         expect(hoisted.addSleepSyncQueueItem).toHaveBeenCalledTimes(expectedWindows.length);
         expect(hoisted.transactionSet).toHaveBeenCalledWith(expect.anything(), {
+            connectionHistoryReservation: expect.anything(),
+            connectionHistoryReservationExpiresAt: expect.anything(),
             provider: SLEEP_PROVIDERS.COROSAPI,
             status: 'ready',
             lastBackfillQueuedAtMs: nowMs,
@@ -892,6 +934,8 @@ describe('backfillGarminAPIHealth', () => {
         expect(hoisted.addSleepSyncQueueItem).not.toHaveBeenCalled();
         expect(hoisted.requestGet).toHaveBeenCalledTimes(expectedWindows.length);
         expect(hoisted.transactionSet).toHaveBeenCalledWith(expect.anything(), {
+            connectionHistoryReservation: expect.anything(),
+            connectionHistoryReservationExpiresAt: expect.anything(),
             provider: SLEEP_PROVIDERS.GarminAPI,
             status: 'ready',
             lastBackfillQueuedAtMs: nowMs,
@@ -905,6 +949,8 @@ describe('backfillGarminAPIHealth', () => {
         expect(hoisted.transactionSet.mock.invocationCallOrder[0])
             .toBeLessThan(hoisted.requestGet.mock.invocationCallOrder[0]);
         expect(hoisted.requestGet).toHaveBeenNthCalledWith(1, {
+            timeout: 30_000,
+            maxResponseBytes: 1024 * 1024,
             headers: {
                 Authorization: 'Bearer garmin-access-token',
             },
@@ -1011,6 +1057,8 @@ describe('backfillGarminAPIHealth', () => {
         expect(result.queued).toBe(expectedWindows.length);
         expect(hoisted.getTokenData).toHaveBeenCalledTimes(2);
         expect(hoisted.requestGet).toHaveBeenNthCalledWith(1, {
+            timeout: 30_000,
+            maxResponseBytes: 1024 * 1024,
             headers: {
                 Authorization: 'Bearer fresh-access-token',
             },
@@ -1190,6 +1238,33 @@ describe('backfillGarminAPIHealth', () => {
             healthBackfillWindowsTotal: countGarminHealthBackfillRequests(startMs, nowMs),
             lastError: 'garmin unavailable',
         }, nowMs, garminLifecycleGuards());
+    });
+
+    it.each([409, 400])('distinguishes already requested automatic Sleep history from an unavailable range (%s)', async statusCode => {
+        seedGarminToken();
+        hoisted.requestGet.mockRejectedValueOnce({ statusCode, error: 'Requested range is before minimum start time' });
+        const execution = {
+            runId: 'run', tokenPath: 'garminAPITokens/user-1/tokens/garmin-user-1', providerUserId: 'garmin-user-1',
+            cooldownStartedAtMs: nowMs, requiredDocumentFieldValues: [], beforeRequest: vi.fn(), inTransaction: vi.fn(), onQueued: vi.fn(),
+        };
+        const result = queueGarminSleepHealthHistory('user-1', { execution, startMs: nowMs - 86400000, endMs: nowMs, resources: ['sleep'] });
+        if (statusCode === 409) await expect(result).resolves.toMatchObject({ sleepQueued: 1 });
+        else await expect(result).rejects.toMatchObject({ name: 'HistoryUnavailableError' });
+    });
+
+    it.each([429, 401])('preserves automatic Garmin provider failure %s without releasing its cooldown', async statusCode => {
+        seedGarminToken();
+        const error = Object.assign(new Error('provider busy'), { statusCode, response: { headers: { 'retry-after': '7200' } } });
+        hoisted.requestGet.mockRejectedValueOnce(error);
+        const execution = {
+            runId: 'run', tokenPath: 'garminAPITokens/user-1/tokens/garmin-user-1', providerUserId: 'garmin-user-1',
+            cooldownStartedAtMs: nowMs, requiredDocumentFieldValues: [], beforeRequest: vi.fn(), inTransaction: vi.fn(), onQueued: vi.fn(),
+        };
+        await expect(queueGarminSleepHealthHistory('user-1', {
+            execution, startMs: nowMs - 86400000, endMs: nowMs, resources: ['sleep'],
+        })).rejects.toBe(error);
+        expect(hoisted.requestGet).toHaveBeenCalledWith(expect.objectContaining({ timeout: 30000, maxResponseBytes: 1024 * 1024 }));
+        expect(hoisted.updateSleepSyncState).not.toHaveBeenCalledWith(expect.anything(), expect.anything(), expect.objectContaining({ nextBackfillAllowedAtMs: null }), expect.anything(), expect.anything());
     });
 
     it('fences a failed Health queue admission to the initiating Garmin lifecycle', async () => {
@@ -1402,6 +1477,8 @@ describe('backfillGarminAPIHealth', () => {
 
         expect(result.queued).toBe(expectedWindows.length);
         expect(hoisted.requestGet).toHaveBeenNthCalledWith(2, {
+            timeout: 30_000,
+            maxResponseBytes: 1024 * 1024,
             headers: {
                 Authorization: 'Bearer garmin-access-token',
             },
@@ -1433,6 +1510,8 @@ describe('backfillGarminAPIHealth', () => {
 
         expect(result.queued).toBe(expectedWindows.length);
         expect(hoisted.requestGet).toHaveBeenNthCalledWith(2, {
+            timeout: 30_000,
+            maxResponseBytes: 1024 * 1024,
             headers: {
                 Authorization: 'Bearer garmin-access-token',
             },
@@ -1459,6 +1538,8 @@ describe('backfillGarminAPIHealth', () => {
 
         expect(result.queued).toBe(expectedWindows.length);
         expect(hoisted.requestGet).toHaveBeenNthCalledWith(2, {
+            timeout: 30_000,
+            maxResponseBytes: 1024 * 1024,
             headers: {
                 Authorization: 'Bearer garmin-access-token',
             },
@@ -1491,6 +1572,8 @@ describe('backfillGarminAPIHealth', () => {
         });
         expect(hoisted.requestGet).toHaveBeenCalledTimes(expectedWindows.length);
         expect(hoisted.requestGet).toHaveBeenNthCalledWith(1, {
+            timeout: 30_000,
+            maxResponseBytes: 1024 * 1024,
             headers: {
                 Authorization: 'Bearer garmin-access-token',
             },
@@ -1528,6 +1611,8 @@ describe('backfillGarminAPIHealth', () => {
             nextAllowedAtMs: nowMs + cooldownMs,
         });
         expect(hoisted.requestGet).toHaveBeenNthCalledWith(1, {
+            timeout: 30_000,
+            maxResponseBytes: 1024 * 1024,
             headers: {
                 Authorization: 'Bearer garmin-access-token',
             },
@@ -1558,6 +1643,8 @@ describe('backfillGarminAPIHealth', () => {
         expect(result.queued).toBe(1);
         expect(hoisted.requestGet).toHaveBeenCalledTimes(2);
         expect(hoisted.requestGet).toHaveBeenNthCalledWith(2, {
+            timeout: 30_000,
+            maxResponseBytes: 1024 * 1024,
             headers: {
                 Authorization: 'Bearer garmin-access-token',
             },
@@ -1587,6 +1674,8 @@ describe('backfillGarminAPIHealth', () => {
 
         expect(result.queued).toBe(expectedWindows.length);
         expect(hoisted.requestGet).toHaveBeenNthCalledWith(2, {
+            timeout: 30_000,
+            maxResponseBytes: 1024 * 1024,
             headers: {
                 Authorization: 'Bearer garmin-access-token',
             },
@@ -1611,6 +1700,8 @@ describe('backfillGarminAPIHealth', () => {
 
         expect(result.queued).toBe(expectedWindows.length);
         expect(hoisted.requestGet).toHaveBeenNthCalledWith(2, {
+            timeout: 30_000,
+            maxResponseBytes: 1024 * 1024,
             headers: {
                 Authorization: 'Bearer garmin-access-token',
             },
@@ -1636,6 +1727,8 @@ describe('backfillGarminAPIHealth', () => {
 
         expect(result.queued).toBe(expectedWindows.length);
         expect(hoisted.requestGet).toHaveBeenNthCalledWith(2, {
+            timeout: 30_000,
+            maxResponseBytes: 1024 * 1024,
             headers: {
                 Authorization: 'Bearer garmin-access-token',
             },
@@ -1665,6 +1758,8 @@ describe('backfillGarminAPIHealth', () => {
 
         expect(result.queued).toBe(expectedWindows.length);
         expect(hoisted.requestGet).toHaveBeenNthCalledWith(2, {
+            timeout: 30_000,
+            maxResponseBytes: 1024 * 1024,
             headers: {
                 Authorization: 'Bearer garmin-access-token',
             },
@@ -1695,6 +1790,8 @@ describe('backfillGarminAPIHealth', () => {
 
         expect(result.queued).toBe(expectedWindows.length - 1);
         expect(hoisted.requestGet).toHaveBeenNthCalledWith(2, {
+            timeout: 30_000,
+            maxResponseBytes: 1024 * 1024,
             headers: {
                 Authorization: 'Bearer garmin-access-token',
             },

@@ -8,6 +8,7 @@ import type { GarminSupportedSummaryType } from '../garmin/health-summary-types'
 import DocumentReference = admin.firestore.DocumentReference;
 
 export interface QueueItemInterface {
+  connectionHistoryRunId?: string;
   id: string,
   ref?: DocumentReference
   dateCreated: number,

@@ -41,6 +41,199 @@ import {
 import { ROUTE_DELIVERY_SYNC_ROUTE_IDS } from '@shared/route-delivery-sync-routes';
 import { AppBreakpoints } from '../../constants/breakpoints';
 
+// Static source contracts run outside component fixture hooks.
+describe('RoutesPageComponent', () => {
+
+    it('renders compare-style route filter controls and filtered empty state', () => {
+        const template = readFileSync(
+            resolve(process.cwd(), 'src/app/components/routes/routes-page.component.html'),
+            'utf8',
+        );
+        const styles = readFileSync(
+            resolve(process.cwd(), 'src/app/components/routes/routes-page.component.scss'),
+            'utf8',
+        );
+        const sharedTableControls = readFileSync(
+            resolve(process.cwd(), 'src/styles/_table-controls.scss'),
+            'utf8',
+        );
+
+        expect(template).toContain('class="routes-table-panel"');
+        expect(template).toContain('class="comparison-table-controls"');
+        expect(template).toContain('Filter loaded routes');
+        expect(template).toContain('(input)="updateRouteFilter($any($event.target).value)"');
+        expect(template).toContain('(selectionChange)="updateRouteFileTypeFilter($event.value)"');
+        expect(template).toContain('(selectionChange)="updateRouteActivityTypeFilter($event.value)"');
+        expect(template).toContain('{{ routeResultSummary() }}');
+        expect(template).toContain('{{ loadedRouteCount() }}');
+        expect(template).toContain('class="routes-map-panel"');
+        expect(template).toContain('<app-route-preview-map');
+        expect(template).toContain('[routes]="routeMapRoutes()"');
+        expect(template).toContain('[mapStyle]="currentUser.settings?.mapSettings?.mapStyle || \'default\'"');
+        expect(template).toContain('analyticsSource="routes_page_map"');
+        expect(template).toContain('No loaded routes match this filter');
+        expect(styles).toContain('.routes-table-panel');
+        expect(styles).toContain('.routes-map-stage');
+        expect(styles).toContain('height: clamp(22rem, 46vh, 32rem);');
+        expect(styles).toContain("@use '../../../styles/table-controls' as tableControls;");
+        expect(styles).toContain('@include tableControls.comparisonTableControlsLayout();');
+        expect(styles).toContain('@include bp.max-768 {');
+        expect(sharedTableControls).toContain('.comparison-table-controls');
+        expect(sharedTableControls).toContain('.filter-field');
+        expect(sharedTableControls).toContain('.facet-filter-field');
+        expect(sharedTableControls).toContain('.result-summary');
+    });
+
+    it('uses the shared route header icon', () => {
+        const template = readFileSync(
+            resolve(process.cwd(), 'src/app/components/routes/routes-page.component.html'),
+            'utf8',
+        );
+
+        expect(template).toContain('title="Routes"');
+        expect(template).toContain('titleId="routes-page-title"');
+        expect(template).toContain('leadingIcon="route"');
+    });
+
+    it('renders route type cells with the compare icon and label structure', () => {
+        const template = readFileSync(
+            resolve(process.cwd(), 'src/app/components/routes/routes-page.component.html'),
+            'utf8',
+        );
+        const styles = readFileSync(
+            resolve(process.cwd(), 'src/app/components/routes/routes-page.component.scss'),
+            'utf8',
+        );
+
+        expect(template).toContain('class="route-type-line"');
+        expect(template).toContain('<app-activity-type-icon');
+        expect(template).toContain('[activityType]="summary.activityTypeIconValue"');
+        expect(template).toContain('class="route-type-value"');
+        expect(styles).toContain('.route-type-line');
+        expect(styles).toContain('.route-type-line app-activity-type-icon');
+        expect(styles).toContain('.route-type-value');
+        expect(styles).toContain('font-weight: 500;');
+    });
+
+    it('keeps route details in the row action menu while also allowing guarded row activation', () => {
+        const template = readFileSync(
+            resolve(process.cwd(), 'src/app/components/routes/routes-page.component.html'),
+            'utf8',
+        );
+        const styles = readFileSync(
+            resolve(process.cwd(), 'src/app/components/routes/routes-page.component.scss'),
+            'utf8',
+        );
+
+        expect(template).toContain('class="route-table-row"');
+        const rowDefinition = template.match(/<tr\s+mat-row[\s\S]*?class="route-table-row"[\s\S]*?\*matRowDef="let item; columns: routeColumns;"[\s\S]*?>/)?.[0] ?? '';
+        expect(rowDefinition).toContain('(pointerdown)="onRouteRowPointerDown($event)"');
+        expect(rowDefinition).toContain('(pointermove)="onRouteRowPointerMove($event)"');
+        expect(rowDefinition).toContain('(pointerup)="onRouteRowPointerUp($event)"');
+        expect(rowDefinition).toContain('(pointercancel)="onRouteRowPointerCancel($event)"');
+        expect(rowDefinition).toContain('(click)="onRouteRowClick(item, $event)"');
+        expect(rowDefinition).toContain('(keydown.enter)="onRouteRowKeydown(item, $event)"');
+        expect(rowDefinition).toContain('(keydown.space)="onRouteRowKeydown(item, $event)"');
+        expect(rowDefinition).toContain('tabindex="0"');
+        expect(template).toContain('matColumnDef="sourceService"');
+        expect(template).toContain('matColumnDef="preview"');
+        expect(template).toContain('<app-route-preview-thumbnail');
+        expect(template).toContain('[preview]="item.routePreview"');
+        expect(template).toContain('[routeName]="item.name"');
+        expect(template).toContain('class="route-source-service-cell"');
+        expect(template).toContain('[presentation]="item.sourcePresentation"');
+        expect(template).toContain('class="route-original-file-cell"');
+        expect(template).toContain('<span>Original</span>');
+        expect(template).toContain('<app-service-source-icon');
+        expect(template).toContain('matColumnDef="select"');
+        expect(template).toContain('aria-label="Select all visible routes"');
+        expect(template).toContain('(change)="toggleVisibleRouteSelection($event.checked)"');
+        expect(template).toContain('(change)="toggleRouteSelection(item, $event.checked)"');
+        expect(template).toContain('[checked]="!!item.route.id && selectedRouteIDSet().has(item.route.id)"');
+        expect(template).toContain('(keydown)="$event.stopPropagation()"');
+        expect(template).toContain('class="route-selection-toolbar"');
+        expect(template).toContain('Export GPX');
+        expect(template).toContain('(click)="exportRouteAsGPX(item.route)"');
+        expect(template).toContain('(click)="downloadRouteOriginals(item.route)"');
+        expect(template).toContain('(click)="sendRouteToSuunto(item.route)"');
+        expect(template).toContain('(click)="sendRouteToGarmin(item.route)"');
+        expect(template).toContain('(click)="sendRouteToCOROS(item.route)"');
+        expect(template).toContain('(click)="$event.preventDefault(); $event.stopPropagation(); sendSelectedRoutesToSuunto()"');
+        expect(template).toContain('(click)="$event.preventDefault(); $event.stopPropagation(); sendSelectedRoutesToGarmin()"');
+        expect(template).toContain('(click)="$event.preventDefault(); $event.stopPropagation(); sendSelectedRoutesToCOROS()"');
+        expect(template).toContain('<span>Send to</span>');
+        expect(template).toContain('!(canSendRoutesToCOROS() && item.canSendToCOROS)');
+        expect(template).toContain('(click)="confirmDeleteRoute(item.route)"');
+        expect(template).toContain('(click)="reprocessRouteFromOriginalFile(item.route)"');
+        expect(template).toContain('[matMenuTriggerFor]="routeRowActionsMenu"');
+        expect(template).toContain('!item.canReprocess');
+        expect(template).not.toContain('canReprocessRoute(item.route)');
+        expect(template).not.toContain('isRouteSelected(item)');
+        expect(template).toContain('<mat-icon>autorenew</mat-icon>');
+        expect(template).toContain('<mat-icon>cloud_upload</mat-icon>');
+        expect(template).toContain('<mat-icon>open_in_new</mat-icon>');
+        expect(template).toContain('[matTooltipDisabled]="passiveRouteTableTooltipsDisabled()"');
+        expect(template).toContain('matTooltipTouchGestures="off"');
+        expect(styles).toContain('.route-table-row');
+        expect(styles).toContain('cursor: pointer;');
+        expect(styles).toContain('.route-table-row:focus-visible');
+        expect(styles).toContain('.route-selection-toolbar');
+        expect(styles).toContain('.route-table .mat-column-name');
+        expect(styles).toContain('width: 14rem;');
+        expect(styles).toContain('min-width: 12rem;');
+        expect(styles).toContain('max-width: 16rem;');
+        expect(styles).toContain('.route-table .mat-column-preview');
+        expect(styles).toContain('width: 6.25rem;');
+        expect(styles).toContain('.route-table .mat-column-sourceService');
+        expect(styles).toContain('.route-source-service-cell');
+        expect(styles).toContain('.route-original-file-cell');
+        expect(styles).toContain('.route-table .mat-column-select');
+        expect(template).not.toContain('class="route-provenance-item"');
+    });
+
+    it('uses a bounded two-axis scroll shell for the routes table', () => {
+        const template = readFileSync(
+            resolve(process.cwd(), 'src/app/components/routes/routes-page.component.html'),
+            'utf8',
+        );
+        const styles = readFileSync(
+            resolve(process.cwd(), 'src/app/components/routes/routes-page.component.scss'),
+            'utf8',
+        );
+
+        expect(template).toContain('class="route-table-shell qs-scrollbar"');
+        expect(template).not.toContain('class="route-table-scroll qs-scrollbar"');
+        expect(styles).toContain('.route-table-shell');
+        expect(styles).toContain('--route-table-min-width: 114rem;');
+        expect(styles).toContain('max-height: min(72vh, 48rem);');
+        expect(styles).toContain('max-width: 100%;');
+        expect(styles).toContain('min-width: 0;');
+        expect(styles).toContain('overflow: auto;');
+        expect(styles).toContain('overscroll-behavior: contain;');
+        expect(styles).toContain('scrollbar-gutter: stable;');
+        expect(styles).toContain('-webkit-overflow-scrolling: touch;');
+        expect(styles).not.toContain('.route-table-scroll');
+        expect(styles).not.toContain('touch-action: pan-x pan-y;');
+        const selectionToolbarStyles = styles.match(/\.route-selection-toolbar\s*{(?<body>[^}]*)}/)?.groups?.['body'] ?? '';
+        expect(selectionToolbarStyles).toContain('position: sticky;');
+        expect(selectionToolbarStyles).toContain('left: 0;');
+        expect(selectionToolbarStyles).toContain('width: 100%;');
+        expect(selectionToolbarStyles).toContain('justify-content: flex-start;');
+        expect(selectionToolbarStyles).not.toContain('min-width');
+    });
+
+    it('keeps point count table values on the default row text color', () => {
+        const styles = readFileSync(
+            resolve(process.cwd(), 'src/app/components/routes/routes-page.component.scss'),
+            'utf8',
+        );
+
+        expect(styles).toContain('.route-detail-stack');
+        expect(styles).toContain('color: inherit;');
+        expect(styles).not.toContain('.route-detail-stack {\n  align-content: center;\n  color: var(--qs-secondary-text-color');
+    });
+});
+
 describe('RoutesPageComponent', () => {
     let component: RoutesPageComponent;
     let authServiceMock: any;
@@ -613,8 +806,8 @@ describe('RoutesPageComponent', () => {
         });
         await Promise.resolve();
 
-        expect(userServiceMock.getCurrentUserServiceTokenAndRedirectURI).toHaveBeenCalledWith(ServiceNames.GarminAPI);
-        expect(windowServiceMock.windowRef.location.href).toBe('https://garmin.example/reconnect');
+        expect(userServiceMock.getCurrentUserServiceTokenAndRedirectURI).not.toHaveBeenCalled();
+        expect(routerMock.navigate).toHaveBeenCalledWith(['/services'], { queryParams: { serviceName: ServiceNames.GarminAPI, reconnect: '1' } });
     });
 
     it('dismisses the Garmin route permission prompt through dashboardActionPrompts', async () => {
@@ -1187,184 +1380,6 @@ describe('RoutesPageComponent', () => {
         expect(component.allVisibleRoutesSelected()).toBe(true);
     });
 
-    it('renders compare-style route filter controls and filtered empty state', () => {
-        const template = readFileSync(
-            resolve(process.cwd(), 'src/app/components/routes/routes-page.component.html'),
-            'utf8',
-        );
-        const styles = readFileSync(
-            resolve(process.cwd(), 'src/app/components/routes/routes-page.component.scss'),
-            'utf8',
-        );
-        const sharedTableControls = readFileSync(
-            resolve(process.cwd(), 'src/styles/_table-controls.scss'),
-            'utf8',
-        );
-
-        expect(template).toContain('class="routes-table-panel"');
-        expect(template).toContain('class="comparison-table-controls"');
-        expect(template).toContain('Filter loaded routes');
-        expect(template).toContain('(input)="updateRouteFilter($any($event.target).value)"');
-        expect(template).toContain('(selectionChange)="updateRouteFileTypeFilter($event.value)"');
-        expect(template).toContain('(selectionChange)="updateRouteActivityTypeFilter($event.value)"');
-        expect(template).toContain('{{ routeResultSummary() }}');
-        expect(template).toContain('{{ loadedRouteCount() }}');
-        expect(template).toContain('class="routes-map-panel"');
-        expect(template).toContain('<app-route-preview-map');
-        expect(template).toContain('[routes]="routeMapRoutes()"');
-        expect(template).toContain('[mapStyle]="currentUser.settings?.mapSettings?.mapStyle || \'default\'"');
-        expect(template).toContain('analyticsSource="routes_page_map"');
-        expect(template).toContain('No loaded routes match this filter');
-        expect(styles).toContain('.routes-table-panel');
-        expect(styles).toContain('.routes-map-stage');
-        expect(styles).toContain('height: clamp(22rem, 46vh, 32rem);');
-        expect(styles).toContain("@use '../../../styles/table-controls' as tableControls;");
-        expect(styles).toContain('@include tableControls.comparisonTableControlsLayout();');
-        expect(styles).toContain('@include bp.max-768 {');
-        expect(sharedTableControls).toContain('.comparison-table-controls');
-        expect(sharedTableControls).toContain('.filter-field');
-        expect(sharedTableControls).toContain('.facet-filter-field');
-        expect(sharedTableControls).toContain('.result-summary');
-    });
-
-    it('uses the shared route header icon', () => {
-        const template = readFileSync(
-            resolve(process.cwd(), 'src/app/components/routes/routes-page.component.html'),
-            'utf8',
-        );
-
-        expect(template).toContain('title="Routes"');
-        expect(template).toContain('titleId="routes-page-title"');
-        expect(template).toContain('leadingIcon="route"');
-    });
-
-    it('renders route type cells with the compare icon and label structure', () => {
-        const template = readFileSync(
-            resolve(process.cwd(), 'src/app/components/routes/routes-page.component.html'),
-            'utf8',
-        );
-        const styles = readFileSync(
-            resolve(process.cwd(), 'src/app/components/routes/routes-page.component.scss'),
-            'utf8',
-        );
-
-        expect(template).toContain('class="route-type-line"');
-        expect(template).toContain('<app-activity-type-icon');
-        expect(template).toContain('[activityType]="summary.activityTypeIconValue"');
-        expect(template).toContain('class="route-type-value"');
-        expect(styles).toContain('.route-type-line');
-        expect(styles).toContain('.route-type-line app-activity-type-icon');
-        expect(styles).toContain('.route-type-value');
-        expect(styles).toContain('font-weight: 500;');
-    });
-
-    it('keeps route details in the row action menu while also allowing guarded row activation', () => {
-        const template = readFileSync(
-            resolve(process.cwd(), 'src/app/components/routes/routes-page.component.html'),
-            'utf8',
-        );
-        const styles = readFileSync(
-            resolve(process.cwd(), 'src/app/components/routes/routes-page.component.scss'),
-            'utf8',
-        );
-
-        expect(template).toContain('class="route-table-row"');
-        const rowDefinition = template.match(/<tr\s+mat-row[\s\S]*?class="route-table-row"[\s\S]*?\*matRowDef="let item; columns: routeColumns;"[\s\S]*?>/)?.[0] ?? '';
-        expect(rowDefinition).toContain('(pointerdown)="onRouteRowPointerDown($event)"');
-        expect(rowDefinition).toContain('(pointermove)="onRouteRowPointerMove($event)"');
-        expect(rowDefinition).toContain('(pointerup)="onRouteRowPointerUp($event)"');
-        expect(rowDefinition).toContain('(pointercancel)="onRouteRowPointerCancel($event)"');
-        expect(rowDefinition).toContain('(click)="onRouteRowClick(item, $event)"');
-        expect(rowDefinition).toContain('(keydown.enter)="onRouteRowKeydown(item, $event)"');
-        expect(rowDefinition).toContain('(keydown.space)="onRouteRowKeydown(item, $event)"');
-        expect(rowDefinition).toContain('tabindex="0"');
-        expect(template).toContain('matColumnDef="sourceService"');
-        expect(template).toContain('matColumnDef="preview"');
-        expect(template).toContain('<app-route-preview-thumbnail');
-        expect(template).toContain('[preview]="item.routePreview"');
-        expect(template).toContain('[routeName]="item.name"');
-        expect(template).toContain('class="route-source-service-cell"');
-        expect(template).toContain('[presentation]="item.sourcePresentation"');
-        expect(template).toContain('class="route-original-file-cell"');
-        expect(template).toContain('<span>Original</span>');
-        expect(template).toContain('<app-service-source-icon');
-        expect(template).toContain('matColumnDef="select"');
-        expect(template).toContain('aria-label="Select all visible routes"');
-        expect(template).toContain('(change)="toggleVisibleRouteSelection($event.checked)"');
-        expect(template).toContain('(change)="toggleRouteSelection(item, $event.checked)"');
-        expect(template).toContain('[checked]="!!item.route.id && selectedRouteIDSet().has(item.route.id)"');
-        expect(template).toContain('(keydown)="$event.stopPropagation()"');
-        expect(template).toContain('class="route-selection-toolbar"');
-        expect(template).toContain('Export GPX');
-        expect(template).toContain('(click)="exportRouteAsGPX(item.route)"');
-        expect(template).toContain('(click)="downloadRouteOriginals(item.route)"');
-        expect(template).toContain('(click)="sendRouteToSuunto(item.route)"');
-        expect(template).toContain('(click)="sendRouteToGarmin(item.route)"');
-        expect(template).toContain('(click)="sendRouteToCOROS(item.route)"');
-        expect(template).toContain('(click)="$event.preventDefault(); $event.stopPropagation(); sendSelectedRoutesToSuunto()"');
-        expect(template).toContain('(click)="$event.preventDefault(); $event.stopPropagation(); sendSelectedRoutesToGarmin()"');
-        expect(template).toContain('(click)="$event.preventDefault(); $event.stopPropagation(); sendSelectedRoutesToCOROS()"');
-        expect(template).toContain('<span>Send to</span>');
-        expect(template).toContain('!(canSendRoutesToCOROS() && item.canSendToCOROS)');
-        expect(template).toContain('(click)="confirmDeleteRoute(item.route)"');
-        expect(template).toContain('(click)="reprocessRouteFromOriginalFile(item.route)"');
-        expect(template).toContain('[matMenuTriggerFor]="routeRowActionsMenu"');
-        expect(template).toContain('!item.canReprocess');
-        expect(template).not.toContain('canReprocessRoute(item.route)');
-        expect(template).not.toContain('isRouteSelected(item)');
-        expect(template).toContain('<mat-icon>autorenew</mat-icon>');
-        expect(template).toContain('<mat-icon>cloud_upload</mat-icon>');
-        expect(template).toContain('<mat-icon>open_in_new</mat-icon>');
-        expect(template).toContain('[matTooltipDisabled]="passiveRouteTableTooltipsDisabled()"');
-        expect(template).toContain('matTooltipTouchGestures="off"');
-        expect(styles).toContain('.route-table-row');
-        expect(styles).toContain('cursor: pointer;');
-        expect(styles).toContain('.route-table-row:focus-visible');
-        expect(styles).toContain('.route-selection-toolbar');
-        expect(styles).toContain('.route-table .mat-column-name');
-        expect(styles).toContain('width: 14rem;');
-        expect(styles).toContain('min-width: 12rem;');
-        expect(styles).toContain('max-width: 16rem;');
-        expect(styles).toContain('.route-table .mat-column-preview');
-        expect(styles).toContain('width: 6.25rem;');
-        expect(styles).toContain('.route-table .mat-column-sourceService');
-        expect(styles).toContain('.route-source-service-cell');
-        expect(styles).toContain('.route-original-file-cell');
-        expect(styles).toContain('.route-table .mat-column-select');
-        expect(template).not.toContain('class="route-provenance-item"');
-    });
-
-    it('uses a bounded two-axis scroll shell for the routes table', () => {
-        const template = readFileSync(
-            resolve(process.cwd(), 'src/app/components/routes/routes-page.component.html'),
-            'utf8',
-        );
-        const styles = readFileSync(
-            resolve(process.cwd(), 'src/app/components/routes/routes-page.component.scss'),
-            'utf8',
-        );
-
-        expect(template).toContain('class="route-table-shell qs-scrollbar"');
-        expect(template).not.toContain('class="route-table-scroll qs-scrollbar"');
-        expect(styles).toContain('.route-table-shell');
-        expect(styles).toContain('--route-table-min-width: 114rem;');
-        expect(styles).toContain('max-height: min(72vh, 48rem);');
-        expect(styles).toContain('max-width: 100%;');
-        expect(styles).toContain('min-width: 0;');
-        expect(styles).toContain('overflow: auto;');
-        expect(styles).toContain('overscroll-behavior: contain;');
-        expect(styles).toContain('scrollbar-gutter: stable;');
-        expect(styles).toContain('-webkit-overflow-scrolling: touch;');
-        expect(styles).not.toContain('.route-table-scroll');
-        expect(styles).not.toContain('touch-action: pan-x pan-y;');
-        const selectionToolbarStyles = styles.match(/\.route-selection-toolbar\s*{(?<body>[^}]*)}/)?.groups?.['body'] ?? '';
-        expect(selectionToolbarStyles).toContain('position: sticky;');
-        expect(selectionToolbarStyles).toContain('left: 0;');
-        expect(selectionToolbarStyles).toContain('width: 100%;');
-        expect(selectionToolbarStyles).toContain('justify-content: flex-start;');
-        expect(selectionToolbarStyles).not.toContain('min-width');
-    });
-
     it('disables passive route table tooltips on touch-oriented layouts', async () => {
         breakpointObserverMock.observe.mockReturnValue(of({ matches: true }));
 
@@ -1572,17 +1587,6 @@ describe('RoutesPageComponent', () => {
 
         expect(routes.map(item => item.route.id)).toEqual(['route-2', 'route-1']);
         expect(routes[0].pointCountLabel).toBe('0 points');
-    });
-
-    it('keeps point count table values on the default row text color', () => {
-        const styles = readFileSync(
-            resolve(process.cwd(), 'src/app/components/routes/routes-page.component.scss'),
-            'utf8',
-        );
-
-        expect(styles).toContain('.route-detail-stack');
-        expect(styles).toContain('color: inherit;');
-        expect(styles).not.toContain('.route-detail-stack {\n  align-content: center;\n  color: var(--qs-secondary-text-color');
     });
 
     it('opens route details from the table row handler', async () => {

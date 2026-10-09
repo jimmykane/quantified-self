@@ -93,6 +93,10 @@ export function buildAdminDashboardQueueRows(stats: QueueStats | null): AdminDas
     const staleDerived = normalizeCount(derivedCoordinators?.staleQueued) + normalizeCount(derivedCoordinators?.staleProcessing);
 
     return [
+        ...(stats.connectionHistory ? [buildQueueRow({ id: 'connection-history', label: 'Connection history', icon: 'history',
+            route: '', pendingDb: stats.connectionHistory.pending, cloudTasks: queues?.connectionHistory?.pending,
+            problemCount: stats.connectionHistory.failed, problemLabel: 'Failed runs', maxLagMs: stats.connectionHistory.maxLagMs,
+            chips: ['30 days', 'Background imports'] })] : []),
         buildQueueRow({
             id: 'workout',
             label: 'Workout',

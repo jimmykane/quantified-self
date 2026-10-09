@@ -189,6 +189,11 @@ deployment dependencies and the actual gate script's rejection of every job's fa
 or unknown result. It also protects job independence and the placement of the existing checks. `js-yaml` is an
 explicit dev dependency reusing the already locked parser; it adds no app or Functions runtime dependency.
 
+The MCP pre-push hook builds and checks the contract, then runs both public output-schema and server suites with
+one worker and serial files. It uses the JSON reporter to avoid progress-reporting RPC timeouts and writes the
+result to the ignored `tmp/mcp-pre-push-results.json`. Test failures and unhandled runner errors still fail the push;
+the reporter change does not filter tests or alter their timeouts. `npm run test:workflows` protects these requirements.
+
 ## Deployment triggers
 
 Publishing a GitHub release or prerelease does not run a build or deployment workflow. The former release-triggered

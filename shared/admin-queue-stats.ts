@@ -46,6 +46,7 @@ export interface CloudTaskQueueBreakdown {
     derivedMetrics: CloudTaskQueueStats;
     sleepSync: CloudTaskQueueStats;
     garminHealthBackfill: CloudTaskQueueStats;
+    connectionHistory?: CloudTaskQueueStats;
 }
 
 export interface ReparseCheckpointBaseStats {
@@ -293,6 +294,7 @@ export interface AdminQueueProviderStats {
 }
 
 export interface AdminQueueStatsResponse {
+    connectionHistory?: { pending: number; failed: number; maxLagMs: number | null } | null;
     pending: number;
     succeeded: number;
     stuck: number;

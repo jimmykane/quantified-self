@@ -764,8 +764,7 @@ export class RoutesPageComponent implements OnInit {
         this.suuntoRouteCatchUpPromptError.set(null);
 
         try {
-            const tokenAndURI = await this.userService.getCurrentUserServiceTokenAndRedirectURI(ServiceNames.SuuntoApp);
-            this.windowService.windowRef.location.href = tokenAndURI.redirect_uri;
+            await this.router.navigate(['/services'], { queryParams: { serviceName: ServiceNames.SuuntoApp, reconnect: '1' } });
         } catch (error) {
             this.suuntoRouteCatchUpPromptError.set('Could not start Suunto reconnect.');
             this.logger.error('[RoutesPageComponent] Failed to start Suunto reconnect from route catch-up prompt', error);
@@ -840,8 +839,7 @@ export class RoutesPageComponent implements OnInit {
         this.garminRoutePermissionPromptError.set(null);
 
         try {
-            const tokenAndURI = await this.userService.getCurrentUserServiceTokenAndRedirectURI(ServiceNames.GarminAPI);
-            this.windowService.windowRef.location.href = tokenAndURI.redirect_uri;
+            await this.router.navigate(['/services'], { queryParams: { serviceName: ServiceNames.GarminAPI, reconnect: '1' } });
         } catch (error) {
             this.garminRoutePermissionPromptError.set('Could not start Garmin reconnect.');
             this.logger.error('[RoutesPageComponent] Failed to start Garmin reconnect from route permission prompt', error);

@@ -1,0 +1,76 @@
+import { GARMIN_HEALTH_SUMMARY_TYPES, type GarminHealthSummaryType } from '../garmin/health-summary-types';
+import { ServiceNames } from '@sports-alliance/sports-lib';
+import { connectionHistoryRange, historyCapabilities, type ConnectionHistoryRangePreset, type HistoryCapability, type ConnectionHistoryStepStatus, type ConnectionHistoryStatusProjection } from '../../../shared/connection-history';
+
+export const CONNECTION_HISTORY_COLLECTION = 'connectionHistoryImports';
+export const OAUTH_HISTORY_FIELD = 'oauthImportRecentHistory';
+export const OAUTH_HISTORY_RANGE_FIELD = 'oauthImportHistoryRange';
+export interface HistoryStep extends ConnectionHistoryStepStatus {
+  capability: HistoryCapability;
+  nextStartMs: number;
+  page: number;
+  windowDays?: number;
+  retryCount: number;
+  done: boolean;
+  childPaths: string[];
+}
+export interface ConnectionHistoryRun {
+  id: string;
+  userID: string;
+  serviceName: ServiceNames;
+  providerUserId: string;
+  tokenPath: string;
+  rootPath: string;
+  credentialGeneration: string;
+  connectionGeneration: string;
+  rangePreset: ConnectionHistoryRangePreset;
+  startMs: number;
+  endMs: number;
+  dateCreated: number;
+  updatedAtMs: number;
+  nextAttemptAt: number;
+  processed: boolean;
+  revision: number;
+  failed?: boolean;
+  garminHealthSummaryTypes?: readonly GarminHealthSummaryType[];
+  steps: HistoryStep[];
+  lastOperation?: { key: string; result: { count: number; nextStartMs: number; nextPage: number; childPaths: string[] } };
+  leaseOwner?: string;
+  leaseExpiresAt?: number;
+}
+export interface HistoryConnectionContext {
+  requested: boolean;
+  rangePreset: ConnectionHistoryRangePreset;
+  runId: string;
+  tokenPath: string;
+  rootPath: string;
+  providerUserId: string;
+  credentialGeneration: string;
+}
+export function isConnectionHistoryRunId(value: unknown): value is string {
+  return typeof value === 'string'
+    && /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/.test(value);
+}
+export function createHistoryRun(userID: string, serviceName: ServiceNames, context: HistoryConnectionContext, connectionGeneration: string, nowMs: number): ConnectionHistoryRun {
+  if (!isConnectionHistoryRunId(context.runId)) throw new Error('Invalid connection history run identity.');
+  const range = connectionHistoryRange(nowMs, serviceName, context.rangePreset);
+  return {
+    id: context.runId, userID, serviceName,
+    providerUserId: context.providerUserId, tokenPath: context.tokenPath, rootPath: context.rootPath,
+    credentialGeneration: context.credentialGeneration, connectionGeneration, rangePreset: context.rangePreset, ...range,
+    dateCreated: nowMs, updatedAtMs: nowMs, nextAttemptAt: nowMs, processed: false, revision: 0,
+    ...(serviceName === ServiceNames.GarminAPI ? { garminHealthSummaryTypes: [...GARMIN_HEALTH_SUMMARY_TYPES] } : {}),
+    steps: historyCapabilities(serviceName).map(capability => ({
+      id: capability.id, resources: [...capability.resources], capability: { ...capability, resources: [...capability.resources] },
+      status: 'queued', count: 0, nextStartMs: range.startMs, page: 1, retryCount: 0, done: false, childPaths: [],
+    })),
+  };
+}
+export function historyProjection(run: ConnectionHistoryRun): ConnectionHistoryStatusProjection {
+  return {
+    runId: run.id, rangePreset: run.rangePreset, startMs: run.startMs, endMs: run.endMs, updatedAtMs: run.updatedAtMs,
+    active: !run.processed, canRetry: run.processed && run.steps.some(step => step.status === 'failed'),
+    steps: run.steps.map(step => ({ id: step.id, resources: step.resources, status: step.status, count: step.count,
+      ...(step.message ? { message: step.message } : {}), ...(step.nextAllowedAtMs ? { nextAllowedAtMs: step.nextAllowedAtMs } : {}) })),
+  };
+}

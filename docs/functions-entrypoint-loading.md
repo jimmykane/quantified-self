@@ -238,6 +238,21 @@ dispatches with ignored queue writes before proposing a narrower durable dispatc
 miss new revisions written to existing queue documents. The existing October 1–5 sample showed 111,970 requests and
 only nine container starts, so local startup improvements alone do not establish a material reduction in daily costs.
 
+## Connection history isolation
+
+The four connection history endpoints load directly from `connection-history/tasks`, preserving the task queue,
+Firestore written trigger, once-per-minute recovery schedule, callable, pacing, retry policy and secret bindings.
+They join the current target map without restoring the retired `projectEventTagCatalog` export. Full discovery
+exposes 172 endpoints and runtime routing isolates 86 targets. The checker compares their complete endpoint/trigger
+descriptors against a separate fresh discovery process and verifies both inherited-target discovery modes and
+standalone secret validation.
+
+On 2026-10-09, three fresh Node 22.23.3 imports per target on the rebased PR measured a full-entrypoint median of
+3,025 ms, 238.8 MiB RSS and 3,224 modules. The four isolated history targets had medians of
+750–1,371 ms and 139.8–141.3 MiB RSS, each loading 1,554 modules and exporting one handler.
+Other local verification was running concurrently, so these timings are a startup sanity check rather than a
+controlled performance comparison. Keep runtime limits unchanged and verify production memory/startup separately.
+
 ## Verification
 
 Run the routing and discovery contract:
@@ -248,7 +263,7 @@ npm --prefix functions run entrypoint:check
 
 The check builds the Functions package and verifies:
 
-- discovery exposes all 168 application exports;
+- discovery exposes all 172 application exports;
 - both Firebase discovery modes ignore an inherited optimized `FUNCTION_TARGET`;
 - standalone secret-binding validation forces complete discovery even with an inherited ingestion `FUNCTION_TARGET`;
 - an unknown target exposes the same complete export set;
@@ -636,6 +651,11 @@ seven offline Health/Sleep monitoring tests, the TypeScript build and compiled e
 cloud configuration apply is part of this loading change. The existing #830 deployment command in
 [Sleep sync operations](sleep-sync-operations.md#cost-verification-and-activation) includes all three handlers and
 still requires separate explicit approval.
+
+One local Node 20.19.3 cold-import run on 2026-09-25 measured 216.9 MiB RSS, 1,034 ms and 3,118 modules for the
+complete entrypoint. Each of the four isolated connection history targets loaded the same 1,535-module coordinator
+graph in 385–399 ms and used 124.5–125.3 MiB RSS. This historical single-run comparison predates the October rebase;
+production memory and cold-start monitoring remain necessary before changing runtime limits.
 
 ## Adding another optimized target
 

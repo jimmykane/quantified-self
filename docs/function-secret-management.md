@@ -9,6 +9,8 @@ Garmin, Wahoo and Suunto; COROS remains disabled in the shared capability regist
 Pro, explicit plan/workout consent and per-request authority remain required. Future deployments or enablement changes
 still require separate approval; this documentation update changes no secret binding or runtime switch.
 
+`processConnectionHistoryTask` binds the existing Garmin, Suunto API, COROS and Wahoo client credentials because it coordinates their shared history operations. `onConnectionHistoryImportWritten`, `recoverConnectionHistoryImports`, and `retryConnectionHistoryImport` have no provider-secret bindings. Downstream workers retain their existing least-privilege bindings. Deploy this compatible backend before the connection-history checkbox frontend; see [the release checklist](connection-history-import.md#release-and-operations).
+
 ## Managed inventory
 
 | Area | Secret Manager names |

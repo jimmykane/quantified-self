@@ -1,3 +1,7 @@
+import { randomUUID } from 'node:crypto';
+import { replacesSupersededHistoryWork } from '../connection-history/queue-replacement';
+import { assertHistoryWrite, currentHistoryExecution } from '../connection-history/context';
+import { HistoryLifecycleChangedError } from '../connection-history/execution';
 import * as admin from 'firebase-admin';
 import { recordImportCommit, recordImportCompletion } from '../queue/import-monitoring';
 import * as logger from 'firebase-functions/logger';
@@ -36,10 +40,12 @@ function revisionTime(value: unknown): number {
 
 function hasSameRevision(
   current: Partial<WahooAPIWorkoutQueueItemInterface>,
-  queueItem: Pick<WahooAPIWorkoutQueueItemInterface, 'workoutSummaryID' | 'summaryUpdatedAt'>,
+  queueItem: Pick<WahooAPIWorkoutQueueItemInterface, 'workoutSummaryID' | 'summaryUpdatedAt' | 'connectionHistoryRunId' | 'queueRevision'>,
 ): boolean {
   return current.workoutSummaryID === queueItem.workoutSummaryID
-    && current.summaryUpdatedAt === queueItem.summaryUpdatedAt;
+    && current.summaryUpdatedAt === queueItem.summaryUpdatedAt
+    && current.connectionHistoryRunId === queueItem.connectionHistoryRunId
+    && current.queueRevision === queueItem.queueRevision;
 }
 
 function isNewerRevision(
@@ -146,6 +152,7 @@ export async function upsertWahooWorkoutQueueItem(
   const db = admin.firestore();
   const ref = db.collection(WAHOO_API_WORKOUT_QUEUE_COLLECTION_NAME).doc(input.id);
   const now = Date.now();
+  const historyRevision = input.connectionHistoryRunId ? { queueRevision: input.queueRevision || randomUUID() } : {};
   const result = await db.runTransaction(async (transaction) => {
     let deletionGuard;
     try {
@@ -160,7 +167,10 @@ export async function upsertWahooWorkoutQueueItem(
 
     const existingSnapshot = await transaction.get(ref);
     const existing = existingSnapshot.exists ? existingSnapshot.data() as Partial<WahooAPIWorkoutQueueItemInterface> : null;
-    if (existing && !isNewerRevision(existing, input)) {
+    if (existing?.firebaseUserID && existing.firebaseUserID !== input.firebaseUserID) {
+      throw new Error('Wahoo queue ownership is still changing. Retry after connection cleanup.');
+    }
+    if (existing && !isNewerRevision(existing, input) && !replacesSupersededHistoryWork(existing, input)) {
       if ((existing as Record<string, unknown>).processed !== true) {
         const refreshed: Partial<WahooAPIWorkoutQueueItemInterface> = {};
         if (existing.FITFileURI !== input.FITFileURI) refreshed.FITFileURI = input.FITFileURI;
@@ -177,6 +187,7 @@ export async function upsertWahooWorkoutQueueItem(
     // revision becomes dispatchable.
     transaction.set(ref, {
       ...input,
+      ...historyRevision,
       dateCreated: now,
       processed: false,
       retryCount: 0,
@@ -192,6 +203,7 @@ export async function upsertWahooWorkoutQueueItem(
 
   const queueItemForDispatch = {
     ...input,
+    ...historyRevision,
     ref,
     dateCreated: result.dateCreated,
     processed: false,
@@ -326,9 +338,11 @@ export async function failWahooWorkoutQueueRevision(
   processingOwner: string,
   error: Error,
 ): Promise<QueueResult.Processed | QueueResult.RetryIncremented | QueueResult.MovedToDLQ | QueueResult.Failed> {
+  await currentHistoryExecution()?.beforeRequest();
   if (!queueItem.ref) throw new Error(`No document reference supplied for Wahoo queue item ${queueItem.id}`);
   try {
     const result = await admin.firestore().runTransaction(async (transaction) => {
+      await assertHistoryWrite(transaction);
       const deletionGuard = await getUserDeletionGuardStateInTransaction(
         admin.firestore(),
         transaction,
@@ -386,6 +400,7 @@ export async function failWahooWorkoutQueueRevision(
     if (result === QueueResult.MovedToDLQ) recordImportCommit(queueItem.ref.parent?.id, 'dead_lettered');
     return result;
   } catch (transactionError) {
+    if (transactionError instanceof HistoryLifecycleChangedError) throw transactionError;
     logger.error(`Could not update Wahoo retry state for ${queueItem.id}`, transactionError);
     return QueueResult.Failed;
   }

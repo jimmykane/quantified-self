@@ -5,6 +5,8 @@ import type { BulkWriter } from 'firebase-admin/firestore';
 import type { GarminAPIActivityQueueItemInterface, SleepSyncQueueItemInterface } from './queue/queue-item.interface';
 import { deferQueueItemForPendingDisconnect, deferQueueItemForPendingDisconnectIfCurrentUserActive, deferQueueItemForReconnectRequiredIfCurrentUserActive, moveToDeadLetterQueue, moveToDeadLetterQueueIfCurrentUserActive, increaseRetryCountForQueueItem, increaseRetryCountIfCurrentUserActive, isCurrentSleepQueueTransition, isProviderOperationInFlightLeaseActive, markQueueItemSkipped, PENDING_DISCONNECT_QUEUE_DISPATCH_MARKER, PROVIDER_OPERATION_IN_FLIGHT_LEASE_MS, PROVIDER_OPERATION_IN_FLIGHT_QUEUE_DISPATCH_MARKER, QUEUE_DEFERRED_REASONS, QUEUE_SKIPPED_REASONS, updateToProcessed, QueueResult } from './queue-utils';
 import { TTL_CONFIG } from './shared/ttl-config';
+import { withHistoryExecution } from './connection-history/context';
+import { HistoryLifecycleChangedError, type HistoryExecution } from './connection-history/execution';
 
 // Hoisted Firestore mocks
 const hoisted = vi.hoisted(() => {
@@ -101,6 +103,34 @@ vi.mock('./service-token-store', () => ({
 }));
 
 describe('queue-utils', () => {
+    it('does not retry or dead-letter a history child when a converted provider error belongs to a superseded connection', async () => {
+        const execution = { beforeRequest: vi.fn().mockRejectedValue(new HistoryLifecycleChangedError()) } as unknown as HistoryExecution;
+        const item = { id: 'history-child', retryCount: 9, connectionHistoryRunId: 'run', ref: { id: 'history-child' } } as unknown as SleepSyncQueueItemInterface;
+        await withHistoryExecution(execution, async () => {
+            await expect(increaseRetryCountForQueueItem(item, new Error('Safe provider failure'))).rejects.toBeInstanceOf(HistoryLifecycleChangedError);
+            await expect(moveToDeadLetterQueue(item, new Error('Safe provider failure'))).rejects.toBeInstanceOf(HistoryLifecycleChangedError);
+            await expect(moveToDeadLetterQueueIfCurrentUserActive({ queueItem: item, error: new Error('Safe provider failure'), userID: 'owner', phase: 'history', logPrefix: 'History', isCurrent: () => true }))
+                .rejects.toBeInstanceOf(HistoryLifecycleChangedError);
+        });
+        expect(item.retryCount).toBe(9);
+        expect(hoisted.runTransaction).not.toHaveBeenCalled();
+        expect(hoisted.batch.set).not.toHaveBeenCalled();
+        expect(hoisted.transaction.delete).not.toHaveBeenCalled();
+    });
+    it('fences a connection change between the initial failure check and the retry/DLQ transaction', async () => {
+        const execution = { beforeRequest: vi.fn().mockResolvedValue(undefined), inTransaction: vi.fn().mockRejectedValue(new HistoryLifecycleChangedError()) } as unknown as HistoryExecution;
+        const item = { id: 'history-child', userID: 'owner', queueRevision: 'revision', retryCount: 9, connectionHistoryRunId: 'run',
+            ref: { id: 'history-child', parent: { id: 'sleepSyncQueue' } } } as unknown as SleepSyncQueueItemInterface;
+        await withHistoryExecution(execution, async () => {
+            await expect(increaseRetryCountForQueueItem(item, new Error('Safe provider failure'))).rejects.toBeInstanceOf(HistoryLifecycleChangedError);
+            await expect(moveToDeadLetterQueue(item, new Error('Safe provider failure'))).rejects.toBeInstanceOf(HistoryLifecycleChangedError);
+        });
+        expect(execution.inTransaction).toHaveBeenCalledTimes(2);
+        expect(item.retryCount).toBe(9);
+        expect(hoisted.transaction.set).not.toHaveBeenCalled();
+        expect(hoisted.transaction.update).not.toHaveBeenCalled();
+        expect(hoisted.transaction.delete).not.toHaveBeenCalled();
+    });
     beforeEach(() => {
         vi.clearAllMocks();
         hoisted.batch.set.mockReset();
