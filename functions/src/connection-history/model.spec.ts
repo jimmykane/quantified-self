@@ -4,9 +4,22 @@ import { ServiceNames } from '@sports-alliance/sports-lib';
 import { connectionHistoryRange, historyCapabilities, historyRangeOptions, parseImportHistoryRange, parseImportRecentHistory } from '../../../shared/connection-history';
 import { isConnectionHistoryAdmissionEnabled } from './admission';
 import { CONNECTION_HISTORY_CAPABILITIES } from '../../../shared/connection-history';
-import { createHistoryRun, historyProjection, isConnectionHistoryRunId } from './model';
+import { createHistoryRun, historyOperationKey, historyProjection, isConnectionHistoryRunId } from './model';
 
 describe('connection history contract', () => {
+  it('keeps committed operation identities stable and scoped to the exact cursor', () => {
+    const run = createHistoryRun('owner', ServiceNames.WahooAPI, { requested: true, rangePreset: '30_days',
+      runId: '11111111-1111-4111-8111-111111111111', tokenPath: 'private/token', rootPath: 'private/root',
+      providerUserId: 'account', credentialGeneration: 'credential' }, 'connection', Date.now());
+    const step = run.steps[0];
+    const key = historyOperationKey(step);
+    expect(key).toBe(JSON.stringify([step.id, step.capability.version, step.nextStartMs, 30, step.page]));
+    expect(historyOperationKey({ ...step, windowDays: 30 })).toBe(key);
+    for (const changed of [{ page: step.page + 1 }, { nextStartMs: step.nextStartMs + 1 }, { windowDays: 15 },
+      { id: 'another' }, { capability: { ...step.capability, version: 2 } }]) {
+      expect(historyOperationKey({ ...step, ...changed })).not.toBe(key);
+    }
+  });
   it('accepts only server-generated v4 run identities', () => {
     expect(isConnectionHistoryRunId('11111111-1111-4111-8111-111111111111')).toBe(true);
     expect(isConnectionHistoryRunId('flow')).toBe(false);

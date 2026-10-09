@@ -10,7 +10,7 @@ vi.mock('./adapters', () => ({
   historySleepProvider: () => 'suunto', historyAdmissionQueue: () => ({ taskQueue: 'workout', collection: 'workoutQueue' }),
 }));
 import { ServiceNames } from '@sports-alliance/sports-lib';
-import { createHistoryRun } from './model';
+import { createHistoryRun, historyOperationKey } from './model';
 import { observeConnectionHistory, HISTORY_PROBE_LIMIT } from './monitoring-probe';
 
 describe.skipIf(!process.env.FIRESTORE_EMULATOR_HOST)('connection history bounded read-only observations', () => {
@@ -47,9 +47,11 @@ describe.skipIf(!process.env.FIRESTORE_EMULATOR_HOST)('connection history bounde
     expect((await ref.get()).updateTime!.isEqual(before.updateTime!)).toBe(true);
     expect(transaction.mock.calls.every(([, options]) => options?.readOnly)).toBe(true);
     expect(select).toHaveBeenCalled(); expect(getAll).toHaveBeenCalled();
+    expect(select.mock.calls[0]).toContain('lastOperation.key');
     for (const call of getAll.mock.calls) {
       const fields = (call.at(-1) as { fieldMask: string[] }).fieldMask;
       expect(fields).not.toContain('accessToken'); expect(fields).not.toContain('refreshToken'); expect(fields).not.toContain('lastOperation');
+      expect(fields).not.toContain('lastOperation.result');
     }
     expect(JSON.stringify(logs())).not.toContain('PRIVATE');
   });
@@ -88,6 +90,43 @@ describe.skipIf(!process.env.FIRESTORE_EMULATOR_HOST)('connection history bounde
     if (reason === 'failed') await db.doc('workoutQueue/PRIVATE').set({ processed: true, resultStatus: 'failed' });
     const depth = vi.fn(async () => 500); await observe(async () => true, depth);
     expect(sample()).toMatchObject({ dueSample: 1 }); expect(depth).not.toHaveBeenCalled();
+  });
+  it.each(['capacity', 'permission', 'cooldown', 'adapter'])('observes committed receipt recovery despite %s admission blocking', async reason => {
+    const { ref, run } = await seed(ServiceNames.GarminAPI);
+    if (reason === 'permission') await db.doc(run.tokenPath).update({ permissions: [] });
+    if (reason === 'cooldown') await db.doc(`users/PRIVATE_OWNER/meta/${run.serviceName}`).update({ connectionHistoryReservation: 'OTHER', connectionHistoryReservationExpiresAt: Date.now() + 60000 });
+    if (reason === 'adapter') run.steps[0].capability.version = 2;
+    await ref.update({ steps: run.steps, lastOperation: { key: historyOperationKey(run.steps[0]),
+      result: { count: 1, nextStartMs: run.endMs + 1000, nextPage: 1, childPaths: ['workoutQueue/PRIVATE_RECEIPT'] } } });
+    const before = await ref.get(); const getAll = vi.spyOn(Transaction.prototype, 'getAll');
+    const depth = vi.fn(async () => 500); await observe(async () => true, depth);
+    expect(sample('garmin')).toMatchObject({ dueSample: 1, unknownSample: 0 });
+    expect(depth).not.toHaveBeenCalled();
+    expect(getAll.mock.calls).toHaveLength(1); // Receipt payload/children are not inspected.
+    expect((await ref.get()).updateTime!.isEqual(before.updateTime!)).toBe(true);
+    expect(JSON.stringify(logs())).not.toContain('PRIVATE');
+  });
+  it.each(['cursor', 'page', 'window', 'capability', 'step'])('does not reuse a receipt from another %s', async changed => {
+    const { ref, run } = await seed(); const step = run.steps[0];
+    const stale = { ...step, capability: { ...step.capability } };
+    if (changed === 'cursor') stale.nextStartMs++;
+    if (changed === 'page') stale.page++;
+    if (changed === 'window') stale.windowDays = 15;
+    if (changed === 'capability') stale.capability.version++;
+    if (changed === 'step') stale.id = 'another';
+    await ref.update({ lastOperation: { key: historyOperationKey(stale), result: 'PRIVATE_RESULT' } });
+    const depth = vi.fn(async () => 500); await observe(async () => true, depth);
+    expect(sample()).toMatchObject({ dueSample: 0, unknownSample: 0 }); expect(depth).toHaveBeenCalledOnce();
+  });
+  it.each(['disconnect', 'pro', 'child'])('committed receipts still respect %s lifecycle and waiting work', async reason => {
+    const { ref, run } = await seed();
+    if (reason === 'disconnect') await db.doc(run.rootPath).update({ disconnectOperationGeneration: 'PRIVATE_NEW' });
+    if (reason === 'child') {
+      run.steps[0].childPaths = ['workoutQueue/PRIVATE_CHILD']; await db.doc('workoutQueue/PRIVATE_CHILD').set({ processed: false });
+    }
+    await ref.update({ steps: run.steps, lastOperation: { key: historyOperationKey(run.steps[0]), result: 'PRIVATE_RESULT' } });
+    const depth = vi.fn(async () => 500); await observe(async () => reason !== 'pro', depth);
+    expect(sample()).toMatchObject({ dueSample: 0, unknownSample: 0 }); expect(depth).not.toHaveBeenCalled();
   });
   it('treats an ambiguous child state as unknown, not eligible or healthy zero', async () => {
     const { ref, run } = await seed(); run.steps[0].childPaths = ['workoutQueue/PRIVATE']; await ref.update({ steps: run.steps });

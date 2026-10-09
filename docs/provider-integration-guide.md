@@ -1298,6 +1298,8 @@ The unchanged once-per-minute recovery observes a masked, read-only sample of at
 20 due runs on UTC quarter-hour ticks, within five seconds. Expected capacity, future
 retries, leases, permissions/cooldowns and superseded/disconnected/deleting accounts
 do not produce failure pages. Capped/unknown observations cannot assert healthy zero.
+Matching committed receipt keys keep checkpoint recovery observable without new
+provider admission; receipt payloads are not read and keys are never logged.
 Downstream ingestion remains owned by #829/#830; request submission, worker ACK and
 committed ingestion are distinct. No provider behavior, retry/schedule/resources,
 Help or MCP contract changes. Deployment, bundle activation and positive metric-series

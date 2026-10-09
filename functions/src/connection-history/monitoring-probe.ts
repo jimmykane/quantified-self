@@ -9,7 +9,7 @@ import { historyAdmissionQueue, historyCooldownUntil, historySleepProvider, getH
 import { isSleepProviderEnabled, isSleepSyncUserAllowed } from '../sleep/provider-flags';
 import { isGarminHealthSyncEnabled } from '../garmin/health-flags';
 import { isSuuntoHealthSyncEnabled } from '../suunto/health-flags';
-import { CONNECTION_HISTORY_COLLECTION, type ConnectionHistoryRun } from './model';
+import { CONNECTION_HISTORY_COLLECTION, historyOperationKey, type ConnectionHistoryRun } from './model';
 import { emitHistoryMonitoring, historyMonitoringProvider, HISTORY_PROVIDERS } from './monitoring';
 
 export const HISTORY_PROBE_LIMIT = 20;
@@ -19,7 +19,7 @@ const ROOTS: Record<ServiceNames, string> = {
   [ServiceNames.COROSAPI]: COROSAPI_ACCESS_TOKENS_COLLECTION_NAME, [ServiceNames.WahooAPI]: WAHOO_API_ACCESS_TOKENS_COLLECTION_NAME,
 };
 const RUN_FIELDS = ['userID', 'serviceName', 'rootPath', 'tokenPath', 'credentialGeneration', 'connectionGeneration',
-  'revision', 'processed', 'nextAttemptAt', 'leaseExpiresAt', 'dateCreated', 'updatedAtMs', 'endMs', 'steps'];
+  'revision', 'processed', 'nextAttemptAt', 'leaseExpiresAt', 'dateCreated', 'updatedAtMs', 'endMs', 'steps', 'lastOperation.key'];
 const STATE_FIELDS = [...RUN_FIELDS, 'expireAt', 'activeOAuthCredentialGeneration', 'tokenCredentialGeneration', 'permissions',
   'disconnectOperationGeneration', 'disconnectGeneration', 'connectionState', 'connectionStateGeneration',
   'connectionHistoryReservation', 'connectionHistoryReservationExpiresAt', 'historyImportLeaseExpiresAt',
@@ -103,6 +103,9 @@ export async function observeConnectionHistory(db: FirebaseFirestore.Firestore, 
         }
         if (!timestamp(step.nextStartMs) || !timestamp(run.endMs)) return 'unknown';
         if (step.nextStartMs > run.endMs) return 'eligible';
+        // The worker reuses this committed result before provider admission.
+        // Observe only its identity, never the private result or child payload.
+        if (run.lastOperation?.key === historyOperationKey(step)) return 'eligible';
         try { getHistoryAdapter(run, step); } catch { return 'excluded'; }
         if (step.capability.cooldownGroup === 'activities') {
           if (meta.get('connectionHistoryReservation') !== doc.id

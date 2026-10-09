@@ -15,7 +15,7 @@ import { FUNCTION_SECRET_BINDINGS } from '../secrets';
 import { ALLOWED_CORS_ORIGINS, enforceAppCheck, hasProAccess, getUserRoleAndGracePeriod, isGracePeriodActive } from '../utils';
 import { CLOUD_TASK_RETRY_CONFIG, MAX_PENDING_TASKS } from '../shared/queue-config';
 import { enqueueConnectionHistoryTask, getCloudTaskQueueDepthForQueue } from '../shared/cloud-tasks';
-import { CONNECTION_HISTORY_COLLECTION, historyProjection, isConnectionHistoryRunId, type ConnectionHistoryRun } from './model';
+import { CONNECTION_HISTORY_COLLECTION, historyOperationKey, historyProjection, isConnectionHistoryRunId, type ConnectionHistoryRun } from './model';
 import { assertHistoryConnectionCurrent, assertHistoryReservation, historyExecution, HistoryLifecycleChangedError, HistoryUnavailableError } from './execution';
 import { executeHistoryOperation, HistorySkippedError, isHistoryWindowTooLarge } from './adapters';
 import { advanceHistoryRun } from './advance';
@@ -144,7 +144,7 @@ export async function processConnectionHistoryRun(id: string, revision: string):
           return classifyHistoryFailure(error);
         },
         execute: async step => {
-          const key = JSON.stringify([step.id, step.capability.version, step.nextStartMs, step.windowDays || 30, step.page]);
+          const key = historyOperationKey(step);
           if (run.lastOperation?.key === key) return run.lastOperation.result;
           const paths: string[] = [];
           const downstream = historyAdmissionQueue(run, step);

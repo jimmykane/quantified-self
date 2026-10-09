@@ -95,9 +95,12 @@ describe('durable history coordinator', () => {
     expect(saved().steps[0].retryCount).toBe(0); expect(saved().nextAttemptAt).toBe(now + 60000); expect(mocks.execute).not.toHaveBeenCalled();
     expect(signals()).toEqual([{ telemetryVersion: 1, event: 'checkpoint', provider: 'wahoo', outcome: 'active' }]);
   });
-  it('recovers a completed operation receipt without calling the provider again', async () => {
+  it('recovers a completed operation receipt even at capacity without calling the provider again', async () => {
     run.lastOperation = { key: JSON.stringify(['activities', 1, run.startMs, 30, 1]), result: { count: 4, nextStartMs: now + 1000, nextPage: 1, childPaths: [] } };
+    mocks.depth.mockResolvedValue(500);
     await processConnectionHistoryRun(run.id, '0'); expect(mocks.execute).not.toHaveBeenCalled(); expect(saved().steps[0].count).toBe(4);
+    expect(mocks.depth).not.toHaveBeenCalled(); expect(saved().processed).toBe(true);
+    expect(signals()).toEqual([{ telemetryVersion: 1, event: 'checkpoint', provider: 'wahoo', outcome: 'processed' }]);
   });
   it.each(['root', 'token', 'meta', 'disconnect', 'deleted', 'pro'])('stops before provider work after %s lifecycle changes', async kind => {
     if (kind === 'root') mocks.rows.set(run.rootPath, { activeOAuthCredentialGeneration: 'replacement' });
