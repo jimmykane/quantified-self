@@ -72,8 +72,89 @@ Prepare and verify these changes locally; merging and production deployment requ
 2. Verify the dedicated queue limits, task invoker permissions, scheduled recovery, and all secret bindings. The coordinator receives Garmin, Suunto API, COROS and Wahoo API credentials; dispatch/recovery/retry endpoints receive none. Existing ingestion workers retain their bindings.
 3. Release the frontend after the backend can atomically accept jobs. Old clients remain opt-out by omission.
 4. `CONNECTION_HISTORY_IMPORT_ENABLED=false` in the OAuth completion functions' runtime environment stops new automatic admission. This is not a credential; do not create a Functions `.env` file. Existing accepted runs, manual imports and imported data remain intact. Restore the environment setting through the separately approved infrastructure workflow.
-5. Monitor `[ConnectionHistory]` structured events: `startup_failure`, `capacity_wait`, `checkpoint`, `finished`, and `monitoring_unavailable`. Outcomes distinguish retrying, skipped and failed work; `ageMs` measures run age. Admin queue monitoring includes coordination task depth, pending/failed runs and oldest pending age. Investigate sustained startup failure, queue age, throttling, skipped permissions and failed runs using server-only operational records. Do not log credentials or raw provider payloads.
+5. Monitor the versioned `[ConnectionHistory]` observations below. Admin queue monitoring still includes coordination task depth, pending/failed runs and oldest pending age; its lifetime age and retained failed totals are diagnostics, not the new actionable alert predicates. Investigate private operational records without exporting identities or provider details into alerts.
 
-Monitoring coverage: downstream recorded-activity and Health/Sleep ingestion remain **covered** by the existing #829/#830 bundles. Dedicated coordinator alerts are **deferred** to [#847](https://github.com/jimmykane/quantified-self/issues/847), tracked in Quantified Self IO Project 2. The current bundles omit `processConnectionHistoryTask` from their native queue filters and do not consume `[ConnectionHistory]` events; Admin Queue Monitor and application logs do not establish alert coverage. The follow-up covers eligible backlog age, dispatch/processing failures, terminal failed runs and missing/unknown telemetry while excluding expected capacity, retry and lifecycle waits. Production activation remains separately approved work.
+Monitoring coverage: downstream recorded-activity and Health/Sleep ingestion remain **covered** by #829/#830. Coordinator implementation is **prepared locally**, with deployment, activation and live evidence still pending in [#847](https://github.com/jimmykane/quantified-self/issues/847), Project 2. Those existing bundles omit this coordinator; Admin Queue Monitor and passing offline tests do not establish active alert coverage.
+
+## Coordinator monitoring (#847)
+
+`tools/connection-history-monitoring/` reuses the shared `tools/monitoring/` provisioner without changing its behavior. Its independent owner is `qs-connection-history-monitoring-v1`, with one **QS Connection history** dashboard, 14 `qs_connection_history_*_v1` log metrics and six policies. The dashboard also consumes native Cloud Tasks depth, attempts and dispatch-delay metrics for exactly `processConnectionHistoryTask`, plus native Cloud Run request counts/latency for all four coordinator endpoints in `europe-west2`. All four are already Gen 2 with isolated owner-module loading; no new Function, scheduler, secret, index, Rules or product gate is introduced. Existing memory, timeout, retry, rate and concurrency settings remain unchanged. Native HTTP/transport series are diagnostic: an accepted enqueue, worker ACK, submitted Garmin request and committed activity/Health/Sleep ingestion are different outcomes. Native Cloud Run metric/resource contracts are documented by [Google](https://docs.cloud.google.com/monitoring/api/metrics_gcp_p_z).
+
+### Fixed signals and privacy
+
+Only `[ConnectionHistory]` with `telemetryVersion=1` enters the new metrics. Labels are fixed `provider=garmin|suunto|coros|wahoo|unknown` and allowlisted outcome. Whole-worker failures before context is available retain `unknown`, rather than trusting task payload labels. No owner/run/account IDs, credential generations, titles, provider payloads, URLs or raw errors enter these signals or email text. Older diagnostic logs and server-only records remain separate.
+
+- `dispatch_attempt`: enqueue `accepted` (including deterministic task deduplication) or `failed`; this is not an ACK.
+- `worker_attempt`: whole-task `acknowledged`, `failed` or `expected_contention`, plus bounded duration. ACK can be a stale revision, active lease or deletion no-op; it is not ingestion success.
+- `checkpoint`: emitted only after a committed transaction, once even if its callback replays. `active`, `requested`, `processed`, `skipped`, `failed` and `expected_contention` describe coordination. `requested` wins when any scope remains request-only; `processed` can include skipped scopes and never claims complete provider coverage, watch receipt or workout completion.
+- `operation_retry`: only a committed increase in real operation retry attempts. Capacity waits and window subdivision do not increment this signal. Recognized credential-refresh/provider-operation contention is excluded without changing existing retry behavior.
+- `recovery_run`: the unchanged once-per-minute recovery's outcome; whole-run and candidate failure observations can overlap.
+- `queue_sample` / `queue_sample_unavailable`: four fixed provider heartbeats on UTC quarter-hour scheduled ticks, including idle observations.
+
+Logger failures cannot turn a committed checkpoint or ACK into another task retry. Observation errors cannot replace recovery's original result/error. No new signal is emitted for a rejected checkpoint write. New terminal failures count committed failure episodes, not retained failed documents or duplicate processed tasks; an explicit owner Retry can create another failure episode.
+
+### Bounded read-only observations
+
+The existing recovery scheduler samples every **15 minutes**, using its scheduled timestamp rather than delayed invocation time. Its dispatch loop still runs every minute, with unchanged limits. There is no additional scheduler or persistent monitoring state.
+
+One masked, oldest-due-first query inspects at most **20 runs plus one truncation sentinel**, using the existing `(processed, nextAttemptAt)` index. Reads exclude token values, provider payloads and operation receipts. Each candidate's read-only transaction rechecks exact document update time, owner/tombstone, token/root presence and credential/connection generations. Permission/cooldown/unsupported-capability and Sleep/Health rollout checks match the local admission contract. Pro/grace checks are read-only and cached, at most 20 Auth lookups. Child observations share a **100-row total budget** and read only `processed`, `resultStatus` and `skippedReason`; pending children belong to the downstream bundles. Missing/failed children or an exhausted cursor can leave overdue coordinator finalization, not prove successful ingestion. Successful children with another page remaining still require downstream capacity; ambiguous child state is unknown.
+
+Capacity checks reuse the actual downstream queue/collection mapping, cache each mapping within the observation, and require both native depth and Firestore pending count below the existing half-capacity threshold. No provider API, refresh, queue write, account pinning, dispatch decision or retry change occurs. Capacity reads settle together on ordinary errors. A shared **five-second deadline** stops further reads and suppresses late healthy emissions; already-started requests may finish afterward.
+
+Future retries, active leases, pending children, current downstream saturation, superseded/disconnected/deleting accounts, non-Pro access and expected permission/cooldown skips are excluded. A retry that is already overdue remains eligible; its future backoff window is not mistaken for a stall. Age is the delay since the sampled revision's `nextAttemptAt`, not the lifetime of a years-long import. A same-revision edit racing the sample is unknown, not zero.
+
+Positive count/age values are lower bounds. A global saturated or unknown prefix without a proven eligible count omits count/age, including for unseen providers; it cannot clear backlog as healthy zero. Query/read/capacity failure or timeout emits unavailable for all four groups. A complete idle observation emits real zero. Histogram chart means preserve zero observations without interpolating a false positive age; the backlog policy uses the exact emitted count/age predicate instead.
+
+### Initial alert conditions
+
+| Policy | Condition per fixed provider | Meaning |
+| --- | --- | --- |
+| Sustained eligible backlog | Three positive samples at least 15 minutes overdue in one hour | Eligible coordinator delay, not complete backlog or expected provider waits |
+| Repeated dispatch/recovery failures | Three observations in 15 minutes | Immediate startup/enqueue or recovery failure; candidate/run observations may overlap |
+| Repeated processing failures | Ten observations in 15 minutes | Unexpected failed attempts or committed real retries; ACK/contention/skips excluded |
+| New failed import runs | Three newly committed terminal failure episodes in 30 minutes | Not retained failures, stale tasks or lifecycle skips |
+| Observations unavailable | Two unknown/unavailable samples in one hour | Includes capped prefixes with no proven eligible count |
+| Required heartbeat missing | No sample for one hour, independently for all four providers | Idle emits; no-new-imports is never an outage |
+
+Threshold policies use a 60-second retest window, missing data inactive, and the explicitly selected existing email channel for OPENED/CLOSED notifications. Absence policies require each series to initialize after metric creation. These are initial tunable thresholds, not partner quotas or unique-user counts.
+
+### Approval and operational completion
+
+Offline preview needs no credentials or network:
+
+```bash
+node tools/connection-history-monitoring/cli.mjs --project=quantified-self-io
+```
+
+After separate approval, deploy only the three instrumented endpoints (`processConnectionHistoryTask`, `onConnectionHistoryImportWritten`, `recoverConnectionHistoryImports`). `retryConnectionHistoryImport` has native dashboard coverage but no handler changes. Verify active revisions and unchanged runtime/secret/queue/scheduler configuration. No Hosting, Rules or index release is required by this monitoring change.
+
+Apply only after explicit approval for this bundle and selecting the existing Alerts email channel:
+
+```bash
+node tools/connection-history-monitoring/cli.mjs \
+  --project=quantified-self-io \
+  --notification-channel='projects/quantified-self-io/notificationChannels/EXISTING_ALERTS_CHANNEL_ID' \
+  --confirm-project=quantified-self-io --apply
+```
+
+The provisioner validates the enabled email channel and paginated inventories before writes. Owner/name/policy-identity collisions, duplicates, malformed inventories and immutable metric schema drift fail closed. Serial reapply retains condition IDs and dashboard etag, without duplicate resources or DELETE. Other dashboards, metrics, policies and all notification channels remain unchanged. No new mail extension integration is needed; Cloud Monitoring uses its existing notification channel.
+
+Before closing #847, record approval and pinned commit, deploy/apply results, exact API readback of the dashboard/14 metric schemas/six valid enabled policies, all **18 chart and nine condition queries**, native metrics for all four services and the queue, and positive **post-creation** metric points from a natural quarter-hour observation for each of the four heartbeat groups. Earlier logs cannot initialize new metric-absence series. Reuse existing same-channel notification evidence where valid; fault injection, manual scheduler invocation, test email, provider actions or deletion need their own approval. Do not claim operational coverage while activation/readback is pending.
+
+Monitoring adds bounded Firestore/Auth/Cloud Tasks reads (at most 21 queried runs, 20 six-record lifecycle reads plus optional Sleep rows, 100 child rows and cached capacity observations per 15-minute tick), small fixed-category logs, log-metric series and alert evaluations. This is **not guaranteed free**. Idle probes read one bounded query and emit four logs; no provider calls or new scheduler are added. Review current [Observability pricing](https://cloud.google.com/products/observability/pricing) and actual volume before changing thresholds or sample limits.
+
+Help's **Recent history when connecting** was reviewed and remains accurate; observability changes no user-facing behavior. **No MCP wire impact:** no tools, schemas, scopes, consent, exposed athlete data, Assistant actions or bundled skills change. Local verification includes privacy/lifecycle emulator cases, deterministic telemetry/deadline specs, actual log-filter fixtures, provisioning ownership/pagination/reapplication tests and the existing entrypoint/secret checks. The new emulator suite is registered in CI's `mcp-data` group; offline definitions run in the existing unit job.
+
+```bash
+npm run test:connection-history-monitoring
+npm --prefix functions test -- src/connection-history
+npm run test:functions-emulators -- mcp-data
+npm run test:emulator-coverage
+npm run test:delivery-shards
+npm run test:workflows
+npm --prefix functions run entrypoint:check
+npm --prefix functions run deploy:safety:compiled
+git diff --check
+```
 
 This implements #681 with an explicit selected boundary. Thirty days remains the preselected default; users can choose a longer provider-valid range, including the provider maximum where supported. The run never expands its snapshot or automatically continues earlier than the chosen range.

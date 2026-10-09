@@ -12,7 +12,7 @@ import { onCall, HttpsError } from 'firebase-functions/v2/https';
 import { FUNCTIONS_MANIFEST } from '../../../shared/functions-manifest';
 import { config } from '../config';
 import { FUNCTION_SECRET_BINDINGS } from '../secrets';
-import { ALLOWED_CORS_ORIGINS, enforceAppCheck, hasProAccess } from '../utils';
+import { ALLOWED_CORS_ORIGINS, enforceAppCheck, hasProAccess, getUserRoleAndGracePeriod, isGracePeriodActive } from '../utils';
 import { CLOUD_TASK_RETRY_CONFIG, MAX_PENDING_TASKS } from '../shared/queue-config';
 import { enqueueConnectionHistoryTask, getCloudTaskQueueDepthForQueue } from '../shared/cloud-tasks';
 import { CONNECTION_HISTORY_COLLECTION, historyProjection, isConnectionHistoryRunId, type ConnectionHistoryRun } from './model';
@@ -20,18 +20,27 @@ import { assertHistoryConnectionCurrent, assertHistoryReservation, historyExecut
 import { executeHistoryOperation, HistorySkippedError, isHistoryWindowTooLarge } from './adapters';
 import { advanceHistoryRun } from './advance';
 import { withHistoryExecution } from './context';
+import { emitHistoryMonitoring, historyMonitoringProvider, historyExpectedContention } from './monitoring';
+import { historyProbeDue, observeConnectionHistory, recordHistoryProbeUnavailable } from './monitoring-probe';
 
 const region = FUNCTIONS_MANIFEST.processConnectionHistoryTask.region;
 const refFor = (id: string) => admin.firestore().collection(CONNECTION_HISTORY_COLLECTION).doc(id);
 
 export async function dispatchConnectionHistoryRun(run: ConnectionHistoryRun): Promise<void> {
   if (run.processed) return;
-  const accepted = await enqueueConnectionHistoryTask(run.id, run.dateCreated,
-    Math.max(1, Math.ceil((run.nextAttemptAt - Date.now()) / 1000)), {
-      queueRevision: String(run.revision), queueDateCreated: run.dateCreated,
-      recoveryTaskKey: String(Math.floor(Date.now() / 60_000)),
-    });
-  if (!accepted) throw new Error('History dispatch was not accepted.');
+  const provider = historyMonitoringProvider(run.serviceName);
+  try {
+    const accepted = await enqueueConnectionHistoryTask(run.id, run.dateCreated,
+      Math.max(1, Math.ceil((run.nextAttemptAt - Date.now()) / 1000)), {
+        queueRevision: String(run.revision), queueDateCreated: run.dateCreated,
+        recoveryTaskKey: String(Math.floor(Date.now() / 60_000)),
+      });
+    if (!accepted) throw new Error('History dispatch was not accepted.');
+    emitHistoryMonitoring({ event: 'dispatch_attempt', provider, outcome: 'accepted' });
+  } catch (error) {
+    emitHistoryMonitoring({ event: 'dispatch_attempt', provider, outcome: 'failed' });
+    throw error;
+  }
 }
 
 /** Missing rows never prove delivery. Failed rows are retried only through explicit owner action. */
@@ -80,7 +89,7 @@ export function classifyHistoryFailure(error: unknown) {
     ...(Number.isFinite(retryAt) ? { retryAt } : {}) };
 }
 
-async function saveRun(run: ConnectionHistoryRun, owner: string): Promise<ConnectionHistoryRun | null> {
+async function saveRun(run: ConnectionHistoryRun, owner: string): Promise<{ run: ConnectionHistoryRun; currentConnection: boolean } | null> {
   const db = admin.firestore();
   return db.runTransaction(async tx => {
     const ref = refFor(run.id); const current = await tx.get(ref);
@@ -107,7 +116,7 @@ async function saveRun(run: ConnectionHistoryRun, owner: string): Promise<Connec
       connectionHistoryImport: historyProjection(checkpoint),
       ...(checkpoint.processed ? { connectionHistoryReservationExpiresAt: 0 } : {}),
     }, { merge: true });
-    return checkpoint;
+    return { run: checkpoint, currentConnection };
   });
 }
 
@@ -123,11 +132,17 @@ export async function processConnectionHistoryRun(id: string, revision: string):
     return data;
   });
   if (!run) return;
+  const retryCount = run.steps.reduce((count, step) => count + step.retryCount, 0);
+  let lifecycleSkip = false;
+  let expectedContention = false;
   try {
     await historyExecution(run, []).beforeRequest();
     if (!(await hasProAccess(run.userID))) throw new HistoryLifecycleChangedError();
       await advanceHistoryRun(run, {
-        observe: paths => observeHistoryChildren(paths, run.id), classify: classifyHistoryFailure,
+        observe: paths => observeHistoryChildren(paths, run.id), classify: error => {
+          expectedContention = historyExpectedContention(error);
+          return classifyHistoryFailure(error);
+        },
         execute: async step => {
           const key = JSON.stringify([step.id, step.capability.version, step.nextStartMs, step.windowDays || 30, step.page]);
           if (run.lastOperation?.key === key) return run.lastOperation.result;
@@ -155,36 +170,64 @@ export async function processConnectionHistoryRun(id: string, revision: string):
       }, now);
   } catch (error) {
     if (!(error instanceof HistoryLifecycleChangedError)) throw error;
+    lifecycleSkip = true;
     for (const step of run.steps.filter(step => !step.done)) {
       step.done = true; step.status = 'skipped'; step.message = 'The connection or Pro access changed. Reconnect to import the selected history.';
     }
     run.processed = true;
   }
-  const checkpoint = await saveRun(run, owner);
-  if (checkpoint) logger.info('[ConnectionHistory]', { event: checkpoint.processed ? 'finished' : 'checkpoint', service: checkpoint.serviceName,
-    ageMs: Date.now() - checkpoint.dateCreated, outcomes: checkpoint.steps.map(step => step.status) });
+  const saved = await saveRun(run, owner);
+  if (saved) {
+    const checkpoint = saved.run;
+    const provider = historyMonitoringProvider(checkpoint.serviceName);
+    const outcome = !saved.currentConnection || lifecycleSkip ? 'skipped' : !checkpoint.processed ? 'active'
+      : expectedContention ? 'expected_contention' : checkpoint.failed ? 'failed' : checkpoint.steps.some(step => step.status === 'requested') ? 'requested'
+      : checkpoint.steps.some(step => step.status === 'processed') ? 'processed' : 'skipped';
+    emitHistoryMonitoring({ event: 'checkpoint', provider, outcome });
+    if (saved.currentConnection && !lifecycleSkip && !expectedContention && checkpoint.steps.reduce((count, step) => count + step.retryCount, 0) > retryCount) {
+      emitHistoryMonitoring({ event: 'operation_retry', provider });
+    }
+  }
 }
 
 export const processConnectionHistoryTask = onTaskDispatched({ region, timeoutSeconds: 300, memory: '512MiB',
   secrets: FUNCTION_SECRET_BINDINGS.processConnectionHistoryTask, retryConfig: CLOUD_TASK_RETRY_CONFIG,
   rateLimits: { maxConcurrentDispatches: 1, maxDispatchesPerSecond: 1 } }, async request => {
-  if (!isConnectionHistoryRunId(request.data?.queueItemId) || typeof request.data?.queueRevision !== 'string') return;
-  await processConnectionHistoryRun(request.data.queueItemId, request.data.queueRevision);
+  const startedAt = Date.now();
+  let outcome: 'acknowledged' | 'failed' | 'expected_contention' = 'acknowledged';
+  try {
+    if (!isConnectionHistoryRunId(request.data?.queueItemId) || typeof request.data?.queueRevision !== 'string') return;
+    await processConnectionHistoryRun(request.data.queueItemId, request.data.queueRevision);
+  } catch (error) { outcome = historyExpectedContention(error) ? 'expected_contention' : 'failed'; throw error; }
+  finally { emitHistoryMonitoring({ event: 'worker_attempt', outcome, durationMs: Date.now() - startedAt }); }
 });
 export const onConnectionHistoryImportWritten = onDocumentWritten({ region, document: `${CONNECTION_HISTORY_COLLECTION}/{runId}`, retry: true }, async event => {
   const run = event.data?.after.data() as ConnectionHistoryRun | undefined;
   if (!run || run.processed || (event.data?.before.exists && event.data.before.data()?.revision === run.revision)) return;
-  try { await dispatchConnectionHistoryRun(run); }
-  catch (error) { logger.warn('[ConnectionHistory]', { event: 'startup_failure' }); throw error; }
+  await dispatchConnectionHistoryRun(run);
 });
-export const recoverConnectionHistoryImports = onSchedule({ region, schedule: '* * * * *', timeoutSeconds: 120 }, async () => {
-  if (await getCloudTaskQueueDepthForQueue(config.cloudtasks.connectionHistoryQueue, true) >= MAX_PENDING_TASKS) return;
-  const rows = await admin.firestore().collection(CONNECTION_HISTORY_COLLECTION).where('processed', '==', false)
-    .where('nextAttemptAt', '<=', Date.now()).orderBy('nextAttemptAt').limit(100).get();
-  for (const row of rows.docs) {
-    const run = row.data() as ConnectionHistoryRun;
-    if ((run.leaseExpiresAt || 0) > Date.now()) continue;
-    await dispatchConnectionHistoryRun(run);
+export const recoverConnectionHistoryImports = onSchedule({ region, schedule: '* * * * *', timeoutSeconds: 120 }, async event => {
+  let outcome: 'completed' | 'failed' = 'completed';
+  try {
+    if (await getCloudTaskQueueDepthForQueue(config.cloudtasks.connectionHistoryQueue, true) >= MAX_PENDING_TASKS) return;
+    const rows = await admin.firestore().collection(CONNECTION_HISTORY_COLLECTION).where('processed', '==', false)
+      .where('nextAttemptAt', '<=', Date.now()).orderBy('nextAttemptAt').limit(100).get();
+    for (const row of rows.docs) {
+      const run = row.data() as ConnectionHistoryRun;
+      if ((run.leaseExpiresAt || 0) > Date.now()) continue;
+      await dispatchConnectionHistoryRun(run);
+    }
+  } catch (error) { outcome = 'failed'; throw error; }
+  finally {
+    emitHistoryMonitoring({ event: 'recovery_run', outcome });
+    if (historyProbeDue(event.scheduleTime)) {
+      try {
+        await observeConnectionHistory(admin.firestore(), async uid => {
+          const { role, gracePeriodUntil } = await getUserRoleAndGracePeriod(uid);
+          return role === 'pro' || isGracePeriodActive(gracePeriodUntil);
+        }, queue => getCloudTaskQueueDepthForQueue(queue, true));
+      } catch { recordHistoryProbeUnavailable(); }
+    }
   }
 });
 

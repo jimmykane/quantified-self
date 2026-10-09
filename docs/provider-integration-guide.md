@@ -1290,6 +1290,21 @@ visible rather than converted into an empty backlog.
 The shared monitoring provisioner rejects malformed inventories and mismatched managed
 policy identities before any cloud writes; a title alone cannot adopt another policy.
 
+Connection-history coordinator monitoring (#847) is **prepared locally, not yet activated**.
+Its separate `tools/connection-history-monitoring/` bundle reuses shared provisioning,
+covering the dedicated task queue and all four existing Gen 2 endpoints with native
+metrics, plus fixed-category post-commit/failure signals and six alert policies.
+The unchanged once-per-minute recovery observes a masked, read-only sample of at most
+20 due runs on UTC quarter-hour ticks, within five seconds. Expected capacity, future
+retries, leases, permissions/cooldowns and superseded/disconnected/deleting accounts
+do not produce failure pages. Capped/unknown observations cannot assert healthy zero.
+Downstream ingestion remains owned by #829/#830; request submission, worker ACK and
+committed ingestion are distinct. No provider behavior, retry/schedule/resources,
+Help or MCP contract changes. Deployment, bundle activation and positive metric-series
+readback remain separately approved acceptance criteria in #847. See the authoritative
+[connection-history monitoring runbook](connection-history-import.md#coordinator-monitoring-847)
+for signals, bounds, costs, thresholds, exclusions and the activation checklist.
+
 Health/Sleep monitoring (#830) has a separate bundle, activated on 7 October 2026, for the ordinary
 `processSleepSyncTask` and single-task `processGarminHealthBackfillTask` queues. It reuses
 the ordinary worker invocation summary and adds post-commit terminal observations and

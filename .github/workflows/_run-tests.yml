@@ -68,6 +68,9 @@ jobs:
       - name: Test route import and delivery monitoring configuration
         run: npm run test:route-monitoring
 
+      - name: Test connection-history coordinator monitoring configuration
+        run: npm run test:connection-history-monitoring
+
       - name: Validate local Quantified Self plugin
         env:
           QS_CHATGPT_APP_ID: plugin_asdk_app_ci_fixture

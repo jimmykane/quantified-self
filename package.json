@@ -40,6 +40,7 @@
     "test:health-sleep-monitoring": "node --test tools/health-sleep-monitoring/monitoring.test.mjs",
     "test:activity-delivery-monitoring": "node --test tools/activity-delivery-monitoring/monitoring.test.mjs",
     "test:route-monitoring": "node --test tools/route-monitoring/monitoring.test.mjs",
+    "test:connection-history-monitoring": "node --test tools/connection-history-monitoring/monitoring.test.mjs",
     "test-coverage": "vitest run --coverage",
     "lint": "ng lint",
     "plugin:tools": "npm --prefix tools/quantified-self-plugin ci",

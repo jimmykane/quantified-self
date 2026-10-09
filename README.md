@@ -170,6 +170,7 @@ Never commit environment files, service-account JSON, API tokens, private keys, 
 | Health/Sleep monitoring configuration | `npm run test:health-sleep-monitoring` | Offline ordinary-ingestion/serialized-backfill dashboard and policies; no production changes by default |
 | Recorded-activity delivery monitoring configuration | `npm run test:activity-delivery-monitoring` | Offline outbound delivery dashboard/policies, including pending and manual-reconciliation outcomes; no production changes by default |
 | Route import/delivery monitoring configuration | `npm run test:route-monitoring` | Offline route dashboard, bounded labels, eight policies and safe provisioning; no cloud changes by default |
+| Connection-history monitoring configuration | `npm run test:connection-history-monitoring` | Offline coordinator dashboard/six policies, bounded observations and safe provisioning; activation needs separate approval |
 | Functions lint | `npm --prefix functions run lint` | Runs ESLint with `--fix` and may edit files |
 | Install Git hooks | `npm run hooks:install` | Reinstalls the repository Lefthook hooks; `npm ci` normally installs them automatically |
 | Test the local credential guard | `npm run credentials:test` | Checks the staged-file rejection policy without reading credential values |
@@ -254,6 +255,7 @@ Unified health history under `users/{uid}/healthSourceRecords` and `healthSample
 - [Recorded activity import monitoring and activation](docs/activity-import-monitoring.md)
 - [Recorded activity delivery monitoring and activation](docs/activity-delivery-monitoring.md)
 - [Route import and delivery monitoring](docs/route-monitoring.md)
+- [Connection-history imports and coordinator monitoring](docs/connection-history-import.md)
 - [Frontend UI composition and shared route headers](docs/frontend-ui.md)
 - [Event chart sport defaults and visibility persistence](docs/event-chart-visibility.md)
 - [Supported activities and metrics catalog](docs/supported-activities.md)
