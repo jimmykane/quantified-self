@@ -4804,6 +4804,9 @@ This section reuses global derived load metrics:
 - Form after seven zero-load days.
 
 The existing exact-value grid adds compact history columns below CTL, ATL, Ramp, ACWR, Strain and Form now.
+The shared grid uses its own inline-size container for responsive columns and dividers: at 640px or less it shows
+two load-metric columns, including narrow desktop side panels, rather than squeezing four columns into them.
+Wider grids retain four columns; the public context preview retains its existing one-column narrow layout.
 CTL/ATL/Form/Ramp reuse the current-day Form context's last available sample in each of up to eight UTC weeks;
 ACWR and Strain reuse their prepared `trend8Weeks` observations. These are weekly metric observations, not summed
 weekly load. No extra activity-history query or derived snapshot is introduced. A metric without observed history

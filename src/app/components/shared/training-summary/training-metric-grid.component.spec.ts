@@ -1,5 +1,7 @@
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { describe, expect, it, beforeEach, vi } from 'vitest';
+import { readFileSync } from 'node:fs';
+import { resolve } from 'node:path';
 import { TrainingMetricGridComponent } from './training-metric-grid.component';
 import { EChartsLoaderService } from '../../../services/echarts-loader.service';
 
@@ -12,6 +14,20 @@ describe('TrainingMetricGridComponent', () => {
       providers: [{ provide: EChartsLoaderService, useValue: { init: vi.fn().mockResolvedValue(null), dispose: vi.fn() } }],
     }).compileComponents();
     fixture = TestBed.createComponent(TrainingMetricGridComponent);
+  });
+
+  it('adapts columns and dividers to narrow desktop panels as well as phone widths', () => {
+    // JSDOM does not lay out container queries; browser QA verifies the actual geometry.
+    const styles = readFileSync(resolve(process.cwd(), 'src/app/components/shared/training-summary/training-metric-grid.component.scss'), 'utf8');
+    expect(styles).toContain('container-type: inline-size');
+    expect(styles).toContain('@container (max-width: 640px)');
+    expect(styles).not.toContain('@media (max-width: 640px)');
+    const narrowStyles = styles.slice(styles.indexOf('@container (max-width: 640px)'));
+    expect(narrowStyles).toContain('grid-template-columns: repeat(2, minmax(0, 1fr))');
+    expect(narrowStyles).toContain('.training-metric-grid--workspace > div:nth-child(odd)');
+    expect(narrowStyles).toContain('.training-metric-grid--workspace > div:nth-child(even)');
+    expect(narrowStyles).toContain('.training-metric-grid--preview-load > div:nth-child(n + 3)');
+    expect(narrowStyles).toContain('.training-metric-grid--preview-context > div:not(:first-child)');
   });
 
   it('renders exact metric values through the shared numeric formatter', () => {
