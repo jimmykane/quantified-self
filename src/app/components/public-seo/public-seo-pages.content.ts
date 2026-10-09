@@ -49,6 +49,7 @@ export interface PublicSeoPage {
   description: string;
   h1: string;
   intro: string;
+  accessNote?: string;
   chips: readonly string[];
   actions: readonly PublicSeoAction[];
   sections: readonly PublicSeoSection[];
@@ -478,6 +479,7 @@ export const PUBLIC_SEO_PAGES: Record<PublicSeoPageKey, PublicSeoPage> = {
     description: TRAINING_PLANS_SEO_CONTENT.description,
     h1: TRAINING_PLANS_SEO_CONTENT.h1,
     intro: TRAINING_PLANS_SEO_CONTENT.intro,
+    accessNote: TRAINING_PLANS_SEO_CONTENT.accessNote,
     chips: ['Plans included', 'Standalone workouts', 'Named phases', 'MCP planning', 'Provider delivery for Pro', 'Plan calendar', 'Completed totals stay separate'],
     actions: [
       routeAction('Start Free', '/login', 'flat', 'arrow_forward'),

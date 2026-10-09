@@ -930,6 +930,8 @@ In the built-in Assistant, **Private workout reflections** in **Examples & data 
 - Manual activity uploads (\`.fit\`, \`.gpx\`, \`.tcx\`, \`.json\`, \`.sml\`)
 - Manual route uploads (\`.fit\`, \`.gpx\`)
 - Core dashboard and event analysis tools
+- Training plans and standalone structured workouts without a provider connection
+- Up to **${ASSISTANT_REQUEST_LIMITS.free}** built-in Assistant requests per calendar month
 - Free permission-scoped MCP connections, including approval-gated Training plan and workout changes
 
 ### Basic
@@ -937,6 +939,7 @@ In the built-in Assistant, **Private workout reflections** in **Examples & data 
 - Everything in Starter
 - Up to **${getNumberFormatter('en-US').format(USAGE_LIMITS.basic)} activities**
 - Up to **${ROUTE_USAGE_LIMITS.basic} saved routes**
+- Up to **${ASSISTANT_REQUEST_LIMITS.basic}** built-in Assistant requests per billing period
 - **My Tracks (Beta)** access
 - Paid-only chart customization such as custom watermark text
 
@@ -945,6 +948,8 @@ In the built-in Assistant, **Private workout reflections** in **Examples & data 
 - Everything in Basic
 - **Unlimited activities**
 - **Unlimited saved routes**
+- Up to **${ASSISTANT_REQUEST_LIMITS.pro}** built-in Assistant requests per billing period
+- Compatible planned-workout delivery to connected Garmin, Suunto, and Wahoo accounts
 - Garmin, Suunto, COROS, and Wahoo integration workflows
 - History import workflows (provider limits still apply)
 - Suunto FIT activity upload and GPX/FIT route upload tools

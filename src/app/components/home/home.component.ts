@@ -70,16 +70,17 @@ export class HomeComponent implements OnInit {
   readonly healthFeature = HEALTH_FEATURE_CONTENT;
   readonly trainingPlansFeature = TRAINING_PLANS_HOME_CONTENT;
   readonly memberships = [
-    { name: 'Starter', label: 'Free', copy: 'A place to begin.', route: '/login', action: 'Start free',
+    { name: 'Starter', label: 'Free', copy: 'Core tools, free forever.', route: '/login', action: 'Start free',
       features: [`Up to ${getNumberFormatter().format(USAGE_LIMITS.free)} activities`,
         `Up to ${getNumberFormatter().format(ROUTE_USAGE_LIMITS.free)} saved routes`, 'Plans and standalone workouts',
+        'Manual uploads and core analysis',
         `Up to ${getNumberFormatter().format(ASSISTANT_REQUEST_LIMITS.free)} Assistant requests per calendar month`] },
-    { name: 'Basic', label: 'More history', copy: 'For consistent training.', route: '/pricing', action: 'Explore Basic',
+    { name: 'Basic', label: 'More history', copy: 'Everything in Starter, with more history and Assistant requests.', route: '/pricing', action: 'Explore Basic',
       features: [`Up to ${getNumberFormatter().format(USAGE_LIMITS.basic)} activities`,
         `Up to ${getNumberFormatter().format(ROUTE_USAGE_LIMITS.basic)} saved routes`,
         `Up to ${getNumberFormatter().format(ASSISTANT_REQUEST_LIMITS.basic)} Assistant requests per billing period`] },
-    { name: 'Pro', label: 'Keep it connected', copy: 'For your complete workflow.', route: '/pricing', action: 'Explore Pro',
-      features: ['Unlimited activities and routes', 'Supported cross-provider sync', 'Compatible workout delivery',
+    { name: 'Pro', label: 'Keep it connected', copy: 'Everything in Basic, plus connected provider services.', route: '/pricing', action: 'Explore Pro',
+      features: ['Unlimited activities and routes', 'Automatic activity imports', 'Supported cross-provider sync', 'Compatible workout delivery',
         `Up to ${getNumberFormatter().format(ASSISTANT_REQUEST_LIMITS.pro)} Assistant requests per billing period`] },
   ];
   readonly faqs = [

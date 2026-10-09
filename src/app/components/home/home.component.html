@@ -12,6 +12,7 @@
         <a mat-flat-button class="qs-mat-primary" routerLink="/login">Get Started Free <mat-icon iconPositionEnd>arrow_forward</mat-icon></a>
         <a mat-stroked-button routerLink="/features/training-analysis">Explore Training Analysis <mat-icon iconPositionEnd>monitoring</mat-icon></a>
       </div>
+      <p class="hero-access-note">Training analysis, plans, workouts, and manual uploads are included with free Starter.</p>
       <ul class="trust-indicators" aria-label="Your data in Quantified Self">
         <li><mat-icon aria-hidden="true">code</mat-icon> Open source</li>
         <li><mat-icon aria-hidden="true">download</mat-icon> Original-file exports</li>
@@ -97,6 +98,7 @@
       <p class="eyebrow">Plan what comes next</p>
       <h2 id="home-plans-title" tabindex="-1">{{ trainingPlansFeature.title }}</h2>
       <p>{{ trainingPlansFeature.intro }}</p>
+      <p>{{ trainingPlansFeature.accessNote }}</p>
       <a mat-button [routerLink]="trainingPlansFeature.cta.routerLink">{{ trainingPlansFeature.cta.label }} <mat-icon iconPositionEnd>{{ trainingPlansFeature.cta.icon }}</mat-icon></a>
     </div>
     <div class="compact-row-stack">
@@ -188,7 +190,7 @@
   <section class="membership-section" aria-labelledby="home-membership-title">
     <p class="eyebrow">Membership</p>
     <h2 appHomeReveal id="home-membership-title">Start free. Grow when you need to.</h2>
-    <p>Choose the history and automation that fit your training.</p>
+    <p>Core tools are included with Starter. Upgrade for more history, higher Assistant allowances, or connected provider services.</p>
     <a mat-button routerLink="/pricing">View current pricing <mat-icon iconPositionEnd>arrow_forward</mat-icon></a>
     <div class="membership-grid">
       @for (membership of memberships; track membership.name) {

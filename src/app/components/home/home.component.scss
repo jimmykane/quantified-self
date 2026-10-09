@@ -17,6 +17,7 @@
 .eyebrow { margin: 0 0 0.75rem; font: var(--mat-sys-label-medium); font-weight: 700; letter-spacing: 0.12em; text-transform: uppercase; }
 .hero-subtitle { max-width: 50rem; margin-inline: auto; font: var(--mat-sys-body-large); }
 .hero-actions { display: flex; justify-content: center; flex-wrap: wrap; gap: 0.75rem; margin-block: 1.5rem; }
+.hero-access-note { max-width: 50rem; margin: 0 auto 0.75rem; font: var(--mat-sys-body-medium); }
 .trust-indicators { display: flex; justify-content: center; flex-wrap: wrap; gap: 0.75rem 1rem; margin: 0; padding: 0; list-style: none; color: var(--mat-sys-on-surface-variant); font: var(--mat-sys-body-small); }
 .trust-indicators li { display: flex; align-items: center; gap: 0.3rem; }
 .trust-indicators mat-icon { width: 16px; height: 16px; font-size: 16px; }
@@ -74,6 +75,7 @@
   .hero-content h1 { animation-delay: 0.05s; }
   .hero-content .hero-subtitle { animation-delay: 0.1s; }
   .hero-content .hero-actions { animation-delay: 0.15s; }
+  .hero-content .hero-access-note { animation-delay: 0.2s; }
   .hero-content .trust-indicators { animation-delay: 0.2s; }
   [appHomeReveal].home-reveal-visible { animation: homeFadeInUp 0.45s cubic-bezier(0.2, 0.8, 0.2, 1); }
   [appHomeReveal].home-reveal-visible:focus-within { animation: none; }
