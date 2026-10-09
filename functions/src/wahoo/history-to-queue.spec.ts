@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { HttpsError } from 'firebase-functions/v2/https';
 import { withHistoryExecution } from '../connection-history/context';
 import type { HistoryExecution } from '../connection-history/execution';
 
@@ -316,6 +317,21 @@ describe('importWahooHistory account fencing', () => {
     )).rejects.toThrow('account changed');
 
     expect(historyMocks.upsertWahooWorkoutQueueItem).not.toHaveBeenCalled();
+  });
+
+  it('rejects an automatic-history reservation before provider work without remapping the busy response', async () => {
+    firestoreMocks.transactionGet.mockResolvedValue({
+      exists: true,
+      data: () => ({ connectionHistoryReservation: 'automatic-run', connectionHistoryReservationExpiresAt: Date.now() + 60_000 }),
+    });
+    const error = await importWahooHistory('user-1', new Date('2026-07-10'), new Date('2026-07-18')).catch(error => error);
+
+    expect(error).toBeInstanceOf(HttpsError);
+    expect(error).toMatchObject({ code: 'already-exists', httpErrorCode: { status: 409 } });
+    expect(toWahooHistoryCallableError(error)).toBeNull();
+    expect(historyMocks.requestWahooAPI).not.toHaveBeenCalled();
+    expect(historyMocks.upsertWahooWorkoutQueueItem).not.toHaveBeenCalled();
+    expect(firestoreMocks.transactionSet).not.toHaveBeenCalled();
   });
 
   it('binds every history queue write to the captured Wahoo account transactionally', async () => {

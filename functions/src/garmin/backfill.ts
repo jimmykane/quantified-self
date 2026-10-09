@@ -391,8 +391,12 @@ export const backfillGarminAPIActivities = functions.region(FUNCTIONS_MANIFEST.b
     if (error instanceof GarminHistoryImportSkippedForDeletedUserError) {
       throw new functions.https.HttpsError('failed-precondition', error.message);
     }
-    if (error instanceof GarminHistoryImportInProgressError) {
-      throw new functions.https.HttpsError('already-exists', error.message);
+    if (error instanceof GarminHistoryImportInProgressError
+      || (error instanceof functions.https.HttpsError && error.code === 'already-exists')) {
+      logger.info('[GarminHistoryImport] History import is already running.');
+      throw error instanceof functions.https.HttpsError
+        ? error
+        : new functions.https.HttpsError('already-exists', error.message);
     }
     if (error instanceof UserDeletionGuardReadError) {
       throw new functions.https.HttpsError('unavailable', error.message);

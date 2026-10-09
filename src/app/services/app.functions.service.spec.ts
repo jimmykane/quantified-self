@@ -245,14 +245,14 @@ describe('AppFunctionsService', () => {
         expect(mocks.callableSpy).toHaveBeenCalledTimes(2);
     });
 
-    it('should not retry non App Check callable failures', async () => {
+    it.each(['functions/internal', 'functions/already-exists'])('should not retry non App Check callable failures (%s)', async code => {
         mocks.callableSpy.mockRejectedValueOnce({
-            code: 'functions/internal',
+            code,
             message: 'Unexpected failure'
         });
 
         await expect(service.call('defaultRegionFunc' as any)).rejects.toMatchObject({
-            code: 'functions/internal',
+            code,
             message: 'Unexpected failure'
         });
 

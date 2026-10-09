@@ -1123,6 +1123,8 @@ The public [Features hub](/features) links to [Workout Data Comparison](/feature
 
 Activity-history date pickers for Garmin and Suunto default to the latest **2 calendar years** through today. COROS defaults to its full **3-month** provider limit, and Wahoo defaults to the latest **2 years**. You can select a longer or shorter range before importing, subject to each provider's available-history limit.
 
+For Garmin, Suunto, COROS, and Wahoo, **Import already running** means an existing activity-history request is still active. The duplicate request does not start another import and does not mean the original import failed. Wait for the active import to finish before requesting more history.
+
 ## Sleep data
 
 History import buttons lock as soon as a request starts. Closing the dialog after the request is sent does not cancel it; reopening the tool in the same app keeps the pending state and shows the request result when it arrives. Activity history and Sleep/Health history have separate requests and cooldowns. A started or queued request means the import was accepted; records may arrive later. Starting another import requires current Pro access or an unexpired Pro grace period.
