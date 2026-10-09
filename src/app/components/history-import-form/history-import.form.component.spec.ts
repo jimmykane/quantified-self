@@ -321,6 +321,41 @@ describe('HistoryImportFormComponent', () => {
             expect(component.canSubmitSleepBackfill).toBe(true);
         });
 
+        it('times out an unconfirmed server Sleep status read, stays locked, and permits a successful retry', async () => {
+            const state$ = new Subject<SleepSyncState | null>();
+            mockSleepService.watchSyncState.mockReturnValueOnce(state$);
+            vi.useFakeTimers();
+            await reopen();
+            expect(mockSleepService.watchSyncState).toHaveBeenCalledWith('123', 'COROSAPI', { waitForServer: true });
+            await vi.advanceTimersByTimeAsync(10_000);
+            fixture.detectChanges();
+            expect(component.sleepSyncStatus()).toBe('error');
+            expect(component.canSubmitSleepBackfill).toBe(false);
+            expect(fixture.nativeElement.textContent).toContain('Retry status check');
+            expect(state$.observed).toBe(false);
+            expect(haptics.error).not.toHaveBeenCalled();
+            expect(mockUserService.backfillCorosSleepForCurrentUser).not.toHaveBeenCalled();
+            mockSleepService.watchSyncState.mockReturnValueOnce(of(null));
+            component.retrySleepSyncState();
+            expect(component.sleepSyncStatus()).toBe('ready');
+            expect(component.canSubmitSleepBackfill).toBe(true);
+            expect(haptics.selection).toHaveBeenCalledTimes(1);
+        });
+
+        it('keeps a confirmed Sleep status listener alive beyond its initial read timeout', async () => {
+            const state$ = new Subject<SleepSyncState | null>();
+            mockSleepService.watchSyncState.mockReturnValueOnce(state$);
+            vi.useFakeTimers();
+            await reopen();
+            state$.next(null);
+            await vi.advanceTimersByTimeAsync(20_000);
+            expect(component.sleepSyncStatus()).toBe('ready');
+            expect(state$.observed).toBe(true);
+            state$.next({ nextBackfillAllowedAtMs: Date.now() + 60_000 } as SleepSyncState);
+            expect(component.canSubmitSleepBackfill).toBe(false);
+            expect(mockLoggerService.error).not.toHaveBeenCalled();
+        });
+
         it('gives Sleep success feedback once for an accepted request and stays silent on initialization', async () => {
             await reopen();
             expect(haptics.selection).not.toHaveBeenCalled();

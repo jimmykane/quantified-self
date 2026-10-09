@@ -241,7 +241,9 @@ fails closed.
 
 The shared provider History import UI reserves each user's provider/domain request before awaiting the callable and
 retains the pending/result state across dialog reopenings within the same app instance. Sleep/Health import requires
-a successful sync-state read; loading or failed reads keep the action disabled, with **Retry status check** on failure.
+a server-confirmed sync-state read; cached snapshots and pending local writes cannot enable admission. A ten-second
+initial-read timeout keeps the action disabled and offers **Retry status check** when the server does not respond.
+The continuing listener has no inactivity timeout after its first server confirmation.
 An earlier known cooldown survives read errors and retries until a successful snapshot replaces it. The exact existing
 `resource-exhausted` cooldown message supplies its next-available timestamp without changing the callable contract.
 Expected cooldown waits do not become frontend Sentry errors or error haptics; unexpected failures remain reportable.

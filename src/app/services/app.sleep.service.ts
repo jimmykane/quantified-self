@@ -104,6 +104,7 @@ export class AppSleepService {
   watchSyncState(
     userID: string | null | undefined,
     provider: SleepProvider,
+    options?: { waitForServer: boolean },
   ): Observable<SleepSyncState | null> {
     const uid = `${userID || ''}`.trim();
     if (!uid) {
@@ -111,7 +112,8 @@ export class AppSleepService {
     }
 
     const stateDoc = doc(this.firestore, 'users', uid, SLEEP_SYNC_STATE_COLLECTION_ID, provider);
-    return (docData(stateDoc) as Observable<SleepSyncState | undefined>).pipe(
+    const state$ = options ? docData(stateDoc, options) : docData(stateDoc);
+    return (state$ as Observable<SleepSyncState | undefined>).pipe(
       map((state) => state || null),
     );
   }

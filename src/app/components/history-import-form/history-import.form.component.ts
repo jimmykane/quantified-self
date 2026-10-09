@@ -1,4 +1,4 @@
-import { Component, Inject, Input, OnChanges, OnDestroy, OnInit, SimpleChanges, inject, Output, EventEmitter, ChangeDetectorRef, signal } from '@angular/core';
+import { Component, Inject, Input, OnChanges, OnDestroy, OnInit, SimpleChanges, inject, Output, EventEmitter, ChangeDetectorRef, signal, NgZone } from '@angular/core';
 import {
   AbstractControl,
   UntypedFormArray,
@@ -17,7 +17,7 @@ import { LoggerService } from '../../services/logger.service';
 import { User } from '@sports-alliance/sports-lib';
 
 import { AppUserServiceMetaInterface } from '../../models/app-user.interface';
-import { Subscription } from 'rxjs';
+import { Subscription, timeout } from 'rxjs';
 import { ServiceNames } from '@sports-alliance/sports-lib';
 import { COROS_HISTORY_IMPORT_LIMIT_MONTHS, GARMIN_HISTORY_IMPORT_COOLDOWN_DAYS, GARMIN_HISTORY_IMPORT_LIMIT_YEARS, HISTORY_IMPORT_ACTIVITIES_PER_DAY_LIMIT, HISTORY_IMPORT_DEFAULT_RANGE_YEARS, HISTORY_IMPORT_PROCESSING_CAPACITY_PER_DAY_PER_USER_ESTIMATE } from '@shared/history-import.constants';
 import {
@@ -49,6 +49,7 @@ type HealthAvailabilityState = 'idle' | 'loading' | 'available' | 'unavailable' 
 
 // Keep contention feedback visible and prevent immediate repeats while live metadata catches up.
 const HISTORY_IMPORT_BUSY_RETRY_DELAY_MS = 5_000;
+const SLEEP_SYNC_INITIAL_READ_TIMEOUT_MS = 10_000;
 
 
 @Component({
@@ -116,6 +117,7 @@ export class HistoryImportFormComponent implements OnInit, OnDestroy, OnChanges 
   private changeDetectorRef = inject(ChangeDetectorRef);
   private authService = inject(AppAuthService);
   private sleepService = inject(AppSleepService);
+  private ngZone = inject(NgZone);
   private hapticsService = inject(AppHapticsService);
   private importState = inject(HistoryImportStateService);
   private isDestroyed = false;
@@ -801,8 +803,10 @@ export class HistoryImportFormComponent implements OnInit, OnDestroy, OnChanges 
       return;
     }
 
-    this.sleepSyncStateSubscription = this.sleepService
-      .watchSyncState(this.currentUserID, provider)
+    // The admission timeout must not keep Angular unstable while the server read is pending.
+    this.sleepSyncStateSubscription = this.ngZone.runOutsideAngular(() => this.sleepService
+      .watchSyncState(this.currentUserID, provider, { waitForServer: true })
+      .pipe(timeout({ first: SLEEP_SYNC_INITIAL_READ_TIMEOUT_MS }))
       .subscribe({
         next: (state) => {
           if (this.isDestroyed || this.sleepSyncStateKey !== key) return;
@@ -812,14 +816,14 @@ export class HistoryImportFormComponent implements OnInit, OnDestroy, OnChanges 
           this.scheduleCooldownRefresh();
           this.changeDetectorRef.markForCheck();
         },
-        error: (error) => {
+        error: (error) => this.ngZone.run(() => {
           if (this.isDestroyed || this.sleepSyncStateKey !== key) return;
           this.logger.error(error);
           this.sleepSyncStatus.set('error');
           this.updateHistoryBackfillPresentation();
           this.changeDetectorRef.markForCheck();
-        },
-      });
+        }),
+      }));
   }
 
   public retrySleepSyncState(): void {
