@@ -9,6 +9,13 @@ Garmin, Wahoo and Suunto; COROS remains disabled in the shared capability regist
 Pro, explicit plan/workout consent and per-request authority remain required. Future deployments or enablement changes
 still require separate approval; this documentation update changes no secret binding or runtime switch.
 
+The prepared account-deletion owner `cleanupUserAccountsV2` reuses the existing
+COROS, Garmin, Suunto and Wahoo OAuth client pairs, matching the transitional Gen 1
+`cleanupUserAccounts` binding. No new credential is registered or provisioned. Its
+explicit runtime identity is `quantified-self-io@appspot.gserviceaccount.com`; verify
+that identity's existing Secret Manager and exact bucket access before an approved
+rollout. See [the staged cutover](delete-user-data-migration.md).
+
 ## Managed inventory
 
 | Area | Secret Manager names |

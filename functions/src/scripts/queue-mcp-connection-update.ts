@@ -12,10 +12,14 @@ import {
 import { createLocalEmailTemplateRenderer } from '../email/template-renderer';
 import { ACTIVE_SUBSCRIPTION_STATUSES } from '../admin/shared/subscription.constants';
 import { getExpireAtTimestamp, TTL_CONFIG } from '../shared/ttl-config';
+import {
+    getUserDeletionGuardStateInTransaction,
+    isUserDeletionTombstoneActive,
+    USER_DELETION_TOMBSTONES_COLLECTION,
+} from '../shared/user-deletion-guard';
 
 const CAMPAIGN_ID = 'mcp_connection_update_2026_08';
 const MAIL_COLLECTION = 'mail';
-const USER_DELETION_TOMBSTONES_COLLECTION = 'userDeletionTombstones';
 const PRODUCTION_PROJECT_ID = 'quantified-self-io';
 const TEMPLATE_ROOT = path.resolve(__dirname, '../../templates');
 const MAX_AUTH_LOOKUP_BATCH_SIZE = 100;
@@ -166,21 +170,6 @@ function firstNameFromDisplayName(displayName: string | undefined): string {
     return firstName.slice(0, 80);
 }
 
-function getTimestampMillis(value: unknown): number | null {
-    if (value && typeof value === 'object' && typeof (value as { toMillis?: unknown }).toMillis === 'function') {
-        return (value as { toMillis: () => number }).toMillis();
-    }
-    return null;
-}
-
-function hasActiveDeletionMarker(snapshot: admin.firestore.DocumentSnapshot, nowMs: number): boolean {
-    if (!snapshot.exists) {
-        return false;
-    }
-    const expiresAtMs = getTimestampMillis(snapshot.data()?.expireAt);
-    return expiresAtMs === null || expiresAtMs > nowMs;
-}
-
 function splitIntoBatches<T>(values: readonly T[], batchSize: number): T[][] {
     const batches: T[][] = [];
     for (let start = 0; start < values.length; start += batchSize) {
@@ -220,7 +209,10 @@ async function loadUserStateByUid(
             const deletionSnapshot = snapshots[index * 2 + 1];
             states.set(uid, {
                 userExists: userSnapshot?.exists === true,
-                deletionMarked: deletionSnapshot ? hasActiveDeletionMarker(deletionSnapshot, nowMs) : false,
+                deletionMarked: isUserDeletionTombstoneActive(
+                    deletionSnapshot?.exists ? deletionSnapshot.data() : null,
+                    nowMs,
+                ),
             });
         });
     }
@@ -337,9 +329,13 @@ function campaignMailDocumentId(uid: string): string {
 async function queueRecipient(
     db: admin.firestore.Firestore,
     recipient: CampaignRecipient,
-): Promise<'queued' | 'already-queued'> {
+): Promise<'queued' | 'already-queued' | 'skipped-deleted-user'> {
     const mailRef = db.collection(MAIL_COLLECTION).doc(campaignMailDocumentId(recipient.uid));
     return db.runTransaction(async transaction => {
+        // Selection precedes the paced queue loop. Fence this write against a
+        // deletion that started while the recipient was waiting for its turn.
+        const deletionGuard = await getUserDeletionGuardStateInTransaction(db, transaction, recipient.uid);
+        if (deletionGuard.shouldSkip) return 'skipped-deleted-user';
         const existing = await transaction.get(mailRef);
         if (existing.exists) {
             return 'already-queued';
@@ -386,18 +382,21 @@ export async function queueMcpConnectionUpdate(options: QueueOptions): Promise<v
 
     let queued = 0;
     let alreadyQueued = 0;
+    let skippedDeletedUsers = 0;
     for (const [index, recipient] of resolution.recipients.entries()) {
         const result = await queueRecipient(db, recipient);
         if (result === 'queued') {
             queued++;
-        } else {
+        } else if (result === 'already-queued') {
             alreadyQueued++;
+        } else {
+            skippedDeletedUsers++;
         }
         if (index < resolution.recipients.length - 1) {
             await waitForQueueInterval(options.intervalMs);
         }
     }
-    console.log(JSON.stringify({ campaignId: CAMPAIGN_ID, queued, alreadyQueued }));
+    console.log(JSON.stringify({ campaignId: CAMPAIGN_ID, queued, alreadyQueued, skippedDeletedUsers }));
 }
 
 if (require.main === module) {

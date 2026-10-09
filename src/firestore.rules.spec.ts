@@ -33,6 +33,111 @@ describe('Firestore Security Rules', () => {
         await testEnv.clearFirestore();
     });
 
+    describe('Account deletion fences for existing client sessions', () => {
+        const uid = 'deleting-owner';
+        const accountPath = `users/${uid}`;
+        const checkoutPath = `customers/${uid}/checkout_sessions/session`;
+        const fixtures = {
+            [accountPath]: { displayName: 'Owner' },
+            [`${accountPath}/config/settings`]: { theme: 'dark' },
+            [`${accountPath}/legal/agreements`]: { acceptedMarketingPolicy: true },
+            [`${accountPath}/events/event`]: { name: 'Run', privacy: 'private' },
+            [`${accountPath}/routes/route`]: { name: 'Route' },
+            [`${accountPath}/activities/activity`]: { eventID: 'event', name: 'Activity' },
+            [checkoutPath]: { price: 'price_123' },
+        };
+        const mutations = [
+            { name: 'profile creation', path: accountPath, operation: 'create', data: { displayName: 'Late profile' } },
+            { name: 'profile update', path: accountPath, operation: 'update', data: { displayName: 'Late profile' } },
+            { name: 'settings creation', path: `${accountPath}/config/settings`, operation: 'create', data: { theme: 'light' } },
+            { name: 'settings update', path: `${accountPath}/config/settings`, operation: 'update', data: { theme: 'light' } },
+            { name: 'settings deletion', path: `${accountPath}/config/settings`, operation: 'delete' },
+            { name: 'legal creation', path: `${accountPath}/legal/agreements`, operation: 'create', data: { acceptedMarketingPolicy: false } },
+            { name: 'legal update', path: `${accountPath}/legal/agreements`, operation: 'update', data: { acceptedMarketingPolicy: false } },
+            { name: 'event update', path: `${accountPath}/events/event`, operation: 'update', data: { name: 'Late event' } },
+            { name: 'event deletion', path: `${accountPath}/events/event`, operation: 'delete' },
+            { name: 'route update', path: `${accountPath}/routes/route`, operation: 'update', data: { name: 'Late route' } },
+            { name: 'route deletion', path: `${accountPath}/routes/route`, operation: 'delete' },
+            { name: 'activity update', path: `${accountPath}/activities/activity`, operation: 'update', data: { name: 'Late activity' } },
+            { name: 'checkout creation', path: checkoutPath, operation: 'create', data: { price: 'price_456' } },
+            { name: 'checkout update', path: checkoutPath, operation: 'update', data: { price: 'price_456' } },
+            { name: 'checkout deletion', path: checkoutPath, operation: 'delete' },
+        ] as const;
+
+        beforeEach(async () => {
+            await testEnv.withSecurityRulesDisabled(async context => {
+                const batch = context.firestore().batch();
+                for (const [path, data] of Object.entries(fixtures)) batch.set(context.firestore().doc(path), data);
+                await batch.commit();
+            });
+        });
+
+        it.each(mutations)('blocks $name after the pending fence even for an existing session', async mutation => {
+            // The session predates deletion: signing out another tab cannot revoke this client.
+            const owner = testEnv.authenticatedContext(uid).firestore();
+            await assertSucceeds(owner.doc(accountPath).get());
+            await testEnv.withSecurityRulesDisabled(async context => {
+                const db = context.firestore();
+                if (mutation.operation === 'create') await db.doc(mutation.path).delete();
+                await db.doc(`userDeletionTombstones/${uid}`).set({ cleanupStatus: 'pending' });
+            });
+            const ref = owner.doc(mutation.path);
+            if (mutation.operation === 'delete') await assertFails(ref.delete());
+            else if (mutation.operation === 'create') await assertFails(ref.set(mutation.data));
+            else await assertFails(ref.update(mutation.data));
+        });
+
+        it.each([
+            { name: 'retained completion', marker: { cleanupStatus: 'complete', expireAt: new Date('2100-01-01') } },
+            { name: 'malformed expiration', marker: { cleanupStatus: 'pending', expireAt: 'expired' } },
+        ])('keeps $name fenced after the roots disappear', async ({ marker }) => {
+            const owner = testEnv.authenticatedContext(uid).firestore();
+            await testEnv.withSecurityRulesDisabled(async context => {
+                const db = context.firestore();
+                await db.doc(accountPath).delete();
+                await db.doc(`${accountPath}/config/settings`).delete();
+                await db.doc(checkoutPath).delete();
+                await db.doc(`userDeletionTombstones/${uid}`).set(marker);
+            });
+            await assertFails(owner.doc(accountPath).set({ displayName: 'Resurrected' }));
+            await assertFails(owner.doc(`${accountPath}/config/settings`).set({ theme: 'light' }));
+            await assertFails(owner.doc(checkoutPath).set({ price: 'price_456' }));
+        });
+
+        it('preserves ordinary owner reads and backend writes while pending', async () => {
+            await testEnv.withSecurityRulesDisabled(async context => {
+                const db = context.firestore();
+                await db.doc(`userDeletionTombstones/${uid}`).set({ cleanupStatus: 'pending' });
+                await db.doc(accountPath).update({ displayName: 'Backend update' });
+                await db.doc(`${accountPath}/config/settings`).set({ theme: 'backend' });
+                await db.doc(checkoutPath).update({ status: 'closed' });
+            });
+            const owner = testEnv.authenticatedContext(uid).firestore();
+            expect((await assertSucceeds(owner.doc(accountPath).get())).data()?.displayName).toBe('Backend update');
+            expect((await assertSucceeds(owner.doc(`${accountPath}/config/settings`).get())).data()?.theme).toBe('backend');
+            await assertSucceeds(owner.doc(`${accountPath}/events/event`).get());
+            await assertSucceeds(owner.doc(checkoutPath).get());
+            await assertFails(owner.doc(`userDeletionTombstones/${uid}`).get());
+            await assertFails(owner.doc(`userDeletionTombstones/${uid}`).delete());
+        });
+
+        it.each(['absent', 'expired'])('permits normal account creation with an $0 deletion marker', async markerState => {
+            const newUid = 'new-owner';
+            if (markerState === 'expired') {
+                await testEnv.withSecurityRulesDisabled(async context => {
+                    await context.firestore().doc(`userDeletionTombstones/${newUid}`)
+                        .set({ cleanupStatus: 'complete', expireAt: new Date(0) });
+                });
+            }
+            const owner = testEnv.authenticatedContext(newUid).firestore();
+            await assertSucceeds(owner.doc(`users/${newUid}`).set({ displayName: 'New owner', creationDate: new Date() }));
+            await assertSucceeds(owner.doc(`users/${newUid}/config/settings`).set({ theme: 'light' }));
+            await assertSucceeds(owner.doc(`users/${newUid}/legal/agreements`).set({ acceptedMarketingPolicy: false }));
+            await assertSucceeds(owner.doc(`customers/${newUid}/checkout_sessions/new`).set({ price: 'price_123' }));
+            await assertFails(owner.doc(`users/${uid}`).update({ displayName: 'Wrong owner' }));
+        });
+    });
+
     describe('Private workout reflection leaves', () => {
         const path = 'users/owner/events/e/workoutReflections/recording';
         const value = { schemaVersion: 1, revision: 1, deleted: false,

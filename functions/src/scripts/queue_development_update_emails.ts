@@ -4,11 +4,7 @@ import * as path from 'path';
 import pLimit from 'p-limit';
 import { getExpireAtTimestamp, TTL_CONFIG } from '../shared/ttl-config';
 import { USAGE_LIMITS } from '../../../shared/limits';
-
-// Initialize Firebase Admin
-if (admin.apps.length === 0) {
-    admin.initializeApp();
-}
+import { getUserDeletionGuardStateInTransaction } from '../shared/user-deletion-guard';
 
 const CSV_FILE_PATH = path.join(__dirname, '../../users_export.csv');
 const MAIL_COLLECTION = 'mail'; // As per extensions/firestore-send-email.env
@@ -120,11 +116,20 @@ async function wasAlreadyQueued(
     return snapshot.exists;
 }
 
-async function queueSingleEmail(
+export async function queueSingleEmail(
     db: admin.firestore.Firestore,
     user: CsvUser,
     runId: string
-): Promise<'queued' | 'already-queued'> {
+): Promise<'queued' | 'already-queued' | 'skipped-deleted-user'> {
+    // This CSV contains app users. Resolve ownership at send time, and never
+    // requeue mail for an exported account that has since been deleted.
+    let uid: string;
+    try {
+        uid = (await admin.auth().getUserByEmail(user.email)).uid;
+    } catch (error) {
+        if ((error as { code?: string })?.code === 'auth/user-not-found') return 'skipped-deleted-user';
+        throw error;
+    }
     const trackingDocId = getTrackingDocId(user.email);
     const trackingRef = db.collection(TRACKING_COLLECTION).doc(trackingDocId);
     const mailRef = db.collection(MAIL_COLLECTION).doc();
@@ -134,9 +139,12 @@ async function queueSingleEmail(
         if (existingTracking.exists) {
             return 'already-queued' as const;
         }
+        const guard = await getUserDeletionGuardStateInTransaction(db, transaction, uid);
+        if (guard.shouldSkip) return 'skipped-deleted-user' as const;
 
         transaction.set(mailRef, {
             to: user.email,
+            uid,
             template: {
                 name: TEMPLATE_NAME,
                 data: {
@@ -150,13 +158,17 @@ async function queueSingleEmail(
         });
 
         transaction.set(trackingRef, {
+            // This separate receipt also holds recipient data and must be
+            // discoverable by account cleanup after the mail itself expires.
+            uid,
             email: user.email,
             firstName: user.firstName,
             lastName: user.lastName,
             template: TEMPLATE_NAME,
             runId,
             queuedAt: admin.firestore.FieldValue.serverTimestamp(),
-            mailDocumentId: mailRef.id
+            mailDocumentId: mailRef.id,
+            expireAt: getExpireAtTimestamp(TTL_CONFIG.MAIL_IN_DAYS),
         });
 
         return 'queued' as const;
@@ -167,6 +179,7 @@ async function queueSingleEmail(
 
 async function queueEmails() {
     const options = parseOptions(process.argv.slice(2));
+    if (admin.apps.length === 0) admin.initializeApp();
 
     console.log(`Reading CSV from ${CSV_FILE_PATH}...`);
     console.log(
@@ -223,6 +236,7 @@ async function queueEmails() {
 
     let queuedNow = 0;
     let skippedBecauseRace = 0;
+    let skippedDeletedUsers = 0;
     let failed = 0;
 
     const tasks = selectedUsers.map((user) => limit(async () => {
@@ -237,8 +251,10 @@ async function queueEmails() {
             const status = await queueSingleEmail(db, user, options.runId);
             if (status === 'queued') {
                 queuedNow++;
-            } else {
+            } else if (status === 'already-queued') {
                 skippedBecauseRace++;
+            } else {
+                skippedDeletedUsers++;
             }
         } catch (error) {
             failed++;
@@ -257,6 +273,7 @@ async function queueEmails() {
     console.log(`- dryRun: ${options.dryRun}`);
     console.log(`- queuedNow: ${options.dryRun ? 0 : queuedNow}`);
     console.log(`- skippedBecauseAlreadyQueuedInTransaction: ${options.dryRun ? 0 : skippedBecauseRace}`);
+    console.log(`- skippedDeletedUsers: ${options.dryRun ? 0 : skippedDeletedUsers}`);
     console.log(`- failed: ${options.dryRun ? 0 : failed}`);
     console.log(`- nextSuggestedStartAt: ${nextSuggestedStartAt}`);
 
@@ -265,4 +282,9 @@ async function queueEmails() {
     }
 }
 
-queueEmails().catch(console.error);
+if (require.main === module) {
+    queueEmails().catch(error => {
+        console.error(error);
+        process.exitCode = 1;
+    });
+}

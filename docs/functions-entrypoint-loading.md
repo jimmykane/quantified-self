@@ -637,6 +637,29 @@ cloud configuration apply is part of this loading change. The existing #830 depl
 [Sleep sync operations](sleep-sync-operations.md#cost-verification-and-activation) includes all three handlers and
 still requires separate explicit approval.
 
+## Gen 2 account cleanup (2026-10-09)
+
+`cleanupUserAccountsV2` loads directly from `users/cleanup`, exposes one Firebase
+handler and preserves its Auth deletion trigger and all runtime options during
+both isolated loading and complete discovery. Discovery now exposes 169 endpoints
+and the loader has 83 isolated targets. The Gen 1 `cleanupUserAccounts` fallback
+remains during the [staged cutover](delete-user-data-migration.md).
+
+The owner needs MCP OAuth erasure and marketing recipient cleanup. Its import
+check allows only `mcp/oauth.service`, `admin/marketing/cleanup` and
+`admin/marketing/core` within those areas; it still rejects MCP server registration,
+admin handlers, Genkit, BigQuery and the full entrypoint. No unrelated endpoint is
+exposed by the loader.
+
+A Node 22.23.3 cold-import smoke ran once for each of the 84 scenarios (complete
+entrypoint plus all isolated targets). The new cleanup target imported in 1.52 s,
+with 134.1 MiB RSS, 38.6 MiB used heap and 1,473 loaded modules. Complete discovery
+used 230.2 MiB RSS and 128.0 MiB heap. These local smoke measurements were collected
+while emulator tests were running; they are not a performance comparison,
+production memory guarantee or billing estimate. The configured limit is now
+1 GiB to provide additional cleanup headroom; production cutover must verify
+memory/errors as well as event delivery.
+
 ## Adding another optimized target
 
 1. For each new deployed Function, add the full export and a direct owner-module loader in

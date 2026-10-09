@@ -73,6 +73,17 @@ describe('queue cleanup tombstones', () => {
         }), { merge: true });
     });
 
+    it('stages a tombstone in the caller transaction without an independent write', async () => {
+        const transaction = { set: vi.fn() };
+        await expect(markQueueItemDeletedForUserCleanup('sleepSyncQueue', 'item-1',
+            QUEUE_CLEANUP_TOMBSTONE_REASONS.AccountDeletionCleanup,
+            transaction as unknown as FirebaseFirestore.Transaction)).resolves.toBe(true);
+        expect(transaction.set).toHaveBeenCalledWith(expect.anything(), expect.objectContaining({
+            originalCollection: 'sleepSyncQueue', queueItemId: 'item-1',
+        }), { merge: true });
+        expect(mockSet).not.toHaveBeenCalled();
+    });
+
     it('matches tombstones only when the stored collection matches', async () => {
         mockGet.mockResolvedValueOnce({
             exists: true,

@@ -5,6 +5,16 @@ service cloud.firestore {
       return request.auth != null && request.auth.token.admin == true;
     }
 
+    // Existing client sessions can outlive the deletion request. Fence every
+    // owner write until the server's retained deletion marker expires.
+    function mayWriteAccount(userID) {
+      let tombstonePath = /databases/$(database)/documents/userDeletionTombstones/$(userID);
+      return request.auth != null && request.auth.uid == userID
+        && (!exists(tombstonePath)
+          || (get(tombstonePath).data.get('expireAt', null) is timestamp
+            && get(tombstonePath).data.expireAt <= request.time));
+    }
+
     // Make sure the uid of the requesting user matches name of the user
     // document. The wildcard expression {userId} makes the userId variable
     // available in rules.
@@ -22,20 +32,17 @@ service cloud.firestore {
 
       function mayCreateEventTagCatalogEntry() {
         let userPath = /databases/$(database)/documents/users/$(userID);
-        let tombstonePath = /databases/$(database)/documents/userDeletionTombstones/$(userID);
         return exists(userPath)
-          && (!exists(tombstonePath)
-            || (get(tombstonePath).data.get('expireAt', null) is timestamp
-              && get(tombstonePath).data.expireAt <= request.time));
+          && mayWriteAccount(userID);
       }
 
       allow read: if isOwner();
-      allow create: if isOwner()
+      allow create: if mayWriteAccount(userID)
         && (
           !('creationDate' in request.resource.data)
           || request.resource.data.creationDate is timestamp
         );
-      allow update: if isOwner()
+      allow update: if mayWriteAccount(userID)
         && !request.resource.data.diff(resource.data).affectedKeys().hasAny([
           'creationDate'
         ]);
@@ -62,9 +69,9 @@ service cloud.firestore {
            (request.resource.data.get('acceptedTos', true) == true);
         }
 
-        allow create: if request.auth.uid == userID && isValidLegalAgreement();
+        allow create: if mayWriteAccount(userID) && isValidLegalAgreement();
         
-        allow update: if request.auth.uid == userID 
+        allow update: if mayWriteAccount(userID)
           && request.resource.data.diff(resource.data).affectedKeys().hasOnly([
              'acceptedPrivacyPolicy', 
              'acceptedDataPolicy', 
@@ -88,11 +95,11 @@ service cloud.firestore {
       // are validated and queue a targeted refresh through an App-Check callable.
       match /config/settings {
          allow read: if request.auth.uid == userID;
-         allow create: if request.auth.uid == userID
+         allow create: if mayWriteAccount(userID)
            && !request.resource.data.keys().hasAny(['trainingSettings']);
-         allow update: if request.auth.uid == userID
+         allow update: if mayWriteAccount(userID)
            && !request.resource.data.diff(resource.data).affectedKeys().hasAny(['trainingSettings']);
-         allow delete: if request.auth.uid == userID
+         allow delete: if mayWriteAccount(userID)
            && !resource.data.keys().hasAny(['trainingSettings']);
       }
 
@@ -214,10 +221,10 @@ service cloud.firestore {
           allow get: if isOwner() || isPublicEvent();
           allow list: if isOwner();
           allow create: if false;
-          allow update: if request.auth.uid == userID
+          allow update: if mayWriteAccount(userID)
             && !request.resource.data.diff(resource.data).affectedKeys().hasAny(serverOwnedEventFields())
             && hasValidUpdatedEventTags();
-          allow delete: if request.auth.uid == userID;
+          allow delete: if mayWriteAccount(userID);
 
 
             // Private reflection leaves never inherit the public parent event read.
@@ -306,10 +313,10 @@ service cloud.firestore {
 
           allow read: if request.auth.uid == userID;
           allow create: if false;
-          allow update: if request.auth.uid == userID
+          allow update: if mayWriteAccount(userID)
             && !request.resource.data.diff(resource.data).affectedKeys().hasAny(serverOwnedRouteFields())
             && hasValidRouteName();
-          allow delete: if request.auth.uid == userID;
+          allow delete: if mayWriteAccount(userID);
 
           match /metaData/processing {
             allow read: if request.auth.uid == userID;
@@ -339,7 +346,7 @@ service cloud.firestore {
             allow read: if request.auth.uid == userID || parentEventIsPublic(resource.data);
             allow create: if false;
             allow delete: if false;
-            allow update: if request.auth.uid == userID
+            allow update: if mayWriteAccount(userID)
               && !request.resource.data.diff(resource.data).affectedKeys().hasAny(['eventID', 'userID', 'eventStartDate', 'sourceActivityKey'])
               && isOwnEventRef(request.resource.data);
           }
@@ -536,10 +543,11 @@ service cloud.firestore {
       allow read: if request.auth.uid == userID;
       
       match /checkout_sessions/{id} {
-        allow read, delete: if request.auth.uid == userID;
+        allow read: if request.auth.uid == userID;
+        allow delete: if mayWriteAccount(userID);
         // The app buys an existing price. Inline items let callers define their
         // own product role or price, which the extension trusts for entitlements.
-        allow create, update: if request.auth.uid == userID
+        allow create, update: if mayWriteAccount(userID)
           && !request.resource.data.keys().hasAny(['line_items']);
       }
       match /subscriptions/{id} {

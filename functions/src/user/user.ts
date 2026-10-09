@@ -2,6 +2,7 @@ import * as functions from 'firebase-functions/v1';
 import * as logger from 'firebase-functions/logger';
 import * as admin from 'firebase-admin';
 import { FieldValue } from 'firebase-admin/firestore';
+import { USER_DELETION_TOMBSTONES_COLLECTION } from '../shared/user-deletion-guard';
 
 
 import { isCorsAllowed } from '../utils';
@@ -18,8 +19,6 @@ type FirebaseAuthErrorLike = {
     };
 };
 
-const USER_DELETION_TOMBSTONES_COLLECTION = 'userDeletionTombstones';
-const USER_DELETION_TOMBSTONE_RETENTION_IN_DAYS = 7;
 
 const isAuthUserNotFoundError = (error: unknown): boolean => {
     return (error as FirebaseAuthErrorLike)?.errorInfo?.code === 'auth/user-not-found';
@@ -58,7 +57,6 @@ export const deleteSelf = functions
 
         try {
             let userEmail: string | undefined;
-            let deletionMarkerWritten = false;
             try {
                 const userRecord = await admin.auth().getUser(uid);
                 userEmail = userRecord.email ?? undefined;
@@ -67,12 +65,23 @@ export const deleteSelf = functions
             }
 
             try {
-                await deletionMarkerRef.set({
+                const pendingMarker = {
                     createdAt: FieldValue.serverTimestamp(),
                     source: 'deleteSelf',
-                    expireAt: getExpireAtTimestamp(USER_DELETION_TOMBSTONE_RETENTION_IN_DAYS),
-                }, { merge: true });
-                deletionMarkerWritten = true;
+                    cleanupStatus: 'pending',
+                    // Unfinished deletion must never lose its writer fence to TTL.
+                    expireAt: FieldValue.delete(),
+                    completedAt: FieldValue.delete(),
+                };
+                await firestore.runTransaction(async transaction => {
+                    const existing = await transaction.get(deletionMarkerRef);
+                    // Another deletion can complete after the Auth lookup. Always
+                    // preserve its verified receipt atomically: a repeated deleteUser
+                    // may find Auth absent and emit no new event to finish a reset fence.
+                    if (existing.get('cleanupStatus') !== 'complete') {
+                        transaction.set(deletionMarkerRef, pendingMarker, { merge: true });
+                    }
+                });
             } catch (markerError) {
                 logger.error(`Failed to write user deletion marker for ${uid}. Aborting deletion.`, markerError);
                 throw markerError;
@@ -86,13 +95,8 @@ export const deleteSelf = functions
                 if (isAuthUserNotFoundError(deleteError)) {
                     logger.warn(`User ${uid} was already deleted in auth. Treating deletion as successful.`, deleteError);
                 } else {
-                    if (deletionMarkerWritten) {
-                        try {
-                            await deletionMarkerRef.delete();
-                        } catch (markerCleanupError) {
-                            logger.error(`Failed to remove user deletion marker after auth deletion failed for ${uid}.`, markerCleanupError);
-                        }
-                    }
+                    // A failed Auth RPC may have committed before its response was lost.
+                    // Retain the fence; retrying deleteSelf is safe and remains permitted.
                     throw deleteError;
                 }
             }
@@ -101,6 +105,7 @@ export const deleteSelf = functions
                 try {
                     await admin.firestore().collection('mail').doc(`account_deleted_confirmation_${uid}`).set({
                         to: userEmail,
+                        uid,
                         from: TRANSACTIONAL_EMAIL_FROM,
                         replyTo: TRANSACTIONAL_EMAIL_REPLY_TO,
                         template: {

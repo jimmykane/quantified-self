@@ -200,7 +200,7 @@ export { checkSubscriptionNotifications } from './schedule/notifications';
 export { scheduleSportsLibReparseScan } from './schedule/sports-lib-reparse';
 export { scheduleSportsLibRouteReparseScan } from './schedule/sports-lib-route-reparse';
 export { dispatchRouteDeliverySyncQueue } from './route-delivery-sync/dispatcher';
-export { cleanupUserAccounts } from './users/cleanup';
+export { cleanupUserAccounts, cleanupUserAccountsV2 } from './users/cleanup';
 export { deleteSelf } from './user/user';
 export { mcpApi } from './mcp/server';
 export {

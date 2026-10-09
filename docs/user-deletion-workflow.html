@@ -166,12 +166,16 @@
                 subgraph Triggers["⚡ Parallel Cleanup Triggers"]
                 direction TB
 
-                subgraph CustomCleanup["🛠️ cleanupUserAccounts (Functions)"]
+                subgraph CustomCleanup["🛠️ cleanupUserAccountsV2 (Functions)"]
                 Suunto["🔵 Suunto"]
                 Coros["🟢 COROS"]
                 Garmin["🟠 Garmin"]
                 Wahoo["🔴 Wahoo"]
                 Email["📧 Email"]
+                NativeRoots["Native recursiveDelete: users/{uid}, customers/{uid}"]
+                NativeStorage["Exact Storage prefix sweep and verification"]
+                Completion["All mandatory stages verified → completion marker"]
+                NativeRoots --> NativeStorage --> Completion
 
                 Suunto -->|"1. Deauthorize API<br />2. Delete Tokens<br />3. Delete Parent Doc"| Suunto
                 Garmin -->|"1. DELETE API<br />2. Delete Doc"| Garmin
@@ -179,7 +183,7 @@
                 Wahoo -->|"1. DELETE permissions<br />2. Delete Tokens<br />3. Delete Mapping"| Wahoo
                 end
 
-                subgraph ExtensionCleanup["📦 delete-user-data (Extension)"]
+                subgraph ExtensionCleanup["📦 delete-user-data (installed until approved cutover)"]
                 Config["Configuration Rules"]
                 Firestore["🔥 Firestore Recursive Delete"]
                 Storage["📂 Storage Bucket Delete"]
@@ -196,6 +200,8 @@
                 style CustomCleanup fill:#161b22,stroke:#d29922,stroke-width:2px,stroke-dasharray: 5 5
                 style ExtensionCleanup fill:#161b22,stroke:#238636,stroke-width:2px,stroke-dasharray: 5 5
             </div>
+            <p>The prepared Gen 2 owner uses Firebase's official Auth deletion API (currently Preview). The transitional Gen 1 <code>cleanupUserAccounts</code> shares its guarded implementation until separately approved retirement. No deployment or extension migration is performed by this change.</p>
+            <p>Before removing provider identity sources, <code>cleanupUserAccountsV2</code> stores a deletion-surviving checkpoint. Both Firestore roots and the exact Storage prefix are verified before recording completion. Pending deletion markers do not expire; completed markers retain a seven-day TTL. Independent cleanup stages continue after failure before the trigger throws for retry.</p>
             <p><code>deleteSelf</code> deletes the Firebase Auth user only after the deletion tombstone is stored. If
                 that write fails, deletion aborts so guarded background writers cannot race recursive cleanup without a
                 deletion signal.</p>
@@ -203,6 +209,8 @@
 
         <div class="card">
             <h2>🗑️ Data Cleanup Matrix</h2>
+            <p>The installed extension 0.1.30 uses a bare Storage prefix that can match a longer custom UID and interprets replacement tokens inside custom UIDs. Resolve both scope issues before approving overlapping deletion; the native helper uses an exact object and a slash-delimited folder. See the runbook’s pinned source comparison.</p>
+            <p>The native owner below is prepared in source; deployment and extension retirement are separate steps. See the <a href="delete-user-data-migration.md">cutover, completion and recovery runbook</a>.</p>
             <table>
                 <thead>
                     <tr>
@@ -217,70 +225,71 @@
                         <td><strong>User Profile</strong></td>
                         <td><code>users/{uid}</code><br><code>users/{uid}/config/*</code><br><code>users/{uid}/system/*</code>
                         </td>
-                        <td>Extension</td>
+                        <td><code>cleanupUserAccountsV2</code></td>
                         <td>Recursive deletion enabled for the entire user subtree</td>
                     </tr>
                     <tr>
                         <td><strong>Saved Events &amp; Activities</strong></td>
                         <td><code>users/{uid}/events/*</code><br><code>users/{uid}/events/*/metaData/*</code><br><code>users/{uid}/activities/*</code><br>Storage: <code>users/{uid}/events/*</code></td>
-                        <td>Extension + <code>cleanupEventFile</code></td>
-                        <td>The extension removes the user subtree during account deletion; <code>cleanupEventFile</code> covers normal event deletes, linked flat activities, event metadata, and event-scoped original files</td>
+                        <td><code>cleanupUserAccountsV2</code> + <code>cleanupEventFile</code></td>
+                        <td>The native account owner recursively removes the user subtree during account deletion; <code>cleanupEventFile</code> covers normal event deletes, linked flat activities, event metadata, and event-scoped original files</td>
                     </tr>
                     <tr>
                         <td><strong>Saved Routes</strong></td>
                         <td><code>users/{uid}/routes/*</code><br><code>users/{uid}/routes/*/metaData/*</code><br>Storage: <code>users/{uid}/routes/*</code></td>
-                        <td>Extension + <code>cleanupRouteFiles</code></td>
-                        <td>The extension removes saved routes during account deletion; <code>cleanupRouteFiles</code> covers normal route deletes, route metadata, route-scoped original files, and route quota reconciliation while skipping Firestore-owned work when account deletion is already in progress</td>
+                        <td><code>cleanupUserAccountsV2</code> + <code>cleanupRouteFiles</code></td>
+                        <td>The native account owner recursively removes saved routes during account deletion; <code>cleanupRouteFiles</code> covers normal route deletes, route metadata, route-scoped original files, and route quota reconciliation while skipping Firestore-owned work when account deletion is already in progress</td>
                     </tr>
                     <tr>
                         <td><strong>Sleep &amp; Unified Health</strong></td>
                         <td><code>users/{uid}/sleepSessions/*</code><br><code>users/{uid}/sleepSyncState/*</code><br><code>users/{uid}/healthSourceRecords/*</code><br><code>users/{uid}/healthSampleChunks/*</code><br><code>users/{uid}/healthSyncState/*</code></td>
-                        <td>Extension</td>
+                        <td><code>cleanupUserAccountsV2</code></td>
                         <td>All records remain in the recursively deleted user subtree. Provider disconnect retains imported history; account deletion removes it. Deletion-guarded writers cannot recreate records once deletion starts.</td>
                     </tr>
                     <tr>
                         <td><strong>Stripe Data</strong></td>
                         <td><code>customers/{uid}</code><br><code>customers/{uid}/subscriptions/*</code></td>
-                        <td>Extension</td>
-                        <td>Stripe Customer object is <strong>preserved</strong> in Dashboard</td>
+                        <td><code>cleanupUserAccountsV2</code></td>
+                        <td>The Stripe extension remains the remote billing owner; its configured Auto delete policy deletes the customer and cancels subscriptions. Local completion does not certify remote completion.</td>
                     </tr>
                     <tr>
                         <td><strong>Access Tokens</strong></td>
                         <td><code>suuntoAppAccessTokens/{uid}</code><br><code>COROSAPIAccessTokens/{uid}</code><br><code>garminAPITokens/{uid}</code><br><code>wahooAPIAccessTokens/{uid}</code>
                         </td>
-                        <td><code>cleanupUserAccounts</code></td>
-                        <td>Attempts partner deauthorization first; if the provider is unavailable, archives token material for follow-up, then guarantees local token-root cleanup</td>
+                        <td><code>cleanupUserAccountsV2</code></td>
+                        <td>Attempts partner deauthorization first; if the provider is unavailable, archives token material for follow-up, then recursively deletes local token roots; local deletion failures require a retry</td>
                     </tr>
                     <tr>
                         <td><strong>MCP OAuth State</strong></td>
                         <td><code>mcpOAuthAuthorizationRequests/*</code><br><code>mcpOAuthAuthorizationCodes/*</code><br><code>mcpOAuthAccessTokens/*</code><br><code>mcpOAuthRefreshTokens/*</code><br><code>mcpOAuthRateLimits/*</code><br><code>users/{uid}/mcpConnections/*</code></td>
-                        <td><code>cleanupUserAccounts</code></td>
+                        <td><code>cleanupUserAccountsV2</code></td>
                         <td>Recursively deletes bounded pages with limited concurrency. An incomplete or failed pass does not skip mail or queue cleanup; the trigger fails afterward so Firebase retries the idempotent cleanup.</td>
                     </tr>
                     <tr>
                         <td><strong>Operational Queues</strong></td>
                         <td><code>activitySyncQueue/*</code><br><code>routeSyncQueue/*</code><br><code>sleepSyncQueue/*</code><br><code>suuntoAppWorkoutQueue/*</code><br><code>COROSAPIWorkoutQueue/*</code><br><code>garminAPIActivityQueue/*</code><br><code>wahooAPIWorkoutQueue/*</code><br><code>failed_jobs/*</code><br><code>sportsLibReparseJobs/*</code><br><code>sportsLibRouteReparseJobs/*</code></td>
-                        <td><code>cleanupUserAccounts</code></td>
-                        <td>Top-level queue docs are outside the extension paths, so cleanup queries by Firebase UID and known provider ids, writes short-lived cleanup tombstones, then recursively deletes queue roots, including Sleep and Suunto <code>suunto_health_poll</code> work in <code>sleepSyncQueue</code>, route sync, and route reparse jobs</td>
+                        <td><code>cleanupUserAccountsV2</code></td>
+                        <td>Top-level queue docs are outside the extension paths, so cleanup queries by Firebase UID and known provider ids, checks the parent revision and ownership in each recursive delete transaction and commits short-lived cleanup tombstones with root removal, including Sleep and Suunto <code>suunto_health_poll</code> work in <code>sleepSyncQueue</code>, route sync, and route reparse jobs</td>
                     </tr>
                     <tr>
                         <td><strong>Email Logs</strong></td>
                         <td><code>mail/{docId}</code></td>
-                        <td><code>cleanupUserAccounts</code></td>
-                        <td>Queries by UID and Email</td>
+                        <td><code>cleanupUserAccountsV2</code></td>
+                        <td>Queries only by <code>uid</code>, <code>toUids</code> and <code>marketing.uid</code>; preserves conflicting UID owners and confirmation mail. Historical email-only records are outside cleanup, expiring only when they have a valid TTL field. Account mail writers must preserve UID ownership and expiry, including manual scripts for registered recipients.</td>
+                    </tr>
+                    <tr>
+                        <td><strong>Campaign Tracking</strong></td>
+                        <td><code>development_update_email_tracking/{docId}</code></td>
+                        <td><code>cleanupUserAccountsV2</code></td>
+                        <td>Queries explicit <code>uid</code> ownership and recursively deletes with revision checks, retry checkpoints and absence verification. New receipts preserve UID and expiry metadata; mail TTL does not expire this separate collection. Historical UID-less receipts remain outside cleanup; no email matching is used.</td>
                     </tr>
                     <tr>
                         <td><strong>Other Files</strong></td>
                         <td>Storage: <code>users/{uid}/*</code></td>
-                        <td>Extension</td>
-                        <td>Catch-all storage cleanup for any remaining user-uploaded content under the user prefix</td>
+                        <td><code>cleanupUserAccountsV2</code></td>
+                        <td>Paged, generation-pinned cleanup of the exact users/{uid}/ prefix in the configured bucket, followed by absence verification</td>
                     </tr>
-                    <tr>
-                        <td><strong>Permissions</strong></td>
-                        <td><code>userAccountPrivileges/{uid}</code></td>
-                        <td>Extension</td>
-                        <td>System access levels</td>
-                    </tr>
+
                 </tbody>
             </table>
         </div>
