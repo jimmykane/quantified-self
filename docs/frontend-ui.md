@@ -645,6 +645,11 @@ account subscriptions and refreshes even when the supplied identity matches an o
 retained private evidence. Examples use fixed fictional dates and canonical values from the shared example projection.
 Opening sample history preserves the overview's category and returns keyboard focus to its originating action.
 These controls never save settings or measurements. Existing detailed Sleep, HRV, and manual-measurement previews remain.
+`health-example-days.helper.ts` owns the invented month shared by overview cards and detailed public examples.
+Keep observations sparse for weigh-ins and fitness estimates, preserve stage/asleep/in-bed duration totals and morning
+wake times, and use the same nightly HRV values in both renderers. Daily movement and energy totals remain coherent.
+Older baseline variation is deterministic and independent by metric; never repeat one waveform across metrics or
+commit account records, identities, or exports as sample fixtures.
 
 The loading bar sits at the date toolbar's lower edge without reserving an extra flex row. The latest-value/source row follows its content height, retaining Material button touch targets when a selector is present. Embedded Sleep (`hideTitle`) removes its own top padding because the dashboard wrapper already supplies that spacing; standalone Sleep keeps its existing layout.
 
