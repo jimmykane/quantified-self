@@ -408,7 +408,7 @@ describe('cleanupUserAccountsV2', () => {
     it('registers the default-project Gen 2 trigger with retries and the previous runtime identity', () => {
         expect(ACCOUNT_DELETION_CLEANUP_V2_RUNTIME_OPTIONS.tenantId).toBe(IS_NOT_TENANT);
         expect(cleanupUserAccountsV2.__endpoint).toMatchObject({
-            platform: 'gcfv2', region: ['europe-west2'], availableMemoryMb: 512,
+            platform: 'gcfv2', region: ['europe-west2'], availableMemoryMb: 1024,
             timeoutSeconds: 540, concurrency: 1, cpu: 1,
             serviceAccountEmail: 'quantified-self-io@appspot.gserviceaccount.com',
             eventTrigger: { eventType: 'google.firebase.auth.user.v2.deleted', retry: true, region: 'global', eventFilters: {} },

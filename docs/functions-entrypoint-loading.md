@@ -656,8 +656,9 @@ entrypoint plus all isolated targets). The new cleanup target imported in 1.52 s
 with 134.1 MiB RSS, 38.6 MiB used heap and 1,473 loaded modules. Complete discovery
 used 230.2 MiB RSS and 128.0 MiB heap. These local smoke measurements were collected
 while emulator tests were running; they are not a performance comparison,
-production memory guarantee or billing estimate. The configured limit remains
-512 MiB and production cutover must verify memory/errors as well as event delivery.
+production memory guarantee or billing estimate. The configured limit is now
+1 GiB to provide additional cleanup headroom; production cutover must verify
+memory/errors as well as event delivery.
 
 ## Adding another optimized target
 

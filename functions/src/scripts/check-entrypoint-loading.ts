@@ -550,7 +550,7 @@ async function check(): Promise<void> {
       .map(secret => secret.key || '')
       .sort();
     if (target === 'cleanupUserAccountsV2') {
-      assert(endpoint.availableMemoryMb === 512 && endpoint.timeoutSeconds === 540,
+      assert(endpoint.availableMemoryMb === 1024 && endpoint.timeoutSeconds === 540,
         `${target} memory or timeout changed.`);
       assert(endpoint.cpu === 1 && endpoint.concurrency === 1,
         `${target} CPU or per-instance cleanup concurrency changed.`);

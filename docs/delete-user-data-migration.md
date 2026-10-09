@@ -22,7 +22,7 @@ user tree after other account-cleanup stages had returned successfully.
 This document contains no incident account identifiers or exports.
 
 The new owner is a Gen 2 Auth deletion trigger in `europe-west2`, with a global
-Auth Eventarc source, 512 MiB, 540 seconds, retry enabled, one CPU and concurrency
+Auth Eventarc source, 1 GiB, 540 seconds, retry enabled, one CPU and concurrency
 one per instance. It retains the eight provider secrets and explicitly runs as
 `quantified-self-io@appspot.gserviceaccount.com`, the inspected Gen 1 identity,
 rather than switching to the Compute default account. `IS_NOT_TENANT` makes the

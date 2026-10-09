@@ -1201,7 +1201,7 @@ export const cleanupUserAccounts = functions
 
 export const ACCOUNT_DELETION_CLEANUP_V2_RUNTIME_OPTIONS = {
     region: 'europe-west2',
-    memory: '512MiB',
+    memory: '1GiB',
     timeoutSeconds: 540,
     retry: true,
     cpu: 1,
