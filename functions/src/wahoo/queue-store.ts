@@ -1,5 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import { replacesSupersededHistoryWork } from '../connection-history/queue-replacement';
+import { assertHistoryWrite, currentHistoryExecution } from '../connection-history/context';
+import { HistoryLifecycleChangedError } from '../connection-history/execution';
 import * as admin from 'firebase-admin';
 import { recordImportCommit, recordImportCompletion } from '../queue/import-monitoring';
 import * as logger from 'firebase-functions/logger';
@@ -336,9 +338,11 @@ export async function failWahooWorkoutQueueRevision(
   processingOwner: string,
   error: Error,
 ): Promise<QueueResult.Processed | QueueResult.RetryIncremented | QueueResult.MovedToDLQ | QueueResult.Failed> {
+  await currentHistoryExecution()?.beforeRequest();
   if (!queueItem.ref) throw new Error(`No document reference supplied for Wahoo queue item ${queueItem.id}`);
   try {
     const result = await admin.firestore().runTransaction(async (transaction) => {
+      await assertHistoryWrite(transaction);
       const deletionGuard = await getUserDeletionGuardStateInTransaction(
         admin.firestore(),
         transaction,
@@ -396,6 +400,7 @@ export async function failWahooWorkoutQueueRevision(
     if (result === QueueResult.MovedToDLQ) recordImportCommit(queueItem.ref.parent?.id, 'dead_lettered');
     return result;
   } catch (transactionError) {
+    if (transactionError instanceof HistoryLifecycleChangedError) throw transactionError;
     logger.error(`Could not update Wahoo retry state for ${queueItem.id}`, transactionError);
     return QueueResult.Failed;
   }

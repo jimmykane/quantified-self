@@ -4,6 +4,9 @@ import { getUserDeletionGuardStateInTransaction } from '../shared/user-deletion-
 import { ACTIVE_OAUTH_CREDENTIAL_GENERATION_FIELD } from '../token-refresh-coordinator';
 import { CONNECTION_HISTORY_COLLECTION, isConnectionHistoryRunId, type ConnectionHistoryRun } from './model';
 import { withHistoryExecution } from './context';
+import type { QueueItemInterface } from '../queue/queue-item.interface';
+import type { QueueResult } from '../queue-utils';
+import { SLEEP_SYNC_QUEUE_COLLECTION_NAME } from '../sleep/constants';
 
 /** Optional server-only execution context; never accepted from callable input. */
 export interface HistoryExecution {
@@ -57,7 +60,7 @@ export function historyExecution(run: ConnectionHistoryRun, paths: string[], lea
   };
 }
 export class HistoryUnavailableError extends Error {
-  constructor(message: string) { super(message); this.name = 'HistoryUnavailableError'; }
+  constructor(message: string, public readonly earliestStartMs?: number) { super(message); this.name = 'HistoryUnavailableError'; }
 }
 export class HistoryWindowTooLargeError extends Error {
   constructor() { super('History window must be subdivided.'); this.name = 'HistoryWindowTooLargeError'; }
@@ -70,13 +73,31 @@ export function assertHistoryReservation(meta: Record<string, unknown> | undefin
   }
 }
 
-export async function withHistoryQueueExecution<T>(item: { connectionHistoryRunId?: string; userID?: string; firebaseUserID?: string }, operation: () => Promise<T>): Promise<T> {
+export async function withHistoryQueueExecution(item: QueueItemInterface & { userID?: string }, operation: () => Promise<QueueResult>): Promise<QueueResult> {
   if (!item.connectionHistoryRunId) return operation();
-  if (!isConnectionHistoryRunId(item.connectionHistoryRunId)) throw new HistoryLifecycleChangedError();
-  const snapshot = await admin.firestore().collection(CONNECTION_HISTORY_COLLECTION).doc(item.connectionHistoryRunId).get();
-  const run = snapshot.data() as ConnectionHistoryRun | undefined;
-  if (!run || (item.firebaseUserID || item.userID) !== run.userID) throw new HistoryLifecycleChangedError();
-  const execution = historyExecution(run, []);
-  await execution.beforeRequest();
-  return withHistoryExecution(execution, operation);
+  let started = false;
+  try {
+    if (!isConnectionHistoryRunId(item.connectionHistoryRunId)) throw new HistoryLifecycleChangedError();
+    const snapshot = await admin.firestore().collection(CONNECTION_HISTORY_COLLECTION).doc(item.connectionHistoryRunId).get();
+    const run = snapshot.data() as ConnectionHistoryRun | undefined;
+    if (!run || (item.firebaseUserID || item.userID) !== run.userID) throw new HistoryLifecycleChangedError();
+    const execution = historyExecution(run, []);
+    await execution.beforeRequest();
+    started = true;
+    return await withHistoryExecution(execution, operation);
+  } catch (error) {
+    if (!(error instanceof HistoryLifecycleChangedError)) throw error;
+    const transitionItem = { ...item };
+    if (!started && item.ref?.parent.id === SLEEP_SYNC_QUEUE_COLLECTION_NAME) {
+      // A fetched Sleep snapshot can carry another worker's lease. It is not
+      // proof that this invocation may complete that leased revision.
+      delete transitionItem.processingOwner;
+      delete transitionItem.processingRevision;
+      delete transitionItem.processingLeaseExpiresAt;
+    }
+    const { markQueueItemSkipped } = await import('../queue-utils');
+    return markQueueItemSkipped(transitionItem, undefined, 'connection_history_superseded', {
+      skippedContext: 'CONNECTION_HISTORY_LIFECYCLE_GUARD',
+    });
+  }
 }

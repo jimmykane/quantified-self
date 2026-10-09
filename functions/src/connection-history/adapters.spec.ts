@@ -3,13 +3,13 @@ vi.unmock('@sports-alliance/sports-lib');
 const mocks = vi.hoisted(() => ({ activity: vi.fn(), garminActivity: vi.fn(), wahoo: vi.fn(), suunto: vi.fn(), coros: vi.fn(), garmin: vi.fn(),
   healthEnabled: vi.fn(), sleepEnabled: vi.fn(), before: vi.fn(), meta: {} as Record<string, unknown> }));
 vi.mock('../history', () => ({ addHistoryToQueue: mocks.activity }));
-vi.mock('../garmin/backfill', () => ({ processGarminBackfill: mocks.garminActivity, GarminHistoryRangeUnavailableError: class GarminHistoryRangeUnavailableError extends Error {} }));
+vi.mock('../garmin/backfill', () => ({ processGarminBackfill: mocks.garminActivity, GarminHistoryRangeUnavailableError: class GarminHistoryRangeUnavailableError extends Error { constructor(public readonly minimumDate?: Date) { super('Unavailable range'); } } }));
 vi.mock('../wahoo/history-to-queue', () => ({ importWahooHistory: mocks.wahoo }));
 vi.mock('../sleep/backfill', () => ({ queueSuuntoSleepHealthHistory: mocks.suunto, queueCorosSleepHealthHistory: mocks.coros, queueGarminSleepHealthHistory: mocks.garmin }));
 vi.mock('../garmin/health-flags', () => ({ isGarminHealthSyncEnabled: mocks.healthEnabled }));
 vi.mock('../suunto/health-flags', () => ({ isSuuntoHealthSyncEnabled: mocks.healthEnabled }));
 vi.mock('../sleep/provider-flags', () => ({ isSleepProviderEnabled: mocks.sleepEnabled, isSleepSyncUserAllowed: () => true }));
-vi.mock('./execution', () => ({ assertHistoryConnectionCurrent: vi.fn(), HistoryWindowTooLargeError: class HistoryWindowTooLargeError extends Error {} }));
+vi.mock('./execution', () => ({ assertHistoryConnectionCurrent: vi.fn(), HistoryWindowTooLargeError: class HistoryWindowTooLargeError extends Error {}, HistoryUnavailableError: class HistoryUnavailableError extends Error { constructor(message: string, public readonly earliestStartMs?: number) { super(message); } } }));
 vi.mock('firebase-admin', () => ({ firestore: () => ({ doc: () => ({ get: async () => ({ data: () => mocks.meta }) }),
   runTransaction: async (work: any) => work({ get: async () => ({ data: () => mocks.meta }), set: vi.fn() }) }) }));
 import { GarminHistoryRangeUnavailableError } from '../garmin/backfill';
@@ -17,7 +17,7 @@ import { ServiceNames } from '@sports-alliance/sports-lib';
 import { CONNECTION_HISTORY_CAPABILITIES, historyCapabilities, type HistoryCapability } from '../../../shared/connection-history';
 import { createHistoryRun } from './model';
 import { executeHistoryOperation, HISTORY_ADAPTERS, historyAdmissionQueue } from './adapters';
-import type { HistoryExecution } from './execution';
+import { HistoryUnavailableError, type HistoryExecution } from './execution';
 const now = Date.parse('2026-03-01T13:00:00+02:00');
 function run(service: ServiceNames) { return createHistoryRun('owner', service, { requested: true, rangePreset: '30_days', runId: '11111111-1111-4111-8111-111111111111', providerUserId: 'selected-account', tokenPath: 'private/exact/token', rootPath: 'private/root', credentialGeneration: 'credential' }, 'connection', now); }
 const execution = { runId: 'run', tokenPath: 'private/exact/token', providerUserId: 'selected-account', beforeRequest: mocks.before } as unknown as HistoryExecution;
@@ -60,6 +60,28 @@ describe('shared history adapter contracts', () => {
     const job = run(ServiceNames.GarminAPI);
     mocks.garminActivity.mockRejectedValue(new GarminHistoryRangeUnavailableError());
     await expect(executeHistoryOperation(job, job.steps[0], execution)).rejects.toMatchObject({ name: 'HistorySkippedError' });
+  });
+  it('continues a longer Garmin activity import at the provider minimum instead of dropping later history', async () => {
+    const job = run(ServiceNames.GarminAPI); job.startMs -= 180 * 86400000; job.steps[0].nextStartMs = job.startMs;
+    const minimum = now - 10 * 86400000;
+    mocks.garminActivity.mockRejectedValueOnce(new GarminHistoryRangeUnavailableError(new Date(minimum)));
+    const skippedWindow = await executeHistoryOperation(job, job.steps[0], execution);
+    expect(skippedWindow).toEqual({ count: 0, nextStartMs: minimum, nextPage: 1 });
+    job.steps[0].nextStartMs = skippedWindow.nextStartMs;
+    expect(await executeHistoryOperation(job, job.steps[0], execution)).toMatchObject({ count: 1, nextStartMs: job.endMs + 1000 });
+    expect(mocks.garminActivity).toHaveBeenLastCalledWith('owner', new Date(minimum), new Date(job.endMs), execution);
+  });
+  it('continues later Garmin Sleep windows after an unavailable early window without expanding the selected range', async () => {
+    const job = run(ServiceNames.GarminAPI); job.startMs -= 180 * 86400000; const step = job.steps[1]; step.nextStartMs = job.startMs;
+    const minimum = now - 10 * 86400000;
+    mocks.garmin.mockRejectedValueOnce(new HistoryUnavailableError('Unavailable Sleep range', minimum));
+    const skippedWindow = await executeHistoryOperation(job, step, execution);
+    expect(skippedWindow).toEqual({ count: 0, nextStartMs: minimum, nextPage: 1 });
+    step.nextStartMs = skippedWindow.nextStartMs;
+    expect(await executeHistoryOperation(job, step, execution)).toMatchObject({ count: 1, nextStartMs: job.endMs + 1000 });
+    expect(mocks.garmin).toHaveBeenLastCalledWith('owner', { execution, startMs: minimum, endMs: job.endMs, resources: ['sleep'] });
+    mocks.garmin.mockRejectedValueOnce(new HistoryUnavailableError('Unavailable Sleep range', job.endMs + 1000));
+    await expect(executeHistoryOperation(job, step, execution)).rejects.toThrow('Unavailable Sleep range');
   });
   it('resumes Wahoo one page at a time with cumulative counts and a fixed range', async () => {
     const job = run(ServiceNames.WahooAPI); job.steps[0].page = 3; job.steps[0].count = 100; mocks.wahoo.mockResolvedValue({ successCount: 50, nextPage: 4 });

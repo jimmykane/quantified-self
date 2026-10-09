@@ -959,7 +959,7 @@ export async function queueGarminSleepHealthHistory(userID: string, options: Sle
             }
         }
         if (options.execution && options.resources?.includes('sleep') && !includeHealth && requested === 0 && !abortedForDeletion) {
-            throw new HistoryUnavailableError('Garmin does not provide Sleep history for this date range.');
+            throw new HistoryUnavailableError('Garmin does not provide Sleep history for this date range.', requestContext.providerMinStartMs ?? undefined);
         }
         if (!abortedForDeletion) {
             completedStartMs = Math.max(startMs, requestContext.providerMinStartMs || startMs);

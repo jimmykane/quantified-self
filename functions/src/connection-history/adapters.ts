@@ -13,7 +13,7 @@ import { queueSuuntoSleepHealthHistory, queueCorosSleepHealthHistory, queueGarmi
 import { isGarminHealthSyncEnabled } from '../garmin/health-flags';
 import { isSuuntoHealthSyncEnabled } from '../suunto/health-flags';
 import { isSleepProviderEnabled, isSleepSyncUserAllowed } from '../sleep/provider-flags';
-import { assertHistoryConnectionCurrent, HistoryWindowTooLargeError, type HistoryExecution } from './execution';
+import { assertHistoryConnectionCurrent, HistoryUnavailableError, HistoryWindowTooLargeError, type HistoryExecution } from './execution';
 import type { ConnectionHistoryRun, HistoryStep } from './model';
 
 export class HistorySkippedError extends Error {
@@ -75,7 +75,14 @@ async function executeActivityHistory(run: ConnectionHistoryRun, step: HistorySt
   await reserveActivities(run);
   if (run.serviceName === ServiceNames.GarminAPI) {
     try { await processGarminBackfill(run.userID, new Date(step.nextStartMs), new Date(endMs), execution); }
-    catch (error) { if (error instanceof GarminHistoryRangeUnavailableError) throw new HistorySkippedError(error.message); throw error; }
+    catch (error) {
+      if (error instanceof GarminHistoryRangeUnavailableError) {
+        const resumeStartMs = Math.max(nextStartMs, error.minimumDate?.getTime() ?? nextStartMs);
+        if (resumeStartMs <= run.endMs) return { count: 0, nextStartMs: resumeStartMs, nextPage: 1 };
+        throw new HistorySkippedError(error.message);
+      }
+      throw error;
+    }
     return { count: 1, nextStartMs, nextPage: 1 };
   }
   if (run.serviceName === ServiceNames.WahooAPI) {
@@ -101,7 +108,15 @@ async function executeSleepHealthHistory(run: ConnectionHistoryRun, step: Histor
   const options = { execution, startMs: step.nextStartMs, endMs, resources: step.resources };
   const operation = HISTORY_SLEEP_OPERATIONS[run.serviceName as keyof typeof HISTORY_SLEEP_OPERATIONS];
   if (!operation) throw new HistorySkippedError('History is not supported.');
-  const result = await operation(run.userID, options);
+  let result: Awaited<ReturnType<typeof operation>>;
+  try { result = await operation(run.userID, options); }
+  catch (error) {
+    if (run.serviceName === ServiceNames.GarminAPI && error instanceof HistoryUnavailableError) {
+      const resumeStartMs = Math.max(nextStartMs, error.earliestStartMs ?? nextStartMs);
+      if (resumeStartMs <= run.endMs) return { count: 0, nextStartMs: resumeStartMs, nextPage: 1 };
+    }
+    throw error;
+  }
   return { count: step.id === 'health' ? result.healthQueued ?? 0 : result.sleepQueued ?? result.queued, nextStartMs, nextPage: 1 };
 }
 const HISTORY_SLEEP_OPERATIONS = {

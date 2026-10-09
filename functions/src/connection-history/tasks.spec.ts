@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 vi.unmock('@sports-alliance/sports-lib');
 const mocks = vi.hoisted(() => ({
-  replayFinalCommit: false, rows: new Map<string, any>(), pro: vi.fn(), depth: vi.fn(), enqueue: vi.fn(), execute: vi.fn(), appCheck: vi.fn(),
+  replayFinalCommit: false, rows: new Map<string, any>(), pro: vi.fn(), depth: vi.fn(), enqueue: vi.fn(), execute: vi.fn(), appCheck: vi.fn(), skip: vi.fn(),
 }));
 vi.mock('firebase-functions/v2/tasks', () => ({ onTaskDispatched: (_: unknown, handler: unknown) => handler }));
 vi.mock('firebase-functions/v2/firestore', () => ({ onDocumentWritten: (_: unknown, handler: unknown) => handler }));
@@ -11,6 +11,7 @@ vi.mock('../utils', () => ({ hasProAccess: mocks.pro, enforceAppCheck: mocks.app
 vi.mock('../config', () => ({ config: { cloudtasks: { workoutQueue: 'workout', sleepSyncQueue: 'sleep', garminHealthBackfillQueue: 'health', connectionHistoryQueue: 'history' } } }));
 vi.mock('../secrets', () => ({ FUNCTION_SECRET_BINDINGS: { processConnectionHistoryTask: [] } }));
 vi.mock('../shared/cloud-tasks', () => ({ enqueueConnectionHistoryTask: mocks.enqueue, getCloudTaskQueueDepthForQueue: mocks.depth }));
+vi.mock('../queue-utils', () => ({ markQueueItemSkipped: mocks.skip }));
 vi.mock('./adapters', () => ({ executeHistoryOperation: mocks.execute, historyAdmissionQueue: () => ({ taskQueue: 'workout', collection: 'workoutQueue' }), historySleepProvider: () => 'garmin', historyCooldownUntil: (_: unknown, meta: any) => Number(meta?.testCooldownUntil || 0), isHistoryWindowTooLarge: () => false,
   HistorySkippedError: class HistorySkippedError extends Error {} }));
 vi.mock('firebase-admin', () => {
@@ -38,7 +39,9 @@ vi.mock('firebase-admin', () => {
 import { ServiceNames } from '@sports-alliance/sports-lib';
 import { CONNECTION_HISTORY_COLLECTION, createHistoryRun, type ConnectionHistoryRun } from './model';
 import { processConnectionHistoryRun, observeHistoryChildren, dispatchConnectionHistoryRun, retryConnectionHistoryImport, classifyHistoryFailure } from './tasks';
-import { historyExecution } from './execution';
+import { historyExecution, HistoryLifecycleChangedError, withHistoryQueueExecution } from './execution';
+import type { QueueItemInterface } from '../queue/queue-item.interface';
+import type { QueueResult } from '../queue-utils';
 import { currentHistoryExecution, withHistoryExecution } from './context';
 const now = Date.parse('2026-09-14T12:00:00Z');
 const runId = '11111111-1111-4111-8111-111111111111';
@@ -48,6 +51,7 @@ const saved = () => mocks.rows.get(path()) as ConnectionHistoryRun;
 beforeEach(() => {
   mocks.replayFinalCommit = false; vi.restoreAllMocks(); vi.spyOn(Date, 'now').mockReturnValue(now); mocks.rows.clear();
   mocks.pro.mockReset().mockResolvedValue(true); mocks.depth.mockReset().mockResolvedValue(0); mocks.enqueue.mockReset().mockResolvedValue(true); mocks.appCheck.mockReset();
+  mocks.skip.mockReset().mockResolvedValue('PROCESSED');
   run = createHistoryRun('owner', ServiceNames.WahooAPI, { requested: true, rangePreset: '30_days', runId, tokenPath: 'wahooAPIAccessTokens/owner/tokens/account', rootPath: 'wahooAPIAccessTokens/owner', providerUserId: 'account', credentialGeneration: 'credential' }, 'connection', now);
   mocks.rows.set(path(), run); mocks.rows.set('users/owner', { uid: 'owner' });
   mocks.rows.set(run.rootPath, { activeOAuthCredentialGeneration: 'credential' }); mocks.rows.set(run.tokenPath, { tokenCredentialGeneration: 'credential' });
@@ -134,6 +138,43 @@ describe('durable history coordinator', () => {
       expect(currentHistoryExecution()).toBe(execution); mocks.rows.get(run.tokenPath).tokenCredentialGeneration = 'new';
       await expect(execution.beforeRequest()).rejects.toThrow('earlier connection');
     }); expect(currentHistoryExecution()).toBeUndefined();
+  });
+  it.each(['connection', 'missing-run', 'pro'])('acknowledges a queued history child after %s changes without provider work or task retries', async change => {
+    const item: QueueItemInterface = { id: 'child', dateCreated: now, processed: false, retryCount: 0, dispatchedToCloudTask: null,
+      connectionHistoryRunId: run.id, firebaseUserID: 'owner', queueRevision: 'child-revision' };
+    if (change === 'connection') mocks.rows.get(`users/owner/meta/${run.serviceName}`).connectionStateGeneration = 'replacement';
+    if (change === 'missing-run') mocks.rows.delete(path());
+    if (change === 'pro') mocks.pro.mockResolvedValue(false);
+    const operation = vi.fn(async () => 'PROCESSED' as QueueResult);
+    await expect(withHistoryQueueExecution(item, operation)).resolves.toBe('PROCESSED');
+    expect(operation).not.toHaveBeenCalled();
+    expect(mocks.skip).toHaveBeenCalledWith(item, undefined, 'connection_history_superseded', { skippedContext: 'CONNECTION_HISTORY_LIFECYCLE_GUARD' });
+  });
+  it('keeps transient guard reads retryable and handles a lifecycle change during authorized work', async () => {
+    const item: QueueItemInterface = { id: 'child', dateCreated: now, processed: false, retryCount: 0, dispatchedToCloudTask: null,
+      connectionHistoryRunId: run.id, firebaseUserID: 'owner', queueRevision: 'child-revision' };
+    mocks.pro.mockRejectedValueOnce(new Error('Transient read failure'));
+    const operation = vi.fn(async () => 'PROCESSED' as QueueResult);
+    await expect(withHistoryQueueExecution(item, operation)).rejects.toThrow('Transient read failure');
+    expect(mocks.skip).not.toHaveBeenCalled();
+    operation.mockRejectedValueOnce(new HistoryLifecycleChangedError());
+    await expect(withHistoryQueueExecution(item, operation)).resolves.toBe('PROCESSED');
+    expect(mocks.skip).toHaveBeenCalledOnce();
+    expect(currentHistoryExecution()).toBeUndefined();
+  });
+  it('does not reuse a persisted Sleep lease as authority for an early lifecycle skip', async () => {
+    const item = { id: 'child', dateCreated: now, processed: false, retryCount: 0, dispatchedToCloudTask: null,
+      connectionHistoryRunId: run.id, userID: 'owner', queueRevision: 'child-revision',
+      processingOwner: 'another-worker', processingRevision: 'child-revision', processingLeaseExpiresAt: now + 60000,
+      ref: { parent: { id: 'sleepSyncQueue' } },
+    } as unknown as QueueItemInterface;
+    mocks.rows.delete(path());
+    await withHistoryQueueExecution(item, vi.fn());
+    const transitionItem = mocks.skip.mock.calls[0][0];
+    expect(transitionItem.processingOwner).toBeUndefined();
+    expect(transitionItem.processingRevision).toBeUndefined();
+    expect(transitionItem.processingLeaseExpiresAt).toBeUndefined();
+    expect(item.processingOwner).toBe('another-worker');
   });
   it('requires authentication, owner identity and App Check for retries', async () => {
     const retry = retryConnectionHistoryImport as unknown as (request: any) => Promise<unknown>;

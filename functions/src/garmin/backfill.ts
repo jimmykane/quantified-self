@@ -36,7 +36,7 @@ interface BackfillRequest {
 }
 
 export class GarminHistoryRangeUnavailableError extends Error {
-  constructor(minimumDate?: Date | null) {
+  constructor(public readonly minimumDate?: Date | null) {
     const minimumDateLabel = minimumDate
       ? minimumDate.toISOString().slice(0, 10)
       : null;
