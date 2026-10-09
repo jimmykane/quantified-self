@@ -24,6 +24,7 @@ export const consoleLogAdapter: LogAdapter = {
 
 export interface FirestoreAdapter {
     setDoc(path: string[], data: unknown): Promise<void>;
+    prepareTrainingLoad?(event: AppEventInterface): Promise<() => Promise<void>>;
     createBlob(data: Uint8Array): unknown;
     generateID(): string;
 }
@@ -165,6 +166,7 @@ export class EventWriter {
         }
 
         try {
+            const persistTrainingLoad = await this.adapter.prepareTrainingLoad?.(event);
             const startActivities = Date.now();
             const activities = event.getActivities();
             for (const activity of activities) {
@@ -292,6 +294,7 @@ export class EventWriter {
             }
             this.logger.info(`Write batch complete in ${Date.now() - startWrites}ms`);
             this.logger.info(`Total writeAllEventData execution time: ${Date.now() - startTotal}ms`);
+            await persistTrainingLoad?.();
             return persistedOriginalFiles;
         } catch (e) {
             const error = e as Error;

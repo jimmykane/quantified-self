@@ -33,6 +33,111 @@ describe('Firestore Security Rules', () => {
         await testEnv.clearFirestore();
     });
 
+    describe('Training load controls and dated policies', () => {
+        const path = 'users/owner/events/workout/metaData/trainingLoad';
+        async function seed() {
+            await testEnv.withSecurityRulesDisabled(async context => {
+                const db = context.firestore();
+                await db.doc('users/owner').set({ created: true });
+                await db.doc('users/owner/events/workout').set({ privacy: 'public' });
+                await db.doc('users/owner/activities/leg').set({ eventID: 'workout' });
+            });
+        }
+        async function edit(revision = 1, override = 0) {
+            const { serverTimestamp } = await import('firebase/firestore');
+            return { version: 1, revision, excluded: false, controls: { leg: { override } },
+                editedLegKey: 'leg', updatedAt: serverTimestamp() };
+        }
+        it('keeps compact load summaries private and rejects client writes to cache or coordination fields', async () => {
+            await seed();
+            const cachePath = 'users/owner/trainingLoadCache/b_a';
+            await testEnv.withSecurityRulesDisabled(async context => {
+                await context.firestore().doc(cachePath).set({ version: 1, leaf: true, entries: {} });
+                await context.firestore().doc(path).set({ version: 1, revision: 1, excluded: false, controls: {},
+                    sourceWritePending: true, sourceRevision: 1, sourceWriteTimes: { event: '1:2' } });
+            });
+            const owner = testEnv.authenticatedContext('owner').firestore();
+            await assertSucceeds(owner.doc(cachePath).get());
+            await assertFails(testEnv.unauthenticatedContext().firestore().doc(cachePath).get());
+            await assertFails(testEnv.authenticatedContext('other').firestore().doc(cachePath).get());
+            await assertFails(owner.doc(cachePath).set({ version: 1, leaf: true, entries: {} }));
+            await assertFails(owner.doc(cachePath).delete());
+            for (const fields of [{ sourceWritePending: false }, { sourceFirstImport: true }, { sourceRevision: 2 }, { loadRevision: 2 },
+                { sourceWriteTimes: {} }, { sourceDigest: 'forged' }])
+                await assertFails(owner.doc(path).update({ ...await edit(2), ...fields }));
+            await assertSucceeds(owner.doc(path).update(await edit(2)));
+        });
+        it('permits owner zero overrides and revision-bound edits while keeping the overlay private', async () => {
+            await seed();
+            const owner = testEnv.authenticatedContext('owner').firestore();
+            await assertSucceeds(owner.doc(path).set(await edit()));
+            await assertFails(testEnv.unauthenticatedContext().firestore().doc(path).get());
+            await assertFails(testEnv.authenticatedContext('other').firestore().doc(path).get());
+            await assertFails(owner.doc(path).set(await edit()));
+            await assertFails(owner.doc(path).set(await edit(2, -1)));
+            await assertFails(owner.doc(path).set(await edit(2, 10000)));
+            await assertSucceeds(owner.doc(path).set(await edit(2, 9999)));
+            await assertFails(owner.doc(path).delete());
+        });
+        it('rejects forged calculated values, foreign legs and writes during account or event deletion', async () => {
+            await seed();
+            const owner = testEnv.authenticatedContext('owner').firestore();
+            await assertFails(owner.doc(path).set({ ...await edit(), legs: {} }));
+            await assertFails(owner.doc(path).set({ ...await edit(), controls: { foreign: { override: 1 } }, editedLegKey: 'foreign' }));
+            await testEnv.withSecurityRulesDisabled(async context => {
+                await context.firestore().doc('userDeletionTombstones/owner').set({ deleting: true });
+            });
+            await assertFails(owner.doc(path).set(await edit()));
+            await testEnv.withSecurityRulesDisabled(async context => {
+                await context.firestore().doc('userDeletionTombstones/owner').delete();
+                await context.firestore().doc('users/owner/events/workout').delete();
+            });
+            await assertFails(owner.doc(path).set(await edit()));
+        });
+        it('preserves server evaluations and saved policies through a reset', async () => {
+            await seed();
+            await testEnv.withSecurityRulesDisabled(async context => {
+                await context.firestore().doc(path).set({ ...await edit(), updatedAt: new Date(),
+                    legs: { leg: { activityId: 'leg', policy: { method: 'HR', included: true } } } });
+            });
+            const owner = testEnv.authenticatedContext('owner').firestore();
+            const { serverTimestamp } = await import('firebase/firestore');
+            await assertFails(owner.doc(path).update({ 'legs.leg.policy.method': 'MET', revision: 2, updatedAt: serverTimestamp() }));
+            await assertSucceeds(owner.doc(path).update({ controls: {}, editedLegKey: null, revision: 2, updatedAt: serverTimestamp() }));
+            expect((await owner.doc(path).get()).data()?.legs.leg.policy.method).toBe('HR');
+        });
+        it('requires saved leg keys after reparse and protects frozen legacy identities', async () => {
+            await seed();
+            await testEnv.withSecurityRulesDisabled(async context => {
+                await context.firestore().doc(path).set({ version: 1, revision: 1, excluded: false, controls: {},
+                    legacyLegs: { leg: { identity: { type: 'Walking' } } },
+                    legs: { stable: { activityId: 'leg', policy: { method: 'HR', included: true } } } });
+            });
+            const owner = testEnv.authenticatedContext('owner').firestore();
+            const { serverTimestamp } = await import('firebase/firestore');
+            await assertFails(owner.doc(path).update(await edit(2)));
+            await assertFails(owner.doc(path).update({ legacyLegs: {}, revision: 2, updatedAt: serverTimestamp() }));
+            await assertSucceeds(owner.doc(path).update({ ...await edit(2), editedLegKey: 'stable', controls: { stable: { override: 0 } } }));
+        });
+        it('requires atomic immutable policy revisions with server timestamps', async () => {
+            await seed();
+            const owner = testEnv.authenticatedContext('owner').firestore();
+            const head = owner.doc('users/owner/trainingLoadPolicies/walking-hiking');
+            const history = head.collection('revisions').doc('r1');
+            const { serverTimestamp } = await import('firebase/firestore');
+            const data = { revision: 1, revisionId: 'r1', method: 'HR', included: true, effectiveAt: serverTimestamp() };
+            await assertFails(head.set(data));
+            const batch = owner.batch(); batch.set(head, data); batch.set(history, data);
+            await assertSucceeds(batch.commit());
+            await assertFails(history.update({ included: false }));
+            await assertFails(history.delete());
+            const next = owner.batch();
+            const backdated = { ...data, revision: 2, revisionId: 'r2', effectiveAt: new Date(0) };
+            next.set(head, backdated); next.set(head.collection('revisions').doc('r2'), backdated);
+            await assertFails(next.commit());
+        });
+    });
+
     describe('Private workout reflection leaves', () => {
         const path = 'users/owner/events/e/workoutReflections/recording';
         const value = { schemaVersion: 1, revision: 1, deleted: false,

@@ -1,3 +1,4 @@
+import { TrainingLoadSettingsComponent } from '../components/training-load/training-load-settings.component';
 import { NgModule } from '@angular/core';
 import { MaterialModule } from './material.module';
 import { SharedModule } from './shared.module';
@@ -12,6 +13,7 @@ import { UserSettingsComponent } from '../components/user-settings/user-settings
 @NgModule({
     imports: [
         CommonModule,
+        TrainingLoadSettingsComponent,
         SharedModule,
         MaterialModule,
         UserRoutingModule,

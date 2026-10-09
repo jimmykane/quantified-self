@@ -1,16 +1,17 @@
+import { resolveEffectiveTrainingLoad } from '@shared/training-load-policy';
 import type { EventInterface } from '@sports-alliance/sports-lib';
 import {
   buildTrainingSessionLoadImpact,
+  isTrainingLoadWithinTotal,
   resolveTrainingLoadDayImpact,
   type TrainingLoadDayImpact,
   type TrainingLoadPoint,
   type TrainingSessionLoadImpact,
 } from '@shared/training-load';
 import {
-  resolveDashboardFormTrainingStressScore,
   type DashboardFormPoint,
 } from './dashboard-form.helper';
-import { isMergeOrBenchmarkEvent } from './event-visibility.helper';
+import { isBenchmarkEventForTrainingMetrics } from '@shared/event-classification';
 import type { TrainingImpactSnapshotState } from '../services/training-impact.service';
 
 export type TrainingImpactAvailability =
@@ -57,11 +58,19 @@ export function buildTrainingSessionImpactView(
   source: TrainingImpactSnapshotState,
 ): TrainingSessionImpactView {
   const eventId = `${event?.getID?.() || ''}`.trim() || null;
-  if (isMergeOrBenchmarkEvent(event)) {
+  if (isBenchmarkEventForTrainingMetrics(event)) {
     return unavailable('excluded', 'Merged benchmark events are excluded from Training.', eventId);
   }
   const dayMs = resolveTrainingImpactUtcDayMs(event);
-  const trainingStressScore = resolveDashboardFormTrainingStressScore(event);
+  const modeled = eventId ? source.loadsByEventId?.get(eventId) : undefined;
+  // Navigation can retain the previous selection's snapshot while new load reads start.
+  if (eventId && source.status === 'ready' && source.loadsByEventId && !modeled)
+    return unavailable('updating', 'Updating Training impact…', eventId, dayMs);
+  if (modeled?.status === 'excluded') return unavailable('excluded', 'Excluded from modeled Training load. History and volume are retained.', eventId, dayMs);
+  if (modeled?.reasons.includes('source-updating')) return unavailable('updating', 'Updating Training impact…', eventId, dayMs);
+  if (modeled?.reasons.includes('activity-match-needs-review')) return unavailable('unavailable',
+    'Review unmatched legs in Training load before using this workout’s modeled load.', eventId, dayMs);
+  const trainingStressScore = modeled ? modeled.score : resolveEffectiveTrainingLoad(event).score;
   if (trainingStressScore === null) {
     return unavailable('missing-tss', 'Training impact unavailable — this activity has no TSS.', eventId, dayMs);
   }
@@ -87,7 +96,7 @@ export function buildTrainingSessionImpactView(
   }
   return {
     availability: 'ready',
-    message: '',
+    message: modeled?.status === 'partial' ? 'This contribution uses available legs only. Some included legs have no usable load.' : '',
     headline: sessionRoleHeadline(impact),
     eventId,
     dayMs,
@@ -99,12 +108,19 @@ export function buildTrainingDayImpactView(
   events: readonly EventInterface[] | null | undefined,
   source: TrainingImpactSnapshotState,
 ): TrainingDayImpactView {
-  const sessions = (events || []).map(event => buildTrainingSessionImpactView(event, source));
+  const sessionViews = (events || []).map(event => buildTrainingSessionImpactView(event, source));
+  // A pending selected load can change the shared Form outcome, even when another
+  // session already has a usable score. Missing load may be partial; pending load must wait.
+  const awaitingLoads = source.status === 'ready' && (sessionViews.some(session => session.availability === 'updating')
+    || selectedLoadsExceedForm(sessionViews));
+  const daySource: TrainingImpactSnapshotState = awaitingLoads ? { ...source, status: 'updating', formPoints: null } : source;
+  const sessions = awaitingLoads ? sessionViews.map(session => session.availability === 'ready'
+    ? unavailable('updating', 'Updating Training impact…', session.eventId, session.dayMs) : session) : sessionViews;
   const readySessions = sessions.filter((session): session is TrainingSessionImpactView & {
     impact: TrainingSessionLoadImpact;
   } => session.availability === 'ready' && session.impact !== null);
-  const points = source.status === 'ready' ? toTrainingLoadPoints(source.formPoints) : [];
-  const outcomes = source.status === 'ready'
+  const points = daySource.status === 'ready' ? toTrainingLoadPoints(daySource.formPoints) : [];
+  const outcomes = daySource.status === 'ready'
     ? [...new Set(sessions.flatMap(session => (
       session.availability !== 'excluded' && session.dayMs !== null ? [session.dayMs] : []
     )))]
@@ -118,8 +134,8 @@ export function buildTrainingDayImpactView(
     atlContribution: total.atlContribution + session.impact.atlContribution,
     formContribution: total.formContribution + session.impact.formContribution,
   }), { trainingStressScore: 0, ctlContribution: 0, atlContribution: 0, formContribution: 0 });
-  const unavailableSessionCount = sessions.length - readySessions.length;
-  const availability = resolveDayAvailability(source, sessions, readySessions.length);
+  const unavailableSessionCount = sessions.filter(session => session.availability !== 'ready' && session.availability !== 'excluded').length;
+  const availability = resolveDayAvailability(daySource, sessions, readySessions.length);
   return {
     availability,
     message: dayAvailabilityMessage(availability, sessions),
@@ -129,6 +145,18 @@ export function buildTrainingDayImpactView(
     outcomes,
     unavailableSessionCount,
   };
+}
+
+function selectedLoadsExceedForm(sessions: readonly TrainingSessionImpactView[]): boolean {
+  const days = new Map<number, { selected: number; saved: number; count: number }>();
+  for (const { impact } of sessions) {
+    if (!impact) continue;
+    const total = days.get(impact.day.dayMs) ?? { selected: 0, saved: impact.day.trainingStressScore, count: 0 };
+    total.selected += impact.trainingStressScore;
+    total.count++;
+    days.set(impact.day.dayMs, total);
+  }
+  return [...days.values()].some(({ selected, saved, count }) => !isTrainingLoadWithinTotal(selected, saved, count));
 }
 
 export function sessionRoleHeadline(impact: TrainingSessionLoadImpact): string {
@@ -175,6 +203,7 @@ function resolveDayAvailability(
 ): TrainingImpactAvailability {
   if (source.status !== 'ready') return source.status;
   if (readySessionCount > 0) return 'ready';
+  if (sessions.length && sessions.every(session => session.availability === 'excluded')) return 'excluded';
   if (sessions.some(session => session.availability === 'updating')) return 'updating';
   if (sessions.some(session => session.availability === 'error')) return 'error';
   return 'unavailable';
@@ -185,10 +214,13 @@ function dayAvailabilityMessage(
   sessions: readonly TrainingSessionImpactView[],
 ): string {
   if (availability === 'ready') {
-    return sessions.some(session => session.availability !== 'ready')
-      ? 'Some completed activities have no available Training impact.'
-      : '';
+    if (sessions.some(session => session.availability !== 'ready' && session.availability !== 'excluded'))
+      return 'Some completed activities have no available Training impact.';
+    if (sessions.some(session => session.message && session.availability === 'ready'))
+      return 'This total uses available legs only. Some included legs have no usable load.';
+    return sessions.some(session => session.availability === 'excluded') ? 'Excluded activities do not contribute to modeled load.' : '';
   }
+  if (availability === 'excluded') return 'Selected activities are excluded from modeled Training load. History and volume are retained.';
   if (availability === 'updating') return 'Updating Training impact…';
   if (availability === 'error') return 'Training impact could not be loaded.';
   if (availability === 'private') return 'Training impact is private.';

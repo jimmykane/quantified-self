@@ -8,6 +8,7 @@ import {
   DataJumpDistance,
   DataPaceAvg,
   DataSpeedAvg,
+  DataTrainingStressScore,
   DataWeight,
   DaysOfTheWeek,
   DistanceUnits,
@@ -25,6 +26,14 @@ import {
 } from '@shared/unit-aware-display';
 
 describe('unit-aware-display', () => {
+  it('uses Sports Lib for optional one-decimal TSS display under metric and imperial settings', () => {
+    for (const distanceUnits of [DistanceUnits.Kilometers, DistanceUnits.Miles]) {
+      const settings = normalizeUserUnitSettings({ distanceUnits });
+      expect(resolveUnitAwareDisplayFromValue(DataTrainingStressScore.type, 87.34, settings)?.value).toBe('87');
+      expect(resolveUnitAwareDisplayFromValue(DataTrainingStressScore.type, 87.34, settings,
+        { trainingStressScoreDecimals: 1 })).toMatchObject({ value: '87.3', unit: '' });
+    }
+  });
   it('should provide the current default user unit settings', () => {
     expect(getDefaultUserUnitSettings()).toEqual({
       speedUnits: [SpeedUnits.KilometersPerHour],

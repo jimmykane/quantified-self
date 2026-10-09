@@ -1,3 +1,4 @@
+import { prepareTrainingLoadMetadata } from '../training-load/training-load-metadata';
 import * as admin from 'firebase-admin';
 import { FieldValue } from 'firebase-admin/firestore';
 import * as logger from 'firebase-functions/logger';
@@ -8,6 +9,8 @@ import {
     ActivityUtilities,
     DataDistance,
     DataDuration,
+    DataTrainingStressScore,
+    DataTrainingStressScoreMethod,
     EventInterface,
     EventUtilities,
 } from '@sports-alliance/sports-lib';
@@ -1521,6 +1524,7 @@ async function setReparseDocIfUserActive(
 
 function getFirestoreAdapter(uid: string): FirestoreAdapter {
     return {
+        prepareTrainingLoad: event => prepareTrainingLoadMetadata(uid, event),
         setDoc: async (path: string[], data: unknown) => {
             const documentPath = path.join('/');
             const isEventDocument = path.length === 4 && path[0] === 'users' && path[2] === 'events';
@@ -1997,6 +2001,22 @@ export async function reparseEventFromOriginalFiles(
                         activityAny.addStat(stat);
                     }
                 });
+                // Regeneration temporarily removes file inputs (energy, mass, gender,
+                // etc.). Restore the parsed score and its provenance as a pair, then
+                // refresh candidates from the complete inputs before persistence.
+                for (const type of [DataTrainingStressScore.type, DataTrainingStressScoreMethod.type]) {
+                    activity.removeStat(type);
+                    const parsedStat = previousStats.get(type);
+                    if (parsedStat) activityAny.addStat(parsedStat);
+                }
+                const automatic = ActivityUtilities.evaluateTrainingStressScore(activity).automatic;
+                if (automatic.score !== null && automatic.method !== null) {
+                    activity.addStat(new DataTrainingStressScore(automatic.score));
+                    activity.addStat(new DataTrainingStressScoreMethod(automatic.method));
+                } else {
+                    activity.removeStat(DataTrainingStressScore.type);
+                    activity.removeStat(DataTrainingStressScoreMethod.type);
+                }
             });
         }
         EventUtilities.reGenerateStatsForEvent(reparsedEvent);

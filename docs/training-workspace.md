@@ -3876,7 +3876,7 @@ users/{uid}/derivedMetrics/{metricKind}
 ### Events
 
 Parent event documents provide event identity, date, tags, merged-event classification, parent TSS, and display metadata.
-Overall load and top contributors use parent-event TSS to avoid double-counting a multisport event.
+Overall load and top contributors use the shared effective-load resolver once per event. Reparsed or controlled multisport workouts sum included legs; legacy untouched events retain parent TSS. Parent-only TSS is never allocated across legs.
 
 The shared classifier treats `mergeType: 'benchmark'` and legacy `isMerge: true` as merged benchmark events. A
 `mergeType: 'multi'` parent is a standard multisport event and remains eligible so its child legs can be analysed.
@@ -4034,13 +4034,13 @@ settings, sleep, swim lengths, or activity documents for unrelated metrics.
 
 | Metric kind | Training use | Primary source |
 | --- | --- | --- |
-| `form` | Form/load chart, CTL/ATL state inputs, and exact Training impact recap counts | Parent event TSS |
+| `form` | Form/load chart, CTL/ATL state inputs, and exact Training impact recap counts | Effective modeled workout TSS |
 | `recovery_now` | Imported recovery-remaining card | Bounded parent event recovery stats |
-| `acwr` | Load metrics | Parent event TSS |
-| `ramp_rate` | State and load metrics | Parent event TSS |
-| `monotony_strain` | Load metrics | Parent event TSS |
-| `form_now`, `form_plus_7d` | Current/projected freshness values | Parent event TSS |
-| `freshness_forecast` | Zero-future-load scenario chart | Parent event TSS |
+| `acwr` | Load metrics | Effective modeled workout TSS |
+| `ramp_rate` | State and load metrics | Effective modeled workout TSS |
+| `monotony_strain` | Load metrics | Effective modeled workout TSS |
+| `form_now`, `form_plus_7d` | Current/projected freshness values | Effective modeled workout TSS |
+| `freshness_forecast` | Zero-future-load scenario chart | Effective modeled workout TSS |
 | `intensity_distribution` | Global intensity chart | Joined child activity power/HR zones |
 | `training_summary` | Overall comparison, ten-group Training Mix, and context/profile summaries | Joined normalized activities |
 | `training_capacity` | Imported FTP/VO2 observations plus separately labelled manual VO2 references | Joined activities and qualifying manual Health VO2 point measurements |
@@ -4754,7 +4754,7 @@ Overview only.
 
 It intentionally separates parent-event load from child-activity composition:
 
-- Parent events determine total TSS and top contributors. This avoids double-counting multisport legs.
+- The effective-load resolver determines workout totals and top contributors once per parent, summing included legs without double-counting.
 - Child activities determine the ten Training groups plus aggregate Other and unknown Unclassified composition/rhythm.
 
 The cards show:
@@ -4828,7 +4828,7 @@ point. Ramp has no sample until a prior seven-day CTL observation exists, and it
 This is presentation-only: no formula, stored data, planning behavior, MCP read/write schema,
 scope, consent, provider action or backend deployment change.
 
-Daily load is TSS on UTC days. CTL and ATL use exponentially decaying recurrences with 42-day and 7-day time constants:
+Daily load is effective modeled TSS on UTC days. CTL and ATL use exponentially decaying recurrences with 42-day and 7-day time constants:
 
 ```text
 CTL_today = CTL_previous + (load_today - CTL_previous) / 42
@@ -4847,11 +4847,257 @@ load metrics are intentionally independent of sleep, HRV, overnight heart rate, 
 signals appear only in Readiness today, which adds recovery context without changing Freshness/Form or the Training
 state.
 
+### File-only TSS evaluation and owner load controls
+
+Sports Lib 21.6.1 calculates and caches Automatic, HR and MET evaluations while file inputs and streams remain
+available. Each result records its score (including valid zero), actual method, imported/calculated provenance,
+estimate flag and missing-input/fallback reasons. Walking, Nordic Walking, Hiking and Trekking use imported TSS →
+calibrated HR → calorie MET → unavailable; calculated power and running pace are ineligible. Other sports retain
+their existing Automatic order with corrected HR eligibility. A preferred HR/MET calculation falls back through the
+eligible Automatic order. Valid nonnegative file-imported TSS wins regardless of preference; previous calculated
+TSS is never treated as imported on recalculation.
+
+HR uses continuous threshold-normalized TRIMP and requires explicit file calibration satisfying `0 < resting HR <
+threshold HR < maximum HR`. Session-matched FIT `time_in_zone` settings take priority over unambiguous
+`zones_target` and applicable profile settings. Walking uses general maximum HR, never the running-specific
+setting. Observed peak HR, guessed threshold ratios and weighted HR zones are ineligible. QS supplies no athlete
+settings. The synthetic one-hour recovery walk with calibration 190/55/165 produces approximately 7.6 HR TSS.
+
+MET remains an estimate: `hours = duration / 3600`, `MET = kcal / (file kg × hours)`, `TSS = 100 × hours × (MET /
+10)²`. Require valid file energy, body mass and duration; 210 kcal, 70 kg and one hour yield MET 3 and 9 TSS. Do
+not invent mass, subtract resting calories, use reference-MET tables, or adopt STT's linear score or zone weights.
+
+Settings keeps Training load in the Preferences disclosure group. Its sport-policy editor initializes on first
+expansion, then remains mounted while collapsed so drafts and the existing policy subscription survive section
+changes. Each family saves its own dated policy; the main Settings Save changes action continues to save only
+ordinary account/app preferences. This integration preserves the current Settings layout and adds no policy reads
+before the Training load section is opened. Existing workout-reflection leaves and their independent Rules/MCP
+contracts remain unchanged; this synchronization adds no planning or provider delivery capability.
+Source fingerprints omit Feeling and Rated Perceived Exertion because workout feedback is not a TSS input.
+Adding, editing or clearing either field preserves calculated load and the existing cache entry; recorded TSS,
+calories, body mass, dates and the other source statistics remain guarded against stale calculations.
+
+Owners open **Training load** from the activity action menu. The editor separates recorded, Automatic and modeled
+TSS, explains the actual method/fallback, and supports a preferred method, 0–9999 numeric override (one decimal),
+per-leg inclusion, whole-workout exclusion and reset. Exclusions retain history and volume. Missing load remains
+distinct from a valid zero and from exclusion. Clearing the numeric field removes the override; an explicit zero
+remains a valid override. Multisport overrides belong to individual legs; included available legs sum once at full
+precision, with rounding applied only for display and unavailable coverage explained in the editor and impact.
+Excluded sessions do not count as missing-load sessions. Reset restores the saved per-leg policy rather than today's
+Settings. A whole-workout reset also explicitly releases retained unmatched controls; per-leg reset retains any
+explicit association.
+
+The Training load action and owner Training impact use the same event classifier as Form and MCP: explicit
+`mergeType: 'benchmark'` and legacy merged comparison records are excluded, while `mergeType: 'multi'` remains an
+eligible combined workout. Comparison records do not offer the load editor, and its handler also rejects them.
+Owner-excluded standard workouts retain the editor so they can be included again. Incidental benchmark display
+metadata does not override the persisted Training classification. This UI alignment changes no stored controls,
+calculations, database write paths, MCP schema/scope or Training planning/provider delivery contract.
+
+After saving controls, the editor reloads its metadata and sport policy heads before showing updated load or allowing
+another edit. If that refresh fails, it hides the old load and form, stops the loading indicator, and explains that the
+write succeeded but the editor must be reopened. A failed read also unsubscribes the other pending refresh read.
+A rejected write retains the draft for review. This affects editor
+readiness only; persisted policies, calculation semantics and MCP contracts are unchanged.
+Closing/destroying the editor unsubscribes any pending metadata/policy reads. A submitted save still completes,
+but its late result cannot start another refresh, change the closed editor's state or give success/error feedback.
+Async source-fingerprint checks also discard results after destruction. Reopening reads the current saved state;
+this lifecycle handling adds no database operations and has no MCP contract impact.
+
+Settings → Training load uses the existing ten sport families, including Walking & Hiking. Defaults are
+Automatic/included. Saving appends an immutable server-timestamped revision in
+`users/{uid}/trainingLoadPolicies/{family}/revisions/{revisionId}` and updates the revision-checked head. The leg
+editor can copy method/inclusion to future family defaults, never a numeric override. First import chooses the last
+revision effective at the leg's recorded start time, so old/delayed uploads do not acquire today's defaults. Each
+leg freezes that applied policy; duplicate uploads, resyncs and reparses preserve it. Matched legs reuse that
+snapshot without querying policy history again; only new legs select a dated policy.
+
+The Settings editor retains dirty drafts while policy updates arrive. After a successful save it displays the newest
+observed policy head and uses that revision for the next edit. Pending save completions belong to the current account
+and editor lifetime; switching accounts or closing Settings prevents stale completions from changing form state or
+giving feedback. This coordination uses the existing policy listener and adds no database operations. It does not
+change persisted policy semantics or MCP contracts; policy history remains private.
+
+Saving unchanged leg controls compares values independently of Firestore map field order. It leaves the workout's
+revision and load timestamp unchanged, avoiding an unnecessary metadata write and preventing Training impact from
+waiting for a rebuild that correctly ignores unchanged controls. An explicit copy to future sport defaults still
+saves its dated policy revision independently. This uses the existing transaction reads and adds no database work;
+owner Rules, load calculations, queue behavior and MCP contracts are unchanged. Existing help remains applicable:
+future defaults do not change the current workout's saved policy or copy its numeric override.
+
+Private `users/{uid}/events/{eventId}/metaData/trainingLoad` stores server-owned candidates, source fingerprints,
+leg identities and applied policies beside owner-editable controls. Firestore Rules allow exact owner-scoped
+transactions with revision checks and deletion guards, while denying client writes to calculated fields, policy
+revision updates/deletes and cross-event associations. Before provider ingestion, manual upload or source-file
+reparse overwrites any existing source document, backend EventWriter adapters durably freeze legacy identities in
+the server-owned `legacyLegs` field. This evidence survives partial-write retries and does not advance the load
+timestamp. Preparation atomically sets `sourceWritePending` and caches an unavailable load (or whole-workout
+exclusion) before source writes. This covers already-warm caches as well as the first full-history warmup. After source writes, a second transaction
+refreshes candidates, checks the persisted source, preserves the latest controls and atomically updates the compact
+load cache. It clears the pending marker, records exact source update times and advances `sourceRevision` only when
+the shared derived-source projection changes. Failed preparation/finalization must be retried through the original
+writer; never clear a pending marker manually to bypass incomplete candidates. Finalization consumes the frozen
+evidence before old leg cleanup. Metadata preparation and persistence failures propagate to the caller for retry. Preparation also computes any uncached evaluations before EventWriter
+serializes source statistics, including native JSON imports whose power evaluation derives additional statistics.
+Final metadata persistence reads those cached results so source fingerprints describe exactly what was saved.
+
+The source-file **Regenerate statistics** path refreshes TSS evaluations after restoring file statistics that generic
+regeneration temporarily clears, including calories, body mass and gender. It restores the parsed TSS score and method
+together before evaluation, preserving imported scores (including zero), recalculating known calculated scores, and
+removing unavailable calculated scores instead of resurrecting them from the backup stats. Recorded TSS and private
+candidates therefore describe the same completed regeneration. This correction adds only in-memory evaluation, with
+no additional Firestore reads/writes, queue work, provider calls, or MCP schema/scope/mutation changes. Monitoring
+coverage is unchanged: existing reparse persistence and failure stages still own the operation and its retries.
+
+Reconciliation uses the existing unique identity matcher with its unmatched-leg fallback disabled. Derived TSS is
+excluded from control identity. Ambiguous identities retain saved policies/controls and make modeled load
+unavailable until the owner explicitly reassociates or resets them. Missing legacy identity evidence also requires
+review; a newly written activity with a reused ID cannot establish the old control's identity. Reassociation survives
+the next reparse, and copying preferences uses the newly associated activity's sport family.
+Retained unmatched identities stay outside automatic matching on later reparses, even if their old identity reappears.
+Only an explicit owner association makes one eligible to match again; otherwise its saved controls remain pending review.
+Bounds: 100 source legs/controls per event and 200 retained identities; reaching the retained bound requires review
+before further reparse.
+
+`shared/training-load-policy.ts` owns the effective-load resolver for Form, weekly load, ACWR, comparisons, sport
+contributions and impact. Full-history backend rebuilds read compact resolved loads from the private,
+server-owned `users/{uid}/trainingLoadCache` collection instead of joining one metadata document per event. Hash-prefix
+buckets start with one hex digit and split atomically at 100 entries or 400,000 JSON bytes; entries are bounded at
+100,000 bytes. Branch documents have `leaf: false`; a single leaf query retrieves the current buckets. Each entry
+contains only the resolved parent/per-leg results and source guards, never policy history or full evaluations.
+Unqueried cache entries and metadata control/candidate maps are exempt from indexing. Empty leaf documents are
+removed so deleted history stops adding rebuild reads. Buckets are flat documents without descendants; branch
+documents remain to route future writes and are omitted from the leaf query. All cache records are below the
+recursively deleted user root.
+
+The shared resolver sums included, available leg scores in ascending numeric order and sorts the aggregate diagnostic
+set, including primary-reason selection when every included leg is unavailable. Reading identical Firestore leg maps in another order therefore produces the same parent summary, avoiding
+floating-point freshness mismatches and unnecessary cache writes. Individual leg values retain their full precision;
+the editor's one-decimal display is not used to round modeled load.
+
+A versioned `state` document becomes ready only after the first **full-history** build warms existing metadata.
+That cold build uses exact owner paths in batches of at most 100 and refreshes existing metadata with at most four
+concurrent transactions, rereading current sources and controls before every cache write. Interrupted imports warm
+as unavailable (or explicitly excluded), so one pending file does not block other workouts.
+Final persistence replaces that placeholder atomically. Existing untouched legacy workouts need no cache entry and keep
+recorded load. Future imports update their cache atomically; owner edits refresh it before invalidation even outside
+the derived-metrics rollout gate. Event deletion removes its cached entry. Cache maintenance checks the account
+root and deletion tombstone transactionally. A failed cache refresh retries without publishing invalidation first.
+Immediate legacy controls may still require a bounded child join, and ordinary source corrections/deletions refresh
+those legacy entries before invalidation, including outside the derived rollout gate. Moving a leg refreshes both
+its former and current parents. Parsed cache refreshes validate the saved active leg IDs against current child
+existence, event ownership and source fingerprints in the same transaction. A changed, deleted or moved leg makes
+the cached workout unavailable until a matching source is restored/reparsed; delayed owner edits cannot recertify
+stale candidates. Whole-workout exclusion still wins. Exact active IDs omit obsolete legs awaiting reparse cleanup.
+Uncoordinated child source changes refresh parsed entries too; device-label-only changes do not require this extra
+verification. Focused MCP impact/editor reads keep their exact metadata reads.
+
+Steady-state full rebuild overhead is one cache-state read plus the populated leaf documents (Firestore bills a
+minimum of one read for an empty query). The emulator fixture with 1,001 single-leg controlled workouts uses 16
+leaves: **17 reads instead of 1,001**, a 98.3% reduction in this feature's load-join reads. This is not a reduction in
+the pre-existing event/activity reads or an estimate of the whole Firebase bill. Large multisport entries split
+sooner. First warmup still pays the metadata scan and cache preparation once; imports/edits add bounded transactional
+cache maintenance, and a split costs additional writes. Parsed cache refreshes add one exact source read per active
+leg (maximum 100), including owner edits and final metadata-trigger refreshes; whole-workout exclusions and pending
+imports skip those reads. This validation adds no reads to an already-warm full-history rebuild. Identical refreshes
+skip the cache write. An import writes
+a pending cache result and then its final result, adding a bounded preparation read/write. Even an unchanged reimport
+advances load freshness and requests a targeted load rebuild when it clears a pending result: another build may
+have observed that pending state. Matching reparses still avoid policy lookups; unchanged source projections
+avoid full-source invalidation. No original-file
+reparse is required to warm this cache, and it does not recalculate historical TSS.
+
+For imports, source triggers check the pending marker and committed update times, leaving invalidation to the final
+metadata write. Completed changed sources use normal full-source ingress; owner-only load edits retain targeted
+load ingress. This prevents the import's source and load metadata from independently requesting the same rebuild.
+Independent edits, retries and stale-leg cleanup can still legitimately request additional work. Owner controls
+edited during a pending import refresh the current cached state: whole-workout exclusion takes effect immediately,
+while other modeled results remain unavailable until finalization. The shared resolver keeps this state consistent
+in rebuilds, the editor and MCP. `loadRevision` and `updatedAt` advance when finalization clears a pending result,
+even if reimported source fields are identical. Cache-dependent ingress selects its debounce bucket immediately
+before enqueueing, after cache maintenance and deletion guards, so late deliveries do not reuse an expired bucket. `sourceFirstImport` preserves dated selection across
+partial first-import retries; it is removed on successful finalization. Owner revision/updatedAt-only changes are ignored.
+Browser and backend use the same canonical source projection for SHA-256
+fingerprints, rejecting stale candidate/source combinations. Unrecognized leg IDs remain unavailable while a rewrite
+is in progress instead of reverting to recorded TSS. The editor checks both parent and leg fingerprints and blocks
+leg edits until stale activity details are reopened. The
+Sports Lib JSON reader preserves zero W/kg power-curve values so reopening a saved leg does not falsely change its
+source fingerprint. This read compatibility fix needs no historical reparse and exposes no additional MCP fields. The
+`onTrainingLoadMetadataWrite` trigger refreshes the private cache, invalidates affected kinds and increments the event
+mutation/workout input versions; timestamp/revision-only bookkeeping does not invalidate. Impact waits when a load
+edit is newer than Form. CTL 42 days, ATL 7 days and UTC-day bucketing are unchanged.
+
+Legacy activities keep existing values until original-file reparse. Override and exclusion work immediately; HR/MET
+selection requires stored evaluations or **Reimport activity from file**. Recorded-TSS statistics, metric rankings
+and raw statistic queries keep their meaning. Training and impact use modeled load. Existing MCP reads honor
+controls without exposing policy metadata, widening frozen public schemas or adding mutation capabilities; owner
+exclusions never increment benchmark counts, and output validation accepts them outside the benchmark/incomplete
+subsets. MCP source rewrites remain updating even without a cached score; identities needing owner review remain
+unavailable rather than being counted as missing recorded TSS. Stale benchmark metadata cannot block otherwise
+usable day contributions in MCP or the app; the app omits benchmark metadata listeners from impact calculations.
+Recent owner exclusions still wait for the Form rebuild. Actual service responses are
+checked against the strict output validator, including partial days. Built-in Assistant instructions distinguish
+recorded metrics from modeled load. This is a completed-load feature, with no plan/workout read or mutation contract impact and no
+provider delivery changes.
+
+Release order: publish the verified Sports Lib 21.6.1 artifact first, then install that registry version in both QS
+packages and release Functions/Rules/frontend together after separate approval. Local validation uses a packed
+library artifact. Publication, deployment and production reparse are separate explicit approvals; no historical
+values are rewritten merely by deploying this change.
+
+Training load policy/helper tests use the frontend `helpers-node` project; editor/service tests remain in `angular`.
+The Settings disclosure regression explicitly renders its fixture, preserving the shared logic-only setup.
+Training load persistence remains registered once in the lifecycle emulator group. The rebase retains the current
+frontend/delivery shard planners, worker limits and complete report gates; it changes no load or MCP contract.
+
+Local verification covers the encoded synthetic recovery walk (7.6 HR TSS), MET inputs (9 TSS), library package
+exports, provider/manual/reparse writers, modeled-load builders, owner Rules and frozen MCP reads. The Firestore
+emulator verifies delayed policy selection, idempotent duplicates, changed/reused leg IDs, partial-write retries,
+missing legacy identity, edits during first import, concurrent reparse/control edits and deletion guards. Cache tests
+cover the warm/cold read paths, transactionally split buckets, unchanged-write suppression, policy query avoidance,
+zero/excluded/reset projections, source-trigger coordination and private Rules. The 1,001-workout fixture verifies
+17 steady-state document reads. The persistence emulator suite allows 30 seconds per test for real transaction
+contention and retry backoff, matching the other transaction suites; this is not a production latency target.
+Its atomicity, retained-control and read-count assertions remain required. This test-only timing allowance changes
+no runtime behavior, database operations or MCP contracts. Review regressions also cover warm-cache pending imports, exclusion/reset during
+interrupted imports, parser evaluation failures before reservation, removed/recreated empty leaves, leg moves and
+cache maintenance outside rollout. Further regressions cover changed/deleted/moved parsed legs with unchanged
+parent statistics, delayed owner edits against those stale sources, restoration by reparse, obsolete leg cleanup,
+and device-label edits avoiding source validation. This optimization changes no public MCP schema, scope or mutation contract; Training
+planning/provider delivery remains unaffected. The actual
+editor and Settings were exercised with synthetic local data at desktop and
+320/390-pixel phone widths. No original user FIT file or production data was used.
+
 #### Activity and selected-day Training impact
 
 Owner-only activity details and selected-day Calendar surfaces reuse the current Form snapshot to explain how each
-completed activity's recorded TSS participates in this model. They do not query activity history or create a separate
-derived snapshot. For one activity:
+completed activity's modeled TSS participates in this model. They do not query activity history or create a separate
+derived snapshot. Calendar's lightweight event adapter exposes an empty leg list and retains the complete stored
+statistics and end time as source fields for fingerprint validation. This avoids treating a summary object as a fully
+hydrated Sports Lib event. Impact validates saved active leg identities and fingerprints as well
+as the parent; the editor also refuses leg edits when a saved active leg is missing from the opened workout.
+
+Event details reuse their existing live hydrated legs, with no additional source query. For a selected Calendar
+workout with parsed candidates, or legacy per-leg controls, the load reader opens a live owner-scoped child query
+only when hydrated legs are absent. The query is limited to 101 documents to enforce the 100-leg bound. It adds
+reads for the returned legs (or Firestore's empty-query minimum) and later changed documents while that selected
+workout is observed; it does not scan history or add full-rebuild reads. Untouched legacy workouts, pending imports
+and whole-workout exclusions need no child query. Switching workouts, exclusion or unsubscribing releases the
+listener. Child corrections/deletions switch impact to updating until matching source data is available. While a
+new selection's modeled result is loading, a previous selection's ready snapshot cannot supply a recorded-TSS
+fallback for the newly selected workout. The shared resolver continues to distinguish missing load, zero and
+exclusion. A selected day waits if any selected session is updating: it suppresses contributions and the old Form
+outcomes even when another session already has a usable score. Once the sources are current, ready totals return;
+genuinely missing load still allows an explicitly partial total. This is presentation-only and adds no reads,
+writes or rebuilds. The same waiting state applies when the selected contributions together exceed the saved
+Form load for any UTC day, with tolerance only for floating-point summation error. Individually fitting sessions
+cannot certify an aggregate that the saved day does not yet contain. Session, Calendar-day and MCP impact use the
+same shared total comparison, scaling machine precision to load and term count. Equivalent decimal totals such as
+33.1 + 33.2 versus 66.3 remain usable; a real excess still waits for Form. This comparison does not round, alter or
+persist any load, and adds no reads or rebuilds. These corrections preserve the existing MCP updating semantics and all public schemas,
+scopes and mutation contracts; no plugin rebuild is needed.
+
+For one activity:
 
 ```text
 Fitness load (CTL) contribution = activity TSS / 42
@@ -4896,7 +5142,7 @@ header's bottom-padding hooks to leave an 8px join instead of stacking summary a
 surfaces retain their existing spacing. A surface-free **How it’s calculated** Material text button sits alongside the
 day result and wraps beneath it when needed. It controls a labelled hidden region through `aria-expanded` and
 `aria-controls`, with one selection-haptic owner per activation. The initially collapsed explanation contains the
-workout's recorded TSS, contribution formulas, all-training/day-decay meaning, fixed daily cutoff caveat, and existing
+workout's modeled TSS, contribution formulas, all-training/day-decay meaning, fixed daily cutoff caveat, and existing
 physiological-adaptation disclaimer. Disclosure state is component-local, survives same-event ready refreshes, and
 resets when the event/day context or availability changes; it adds no subscription, request, or setting.
 Full-day breakdowns and compact Calendar/Dashboard/day-sheet summaries retain their existing role/outcome wording,

@@ -147,6 +147,7 @@ const TARGET_LOADERS: Readonly<Record<string, ModuleLoader>> = Object.freeze({
   onDashboardDerivedMetricsActivityWrite: loadDashboardDerivedMetricsTriggers,
   onDashboardDerivedMetricsEventWrite: loadDashboardDerivedMetricsTriggers,
   onDashboardDerivedMetricsSleepWrite: loadDashboardDerivedMetricsTriggers,
+  onTrainingLoadMetadataWrite: loadDashboardDerivedMetricsTriggers,
   onDashboardDerivedMetricsHealthWrite: loadDashboardDerivedMetricsTriggers,
   processDerivedMetricsTask:
     () => module.require('./tasks/derived-metrics-worker') as FunctionModule,

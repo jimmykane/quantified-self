@@ -90,4 +90,12 @@ describe('training load impact', () => {
     expect(resolveTrainingLoadDayImpact(points, Date.UTC(2026, 0, 1) + 1)).toBeNull();
     expect(resolveTrainingLoadDayImpact(points, Date.UTC(2026, 0, 2))).toBeNull();
   });
+
+  it('accepts a decimal sum matching the saved day while still rejecting additional load', () => {
+    const dayMs = Date.UTC(2026, 0, 1);
+    const day = resolveTrainingLoadDayImpact(buildTrainingLoadPoints([{ dayMs, load: 66.3 }]), dayMs)!;
+    expect(33.1 + 33.2).toBeGreaterThan(66.3 + Number.EPSILON);
+    expect(buildTrainingSessionLoadImpact(33.1 + 33.2, day)?.trainingStressScore).toBeCloseTo(66.3);
+    expect(buildTrainingSessionLoadImpact(66.300001, day)).toBeNull();
+  });
 });

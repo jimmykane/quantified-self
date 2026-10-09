@@ -1,3 +1,4 @@
+import { TrainingLoadDialogComponent } from '../training-load/training-load-dialog.component';
 import { ChangeDetectionStrategy, Component, DestroyRef, Input, OnChanges, SimpleChanges, ChangeDetectorRef, inject } from '@angular/core';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { AppEventInterface } from '@shared/app-event.interface';
@@ -28,6 +29,7 @@ import { firstValueFrom, take } from 'rxjs';
 import { EventTagService } from '../../services/event-tag.service';
 import { EventTagsDialogComponent } from '../event-tags/event-tags-dialog.component';
 import { AppHapticsService } from '../../services/app.haptics.service';
+import { isBenchmarkEventForTrainingMetrics } from '@shared/event-classification';
 import { resolveUnitAwareDisplayFromValue } from '@shared/unit-aware-display';
 
 @Component({
@@ -90,6 +92,17 @@ export class EventSummaryComponent implements OnChanges {
     if (changes['event'] || changes['selectedActivities'] || changes['unitSettings']) {
       this.rebuildTemplateState();
     }
+  }
+
+  get canEditTrainingLoad(): boolean {
+    return this.isOwner && !!this.event && !isBenchmarkEventForTrainingMetrics(this.event);
+  }
+
+  openTrainingLoad(): void {
+    if (!this.canEditTrainingLoad) return;
+    this.hapticsService.selection();
+    this.dialog.open(TrainingLoadDialogComponent, { width: '600px', maxWidth: 'calc(100vw - 24px)',
+      data: { event: this.event, user: this.user, unitSettings: this.unitSettings } });
   }
 
   openEditDetails() {

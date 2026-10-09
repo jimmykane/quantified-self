@@ -12,7 +12,7 @@ const NO_TARGET = '__NO_TARGET__';
 // Exercise a property inherited from Object.prototype so the fallback check
 // also guards against accidental prototype-based routing.
 const UNKNOWN_TARGET = 'toString';
-const EXPECTED_FULL_EXPORT_COUNT = 168;
+const EXPECTED_FULL_EXPORT_COUNT = 169;
 const MARKETING_TARGETS = new Set([
   'listMarketingCampaigns',
   'saveMarketingCampaign',
@@ -203,6 +203,7 @@ const TRAINING_TARGET_METADATA: Readonly<Record<string, {
   onDashboardDerivedMetricsActivityWrite: { memoryMb: 512, timeoutSeconds: null, trigger: 'event', eventDocument: 'users/{uid}/activities/{activityId}', concurrency: 1, maxInstances: 50 },
   onDashboardDerivedMetricsEventWrite: { memoryMb: 512, timeoutSeconds: null, trigger: 'event', eventDocument: 'users/{uid}/events/{eventId}', concurrency: 1, maxInstances: 50 },
   onDashboardDerivedMetricsSleepWrite: { memoryMb: 512, timeoutSeconds: null, trigger: 'event', eventDocument: 'users/{uid}/sleepSessions/{sleepSessionId}', concurrency: 1, maxInstances: 50 },
+  onTrainingLoadMetadataWrite: { memoryMb: 512, timeoutSeconds: null, trigger: 'event', eventDocument: 'users/{uid}/events/{eventId}/metaData/trainingLoad', concurrency: 1, maxInstances: 50 },
   onDashboardDerivedMetricsHealthWrite: { memoryMb: 512, timeoutSeconds: null, trigger: 'event', eventDocument: 'users/{uid}/healthSourceRecords/{sourceRecordId}', concurrency: 1, maxInstances: 50 },
   processDerivedMetricsTask: { memoryMb: 2048, timeoutSeconds: 540, trigger: 'task', concurrency: 1 },
   processDerivedMetricsIngressTask: { memoryMb: 512, timeoutSeconds: 120, trigger: 'task' },

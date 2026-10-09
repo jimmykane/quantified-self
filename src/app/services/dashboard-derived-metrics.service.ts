@@ -95,6 +95,7 @@ export interface DashboardDerivedMetricsState {
   powerCurve: DerivedPowerCurveMetricPayload | null;
   trainingSwimPerformance: DashboardTrainingSwimPerformanceContext | null;
   formStatus: DashboardDerivedMetricStatus;
+  formUpdatedAtMs?: number | null;
   recoveryNowStatus: DashboardDerivedMetricStatus;
   acwrStatus: DashboardDerivedMetricStatus;
   rampRateStatus: DashboardDerivedMetricStatus;
@@ -418,6 +419,7 @@ export class DashboardDerivedMetricsService {
           const descriptor = metricDescriptors[index];
           mutableState[descriptor.statusKey] = this.resolveSnapshotStatus(descriptor.kind, snapshot);
           mutableState[descriptor.contextKey] = descriptor.resolveContext(snapshot);
+          if (descriptor.kind === DERIVED_METRIC_KINDS.Form) nextState.formUpdatedAtMs = this.toFiniteNumber(snapshot?.updatedAtMs);
         });
         return nextState;
       }),

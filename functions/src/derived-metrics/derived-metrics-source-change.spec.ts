@@ -15,6 +15,12 @@ describe('derived source invalidation', () => {
     it.each(['eventID', 'type', 'stats', 'swimLengths', 'startDate', 'creator'])('retains activity %s invalidation', key => {
         expect(hasDerivedMetricSourceChange('activity', {}, { [key]: 'changed' })).toBe(true);
     });
+    it('invalidates load edits and explicit identity reset, but ignores revision-only bookkeeping', () => {
+        const before = { revision: 1, controls: {}, excluded: false };
+        expect(hasDerivedMetricSourceChange('training-load', before, { ...before, revision: 2, updatedAt: 100 })).toBe(false);
+        for (const patch of [{ excluded: true }, { controls: { leg: { override: 0 } } }, { resetUnmatched: true }])
+            expect(hasDerivedMetricSourceChange('training-load', before, { ...before, ...patch })).toBe(true);
+    });
     it('compares nested canonical sleep fields and source identity', () => {
         expect(hasDerivedMetricSourceChange('sleep', {}, { sportsLibData: { metrics: { [SLEEP_SPORTS_LIB_METRIC_FIELDS.OvernightHrv]: 45 } } })).toBe(true);
         expect(hasDerivedMetricSourceChange('sleep', { source: { providerUserId: 'a' } }, { source: { providerUserId: 'b' } })).toBe(true);

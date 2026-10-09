@@ -61,7 +61,7 @@
         </div>
         <div class="training-impact-calculation" [id]="calculationDetailsId" role="region"
           [attr.aria-labelledby]="calculationToggleId" [hidden]="!calculationExpanded()">
-          <p>The contribution uses this workout’s {{ values().tss }} TSS: fitness load is TSS ÷ 42, fatigue load is TSS ÷ 7, and freshness is fitness load minus fatigue load.</p>
+          <p>The contribution uses this workout’s {{ values().tss }} modeled TSS (which can differ from recorded statistics): fitness load is TSS ÷ 42, fatigue load is TSS ÷ 7, and freshness is fitness load minus fatigue load.</p>
           <p>The day result includes all training counted for that day and the gradual fade of previous training load. The model uses a fixed daily cutoff, which may differ from local midnight.</p>
           <p>{{ modelExplanation }}</p>
         </div>

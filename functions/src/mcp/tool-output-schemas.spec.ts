@@ -2766,6 +2766,25 @@ describe.each<FixtureTransport>(['in-memory', 'legacy-http', 'modern-http'])('MC
         },
       },
       {
+        args,
+        output: {
+          ...trainingImpactFixture,
+          status: 'excluded' as const,
+          reason: 'no_usable_sessions' as const,
+          coverage: {
+            ...trainingImpactFixture.coverage,
+            eligibleSessionCount: 0,
+            modeledSessionCount: 0,
+            excludedSessionCount: 1,
+            benchmarkOrMergeSessionCount: 0,
+            notCompletedSessionCount: 0,
+          },
+          contribution: null,
+          sessionRole: null,
+          outcomes: [],
+        },
+      },
+      {
         args: dayArgs,
         output: {
           ...trainingImpactFixture,

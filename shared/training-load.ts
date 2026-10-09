@@ -51,6 +51,14 @@ export interface TrainingSessionLoadImpact extends TrainingLoadContribution {
   day: TrainingLoadDayImpact;
 }
 
+/** Compare a selected load with its saved total, allowing only floating-point summation error. */
+export function isTrainingLoadWithinTotal(selected: number, total: number, termCount = 1): boolean {
+  if (!Number.isFinite(selected) || selected < 0 || !Number.isFinite(total) || total < 0
+    || !Number.isSafeInteger(termCount) || termCount < 1) return false;
+  const tolerance = Number.EPSILON * Math.max(1, selected, total) * termCount;
+  return selected <= total + tolerance;
+}
+
 /**
  * Builds the canonical UTC TSS load series used by current Training surfaces.
  * Empty days through the optional end time are explicit zero-load decay days.
@@ -186,7 +194,7 @@ export function buildTrainingSessionLoadImpact(
   day: TrainingLoadDayImpact,
 ): TrainingSessionLoadImpact | null {
   const contribution = buildTrainingLoadContribution(trainingStressScore);
-  if (!contribution || trainingStressScore > day.trainingStressScore + Number.EPSILON) {
+  if (!contribution || !isTrainingLoadWithinTotal(trainingStressScore, day.trainingStressScore)) {
     return null;
   }
   let role: TrainingSessionLoadRole;

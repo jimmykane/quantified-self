@@ -67,6 +67,20 @@ describe('EventWriter', () => {
         };
     });
 
+    it('freezes load identity before source writes and propagates a final metadata failure', async () => {
+        const persist = vi.fn(async () => {
+            expect(adapter.setDoc).toHaveBeenCalled();
+            throw new Error('source changed');
+        });
+        adapter.prepareTrainingLoad = vi.fn(async parsed => {
+            expect(adapter.setDoc).not.toHaveBeenCalled();
+            expect(parsed).toBe(eventMock);
+            return persist;
+        });
+        await expect(writer.writeAllEventData('user-1', eventMock)).rejects.toThrow('source changed');
+        expect(adapter.prepareTrainingLoad).toHaveBeenCalledOnce();
+        expect(persist).toHaveBeenCalledOnce();
+    });
     it('should write activities, streams, and event in order', async () => {
         await writer.writeAllEventData('user-1', eventMock);
 

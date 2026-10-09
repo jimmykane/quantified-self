@@ -1709,6 +1709,11 @@
     }
   ],
   "fieldOverrides": [
+    { "collectionGroup": "trainingLoadCache", "fieldPath": "entries", "indexes": [] },
+    { "collectionGroup": "metaData", "fieldPath": "controls", "indexes": [] },
+    { "collectionGroup": "metaData", "fieldPath": "legs", "indexes": [] },
+    { "collectionGroup": "metaData", "fieldPath": "legacyLegs", "indexes": [] },
+    { "collectionGroup": "metaData", "fieldPath": "sourceWriteTimes", "indexes": [] },
     {
       "collectionGroup": "trainingCleanupJobs", "fieldPath": "nextAttemptAtMs", "ttl": false,
       "indexes": [

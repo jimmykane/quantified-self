@@ -156,16 +156,6 @@ export class CalendarPageComponent {
     initialValue: this.route.snapshot.paramMap.get('date'),
   });
   readonly currentUser = computed(() => this.userService.user() as AppUserInterface | null);
-  private readonly trainingImpactSource = computed(() => {
-    const uid = this.currentUser()?.uid;
-    return uid
-      ? this.trainingImpact.watch(uid)
-      : of({ status: 'private', formPoints: null } as TrainingImpactSnapshotState);
-  });
-  readonly trainingImpactState = toSignal(
-    toObservable(this.trainingImpactSource).pipe(switchMap(source => source)),
-    { initialValue: { status: 'private', formPoints: null } as TrainingImpactSnapshotState },
-  );
   readonly hasTrainingPlanningUIAccess = computed(() => !!this.currentUser()?.uid);
   readonly eventState = toSignal(combineLatest([
     this.userService.user$,
@@ -353,6 +343,16 @@ export class CalendarPageComponent {
     day: this.selectedDay()!, status: this.eventState().status,
     complete: this.activitiesComplete(),
   }));
+  private readonly trainingImpactSource = computed(() => {
+    const uid = this.currentUser()?.uid;
+    return uid
+      ? this.trainingImpact.watch(uid, this.selectedDay()?.events ?? [])
+      : of({ status: 'private', formPoints: null } as TrainingImpactSnapshotState);
+  });
+  readonly trainingImpactState = toSignal(
+    toObservable(this.trainingImpactSource).pipe(switchMap(source => source)),
+    { initialValue: { status: 'private', formPoints: null } as TrainingImpactSnapshotState },
+  );
   readonly selectedDayNotes = computed(() => this.notesByDate().get(this.selectedDay()?.dateKey || '')?.notes ?? []);
   readonly selectedDayPlanned = computed(() => this.plannedWorkoutsByDate()[this.selectedDay()?.dateKey || '']?.entries ?? []);
   readonly selectedDayData = computed<CalendarDayDetailsData | null>(() => {
