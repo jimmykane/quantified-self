@@ -31,6 +31,7 @@ import {
 } from '../activity-sync/outbound-fingerprint';
 import { parseCOROSJSON } from './json';
 import { normalizeCOROSInt64Identifier } from './identifier';
+import { prepareCOROSActivityFITUpload } from './activity-fit';
 
 const COROS_SUCCESS_CODE = '0000';
 const COROS_DUPLICATE_CODE = '5082';
@@ -551,7 +552,7 @@ export const importActivityToCOROSAPI = onCall({
 }, async (request) => {
   const userID = await requireCOROSActivityUploadAccess(request);
   try {
-    const fileBuffer = decodeActivityUpload(request.data?.file);
+    const fileBuffer = prepareCOROSActivityFITUpload(decodeActivityUpload(request.data?.file));
     return await uploadActivityFileToCOROS(userID, fileBuffer, {
       beforeProviderRequest: async () => {
         await recordActivitySyncOutboundFingerprint({

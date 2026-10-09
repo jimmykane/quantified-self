@@ -101,6 +101,12 @@ describe('integration-pages.content', () => {
     expect(PROVIDER_INTEGRATION_PAGES.coros.syncFlows.some(flow => flow.title === 'Send activities to COROS')).toBe(true);
     expect(PROVIDER_INTEGRATION_PAGES.coros.syncFlows.some(flow => flow.title === 'Send routes to COROS')).toBe(true);
     expect(PROVIDER_INTEGRATION_PAGES.coros.tools.some(tool => tool.title === 'GPX and FIT route delivery')).toBe(true);
+    const corosFIT = PROVIDER_INTEGRATION_PAGES.coros.tools.find(tool => tool.title === 'FIT activity upload to COROS')!.copy;
+    expect(corosFIT).toContain('Snorkeling FITs with recorded GPS are sent as Open Water Swim');
+    expect(corosFIT).toContain('Sailing FITs with recorded GPS as GPS Cardio');
+    expect(corosFIT).toContain('Direct uploads and activity sync change only the outgoing copy');
+    expect(corosFIT).toContain('keeping your QS activity type and retained original unchanged');
+    expect(corosFIT).toContain('Other files keep their original classification');
     expect(PROVIDER_INTEGRATION_PAGES.coros.faqItems.some(item => item.question === 'Can I send routes to COROS?')).toBe(true);
     expect(PROVIDER_INTEGRATION_ROUTE_DATA.coros).not.toHaveProperty('keywords');
     expect(PROVIDER_INTEGRATION_ROUTE_DATA.suunto.description).toContain('planned workouts as SuuntoPlus Guides');

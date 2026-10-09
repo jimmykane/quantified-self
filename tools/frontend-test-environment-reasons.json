@@ -1,4 +1,8 @@
 {
+  "src/app/components/health/health-category-overview.component.spec.ts": {
+    "environment": "angular",
+    "reason": "Compiles the Health overview with TestBed to verify signal inputs, child chart bindings, Material category controls, account-scoped source choices and haptic feedback."
+  },
   "src/app/components/home/home-reveal.directive.spec.ts": {
     "environment": "angular",
     "reason": "Compiles a directive host with TestBed to verify host class bindings, afterNextRender viewport handling, SSR behavior and DestroyRef teardown."
@@ -10,5 +14,9 @@
   "src/app/components/services/connection-history/connection-history.component.spec.ts": {
     "environment": "angular",
     "reason": "Compiles both history component templates with TestBed and verifies signal input bindings, rendered controls, haptics, and DestroyRef teardown during pending retries."
+  },
+  "src/app/components/shared/metric-history-chart/metric-history-chart.component.spec.ts": {
+    "environment": "angular",
+    "reason": "Creates the chart with TestBed to verify signal input changes, rendered accessibility text, chart host initialization, responsive tooltips, haptic ownership and fixture teardown."
   }
 }

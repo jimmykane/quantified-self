@@ -64,6 +64,9 @@ runner configuration and verification commands.
   when deleting or moving specs to Node. Run `npm run test:frontend-policy` against the branch's base before committing;
   use `-- --base <revision>` when the base is not `origin/develop`. Never skip a missing comparison or invent a reason
   to retain unnecessary setup. CI enforces this policy before either frontend shard starts.
+  When preparing a develop-to-main release or fixing its checks, also verify the full release range against main before
+  that merge, or the failed workflow's `QS_FRONTEND_TEST_POLICY_BASE`. Comparing only with `origin/develop` can
+  grandfather new specs already merged into develop and miss classifications required by the production gate.
   Node/DOM tests must not load Angular testing/compiler/global setup through runtime imports, including local transitive
   imports or mocks. Type-only imports and plain Angular core decorators remain allowed after verifying the suite.
   Keep the policy's runtime import scan aligned with Vite resolution and each project's aliases; TypeScript resolution

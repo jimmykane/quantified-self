@@ -4,6 +4,8 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { ServiceNames } from '@sports-alliance/sports-lib';
 import { PRO_REQUIRED_MESSAGE } from '../utils';
 import { COROS_API_REQUEST_TIMEOUT_MS } from './constants';
+import { createCOROSActivityFITFixture } from '../../test-utils/coros-activity-fit';
+import { prepareCOROSActivityFITUpload } from './activity-fit';
 
 const mocks = vi.hoisted(() => ({
   post: vi.fn(),
@@ -204,6 +206,28 @@ describe('COROS asynchronous activity uploads', () => {
       message: 'Reconnect COROS before sending activities.',
     });
     expect(mocks.recordActivitySyncOutboundFingerprint).not.toHaveBeenCalled();
+    expect(mocks.post).not.toHaveBeenCalled();
+  });
+
+  it.each([82, 32])('direct sport %i fingerprints and posts the same converted FIT, keeping the input intact', async sport => {
+    const input = createCOROSActivityFITFixture({ sport });
+    const original = Buffer.from(input);
+    const converted = prepareCOROSActivityFITUpload(input);
+    await importActivityToCOROSAPI(activityRequest(input));
+    const sent = mocks.recordActivitySyncOutboundFingerprint.mock.calls[0][0].fileBuffer as Buffer;
+    expect(sent).toEqual(converted);
+    expect(sent).not.toEqual(input);
+    expect(mocks.post.mock.calls[0][0].body.includes(sent)).toBe(true);
+    expect(mocks.post.mock.calls[0][0].body.includes(input)).toBe(false);
+    expect(input).toEqual(original);
+    expect(mocks.recordActivitySyncOutboundFingerprint.mock.invocationCallOrder[0])
+      .toBeLessThan(mocks.post.mock.invocationCallOrder[0]);
+  });
+
+  it('does not send a converted direct FIT when its echo receipt fails', async () => {
+    mocks.recordActivitySyncOutboundFingerprint.mockRejectedValueOnce(new Error('receipt unavailable'));
+    await expect(importActivityToCOROSAPI(activityRequest(createCOROSActivityFITFixture())))
+      .rejects.toBeDefined();
     expect(mocks.post).not.toHaveBeenCalled();
   });
 
