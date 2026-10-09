@@ -426,7 +426,10 @@ export async function getCOROSActivityUploadStatus(
           dlqContext: 'COROS_ACTIVITY_UPLOAD_INVALID_RESPONSE',
         });
       }
-      const status = Number(data.status);
+      // Structured values can coerce to -1/2 and authorize a resend/false success.
+      const status = typeof data.status === 'number' || typeof data.status === 'string'
+        ? Number(data.status)
+        : Number.NaN;
       if (status === 1) {
         return { status: 'pending', message: 'COROS is processing the activity.', uploadId, providerUserId };
       }

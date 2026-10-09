@@ -101,7 +101,7 @@ A successful initialization must return an integer-shaped upload ID. JavaScript 
 - provider status `2` is success;
 - provider status `-1` confirms that this upload failed; direct clients retain their explicit failed-file restart action;
 - duplicate result `5082` is completed duplicate-as-success;
-- an unknown status or mismatched upload ID fails closed as a provider-contract error.
+- an unknown or non-scalar status, or a mismatched upload ID, fails closed as a provider-contract error. Numeric-string statuses remain compatible; arrays/booleans cannot authorize a restart or completion.
 
 After COROS issues an upload ID, pending status retries resume that operation and do not post the FIT again. A completed upload increments the COROS upload counter through an idempotency record keyed by the provider operation or queue item.
 
