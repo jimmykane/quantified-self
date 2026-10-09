@@ -12,9 +12,10 @@ const root = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const workflow = file => load(readFileSync(resolve(root, '.github/workflows', file), 'utf8'));
 const testing = workflow('testing.yaml');
 const shared = workflow('_run-tests.yml');
-const requiredJobs = ['unit_tests', 'functions_tests', 'frontend_tests', 'rules_tests', 'functions_emulators'];
+const requiredJobs = ['unit_tests', 'functions_tests', 'functions_build', 'frontend_plan', 'frontend_tests', 'rules_tests', 'functions_emulators'];
 const resultVariables = {
   UNIT_RESULT: 'unit_tests', FUNCTIONS_RESULT: 'functions_tests', FRONTEND_RESULT: 'frontend_tests',
+  FUNCTIONS_BUILD_RESULT: 'functions_build', FRONTEND_PLAN_RESULT: 'frontend_plan',
   RULES_RESULT: 'rules_tests', EMULATOR_RESULT: 'functions_emulators',
 };
 
@@ -34,9 +35,20 @@ test('Functions CI runs the complete suite serially and keeps runner errors fata
   assert.ok(commands.includes('npm ci'));
   assert.ok(commands.includes('npm run lint'));
   assert.ok(commands.includes('npm run test -- --no-file-parallelism'));
-  assert.ok(commands.includes('npm run build'));
-  assert.ok(commands.includes('npm run entrypoint:check:compiled'));
-  assert.ok(commands.includes('npm run mcp:contract:check:compiled'));
+  assert.ok(!commands.includes('npm run build'));
+  assert.ok(!commands.includes('npm run entrypoint:check:compiled'));
+  assert.ok(!commands.includes('npm run mcp:contract:check:compiled'));
+  assert.doesNotMatch(functionsStep.run, /dangerouslyIgnoreUnhandledErrors|passWithNoTests|\|\|\s*true/);
+});
+
+test('Functions build and compiled checks run independently with the same comparison revision', () => {
+  const steps = shared.jobs.functions_build.steps;
+  const functionsStep = steps.find(step => step.name === 'Build and verify functions');
+  const commands = functionsStep.run.split('\n').map(line => line.trim());
+  for (const command of ['npm ci', 'npm run build', 'npm run entrypoint:check:compiled', 'npm run mcp:contract:check:compiled']) {
+    assert.ok(commands.includes(command));
+  }
+  assert.ok(!commands.includes('npm run test -- --no-file-parallelism'));
   const comparison = '${{ github.event.pull_request.base.sha || github.event.before }}';
   assert.equal(functionsStep.env.MCP_CONTRACT_PREVIOUS_REVISION, comparison);
   const fetch = steps.find(step => step.name === 'Fetch MCP contract comparison revision');
@@ -49,21 +61,56 @@ test('Functions CI runs the complete suite serially and keeps runner errors fata
   assert.doesNotMatch(functionsStep.run, /dangerouslyIgnoreUnhandledErrors|passWithNoTests|\|\|\s*true/);
 });
 
-test('app CI checks discovery and runs every frontend project', () => {
+test('app CI checks discovery and runs two complete, independently isolated frontend shards', () => {
+  const job = shared.jobs.frontend_tests;
+  assert.equal(job.needs, 'frontend_plan');
+  assert.equal(job.strategy['fail-fast'], false);
+  assert.deepEqual(job.strategy.matrix, { shard: [1, 2] });
   const steps = shared.jobs.frontend_tests.steps;
   const discovery = steps.find(step => step.run === 'npm run test:frontend-config');
   assert.ok(discovery);
   const app = steps.find(step => step.name === 'Run app tests');
   assert.ok(steps.indexOf(discovery) < steps.indexOf(app));
-  assert.equal(app.run, 'npm run test -- --run');
+  assert.equal(app.run, 'npm run test -- --run --shard=${{ matrix.shard }}/2 --reporter=default --reporter=json --reporter=./tools/frontend-test-timing-reporter.mjs --outputFile=tmp/frontend-shards/report/report.json');
   assert.equal(app.env.NODE_OPTIONS, '--max-old-space-size=3072');
+  assert.equal(app.env.QS_FRONTEND_SHARD_PLAN, 'tmp/frontend-shards/plan.json');
+  assert.equal(app.env.QS_FRONTEND_TIMING_REPORT, 'tmp/frontend-shards/report/timing.json');
+  const plan = steps.find(step => step.uses === 'actions/download-artifact@v4');
+  assert.equal(plan.with.name, 'frontend-shard-plan');
+  assert.equal(plan.with.path, 'tmp/frontend-shards');
+  assert.ok(steps.indexOf(plan) < steps.indexOf(app));
+  const upload = steps.find(step => step.uses === 'actions/upload-artifact@v4');
+  assert.equal(upload.with.name, 'frontend-report-${{ matrix.shard }}');
+  assert.equal(upload.with['if-no-files-found'], 'error');
+});
+
+test('all frontend runners share one discovered plan and only a fully verified gate saves timings', () => {
+  const plan = shared.jobs.frontend_plan.steps;
+  assert.ok(plan.some(step => step.run === 'npm run test:frontend-config'));
+  assert.ok(plan.some(step => step.run === 'npm run test:frontend-shards'));
+  assert.ok(plan.some(step => step.run === 'node tools/frontend-test-shard-cli.mjs plan tmp/frontend-timings/history.json tmp/frontend-shards/plan.json'));
+  const upload = plan.find(step => step.uses === 'actions/upload-artifact@v4');
+  assert.equal(upload.with.name, 'frontend-shard-plan');
+  assert.equal(upload.with['if-no-files-found'], 'error');
+  const restore = plan.find(step => step.uses === 'actions/cache/restore@v4');
+  const gate = shared.jobs.run_tests.steps;
+  const merge = gate.find(step => step.name === 'Require complete frontend shard reports');
+  const save = gate.find(step => step.uses === 'actions/cache/save@v4');
+  assert.equal(merge.run, 'node tools/frontend-test-shard-cli.mjs merge tmp/frontend-shards/plan.json tmp/frontend-shards/reports tmp/frontend-timings/history.json');
+  assert.ok(gate.indexOf(merge) < gate.indexOf(save));
+  assert.equal(save.with.key, restore.with.key);
+  assert.equal(save.with.path, restore.with.path);
+  assert.ok(restore.with['restore-keys'].endsWith('-\n'));
+  const reports = gate.find(step => step.with?.pattern === 'frontend-report-*');
+  assert.equal(reports.with['merge-multiple'], undefined, 'Keep reports separate to reject missing/duplicate files');
+  assert.ok(!gate.some(step => step.run === 'npm ci'), 'Report validation must use Node built-ins');
 });
 
 test('independent jobs retain every validation and Rules check without weakening failures', () => {
   assert.deepEqual(Object.keys(shared.jobs).sort(), [...requiredJobs, 'run_tests'].sort());
   for (const id of requiredJobs) {
     const job = shared.jobs[id];
-    assert.equal(job.needs, undefined, `${id} must start independently`);
+    assert.equal(job.needs, id === 'frontend_tests' ? 'frontend_plan' : undefined, `${id} has unexpected dependencies`);
     assert.equal(job.if, undefined, `${id} must run for every test invocation`);
     assert.equal(job['continue-on-error'] ?? false, false);
     assert.ok(job.steps.every(step => !step.if && !step['continue-on-error']));
@@ -85,7 +132,7 @@ test('independent jobs retain every validation and Rules check without weakening
   assert.ok(rules.some(step => step.uses === 'actions/setup-java@v4' && step.with['java-version'] === '21'));
   assert.ok(rules.some(step => step.run === 'npm install -g firebase-tools'));
   assert.ok(rules.some(step => step.run === 'npm run test:rules'));
-  for (const command of ['npm run test -- --run', 'npm run test:rules', 'npm run lint']) {
+  for (const command of ['npm run test:rules', 'npm run lint']) {
     const owners = requiredJobs.filter(id => shared.jobs[id].steps.some(step => step.run === command));
     assert.equal(owners.length, 1, `${command} must run exactly once`);
   }

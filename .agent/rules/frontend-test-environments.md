@@ -28,6 +28,14 @@ runner configuration and verification commands.
 - Discovery guards must use Vitest's glob library and matching options, including `dot: true` and the existing
   Functions/Rules exclusions. Node's native glob API omits hidden specs. Preserve the hidden-file/future-file
   regression fixtures and ensure each ordinary spec belongs to exactly one project.
+- Keep frontend CI shards generated from current discovery and one shared plan for the tested commit. Never maintain
+  permanent per-shard file lists. Timing history is optional scheduling data: it must not add, omit, skip or reclassify
+  tests. Preserve the two-worker cap per runner and require both JSON reports to cover the plan exactly once before
+  the protected gate succeeds. Keep timing publication after all mandatory jobs and report validation pass.
+- For shard planning, sequencing, timing reporter or CI gate changes, run `npm run test:frontend-shards` alongside
+  the configuration/workflow guards. Verify both complete shards against the unsharded file/assertion set and run
+  coverage across all three environments. New specs enter discovery automatically; unusually large individual specs
+  should be split by responsibility while preserving every assertion rather than increasing worker limits.
 - With Node 22 selected, run the affected specs in their chosen project using
   `npm run test -- --run --project=<project-name> <spec-path>`, plus `npm run test:frontend-config` and
   `npm run test:workflows` after registry or runner changes. Runner/plugin/discovery changes also require the

@@ -6,20 +6,26 @@ approved manual deployment workflows. Independent jobs run the same mandatory ch
 | Job | Required checks |
 | --- | --- |
 | `unit_tests` | Credentials, workflow/emulator coverage contracts, monitoring definitions, plugin validation and frontend lint |
-| `functions_tests` | Functions install/lint, complete ordinary suite, build, compiled entrypoint and MCP contract checks |
-| `frontend_tests` | Frontend environment allocation and the complete suite across all three projects |
+| `functions_tests` | Functions install/lint and the complete ordinary suite |
+| `functions_build` | Independent Functions build, compiled entrypoint and MCP contract checks |
+| `frontend_plan` | Frontend allocation/shard guards and one automatically balanced plan for the tested commit |
+| `frontend_tests` | Two runners covering the complete suite across all three projects |
 | `rules_tests` | Firestore and Storage Rules tests with Java/Firebase emulators |
 | `functions_emulators` | Complete four-group Functions emulator matrix |
 
-Only the final `run_tests` job depends on these jobs. It uses `always()` and fails unless every dependency succeeded,
+The two frontend runners depend on the short `frontend_plan` job; all other suites start independently.
+The final `run_tests` job waits for every job above. It uses `always()` and fails unless every dependency succeeded,
 including failed, cancelled, skipped or missing results. It preserves the protected-branch check name
 `run-tests / run_tests`; no individual successful job can make the required gate green. Reusable-workflow deployment
-dependencies continue to wait for the complete gate.
+dependencies continue to wait for the complete gate. The gate also rejects incomplete frontend reports before
+publishing timing hints. Its report validator uses only Node built-ins, so the gate needs no dependency install.
 
-Keep suite jobs independent when adding CI checks. Add any new mandatory job to the final gate and its executable
+Keep suite jobs independent except for their shared frontend plan when adding CI checks. Add any new mandatory job to the final gate and its executable
 failure tests. Do not put frontend or Rules tests back after the Functions suite, or raise per-runner worker limits
 to obtain parallelism. Node setup caches npm downloads using the applicable lockfiles; each runner still uses `npm ci`.
-Functions installs root dependencies too because its compiled shared sources resolve them there. Only Rules and
+Both Functions jobs install root dependencies because shared sources resolve them there. Build/compiled checks
+run concurrently with ordinary tests instead of waiting behind them; the MCP comparison still uses the PR base SHA
+or push's previous SHA, fetched when needed. Only Rules and
 emulator runners need Java/Firebase Tools; the Rules job shares the existing emulator binary cache.
 
 The previous serial job took about 32 minutes in [run 37779620977](https://github.com/jimmykane/quantified-self/actions/runs/37779620977):
@@ -40,11 +46,12 @@ override. Test isolation and unhandled-error failure behavior remain enabled; th
 extended timeout masking a failure. `test-runner-config.spec.ts` covers these configuration boundaries.
 
 Frontend tests use the same global two-worker bound, with isolated forks across three Vitest projects:
-`helpers-node` runs 164 verified pure specs (helpers and help content) in Node with no setup file,
+`helpers-node` runs 165 verified pure specs (helpers and help content) in Node with no setup file,
 `helpers-dom` runs 10 DOM/locale specs in jsdom with no Angular setup, and `angular` retains the Angular compiler
 plugin and `src/test-setup.ts` for all remaining ordinary specs. The Angular project is the fallback for new or
 unclassified files. The shared
-runner still uses `npm run test -- --run`, so every project runs on every ordinary app test invocation.
+local runner still uses `npm run test -- --run`, covering every project in one invocation. CI divides that same
+discovered workload across two runners with `--shard=1/2` and `--shard=2/2` and the shared plan described below.
 
 `tools/frontend-test-environments.json` is the explicit Node/DOM opt-in registry. To move another pure application
 spec, first verify its tests and transitive imports in the intended environment, then add its exact repository-relative
@@ -64,6 +71,48 @@ It is an explicit dev dependency reusing the already locked version; no package 
 See the [helper test environment benchmark](ci-helper-test-benchmark.md) for the verified allocation and local
 performance measurements. This changes the test runner only; application behavior, Training/MCP contracts,
 provider actions and production infrastructure have no impact, so product help does not need an update.
+
+### Automatically balanced frontend shards
+
+`tools/frontend-test-shards.mjs` discovers files using the actual Vitest project configuration and matching
+`tinyglobby` options. It creates one plan artifact for the tested Git revision, including hidden files and future
+ordinary specs. `tools/frontend-test-sequencer.mjs` verifies the plan against Vitest's actual complete discovery
+before selecting each shard. Missing, duplicated, misclassified or stale-revision selections fail. Node/DOM/Angular
+classification remains the environment registry's responsibility; scheduling does not change it.
+
+The planner assigns expensive modules first to the shard with the lowest estimated work and schedules expensive
+modules first within each runner. Cost includes environment initialization, worker preparation, setup, import
+collection and test/hook execution, collected through Vitest's module diagnostics. The median of up to three recent
+successful samples limits timing noise. New files and cache misses use conservative estimates by environment;
+removed files and files moved to another environment lose their stale samples automatically.
+
+Only `frontend_plan` restores timing history. Both runners download its same plan, so cache changes between jobs
+cannot produce different assignments. The timing cache is keyed by OS, lockfile, runner/setup and scheduling code
+and follows GitHub's branch access rules. A new branch may have no accessible compatible history; complete test
+coverage still runs. The history contains only spec paths, project names and numeric costs. Invalid optional history
+falls back to estimates; it cannot suppress tests or influence commands, imports or environment classification.
+
+Both matrix runners retain isolated forks, a two-worker limit and the 3 GiB Node heap setting. They upload independent
+Vitest JSON and timing reports. The protected gate requires all jobs to succeed, then verifies exact per-shard files,
+all assertion/suite counters, non-empty passing assertions and complete timing entries. Skips, TODOs, unhandled
+errors, missing reports and inconsistent counters remain failures. The gate alone saves updated timings after
+verification succeeds. A measured runtime difference over 20% produces a warning; updated samples rebalance the
+next run. A single expensive spec cannot be divided by file sharding and may need focused specs preserving its
+assertions. This optimization reduces waiting by adding runners and repeated dependency setup; hosted speedups
+must be measured after CI completes.
+
+`npm run test:frontend-shards` covers balancing, changed runtimes, new/hidden specs, environment changes, corrupt
+history, stale plans, real sequencer selection and strict report validation. Run it with `test:frontend-config` and
+`test:workflows` when changing scheduling. Runner changes require both complete shards, an exact file/assertion
+comparison with an unsharded run and a coverage smoke across Node, DOM and Angular. For local reproduction:
+
+```sh
+node tools/frontend-test-shard-cli.mjs plan tmp/frontend-timings/history.json tmp/frontend-shards/plan.json
+QS_FRONTEND_SHARD_PLAN=tmp/frontend-shards/plan.json npm run test -- --run --shard=1/2
+QS_FRONTEND_SHARD_PLAN=tmp/frontend-shards/plan.json npm run test -- --run --shard=2/2
+```
+
+Without `QS_FRONTEND_SHARD_PLAN`, focused and unsharded local invocations keep Vitest's ordinary sequencing.
 
 ## Trigger policy without duplicate test runs
 
