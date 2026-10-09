@@ -1,4 +1,4 @@
-import { Component, OnInit, DestroyRef, PLATFORM_ID, afterEveryRender, inject, signal } from '@angular/core';
+import { Component, OnInit, DestroyRef, ElementRef, PLATFORM_ID, afterEveryRender, inject, signal } from '@angular/core';
 import { DOCUMENT, Location, isPlatformBrowser } from '@angular/common';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { Router, RouterLink } from '@angular/router';
@@ -26,6 +26,16 @@ const HOME_FEATURES = [
   { id: 'integrations', label: 'Integrations' },
 ] as const;
 
+interface HomeScrollPosition {
+  shell: [number, number] | null;
+  viewport: [number, number];
+}
+
+interface HomeFeatureHistory {
+  id: number;
+  position?: HomeScrollPosition;
+}
+
 @Component({
   selector: 'app-home',
   templateUrl: './home.component.html',
@@ -44,9 +54,13 @@ export class HomeComponent implements OnInit {
   private readonly haptics = inject(AppHapticsService);
   private readonly location = inject(Location);
   private readonly document = inject(DOCUMENT);
+  private readonly host = inject<ElementRef<HTMLElement>>(ElementRef);
   private readonly isBrowser = isPlatformBrowser(inject(PLATFORM_ID));
   private featureScrollFrame: number | null = null;
-  private featureScrollTarget: string | null = null;
+  private featureScrollTarget: string | HomeScrollPosition | null = null;
+  private readonly featureHistoryPositions = new Map<number, HomeScrollPosition>();
+  private currentHistoryEntry: number | null = null;
+  private nextHistoryEntry = 0;
   private currentFeatureFragment = '';
   private readonly featureScroll = afterEveryRender(() => this.flushFeatureScroll());
   readonly features = HOME_FEATURES;
@@ -79,8 +93,8 @@ export class HomeComponent implements OnInit {
 
   ngOnInit(): void {
     if (!this.isBrowser) return;
-    this.syncFeatureAnchorFromUrl(this.location.path(true));
-    this.destroyRef.onDestroy(this.location.onUrlChange(url => this.syncFeatureAnchorFromUrl(url)));
+    this.syncFeatureAnchorFromUrl(this.location.path(true), this.location.getState());
+    this.destroyRef.onDestroy(this.location.onUrlChange((url, state) => this.syncFeatureAnchorFromUrl(url, state)));
     this.destroyRef.onDestroy(() => this.cancelFeatureScrollFrame());
     this.authService.user$.pipe(takeUntilDestroyed(this.destroyRef)).subscribe(user => {
       if (user) void this.router.navigate(['/dashboard']);
@@ -99,23 +113,61 @@ export class HomeComponent implements OnInit {
       return;
     }
     this.haptics.selection();
-    const path = this.location.path(true).split('#')[0];
-    this.location.go(`${path}#${fragment}`);
+    const currentUrl = this.location.path(true);
+    const state = this.location.getState();
+    const historyState = state && typeof state === 'object' ? state : {};
+    const entry: HomeFeatureHistory = {
+      id: this.currentHistoryEntry ?? this.nextHistoryEntry++,
+      position: this.readScrollPosition(),
+    };
+    // Preserve the exact outgoing view, including entries without a section fragment.
+    this.location.replaceState(currentUrl, '', { ...historyState, qsHomeFeature: entry });
+    const path = currentUrl.split('#')[0];
+    this.location.go(`${path}#${fragment}`, '', { qsHomeFeature: { id: this.nextHistoryEntry++ } });
   }
 
-  private syncFeatureAnchorFromUrl(url: string): void {
+  private syncFeatureAnchorFromUrl(url: string, state: unknown): void {
+    const entry = (state as { qsHomeFeature?: HomeFeatureHistory } | null)?.qsHomeFeature;
+    const entryId = entry && Number.isSafeInteger(entry.id) && entry.id >= 0 ? entry.id : null;
+    if (this.currentHistoryEntry !== null && this.currentHistoryEntry !== entryId) {
+      // Popstate runs before our scroll: cache the view being left for Forward/Back.
+      this.featureHistoryPositions.set(this.currentHistoryEntry, this.readScrollPosition());
+    }
+    this.cancelFeatureScrollFrame();
+    this.currentHistoryEntry = entryId;
+    if (entryId !== null) this.nextHistoryEntry = Math.max(this.nextHistoryEntry, entryId + 1);
     this.currentFeatureFragment = url.split('#')[1] ?? '';
+    const savedPosition = entryId === null ? null
+      : this.featureHistoryPositions.get(entryId) ?? entry?.position;
+    if (this.isScrollPosition(savedPosition)) {
+      this.featureScrollTarget = savedPosition;
+      return;
+    }
     this.featureScrollTarget = this.features.some(feature => `home-${feature.id}` === this.currentFeatureFragment)
       ? this.currentFeatureFragment : null;
   }
 
   private flushFeatureScroll(): void {
     if (!this.featureScrollTarget) return;
-    const target = this.document.getElementById(this.featureScrollTarget);
-    if (!target) return;
+    const destination = this.featureScrollTarget;
+    const target = typeof destination === 'string' ? this.document.getElementById(destination) : null;
+    if (typeof destination === 'string' && !target) return;
     this.featureScrollTarget = null;
     this.cancelFeatureScrollFrame();
-    const scroll = () => target.scrollIntoView?.({ block: 'start', behavior: 'instant' });
+    const scroll = () => {
+      if (target) {
+        target.scrollIntoView?.({ block: 'start', behavior: 'instant' });
+        return;
+      }
+      if (typeof destination === 'string') return;
+      const shell = this.host.nativeElement.closest<HTMLElement>('mat-sidenav-content');
+      if (shell && destination.shell) {
+        [shell.scrollLeft, shell.scrollTop] = destination.shell;
+      }
+      this.document.defaultView?.scrollTo({
+        left: destination.viewport[0], top: destination.viewport[1], behavior: 'instant',
+      });
+    };
     scroll();
     // Align again once the shell has rendered its visible header offset after scrolling.
     this.featureScrollFrame = this.document.defaultView?.requestAnimationFrame(() => {
@@ -124,6 +176,23 @@ export class HomeComponent implements OnInit {
         scroll();
       }) ?? null;
     }) ?? null;
+  }
+
+  private readScrollPosition(): HomeScrollPosition {
+    const shell = this.host.nativeElement.closest<HTMLElement>('mat-sidenav-content');
+    const viewport = this.document.defaultView;
+    return {
+      shell: shell ? [shell.scrollLeft, shell.scrollTop] : null,
+      viewport: [viewport?.scrollX ?? 0, viewport?.scrollY ?? 0],
+    };
+  }
+
+  private isScrollPosition(position: unknown): position is HomeScrollPosition {
+    if (!position || typeof position !== 'object') return false;
+    const { shell, viewport } = position as Partial<HomeScrollPosition>;
+    const isPair = (value: unknown) => Array.isArray(value) && value.length === 2
+      && value.every(coordinate => typeof coordinate === 'number' && Number.isFinite(coordinate) && coordinate >= 0);
+    return isPair(viewport) && (shell === null || isPair(shell));
   }
 
   private cancelFeatureScrollFrame(): void {

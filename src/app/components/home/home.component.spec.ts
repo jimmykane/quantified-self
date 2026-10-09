@@ -209,6 +209,97 @@ describe('HomeComponent', () => {
     expect(selection).toHaveBeenCalledOnce();
   });
 
+  it('returns Back to the exact unanchored view and Forward to the point left within a feature', () => {
+    const shell = document.createElement('mat-sidenav-content');
+    document.body.appendChild(shell);
+    shell.appendChild(fixture.nativeElement);
+    const scrollTo = vi.spyOn(window, 'scrollTo').mockImplementation(() => {});
+    const go = vi.spyOn(location, 'go');
+    shell.scrollTop = 380;
+    shell.scrollLeft = 12;
+    fixture.nativeElement.querySelector('#home-health').scrollIntoView = vi.fn();
+
+    fixture.componentInstance.jumpToFeature('health');
+    fixture.detectChanges();
+    shell.scrollTop = 4200;
+    shell.scrollLeft = 0;
+    location.back();
+    fixture.detectChanges();
+    expect(shell.scrollTop).toBe(380);
+    expect(shell.scrollLeft).toBe(12);
+    expect(scrollTo).toHaveBeenCalledWith({ left: 0, top: 0, behavior: 'instant' });
+    expect(location.path(true)).toBe('');
+
+    location.forward();
+    fixture.detectChanges();
+    expect(shell.scrollTop).toBe(4200);
+    expect(shell.scrollLeft).toBe(0);
+    expect(location.path(true)).toBe('/#home-health');
+    expect(go).toHaveBeenCalledOnce();
+    expect(selection).toHaveBeenCalledOnce();
+    fixture.destroy();
+    shell.remove();
+  });
+
+  it('keeps separate reading positions for repeated visits to the same feature URL', () => {
+    const shell = document.createElement('mat-sidenav-content');
+    document.body.appendChild(shell);
+    shell.appendChild(fixture.nativeElement);
+    vi.spyOn(window, 'scrollTo').mockImplementation(() => {});
+    fixture.nativeElement.querySelector('#home-training').scrollIntoView = vi.fn();
+    fixture.nativeElement.querySelector('#home-maps').scrollIntoView = vi.fn();
+    fixture.componentInstance.jumpToFeature('training');
+    fixture.detectChanges();
+    shell.scrollTop = 1100;
+    fixture.componentInstance.jumpToFeature('maps');
+    fixture.detectChanges();
+    shell.scrollTop = 7300;
+    fixture.componentInstance.jumpToFeature('training');
+    fixture.detectChanges();
+    shell.scrollTop = 1900;
+
+    location.back();
+    fixture.detectChanges();
+    expect(shell.scrollTop).toBe(7300);
+    location.back();
+    fixture.detectChanges();
+    expect(shell.scrollTop).toBe(1100);
+    location.forward();
+    fixture.detectChanges();
+    location.forward();
+    fixture.detectChanges();
+    expect(shell.scrollTop).toBe(1900);
+    expect(selection).toHaveBeenCalledTimes(3);
+    fixture.destroy();
+    shell.remove();
+  });
+
+  it('preserves existing query/history state and restores a saved view after recreating the homepage', () => {
+    const shell = document.createElement('mat-sidenav-content');
+    document.body.appendChild(shell);
+    shell.appendChild(fixture.nativeElement);
+    vi.spyOn(window, 'scrollTo').mockImplementation(() => {});
+    location.replaceState('/?source=homepage', '', { navigationId: 12, otherState: 'preserved' });
+    shell.scrollTop = 480;
+    fixture.nativeElement.querySelector('#home-plans').scrollIntoView = vi.fn();
+    fixture.componentInstance.jumpToFeature('plans');
+    fixture.detectChanges();
+    expect(location.path(true)).toBe('/?source=homepage#home-plans');
+    location.back();
+    fixture.detectChanges();
+    expect(location.getState()).toMatchObject({ navigationId: 12, otherState: 'preserved' });
+    expect(location.path(true)).toBe('/?source=homepage');
+    fixture.destroy();
+    shell.scrollTop = 0;
+    fixture = TestBed.createComponent(HomeComponent);
+    shell.appendChild(fixture.nativeElement);
+    fixture.detectChanges();
+    expect(shell.scrollTop).toBe(480);
+    expect(selection).toHaveBeenCalledOnce();
+    fixture.destroy();
+    shell.remove();
+  });
+
   it('keeps initialization, invalid and unchanged destinations silent and cleans up history listeners', () => {
     const component = fixture.componentInstance;
     component.jumpToFeature('invalid');
