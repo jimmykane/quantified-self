@@ -31,6 +31,8 @@ import { normalizeUserUnitSettings } from '@shared/unit-aware-display';
 import { formatCanonicalHealthMetricSportsLibValue } from '@shared/sports-lib-health-data';
 import {
   buildHealthMetricCatalogGroups,
+  buildHealthOverviewCategories,
+  selectHealthOverviewMetrics,
   buildHealthMetricWorkspaceView,
   buildHealthHrvPersonalRangeStatus,
   HEALTH_HRV_PERSONAL_RANGE_SEMANTIC_VARIANTS,
@@ -426,6 +428,30 @@ describe('Health workspace helpers', () => {
       HEALTH_METRIC_IDS.BodyWeight,
     ]);
     expect(buildHealthMetricCatalogGroups([])).toEqual([]);
+  });
+
+  it('groups every available metric once without changing the stored catalog categories', () => {
+    const groups = buildHealthMetricCatalogGroups();
+    const categories = buildHealthOverviewCategories(groups, true);
+    expect(categories.map(category => category.id)).toEqual(['body', 'vitals', 'movement', 'recovery', 'fitness']);
+    const metrics = categories.flatMap(category => category.metrics.map(metric => metric.id));
+    expect(new Set(metrics).size).toBe(metrics.length);
+    expect(metrics).toEqual(expect.arrayContaining(['sleep', ...groups.flatMap(group => group.metrics.map(metric => metric.id))]));
+    expect(categories.find(category => category.id === 'fitness')!.metrics.map(metric => metric.id)).toContain('vo2_max');
+    expect(categories.find(category => category.id === 'body')!.metrics.map(metric => metric.id)).toContain('body_weight');
+    expect(HEALTH_METRIC_CATALOG.body_weight.category).toBe('body');
+    expect(buildHealthOverviewCategories([], false)).toEqual([]);
+    expect(buildHealthOverviewCategories([], true)).toMatchObject([{ id: 'recovery', metrics: [{ id: 'sleep' }] }]);
+  });
+
+  it('limits the overview to six available readings and fills gaps without inventing metrics', () => {
+    const categories = buildHealthOverviewCategories(buildHealthMetricCatalogGroups(), true);
+    expect(selectHealthOverviewMetrics(categories).map(metric => metric.id)).toEqual([
+      'body_weight', 'heart_rate_variability', 'resting_heart_rate', 'steps', 'vo2_max', 'sleep',
+    ]);
+    const sparse = buildHealthOverviewCategories(buildHealthMetricCatalogGroups(['body_fat', 'steps']), false);
+    expect(selectHealthOverviewMetrics(sparse).map(metric => metric.id)).toEqual(['steps', 'body_fat']);
+    expect(selectHealthOverviewMetrics([])).toEqual([]);
   });
 
   it('keeps providers, accounts, semantics, native values, gaps, and conflicts isolated', () => {
