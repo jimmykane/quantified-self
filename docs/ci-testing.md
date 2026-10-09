@@ -11,16 +11,19 @@ approved manual deployment workflows. Independent jobs run the same mandatory ch
 | `frontend_plan` | Frontend allocation/shard guards and one automatically balanced plan for the tested commit |
 | `frontend_tests` | Two runners covering the complete suite across all three projects |
 | `rules_tests` | Firestore and Storage Rules tests with Java/Firebase emulators |
-| `functions_emulators` | Complete four-group Functions emulator matrix |
+| `functions_emulators` | Complete lifecycle, completion and MCP/data emulator groups |
+| `delivery_plan` | Registry/discovery validation and one automatically balanced delivery plan for the tested commit |
+| `delivery_emulators` | Two isolated emulator runners covering every delivery spec exactly once |
 
-The two frontend runners depend on the short `frontend_plan` job; all other suites start independently.
+The two frontend runners depend on the short `frontend_plan` job, and the two delivery runners on `delivery_plan`;
+all other suites start independently. Delivery planning uses only Node built-ins and needs no dependency install.
 The final `run_tests` job waits for every job above. It uses `always()` and fails unless every dependency succeeded,
 including failed, cancelled, skipped or missing results. It preserves the protected-branch check name
 `run-tests / run_tests`; no individual successful job can make the required gate green. Reusable-workflow deployment
-dependencies continue to wait for the complete gate. The gate also rejects incomplete frontend reports before
+dependencies continue to wait for the complete gate. The gate also rejects incomplete frontend and delivery reports before
 publishing timing hints. Its report validator uses only Node built-ins, so the gate needs no dependency install.
 
-Keep suite jobs independent except for their shared frontend plan when adding CI checks. Add any new mandatory job to the final gate and its executable
+Keep suite jobs independent except for their shared scheduling plans when adding CI checks. Add any new mandatory job to the final gate and its executable
 failure tests. Do not put frontend or Rules tests back after the Functions suite, or raise per-runner worker limits
 to obtain parallelism. Node setup caches npm downloads using the applicable lockfiles; each runner still uses `npm ci`.
 Both Functions jobs install root dependencies because shared sources resolve them there. Build/compiled checks
@@ -167,7 +170,8 @@ child-process pipe through that path fails on Linux CI even when it works locall
 ## Functions emulator matrix
 
 All real Functions emulator/integration files are mandatory on every invocation, including 400-workout stress cases.
-Four independent Ubuntu runners keep emulator load out of the app/unit test runner. Each uses Node 22 (the Functions
+Five independent Ubuntu runners keep emulator load out of the app/unit test runner: two delivery shards plus
+lifecycle, completion and MCP/data. Each uses Node 22 (the Functions
 runtime), Java 21, one Vitest worker and serial files within its group. There is no nightly-only or path-filtered hole.
 
 | Group | Coverage | Measured local test runtime |
@@ -177,7 +181,8 @@ runtime), Java 21, one Vitest worker and serial files within its group. There is
 | `completion` | Garmin FIT, Wahoo and COROS completion markers plus admin delivery counts | 10 s / 46 tests |
 | `mcp-data` | Training MCP reads/writes, content writes, derived reuse, tag concurrency, marketing durability and interrupted disconnects | 95 s / 101 tests |
 
-The local verification ran all 19 files / 339 tests without skips on Node 22 and Java 23. Timings include Vitest startup,
+The table preserves the original four-group local benchmark, before delivery sharding and later test additions.
+That verification ran all 19 files / 339 tests without skips on Node 22 and Java 23. Timings include Vitest startup,
 not installs, the Functions build or emulator startup, and are not hosted-runner timing guarantees. The 400-workout
 cases took about 24 seconds within `lifecycle`, so they remain in the normal gate rather than a nightly-only workflow.
 
@@ -193,6 +198,49 @@ pending or TODO assertions. All counters must be non-negative integers, passing 
 reported assertion count must equal the total test count. Missing or inconsistent report fields fail closed.
 Missing emulator environment variables cannot silently turn a mandatory suite green.
 Vitest failures, unhandled errors, setup/teardown failures and a missing report remain failures.
+
+### Automatically balanced delivery shards
+
+Delivery became the longest job in [run 37891665905](https://github.com/jimmykane/quantified-self/actions/runs/37891665905):
+12m06s, versus 6m16s for the slower frontend job. Its seven files passed 425 tests. The full required test gate
+took 12m18s from the first test job's start. These are measurements of the previous unsharded CI, not a claimed
+speedup for this change.
+
+`tools/delivery-test-shards.mjs` assigns expensive files first to the least-loaded of two shards. It uses the median
+of up to three successful per-file JSON report spans (first test start through last test end), including the hooks
+within that span. These estimates exclude imports and emulator/build startup; actual shard elapsed time is reported
+separately. Cache misses use equal 60-second estimates; new files with existing history use at least one second or
+the median known cost. Removed files lose their history. Estimates affect scheduling only; the current `delivery`
+registry always defines the complete required workload.
+
+Only `delivery_plan` restores timing history and uploads a single plan with the tested Git revision. Both runners
+download that same plan and validate its exact registered paths before starting fresh emulators. They retain the
+same runner/configuration, isolated forks, one worker and serial files. The other three groups start independently.
+The cache is keyed by OS, root/Functions lockfiles, Functions configuration/setup and scheduling code, and follows
+GitHub's branch cache access rules. A new branch may start cold; malformed optional history falls back safely.
+
+Each shard uploads a report envelope containing the revision, shard index, elapsed time and the validated Vitest
+JSON report with Functions-relative paths. The protected gate requires all jobs to succeed and both frontend and
+delivery report sets to pass before saving either timing cache. Delivery validation rechecks discovery/registry,
+commit, shard identity, exact file coverage, passing non-empty assertions and consistent counters. Missing reports,
+failures, skips, TODOs or invalid timings remain fatal. A runtime gap over 20% emits a warning and successful samples
+rebalance subsequent runs. File sharding cannot divide a single expensive spec.
+
+Run `npm run test:delivery-shards` with `test:emulator-coverage` and `test:workflows` after scheduling changes.
+Verify both complete shards against an unsharded passing run's exact file/assertion-name/status set. Local commands:
+
+```sh
+npm run test:functions-emulators -- delivery --output tmp/delivery-baseline
+node tools/delivery-test-shard-cli.mjs plan tmp/delivery-timings/history.json tmp/delivery-shards/plan.json
+npm run test:functions-emulators -- delivery --plan tmp/delivery-shards/plan.json --shard 1 --output tmp/delivery-shards/reports/delivery-report-1
+npm run test:functions-emulators -- delivery --plan tmp/delivery-shards/plan.json --shard 2 --output tmp/delivery-shards/reports/delivery-report-2
+node tools/delivery-test-shard-cli.mjs merge tmp/delivery-shards/plan.json tmp/delivery-shards/reports tmp/delivery-timings/history.json
+```
+
+Run these local emulator commands serially because the local Firebase configuration uses fixed ports. CI shards
+run in parallel on separate machines, each with its own emulator process. Recreate the plan after changing commits.
+Additional runners repeat installs/build/emulator setup and consume runner capacity; measure hosted gate durations
+after CI completes before making speedup claims.
 
 ## Local commands and isolation
 
