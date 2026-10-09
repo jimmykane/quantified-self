@@ -278,6 +278,12 @@
                         <td>Queries only by <code>uid</code>, <code>toUids</code> and <code>marketing.uid</code>; preserves conflicting UID owners and confirmation mail. Historical email-only records are outside cleanup, expiring only when they have a valid TTL field. Account mail writers must preserve UID ownership and expiry, including manual scripts for registered recipients.</td>
                     </tr>
                     <tr>
+                        <td><strong>Campaign Tracking</strong></td>
+                        <td><code>development_update_email_tracking/{docId}</code></td>
+                        <td><code>cleanupUserAccountsV2</code></td>
+                        <td>Queries explicit <code>uid</code> ownership and recursively deletes with revision checks, retry checkpoints and absence verification. New receipts preserve UID and expiry metadata; mail TTL does not expire this separate collection. Historical UID-less receipts remain outside cleanup; no email matching is used.</td>
+                    </tr>
+                    <tr>
                         <td><strong>Other Files</strong></td>
                         <td>Storage: <code>users/{uid}/*</code></td>
                         <td><code>cleanupUserAccountsV2</code></td>

@@ -139,6 +139,7 @@ describe('queue-mcp-connection-update', () => {
 
         expect(queue.create).toHaveBeenCalledWith(expect.anything(), expect.objectContaining({
             uid: 'user-1', to: 'member@example.com',
+            expireAt: expect.objectContaining({ toMillis: expect.any(Function) }),
         }));
         expect(queue.get).toHaveBeenCalledWith({ path: 'users/user-1' });
         expect(JSON.parse(queue.log.mock.calls.at(-1)![0])).toMatchObject({

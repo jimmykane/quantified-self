@@ -131,6 +131,19 @@ never selected `mail`; email cleanup was already owned by the custom Gen 1 handl
 `functions/AGENTS.md` requires all account-mail writers to preserve explicit UID
 ownership and expiry, including administrative scripts, retries and confirmations.
 
+**Medium impact — campaign tracking retention, fixed for future writes.** The CSV
+sender's separate `development_update_email_tracking` receipt stores recipient
+name/email independently of the `mail` document. Expiring or deleting mail alone
+left that receipt behind. New receipts carry the resolved Auth UID and 90-day
+expiry metadata inside the same deletion-guarded transaction. Cleanup now discovers
+receipts by exact `uid` and uses the guarded recursive/checkpoint/readback path,
+including recovery after a parent disappears. The email-derived document ID is
+never treated as account ownership. Historical UID-less receipts remain outside
+this cleanup scope, with no email fallback or backfill. `mail.expireAt` TTL does
+not apply to this separate collection; no tracking TTL policy is activated here,
+and account cleanup does not depend on one. Existing campaign deduplication is
+unchanged. Agent instructions now explicitly cover recipient-tracking records.
+
 **Client and campaign writers, fixed.** Existing browser sessions can outlive the
 callable response. Rules now apply the active deletion tombstone check to every
 previously permitted account write, including profiles, settings, legal records,
@@ -165,7 +178,7 @@ implementation distinguishes account incarnations at the same path.
 3. Existing provider/account ownership exclusions remain in force, including
    shared accounts and provider IDs reassigned to another active owner. Source
    queue/DLQ tombstones commit atomically with the guarded root deletion.
-   Queue and MCP top-level targets are checkpointed in the marker's server-only
+   Queue, MCP and UID-owned campaign-tracking targets are checkpointed in the marker's server-only
    `operationalTargets` subcollection before recursive deletion. A retry can
    therefore find children after their query-visible parent has disappeared;
    paths stay within an explicit collection allowlist and current parent
@@ -272,7 +285,8 @@ A real Firestore overlap test proves a stale Gen 1 attempt cannot replace the Ge
 receipt or erase another owner. Further regressions cover an 801-record mail
 history, confirmation/other-UID retention, intentionally retained email-only
 records with and without TTL, and reassignment between query and
-batch commit. Further review covers ownership reassignment before recursive
+batch commit. A 101-receipt campaign-tracking fixture verifies paging, interrupted
+parent deletion, checkpoint recovery and other-owner/UID-less retention. Further review covers ownership reassignment before recursive
 queue deletion, reconnect after a provider-only parent disappears, an operational
 tree exceeding the SDK's 5,000-document stream page, `uid` mail ownership after
 email changes, and client Rules/transaction-time campaign fences. These tests do not run Functions/Extensions
