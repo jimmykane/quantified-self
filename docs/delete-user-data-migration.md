@@ -34,7 +34,8 @@ reviewed configuration rather than inheriting the bucket target.
    individual Auth deletion. Marker-write failure aborts the Auth call. An
    ambiguous failed Auth RPC retains the fence; the authenticated user can retry
    `deleteSelf`. An already-missing Auth user does not prove data erasure or emit
-   a fresh deletion event.
+   a fresh deletion event. A stale callable retry preserves an already verified
+   completion receipt instead of reopening a pending fence.
 2. The Auth cleanup handler also creates/upgrades the fence, covering deletion
    initiated through Auth administration. It reads provider identifiers from
    credentials, archived follow-up tokens and UID-owned queues. Before removing
@@ -44,6 +45,18 @@ reviewed configuration rather than inheriting the bucket target.
 3. Existing provider/account ownership exclusions remain in force, including
    shared accounts and provider IDs reassigned to another active owner. Source
    queue/DLQ tombstones are persisted before recursive operational deletion.
+   Queue and MCP top-level targets are checkpointed in the marker's server-only
+   `operationalTargets` subcollection before recursive deletion. A retry can
+   therefore find children after their query-visible parent has disappeared;
+   paths stay within an explicit collection allowlist and current parent
+   ownership is rechecked before replay. Changed ownership retains the target
+   and blocks completion for operator review. Provider-only lookups also require
+   the identifier to belong to the matching provider, not merely share its text.
+   Discovery, deletion and readback page exact UID/provider queries at 100 rows;
+   they do not scan unrelated queue collections. Canonical safe numeric legacy
+   provider IDs are queried alongside their string forms, including Wahoo DLQ rows.
+   Firebase UIDs remain literal strings throughout discovery, filtering and replay;
+   trimming a custom UID must never change its account boundary.
    Required local failures are accumulated while other stages continue, then
    thrown so the existing retry policy can redeliver the Auth event.
 4. Both fixed Firestore roots use native `recursiveDelete`, including children
@@ -59,8 +72,12 @@ reviewed configuration rather than inheriting the bucket target.
    returned successfully. No new scheduler or generic queue is introduced.
 6. Only a fully successful, verified pass sets `cleanupStatus: complete`,
    `completedAt` and a seven-day `expireAt`. Pending markers have no TTL. The
-   checkpoint's provider identifiers survive completed retention for duplicate
-   events, without storing credentials. Completion means this scoped local
+   completion transaction checks the current invocation's attempt ID and an
+   empty target-checkpoint collection. A superseded invocation cannot finish
+   or remove a newer attempt's checkpoints. Each target checkpoint is removed
+   only after descendant verification; completed TTL leaves no checkpoint
+   children behind. The checkpoint's provider identifiers survive completed
+   retention for duplicate events, without storing credentials. Completion means this scoped local
    cleanup passed; Auth deletion, an invocation acknowledgement, an email and
    successful provider HTTP alone are different outcomes.
 
@@ -71,7 +88,10 @@ confirmation email have their existing operational retention. Provider apps or
 watches can retain previously sent workouts. Stripe remains responsible for
 remote customer/subscription cleanup: its inspected `Auto delete` setting means
 customers are **not** promised to be retained in Stripe. None of those remote
-results is certified by the local completion marker.
+results is certified by the local completion marker. Read-only bucket inspection
+also confirmed a 30-day Cloud Storage soft-delete policy. Completion verifies
+absence of live objects; protected recovery copies expire under that existing
+policy. This change does not disable retention or permanently purge those copies.
 
 A running Storage upload cannot be transactionally fenced with Firestore. The
 final listing detects objects visible at verification, while existing writer
@@ -111,7 +131,9 @@ Local evidence includes targeted owner/callable/helper regressions and the
 registered demo Firestore suite: a 4,955-descendant Health/Sleep/reservation tree,
 missing parents, interrupted deletion, checkpoint recovery, concurrent guarded
 writes, repeated cleanup, operational readback and other-owner preservation.
-Storage unit fixtures cover pagination, prefix collisions, generations, partial
+Additional regressions cover lost queue/MCP parents, superseded attempts,
+provider ID collisions, reassigned or invalid checkpoint targets, stale callable
+retries and token descendants below missing parents. Storage unit fixtures cover pagination, prefix collisions, generations, partial
 failures, missing objects and a late object during final readback. Provider I/O
 and Storage I/O in Firestore tests are synthetic. No live provider or account
 mutation establishes this evidence. Functions build, secret/entrypoint checks,
@@ -123,7 +145,8 @@ After separate deployment approval, deploy only the prepared owners:
 firebase deploy --project quantified-self-io --only functions:cleanupUserAccounts,functions:deleteSelf
 ```
 
-Before that approval, verify the runtime identity can recursively delete/read
+Before production cutover, activate and verify the account-cleanup coverage in
+#836; local tests do not replace overdue-pending alerts. Before deployment approval, verify the runtime identity can recursively delete/read
 both Firestore roots and list/read/delete objects in the exact bucket; do not
 copy the extension's broad RTDB/PubSub roles. Keep the installed extension and
 its manifest/env declarations during overlap. After deployment, read back the

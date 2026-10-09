@@ -73,7 +73,7 @@ describe('account Storage cleanup', () => {
 
 describe('operational absence verification', () => {
     it('fails on remaining owned rows but preserves rows excluded by the existing owner filter', async () => {
-        const query = { get: vi.fn().mockResolvedValue({ docs: [{ id: 'other' }, { id: 'owned' }] }) };
+        const query = { get: vi.fn().mockResolvedValue({ docs: [{ id: 'other' }, { id: 'owned' }] }), limit: vi.fn(() => query) };
         const filtered = (doc: { id: string }) => Promise.resolve(doc.id === 'owned');
         await expect(assertAccountCleanupQueryEmpty(query as unknown as admin.firestore.Query, filtered)).rejects.toThrow('remains');
         await expect(assertAccountCleanupQueryEmpty(query as unknown as admin.firestore.Query, async () => false)).resolves.toBeUndefined();
