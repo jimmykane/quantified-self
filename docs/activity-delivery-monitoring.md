@@ -53,6 +53,13 @@ remain `provider_pending`; budget exhaustion retains the failed upload identifie
 and emits the existing DLQ/manual-reconciliation outcomes only after commit.
 Monitoring definitions, labels, thresholds and native queue scope are unchanged.
 
+COROS's #600 upload-copy mappings (Snorkeling → Open Water Swim; Sailing → GPS
+Cardio) use these same workers, destination labels and committed outcomes. Coverage
+is unchanged: a mapping INFO is not provider acceptance or delivery. Confirm
+status `2` and the guarded success write, not the preparation log or task ACK.
+Already accepted uploads remain status-only; this change adds no probe, metric or
+alert-policy dimension and does not authorize replaying old failed records.
+
 Telemetry is best-effort after existing commits, not an audit ledger or an exactly-once
 counter: logging can fail, and a committed write followed by container loss can omit
 an observation. Logging failures never change delivery/acknowledgement behavior.

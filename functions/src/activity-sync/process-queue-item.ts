@@ -67,6 +67,7 @@ import {
 import { WAHOO_API_ACCESS_TOKENS_COLLECTION_NAME } from '../wahoo/constants';
 import { isWahooReconnectRequiredError } from '../wahoo/refresh-recovery';
 import { getCOROSActivityUploadStatus, uploadActivityFileToCOROS } from '../coros/activities';
+import { prepareCOROSActivityFITUpload } from '../coros/activity-fit';
 import { getActiveCOROSTokenSnapshot } from '../coros/account';
 import { hasProAccess } from '../utils';
 import { getActivitySyncRouteAllowlistConfigError, isActivitySyncRouteUserAllowlisted } from './allowlist';
@@ -865,8 +866,9 @@ async function updatePreUploadQueueItemIfUserActive(
 async function ensureOutboundFingerprintBeforeProviderUpload(
     queueItem: ActivitySyncQueueItemInterface,
     fileBuffer: Buffer | undefined,
+    fileChanged = false,
 ): Promise<boolean> {
-    if (queueItem.outboundFingerprintID) {
+    if (queueItem.outboundFingerprintID && !fileChanged) {
         return true;
     }
     if (!fileBuffer) {
@@ -1815,9 +1817,15 @@ export async function processActivitySyncQueueItem(
             );
         }
 
-        const fileBuffer = shouldDownloadOriginalFileForDestination(queueItem)
+        const originalFileBuffer = shouldDownloadOriginalFileForDestination(queueItem)
             ? await downloadOriginalFile(queueItem)
             : undefined;
+        // Accepted operations keep their original receipt and status-only resume.
+        // New uploads/restarts fingerprint the same converted copy they actually send.
+        const fileBuffer = originalFileBuffer && queueItem.destinationServiceName === ServiceNames.COROSAPI
+            && !hasPersistedDestinationUpload(queueItem)
+            ? prepareCOROSActivityFITUpload(originalFileBuffer)
+            : originalFileBuffer;
         if (await shouldSkipQueueWorkForDeletedUser(
             queueItem.userID,
             queueItem.destinationServiceName,
@@ -1827,7 +1835,7 @@ export async function processActivitySyncQueueItem(
             return markActivitySyncQueueItemSkippedForDeletedUser(queueItem, bulkWriter);
         }
 
-        if (!(await ensureOutboundFingerprintBeforeProviderUpload(queueItem, fileBuffer))) {
+        if (!(await ensureOutboundFingerprintBeforeProviderUpload(queueItem, fileBuffer, fileBuffer !== originalFileBuffer))) {
             return QueueResult.AcknowledgedStale;
         }
 

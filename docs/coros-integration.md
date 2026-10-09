@@ -129,6 +129,58 @@ For COROS-bound shared rows, provider status `1` is an expected asynchronous wai
 
 A matching status response with result `0000` and status `-1` uses the existing queued `restart` retry path, not immediate DLQ. The worker clears the confirmed-failed upload identifiers while retaining the original account in `destinationRestartProviderUserID`; a later task may resend the retained FIT only to that still-active account. It does not reset the shared retry count or add an adapter retry loop. Pending polls and restart failures consume the same ten-increment durable budget, so this is not ten new uploads. At exhaustion the last failed upload/account identifiers remain available for DLQ reconciliation. Structured failure logs retain each failed operation ID and status. Explicit unsupported-file result `5096`, unknown status, and mismatched operation IDs remain permanent; a pending or uncertain operation is never blindly resent. Direct callable error codes and manual retry controls are unchanged.
 
+### Recorded-activity category fallbacks (#600)
+
+Both direct FIT uploads and new/restarted queued uploads call
+`functions/src/coros/activity-fit.ts` before writing the outbound fingerprint and
+sending the file. The fixed mappings are:
+
+| Source FIT sport | Sent FIT sport / sub_sport | COROS category |
+| --- | --- | --- |
+| Snorkeling (`82`) | Swimming / Open Water (`5` / `18`) | Open Water Swim |
+| Sailing (`32`) | Generic / Generic (`0` / `0`) | GPS Cardio |
+
+The adapter only converts structurally valid, single-session activity FITs with
+consistent category fields and at least one valid recorded latitude/longitude
+pair. GPS-less, mixed/multi-session, malformed and unrelated files pass through
+unchanged for the existing provider inference/rejection behavior; no support for
+those cases is claimed. FIT sub_sport `17` is pool swimming, not open water.
+COROS's API `mode=18/subMode=1` is not a FIT sport enum or an upload parameter.
+
+Only Session, Lap and optional Sport classification fields change, with missing
+enum fields inserted and header/file CRCs recalculated. Original files and QS
+activity types stay unchanged. Recorded timing, distance, GPS, depth, sensor,
+unknown/vendor and developer fields retain their bytes; no metrics are fabricated.
+COROS may not display every retained field. Synthetic regression fixtures contain
+no private exports.
+
+On 9 October 2026, separately authorized controlled imports of one retained
+Snorkeling and one Sailing activity both reached status `2`. The owner confirmed
+Open Water Swim and matching snorkeling details, then GPS Cardio, matching sailing
+summary and its visible route. Sailing took about two hours and an explicitly
+authorized single same-copy resend returned the same upload ID while pending.
+Neither imported copy appeared in the inspected history API responses, so category
+confirmation came from the owner's app checks, not inferred API readback.
+This proves the two tested files, not universal COROS acceptance. No test identifiers,
+files, screenshots or credentials belong in this repository.
+
+Fingerprint receipts are computed from the actual sent copy. A converted fresh
+send/restart replaces a legacy original-file queue fingerprint marker through the
+existing guarded update; previously accepted operations keep their receipt and
+status-only reconciliation without conversion or another POST. Same-account
+pinning, Pro, deletion/disconnect checks, polling, duplicates and bounded retries
+are unchanged. INFO `[COROS] Applied activity FIT category fallback.` logs only one
+fixed mapping label, never files, coordinates or account identifiers. App Help
+discloses the category change and unsupported cases.
+
+Monitoring coverage is **unchanged**: the #832 bundle/runbook already includes
+COROS, committed delivery/pending/retry/DLQ outcomes and overdue status-only polls.
+No metric dimensions, scheduler, queue policy, Rules, indexes, secrets, persistent
+schema, Training or MCP contracts change. Functions deployment and any historical
+replay require separate explicit approval; this implementation does not deploy,
+replay or complete old queue records. Roll back by reverting the adapter wiring,
+preserving all accepted operation IDs and their polling state.
+
 ## Echo suppression
 
 Provider-to-provider activity delivery can otherwise return through a destination's import feed and start a loop. The shared outbound fingerprint mechanism runs for every activity destination, not only COROS:
