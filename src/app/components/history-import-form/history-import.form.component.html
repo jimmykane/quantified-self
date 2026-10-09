@@ -35,7 +35,7 @@
   }
   } @else if (serviceName === serviceNames.GarminAPI) {
   <app-status-info type="success" title="Import Requested">
-    Garmin will push activities to your account over the coming hours/days.
+    Garmin accepted this history request. Activities may arrive gradually.
     @if (activityRequestRange) {
     <div style="margin-top: 8px; opacity: 0.8; font-size: 0.9em;">
       Requested range: {{ activityRequestRange.startDate | date: 'mediumDate' }} - {{
@@ -60,7 +60,7 @@
   }
   @if (!isActivityCooldownResponse() && userMetaForService && userMetaForService.didLastHistoryImport) {
   @if (serviceName === serviceNames.SuuntoApp || serviceName === serviceNames.COROSAPI || serviceName === serviceNames.WahooAPI) {
-  <app-status-info type="success" title="Import In Progress">
+  <app-status-info type="success" title="History import cooldown">
     {{ userMetaForService.processedActivitiesFromLastHistoryImportCount }} activities scheduled from the last import.
     Cooldown active for {{ cooldownDays }} {{ cooldownDays === 1 ? 'day' : 'days' }}.
   </app-status-info>
@@ -76,11 +76,11 @@
   </app-status-info>
 
   } @else if (serviceName === serviceNames.GarminAPI) {
-  <app-status-info type="success" title="Import Active">
-    Activities are arriving via Garmin push.
+  <app-status-info type="success" title="History import cooldown">
+    Garmin may deliver requested activities gradually.
   </app-status-info>
 
-  <app-status-info title="Cooldown Active">
+  <app-status-info title="Next Available Import">
     New import available on {{ nextImportAvailableDate | date: 'medium' }}.
     @if (userMeta.lastHistoryImportStartDate && userMeta.lastHistoryImportEndDate) {
     <div style="margin-top: 8px; opacity: 0.8; font-size: 0.9em;">

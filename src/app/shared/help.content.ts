@@ -1073,6 +1073,8 @@ The **Connections** page is available to every signed-in account. Starter and Ba
 
 Services opens each provider on a compact connection overview. Choose an action on an activity, sleep history, route, upload, or automatic sync card. For non-Pro accounts, the action opens the Pro subscription page. For Pro accounts, it opens the provider tool in a dialog; close the dialog to return to the unchanged overview. A connected provider can always be disconnected after Pro access ends. Once any grace period expires, an automated subscription check disconnects remaining expired Pro provider connections.
 
+In the History import tool, **History import cooldown** and **Next Available Import** describe when another activity-history request becomes available. A cooldown may continue after the activities have arrived.
+
 ### Garmin permissions
 
 In **Connections → Garmin**, **Permissions** shows each account's last-reported access for supported permissions, including **Training** and **Course Import**. **Granted** and **Not granted** describe Garmin's saved response. **Not reported** means QS does not yet have permission details for that connection—not that you denied access. A granted permission does not mean every related feature is available in QS.

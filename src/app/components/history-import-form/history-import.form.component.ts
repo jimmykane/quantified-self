@@ -317,8 +317,9 @@ export class HistoryImportFormComponent implements OnInit, OnDestroy, OnChanges 
   private scheduleCooldownRefresh(): void {
     if (this.cooldownTimer !== null) globalThis.clearTimeout(this.cooldownTimer);
     this.cooldownTimer = null;
+    // Refresh date limits at local midnight even when no import deadline is pending.
     const futureDates = [this.activityState.nextAllowedAtMs, this.nextImportAvailableDate?.getTime(), this.sleepBackfillNextAllowedAtMs,
-      this.activityEstimatedCompletionAtMs]
+      this.activityEstimatedCompletionAtMs, dayjs().add(1, 'day').startOf('day').valueOf()]
       .filter((value): value is number => typeof value === 'number' && value > Date.now());
     if (!futureDates.length || this.isDestroyed) return;
     this.cooldownTimer = this.ngZone.runOutsideAngular(() => globalThis.setTimeout(() => {

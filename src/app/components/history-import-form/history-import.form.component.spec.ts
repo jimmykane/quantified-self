@@ -565,6 +565,86 @@ describe('HistoryImportFormComponent', () => {
             expect(component.formGroup.valid).toBe(true);
         });
 
+        it.each([ServiceNames.COROSAPI, ServiceNames.SuuntoApp, ServiceNames.WahooAPI, ServiceNames.GarminAPI])(
+            'refreshes %s calendar limits when an idle dialog stays open overnight', async provider => {
+                fixture.destroy();
+                vi.useFakeTimers();
+                vi.setSystemTime(new Date(2026, 9, 10, 23, 59, 59));
+                fixture = TestBed.createComponent(HistoryImportFormComponent);
+                component = fixture.componentInstance;
+                component.serviceName = provider;
+                component.providerConnected = true;
+                fixture.detectChanges();
+                await fixture.whenStable();
+                component.formGroup.get('accepted')!.setValue(true);
+                fixture.detectChanges();
+                const selectedStart = component.formGroup.get('startDate')!.value;
+                const selectedEnd = component.formGroup.get('endDate')!.value;
+
+                await vi.advanceTimersByTimeAsync(1_000);
+                fixture.detectChanges();
+                expect(component.today.isSame(dayjs(), 'day')).toBe(true);
+                expect(component.formGroup.get('startDate')!.value).toBe(selectedStart);
+                expect(component.formGroup.get('endDate')!.value).toBe(selectedEnd);
+                component.formGroup.get('endDate')!.setValue(dayjs().endOf('day'));
+                fixture.detectChanges();
+                expect(component.formGroup.get('endDate')!.hasError('matDatepickerMax')).toBe(false);
+                const updatedEnd = component.formGroup.get('endDate')!.value;
+                const currentDate = new Date();
+                const nextMidnight = new Date(currentDate.getFullYear(), currentDate.getMonth(), currentDate.getDate() + 1);
+                await vi.advanceTimersByTimeAsync(nextMidnight.getTime() - Date.now());
+                fixture.detectChanges();
+                expect(component.today.isSame(dayjs(), 'day')).toBe(true);
+                expect(component.formGroup.get('startDate')!.value).toBe(selectedStart);
+                expect(component.formGroup.get('endDate')!.value).toBe(updatedEnd);
+                expect(mockUserService.importServiceHistoryForCurrentUser).not.toHaveBeenCalled();
+                expect(haptics.selection).not.toHaveBeenCalled();
+                expect(haptics.success).not.toHaveBeenCalled();
+                expect(haptics.error).not.toHaveBeenCalled();
+
+                const refreshTimer = (component as any).cooldownTimer;
+                const clearTimer = vi.spyOn(globalThis, 'clearTimeout');
+                const refresh = vi.spyOn(component as any, 'processChanges');
+                fixture.destroy();
+                expect(clearTimer).toHaveBeenCalledWith(refreshTimer);
+                await vi.advanceTimersByTimeAsync(86_400_000);
+                expect(refresh).not.toHaveBeenCalled();
+            },
+        );
+
+        it.each([ServiceNames.COROSAPI, ServiceNames.SuuntoApp, ServiceNames.WahooAPI, ServiceNames.GarminAPI])(
+            'shows the stored %s cooldown without claiming that its import is still running', async provider => {
+                await reopen(provider);
+                fixture.componentRef.setInput('userMetaForService', {
+                    didLastHistoryImport: Date.now() - 12 * 3_600_000,
+                    processedActivitiesFromLastHistoryImportCount: HISTORY_IMPORT_ACTIVITIES_PER_DAY_LIMIT,
+                });
+                fixture.detectChanges();
+
+                expect(component.formGroup.disabled).toBe(true);
+                expect(component.isActivityHistoryImportRunning()).toBe(false);
+                expect(fixture.nativeElement.querySelector('app-status-info[title="History import cooldown"]')).not.toBeNull();
+                expect(fixture.nativeElement.querySelector('app-status-info[title="Import In Progress"]')).toBeNull();
+                expect(fixture.nativeElement.querySelector('app-status-info[title="Import Active"]')).toBeNull();
+                expect(fixture.nativeElement.textContent).not.toContain('Activities are arriving via Garmin push.');
+                expect(fixture.nativeElement.textContent).toContain(formatDate(component.nextImportAvailableDate, 'medium', 'en-US'));
+            },
+        );
+
+        it('retains a Garmin request acknowledgement without renewing a delivery promise after reopening', async () => {
+            await reopen(ServiceNames.GarminAPI);
+            mockUserService.importServiceHistoryForCurrentUser.mockResolvedValueOnce(undefined);
+            await submit('activity');
+            vi.useFakeTimers();
+            await vi.advanceTimersByTimeAsync(86_400_000);
+            await reopen(ServiceNames.GarminAPI);
+
+            expect(component.formGroup.disabled).toBe(true);
+            expect(fixture.nativeElement.textContent).toContain('Garmin accepted this history request.');
+            expect(fixture.nativeElement.textContent).not.toContain('over the coming hours/days');
+            expect(mockUserService.importServiceHistoryForCurrentUser).toHaveBeenCalledTimes(1);
+        });
+
         it.each([
             [ServiceNames.GarminAPI, 'getGarminHealthSyncAvailabilityForCurrentUser', 'backfillGarminHealthForCurrentUser', 'Sleep & available Health history'],
             [ServiceNames.SuuntoApp, 'getSuuntoHealthSyncAvailabilityForCurrentUser', 'backfillSuuntoSleepForCurrentUser', 'Sleep & 24/7 Health history'],

@@ -953,7 +953,11 @@ of the earlier month, matching the default selection and server policy. Users ca
 submission, subject to each provider's available-history limit. Garmin still starts its
 30-day activity-history cooldown after an accepted request. Keep the selected dates visible
 in confirmation and status state. Status and deadline refreshes also refresh the picker's
-current-day maximum, so an open dialog can select today's activities when its cooldown ends on a later day.
+current-day maximum. The same timer also refreshes at local midnight, including idle dialogs,
+so open pickers stay current without changing the selected range or producing haptic feedback.
+Stored activity-history metadata describes the last request and its next-available date.
+Show this as **History import cooldown**; the metadata remains after queued processing completes.
+Retained Garmin acknowledgements state that the request was accepted without renewing a delivery-time promise on reopen.
 
 - Use the same queue format and processor as webhooks. Separate processing paths drift and create inconsistent duplicate or cleanup behavior.
 - Require the appropriate entitlement and connection state at request time, then re-check in the worker.
