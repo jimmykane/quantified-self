@@ -13,7 +13,7 @@ import { getExpireAtTimestamp, TTL_CONFIG } from '../../shared/ttl-config';
 import { EMAIL_LINKS, MARKETING_EMAIL_REPLY_TO } from '../../email/config';
 import { createLocalEmailTemplateRenderer } from '../../email/template-renderer';
 import { MANUAL_CAMPAIGN_EMAIL_TEMPLATE_CATALOG } from '../../email/template-catalog';
-import { renderMarketingContent, validateMarketingDraft, validateMarketingSenderName } from '../../email/marketing-content';
+import { hasSameMarketingEmail, renderMarketingContent, validateMarketingDraft, validateMarketingSenderName } from '../../email/marketing-content';
 import { blankStats, DEFAULT_MARKETING_DAILY_CAP, remainingToday, selectedPlan, signupInRange, transitionStats, utcDay, validDailyCap } from './core';
 import { armMarketingSchedule, marketingScheduleGate, validateMarketingSchedule } from '../../../../shared/marketing-schedule';
 
@@ -188,8 +188,9 @@ export async function saveCampaign(idInput: unknown, input: unknown, actorUid: s
     if (status !== 'draft' && status !== 'paused') {
       throw new HttpsError('failed-precondition', 'Pause a running campaign to edit its content, or clone it as a new draft.');
     }
+    const savedDraft = validateMarketingDraft(doc.data());
     if (status === 'paused') {
-      const frozen = validateMarketingDraft(doc.data()).filters;
+      const frozen = savedDraft.filters;
       if (frozen.signupFrom !== draft!.filters.signupFrom || frozen.signupTo !== draft!.filters.signupTo ||
           frozen.plans.length !== draft!.filters.plans.length || !frozen.plans.every(plan => draft!.filters.plans.includes(plan))) {
         throw new HttpsError('failed-precondition', 'The prepared audience is fixed. Clone the campaign to change its audience.');
@@ -203,10 +204,11 @@ export async function saveCampaign(idInput: unknown, input: unknown, actorUid: s
     // Older clients must not replace a customized sender with the default.
     const senderName = Object.prototype.hasOwnProperty.call(input, 'senderName')
       ? draft!.senderName : validateMarketingSenderName(doc.get('senderName'));
+    const emailChanged = !hasSameMarketingEmail(savedDraft, { ...draft!, senderName });
     tx.update(ref, { name: draft!.name, subject: draft!.subject, senderName, content: draft!.content, cta: draft!.cta, schedule,
       ...(scheduleChanged ? { nextScheduledSendAt: null, scheduledDispatchUtcDate: null } : {}),
       ...(status === 'draft' ? { filters: draft!.filters } : {}),
-      updatedAt: now, lastTestMailId: null, lastTestState: null });
+      updatedAt: now, ...(emailChanged ? { lastTestMailId: null, lastTestState: null } : {}) });
   });
   return getCampaign(id);
 }

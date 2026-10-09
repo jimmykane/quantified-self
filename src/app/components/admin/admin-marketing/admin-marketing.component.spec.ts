@@ -700,6 +700,56 @@ describe('AdminMarketingComponent', () => {
     expect(root.textContent).toContain('wait for SMTP acceptance');
     fixture.destroy();
   });
+  it.each(['name', 'schedule'] as const)('keeps resume available after saving only the %s without false editor changes', async field => {
+    const saved = { ...pausedCampaign, name: field === 'name' ? 'Renamed update' : pausedCampaign.name,
+      schedule: field === 'schedule' ? { time: '17:00', timeZone: 'UTC' } : null };
+    let releaseSave!: (value: { data: MarketingCampaignView }) => void;
+    const pending = new Promise<{ data: MarketingCampaignView }>(resolve => { releaseSave = resolve; });
+    const call = vi.fn(async (name: string) => name === 'saveMarketingCampaign'
+      ? pending : { data: { ...listing, campaigns: [saved] } });
+    const { haptics } = setup(call);
+    const fixture = TestBed.createComponent(AdminMarketingComponent);
+    fixture.detectChanges(); await fixture.whenStable(); fixture.detectChanges();
+    await fixture.whenStable(); fixture.detectChanges();
+    const component = fixture.componentInstance;
+    component.choose(pausedCampaign, false);
+    fixture.detectChanges(); await fixture.whenStable(); fixture.detectChanges();
+    if (field === 'name') component.draft.name = saved.name;
+    else { component.scheduleMode = 'daily'; component.scheduleTime = '17:00'; component.scheduleTimeZone = 'UTC'; }
+    component.markDirty();
+    expect(component.canResume).toBe(false);
+    const saving = component.save();
+    fixture.detectChanges();
+    releaseSave({ data: saved }); await saving;
+    fixture.detectChanges(); await fixture.whenStable(); fixture.detectChanges();
+    expect(component.dirty).toBe(false);
+    expect(component.canResume).toBe(true);
+    expect(component.selected?.lastTestMailId).toBe(pausedCampaign.lastTestMailId);
+    expect(component.notice).toContain('existing successful test');
+    const root = fixture.nativeElement as HTMLElement;
+    expect(Array.from(root.querySelectorAll<HTMLButtonElement>('.actions button'))
+      .find(button => button.textContent?.trim() === 'Resume')?.disabled).toBe(false);
+    expect(call.mock.calls.some(([name]) => name === 'sendMarketingTest')).toBe(false);
+    expect(haptics.success).toHaveBeenCalledTimes(1);
+    expect(haptics.selection).not.toHaveBeenCalled();
+    fixture.destroy();
+  });
+
+  it('keeps a pending saved test and asks to refresh after a non-email save', async () => {
+    const saved = { ...pausedCampaign, lastTestState: 'PENDING' };
+    const call = vi.fn(async (name: string) => ({ data: name === 'saveMarketingCampaign'
+      ? saved : { ...listing, campaigns: [saved] } }));
+    const { component } = setup(call);
+    component.choose(saved, false); component.draft.name = 'Renamed'; component.markDirty();
+    await component.save();
+    expect(component.selected?.lastTestMailId).toBe(pausedCampaign.lastTestMailId);
+    expect(component.notice).toContain('current test is SMTP accepted');
+    expect(component.canResume).toBe(false);
+    expect(component.resumeHint).toContain('Refresh status');
+    expect(component.resumeHint).not.toContain('Send a test');
+    component.ngOnDestroy();
+  });
+
   it('saves paused edits to the same campaign and sends its saved test to the chosen address', async () => {
     const edited = { ...pausedCampaign, senderName: 'Dimitrios', lastTestMailId: null, lastTestState: null };
     const call = vi.fn(async (name: string) => ({ data: name === 'saveMarketingCampaign'
@@ -717,7 +767,7 @@ describe('AdminMarketingComponent', () => {
     expect(component.selected?.status).toBe('paused');
     expect(component.dirty).toBe(false);
     expect(component.canResume).toBe(false);
-    expect(component.notice).toContain('Send a new test before resuming');
+    expect(component.notice).toContain('Send a test of the saved message before resuming');
     component.testTo = 'new-preview@example.org';
     await component.sendTest();
     expect(call).toHaveBeenCalledWith('sendMarketingTest', { id: pausedCampaign.id, to: 'new-preview@example.org',

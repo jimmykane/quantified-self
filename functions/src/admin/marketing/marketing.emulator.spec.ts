@@ -287,6 +287,75 @@ describe.skipIf(!enabled)('marketing campaign durability (emulators)', () => {
       .toBe('Dimitrios from Quantified Self');
   });
 
+  it.each(['draft', 'paused'] as const)('preserves an accepted test when only renaming or rescheduling a %s', async status => {
+    const schedule = { time: '09:00', timeZone: 'UTC' };
+    const campaign = await saveCampaign(null, { ...draft, senderName: 'Dimitrios', schedule }, 'admin');
+    const ref = db.collection('marketingCampaigns').doc(campaign.id);
+    const testId = `marketing_test_${campaign.id}_preserved`;
+    await db.collection('mail').doc(testId).set({ delivery: { state: 'SUCCESS' } });
+    await ref.update({ status, lastTestMailId: testId, lastTestState: 'SUCCESS',
+      nextScheduledSendAt: '2026-10-09T09:00:00.000Z', scheduledDispatchUtcDate: '2026-10-09' });
+    // Omitted sender names from older clients preserve both the custom name and its test.
+    const renamed = await saveCampaign(campaign.id, { ...draft, name: 'Internal rename' }, 'admin');
+    expect(renamed).toMatchObject({ senderName: 'Dimitrios', lastTestMailId: testId, lastTestState: 'SUCCESS', schedule });
+    expect((await ref.get()).get('scheduledDispatchUtcDate')).toBe('2026-10-09');
+    const changedSchedule = { time: '17:00', timeZone: 'Europe/Helsinki' };
+    const rescheduled = await saveCampaign(campaign.id, { ...draft, name: renamed.name, schedule: changedSchedule }, 'admin');
+    expect(rescheduled).toMatchObject({ lastTestMailId: testId, lastTestState: 'SUCCESS', nextScheduledSendAt: null });
+    expect((await ref.get()).get('scheduledDispatchUtcDate')).toBeNull();
+    if (status === 'paused') {
+      await expect(setCampaignStatus(campaign.id, 'resume', renamed)).rejects.toThrow('saved message changed');
+      const resumed = await setCampaignStatus(campaign.id, 'resume', rescheduled, () => new Date('2026-10-09T08:00:00Z'));
+      expect(resumed.nextScheduledSendAt).toBe('2026-10-09T14:00:00.000Z');
+      await setCampaignStatus(campaign.id, 'pause');
+    }
+  });
+
+  it('preserves a pending test through a schedule edit and still waits for SMTP acceptance', async () => {
+    const campaign = await saveCampaign(null, draft, 'admin');
+    const ref = db.collection('marketingCampaigns').doc(campaign.id);
+    const testId = `marketing_test_${campaign.id}_pending`;
+    const pending = { marketing: { testCampaignId: campaign.id }, delivery: { state: 'PENDING' } };
+    await db.collection('mail').doc(testId).set(pending);
+    await ref.update({ status: 'paused', lastTestMailId: testId, lastTestState: 'PENDING' });
+    const saved = await saveCampaign(campaign.id, { ...draft, schedule: { time: '17:00', timeZone: 'UTC' } }, 'admin');
+    expect(saved).toMatchObject({ lastTestMailId: testId, lastTestState: 'PENDING' });
+    await expect(setCampaignStatus(campaign.id, 'resume')).rejects.toThrow('successful SMTP acceptance');
+    await db.collection('mail').doc(testId).update({ 'delivery.state': 'SUCCESS' });
+    await recordMailDelivery(testId, pending, { ...pending, delivery: { state: 'SUCCESS' } });
+    expect((await ref.get()).get('lastTestState')).toBe('SUCCESS');
+    expect((await setCampaignStatus(campaign.id, 'resume', saved)).status).toBe('running');
+    await setCampaignStatus(campaign.id, 'pause');
+  });
+
+  it.each([
+    ['subject', { subject: 'Changed subject' }],
+    ['sender', { senderName: 'Dimitrios' }],
+    ['body', { content: { type: 'doc', content: [{ type: 'paragraph', content: [{ type: 'text', text: 'Changed body' }] }] } }],
+    ['button', { cta: { label: 'Open help', url: 'https://quantified-self.io/help' } }],
+  ])('requires a new test after changing only the %s and ignores the old test callback', async (_field, change) => {
+    const campaign = await saveCampaign(null, draft, 'admin');
+    const ref = db.collection('marketingCampaigns').doc(campaign.id);
+    const testId = `marketing_test_${campaign.id}_outdated`;
+    const pending = { marketing: { testCampaignId: campaign.id }, delivery: { state: 'PENDING' } };
+    await db.collection('mail').doc(testId).set({ ...pending, delivery: { state: 'SUCCESS' } });
+    await ref.update({ status: 'paused', lastTestMailId: testId, lastTestState: 'SUCCESS' });
+    const saved = await saveCampaign(campaign.id, { ...draft, ...change }, 'admin');
+    expect(saved).toMatchObject({ lastTestMailId: null, lastTestState: null });
+    await recordMailDelivery(testId, pending, { ...pending, delivery: { state: 'SUCCESS' } });
+    expect((await ref.get()).get('lastTestMailId')).toBeNull();
+    expect((await ref.get()).get('lastTestState')).toBeNull();
+    await expect(setCampaignStatus(campaign.id, 'resume')).rejects.toThrow('Send a test email');
+  });
+
+  it('does not create test approval when saving only the schedule of an untested campaign', async () => {
+    const campaign = await saveCampaign(null, draft, 'admin');
+    await db.collection('marketingCampaigns').doc(campaign.id).update({ status: 'paused' });
+    const saved = await saveCampaign(campaign.id, { ...draft, schedule: { time: '17:00', timeZone: 'UTC' } }, 'admin');
+    expect(saved).toMatchObject({ lastTestMailId: null, lastTestState: null });
+    await expect(setCampaignStatus(campaign.id, 'resume')).rejects.toThrow('Send a test email');
+  });
+
   it('edits paused content while preserving the audience, queued mail, and progress, and requires a fresh accepted test', async () => {
     const user = await admin.auth().createUser({ email: `paused-admin-${randomUUID()}@example.com` });
     const campaign = await saveCampaign(null, draft, user.uid);

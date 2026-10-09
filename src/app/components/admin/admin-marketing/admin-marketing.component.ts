@@ -137,6 +137,13 @@ export class AdminMarketingComponent implements OnInit, OnDestroy {
   }
   get canEditAudience(): boolean { return !this.selected || this.selected.status === 'draft'; }
   get canResume(): boolean { return this.selected?.status === 'paused' && !this.dirty && this.selected.lastTestState === 'SUCCESS'; }
+  get resumeHint(): string {
+    if (this.dirty) return 'Save your changes before resuming. Email changes require a new test; schedule and internal name changes keep the current approval.';
+    if (this.selected?.lastTestMailId && (this.selected.lastTestState === 'PENDING' || this.selected.lastTestState === 'PROCESSING')) {
+      return 'Test submitted. Refresh status until it shows SMTP accepted, then resume.';
+    }
+    return 'Send a test of the saved message and wait for SMTP acceptance before resuming.';
+  }
   get canRetryPreparation(): boolean {
     if (this.selected?.status !== 'preparing') return false;
     const started = Date.parse(this.selected.updatedAt);
@@ -283,7 +290,12 @@ export class AdminMarketingComponent implements OnInit, OnDestroy {
     await this.run('Saving', async () => (await this.functions.call('saveMarketingCampaign',
       { id: this.selected?.id || null, draft: this.collectDraft() })).data as MarketingCampaignView,
       campaign => { this.choose(campaign, false); this.notice = campaign.status === 'paused'
-        ? 'Changes saved. Send a new test before resuming.' : 'Draft saved.'; });
+        ? campaign.lastTestState === 'SUCCESS'
+          ? 'Changes saved. You can resume with the existing successful test.'
+          : campaign.lastTestMailId && (campaign.lastTestState === 'PENDING' || campaign.lastTestState === 'PROCESSING')
+            ? 'Changes saved. Refresh status until the current test is SMTP accepted before resuming.'
+            : 'Changes saved. Send a test of the saved message before resuming.'
+        : 'Draft saved.'; });
   }
   private clearPreviewTimer(): void {
     if (this.previewTimer) clearTimeout(this.previewTimer);

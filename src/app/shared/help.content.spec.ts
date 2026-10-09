@@ -20,6 +20,9 @@ describe('help.content', () => {
     expect(copy).toContain('**updates@quantified-self.io**');
     expect(copy).toContain('**Dimitrios <dimitrios@quantified-self.io>**');
     expect(copy).toContain('including only its sender name, clears its earlier test result');
+    expect(copy).toContain('Changing only the **internal name** or **sending schedule** keeps the current test approval');
+    expect(copy).toContain('sender name, subject, body, formatting, links or button');
+    expect(copy).toContain('resume with the existing successful test');
   });
   it('points users to the Privacy section and explains saving analytics and email opt-outs', () => {
     const copy = HELP_SECTIONS.find(section => section.id === 'data-and-privacy')!.content;

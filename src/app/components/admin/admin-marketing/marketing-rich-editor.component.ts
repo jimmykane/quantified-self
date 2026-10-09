@@ -42,7 +42,8 @@ export class MarketingRichEditorComponent implements AfterViewInit, OnDestroy {
   }
   @Input() set disabled(value: boolean) {
     this.editable = !value;
-    this.editor?.setEditable(this.editable);
+    // A form lock is not a message edit and must not dirty the saved campaign.
+    this.editor?.setEditable(this.editable, false);
   }
   get disabled(): boolean { return !this.editable; }
 

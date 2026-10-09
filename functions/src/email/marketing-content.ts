@@ -139,6 +139,14 @@ export function validateMarketingDraft(value: unknown): MarketingCampaignDraft {
   return { name, subject, senderName, content, cta, filters: validateFilters(value.filters), schedule: validateMarketingSchedule(value.schedule) };
 }
 
+/** Compare validated drafts using only the fields that change the email. */
+export function hasSameMarketingEmail(first: MarketingCampaignDraft, second: MarketingCampaignDraft): boolean {
+  const email = (draft: MarketingCampaignDraft) => ({
+    subject: draft.subject, senderName: draft.senderName, content: draft.content, cta: draft.cta,
+  });
+  return JSON.stringify(email(first)) === JSON.stringify(email(second));
+}
+
 function escapeHtml(text: string): string {
   return text.replace(/[&<>"']/g, character => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[character] || character));
 }
