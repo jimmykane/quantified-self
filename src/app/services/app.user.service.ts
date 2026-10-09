@@ -1361,7 +1361,8 @@ export class AppUserService implements OnDestroy {
     );
   }
 
-  async importServiceHistoryForCurrentUser(serviceName: ServiceNames, startDate: Date, endDate: Date) {
+  async importServiceHistoryForCurrentUser(serviceName: ServiceNames, startDate: Date, endDate: Date, expectedUserID?: string) {
+    const canExecute = this.captureHistoryImportAccount(expectedUserID);
     let functionName: FunctionName;
     let payload: any;
 
@@ -1389,7 +1390,7 @@ export class AppUserService implements OnDestroy {
         throw new Error(`Service ${serviceName} not supported for history import`);
     }
 
-    const result = await this.functionsService.call(functionName, payload);
+    const result = await this.functionsService.call(functionName, payload, { canExecute });
     return result.data;
   }
 
@@ -1426,8 +1427,9 @@ export class AppUserService implements OnDestroy {
     return request;
   }
 
-  async backfillSuuntoSleepForCurrentUser(): Promise<SleepBackfillQueueResponse> {
-    const result = await this.functionsService.call<undefined, SleepBackfillQueueResponse>('backfillSuuntoAppSleep');
+  async backfillSuuntoSleepForCurrentUser(expectedUserID?: string): Promise<SleepBackfillQueueResponse> {
+    const canExecute = this.captureHistoryImportAccount(expectedUserID);
+    const result = await this.functionsService.call<undefined, SleepBackfillQueueResponse>('backfillSuuntoAppSleep', undefined, { canExecute });
     return result.data;
   }
 
@@ -1438,8 +1440,9 @@ export class AppUserService implements OnDestroy {
     return result.data.available === true;
   }
 
-  async backfillCorosSleepForCurrentUser(): Promise<SleepBackfillQueueResponse> {
-    const result = await this.functionsService.call<undefined, SleepBackfillQueueResponse>('backfillCorosAPISleep');
+  async backfillCorosSleepForCurrentUser(expectedUserID?: string): Promise<SleepBackfillQueueResponse> {
+    const canExecute = this.captureHistoryImportAccount(expectedUserID);
+    const result = await this.functionsService.call<undefined, SleepBackfillQueueResponse>('backfillCorosAPISleep', undefined, { canExecute });
     return result.data;
   }
 
@@ -1455,8 +1458,9 @@ export class AppUserService implements OnDestroy {
     return result.data;
   }
 
-  async backfillGarminHealthForCurrentUser(): Promise<SleepBackfillQueueResponse> {
-    const result = await this.functionsService.call<undefined, SleepBackfillQueueResponse>('backfillGarminAPIHealth');
+  async backfillGarminHealthForCurrentUser(expectedUserID?: string): Promise<SleepBackfillQueueResponse> {
+    const canExecute = this.captureHistoryImportAccount(expectedUserID);
+    const result = await this.functionsService.call<undefined, SleepBackfillQueueResponse>('backfillGarminAPIHealth', undefined, { canExecute });
     return result.data;
   }
 
@@ -1579,6 +1583,11 @@ export class AppUserService implements OnDestroy {
     const uid = firebaseUser?.uid;
     return () => !!uid && this.auth.currentUser === firebaseUser && this.auth.currentUser.uid === uid
       && (!isCurrentView || isCurrentView());
+  }
+
+  private captureHistoryImportAccount(expectedUserID?: string): () => boolean {
+    // Dialog closure does not cancel an accepted request; changing Firebase identity does.
+    return this.captureServiceConnectionAccount(() => expectedUserID === undefined || this.auth.currentUser?.uid === expectedUserID);
   }
 
   async getCurrentUserServiceTokenAndRedirectURI(serviceName: ServiceNames, isCurrentView?: () => boolean): Promise<{ redirect_uri: string }> {

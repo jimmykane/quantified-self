@@ -237,6 +237,20 @@ remain eligible when both fields are absent; no credential migration or reconnec
 solely for that legacy pair. A missing root, one-sided generation, or generation mismatch still
 fails closed.
 
+## History import status in Connections
+
+The shared provider History import UI reserves each user's provider/domain request before awaiting the callable and
+retains the pending/result state across dialog reopenings within the same app instance. Sleep/Health import requires
+a server-confirmed sync-state read; cached snapshots and pending local writes cannot enable admission. A ten-second
+initial-read timeout keeps the action disabled and offers **Retry status check** when the server does not respond.
+The continuing listener has no inactivity timeout after its first server confirmation.
+An earlier known cooldown survives read errors and retries until a successful snapshot replaces it. The exact existing
+`resource-exhausted` cooldown message supplies its next-available timestamp without changing the callable contract.
+Expected cooldown waits do not become frontend Sentry errors or error haptics; unexpected failures remain reportable.
+Shared completion survives dialog closure, while teardown or account/provider changes suppress stale local feedback.
+Acceptance confirms only queued/requested work. These frontend changes leave the #830 worker/dispatch/queue monitoring
+coverage unchanged and do not enforce admission across tabs or reloads.
+
 ## Suunto Sleep and Health Backfill
 
 The existing Suunto history callable, cooldown, and public Function name remain stable. While the Health

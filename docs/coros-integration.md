@@ -22,6 +22,8 @@ Every automatic activity and saved-route direction is off by default. Empty roll
 
 The Connections overview exposes the daily replay as a dedicated **Sleep & daily Health history** card with an **Import history** action, separate from the COROS activity-history card. Both cards open the shared History import tool, where activity ranges and the three-month Sleep/Health replay remain distinct controls.
 
+The tool locks each request immediately and keeps its pending/result state across dialog reopenings in the same app, separately for the current user's COROS activities and Sleep/Health. Sleep/Health stays disabled until its cooldown status is read successfully; failed reads show **Retry status check**. Existing callable cooldown timestamps are shown as normal next-available dates, retained on reopening, without a frontend error report or error haptic. Closing a dispatched request leaves it running; late responses update shared status without notifying a destroyed or changed account/provider view. This frontend-only feedback uses existing callables and metadata. It adds no cross-tab server lease, queue change, Rules change or migration; server admission remains authoritative.
+
 ## Account identity
 
 All COROS imports and deliveries resolve the same active token through `functions/src/coros/account.ts`.
