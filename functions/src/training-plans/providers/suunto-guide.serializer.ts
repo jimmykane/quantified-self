@@ -1,7 +1,7 @@
 import { ActivityTypes, DataDuration, DataWeight, type WeightUnits } from '@sports-alliance/sports-lib';
 import { normalizeUserUnitSettings, resolveUnitAwareDisplayStat } from '../../../../shared/unit-aware-display';
 import { suuntoGuideWatchTextV1 as watchText, suuntoGuideLiveReadingsV1 as sportLiveFields,
-    suuntoGuideMeasuredTargetV1 as measuredTarget, suuntoGuideOptionalReadingsV1, isSuuntoGuideManualLapAverageV1,
+    suuntoGuideMeasuredTargetV1 as measuredTarget, suuntoGuideOptionalReadingsV1, suuntoGuidePoolScreenReadingsV1, suuntoGuideSwimScreenReadingsV1, isSuuntoGuideManualLapAverageV1,
     type SuuntoGuideReadingTypeV1 as SuuntoGuideReadingType } from '../../../../shared/suunto-guide-presentation';
 import {
     parseWorkoutStructureV1,
@@ -14,6 +14,7 @@ import {
 } from '../../../../shared/planned-workout';
 import { normalizeTrainingLocalDate } from '../../../../shared/training-plans';
 import { parseStrengthWorkoutDetailsV1 } from '../../../../shared/strength-workout';
+import { presentSuuntoRestScreens } from './suunto-rest-presentation';
 import {
     createStableProviderExternalId,
     resolveProviderSerializationIssuesV1,
@@ -31,6 +32,8 @@ export type SuuntoGuideConditionV1 =
 export type SuuntoGuideFieldV1 =
     | { type: SuuntoGuideLiveFieldType; title: string }
     | { type: 'pace' | 'power' | 'strokeRate' | 'swolf'; title: string; window: 'manualLap'; aggregate: 'average' }
+    | { type: 'distance'; title: string; window: 'step' | 'workout' }
+    | { type: 'duration'; title: string; window: 'step' }
     | { type: 'text'; value: string }
     | { type: 'stepDurationCountdown'; value: number; title: string }
     | { type: 'stepDistanceCountdown'; value: number; title: string }
@@ -41,9 +44,9 @@ export type SuuntoGuideFieldV1 =
     | { type: 'targetCadence'; min: number; max: number; title: string };
 
 export type SuuntoGuideLiveFieldType = 'heartRate' | 'power' | 'pace' | 'speed' | 'cadence';
-type GuidePresentation = 'legacy-v2' | 'live-v3' | 'block-pace-v4' | 'sport-screens-v5' | 'early-lap-v6' | 'pool-swolf-v7';
+type GuidePresentation = 'legacy-v2' | 'live-v3' | 'block-pace-v4' | 'sport-screens-v5' | 'early-lap-v6' | 'pool-swolf-v7' | 'pool-screens-v9' | 'swim-rest-v10' | 'manual-instructions-v11';
 function supportsEarlyLap(presentation: GuidePresentation): boolean {
-    return presentation === 'early-lap-v6' || presentation === 'pool-swolf-v7';
+    return presentation === 'early-lap-v6' || presentation === 'pool-swolf-v7' || presentation === 'pool-screens-v9' || presentation === 'swim-rest-v10' || presentation === 'manual-instructions-v11';
 }
 
 export interface SuuntoGuideFieldsStepV1 {
@@ -216,9 +219,9 @@ function endingFields(ending: WorkoutEndingV1, presentation: GuidePresentation):
     const title = presentation === 'legacy-v2' ? 'Remaining' : 'Remain';
     switch (ending.kind) {
         case 'time':
-            return [{ type: 'stepDurationCountdown', value: ending.seconds, title }];
+            return [{ type: 'stepDurationCountdown', value: ending.seconds, title: presentation === 'pool-screens-v9' ? 'Time rem' : title }];
         case 'distance':
-            return [{ type: 'stepDistanceCountdown', value: ending.meters, title }];
+            return [{ type: 'stepDistanceCountdown', value: ending.meters, title: presentation === 'pool-screens-v9' ? 'Dist rem' : title }];
         case 'manual':
             return [];
         case 'kilojoules':
@@ -351,9 +354,16 @@ function collectStepIssues(
     });
 }
 
-function sportReadingField(type: SuuntoGuideReadingType, sport: ActivityTypes): SuuntoGuideFieldV1 {
+function sportReadingField(type: SuuntoGuideReadingType | 'workoutDistance', sport: ActivityTypes, presentation: GuidePresentation): SuuntoGuideFieldV1 {
+    if (type === 'workoutDistance') return { type: 'distance', title: 'Total', window: 'workout' };
+    if (type === 'distance' || type === 'duration') {
+        return { type, title: type === 'distance' ? 'Swum' : 'Elapsed', window: 'step' };
+    }
     if (type === 'strokeRate' || type === 'swolf' || ((type === 'pace' || type === 'power') && isSuuntoGuideManualLapAverageV1(type, sport))) {
-        return { type, title: type === 'pace' ? 'Avg pace' : type === 'power' ? 'Avg pwr' : type === 'swolf' ? 'Avg SWOLF' : 'Avg strk',
+        // Multi-field titles should be below nine characters. Keep the original
+        // v7 label frozen so uncertain older sends retain their exact digest.
+        const swolfTitle = presentation === 'pool-screens-v9' ? 'AvgSWOLF' : 'Avg SWOLF';
+        return { type, title: type === 'pace' ? 'Avg pace' : type === 'power' ? 'Avg pwr' : type === 'swolf' ? swolfTitle : 'Avg strk',
             window: 'manualLap', aggregate: 'average' };
     }
     const titles: Record<SuuntoGuideLiveFieldType, string> = {
@@ -362,11 +372,15 @@ function sportReadingField(type: SuuntoGuideReadingType, sport: ActivityTypes): 
     return { type, title: titles[type] };
 }
 
-function notificationText(step: WorkoutStepV1): string {
+function notificationText(step: WorkoutStepV1, presentation: GuidePresentation): string {
     // Authored instructions take priority; keep their existing font adaptation
     // and loss review. Generated text is not translated or unit-converted by the watch.
     if (step.note) return truncateCodePoints(watchText(step.note), 54);
-    if (step.ending.kind === 'manual') return 'Press lap when ready';
+    if (step.ending.kind === 'manual' && presentation === 'manual-instructions-v11') return step.purpose === 'rest'
+        ? 'Rest now. Press Lap to finish this rest.' : 'Press Lap to finish this interval.';
+    if (step.ending.kind === 'manual') return presentation === 'swim-rest-v10'
+        ? step.purpose === 'rest' ? 'Rest now. Press Lap to finish this rest.' : 'Swim now. Press Lap to finish this interval.'
+        : 'Press lap when ready';
     if (step.ending.kind === 'distance') return allowsEarlyLapV1(step.ending) ? 'Distance limit or press lap' : 'Follow distance countdown';
     if (step.ending.kind === 'time') {
         // Time has no metric/imperial preference. Use the shared Sports Lib
@@ -391,15 +405,21 @@ function notificationText(step: WorkoutStepV1): string {
 }
 
 function stepToSuunto(step: WorkoutStepV1, sport: ActivityTypes, presentation: GuidePresentation): SuuntoGuideFieldsStepV1 {
+    // Only swim notification/Rest selection changes in v10. Preserve v9 pool
+    // progress and v7 open-water Work/recovery fields, including countdown labels.
+    const fieldPresentation = presentation === 'manual-instructions-v11' ? 'pool-swolf-v7' : presentation === 'swim-rest-v10'
+        ? sport === ActivityTypes.Swimming ? 'pool-screens-v9' : 'pool-swolf-v7' : presentation;
     const fields = [
-        ...endingFields(step.ending, presentation),
+        ...endingFields(step.ending, fieldPresentation),
         ...step.targets.map(target => targetToSuunto(target, presentation)),
     ];
     if (step.note) {
         const maximum = fields.length > 0 ? 40 : 54;
         fields.push({ type: 'text', value: truncateCodePoints(watchText(step.note), maximum) });
     }
-    if (fields.length === 0) fields.push({ type: 'text', value: 'Press lap' });
+    if (fields.length === 0 && fieldPresentation !== 'pool-screens-v9'
+        && !(presentation === 'swim-rest-v10' && step.purpose === 'rest')) fields.push({ type: 'text',
+            value: presentation === 'manual-instructions-v11' ? 'Lap to finish' : 'Press lap' });
 
     if (presentation !== 'legacy-v2' && !fields.some(field => field.type === 'text' && codePointLength(field.value) > 40)) {
         const defaults = sportLiveFields(sport);
@@ -408,8 +428,12 @@ function stepToSuunto(step: WorkoutStepV1, sport: ActivityTypes, presentation: G
         const titles: Record<SuuntoGuideLiveFieldType, string> = {
             heartRate: 'HR', power: 'Power', pace: 'Pace', speed: 'Speed', cadence: 'Cadence',
         };
-        const live: SuuntoGuideFieldV1[] = ['sport-screens-v5', 'early-lap-v6', 'pool-swolf-v7'].includes(presentation)
-            ? suuntoGuideOptionalReadingsV1(step, sport, presentation === 'pool-swolf-v7').map(type => sportReadingField(type, sport))
+        const live: SuuntoGuideFieldV1[] = presentation === 'swim-rest-v10'
+            ? suuntoGuideSwimScreenReadingsV1(step, sport).map(type => sportReadingField(type, sport, fieldPresentation))
+            : presentation === 'pool-screens-v9'
+            ? suuntoGuidePoolScreenReadingsV1(step).map(type => sportReadingField(type, sport, presentation))
+            : ['sport-screens-v5', 'early-lap-v6', 'pool-swolf-v7', 'manual-instructions-v11'].includes(presentation)
+            ? suuntoGuideOptionalReadingsV1(step, sport, presentation === 'pool-swolf-v7').map(type => sportReadingField(type, sport, presentation))
             : candidates.slice(0, 5 - fields.length)
             .map(type => type === 'pace' && presentation === 'block-pace-v4'
                 ? { type, title: 'Avg pace', window: 'manualLap', aggregate: 'average' }
@@ -429,7 +453,7 @@ function stepToSuunto(step: WorkoutStepV1, sport: ActivityTypes, presentation: G
             ? { type: 'or', conditions: [endingCondition(step.ending), { type: 'manualLap' }] } : endingCondition(step.ending) }],
         ...(presentation !== 'legacy-v2' ? { notification: {
             title: purposeTitle(step.purpose),
-            text: notificationText(step),
+            text: notificationText(step, presentation),
         } } : {}),
     };
 }
@@ -458,9 +482,15 @@ function structureToSteps(structure: WorkoutStructureV1, presentation: GuidePres
         type: 'fields', title: 'Complete', fields: [{ type: 'text', value: 'Guide complete' }],
         notification: { title: 'Complete', text: 'Guide complete' },
     });
-    if (!['block-pace-v4', 'sport-screens-v5', 'early-lap-v6', 'pool-swolf-v7'].includes(presentation) || !steps.some(node =>
+    // Presentation-only upgrades must not change recorded lap boundaries, even
+    // when a rest screen no longer displays its freshly reset lap averages.
+    const usesLapAverages = presentation === 'pool-screens-v9' || presentation === 'swim-rest-v10' ? structure.nodes.some(node =>
+        (node.kind === 'step' ? [node] : node.steps).some(step => suuntoGuideOptionalReadingsV1(step, structure.sport)
+            .some(type => isSuuntoGuideManualLapAverageV1(type, structure.sport)))) : steps.some(node =>
         (node.type === 'repeat' ? node.steps : [node]).some(step =>
-            step.fields.some(field => 'window' in field && field.window === 'manualLap')))) return steps;
+            step.fields.some(field => 'window' in field && field.window === 'manualLap')));
+    if (!['block-pace-v4', 'sport-screens-v5', 'early-lap-v6', 'pool-swolf-v7', 'pool-screens-v9', 'swim-rest-v10', 'manual-instructions-v11'].includes(presentation)
+        || !usesLapAverages) return steps;
 
     if (supportsEarlyLap(presentation) && structure.nodes.some(node =>
         (node.kind === 'step' ? [node] : node.steps).some(step => allowsEarlyLapV1(step.ending)))) {
@@ -539,11 +569,34 @@ export function serializeSuuntoGuideV6ForRecovery(structureValue: unknown, optio
     return serializeGuide(structureValue, options, 'early-lap-v6');
 }
 
+/** Recovery only: reproduce the exact pool SWOLF v7 payload and lap policy. */
+export function serializeSuuntoGuideV7ForRecovery(structureValue: unknown, options: SerializeSuuntoGuideOptionsV1) {
+    return serializeGuide(structureValue, options, 'pool-swolf-v7');
+}
+
+/** Recovery only: preserve the exact pool progress v9 payload before swim Rest changes. */
+export function serializeSuuntoGuideV9ForRecovery(structureValue: unknown, options: SerializeSuuntoGuideOptionsV1) {
+    return serializeGuide(structureValue, options, 'pool-screens-v9');
+}
+
+/** Recovery only: preserve the exact swim notifications and Rest v10 payload. */
+export function serializeSuuntoGuideV10ForRecovery(structureValue: unknown, options: SerializeSuuntoGuideOptionsV1) {
+    return serializeGuide(structureValue, options, 'swim-rest-v10');
+}
+
 export function serializeSuuntoGuideJsonV1(
     structureValue: unknown,
     options: SerializeSuuntoGuideOptionsV1,
 ): ProviderSerializationResultV1<SuuntoGuideJsonV1> {
-    return serializeGuide(structureValue, options, 'pool-swolf-v7');
+    const result = serializeSuuntoGuideV11ForRecovery(structureValue, options);
+    const steps = presentSuuntoRestScreens(parseWorkoutStructureV1(structureValue), result.artifact.steps,
+        value => Buffer.byteLength(JSON.stringify({ ...result.artifact, steps: value }), 'utf8'));
+    return { ...result, artifact: { ...result.artifact, steps } };
+}
+
+/** Recovery only: freeze manual instruction v11 before Rest presentation. */
+export function serializeSuuntoGuideV11ForRecovery(structureValue: unknown, options: SerializeSuuntoGuideOptionsV1) {
+    return serializeGuide(structureValue, options, 'manual-instructions-v11');
 }
 
 /** Recovery only: preserve Training 01's exact average-pace screens and lap boundaries. */
@@ -570,6 +623,11 @@ export function serializeSuuntoGuideV2ForRecovery(
 function serializeGuide(structureValue: unknown, options: SerializeSuuntoGuideOptionsV1,
     presentation: GuidePresentation): ProviderSerializationResultV1<SuuntoGuideJsonV1> {
     const structure = parseWorkoutStructureV1(structureValue);
+    // Select after strict parsing, once. V9 is pool-only; v10 affects both swim
+    // profiles. V11 changes only non-swim manual wording, keeping v7 readings.
+    if (presentation === 'pool-screens-v9' && structure.sport !== ActivityTypes.Swimming) presentation = 'pool-swolf-v7';
+    if (presentation === 'swim-rest-v10' && ![ActivityTypes.Swimming, ActivityTypes.OpenWaterSwimming].includes(structure.sport)) presentation = 'pool-swolf-v7';
+    if (presentation === 'manual-instructions-v11' && [ActivityTypes.Swimming, ActivityTypes.OpenWaterSwimming].includes(structure.sport)) presentation = 'swim-rest-v10';
     const early = structure.nodes.some(node => (node.kind === 'step' ? [node] : node.steps)
         .some(step => allowsEarlyLapV1(step.ending)));
     if (early && !supportsEarlyLap(presentation)) throw new ProviderWorkoutMappingError('suunto', 'unsupported', [{

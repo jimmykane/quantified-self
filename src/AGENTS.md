@@ -5,6 +5,7 @@ Read `/Users/dimitrios/Projects/quantified-self/AGENTS.md` first.
 Frontend-only rules:
 - `../.agent/rules/rules.md`
 - `../.agent/rules/material-design-strict.md`
+- `../.agent/rules/frontend-test-environments.md` when adding/changing specs or helper runtime imports
 - All scrollable surfaces must use the shared thin QS scrollbar skin from `styles/_scrollbars.scss`, included globally
   by `styles.scss`. This covers dialogs, bottom sheets, menus/selects, nested lists, tables, textareas and page panels,
   including CDK overlays outside app-root. Do not add stock or component-specific scrollbar skins. Keep the actual

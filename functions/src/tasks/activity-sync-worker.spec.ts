@@ -99,6 +99,29 @@ describe('processActivitySyncTask', () => {
     mockShouldSkipQueueWorkForDeletedUser.mockResolvedValue(false);
   });
 
+  it.each([
+    ['PROCESSED', 'acknowledged'], ['ACKNOWLEDGED_STALE', 'stale'], ['SKIPPED', 'manual_reconciliation'],
+    ['MOVED_TO_DLQ', 'dead_lettered'], ['DEFERRED', 'deferred'], ['RETRY_INCREMENTED', 'retry'], ['FAILED', 'failed'],
+  ])('records %s as an attempt, never as confirmed provider delivery', async (result, outcome) => {
+    mockQueueGet.mockResolvedValueOnce({ exists: true, id: 'PRIVATE', ref: { path: 'activitySyncQueue/PRIVATE' }, data: () => ({ processed: false, userID: 'PRIVATE' }) });
+    mockProcessActivitySyncQueueItem.mockResolvedValueOnce(result);
+    await invokeWorker({ data: { queueItemId: 'PRIVATE' } }).catch(() => undefined);
+    const calls = mockLoggerInfo.mock.calls.filter(([message]) => message === '[ActivityDelivery]');
+    expect(calls).toHaveLength(1);
+    expect(calls[0][1]).toMatchObject({ event: 'worker_attempt', outcome, durationMs: expect.any(Number) });
+    expect(JSON.stringify(calls)).not.toContain('PRIVATE');
+  });
+
+  it('records an initial queue read failure and expected provider claim contention separately', async () => {
+    mockQueueGet.mockRejectedValueOnce(new Error('PRIVATE'));
+    await expect(invokeWorker({ data: { queueItemId: 'PRIVATE' } })).rejects.toThrow();
+    expect(mockLoggerInfo).toHaveBeenCalledWith('[ActivityDelivery]', expect.objectContaining({ outcome: 'failed' }));
+    mockQueueGet.mockResolvedValueOnce({ exists: true, data: () => ({ processed: false }) });
+    mockProcessActivitySyncQueueItem.mockRejectedValueOnce(Object.assign(new Error('PRIVATE'), { name: 'ProviderOperationStillInFlightError' }));
+    await expect(invokeWorker({ data: { queueItemId: 'PRIVATE' } })).rejects.toThrow();
+    expect(mockLoggerInfo).toHaveBeenCalledWith('[ActivityDelivery]', expect.objectContaining({ outcome: 'expected_contention' }));
+  });
+
   it('registers half-size Cloud Tasks rate limits for activity sync', () => {
     expect(capturedTaskOptions[0]).toMatchObject({
       rateLimits: {

@@ -303,6 +303,13 @@ mat-button-toggle:active {
   flex: 0 0 auto;
 }
 
+:host(.table-toolbar-layout) .merge-toggle-group {
+  align-items: flex-start;
+  flex: 0 1 auto;
+  max-width: 100%;
+  width: auto;
+}
+
 /* Tablet: Reduce gap and padding to prevent overflow */
 @include bp.handset-or-tablet-portrait {
   .button-groups {
@@ -389,11 +396,13 @@ mat-button-toggle:active {
   :host(.table-toolbar-layout) .filters-row {
     align-items: center;
     flex-direction: row;
-    flex-wrap: nowrap;
+    flex-wrap: wrap;
+    max-width: 100%;
   }
 
   :host(.table-toolbar-layout) .date-range-field {
     flex: 1 1 auto;
+    min-width: min(100%, 248px);
     width: auto;
   }
 

@@ -24,6 +24,7 @@ import {
     ProviderQueueUserNotConnectedError,
 } from '../queue/provider-queue-errors';
 import { ROUTE_SYNC_QUEUE_COLLECTION_NAME } from './route-sync.constants';
+import { observeRouteDispatch, recordRouteDispatchFailure } from './monitoring';
 
 interface EnqueueRouteSyncQueueItemParams {
     sourceServiceName: ServiceNames;
@@ -85,12 +86,14 @@ async function deleteQueueDocAfterDeletionGuard(
             QUEUE_CLEANUP_TOMBSTONE_REASONS.UserDeletionGuard,
         );
         if (!tombstoneWritten) {
+            recordRouteDispatchFailure('import', null, 'immediate', 'cleanup');
             logger.error(`[RouteSync] Failed to write cleanup tombstone for queue item ${queueItemId}; leaving item in place to avoid missing-doc Cloud Task retries.`);
             return;
         }
         await db.recursiveDelete(queueDocRef);
         logger.info(`[RouteSync] Deleted queue item ${queueItemId} for deleting user ${userID} before Cloud Task dispatch.`);
     } catch (error) {
+        recordRouteDispatchFailure('import', null, 'immediate', 'cleanup');
         logger.error(`[RouteSync] Failed to delete queue item ${queueItemId} after deletion guard tripped for user ${userID}`, error);
     }
 }
@@ -236,16 +239,16 @@ export async function enqueueRouteSyncQueueItem(
     });
 
     if (decision.enqueued) {
-        if (!(await canDispatchRouteSyncQueueItem(db, queueDocRef, queueItemId, firebaseUserID, 'route_sync_queue_dispatch_new'))) {
+        if (!(await observeRouteDispatch('import', params, 'guard', () => canDispatchRouteSyncQueueItem(db, queueDocRef, queueItemId, firebaseUserID, 'route_sync_queue_dispatch_new')))) {
             return {
                 enqueued: false,
                 queueItemId,
                 reason: 'user_deleted_or_deleting',
             };
         }
-        const wasTaskEnqueued = await enqueueRouteSyncTask(queueItemId, decision.dateCreated || Date.now());
+        const wasTaskEnqueued = await observeRouteDispatch('import', params, 'enqueue', () => enqueueRouteSyncTask(queueItemId, decision.dateCreated || Date.now()));
         if (wasTaskEnqueued) {
-            if (!(await markRouteSyncQueueItemDispatchedIfUserActive(queueDocRef, queueItemId, firebaseUserID, 'route_sync_queue_mark_new_dispatched'))) {
+            if (!(await observeRouteDispatch('import', params, 'marker', () => markRouteSyncQueueItemDispatchedIfUserActive(queueDocRef, queueItemId, firebaseUserID, 'route_sync_queue_mark_new_dispatched')))) {
                 return {
                     enqueued: false,
                     queueItemId,
@@ -261,16 +264,16 @@ export async function enqueueRouteSyncQueueItem(
 
     let redispatched = false;
     if (decision.shouldDispatchExisting) {
-        if (!(await canDispatchRouteSyncQueueItem(db, queueDocRef, queueItemId, firebaseUserID, 'route_sync_queue_redispatch_existing'))) {
+        if (!(await observeRouteDispatch('import', params, 'guard', () => canDispatchRouteSyncQueueItem(db, queueDocRef, queueItemId, firebaseUserID, 'route_sync_queue_redispatch_existing')))) {
             return {
                 enqueued: false,
                 queueItemId,
                 reason: 'user_deleted_or_deleting',
             };
         }
-        const wasTaskEnqueued = await enqueueRouteSyncTask(queueItemId, decision.dateCreated || Date.now());
+        const wasTaskEnqueued = await observeRouteDispatch('import', params, 'enqueue', () => enqueueRouteSyncTask(queueItemId, decision.dateCreated || Date.now()));
         if (wasTaskEnqueued) {
-            if (!(await markRouteSyncQueueItemDispatchedIfUserActive(queueDocRef, queueItemId, firebaseUserID, 'route_sync_queue_mark_existing_dispatched'))) {
+            if (!(await observeRouteDispatch('import', params, 'marker', () => markRouteSyncQueueItemDispatchedIfUserActive(queueDocRef, queueItemId, firebaseUserID, 'route_sync_queue_mark_existing_dispatched')))) {
                 return {
                     enqueued: false,
                     queueItemId,

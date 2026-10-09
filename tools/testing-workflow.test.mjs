@@ -12,23 +12,83 @@ const root = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const workflow = file => load(readFileSync(resolve(root, '.github/workflows', file), 'utf8'));
 const testing = workflow('testing.yaml');
 const shared = workflow('_run-tests.yml');
+const requiredJobs = ['unit_tests', 'functions_tests', 'frontend_tests', 'rules_tests', 'functions_emulators'];
+const resultVariables = {
+  UNIT_RESULT: 'unit_tests', FUNCTIONS_RESULT: 'functions_tests', FRONTEND_RESULT: 'frontend_tests',
+  RULES_RESULT: 'rules_tests', EMULATOR_RESULT: 'functions_emulators',
+};
 
-test('unit and emulator jobs use the declared Functions Node runtime', () => {
+test('every check job uses the declared Functions Node runtime', () => {
   const functionsPackage = JSON.parse(readFileSync(resolve(root, 'functions/package.json'), 'utf8'));
-  for (const job of [shared.jobs.unit_tests, shared.jobs.functions_emulators]) {
+  for (const id of requiredJobs) {
+    const job = shared.jobs[id];
     const nodeSetup = job.steps.find(step => step.uses === 'actions/setup-node@v4');
     assert.equal(nodeSetup?.with['node-version'], functionsPackage.engines.node);
   }
 });
 
 test('Functions CI runs the complete suite serially and keeps runner errors fatal', () => {
-  const functionsStep = shared.jobs.unit_tests.steps.find(step => step.name === 'Install and test functions');
+  const steps = shared.jobs.functions_tests.steps;
+  const functionsStep = steps.find(step => step.name === 'Install and test functions');
   const commands = functionsStep.run.split('\n').map(line => line.trim());
+  assert.ok(commands.includes('npm ci'));
+  assert.ok(commands.includes('npm run lint'));
   assert.ok(commands.includes('npm run test -- --no-file-parallelism'));
   assert.ok(commands.includes('npm run build'));
   assert.ok(commands.includes('npm run entrypoint:check:compiled'));
   assert.ok(commands.includes('npm run mcp:contract:check:compiled'));
+  const comparison = '${{ github.event.pull_request.base.sha || github.event.before }}';
+  assert.equal(functionsStep.env.MCP_CONTRACT_PREVIOUS_REVISION, comparison);
+  const fetch = steps.find(step => step.name === 'Fetch MCP contract comparison revision');
+  assert.equal(fetch.env.MCP_CONTRACT_PREVIOUS_REVISION, comparison);
+  assert.ok(steps.indexOf(fetch) < steps.indexOf(functionsStep));
+  const sharedDependencies = steps.find(step => step.run === 'npm ci');
+  assert.ok(sharedDependencies, 'Compiled shared sources require root dependencies');
+  assert.ok(steps.indexOf(sharedDependencies) < steps.indexOf(functionsStep));
+  assert.equal(steps.find(step => step.uses === 'actions/checkout@v4').with['fetch-depth'], 0);
   assert.doesNotMatch(functionsStep.run, /dangerouslyIgnoreUnhandledErrors|passWithNoTests|\|\|\s*true/);
+});
+
+test('app CI checks discovery and runs every frontend project', () => {
+  const steps = shared.jobs.frontend_tests.steps;
+  const discovery = steps.find(step => step.run === 'npm run test:frontend-config');
+  assert.ok(discovery);
+  const app = steps.find(step => step.name === 'Run app tests');
+  assert.ok(steps.indexOf(discovery) < steps.indexOf(app));
+  assert.equal(app.run, 'npm run test -- --run');
+  assert.equal(app.env.NODE_OPTIONS, '--max-old-space-size=3072');
+});
+
+test('independent jobs retain every validation and Rules check without weakening failures', () => {
+  assert.deepEqual(Object.keys(shared.jobs).sort(), [...requiredJobs, 'run_tests'].sort());
+  for (const id of requiredJobs) {
+    const job = shared.jobs[id];
+    assert.equal(job.needs, undefined, `${id} must start independently`);
+    assert.equal(job.if, undefined, `${id} must run for every test invocation`);
+    assert.equal(job['continue-on-error'] ?? false, false);
+    assert.ok(job.steps.every(step => !step.if && !step['continue-on-error']));
+    assert.ok(job.steps.some(step => step.run?.split('\n').includes('npm ci')));
+  }
+  const validationCommands = ['credentials:test', 'test:emulator-coverage', 'test:workflows',
+    'test:training-monitoring', 'test:import-monitoring', 'test:health-sleep-monitoring',
+    'test:activity-delivery-monitoring', 'test:route-monitoring', 'plugin:tools', 'plugin:validate', 'lint'];
+  const runs = shared.jobs.unit_tests.steps.flatMap(step => step.run?.split('\n').map(line => line.trim()) ?? []);
+  for (const command of validationCommands) assert.ok(runs.includes(`npm run ${command}`), command);
+  assert.ok(runs.includes('npm --prefix tools/quantified-self-plugin test'));
+  assert.ok(runs.includes('git diff --exit-code'));
+  const credentials = shared.jobs.unit_tests.steps.find(step => step.uses?.startsWith('gitleaks/gitleaks-action@'));
+  assert.ok(credentials);
+  assert.equal(credentials.env.GITLEAKS_ENABLE_COMMENTS, 'false');
+  assert.equal(credentials.env.GITLEAKS_ENABLE_UPLOAD_ARTIFACT, 'false');
+  assert.equal(shared.jobs.unit_tests.steps.find(step => step.uses === 'actions/checkout@v4').with['fetch-depth'], 0);
+  const rules = shared.jobs.rules_tests.steps;
+  assert.ok(rules.some(step => step.uses === 'actions/setup-java@v4' && step.with['java-version'] === '21'));
+  assert.ok(rules.some(step => step.run === 'npm install -g firebase-tools'));
+  assert.ok(rules.some(step => step.run === 'npm run test:rules'));
+  for (const command of ['npm run test -- --run', 'npm run test:rules', 'npm run lint']) {
+    const owners = requiredJobs.filter(id => shared.jobs[id].steps.some(step => step.run === command));
+    assert.equal(owners.length, 1, `${command} must run exactly once`);
+  }
 });
 
 // The job expressions use only equality, boolean operators and literals;
@@ -74,11 +134,14 @@ test('one actual test run for internal branches and a required test run for fork
 
 test('fork tests are read-only, use the PR merge ref and do not inherit deployment secrets', () => {
   assert.deepEqual(testing.permissions, { contents: 'read', 'pull-requests': 'read' });
+  assert.deepEqual(shared.permissions, { contents: 'read', 'pull-requests': 'read' });
   assert.equal(testing.jobs['run-tests'].secrets, undefined);
   assert.equal(testing.jobs['run-tests'].with, undefined);
-  for (const job of [shared.jobs.unit_tests, shared.jobs.functions_emulators]) {
+  for (const id of requiredJobs) {
+    const job = shared.jobs[id];
     const checkout = job.steps.find(step => step.uses === 'actions/checkout@v4');
     assert.equal(checkout.with.ref, '${{ inputs.ref || github.sha }}');
+    assert.equal(job.permissions, undefined);
     assert.equal(job.environment, undefined);
     assert.ok(job.steps.every(step => !/google-github-actions\/auth|firebase deploy/.test(step.uses || step.run || '')));
   }
@@ -86,23 +149,34 @@ test('fork tests are read-only, use the PR merge ref and do not inherit deployme
 
 test('the existing required check aggregates every real test job and rejects skips/cancellation', () => {
   const gate = shared.jobs.run_tests;
-  assert.deepEqual(gate.needs, ['unit_tests', 'functions_emulators']);
+  assert.deepEqual(gate.needs, requiredJobs);
   assert.equal(gate.if, '${{ always() }}');
   assert.equal(gate.name, undefined); // The job id keeps the required run_tests name.
-  assert.equal(shared.jobs.unit_tests.if, undefined);
-  assert.equal(shared.jobs.functions_emulators.if, undefined);
+  assert.equal(gate['continue-on-error'] ?? false, false);
+  assert.ok(gate.steps.every(step => !step.if && !step['continue-on-error']));
   assert.ok(shared.jobs.unit_tests.steps.some(step => step.run === 'npm run test:workflows'));
   const step = gate.steps[0];
-  assert.deepEqual(step.env, { UNIT_RESULT: '${{ needs.unit_tests.result }}',
-    EMULATOR_RESULT: '${{ needs.functions_emulators.result }}' });
-  for (const unit of ['success', 'failure', 'cancelled', 'skipped', '']) {
-    for (const emulator of ['success', 'failure', 'cancelled', 'skipped', '']) {
-      const result = spawnSync('bash', ['-e', '-o', 'pipefail', '-c', step.run], {
-        encoding: 'utf8', env: { PATH: process.env.PATH, UNIT_RESULT: unit, EMULATOR_RESULT: emulator },
-      });
-      assert.equal(result.status, unit === 'success' && emulator === 'success' ? 0 : 1,
-        `unit=${unit}, emulator=${emulator}: ${result.stderr}`);
+  assert.deepEqual(step.env, Object.fromEntries(Object.entries(resultVariables)
+    .map(([variable, job]) => [variable, '${{ needs.' + job + '.result }}'])));
+  const success = Object.fromEntries(Object.keys(resultVariables).map(variable => [variable, 'success']));
+  function status(results) {
+    const result = spawnSync('bash', ['-e', '-o', 'pipefail', '-c', step.run], {
+      encoding: 'utf8', env: { PATH: process.env.PATH, ...results },
+    });
+    assert.equal(result.error, undefined);
+    return result.status;
+  }
+  assert.equal(status(success), 0);
+  for (const bad of ['failure', 'cancelled', 'skipped', '', 'unknown']) {
+    for (const variable of Object.keys(resultVariables)) {
+      assert.equal(status({ ...success, [variable]: bad }), 1, `${variable}=${bad}`);
     }
+    assert.equal(status(Object.fromEntries(Object.keys(resultVariables).map(variable => [variable, bad]))), 1);
+  }
+  for (const variable of Object.keys(resultVariables)) {
+    const missing = { ...success };
+    delete missing[variable];
+    assert.equal(status(missing), 1, `${variable} missing`);
   }
 });
 

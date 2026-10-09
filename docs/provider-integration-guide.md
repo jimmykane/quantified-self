@@ -441,7 +441,7 @@ Average labels `Avg pace`, `Avg pwr` and `Avg strk` identify documented `manualL
 Swimming stroke rate is contextual watch data, never a cadence target or rowing-stroke mapping. Only running/cycling
 receive documented power/cadence sensor counterparts; missing/unsupported sensors stay unavailable, not zero.
 
-Current `suunto-guides-v7` additionally requests measured pool-swim `swolf` with `window: 'manualLap'`,
+The `suunto-guides-v7` mapping additionally requests measured pool-swim `swolf` with `window: 'manualLap'`,
 `aggregate: 'average'` and label `Avg SWOLF`. It is not a native target. Untargeted pool screens prioritize pace,
 stroke rate, SWOLF, then optional HR after countdowns/targets/notes; authored target counterparts retain priority.
 Open water and all non-pool layouts are unchanged. Native pool length and stroke determine the reading; QS does
@@ -451,6 +451,50 @@ digests; lost v2-v6 ACKs recover before updating the same Guide. The separately 
 upload passed exact readback, and the athlete confirmed the requested SWOLF watch check. That is measured-field
 evidence, not native targeting or QS completion-link proof. Normal delivery still needs merge and separately approved
 Functions deployment. See [measured SWOLF behavior](training-workspace.md#pool-swim-measured-swolf-773).
+
+The historical pool-only v9 screen upgrade requests native step-window `distance` (`Swum`) and `duration` (`Elapsed`)
+for manual work, after authored target counterparts and within the five-field budget. Numeric endings show
+`Dist rem`/`Time rem`. Stationary `rest` shows HR/countdown/targets/notes, not freshly reset swim averages;
+active `recovery` retains swim readings. Long manual instructions stay text-only. Field order is controlled,
+and the compact `AvgSWOLF` label keeps new multi-field titles below nine characters without altering the frozen v7
+`Avg SWOLF` payload. Suunto's adaptive layout does not promise fixed positions. No measurement-lag,
+preceding-interval-statistics, target or transition fix is implied. Frozen v7 payload recovery and its recorded-lap policy are retained before
+any eligible same-identity update. Non-pool mappings/digests, consent, completion and queue policy are unchanged.
+Private diagnostic labels include v9; existing provider/event-based monitoring filters already cover it.
+See [pool screen presentation and verification](training-workspace.md#pool-swim-workrest-screen-presentation).
+This local change needs separately approved deployment; no live watch-layout proof is claimed.
+
+The historical Suunto swim mapping `suunto-guides-v10` improves manual swim notifications and stationary Rest for both pool and open
+water: generated text explains that Lap finishes the current interval/rest, and Rest requests native cumulative
+`distance` (`Total`, `window: 'workout'`) after reserving authored ending/targets/notes and current HR. It omits
+freshly reset swim averages, not active-recovery readings. Pool Work keeps v9 fields; open-water Work keeps v7
+fields. V9 pool recovery remains frozen, alongside all older attempts; exact recovery precedes one eligible
+same-identity update. No previous-interval data, delayed-distance fix, forced haptics, extra countdown steps or
+live watch evidence is claimed. Non-swim payloads, recorded laps, consent, queue policy and completion remain
+unchanged; provider/event-based monitoring already covers v10. See the single detailed
+[swim presentation source of truth](training-workspace.md#swim-manual-instructions-and-cumulative-rest-distance).
+Deployment and live testing still require separate approval.
+
+For other supported interval sports, v11 changes generated manual notifications to `Press Lap to finish this interval.`
+and manual Rest to `Rest now. Press Lap to finish this rest.`. The empty-screen reminder becomes `Lap to finish`.
+Authored notes/exercise instructions win; numeric-only and fully annotated recipes retain v7 identities, while swim
+v10 and strength v8 stay byte-identical. Only affected recipes select v11, with exact v7 recovery before one eligible
+same-identity update. Metrics, recorded laps, consent, approval, completion and queues are unchanged; existing
+provider/event-based monitoring covers v11. See [manual instructions and verification](training-workspace.md#manual-instructions-in-other-sports).
+This is local implementation, not deployment or new live evidence.
+
+The current eligible Rest presentation uses private `suunto-guides-v12`: countdown first, current target readings/HR,
+actual pass labels for simple repeated Work/Rest pairs, and a next-phase hint where space permits. Running/walking/
+cycling variants and pool/open-water swimming are covered; active Recovery and Work retain their existing readings.
+Authored targets/notes, exact timing and the frozen execution/lap graph stay intact. No previous-effort statistics,
+guessed manual distance or forced countdown beeps/vibration are added. Large Guides first keep their native execution
+graph without optional numbering; the compact Rest layout is also checked against enriched archive readback bounds.
+If optional labels still cannot fit, preserve the frozen layout and all authored fields, without raising memory limits.
+Exact v10/v11 recovery precedes one eligible same-ID update,
+with pinning, current authority, approval and past/completed-copy protection unchanged. Other recipes retain their
+historical mapping identities. Existing provider/event monitoring covers v12 without queue or alert-policy changes.
+See [Rest-first screens and verification](training-workspace.md#rest-first-interval-screens-v12).
+This needs separately approved Functions deployment and physical watch verification; it is not live evidence.
 
 For additional authored targets, [#773](https://github.com/jimmykane/quantified-self/issues/773) records the
 6 October contract review. The published JSON reference defines only the existing HR, power, speed/pace and cadence
@@ -1058,6 +1102,28 @@ and migration limits are in [Garmin integration](garmin-integration.md#delivery-
 
 Do not use a provider's short-lived file URL as durable application data. Download it in the worker, validate it, and store the original file through the existing event/file flow so reprocessing, export, and sync use the owned copy.
 
+### Original-file upload integrity
+
+Activity imports, manual activity uploads, comparisons, merges, and manual/provider route uploads use
+`functions/src/shared/storage-file-save.ts`. The helper calculates CRC32C over the exact bytes passed to
+Cloud Storage and supplies the base64 checksum in `metadata.crc32c` with `validation: 'crc32c'`.
+Cloud Storage checks the supplied checksum before committing the object; the SDK also validates the
+returned checksum. This explicit metadata avoids depending on an SDK's default checksum-header behavior.
+Already compressed files are hashed and retained as compressed bytes. Object paths, generation
+tracking, original-file provenance, and deletion/connection guards remain unchanged.
+
+Provider activity originals staged under `event-write-staging/` receive the same validation before
+promotion. Promotion remains a server-side copy, which Cloud Storage validates against the source
+object's checksum. An upload rejection propagates through the existing retry and cleanup paths;
+failed staged uploads cannot be promoted. No checksum field is added to Firestore or MCP responses.
+Diagnostic debug-bucket uploads remain separate from retained original files.
+
+Functions declares `@google-cloud/storage` directly at `^7.22.0` and Firebase Admin at `^13.7.0`.
+Verify with `npm --prefix functions test -- src/shared/storage-file-save.spec.ts src/utils-usage.spec.ts`;
+the checksum spec exercises the real SDK against a loopback HTTP server, including corrupted uploads,
+without calling Firebase, providers, or production buckets. Existing objects require no migration.
+Backend deployment remains a separately approved release action.
+
 ### Persisting events
 
 - Resolve a deterministic event ID before writing. Put provider identity fields in safe event metadata for future deduplication and attribution.
@@ -1213,9 +1279,11 @@ classified processing failures, unavailable observations and missing heartbeats 
 Its three affected Functions and owned dashboard/11 metrics/six enabled policies were
 deployed/applied with separate approval and verified through production API/query readback,
 reusing the existing Alerts email channel. It was not activated by the #829 deployment.
-Initial post-creation heartbeat-series evidence remains distinct from earlier raw logs;
-dated activation and remaining observation evidence are recorded in #830. Future changes
-still require separate approval.
+Final 8 October read-only verification confirmed positive post-creation heartbeat,
+sampled-count and sampled-age series for all four lanes, plus all thirteen chart and
+fourteen condition queries. Dated activation and observation evidence are recorded
+in completed #830; idle bounded samples do not prove global coverage, and earlier raw
+logs were not substituted for metric-series proof. Future changes still require separate approval.
 See [Sleep sync operations](sleep-sync-operations.md#cloud-monitoring-830) for meanings,
 exclusions, thresholds, costs and activation steps. HTTP ACK, request-campaign completion
 and received Health/Sleep records are different outcomes; idle feeds are not an outage.
@@ -1228,6 +1296,80 @@ No provider availability, queue concurrency, retry policy, MCP/Assistant permiss
 user-facing Help behavior changes.
 
 Provider parity includes operational visibility, not only a user-facing connection.
+
+Recorded-activity **outbound delivery** monitoring (#832) covers `activitySyncQueue`,
+`processActivitySyncTask` and `dispatchActivitySyncQueue`, separately from the above
+inbound imports, Health/Sleep and Training workouts. Fixed-label post-commit outcomes
+distinguish confirmed delivery, accepted/pending provider processing, actual retries,
+new DLQ transitions and new durable manual-reconciliation cases; HTTP ACK is not
+delivery success. A bounded field-masked read-only probe reuses the existing
+30-minute dispatcher, excludes normal backoff/future/lifecycle waits, and checks
+overdue accepted Wahoo/COROS polls without resending. Its sample is a lower bound,
+not global coverage. Deterministic task deduplication does not count as a dispatch
+failure. Accepted polls stay observable if new-send allowlisting changes, while
+invalid scheduling metadata reports unknown rather than healthy zero.
+Recognized Suunto `NEW`/`PROCESSING` waits also remain distinct from actual failures;
+their existing Cloud Task retry/resume behavior is unchanged, and unknown statuses,
+transport failures and retry exhaustion stay visible.
+Both handlers have isolated target loading with unchanged
+runtime generations/resources. Their separately approved 8 October 2026 deployment
+passed active-state/configuration readback, retaining the existing scheduler and task
+retry/rate limits. The separate dashboard, twelve log metrics and seven enabled
+policies were subsequently activated with separate approval using the existing Alerts
+email channel. Production configuration and all fourteen dashboard queries passed API
+readback on 8 October; unrelated resources and notification channels stayed unchanged.
+The next natural 07:00 UTC run produced positive post-creation heartbeat time series
+for Suunto, Wahoo and COROS, verified through Monitoring at 07:01 UTC. A natural
+Garmin-to-Suunto committed delivery also reached its distinct success metric. This
+completes #832's operational evidence without manual processing, fault injection or
+new test emails; idle bounded samples do not claim complete backlog or device receipt.
+See [activity delivery monitoring](activity-delivery-monitoring.md) for semantics,
+privacy, exclusions, costs, tests and activation steps. No provider support,
+availability, retry/TTL/concurrency, Help or MCP/Assistant contract changes.
+
+Route import and outbound-copy monitoring (#833) is a separate workstream. Its first
+slice, deployed on 2026-10-08, adds fixed-category post-persistence outcomes and whole-task attempts to
+`routeSyncQueue` / `processRouteSyncTask` and `routeDeliverySyncQueue` /
+`processRouteDeliverySyncTask`, plus private-data-free rejected-original cleanup
+diagnostics. Worker attempts include payload/read failures; observation-only logger
+failure cannot turn an ACK into a retry. An ACK, stale revision, deferred item, or durable
+manual-review blocker is not a successful route send. The follow-up, deployed from
+`67cce336d` on 2026-10-08 at 09:50 UTC, adds masked,
+bounded import/delivery eligibility observations on the existing 30-minute outbound
+dispatcher, actual immediate/reconciliation dispatch failures, and an isolated Gen 1
+dispatcher loader with unchanged resources. It excludes lifecycle/revision/permission
+skips; incomplete zero samples are unknown, not healthy. No probe calls providers,
+refreshes credentials, pins accounts, writes queue state or changes dispatch decisions.
+Firestore sub-millisecond commit timestamps remain valid and their observed age rounds
+down; COROS account-ID fallback accepts only absent/empty values, matching its worker.
+The import probe does not invent a blanket Pro gate: unchanged/unlisted inbound work
+may be retired, while new/changed imported-route persistence still requires Pro.
+Restoration markers do not hide
+incoming imports, enabled outbound directions or manual copies that workers may process;
+disabled automatic directions and persisted restoration deferrals remain excluded.
+The five affected route Functions were read back as ACTIVE with unchanged resources,
+secrets and triggers; native task-queue rates/retries and the 30-minute scheduler were
+also preserved. Its natural 10:00 UTC run emitted all four complete idle sample groups.
+The independent source-controlled bundle provides one dashboard, 16 log metrics
+and eight policies, including both dispatch generations and rejected-original cleanup.
+Offline tests cover filtering, ownership, pagination and serial reapplication without
+touching the four earlier monitoring bundles. Its separately approved production apply
+from `94bc51e35` completed on 8 October by 10:18 UTC using the existing Alerts email
+channel. API readback confirmed the owned resources and eight valid enabled policies;
+all 19 chart and 12 condition queries passed, plus native-series checks for both route
+queues. Unrelated monitoring configuration and all notification channels remained
+unchanged. The natural 10:30 UTC run initialized all four heartbeat groups; Monitoring
+readback at 10:31–10:32 UTC confirmed positive post-creation heartbeat points and real
+idle zero count/age observations for import/QS and delivery/Garmin, Wahoo and COROS.
+The actual heartbeat conditions saw those points, and both dashboard hourly-mean
+queries returned zero for every group. All eight policies remained valid/enabled.
+This completes #833's operational evidence without claiming complete queue coverage
+or provider receipt from bounded samples.
+No new Functions deployment, provider call, route mutation or test email was needed
+to apply the bundle. Its route CLI resolves symlinked entrypoint paths without changing
+approval or provisioning semantics. Provider behavior, Help and MCP contracts remain unchanged. See
+[route monitoring](route-monitoring.md) for semantics, completed verification,
+resources and operational diagnosis. Help and MCP/Assistant contracts are unchanged.
 
 Garmin's temporary `garminWebhookProbe` tested URL transport and discarded incoming payloads. PR #800 removes its
 source and deployment exports. After saved portal URLs use the protected production receivers and real ingestion

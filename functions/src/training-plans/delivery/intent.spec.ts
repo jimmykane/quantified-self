@@ -7,7 +7,8 @@ import { FakeTrainingTransport } from './test-support/fake-transport';
 import { GarminTrainingTransport } from './garmin/transport';
 import { SuuntoGuideTransport } from './suunto/transport';
 import { assessSuuntoGuideV2ForRecovery, assessSuuntoGuideV3ForRecovery, assessSuuntoGuideV4ForRecovery, assessSuuntoGuideV5ForRecovery,
-  assessSuuntoGuideV6ForRecovery, assessSuuntoGuideV7ForRecovery } from './suunto/mapping';
+  assessSuuntoGuideV6ForRecovery, assessSuuntoGuideV7ForRecovery, assessSuuntoGuideV9ForRecovery,
+  assessSuuntoGuideV10ForRecovery, assessSuuntoGuideV11ForRecovery } from './suunto/mapping';
 
 const base: DeliveryContext = {
   workout: { schemaVersion: 1, id: 'workout', planId: null, revision: 1, localDate: '2026-09-10', lifecycle: 'planned',
@@ -167,12 +168,27 @@ describe('delivery intent', () => {
       expect(resolveDeliveryIntent(context, ledger).status).toBe('approval_required');
     }
   });
-  it.each([assessSuuntoGuideV2ForRecovery, assessSuuntoGuideV3ForRecovery, assessSuuntoGuideV4ForRecovery, assessSuuntoGuideV5ForRecovery, assessSuuntoGuideV6ForRecovery]
-    .flatMap(assessLegacy => [ActivityTypes.Running, ActivityTypes.Swimming].map(sport => ({ assessLegacy, sport }))))(
-    'keeps exact legacy loss approval for $sport across Suunto display upgrades, never across edits or authority changes', ({ assessLegacy, sport }) => {
+  it.each([
+    ...[assessSuuntoGuideV2ForRecovery, assessSuuntoGuideV3ForRecovery, assessSuuntoGuideV4ForRecovery, assessSuuntoGuideV5ForRecovery, assessSuuntoGuideV6ForRecovery]
+      .flatMap(assessLegacy => [ActivityTypes.Running, ActivityTypes.Swimming].map(sport => ({ assessLegacy, sport, manual: false }))),
+    { assessLegacy: assessSuuntoGuideV7ForRecovery, sport: ActivityTypes.Swimming, manual: false },
+    { assessLegacy: assessSuuntoGuideV7ForRecovery, sport: ActivityTypes.OpenWaterSwimming, manual: false },
+    { assessLegacy: assessSuuntoGuideV9ForRecovery, sport: ActivityTypes.Swimming, manual: false },
+    ...[ActivityTypes.Running, ActivityTypes.Cycling, ActivityTypes.Walking]
+      .map(sport => ({ assessLegacy: assessSuuntoGuideV7ForRecovery, sport, manual: true })),
+    ...[ActivityTypes.Running, ActivityTypes.Cycling, ActivityTypes.Walking]
+      .map(sport => ({ assessLegacy: assessSuuntoGuideV11ForRecovery, sport, manual: true })),
+    ...[ActivityTypes.Swimming, ActivityTypes.OpenWaterSwimming]
+      .map(sport => ({ assessLegacy: assessSuuntoGuideV10ForRecovery, sport, manual: true })),
+  ])(
+    'keeps exact legacy loss approval for $sport across Suunto display upgrades, never across edits or authority changes (manual=$manual)', ({ assessLegacy, sport, manual }) => {
     const transport = new SuuntoGuideTransport(async () => { throw Error('No HTTP during assessment'); }, 'Quantified Self');
-    const workout = { ...base.workout!, structure: { ...base.workout!.structure, sport, nodes: [{ ...base.workout!.structure.nodes[0],
-      note: 'A'.repeat(45) }] } };
+    const restPresentation = assessLegacy === assessSuuntoGuideV10ForRecovery || assessLegacy === assessSuuntoGuideV11ForRecovery;
+    const workout = { ...base.workout!, structure: { ...base.workout!.structure, sport, nodes: [
+      ...(manual ? [{ kind: 'step' as const, id: 'manual', purpose: 'warmup' as const, ending: { kind: 'manual' as const }, targets: [] }] : []),
+      { ...base.workout!.structure.nodes[0],
+      note: 'A'.repeat(45) }, ...(restPresentation ? [{ kind: 'step' as const, id: 'rest', purpose: 'rest' as const,
+        ending: { kind: 'time' as const, seconds: 15 }, targets: [] }] : [])] } };
     const destination = base.connection.destinationKey;
     const prior = assessLegacy(workout, destination, 'Europe/Helsinki', 'Quantified Self');
     const context: DeliveryContext = { ...base, workout, transport,
@@ -180,7 +196,8 @@ describe('delivery intent', () => {
     const ledger = { connectionEpoch: 0, destinationKey: 'account-a', acceptedDigest: prior.digest,
       acceptedContentDigest: deliveryContentDigest(workout, 'Europe/Helsinki') } as DeliveryLedgerV1;
     expect(transport.assess(workout, 'account-a', 'Europe/Helsinki')).toMatchObject({
-      mappingVersion: 'suunto-guides-v7', compatibleApprovalDigests: expect.arrayContaining([prior.digest]),
+      mappingVersion: restPresentation ? 'suunto-guides-v12' : manual ? 'suunto-guides-v11' : [ActivityTypes.Swimming, ActivityTypes.OpenWaterSwimming].includes(sport) ? 'suunto-guides-v10' : 'suunto-guides-v7',
+      compatibleApprovalDigests: expect.arrayContaining([prior.digest]),
     });
     expect(resolveDeliveryIntent(context, ledger)).toMatchObject({ desired: 'present', status: 'pending', approvalDigest: null });
     const currentDigest = transport.assess(workout, 'account-a', 'Europe/Helsinki').digest;
@@ -195,9 +212,10 @@ describe('delivery intent', () => {
       expect(resolveDeliveryIntent(context, { ...retired, mappingApprovalProof: { ...proof, [key]: 'mismatch' } }).status)
         .toBe('approval_required');
     }
+    const editNote = (note: string) => ({ ...workout, structure: { ...workout.structure,
+      nodes: workout.structure.nodes.map(node => 'note' in node ? { ...node, note } : node) } });
     for (const edited of [{ ...workout, title: 'Changed' }, { ...workout, localDate: '2026-09-11' },
-      { ...workout, structure: { ...workout.structure, nodes: [{ ...workout.structure.nodes[0], note: 'B'.repeat(45) }] } },
-      { ...workout, structure: { ...workout.structure, nodes: [{ ...workout.structure.nodes[0], note: 'A'.repeat(40) + 'BBBBB' }] } }]) {
+      editNote('B'.repeat(45)), editNote('A'.repeat(40) + 'BBBBB')]) {
       expect(resolveDeliveryIntent({ ...context, workout: edited }, ledger).status).toBe('approval_required');
       expect(resolveDeliveryIntent({ ...context, workout: edited }, retired).status).toBe('approval_required');
     }

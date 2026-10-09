@@ -14,6 +14,16 @@ import {
 } from './policies.content';
 
 describe('help.content', () => {
+  it('explains campaign sender names, fixed addresses and retesting after sender edits', () => {
+    const copy = HELP_SECTIONS.find(section => section.id === 'data-and-privacy')!.content;
+    expect(copy).toContain('Set **Sender name**');
+    expect(copy).toContain('**updates@quantified-self.io**');
+    expect(copy).toContain('**Dimitrios <dimitrios@quantified-self.io>**');
+    expect(copy).toContain('including only its sender name, clears its earlier test result');
+    expect(copy).toContain('Changing only the **internal name** or **sending schedule** keeps the current test approval');
+    expect(copy).toContain('sender name, subject, body, formatting, links or button');
+    expect(copy).toContain('resume with the existing successful test');
+  });
   it('points users to the Privacy section and explains saving analytics and email opt-outs', () => {
     const copy = HELP_SECTIONS.find(section => section.id === 'data-and-privacy')!.content;
     expect(copy).toContain('[Settings → Privacy & emails](/settings?section=privacy)');
@@ -129,14 +139,48 @@ describe('help.content', () => {
       expect(content).toContain(phrase);
     expect(searchHelpSections(HELP_SECTIONS, 'ZoneSense').map(section => section.id)).toContain('training-plans');
   });
+  it('explains manual pool progress and rest screens without promising measurement or fixed-position fixes', () => {
+    const content = HELP_SECTIONS.find(section => section.id === 'training-plans')!.content;
+    for (const phrase of ['**manual pool-swim work**', '**Swum**', '**Elapsed**', '**Dist rem**', '**Time rem**',
+      'not newly reset swim averages or the preceding swim\'s statistics', 'Active **Recovery** keeps swim readings',
+      'does not offer a configurable field editor or guarantee fixed positions', 'do not fix delayed pool-length detection',
+      'retain the existing lap-boundary behavior even when a rest screen no longer shows averages']) expect(content).toContain(phrase);
+  });
+  it('explains swim manual-step timing and native cumulative Rest distance without promising finished-interval statistics', () => {
+    const content = HELP_SECTIONS.find(section => section.id === 'training-plans')!.content;
+    for (const phrase of ['**pool and open-water swimming**', '**Total**', 'native cumulative distance for the whole recording',
+      'not the distance or pace of the last interval', 'Open-water Work/recovery fields are unchanged',
+      '**Swim now. Press Lap to finish this interval.**', '**Rest now. Press Lap to finish this rest.**',
+      'Lap finishes the current step, not starts it', 'Older Guides may still say **Press lap when ready**']) expect(content).toContain(phrase);
+  });
+  it('clarifies manual Suunto transitions across sports without replacing authored or strength instructions', () => {
+    const content = HELP_SECTIONS.find(section => section.id === 'training-plans')!.content;
+    for (const phrase of ['Manual steps in other supported sports say **Press Lap to finish this interval.**',
+      'including warm-up, Work, active Recovery and cool-down', 'manual Rest says **Rest now. Press Lap to finish this rest.**',
+      'The step starts immediately', 'persistent **Lap to finish** reminder',
+      'prioritize your notes or exercise/set instructions', 'past and completed copies stay unchanged']) expect(content).toContain(phrase);
+    expect(content).not.toContain('Other sports and older Guides keep **Press lap when ready**');
+  });
+  it('explains Rest-first countdown, bounded actual repeats and current versus previous-effort readings', () => {
+    const content = HELP_SECTIONS.find(section => section.id === 'training-plans')!.content;
+    for (const phrase of ['During Work and active Recovery', 'puts its native countdown first', '**Rest rem**',
+      'Your exact duration, targets and notes are kept', 'Work and active Recovery keep their existing readings',
+      '**Rest 3/10**', '**Next: Work 4/10**', 'not an inferred distance for a manual interval',
+      'Each repeat set has its own count', 'very large Guides keep their existing step structure without counters or Next hints',
+      'retain the previous layout when the new labels cannot fit safely', 'Your targets and instructions are never removed',
+      'not freshly reset averages or previous-effort statistics', 'not a previous-interval summary',
+      'Rowing and strength screens are unchanged', 'Sync your Suunto app and watch']) expect(content).toContain(phrase);
+    expect(searchHelpSections(HELP_SECTIONS, 'Rest rem').map(section => section.id)).toContain('training-plans');
+  });
   it('explains pool-only measured SWOLF without target, pool-length or sensor promises', () => {
     const content = HELP_SECTIONS.find(section => section.id === 'training-plans')!.content;
-    for (const phrase of ['pool-only **Avg SWOLF**', '**Avg SWOLF is a measured reading, not a target.**',
+    for (const phrase of ['pool-only **AvgSWOLF**', '**Avg SWOLF** on older Guides', '**SWOLF is a measured reading, not a target.**',
       "your watch's pool-length setting", 'Compare it only within the same pool length and stroke',
       'does not send the selected pool length to Suunto', 'calculate a substitute SWOLF',
       'instead of optional HR', 'with current HR for an HR target', 'without SWOLF',
       'requires the updated Functions release']) expect(content).toContain(phrase);
     expect(searchHelpSections(HELP_SECTIONS, 'Avg SWOLF').map(section => section.id)).toContain('training-plans');
+    expect(searchHelpSections(HELP_SECTIONS, 'AvgSWOLF').map(section => section.id)).toContain('training-plans');
   });
   it('explains shared horizontal pinch zoom on Event details charts', () => {
     const content = HELP_SECTIONS.find(section => section.id === 'getting-started')!.content;
@@ -793,9 +837,13 @@ describe('help.content', () => {
     expect(calendarSection?.content).toContain('intentionally have no hover or touch tooltip');
     expect(calendarSection?.content).toContain('recorded **Distance**, **Duration**, and **Ascent**');
     expect(calendarSection?.content).toContain('Month totals exclude adjacent dates');
-    expect(calendarSection?.content).toContain('**Week** and **Month** views, **Recorded**');
-    expect(calendarSection?.content).toContain('Month also retains recorded ascent');
-    expect(calendarSection?.content).toContain('**Retry month summary**');
+    expect(calendarSection?.content).toContain('**Week** view, your activity count');
+    expect(calendarSection?.content).toContain('**Month** keeps a compact strip of recorded **Distance**, **Duration**, and **Ascent**');
+    expect(calendarSection?.content).toContain('an extra row below the activity totals');
+    expect(calendarSection?.content).toContain('Months without workouts keep the activity totals alone');
+    expect(calendarSection?.content).toContain('**Try again**');
+    expect(calendarSection?.content).toContain('Empty planning sections and zero counts stay hidden');
+    expect(calendarSection?.content).toContain('it starts closed when you open another period');
     expect(calendarSection?.content).toContain('If a Week or Month read is incomplete');
     expect(calendarSection?.content).toContain('scaled against the longest-duration group');
     expect(calendarSection?.content).toContain('alpine skiing, snowboarding, and downhill cycling');
@@ -1113,6 +1161,18 @@ describe('help.content', () => {
   it('should document event swim length tables', () => {
     const gettingStartedSection = HELP_SECTIONS.find(section => section.id === 'getting-started');
 
+    expect(gettingStartedSection?.content).toContain('individual recorded FIT pool lengths');
+    expect(gettingStartedSection?.content).toContain('**Total strokes**');
+    expect(gettingStartedSection?.content).toContain('**SWOLF (25 yd)**');
+    expect(gettingStartedSection?.content).toContain('Stroke, total strokes and normalized SWOLF columns are available only for swimming');
+    expect(gettingStartedSection?.content).toContain('Swimming **Avg** values exclude rest');
+    expect(gettingStartedSection?.content).toContain('not divided into invented splits');
+    expect(gettingStartedSection?.content).toContain('Incomplete length details can use valid native interval metrics');
+    expect(gettingStartedSection?.content).toContain('recorded active-length count differs');
+    expect(gettingStartedSection?.content).toContain('Mixed swim/rest intervals require complete active length details');
+    expect(gettingStartedSection?.content).toContain('Missing active-length distance can use its recorded pool length');
+    expect(gettingStartedSection?.content).toContain('Rest lengths never gain distance from pool size');
+    expect(gettingStartedSection?.content).toContain('Set pace and calculated SWOLF require complete active time and distance');
     expect(gettingStartedSection?.content).toContain('Event swim length tables');
     expect(gettingStartedSection?.content).toContain('**Swim Lengths** table');
     expect(gettingStartedSection?.content).toContain('per-length pool data');
@@ -1125,7 +1185,7 @@ describe('help.content', () => {
     expect(gettingStartedSection?.content).toContain('Stored distances remain in meters');
     expect(gettingStartedSection?.content).toContain('**Swim** time (excluding idle/rest lengths)');
     expect(gettingStartedSection?.content).toContain('**Total** keeps the combined time');
-    expect(gettingStartedSection?.content).toContain('Set swim pace excludes rest too');
+    expect(gettingStartedSection?.content).toContain('Set swim pace, stroke totals, average stroke rate, and efficiency exclude rest too');
     expect(gettingStartedSection?.content).toContain('Each length keeps its recorded duration and all available details');
     expect(gettingStartedSection?.content).toContain('falling back to elapsed time when timer time is missing');
     expect(gettingStartedSection?.content).toContain('unrecorded rest is not inferred');

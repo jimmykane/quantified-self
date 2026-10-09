@@ -61,8 +61,12 @@
     </button>
   </nav>
 
-  @if (isPrescriptionSummaryView()) {
+  @if (!isDayRoute && routeState().view === 'week') {
     <app-calendar-period-summary [summary]="prescriptionSummary()" [canRetry]="canRetrySummary()" (retryRequested)="retry()"></app-calendar-period-summary>
+  } @else if (!isDayRoute && routeState().view === 'month') {
+    <app-calendar-month-totals [summary]="prescriptionSummary()" [activityMetrics]="periodSummaryMetrics()"
+      [periodLabel]="calendarModel().periodLabel" [activityStatus]="eventState().status"
+      [activitiesComplete]="activitiesComplete()"></app-calendar-month-totals>
   } @else {
   <section class="calendar-period-summary"
     [attr.aria-label]="(isDayRoute ? dayTitle() : calendarModel().periodLabel) + ' activity totals'"
@@ -96,6 +100,16 @@
     <button mat-stroked-button type="button" appHapticTap (click)="retry()">
       <mat-icon aria-hidden="true">refresh</mat-icon>
       <span>Retry</span>
+    </button>
+  </section>
+  }
+  @if (!hasError() && showMonthWorkoutRetry()) {
+  <section class="calendar-status calendar-status--error" role="alert">
+    <mat-icon aria-hidden="true">error_outline</mat-icon>
+    <span>Some workout details could not be loaded.</span>
+    <button mat-stroked-button type="button" appHapticTap (click)="retry()">
+      <mat-icon aria-hidden="true">refresh</mat-icon>
+      <span>Try again</span>
     </button>
   </section>
   }

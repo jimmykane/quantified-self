@@ -6,6 +6,7 @@ import { onSchedule } from 'firebase-functions/v2/scheduler';
 import { createHash } from 'node:crypto';
 
 import { FirestoreRouteJSON, OriginalRouteFileMetaData } from '../../../shared/app-route.interface';
+import { recordRouteOriginalCleanup } from './monitoring';
 
 export const REJECTED_ROUTE_ORIGINAL_CLEANUP_COLLECTION_NAME = 'routeOriginalFileCleanup';
 const REJECTED_ROUTE_ORIGINAL_CLEANUP_SCHEMA_VERSION = 1;
@@ -152,44 +153,58 @@ export async function processRejectedRouteOriginalCleanupDocument(
   cleanupID: string,
   nowMs = Date.now(),
 ): Promise<'cleaned' | 'not_due'> {
-  const defaultBucket = admin.storage().bucket();
-  const cleanup = parseRejectedRouteOriginalCleanupDocument(
-    snapshot.data() as Record<string, unknown> | undefined,
-    cleanupID,
-    defaultBucket.name,
-  );
-  if (!cleanup) {
-    logger.error('[RouteSync] Rejected malformed original-file cleanup task.', {
+  let phase: 'validate' | 'route_read' | 'storage_delete' | 'intent_delete' = 'validate';
+  try {
+    const defaultBucket = admin.storage().bucket();
+    const cleanup = parseRejectedRouteOriginalCleanupDocument(
+      snapshot.data() as Record<string, unknown> | undefined,
+      cleanupID,
+      defaultBucket.name,
+    );
+    if (!cleanup) {
+      logger.error('[RouteSync] Rejected malformed original-file cleanup task.', {
+        cleanupID,
+      });
+      // Cleanup intents are permanent leaf documents; malformed server-owned
+      // records cannot contain descendants by design.
+      phase = 'intent_delete';
+      await snapshot.ref.delete();
+      recordRouteOriginalCleanup('malformed_discarded', phase);
+      return 'cleaned';
+    }
+
+    if (cleanup.cleanupAfterMs > nowMs) {
+      return 'not_due';
+    }
+
+    phase = 'route_read';
+    const routeSnapshot = await admin.firestore()
+      .doc(`users/${cleanup.userID}/routes/${cleanup.routeID}`)
+      .get();
+    if (routeSnapshot.exists
+      && routeReferencesOriginalPath(routeSnapshot.data() as FirestoreRouteJSON | undefined, cleanup.path)) {
+      logger.info('[RouteSync] Discarding stale original-file cleanup task for a committed route.', {
+        cleanupID,
+      });
+      phase = 'intent_delete';
+      await snapshot.ref.delete();
+      recordRouteOriginalCleanup('stale_discarded', phase);
+      return 'cleaned';
+    }
+
+    phase = 'storage_delete';
+    await defaultBucket.file(cleanup.path).delete({ ignoreNotFound: true });
+    phase = 'intent_delete';
+    await snapshot.ref.delete();
+    recordRouteOriginalCleanup('deleted', phase);
+    logger.info('[RouteSync] Deleted rejected synced-route original file.', {
       cleanupID,
     });
-    // Cleanup intents are permanent leaf documents; malformed server-owned
-    // records cannot contain descendants by design.
-    await snapshot.ref.delete();
     return 'cleaned';
+  } catch (error) {
+    recordRouteOriginalCleanup('failed', phase);
+    throw error;
   }
-
-  if (cleanup.cleanupAfterMs > nowMs) {
-    return 'not_due';
-  }
-
-  const routeSnapshot = await admin.firestore()
-    .doc(`users/${cleanup.userID}/routes/${cleanup.routeID}`)
-    .get();
-  if (routeSnapshot.exists
-    && routeReferencesOriginalPath(routeSnapshot.data() as FirestoreRouteJSON | undefined, cleanup.path)) {
-    logger.info('[RouteSync] Discarding stale original-file cleanup task for a committed route.', {
-      cleanupID,
-    });
-    await snapshot.ref.delete();
-    return 'cleaned';
-  }
-
-  await defaultBucket.file(cleanup.path).delete({ ignoreNotFound: true });
-  await snapshot.ref.delete();
-  logger.info('[RouteSync] Deleted rejected synced-route original file.', {
-    cleanupID,
-  });
-  return 'cleaned';
 }
 
 async function processCleanupSnapshotPage(
@@ -212,6 +227,7 @@ async function processCleanupSnapshotPage(
         updatedAt: FieldValue.serverTimestamp(),
       });
     } catch (error) {
+      recordRouteOriginalCleanup('backoff_failed', 'backoff');
       logger.error('[RouteSync] Failed to defer a route-original cleanup task after a retryable cleanup error.', {
         cleanupID: doc.id,
         error,

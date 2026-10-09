@@ -4,16 +4,16 @@ import { HttpsError } from 'firebase-functions/v2/https';
 import { FieldPath, FieldValue } from 'firebase-admin/firestore';
 import { randomUUID, createHmac, timingSafeEqual } from 'crypto';
 import * as path from 'path';
-import type { MarketingAudienceExclusions, MarketingCampaignDraft, MarketingCampaignListResponse, MarketingCampaignStats, MarketingCampaignView, MarketingPlan, MarketingRecipientStatus } from '../../../../shared/admin-marketing';
-import { canDeleteMarketingCampaign } from '../../../../shared/admin-marketing';
+import type { MarketingAudienceExclusions, MarketingCampaignDraft, MarketingCampaignListResponse, MarketingCampaignPreview, MarketingCampaignStats, MarketingCampaignView, MarketingPlan, MarketingRecipientStatus } from '../../../../shared/admin-marketing';
+import { canDeleteMarketingCampaign, MARKETING_SENDER_EMAIL } from '../../../../shared/admin-marketing';
 import { ACCEPTED_MARKETING_POLICY_FIELD, USER_LEGAL_COLLECTION_NAME } from '../../../../shared/user-profile-firestore';
 import { ACTIVE_SUBSCRIPTION_STATUSES } from '../shared/subscription.constants';
 import { getUserDeletionGuardState, getUserDeletionGuardStateInTransaction } from '../../shared/user-deletion-guard';
 import { getExpireAtTimestamp, TTL_CONFIG } from '../../shared/ttl-config';
-import { EMAIL_LINKS, MARKETING_EMAIL_FROM, MARKETING_EMAIL_REPLY_TO } from '../../email/config';
+import { EMAIL_LINKS, MARKETING_EMAIL_REPLY_TO } from '../../email/config';
 import { createLocalEmailTemplateRenderer } from '../../email/template-renderer';
 import { MANUAL_CAMPAIGN_EMAIL_TEMPLATE_CATALOG } from '../../email/template-catalog';
-import { renderMarketingContent, validateMarketingDraft } from '../../email/marketing-content';
+import { hasSameMarketingEmail, renderMarketingContent, validateMarketingDraft, validateMarketingSenderName } from '../../email/marketing-content';
 import { blankStats, DEFAULT_MARKETING_DAILY_CAP, remainingToday, selectedPlan, signupInRange, transitionStats, utcDay, validDailyCap } from './core';
 import { armMarketingSchedule, marketingScheduleGate, validateMarketingSchedule } from '../../../../shared/marketing-schedule';
 
@@ -54,7 +54,7 @@ export function checkedTestEmail(value: unknown): string {
   return email;
 }
 function asView(id: string, data: FirebaseFirestore.DocumentData): MarketingCampaignView {
-  return { id, name: data.name, subject: data.subject, content: data.content, cta: data.cta, filters: data.filters,
+  return { id, name: data.name, subject: data.subject, senderName: validateMarketingSenderName(data.senderName), content: data.content, cta: data.cta, filters: data.filters,
     schedule: validateMarketingSchedule(data.schedule), nextScheduledSendAt: data.nextScheduledSendAt || null,
     status: data.status, stats: data.stats, exclusions: data.exclusions, createdAt: data.createdAt,
     updatedAt: data.updatedAt, startedAt: data.startedAt || null,
@@ -132,12 +132,20 @@ function mailPayload(draft: MarketingCampaignDraft, email: string, firstName: st
   campaignId: string | null, attempt: number, unsubscribeOverride?: string) {
   const { rendered, unsubscribeUrl } = renderMessage(draft, firstName, uid, secret, unsubscribeOverride);
   return {
-    to: email, from: MARKETING_EMAIL_FROM, replyTo: MARKETING_EMAIL_REPLY_TO,
+    to: email, from: marketingFrom(draft.senderName), replyTo: MARKETING_EMAIL_REPLY_TO,
     headers: { 'List-Unsubscribe': `<${unsubscribeUrl}>`, 'List-Unsubscribe-Post': 'List-Unsubscribe=One-Click' },
     message: unsubscribeOverride ? { ...rendered, subject: `[TEST] ${rendered.subject}` } : rendered,
     marketing: { campaignId, uid, attempt },
     expireAt: getExpireAtTimestamp(TTL_CONFIG.MAIL_IN_DAYS),
   };
+}
+
+function marketingFrom(value: unknown): string {
+  const name = validateMarketingSenderName(value);
+  // Quote and escape punctuation/Unicode for the extension's mail address parser.
+  // Plain ASCII words keep the existing default header unchanged.
+  const displayName = /^[A-Za-z0-9 ]+$/.test(name) ? name : `"${name.replace(/\\/g, '\\\\').replace(/"/g, '\\"')}"`;
+  return `${displayName} <${MARKETING_SENDER_EMAIL}>`;
 }
 
 export async function listCampaigns(): Promise<MarketingCampaignListResponse> {
@@ -180,8 +188,9 @@ export async function saveCampaign(idInput: unknown, input: unknown, actorUid: s
     if (status !== 'draft' && status !== 'paused') {
       throw new HttpsError('failed-precondition', 'Pause a running campaign to edit its content, or clone it as a new draft.');
     }
+    const savedDraft = validateMarketingDraft(doc.data());
     if (status === 'paused') {
-      const frozen = validateMarketingDraft(doc.data()).filters;
+      const frozen = savedDraft.filters;
       if (frozen.signupFrom !== draft!.filters.signupFrom || frozen.signupTo !== draft!.filters.signupTo ||
           frozen.plans.length !== draft!.filters.plans.length || !frozen.plans.every(plan => draft!.filters.plans.includes(plan))) {
         throw new HttpsError('failed-precondition', 'The prepared audience is fixed. Clone the campaign to change its audience.');
@@ -192,10 +201,14 @@ export async function saveCampaign(idInput: unknown, input: unknown, actorUid: s
     const schedule = Object.prototype.hasOwnProperty.call(input, 'schedule')
       ? draft!.schedule : validateMarketingSchedule(doc.get('schedule'));
     const scheduleChanged = JSON.stringify(schedule) !== JSON.stringify(validateMarketingSchedule(doc.get('schedule')));
-    tx.update(ref, { name: draft!.name, subject: draft!.subject, content: draft!.content, cta: draft!.cta, schedule,
+    // Older clients must not replace a customized sender with the default.
+    const senderName = Object.prototype.hasOwnProperty.call(input, 'senderName')
+      ? draft!.senderName : validateMarketingSenderName(doc.get('senderName'));
+    const emailChanged = !hasSameMarketingEmail(savedDraft, { ...draft!, senderName });
+    tx.update(ref, { name: draft!.name, subject: draft!.subject, senderName, content: draft!.content, cta: draft!.cta, schedule,
       ...(scheduleChanged ? { nextScheduledSendAt: null, scheduledDispatchUtcDate: null } : {}),
       ...(status === 'draft' ? { filters: draft!.filters } : {}),
-      updatedAt: now, lastTestMailId: null, lastTestState: null });
+      updatedAt: now, ...(emailChanged ? { lastTestMailId: null, lastTestState: null } : {}) });
   });
   return getCampaign(id);
 }
@@ -203,7 +216,7 @@ export async function cloneCampaign(idInput: unknown, actorUid: string): Promise
   const source = await getCampaign(idInput);
   if (source.status === 'deleting') throw new HttpsError('failed-precondition', 'This campaign is being deleted.');
   return saveCampaign(null, { name: `Copy of ${source.name}`.slice(0, 120), subject: source.subject,
-    content: source.content, cta: source.cta, filters: source.filters, schedule: source.schedule }, actorUid);
+    senderName: source.senderName, content: source.content, cta: source.cta, filters: source.filters, schedule: source.schedule }, actorUid);
 }
 export async function deleteCampaign(idInput: unknown): Promise<{ id: string; deleted: true }> {
   const id = checkedId(idInput);
@@ -227,10 +240,11 @@ export async function deleteCampaign(idInput: unknown): Promise<{ id: string; de
   // Already submitted test mail and the consumed daily slots remain untouched.
   return { id, deleted: true };
 }
-export function previewCampaign(input: unknown): { subject: string; html: string; text: string } {
+export function previewCampaign(input: unknown): MarketingCampaignPreview {
   let draft: MarketingCampaignDraft;
   try { draft = validateMarketingDraft(input); } catch (error) { badRequest(error); }
-  return renderMessage(draft!, 'friend', 'preview-user', 'preview-only-signing-key', testUnsubscribeUrl).rendered;
+  return { ...renderMessage(draft!, 'friend', 'preview-user', 'preview-only-signing-key', testUnsubscribeUrl).rendered,
+    from: marketingFrom(draft!.senderName), replyTo: MARKETING_EMAIL_REPLY_TO };
 }
 
 export async function prepareCampaign(idInput: unknown): Promise<MarketingCampaignView> {

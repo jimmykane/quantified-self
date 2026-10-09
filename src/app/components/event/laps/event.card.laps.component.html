@@ -107,18 +107,25 @@
     <mat-divider [inset]="true"></mat-divider>
     }
     <section class="table-container">
-      <table mat-table [dataSource]="lapTable.dataSource">
+      <table mat-table [dataSource]="lapTable.dataSource" multiTemplateDataRows>
         @for (column of lapTable.columns; track column) {
         <ng-container [matColumnDef]="column" [sticky]="column === 'selection' || column === '#'">
           <mat-header-cell *matHeaderCellDef [class.lap-selection-cell]="column === 'selection'"
             [class.lap-index-cell]="column === '#'"
-            [class.lap-duration-cell]="column === 'Duration'">
+            [class.lap-duration-cell]="column === 'Duration'"
+            [class.lap-length-toggle-cell]="column === 'lengths'"
+            [class.lap-swolf-cell]="column === swolfColumn">
             @if (column === 'selection') {
             <mat-checkbox [checked]="lapTable.allLapRowsSelected"
               [indeterminate]="lapTable.someLapRowsSelected"
               (change)="toggleAllLapSelections(lapTable)"
               aria-label="Select all laps in this table">
             </mat-checkbox>
+            } @else if (column === 'lengths') {
+            <mat-icon aria-hidden="true" matTooltip="Recorded lengths">linear_scale</mat-icon>
+            <span class="cdk-visually-hidden">Lengths</span>
+            } @else if (column === swolfColumn) {
+            <span class="swim-swolf-heading">{{ swolfColumnLabel }}</span>
             } @else if (column !== '#') {
             <app-data-type-icon [dataType]="column"></app-data-type-icon>
             }
@@ -126,12 +133,26 @@
           <mat-cell *matCellDef="let row" [class.lap-selection-cell]="column === 'selection'"
             [class.lap-index-cell]="column === '#'"
             [class.lap-duration-cell]="column === 'Duration'"
+            [class.lap-length-toggle-cell]="column === 'lengths'"
+            [class.lap-swolf-cell]="column === swolfColumn"
             [class.lap-average-cell]="row.isLapAverage">
             @if (column === 'selection' && !row.isLapAverage) {
             <mat-checkbox [checked]="row.isSelected"
               (change)="toggleLapSelection(lapTable, row)"
               [attr.aria-label]="'Select lap ' + row['#']">
             </mat-checkbox>
+            } @else if (column === 'lengths') {
+            @if (row.hasLengths) {
+            <button mat-icon-button (click)="toggleLapLengths(row)"
+              [attr.aria-label]="(row.lengthsExpanded ? 'Hide' : 'Show') + ' lengths for lap ' + row['#']"
+              [attr.aria-expanded]="row.lengthsExpanded" [attr.aria-controls]="row.detailId">
+              <mat-icon>{{ row.lengthsExpanded ? 'expand_less' : 'expand_more' }}</mat-icon>
+            </button>
+            }
+            } @else if (column === '#') {
+            <span class="lap-index-label">{{ row[column] }}
+              @if (row.isRest) { <span class="mat-label-small">Rest</span> }
+            </span>
             } @else if (column !== 'selection') {
             {{ row[column] }}
             }
@@ -139,18 +160,33 @@
           <mat-footer-cell *matFooterCellDef [class.lap-selection-cell]="column === 'selection'"
             [class.lap-index-cell]="column === '#'"
             [class.lap-duration-cell]="column === 'Duration'"
+            [class.lap-length-toggle-cell]="column === 'lengths'"
+            [class.lap-swolf-cell]="column === swolfColumn"
             [class.lap-selected-summary-label]="column === 'selection'"
             [class.lap-selected-summary-index-spacer]="column === '#'">
             @if (column === 'selection') {
             {{ lapTable.selectedSummaryLabel }}
-            } @else if (column !== '#') {
+            } @else if (column !== '#' && column !== 'lengths') {
             {{ lapTable.selectedSummary[column] }}
             }
           </mat-footer-cell>
         </ng-container>
         }
+        <ng-container matColumnDef="lengthDetails">
+          <mat-cell *matCellDef="let row" class="lap-length-detail-cell">
+            <div [id]="row.detailId" [attr.aria-label]="'Lengths for lap ' + row['#']">
+              @if (row.lengthsExpanded && row.lap) {
+              <p class="mat-label-medium">Recorded lengths · Lap {{ row['#'] }}</p>
+              <app-event-card-swim-lengths [event]="event" [selectedActivities]="[lapTable.activity]"
+                [unitSettings]="unitSettings" [lap]="row.lap"></app-event-card-swim-lengths>
+              }
+            </div>
+          </mat-cell>
+        </ng-container>
         <mat-header-row *matHeaderRowDef="lapTable.columns"></mat-header-row>
-        <mat-row *matRowDef="let row; columns: lapTable.columns;" [class.lap-average-row]="row.isLapAverage"></mat-row>
+        <mat-row *matRowDef="let row; columns: lapTable.columns;" [class.lap-average-row]="row.isLapAverage" [class.lap-rest-row]="row.isRest"></mat-row>
+        <mat-row *matRowDef="let row; columns: ['lengthDetails']; when: hasRecordedLengths" class="lap-length-detail-row"
+          [attr.hidden]="row.lengthsExpanded ? null : ''"></mat-row>
         <mat-footer-row *matFooterRowDef="lapTable.columns; sticky: true" class="lap-selected-summary-row"
           [attr.hidden]="lapTable.selectedCount === 0 ? '' : null"></mat-footer-row>
       </table>

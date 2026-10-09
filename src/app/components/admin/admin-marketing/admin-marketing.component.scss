@@ -29,8 +29,11 @@ mat-form-field { width: 100%; }
 .preview-column { padding: 16px; border: 1px solid var(--mat-sys-outline-variant); border-radius: 12px; background: var(--mat-sys-surface-container-low); }
 .preview-tabs { display: flex; width: 100%; margin-bottom: 14px; }
 .preview-tabs mat-button-toggle { flex: 1; }
-.preview-subject { display: grid; gap: 4px; margin: 0 0 12px; overflow-wrap: anywhere; }
-.preview-subject strong { color: var(--mat-sys-on-surface-variant); font: var(--mat-sys-label-medium); text-transform: uppercase; }
+.sender-field { margin-bottom: 16px; }
+.preview-headers { display: grid; gap: 8px; margin: 0 0 16px; overflow-wrap: anywhere; }
+.preview-headers div { display: grid; gap: 2px; }
+.preview-headers dt { color: var(--mat-sys-on-surface-variant); font: var(--mat-sys-label-medium); }
+.preview-headers dd { margin: 0; font: var(--mat-sys-body-medium); }
 .preview-frame { width: 100%; max-width: 680px; margin: 0 auto; border: 1px solid var(--mat-sys-outline-variant); background: white; }
 .preview-frame.phone { max-width: 375px; }
 .preview-frame iframe { display: block; width: 100%; height: 650px; border: 0; }

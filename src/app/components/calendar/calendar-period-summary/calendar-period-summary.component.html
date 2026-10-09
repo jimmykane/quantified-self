@@ -1,52 +1,86 @@
 <section aria-labelledby="calendar-period-summary-title" [attr.aria-busy]="summary().loading">
   <header>
-    <h2 id="calendar-period-summary-title">{{ periodLabel() }} summary</h2>
-    @if (summary().loading) { <span role="status">Loading {{ periodLabel().toLowerCase() }} coverage…</span> }
+    <div class="summary-heading">
+      <h2 id="calendar-period-summary-title">{{ periodLabel() }} summary</h2>
+      <span class="loading-indicator">
+        @if (summary().loading) { <mat-spinner diameter="16" aria-label="Loading summary"></mat-spinner> }
+      </span>
+    </div>
+    <p class="activity-count" [attr.role]="summary().recordedStatus === 'loading' ? 'status' : null">{{ recordedText() }}</p>
   </header>
-  <dl class="period-counts">
-    @for (count of counts(); track count.label) {
-      <div><dt>{{ count.label }}</dt><dd>{{ count.value === null ? 'Unknown' : (count.value | number) }}</dd></div>
-    }
-  </dl>
-  <div class="period-sources">
-    <section [attr.aria-label]="'Recorded ' + periodLabel().toLowerCase() + ' volume'">
-      <h3>Recorded</h3>
-      <p>{{ summary().recordedCount === null ? 'Activity count unknown' : (summary().recordedCount | number) + (summary().recordedComplete ? ' recorded activities' : ' observed recorded activities') }}</p>
+  <section [attr.aria-label]="'Recorded ' + periodLabel().toLowerCase() + ' volume'">
+    @if (summary().recordedCount !== 0 || !summary().recordedComplete) {
       <dl class="recorded-metrics">
         @for (metric of summary().recordedMetrics; track metric.label) {
-          <div><dt>{{ metric.label }}</dt><dd>{{ metric.text }}</dd>
+          <div><dt>{{ metric.label }}</dt><dd>{{ summary().recordedStatus === 'loading' ? '—' : metric.text }}</dd>
             @if (metric.coverage) { <span class="coverage">{{ metric.coverage }}</span> }
           </div>
         }
       </dl>
-    </section>
-    <section [attr.aria-label]="'Scheduled ' + periodLabel().toLowerCase() + ' prescriptions'">
-      <h3>Planned prescriptions</h3>
-      <p class="prescription">{{ summary().plannedText }}</p>
-      <p class="coverage">Includes linked prescriptions; excludes skipped workouts.</p>
-      @if (summary().planned; as planned) {
-        @if (planned.summary.distance.unknownSteps > 0) {
-          <p class="coverage">{{ planned.summary.distance.unknownSteps | number }} steps without prescribed distance.</p>
-        }
-      }
-    </section>
-    <section [attr.aria-label]="'Remaining ' + periodLabel().toLowerCase() + ' prescriptions'">
-      <h3>Remaining prescriptions</h3>
-      <p class="prescription">{{ summary().remainingText }}</p>
-      <p class="coverage">Unlinked, non-skipped workouts. A missing link does not prove a workout was missed.</p>
-      @if (summary().remaining; as remaining) {
-        @if (remaining.summary.distance.unknownSteps > 0) {
-          <p class="coverage">{{ remaining.summary.distance.unknownSteps | number }} steps without prescribed distance.</p>
-        }
-      }
-    </section>
+    }
+  </section>
+
+  <div [attr.inert]="showPlanning() ? null : ''" [attr.aria-hidden]="showPlanning() ? null : true">
+    @if (showPlanning()) {
+      <div class="planning-slot" animate.enter="planning-enter" animate.leave="planning-leave">
+        <div class="planning-slot-content">
+          <mat-expansion-panel class="planning-panel mat-elevation-z0" [expanded]="expanded()" (expandedChange)="expanded.set($event)">
+            <mat-expansion-panel-header appHapticTap collapsedHeight="auto" expandedHeight="auto">
+              <mat-panel-title>
+                <span class="planning-heading">
+                  <span>Planned workouts</span>
+                  <span class="planning-caption">
+                    @if (summary().scheduledCount; as count) {
+                      {{ summary().scheduleComplete ? '' : 'At least ' }}{{ count | number }} scheduled
+                      @if (summary().remainingCount !== null) {
+                        · {{ summary().remainingCount === 0 && summary().scheduleComplete ? 'Nothing remaining' : (summary().remainingCount | number) + ' remaining' + (summary().scheduleComplete ? '' : ' so far') }}
+                      } @else if (summary().completionStatus === 'loading') {
+                        · Checking activities…
+                      } @else {
+                        · Remaining unavailable
+                      }
+                    }
+                  </span>
+                </span>
+              </mat-panel-title>
+            </mat-expansion-panel-header>
+
+            @if (summary().scheduledCount) {
+              @if (!summary().scheduleComplete) { <p class="coverage">Counts include only the workouts loaded so far.</p> }
+              @if (counts().length) {
+                <dl class="period-counts">
+                  @for (count of counts(); track count.label) {
+                    <div><dt>{{ count.label }}</dt><dd>{{ count.value === null ? (summary().completionStatus === 'loading' ? 'Checking…' : 'Unavailable') : (count.value | number) }}</dd></div>
+                  }
+                </dl>
+              }
+              <div class="planning-totals">
+                @if (summary().planned === null || summary().planned!.workoutCount > 0) {
+                  <section aria-label="Planned workout totals">
+                    <h3>Planned</h3>
+                    <p>{{ summary().plannedText }}</p>
+                    <p class="coverage">All scheduled workouts, excluding skipped workouts.</p>
+                  </section>
+                }
+                @if (summary().remaining === null || summary().remaining!.workoutCount > 0) {
+                  <section aria-label="Remaining workout totals">
+                    <h3>Remaining</h3>
+                    <p>{{ summary().completionStatus === 'loading' ? 'Checking activities…' : summary().remainingText }}</p>
+                    <p class="coverage">No matching activity yet. This doesn’t necessarily mean you missed the workout.</p>
+                  </section>
+                }
+              </div>
+            }
+          </mat-expansion-panel>
+        </div>
+      </div>
+    }
   </div>
-  <p class="coverage">Recorded activities stay in the {{ periodLabel().toLowerCase() }} they were recorded in. Planned load is unavailable; prescriptions are not added to recorded load.</p>
   @if (summary().warnings.length) {
     <div class="period-warnings" role="status">
       @for (warning of summary().warnings; track warning) { <p>{{ warning }}</p> }
       @if (canRetry()) {
-        <button mat-button appHapticTap type="button" (click)="retryRequested.emit()"><mat-icon aria-hidden="true">refresh</mat-icon>Retry {{ periodLabel().toLowerCase() }} summary</button>
+        <button mat-button appHapticTap type="button" (click)="retryRequested.emit()"><mat-icon aria-hidden="true">refresh</mat-icon>Try again</button>
       }
     </div>
   }

@@ -6,6 +6,7 @@ import type {
   MarketingTextMark,
 } from '../../../shared/admin-marketing';
 import { validateMarketingSchedule } from '../../../shared/marketing-schedule';
+import { DEFAULT_MARKETING_SENDER_NAME, marketingSenderNameError } from '../../../shared/admin-marketing';
 
 const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
 const MAX_NODES = 500;
@@ -22,6 +23,14 @@ function cleanLine(value: unknown, label: string, max: number): string {
     throw new Error(`${label} must contain 1-${max} printable characters.`);
   }
   return text;
+}
+
+export function validateMarketingSenderName(value: unknown): string {
+  if (value === undefined) return DEFAULT_MARKETING_SENDER_NAME;
+  if (typeof value !== 'string') throw new Error('Sender name must be text.');
+  const error = marketingSenderNameError(value);
+  if (error) throw new Error(error);
+  return value.trim();
 }
 
 export function safeMarketingUrl(value: unknown): string {
@@ -111,6 +120,7 @@ export function validateMarketingDraft(value: unknown): MarketingCampaignDraft {
   if (!plainObject(value)) throw new Error('Campaign draft is required.');
   const name = cleanLine(value.name, 'Campaign name', 120);
   const subject = cleanLine(value.subject, 'Subject', 180);
+  const senderName = validateMarketingSenderName(value.senderName);
   if (!plainObject(value.content) || value.content.type !== 'doc' || !Array.isArray(value.content.content) || !value.content.content.length) {
     throw new Error('Campaign body is required.');
   }
@@ -126,7 +136,15 @@ export function validateMarketingDraft(value: unknown): MarketingCampaignDraft {
     cta = { label: cleanLine(value.cta.label, 'Button label', 80), url: safeMarketingUrl(value.cta.url) };
     if (!cta.url.startsWith('https:')) throw new Error('Button must link to HTTPS.');
   }
-  return { name, subject, content, cta, filters: validateFilters(value.filters), schedule: validateMarketingSchedule(value.schedule) };
+  return { name, subject, senderName, content, cta, filters: validateFilters(value.filters), schedule: validateMarketingSchedule(value.schedule) };
+}
+
+/** Compare validated drafts using only the fields that change the email. */
+export function hasSameMarketingEmail(first: MarketingCampaignDraft, second: MarketingCampaignDraft): boolean {
+  const email = (draft: MarketingCampaignDraft) => ({
+    subject: draft.subject, senderName: draft.senderName, content: draft.content, cta: draft.cta,
+  });
+  return JSON.stringify(email(first)) === JSON.stringify(email(second));
 }
 
 function escapeHtml(text: string): string {

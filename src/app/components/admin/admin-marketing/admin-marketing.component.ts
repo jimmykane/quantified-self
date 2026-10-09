@@ -8,10 +8,11 @@ import { MatCheckboxModule } from '@angular/material/checkbox';
 import { MatFormFieldModule } from '@angular/material/form-field';
 import { MatIconModule } from '@angular/material/icon';
 import { MatInputModule } from '@angular/material/input';
+import { ErrorStateMatcher } from '@angular/material/core';
 import { MatProgressSpinnerModule } from '@angular/material/progress-spinner';
 import { RouterModule } from '@angular/router';
-import type { MarketingCampaignDraft, MarketingCampaignListResponse, MarketingCampaignView, MarketingDocument, MarketingPlan } from '../../../../../shared/admin-marketing';
-import { canDeleteMarketingCampaign } from '../../../../../shared/admin-marketing';
+import type { MarketingCampaignDraft, MarketingCampaignListResponse, MarketingCampaignPreview, MarketingCampaignView, MarketingDocument, MarketingPlan } from '../../../../../shared/admin-marketing';
+import { canDeleteMarketingCampaign, DEFAULT_MARKETING_SENDER_NAME, marketingSenderNameError, MARKETING_SENDER_EMAIL, MARKETING_SENDER_NAME_MAX_LENGTH } from '../../../../../shared/admin-marketing';
 import { AppFunctionsService } from '../../../services/app.functions.service';
 import { PageHeaderComponent } from '../../shared/page-header/page-header.component';
 import { AppHapticsService } from '../../../services/app.haptics.service';
@@ -29,7 +30,7 @@ import { ConfirmationDialogComponent, ConfirmationDialogData } from '../../confi
 import { firstValueFrom } from 'rxjs';
 
 function emptyDraft(): MarketingCampaignDraft {
-  return { name: '', subject: '', content: { type: 'doc', content: [{ type: 'paragraph', content: [] }] },
+  return { name: '', subject: '', senderName: DEFAULT_MARKETING_SENDER_NAME, content: { type: 'doc', content: [{ type: 'paragraph', content: [] }] },
     cta: null, filters: { plans: ['free', 'basic', 'pro'], signupFrom: null, signupTo: null }, schedule: null };
 }
 function deleteLabel(campaign: MarketingCampaignView | null): string {
@@ -71,7 +72,12 @@ export class AdminMarketingComponent implements OnInit, OnDestroy {
   readonly deletingCampaignId = signal<string | null>(null);
   error = '';
   notice = '';
-  preview: { subject: string; html: string; text: string } | null = null;
+  readonly senderEmail = MARKETING_SENDER_EMAIL;
+  readonly senderNameMaxLength = MARKETING_SENDER_NAME_MAX_LENGTH;
+  readonly senderNameMatcher: ErrorStateMatcher = {
+    isErrorState: control => !!control && !control.disabled && (control.dirty || control.touched) && !!this.senderNameError,
+  };
+  preview: MarketingCampaignPreview | null = null;
   trustedPreviewHtml: SafeHtml | null = null;
   previewBusy = false;
   previewError = '';
@@ -131,6 +137,13 @@ export class AdminMarketingComponent implements OnInit, OnDestroy {
   }
   get canEditAudience(): boolean { return !this.selected || this.selected.status === 'draft'; }
   get canResume(): boolean { return this.selected?.status === 'paused' && !this.dirty && this.selected.lastTestState === 'SUCCESS'; }
+  get resumeHint(): string {
+    if (this.dirty) return 'Save your changes before resuming. Email changes require a new test; schedule and internal name changes keep the current approval.';
+    if (this.selected?.lastTestMailId && (this.selected.lastTestState === 'PENDING' || this.selected.lastTestState === 'PROCESSING')) {
+      return 'Test submitted. Refresh status until it shows SMTP accepted, then resume.';
+    }
+    return 'Send a test of the saved message and wait for SMTP acceptance before resuming.';
+  }
   get canRetryPreparation(): boolean {
     if (this.selected?.status !== 'preparing') return false;
     const started = Date.parse(this.selected.updatedAt);
@@ -173,7 +186,7 @@ export class AdminMarketingComponent implements OnInit, OnDestroy {
   }
   private loadCampaign(campaign: MarketingCampaignView, testRecipient: string): void {
     this.selected = campaign;
-    this.draft = { name: campaign.name, subject: campaign.subject, content: campaign.content,
+    this.draft = { name: campaign.name, subject: campaign.subject, senderName: campaign.senderName ?? DEFAULT_MARKETING_SENDER_NAME, content: campaign.content,
       cta: campaign.cta, filters: { ...campaign.filters, plans: [...campaign.filters.plans] }, schedule: campaign.schedule || null };
     this.scheduleMode = campaign.schedule ? 'daily' : 'now';
     this.scheduleTime = campaign.schedule?.time || '09:00';
@@ -188,7 +201,7 @@ export class AdminMarketingComponent implements OnInit, OnDestroy {
     this.schedulePreview();
   }
   private updateSelected(campaign: MarketingCampaignView): void {
-    const savedDraft = { name: campaign.name, subject: campaign.subject, content: campaign.content,
+    const savedDraft = { name: campaign.name, subject: campaign.subject, senderName: campaign.senderName ?? DEFAULT_MARKETING_SENDER_NAME, content: campaign.content,
       cta: campaign.cta, filters: campaign.filters, schedule: campaign.schedule || null };
     if (!this.dirty && JSON.stringify(this.collectDraft()) !== JSON.stringify(savedDraft)) {
       this.loadCampaign(campaign, this.testTo);
@@ -245,7 +258,7 @@ export class AdminMarketingComponent implements OnInit, OnDestroy {
     this.markDirty();
   }
   private collectDraft(): MarketingCampaignDraft {
-    return { name: this.draft.name, subject: this.draft.subject,
+    return { name: this.draft.name, subject: this.draft.subject, senderName: this.draft.senderName,
       content: this.draft.content,
       cta: this.showCta ? { label: this.ctaLabel, url: this.ctaUrl } : null,
       filters: { plans: [...this.draft.filters.plans], signupFrom: this.draft.filters.signupFrom || null,
@@ -273,11 +286,16 @@ export class AdminMarketingComponent implements OnInit, OnDestroy {
     finally { this.busy = ''; }
   }
   async save(): Promise<void> {
-    if (!this.canEdit || this.scheduleError) return;
+    if (!this.canEdit || this.scheduleError || this.senderNameError) return;
     await this.run('Saving', async () => (await this.functions.call('saveMarketingCampaign',
       { id: this.selected?.id || null, draft: this.collectDraft() })).data as MarketingCampaignView,
       campaign => { this.choose(campaign, false); this.notice = campaign.status === 'paused'
-        ? 'Changes saved. Send a new test before resuming.' : 'Draft saved.'; });
+        ? campaign.lastTestState === 'SUCCESS'
+          ? 'Changes saved. You can resume with the existing successful test.'
+          : campaign.lastTestMailId && (campaign.lastTestState === 'PENDING' || campaign.lastTestState === 'PROCESSING')
+            ? 'Changes saved. Refresh status until the current test is SMTP accepted before resuming.'
+            : 'Changes saved. Send a test of the saved message before resuming.'
+        : 'Draft saved.'; });
   }
   private clearPreviewTimer(): void {
     if (this.previewTimer) clearTimeout(this.previewTimer);
@@ -301,6 +319,11 @@ export class AdminMarketingComponent implements OnInit, OnDestroy {
       this.previewBusy = false;
       return;
     }
+    if (this.senderNameError) {
+      this.previewBusy = false;
+      this.previewError = this.senderNameError;
+      return;
+    }
     if (this.showCta && (!this.ctaLabel.trim() || !this.ctaUrl.trim())) {
       this.previewBusy = false;
       this.previewError = 'Add both a button label and HTTPS destination to preview this email.';
@@ -316,9 +339,13 @@ export class AdminMarketingComponent implements OnInit, OnDestroy {
         signupFrom: null, signupTo: null } };
     this.previewBusy = true;
     try {
-      const result = await this.functions.call<unknown, { subject: string; html: string; text: string }>(
+      const result = await this.functions.call<unknown, MarketingCampaignPreview>(
         'previewMarketingCampaign', { draft: previewDraft });
       if (this.destroyed || sequence !== this.previewSequence) return;
+      if (typeof result.data.from !== 'string' || !result.data.from.trim() ||
+          typeof result.data.replyTo !== 'string' || !result.data.replyTo.trim()) {
+        throw new Error('Email sender details are unavailable. Update the marketing Functions, then refresh and try again.');
+      }
       this.preview = result.data;
       // The admin-only renderer validates and escapes draft content before adding the fixed
       // email template. Keep its CSS intact inside an iframe with scripts and forms disabled.
@@ -332,6 +359,9 @@ export class AdminMarketingComponent implements OnInit, OnDestroy {
     } finally {
       if (sequence === this.previewSequence) this.previewBusy = false;
     }
+  }
+  get senderNameError(): string {
+    return marketingSenderNameError(this.draft.senderName);
   }
   async prepare(): Promise<void> { await this.campaignAction('prepareMarketingCampaign', 'Preparing audience', 'Audience frozen. Review counts, then send a test.'); }
   async sendTest(): Promise<void> {

@@ -33,6 +33,92 @@ function setup(call = vi.fn(async () => ({ data: listing }))) {
 }
 
 describe('AdminMarketingComponent', () => {
+  it('defaults legacy campaigns, loads custom senders, and locks sender editing for frozen campaigns', async () => {
+    setup();
+    const fixture = TestBed.createComponent(AdminMarketingComponent);
+    fixture.detectChanges(); await fixture.whenStable(); fixture.detectChanges();
+    await fixture.whenStable(); fixture.detectChanges();
+    const component = fixture.componentInstance;
+    const input = () => (fixture.nativeElement as HTMLElement).querySelector<HTMLInputElement>('#campaign-sender-name')!;
+    expect(input().value).toBe('Dimitrios from Quantified Self');
+    expect(input().maxLength).toBe(120);
+    component.choose(pausedCampaign, false); fixture.detectChanges();
+    expect(component.draft.senderName).toBe('Dimitrios from Quantified Self');
+    component.choose({ ...pausedCampaign, senderName: 'Dimitrios' }, false);
+    fixture.detectChanges(); await fixture.whenStable(); fixture.detectChanges();
+    expect(input().value).toBe('Dimitrios');
+    expect(input().disabled).toBe(false);
+    input().value = 'Élodie from QS'; input().dispatchEvent(new Event('input', { bubbles: true })); fixture.detectChanges();
+    expect(component.draft.senderName).toBe('Élodie from QS');
+    expect(component.dirty).toBe(true);
+    expect(component.canResume).toBe(false);
+    component.choose({ ...readyCampaign, senderName: 'Dimitrios' }, false); fixture.detectChanges();
+    await fixture.whenStable(); fixture.detectChanges();
+    expect(input().disabled).toBe(true);
+    component.choose({ ...pausedCampaign, status: 'running', senderName: 'Dimitrios' }, false); fixture.detectChanges();
+    await fixture.whenStable(); fixture.detectChanges();
+    expect(input().disabled).toBe(true);
+    fixture.destroy();
+  });
+
+  it('requires a sender name before previewing, saving or testing', async () => {
+    const { component, call } = setup();
+    component.choose(pausedCampaign, false);
+    component.draft.senderName = '   ';
+    component.markDirty();
+    expect(component.previewError).toBe('Enter a sender name.');
+    expect(component.canSendTest).toBe(false);
+    await component.save();
+    expect(call).not.toHaveBeenCalled();
+    component.ngOnDestroy();
+  });
+
+  it('shows sender validation at the field even before the subject and body exist', async () => {
+    const { haptics } = setup();
+    const fixture = TestBed.createComponent(AdminMarketingComponent);
+    fixture.detectChanges(); await fixture.whenStable(); fixture.detectChanges();
+    await fixture.whenStable(); fixture.detectChanges();
+    const root = fixture.nativeElement as HTMLElement;
+    const input = root.querySelector<HTMLInputElement>('#campaign-sender-name')!;
+    const edit = async (value: string) => {
+      input.value = value;
+      input.dispatchEvent(new Event('input', { bubbles: true }));
+      input.dispatchEvent(new Event('blur'));
+      fixture.detectChanges(); await fixture.whenStable(); fixture.detectChanges();
+    };
+    await edit('   ');
+    expect(input.getAttribute('aria-invalid')).toBe('true');
+    expect(root.querySelector('.sender-field mat-error')?.textContent).toContain('Enter a sender name.');
+    await edit('Name\u0085');
+    expect(input.getAttribute('aria-invalid')).toBe('true');
+    expect(root.querySelector('.sender-field mat-error')?.textContent).toContain('control characters');
+    expect(Array.from(root.querySelectorAll<HTMLButtonElement>('.actions button'))
+      .find(button => button.textContent?.trim() === 'Save draft')?.disabled).toBe(true);
+    await edit('Dimitrios');
+    expect(input.getAttribute('aria-invalid')).toBe('false');
+    expect(root.querySelector('.sender-field mat-error')).toBeNull();
+    expect(haptics.selection).not.toHaveBeenCalled();
+    expect(haptics.success).not.toHaveBeenCalled();
+    expect(haptics.error).not.toHaveBeenCalled();
+    fixture.destroy();
+  });
+
+  it('refreshes sender-only saved changes while preserving an unsaved sender and test recipient', async () => {
+    const updated = { ...pausedCampaign, senderName: 'Dimitrios' };
+    const { component } = setup(vi.fn(async () => ({ data: { ...listing, campaigns: [updated] } })));
+    component.choose(pausedCampaign, false);
+    component.testTo = 'qa@example.org';
+    await component.refresh();
+    expect(component.draft.senderName).toBe('Dimitrios');
+    expect(component.testTo).toBe('qa@example.org');
+    expect(component.dirty).toBe(false);
+    component.draft.senderName = 'My unsaved name'; component.markDirty();
+    await component.refresh();
+    expect(component.draft.senderName).toBe('My unsaved name');
+    expect(component.canResume).toBe(false);
+    component.ngOnDestroy();
+  });
+
   it('confirms deletion of a prepared campaign including its recipient list without starting it', async () => {
     const call = vi.fn(async (name: string) => ({ data: name === 'changeMarketingCampaignStatus'
       ? { id: readyCampaign.id, deleted: true } : listing }));
@@ -338,7 +424,7 @@ describe('AdminMarketingComponent', () => {
     const call = vi.fn((name: string) => {
       if (name === 'listMarketingCampaigns') return ++lists === 1
         ? Promise.resolve({ data: { ...listing, campaigns: [pausedCampaign] } }) : pending;
-      return Promise.resolve({ data: { subject: pausedCampaign.subject, html: '<p>Preview</p>', text: 'Preview' } });
+      return Promise.resolve({ data: { from: 'Dimitrios from Quantified Self <updates@quantified-self.io>', replyTo: 'Dimitrios <dimitrios@quantified-self.io>', subject: pausedCampaign.subject, html: '<p>Preview</p>', text: 'Preview' } });
     });
     const { haptics } = setup(call);
     const fixture = TestBed.createComponent(AdminMarketingComponent);
@@ -539,7 +625,7 @@ describe('AdminMarketingComponent', () => {
     component.choose(pausedCampaign, false);
     component.draft.subject = 'My unsaved message';
     component.dirty = true;
-    component.preview = { subject: 'My unsaved message', html: '<p>My preview</p>', text: 'My preview' };
+    component.preview = { from: 'Dimitrios from Quantified Self <updates@quantified-self.io>', replyTo: 'Dimitrios <dimitrios@quantified-self.io>', subject: 'My unsaved message', html: '<p>My preview</p>', text: 'My preview' };
     const preview = component.preview;
     await component.refresh();
     expect(component.draft.subject).toBe('My unsaved message');
@@ -614,28 +700,78 @@ describe('AdminMarketingComponent', () => {
     expect(root.textContent).toContain('wait for SMTP acceptance');
     fixture.destroy();
   });
+  it.each(['name', 'schedule'] as const)('keeps resume available after saving only the %s without false editor changes', async field => {
+    const saved = { ...pausedCampaign, name: field === 'name' ? 'Renamed update' : pausedCampaign.name,
+      schedule: field === 'schedule' ? { time: '17:00', timeZone: 'UTC' } : null };
+    let releaseSave!: (value: { data: MarketingCampaignView }) => void;
+    const pending = new Promise<{ data: MarketingCampaignView }>(resolve => { releaseSave = resolve; });
+    const call = vi.fn(async (name: string) => name === 'saveMarketingCampaign'
+      ? pending : { data: { ...listing, campaigns: [saved] } });
+    const { haptics } = setup(call);
+    const fixture = TestBed.createComponent(AdminMarketingComponent);
+    fixture.detectChanges(); await fixture.whenStable(); fixture.detectChanges();
+    await fixture.whenStable(); fixture.detectChanges();
+    const component = fixture.componentInstance;
+    component.choose(pausedCampaign, false);
+    fixture.detectChanges(); await fixture.whenStable(); fixture.detectChanges();
+    if (field === 'name') component.draft.name = saved.name;
+    else { component.scheduleMode = 'daily'; component.scheduleTime = '17:00'; component.scheduleTimeZone = 'UTC'; }
+    component.markDirty();
+    expect(component.canResume).toBe(false);
+    const saving = component.save();
+    fixture.detectChanges();
+    releaseSave({ data: saved }); await saving;
+    fixture.detectChanges(); await fixture.whenStable(); fixture.detectChanges();
+    expect(component.dirty).toBe(false);
+    expect(component.canResume).toBe(true);
+    expect(component.selected?.lastTestMailId).toBe(pausedCampaign.lastTestMailId);
+    expect(component.notice).toContain('existing successful test');
+    const root = fixture.nativeElement as HTMLElement;
+    expect(Array.from(root.querySelectorAll<HTMLButtonElement>('.actions button'))
+      .find(button => button.textContent?.trim() === 'Resume')?.disabled).toBe(false);
+    expect(call.mock.calls.some(([name]) => name === 'sendMarketingTest')).toBe(false);
+    expect(haptics.success).toHaveBeenCalledTimes(1);
+    expect(haptics.selection).not.toHaveBeenCalled();
+    fixture.destroy();
+  });
+
+  it('keeps a pending saved test and asks to refresh after a non-email save', async () => {
+    const saved = { ...pausedCampaign, lastTestState: 'PENDING' };
+    const call = vi.fn(async (name: string) => ({ data: name === 'saveMarketingCampaign'
+      ? saved : { ...listing, campaigns: [saved] } }));
+    const { component } = setup(call);
+    component.choose(saved, false); component.draft.name = 'Renamed'; component.markDirty();
+    await component.save();
+    expect(component.selected?.lastTestMailId).toBe(pausedCampaign.lastTestMailId);
+    expect(component.notice).toContain('current test is SMTP accepted');
+    expect(component.canResume).toBe(false);
+    expect(component.resumeHint).toContain('Refresh status');
+    expect(component.resumeHint).not.toContain('Send a test');
+    component.ngOnDestroy();
+  });
+
   it('saves paused edits to the same campaign and sends its saved test to the chosen address', async () => {
-    const edited = { ...pausedCampaign, subject: 'Updated subject', lastTestMailId: null, lastTestState: null };
+    const edited = { ...pausedCampaign, senderName: 'Dimitrios', lastTestMailId: null, lastTestState: null };
     const call = vi.fn(async (name: string) => ({ data: name === 'saveMarketingCampaign'
       ? edited : name === 'listMarketingCampaigns' ? { ...listing, campaigns: [edited] } : { submitted: true } }));
     const { component, haptics } = setup(call);
     component.choose(pausedCampaign, false);
-    component.draft.subject = edited.subject;
+    component.draft.senderName = edited.senderName;
     component.markDirty();
     await component.change('resume');
     expect(call).not.toHaveBeenCalled();
     expect(haptics.success).not.toHaveBeenCalled();
     await component.save();
     expect(call).toHaveBeenCalledWith('saveMarketingCampaign', { id: pausedCampaign.id,
-      draft: expect.objectContaining({ subject: edited.subject, filters: pausedCampaign.filters }) });
+      draft: expect.objectContaining({ subject: edited.subject, senderName: edited.senderName, filters: pausedCampaign.filters }) });
     expect(component.selected?.status).toBe('paused');
     expect(component.dirty).toBe(false);
     expect(component.canResume).toBe(false);
-    expect(component.notice).toContain('Send a new test before resuming');
+    expect(component.notice).toContain('Send a test of the saved message before resuming');
     component.testTo = 'new-preview@example.org';
     await component.sendTest();
     expect(call).toHaveBeenCalledWith('sendMarketingTest', { id: pausedCampaign.id, to: 'new-preview@example.org',
-      draft: expect.objectContaining({ subject: edited.subject, filters: pausedCampaign.filters }) });
+      draft: expect.objectContaining({ subject: edited.subject, senderName: edited.senderName, filters: pausedCampaign.filters }) });
     expect(haptics.success).toHaveBeenCalledTimes(2);
     component.ngOnDestroy();
   });
@@ -706,7 +842,7 @@ describe('AdminMarketingComponent', () => {
     component.draft.content = { type: 'doc', content: [{ type: 'paragraph', content: [{ type: 'text', text: 'A test message' }] }] };
     component.testTo = ' jimmykane9@gmail.com ';
     expect(component.canSendTest).toBe(false);
-    component.preview = { subject: 'Test subject', html: '<p>A test message</p>', text: 'A test message' };
+    component.preview = { from: 'Dimitrios from Quantified Self <updates@quantified-self.io>', replyTo: 'Dimitrios <dimitrios@quantified-self.io>', subject: 'Test subject', html: '<p>A test message</p>', text: 'A test message' };
     expect(component.canSendTest).toBe(true);
     await component.sendTest();
     expect(call).toHaveBeenCalledWith('sendMarketingTest', { id: null, to: 'jimmykane9@gmail.com',
@@ -723,10 +859,68 @@ describe('AdminMarketingComponent', () => {
     expect(fixture.nativeElement.querySelector('.writing-column input[type="email"]')).not.toBeNull();
     fixture.destroy();
   });
+  it('isolates recipient autofill from the campaign name, subject and sender', async () => {
+    const { call } = setup();
+    const fixture = TestBed.createComponent(AdminMarketingComponent);
+    fixture.detectChanges(); await fixture.whenStable(); fixture.detectChanges();
+    const root = fixture.nativeElement as HTMLElement;
+    for (const id of ['campaign-internal-name', 'campaign-subject', 'campaign-sender-name']) {
+      const input = root.querySelector<HTMLInputElement>(`#${id}`);
+      expect(input, id).not.toBeNull();
+      expect(input?.autocomplete, id).toBe('off');
+      expect(input?.name, id).toBeTruthy();
+      expect(input?.form, id).toBeNull();
+    }
+    const recipient = root.querySelector<HTMLInputElement>('#campaign-test-recipient');
+    expect(recipient?.autocomplete).toBe('section-campaigntest email');
+    expect(recipient?.name).toBe('campaignTestRecipient');
+    expect(recipient?.form?.id).toBe('campaign-test-send');
+    expect(recipient?.getAttribute('autocapitalize')).toBe('none');
+    expect(recipient?.getAttribute('spellcheck')).toBe('false');
+    const submit = new Event('submit', { bubbles: true, cancelable: true });
+    recipient!.form!.dispatchEvent(submit);
+    expect(submit.defaultPrevented).toBe(true);
+    expect(call).not.toHaveBeenCalledWith('sendMarketingTest', expect.anything());
+    fixture.destroy();
+  });
+  it('keeps the edited subject when a test of unsaved changes finishes and refreshes the saved campaign', async () => {
+    const call = vi.fn(async (name: string, data?: { draft: { subject: string } }) => ({ data: name === 'sendMarketingTest'
+      ? { mailId: 'unsaved-test', submitted: true } : name === 'previewMarketingCampaign'
+        ? { from: 'Dimitrios <updates@quantified-self.io>', replyTo: 'Dimitrios <dimitrios@quantified-self.io>',
+          subject: data!.draft.subject, html: '<p>Hello</p>', text: 'Hello' }
+        : { ...listing, campaigns: [pausedCampaign] } }));
+    setup(call);
+    const fixture = TestBed.createComponent(AdminMarketingComponent);
+    fixture.detectChanges(); await fixture.whenStable(); fixture.detectChanges();
+    const component = fixture.componentInstance;
+    component.choose(pausedCampaign, false);
+    fixture.detectChanges(); await fixture.whenStable(); fixture.detectChanges();
+    const root = fixture.nativeElement as HTMLElement;
+    const subject = root.querySelector<HTMLInputElement>('#campaign-subject')!;
+    subject.value = 'My edited subject'; subject.dispatchEvent(new Event('input', { bubbles: true }));
+    const recipient = root.querySelector<HTMLInputElement>('#campaign-test-recipient')!;
+    recipient.value = 'qa@example.org'; recipient.dispatchEvent(new Event('input', { bubbles: true }));
+    fixture.detectChanges();
+    expect(component.draft.subject).toBe('My edited subject');
+    expect(component.dirty).toBe(true);
+    fixture.detectChanges(); await fixture.whenStable(); fixture.detectChanges();
+    const button = root.querySelector<HTMLButtonElement>('.test-send button')!;
+    expect(button.disabled).toBe(false);
+    button.click();
+    fixture.detectChanges(); await fixture.whenStable(); fixture.detectChanges();
+    expect(call).toHaveBeenCalledWith('sendMarketingTest', { id: null, to: 'qa@example.org',
+      draft: expect.objectContaining({ subject: 'My edited subject' }) });
+    expect(subject.value).toBe('My edited subject');
+    expect(component.draft.subject).toBe('My edited subject');
+    expect(component.selected?.subject).toBe('Original subject');
+    expect(component.dirty).toBe(true);
+    expect(call).not.toHaveBeenCalledWith('saveMarketingCampaign', expect.anything());
+    fixture.destroy();
+  });
   it('keeps Send test disabled until the recipient address is valid', async () => {
     setup();
     const fixture = TestBed.createComponent(AdminMarketingComponent);
-    fixture.componentInstance.preview = { subject: 'A note', html: '<p>Hello</p>', text: 'Hello' };
+    fixture.componentInstance.preview = { from: 'Dimitrios from Quantified Self <updates@quantified-self.io>', replyTo: 'Dimitrios <dimitrios@quantified-self.io>', subject: 'A note', html: '<p>Hello</p>', text: 'Hello' };
     fixture.detectChanges();
     await fixture.whenStable();
     fixture.detectChanges();
@@ -747,7 +941,7 @@ describe('AdminMarketingComponent', () => {
     component.draft.subject = 'A note';
     component.draft.content = { type: 'doc', content: [{ type: 'paragraph', content: [{ type: 'text', text: 'Hello' }] }] };
     component.testTo = 'qa@example.org';
-    component.preview = { subject: 'A note', html: '<p>Hello</p>', text: 'Hello' };
+    component.preview = { from: 'Dimitrios from Quantified Self <updates@quantified-self.io>', replyTo: 'Dimitrios <dimitrios@quantified-self.io>', subject: 'A note', html: '<p>Hello</p>', text: 'Hello' };
     expect(component.canSendTest).toBe(true);
     component.schedulePreview();
     expect(component.canSendTest).toBe(false);
@@ -757,24 +951,40 @@ describe('AdminMarketingComponent', () => {
     component.ngOnDestroy();
   });
   it('renders a live server preview from an unsaved message without sending mail', async () => {
-    const preview = { subject: 'Subject', html: '<p>Hello</p>', text: 'Hello' };
+    const preview = { from: 'Dimitrios from Quantified Self <updates@quantified-self.io>', replyTo: 'Dimitrios <dimitrios@quantified-self.io>', subject: 'Subject', html: '<p>Hello</p>', text: 'Hello' };
     const call = vi.fn(async (name: string) => ({ data: name === 'previewMarketingCampaign' ? preview : listing }));
     const { component, haptics } = setup(call);
     component.draft.subject = 'Subject';
+    component.draft.senderName = 'Dimitrios';
     component.draft.content = { type: 'doc', content: [{ type: 'paragraph', content: [{ type: 'text', text: 'Hello' }] }] };
     vi.useFakeTimers();
     try {
       component.schedulePreview();
       await vi.advanceTimersByTimeAsync(900);
       expect(component.preview).toEqual(preview);
-      expect(call).toHaveBeenCalledWith('previewMarketingCampaign', { draft: expect.objectContaining({ name: 'Preview', subject: 'Subject' }) });
+      expect(call).toHaveBeenCalledWith('previewMarketingCampaign', { draft: expect.objectContaining({ name: 'Preview', subject: 'Subject', senderName: 'Dimitrios' }) });
       expect(haptics.success).not.toHaveBeenCalled();
+    } finally { vi.useRealTimers(); component.ngOnDestroy(); }
+  });
+  it('blocks test sending when an older preview service omits the sender details', async () => {
+    const call = vi.fn(async () => ({ data: { subject: 'Subject', html: '<p>Hello</p>', text: 'Hello' } }));
+    const { component } = setup(call);
+    component.draft.subject = 'Subject'; component.draft.senderName = 'Dimitrios';
+    component.draft.content = { type: 'doc', content: [{ type: 'paragraph', content: [{ type: 'text', text: 'Hello' }] }] };
+    component.testTo = 'qa@example.org';
+    vi.useFakeTimers();
+    try {
+      component.schedulePreview(); await vi.advanceTimersByTimeAsync(900);
+      expect(component.preview).toBeNull();
+      expect(component.previewError).toContain('sender details');
+      expect(component.canSendTest).toBe(false);
+      expect(call).not.toHaveBeenCalledWith('sendMarketingTest', expect.anything());
     } finally { vi.useRealTimers(); component.ngOnDestroy(); }
   });
   it('keeps the email template CSS in a sandboxed preview beside a saved draft', async () => {
     const html = '<!doctype html><html><head><style>body{color:#123456}</style></head><body style="margin:0"><p>Hello</p></body></html>';
     const call = vi.fn(async (name: string) => ({ data: name === 'previewMarketingCampaign'
-      ? { subject: 'A note', html, text: 'Hello' } : listing }));
+      ? { from: 'Dimitrios from Quantified Self <updates@quantified-self.io>', replyTo: 'Dimitrios <dimitrios@quantified-self.io>', subject: 'A note', html, text: 'Hello' } : listing }));
     setup(call);
     const fixture = TestBed.createComponent(AdminMarketingComponent);
     fixture.componentInstance.selected = { id: 'campaign_1234567890', name: 'Product update', status: 'draft',
@@ -788,6 +998,9 @@ describe('AdminMarketingComponent', () => {
       await vi.advanceTimersByTimeAsync(900);
       fixture.detectChanges();
       const frame = fixture.nativeElement.querySelector('iframe');
+      const headers = fixture.nativeElement.querySelector('.preview-headers') as HTMLElement;
+      expect(headers.textContent).toContain('Dimitrios from Quantified Self <updates@quantified-self.io>');
+      expect(headers.textContent).toContain('Dimitrios <dimitrios@quantified-self.io>');
       expect(frame?.getAttribute('srcdoc')).toContain('<style>body{color:#123456}</style>');
       expect(frame?.getAttribute('srcdoc')).toContain('style="margin:0"');
       expect(frame?.getAttribute('sandbox')).toBe('allow-same-origin allow-popups allow-popups-to-escape-sandbox');

@@ -20,6 +20,8 @@ import {
     markQueueItemDeletedForUserCleanup,
     QUEUE_CLEANUP_TOMBSTONE_REASONS,
 } from '../queue/cleanup-tombstone';
+import { recordActivityDeliveryDispatch } from './monitoring';
+import { observeActivityDeliveryQueue, recordActivityDeliveryQueueUnavailable } from './monitoring-probe';
 
 const ACTIVITY_SYNC_REDISPATCH_STALE_MS = 2 * 60 * 60 * 1000;
 const MAX_ACTIVITY_SYNC_QUEUE_SCAN = 500;
@@ -104,18 +106,20 @@ async function shouldDispatchActivitySyncCandidate(
         await deleteActivitySyncCandidateBeforeDispatch(doc, `user ${userID} is missing or deletion is in progress`);
         return false;
     } catch (error) {
+        recordActivityDeliveryDispatch('failed');
         logger.error(`[ActivitySyncDispatcher] Failed to check deletion guard for queue item ${doc.id} and user ${userID}; leaving item undispatched for a future run.`, error);
         return false;
     }
 }
 
-export async function reconcileActivitySyncQueueDispatches(nowMs = Date.now()): Promise<{
+export async function reconcileActivitySyncQueueDispatches(nowMs = Date.now(), reportTaskDepth?: (depth: number) => void): Promise<{
     inspected: number;
     dispatched: number;
     skippedRecent: number;
 }> {
     const cloudTaskQueueId = config.cloudtasks.activitySyncQueue;
     const pendingCloudTasks = await getCloudTaskQueueDepthForQueue(cloudTaskQueueId, true);
+    reportTaskDepth?.(pendingCloudTasks);
     if (pendingCloudTasks >= MAX_PENDING_TASKS) {
         logger.info(`[ActivitySyncDispatcher] Queue busy (${pendingCloudTasks} pending tasks), skipping dispatch reconciliation.`);
         return {
@@ -243,6 +247,8 @@ export async function reconcileActivitySyncQueueDispatches(nowMs = Date.now()): 
 
             const wasTaskEnqueued = await enqueueActivitySyncTask(candidate.doc.id, candidate.dateCreated);
             if (!wasTaskEnqueued) {
+                // The enqueue helper returns false only for deterministic task
+                // deduplication. Transport failures throw and are recorded below.
                 logger.info(`[ActivitySyncDispatcher] Task not enqueued for ${candidate.doc.id}; leaving dispatch marker unchanged.`);
                 continue;
             }
@@ -272,6 +278,7 @@ export async function reconcileActivitySyncQueueDispatches(nowMs = Date.now()): 
             }
             dispatched += 1;
         } catch (error) {
+            recordActivityDeliveryDispatch('failed');
             logger.error(`[ActivitySyncDispatcher] Failed to dispatch queue item ${candidate.doc.id}`, error);
         }
     }
@@ -288,6 +295,25 @@ export const dispatchActivitySyncQueue = functions.region('europe-west2').runWit
     memory: '256MB',
     maxInstances: 1,
 }).pubsub.schedule(QUEUE_SCHEDULE).onRun(async () => {
-    const result = await reconcileActivitySyncQueueDispatches();
-    logger.info('[ActivitySyncDispatcher] Reconciliation completed', result);
+    let taskDepth: number | undefined;
+    try {
+        const result = await reconcileActivitySyncQueueDispatches(Date.now(), depth => { taskDepth = depth; });
+        recordActivityDeliveryDispatch('completed');
+        logger.info('[ActivitySyncDispatcher] Reconciliation completed', result);
+    } catch (error) {
+        recordActivityDeliveryDispatch('failed');
+        throw error;
+    } finally {
+        try {
+            await observeActivityDeliveryQueue(admin.firestore(), async uid => {
+                try {
+                    const claims = (await admin.auth().getUser(uid)).customClaims;
+                    return claims?.stripeRole === 'pro' || typeof claims?.gracePeriodUntil === 'number' && claims.gracePeriodUntil > Date.now();
+                } catch (error) {
+                    if ((error as { code?: string }).code === 'auth/user-not-found') return false;
+                    throw error;
+                }
+            }, taskDepth);
+        } catch { recordActivityDeliveryQueueUnavailable(); }
+    }
 });

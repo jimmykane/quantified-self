@@ -5,6 +5,7 @@ import { ServiceNames } from '@sports-alliance/sports-lib';
 import { randomUUID } from 'crypto';
 import { ACTIVITY_SYNC_ROUTES } from '../../shared/activity-sync-routes';
 import { ROUTE_DELIVERY_SYNC_ROUTES } from '../../shared/route-delivery-sync-routes';
+import * as logger from 'firebase-functions/logger';
 
 // Real Firestore transactions and recursiveDelete; only provider I/O is mocked.
 // Run with npm run test:disconnect. Never use ADC or production Firestore.
@@ -21,6 +22,10 @@ import { deauthorizeServiceForUser, getServiceOAuth2CodeRedirectAndSaveStateToUs
 import { getServiceTokenRootDocumentRef } from './service-token-store';
 import { clearServiceDisconnectPending } from './service-disconnect-pending';
 import { cleanupServiceDisconnectTasksForUser, processServiceDisconnectCleanup, retryServiceDisconnectCleanup, SERVICE_DISCONNECT_CLEANUP_COLLECTION } from './service-disconnect-cleanup';
+import { processSleepSyncQueueItem } from './sleep/queue';
+import { parseWorkoutQueueItemForServiceName } from './queue';
+import { QueueResult } from './queue-utils';
+import type { SleepSyncQueueItemInterface, SuuntoAppWorkoutQueueItemInterface } from './queue/queue-item.interface';
 
 const emulatorHost = process.env.FIRESTORE_EMULATOR_HOST;
 describe.skipIf(!emulatorHost)('explicit disconnect durability (Firestore emulator)', () => {
@@ -39,6 +44,8 @@ describe.skipIf(!emulatorHost)('explicit disconnect durability (Firestore emulat
     if (!emulatorHost || !/^(127\.0\.0\.1|localhost):\d+$/.test(emulatorHost)) throw new Error('Loopback Firestore emulator required');
     admin.initializeApp({ projectId: 'demo-disconnect' });
     db = admin.firestore();
+    // Match bootstrap.ts: DLQ serialization deliberately omits undefined fields.
+    db.settings({ ignoreUndefinedProperties: true });
   });
   afterAll(async () => { await admin.app().delete(); });
   afterEach(() => { vi.restoreAllMocks(); });
@@ -241,6 +248,132 @@ describe.skipIf(!emulatorHost)('explicit disconnect durability (Firestore emulat
     expect((await work.get()).exists).toBe(true);
     expect((await ref.get()).exists).toBe(false);
     expect((await root().get()).data()!.activeOAuthCredentialGeneration).toBe('replacement');
+  });
+
+  // Synthetic accounts only. Model the completed OAuth write locally; run the
+  // real disconnect, cleanup, processors and DLQ transactions, not provider HTTP.
+  async function seedSleepPoll(id: string, account = providerID): Promise<admin.firestore.DocumentReference> {
+    const ref = db.collection('sleepSyncQueue').doc(`${uid}-${id}`);
+    await ref.set({
+      id: ref.id, userID: uid, providerUserId: account, provider: 'SuuntoApp', type: 'suunto_poll',
+      dateCreated: Date.now(), queueRevision: 'original-revision', processed: false, retryCount: 0,
+      dispatchedToCloudTask: null, rangeStartMs: Date.UTC(2024, 0, 1), rangeEndMs: Date.UTC(2024, 0, 2),
+    });
+    return ref;
+  }
+
+  async function seedReplacementConnection(account: string): Promise<admin.firestore.DocumentReference> {
+    const replacementToken = root().collection('tokens').doc(account);
+    const batch = db.batch();
+    batch.set(root(), { activeOAuthCredentialGeneration: 'replacement-credential', oauthFlowGeneration: 'replacement-flow' });
+    batch.set(replacementToken, {
+      serviceName: service, userName: account, accessToken: 'test-replacement-access',
+      refreshToken: 'test-replacement-refresh', tokenCredentialGeneration: 'replacement-credential',
+    });
+    batch.set(meta(), { connectionState: 'connected', connectionStateGeneration: 'replacement-connection' });
+    await batch.commit();
+    return replacementToken;
+  }
+
+  it('reproduces 700 old sleep polls and one workout entering DLQ after switching Suunto accounts', async () => {
+    const sleepRefs: admin.firestore.DocumentReference[] = [];
+    // Match the production count without importing any private payload or UID.
+    for (let page = 0; page < 2; page++) {
+      const batch = db.batch();
+      for (let index = 0; index < 350; index++) {
+        const ref = db.collection('sleepSyncQueue').doc(`${uid}-old-${page}-${index}`);
+        sleepRefs.push(ref);
+        batch.set(ref, {
+          id: ref.id, userID: uid, providerUserId: providerID, provider: 'SuuntoApp', type: 'suunto_poll',
+          dateCreated: Date.now(), queueRevision: 'original-revision', processed: false, retryCount: 0,
+          dispatchedToCloudTask: null, rangeStartMs: Date.UTC(2024, 0, 1) + (page * 350 + index) * 86_400_000,
+          rangeEndMs: Date.UTC(2024, 0, 2) + (page * 350 + index) * 86_400_000,
+        });
+      }
+      await batch.commit();
+    }
+    const workout = queue().doc(`${uid}-old-workout`);
+    await workout.set({
+      id: workout.id, firebaseUserID: uid, userName: providerID, workoutID: 'test-old-workout',
+      dateCreated: Date.now(), processed: false, retryCount: 0, dispatchedToCloudTask: null,
+    });
+    await deauthorizeServiceForUser(uid, service);
+    expect((await token().get()).exists).toBe(false);
+    const cleanup = (await tasks().get()).docs[0].ref;
+
+    const newAccount = `replacement-${providerID}`;
+    const replacementToken = await seedReplacementConnection(newAccount);
+    const replacementBefore = await replacementToken.get();
+    const newSleep = await seedSleepPoll('new-sleep', newAccount);
+    const newWorkout = queue().doc(`${uid}-new-workout`);
+    await newWorkout.set({ userName: newAccount, firebaseUserID: uid, processed: false });
+    await processServiceDisconnectCleanup(cleanup);
+    expect((await cleanup.get()).exists).toBe(false); // reconnect retires the old cleanup
+    expect((await sleepRefs[0].get()).exists).toBe(true);
+    expect((await workout.get()).exists).toBe(true);
+
+    vi.clearAllMocks();
+    const unexpectedProviderCall = async () => { throw new Error('Old jobs must not call the replacement provider account'); };
+    const providerGet = vi.spyOn(providerRequests, 'get').mockImplementation(unexpectedProviderCall);
+    const providerPost = vi.spyOn(providerRequests, 'post').mockImplementation(unexpectedProviderCall);
+    const providerDelete = vi.spyOn(providerRequests, 'delete').mockImplementation(unexpectedProviderCall);
+    const sleepSnapshots = await db.getAll(...sleepRefs);
+    for (let offset = 0; offset < sleepSnapshots.length; offset += 8) {
+      const outcomes = await Promise.all(sleepSnapshots.slice(offset, offset + 8).map(snapshot =>
+        processSleepSyncQueueItem({ ...snapshot.data(), ref: snapshot.ref } as SleepSyncQueueItemInterface)));
+      expect(logger.error).not.toHaveBeenCalled();
+      expect(outcomes).toEqual(Array(outcomes.length).fill(QueueResult.MovedToDLQ));
+    }
+    const workoutSnapshot = await workout.get();
+    expect(await parseWorkoutQueueItemForServiceName(service, {
+      ...workoutSnapshot.data(), ref: workout,
+    } as SuuntoAppWorkoutQueueItemInterface)).toBe(QueueResult.MovedToDLQ);
+
+    const failures = await db.getAll(...[...sleepRefs, workout].map(ref => db.collection('failed_jobs').doc(ref.id)));
+    expect(failures).toHaveLength(701);
+    expect(failures.every(snapshot => snapshot.exists && snapshot.get('context') === 'NO_TOKEN_FOUND'
+      && snapshot.get('processed') === false && snapshot.get('retryCount') === 0)).toBe(true);
+    expect(failures.filter(snapshot => snapshot.get('originalCollection') === 'sleepSyncQueue')).toHaveLength(700);
+    expect(failures.filter(snapshot => snapshot.get('originalCollection') === 'suuntoAppWorkoutQueue')).toHaveLength(1);
+    expect((await db.collection('sleepSyncQueue').where('userID', '==', uid).get()).docs.map(doc => doc.id)).toEqual([newSleep.id]);
+    expect((await queue().where('firebaseUserID', '==', uid).get()).docs.map(doc => doc.id)).toEqual([newWorkout.id]);
+    expect((await replacementToken.get()).updateTime!.isEqual(replacementBefore.updateTime!)).toBe(true);
+    expect((await meta().get()).get('connectionState')).toBe('connected');
+    expect(providerGet).not.toHaveBeenCalled();
+    expect(providerPost).not.toHaveBeenCalled();
+    expect(providerDelete).not.toHaveBeenCalled();
+  }, 120_000);
+
+  it('does not create dead letters when cleanup completes before reconnect and an old delivery arrives', async () => {
+    const sleep = await seedSleepPoll('cleaned-sleep');
+    const snapshot = await sleep.get();
+    await deauthorizeServiceForUser(uid, service);
+    const cleanup = (await tasks().get()).docs[0].ref;
+    await processServiceDisconnectCleanup(cleanup);
+    expect((await sleep.get()).exists).toBe(false);
+    expect((await cleanup.get()).exists).toBe(false);
+    expect(await processSleepSyncQueueItem({ ...snapshot.data(), ref: sleep } as SleepSyncQueueItemInterface))
+      .toBe(QueueResult.Processed);
+    expect((await db.collection('failed_jobs').doc(sleep.id).get()).exists).toBe(false);
+  });
+
+  it('protects a same-ID replacement sleep job after reconnecting the same Suunto account', async () => {
+    const sleep = await seedSleepPoll('same-account');
+    const original = await sleep.get();
+    await deauthorizeServiceForUser(uid, service);
+    const cleanup = (await tasks().get()).docs[0].ref;
+    await seedReplacementConnection(providerID);
+    await sleep.update({ queueRevision: 'replacement-revision', dateCreated: Date.now() });
+    const replacement = await sleep.get();
+    const cutoff = (await cleanup.get()).get('cutoffAt') as Timestamp;
+    expect(replacement.createTime!.isEqual(original.createTime!)).toBe(true);
+    expect(replacement.createTime!.toMillis()).toBeLessThanOrEqual(cutoff.toMillis());
+    await processServiceDisconnectCleanup(cleanup);
+    expect((await sleep.get()).get('queueRevision')).toBe('replacement-revision');
+    expect((await sleep.get()).get('processed')).toBe(false);
+    expect((await token().get()).get('tokenCredentialGeneration')).toBe('replacement-credential');
+    expect((await cleanup.get()).exists).toBe(false);
+    expect((await db.collection('failed_jobs').doc(sleep.id).get()).exists).toBe(false);
   });
 
   it('does not revoke a replacement connection from a stale recovery snapshot', async () => {

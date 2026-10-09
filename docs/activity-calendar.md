@@ -104,15 +104,29 @@ The top summary shows distance, duration, and ascent for the selected primary pe
 
 ## Planned and recorded summaries
 
-Week and Month add separate recorded, planned and remaining prescription sections, with scheduled/completed-link/skipped/unlinked
-counts. Exact links establish completion evidence; missing links do not establish missed execution. Planned and recorded
-volume never share a total. Recorded load is current/legacy parent TSS with explicit missing-source coverage; planned load
-is unavailable. Both views use bounded server-confirmed reads and label truncated reads as observed subtotals. Month
-loads adjoining grid dates for selection but excludes them from its summary, and retains recorded ascent with the shared
-elevation exclusions. 30 days, Year and Dashboard retain their existing period summaries. Week and Month carry incomplete
-coverage into grid labels and selected-day totals;
-the activity table loads independently. Detailed calculation, lifecycle,
-read bounds, revision warnings and MCP review belong to the single [Training source of truth](training-workspace.md#calendar-period-planned-and-recorded-summaries-training-09).
+Month retains the original compact Distance/Duration/Ascent strip below the grid and selected-day panel.
+Monthly planned/recorded calculations and completion coverage remain available, with planned workouts and matches
+visible on calendar days; the monthly summary panel is not mounted while its placement is being redesigned.
+Failed workout reads retain a compact retry action.
+
+Week keeps recorded activity counts and totals first. A flat **Planned workouts** expansion panel appears only
+when the period contains scheduled workouts; its heading shows scheduled and remaining counts. It starts collapsed,
+keeps the same minimum header height when opened, grows to fit larger text, and retains the user's choice on live
+updates until the period changes. The planning
+row reveals smoothly when data arrives and stays in place until its collapse finishes. Leaving content becomes
+inaccessible immediately, and all planning motion respects reduced motion. Confirmed empty plans, zero counters and empty
+planned/remaining totals are omitted. Loading uses a fixed-size indicator; failed or partial reads remain visible as
+plain-language warnings with **Try again** for failed reads.
+
+Exact activity matches establish recorded evidence; missing matches do not establish missed execution. Planned and
+recorded volume never share a total. Training load is current/legacy parent TSS with explicit missing-source coverage.
+Both views use bounded server-confirmed reads and identify totals from incomplete reads. Month loads adjoining grid
+dates for selection but excludes them from its summary, and retains recorded ascent with the shared elevation
+exclusions. 30 days, Year and Dashboard retain their existing period summaries. Week and Month carry incomplete
+coverage into grid labels and selected-day totals; the activity table loads independently. Detailed calculation,
+lifecycle, read bounds, revision warnings and MCP review belong to the single
+[Training source of truth](training-workspace.md#calendar-period-planned-and-recorded-summaries-training-09).
+
 
 ## UI and accessibility
 

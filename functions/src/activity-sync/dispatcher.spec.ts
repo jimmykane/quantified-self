@@ -135,7 +135,9 @@ vi.mock('../queue/cleanup-tombstone', () => ({
   },
 }));
 
-import { reconcileActivitySyncQueueDispatches } from './dispatcher';
+vi.mock('./monitoring-probe', () => ({ observeActivityDeliveryQueue: vi.fn(), recordActivityDeliveryQueueUnavailable: vi.fn() }));
+import { observeActivityDeliveryQueue, recordActivityDeliveryQueueUnavailable } from './monitoring-probe';
+import { dispatchActivitySyncQueue, reconcileActivitySyncQueueDispatches } from './dispatcher';
 
 describe('activity-sync/dispatcher', () => {
   beforeEach(() => {
@@ -183,6 +185,24 @@ describe('activity-sync/dispatcher', () => {
       skippedRecent: 0,
     });
     expect(mockQueueCollection).not.toHaveBeenCalled();
+  });
+
+  it('keeps the scheduled dispatcher failure even when monitoring also fails', async () => {
+    const error = new Error('private dispatch error');
+    mockGetCloudTaskQueueDepthForQueue.mockRejectedValueOnce(error);
+    vi.mocked(observeActivityDeliveryQueue).mockRejectedValueOnce(new Error('private observation error'));
+    await expect((dispatchActivitySyncQueue as unknown as () => Promise<void>)()).rejects.toBe(error);
+    expect(mockLoggerInfo).toHaveBeenCalledWith('[ActivityDelivery]', expect.objectContaining({ event: 'dispatch_run', outcome: 'failed' }));
+    expect(observeActivityDeliveryQueue).toHaveBeenCalledOnce();
+    expect(recordActivityDeliveryQueueUnavailable).toHaveBeenCalledOnce();
+  });
+
+  it('observes the existing native depth without fetching it twice or changing idle dispatch', async () => {
+    vi.mocked(observeActivityDeliveryQueue).mockResolvedValueOnce(undefined);
+    await (dispatchActivitySyncQueue as unknown as () => Promise<void>)();
+    expect(mockGetCloudTaskQueueDepthForQueue).toHaveBeenCalledOnce();
+    expect(observeActivityDeliveryQueue).toHaveBeenCalledWith(expect.anything(), expect.any(Function), 0);
+    expect(mockLoggerInfo).toHaveBeenCalledWith('[ActivityDelivery]', expect.objectContaining({ event: 'dispatch_run', outcome: 'completed' }));
   });
 
   it('dispatches undispatched and stale queue items and skips recent ones', async () => {
@@ -369,6 +389,7 @@ describe('activity-sync/dispatcher', () => {
     expect(updateFirst).not.toHaveBeenCalled();
     expect(updateSecond).toHaveBeenCalledWith({ dispatchedToCloudTask: nowMs });
     expect(mockLoggerError).toHaveBeenCalled();
+    expect(mockLoggerInfo).toHaveBeenCalledWith('[ActivityDelivery]', expect.objectContaining({ event: 'dispatch_run', outcome: 'failed' }));
   });
 
   it('does not mark queue item as dispatched when Cloud Task enqueue returns false', async () => {
@@ -395,6 +416,7 @@ describe('activity-sync/dispatcher', () => {
     });
     expect(mockEnqueueActivitySyncTask).toHaveBeenCalledWith('undispatched-item', 301);
     expect(updateUndispatched).not.toHaveBeenCalled();
+    expect(mockLoggerInfo).not.toHaveBeenCalledWith('[ActivityDelivery]', expect.objectContaining({ event: 'dispatch_run', outcome: 'failed' }));
   });
 
   it('does not write the dispatch marker when deletion starts after Cloud Task enqueue', async () => {

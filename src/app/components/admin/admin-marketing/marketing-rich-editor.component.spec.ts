@@ -5,6 +5,28 @@ import { MarketingRichEditorComponent } from './marketing-rich-editor.component'
 import { AppHapticsService } from '../../../services/app.haptics.service';
 
 describe('MarketingRichEditorComponent', () => {
+  it('does not emit message edits when locking, unlocking or loading saved content', () => {
+    const haptics = { selection: vi.fn(), success: vi.fn(), error: vi.fn() };
+    TestBed.configureTestingModule({ providers: [{ provide: AppHapticsService, useValue: haptics }] });
+    const fixture = TestBed.createComponent(MarketingRichEditorComponent);
+    fixture.componentRef.setInput('value', { type: 'doc', content: [{ type: 'paragraph', content: [{ type: 'text', text: 'Saved email' }] }] });
+    fixture.detectChanges();
+    const emitted = vi.fn();
+    fixture.componentInstance.valueChange.subscribe(emitted);
+    fixture.componentRef.setInput('disabled', true); fixture.detectChanges();
+    fixture.componentRef.setInput('disabled', false); fixture.detectChanges();
+    fixture.componentRef.setInput('value', { type: 'doc', content: [{ type: 'paragraph', content: [{ type: 'text', text: 'Refreshed saved email' }] }] });
+    fixture.detectChanges();
+    expect(emitted).not.toHaveBeenCalled();
+    expect(haptics.selection).not.toHaveBeenCalled();
+    expect(haptics.success).not.toHaveBeenCalled();
+    expect(haptics.error).not.toHaveBeenCalled();
+    const editor = Reflect.get(fixture.componentInstance, 'editor') as Editor;
+    editor.commands.insertContent(' edited');
+    expect(emitted).toHaveBeenCalledTimes(1);
+    fixture.destroy();
+  });
+
   it('hydrates structured content, emits edits, and locks prepared campaigns', () => {
     const haptics = { selection: vi.fn(), success: vi.fn(), error: vi.fn() };
     TestBed.configureTestingModule({ providers: [{ provide: AppHapticsService, useValue: haptics }] });

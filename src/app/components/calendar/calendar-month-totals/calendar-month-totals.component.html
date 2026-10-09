@@ -1,0 +1,34 @@
+<section class="calendar-period-summary calendar-activity-totals"
+  [attr.aria-label]="periodLabel() + ' activity totals'" [attr.aria-description]="activityDescription()"
+  [attr.aria-busy]="activityStatus() === 'loading'">
+  <div class="calendar-totals-metrics">
+    @for (metric of activityMetrics(); track metric.label) {
+      <div class="calendar-period-summary-metric">
+        <span class="calendar-period-summary-label">
+          <mat-icon aria-hidden="true">{{ metric.icon }}</mat-icon>
+          <span>{{ metric.label }}</span>
+        </span>
+        <strong class="calendar-period-summary-value">{{ metric.value }}</strong>
+      </div>
+    }
+  </div>
+</section>
+@if (hasWorkouts()) {
+  <section class="calendar-period-summary calendar-workout-totals"
+    [class.calendar-workout-totals--with-caption]="!!caption()"
+    [attr.aria-label]="periodLabel() + ' workout totals'" [attr.aria-busy]="summary().loading">
+    <div class="calendar-totals-metrics">
+      @for (metric of workoutMetrics(); track metric.label) {
+        <div class="calendar-period-summary-metric">
+          <span class="calendar-period-summary-label">{{ metric.label }}</span>
+          <strong class="calendar-period-summary-value">{{ metric.value }}</strong>
+        </div>
+      }
+    </div>
+    @if (caption()) {
+    <button class="calendar-totals-caption" type="button" [matTooltip]="captionDetails()"
+      #captionTooltip="matTooltip" matTooltipTouchGestures="off" (click)="captionTooltip.show()"
+      [attr.aria-label]="captionDetails()">{{ caption() }}</button>
+    }
+  </section>
+}

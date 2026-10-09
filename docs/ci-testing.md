@@ -1,15 +1,35 @@
 # CI test coverage
 
 `.github/workflows/_run-tests.yml` is the shared test gate for branch pushes, fork pull requests, beta/main builds and
-approved manual deployment workflows. `unit_tests` runs credential/plugin checks, ordinary Functions tests, compiled
-entrypoint/MCP contract checks, lint, Firestore/Storage Rules tests and frontend tests. The final `run_tests` job waits
-for both `unit_tests` and the complete emulator matrix, then fails unless both succeeded (including failed, cancelled
-or skipped dependencies). It preserves the protected-branch check name `run-tests / run_tests`; an emulator failure
-must not leave the required check green. Reusable-workflow deployment dependencies also wait for all jobs.
+approved manual deployment workflows. Independent jobs run the same mandatory checks on separate Ubuntu runners:
+
+| Job | Required checks |
+| --- | --- |
+| `unit_tests` | Credentials, workflow/emulator coverage contracts, monitoring definitions, plugin validation and frontend lint |
+| `functions_tests` | Functions install/lint, complete ordinary suite, build, compiled entrypoint and MCP contract checks |
+| `frontend_tests` | Frontend environment allocation and the complete suite across all three projects |
+| `rules_tests` | Firestore and Storage Rules tests with Java/Firebase emulators |
+| `functions_emulators` | Complete four-group Functions emulator matrix |
+
+Only the final `run_tests` job depends on these jobs. It uses `always()` and fails unless every dependency succeeded,
+including failed, cancelled, skipped or missing results. It preserves the protected-branch check name
+`run-tests / run_tests`; no individual successful job can make the required gate green. Reusable-workflow deployment
+dependencies continue to wait for the complete gate.
+
+Keep suite jobs independent when adding CI checks. Add any new mandatory job to the final gate and its executable
+failure tests. Do not put frontend or Rules tests back after the Functions suite, or raise per-runner worker limits
+to obtain parallelism. Node setup caches npm downloads using the applicable lockfiles; each runner still uses `npm ci`.
+Functions installs root dependencies too because its compiled shared sources resolve them there. Only Rules and
+emulator runners need Java/Firebase Tools; the Rules job shares the existing emulator binary cache.
+
+The previous serial job took about 32 minutes in [run 37779620977](https://github.com/jimmykane/quantified-self/actions/runs/37779620977):
+Functions install/lint/tests/build/contracts took 14m38s and frontend tests took 14m19s. These observed step durations
+motivate running the suites concurrently; they do not establish a measured speedup for the split. Extra runners
+repeat dependency setup and consume concurrent runner capacity. Measure the full required gate after CI completes.
 
 ## Ordinary unit runner
 
-Both unit and emulator jobs use Node 22, matching `functions/package.json` rather than testing Functions on an older
+All check jobs use Node 22, matching `functions/package.json` rather than testing Functions on an older
 runtime. `npm run test:workflows` checks that alignment against the actual YAML.
 
 Ordinary Functions tests use at most two isolated Vitest fork workers, with a minimum of one. This bounds concurrent
@@ -18,6 +38,32 @@ The cap addresses runner pressure after a CI run passed every test but failed wi
 `[vitest-worker]: Timeout calling "onTaskUpdate"`. Emulator commands retain their explicit one-worker, serial-file
 override. Test isolation and unhandled-error failure behavior remain enabled; there is no retry, ignored error or
 extended timeout masking a failure. `test-runner-config.spec.ts` covers these configuration boundaries.
+
+Frontend tests use the same global two-worker bound, with isolated forks across three Vitest projects:
+`helpers-node` runs 164 verified pure specs (helpers and help content) in Node with no setup file,
+`helpers-dom` runs 10 DOM/locale specs in jsdom with no Angular setup, and `angular` retains the Angular compiler
+plugin and `src/test-setup.ts` for all remaining ordinary specs. The Angular project is the fallback for new or
+unclassified files. The shared
+runner still uses `npm run test -- --run`, so every project runs on every ordinary app test invocation.
+
+`tools/frontend-test-environments.json` is the explicit Node/DOM opt-in registry. To move another pure application
+spec, first verify its tests and transitive imports in the intended environment, then add its exact repository-relative
+path to the registry. DOM rendering and browser-locale assumptions require jsdom; component/service/router imports may
+require the Angular pipeline. Do not route the whole helper directory to Node or add fake browser/Angular globals
+to conceal an unsupported import. Removing a registry entry returns that spec to Angular automatically.
+
+`npm run test:frontend-config` loads the real configuration and compares project discovery with the original
+ordinary-test boundary. It rejects missing files, duplicates and overlapping opt-ins, exercises future-file
+fallback (including hidden specs) plus Functions/Rules exclusions, and checks plugin/setup isolation, aliases,
+dependency inlining and the global worker bound. CI runs this check before the suites. The root retains the original include/exclude
+boundary for coverage, and reporters/coverage remain global across projects. A focused command can use
+`npm run test -- --run --project helpers-node <spec>` without initializing the Angular project.
+The guard uses Vitest's `tinyglobby` library with matching discovery options, including `dot: true`.
+It is an explicit dev dependency reusing the already locked version; no package versions change.
+
+See the [helper test environment benchmark](ci-helper-test-benchmark.md) for the verified allocation and local
+performance measurements. This changes the test runner only; application behavior, Training/MCP contracts,
+provider actions and production infrastructure have no impact, so product help does not need an update.
 
 ## Trigger policy without duplicate test runs
 
@@ -33,7 +79,8 @@ Skipped internal PR callers use the distinct name `Internal PR - covered by push
 publish the protected push check's name. They may appear as a skipped entry, but perform no test/dependency setup.
 
 `npm run test:workflows` parses the real YAML and tests fork/internal event routing, check names, permissions,
-deployment dependencies and all success/failure/cancelled/skipped combinations of the final gate. `js-yaml` is an
+deployment dependencies and the actual gate script's rejection of every job's failed, cancelled, skipped, missing
+or unknown result. It also protects job independence and the placement of the existing checks. `js-yaml` is an
 explicit dev dependency reusing the already locked parser; it adds no app or Functions runtime dependency.
 
 ## Deployment triggers

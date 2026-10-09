@@ -23,7 +23,7 @@ const hoisted = vi.hoisted(() => {
   const mockStorageDelete = vi.fn();
   const mockStorageFile = vi.fn((path: string) => ({
     path,
-    save: (data: Buffer) => mockStorageSave(path, data),
+    save: (data: Buffer, options: unknown) => mockStorageSave(path, data, options),
     delete: (options: unknown) => mockStorageDelete(path, options),
   }));
   const mockStorageBucket = vi.fn((name?: string) => ({
@@ -226,6 +226,7 @@ describe('upsertSyncedRoute', () => {
     expect(hoisted.mockStorageSave).toHaveBeenCalledWith(
       'users/user-1/routes/route-1/uploads/provider-sync/original-new-file-id.gpx',
       Buffer.from('<gpx />'),
+      { validation: 'crc32c', metadata: { crc32c: expect.any(String) } },
     );
     expect(transactionSetPayloadForPath('users/user-1/routes/route-1')).toEqual(expect.objectContaining({
       originalFiles: [expect.objectContaining({

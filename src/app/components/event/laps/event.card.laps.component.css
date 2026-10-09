@@ -1,7 +1,8 @@
 .table-container {
   overflow: auto;
   width: 100%;
-  max-width: 100%
+  max-width: 100%;
+  container-type: inline-size;
 }
 
 .table-container mat-cell,
@@ -20,6 +21,61 @@
   justify-content: center;
   width: 48px;
   max-width: 48px;
+}
+
+.lap-length-toggle-cell {
+  flex: 0 0 52px;
+  width: 52px;
+  max-width: 52px;
+  justify-content: center;
+}
+
+.table-container .lap-length-toggle-cell {
+  padding-inline: 0;
+}
+
+.lap-swolf-cell {
+  flex: 0 0 128px;
+  width: 128px;
+  max-width: 128px;
+}
+
+.lap-index-label {
+  display: flex;
+  flex-direction: column;
+}
+
+.table-container .lap-rest-row mat-cell,
+.table-container .lap-rest-row:hover mat-cell {
+  background: linear-gradient(var(--mat-sys-surface-container-high), var(--mat-sys-surface-container-high)), var(--mat-sys-surface-container-lowest);
+  color: var(--mat-sys-on-surface-variant);
+}
+
+.lap-length-detail-row[hidden] {
+  display: none;
+}
+
+.lap-length-detail-cell {
+  /* Match the scroll viewport, not the wider outer table, and let lengths scroll independently. */
+  box-sizing: border-box;
+  display: block;
+  flex: 0 0 100cqi;
+  width: 100cqi;
+  max-width: 100cqi;
+  min-width: 0;
+  padding: 12px 0;
+  position: sticky;
+  left: 0;
+}
+
+.lap-length-detail-cell p {
+  margin: 0 16px 8px;
+}
+
+.swim-swolf-heading {
+  font: var(--mat-sys-label-medium);
+  text-transform: none;
+  white-space: nowrap;
 }
 
 .table-container .lap-index-cell,

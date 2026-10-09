@@ -191,6 +191,53 @@ describe('queue-utils', () => {
         });
     });
 
+    describe('route committed observations', () => {
+        const observed = () => vi.mocked(logger.info).mock.calls.filter(([message]) => message === '[RouteQueue]');
+        const item = () => ({ id: 'qa', routeId: 'SuuntoApp_to_WahooAPI', sourceServiceName: ServiceNames.SuuntoApp, destinationServiceName: ServiceNames.WahooAPI,
+            dateCreated: 1, processed: false, retryCount: 0, errors: [], userID: 'PRIVATE', ref: { parent: { id: 'routeDeliverySyncQueue' }, id: 'qa' } } as unknown as GarminAPIActivityQueueItemInterface);
+        it('emits new dead-letter/manual markers once, after transaction retry commits', async () => {
+            vi.spyOn(logger, 'info').mockImplementation(() => {});
+            const current = item();
+            hoisted.transaction.get.mockResolvedValue({ exists: true, data: () => ({ ...current }) });
+            hoisted.runTransaction.mockImplementationOnce(async callback => {
+                await callback(hoisted.transaction);
+                expect(observed()).toHaveLength(0);
+                return callback(hoisted.transaction);
+            });
+            expect(await moveToDeadLetterQueueIfCurrentUserActive({ queueItem: current, error: new Error('PRIVATE'), userID: 'PRIVATE', phase: 'qa', logPrefix: 'qa', isCurrent: () => true,
+                manualReconciliation: { additionalData: { destinationProviderRouteId: 'PRIVATE' } } })).toBe(QueueResult.MovedToDLQ);
+            expect(observed().map(([, fields]) => fields?.outcome)).toEqual(['dead_lettered', 'manual_reconciliation']);
+            expect(JSON.stringify(observed())).not.toContain('PRIVATE');
+        });
+        it.each(['stale', 'deleted', 'failed'])('does not claim new failures for %s transitions', async state => {
+            vi.spyOn(logger, 'info').mockImplementation(() => {});
+            hoisted.transaction.get.mockResolvedValue({ exists: true, data: () => ({ processed: false }) });
+            if (state === 'deleted') hoisted.getUserDeletionGuardStateInTransaction.mockResolvedValueOnce({ shouldSkip: true });
+            if (state === 'failed') hoisted.runTransaction.mockRejectedValueOnce(new Error('PRIVATE'));
+            await moveToDeadLetterQueueIfCurrentUserActive({ queueItem: item(), error: new Error('PRIVATE'), userID: 'PRIVATE', phase: 'qa', logPrefix: 'qa', isCurrent: () => state !== 'stale', manualReconciliation: {} });
+            expect(observed()).toHaveLength(0);
+        });
+        it('counts retry-exhausted reconciliation without counting a retry as success', async () => {
+            vi.spyOn(logger, 'info').mockImplementation(() => {});
+            const current = item();
+            hoisted.transaction.get.mockResolvedValue({ exists: true, data: () => ({ ...current, retryCount: 9 }) });
+            expect(await increaseRetryCountIfCurrentUserActive({ queueItem: current, error: new Error('PRIVATE'), userID: 'PRIVATE', phase: 'qa', logPrefix: 'qa', isCurrent: () => true, manualReconciliation: {} })).toBe(QueueResult.MovedToDLQ);
+            expect(observed().map(([, fields]) => fields?.outcome)).toEqual(['dead_lettered', 'manual_reconciliation']);
+        });
+        it('records legacy import commits only after successful persistence, not queued BulkWriter writes', async () => {
+            vi.spyOn(logger, 'info').mockImplementation(() => {});
+            const ref = { parent: { id: 'routeSyncQueue' }, update: vi.fn().mockResolvedValue(undefined) };
+            const current = { ...item(), sourceServiceName: ServiceNames.SuuntoApp, ref } as unknown as GarminAPIActivityQueueItemInterface;
+            await updateToProcessed(current, undefined, { resultStatus: 'success' });
+            expect(observed()).toHaveLength(1);
+            ref.update.mockRejectedValueOnce(new Error('PRIVATE'));
+            await updateToProcessed({ ...current, ref }, undefined, { resultStatus: 'success' });
+            const bulk = { update: vi.fn() } as unknown as BulkWriter;
+            await updateToProcessed({ ...current, ref }, bulk, { resultStatus: 'success' });
+            expect(observed()).toHaveLength(1);
+        });
+    });
+
     describe('provider operation claim lease', () => {
         it('treats only a recent in-flight marker as active', () => {
             const nowMs = 1_800_000_000_000;

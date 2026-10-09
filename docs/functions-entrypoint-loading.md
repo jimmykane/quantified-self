@@ -109,6 +109,31 @@ Monitoring coverage is **unchanged**: #830 still uses `cloud_function` for the d
 for both workers. No dashboard, metric, policy, provider availability, Help or MCP contract change is needed.
 Deployment and #830 monitoring activation/readback remain separately approved operational work.
 
+## Recorded-activity delivery dispatcher isolation
+
+`dispatchActivitySyncQueue` loads directly from `activity-sync/dispatcher`, alongside
+the already isolated `processActivitySyncTask` worker. The dispatcher remains Gen 1
+in `europe-west2`, 256 MiB, 300 seconds, maximum one instance, no secrets and
+`*/30 * * * *` with unchanged default time-zone/retry settings. The original Firebase
+handler object is preserved; full discovery still exposes 168 endpoints. This is not
+a scheduler generation migration or a memory increase.
+
+The compiled check compares isolated endpoint/trigger descriptors with fresh full
+discovery and verifies both inherited-target discovery paths, standalone secrets and
+absence of the complete entrypoint, Genkit, BigQuery, MCP and admin modules. #832's
+telemetry uses `cloud_function` for this dispatcher and `cloud_run_revision` for the
+worker. Monitoring is additive; existing delivery, cleanup, polling, retry and claim
+behavior stays unchanged. Both handlers were deployed with separate approval on
+8 October 2026 and passed active-state/configuration readback. Cloud alert activation
+still requires separate approval. See [recorded-activity delivery monitoring](activity-delivery-monitoring.md).
+
+Three local Node 22.23.3 cold-import runs on 2026-10-08 measured medians of 1,098 ms /
+239.2 MiB RSS for full discovery, 365 ms / 120.7 MiB for `processActivitySyncTask`,
+and 378 ms / 127.1 MiB for `dispatchActivitySyncQueue`. Isolated handlers each exported
+one Function (1,439 / 1,421 loaded modules), versus 168 exports / 3,154 modules in full
+discovery. These are local import measurements, not production latency, memory or
+billing guarantees; no memory/runtime limit was changed.
+
 ## Recorded-activity import dispatcher isolation
 
 The four existing source-queue dispatchers load directly from their shared owner module, `queue`, and export only
@@ -275,6 +300,58 @@ npm --prefix functions run entrypoint:benchmark
 Set `ENTRYPOINT_BENCHMARK_RUNS` to change the default five runs. Run it with Node 22 when comparing against production.
 The command benchmarks the complete entrypoint and every target in the production routing table. It reports the minimum,
 median and maximum import time, RSS, RSS delta, heap usage and CommonJS module count.
+
+## Route monitoring entrypoint verification (2026-10-08)
+
+The #833 telemetry slice isolates two more existing targets:
+`processRouteDeliverySyncTask` loads `tasks/route-delivery-sync-worker`, retaining
+Gen 2, `europe-west2`, 1 GiB, 540 seconds, the same COROS/Suunto/Garmin/Wahoo
+secret bindings and existing task retries. `cleanupRejectedRouteOriginalFile` loads
+`routes/rejected-original-cleanup`, retaining Gen 2, 256 MiB, 60 seconds, concurrency
+one, maximum 20 instances and retryable document-updated trigger at
+`routeOriginalFileCleanup/{cleanupID}`. No resources, generations or schedules change.
+The existing import worker and cleanup redrive remain isolated. Full discovery still
+contains 168 endpoints; the target table now has 81 isolated exports.
+
+Three fresh Node 22.23.3 processes per target used compiled `--probe` mode with
+`--expose-gc`, matching `FUNCTION_TARGET`, synthetic demo project configuration and
+no inherited discovery override. Median local cold-import results:
+
+| Target | Import | RSS after import | Modules | Exports |
+| --- | --- | --- | --- | --- |
+| Complete discovery | 1,263 ms | 237.4 MiB | 3,155 | 168 |
+| `processRouteSyncTask` | 575 ms | 123.6 MiB | 1,452 | 1 |
+| `processRouteDeliverySyncTask` | 378 ms | 120.5 MiB | 1,445 | 1 |
+| `cleanupRejectedRouteOriginalFile` | 170 ms | 86.9 MiB | 757 | 1 |
+| `redriveRejectedRouteOriginalCleanup` | 166 ms | 86.9 MiB | 757 | 1 |
+
+The compiled entrypoint check passed trigger/resource/secret contracts, original
+handler identity, isolated exports, unrelated-module exclusions, discovery and the
+inherited-target secret checks. This is local verification, not a deployment or
+worker peak-memory measurement. See [route monitoring](route-monitoring.md) for
+the remaining #833 scope and activation boundary.
+
+### Route dispatcher follow-up (2026-10-08)
+
+`dispatchRouteDeliverySyncQueue` now loads directly from
+`route-delivery-sync/dispatcher`. It retains Gen 1, `europe-west2`, 256 MiB,
+300 seconds, maximum one instance, no secrets, the existing 30-minute cron and
+unchanged retry metadata. The bounded import/delivery observations share this
+existing scheduler; no new endpoint or scheduler is introduced. Full discovery
+still exports 168 endpoints; the isolated target table now contains 82.
+
+Three fresh Node 22.23.3 processes per scenario, using the same compiled probe
+mode above and synthetic demo project configuration, produced these medians:
+
+| Target | Import | RSS after import | Modules | Exports |
+| --- | --- | --- | --- | --- |
+| Complete discovery | 1,403 ms | 239.5 MiB | 3,157 | 168 |
+| `dispatchRouteDeliverySyncQueue` | 484 ms | 130.0 MiB | 1,450 | 1 |
+
+These are local cold-import observations, not peak worker memory or a deployment.
+The compiled entrypoint check verifies identical full/isolated handler identity,
+Gen 1 endpoint/trigger options, discovery, secret bindings and unrelated-module
+exclusions. Do not use these startup measurements to lower runtime memory.
 
 ## Initial local benchmark
 

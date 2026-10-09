@@ -54,6 +54,7 @@ import {
   type PlannedWorkoutCalendarOverlay,
 } from '../../../helpers/planned-workout-calendar.helper';
 import { CalendarPeriodSummaryComponent } from '../calendar-period-summary/calendar-period-summary.component';
+import { CalendarMonthTotalsComponent } from '../calendar-month-totals/calendar-month-totals.component';
 import { buildCalendarPeriodSummary, resolveCalendarCompletionCoverage, type CalendarPeriodSource } from '../../../helpers/calendar-period-summary.helper';
 import type { TrainingWorkoutCompletionV1 } from '@shared/training-workout-completion';
 import { AppHapticsService } from '../../../services/app.haptics.service';
@@ -85,6 +86,7 @@ interface CalendarViewOption {
   imports: [
     SharedModule,
     CalendarPeriodSummaryComponent,
+    CalendarMonthTotalsComponent,
     ActivityCalendarGridComponent,
     CalendarDayContextComponent,
     ActivityCalendarVolumeListComponent,
@@ -240,6 +242,11 @@ export class CalendarPageComponent {
   });
   readonly canRetrySummary = computed(() => this.eventState().status === 'error' || this.plansState().status === 'error'
     || this.completionState().status === 'error');
+  readonly showMonthWorkoutRetry = computed(() => !this.isDayRoute && this.routeState().view === 'month'
+    && this.hasTrainingPlanningUIAccess() && (
+      (this.plansState().status === 'error' && !this.plansState().restoreInProgress)
+      || (this.prescriptionSummary().completionStatus === 'error' && (this.prescriptionSummary().scheduledCount ?? 0) > 0)
+    ));
   readonly activitiesComplete = computed(() => this.eventState().status === 'ready' && this.eventState().complete !== false);
   readonly plannedWorkoutsComplete = computed(() => this.plansState().status === 'ready' && this.plansState().schedule?.workoutsComplete !== false);
   readonly planPhasesByDate = computed(() => {

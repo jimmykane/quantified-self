@@ -11,6 +11,24 @@ const draft = {
 };
 
 describe('marketing audience and content', () => {
+  it('previews the configured sender and fixed reply address without changing the email layout', () => {
+    const original = previewCampaign(draft);
+    const custom = previewCampaign({ ...draft, senderName: '  Dimitrios  ' });
+    expect(original.from).toBe('Dimitrios from Quantified Self <updates@quantified-self.io>');
+    expect(custom.from).toBe('Dimitrios <updates@quantified-self.io>');
+    expect(custom.replyTo).toBe('Dimitrios <dimitrios@quantified-self.io>');
+    expect(custom.html).toBe(original.html);
+    expect(custom.text).toBe(original.text);
+  });
+
+  it('quotes punctuation, Unicode and address-like display names as a single fixed sender', () => {
+    expect(previewCampaign({ ...draft, senderName: 'Élodie, "QS" \\ Team' }).from)
+      .toBe('"Élodie, \\"QS\\" \\\\ Team" <updates@quantified-self.io>');
+    expect(previewCampaign({ ...draft, senderName: 'Name <other@example.org>, Other' }).from)
+      .toBe('"Name <other@example.org>, Other" <updates@quantified-self.io>');
+    expect(() => previewCampaign({ ...draft, senderName: '\nBcc: other@example.org' })).toThrow('Sender name');
+  });
+
   it('accepts one test address and rejects malformed or injected recipients', () => {
     expect(checkedTestEmail('  qa+campaign@example.org  ')).toBe('qa+campaign@example.org');
     for (const value of ['', 'one@example.org,two@example.org', 'Name <one@example.org>',

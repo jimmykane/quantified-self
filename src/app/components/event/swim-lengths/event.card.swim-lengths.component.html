@@ -1,3 +1,6 @@
+@if (lapLengthTable; as table) {
+<ng-container *ngTemplateOutlet="swimLengthTable; context: { $implicit: table }"></ng-container>
+}
 @if (swimLengthViews.length > 0) {
 <app-event-section-header icon="pool" title="Swim Lengths"></app-event-section-header>
 @if (swimLengthViews.length === 1) {
@@ -58,20 +61,31 @@
         </mat-panel-title>
       </mat-expansion-panel-header>
 
+      <ng-container *ngTemplateOutlet="swimLengthTable; context: { $implicit: group }"></ng-container>
+    </mat-expansion-panel>
+    }
+  </mat-accordion>
+</ng-template>
+
+<ng-template #swimLengthTable let-group>
       <section class="table-container">
         <table mat-table [dataSource]="group.rows">
           @for (column of group.columns; track column.name) {
           <ng-container [matColumnDef]="column.name" [sticky]="column.sticky">
             <mat-header-cell *matHeaderCellDef [class.swim-length-index-cell]="column.name === '#'"
               [class.swim-length-lap-cell]="column.name === 'Lap'"
-              [class.swim-length-split-cell]="column.name === 'Split'">
-              @if (column.name !== '#') {
+              [class.swim-length-split-cell]="column.name === 'Split'"
+              [class.swim-length-swolf-cell]="column.name === 'Normalized SWOLF'">
+              @if (column.name === 'Normalized SWOLF') {
+              <span class="swim-swolf-heading">{{ swolfColumnLabel }}</span>
+              } @else if (column.name !== '#') {
               <app-data-type-icon [dataType]="column.name"></app-data-type-icon>
               }
             </mat-header-cell>
             <mat-cell *matCellDef="let row" [class.swim-length-index-cell]="column.name === '#'"
               [class.swim-length-lap-cell]="column.name === 'Lap'"
-              [class.swim-length-split-cell]="column.name === 'Split'">
+              [class.swim-length-split-cell]="column.name === 'Split'"
+              [class.swim-length-swolf-cell]="column.name === 'Normalized SWOLF'">
               <span class="swim-length-table-value" [class.swim-length-number]="column.numeric">
                 {{ row[column.name] }}
               </span>
@@ -80,10 +94,7 @@
           }
 
           <mat-header-row *matHeaderRowDef="group.columnNames"></mat-header-row>
-          <mat-row *matRowDef="let row; columns: group.columnNames;"></mat-row>
+          <mat-row *matRowDef="let row; columns: group.columnNames;" [class.swim-length-rest-row]="row.isRest"></mat-row>
         </table>
       </section>
-    </mat-expansion-panel>
-    }
-  </mat-accordion>
 </ng-template>

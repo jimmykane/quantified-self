@@ -15,6 +15,7 @@ import {
     DataSpeedAvg,
     DataSpeedMax,
     DataSpeedMin,
+    DataTotalCycles,
     DistanceUnits,
     EventImporterJSON,
     EventInterface,
@@ -24,6 +25,7 @@ import {
     LapTypes,
     Privacy,
     SpeedUnits,
+    SwimPaceUnits,
     UserUnitSettingsInterface
 } from '@sports-alliance/sports-lib';
 import { readFileSync } from 'node:fs';
@@ -37,6 +39,7 @@ import { EVENT_LAP_STROKE_COLUMN, normalizeEventDetailsSettings } from '../../..
 import { getDefaultUserUnitSettings } from '../../../../../shared/unit-aware-display';
 import { AppHapticsService } from '../../../services/app.haptics.service';
 import { HapticTapDirective } from '../../../directives/haptic-tap.directive';
+import { EVENT_LAP_STROKES_COLUMN, EVENT_LAP_SWOLF_COLUMN } from '../../../helpers/event-swim-analytics.helper';
 
 function createActivity(laps: LapInterface[]): ActivityInterface {
     return {
@@ -113,6 +116,49 @@ describe('EventCardLapsComponent', () => {
         fixture.detectChanges();
     });
 
+    it('expands only recorded lengths, retains disclosure and selection across units, and labels rest rows', () => {
+        const laps = [createRenderableLap(LapTypes.Manual), createRenderableLap(LapTypes.Manual)];
+        const activity = { ...createActivity(laps), type: 'Swimming', getSwimLengths: () => [
+            { index: 1, lapIndex: 1, type: 'active', stroke: 'freestyle', startDate: 0, endDate: 30_000,
+                timerTime: 30, distance: 22.86, strokes: 10, avgCadence: 20 },
+            { index: 2, lapIndex: 2, type: 'idle', startDate: 30_000, endDate: 60_000, timerTime: 30, distance: 0 },
+        ] } as unknown as ActivityInterface;
+        component.selectedActivities = [activity];
+        component.ngOnChanges();
+        fixture.detectChanges();
+        const table = component.lapTableGroups[0].tables[0];
+        expect(table.columns).toContain('lengths');
+        const active = table.dataSource.data.find(row => row.lap === laps[0])!;
+        const rest = table.dataSource.data.find(row => row.lap === laps[1])!;
+        expect(rest.isRest).toBe(true);
+        expect(fixture.nativeElement.querySelector('.lap-rest-row').textContent).toContain('Rest');
+        expect(haptics.selection).not.toHaveBeenCalled();
+        const button = fixture.nativeElement.querySelector('button[aria-label="Show lengths for lap 1"]');
+        button.click();
+        fixture.detectChanges();
+        expect(button.getAttribute('aria-expanded')).toBe('true');
+        expect(fixture.nativeElement.querySelector('.lap-length-detail-row:not([hidden]) app-event-card-swim-lengths')).toBeTruthy();
+        expect(haptics.selection).toHaveBeenCalledTimes(1);
+        component.toggleLapSelection(table, active);
+        component.unitSettings = { ...getDefaultUserUnitSettings(), swimPaceUnits: [SwimPaceUnits.MinutesPer100Yard] };
+        component.ngOnChanges();
+        fixture.detectChanges();
+        const refreshed = component.lapTableGroups[0].tables[0];
+        expect(refreshed.selectedCount).toBe(1);
+        expect(refreshed.dataSource.data.find(row => row.lap === laps[0])?.lengthsExpanded).toBe(true);
+        expect(fixture.nativeElement.querySelector('button[aria-label="Hide lengths for lap 1"]')).toBeTruthy();
+        expect(component.swolfColumnLabel).toBe('SWOLF (25 yd)');
+        const summaryCell = fixture.nativeElement.querySelector('mat-footer-cell.mat-column-Normalized-SWOLF');
+        expect(summaryCell.textContent).toContain('40 · 1/1');
+        expect(haptics.selection).toHaveBeenCalledTimes(2);
+        fixture.nativeElement.querySelector('button[aria-label="Hide lengths for lap 1"]').click();
+        fixture.detectChanges();
+        expect(fixture.nativeElement.querySelector('.lap-length-detail-row:not([hidden])')).toBeNull();
+        expect(haptics.selection).toHaveBeenCalledTimes(3);
+        component.toggleLapLengths({ '#': 'Avg', isLapAverage: true });
+        expect(haptics.selection).toHaveBeenCalledTimes(3);
+    });
+
     it('should create', () => {
         expect(component).toBeTruthy();
     });
@@ -182,6 +228,27 @@ describe('EventCardLapsComponent', () => {
         eventDetailsSettings.set(normalizeEventDetailsSettings({ lapTableColumnsBySportFamily: { swimming: [DataDuration.type] } }));
         fixture.detectChanges();
         expect(component.getColumnsToDisplay('Swimming')).toEqual(['#', DataDuration.type]);
+    });
+
+    it('does not offer swim columns or show cycling crank cycles as total strokes', () => {
+        const cyclingLap = {
+            ...createRenderableLap(LapTypes.Manual),
+            getStat: (type: string) => type === DataTotalCycles.type ? new DataTotalCycles(500) : undefined,
+        } as LapInterface;
+        const cycling = { ...createActivity([cyclingLap]), type: 'Cycling' } as ActivityInterface;
+        component.canCustomize = true;
+        eventDetailsSettings.set(normalizeEventDetailsSettings({ lapTableColumnsBySportFamily: {
+            cycling: [DataDuration.type, EVENT_LAP_STROKES_COLUMN, EVENT_LAP_SWOLF_COLUMN, EVENT_LAP_STROKE_COLUMN],
+        } }));
+        fixture.detectChanges();
+        component.selectedActivities = [cycling];
+        component.ngOnChanges();
+        fixture.detectChanges();
+        expect(component.getColumns(cycling, LapTypes.Manual)).toEqual(['selection', '#', DataDuration.type]);
+        const offered = component.lapColumnMenuGroups[0].metricGroups.flatMap(group => group.metrics.map(metric => metric.type));
+        expect(offered).not.toContain(EVENT_LAP_STROKES_COLUMN);
+        expect(offered).not.toContain(EVENT_LAP_SWOLF_COLUMN);
+        expect(offered).not.toContain(EVENT_LAP_STROKE_COLUMN);
     });
 
     it('gives column feedback only for accepted changes and confirmed saves, keeping initialization and no-ops silent', async () => {

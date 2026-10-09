@@ -93,6 +93,24 @@
   font-variant-numeric: tabular-nums;
 }
 
+.table-container .swim-length-rest-row mat-cell,
+.table-container .swim-length-rest-row:hover mat-cell {
+  background: linear-gradient(var(--mat-sys-surface-container-high), var(--mat-sys-surface-container-high)), var(--mat-sys-surface-container-lowest);
+  color: var(--mat-sys-on-surface-variant);
+}
+
+.swim-swolf-heading {
+  font: var(--mat-sys-label-medium);
+  text-transform: none;
+  white-space: nowrap;
+}
+
+.swim-length-swolf-cell {
+  flex: 0 0 128px;
+  width: 128px;
+  max-width: 128px;
+}
+
 @media (max-width: 599.98px) {
   .swim-length-group-header {
     min-height: 64px;

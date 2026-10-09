@@ -1,6 +1,8 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { ServiceNames } from '@sports-alliance/sports-lib';
 import { ROUTE_DELIVERY_SYNC_ROUTE_IDS } from '../../../shared/route-delivery-sync-routes';
+import * as logger from 'firebase-functions/logger';
+vi.unmock('@sports-alliance/sports-lib');
 
 const {
   mockGet,
@@ -158,6 +160,20 @@ describe('route-delivery-sync/queue', () => {
       'route-1',
       'SuuntoApp:provider-route-1:1710000000000',
     ]);
+  });
+
+  it.each(['new', 'existing'])('observes %s enqueue failures without marking or replacing the original error', async kind => {
+    if (kind === 'new') mockTransactionGet.mockResolvedValueOnce({ exists: false });
+    const error = new Error('PRIVATE_TRANSPORT');
+    mockEnqueueRouteDeliverySyncTask.mockRejectedValueOnce(error);
+    await expect(enqueueRouteDeliverySyncQueueItem({ routeId: ROUTE_DELIVERY_SYNC_ROUTE_IDS.SuuntoApp_to_WahooAPI,
+      sourceServiceName: ServiceNames.SuuntoApp, destinationServiceName: ServiceNames.WahooAPI, userID: 'PRIVATE_UID',
+      savedRouteID: 'PRIVATE_ROUTE', sourceRevisionKey: 'PRIVATE_REVISION', manual: false })).rejects.toBe(error);
+    expect(mockUpdate).not.toHaveBeenCalled();
+    const events = vi.mocked(logger.info).mock.calls.filter(([message]) => message === '[RouteQueue]');
+    expect(events).toHaveLength(1);
+    expect(events[0][1]).toMatchObject({ event: 'dispatch_failure', lane: 'delivery', destination: 'wahoo', phase: 'enqueue' });
+    expect(JSON.stringify(events)).not.toContain('PRIVATE');
   });
 
   it('enqueues a new route delivery sync queue item and dispatches Cloud Task', async () => {

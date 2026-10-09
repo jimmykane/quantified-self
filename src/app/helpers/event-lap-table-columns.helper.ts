@@ -1,4 +1,5 @@
 import {
+  ActivityInterface,
   ActivityTypeGroups,
   ActivityTypesHelper,
   DataAccumulatedPower,
@@ -46,6 +47,7 @@ import {
   DataStrokeRateAvg,
   DataSwimPaceAvg,
   DataTotalGrit,
+  DataTotalCycles,
   DynamicDataLoader,
   LapInterface,
   type UserUnitSettingsInterface,
@@ -57,6 +59,11 @@ import {
   AppEventDetailsSettingsInterface,
   AppEventLapSportFamily,
 } from '../models/app-user.interface';
+
+import {
+  DataNormalizedSwolf, EVENT_LAP_STROKES_COLUMN, EVENT_LAP_SWOLF_COLUMN,
+  getSwimLapAnalytics, getSwimLapDisplayMetric, isRestSwimLap, SwimLapAnalytics,
+} from './event-swim-analytics.helper';
 
 export interface EventLapMetricOption {
   type: string;
@@ -137,6 +144,7 @@ interface OrderedEventLapMetricOptionGroup extends EventLapMetricOptionGroup {
 const EVENT_LAP_METRIC_TYPES = new Set<string>();
 /** Recorded categorical metadata, derived from the lap's swim lengths. */
 export const EVENT_LAP_STROKE_COLUMN = 'Stroke';
+const SWIM_ONLY_LAP_METRIC_TYPES = new Set([EVENT_LAP_STROKE_COLUMN, EVENT_LAP_STROKES_COLUMN, EVENT_LAP_SWOLF_COLUMN]);
 const EVENT_LAP_CATALOG_METRICS: EventLapCatalogMetric[] = [];
 
 const resolveEventLapMetricVariant = (type: string): EventLapMetricVariant | null => {
@@ -184,6 +192,8 @@ EVENT_SUMMARY_METRIC_GROUPS.forEach((summaryGroup) => {
   DataPaceMin.type,
   DataPaceMax.type,
   EVENT_LAP_STROKE_COLUMN,
+  EVENT_LAP_STROKES_COLUMN,
+  EVENT_LAP_SWOLF_COLUMN,
 ].forEach((type) => {
   if (EXCLUDED_EVENT_LAP_METRIC_TYPES.has(type) || EVENT_LAP_METRIC_TYPES.has(type)) {
     return;
@@ -262,6 +272,7 @@ const ACCUMULATED_LAP_METRIC_TYPES = new Set([
   DataAccumulatedPower.type,
   DataPowerWork.type,
   DataTotalGrit.type,
+  EVENT_LAP_STROKES_COLUMN,
 ]);
 
 const DISTANCE_WEIGHTED_LAP_METRIC_TYPES = new Set([
@@ -278,11 +289,11 @@ const DURATION_WEIGHTED_LAP_METRIC_TYPES = new Set([
 
 export const EVENT_LAP_TABLE_FIXED_COLUMN = '#';
 
-export const getEventLapMetricOptionGroups = (): EventLapMetricOptionGroup[] => (
+export const getEventLapMetricOptionGroups = (family?: AppEventLapSportFamily): EventLapMetricOptionGroup[] => (
   EVENT_LAP_METRIC_OPTION_GROUPS.map((group) => ({
     ...group,
-    metrics: [...group.metrics],
-  }))
+    metrics: group.metrics.filter(metric => !family || family === 'swimming' || !SWIM_ONLY_LAP_METRIC_TYPES.has(metric.type)),
+  })).filter(group => group.metrics.length > 0)
 );
 
 export const getEventLapSportFamilyPresentation = (
@@ -329,7 +340,7 @@ export const getDefaultEventLapMetricTypes = (
     DataDuration.type,
     DataDistance.type,
     effortType,
-    ...(family === 'swimming' ? [EVENT_LAP_STROKE_COLUMN] : []),
+    ...(family === 'swimming' ? [EVENT_LAP_STROKE_COLUMN, EVENT_LAP_STROKES_COLUMN, EVENT_LAP_SWOLF_COLUMN] : []),
     ...CORE_LAP_METRIC_TYPES.filter((type) => type !== DataDuration.type && type !== DataDistance.type),
   ].filter((type, index, values) => values.indexOf(type) === index);
 };
@@ -386,9 +397,9 @@ export const getSelectedEventLapMetricTypes = (
 ): string[] => {
   const normalizedSettings = normalizeEventDetailsSettings(settings);
   const selectedMetricTypes = normalizedSettings.lapTableColumnsBySportFamily?.[family];
-  return selectedMetricTypes === undefined
+  return (selectedMetricTypes === undefined
     ? getDefaultEventLapMetricTypes(family)
-    : selectedMetricTypes;
+    : selectedMetricTypes).filter(type => family === 'swimming' || !SWIM_ONLY_LAP_METRIC_TYPES.has(type));
 };
 
 export const formatEventLapMetric = (
@@ -443,93 +454,97 @@ export const getEventLapMetricStat = (
     if (metricType === DataDistance.type) {
       return lap.getDistance?.() || null;
     }
-    return lap.getStat?.(metricType) || null;
+    return lap.getStat?.(metricType === EVENT_LAP_STROKES_COLUMN ? DataTotalCycles.type : metricType) || null;
   } catch {
     return null;
   }
 };
 
-export const getAverageEventLapMetrics = (
-  laps: readonly LapInterface[],
-  metricTypes: readonly string[],
-  unitSettings: UserUnitSettingsInterface | null | undefined,
-  activityType: unknown,
-): EventLapAverageMetric[] => (
-  metricTypes.reduce<EventLapAverageMetric[]>((averages, metricType) => {
-    if (ACCUMULATED_LAP_METRIC_TYPES.has(metricType)) {
-      return averages;
-    }
+interface LapSummaryContext {
+  swimming: boolean;
+  analytics: Map<LapInterface, SwimLapAnalytics>;
+}
 
-    const values = laps
-      .map((lap) => getEventLapMetricStat(lap, metricType)?.getValue?.())
-      .filter((value): value is number => typeof value === 'number' && Number.isFinite(value));
-    if (values.length === 0) {
-      return averages;
-    }
-
-    try {
-      const averageValue = values.reduce((total, value) => total + value, 0) / values.length;
-      const averageStat = DynamicDataLoader.getDataInstanceFromDataType(metricType, averageValue);
-      const display = formatEventLapMetric(averageStat, metricType, unitSettings, activityType);
-      if (display) {
-        averages.push({ type: metricType, display });
-      }
-    } catch {
-      // A malformed or non-numeric sports-lib metric should not block the Laps table.
-    }
-
-    return averages;
-  }, [])
-);
+const createSummaryContext = (
+  activityType: unknown, activity: ActivityInterface | undefined, units: UserUnitSettingsInterface | null | undefined,
+): LapSummaryContext => {
+  const swimming = resolveEventLapSportFamily(activityType) === 'swimming';
+  return { swimming, analytics: swimming && activity ? getSwimLapAnalytics(activity, units) : new Map() };
+};
 
 const getFiniteEventLapMetricValue = (
-  lap: LapInterface,
-  metricType: string,
+  lap: LapInterface, metricType: string, context: LapSummaryContext,
 ): number | null => {
-  const value = getEventLapMetricStat(lap, metricType)?.getValue?.();
+  const derived = getSwimLapDisplayMetric(context.analytics.get(lap), metricType);
+  const value = (derived === undefined ? getEventLapMetricStat(lap, metricType) : derived)?.getValue?.();
   return typeof value === 'number' && Number.isFinite(value) ? value : null;
 };
 
-const getSelectedEventLapSummaryValue = (
-  laps: readonly LapInterface[],
-  metricType: string,
-): { value: number; availableCount: number } | null => {
-  const weightingMetricType = DISTANCE_WEIGHTED_LAP_METRIC_TYPES.has(metricType)
-    ? DataDistance.type
-    : DURATION_WEIGHTED_LAP_METRIC_TYPES.has(metricType)
-      ? DataDuration.type
-      : null;
+const getSummaryStat = (type: string, value: number): DataInterface => (
+  type === EVENT_LAP_SWOLF_COLUMN ? new DataNormalizedSwolf(value)
+    : type === EVENT_LAP_STROKES_COLUMN ? new DataTotalCycles(value)
+      : DynamicDataLoader.getDataInstanceFromDataType(type, value)
+);
 
-  if (!weightingMetricType) {
-    const values = laps
-      .map((lap) => getFiniteEventLapMetricValue(lap, metricType))
-      .filter((value): value is number => value !== null);
-    if (values.length === 0) {
-      return null;
-    }
-    return {
-      value: values.reduce((total, value) => total + value, 0) / values.length,
-      availableCount: values.length,
-    };
-  }
+const getEventLapSummaryValue = (
+  laps: readonly LapInterface[], metricType: string, context: LapSummaryContext, selected: boolean,
+): { value: number; availableCount: number } | null => {
+  // Keep accumulated selection averages (and their coverage) unchanged. Swim performance
+  // averages use only recorded active rows, including zero-stroke drills.
+  const eligibleLaps = context.swimming && !ACCUMULATED_LAP_METRIC_TYPES.has(metricType)
+    ? laps.filter(lap => !(context.analytics.get(lap)?.isRest ?? isRestSwimLap(lap))) : laps;
+  const distanceWeighted = ((selected || context.swimming) && DISTANCE_WEIGHTED_LAP_METRIC_TYPES.has(metricType))
+    || (context.swimming && metricType === EVENT_LAP_SWOLF_COLUMN);
+  const durationWeighted = ((selected || context.swimming) && DURATION_WEIGHTED_LAP_METRIC_TYPES.has(metricType))
+    || (context.swimming && [DataStrokeRateAvg.type, DataCadenceAvg.type].includes(metricType));
+  const weightingMetricType = distanceWeighted ? DataDistance.type : durationWeighted ? DataDuration.type : null;
 
   let weightedTotal = 0;
   let totalWeight = 0;
   let availableCount = 0;
-  laps.forEach((lap) => {
-    const value = getFiniteEventLapMetricValue(lap, metricType);
-    const weight = getFiniteEventLapMetricValue(lap, weightingMetricType);
+  eligibleLaps.forEach(lap => {
+    const value = getFiniteEventLapMetricValue(lap, metricType, context);
+    const analytics = context.analytics.get(lap);
+    let weight = 1;
+    if (weightingMetricType) {
+      weight = !analytics ? getFiniteEventLapMetricValue(lap, weightingMetricType, context)
+        : distanceWeighted ? analytics.activeDistance
+          : [DataStrokeRateAvg.type, DataCadenceAvg.type].includes(metricType) ? analytics.cadenceDuration : analytics.activeDuration;
+    }
     if (value === null || weight === null || weight <= 0) {
       return;
     }
     weightedTotal += value * weight;
     totalWeight += weight;
-    availableCount += 1;
+    availableCount++;
   });
+  return totalWeight > 0 ? { value: weightedTotal / totalWeight, availableCount } : null;
+};
 
-  return totalWeight > 0
-    ? { value: weightedTotal / totalWeight, availableCount }
-    : null;
+export const getAverageEventLapMetrics = (
+  laps: readonly LapInterface[], metricTypes: readonly string[],
+  unitSettings: UserUnitSettingsInterface | null | undefined, activityType: unknown,
+  activity?: ActivityInterface,
+): EventLapAverageMetric[] => {
+  const context = createSummaryContext(activityType, activity, unitSettings);
+  return metricTypes.reduce<EventLapAverageMetric[]>((averages, metricType) => {
+    if (ACCUMULATED_LAP_METRIC_TYPES.has(metricType)) {
+      return averages;
+    }
+    const result = getEventLapSummaryValue(laps, metricType, context, false);
+    if (!result) {
+      return averages;
+    }
+    try {
+      const display = formatEventLapMetric(getSummaryStat(metricType, result.value), metricType, unitSettings, activityType);
+      if (display) {
+        averages.push({ type: metricType, display });
+      }
+    } catch {
+      // Malformed or unsupported metrics must not prevent other columns from rendering.
+    }
+    return averages;
+  }, []);
 };
 
 /**
@@ -542,15 +557,17 @@ export const getSelectedEventLapSummaryMetrics = (
   metricTypes: readonly string[],
   unitSettings: UserUnitSettingsInterface | null | undefined,
   activityType: unknown,
-): EventLapSelectedSummaryMetric[] => (
-  metricTypes.reduce<EventLapSelectedSummaryMetric[]>((summaries, metricType) => {
-    const summaryValue = getSelectedEventLapSummaryValue(laps, metricType);
+  activity?: ActivityInterface,
+): EventLapSelectedSummaryMetric[] => {
+  const context = createSummaryContext(activityType, activity, unitSettings);
+  return metricTypes.reduce<EventLapSelectedSummaryMetric[]>((summaries, metricType) => {
+    const summaryValue = getEventLapSummaryValue(laps, metricType, context, true);
     if (!summaryValue) {
       return summaries;
     }
 
     try {
-      const summaryStat = DynamicDataLoader.getDataInstanceFromDataType(
+      const summaryStat = getSummaryStat(
         metricType,
         summaryValue.value,
       );
@@ -568,5 +585,5 @@ export const getSelectedEventLapSummaryMetrics = (
     }
 
     return summaries;
-  }, [])
-);
+  }, []);
+};

@@ -1409,7 +1409,10 @@ describe('uploadActivity', () => {
       'user-1',
       'activity_upload_original_file:users/user-1/events/adapter-test/original.fit',
     );
-    expect(hoisted.mockStorageSave).toHaveBeenCalledWith(Buffer.from([0xaa]));
+    expect(hoisted.mockStorageSave).toHaveBeenCalledWith(Buffer.from([0xaa]), {
+      validation: 'crc32c',
+      metadata: { crc32c: expect.any(String) },
+    });
     expect(hoisted.mockStorageGetMetadata).toHaveBeenCalled();
     expect(storageAdapter.getBucketName()).toBe('test-bucket');
 

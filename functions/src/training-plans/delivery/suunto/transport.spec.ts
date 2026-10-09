@@ -11,7 +11,8 @@ import { SuuntoHttpFixture } from '../test-support/suunto-http-fixture';
 import { packageGuide, readGuideArchive } from './archive';
 import type { SuuntoGuideFieldsStepV1, SuuntoGuideJsonV1 } from '../../providers/suunto-guide.serializer';
 import { assessSuuntoGuideV2ForRecovery, assessSuuntoGuideV3ForRecovery, assessSuuntoGuideV4ForRecovery, assessSuuntoGuideV6ForRecovery,
-  assessSuuntoGuideV7ForRecovery, guideExternalId, guideMapping, guidePayloadForRecovery } from './mapping';
+  assessSuuntoGuideV7ForRecovery, assessSuuntoGuideV9ForRecovery, assessSuuntoGuideV10ForRecovery,
+  assessSuuntoGuideV11ForRecovery, guideExternalId, guideMapping, guidePayloadForRecovery } from './mapping';
 
 describe('Suunto Guide lifecycle — synthetic transport', () => {
   const now = Date.parse('2026-12-29T12:00:00Z'); const owner = 'Quantified Self';
@@ -104,6 +105,165 @@ describe('Suunto Guide lifecycle — synthetic transport', () => {
     const current = transport.assess(op.workout!, op.destinationKey, op.timeZone);
     expect(current).toEqual(assessSuuntoGuideV7ForRecovery(op.workout!, op.destinationKey, op.timeZone, owner));
     expect(transport.assess(op.workout!, op.destinationKey, op.timeZone, undefined, WeightUnits.Pounds)).toEqual(current);
+  });
+  it.each([ActivityTypes.Running, ActivityTypes.Cycling, ActivityTypes.Rowing])(
+    'versions only changed manual %s instructions, not numeric endings or authored notes', sport => {
+    next({ structure: { version: 1, sport, nodes: [{ kind: 'step', id: 'manual', purpose: 'warmup',
+      ending: { kind: 'manual' }, targets: [] }] } });
+    const current = transport.assess(op.workout!, op.destinationKey, op.timeZone);
+    expect(current.mappingVersion).toBe('suunto-guides-v11');
+    expect(transport.diagnosticMappingVersion(op)).toBe('suunto-guides-v11');
+    expect(transport.assess(op.workout!, op.destinationKey, op.timeZone, undefined, WeightUnits.Pounds)).toEqual(current);
+    for (const step of [
+      { kind: 'step', id: 'manual', purpose: 'warmup', ending: { kind: 'manual' }, targets: [], note: 'Stay relaxed' },
+      { kind: 'step', id: 'timed', purpose: 'work', ending: { kind: 'time', seconds: 90 }, targets: [] },
+      { kind: 'step', id: 'distance', purpose: 'work', ending: { kind: 'distance', meters: 100 }, targets: [] },
+    ] satisfies WorkoutStepV1[]) {
+      next({ structure: { version: 1, sport, nodes: [step] } });
+      expect(transport.assess(op.workout!, op.destinationKey, op.timeZone))
+        .toEqual(assessSuuntoGuideV7ForRecovery(op.workout!, op.destinationKey, op.timeZone, owner));
+    }
+    expect(server.calls).toHaveLength(0);
+  });
+  it.each([ActivityTypes.Running, ActivityTypes.Cycling, ActivityTypes.Rowing])(
+    'recovers exact v7 %s manual instructions before one presentation update, with stable identity and ZIP readback', async sport => {
+    next({ structure: { version: 1, sport, nodes: [{ kind: 'repeat', id: 'sets', count: 3, steps: [
+      { kind: 'step', id: 'work', purpose: 'work', ending: { kind: 'manual' }, targets: [] },
+      { kind: 'step', id: 'rest', purpose: 'rest', ending: { kind: 'time', seconds: 15 }, targets: [] },
+    ] }] } });
+    op.digest = assessSuuntoGuideV7ForRecovery(op.workout!, op.destinationKey, op.timeZone, owner).digest;
+    const old = guidePayloadForRecovery(op, owner)!;
+    expect(JSON.stringify(old)).toContain('Press lap when ready');
+    server.guides.set('legacy-manual', { guide: old, pinned: true });
+    op.progress = { version: 1, step: 'create', state: 'started' };
+    const recovered = await recover();
+    if (recovered.kind !== 'accepted') throw new Error('Historical manual copy not recovered');
+    expect(server.calls.every(request => request.method === 'GET')).toBe(true);
+    op.artifact = recovered.artifact;
+    next(); await execute();
+    const current = server.guides.get('legacy-manual')!;
+    expect(current.pinned).toBe(true);
+    expect(current.guide.externalId).toBe(old.externalId);
+    expect(JSON.stringify(current.guide)).toContain('Press Lap to finish this interval.');
+    expect(JSON.stringify(current.guide)).not.toContain('Press lap when ready');
+    expect(await readGuideArchive(await packageGuide(current.guide))).toEqual(current.guide);
+    next(); await execute();
+    expect(server.guides.size).toBe(1);
+    expect(server.calls.filter(request => request.method === 'POST')).toHaveLength(0);
+    expect(server.calls.filter(request => request.method === 'PUT')).toHaveLength(1);
+  });
+  it.each([
+    { sport: ActivityTypes.Running, legacy: assessSuuntoGuideV11ForRecovery },
+    { sport: ActivityTypes.Walking, legacy: assessSuuntoGuideV11ForRecovery },
+    { sport: ActivityTypes.Cycling, legacy: assessSuuntoGuideV11ForRecovery },
+    { sport: ActivityTypes.Swimming, legacy: assessSuuntoGuideV10ForRecovery },
+    { sport: ActivityTypes.OpenWaterSwimming, legacy: assessSuuntoGuideV10ForRecovery },
+  ])('recovers frozen $sport Rest before an idempotent v12 update and fails closed for changed content', async ({ sport, legacy }) => {
+    next({ structure: { version: 1, sport, nodes: [{ kind: 'repeat', id: 'sets', count: 3, steps: [
+      { kind: 'step', id: 'work', purpose: 'work', ending: { kind: 'manual' }, targets: [] },
+      { kind: 'step', id: 'rest', purpose: 'rest', ending: { kind: 'time', seconds: 15 }, targets: [] },
+    ] }] } });
+    const recipe = structuredClone(op.workout!.structure);
+    op.digest = legacy(op.workout!, op.destinationKey, op.timeZone, owner).digest;
+    const old = guidePayloadForRecovery(op, owner)!;
+    server.guides.set('legacy-rest', { guide: old, pinned: true });
+    op.progress = { version: 1, step: 'create', state: 'started' };
+    const recovered = await recover();
+    if (recovered.kind !== 'accepted') throw new Error('Historical Rest copy not recovered');
+    expect(server.calls.every(request => request.method === 'GET')).toBe(true);
+    op.artifact = recovered.artifact;
+    next(); expect(transport.diagnosticMappingVersion(op)).toBe('suunto-guides-v12');
+    await execute();
+    const current = server.guides.get('legacy-rest')!;
+    expect(current.pinned).toBe(true);
+    expect(current.guide.externalId).toBe(old.externalId);
+    expect(current.guide.steps[1]).toMatchObject({ title: 'Rest 1/3' });
+    expect(await readGuideArchive(await packageGuide(current.guide))).toEqual(current.guide);
+    next(); await execute();
+    expect(op.workout!.structure).toEqual(recipe);
+    expect(server.calls.filter(request => request.method === 'POST')).toHaveLength(0);
+    expect(server.calls.filter(request => request.method === 'PUT')).toHaveLength(1);
+    // A current digest can never authorize an altered prescription.
+    op.workout!.title = 'Changed without a new digest';
+    await expect(execute()).rejects.toMatchObject({ kind: 'terminal' });
+    expect(server.calls.filter(request => ['POST', 'PUT', 'DELETE'].includes(request.method))).toHaveLength(1);
+  });
+  it('recovers the exact v7 pool copy before upgrading its screens once in place', async () => {
+    next({ structure: { version: 1, sport: ActivityTypes.Swimming, nodes: [
+      { kind: 'repeat', id: 'sets', count: 10, steps: [
+        { kind: 'step', id: 'work', purpose: 'work', ending: { kind: 'manual' }, targets: [] },
+        { kind: 'step', id: 'rest', purpose: 'rest', ending: { kind: 'time', seconds: 15 }, targets: [] },
+      ] },
+    ] } });
+    expect(transport.diagnosticMappingVersion(op)).toBe('suunto-guides-v12');
+    const currentDigest = op.digest;
+    op.digest = assessSuuntoGuideV7ForRecovery(op.workout!, op.destinationKey, op.timeZone, owner).digest;
+    expect(op.digest).not.toBe(currentDigest);
+    expect(transport.diagnosticMappingVersion(op)).toBe('suunto-guides-v7');
+    const oldGuide = guidePayloadForRecovery(op, owner)!;
+    expect(JSON.stringify(oldGuide)).not.toContain('"window":"step"');
+    server.guides.set('legacy-pool-v7', { guide: oldGuide, pinned: true });
+    op.progress = { version: 1, step: 'create', state: 'started' };
+    const recovered = await recover();
+    expect(recovered).toMatchObject({ kind: 'accepted', artifact: { ids: { guide: 'legacy-pool-v7' } } });
+    if (recovered.kind !== 'accepted') throw new Error('Legacy identity was not recovered');
+    op.artifact = recovered.artifact;
+    expect(server.calls.every(request => request.method === 'GET')).toBe(true);
+    next(); await execute();
+    const current = server.guides.get('legacy-pool-v7')!;
+    expect(current.pinned).toBe(true);
+    expect(JSON.stringify(current.guide)).toContain('"window":"step"');
+    expect(current.guide.externalId).toBe(oldGuide.externalId);
+    next(); await execute();
+    expect(server.guides.size).toBe(1);
+    expect(server.calls.filter(request => request.method === 'POST')).toHaveLength(0);
+    expect(server.calls.filter(request => request.method === 'PUT')).toHaveLength(1);
+  });
+  it.each([assessSuuntoGuideV7ForRecovery, assessSuuntoGuideV9ForRecovery])('carries identical pool mapping losses, never approval for an edited prescription: %s', assessLegacy => {
+    next({ structure: { version: 1, sport: ActivityTypes.Swimming, nodes: [{ kind: 'step', id: 'work', purpose: 'work',
+      ending: { kind: 'manual' }, targets: [], note: 'A'.repeat(55) }] } });
+    const old = assessLegacy(op.workout!, op.destinationKey, op.timeZone, owner);
+    const current = transport.assess(op.workout!, op.destinationKey, op.timeZone);
+    expect(current.level).toBe('degraded');
+    expect(current.compatibleApprovalDigests).toContain(old.digest);
+    next({ structure: { ...op.workout!.structure, nodes: [{ kind: 'step', id: 'work', purpose: 'work',
+      ending: { kind: 'manual' }, targets: [], note: 'B'.repeat(55) }] } });
+    expect(transport.assess(op.workout!, op.destinationKey, op.timeZone).compatibleApprovalDigests).not.toContain(old.digest);
+  });
+  it.each([
+    { sport: ActivityTypes.Swimming, version: 'suunto-guides-v9', assessLegacy: assessSuuntoGuideV9ForRecovery },
+    { sport: ActivityTypes.OpenWaterSwimming, version: 'suunto-guides-v7', assessLegacy: assessSuuntoGuideV7ForRecovery },
+  ])('recovers $version $sport before upgrading Rest once, retaining identity and notifications through ZIP readback', async ({ sport, version, assessLegacy }) => {
+    next({ structure: { version: 1, sport, nodes: [{ kind: 'repeat', id: 'sets', count: 10, steps: [
+      { kind: 'step', id: 'work', purpose: 'work', ending: { kind: 'manual' }, targets: [] },
+      { kind: 'step', id: 'rest', purpose: 'rest', ending: { kind: 'time', seconds: 15 }, targets: [] },
+    ] }] } });
+    op.digest = assessLegacy(op.workout!, op.destinationKey, op.timeZone, owner).digest;
+    expect(transport.diagnosticMappingVersion(op)).toBe(version);
+    const oldGuide = guidePayloadForRecovery(op, owner)!;
+    expect(JSON.stringify(oldGuide)).not.toContain('"window":"workout"');
+    server.guides.set('prior-swim', { guide: oldGuide, pinned: true });
+    op.progress = { version: 1, step: 'create', state: 'started' };
+    const recovered = await recover();
+    if (recovered.kind !== 'accepted') throw new Error('Historical swim copy not recovered');
+    op.artifact = recovered.artifact;
+    expect(server.calls.every(request => request.method === 'GET')).toBe(true);
+    next(); await execute();
+    const current = server.guides.get('prior-swim')!;
+    expect(current.pinned).toBe(true);
+    expect(current.guide.externalId).toBe(oldGuide.externalId);
+    const readback = await readGuideArchive(await packageGuide(current.guide));
+    expect(readback).toEqual(current.guide);
+    const steps = current.guide.steps.flatMap(step => step.type === 'repeat' ? step.steps : [step]);
+    for (const step of steps.filter(step => step.title === 'Work')) expect(step.notification?.text).toBe('Swim now. Press Lap to finish this interval.');
+    for (const step of steps.filter(step => step.title === 'Rest')) {
+      expect(step.notification?.text).toBe('Rest for 15s');
+      expect(step.fields).toContainEqual({ type: 'distance', title: 'Total', window: 'workout' });
+    }
+    next(); await execute();
+    expect(server.guides.size).toBe(1);
+    expect(server.calls.filter(request => request.method === 'POST')).toHaveLength(0);
+    expect(server.calls.filter(request => request.method === 'PUT')).toHaveLength(1);
   });
   it('recovers a frozen v6 pool create and adds SWOLF to the same Guide once', async () => {
     next({ structure: { ...op.workout!.structure, sport: ActivityTypes.Swimming } });

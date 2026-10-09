@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { ServiceNames } from '@sports-alliance/sports-lib';
 import * as logger from 'firebase-functions/logger';
 import { ROUTE_DELIVERY_SYNC_ROUTE_IDS, ROUTE_DELIVERY_SYNC_ROUTES } from '../../../shared/route-delivery-sync-routes';
+vi.unmock('@sports-alliance/sports-lib');
 
 const {
   mockHasProAccess,
@@ -320,6 +321,27 @@ describe('route-delivery-sync/process-queue-item', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mockSuccessfulPrerequisites();
+  });
+
+  const observed = () => vi.mocked(logger.info).mock.calls.filter(([message]) => message === '[RouteQueue]');
+
+  it('emits delivery success only after the guarded finalization actually updates', async () => {
+    await processRouteDeliverySyncQueueItem({ ...baseQueueItem });
+    expect(observed().map(([, fields]) => fields.outcome)).toEqual(['success']);
+    expect(observed()[0][1]).toMatchObject({ lane: 'delivery', source: 'suunto', destination: 'garmin', mode: 'automatic', event: 'committed' });
+  });
+
+  it.each(['not_current', 'skipped_deleted_user'])('cannot claim success after a %s finalization ACK', async state => {
+    mockUpdateQueueItemIfUserActive.mockImplementation(async params => params.phase === 'before_route_delivery_success_finalize' ? state : 'updated');
+    expect(await processRouteDeliverySyncQueueItem({ ...baseQueueItem })).toBe(QueueResult.Processed);
+    expect(observed()).toHaveLength(0);
+  });
+
+  it('metadata-persistence failure after acceptance is not confirmed delivery', async () => {
+    mockPersistRouteDeliveryMetadata.mockRejectedValueOnce(new Error('PRIVATE'));
+    mockIsDeliveryMetadataPersistenceError.mockReturnValue(true);
+    expect(await processRouteDeliverySyncQueueItem({ ...baseQueueItem })).toBe(QueueResult.RetryIncremented);
+    expect(observed()).toHaveLength(0);
   });
 
   it('sends a prepared Suunto route to Garmin and marks the queue item successful', async () => {
@@ -962,6 +984,19 @@ describe('route-delivery-sync/process-queue-item', () => {
     }));
     expect(mockCreateContext).not.toHaveBeenCalled();
     expect(mockSendPreparedRoute).not.toHaveBeenCalled();
+  });
+
+  it.each([ServiceNames.SuuntoApp, ServiceNames.GarminAPI].flatMap(service =>
+    [false, true].map(manual => ({ service, manual }))))('allows eligible delivery during $service restoration (manual=$manual)', async ({ service, manual }) => {
+    mockGetServiceConnectionMeta.mockImplementation(async (_userID, serviceName) => (
+      serviceName === service ? { connectionState: 'connected', routeRestorePending: true } : null
+    ));
+    mockIsRouteEnabled.mockResolvedValue(!manual);
+
+    expect(await processRouteDeliverySyncQueueItem({ ...baseQueueItem, manual })).toBe(QueueResult.Processed);
+    expect(mockSendPreparedRoute).toHaveBeenCalledOnce();
+    expect(mockFinalizeDisabledSyncRouteIfCurrent).not.toHaveBeenCalled();
+    expect(observed().map(([, fields]) => fields.outcome)).toEqual(['success']);
   });
 
   it('parks a route when reconnect-required wins after the earlier lifecycle read', async () => {

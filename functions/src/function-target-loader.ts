@@ -60,8 +60,16 @@ const TARGET_LOADERS: Readonly<Record<string, ModuleLoader>> = Object.freeze({
   parseWahooAPIWorkoutQueue: loadActivityImportDispatchers,
   processActivitySyncTask:
     () => module.require('./tasks/activity-sync-worker') as FunctionModule,
+  dispatchActivitySyncQueue:
+    () => module.require('./activity-sync/dispatcher') as FunctionModule,
   processRouteSyncTask:
     () => module.require('./tasks/route-sync-worker') as FunctionModule,
+  processRouteDeliverySyncTask:
+    () => module.require('./tasks/route-delivery-sync-worker') as FunctionModule,
+  dispatchRouteDeliverySyncQueue:
+    () => module.require('./route-delivery-sync/dispatcher') as FunctionModule,
+  cleanupRejectedRouteOriginalFile:
+    () => module.require('./routes/rejected-original-cleanup') as FunctionModule,
   cleanupEventFile:
     () => module.require('./events/cleanup') as FunctionModule,
   uploadActivity:

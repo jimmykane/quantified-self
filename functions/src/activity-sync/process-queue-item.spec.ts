@@ -26,6 +26,7 @@ interface MockActivitySyncDlqParams {
 
 function createMockActivitySyncQueueItemRef(currentQueueItem?: Record<string, unknown>): MockActivitySyncQueueItemRef {
   return {
+    parent: { id: 'activitySyncQueue' },
     get: vi.fn().mockResolvedValue({
       exists: currentQueueItem !== undefined,
       data: () => currentQueueItem,
@@ -805,10 +806,30 @@ describe('activity-sync/process-queue-item', () => {
     expect(mockIncreaseRetryCountForQueueItem).not.toHaveBeenCalled();
   });
 
+  it.each(['updated', 'not_current', 'skipped_deleted_user'])('records delivery only after a committed %s success finalization', async state => {
+    const queueItem: ActivitySyncQueueItemInterface = {
+      ...baseQueueItem, destinationUploadID: 'upload-1', destinationProviderUserID: 'suunto-user-1',
+    };
+    mockUpdateQueueItemIfUserActive.mockImplementation(async ({ phase }) => phase === 'before_activity_sync_success_finalize' ? state : 'updated');
+    await expect(processActivitySyncQueueItem(queueItem)).resolves.toBe(QueueResult.Processed);
+    const deliveries = vi.mocked(logger.info).mock.calls.filter(([message, fields]) => message === '[ActivityDelivery]' && fields.outcome === 'delivered');
+    expect(deliveries).toHaveLength(state === 'updated' ? 1 : 0);
+    expect(mockUploadActivityFileToSuunto).not.toHaveBeenCalled();
+  });
+
+  it.each([QueueResult.MovedToDLQ, QueueResult.Processed, QueueResult.Failed])('records a new DLQ only when its guarded transition returns %s', async result => {
+    mockUploadActivityFileToSuunto.mockRejectedValueOnce(new Error('permanent failure'));
+    mockMoveToDeadLetterQueue.mockResolvedValueOnce(result);
+    await processActivitySyncQueueItem(baseQueueItem);
+    expect(vi.mocked(logger.info).mock.calls.filter(([message, fields]) => message === '[ActivityDelivery]' && fields.outcome === 'dead_lettered'))
+      .toHaveLength(result === QueueResult.MovedToDLQ ? 1 : 0);
+  });
+
   it('marks queue item processed and writes success metadata when upload succeeds', async () => {
     const result = await processActivitySyncQueueItem(baseQueueItem);
 
     expect(result).toBe(QueueResult.Processed);
+    expect(logger.info).toHaveBeenCalledWith('[ActivityDelivery]', expect.objectContaining({ event: 'committed', outcome: 'delivered' }));
     expect(mockSetActivitySyncProcessingMetadata).toHaveBeenCalled();
     expect(mockUploadActivityFileToSuunto).toHaveBeenCalledWith(
       'user-1',
@@ -1514,12 +1535,16 @@ describe('activity-sync/process-queue-item', () => {
     const firstResult = await processActivitySyncQueueItem(queueItem);
 
     expect(firstResult).toBe(QueueResult.Failed);
+    expect(vi.mocked(logger.info).mock.calls.filter(([message]) => message === '[ActivityDelivery]')).toHaveLength(0);
     expect(queueItem.destinationUploadID).toBe('wahoo-upload-1');
     queueItem.providerOperationStartedAt = Date.now() - 13 * 60 * 1000;
 
     const secondResult = await processActivitySyncQueueItem(queueItem);
 
     expect(secondResult).toBe(QueueResult.Processed);
+    expect(vi.mocked(logger.info).mock.calls.filter(([message]) => message === '[ActivityDelivery]')).toEqual([
+      ['[ActivityDelivery]', expect.objectContaining({ event: 'committed', outcome: 'delivered' })],
+    ]);
     expect(mockGetWahooActivityUploadStatus).toHaveBeenCalledWith(
       queueItem.userID,
       'wahoo-upload-1',
@@ -1596,6 +1621,9 @@ describe('activity-sync/process-queue-item', () => {
     dateNowSpy.mockRestore();
 
     expect(firstResult).toBe(QueueResult.ProviderStatusPending);
+    expect(vi.mocked(logger.info).mock.calls.filter(([message]) => message === '[ActivityDelivery]')).toEqual([
+      ['[ActivityDelivery]', expect.objectContaining({ event: 'committed', outcome: 'provider_pending' })],
+    ]);
     expect(mockUploadActivityFileToWahoo).toHaveBeenCalledWith('user-1', Buffer.from('FITDATA'), expect.objectContaining({
       filename: 'original.fit',
     }));
@@ -1655,6 +1683,10 @@ describe('activity-sync/process-queue-item', () => {
 
     expect(result).toBe(QueueResult.MovedToDLQ);
     expect(mockSetActivitySyncRetryingMetadata).not.toHaveBeenCalled();
+    expect(vi.mocked(logger.info).mock.calls.filter(([message]) => message === '[ActivityDelivery]')).toEqual([
+      ['[ActivityDelivery]', expect.objectContaining({ event: 'committed', outcome: 'dead_lettered' })],
+      ['[ActivityDelivery]', expect.objectContaining({ event: 'committed', outcome: 'manual_reconciliation' })],
+    ]);
     expect(mockSetActivitySyncFailedMetadata).toHaveBeenCalledWith(expect.objectContaining({
       destinationServiceName: ServiceNames.WahooAPI,
     }));
@@ -1950,6 +1982,60 @@ describe('activity-sync/process-queue-item', () => {
     expect(mockUploadActivityFileToSuunto).toHaveBeenCalledTimes(1);
   });
 
+  it.each(['NEW', 'PROCESSING', 'UNKNOWN', undefined, 'UNRECOGNIZED'])('observes Suunto status %s without changing retry scheduling or reposting the file', async providerStatus => {
+    const queueItem = { ...baseQueueItem, ref: createMockActivitySyncQueueItemRef() };
+    mockUploadActivityFileToSuunto.mockResolvedValueOnce({
+      status: 'pending', providerStatus, uploadId: 'PRIVATE_UPLOAD', providerUserId: 'PRIVATE_ACCOUNT',
+    });
+    expect(await processActivitySyncQueueItem(queueItem)).toBe(QueueResult.RetryIncremented);
+    expect(queueItem.dispatchedToCloudTask).toBeNull();
+    expect(queueItem.providerOperationStartedAt).toBeNull();
+    expect(mockIncreaseRetryCountIfCurrentParams).toHaveBeenCalledWith(expect.objectContaining({ retryDispatchMarkerAtMs: undefined }));
+    const observations = vi.mocked(logger.info).mock.calls.filter(([message]) => message === '[ActivityDelivery]');
+    expect(observations).toEqual([['[ActivityDelivery]', expect.objectContaining({
+      event: 'committed', outcome: providerStatus === 'NEW' || providerStatus === 'PROCESSING' ? 'provider_pending' : 'retry',
+    })]]);
+    expect(JSON.stringify(observations)).not.toContain('PRIVATE');
+    await processActivitySyncQueueItem(queueItem);
+    expect(mockGetSuuntoActivityUploadStatus).toHaveBeenCalledWith(queueItem.userID, 'PRIVATE_UPLOAD', 'PRIVATE_ACCOUNT');
+    expect(mockUploadActivityFileToSuunto).toHaveBeenCalledTimes(1);
+  });
+
+  it('does not suppress a Suunto status transport deadline just because an upload was accepted', async () => {
+    const queueItem = { ...baseQueueItem, ref: createMockActivitySyncQueueItemRef() };
+    mockUploadActivityFileToSuunto.mockRejectedValueOnce(new ProviderOperationError({
+      serviceName: ServiceNames.SuuntoApp, operation: 'activity_upload_status', disposition: 'retryable', retryMode: 'resume',
+      code: 'deadline-exceeded', message: 'PRIVATE_TRANSPORT', providerOperationId: 'PRIVATE_UPLOAD', providerUserId: 'PRIVATE_ACCOUNT',
+    }));
+    expect(await processActivitySyncQueueItem(queueItem)).toBe(QueueResult.RetryIncremented);
+    expect(vi.mocked(logger.info).mock.calls.filter(([message]) => message === '[ActivityDelivery]')).toEqual([
+      ['[ActivityDelivery]', expect.objectContaining({ event: 'committed', outcome: 'retry' })],
+    ]);
+  });
+
+  it('keeps exhausted recognized Suunto pending work visible as a new permanent failure', async () => {
+    const queueItem = { ...baseQueueItem, ref: createMockActivitySyncQueueItemRef() };
+    mockUploadActivityFileToSuunto.mockResolvedValueOnce({
+      status: 'pending', providerStatus: 'PROCESSING', uploadId: 'PRIVATE_UPLOAD', providerUserId: 'PRIVATE_ACCOUNT',
+    });
+    mockIncreaseRetryCountForQueueItem.mockResolvedValueOnce(QueueResult.MovedToDLQ);
+    expect(await processActivitySyncQueueItem(queueItem)).toBe(QueueResult.MovedToDLQ);
+    expect(vi.mocked(logger.info).mock.calls.filter(([message]) => message === '[ActivityDelivery]')).toEqual([
+      ['[ActivityDelivery]', expect.objectContaining({ event: 'committed', outcome: 'dead_lettered' })],
+      ['[ActivityDelivery]', expect.objectContaining({ event: 'committed', outcome: 'manual_reconciliation' })],
+    ]);
+  });
+
+  it.each([QueueResult.Processed, QueueResult.Failed])('emits no pending commit when Suunto retry persistence returns %s', async result => {
+    const queueItem = { ...baseQueueItem, ref: createMockActivitySyncQueueItemRef() };
+    mockUploadActivityFileToSuunto.mockResolvedValueOnce({
+      status: 'pending', providerStatus: 'PROCESSING', uploadId: 'PRIVATE_UPLOAD', providerUserId: 'PRIVATE_ACCOUNT',
+    });
+    mockIncreaseRetryCountForQueueItem.mockResolvedValueOnce(result);
+    expect(await processActivitySyncQueueItem(queueItem)).toBe(result);
+    expect(vi.mocked(logger.info).mock.calls.filter(([message]) => message === '[ActivityDelivery]')).toEqual([]);
+  });
+
   it('moves an accepted Suunto upload to DLQ with resume identifiers when state persistence fails', async () => {
     const queueItem: ActivitySyncQueueItemInterface = {
       ...baseQueueItem,
@@ -2058,6 +2144,9 @@ describe('activity-sync/process-queue-item', () => {
     const result = await processActivitySyncQueueItem(queueItem);
 
     expect(result).toBe(QueueResult.Skipped);
+    expect(vi.mocked(logger.info).mock.calls.filter(([message]) => message === '[ActivityDelivery]')).toEqual([
+      ['[ActivityDelivery]', expect.objectContaining({ event: 'committed', outcome: 'manual_reconciliation' })],
+    ]);
     expect(mockUploadActivityFileToWahoo).toHaveBeenCalledTimes(1);
     expect(mockMoveToDeadLetterQueue).toHaveBeenCalledTimes(1);
     expect(mockIncreaseRetryCountForQueueItem).not.toHaveBeenCalled();
@@ -2094,6 +2183,7 @@ describe('activity-sync/process-queue-item', () => {
     const result = await processActivitySyncQueueItem(queueItem);
 
     expect(result).toBe(QueueResult.Failed);
+    expect(vi.mocked(logger.info).mock.calls.filter(([message]) => message === '[ActivityDelivery]')).toHaveLength(0);
     expect(mockUploadActivityFileToWahoo).toHaveBeenCalledTimes(1);
     expect(mockUpdateQueueItemIfUserActive).toHaveBeenCalledTimes(3);
     expect(mockIncreaseRetryCountForQueueItem).not.toHaveBeenCalled();

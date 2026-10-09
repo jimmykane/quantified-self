@@ -87,6 +87,7 @@ import {
     finalizeDisabledSyncRouteIfCurrent,
 } from '../queue/sync-route-eligibility';
 import { getCloudTaskRetryBackoffSeconds } from '../shared/queue-config';
+import { activityDeliveryFailureOutcome, recordActivityDeliveryCommit, recordActivityDeliveryCompletion } from './monitoring';
 
 function toExtension(path?: string, extension?: string): string {
     if (extension && typeof extension === 'string' && extension.trim().length > 0) {
@@ -497,6 +498,7 @@ interface UploadActivityFileResult {
     workoutKey?: string;
     uploadId?: string;
     providerUserId?: string;
+    providerStatus?: unknown;
     blobContinuation?: SuuntoActivityBlobContinuation;
 }
 
@@ -965,14 +967,15 @@ async function moveAcceptedDestinationUploadConnectionFailureToDlq(
     );
 }
 
-function moveActivitySyncQueueItemToDlqIfCurrent(
+async function moveActivitySyncQueueItemToDlqIfCurrent(
     failedQueueItem: ActivitySyncQueueItemInterface,
     error: Error,
     bulkWriter: admin.firestore.BulkWriter | undefined,
     context: string | undefined,
     expectedQueueItem: ActivitySyncQueueItemInterface = failedQueueItem,
 ): Promise<QueueResult.MovedToDLQ | QueueResult.Processed | QueueResult.Failed> {
-    return moveToDeadLetterQueueIfCurrentUserActive({
+    const manualReconciliation = getActivitySyncManualReconciliationState(failedQueueItem, context);
+    const result = await moveToDeadLetterQueueIfCurrentUserActive({
         queueItem: failedQueueItem,
         error,
         context,
@@ -981,18 +984,25 @@ function moveActivitySyncQueueItemToDlqIfCurrent(
         phase: 'activity_sync_dlq_transition',
         logPrefix: 'ActivitySync',
         isCurrent: currentQueueItem => isSameActivitySyncProviderState(currentQueueItem, expectedQueueItem),
-        manualReconciliation: getActivitySyncManualReconciliationState(failedQueueItem, context),
+        manualReconciliation,
     });
+    if (result === QueueResult.MovedToDLQ) {
+        recordActivityDeliveryCommit(failedQueueItem, 'dead_lettered');
+        if (manualReconciliation) recordActivityDeliveryCommit(failedQueueItem, 'manual_reconciliation');
+    }
+    return result;
 }
 
-function increaseActivitySyncRetryCountIfCurrent(
+async function increaseActivitySyncRetryCountIfCurrent(
     queueItem: ActivitySyncQueueItemInterface,
     error: Error,
     bulkWriter: admin.firestore.BulkWriter | undefined,
     maxRetryDlqContext?: string,
     retryDispatchMarkerAtMs?: (nextRetryCount: number) => number | null,
+    observedProviderPending = false,
 ): Promise<QueueResult.MovedToDLQ | QueueResult.RetryIncremented | QueueResult.Processed | QueueResult.Failed> {
-    return increaseRetryCountIfCurrentUserActive({
+    const manualReconciliation = getActivitySyncManualReconciliationState(queueItem, maxRetryDlqContext);
+    const result = await increaseRetryCountIfCurrentUserActive({
         queueItem,
         error,
         incrementBy: 1,
@@ -1002,9 +1012,17 @@ function increaseActivitySyncRetryCountIfCurrent(
         phase: 'activity_sync_retry_transition',
         logPrefix: 'ActivitySync',
         isCurrent: currentQueueItem => isSameActivitySyncProviderState(currentQueueItem, queueItem),
-        manualReconciliation: getActivitySyncManualReconciliationState(queueItem, maxRetryDlqContext),
+        manualReconciliation,
         retryDispatchMarkerAtMs,
     });
+    if (result === QueueResult.MovedToDLQ) {
+        recordActivityDeliveryCommit(queueItem, 'dead_lettered');
+        if (manualReconciliation) recordActivityDeliveryCommit(queueItem, 'manual_reconciliation');
+    } else if (result === QueueResult.RetryIncremented) {
+        recordActivityDeliveryCommit(queueItem, observedProviderPending || error instanceof ProviderOperationError && isExpectedActivityUploadPending(error) ? 'provider_pending'
+            : activityDeliveryFailureOutcome(error) === 'expected_contention' ? 'expected_contention' : 'retry');
+    }
+    return result;
 }
 
 function buildUnresolvedDestinationProviderOperationError(
@@ -1153,6 +1171,7 @@ async function finalizeActivitySyncQueueItemIfCurrent(
         if (updateResult === QueueItemUserGuardedUpdateResult.NotCurrent) {
             logger.info(`[ActivitySync] Queue item ${queueItem.id} was already advanced or replaced; skipping stale ${actionDescription}.`);
         }
+        if (updateResult === QueueItemUserGuardedUpdateResult.Updated) recordActivityDeliveryCompletion(queueItem, additionalData);
         return QueueResult.Processed;
     } catch (error) {
         logger.error(`[ActivitySync] Could not complete ${actionDescription} for queue item ${queueItem.id}.`, error);
@@ -1385,6 +1404,7 @@ async function moveUploadStatePersistenceFailureToDlq(
                 return QueueResult.Processed;
             }
             if (terminalResult === QueueItemUserGuardedUpdateResult.Updated) {
+                recordActivityDeliveryCommit(queueItem, 'manual_reconciliation');
                 logger.error('[ActivitySync] Persisted a terminal manual-reconciliation marker after resume-state and DLQ persistence failed.', {
                     queueItemId: queueItem.id,
                     userID: queueItem.userID,
@@ -1545,6 +1565,10 @@ export async function processActivitySyncQueueItem(
     };
 
     let duringDestinationUpload = false;
+    // Observation only: Suunto retains its existing task-retry flow. Only an
+    // explicit recognized provider status can suppress a failure observation;
+    // unknown/malformed status and transport deadlines remain actual retries.
+    let observedProviderPending = false;
 
     try {
         if (await shouldSkipQueueWorkForDeletedUser(
@@ -1810,6 +1834,8 @@ export async function processActivitySyncQueueItem(
             expectedWahooWorkoutType.workoutTypeId,
         );
         if (uploadResult.status === 'pending') {
+            observedProviderPending = queueItem.destinationServiceName === ServiceNames.SuuntoApp
+                && (uploadResult.providerStatus === 'NEW' || uploadResult.providerStatus === 'PROCESSING');
             throw buildPendingDestinationUploadError(queueItem, uploadResult);
         }
         duringDestinationUpload = false;
@@ -2254,6 +2280,8 @@ export async function processActivitySyncQueueItem(
                 normalizedError,
                 bulkWriter,
                 actionableError.dlqContext || 'DESTINATION_PROVIDER_RETRY_EXHAUSTED',
+                undefined,
+                observedProviderPending,
             );
             if (retryResult === QueueResult.MovedToDLQ) {
                 await safelyWriteMetadata(() => setActivitySyncFailedMetadata({

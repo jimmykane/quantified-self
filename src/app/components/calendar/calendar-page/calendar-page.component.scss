@@ -345,11 +345,12 @@
 }
 
 .calendar-page--calm-month {
-  .calendar-main-surface { display: flex; flex-direction: column; padding: 14px; }
+  .calendar-main-surface { display: flex; flex-direction: column; padding: 14px 14px 0; }
   .calendar-period-navigation { order: 0; }
   .calendar-progress-slot, .calendar-status, .calendar-status-announcement { order: 1; }
   .calendar-day-layout { order: 2; }
   .calendar-period-summary { order: 3; }
+  app-calendar-month-totals { order: 3; margin-top: 8px; }
   .calendar-period-navigation { min-height: 44px; margin-bottom: 8px; border: 0; grid-template-columns: 44px minmax(0, 1fr) auto 44px; }
   .calendar-period-navigation h2 { font: var(--mat-sys-title-medium); }
   .calendar-today-button--desktop { min-height: 36px; }
@@ -362,7 +363,7 @@
 
 @media (max-width: 900px) {
   .calendar-page--calm-month {
-    .calendar-main-surface { padding: 10px; }
+    .calendar-main-surface { padding: 10px 10px 0; }
     .calendar-day-layout { grid-template-columns: minmax(0, 1fr); gap: 13px; }
     .calendar-selected-day { position: static; grid-column: 1; grid-row: 2; height: auto; padding: 13px 0 0; border-top: 1px solid var(--mat-sys-outline-variant); border-left: 0; }
   }

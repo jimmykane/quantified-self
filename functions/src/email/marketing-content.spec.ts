@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { renderMarketingContent, validateMarketingDraft } from './marketing-content';
+import { hasSameMarketingEmail, renderMarketingContent, validateMarketingDraft } from './marketing-content';
 
 const draft = {
   name: 'September update',
@@ -26,6 +26,40 @@ const draft = {
 };
 
 describe('marketing content', () => {
+  it.each([
+    { name: 'Renamed campaign' },
+    { schedule: { time: '17:00', timeZone: 'Europe/Helsinki' } },
+    { filters: { plans: ['pro'], signupFrom: '2026-09-01', signupTo: null } },
+    { subject: `  ${draft.subject}  `, senderName: '  Dimitrios from Quantified Self  ',
+      cta: { label: '  Open QS  ', url: 'https://quantified-self.io/' } },
+  ])('preserves test approval for changes outside the normalized email %#', change => {
+    expect(hasSameMarketingEmail(validateMarketingDraft(draft), validateMarketingDraft({ ...draft, ...change }))).toBe(true);
+  });
+
+  it.each([
+    { subject: 'A different subject' },
+    { senderName: 'Dimitrios' },
+    { content: { type: 'doc', content: [{ type: 'paragraph', content: [{ type: 'text', text: 'Different body' }] }] } },
+    { content: { type: 'doc', content: [{ type: 'paragraph', content: [{ type: 'text', text: 'A new ', marks: [{ type: 'italic' }] }] }] } },
+    { content: { type: 'doc', content: [{ type: 'paragraph', content: [{ type: 'text', text: 'feature', marks: [{ type: 'link', attrs: { href: 'https://quantified-self.io/help' } }] }] }] } },
+    { cta: { label: 'Different button', url: draft.cta.url } },
+    { cta: { label: draft.cta.label, url: 'https://quantified-self.io/help' } },
+    { cta: null },
+  ])('invalidates test approval for email changes %#', change => {
+    expect(hasSameMarketingEmail(validateMarketingDraft(draft), validateMarketingDraft({ ...draft, ...change }))).toBe(false);
+  });
+
+  it('defaults legacy drafts and normalizes personal sender names', () => {
+    expect(validateMarketingDraft(draft).senderName).toBe('Dimitrios from Quantified Self');
+    expect(validateMarketingDraft({ ...draft, senderName: '  Élodie, from QS  ' }).senderName).toBe('Élodie, from QS');
+    expect(validateMarketingDraft({ ...draft, senderName: 'A'.repeat(120) }).senderName).toHaveLength(120);
+  });
+
+  it.each(['', '   ', null, 42, 'A'.repeat(121), '\r\nDimitrios', 'Dimitrios\n',
+    'Name\r\nBcc: person@example.com', 'Name\t', 'Name\u007f', 'Name\u0085', 'Name\u2028'])('rejects invalid sender names %#', senderName => {
+    expect(() => validateMarketingDraft({ ...draft, senderName })).toThrow(/sender name/i);
+  });
+
   it('renders safe email HTML and plaintext from the allowlisted editor document', () => {
     const result = renderMarketingContent(validateMarketingDraft(draft));
     expect(result.bodyHtml).toContain('<strong>A new </strong>');
