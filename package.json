@@ -32,6 +32,8 @@
     "test:delivery-shards": "node --test tools/delivery-test-shards.test.mjs",
     "test:workflows": "node --test tools/testing-workflow.test.mjs",
     "test:frontend-config": "node --test tools/frontend-test-config.test.mjs",
+    "test:frontend-policy": "node tools/frontend-test-policy-cli.mjs",
+    "test:frontend-policy-guards": "node --test tools/frontend-test-policy.test.mjs",
     "test:frontend-shards": "node --test tools/frontend-test-shards.test.mjs",
     "test:training-monitoring": "node --test tools/training-monitoring/monitoring.test.mjs",
     "test:import-monitoring": "node --test tools/import-monitoring/monitoring.test.mjs",

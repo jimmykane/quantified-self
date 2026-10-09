@@ -49,3 +49,14 @@ runner configuration and verification commands.
   `npm run test:workflows` after registry or runner changes. Runner/plugin/discovery changes also require the
   complete frontend suite and a coverage smoke across all projects. Compare exact files and assertion
   names/statuses when benchmarking; report timings only for equivalent passing workloads without skips.
+- Every new ordinary spec must be classified in the same change: register Node/DOM paths in
+  `tools/frontend-test-environments.json`; record new Angular paths with `environment: "angular"` and a concrete
+  reason in the sorted `tools/frontend-test-environment-reasons.json` map. Existing Angular specs are grandfathered.
+  Moving an existing Node/DOM spec to a heavier project also requires a matching reason record. Remove stale reasons
+  when deleting or moving specs to Node. Run `npm run test:frontend-policy` against the branch's base before committing;
+  use `-- --base <revision>` when the base is not `origin/develop`. Never skip a missing comparison or invent a reason
+  to retain unnecessary setup. CI enforces this policy before either frontend shard starts.
+  Node/DOM tests must not load Angular testing/compiler/global setup through runtime imports, including local transitive
+  imports or mocks. Type-only imports and plain Angular core decorators remain allowed after verifying the suite.
+  Shared fixture hooks in new/changed Angular specs generate review warnings; inspect them and keep pure/static tests
+  in separate light suites where practical. Keep real fixtures where bindings, view effects or teardown need coverage.
