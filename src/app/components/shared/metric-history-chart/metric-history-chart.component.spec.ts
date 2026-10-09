@@ -9,7 +9,7 @@ const time = Date.UTC(2026, 7, 3);
 const history = {
   caption: '8-week history', points: [
     { time, value: -2, valueText: '-2' },
-    { time: time + 7 * 86400000, value: null, valueText: 'Unavailable' },
+    { time: time + 7 * 86400000, value: null, valueText: '--' },
     { time: time + 14 * 86400000, value: 3.2, valueText: '+3.2' },
   ],
 };
@@ -19,7 +19,7 @@ async function setup() {
   const detach = vi.fn();
   const loader = {
     init: vi.fn().mockResolvedValue(chart), setOption: vi.fn(), dispose: vi.fn(), resize: vi.fn(),
-    attachMobileSeriesTapFeedback: vi.fn(() => detach), subscribeToViewportResize: vi.fn(() => () => undefined),
+    attachMobileSeriesTapFeedback: vi.fn(() => detach), subscribeToViewportResize: vi.fn((_callback: () => void) => () => undefined),
   };
   const haptics = { selection: vi.fn() };
   await TestBed.configureTestingModule({
@@ -66,6 +66,7 @@ describe('MetricHistoryChartComponent', () => {
     expect(tooltip).toContain('+3.2');
     expect(tooltip).toContain('Week');
     expect(option().series[0].data[1]).toEqual([time + 7 * 86400000, null]);
+    expect(option().tooltip.formatter([{ data: [time + 7 * 86400000, null] }])).toContain('Unavailable');
   });
 
   it('uses click tooltips on phones and identifies the forecast as a scenario', async () => {
@@ -78,8 +79,42 @@ describe('MetricHistoryChartComponent', () => {
       fixture.detectChanges();
       await vi.waitFor(() => expect(loader.setOption).toHaveBeenCalledTimes(2));
       expect(option().series[0]).toMatchObject({ type: 'line', connectNulls: false, lineStyle: { type: 'dashed' } });
-      expect(option().tooltip.formatter([{ data: [time, -2] }])).toContain('a scenario, not a prediction');
+      const tooltip = option().tooltip.formatter([{ data: [time, -2] }]);
+      expect(tooltip).toContain('a scenario, not a prediction');
+      const content = document.createElement('div');
+      content.innerHTML = tooltip;
+      const explanation = Array.from(content.querySelectorAll('div')).find(element => element.childElementCount === 0 && element.textContent === 'No additional training load; a scenario, not a prediction.');
+      expect(explanation?.style.whiteSpace).toBe('normal');
+      expect(explanation?.style.overflowWrap).toBe('anywhere');
       expect(haptics.selection).not.toHaveBeenCalled();
+    } finally {
+      window.matchMedia = original;
+    }
+  });
+
+  it('refreshes tooltip interaction after resizing across the phone breakpoint without input changes', async () => {
+    const original = window.matchMedia;
+    let mobile = false;
+    window.matchMedia = vi.fn(() => ({ matches: mobile, addEventListener: vi.fn(), removeEventListener: vi.fn() })) as any;
+    try {
+      const { fixture, loader, haptics, option } = await setup();
+      expect(option().tooltip.triggerOn).toBe('mousemove|click');
+      const image = fixture.nativeElement.querySelector('[role="img"]') as HTMLElement;
+      Object.defineProperties(image, { clientWidth: { value: 200, configurable: true }, clientHeight: { value: 38 } });
+      const resize = loader.subscribeToViewportResize.mock.calls[0][0] as () => void;
+      mobile = true;
+      resize();
+      await vi.waitFor(() => expect(option().tooltip.triggerOn).toBe('click'));
+      expect(option().tooltip.confine).toBe(false);
+      expect(option().tooltip.appendTo).toBeTypeOf('function');
+
+      Object.defineProperty(image, 'clientWidth', { value: 300, configurable: true });
+      mobile = false;
+      resize();
+      await vi.waitFor(() => expect(option().tooltip.triggerOn).toBe('mousemove|click'));
+      expect(option().tooltip.confine).toBe(false);
+      expect(haptics.selection).not.toHaveBeenCalled();
+      expect(loader.attachMobileSeriesTapFeedback).toHaveBeenCalledTimes(1);
     } finally {
       window.matchMedia = original;
     }

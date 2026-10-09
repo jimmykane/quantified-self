@@ -1,6 +1,6 @@
 import { AppBreakpoints } from '../constants/breakpoints';
 import { getOrCreateEChartsTooltipHost } from './echarts-tooltip-host.helper';
-import { getViewportConstrainedTooltipPosition } from './echarts-tooltip-position.helper';
+import { buildViewportHostedTooltipPosition, getViewportConstrainedTooltipPosition } from './echarts-tooltip-position.helper';
 
 export type EChartsTooltipTriggerOn = 'none' | 'click' | 'mousemove|click';
 export type EChartsAxisPointerHapticFeedback = 'always' | 'afterFirstInteraction' | 'off';
@@ -59,4 +59,9 @@ export function resolveEChartsTooltipSurfaceConfig(
     confine: false,
     position: getViewportConstrainedTooltipPosition,
   };
+}
+
+/** Compact plots cannot contain a readable tooltip, including on phones. */
+export function resolveEChartsMiniChartTooltipSurfaceConfig(chartContainer: HTMLElement): EChartsTooltipSurfaceConfig {
+  return { ...resolveEChartsTooltipSurfaceConfig(false), position: buildViewportHostedTooltipPosition(chartContainer) };
 }

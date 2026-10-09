@@ -2,7 +2,7 @@ import { ChangeDetectionStrategy, Component, DestroyRef, ElementRef, computed, e
 import { buildMetricHistoryChartOption, normalizeMetricHistoryPoints, type MetricHistory } from '../../../helpers/metric-history-chart.helper';
 import { buildDashboardEChartsStyleTokens, buildDashboardEChartsTooltipChrome, renderDashboardEChartsTooltipCard } from '../../../helpers/dashboard-echarts-style.helper';
 import { ECHARTS_CARTESIAN_IMMEDIATE_UPDATE_SETTINGS, EChartsHostController } from '../../../helpers/echarts-host-controller';
-import { isEChartsMobileTooltipViewport, resolveEChartsTooltipSurfaceConfig, resolveEChartsTooltipTriggerOn } from '../../../helpers/echarts-tooltip-interaction.helper';
+import { isEChartsMobileTooltipViewport, resolveEChartsMiniChartTooltipSurfaceConfig, resolveEChartsTooltipTriggerOn } from '../../../helpers/echarts-tooltip-interaction.helper';
 import { resolveEChartsThemeName } from '../../../helpers/echarts-theme.helper';
 import { formatDashboardWeekRangeLabel } from '../../../helpers/dashboard-chart-data.helper';
 import { getDateTimeFormatter } from '../../../helpers/date-time-format.helper';
@@ -13,9 +13,7 @@ import type { EChartsOption } from 'echarts';
 @Component({
   selector: 'app-metric-history-chart', standalone: true,
   template: `<div #chartDiv class="metric-history-plot" role="img" [attr.aria-label]="accessibleSummary()"></div><small>{{ history().caption }}</small>`,
-  styles: `:host { display: block; min-width: 0; margin-top: 8px; }
-    .metric-history-plot { width: 100%; height: 38px; }
-    small { display: block; margin-top: 3px; color: var(--mat-sys-on-surface-variant); font-size: 10px; line-height: 1.3; }`,
+  styleUrl: './metric-history-chart.component.scss',
   changeDetection: ChangeDetectionStrategy.OnPush,
 })
 export class MetricHistoryChartComponent {
@@ -27,24 +25,28 @@ export class MetricHistoryChartComponent {
   private readonly host = new EChartsHostController({
     deferUntilNearViewport: true,
     eChartsLoader: inject(EChartsLoaderService), logger: inject(LoggerService), logPrefix: '[MetricHistoryChart]',
+    onContainerResize: () => this.refreshChart(),
   });
   private renderVersion = 0;
 
   readonly accessibleSummary = computed(() => {
     const history = this.history();
     const points = normalizeMetricHistoryPoints(history.points);
-    return `${this.label()} · ${history.caption}. ${points.map(point => `${this.dateLabel(point.time, history)}: ${history.points.find(source => source.time === point.time)?.valueText || 'Unavailable'}`).join('; ')}`;
+    return `${this.label()} · ${history.caption}. ${points.map(point => `${this.dateLabel(point.time, history)}: ${point.value === null ? 'Unavailable' : history.points.find(source => source.time === point.time)?.valueText || 'Unavailable'}`).join('; ')}`;
   });
 
   constructor() {
-    effect(() => {
-      const container = this.container()?.nativeElement;
-      const history = this.history();
-      const dark = this.darkTheme();
-      const label = this.label();
-      if (container) void this.render(container, history, dark, label);
-    });
+    effect(() => this.refreshChart());
     this.destroyRef.onDestroy(() => { this.renderVersion++; this.host.dispose(); });
+  }
+
+  private refreshChart(): void {
+    if (this.destroyRef.destroyed) return;
+    const container = this.container()?.nativeElement;
+    const history = this.history();
+    const dark = this.darkTheme();
+    const label = this.label();
+    if (container) void this.render(container, history, dark, label);
   }
 
   private async render(container: HTMLElement, history: MetricHistory, dark: boolean, label: string): Promise<void> {
@@ -58,13 +60,16 @@ export class MetricHistoryChartComponent {
     });
     option.tooltip = {
       trigger: 'axis', triggerOn: resolveEChartsTooltipTriggerOn(true, mobile), renderMode: 'html',
-      ...resolveEChartsTooltipSurfaceConfig(mobile), ...buildDashboardEChartsTooltipChrome(style),
+      ...resolveEChartsMiniChartTooltipSurfaceConfig(container), ...buildDashboardEChartsTooltipChrome(style),
       formatter: (params: { data?: unknown } | { data?: unknown }[]) => {
         const data = (Array.isArray(params) ? params[0] : params)?.data;
         const point = history.points.find(point => Array.isArray(data) && point.time === data[0]);
         return point ? renderDashboardEChartsTooltipCard(style, {
-          title: this.dateLabel(point.time, history), rows: [{ label, value: point.valueText }],
-          notes: history.mode === 'forecast' ? ['No additional training load; a scenario, not a prediction.'] : undefined,
+          title: this.dateLabel(point.time, history), stackHeader: true,
+          rows: [{
+            label, value: Number.isFinite(point.value) ? point.valueText : 'Unavailable',
+            detail: history.mode === 'forecast' ? 'No additional training load; a scenario, not a prediction.' : undefined,
+          }],
         }) : '';
       },
     } as EChartsOption['tooltip'];

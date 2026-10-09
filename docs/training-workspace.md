@@ -4814,8 +4814,14 @@ Columns use a zero baseline (signed metrics can extend below it), muted earlier 
 observation. Real zero remains valid; internal missing weeks remain gaps, with empty edges trimmed and half-slot
 time-axis space to prevent endpoint clipping. Each plot has a dated accessible summary and uses the owner's
 formatted values in the shared tooltip. The +7-days cell instead shows the existing current-plus-future Form points
-as a dashed **no-additional-load scenario**, never as observed history or a prediction. Retained snapshots keep the
-existing route updating disclosure. The shared public example grid receives static synthetic histories without
+as a dashed **no-additional-load scenario**, never as observed history or a prediction. Tooltip dates and scenario
+explanations wrap within the shared bounded surface on phones. Container resizes rebuild size-dependent tooltip
+options through the shared host, including tap-versus-hover behavior when crossing the phone breakpoint. Missing
+observations are named **Unavailable** in accessible summaries and tooltips instead of reading numeric placeholders.
+Training and Dashboard column mini-charts use the shared viewport tooltip host even on phones: their small plots
+cannot contain a readable tooltip. The positioning adapter converts chart-local coordinates to viewport coordinates
+for the existing clamp, then converts back for ECharts; normal full-chart tooltip policies remain unchanged.
+Retained snapshots keep the existing route updating disclosure. The shared public example grid receives static synthetic histories without
 loading athlete data. This is presentation-only: no formula, stored data, planning behavior, MCP read/write schema,
 scope, consent, provider action or backend deployment change.
 

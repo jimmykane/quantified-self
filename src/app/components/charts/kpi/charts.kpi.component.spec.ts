@@ -14,6 +14,7 @@ import { ChartsKpiComponent } from './charts.kpi.component';
 import { AppHapticsService } from '../../../services/app.haptics.service';
 import { EChartsLoaderService } from '../../../services/echarts-loader.service';
 import { LoggerService } from '../../../services/logger.service';
+import { getOrCreateEChartsTooltipHost } from '../../../helpers/echarts-tooltip-host.helper';
 import {
   DASHBOARD_ACWR_KPI_CHART_TYPE,
   DASHBOARD_AEROBIC_CAPACITY_KPI_CHART_TYPE,
@@ -778,6 +779,11 @@ describe('ChartsKpiComponent', () => {
     expect(tooltipHtml).toContain('Apr');
     expect(tooltipHtml).toContain('2026 -');
     expect(tooltipHtml).not.toContain('Week of Apr 6');
+    expect(option?.tooltip).toMatchObject({ confine: false, appendTo: getOrCreateEChartsTooltipHost, position: expect.any(Function) });
+    const content = document.createElement('div');
+    content.innerHTML = tooltipHtml;
+    const heading = Array.from(content.querySelectorAll('div')).find(element => element.childElementCount === 0 && element.textContent?.startsWith('Week 15,'));
+    expect(heading?.style.whiteSpace).toBe('normal');
   });
 
   it('renders KPI detail rows for the info menu without row-level haptics', async () => {

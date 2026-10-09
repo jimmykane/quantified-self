@@ -36,6 +36,7 @@ import {
 import {
   type EChartsMobileTapFeedbackOptions,
   isEChartsMobileTooltipViewport,
+  resolveEChartsMiniChartTooltipSurfaceConfig,
   resolveEChartsTooltipSurfaceConfig,
   resolveEChartsTooltipTriggerOn,
 } from '../../../helpers/echarts-tooltip-interaction.helper';
@@ -883,7 +884,10 @@ export class ChartsKpiComponent implements AfterViewInit, OnChanges, OnDestroy {
         barMaxWidth: 8,
       });
       if (presentation.trend.some(point => Number.isFinite(point.value))) {
-        option.tooltip = this.buildTooltipOption(style, isMobileTooltipViewport, sparklineStyle);
+        option.tooltip = {
+          ...this.buildTooltipOption(style, isMobileTooltipViewport, sparklineStyle),
+          ...resolveEChartsMiniChartTooltipSurfaceConfig(this.chartDiv.nativeElement),
+        };
       }
       return option;
     }
@@ -1076,6 +1080,7 @@ export class ChartsKpiComponent implements AfterViewInit, OnChanges, OnDestroy {
         const valueText = this.formatPrimaryValue(entry[1]);
         return renderDashboardEChartsTooltipCard(style, {
           title: heading,
+          stackHeader: usesDashboardKpiHistoryColumns(this.chartType),
           rows: [{ label: this.primaryLabel || 'Value', value: valueText }],
         });
       },
