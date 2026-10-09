@@ -1,5 +1,5 @@
 import { onRequest, HttpsError } from 'firebase-functions/v2/https';
-import type { Request, Response } from 'express';
+import type { Request } from 'express';
 import { onSchedule } from 'firebase-functions/v2/scheduler';
 import { onDocumentUpdated } from 'firebase-functions/v2/firestore';
 import * as logger from 'firebase-functions/logger';
@@ -57,7 +57,14 @@ function confirmationPage(message: string, token?: string): string {
   const action = token ? `<form method="post" action="/email/unsubscribe?token=${encodeURIComponent(token)}"><button type="submit">Unsubscribe</button></form>` : '';
   return `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Email preferences · Quantified Self</title><style>body{font:18px/1.5 system-ui,sans-serif;max-width:580px;margin:10vh auto;padding:20px;color:#172033}button{background:#174ea6;color:white;border:0;border-radius:4px;padding:12px 20px;font:inherit;cursor:pointer}</style></head><body><h1>Email preferences</h1><p>${message}</p>${action}</body></html>`;
 }
-export async function handleMarketingUnsubscribe(request: Request, response: Response, signingKey: string): Promise<void> {
+interface UnsubscribeResponse {
+  set(name: string, value: string): UnsubscribeResponse;
+  type(contentType: string): UnsubscribeResponse;
+  status(code: number): UnsubscribeResponse;
+  send(body: string): unknown;
+}
+
+export async function handleMarketingUnsubscribe(request: Pick<Request, 'method' | 'query'>, response: UnsubscribeResponse, signingKey: string): Promise<void> {
   response.set('Cache-Control', 'no-store');
   response.set('X-Robots-Tag', 'noindex, nofollow');
   response.set('Referrer-Policy', 'no-referrer');

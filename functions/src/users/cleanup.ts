@@ -1,4 +1,5 @@
 import * as functions from 'firebase-functions/v1';
+import { IS_NOT_TENANT, onUserDeleted } from 'firebase-functions/v2/identity';
 import * as logger from 'firebase-functions/logger';
 import * as admin from 'firebase-admin';
 import { cleanupMarketingCampaignRecipients } from '../admin/marketing/cleanup';
@@ -1001,10 +1002,7 @@ export const ACCOUNT_DELETION_CLEANUP_RUNTIME_OPTIONS = {
     secrets: FUNCTION_SECRET_BINDINGS.cleanupUserAccounts,
 } as const;
 
-export const cleanupUserAccounts = functions
-    .region('europe-west2')
-    .runWith(ACCOUNT_DELETION_CLEANUP_RUNTIME_OPTIONS)
-    .auth.user().onDelete(async (user) => {
+async function cleanupDeletedUser(user: admin.auth.UserRecord): Promise<void> {
     const uid = user.uid;
     const db = admin.firestore();
     // Fail closed before any destructive stage if the durable fence cannot be established.
@@ -1193,4 +1191,29 @@ export const cleanupUserAccounts = functions
     }
     await completeAccountDataCleanup(db, uid, savedIdentifiers.attemptId);
     logger.info('[AccountDeletion] Verified cleanup complete.', { outcome: 'complete' });
+}
+
+// Retain the Gen 1 name until a separately approved, verified cutover retires it.
+export const cleanupUserAccounts = functions
+    .region('europe-west2')
+    .runWith(ACCOUNT_DELETION_CLEANUP_RUNTIME_OPTIONS)
+    .auth.user().onDelete(cleanupDeletedUser);
+
+export const ACCOUNT_DELETION_CLEANUP_V2_RUNTIME_OPTIONS = {
+    region: 'europe-west2',
+    memory: '512MiB',
+    timeoutSeconds: 540,
+    retry: true,
+    cpu: 1,
+    concurrency: 1,
+    // Preserve the inspected Gen 1 identity and its existing bucket/secret access.
+    serviceAccount: 'quantified-self-io@appspot.gserviceaccount.com',
+    // UIDs and cleanup paths belong to the default project, never another tenant.
+    tenantId: IS_NOT_TENANT,
+    secrets: FUNCTION_SECRET_BINDINGS.cleanupUserAccountsV2,
+} as const;
+
+export const cleanupUserAccountsV2 = onUserDeleted(ACCOUNT_DELETION_CLEANUP_V2_RUNTIME_OPTIONS, async event => {
+    if (!event.data) throw new Error('Missing deleted Auth user.');
+    await cleanupDeletedUser(event.data);
 });
