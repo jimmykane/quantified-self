@@ -275,7 +275,7 @@
                         <td><strong>Email Logs</strong></td>
                         <td><code>mail/{docId}</code></td>
                         <td><code>cleanupUserAccountsV2</code></td>
-                        <td>Queries by <code>uid</code>, <code>toUids</code>, <code>marketing.uid</code> and Email; preserves conflicting UID owners and confirmation mail. New registration/subscription mail stores UID ownership; historical email-only attribution remains limited.</td>
+                        <td>Queries by <code>uid</code>, <code>toUids</code>, <code>marketing.uid</code> and email. Deletes historical email-only records without waiting for UID metadata; preserves conflicting UID owners and confirmation mail. Account mail writers now include UID ownership, including manual scripts for registered recipients.</td>
                     </tr>
                     <tr>
                         <td><strong>Other Files</strong></td>

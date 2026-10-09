@@ -202,6 +202,7 @@ describe('deleteSelf Cloud Function', () => {
         expect(mailDocMock).toHaveBeenCalledWith(`account_deleted_confirmation_${uid}`);
         expect(mailSetMock).toHaveBeenCalledWith(expect.objectContaining({
             to: 'test@example.com',
+            uid,
             from: 'Quantified Self <hello@quantified-self.io>',
             replyTo: 'support@quantified-self.io',
             template: {
