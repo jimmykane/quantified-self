@@ -144,7 +144,8 @@ describe('HistoryImportFormComponent', () => {
         fixture = TestBed.createComponent(HistoryImportFormComponent);
         component = fixture.componentInstance;
         component.serviceName = ServiceNames.COROSAPI;
-        vi.spyOn(snackBar, 'open');
+        // These tests verify feedback requests; real snackbar dismissal timers delay fixture stability.
+        vi.spyOn(snackBar, 'open').mockReturnValue(null);
         fixture.detectChanges();
     });
 

@@ -13,7 +13,8 @@ runner configuration and verification commands.
   Inspect transitive runtime imports and test assumptions, add the exact spec path to the sorted `node` list in
   `tools/frontend-test-environments.json`, and verify it in that project. Keep framework fixture builders out
   of pure helper tests when equivalent plain fixtures suffice. Record why a new helper needs a heavier environment
-  when it cannot use Node. Other pure application specs, such as static content contracts under `src/app/shared/`,
+  when it cannot use Node. Other pure application specs, such as static content contracts under `src/app/shared/`
+  or static utility behavior under `src/app/utils/`,
   can use the same explicit Node opt-in after their imports and assertions are verified.
   State services without injected dependencies or Angular lifecycle behavior can use plain construction for behavioral
   unit tests after verifying their imports in Node; retain Angular integration coverage for provider scope, injection
@@ -32,6 +33,10 @@ runner configuration and verification commands.
   logic tests and real fixtures for template bindings, controls, view queries, effects or Angular lifecycle behavior.
   Static source/style contract checks must not configure TestBed or create components; keep fixture setup local
   to the tests that need it, even when those checks share an Angular spec file.
+  When a suite only asserts notification/dialog service calls, mock those methods without opening real overlays
+  or starting dismissal timers. Keep real overlays when their rendering, interactions or teardown are under test,
+  and model returned references explicitly when the component uses them. Do not let unrelated UI timers delay
+  `fixture.whenStable()` in component lifecycle tests.
   A component injected through TestBed still belongs in `angular`; initialize the hooks it needs and preserve
   TestBed teardown. Only use this approach after checking for component/view-scoped dependencies, and compare
   unchanged assertions and covered source locations when benchmarking. See the

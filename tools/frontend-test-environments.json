@@ -166,7 +166,8 @@
     "src/app/helpers/workout-reflection.shared.spec.ts",
     "src/app/helpers/workout-time-input.helper.spec.ts",
     "src/app/services/history-import-state.service.spec.ts",
-    "src/app/shared/help.content.spec.ts"
+    "src/app/shared/help.content.spec.ts",
+    "src/app/utils/app.user.utilities.spec.ts"
   ],
   "dom": [
     "src/app/helpers/assistant-message-format.helper.spec.ts",
