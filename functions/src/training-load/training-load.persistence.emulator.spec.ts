@@ -95,6 +95,28 @@ describe.skipIf(!enabled)('Training load persistence in Firestore', { timeout: 3
     expect((await db.doc(metadataPath(uid)).get()).data()).toEqual(before);
   });
 
+  it('preserves calculated load and cache writes when workout feedback is added, edited or removed', async () => {
+    const uid = setup(); const event = workout(); await source(uid, event); await persistTrainingLoadMetadata(uid, event);
+    await completeTrainingLoadCacheWarmup(uid);
+    const parent = db.doc(`users/${uid}/events/workout`);
+    const metadata = db.doc(metadataPath(uid)); const originalMetadata = (await metadata.get()).data();
+    const bucket = db.doc(`users/${uid}/trainingLoadCache/b_${trainingLoadCacheKey('workout')[0]}`);
+    const cachedTime = (await bucket.get()).updateTime!;
+    for (const feedback of [
+      { 'stats.Feeling': 3, 'stats.Rated Perceived Exertion': 1 },
+      { 'stats.Feeling': 5, 'stats.Rated Perceived Exertion': 8 },
+      { 'stats.Feeling': admin.firestore.FieldValue.delete(), 'stats.Rated Perceived Exertion': admin.firestore.FieldValue.delete() },
+    ]) {
+      await parent.update(feedback);
+      const [projection] = await attachEventTrainingLoads(uid, [await parent.get()]);
+      expect(attachedEffectiveTrainingLoad(projection.data()!)).toMatchObject({ score: 9, status: 'available' });
+      await refreshTrainingLoadSummary(uid, 'workout');
+      expect((await readTrainingLoadSummaries(uid))?.get('workout')?.load).toMatchObject({ score: 9, status: 'available' });
+      expect((await bucket.get()).updateTime?.isEqual(cachedTime)).toBe(true);
+      expect((await metadata.get()).data()).toEqual(originalMetadata);
+    }
+  });
+
   it('invalidates and caches a control edit made during an otherwise unchanged reimport', async () => {
     const uid = setup(); const event = workout(); await source(uid, event); await persistTrainingLoadMetadata(uid, event);
     const ref = db.doc(metadataPath(uid)); const before = (await ref.get()).data()!;

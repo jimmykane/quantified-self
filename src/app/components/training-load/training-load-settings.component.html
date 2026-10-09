@@ -1,4 +1,4 @@
-<h2>Training load defaults</h2>
+<h4>Training load defaults</h4>
 <p>Choose how each sport contributes to fitness and fatigue. These preferences apply to workouts starting from the time you save them, including delayed uploads. Existing workouts keep their saved policy.</p>
 <p>Automatic uses the eligible methods available in the file. HR needs file calibration; MET estimates load from file calories, body mass and duration. A missing preferred method falls back to Automatic. Imported TSS takes precedence.</p>
 @if (message()) { <p role="status" aria-live="polite">{{ message() }}</p> }
@@ -7,7 +7,7 @@
   <div class="load-settings-grid">
     @for (row of rows; track row.id) {
       <section class="load-settings-family" [formGroup]="row.form" [attr.aria-label]="row.label">
-        <h3>{{ row.label }}</h3>
+        <h5>{{ row.label }}</h5>
         <mat-form-field appearance="outline" subscriptSizing="dynamic">
           <mat-label>Preferred calculation</mat-label>
           <mat-select formControlName="method" (selectionChange)="selection()">

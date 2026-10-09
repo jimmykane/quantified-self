@@ -4867,6 +4867,16 @@ MET remains an estimate: `hours = duration / 3600`, `MET = kcal / (file kg × ho
 10)²`. Require valid file energy, body mass and duration; 210 kcal, 70 kg and one hour yield MET 3 and 9 TSS. Do
 not invent mass, subtract resting calories, use reference-MET tables, or adopt STT's linear score or zone weights.
 
+Settings keeps Training load in the Preferences disclosure group. Its sport-policy editor initializes on first
+expansion, then remains mounted while collapsed so drafts and the existing policy subscription survive section
+changes. Each family saves its own dated policy; the main Settings Save changes action continues to save only
+ordinary account/app preferences. This integration preserves the current Settings layout and adds no policy reads
+before the Training load section is opened. Existing workout-reflection leaves and their independent Rules/MCP
+contracts remain unchanged; this synchronization adds no planning or provider delivery capability.
+Source fingerprints omit Feeling and Rated Perceived Exertion because workout feedback is not a TSS input.
+Adding, editing or clearing either field preserves calculated load and the existing cache entry; recorded TSS,
+calories, body mass, dates and the other source statistics remain guarded against stale calculations.
+
 Owners open **Training load** from the activity action menu. The editor separates recorded, Automatic and modeled
 TSS, explains the actual method/fallback, and supports a preferred method, 0–9999 numeric override (one decimal),
 per-leg inclusion, whole-workout exclusion and reset. Exclusions retain history and volume. Missing load remains
@@ -5034,6 +5044,11 @@ Release order: publish the verified Sports Lib 21.6.1 artifact first, then insta
 packages and release Functions/Rules/frontend together after separate approval. Local validation uses a packed
 library artifact. Publication, deployment and production reparse are separate explicit approvals; no historical
 values are rewritten merely by deploying this change.
+
+Training load policy/helper tests use the frontend `helpers-node` project; editor/service tests remain in `angular`.
+The Settings disclosure regression explicitly renders its fixture, preserving the shared logic-only setup.
+Training load persistence remains registered once in the lifecycle emulator group. The rebase retains the current
+frontend/delivery shard planners, worker limits and complete report gates; it changes no load or MCP contract.
 
 Local verification covers the encoded synthetic recovery walk (7.6 HR TSS), MET inputs (9 TSS), library package
 exports, provider/manual/reparse writers, modeled-load builders, owner Rules and frozen MCP reads. The Firestore

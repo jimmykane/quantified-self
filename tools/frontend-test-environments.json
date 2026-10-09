@@ -142,6 +142,7 @@
     "src/app/helpers/training-explanation-view.helper.spec.ts",
     "src/app/helpers/training-impact-recap.helper.spec.ts",
     "src/app/helpers/training-impact.helper.spec.ts",
+    "src/app/helpers/training-load-policy.spec.ts",
     "src/app/helpers/training-load.shared.spec.ts",
     "src/app/helpers/training-metric-text.helper.spec.ts",
     "src/app/helpers/training-plan-appearance.helper.spec.ts",
