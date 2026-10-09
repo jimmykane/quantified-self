@@ -2434,6 +2434,21 @@ describe('AppUserService', () => {
                 finish({ data: { accepted: true } });
                 await expect(pending).rejects.toThrow('Operation cancelled because its account or view changed.');
             });
+            it.each(['account', 'view'])('cancels a late failed response after the %s changes', async change => {
+                let currentView = true;
+                let fail!: (error: Error) => void;
+                mockFunctionsService.call.mockReturnValueOnce(new Promise((_, reject) => fail = reject));
+                const pending = service.retryConnectionHistoryImport('run-id', () => currentView);
+                if (change === 'account') mockAuth.currentUser = { ...mockAuth.currentUser };
+                else currentView = false;
+                fail(new Error('Delayed provider failure'));
+                await expect(pending).rejects.toThrow('Operation cancelled because its account or view changed.');
+            });
+            it('preserves a genuine retry failure while its account and view are current', async () => {
+                const error = Object.assign(new Error('Retry unavailable'), { code: 'functions/unavailable' });
+                mockFunctionsService.call.mockRejectedValueOnce(error);
+                await expect(service.retryConnectionHistoryImport('run-id', () => true)).rejects.toBe(error);
+            });
         });
 
         describe.each(['activity', 'suunto-sleep', 'coros-sleep', 'garmin-health'] as const)('%s history account guard', kind => {

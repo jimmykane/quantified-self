@@ -1593,7 +1593,11 @@ export class AppUserService implements OnDestroy {
 
   async retryConnectionHistoryImport(runId: string, isCurrentView?: () => boolean): Promise<void> {
     const canExecute = this.captureServiceConnectionAccount(isCurrentView);
-    const result = await this.functionsService.call<{ runId: string }, { accepted: boolean }>('retryConnectionHistoryImport', { runId }, { canExecute });
+    const result = await this.functionsService.call<{ runId: string }, { accepted: boolean }>('retryConnectionHistoryImport', { runId }, { canExecute })
+      .catch(error => {
+        if (!canExecute()) throw new Error('Operation cancelled because its account or view changed.');
+        throw error;
+      });
     if (!canExecute()) throw new Error('Operation cancelled because its account or view changed.');
     if (!result.data.accepted) throw new Error('History retry was not accepted.');
   }
