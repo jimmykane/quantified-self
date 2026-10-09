@@ -60,7 +60,6 @@
                     type="button"
                     [attr.data-plan-role]="plan.role"
                     [attr.data-price-id]="price.id"
-                    appHapticTap
                     [attr.aria-label]="plan.title + ': ' + price.ctaLabel"
                     (click)="continueToMembership()">
                     {{ price.ctaLabel }}
@@ -72,7 +71,6 @@
                     class="subscribe-btn qs-mat-primary"
                     [attr.data-plan-role]="plan.role"
                     [attr.data-price-id]="price.id"
-                    appHapticTap
                     [attr.aria-label]="plan.title + ': ' + price.ctaLabel"
                     (click)="continueToMembership()">
                     {{ price.ctaLabel }}
@@ -112,12 +110,12 @@
     <h2 id="included-heading">Included on every plan</h2>
     <p class="section-intro">Starter includes the tools below. Basic adds more history and customization; Pro adds connected services.</p>
     <div class="plan-capabilities">@for (feature of sharedFeatures; track feature.title) {
-      <article><mat-icon aria-hidden="true">{{ feature.icon }}</mat-icon><div><h3>{{ feature.title }}</h3><p>{{ feature.copy }}</p><a mat-button [routerLink]="feature.path" appHapticTap>Learn more<mat-icon>arrow_forward</mat-icon></a></div></article>
+      <article><mat-icon aria-hidden="true">{{ feature.icon }}</mat-icon><div><h3>{{ feature.title }}</h3><p>{{ feature.copy }}</p><a mat-button [routerLink]="feature.path" [attr.aria-label]="'Learn more about ' + feature.title">Learn more<mat-icon>arrow_forward</mat-icon></a></div></article>
     }</div>
   </section>
   <section class="plan-details" aria-label="What paid plans add">
     <h2>What paid plans add</h2>
-    <div class="plan-capabilities">
+    <div class="plan-capabilities plan-capabilities--paid">
       <article><mat-icon aria-hidden="true">layers</mat-icon><div><h3>Basic: more history and customization</h3><p>Everything in Starter, plus My Tracks (Beta) and custom chart watermark text.</p></div></article>
       <article><mat-icon aria-hidden="true">sync</mat-icon><div><h3>Pro: connected services</h3><p>Everything in Basic, plus Garmin, Suunto, COROS, and Wahoo workflows, supported history imports, and compatible activity, route, and workout delivery.</p></div></article>
     </div>
@@ -130,6 +128,6 @@
       </article>
     }
     <p class="membership-help">Your data stays yours. Original activity files can be exported, and existing activities and routes are retained when you downgrade.</p>
-    <a mat-button routerLink="/help" fragment="plans-and-billing" appHapticTap>Read the membership guide<mat-icon>arrow_forward</mat-icon></a>
+    <a mat-button routerLink="/help" fragment="plans-and-billing">Read the membership guide<mat-icon>arrow_forward</mat-icon></a>
   </section>
 </main>

@@ -26,6 +26,7 @@
   .plan-details h2, .plan-faq > h2 { font: var(--mat-sys-headline-small); font-weight: 400; text-align: center; margin: 0 0 10px; }
   .section-intro { max-width: 720px; margin: 0 auto 24px; text-align: center; font: var(--mat-sys-body-medium); color: var(--mat-sys-on-surface-variant); }
   .plan-capabilities { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 24px; }
+  .plan-capabilities--paid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .plan-capabilities article { display: flex; align-items: flex-start; gap: 12px; }
   .plan-capabilities mat-icon { flex-shrink: 0; color: var(--mat-sys-on-surface-variant); }
   .plan-capabilities h3 { font: var(--mat-sys-title-medium); font-weight: 400; margin: 0 0 6px; }

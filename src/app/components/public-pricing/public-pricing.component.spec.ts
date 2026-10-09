@@ -1,12 +1,16 @@
+import { Component } from '@angular/core';
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { By } from '@angular/platform-browser';
 import { Router, provideRouter } from '@angular/router';
+import { RouterTestingHarness } from '@angular/router/testing';
 import { Subject, of, throwError } from 'rxjs';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { AppPaymentService, StripeProduct } from '../../services/app.payment.service';
 import { LoggerService } from '../../services/logger.service';
 import { AppHapticsService } from '../../services/app.haptics.service';
+import { ShellNavigationEffectsService } from '../../services/shell-navigation-effects.service';
 import { PublicPricingComponent, buildPublicPricingCatalog } from './public-pricing.component';
+import { PUBLIC_PRICING_SHARED_FEATURES } from './public-pricing.content';
 
 const PAID_PRODUCTS: StripeProduct[] = [
     {
@@ -150,7 +154,8 @@ describe('PublicPricingComponent', () => {
         expect(router.navigate).toHaveBeenCalledWith(['/login'], {
             queryParams: { returnUrl: '/dashboard' },
         });
-        expect(haptics.selection).toHaveBeenCalledTimes(4);
+        // The shell owns feedback after a successful route change.
+        expect(haptics.selection).not.toHaveBeenCalled();
     });
 
     it('preserves all catalog features and original controls with billing above the features', () => {
@@ -189,6 +194,8 @@ describe('PublicPricingComponent', () => {
         expect(root.textContent).toContain('custom chart watermark text');
         expect(root.querySelector('a[href="/features/training-plans"]')).not.toBeNull();
         expect(root.querySelector('a[href="/help#plans-and-billing"]')).not.toBeNull();
+        expect(Array.from(root.querySelectorAll('.plan-capabilities a')).map(link => link.getAttribute('aria-label')))
+            .toEqual(PUBLIC_PRICING_SHARED_FEATURES.map(feature => `Learn more about ${feature.title}`));
     });
 
     it('discloses provider compatibility with accessible FAQ toggles and one haptic per action', () => {
@@ -252,6 +259,66 @@ describe('PublicPricingComponent', () => {
         } finally {
             vi.useRealTimers();
         }
+    });
+});
+
+@Component({ standalone: true, template: '<p>Destination</p>' })
+class PricingDestinationStub {}
+
+describe('Public pricing navigation feedback', () => {
+    let harness: RouterTestingHarness;
+    let haptics: { selection: ReturnType<typeof vi.fn> };
+    let navigationAllowed: boolean;
+
+    const navigationActions = [
+        ...['free_price', 'price_basic_monthly', 'price_basic_yearly', 'price_pro_monthly'].map(id => ({
+            name: id,
+            selector: `button[data-price-id="${id}"]`,
+            destination: '/login?returnUrl=%2Fdashboard',
+        })),
+        ...PUBLIC_PRICING_SHARED_FEATURES.map(feature => ({
+            name: feature.title,
+            selector: `a[href="${feature.path}"]`,
+            destination: feature.path,
+        })),
+        { name: 'membership guide', selector: 'a[href="/help#plans-and-billing"]', destination: '/help#plans-and-billing' },
+    ];
+
+    beforeEach(async () => {
+        navigationAllowed = true;
+        haptics = { selection: vi.fn() };
+        vi.spyOn(window, 'scrollTo').mockImplementation(() => {});
+        await TestBed.configureTestingModule({ providers: [
+            provideRouter([
+                { path: 'pricing', component: PublicPricingComponent },
+                ...['login', 'help', ...PUBLIC_PRICING_SHARED_FEATURES.map(feature => feature.path.slice(1))]
+                    .map(path => ({ path, component: PricingDestinationStub, canActivate: [() => navigationAllowed] })),
+            ]),
+            { provide: AppPaymentService, useValue: { getProducts: vi.fn().mockReturnValue(of(PAID_PRODUCTS)) } },
+            { provide: AppHapticsService, useValue: haptics },
+            { provide: LoggerService, useValue: { error: vi.fn() } },
+        ] }).compileComponents();
+
+        TestBed.inject(ShellNavigationEffectsService);
+        harness = await RouterTestingHarness.create('/pricing');
+    });
+
+    it.each(navigationActions)('emits one shell-owned haptic when $name navigation succeeds', async action => {
+        expect(haptics.selection).not.toHaveBeenCalled();
+        harness.routeNativeElement!.querySelector<HTMLElement>(action.selector)!.click();
+        await harness.fixture.whenStable();
+
+        expect(TestBed.inject(Router).url).toBe(action.destination);
+        expect(haptics.selection).toHaveBeenCalledTimes(1);
+    });
+
+    it('does not emit feedback for a cancelled membership navigation', async () => {
+        navigationAllowed = false;
+        harness.routeNativeElement!.querySelector<HTMLButtonElement>('button[data-price-id="free_price"]')!.click();
+        await harness.fixture.whenStable();
+
+        expect(TestBed.inject(Router).url).toBe('/pricing');
+        expect(haptics.selection).not.toHaveBeenCalled();
     });
 });
 

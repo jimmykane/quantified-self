@@ -9,7 +9,6 @@ import { getAssistantRequestLimitForRole, getRouteUsageLimitForRole, getUsageLim
 import { Observable, catchError, defer, map, of, shareReplay, timeout } from 'rxjs';
 import { AppPaymentService, StripePrice, StripeProduct } from '../../services/app.payment.service';
 import { LoggerService } from '../../services/logger.service';
-import { AppChartSharedModule } from '../../modules/app-chart-shared.module';
 import { AppHapticsService } from '../../services/app.haptics.service';
 import { PUBLIC_PRICING_FAQS, PUBLIC_PRICING_SHARED_FEATURES } from './public-pricing.content';
 
@@ -80,7 +79,6 @@ const PUBLIC_PLAN_COPY: Record<PublicPlanRole, { title: string; subtitle: string
         MatIconModule,
         MatProgressSpinnerModule,
         RouterLink,
-        AppChartSharedModule,
     ],
     templateUrl: './public-pricing.component.html',
     styleUrls: ['../pricing/pricing.component.scss', './public-pricing.component.scss'],
