@@ -4,6 +4,7 @@ import { readFitMessages, readFitUnsignedField } from 'fit-file-parser/raw';
 // Local #600 proof only. Deliberately not imported by any upload/queue path:
 // valid FIT encoding does not establish COROS partner-API acceptance.
 const SNORKELING = 82;
+const SAILING = 32;
 const SWIMMING = 5;
 const OPEN_WATER = 18; // FIT sub_sport; 17 is lap_swimming, not open water.
 const MAX_BYTES = 30 * 1024 * 1024;
@@ -30,6 +31,16 @@ interface Patch { offset: number; remove: number; bytes: Buffer }
  * Refuse other/mixed sports and malformed files instead of guessing a category.
  */
 export function createCOROSSnorkelingFITProof(input: Buffer): Buffer {
+  return createCategoryProof(input, SNORKELING, SWIMMING, OPEN_WATER, 'snorkeling');
+}
+
+/** Experimental generic/generic copy; COROS GPS Cardio acceptance is NOT established. */
+export function createCOROSSailingGenericFITProof(input: Buffer): Buffer {
+  return createCategoryProof(input, SAILING, 0, 0, 'sailing');
+}
+
+function createCategoryProof(input: Buffer, sourceSport: number, targetSport: number,
+  targetSubSport: number, sourceName: string): Buffer {
   const parsed = readFitMessages(input, { messageNumbers: [0, 12, 18, 19], maxInputBytes: MAX_BYTES });
   const value = (message: typeof parsed.messages[number], number: number) => readFitUnsignedField(
     message.fields.find(field => field.fieldNumber === number), 0, 1, message.littleEndian,
@@ -37,14 +48,14 @@ export function createCOROSSnorkelingFITProof(input: Buffer): Buffer {
   const fileIds = parsed.messages.filter(message => message.globalMessageNumber === 0);
   const sessions = parsed.messages.filter(message => message.globalMessageNumber === 18);
   if (parsed.issues.length || fileIds.length !== 1 || value(fileIds[0], 0) !== 4
-    || sessions.length !== 1 || value(sessions[0], 5) !== SNORKELING) {
-    throw new Error('Proof requires a valid single-session snorkeling activity FIT.');
+    || sessions.length !== 1 || value(sessions[0], 5) !== sourceSport) {
+    throw new Error(`Proof requires a valid single-session ${sourceName} activity FIT.`);
   }
   for (const message of parsed.messages) {
     const category = CATEGORY_FIELDS.get(message.globalMessageNumber);
     if (!category) continue;
     const sport = value(message, category.sport);
-    if (sport !== undefined && sport !== SNORKELING) {
+    if (sport !== undefined && sport !== sourceSport) {
       throw new Error('Proof refuses conflicting FIT sport classifications.');
     }
     // Validate the scalar shape even though the selected fallback replaces it.
@@ -83,8 +94,8 @@ export function createCOROSSnorkelingFITProof(input: Buffer): Buffer {
       }
       const category = CATEGORY_FIELDS.get(global);
       const additions = category ? [
-        { number: category.sport, value: SWIMMING },
-        { number: category.subSport, value: OPEN_WATER },
+        { number: category.sport, value: targetSport },
+        { number: category.subSport, value: targetSubSport },
       ].filter(field => !fields.some(existing => existing.number === field.number)) : [];
       definitions.set(local, { fields, developerSize, category, additions, offset: start, patched: false });
       continue;
@@ -104,8 +115,8 @@ export function createCOROSSnorkelingFITProof(input: Buffer): Buffer {
     for (const field of definition.fields) {
       if (compressed && field.number === 253) continue;
       if (definition.category) {
-        if (field.number === definition.category.sport) replace(cursor, SWIMMING);
-        if (field.number === definition.category.subSport) replace(cursor, OPEN_WATER);
+        if (field.number === definition.category.sport) replace(cursor, targetSport);
+        if (field.number === definition.category.subSport) replace(cursor, targetSubSport);
       }
       cursor += field.size;
     }

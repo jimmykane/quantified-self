@@ -1,7 +1,7 @@
 import { FitEncoder } from 'fit-file-parser/encoder';
 import { getFitSportName, getFitSubSportName } from 'fit-file-parser/profile';
 import { readFitMessages } from 'fit-file-parser/raw';
-import { createCOROSSnorkelingFITProof } from './snorkeling-fit-proof';
+import { createCOROSSailingGenericFITProof, createCOROSSnorkelingFITProof } from './snorkeling-fit-proof';
 
 type Field = [number, number, Buffer];
 
@@ -175,5 +175,51 @@ describe('COROS local snorkeling FIT proof (not enabled for uploads)', () => {
     expect(() => createCOROSSnorkelingFITProof(corrupt)).toThrow('invalid_crc');
     expect(() => createCOROSSnorkelingFITProof(fixture().subarray(0, -3))).toThrow('invalid_header');
     expect(() => createCOROSSnorkelingFITProof(Buffer.alloc(30 * 1024 * 1024 + 1))).toThrow('input_limit');
+  });
+});
+
+describe('COROS local experimental sailing generic FIT proof (not enabled for uploads)', () => {
+  it.each([false, true])('changes only classification, preserving opaque fields and GPS (big endian=%s)', bigEndian => {
+    const input = fixture({ sport: 32, bigEndian, developer: true, compressed: true, compressedLap: true });
+    const untouched = Buffer.from(input);
+    const output = createCOROSSailingGenericFITProof(input);
+    expect(input).toEqual(untouched);
+    const before = readFitMessages(input), after = readFitMessages(output);
+    const categoryFields = new Map([[12, [0, 1]], [18, [5, 6]], [19, [25, 39]]]);
+    const withoutCategory = (m: typeof before.messages[number]) => ({ ...m,
+      fields: m.fields.filter(f => !(categoryFields.get(m.globalMessageNumber) ?? []).includes(f.fieldNumber)) });
+    expect(after.issues).toEqual([]);
+    expect(after.messages.map(withoutCategory)).toEqual(before.messages.map(withoutCategory));
+    for (const message of after.messages) {
+      for (const field of categoryFields.get(message.globalMessageNumber) ?? []) {
+        expect(message.fields.find(f => f.fieldNumber === field)!.bytes).toEqual(Buffer.from([0]));
+      }
+    }
+    expect(getFitSportName(0)).toBe('generic');
+    expect(getFitSubSportName(0)).toBe('generic');
+  });
+
+  it('does not add GPS and handles existing scalar category fields', () => {
+    const input = fixture({ sport: 32, withSubSport: true, withGPS: false });
+    const output = createCOROSSailingGenericFITProof(input);
+    expect(output.length).toBe(input.length);
+    expect(readFitMessages(output).messages.filter(m => m.globalMessageNumber === 20))
+      .toEqual(readFitMessages(input).messages.filter(m => m.globalMessageNumber === 20));
+  });
+
+  it.each([0, 5, 82])('refuses non-sailing sport %i', sport => {
+    expect(() => createCOROSSailingGenericFITProof(fixture({ sport }))).toThrow('single-session sailing');
+  });
+
+  it('refuses multiple sessions, conflicting lap sport, and corrupt data', () => {
+    expect(() => createCOROSSailingGenericFITProof(fixture({ sport: 32, sessionCount: 2 })))
+      .toThrow('single-session sailing');
+    const mixed = fixture({ sport: 32 });
+    const index = mixed.indexOf(Buffer.from([0, 0xe8, 3, 0, 0, 32, 7]));
+    expect(index).toBeGreaterThan(0);
+    mixed[index + 5] = 82; repairCRC(mixed);
+    expect(() => createCOROSSailingGenericFITProof(mixed)).toThrow('conflicting FIT sport');
+    const corrupt = fixture({ sport: 32 }); corrupt[corrupt.length - 1] ^= 1;
+    expect(() => createCOROSSailingGenericFITProof(corrupt)).toThrow('invalid_crc');
   });
 });

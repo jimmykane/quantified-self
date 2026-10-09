@@ -131,8 +131,8 @@ A matching status response with result `0000` and status `-1` uses the existing 
 
 The selected categories are Snorkeling → Open Water Swim and Sailing → GPS Cardio.
 `functions/src/coros/snorkeling-fit-proof.ts` is an **unwired local proof**, not an
-upload adapter. It accepts only a structurally valid, single-session snorkeling
-activity FIT. It copies FIT sport `82` to swimming `5` / open-water sub_sport `18`
+upload adapter. Its snorkeling export accepts only a structurally valid, single-session
+snorkeling activity FIT. It copies FIT sport `82` to swimming `5` / open-water sub_sport `18`
 in Session, Lap and optional Sport messages, inserting missing enum fields and
 recalculating header/file CRCs. Sub_sport `17` means pool/lap swimming, not open water.
 Unrelated bytes, unknown/vendor fields, developer data, byte order and compressed
@@ -141,9 +141,14 @@ GPS-less inputs can be inspected locally, but their COROS eligibility is undecid
 Originals and QS activity types are never changed. Synthetic regression fixtures
 contain no account exports. Other sports, mixed sessions and malformed inputs are refused.
 
-This establishes a valid candidate encoding, **not COROS acceptance or category
-readback**. Sailing remains unimplemented until a native GPS Cardio export, partner
-confirmation or separately authorized controlled import establishes its FIT encoding.
+The separate sailing export accepts only a single-session sailing FIT (sport `32`)
+and produces an experimental generic/generic copy (`0` / `0`) using the same
+byte-preserving implementation. This is **not a verified GPS Cardio encoding**.
+Both exports refuse other/mixed sports, and neither is called by production uploads.
+
+These establish valid candidate encodings, **not COROS acceptance or category
+readback**. A native GPS Cardio export, partner confirmation or separately authorized
+controlled import must establish sailing's recognized destination classification.
 COROS `mode=18/subMode=1` must not be used as FIT sport `18`; the activity upload API
 has no documented mode override. Do not connect this proof to either upload path yet.
 
@@ -156,6 +161,15 @@ and replay remain separate approvals. Issue #600 stays open. Reviewed app Help's
 activity-type section: unchanged while original-only delivery remains production behavior.
 Monitoring is unchanged: this proof has no worker, queue, provider call or telemetry;
 the #832 bundle/runbook still cover all existing COROS delivery outcomes.
+
+For the explicitly authorized controlled test, use the actual converted copy for
+the existing outbound fingerprint receipt, retain active-account/deletion/disconnect
+and entitlement checks, and send each candidate only once. Reconcile the returned
+upload IDs using status-only GETs; do not treat `0000`/status `1` as completion or
+resend a pending/uncertain operation. Read back the resulting activity category
+(`10` / `1` for Open Water Swim, `18` / `1` for GPS Cardio), timing and recorded data.
+The operator test must not complete or rewrite the original queue rows or FIT files.
+No test files, identifiers, credentials or private samples belong in this repository.
 
 ## Echo suppression
 
