@@ -20,7 +20,7 @@ describe('public-seo-pages.content', () => {
     const entities = schema['mainEntity'] as Record<string, unknown>[];
     expect(entities.find(entity => entity['@type'] === 'SoftwareApplication')?.['featureList'])
       .toEqual(expect.arrayContaining([...HEALTH_FEATURE_CONTENT.seo.featureList]));
-    expect(page.sections.slice(0, 3)).toEqual(HEALTH_FEATURE_CONTENT.rows.map(row => ({
+    expect(page.sections.slice(0, HEALTH_FEATURE_CONTENT.rows.length)).toEqual(HEALTH_FEATURE_CONTENT.rows.map(row => ({
       eyebrow: 'Health history', title: row.title, copy: row.copy, preview: row.preview, items: [],
     })));
     expect(page.faqItems[0].answer).toContain('Health (Beta) is available to all signed-in users');

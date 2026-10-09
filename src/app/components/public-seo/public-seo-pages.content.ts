@@ -103,7 +103,7 @@ export const PUBLIC_SEO_PAGES: Record<PublicSeoPageKey, PublicSeoPage> = {
     featureList: HEALTH_FEATURE_CONTENT.seo.featureList,
     h1: HEALTH_FEATURE_CONTENT.title,
     intro: HEALTH_FEATURE_CONTENT.intro,
-    chips: ['Sleep stages', 'Resting heart rate', 'HRV personal range', 'Body measurements', 'Manual readings'],
+    chips: ['Category overview', 'Sleep stages', 'Resting heart rate', 'HRV personal range', 'Body measurements', 'Manual readings'],
     actions: [
       routeAction('Health Guide', '/help', 'flat', 'arrow_forward', 'health'),
       routeAction('Explore Integrations', '/integrations'),

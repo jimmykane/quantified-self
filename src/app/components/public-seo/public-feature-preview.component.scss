@@ -32,6 +32,7 @@
 
 .preview-placeholder--health { min-height: 15rem; }
 .preview-placeholder--health-sleep { min-height: 28rem; }
+.preview-placeholder--health-overview { min-height: 73rem; }
 
 .preview-placeholder--dashboard {
   min-height: 30rem;
@@ -68,6 +69,9 @@
 @media (max-width: 799.98px) {
   .preview-placeholder--reviewer { min-height: 106rem; }
 }
+
+@media (max-width: 980px) { .preview-placeholder--health-overview { min-height: 106rem; } }
+@media (max-width: 600px) { .preview-placeholder--health-overview { min-height: 190rem; } }
 
 @media (max-width: 599.98px) {
   .preview-placeholder--reviewer { min-height: 135rem; }

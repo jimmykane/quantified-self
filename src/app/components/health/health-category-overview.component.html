@@ -1,7 +1,7 @@
 <section aria-labelledby="health-overview-title">
   <header class="health-overview-heading">
     <h2 id="health-overview-title" tabindex="-1">Your overview</h2>
-    <p>Latest recorded readings · Last 30 days</p>
+    <p>{{ exampleOnly() ? 'Fictional sample readings' : 'Latest recorded readings' }} · Last 30 days</p>
   </header>
 
   <mat-chip-listbox aria-label="Health categories" [value]="selectedCategory()" (change)="selectCategory($event.value)">
@@ -18,7 +18,7 @@
           <mat-card-title [id]="'health-overview-' + card.id"><mat-icon aria-hidden="true">{{ card.icon }}</mat-icon><span>{{ card.label }}</span></mat-card-title>
         </mat-card-header>
         <mat-card-content>
-          <app-dashboard-health-chart [user]="user()" [settings]="card.settings" [overview]="true" [hideTitle]="true"
+          <app-dashboard-health-chart [user]="user()" [settings]="card.settings" [overview]="true" [hideTitle]="true" [exampleOnly]="exampleOnly()"
             [darkTheme]="darkTheme()" [referenceDate]="referenceDate()" [providerFilter]="providerFilter()" [timelineNotes]="timelineNotes()"
             (settingsChange)="updateCardSettings($event.settings)" (contextChange)="observeSources($event)" />
         </mat-card-content>

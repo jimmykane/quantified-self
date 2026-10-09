@@ -7,6 +7,15 @@ import { resolveHealthWorkspaceWindow } from './health-workspace.helper';
 import { formatCanonicalHealthMetricSportsLibValue } from '@shared/sports-lib-health-data';
 
 describe('Health library examples', () => {
+  it('keeps fictional Sleep stages and elapsed night duration consistent', () => {
+    const settings = { metric: 'sleep' as const, range: '30d' as const };
+    const preview = buildDashboardHealthExample(settings, resolveHealthWorkspaceWindow({ ...settings, endDate: '2026-08-31' }));
+    expect(preview.sleep.points).toHaveLength(30);
+    for (const point of preview.sleep.points) {
+      expect(point.deepSeconds + point.lightSeconds + point.remSeconds + point.unknownSeconds).toBe(point.totalSeconds);
+      expect(point.endTimeMs - point.startTimeMs).toBeCloseTo((point.totalSeconds + point.awakeSeconds) * 1000, 3);
+    }
+  });
   it.each([...DASHBOARD_HEALTH_METRICS])('renders %s without qualifying it as account data or a selectable source', metric => {
     const settings = { metric, range: '30d' as const, sourceKey: 'missing-real-source' };
     const window = resolveHealthWorkspaceWindow({ ...settings, endDate: '2026-09-15' });

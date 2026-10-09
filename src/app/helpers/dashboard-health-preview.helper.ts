@@ -8,7 +8,7 @@ import { buildDashboardHealthContext, type DashboardHealthContext } from './dash
 import { localCalendarDate, type HealthWorkspaceWindow } from './health-workspace.helper';
 
 const DAY = 86400000;
-// Fictional canonical values, used only by the add/edit browser. Never persisted,
+// Fictional canonical values for public Health examples and the add/edit browser. Never persisted,
 // emitted as availability evidence, or used to choose a saved source.
 const EXAMPLE_VALUES: Record<HealthMetricId, readonly [number, number]> = {
   steps: [8200, 1800], wheelchair_pushes: [2400, 450], distance: [5200, 850],
@@ -67,7 +67,7 @@ export function buildDashboardHealthExample(settings: AppDashboardHealthMetricSe
   const sessions: SleepSession[] = metric === 'sleep' ? timestamps.map((timestamp, index) => {
     const durationSeconds = 27600 + VARIATION[index % VARIATION.length] * 2400;
     return { id: `example-sleep-${index}`, userID: 'example', source: { provider: 'SuuntoApp', accountKey: 'example', providerUserId: 'example', sourceSessionKey: String(index) },
-      sleepDate: localCalendarDate(timestamp), startTimeMs: timestamp - durationSeconds * 1000, endTimeMs: timestamp,
+      sleepDate: localCalendarDate(timestamp), startTimeMs: timestamp - (durationSeconds + 600) * 1000, endTimeMs: timestamp,
       durationSeconds, isNap: false, stages: [], stageDurationsSeconds: { deep: 5400, rem: 6600, light: durationSeconds - 12000, awake: 600 },
       score: { value: 82 + index % 7 }, vitals: { averageHrvMs: 58 + index % 5, averageHeartRateBpm: 52 + index % 3 },
       createdAtMs: timestamp, updatedAtMs: timestamp };

@@ -90,6 +90,37 @@ describe('independent dashboard Health views',()=>{
     expect(watch).toHaveBeenCalledTimes(1);expect(haptics.selection).not.toHaveBeenCalled();
     fixture.destroy();expect(streams[0].observed).toBe(false);
   });
+  it('keeps explicit public examples separate from owner reads, refreshes and evidence callbacks', () => {
+    const fixture = TestBed.createComponent(DashboardHealthChartComponent), component = fixture.componentInstance;
+    fixture.componentRef.setInput('user', { uid: 'owner', settings: { unitSettings: {} } });
+    fixture.componentRef.setInput('settings', { metric: 'body_weight', range: '30d' });
+    fixture.componentRef.setInput('exampleOnly', true);
+    fixture.componentRef.setInput('referenceDate', '2026-08-31');
+    component['visible'].set(true);
+    const contextChanged = vi.fn(); component.contextChange.subscribe(contextChanged);
+    fixture.detectChanges();
+    expect(component.showingExample()).toBe(true);
+    expect(component.displayContext()?.selected?.model.ariaLabel).toContain('Fictional readings');
+    expect(watch).not.toHaveBeenCalled();
+    component.reload();
+    fixture.componentRef.setInput('user', { uid: 'another-owner', settings: { unitSettings: {} } }); fixture.detectChanges();
+    expect(watch).not.toHaveBeenCalled();
+    expect(TestBed.inject(DashboardHealthService).invalidate).not.toHaveBeenCalled();
+    expect(contextChanged).not.toHaveBeenCalled();
+    expect(haptics.selection).not.toHaveBeenCalled();
+    fixture.destroy();
+  });
+  it('unsubscribes and clears private evidence when switching an owner chart to a public example', () => {
+    const fixture = create('body_weight'), component = fixture.componentInstance;
+    streams[0].next(result('body_weight')); fixture.detectChanges();
+    expect(component.context()).not.toBeNull();
+    fixture.componentRef.setInput('exampleOnly', true); fixture.detectChanges();
+    expect(streams[0].observed).toBe(false);
+    expect(component.context()).toBeNull();
+    expect(component.displayContext()?.selected?.model.ariaLabel).toContain('Fictional readings');
+    expect(watch).toHaveBeenCalledOnce();
+    fixture.destroy();
+  });
   it('advances an overview window without dropping its selected source or producing feedback', () => {
     const fixture = create(), component = fixture.componentInstance;
     fixture.componentRef.setInput('overview', true);

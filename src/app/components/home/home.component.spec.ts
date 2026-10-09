@@ -98,7 +98,7 @@ describe('HomeComponent', () => {
     expect(previews.map(preview => preview.componentInstance.previewKey()))
       .toEqual(['provider-flow', 'training-snapshot', 'training-readiness', 'training-signals',
         'training-explorer', 'dashboard', 'workout-analysis', 'training-plans',
-        'health-sleep', 'health-hrv', 'health-weight', 'assistant-example', 'mcp-flow',
+        'health-overview', 'health-sleep', 'health-hrv', 'health-weight', 'assistant-example', 'mcp-flow',
         'activity-map', 'reviewer-benchmark']);
     expect(previews.every(preview => !!preview.nativeElement.querySelector(':scope > div[data-nosnippet]'))).toBe(true);
     expect(fixture.nativeElement.querySelector('app-training-explorer-preview')).toBeNull();
@@ -122,9 +122,11 @@ describe('HomeComponent', () => {
     const memberships = fixture.componentInstance.memberships;
     expect(memberships[0].features).toContain(`Up to ${USAGE_LIMITS.free} activities`);
     expect(memberships[0].features).toContain(`Up to ${ROUTE_USAGE_LIMITS.free} saved routes`);
+    expect(memberships[0].features).toContain(`Up to ${ASSISTANT_REQUEST_LIMITS.free} Assistant requests per calendar month`);
     expect(memberships[1].features).toContain('Up to 1,000 activities');
     expect(memberships[1].features).toContain(`Up to ${ROUTE_USAGE_LIMITS.basic} saved routes`);
     expect(memberships[1].features).toContain(`Up to ${ASSISTANT_REQUEST_LIMITS.basic} Assistant requests per billing period`);
+    expect(memberships[2].features).toContain(`Up to ${ASSISTANT_REQUEST_LIMITS.pro} Assistant requests per billing period`);
     expect(fixture.nativeElement.querySelectorAll('.membership-grid mat-card')).toHaveLength(3);
     expect(Array.from(fixture.nativeElement.querySelectorAll('.membership-grid h3'))
       .map((heading: Element) => heading.textContent)).toEqual(['Starter', 'Basic', 'Pro']);

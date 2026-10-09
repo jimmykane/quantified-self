@@ -11,6 +11,7 @@ import { AssistantExamplePreviewComponent } from '../shared/assistant-example-pr
 import { McpReadOnlyFlowPreviewComponent } from '../shared/mcp-read-only-flow-preview/mcp-read-only-flow-preview.component';
 import type { PublicFeaturePreviewKey } from './public-feature-preview.types';
 import { HealthPreviewComponent } from './health-preview.component';
+import { HealthOverviewPreviewComponent } from './health-overview-preview.component';
 import { TrainingExplorerPreviewComponent } from './training-explorer-preview.component';
 import { TrainingPlansPreviewComponent } from './training-plans-preview.component';
 
@@ -19,6 +20,7 @@ import { TrainingPlansPreviewComponent } from './training-plans-preview.componen
   standalone: true,
   imports: [
     HealthPreviewComponent,
+    HealthOverviewPreviewComponent,
     TrainingExplorerPreviewComponent,
     TrainingPlansPreviewComponent,
     HomeDashboardPreviewComponent,

@@ -56,6 +56,8 @@ describe('help.content', () => {
     expect(copy).toContain('Back and Forward');
     expect(copy).toContain('restore the exact place you were reading');
     expect(copy).toContain('homepage view before your first jump');
+    expect(copy).toContain('same category cards and charts as the signed-in workspace');
+    expect(copy).toContain('never loads your account data or saves changes');
     expect(copy).not.toContain('/demo');
   });
   it('points users to the Privacy section and explains saving analytics and email opt-outs', () => {

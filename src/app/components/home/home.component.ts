@@ -71,13 +71,15 @@ export class HomeComponent implements OnInit {
   readonly memberships = [
     { name: 'Starter', label: 'Free', copy: 'A place to begin.', route: '/login', action: 'Start free',
       features: [`Up to ${getNumberFormatter().format(USAGE_LIMITS.free)} activities`,
-        `Up to ${getNumberFormatter().format(ROUTE_USAGE_LIMITS.free)} saved routes`, 'Plans and standalone workouts'] },
+        `Up to ${getNumberFormatter().format(ROUTE_USAGE_LIMITS.free)} saved routes`, 'Plans and standalone workouts',
+        `Up to ${getNumberFormatter().format(ASSISTANT_REQUEST_LIMITS.free)} Assistant requests per calendar month`] },
     { name: 'Basic', label: 'More history', copy: 'For consistent training.', route: '/pricing', action: 'Explore Basic',
       features: [`Up to ${getNumberFormatter().format(USAGE_LIMITS.basic)} activities`,
         `Up to ${getNumberFormatter().format(ROUTE_USAGE_LIMITS.basic)} saved routes`,
         `Up to ${getNumberFormatter().format(ASSISTANT_REQUEST_LIMITS.basic)} Assistant requests per billing period`] },
     { name: 'Pro', label: 'Keep it connected', copy: 'For your complete workflow.', route: '/pricing', action: 'Explore Pro',
-      features: ['Unlimited activities and routes', 'Supported cross-provider sync', 'Compatible workout delivery'] },
+      features: ['Unlimited activities and routes', 'Supported cross-provider sync', 'Compatible workout delivery',
+        `Up to ${getNumberFormatter().format(ASSISTANT_REQUEST_LIMITS.pro)} Assistant requests per billing period`] },
   ];
   readonly faqs = [
     { id: 'watch', question: 'Can I start without a watch?',
