@@ -33,4 +33,26 @@ describe('TrainingSnapshotPreviewComponent', () => {
     expect(forecast.points.at(-1)!.time - forecast.points[0].time).toBe(7 * 86400000);
     expect(forecast.points.at(-1)!.value).toBeCloseTo(62 * (41 / 42) ** 7 - 54 * (6 / 7) ** 7);
   });
+
+  it('keeps example Form and Ramp history consistent with the same dated CTL and ATL observations', () => {
+    const metrics = fixture.componentInstance.loadMetrics;
+    const fitness = metrics.find(metric => metric.id === 'fitness')!.history!;
+    const fatigue = metrics.find(metric => metric.id === 'fatigue')!.history!;
+    const form = metrics.find(metric => metric.id === 'form-now')!.history!;
+    const ramp = metrics.find(metric => metric.id === 'ramp')!.history!;
+    const ctlByTime = new Map(fitness.points.map(point => [point.time, point.value]));
+    const atlByTime = new Map(fatigue.points.map(point => [point.time, point.value]));
+    for (const point of form.points) {
+      expect(point.value).toBeCloseTo(ctlByTime.get(point.time)! - atlByTime.get(point.time)!);
+    }
+    for (const point of ramp.points) {
+      const priorCtl = ctlByTime.get(point.time - 7 * 86400000);
+      expect(priorCtl).toBeDefined();
+      expect(point.value).toBeCloseTo(ctlByTime.get(point.time)! - priorCtl!);
+    }
+    for (const id of ['fitness', 'fatigue', 'form-now', 'ramp']) {
+      const metric = metrics.find(metric => metric.id === id)!;
+      expect(metric.valueText).toBe(metric.history!.points.at(-1)!.valueText);
+    }
+  });
 });

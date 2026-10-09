@@ -4821,8 +4821,11 @@ observations are named **Unavailable** in accessible summaries and tooltips inst
 Training and Dashboard column mini-charts use the shared viewport tooltip host even on phones: their small plots
 cannot contain a readable tooltip. The positioning adapter converts chart-local coordinates to viewport coordinates
 for the existing clamp, then converts back for ECharts; normal full-chart tooltip policies remain unchanged.
-Retained snapshots keep the existing route updating disclosure. The shared public example grid receives static synthetic histories without
-loading athlete data. This is presentation-only: no formula, stored data, planning behavior, MCP read/write schema,
+Retained snapshots keep the existing route updating disclosure. The shared public example grid receives static
+synthetic histories without loading athlete data. Its CTL, ATL, Form and Ramp histories use one dated example Form
+series and the live view's `buildCurrentTrainingStateContext` helper; the forecast starts from that series' latest
+point. Ramp has no sample until a prior seven-day CTL observation exists, and its values agree with that comparison.
+This is presentation-only: no formula, stored data, planning behavior, MCP read/write schema,
 scope, consent, provider action or backend deployment change.
 
 Daily load is TSS on UTC days. CTL and ATL use exponentially decaying recurrences with 42-day and 7-day time constants:
