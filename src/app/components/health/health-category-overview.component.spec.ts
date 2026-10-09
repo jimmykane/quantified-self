@@ -64,6 +64,38 @@ describe('Health category overview', () => {
     expect(fixture.nativeElement.textContent).toContain('Fictional sample readings');
     expect(haptics.selection).not.toHaveBeenCalled();
   });
+  it('deduplicates only highlighted metrics on All and preserves every category metric', () => {
+    const fixture = create(), component = fixture.componentInstance;
+    fixture.componentRef.setInput('highlightedMetrics', ['sleep', 'heart_rate_variability', 'heart_rate']);
+    fixture.detectChanges();
+    expect(component.cards()).toHaveLength(6);
+    expect(component.cards().some(card => ['sleep', 'heart_rate_variability', 'heart_rate'].includes(card.id))).toBe(false);
+    expect(component.cards().map(card => card.id)).toContain('resting_heart_rate');
+    const highlights = fixture.nativeElement.querySelector('.health-overview-highlights') as HTMLElement;
+    expect(highlights.hidden).toBe(false);
+    expect(haptics.selection).not.toHaveBeenCalled();
+    component.selectCategory('recovery'); fixture.detectChanges();
+    expect(highlights.hidden).toBe(true);
+    expect(component.cards().map(card => card.id)).toContain('sleep');
+    component.selectCategory('vitals'); fixture.detectChanges();
+    expect(component.cards().map(card => card.id)).toEqual(expect.arrayContaining(['heart_rate_variability', 'heart_rate']));
+    component.selectCategory('all'); fixture.detectChanges();
+    expect(highlights.hidden).toBe(false);
+    fixture.componentRef.setInput('highlightedMetrics', []); fixture.detectChanges();
+    expect(highlights.hidden).toBe(true);
+    expect(component.cards().map(card => card.id)).toEqual(expect.arrayContaining(['sleep', 'heart_rate_variability']));
+  });
+  it('does not claim there are no readings when highlights cover every overview metric', () => {
+    const fixture = create();
+    fixture.componentRef.setInput('groups', []);
+    fixture.componentRef.setInput('highlightedMetrics', ['sleep']);
+    fixture.detectChanges();
+    expect(fixture.componentInstance.cards()).toEqual([]);
+    expect(fixture.nativeElement.textContent).not.toContain('No recorded Health metrics yet');
+    expect(fixture.nativeElement.textContent).toContain('Recovery & sleep');
+    fixture.componentInstance.selectCategory('recovery'); fixture.detectChanges();
+    expect(fixture.componentInstance.cards().map(card => card.id)).toEqual(['sleep']);
+  });
   it('filters by category using Material semantic selection and keeps unchanged actions silent', () => {
     const fixture = create(), component = fixture.componentInstance;
     const chips = fixture.nativeElement.querySelectorAll('mat-chip-option button');
