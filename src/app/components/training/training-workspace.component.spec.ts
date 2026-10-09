@@ -124,6 +124,33 @@ function createExcludedCyclingDurabilityPayload(): DerivedTrainingDurabilityMetr
 describe('TrainingWorkspaceComponent', () => {
   let analyticsService: { logEvent: ReturnType<typeof vi.fn> };
 
+  it('maps only real load histories, not strain as monotony, and keeps forecasts separate', () => {
+    const component = Object.create(TrainingWorkspaceComponent.prototype) as TrainingWorkspaceComponent;
+    const time = Date.UTC(2026, 7, 3);
+    const trend8Weeks = [{ time, value: 0 }, { time: time + 7 * 86400000, value: null }];
+    component.derivedState = createRouteReadyDerivedState({
+      acwr: { ratio: 1.1, latestDayMs: time, acuteLoad7: 110, chronicLoad28: 100, trend8Weeks },
+      monotonyStrain: { monotony: 1.2, strain: 600, weeklyLoad7: 500, latestDayMs: time, trend8Weeks },
+    });
+    component.loadMetrics = { ctlText: '62', atlText: '54', rampText: '+1.4', acwrText: '1.1', monotonyText: '1.2', strainText: '600', freshnessNowText: '+8', freshnessPlusSevenDaysText: '+15' };
+    const current = { fitness: { trend8Weeks }, fatigue: { trend8Weeks }, rampRate: { trend8Weeks }, formNow: { trend8Weeks } };
+    const metrics = (component as any).buildTrainingLoadMetricItems(current, [
+      { dayMs: time, formSameDay: 8, isForecast: false },
+      { dayMs: time + 86400000, formSameDay: 9, isForecast: true },
+    ]);
+    expect(metrics.find((metric: any) => metric.id === 'ctl').history.points).toEqual([
+      { time, value: 0, valueText: '0' }, { time: time + 7 * 86400000, value: null, valueText: '--' },
+    ]);
+    expect(metrics.find((metric: any) => metric.id === 'monotony').history).toBeUndefined();
+    expect(metrics.find((metric: any) => metric.id === 'strain').history.points[0].value).toBe(0);
+    expect(metrics.find((metric: any) => metric.id === 'plus-seven-days').history).toMatchObject({
+      mode: 'forecast', points: [{ time, value: 8, valueText: '+8' }, { time: time + 86400000, value: 9, valueText: '+9' }],
+    });
+    const noHistory = (component as any).buildTrainingLoadMetricItems();
+    expect(noHistory.find((metric: any) => metric.id === 'ctl').history).toBeUndefined();
+    expect(noHistory.find((metric: any) => metric.id === 'plus-seven-days').history).toBeUndefined();
+  });
+
   afterEach(() => {
     vi.useRealTimers();
   });

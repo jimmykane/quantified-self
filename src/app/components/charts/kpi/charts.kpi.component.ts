@@ -1,4 +1,5 @@
-import { resolveDashboardKpiSparklineStyle, resolveDashboardKpiThemeColor, resolveDashboardKpiTrend, resolveDashboardKpiTrendDelta, type KpiSparklineStyle } from '../../../helpers/dashboard-kpi-sparkline.helper';
+import { resolveDashboardKpiSparklineStyle, resolveDashboardKpiThemeColor, resolveDashboardKpiTrend, resolveDashboardKpiTrendDelta, usesDashboardKpiHistoryColumns, type KpiSparklineStyle } from '../../../helpers/dashboard-kpi-sparkline.helper';
+import { buildMetricHistoryChartOption } from '../../../helpers/metric-history-chart.helper';
 import {
   AfterViewInit,
   ChangeDetectionStrategy,
@@ -874,6 +875,18 @@ export class ChartsKpiComponent implements AfterViewInit, OnChanges, OnDestroy {
     const style = buildDashboardEChartsStyleTokens(this.darkTheme, chartWidth);
     const sparklineStyle = resolveDashboardKpiSparklineStyle(this, style.trendLineColor);
     const isMobileTooltipViewport = isEChartsMobileTooltipViewport();
+    if (usesDashboardKpiHistoryColumns(this.chartType)) {
+      const option = buildMetricHistoryChartOption(presentation.trend, {
+        color: sparklineStyle.lineColor,
+        mutedColor: this.withAlpha(sparklineStyle.areaColor, this.darkTheme ? .55 : .35),
+        baselineColor: this.withAlpha(style.axisColor, .25),
+        barMaxWidth: 8,
+      });
+      if (presentation.trend.some(point => Number.isFinite(point.value))) {
+        option.tooltip = this.buildTooltipOption(style, isMobileTooltipViewport, sparklineStyle);
+      }
+      return option;
+    }
     const rawTrendData = presentation.trend
       .filter(point => Number.isFinite(point.time))
       .map(point => {

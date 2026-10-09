@@ -521,9 +521,12 @@ Dashboard dependencies or configurable tiles.
 The lightweight status/comparison cards and exact-value load grid are shared presentation primitives. The authenticated
 Training workspace supplies their live, normalized view models; the public homepage supplies a static example view model
 and selects the compact preview density. These components own the repeated semantic markup, numeric token formatting,
-indicator placement, and responsive layout, but they never subscribe to data, calculate a metric, initialize a chart,
-or access browser-only APIs. Training remains the source of truth for calculations and athlete-specific wording, while
-the homepage remains safe to render during SSR and prerendering.
+indicator placement, and responsive layout, but they never subscribe to data or calculate a metric.
+The metric grid can mount `MetricHistoryChartComponent` below an existing value. Its presentation model contains
+already formatted values and dated observations; the child owns the viewport-aware ECharts host, shared tooltip,
+mobile series-tap feedback, theme, resize and disposal behavior. It does not import account or data services.
+Training remains the source of truth for calculations and athlete-specific wording, while the homepage remains safe
+to render during SSR and prerendering and supplies deterministic examples only.
 
 The homepage and `/features/training-analysis` also share `TrainingExplorerPreviewComponent`: a 14-day readiness
 example and a compact tabbed explorer for sport mix, Best Build metrics, power-system history, and durability.
@@ -4099,6 +4102,12 @@ Training state and Readiness are fixed inside the optional Today summary:
   formula. Both surfaces render the state as plain heading text rather than a status tag. Dashboard Today intentionally
   shows the compact label, caption, and `TSS only` qualifier, while Training provides the full Material info control with
   the contributing values and state boundaries.
+- **Metric history columns** in the Training load grid and Dashboard weekly scalar KPI tiles share
+  `metric-history-chart.helper.ts`. Dashboard keeps its existing tile layout, semantic colors, tooltips and interaction
+  host; chart-library thumbnails use the same columns silently. Recovery Debt retains its underlying Form line,
+  while Aerobic Capacity and Aerobic Durability retain their existing evidence-series lines. The full Form and
+  Freshness Forecast charts are unchanged. Calendar has no load-metric history grid or KPI mini-chart consumer:
+  its Training impact remains a completed-workout contribution/day-result summary, not a history series.
 - **Readiness** uses the environment-neutral formula in `shared/readiness.ts` in both surfaces. Dashboard Today applies
   it to current Form/ramp and bounded live sleep. Training uses that same live current result and also reads a
   backend-derived
@@ -4793,6 +4802,22 @@ This section reuses global derived load metrics:
 - Strain.
 - Form now.
 - Form after seven zero-load days.
+
+The existing exact-value grid adds compact history columns below CTL, ATL, Ramp, ACWR, Strain and Form now.
+CTL/ATL/Form/Ramp reuse the current-day Form context's last available sample in each of up to eight UTC weeks;
+ACWR and Strain reuse their prepared `trend8Weeks` observations. These are weekly metric observations, not summed
+weekly load. No extra activity-history query or derived snapshot is introduced. A metric without observed history
+keeps its numeric value and explanation only. In particular, the Monotony/Strain snapshot has Strain history, not
+Monotony history; never display Strain columns under Monotony.
+
+Columns use a zero baseline (signed metrics can extend below it), muted earlier observations and an accented latest
+observation. Real zero remains valid; internal missing weeks remain gaps, with empty edges trimmed and half-slot
+time-axis space to prevent endpoint clipping. Each plot has a dated accessible summary and uses the owner's
+formatted values in the shared tooltip. The +7-days cell instead shows the existing current-plus-future Form points
+as a dashed **no-additional-load scenario**, never as observed history or a prediction. Retained snapshots keep the
+existing route updating disclosure. The shared public example grid receives static synthetic histories without
+loading athlete data. This is presentation-only: no formula, stored data, planning behavior, MCP read/write schema,
+scope, consent, provider action or backend deployment change.
 
 Daily load is TSS on UTC days. CTL and ATL use exponentially decaying recurrences with 42-day and 7-day time constants:
 

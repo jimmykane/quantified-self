@@ -9,9 +9,17 @@
 }
 
 .training-metric-grid > div {
+  display: flex;
+  flex-direction: column;
   min-width: 0;
   padding: 20px;
   border-left: 1px solid var(--qs-glass-panel-border, var(--mat-sys-outline-variant));
+}
+
+// Keep plots aligned within a row when a metric explanation wraps on phones.
+.training-metric-grid app-metric-history-chart {
+  margin-top: auto;
+  padding-top: 8px;
 }
 
 .training-metric-grid > div:nth-child(4n + 1) {

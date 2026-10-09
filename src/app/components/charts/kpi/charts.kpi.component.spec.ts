@@ -710,7 +710,7 @@ describe('ChartsKpiComponent', () => {
     }
   });
 
-  it('trims null trend edges and clamps sparkline x-axis to data bounds', async () => {
+  it('trims empty history edges and leaves half a slot for the endpoint columns', async () => {
     component.chartType = DASHBOARD_ACWR_KPI_CHART_TYPE;
     component.acwr = {
       latestDayMs: Date.UTC(2026, 0, 1),
@@ -738,9 +738,10 @@ describe('ChartsKpiComponent', () => {
     )) as Record<string, any> | undefined;
 
     expect(option).toBeTruthy();
-    expect(option?.xAxis?.min).toBe('dataMin');
-    expect(option?.xAxis?.max).toBe('dataMax');
-    expect(option?.xAxis?.boundaryGap).toBe(false);
+    expect(option?.xAxis?.min).toBe(Date.UTC(2025, 11, 1) - 3.5 * 86400000);
+    expect(option?.xAxis?.max).toBe(Date.UTC(2025, 11, 8) + 3.5 * 86400000);
+    expect(option?.xAxis?.boundaryGap).toEqual([0, 0]);
+    expect(option?.series?.[0]?.type).toBe('bar');
     expect(option?.grid?.bottom).toBe(2);
     expect(option?.series?.[0]?.data).toEqual([
       [Date.UTC(2025, 11, 1), 0.9],
@@ -861,7 +862,7 @@ describe('ChartsKpiComponent', () => {
     expect(hapticsMock.selection).toHaveBeenCalledTimes(1);
   });
 
-  it('renders thinner sparkline with chart-type color accents', async () => {
+  it('renders compact history columns with chart-type color accents', async () => {
     const pointTime = Date.UTC(2025, 11, 1);
     const xAxisPaddingMs = 3.5 * 24 * 60 * 60 * 1000;
     component.chartType = DASHBOARD_HARD_PERCENT_KPI_CHART_TYPE;
@@ -885,15 +886,13 @@ describe('ChartsKpiComponent', () => {
     expect(option).toBeTruthy();
     expect(option?.xAxis?.min).toBe(pointTime - xAxisPaddingMs);
     expect(option?.xAxis?.max).toBe(pointTime + xAxisPaddingMs);
-    expect(option?.series?.[0]?.lineStyle?.width).toBe(1);
-    expect(option?.series?.[0]?.lineStyle?.color).toBe('#e65100');
-    expect(option?.series?.[0]?.areaStyle?.color?.type).toBe('linear');
-    expect(option?.series?.[0]?.showSymbol).toBe(true);
-    expect(option?.series?.[0]?.symbol).toBe('circle');
-    expect(option?.series?.[0]?.symbolSize).toBe(4);
+    expect(option?.series?.[0]?.type).toBe('bar');
+    expect(option?.series?.[0]?.barMaxWidth).toBe(8);
+    expect(option?.series?.[0]?.itemStyle.color({ dataIndex: 0 })).toBe('#e65100');
+    expect(option?.yAxis?.min).toBe(0);
   });
 
-  it('adds a below-zero band and zero guide line when sparkline includes negative values', async () => {
+  it('anchors signed history columns to zero without a background band', async () => {
     component.chartType = DASHBOARD_FORM_NOW_KPI_CHART_TYPE;
     component.formNow = {
       latestDayMs: Date.UTC(2026, 2, 9),
@@ -918,9 +917,8 @@ describe('ChartsKpiComponent', () => {
 
     expect(option).toBeTruthy();
     expect(option?.series?.[0]?.markLine?.data).toEqual([{ yAxis: 0 }]);
-    expect(option?.series?.[0]?.markArea?.data).toEqual([
-      [{ yAxis: -14.9 }, { yAxis: 0 }],
-    ]);
+    expect(option?.series?.[0]?.markArea).toBeUndefined();
+    expect(option?.series?.[0]?.type).toBe('bar');
     expect(option?.yAxis?.min).toBeLessThan(-14.9);
     expect(option?.yAxis?.max).toBeGreaterThan(4.2);
   });
@@ -950,9 +948,7 @@ describe('ChartsKpiComponent', () => {
 
     expect(option).toBeTruthy();
     expect(option?.series?.[0]?.markLine?.data).toEqual([{ yAxis: 0 }]);
-    expect(option?.series?.[0]?.markArea?.data).toEqual([
-      [{ yAxis: -7.2 }, { yAxis: 0 }],
-    ]);
+    expect(option?.series?.[0]?.markArea).toBeUndefined();
     expect(option?.yAxis?.min).toBeLessThan(-7.2);
     expect(option?.yAxis?.max).toBeGreaterThanOrEqual(0);
   });
