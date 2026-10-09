@@ -859,6 +859,64 @@ describe('AdminMarketingComponent', () => {
     expect(fixture.nativeElement.querySelector('.writing-column input[type="email"]')).not.toBeNull();
     fixture.destroy();
   });
+  it('isolates recipient autofill from the campaign name, subject and sender', async () => {
+    const { call } = setup();
+    const fixture = TestBed.createComponent(AdminMarketingComponent);
+    fixture.detectChanges(); await fixture.whenStable(); fixture.detectChanges();
+    const root = fixture.nativeElement as HTMLElement;
+    for (const id of ['campaign-internal-name', 'campaign-subject', 'campaign-sender-name']) {
+      const input = root.querySelector<HTMLInputElement>(`#${id}`);
+      expect(input, id).not.toBeNull();
+      expect(input?.autocomplete, id).toBe('off');
+      expect(input?.name, id).toBeTruthy();
+      expect(input?.form, id).toBeNull();
+    }
+    const recipient = root.querySelector<HTMLInputElement>('#campaign-test-recipient');
+    expect(recipient?.autocomplete).toBe('section-campaigntest email');
+    expect(recipient?.name).toBe('campaignTestRecipient');
+    expect(recipient?.form?.id).toBe('campaign-test-send');
+    expect(recipient?.getAttribute('autocapitalize')).toBe('none');
+    expect(recipient?.getAttribute('spellcheck')).toBe('false');
+    const submit = new Event('submit', { bubbles: true, cancelable: true });
+    recipient!.form!.dispatchEvent(submit);
+    expect(submit.defaultPrevented).toBe(true);
+    expect(call).not.toHaveBeenCalledWith('sendMarketingTest', expect.anything());
+    fixture.destroy();
+  });
+  it('keeps the edited subject when a test of unsaved changes finishes and refreshes the saved campaign', async () => {
+    const call = vi.fn(async (name: string, data?: { draft: { subject: string } }) => ({ data: name === 'sendMarketingTest'
+      ? { mailId: 'unsaved-test', submitted: true } : name === 'previewMarketingCampaign'
+        ? { from: 'Dimitrios <updates@quantified-self.io>', replyTo: 'Dimitrios <dimitrios@quantified-self.io>',
+          subject: data!.draft.subject, html: '<p>Hello</p>', text: 'Hello' }
+        : { ...listing, campaigns: [pausedCampaign] } }));
+    setup(call);
+    const fixture = TestBed.createComponent(AdminMarketingComponent);
+    fixture.detectChanges(); await fixture.whenStable(); fixture.detectChanges();
+    const component = fixture.componentInstance;
+    component.choose(pausedCampaign, false);
+    fixture.detectChanges(); await fixture.whenStable(); fixture.detectChanges();
+    const root = fixture.nativeElement as HTMLElement;
+    const subject = root.querySelector<HTMLInputElement>('#campaign-subject')!;
+    subject.value = 'My edited subject'; subject.dispatchEvent(new Event('input', { bubbles: true }));
+    const recipient = root.querySelector<HTMLInputElement>('#campaign-test-recipient')!;
+    recipient.value = 'qa@example.org'; recipient.dispatchEvent(new Event('input', { bubbles: true }));
+    fixture.detectChanges();
+    expect(component.draft.subject).toBe('My edited subject');
+    expect(component.dirty).toBe(true);
+    fixture.detectChanges(); await fixture.whenStable(); fixture.detectChanges();
+    const button = root.querySelector<HTMLButtonElement>('.test-send button')!;
+    expect(button.disabled).toBe(false);
+    button.click();
+    fixture.detectChanges(); await fixture.whenStable(); fixture.detectChanges();
+    expect(call).toHaveBeenCalledWith('sendMarketingTest', { id: null, to: 'qa@example.org',
+      draft: expect.objectContaining({ subject: 'My edited subject' }) });
+    expect(subject.value).toBe('My edited subject');
+    expect(component.draft.subject).toBe('My edited subject');
+    expect(component.selected?.subject).toBe('Original subject');
+    expect(component.dirty).toBe(true);
+    expect(call).not.toHaveBeenCalledWith('saveMarketingCampaign', expect.anything());
+    fixture.destroy();
+  });
   it('keeps Send test disabled until the recipient address is valid', async () => {
     setup();
     const fixture = TestBed.createComponent(AdminMarketingComponent);

@@ -76,12 +76,12 @@
             <p class="frozen">Content and audience are frozen. Clone to make changes.</p>
           }
           <div class="field-grid">
-            <mat-form-field appearance="outline"><mat-label>Internal name</mat-label><input matInput [(ngModel)]="draft.name" (ngModelChange)="markDirty()" [disabled]="!!busy || !canEdit" maxlength="120"></mat-form-field>
-            <mat-form-field appearance="outline"><mat-label>Email subject</mat-label><input matInput [(ngModel)]="draft.subject" (ngModelChange)="markDirty()" [disabled]="!!busy || !canEdit" maxlength="180"></mat-form-field>
+            <mat-form-field appearance="outline"><mat-label>Internal name</mat-label><input matInput id="campaign-internal-name" name="campaignInternalName" autocomplete="off" [(ngModel)]="draft.name" (ngModelChange)="markDirty()" [disabled]="!!busy || !canEdit" maxlength="120"></mat-form-field>
+            <mat-form-field appearance="outline"><mat-label>Email subject</mat-label><input matInput id="campaign-subject" name="campaignSubject" autocomplete="off" [(ngModel)]="draft.subject" (ngModelChange)="markDirty()" [disabled]="!!busy || !canEdit" maxlength="180"></mat-form-field>
           </div>
           <mat-form-field appearance="outline" class="sender-field" subscriptSizing="dynamic">
             <mat-label>Sender name</mat-label>
-            <input matInput id="campaign-sender-name" [(ngModel)]="draft.senderName" (ngModelChange)="markDirty()"
+            <input matInput id="campaign-sender-name" name="campaignSenderName" [(ngModel)]="draft.senderName" (ngModelChange)="markDirty()"
               [errorStateMatcher]="senderNameMatcher" required [maxlength]="senderNameMaxLength" [disabled]="!!busy || !canEdit" autocomplete="off">
             <mat-hint>The name recipients see. Sends from {{ senderEmail }}.</mat-hint>
             @if (senderNameError) { <mat-error>{{ senderNameError }}</mat-error> }
@@ -106,13 +106,13 @@
                 <div class="test-send">
                   <div><h3>Send a test</h3><p>Send the current message to one address. This uses one slot from today's limit. Test unsubscribe links cannot change preferences.</p></div>
                   @if (selected && dirty) { <p class="unsaved-note">This tests your unsaved edits. It does not approve the saved campaign for sending.</p> }
-                  <div class="test-send-controls">
+                  <form id="campaign-test-send" class="test-send-controls" aria-label="Send a test email" autocomplete="on">
                     <mat-form-field appearance="outline" subscriptSizing="dynamic"><mat-label>Test email address</mat-label>
-                      <input matInput type="email" [(ngModel)]="testTo" #testEmail="ngModel" email required autocomplete="email" [disabled]="!!busy" placeholder="name@example.com">
+                      <input matInput id="campaign-test-recipient" name="campaignTestRecipient" type="email" [(ngModel)]="testTo" #testEmail="ngModel" email required autocomplete="section-campaigntest email" autocapitalize="none" spellcheck="false" [disabled]="!!busy" placeholder="name@example.com">
                       @if (testEmail.invalid && testEmail.touched && testTo.trim()) { <mat-error>Enter one valid email address.</mat-error> }
                     </mat-form-field>
                     <button mat-stroked-button type="button" [disabled]="!!busy || !canSendTest || testEmail.invalid" (click)="sendTest()">Send test</button>
-                  </div>
+                  </form>
                 </div>
               }
             </section>
