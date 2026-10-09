@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import * as admin from 'firebase-admin';
 import * as history from './history';
+import { HistoryLifecycleChangedError, HistoryWindowTooLargeError, type HistoryExecution } from './connection-history/execution';
 import * as tokens from './tokens';
 import * as requestHelper from './request-helper';
 import * as oauth2 from './OAuth2';
@@ -377,6 +378,57 @@ describe('history', () => {
             expect(requestHelper.get).toHaveBeenLastCalledWith(expect.objectContaining({
                 headers: expect.objectContaining({ Authorization: 'Bearer refreshed-token' }),
             }));
+        });
+
+        it('keeps automatic history response bounds after a same-account Suunto refresh', async () => {
+            hoisted.getMock.mockResolvedValue({ id: 'token1' });
+            vi.mocked(requestHelper.get).mockReset()
+                .mockRejectedValueOnce({ statusCode: 403 })
+                .mockResolvedValueOnce(JSON.stringify({ payload: [{ workoutKey: 'w1' }, { workoutKey: 'w2' }] }));
+            const execution = {
+                runId: 'current-run', tokenPath: 'token', providerUserId: 'testUser',
+                cooldownStartedAtMs: Date.now(), requiredDocumentFieldValues: [],
+                beforeRequest: vi.fn(), inTransaction: vi.fn(), onQueued: vi.fn(),
+            } satisfies HistoryExecution;
+
+            await expect(history.addHistoryToQueue('uid', ServiceNames.SuuntoApp,
+                new Date('2026-09-01'), new Date('2026-09-02'), { execution, maxItems: 1 }))
+                .rejects.toBeInstanceOf(HistoryWindowTooLargeError);
+
+            expect(tokens.getTokenData).toHaveBeenNthCalledWith(2,
+                expect.objectContaining({ id: 'token1' }), ServiceNames.SuuntoApp, true);
+            expect(requestHelper.get).toHaveBeenCalledTimes(2);
+            expect(hoisted.batchSetMock).not.toHaveBeenCalled();
+            expect(execution.onQueued).not.toHaveBeenCalled();
+        });
+
+        it('rechecks automatic history ownership after Suunto refresh before another provider request', async () => {
+            hoisted.getMock.mockResolvedValue({ id: 'token1' });
+            let connectionChanged = false;
+            vi.mocked(tokens.getTokenData)
+                .mockResolvedValueOnce({ accessToken: 'old-token', userName: 'testUser' } as Awaited<ReturnType<typeof tokens.getTokenData>>)
+                .mockImplementationOnce(async () => {
+                    connectionChanged = true;
+                    return { accessToken: 'refreshed-token', userName: 'testUser' } as Awaited<ReturnType<typeof tokens.getTokenData>>;
+                });
+            vi.mocked(requestHelper.get).mockReset().mockRejectedValueOnce({ statusCode: 403 });
+            const execution = {
+                runId: 'current-run', tokenPath: 'token', providerUserId: 'testUser',
+                cooldownStartedAtMs: Date.now(), requiredDocumentFieldValues: [],
+                beforeRequest: vi.fn(async () => {
+                    if (connectionChanged) throw new HistoryLifecycleChangedError();
+                }),
+                inTransaction: vi.fn(), onQueued: vi.fn(),
+            } satisfies HistoryExecution;
+
+            await expect(history.addHistoryToQueue('uid', ServiceNames.SuuntoApp,
+                new Date('2026-09-01'), new Date('2026-09-02'), { execution, maxItems: 1 }))
+                .rejects.toBeInstanceOf(HistoryLifecycleChangedError);
+
+            expect(tokens.getTokenData).toHaveBeenCalledTimes(2);
+            expect(requestHelper.get).toHaveBeenCalledTimes(1);
+            expect(hoisted.batchSetMock).not.toHaveBeenCalled();
+            expect(execution.onQueued).not.toHaveBeenCalled();
         });
 
         it('does not loop or enqueue after a persistent Suunto history 403', async () => {

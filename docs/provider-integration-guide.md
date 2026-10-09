@@ -750,7 +750,10 @@ The facade supplies Wahoo's connected-state fields to the same guarded connectio
 and invokes its continuation only after that write succeeds; clear-state recovery fields also
 remain in the existing transaction. Wahoo recovery calls generic restoration, while the generic
 lifecycle does not import Wahoo recovery or its queue-release implementation. This separation
-preserves the persisted fields, guards, repair schedules, and restoration/release ordering.
+preserves the persisted fields, guards, repair schedules, and restoration/release ordering. Connection-history
+acceptance follows the same boundary: the facade forwards its server-only history context, and the lifecycle
+owner atomically stages the private run and safe connection projection after validating OAuth/credential
+and deletion guards. Wahoo recovery continues only after that transaction succeeds.
 
 ### Stripe billing provider boundary
 

@@ -247,6 +247,12 @@ exposes 172 endpoints and runtime routing isolates 86 targets. The checker compa
 descriptors against a separate fresh discovery process and verifies both inherited-target discovery modes and
 standalone secret validation.
 
+On 2026-10-09, three fresh Node 22.23.3 imports per target on the rebased PR measured a full-entrypoint median of
+3,025 ms, 238.8 MiB RSS and 3,224 modules. The four isolated history targets had medians of
+750–1,371 ms and 139.8–141.3 MiB RSS, each loading 1,554 modules and exporting one handler.
+Other local verification was running concurrently, so these timings are a startup sanity check rather than a
+controlled performance comparison. Keep runtime limits unchanged and verify production memory/startup separately.
+
 ## Verification
 
 Run the routing and discovery contract:

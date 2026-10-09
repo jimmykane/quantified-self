@@ -284,6 +284,10 @@ function arraysEqual(left: readonly string[], right: readonly string[]): boolean
   return left.length === right.length && left.every((value, index) => value === right[index]);
 }
 
+function isDefaultRuntimeValue(value: unknown): boolean {
+  return value == null || (typeof value === 'object' && value.constructor?.name === 'ResetValue');
+}
+
 function probe(targetArgument: string): void {
   if (targetArgument === NO_TARGET) delete process.env.FUNCTION_TARGET;
 
