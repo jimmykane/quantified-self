@@ -74,7 +74,7 @@ Prepare and verify these changes locally; merging and production deployment requ
 4. `CONNECTION_HISTORY_IMPORT_ENABLED=false` in the OAuth completion functions' runtime environment stops new automatic admission. This is not a credential; do not create a Functions `.env` file. Existing accepted runs, manual imports and imported data remain intact. Restore the environment setting through the separately approved infrastructure workflow.
 5. Monitor the versioned `[ConnectionHistory]` observations below. Admin queue monitoring still includes coordination task depth, pending/failed runs and oldest pending age; its lifetime age and retained failed totals are diagnostics, not the new actionable alert predicates. Investigate private operational records without exporting identities or provider details into alerts.
 
-Monitoring coverage: downstream recorded-activity and Health/Sleep ingestion remain **covered** by #829/#830. Coordinator implementation is **prepared locally**, with deployment, activation and live evidence still pending in [#847](https://github.com/jimmykane/quantified-self/issues/847), Project 2. Those existing bundles omit this coordinator; Admin Queue Monitor and passing offline tests do not establish active alert coverage.
+Monitoring coverage: downstream recorded-activity and Health/Sleep ingestion remain **covered** by #829/#830. Coordinator coverage was **activated** on 9 October 2026 after separately approved Functions deployment and monitoring-bundle apply, with production configuration, query and positive heartbeat evidence recorded in [#847](https://github.com/jimmykane/quantified-self/issues/847), Project 2. Its independently owned bundle covers the coordinator omitted from those downstream bundles; Admin Queue Monitor and passing offline tests alone do not establish active alert coverage. Future cloud changes still require separate approval.
 
 ## Coordinator monitoring (#847)
 
@@ -128,7 +128,7 @@ Offline preview needs no credentials or network:
 node tools/connection-history-monitoring/cli.mjs --project=quantified-self-io
 ```
 
-After separate approval, deploy only the three instrumented endpoints (`processConnectionHistoryTask`, `onConnectionHistoryImportWritten`, `recoverConnectionHistoryImports`). `retryConnectionHistoryImport` has native dashboard coverage but no handler changes. Verify active revisions and unchanged runtime/secret/queue/scheduler configuration. No Hosting, Rules or index release is required by this monitoring change.
+For future instrumentation releases, after separate approval deploy only the three instrumented endpoints (`processConnectionHistoryTask`, `onConnectionHistoryImportWritten`, `recoverConnectionHistoryImports`). `retryConnectionHistoryImport` has native dashboard coverage but no handler changes. Verify active revisions and unchanged runtime/secret/queue/scheduler configuration. No Hosting, Rules or index release is required by this monitoring change. The initial 9 October deployment created all four coordinator endpoints as part of the separately approved all-Functions deployment.
 
 Apply only after explicit approval for this bundle and selecting the existing Alerts email channel:
 
@@ -158,5 +158,17 @@ npm --prefix functions run entrypoint:check
 npm --prefix functions run deploy:safety:compiled
 git diff --check
 ```
+
+### Production activation and readback — 9 October 2026
+
+The separately approved all-Functions deployment from `b588b7896` completed before activation, with all four coordinator endpoints ACTIVE, Gen 2, in `europe-west2`. The unchanged bundle at `ec2f98936` was then applied to `quantified-self-io` using the existing enabled **Alerts** email channel. No notification channel was created or changed; the previously recorded same-channel opening/closing email proof from #655 is reused.
+
+Production API readback confirmed one owned dashboard, all 14 metric definitions and six valid enabled policies with nine conditions. All 18 dashboard queries and nine condition queries passed, including native queue metrics and separate request queries for all four services. Idle endpoints correctly have no request series until invoked. The queue is RUNNING with one dispatch per second and one concurrent dispatch; scheduled recovery is ENABLED on the unchanged once-per-minute UTC schedule.
+
+A second apply retained every dashboard, metric, policy and condition identity without duplicates or DELETE. Before/after configuration fingerprints confirmed that all four notification channels and every unrelated dashboard, metric and policy remained unchanged. All six offline monitoring suites passed: 57 tests.
+
+The natural 13:15 UTC recovery tick emitted complete, untruncated idle observations for Garmin, Suunto, COROS and Wahoo. Monitoring readback at 13:16 UTC confirmed positive post-creation heartbeat points, initialized all four actual absence-condition queries, and recorded real zero-valued count/age samples for every provider. No unavailable, overdue, processing, dispatch or new-terminal-failure points were observed in the post-creation interval. Idle bounded samples do not prove historical coverage or provider receipt; empty failure series are not a fabricated failure exercise.
+
+This completes the deployment, activation and live readback evidence for #847. No manual scheduler invocation, provider call, test email, fault injection, Hosting deployment or data/resource deletion was used. Future tuning, cloud changes and operational tests still require their own explicit approval. Help and MCP/Assistant behavior and wire contracts remain unchanged.
 
 This implements #681 with an explicit selected boundary. Thirty days remains the preselected default; users can choose a longer provider-valid range, including the provider maximum where supported. The run never expands its snapshot or automatically continues earlier than the chosen range.

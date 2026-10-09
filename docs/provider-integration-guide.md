@@ -1290,7 +1290,9 @@ visible rather than converted into an empty backlog.
 The shared monitoring provisioner rejects malformed inventories and mismatched managed
 policy identities before any cloud writes; a title alone cannot adopt another policy.
 
-Connection-history coordinator monitoring (#847) is **prepared locally, not yet activated**.
+Connection-history coordinator monitoring (#847) was **activated on 9 October 2026** after
+separately approved Functions deployment and monitoring-bundle apply using the existing
+Alerts email channel.
 Its separate `tools/connection-history-monitoring/` bundle reuses shared provisioning,
 covering the dedicated task queue and all four existing Gen 2 endpoints with native
 metrics, plus fixed-category post-commit/failure signals and six alert policies.
@@ -1301,9 +1303,16 @@ do not produce failure pages. Capped/unknown observations cannot assert healthy 
 Matching committed receipt keys keep checkpoint recovery observable without new
 provider admission; receipt payloads are not read and keys are never logged.
 Downstream ingestion remains owned by #829/#830; request submission, worker ACK and
-committed ingestion are distinct. No provider behavior, retry/schedule/resources,
-Help or MCP contract changes. Deployment, bundle activation and positive metric-series
-readback remain separately approved acceptance criteria in #847. See the authoritative
+committed ingestion are distinct. Provider behavior, retry policy, scheduler cadence,
+Function runtime resources, Help and MCP contracts are unchanged. Production readback
+verified the dashboard, all 14 metrics,
+six valid enabled policies, all 18 chart and nine condition queries, native runtime/queue
+coverage and positive post-creation heartbeat points for all four providers from the
+natural 13:15 UTC tick. Actual absence conditions were initialized, and count/age samples
+were real idle zeroes. A second apply preserved resource/condition identities without
+duplicates or deletion; unrelated resources and every notification channel stayed unchanged.
+Existing same-channel email proof is reused, with no new email test or manual invocation.
+Future cloud changes still require separate approval. See the authoritative
 [connection-history monitoring runbook](connection-history-import.md#coordinator-monitoring-847)
 for signals, bounds, costs, thresholds, exclusions and the activation checklist.
 
