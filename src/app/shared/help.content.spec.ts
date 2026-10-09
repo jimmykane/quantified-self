@@ -17,7 +17,9 @@ describe('help.content', () => {
   it('explains Training history columns separately from unavailable history and forecasts', () => {
     const training = HELP_SECTIONS.find(section => section.id === 'training-analysis')!.content;
     expect(training).toContain('**Load metric history**');
-    expect(training).toContain('Monotony stays numeric');
+    expect(training).toContain('Monotony history uses recorded daily TSS');
+    expect(training).toContain('not Strain values');
+    expect(training).toContain('**Plans** in the Training header');
     expect(training).toContain('dashed no-additional-load scenario');
     const dashboard = HELP_SECTIONS.find(section => section.id === 'getting-started')!.content;
     expect(dashboard).toContain('**history columns**');

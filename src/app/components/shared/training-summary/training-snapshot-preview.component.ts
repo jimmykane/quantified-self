@@ -109,7 +109,7 @@ export class TrainingSnapshotPreviewComponent {
     { id: 'form-now', label: 'Form now', valueText: formatExampleValue(EXAMPLE_CURRENT_STATE.formNow?.value ?? null, 0, true), detailText: 'Fitness − fatigue', history: exampleHistory(EXAMPLE_CURRENT_STATE.formNow?.trend8Weeks || [], 0, true) },
     { id: 'ramp', label: 'Ramp', valueText: formatExampleValue(EXAMPLE_CURRENT_STATE.rampRate?.rampRate ?? null, 1, true), detailText: '7-day fitness change', history: exampleHistory(EXAMPLE_CURRENT_STATE.rampRate?.trend8Weeks || [], 1, true) },
     { id: 'acwr', label: 'ACWR', valueText: '1.03', detailText: 'Acute ÷ chronic load', history: exampleHistory(exampleWeeklyPoints([1.1, 1.2, .9, 1.2, 1.3, 1, 1.15, 1.03]), 2) },
-    { id: 'monotony', label: 'Monotony', valueText: '1.42', detailText: 'Weekly load variability' },
+    { id: 'monotony', label: 'Monotony', valueText: '1.42', detailText: 'Weekly load variability', history: exampleHistory(exampleWeeklyPoints([.95, 1.1, 1.25, 1.15, 1.45, 1.65, 1.3, 1.42]), 2) },
     { id: 'strain', label: 'Strain', valueText: '684', detailText: 'Load × monotony', history: exampleHistory(exampleWeeklyPoints([410, 480, 520, 460, 590, 720, 640, 684])) },
     { id: 'form-plus-seven', label: 'Form +7 days', valueText: this.forecastHistory.points.at(-1)!.valueText, detailText: 'No-additional-load scenario', history: this.forecastHistory },
   ];

@@ -32,6 +32,7 @@ import type {
   DerivedTrainingSwimWeek,
 } from '@shared/derived-metrics';
 import { normalizeSleepProvider } from '@shared/sleep';
+import { resolveTrainingMonotonyStrain } from '@shared/training-load';
 import {
   DERIVED_TRAINING_RECOVERY_MAX_BEDTIME_VARIATION_MINUTES,
   DERIVED_TRAINING_BUILD_COMPARISON_RECOVERY_VERSION,
@@ -1274,6 +1275,36 @@ export function resolveDashboardMonotonyStrainContext(payload: unknown): Dashboa
     strain: toFiniteNumber(normalized.strain),
     trend8Weeks: normalizeTrendPoints(normalized.trend8Weeks, 'weekStartMs', 'strain'),
   };
+}
+
+/** Uses the existing UTC Form load series; persisted trend8Weeks is Strain, never Monotony. */
+export function resolveDashboardMonotonyHistoryFromFormPoints(
+  points: readonly DashboardFormPoint[] | null | undefined,
+  asOfDayMs = Date.now(),
+): DashboardDerivedTrendPoint[] {
+  if (!Array.isArray(points) || !Number.isFinite(asOfDayMs)) {
+    return [];
+  }
+  const cutoff = resolveUtcDayStartMs(asOfDayMs);
+  const observedPoints = [...points]
+    .filter(point => Number.isSafeInteger(point.time) && point.time >= 0 && point.time % DAY_MS === 0 && point.time <= cutoff)
+    .sort((left, right) => left.time - right.time);
+  const dailyPoints = extendDashboardFormPointsWithZeroLoadUntil(observedPoints, cutoff);
+  const loads = dailyPoints.map(point => ({ load: point.trainingStressScore }));
+  const trendByWeek = new Map<number, DashboardDerivedTrendPoint>();
+  dailyPoints.forEach((point, index) => {
+    const window = dailyPoints.slice(Math.max(0, index - 6), index + 1);
+    const completeWindow = window.every((day, dayIndex) => (
+      Number.isFinite(day.trainingStressScore) && day.trainingStressScore >= 0
+      && (dayIndex === 0 || day.time === window[dayIndex - 1].time + DAY_MS)
+    ));
+    const weekStartMs = resolveUtcWeekStartMs(point.time);
+    trendByWeek.set(weekStartMs, {
+      time: weekStartMs,
+      value: completeWindow ? toRoundedMetricValue(resolveTrainingMonotonyStrain(loads, index).monotony) : null,
+    });
+  });
+  return [...trendByWeek.values()].slice(-8);
 }
 
 export function resolveDashboardFormNowContext(payload: unknown): DashboardFormNowContext | null {

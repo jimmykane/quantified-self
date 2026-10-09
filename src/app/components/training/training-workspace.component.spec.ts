@@ -4,6 +4,8 @@ import { ComponentFixture, TestBed, type TestModuleMetadata } from '@angular/cor
 import { Component, LOCALE_ID, NO_ERRORS_SCHEMA, signal } from '@angular/core';
 import { MatMenuModule } from '@angular/material/menu';
 import { MatTooltipModule } from '@angular/material/tooltip';
+import { MatButtonModule } from '@angular/material/button';
+import { provideRouter, Router, RouterLink } from '@angular/router';
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { BehaviorSubject, concat, NEVER, of, Subject, throwError } from 'rxjs';
@@ -33,6 +35,8 @@ import { MetricIndicatorComponent } from '../shared/metric-indicator/metric-indi
 import { TrainingSummaryCardsComponent } from '../shared/training-summary/training-summary-cards.component';
 import { TrainingMetricGridComponent } from '../shared/training-summary/training-metric-grid.component';
 import { getDateTimeFormatter } from '../../helpers/date-time-format.helper';
+import { HapticTapDirective } from '../../directives/haptic-tap.directive';
+import { buildDashboardFormPointsFromDailyLoads } from '../../helpers/dashboard-form.helper';
 
 @Component({ selector: 'app-timeline-notes-workspace', standalone: true, template: '<button>Timeline notes</button>' })
 class TimelineNotesWorkspaceStubComponent { context = () => null; }
@@ -161,6 +165,13 @@ describe('TrainingWorkspaceComponent', () => {
     const noHistory = (component as any).buildTrainingLoadMetricItems();
     expect(noHistory.find((metric: any) => metric.id === 'ctl').history).toBeUndefined();
     expect(noHistory.find((metric: any) => metric.id === 'plus-seven-days').history).toBeUndefined();
+    component.derivedState.formPoints = buildDashboardFormPointsFromDailyLoads([10, 20, 30].map((load, index) => ({ dayMs: time + index * 86400000, load })));
+    component.derivedState.monotonyStrain!.latestDayMs = time + 2 * 86400000;
+    const withMonotony = (component as any).buildTrainingLoadMetricItems();
+    expect(withMonotony.find((metric: any) => metric.id === 'monotony').history).toMatchObject({
+      caption: '8-week history', points: [{ time, value: 2.4495, valueText: '2.45' }],
+    });
+    expect(withMonotony.find((metric: any) => metric.id === 'strain').history.points[0].value).toBe(0);
   });
 
   afterEach(() => {
@@ -211,10 +222,14 @@ describe('TrainingWorkspaceComponent', () => {
       },
     };
     const derivedMetrics = { watch: vi.fn(() => of(derivedState)), ensureForDashboard: vi.fn() };
+    const haptics = { selection: vi.fn() };
 
     await configureFixtureTestingModule({
-      declarations: [TrainingWorkspaceComponent],
+      imports: [RouterLink, MatButtonModule],
+      declarations: [TrainingWorkspaceComponent, HapticTapDirective],
       providers: [
+        provideRouter([]),
+        { provide: AppHapticsService, useValue: haptics },
         { provide: AppAuthService, useValue: { user$: of({ uid: 'user-1' }) } },
         { provide: DashboardDerivedMetricsService, useValue: derivedMetrics },
         { provide: AppSleepService, useValue: createSleepService() },
@@ -235,7 +250,16 @@ describe('TrainingWorkspaceComponent', () => {
     expect(element.querySelector('.training-feedback-action')).toBeNull();
     expect(element.querySelector('.training-calendar-action')).toBeNull();
     expect(element.querySelector('.training-dashboard-action')).toBeNull();
-    expect(element.querySelector('.training-page-actions')).toBeNull();
+    const plansAction = element.querySelector<HTMLAnchorElement>('.qs-page-header__actions .training-plans-action');
+    expect(plansAction?.getAttribute('href')).toBe('/training/plans');
+    expect(plansAction?.textContent).toContain('Plans');
+    expect(plansAction?.querySelector('mat-icon')?.textContent?.trim()).toBe('event_note');
+    expect(element.querySelector('.training-derived-metrics-retry')).toBeNull();
+    expect(haptics.selection).not.toHaveBeenCalled();
+    const navigate = vi.spyOn(TestBed.inject(Router), 'navigateByUrl').mockResolvedValue(true);
+    plansAction?.click();
+    expect(navigate).toHaveBeenCalledOnce();
+    expect(haptics.selection).toHaveBeenCalledOnce();
     expect(element.querySelector('app-timeline-notes-workspace')?.hasAttribute('hidden')).toBe(true);
     expect(element.querySelector('app-page-header app-timeline-notes-workspace')).toBeNull();
     const sportVisibilityAction = element.querySelector('.training-sport-visibility-action');
@@ -373,19 +397,21 @@ describe('TrainingWorkspaceComponent', () => {
     expect(compactActionsStyles).toContain('width: 48px;');
   });
 
-  it('keeps the mobile header actions close to the first section divider', () => {
+  it('leaves breathing room between the mobile header and the sport selector', () => {
     const stylePath = resolve(process.cwd(), 'src/app/components/training/training-workspace.component.scss');
     const styles = readFileSync(stylePath, 'utf8');
     const mobileHeaderRule = styles.match(/@media \(max-width: 640px\) \{ \.training-page-header \{([^}]*)\}/)?.[1];
 
-    expect(mobileHeaderRule).toContain('margin-bottom: 8px;');
+    expect(mobileHeaderRule).toContain('margin-bottom: 24px;');
+    expect(styles).toContain('.training-page-header { margin-bottom: 32px; }');
+    expect(styles).not.toContain('margin: -12px 0 0;');
   });
 
   it('uses one divider between destination navigation and the first Training section', () => {
     const stylePath = resolve(process.cwd(), 'src/app/components/training/training-workspace.component.scss');
     const styles = readFileSync(stylePath, 'utf8');
 
-    expect(styles).toContain('margin: -12px 0 0;');
+    expect(styles).toContain('.training-destination-navigation { display: grid; gap: 8px; margin: 0;');
     expect(styles).toContain('.training-destination-navigation + .training-section { border-top: 0; }');
   });
 
@@ -2844,6 +2870,7 @@ describe('TrainingWorkspaceComponent', () => {
       .toContain('Derived metrics update failed');
     expect(statusToggle.querySelector('mat-icon')?.classList).not.toContain('training-update-spinning');
     expect(retryButton.getAttribute('aria-label')).toBe('Retry derived metrics update');
+    expect(retryButton.parentElement?.querySelector('.training-plans-action')).toBeTruthy();
     retryButton.click();
     expect(derivedMetrics.ensureForDashboard).toHaveBeenLastCalledWith(
       { uid: 'user-1' },

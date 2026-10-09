@@ -33,8 +33,12 @@
         </span>
       }
     </div>
-    @if (derivedMetricsRouteStatus?.showRetry) {
-      <div pageHeaderActions class="training-page-actions">
+    <div pageHeaderActions class="training-page-actions">
+      <a mat-stroked-button routerLink="/training/plans" appHapticTap class="training-plans-action">
+        <mat-icon aria-hidden="true">event_note</mat-icon>
+        Plans
+      </a>
+      @if (derivedMetricsRouteStatus?.showRetry) {
         <button
           mat-stroked-button
           type="button"
@@ -45,8 +49,8 @@
           <mat-icon aria-hidden="true">refresh</mat-icon>
           <span class="training-derived-metrics-retry-label">Retry</span>
         </button>
-      </div>
-    }
+      }
+    </div>
   </app-page-header>
 
   @if (derivedMetricsRouteStatus) {

@@ -24,8 +24,10 @@ describe('TrainingSnapshotPreviewComponent', () => {
     expect(text).toContain('Readiness today');
     expect(text).toContain('Fitness (CTL)');
     expect(text).toContain('Recovery debt');
-    expect(fixture.nativeElement.querySelectorAll('app-metric-history-chart')).toHaveLength(7);
-    expect(fixture.componentInstance.loadMetrics.find(metric => metric.id === 'monotony')?.history).toBeUndefined();
+    expect(fixture.nativeElement.querySelectorAll('app-metric-history-chart')).toHaveLength(8);
+    const monotony = fixture.componentInstance.loadMetrics.find(metric => metric.id === 'monotony')!;
+    expect(monotony.history?.points).toHaveLength(8);
+    expect(monotony.history?.points.at(-1)?.valueText).toBe(monotony.valueText);
     expect(fixture.componentInstance.loadMetrics.find(metric => metric.id === 'form-plus-seven')?.history?.mode).toBe('forecast');
     const form = fixture.componentInstance.loadMetrics.find(metric => metric.id === 'form-now')!.history!;
     const forecast = fixture.componentInstance.loadMetrics.find(metric => metric.id === 'form-plus-seven')!.history!;
@@ -50,7 +52,7 @@ describe('TrainingSnapshotPreviewComponent', () => {
       expect(priorCtl).toBeDefined();
       expect(point.value).toBeCloseTo(ctlByTime.get(point.time)! - priorCtl!);
     }
-    for (const id of ['fitness', 'fatigue', 'form-now', 'ramp']) {
+    for (const id of ['fitness', 'fatigue', 'form-now', 'ramp', 'monotony']) {
       const metric = metrics.find(metric => metric.id === id)!;
       expect(metric.valueText).toBe(metric.history!.points.at(-1)!.valueText);
     }

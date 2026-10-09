@@ -510,7 +510,9 @@ Form history and canonical parent/activity join.
 - User help copy: `src/app/shared/help.content.ts`
 
 Training is available to signed-in users from the sidenav. Its route header uses the shared `app-page-header` route
-primitive for the title, compact update disclosure, and conditional derived-metrics **Retry** action. Timeline notes, Feedback,
+primitive for the title, compact update disclosure, **Plans** navigation to `/training/plans`, and conditional derived-metrics
+**Retry** action. Plans uses the shared right-aligned action slot on desktop and a labelled action row below the subtitle
+on phones/tablets. The sport navigation does not pull upwards into the header's bottom spacing. Timeline notes, Feedback,
 Calendar, and Dashboard shortcuts are omitted from this header; use app navigation for Calendar and Dashboard and the
 Training help article's email action for feedback. This presentation changes no chart-note reads, Training calculations,
 planning/MCP contract, consent, or mutation. The Dashboard header does not duplicate the Training or Health navigation
@@ -4805,7 +4807,7 @@ This section reuses global derived load metrics:
 - Form now.
 - Form after seven zero-load days.
 
-The existing exact-value grid adds compact history columns below CTL, ATL, Ramp, ACWR, Strain and Form now.
+The existing exact-value grid adds compact history columns below CTL, ATL, Ramp, ACWR, Monotony, Strain and Form now.
 The shared grid uses its own inline-size container for responsive columns and dividers: at 640px or less it shows
 two load-metric columns, including narrow desktop side panels, rather than squeezing four columns into them.
 Wider grids retain four columns; the public context preview retains its existing one-column narrow layout.
@@ -4813,10 +4815,13 @@ The workspace grid stays content-sized instead of stretching to a neighboring ch
 12px vertical / 16px horizontal padding and a 4px history inset; charts remain aligned within each row when details
 wrap. Missing histories do not reserve a synthetic chart. Public preview padding remains unchanged.
 CTL/ATL/Form/Ramp reuse the current-day Form context's last available sample in each of up to eight UTC weeks;
-ACWR and Strain reuse their prepared `trend8Weeks` observations. These are weekly metric observations, not summed
-weekly load. No extra activity-history query or derived snapshot is introduced. A metric without observed history
-keeps its numeric value and explanation only. In particular, the Monotony/Strain snapshot has Strain history, not
-Monotony history; never display Strain columns under Monotony.
+ACWR and Strain reuse their prepared `trend8Weeks` observations. Monotony uses the existing Form series' daily TSS
+and the same `resolveTrainingMonotonyStrain` calculation in `shared/training-load.ts` as the backend: rolling up-to-seven-day
+mean divided by population standard deviation. Its latest available observation in each UTC week is bounded by the
+Monotony snapshot's day cutoff. Zero-variance windows and missing daily evidence stay unavailable; Strain history is
+never displayed under Monotony. These are weekly metric observations, not summed weekly load. No extra activity-history
+query, derived snapshot, persisted field, formula change or backend deployment is needed. A metric without observed history
+keeps its numeric value and explanation only. The public example includes explicitly synthetic Monotony columns.
 
 Columns use a zero baseline (signed metrics can extend below it), muted earlier observations and an accented latest
 observation. Real zero remains valid; internal missing weeks remain gaps, with empty edges trimmed and half-slot

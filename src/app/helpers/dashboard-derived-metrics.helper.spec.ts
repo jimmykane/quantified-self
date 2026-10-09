@@ -15,6 +15,7 @@ import {
   resolveDashboardHardPercentContext,
   resolveDashboardIntensityDistributionContext,
   resolveDashboardMonotonyStrainContext,
+  resolveDashboardMonotonyHistoryFromFormPoints,
   resolveDashboardRampRateContext,
   resolveDashboardRampRateContextFromPoints,
   resolveDashboardTrainingSummaryContext,
@@ -22,8 +23,30 @@ import {
   resolveDashboardTrainingCapacityContext,
   resolveDashboardTrainingSwimPerformanceContext,
 } from './dashboard-derived-metrics.helper';
+import { buildDashboardFormPointsFromDailyLoads } from './dashboard-form.helper';
 
 describe('dashboard-derived-metrics.helper', () => {
+  it('derives real weekly Monotony observations from Form loads, stopping at the snapshot cutoff', () => {
+    const start = Date.UTC(2026, 0, 1);
+    const points = buildDashboardFormPointsFromDailyLoads([10, 20, 30, 400].map((load, index) => ({ dayMs: start + index * 86400000, load })));
+    const history = resolveDashboardMonotonyHistoryFromFormPoints(points, start + 2 * 86400000);
+    expect(history).toEqual([{ time: Date.UTC(2025, 11, 29), value: 2.4495 }]);
+    expect(points).toHaveLength(4);
+    expect(history[0].value).not.toBeCloseTo(60 * 2.4495);
+    expect(resolveDashboardMonotonyHistoryFromFormPoints(points, start + 10 * 86400000).at(-1)?.value).toBeNull();
+    expect(resolveDashboardMonotonyHistoryFromFormPoints(null)).toEqual([]);
+    expect(resolveDashboardMonotonyHistoryFromFormPoints([], Number.NaN)).toEqual([]);
+  });
+
+  it('keeps missing daily evidence unavailable and limits Monotony history to eight UTC weeks', () => {
+    const start = Date.UTC(2026, 0, 5);
+    const points = buildDashboardFormPointsFromDailyLoads(Array.from({ length: 80 }, (_, index) => ({ dayMs: start + index * 86400000, load: index % 3 * 20 })));
+    const fullHistory = resolveDashboardMonotonyHistoryFromFormPoints(points, points.at(-1)!.time);
+    expect(fullHistory).toHaveLength(8);
+    const gap = points.slice(0, 5).filter((_, index) => index !== 2);
+    expect(resolveDashboardMonotonyHistoryFromFormPoints(gap, gap.at(-1)!.time)[0].value).toBeNull();
+    expect(resolveDashboardMonotonyHistoryFromFormPoints([{ ...points[0], trainingStressScore: Number.NaN }], start)[0].value).toBeNull();
+  });
   it('normalizes ACWR payload context', () => {
     const context = resolveDashboardAcwrContext({
       latestDayMs: Date.UTC(2026, 0, 1),
