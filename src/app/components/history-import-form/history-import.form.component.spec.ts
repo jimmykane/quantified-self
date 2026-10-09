@@ -21,13 +21,14 @@ import { AppSleepService } from '../../services/app.sleep.service';
 import { AppHapticsService } from '../../services/app.haptics.service';
 import { APP_STORAGE } from '../../services/storage/app.storage.token';
 import { Firestore } from 'app/firebase/firestore';
-import { of } from 'rxjs';
+import { of, Subject } from 'rxjs';
 import { ServiceNames, UserServiceMetaInterface } from '@sports-alliance/sports-lib';
 import { NoopAnimationsModule } from '@angular/platform-browser/animations';
 import { Component, Input, NO_ERRORS_SCHEMA } from '@angular/core';
 import { CommonModule } from '@angular/common'; // Added CommonModule
 import { HISTORY_IMPORT_ACTIVITIES_PER_DAY_LIMIT } from '@shared/history-import.constants';
 import dayjs from 'dayjs';
+import { SleepSyncState } from '@shared/sleep';
 
 vi.mock('../../services/app.event.service');
 vi.mock('../../services/app.user.service');
@@ -149,6 +150,275 @@ describe('HistoryImportFormComponent', () => {
 
     it('should create', () => {
         expect(component).toBeTruthy();
+    });
+
+    describe('shared request lifecycle', () => {
+        afterEach(() => vi.useRealTimers());
+
+        async function reopen() {
+            fixture.destroy();
+            fixture = TestBed.createComponent(HistoryImportFormComponent);
+            component = fixture.componentInstance;
+            component.serviceName = ServiceNames.COROSAPI;
+            component.providerConnected = true;
+            fixture.detectChanges();
+            await fixture.whenStable();
+            component.formGroup.patchValue({ startDate: new Date(2026, 9, 1), endDate: new Date(2026, 9, 2), accepted: true });
+            fixture.detectChanges();
+        }
+
+        async function submit(domain: 'activity' | 'sleep') {
+            return domain === 'activity'
+                ? component.onSubmit(new Event('submit'))
+                : component.onSleepBackfill(new Event('click'));
+        }
+
+        it.each(['activity', 'sleep'] as const)('keeps %s locked on reopen and retains late success without stale feedback', async domain => {
+            await reopen();
+            const call = domain === 'activity' ? mockUserService.importServiceHistoryForCurrentUser : mockUserService.backfillCorosSleepForCurrentUser;
+            let resolve!: (value: unknown) => void;
+            call.mockReturnValueOnce(new Promise(value => resolve = value));
+            const first = component;
+            const submission = submit(domain);
+            await vi.waitFor(() => expect(call).toHaveBeenCalledTimes(1));
+            const staleDetection = vi.spyOn((first as any).changeDetectorRef, 'detectChanges');
+            const emit = vi.spyOn(first.importInitiated, 'emit');
+            await reopen();
+            expect(fixture.nativeElement.textContent).toContain('Closing this dialog does not cancel it');
+            if (domain === 'activity') expect(component.formGroup.disabled).toBe(true);
+            else expect((fixture.nativeElement.querySelector('.sleep-backfill-button') as HTMLButtonElement).disabled).toBe(true);
+            await submit(domain);
+            expect(call).toHaveBeenCalledTimes(1);
+            const nextAllowedAtMs = Date.now() + 7 * 86_400_000;
+            resolve(domain === 'activity'
+                ? { stats: { successCount: 11, failureCount: 0, processedBatches: 1, failedBatches: 0 } }
+                : { queued: 4, sleepQueued: 4, healthQueued: 4, startDate: '2026-07-09', endDate: '2026-10-09', nextAllowedAtMs });
+            await submission;
+            fixture.detectChanges();
+            expect(fixture.nativeElement.textContent).toContain(domain === 'activity' ? '11 activities scheduled' : 'import started for 4 date ranges');
+            expect(staleDetection).not.toHaveBeenCalled();
+            expect(emit).not.toHaveBeenCalled();
+            expect(snackBar.open).not.toHaveBeenCalled();
+            expect(haptics.selection).toHaveBeenCalledTimes(1);
+            expect(haptics.success).not.toHaveBeenCalled();
+            expect(haptics.error).not.toHaveBeenCalled();
+            await reopen();
+            expect(fixture.nativeElement.textContent).toContain(domain === 'activity' ? '11 activities scheduled' : 'import started for 4 date ranges');
+            await submit(domain);
+            expect(call).toHaveBeenCalledTimes(1);
+        });
+
+        it.each(['activity', 'sleep'] as const)('retains a late %s failure on reopen and reports it without stale UI feedback', async domain => {
+            await reopen();
+            const call = domain === 'activity' ? mockUserService.importServiceHistoryForCurrentUser : mockUserService.backfillCorosSleepForCurrentUser;
+            let reject!: (error: Error) => void;
+            call.mockReturnValueOnce(new Promise((_resolve, failure) => reject = failure));
+            const submission = submit(domain);
+            await vi.waitFor(() => expect(call).toHaveBeenCalledTimes(1));
+            fixture.destroy();
+            const error = new Error('provider unavailable');
+            reject(error);
+            await submission;
+            expect(mockLoggerService.error).toHaveBeenCalledWith(error);
+            expect(snackBar.open).not.toHaveBeenCalled();
+            expect(haptics.error).not.toHaveBeenCalled();
+            await reopen();
+            expect(fixture.nativeElement.textContent).toContain('request did not complete successfully');
+        });
+
+        it('releases the activity lock if the dialog closes before dispatch', async () => {
+            await reopen();
+            vi.useFakeTimers();
+            const submission = submit('activity');
+            fixture.destroy();
+            await vi.advanceTimersByTimeAsync(100);
+            await submission;
+            expect(mockUserService.importServiceHistoryForCurrentUser).not.toHaveBeenCalled();
+            await reopen();
+            expect(component.formGroup.enabled).toBe(true);
+        });
+
+        it.each(['activity', 'sleep'] as const)('displays %s cooldowns without error reports and retains them through reopen until expiry', async domain => {
+            await reopen();
+            vi.useFakeTimers();
+            const call = domain === 'activity' ? mockUserService.importServiceHistoryForCurrentUser : mockUserService.backfillCorosSleepForCurrentUser;
+            const nextAllowedAtMs = Date.now() + 60_000;
+            const code = domain === 'activity' ? 'functions/permission-denied' : 'functions/resource-exhausted';
+            const prefix = domain === 'activity' ? 'History import is not allowed until ' : 'Sleep backfill is not allowed until ';
+            call.mockRejectedValueOnce(Object.assign(new Error(prefix + new Date(nextAllowedAtMs).toISOString()), { code }));
+            const submission = submit(domain);
+            await vi.advanceTimersByTimeAsync(100);
+            await submission;
+            expect(mockLoggerService.error).not.toHaveBeenCalled();
+            expect(haptics.error).not.toHaveBeenCalled();
+            expect(haptics.success).not.toHaveBeenCalled();
+            expect(haptics.selection).toHaveBeenCalledTimes(1);
+            await reopen();
+            if (domain === 'activity') {
+                expect(fixture.nativeElement.querySelector('app-status-info[title="Next Available Import"]')).not.toBeNull();
+                expect(component.nextImportAvailableDate.getTime()).toBe(nextAllowedAtMs);
+            } else {
+                expect(fixture.nativeElement.textContent).toContain('Next available');
+            }
+            await submit(domain);
+            expect(call).toHaveBeenCalledTimes(1);
+            await vi.advanceTimersByTimeAsync(nextAllowedAtMs - Date.now());
+            fixture.detectChanges();
+            expect(domain === 'activity' ? component.formGroup.enabled : component.canSubmitSleepBackfill).toBe(true);
+        });
+
+        it.each(['activity', 'sleep'] as const)('still reports unrelated %s permission/rate-limit failures', async domain => {
+            await reopen();
+            const call = domain === 'activity' ? mockUserService.importServiceHistoryForCurrentUser : mockUserService.backfillCorosSleepForCurrentUser;
+            const error = Object.assign(new Error('Provider access rejected'), {
+                code: domain === 'activity' ? 'functions/permission-denied' : 'functions/resource-exhausted',
+            });
+            call.mockRejectedValueOnce(error);
+            await submit(domain);
+            expect(mockLoggerService.error).toHaveBeenCalledWith(error);
+            expect(haptics.error).toHaveBeenCalledTimes(1);
+        });
+
+        it('waits for a successful Sleep sync-state read and stays locked after a read error', async () => {
+            const state$ = new Subject<SleepSyncState | null>();
+            mockSleepService.watchSyncState.mockReturnValueOnce(state$);
+            await reopen();
+            expect(component.sleepSyncStatus()).toBe('loading');
+            expect(component.canSubmitSleepBackfill).toBe(false);
+            expect(fixture.nativeElement.textContent).toContain('Checking when the next import is available');
+            await submit('sleep');
+            expect(mockUserService.backfillCorosSleepForCurrentUser).not.toHaveBeenCalled();
+            expect(haptics.selection).not.toHaveBeenCalled();
+            state$.next({ nextBackfillAllowedAtMs: Date.now() + 60_000 } as SleepSyncState);
+            state$.error(new Error('sync-state unavailable'));
+            fixture.detectChanges();
+            expect(component.sleepSyncStatus()).toBe('error');
+            expect(component.canSubmitSleepBackfill).toBe(false);
+            expect(component.isSleepBackfillCooldownActive).toBe(true);
+            expect(fixture.nativeElement.textContent).toContain('Retry status check');
+            const retry$ = new Subject<SleepSyncState | null>();
+            mockSleepService.watchSyncState.mockReturnValueOnce(retry$);
+            component.retrySleepSyncState();
+            expect(component.sleepSyncStatus()).toBe('loading');
+            expect(component.isSleepBackfillCooldownActive).toBe(true);
+            expect(haptics.selection).toHaveBeenCalledTimes(1);
+            retry$.next(null);
+            expect(component.sleepSyncStatus()).toBe('ready');
+            expect(component.canSubmitSleepBackfill).toBe(true);
+        });
+
+        it('keeps a missing Sleep sync-state error locked until Retry resolves successfully', async () => {
+            const state$ = new Subject<SleepSyncState | null>();
+            mockSleepService.watchSyncState.mockReturnValueOnce(state$);
+            await reopen();
+            state$.error(new Error('no readable sync state'));
+            expect(component.canSubmitSleepBackfill).toBe(false);
+            mockSleepService.watchSyncState.mockReturnValueOnce(of(null));
+            component.retrySleepSyncState();
+            expect(component.canSubmitSleepBackfill).toBe(true);
+        });
+
+        it('gives Sleep success feedback once for an accepted request and stays silent on initialization', async () => {
+            await reopen();
+            expect(haptics.selection).not.toHaveBeenCalled();
+            expect(haptics.success).not.toHaveBeenCalled();
+            await submit('sleep');
+            expect(haptics.selection).toHaveBeenCalledTimes(1);
+            expect(haptics.success).toHaveBeenCalledTimes(1);
+            expect(haptics.error).not.toHaveBeenCalled();
+        });
+
+        it('does not apply a late Sleep result or feedback to a different account', async () => {
+            const user$ = new Subject<any>();
+            mockAuthService.user$ = user$;
+            await reopen();
+            let resolve!: (value: unknown) => void;
+            mockUserService.backfillCorosSleepForCurrentUser.mockReturnValueOnce(new Promise(value => resolve = value));
+            const submission = submit('sleep');
+            user$.next({ uid: 'different-owner', stripeRole: 'pro' });
+            resolve({ queued: 4, nextAllowedAtMs: Date.now() + 60_000 });
+            await submission;
+            fixture.detectChanges();
+            expect(component.pendingSleepBackfillResult()).toBeNull();
+            expect(snackBar.open).not.toHaveBeenCalled();
+            expect(haptics.success).not.toHaveBeenCalled();
+            expect(component.canSubmitSleepBackfill).toBe(true);
+        });
+
+        it('does not apply a late Sleep result or feedback to a different provider', async () => {
+            await reopen();
+            let resolve!: (value: unknown) => void;
+            mockUserService.backfillCorosSleepForCurrentUser.mockReturnValueOnce(new Promise(value => resolve = value));
+            const submission = submit('sleep');
+            fixture.componentRef.setInput('serviceName', ServiceNames.SuuntoApp);
+            fixture.detectChanges();
+            resolve({ queued: 4, nextAllowedAtMs: Date.now() + 60_000 });
+            await submission;
+            expect(component.pendingSleepBackfillResult()).toBeNull();
+            expect(snackBar.open).not.toHaveBeenCalled();
+            expect(haptics.success).not.toHaveBeenCalled();
+        });
+
+        it.each(['account', 'provider'] as const)('keeps late feedback silent after leaving and returning to the same %s', async context => {
+            const user$ = new Subject<any>();
+            mockAuthService.user$ = user$;
+            await reopen();
+            let resolve!: (value: unknown) => void;
+            mockUserService.backfillCorosSleepForCurrentUser.mockReturnValueOnce(new Promise(value => resolve = value));
+            const submission = submit('sleep');
+            if (context === 'account') {
+                user$.next({ uid: 'other', stripeRole: 'pro' });
+                user$.next({ uid: '123', stripeRole: 'pro' });
+            } else {
+                fixture.componentRef.setInput('serviceName', ServiceNames.SuuntoApp);
+                fixture.detectChanges();
+                fixture.componentRef.setInput('serviceName', ServiceNames.COROSAPI);
+                fixture.detectChanges();
+            }
+            resolve({ queued: 4, nextAllowedAtMs: Date.now() + 60_000 });
+            await submission;
+            expect(component.pendingSleepBackfillResult()?.queued).toBe(4);
+            expect(snackBar.open).not.toHaveBeenCalled();
+            expect(haptics.success).not.toHaveBeenCalled();
+        });
+
+        it('retains an empty activity acknowledgement while allowing a new range', async () => {
+            await reopen();
+            mockUserService.importServiceHistoryForCurrentUser.mockResolvedValueOnce({ stats: { successCount: 0 } });
+            await submit('activity');
+            await reopen();
+            expect(fixture.nativeElement.textContent).toContain('0 activities scheduled');
+            expect(component.formGroup.enabled).toBe(true);
+        });
+
+        it('unlocks an accepted activity request at expiry and clears its active confirmation', async () => {
+            await reopen();
+            vi.useFakeTimers();
+            mockUserService.importServiceHistoryForCurrentUser.mockResolvedValueOnce({ stats: { successCount: HISTORY_IMPORT_ACTIVITIES_PER_DAY_LIMIT } });
+            const submission = submit('activity');
+            await vi.advanceTimersByTimeAsync(100);
+            await submission;
+            fixture.detectChanges();
+            expect(component.formGroup.disabled).toBe(true);
+            expect(fixture.nativeElement.querySelector('app-status-info[title="Import started"]')).not.toBeNull();
+            await vi.advanceTimersByTimeAsync(86_400_000);
+            fixture.detectChanges();
+            expect(component.formGroup.enabled).toBe(true);
+            expect(fixture.nativeElement.querySelector('app-status-info[title="Import started"]')).toBeNull();
+        });
+
+        it.each(['activity', 'sleep'] as const)('releases a cancelled %s request without error feedback', async domain => {
+            await reopen();
+            const call = domain === 'activity' ? mockUserService.importServiceHistoryForCurrentUser : mockUserService.backfillCorosSleepForCurrentUser;
+            call.mockRejectedValueOnce(new Error('Operation cancelled because its account or view changed.'));
+            await submit(domain);
+            const args = call.mock.calls[0];
+            expect(args[domain === 'activity' ? 3 : 0]).toBe('123');
+            expect(mockLoggerService.error).not.toHaveBeenCalled();
+            expect(haptics.error).not.toHaveBeenCalled();
+            await reopen();
+            expect(domain === 'activity' ? component.formGroup.enabled : component.canSubmitSleepBackfill).toBe(true);
+        });
     });
 
     describe.each([

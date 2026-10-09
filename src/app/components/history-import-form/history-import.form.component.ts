@@ -33,6 +33,7 @@ import relativeTime from 'dayjs/plugin/relativeTime';
 import { AppAuthService } from '../../authentication/app.auth.service';
 import { AppSleepService } from '../../services/app.sleep.service';
 import { AppHapticsService } from '../../services/app.haptics.service';
+import { HistoryImportStateService, HistoryImportRequestState, historyImportCooldownAt } from '../../services/history-import-state.service';
 
 dayjs.extend(relativeTime);
 
@@ -86,6 +87,12 @@ export class HistoryImportFormComponent implements OnInit, OnDestroy, OnChanges 
   public isSleepBackfillSubmitting = signal(false);
   public pendingSleepBackfillResult = signal<SleepBackfillQueueResponse | null>(null);
   public sleepBackfillSyncState = signal<SleepSyncState | null>(null);
+  public sleepSyncStatus = signal<'idle' | 'loading' | 'ready' | 'error'>('idle');
+  public activityImportFailed = signal(false);
+  public isActivityCooldownResponse = signal(false);
+  public hasAcceptedActivityImport = signal(false);
+  public sleepImportFailed = signal(false);
+  public activityRequestRange: { startDate: Date; endDate: Date } | null = null;
   public healthAvailabilityState = signal<HealthAvailabilityState>('idle');
   public isSleepAndHealthBackfill = false;
   public checksHealthBackfillAvailability = false;
@@ -107,6 +114,7 @@ export class HistoryImportFormComponent implements OnInit, OnDestroy, OnChanges 
   private authService = inject(AppAuthService);
   private sleepService = inject(AppSleepService);
   private hapticsService = inject(AppHapticsService);
+  private importState = inject(HistoryImportStateService);
   private isDestroyed = false;
   private activityHistoryLeaseTimer: ReturnType<typeof globalThis.setTimeout> | null = null;
   private currentUserID: string | null = null;
@@ -114,6 +122,13 @@ export class HistoryImportFormComponent implements OnInit, OnDestroy, OnChanges 
   private sleepSyncStateKey: string | null = null;
   private healthAvailabilityRequestKey: string | null = null;
   private healthAvailabilityRequestGeneration = 0;
+  private sharedStateKey: string | null = null;
+  private contextGeneration = 0;
+  private sharedStateSubscriptions = new Subscription();
+  private authSubscription: Subscription | null = null;
+  private activityState: HistoryImportRequestState<{ stats?: HistoryImportResult }> = { status: 'idle' };
+  private sleepState: HistoryImportRequestState<SleepBackfillQueueResponse> = { status: 'idle' };
+  private cooldownTimer: ReturnType<typeof globalThis.setTimeout> | null = null;
 
   async ngOnInit() {
     this.formGroup = new UntypedFormGroup({
@@ -136,6 +151,14 @@ export class HistoryImportFormComponent implements OnInit, OnDestroy, OnChanges 
     this.currentUserID = this.coerceUserID(user);
 
     this.processChanges();
+    this.authSubscription = this.authService.user$.subscribe(user => {
+      const userID = this.coerceUserID(user);
+      if (this.isDestroyed || userID === this.currentUserID) return;
+      this.currentUserID = userID;
+      this.isPro = AppUserUtilities.hasProAccess(user);
+      this.processChanges();
+      this.changeDetectorRef.markForCheck();
+    });
   }
 
   private getDefaultHistoryStartDate() {
@@ -184,6 +207,12 @@ export class HistoryImportFormComponent implements OnInit, OnDestroy, OnChanges 
   }
 
   private processChanges() {
+    if (this.isDestroyed) return;
+    this.syncSharedImportState();
+    this.isSubmitting = this.activityState.status === 'pending';
+    this.isHistoryImportPending.set(this.activityState.status === 'success'
+      && (this.activityState.nextAllowedAtMs === undefined || this.activityState.nextAllowedAtMs > Date.now()));
+    this.nextImportAvailableDate = undefined;
     this.syncActivityHistoryImportRunning();
     this.checksHealthBackfillAvailability = this.serviceName === ServiceNames.SuuntoApp
       || this.serviceName === ServiceNames.GarminAPI;
@@ -194,6 +223,7 @@ export class HistoryImportFormComponent implements OnInit, OnDestroy, OnChanges 
 
     if (!this.userMetaForService || !this.userMetaForService.didLastHistoryImport) {
       this.isAllowedToDoHistoryImport = true;
+      this.applyActivityCooldown();
       this.updateActivityHistoryFormState();
       return;
     }
@@ -224,12 +254,82 @@ export class HistoryImportFormComponent implements OnInit, OnDestroy, OnChanges 
         // this.isAllowedToDoHistoryImport = false;
         break;
     }
+    this.applyActivityCooldown();
     this.updateActivityHistoryFormState();
+  }
+
+  private applyActivityCooldown(): void {
+    const nextAllowed = this.activityState.nextAllowedAtMs;
+    if (nextAllowed !== undefined && nextAllowed > Date.now()) {
+      this.isAllowedToDoHistoryImport = false;
+      this.nextImportAvailableDate = new Date(Math.max(nextAllowed, this.nextImportAvailableDate?.getTime() || 0));
+    }
+    this.scheduleCooldownRefresh();
+  }
+
+  private syncSharedImportState(): void {
+    const key = this.currentUserID ? JSON.stringify([this.currentUserID, this.serviceName]) : null;
+    if (this.sharedStateKey === key) return;
+    this.sharedStateSubscriptions.unsubscribe();
+    this.sharedStateSubscriptions = new Subscription();
+    this.sharedStateKey = key;
+    this.contextGeneration += 1;
+    this.activityState = { status: 'idle' };
+    this.sleepState = { status: 'idle' };
+    this.pendingImportResult.set(null);
+    this.pendingSleepBackfillResult.set(null);
+    this.isSleepBackfillSubmitting.set(false);
+    this.activityImportFailed.set(false);
+    this.isActivityCooldownResponse.set(false);
+    this.hasAcceptedActivityImport.set(false);
+    this.sleepImportFailed.set(false);
+    this.activityRequestRange = null;
+    if (!this.currentUserID) return;
+    const activityKey = this.importState.key(this.currentUserID, this.serviceName, 'activity');
+    const sleepKey = this.importState.key(this.currentUserID, this.serviceName, 'sleep');
+    this.sharedStateSubscriptions.add(this.importState.watch$<{ stats?: HistoryImportResult }>(activityKey).subscribe(state => {
+      this.activityState = state;
+      this.pendingImportResult.set(state.result?.stats ?? null);
+      this.activityImportFailed.set(state.status === 'error');
+      this.isActivityCooldownResponse.set(state.status === 'cooldown');
+      this.hasAcceptedActivityImport.set(state.status === 'success');
+      this.activityRequestRange = state.range ?? null;
+      this.processChanges();
+      this.changeDetectorRef.markForCheck();
+    }));
+    this.sharedStateSubscriptions.add(this.importState.watch$<SleepBackfillQueueResponse>(sleepKey).subscribe(state => {
+      this.sleepState = state;
+      this.isSleepBackfillSubmitting.set(state.status === 'pending');
+      this.pendingSleepBackfillResult.set(state.result ?? null);
+      this.sleepImportFailed.set(state.status === 'error');
+      this.updateHistoryBackfillPresentation();
+      this.scheduleCooldownRefresh();
+      this.changeDetectorRef.markForCheck();
+    }));
+  }
+
+  private scheduleCooldownRefresh(): void {
+    if (this.cooldownTimer !== null) globalThis.clearTimeout(this.cooldownTimer);
+    this.cooldownTimer = null;
+    const futureDates = [this.activityState.nextAllowedAtMs, this.nextImportAvailableDate?.getTime(), this.sleepBackfillNextAllowedAtMs]
+      .filter((value): value is number => typeof value === 'number' && value > Date.now());
+    if (!futureDates.length || this.isDestroyed) return;
+    this.cooldownTimer = globalThis.setTimeout(() => {
+      this.cooldownTimer = null;
+      this.processChanges();
+      this.updateHistoryBackfillPresentation();
+      this.changeDetectorRef.markForCheck();
+    }, Math.min(Math.min(...futureDates) - Date.now(), 2_147_483_647));
+  }
+
+  private isCurrentView(userID: string, serviceName: ServiceNames, generation: number): boolean {
+    return !this.isDestroyed && this.currentUserID === userID && this.serviceName === serviceName
+      && this.contextGeneration === generation;
   }
 
   private updateActivityHistoryFormState(): void {
     if (this.isAllowedToDoHistoryImport && !this.isMissingGarminPermissions
-      && !this.isSubmitting && !this.isHistoryImportPending() && !this.isActivityHistoryImportRunning()) {
+      && !!this.currentUserID && !this.isSubmitting && !this.isHistoryImportPending() && !this.isActivityHistoryImportRunning()) {
       this.formGroup.enable();
     } else {
       this.formGroup.disable();
@@ -284,13 +384,21 @@ export class HistoryImportFormComponent implements OnInit, OnDestroy, OnChanges 
     event.preventDefault();
     if (this.isDestroyed || !this.formGroup) return;
     this.syncActivityHistoryImportRunning();
-    if (this.isSubmitting || this.formGroup.disabled || this.isHistoryImportPending() || this.isActivityHistoryImportRunning()) return;
+    if (!this.currentUserID || this.isLoadingParent || this.isSubmitting || this.formGroup.disabled || this.isHistoryImportPending() || this.isActivityHistoryImportRunning()) return;
     if (!this.formGroup.valid) {
       this.validateAllFormFields(this.formGroup);
       return;
     }
 
-    this.isSubmitting = true;
+    const userID = this.currentUserID;
+    const serviceName = this.serviceName;
+    const generation = this.contextGeneration;
+    const key = this.importState.key(userID, serviceName, 'activity');
+    const operation = this.importState.begin(key);
+    if (!operation) return;
+    const startDate = dayjs(this.formGroup.get('startDate')?.value).startOf('day').toDate();
+    const endDate = dayjs(this.formGroup.get('endDate')?.value).endOf('day').toDate();
+    let dispatched = false;
     this.hapticsService.selection();
 
     try {
@@ -307,29 +415,31 @@ export class HistoryImportFormComponent implements OnInit, OnDestroy, OnChanges 
     await new Promise(resolve => setTimeout(resolve, 100));
 
     try {
-      if (this.isDestroyed) return;
+      if (!this.isCurrentView(userID, serviceName, generation)) return;
       this.syncActivityHistoryImportRunning();
       if (this.isActivityHistoryImportRunning()) return;
 
-      // Normalize dates: start = 00:00, end = 23:59
-      const startDate = dayjs(this.formGroup.get('startDate')?.value).startOf('day').toDate();
-      const endDate = dayjs(this.formGroup.get('endDate')?.value).endOf('day').toDate();
-
+      dispatched = true;
       const result = await this.userService.importServiceHistoryForCurrentUser(
-        this.serviceName,
+        serviceName,
         startDate,
-        endDate
+        endDate,
+        userID
       );
-      if (this.isDestroyed) return;
+      const cooldownMs = serviceName === ServiceNames.GarminAPI
+        ? GARMIN_HISTORY_IMPORT_COOLDOWN_DAYS * 86_400_000
+        : typeof result?.stats?.successCount === 'number'
+          ? result.stats.successCount / HISTORY_IMPORT_ACTIVITIES_PER_DAY_LIMIT * 86_400_000
+          : null;
+      this.importState.finish(key, operation, {
+        status: 'success', result, range: { startDate, endDate },
+        ...(cooldownMs !== null ? { nextAllowedAtMs: Date.now() + cooldownMs } : {}),
+      });
+      if (!this.isCurrentView(userID, serviceName, generation)) return;
       this.importInitiated.emit(result);
-
-      // Set optimistic flag immediately to prevent re-submission
-      this.isHistoryImportPending.set(true);
 
       // Store result for display (COROS/Suunto return stats, Garmin doesn't)
       if (result?.stats) {
-        this.pendingImportResult.set(result.stats);
-
         if (result.stats.successCount === 0) {
           this.snackBar.open('No new activities found to import.', undefined, {
             duration: 3000,
@@ -346,23 +456,38 @@ export class HistoryImportFormComponent implements OnInit, OnDestroy, OnChanges 
       }
       this.hapticsService.success();
     } catch (e: any) {
-      if ((this.serviceName === ServiceNames.WahooAPI || this.serviceName === ServiceNames.GarminAPI)
+      if (this.isCancelledHistoryRequest(e)) {
+        this.importState.finish(key, operation, { status: 'idle' });
+        return;
+      }
+      const nextAllowedAtMs = historyImportCooldownAt(e, 'activity');
+      if (nextAllowedAtMs !== null) {
+        this.importState.finish(key, operation, { status: 'cooldown', nextAllowedAtMs });
+        if (this.isCurrentView(userID, serviceName, generation)) {
+          this.snackBar.open(`Next history import available ${new Date(nextAllowedAtMs).toLocaleString()}.`, undefined, { duration: 4000 });
+        }
+        return;
+      }
+      if ((serviceName === ServiceNames.WahooAPI || serviceName === ServiceNames.GarminAPI)
         && (e?.code === 'functions/already-exists' || e?.code === 'already-exists')) {
-        if (this.isDestroyed) return;
+        this.importState.finish(key, operation, { status: 'idle' });
+        if (!this.isCurrentView(userID, serviceName, generation)) return;
         this.snackBar.open(this.historyImportRunningMessage, undefined, {
           duration: 4000,
         });
         return;
       }
+      this.importState.finish(key, operation, { status: 'error' });
       this.logger.error(e);
-      if (this.isDestroyed) return;
+      if (!this.isCurrentView(userID, serviceName, generation)) return;
 
       this.snackBar.open(`Could not import history for ${this.serviceName} due to ${e.message}`, undefined, {
         duration: 2000,
       });
       this.hapticsService.error();
     } finally {
-      if (!this.isDestroyed) {
+      if (!dispatched) this.importState.finish(key, operation, { status: 'idle' });
+      if (this.isCurrentView(userID, serviceName, generation)) {
         this.isSubmitting = false;
         // Re-evaluate form state
         this.processChanges();
@@ -386,6 +511,9 @@ export class HistoryImportFormComponent implements OnInit, OnDestroy, OnChanges 
     this.isDestroyed = true;
     this.clearActivityHistoryLeaseTimer();
     this.sleepSyncStateSubscription?.unsubscribe();
+    this.sharedStateSubscriptions.unsubscribe();
+    this.authSubscription?.unsubscribe();
+    if (this.cooldownTimer !== null) globalThis.clearTimeout(this.cooldownTimer);
     this.healthAvailabilityRequestGeneration += 1;
   }
 
@@ -503,6 +631,10 @@ export class HistoryImportFormComponent implements OnInit, OnDestroy, OnChanges 
     this.historyBackfillIcon = this.isSleepAndHealthBackfill ? 'monitor_heart' : 'bedtime';
     this.historyBackfillActionLabel = this.isSleepBackfillSubmitting()
       ? 'Starting import...'
+      : this.sleepSyncStatus() === 'loading'
+        ? 'Checking import status...'
+        : this.sleepSyncStatus() === 'error'
+          ? 'Import status unavailable'
       : this.checksHealthBackfillAvailability && healthAvailabilityState === 'loading'
         ? 'Checking Health availability...'
         : this.checksHealthBackfillAvailability && healthAvailabilityState === 'error'
@@ -530,11 +662,10 @@ export class HistoryImportFormComponent implements OnInit, OnDestroy, OnChanges 
   }
 
   get sleepBackfillNextAllowedAtMs(): number | null {
-    const nextAllowedAtMs = Number(
-      this.pendingSleepBackfillResult()?.nextAllowedAtMs
-      ?? this.sleepBackfillSyncState()?.nextBackfillAllowedAtMs
-    );
-    return Number.isFinite(nextAllowedAtMs) ? nextAllowedAtMs : null;
+    const candidates = [this.sleepState.nextAllowedAtMs, this.pendingSleepBackfillResult()?.nextAllowedAtMs,
+      this.sleepBackfillSyncState()?.nextBackfillAllowedAtMs]
+      .filter((value): value is number => typeof value === 'number' && Number.isFinite(value));
+    return candidates.length ? Math.max(...candidates) : null;
   }
 
   get isSleepBackfillCooldownActive(): boolean {
@@ -547,6 +678,8 @@ export class HistoryImportFormComponent implements OnInit, OnDestroy, OnChanges 
       || this.healthAvailabilityState() === 'available'
       || this.healthAvailabilityState() === 'unavailable';
     return this.isSleepBackfillVisible
+      && !!this.currentUserID
+      && this.sleepSyncStatus() === 'ready'
       && !this.isSubmitting
       && !this.isLoadingParent
       && !this.isSleepBackfillSubmitting()
@@ -559,12 +692,17 @@ export class HistoryImportFormComponent implements OnInit, OnDestroy, OnChanges 
     event.preventDefault();
     event.stopPropagation();
     const provider = this.sleepBackfillProvider;
-    if (!provider || !this.canSubmitSleepBackfill) {
+    if (this.isDestroyed || !this.currentUserID || !provider || !this.canSubmitSleepBackfill) {
       return;
     }
     const historyName = this.historyBackfillScopeTitle;
-
-    this.isSleepBackfillSubmitting.set(true);
+    const userID = this.currentUserID;
+    const serviceName = this.serviceName;
+    const generation = this.contextGeneration;
+    const key = this.importState.key(userID, serviceName, 'sleep');
+    const operation = this.importState.begin(key);
+    if (!operation) return;
+    this.hapticsService.selection();
     this.updateHistoryBackfillPresentation();
     this.changeDetectorRef.detectChanges();
 
@@ -579,11 +717,12 @@ export class HistoryImportFormComponent implements OnInit, OnDestroy, OnChanges 
 
     try {
       const result = provider === SLEEP_PROVIDERS.GarminAPI
-        ? await this.userService.backfillGarminHealthForCurrentUser()
+        ? await this.userService.backfillGarminHealthForCurrentUser(userID)
         : provider === SLEEP_PROVIDERS.COROSAPI
-          ? await this.userService.backfillCorosSleepForCurrentUser()
-          : await this.userService.backfillSuuntoSleepForCurrentUser();
-      this.pendingSleepBackfillResult.set(result);
+          ? await this.userService.backfillCorosSleepForCurrentUser(userID)
+          : await this.userService.backfillSuuntoSleepForCurrentUser(userID);
+      this.importState.finish(key, operation, { status: 'success', result, nextAllowedAtMs: result.nextAllowedAtMs });
+      if (!this.isCurrentView(userID, serviceName, generation)) return;
       this.updateHistoryBackfillPresentation();
       const startedHistoryName = typeof result.healthQueued === 'number'
         ? (result.healthQueued > 0 ? this.historyBackfillScopeTitle : 'Sleep history')
@@ -592,19 +731,42 @@ export class HistoryImportFormComponent implements OnInit, OnDestroy, OnChanges 
       this.snackBar.open(`${this.sleepBackfillProviderLabel} ${startedHistoryName} import started for ${sleepQueued} date ranges.`, undefined, {
         duration: 3000,
       });
+      this.hapticsService.success();
     } catch (e: any) {
+      if (this.isCancelledHistoryRequest(e)) {
+        this.importState.finish(key, operation, { status: 'idle' });
+        return;
+      }
+      const nextAllowedAtMs = historyImportCooldownAt(e, 'sleep');
+      if (nextAllowedAtMs !== null) {
+        this.importState.finish(key, operation, { status: 'cooldown', nextAllowedAtMs });
+        if (this.isCurrentView(userID, serviceName, generation)) {
+          this.snackBar.open(`Next ${historyName} import available ${new Date(nextAllowedAtMs).toLocaleString()}.`, undefined, { duration: 4000 });
+        }
+        return;
+      }
+      this.importState.finish(key, operation, { status: 'error' });
       this.logger.error(e);
+      if (!this.isCurrentView(userID, serviceName, generation)) return;
       this.snackBar.open(`Could not start the ${historyName} import: ${e.message}`, undefined, {
         duration: 3000,
       });
+      this.hapticsService.error();
     } finally {
-      this.isSleepBackfillSubmitting.set(false);
-      this.updateHistoryBackfillPresentation();
-      this.changeDetectorRef.detectChanges();
+      if (this.isCurrentView(userID, serviceName, generation)) {
+        this.updateHistoryBackfillPresentation();
+        this.changeDetectorRef.detectChanges();
+      }
     }
   }
 
-  private syncSleepBackfillStateSubscription(): void {
+  private isCancelledHistoryRequest(error: unknown): boolean {
+    const candidate = error as { code?: unknown; message?: unknown } | null;
+    return candidate?.code === undefined
+      && candidate?.message === 'Operation cancelled because its account or view changed.';
+  }
+
+  private syncSleepBackfillStateSubscription(retainKnownState = false): void {
     const provider = this.sleepBackfillProvider;
     const key = provider && this.currentUserID
       ? `${this.currentUserID}:${provider}`
@@ -616,8 +778,8 @@ export class HistoryImportFormComponent implements OnInit, OnDestroy, OnChanges 
     this.sleepSyncStateSubscription?.unsubscribe();
     this.sleepSyncStateSubscription = null;
     this.sleepSyncStateKey = key;
-    this.sleepBackfillSyncState.set(null);
-    this.pendingSleepBackfillResult.set(null);
+    if (!retainKnownState) this.sleepBackfillSyncState.set(null);
+    this.sleepSyncStatus.set(key ? 'loading' : 'idle');
     this.updateHistoryBackfillPresentation();
 
     if (!key || !this.currentUserID || !provider) {
@@ -628,15 +790,28 @@ export class HistoryImportFormComponent implements OnInit, OnDestroy, OnChanges 
       .watchSyncState(this.currentUserID, provider)
       .subscribe({
         next: (state) => {
+          if (this.isDestroyed || this.sleepSyncStateKey !== key) return;
           this.sleepBackfillSyncState.set(state);
+          this.sleepSyncStatus.set('ready');
+          this.updateHistoryBackfillPresentation();
+          this.scheduleCooldownRefresh();
           this.changeDetectorRef.markForCheck();
         },
         error: (error) => {
+          if (this.isDestroyed || this.sleepSyncStateKey !== key) return;
           this.logger.error(error);
-          this.sleepBackfillSyncState.set(null);
+          this.sleepSyncStatus.set('error');
+          this.updateHistoryBackfillPresentation();
           this.changeDetectorRef.markForCheck();
         },
       });
+  }
+
+  public retrySleepSyncState(): void {
+    if (this.isDestroyed || !this.currentUserID || this.sleepSyncStatus() !== 'error') return;
+    this.hapticsService.selection();
+    this.sleepSyncStateKey = null;
+    this.syncSleepBackfillStateSubscription(true);
   }
 
   private syncHealthAvailability(): void {
@@ -678,9 +853,10 @@ export class HistoryImportFormComponent implements OnInit, OnDestroy, OnChanges 
   }
 
   public retryHealthAvailability(): void {
-    if (!this.checksHealthBackfillAvailability
+    if (this.isDestroyed || !this.checksHealthBackfillAvailability
       || !this.currentUserID
       || this.healthAvailabilityState() === 'loading') return;
+    this.hapticsService.selection();
     this.healthAvailabilityRequestKey = null;
     this.syncHealthAvailability();
   }
