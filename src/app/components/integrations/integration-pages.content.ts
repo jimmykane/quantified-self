@@ -345,13 +345,13 @@ export const PROVIDER_INTEGRATION_PAGES: Record<IntegrationProviderKey, Provider
       },
       {
         icon: 'insights',
-        title: 'Grounded Assistant for endurance training data',
+        title: 'Grounded Assistant for your data',
         copy: 'Ask focused questions about your stored activity statistics and get conversational answers with compact evidence for trends, latest activities, and Training summaries.',
       },
       {
         icon: 'security',
         title: 'Your data stays yours',
-        copy: 'Quantified Self is built for athletes who want one training dashboard when Garmin, Suunto, and COROS data all matter.',
+        copy: 'Bring Garmin, Suunto, and COROS data together for activity analysis, training, and health tracking.',
       },
     ],
     faqItems: [
@@ -491,7 +491,7 @@ export const PROVIDER_INTEGRATION_PAGES: Record<IntegrationProviderKey, Provider
       },
       {
         icon: 'insights',
-        title: 'Grounded Assistant for endurance training data',
+        title: 'Grounded Assistant for your data',
         copy: 'Ask questions across COROS, Garmin, and Suunto statistics and get conversational answers with compact evidence for Training summaries and trends.',
       },
       {
@@ -784,7 +784,7 @@ function providerWebPageJsonLd(page: ProviderIntegrationPage, metadataDescriptio
     about: [
       ...page.highlights,
       page.dashboardTitle,
-      'Grounded Assistant for endurance training data',
+      'Grounded Assistant for your data',
       'Training dashboard',
     ],
     mainEntity: [

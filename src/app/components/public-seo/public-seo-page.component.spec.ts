@@ -159,7 +159,7 @@ describe('PublicSeoPageComponent', () => {
     const hrefs = Array.from(calendarFixture.nativeElement.querySelectorAll('a'))
       .map(link => (link as HTMLAnchorElement).getAttribute('href') ?? '');
 
-    expect(text).toContain('Activity calendar for endurance training');
+    expect(text).toContain('Activity calendar for workouts and plans');
     expect(text).toContain('Week, Month, and Year views');
     expect(text).toContain('Duration-scaled activity circles');
     expect(text).toContain('independent from dashboard event-search filters');

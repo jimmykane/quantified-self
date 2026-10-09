@@ -38,7 +38,7 @@ describe('workout-data-comparison-page.content', () => {
     ]);
     expect(WORKOUT_DATA_COMPARISON_ROUTE_DATA.jsonLd).toMatchObject({
       audience: [
-        { '@type': 'Audience', audienceType: 'Endurance athletes' },
+        { '@type': 'Audience', audienceType: 'People comparing activity data' },
         { '@type': 'Audience', audienceType: 'Sports technology reviewers' },
       ],
     });
