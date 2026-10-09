@@ -24,7 +24,7 @@ import { Firestore } from 'app/firebase/firestore';
 import { of, Subject } from 'rxjs';
 import { ServiceNames, UserServiceMetaInterface } from '@sports-alliance/sports-lib';
 import { NoopAnimationsModule } from '@angular/platform-browser/animations';
-import { Component, Input, NO_ERRORS_SCHEMA } from '@angular/core';
+import { Component, Input, NgZone, NO_ERRORS_SCHEMA } from '@angular/core';
 import { CommonModule, formatDate } from '@angular/common'; // Added CommonModule
 import { HISTORY_IMPORT_ACTIVITIES_PER_DAY_LIMIT } from '@shared/history-import.constants';
 import dayjs from 'dayjs';
@@ -460,6 +460,58 @@ describe('HistoryImportFormComponent', () => {
                 fixture.detectChanges();
                 expect(component.isAllowedToDoHistoryImport).toBe(true);
                 expect(component.formGroup.enabled).toBe(true);
+            },
+        );
+
+        it.each(['activity cooldown', 'sleep cooldown', 'activity lease'] as const)(
+            'keeps Angular stable while waiting for the %s deadline', async deadline => {
+                const sleepState$ = new Subject<SleepSyncState | null>();
+                mockSleepService.watchSyncState.mockReturnValueOnce(sleepState$);
+                await reopen(deadline === 'activity lease' ? ServiceNames.GarminAPI : ServiceNames.COROSAPI);
+                const zone = new NgZone({ enableLongStackTrace: false });
+                (component as any).ngZone = zone;
+                const nextAllowedAtMs = Date.now() + 100;
+                const expiryZone = vi.fn(() => NgZone.isInAngularZone());
+                let expirySubscription: ReturnType<typeof zone.onUnstable.subscribe> | undefined;
+
+                try {
+                    zone.run(() => {
+                        if (deadline === 'sleep cooldown') {
+                            sleepState$.next({
+                                provider: ServiceNames.COROSAPI,
+                                status: 'ready',
+                                nextBackfillAllowedAtMs: nextAllowedAtMs,
+                                updatedAtMs: Date.now(),
+                            });
+                        } else {
+                            component.userMetaForService = deadline === 'activity lease'
+                                ? { historyImportLeaseExpiresAt: nextAllowedAtMs }
+                                : {
+                                    didLastHistoryImport: nextAllowedAtMs - 86_400_000,
+                                    processedActivitiesFromLastHistoryImportCount: HISTORY_IMPORT_ACTIVITIES_PER_DAY_LIMIT,
+                                };
+                            component.ngOnChanges({});
+                        }
+                    });
+
+                    if (deadline === 'sleep cooldown') expect(component.canSubmitSleepBackfill).toBe(false);
+                    else expect(component.formGroup.disabled).toBe(true);
+                    expect(zone.hasPendingMacrotasks).toBe(false);
+                    expirySubscription = zone.onUnstable.subscribe(expiryZone);
+                    await vi.waitFor(() => {
+                        if (deadline === 'sleep cooldown') expect(component.canSubmitSleepBackfill).toBe(true);
+                        else expect(component.formGroup.enabled).toBe(true);
+                    });
+                    expect(expiryZone).toHaveBeenCalled();
+                    expect(expiryZone.mock.results.every(result => result.value === true)).toBe(true);
+                    expect(haptics.selection).not.toHaveBeenCalled();
+                    expect(haptics.success).not.toHaveBeenCalled();
+                    expect(haptics.error).not.toHaveBeenCalled();
+                } finally {
+                    expirySubscription?.unsubscribe();
+                    fixture.destroy();
+                }
+                expect(zone.hasPendingMacrotasks).toBe(false);
             },
         );
 

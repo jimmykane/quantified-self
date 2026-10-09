@@ -320,12 +320,15 @@ export class HistoryImportFormComponent implements OnInit, OnDestroy, OnChanges 
       this.activityEstimatedCompletionAtMs]
       .filter((value): value is number => typeof value === 'number' && value > Date.now());
     if (!futureDates.length || this.isDestroyed) return;
-    this.cooldownTimer = globalThis.setTimeout(() => {
+    this.cooldownTimer = this.ngZone.runOutsideAngular(() => globalThis.setTimeout(() => {
       this.cooldownTimer = null;
-      this.processChanges();
-      this.updateHistoryBackfillPresentation();
-      this.changeDetectorRef.markForCheck();
-    }, Math.min(Math.min(...futureDates) - Date.now(), 2_147_483_647));
+      if (this.isDestroyed) return;
+      this.ngZone.run(() => {
+        this.processChanges();
+        this.updateHistoryBackfillPresentation();
+        this.changeDetectorRef.markForCheck();
+      });
+    }, Math.min(Math.min(...futureDates) - Date.now(), 2_147_483_647)));
   }
 
   private isCurrentView(userID: string, serviceName: ServiceNames, generation: number): boolean {
@@ -359,10 +362,10 @@ export class HistoryImportFormComponent implements OnInit, OnDestroy, OnChanges 
     const remainingMs = Math.max(leaseExpiry, retryAllowedAtMs) - Date.now();
     this.isActivityHistoryImportRunning.set(remainingMs > 0);
     if (remainingMs <= 0 || this.isDestroyed) return;
-    this.activityHistoryLeaseTimer = globalThis.setTimeout(() => {
+    this.activityHistoryLeaseTimer = this.ngZone.runOutsideAngular(() => globalThis.setTimeout(() => {
       this.activityHistoryLeaseTimer = null;
-      if (!this.isDestroyed) this.processChanges();
-    }, Math.min(remainingMs, 2_147_483_647));
+      if (!this.isDestroyed) this.ngZone.run(() => this.processChanges());
+    }, Math.min(remainingMs, 2_147_483_647)));
   }
 
   private clearActivityHistoryLeaseTimer(): void {
