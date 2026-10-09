@@ -38,6 +38,19 @@ import { APP_STORAGE } from '../../services/storage/app.storage.token';
 import { MemoryStorage } from '../../services/storage/memory.storage';
 import { AppHapticsService } from '../../services/app.haptics.service';
 
+// Static source contracts run outside component fixture hooks.
+describe('DashboardComponent', () => {
+
+    it('uses the shared overlay surface for the no-activity dashboard state', () => {
+        const styles = readFileSync(resolve(process.cwd(), 'src/app/components/dashboard/dashboard.component.scss'), 'utf8');
+
+        expect(styles).toContain('.dashboard-no-activity {');
+        expect(styles).toContain('--mdc-outlined-card-container-color: var(--qs-overlay-surface);');
+        expect(styles).toContain('--mdc-outlined-card-outline-color: var(--qs-overlay-surface-border);');
+        expect(styles).toContain('background: var(--qs-overlay-surface);');
+    });
+});
+
 describe('DashboardComponent', () => {
     let component: DashboardComponent;
     let fixture: ComponentFixture<DashboardComponent>;
@@ -357,15 +370,6 @@ describe('DashboardComponent', () => {
 
         expect(mockEventService.hasAnyActivity).not.toHaveBeenCalled();
         expect(component.showNoActivityDashboardState).toBe(false);
-    });
-
-    it('uses the shared overlay surface for the no-activity dashboard state', () => {
-        const styles = readFileSync(resolve(process.cwd(), 'src/app/components/dashboard/dashboard.component.scss'), 'utf8');
-
-        expect(styles).toContain('.dashboard-no-activity {');
-        expect(styles).toContain('--mdc-outlined-card-container-color: var(--qs-overlay-surface);');
-        expect(styles).toContain('--mdc-outlined-card-outline-color: var(--qs-overlay-surface-border);');
-        expect(styles).toContain('background: var(--qs-overlay-surface);');
     });
 
     it('dismisses first activity upload prompt and persists action prompt state', async () => {
