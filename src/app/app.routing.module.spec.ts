@@ -464,20 +464,20 @@ describe('AppRoutingModule routes', () => {
     const expectedRoutes = [
       {
         path: PUBLIC_FEATURE_PATHS.hub,
-        title: 'Features for Endurance Training Data',
-        h1: 'Features for endurance training data',
-        descriptionText: 'training analysis, maps, dashboards, comparisons, and AI answers',
+        title: 'Activity, Training & Health Features',
+        h1: 'Features for your activities, training, and health',
+        descriptionText: 'activity analysis, workout planning, health tracking, maps, comparisons, and AI answers',
       },
       {
         path: PUBLIC_FEATURE_PATHS.activityCalendar,
-        title: 'Activity Calendar for Endurance Training',
-        h1: 'Activity calendar for endurance training',
+        title: 'Activity Calendar for Workouts and Plans',
+        h1: 'Activity calendar for workouts and plans',
         descriptionText: 'Week, Month, and Year calendar views',
       },
       {
         path: PUBLIC_FEATURE_PATHS.trainingAnalysis,
-        title: 'Training Analysis for Endurance Athletes',
-        h1: 'Training analysis for endurance athletes',
+        title: 'Training Analysis, Readiness & Recovery',
+        h1: 'Training analysis, readiness, and recovery',
         descriptionText: 'training load, readiness, intensity, durability, sleep, power, and sport-specific trends',
       },
       {
@@ -488,7 +488,7 @@ describe('AppRoutingModule routes', () => {
       },
       {
         path: PUBLIC_FEATURE_PATHS.trainingDashboard,
-        title: 'Custom Training Dashboard for Endurance Athletes',
+        title: 'Custom Activity and Training Dashboard',
         h1: 'Build the training dashboard you need',
         descriptionText: 'KPI, chart, and map tiles, independent filters',
       },
