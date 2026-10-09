@@ -1,4 +1,3 @@
-import { TestBed } from '@angular/core/testing';
 import { describe, it, expect, afterEach, vi } from 'vitest';
 import { HistoryImportStateService, historyImportCooldownAt } from './history-import-state.service';
 
@@ -6,7 +5,7 @@ describe('HistoryImportStateService', () => {
   afterEach(() => vi.useRealTimers());
 
   it('locks synchronously, shares completion with new observers, and isolates owner/provider/domain', () => {
-    const service = TestBed.inject(HistoryImportStateService);
+    const service = new HistoryImportStateService();
     const key = service.key('owner', 'COROS', 'activity');
     const operation = service.begin(key)!;
     expect(service.begin(key)).toBeNull();
@@ -22,7 +21,7 @@ describe('HistoryImportStateService', () => {
 
   it('retains cooldowns and fences an obsolete completion after expiration and retry', () => {
     vi.useFakeTimers();
-    const service = TestBed.inject(HistoryImportStateService);
+    const service = new HistoryImportStateService();
     const key = service.key('owner', 'COROS', 'sleep');
     const operation = service.begin(key)!;
     service.finish(key, operation, { status: 'cooldown', nextAllowedAtMs: Date.now() + 1000 });
@@ -37,7 +36,7 @@ describe('HistoryImportStateService', () => {
 
   it('retains contention without treating it as success and enables retry at the exact local deadline', () => {
     vi.useFakeTimers();
-    const service = TestBed.inject(HistoryImportStateService);
+    const service = new HistoryImportStateService();
     const key = service.key('owner', 'Garmin', 'activity');
     const operation = service.begin(key)!;
     service.finish(key, operation, { status: 'running', retryAllowedAtMs: Date.now() + 5_000 });

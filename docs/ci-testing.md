@@ -49,7 +49,7 @@ override. Test isolation and unhandled-error failure behavior remain enabled; th
 extended timeout masking a failure. `test-runner-config.spec.ts` covers these configuration boundaries.
 
 Frontend tests use the same global two-worker bound, with isolated forks across three Vitest projects:
-`helpers-node` runs verified pure specs (helpers and help content) in Node with no setup file,
+`helpers-node` runs verified pure specs (helpers, help content and pure state services) in Node with no setup file,
 `helpers-dom` runs DOM/locale specs in jsdom with no Angular setup, and `angular` retains the Angular compiler
 plugin and `src/test-setup.ts` for all remaining ordinary specs. The Angular project is the fallback for new or
 unclassified files. The shared
