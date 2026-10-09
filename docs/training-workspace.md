@@ -4824,6 +4824,8 @@ as a dashed **no-additional-load scenario**, never as observed history or a pred
 explanations wrap within the shared bounded surface on phones. Container resizes rebuild size-dependent tooltip
 options through the shared host, including tap-versus-hover behavior when crossing the phone breakpoint. Missing
 observations are named **Unavailable** in accessible summaries and tooltips instead of reading numeric placeholders.
+Dashboard KPI charts, including the real KPI components reused by the homepage preview, rebuild their size-dependent
+tooltip options through the same resize callback without recreating the chart or adding another haptic listener.
 Training and Dashboard column mini-charts use the shared viewport tooltip host even on phones: their small plots
 cannot contain a readable tooltip. The positioning adapter converts chart-local coordinates to viewport coordinates
 for the existing clamp, then converts back for ECharts; normal full-chart tooltip policies remain unchanged.

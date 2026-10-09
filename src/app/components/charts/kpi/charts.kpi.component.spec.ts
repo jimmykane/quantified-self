@@ -711,6 +711,52 @@ describe('ChartsKpiComponent', () => {
     }
   });
 
+  it('updates tooltip interaction after resizing across the phone breakpoint without input changes', async () => {
+    const originalMatchMedia = window.matchMedia;
+    let mobile = false;
+    window.matchMedia = vi.fn(() => ({
+      matches: mobile,
+      media: '',
+      onchange: null,
+      addListener: vi.fn(),
+      removeListener: vi.fn(),
+      addEventListener: vi.fn(),
+      removeEventListener: vi.fn(),
+      dispatchEvent: vi.fn(),
+    })) as unknown as typeof window.matchMedia;
+
+    const option = () => mockLoader.setOption.mock.calls.at(-1)?.[1] as {
+      tooltip?: { triggerOn?: string; confine?: boolean };
+      series?: Array<{ type?: string }>;
+    };
+    try {
+      fixture.detectChanges();
+      await vi.waitFor(() => expect(option()?.tooltip?.triggerOn).toBe('mousemove|click'));
+      const chartElement = mockLoader.init.mock.calls[0][0] as HTMLElement;
+      Object.defineProperties(chartElement, {
+        clientWidth: { value: 58, configurable: true },
+        clientHeight: { value: 38, configurable: true },
+      });
+      const resize = mockLoader.subscribeToViewportResize.mock.calls[0][0] as () => void;
+      mobile = true;
+      resize();
+      await vi.waitFor(() => expect(option()?.tooltip?.triggerOn).toBe('click'));
+      expect(option()?.tooltip?.confine).toBe(false);
+      expect(option()?.series?.[0]?.type).toBe('bar');
+
+      Object.defineProperty(chartElement, 'clientWidth', { value: 94, configurable: true });
+      mobile = false;
+      resize();
+      await vi.waitFor(() => expect(option()?.tooltip?.triggerOn).toBe('mousemove|click'));
+      expect(option()?.series?.[0]?.type).toBe('bar');
+      expect(mockLoader.init).toHaveBeenCalledTimes(1);
+      expect(mockLoader.attachMobileSeriesTapFeedback).toHaveBeenCalledTimes(1);
+      expect(hapticsMock.selection).not.toHaveBeenCalled();
+    } finally {
+      window.matchMedia = originalMatchMedia;
+    }
+  });
+
   it('trims empty history edges and leaves half a slot for the endpoint columns', async () => {
     component.chartType = DASHBOARD_ACWR_KPI_CHART_TYPE;
     component.acwr = {

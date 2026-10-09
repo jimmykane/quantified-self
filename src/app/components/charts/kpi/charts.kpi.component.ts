@@ -200,6 +200,7 @@ export class ChartsKpiComponent implements AfterViewInit, OnChanges, OnDestroy {
         height: KPI_SPARKLINE_INIT_HEIGHT_PX,
       },
       mobileTapFeedbackOptions: () => this.mobileTapFeedbackOptions,
+      onContainerResize: () => { void this.refreshChart(); },
     });
   }
 
