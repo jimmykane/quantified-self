@@ -268,6 +268,7 @@ Unified health history under `users/{uid}/healthSourceRecords` and `healthSample
 - [Event merge idempotency and recovery](docs/event-merge-idempotency.md)
 - [Pricing and usage limits](docs/PRICING_AND_LIMITS.md)
 - [User deletion workflow](docs/user-deletion-workflow.html)
+- [Delete User Data migration and recovery](docs/delete-user-data-migration.md)
 
 ## Contributing
 

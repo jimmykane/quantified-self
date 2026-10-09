@@ -40,6 +40,7 @@ export const EMULATOR_SUITES = {
     'src/events/event-tag-catalog.emulator.spec.ts',
     'src/admin/marketing/marketing.emulator.spec.ts',
     'src/service-disconnect-cleanup.integration.spec.ts',
+    'src/users/data-cleanup.emulator.spec.ts',
   ],
 };
 

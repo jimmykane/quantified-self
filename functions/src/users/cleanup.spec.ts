@@ -5,6 +5,7 @@ import { ServiceNames } from '@sports-alliance/sports-lib';
 
 // Hoist mocks
 const {
+    dataCleanupMocks,
     authBuilderMock,
     runWithMock,
     deauthorizeServiceMock,
@@ -28,6 +29,16 @@ const {
     cleanupRejectedRouteOriginalFilesForUserMock,
     cleanupServiceDisconnectTasksForUserMock,
 } = vi.hoisted(() => {
+    const dataCleanupMocks = {
+        beginAccountDataCleanup: vi.fn().mockResolvedValue({ suuntoUserNames: [], corosOpenIds: [], garminUserIDs: [], wahooUserIDs: [] }),
+        checkpointAccountDeletionIdentifiers: vi.fn().mockResolvedValue(undefined),
+        completeAccountDataCleanup: vi.fn().mockResolvedValue(undefined),
+        deleteAccountFirestoreRoot: vi.fn().mockResolvedValue(undefined),
+        assertAccountFirestoreRootAbsent: vi.fn().mockResolvedValue(undefined),
+        deleteAccountStorageFiles: vi.fn().mockResolvedValue(undefined),
+        assertAccountStorageAbsent: vi.fn().mockResolvedValue(undefined),
+        assertAccountCleanupQueryEmpty: vi.fn().mockResolvedValue(undefined),
+    };
     const onDeleteMock = vi.fn((handler) => handler);
     // eslint-disable-next-line @typescript-eslint/no-unused-vars
     const userMock = vi.fn((_id?: string) => ({ onDelete: onDeleteMock }));
@@ -40,7 +51,8 @@ const {
     const tokensGetMock = vi.fn().mockResolvedValue({ empty: true, docs: [] });
     const tokensCollectionMock = vi.fn((collectionId?: string) => ({
         path: `subcollection/${collectionId || ''}`,
-        get: tokensGetMock
+        get: tokensGetMock,
+        limit: vi.fn(() => ({ get: tokensGetMock })),
     }));
 
      
@@ -139,6 +151,7 @@ const {
     }));
 
     return {
+        dataCleanupMocks,
         authBuilderMock,
         runWithMock,
         deauthorizeServiceMock,
@@ -204,10 +217,14 @@ vi.mock('../mcp/oauth.service', () => ({
 }));
 
 vi.mock('../routes/rejected-original-cleanup', () => ({
+    REJECTED_ROUTE_ORIGINAL_CLEANUP_COLLECTION_NAME: 'routeOriginalFileCleanup',
     cleanupRejectedRouteOriginalFilesForUser: cleanupRejectedRouteOriginalFilesForUserMock,
 }));
 
+vi.mock('./data-cleanup', () => ({ ...dataCleanupMocks, ACCOUNT_DELETION_ROOT_COLLECTIONS: ['users', 'customers'] }));
+
 vi.mock('../service-disconnect-cleanup', () => ({
+    SERVICE_DISCONNECT_CLEANUP_COLLECTION: 'serviceDisconnectCleanup',
     cleanupServiceDisconnectTasksForUser: cleanupServiceDisconnectTasksForUserMock,
 }));
 
@@ -292,6 +309,10 @@ describe('cleanupUserAccounts', () => {
         // Reset console mocks to keep output clean during tests if needed
         global.console = { ...global.console, log: vi.fn(), error: vi.fn() };
 
+        for (const [key, mock] of Object.entries(dataCleanupMocks)) {
+            mock.mockReset().mockResolvedValue(key === 'beginAccountDataCleanup'
+                ? { suuntoUserNames: [], corosOpenIds: [], garminUserIDs: [], wahooUserIDs: [] } : undefined);
+        }
         // Setup default mocks
         getServiceConfigMock.mockReturnValue({ tokenCollectionName: 'mockCollection' });
         deauthorizeServiceMock.mockReset().mockResolvedValue(undefined);
@@ -336,6 +357,56 @@ describe('cleanupUserAccounts', () => {
     afterEach(() => {
         testEnv.cleanup();
         vi.clearAllMocks();
+    });
+
+    it('fails closed when the account fence cannot be established', async () => {
+        dataCleanupMocks.beginAccountDataCleanup.mockRejectedValueOnce(new Error('marker unavailable'));
+        await expect(cleanupUserAccounts(testEnv.auth.makeUserRecord({ uid: 'testUser123' }), {} as functions.EventContext))
+            .rejects.toThrow('marker unavailable');
+        expect(recursiveDeleteMock).not.toHaveBeenCalled();
+        expect(deauthorizeServiceMock).not.toHaveBeenCalled();
+        expect(dataCleanupMocks.deleteAccountStorageFiles).not.toHaveBeenCalled();
+    });
+
+    it('preserves identity sources after a failed checkpoint while completing independent erasure stages', async () => {
+        dataCleanupMocks.checkpointAccountDeletionIdentifiers.mockRejectedValueOnce(new Error('checkpoint unavailable'));
+        await expect(cleanupUserAccounts(testEnv.auth.makeUserRecord({ uid: 'testUser123' }), {} as functions.EventContext))
+            .rejects.toThrow('checkpoint unavailable');
+        expect(deauthorizeServiceMock).not.toHaveBeenCalled();
+        expect(dataCleanupMocks.deleteAccountFirestoreRoot).toHaveBeenCalledTimes(2);
+        expect(dataCleanupMocks.deleteAccountStorageFiles).toHaveBeenCalledWith('testUser123');
+        expect(cleanupMcpOAuthStateForUserMock).toHaveBeenCalled();
+        expect(dataCleanupMocks.completeAccountDataCleanup).not.toHaveBeenCalled();
+    });
+
+    it('continues all independent stages after root failure and completes only a verified retry', async () => {
+        const user = testEnv.auth.makeUserRecord({ uid: 'testUser123' });
+        dataCleanupMocks.deleteAccountFirestoreRoot.mockRejectedValueOnce(new Error('root unavailable'));
+        await expect(cleanupUserAccounts(user, {} as functions.EventContext)).rejects.toThrow('root unavailable');
+        expect(dataCleanupMocks.deleteAccountFirestoreRoot).toHaveBeenCalledTimes(2);
+        expect(dataCleanupMocks.deleteAccountStorageFiles).toHaveBeenCalled();
+        expect(dataCleanupMocks.assertAccountStorageAbsent).toHaveBeenCalled();
+        expect(dataCleanupMocks.completeAccountDataCleanup).not.toHaveBeenCalled();
+        await cleanupUserAccounts(user, {} as functions.EventContext);
+        expect(dataCleanupMocks.completeAccountDataCleanup).toHaveBeenCalledTimes(1);
+    });
+
+    it('recovers provider-only work from the durable checkpoint after credentials disappear', async () => {
+        dataCleanupMocks.beginAccountDataCleanup.mockResolvedValueOnce({
+            suuntoUserNames: ['retained-provider'], corosOpenIds: [], garminUserIDs: [], wahooUserIDs: [],
+        });
+        await cleanupUserAccounts(testEnv.auth.makeUserRecord({ uid: 'testUser123' }), {} as functions.EventContext);
+        expect(whereMock).toHaveBeenCalledWith('userName', '==', 'retained-provider');
+        expect(dataCleanupMocks.checkpointAccountDeletionIdentifiers).toHaveBeenCalledWith(expect.anything(), 'testUser123', {
+            suuntoUserNames: ['retained-provider'], corosOpenIds: [], garminUserIDs: [], wahooUserIDs: [],
+        });
+    });
+
+    it('keeps the fence pending when scoped absence cannot be verified', async () => {
+        dataCleanupMocks.assertAccountStorageAbsent.mockRejectedValueOnce(new Error('late object remains'));
+        await expect(cleanupUserAccounts(testEnv.auth.makeUserRecord({ uid: 'testUser123' }), {} as functions.EventContext))
+            .rejects.toThrow('late object remains');
+        expect(dataCleanupMocks.completeAccountDataCleanup).not.toHaveBeenCalled();
     });
 
     it('should deauthorize services and delete parent documents', async () => {
@@ -431,7 +502,7 @@ describe('cleanupUserAccounts', () => {
 
         await expect(
             wrapped(user, { eventId: 'eventId' } as unknown as functions.EventContext),
-        ).rejects.toThrow('MCP OAuth cleanup did not complete.');
+        ).rejects.toThrow('Account cleanup did not complete.');
 
         expect(firestoreMock().collection).toHaveBeenCalledWith('mail');
         expect(firestoreMock().collection).toHaveBeenCalledWith('activitySyncQueue');
@@ -482,7 +553,7 @@ describe('cleanupUserAccounts', () => {
         // Make Suunto doc deletion fail (via the recursiveDelete mock)
         recursiveDeleteMock.mockRejectedValueOnce(new Error('Firestore delete failed'));
 
-        await wrapped(user, { eventId: 'eventId' } as unknown as functions.EventContext);
+        await expect(wrapped(user, { eventId: 'eventId' } as unknown as functions.EventContext)).rejects.toThrow('Firestore delete failed');
 
         // Verify Suunto was called
         expect(deauthorizeServiceMock).toHaveBeenCalledWith('testUser123', ServiceNames.SuuntoApp);
@@ -511,9 +582,10 @@ describe('cleanupUserAccounts', () => {
         const getMock = vi.fn();
         getMock
             .mockResolvedValueOnce(uidDocs)
+            .mockResolvedValueOnce({ docs: [] })
             .mockResolvedValueOnce(emailDocs);
 
-        whereMock.mockReturnValue({ get: getMock });
+        whereMock.mockImplementation((field: string) => ({ get: ['toUids', 'marketing.uid', 'to'].includes(field) ? getMock : vi.fn().mockResolvedValue({ docs: [] }) }));
 
         await wrapped(user, { eventId: 'eventId' } as unknown as functions.EventContext);
 
@@ -538,7 +610,7 @@ describe('cleanupUserAccounts', () => {
         const getMock = vi.fn()
             .mockResolvedValueOnce({ docs: [] })
             .mockResolvedValueOnce({ docs: marketingDocs });
-        whereMock.mockReturnValue({ get: getMock });
+        whereMock.mockImplementation((field: string) => ({ get: ['toUids', 'marketing.uid', 'to'].includes(field) ? getMock : vi.fn().mockResolvedValue({ docs: [] }) }));
 
         await cleanupUserAccounts(user, { eventId: 'eventId' } as unknown as functions.EventContext);
 
@@ -551,7 +623,7 @@ describe('cleanupUserAccounts', () => {
         const getMock = vi.fn()
             .mockResolvedValueOnce({ docs: [] })
             .mockResolvedValueOnce({ docs: [{ id: 'marketing-mail', ref: 'mail-ref', data: () => ({}) }] });
-        whereMock.mockReturnValue({ get: getMock });
+        whereMock.mockImplementation((field: string) => ({ get: ['toUids', 'marketing.uid', 'to'].includes(field) ? getMock : vi.fn().mockResolvedValue({ docs: [] }) }));
         batchMock.commit.mockRejectedValueOnce(new Error('Mail batch failed'));
 
         await expect(cleanupUserAccounts(user, { eventId: 'eventId' } as unknown as functions.EventContext))
@@ -596,9 +668,10 @@ describe('cleanupUserAccounts', () => {
         const getMock = vi.fn();
         getMock
             .mockResolvedValueOnce(uidDocs)
+            .mockResolvedValueOnce({ docs: [] })
             .mockResolvedValueOnce(emailDocs);
 
-        whereMock.mockReturnValue({ get: getMock });
+        whereMock.mockImplementation((field: string) => ({ get: ['toUids', 'marketing.uid', 'to'].includes(field) ? getMock : vi.fn().mockResolvedValue({ docs: [] }) }));
 
         await wrapped(user, { eventId: 'eventId' } as unknown as functions.EventContext);
 
@@ -647,7 +720,7 @@ describe('cleanupUserAccounts', () => {
         // Make recursiveDelete throw
         recursiveDeleteMock.mockRejectedValueOnce(new Error('Firestore error'));
 
-        await wrapped(user, { eventId: 'eventId' } as unknown as functions.EventContext);
+        await expect(wrapped(user, { eventId: 'eventId' } as unknown as functions.EventContext)).rejects.toThrow('Firestore error');
 
         // Should still call COROS and Garmin
         expect(deauthorizeServiceMock).toHaveBeenCalledWith('testUser123', ServiceNames.COROSAPI);
@@ -665,7 +738,7 @@ describe('cleanupUserAccounts', () => {
             if (ref === queueRef && !failed) { failed = true; throw new Error('Transient cleanup failure'); }
         });
         try {
-            await cleanupUserAccounts(user, { eventId: 'first' } as unknown as functions.EventContext);
+            await expect(cleanupUserAccounts(user, { eventId: 'first' } as unknown as functions.EventContext)).rejects.toThrow('Transient cleanup failure');
             await cleanupUserAccounts(user, { eventId: 'retry' } as unknown as functions.EventContext);
             expect(recursiveDeleteMock.mock.calls.filter(([ref]) => ref === queueRef)).toHaveLength(2);
             expect(markQueueItemDeletedForUserCleanupMock).toHaveBeenCalledWith(
@@ -919,17 +992,19 @@ describe('cleanupUserAccounts', () => {
         expect(recursiveDeleteMock).toHaveBeenCalled();
     });
 
-    it('should still force delete token roots when reading remaining tokens for archival fails', async () => {
+    it('preserves provider identity sources on failed discovery while continuing independent cleanup', async () => {
         const wrapped = cleanupUserAccounts;
         const user = testEnv.auth.makeUserRecord({ uid: 'testUser123' });
 
         tokensGetMock.mockRejectedValue(new Error('Firestore read failed'));
 
-        await expect(wrapped(user, { eventId: 'eventId' } as unknown as functions.EventContext)).resolves.not.toThrow();
+        await expect(wrapped(user, { eventId: 'eventId' } as unknown as functions.EventContext)).rejects.toThrow('Firestore read failed');
 
         const tokenRootDeleteCalls = recursiveDeleteMock.mock.calls
             .filter(([ref]) => ref?.path === 'doc/testUser123');
-        expect(tokenRootDeleteCalls).toHaveLength(4);
+        expect(tokenRootDeleteCalls).toHaveLength(0);
+        expect(dataCleanupMocks.deleteAccountFirestoreRoot).toHaveBeenCalledTimes(2);
+        expect(dataCleanupMocks.completeAccountDataCleanup).not.toHaveBeenCalled();
     });
 
     it('should skip archiving when no tokens remain', async () => {
@@ -951,7 +1026,7 @@ describe('cleanupUserAccounts', () => {
         // User without email - only uid query should run
 
         const getMock = vi.fn().mockResolvedValue({ docs: [] });
-        whereMock.mockReturnValue({ get: getMock });
+        whereMock.mockImplementation((field: string) => ({ get: ['toUids', 'marketing.uid', 'to'].includes(field) ? getMock : vi.fn().mockResolvedValue({ docs: [] }) }));
 
         await wrapped(user, { eventId: 'eventId' } as unknown as functions.EventContext);
 
@@ -965,7 +1040,7 @@ describe('cleanupUserAccounts', () => {
 
         // Both queries return empty
         const getMock = vi.fn().mockResolvedValue({ docs: [] });
-        whereMock.mockReturnValue({ get: getMock });
+        whereMock.mockImplementation((field: string) => ({ get: ['toUids', 'marketing.uid', 'to'].includes(field) ? getMock : vi.fn().mockResolvedValue({ docs: [] }) }));
 
         await wrapped(user, { eventId: 'eventId' } as unknown as functions.EventContext);
 
@@ -1138,7 +1213,7 @@ describe('cleanupUserAccounts', () => {
         );
 
         try {
-            await wrapped(user, { eventId: 'eventId' } as unknown as functions.EventContext);
+            await expect(wrapped(user, { eventId: 'eventId' } as unknown as functions.EventContext)).rejects.toThrow('Queue cleanup tombstone');
         } finally {
             restoreCollectionMock();
         }

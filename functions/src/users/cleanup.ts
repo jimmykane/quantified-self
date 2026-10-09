@@ -51,8 +51,22 @@ import {
 } from '../orphaned-service-tokens';
 import { cleanupMcpOAuthStateForUser } from '../mcp/oauth.service';
 import { FUNCTION_SECRET_BINDINGS } from '../secrets';
-import { cleanupRejectedRouteOriginalFilesForUser } from '../routes/rejected-original-cleanup';
-import { cleanupServiceDisconnectTasksForUser } from '../service-disconnect-cleanup';
+import { cleanupRejectedRouteOriginalFilesForUser, REJECTED_ROUTE_ORIGINAL_CLEANUP_COLLECTION_NAME } from '../routes/rejected-original-cleanup';
+import { cleanupServiceDisconnectTasksForUser, SERVICE_DISCONNECT_CLEANUP_COLLECTION } from '../service-disconnect-cleanup';
+import {
+    ACCOUNT_DELETION_ROOT_COLLECTIONS, beginAccountDataCleanup, checkpointAccountDeletionIdentifiers,
+    completeAccountDataCleanup, deleteAccountFirestoreRoot, assertAccountFirestoreRootAbsent,
+    deleteAccountStorageFiles, assertAccountStorageAbsent, assertAccountCleanupQueryEmpty,
+} from './data-cleanup';
+
+type CleanupFailures = { stage: string; error: unknown }[];
+async function runCleanupStage(failures: CleanupFailures, stage: string, action: () => Promise<unknown>): Promise<void> {
+    try { await action(); }
+    catch (error) {
+        failures.push({ stage, error });
+        logger.error('[AccountDeletion] Mandatory stage failed.', { stage });
+    }
+}
 
 export { ORPHANED_SERVICE_TOKENS_COLLECTION_NAME } from '../orphaned-service-tokens';
 
@@ -233,7 +247,7 @@ function serviceNameFromSleepProvider(provider: unknown): ServiceNames | null {
     }
 }
 
-async function collectProviderIdentifiersForUser(uid: string, services: readonly ServiceCleanupConfig[]): Promise<UserProviderIdentifiers> {
+async function collectProviderIdentifiersForUser(uid: string, services: readonly ServiceCleanupConfig[], failures: CleanupFailures): Promise<UserProviderIdentifiers> {
     const identifiers: UserProviderIdentifiers = {
         suuntoUserNames: new Set<string>(),
         corosOpenIds: new Set<string>(),
@@ -250,14 +264,15 @@ async function collectProviderIdentifiersForUser(uid: string, services: readonly
                 addProviderIdentifiersFromTokenData(identifiers, service.serviceName, tokenData);
             });
         } catch (error) {
-            logger.error(`[Cleanup] Failed to collect provider identifiers for ${service.name} user ${uid}`, error);
+            failures.push({ stage: 'provider_identifiers', error });
+            logger.error('[AccountDeletion] Provider identity read failed.');
         }
     }
 
     return identifiers;
 }
 
-async function collectArchivedProviderIdentifiersForUser(uid: string, identifiers: UserProviderIdentifiers): Promise<void> {
+async function collectArchivedProviderIdentifiersForUser(uid: string, identifiers: UserProviderIdentifiers, failures: CleanupFailures): Promise<void> {
     try {
         const snapshot = await admin.firestore()
             .collection(ORPHANED_SERVICE_TOKENS_COLLECTION_NAME)
@@ -272,7 +287,8 @@ async function collectArchivedProviderIdentifiersForUser(uid: string, identifier
             addProviderIdentifiersFromTokenData(identifiers, serviceName, tokenData);
         });
     } catch (error) {
-        logger.error(`[Cleanup] Failed to collect archived provider identifiers for user ${uid}`, error);
+        failures.push({ stage: 'archived_identifiers', error });
+        logger.error('[AccountDeletion] Archived identity read failed.');
     }
 }
 
@@ -316,14 +332,10 @@ async function safeDeauthorizeAndCleanup(uid: string, config: ServiceCleanupConf
         logger.error(`[Cleanup] Error archiving lifecycle ${config.name} tokens for ${uid}`, e as Error);
     }
 
-    try {
-        await deleteTokenDocumentWithSubcollections(config.collectionName, uid);
-    } catch (e: unknown) {
-        logger.error(`[Cleanup] Error deleting ${config.name} tokens for ${uid}`, e as Error);
-    }
+    await deleteTokenDocumentWithSubcollections(config.collectionName, uid);
 }
 
-async function cleanupUserScopedGeneratedState(uid: string): Promise<void> {
+async function cleanupUserScopedGeneratedState(uid: string, failures: CleanupFailures): Promise<void> {
     const db = admin.firestore();
     const userRef = db.collection('users').doc(uid);
     const cleanupTargets = [
@@ -346,7 +358,8 @@ async function cleanupUserScopedGeneratedState(uid: string): Promise<void> {
             await db.recursiveDelete(target.ref);
             logger.info(`[Cleanup] Recursively deleted ${target.label} generated state for user ${uid}`);
         } catch (error) {
-            logger.error(`[Cleanup] Failed to recursively delete ${target.label} generated state for user ${uid}`, error);
+            failures.push({ stage: 'generated_state', error });
+            logger.error('[AccountDeletion] Generated-state cleanup failed.');
         }
     }
 }
@@ -368,11 +381,13 @@ async function recursiveDeleteQueryResults(
     fieldName: string,
     values: Iterable<string>,
     deletedRefKeys: Set<string>,
+    failures: CleanupFailures,
     shouldDeleteDoc?: OperationalDocDeleteFilter,
 ): Promise<void> {
     for (const value of new Set([...values].map((candidate) => `${candidate || ''}`.trim()).filter(Boolean))) {
         try {
-            const snapshot = await db.collection(collectionName).where(fieldName, '==', value).get();
+            const query = db.collection(collectionName).where(fieldName, '==', value);
+            const snapshot = await query.get();
             const docs = getSnapshotDocs(snapshot);
             let deletedDocCount = 0;
             for (const doc of docs) {
@@ -384,18 +399,22 @@ async function recursiveDeleteQueryResults(
                     continue;
                 }
                 if (!(await markQueueCleanupTombstoneForDeletedOperationalDoc(collectionName, doc))) {
-                    logger.error(`[Cleanup] Preserving ${collectionName}/${doc.id} because cleanup tombstone could not be written.`);
+                    failures.push({ stage: 'queue_tombstone', error: new Error('Queue cleanup tombstone could not be written.') });
                     continue;
                 }
-                await db.recursiveDelete(doc.ref);
-                deletedRefKeys.add(refKey);
-                deletedDocCount += 1;
+                await runCleanupStage(failures, 'operational_document', async () => {
+                    await db.recursiveDelete(doc.ref);
+                    deletedRefKeys.add(refKey);
+                    deletedDocCount += 1;
+                });
             }
+            await assertAccountCleanupQueryEmpty(query, shouldDeleteDoc);
             if (deletedDocCount > 0) {
                 logger.info(`[Cleanup] Recursively deleted ${deletedDocCount} ${label} docs for user ${uid} from ${collectionName} where ${fieldName} == ${value}`);
             }
         } catch (error) {
-            logger.error(`[Cleanup] Failed to recursively delete ${label} docs for user ${uid} from ${collectionName} where ${fieldName} == ${value}`, error);
+            failures.push({ stage: 'operational_query', error });
+            logger.error('[AccountDeletion] Operational cleanup failed.');
         }
     }
 }
@@ -654,6 +673,7 @@ async function cleanupLegacyProviderKeyedQueueOrphans(
     uid: string,
     identifiers: UserProviderIdentifiers,
     deletedRefKeys: Set<string>,
+    failures: CleanupFailures,
 ): Promise<void> {
     if (!hasAnyProviderIdentifier(identifiers)) {
         return;
@@ -708,11 +728,13 @@ async function cleanupLegacyProviderKeyedQueueOrphans(
                     }
 
                     if (!(await markQueueCleanupTombstoneForDeletedOperationalDoc(collectionName, doc))) {
-                        logger.error(`[Cleanup] Preserving legacy provider-keyed orphan doc ${collectionName}/${doc.id} because cleanup tombstone could not be written.`);
+                        failures.push({ stage: 'queue_tombstone', error: new Error('Queue cleanup tombstone could not be written.') });
                         continue;
                     }
-                    await db.recursiveDelete(doc.ref);
-                    deletedRefKeys.add(refKey);
+                    await runCleanupStage(failures, 'legacy_operational_document', async () => {
+                        await db.recursiveDelete(doc.ref);
+                        deletedRefKeys.add(refKey);
+                    });
                     logger.info(
                         `[Cleanup] Recursively deleted legacy provider-keyed orphan doc ${collectionName}/${doc.id} while cleaning user ${uid}.`,
                     );
@@ -723,8 +745,25 @@ async function cleanupLegacyProviderKeyedQueueOrphans(
                     break;
                 }
             }
+            let cursor: admin.firestore.QueryDocumentSnapshot | undefined;
+            while (true) {
+                let query = db.collection(collectionName).limit(LEGACY_PROVIDER_QUEUE_ORPHAN_SWEEP_LIMIT);
+                if (cursor) query = query.startAfter(cursor);
+                const page = await query.get();
+                await assertAccountCleanupQueryEmpty(query, async doc => {
+                    const data = doc.data() as Record<string, unknown>;
+                    const lookup = providerQueueLookupFromCollectionData(collectionName, data);
+                    return !hasFirebaseUidAssociation(collectionName, data) && Boolean(lookup
+                        && providerLookupBelongsToUserIdentifiers(lookup, identifiers)
+                        && !(await hasConnectedTokenForProviderLookup(db, lookup, uid)));
+                });
+                const docs = getSnapshotDocs(page);
+                if (docs.length < LEGACY_PROVIDER_QUEUE_ORPHAN_SWEEP_LIMIT) break;
+                cursor = docs[docs.length - 1];
+            }
         } catch (error) {
-            logger.error(`[Cleanup] Failed legacy provider-keyed orphan sweep for ${collectionName} while cleaning user ${uid}`, error);
+            failures.push({ stage: 'legacy_operational_query', error });
+            logger.error('[AccountDeletion] Legacy operational cleanup failed.');
         }
     }
 }
@@ -788,13 +827,15 @@ async function collectProviderIdentifiersFromQueueQuery(
     fieldName: string,
     values: Iterable<string>,
     addIdentifiersFromData: (data: Record<string, unknown>) => void,
+    failures: CleanupFailures,
 ): Promise<void> {
     for (const value of new Set([...values].map((candidate) => `${candidate || ''}`.trim()).filter(Boolean))) {
         try {
             const snapshot = await db.collection(collectionName).where(fieldName, '==', value).get();
             getSnapshotDocs(snapshot).forEach((doc) => addIdentifiersFromData(doc.data() as Record<string, unknown>));
         } catch (error) {
-            logger.error(`[Cleanup] Failed to collect provider identifiers for user ${uid} from ${collectionName} where ${fieldName} == ${value}`, error);
+            failures.push({ stage: 'queue_identifiers', error });
+            logger.error('[AccountDeletion] Queue identity read failed.');
         }
     }
 }
@@ -803,6 +844,7 @@ async function collectProviderIdentifiersFromUidKeyedQueueState(
     db: admin.firestore.Firestore,
     uid: string,
     identifiers: UserProviderIdentifiers,
+    failures: CleanupFailures,
 ): Promise<void> {
     const firebaseUIDValues = [uid];
 
@@ -813,6 +855,7 @@ async function collectProviderIdentifiersFromUidKeyedQueueState(
         'firebaseUserID',
         firebaseUIDValues,
         (data) => addProviderIdentifier(identifiers, data.sourceServiceName, data.providerUserId),
+        failures,
     );
     await collectProviderIdentifiersFromQueueQuery(
         db,
@@ -821,6 +864,7 @@ async function collectProviderIdentifiersFromUidKeyedQueueState(
         'userID',
         firebaseUIDValues,
         (data) => addProviderIdentifier(identifiers, ServiceNames.SuuntoApp, data.providerUserId),
+        failures,
     );
     await collectProviderIdentifiersFromQueueQuery(
         db,
@@ -829,6 +873,7 @@ async function collectProviderIdentifiersFromUidKeyedQueueState(
         'userID',
         firebaseUIDValues,
         (data) => addProviderIdentifiersFromSleepQueueData(identifiers, data),
+        failures,
     );
     await collectProviderIdentifiersFromQueueQuery(
         db,
@@ -837,6 +882,7 @@ async function collectProviderIdentifiersFromUidKeyedQueueState(
         'firebaseUserID',
         firebaseUIDValues,
         (data) => addProviderIdentifiersFromSleepQueueData(identifiers, data),
+        failures,
     );
     await collectProviderIdentifiersFromQueueQuery(
         db,
@@ -845,6 +891,7 @@ async function collectProviderIdentifiersFromUidKeyedQueueState(
         'firebaseUserID',
         firebaseUIDValues,
         (data) => addProviderIdentifier(identifiers, ServiceNames.SuuntoApp, data.userName),
+        failures,
     );
     await collectProviderIdentifiersFromQueueQuery(
         db,
@@ -853,6 +900,7 @@ async function collectProviderIdentifiersFromUidKeyedQueueState(
         'firebaseUserID',
         firebaseUIDValues,
         (data) => addProviderIdentifier(identifiers, ServiceNames.COROSAPI, data.openId),
+        failures,
     );
     await collectProviderIdentifiersFromQueueQuery(
         db,
@@ -861,6 +909,7 @@ async function collectProviderIdentifiersFromUidKeyedQueueState(
         'firebaseUserID',
         firebaseUIDValues,
         (data) => addProviderIdentifier(identifiers, ServiceNames.GarminAPI, data.userID),
+        failures,
     );
     await collectProviderIdentifiersFromQueueQuery(
         db,
@@ -869,6 +918,7 @@ async function collectProviderIdentifiersFromUidKeyedQueueState(
         'firebaseUserID',
         firebaseUIDValues,
         (data) => addProviderIdentifier(identifiers, ServiceNames.WahooAPI, data.wahooUserID),
+        failures,
     );
     await collectProviderIdentifiersFromQueueQuery(
         db,
@@ -881,6 +931,7 @@ async function collectProviderIdentifiersFromUidKeyedQueueState(
                 addProviderIdentifiersFromFailedJobData(identifiers, data);
             }
         },
+        failures,
     );
     await collectProviderIdentifiersFromQueueQuery(
         db,
@@ -889,6 +940,7 @@ async function collectProviderIdentifiersFromUidKeyedQueueState(
         'firebaseUserID',
         firebaseUIDValues,
         (data) => addProviderIdentifiersFromFailedJobData(identifiers, data),
+        failures,
     );
     await collectProviderIdentifiersFromQueueQuery(
         db,
@@ -897,14 +949,15 @@ async function collectProviderIdentifiersFromUidKeyedQueueState(
         'uid',
         firebaseUIDValues,
         (data) => addProviderIdentifiersFromFailedJobData(identifiers, data),
+        failures,
     );
 }
 
-async function cleanupTopLevelQueueState(uid: string, identifiers: UserProviderIdentifiers): Promise<void> {
+async function cleanupTopLevelQueueState(uid: string, identifiers: UserProviderIdentifiers, failures: CleanupFailures): Promise<void> {
+    const startingFailureCount = failures.length;
     const db = admin.firestore();
     const deletedRefKeys = new Set<string>();
     const firebaseUIDValues = [uid];
-    await collectProviderIdentifiersFromUidKeyedQueueState(db, uid, identifiers);
     const suuntoValues = [...identifiers.suuntoUserNames];
     const corosValues = [...identifiers.corosOpenIds];
     const garminValues = [...identifiers.garminUserIDs];
@@ -915,40 +968,42 @@ async function cleanupTopLevelQueueState(uid: string, identifiers: UserProviderI
     const failedJobFirebaseUidDeleteFilter: OperationalDocDeleteFilter = async (doc) =>
         getExplicitFirebaseUidAssociation('failed_jobs', doc.data() as Record<string, unknown>) === uid;
 
-    await recursiveDeleteQueryResults(db, uid, 'activity sync queue', ACTIVITY_SYNC_QUEUE_COLLECTION_NAME, 'userID', firebaseUIDValues, deletedRefKeys);
-    await recursiveDeleteQueryResults(db, uid, 'training delivery queue', DELIVERY_QUEUE, 'uid', firebaseUIDValues, deletedRefKeys);
-    await recursiveDeleteQueryResults(db, uid, 'COROS Training integer claim', COROS_INTEGER_CLAIMS, 'uid', firebaseUIDValues, deletedRefKeys);
-    await recursiveDeleteQueryResults(db, uid, 'activity sync queue', ACTIVITY_SYNC_QUEUE_COLLECTION_NAME, 'firebaseUserID', firebaseUIDValues, deletedRefKeys);
-    await recursiveDeleteQueryResults(db, uid, 'route delivery sync queue', ROUTE_DELIVERY_SYNC_QUEUE_COLLECTION_NAME, 'userID', firebaseUIDValues, deletedRefKeys);
-    await recursiveDeleteQueryResults(db, uid, 'route delivery sync queue', ROUTE_DELIVERY_SYNC_QUEUE_COLLECTION_NAME, 'firebaseUserID', firebaseUIDValues, deletedRefKeys);
-    await recursiveDeleteQueryResults(db, uid, 'route sync queue', ROUTE_SYNC_QUEUE_COLLECTION_NAME, 'firebaseUserID', firebaseUIDValues, deletedRefKeys);
-    await recursiveDeleteQueryResults(db, uid, 'route sync queue', ROUTE_SYNC_QUEUE_COLLECTION_NAME, 'providerUserId', providerValues, deletedRefKeys, providerKeyedDeleteFilter(ROUTE_SYNC_QUEUE_COLLECTION_NAME));
-    await recursiveDeleteQueryResults(db, uid, 'sleep sync queue', SLEEP_SYNC_QUEUE_COLLECTION_NAME, 'userID', firebaseUIDValues, deletedRefKeys);
-    await recursiveDeleteQueryResults(db, uid, 'sleep sync queue', SLEEP_SYNC_QUEUE_COLLECTION_NAME, 'firebaseUserID', firebaseUIDValues, deletedRefKeys);
-    await recursiveDeleteQueryResults(db, uid, 'sleep sync queue', SLEEP_SYNC_QUEUE_COLLECTION_NAME, 'providerUserId', providerValues, deletedRefKeys, providerKeyedDeleteFilter(SLEEP_SYNC_QUEUE_COLLECTION_NAME));
-    await recursiveDeleteQueryResults(db, uid, 'Suunto Health webhook ingress', SUUNTO_HEALTH_WEBHOOK_INGRESS_COLLECTION_NAME, 'userID', firebaseUIDValues, deletedRefKeys);
-    await recursiveDeleteQueryResults(db, uid, 'Suunto Health webhook account binding', SUUNTO_HEALTH_WEBHOOK_ACCOUNT_BINDINGS_COLLECTION_NAME, 'userID', firebaseUIDValues, deletedRefKeys);
-    await recursiveDeleteQueryResults(db, uid, 'Suunto Health webhook ingress', SUUNTO_HEALTH_WEBHOOK_INGRESS_COLLECTION_NAME, 'providerUserId', suuntoValues, deletedRefKeys, providerKeyedDeleteFilter(SUUNTO_HEALTH_WEBHOOK_INGRESS_COLLECTION_NAME));
-    await recursiveDeleteQueryResults(db, uid, 'Suunto workout queue', SUUNTOAPP_WORKOUT_QUEUE_COLLECTION_NAME, 'firebaseUserID', firebaseUIDValues, deletedRefKeys);
-    await recursiveDeleteQueryResults(db, uid, 'Suunto workout queue', SUUNTOAPP_WORKOUT_QUEUE_COLLECTION_NAME, 'userName', suuntoValues, deletedRefKeys, providerKeyedDeleteFilter(SUUNTOAPP_WORKOUT_QUEUE_COLLECTION_NAME));
-    await recursiveDeleteQueryResults(db, uid, 'COROS workout queue', COROSAPI_WORKOUT_QUEUE_COLLECTION_NAME, 'firebaseUserID', firebaseUIDValues, deletedRefKeys);
-    await recursiveDeleteQueryResults(db, uid, 'COROS workout queue', COROSAPI_WORKOUT_QUEUE_COLLECTION_NAME, 'openId', corosValues, deletedRefKeys, providerKeyedDeleteFilter(COROSAPI_WORKOUT_QUEUE_COLLECTION_NAME));
-    await recursiveDeleteQueryResults(db, uid, 'Garmin workout queue', GARMIN_API_WORKOUT_QUEUE_COLLECTION_NAME, 'firebaseUserID', firebaseUIDValues, deletedRefKeys);
-    await recursiveDeleteQueryResults(db, uid, 'Garmin workout queue', GARMIN_API_WORKOUT_QUEUE_COLLECTION_NAME, 'userID', garminValues, deletedRefKeys, providerKeyedDeleteFilter(GARMIN_API_WORKOUT_QUEUE_COLLECTION_NAME));
-    await recursiveDeleteQueryResults(db, uid, 'Wahoo workout queue', WAHOO_API_WORKOUT_QUEUE_COLLECTION_NAME, 'firebaseUserID', firebaseUIDValues, deletedRefKeys);
-    await recursiveDeleteQueryResults(db, uid, 'Wahoo workout queue', WAHOO_API_WORKOUT_QUEUE_COLLECTION_NAME, 'wahooUserID', wahooValues, deletedRefKeys, providerKeyedDeleteFilter(WAHOO_API_WORKOUT_QUEUE_COLLECTION_NAME));
-    await recursiveDeleteQueryResults(db, uid, 'failed job', 'failed_jobs', 'userID', firebaseUIDValues, deletedRefKeys, failedJobFirebaseUidDeleteFilter);
-    await recursiveDeleteQueryResults(db, uid, 'failed job', 'failed_jobs', 'userID', garminValues, deletedRefKeys, providerKeyedDeleteFilter('failed_jobs'));
-    await recursiveDeleteQueryResults(db, uid, 'failed job', 'failed_jobs', 'firebaseUserID', firebaseUIDValues, deletedRefKeys);
-    await recursiveDeleteQueryResults(db, uid, 'failed job', 'failed_jobs', 'uid', firebaseUIDValues, deletedRefKeys);
-    await recursiveDeleteQueryResults(db, uid, 'failed job', 'failed_jobs', 'providerUserId', providerValues, deletedRefKeys, providerKeyedDeleteFilter('failed_jobs'));
-    await recursiveDeleteQueryResults(db, uid, 'failed job', 'failed_jobs', 'userName', suuntoValues, deletedRefKeys, providerKeyedDeleteFilter('failed_jobs'));
-    await recursiveDeleteQueryResults(db, uid, 'failed job', 'failed_jobs', 'openId', corosValues, deletedRefKeys, providerKeyedDeleteFilter('failed_jobs'));
-    await recursiveDeleteQueryResults(db, uid, 'sports-lib reparse job', SPORTS_LIB_REPARSE_JOBS_COLLECTION, 'uid', firebaseUIDValues, deletedRefKeys);
-    await recursiveDeleteQueryResults(db, uid, 'sports-lib route reparse job', SPORTS_LIB_ROUTE_REPARSE_JOBS_COLLECTION, 'uid', firebaseUIDValues, deletedRefKeys);
-    await cleanupLegacyProviderKeyedQueueOrphans(uid, identifiers, deletedRefKeys);
+    await recursiveDeleteQueryResults(db, uid, 'activity sync queue', ACTIVITY_SYNC_QUEUE_COLLECTION_NAME, 'userID', firebaseUIDValues, deletedRefKeys, failures);
+    await recursiveDeleteQueryResults(db, uid, 'training delivery queue', DELIVERY_QUEUE, 'uid', firebaseUIDValues, deletedRefKeys, failures);
+    await recursiveDeleteQueryResults(db, uid, 'COROS Training integer claim', COROS_INTEGER_CLAIMS, 'uid', firebaseUIDValues, deletedRefKeys, failures);
+    await recursiveDeleteQueryResults(db, uid, 'activity sync queue', ACTIVITY_SYNC_QUEUE_COLLECTION_NAME, 'firebaseUserID', firebaseUIDValues, deletedRefKeys, failures);
+    await recursiveDeleteQueryResults(db, uid, 'route delivery sync queue', ROUTE_DELIVERY_SYNC_QUEUE_COLLECTION_NAME, 'userID', firebaseUIDValues, deletedRefKeys, failures);
+    await recursiveDeleteQueryResults(db, uid, 'route delivery sync queue', ROUTE_DELIVERY_SYNC_QUEUE_COLLECTION_NAME, 'firebaseUserID', firebaseUIDValues, deletedRefKeys, failures);
+    await recursiveDeleteQueryResults(db, uid, 'route sync queue', ROUTE_SYNC_QUEUE_COLLECTION_NAME, 'firebaseUserID', firebaseUIDValues, deletedRefKeys, failures);
+    await recursiveDeleteQueryResults(db, uid, 'route sync queue', ROUTE_SYNC_QUEUE_COLLECTION_NAME, 'providerUserId', providerValues, deletedRefKeys, failures, providerKeyedDeleteFilter(ROUTE_SYNC_QUEUE_COLLECTION_NAME));
+    await recursiveDeleteQueryResults(db, uid, 'sleep sync queue', SLEEP_SYNC_QUEUE_COLLECTION_NAME, 'userID', firebaseUIDValues, deletedRefKeys, failures);
+    await recursiveDeleteQueryResults(db, uid, 'sleep sync queue', SLEEP_SYNC_QUEUE_COLLECTION_NAME, 'firebaseUserID', firebaseUIDValues, deletedRefKeys, failures);
+    await recursiveDeleteQueryResults(db, uid, 'sleep sync queue', SLEEP_SYNC_QUEUE_COLLECTION_NAME, 'providerUserId', providerValues, deletedRefKeys, failures, providerKeyedDeleteFilter(SLEEP_SYNC_QUEUE_COLLECTION_NAME));
+    await recursiveDeleteQueryResults(db, uid, 'Suunto Health webhook ingress', SUUNTO_HEALTH_WEBHOOK_INGRESS_COLLECTION_NAME, 'userID', firebaseUIDValues, deletedRefKeys, failures);
+    await recursiveDeleteQueryResults(db, uid, 'Suunto Health webhook account binding', SUUNTO_HEALTH_WEBHOOK_ACCOUNT_BINDINGS_COLLECTION_NAME, 'userID', firebaseUIDValues, deletedRefKeys, failures);
+    await recursiveDeleteQueryResults(db, uid, 'Suunto Health webhook ingress', SUUNTO_HEALTH_WEBHOOK_INGRESS_COLLECTION_NAME, 'providerUserId', suuntoValues, deletedRefKeys, failures, providerKeyedDeleteFilter(SUUNTO_HEALTH_WEBHOOK_INGRESS_COLLECTION_NAME));
+    await recursiveDeleteQueryResults(db, uid, 'Suunto workout queue', SUUNTOAPP_WORKOUT_QUEUE_COLLECTION_NAME, 'firebaseUserID', firebaseUIDValues, deletedRefKeys, failures);
+    await recursiveDeleteQueryResults(db, uid, 'Suunto workout queue', SUUNTOAPP_WORKOUT_QUEUE_COLLECTION_NAME, 'userName', suuntoValues, deletedRefKeys, failures, providerKeyedDeleteFilter(SUUNTOAPP_WORKOUT_QUEUE_COLLECTION_NAME));
+    await recursiveDeleteQueryResults(db, uid, 'COROS workout queue', COROSAPI_WORKOUT_QUEUE_COLLECTION_NAME, 'firebaseUserID', firebaseUIDValues, deletedRefKeys, failures);
+    await recursiveDeleteQueryResults(db, uid, 'COROS workout queue', COROSAPI_WORKOUT_QUEUE_COLLECTION_NAME, 'openId', corosValues, deletedRefKeys, failures, providerKeyedDeleteFilter(COROSAPI_WORKOUT_QUEUE_COLLECTION_NAME));
+    await recursiveDeleteQueryResults(db, uid, 'Garmin workout queue', GARMIN_API_WORKOUT_QUEUE_COLLECTION_NAME, 'firebaseUserID', firebaseUIDValues, deletedRefKeys, failures);
+    await recursiveDeleteQueryResults(db, uid, 'Garmin workout queue', GARMIN_API_WORKOUT_QUEUE_COLLECTION_NAME, 'userID', garminValues, deletedRefKeys, failures, providerKeyedDeleteFilter(GARMIN_API_WORKOUT_QUEUE_COLLECTION_NAME));
+    await recursiveDeleteQueryResults(db, uid, 'Wahoo workout queue', WAHOO_API_WORKOUT_QUEUE_COLLECTION_NAME, 'firebaseUserID', firebaseUIDValues, deletedRefKeys, failures);
+    await recursiveDeleteQueryResults(db, uid, 'Wahoo workout queue', WAHOO_API_WORKOUT_QUEUE_COLLECTION_NAME, 'wahooUserID', wahooValues, deletedRefKeys, failures, providerKeyedDeleteFilter(WAHOO_API_WORKOUT_QUEUE_COLLECTION_NAME));
+    await recursiveDeleteQueryResults(db, uid, 'failed job', 'failed_jobs', 'userID', firebaseUIDValues, deletedRefKeys, failures, failedJobFirebaseUidDeleteFilter);
+    await recursiveDeleteQueryResults(db, uid, 'failed job', 'failed_jobs', 'userID', garminValues, deletedRefKeys, failures, providerKeyedDeleteFilter('failed_jobs'));
+    await recursiveDeleteQueryResults(db, uid, 'failed job', 'failed_jobs', 'firebaseUserID', firebaseUIDValues, deletedRefKeys, failures);
+    await recursiveDeleteQueryResults(db, uid, 'failed job', 'failed_jobs', 'uid', firebaseUIDValues, deletedRefKeys, failures);
+    await recursiveDeleteQueryResults(db, uid, 'failed job', 'failed_jobs', 'providerUserId', providerValues, deletedRefKeys, failures, providerKeyedDeleteFilter('failed_jobs'));
+    await recursiveDeleteQueryResults(db, uid, 'failed job', 'failed_jobs', 'userName', suuntoValues, deletedRefKeys, failures, providerKeyedDeleteFilter('failed_jobs'));
+    await recursiveDeleteQueryResults(db, uid, 'failed job', 'failed_jobs', 'openId', corosValues, deletedRefKeys, failures, providerKeyedDeleteFilter('failed_jobs'));
+    await recursiveDeleteQueryResults(db, uid, 'sports-lib reparse job', SPORTS_LIB_REPARSE_JOBS_COLLECTION, 'uid', firebaseUIDValues, deletedRefKeys, failures);
+    await recursiveDeleteQueryResults(db, uid, 'sports-lib route reparse job', SPORTS_LIB_ROUTE_REPARSE_JOBS_COLLECTION, 'uid', firebaseUIDValues, deletedRefKeys, failures);
+    await cleanupLegacyProviderKeyedQueueOrphans(uid, identifiers, deletedRefKeys, failures);
 
-    logger.info(`[Cleanup] Completed top-level queue state cleanup for user ${uid}`);
+    logger.info('[AccountDeletion] Operational pass finished.', {
+        outcome: failures.length === startingFailureCount ? 'verified' : 'incomplete',
+    });
 }
 
 export const ACCOUNT_DELETION_CLEANUP_RUNTIME_OPTIONS = {
@@ -963,6 +1018,10 @@ export const cleanupUserAccounts = functions
     .runWith(ACCOUNT_DELETION_CLEANUP_RUNTIME_OPTIONS)
     .auth.user().onDelete(async (user) => {
     const uid = user.uid;
+    const db = admin.firestore();
+    // Fail closed before any destructive stage if the durable fence cannot be established.
+    const savedIdentifiers = await beginAccountDataCleanup(db, uid);
+    const failures: CleanupFailures = [];
     logger.info(`[Cleanup] User ${uid} deleted. Starting service deauthorization cleanup.`);
 
     // Import constants locally to avoid top-level side effects if helpful, 
@@ -1017,39 +1076,28 @@ export const cleanupUserAccounts = functions
             serviceName: ServiceNames.WahooAPI
         }
     ];
-    const providerIdentifiers = await collectProviderIdentifiersForUser(uid, services);
-
-    // Run sequantially to avoid race conditions or overwhelming logs, though parallel is also an option.
-    // Sequential is safer for clarity.
-    for (const service of services) {
-        await safeDeauthorizeAndCleanup(uid, service);
+    const providerIdentifiers = await collectProviderIdentifiersForUser(uid, services, failures);
+    for (const key of Object.keys(providerIdentifiers) as (keyof UserProviderIdentifiers)[]) {
+        savedIdentifiers[key].forEach(value => providerIdentifiers[key].add(value));
+    }
+    await collectArchivedProviderIdentifiersForUser(uid, providerIdentifiers, failures);
+    await collectProviderIdentifiersFromUidKeyedQueueState(db, uid, providerIdentifiers, failures);
+    // Never erase identity sources after a partial read or failed checkpoint.
+    await runCleanupStage(failures, 'identity_checkpoint', () => checkpointAccountDeletionIdentifiers(db, uid, {
+        suuntoUserNames: [...providerIdentifiers.suuntoUserNames], corosOpenIds: [...providerIdentifiers.corosOpenIds],
+        garminUserIDs: [...providerIdentifiers.garminUserIDs], wahooUserIDs: [...providerIdentifiers.wahooUserIDs],
+    }));
+    const identitySourcesSafeToDelete = failures.length === 0;
+    if (identitySourcesSafeToDelete) {
+        for (const service of services) {
+            await runCleanupStage(failures, 'provider_tokens', () => safeDeauthorizeAndCleanup(uid, service));
+        }
     }
 
-    logger.info(`[Cleanup] Service deauthorization clean up completed for user ${uid}`);
-
-    await cleanupUserScopedGeneratedState(uid);
-    let routeOriginalCleanupFailed = false;
-    let routeOriginalCleanupError: unknown = null;
-    try {
-        await cleanupRejectedRouteOriginalFilesForUser(uid);
-    } catch (error) {
-        routeOriginalCleanupFailed = true;
-        routeOriginalCleanupError = error;
-        logger.error('[Cleanup] Rejected route-original cleanup did not complete; continuing remaining account cleanup before retry.', error);
-    }
-    let mcpOAuthCleanupFailed = false;
-    let mcpOAuthCleanupError: unknown = null;
-    try {
-        await cleanupMcpOAuthStateForUser(uid);
-    } catch (error) {
-        mcpOAuthCleanupFailed = true;
-        mcpOAuthCleanupError = error;
-        logger.error('[Cleanup] MCP OAuth cleanup did not complete; continuing remaining account cleanup before retry.', error);
-    }
-
-    // Remove identifying campaign snapshots before cleaning mail.
-    const removedMarketingRecipients = await cleanupMarketingCampaignRecipients(admin.firestore(), uid);
-    logger.info(`[Cleanup] Removed ${removedMarketingRecipients} marketing campaign recipients for ${uid}`);
+    await cleanupUserScopedGeneratedState(uid, failures);
+    await runCleanupStage(failures, 'route_originals', () => cleanupRejectedRouteOriginalFilesForUser(uid));
+    await runCleanupStage(failures, 'mcp_oauth', () => cleanupMcpOAuthStateForUser(uid));
+    await runCleanupStage(failures, 'marketing', () => cleanupMarketingCampaignRecipients(db, uid));
 
     // Cleanup Emails
     let mailCleanupError: unknown = null;
@@ -1114,26 +1162,38 @@ export const cleanupUserAccounts = functions
         logger.error(`[Cleanup] Error deleting emails for ${uid}`, e);
     }
 
-    await collectArchivedProviderIdentifiersForUser(uid, providerIdentifiers);
-    await cleanupTopLevelQueueState(uid, providerIdentifiers);
-    // Disconnect may already have removed every credential. Its independent
-    // cleanup records still own provider-only operational rows in that case.
-    await cleanupServiceDisconnectTasksForUser(uid);
-
-    if (mailCleanupError) {
-        throw mailCleanupError instanceof Error
-            ? mailCleanupError
-            : new Error('Mail cleanup did not complete.');
+    if (mailCleanupError) failures.push({ stage: 'mail', error: mailCleanupError });
+    if (identitySourcesSafeToDelete) {
+        await cleanupTopLevelQueueState(uid, providerIdentifiers, failures);
+        // A bounded reconciler may retain a lease/cursor. Its ACK is not completion.
+        await runCleanupStage(failures, 'disconnect_tasks', () => cleanupServiceDisconnectTasksForUser(uid));
     }
-
-    if (mcpOAuthCleanupFailed) {
-        throw mcpOAuthCleanupError instanceof Error
-            ? mcpOAuthCleanupError
-            : new Error('MCP OAuth cleanup did not complete.');
+    for (const collection of ACCOUNT_DELETION_ROOT_COLLECTIONS) {
+        await runCleanupStage(failures, 'firestore_root', () => deleteAccountFirestoreRoot(db, uid, collection));
     }
-    if (routeOriginalCleanupFailed) {
-        throw routeOriginalCleanupError instanceof Error
-            ? routeOriginalCleanupError
-            : new Error('Rejected route-original cleanup did not complete.');
+    await runCleanupStage(failures, 'storage', () => deleteAccountStorageFiles(uid));
+    for (const collection of ACCOUNT_DELETION_ROOT_COLLECTIONS) {
+        await runCleanupStage(failures, 'firestore_verification', () => assertAccountFirestoreRootAbsent(db, uid, collection));
     }
+    await runCleanupStage(failures, 'storage_verification', () => assertAccountStorageAbsent(uid));
+    for (const collection of [SERVICE_DISCONNECT_CLEANUP_COLLECTION, REJECTED_ROUTE_ORIGINAL_CLEANUP_COLLECTION_NAME]) {
+        await runCleanupStage(failures, 'deferred_cleanup_verification', () => assertAccountCleanupQueryEmpty(
+            db.collection(collection).where('userID', '==', uid),
+        ));
+    }
+    // Prove provider roots empty too; recursive deletion can race a stale writer.
+    for (const service of services) {
+        await runCleanupStage(failures, 'token_verification', () => assertAccountCleanupQueryEmpty(
+            db.collection(service.collectionName).doc(uid).collection('tokens').limit(1),
+        ));
+    }
+    if (failures.length) {
+        logger.error('[AccountDeletion] Cleanup incomplete; retry required.', {
+            outcome: 'incomplete', failedStages: [...new Set(failures.map(failure => failure.stage))],
+        });
+        const error = failures[0].error;
+        throw error instanceof Error ? error : new Error('Account cleanup did not complete.');
+    }
+    await completeAccountDataCleanup(db, uid);
+    logger.info('[AccountDeletion] Verified cleanup complete.', { outcome: 'complete' });
 });

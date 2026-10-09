@@ -1208,7 +1208,9 @@ Account deletion is not merely token deletion. Add provider identity discovery a
 
 Existing imported events are product-policy decisions. State explicitly whether disconnect, entitlement expiry, and account deletion each retain or remove them. Wahoo retains imported events on disconnect but removes account-associated data on account deletion.
 
-Unified health history is retained on provider disconnect and removed on account deletion. Its collections live below `users/{uid}`, so the configured recursive extension owns account cleanup; provider adapters must not delete historical health source records during ordinary deauthorization.
+Unified health history is retained on provider disconnect and removed on account deletion. Its collections live below `users/{uid}`, so the native account owner prepared in this phase recursively covers them (the installed extension remains until separately approved cutover); provider adapters must not delete historical health source records during ordinary deauthorization.
+
+The deletion owner checkpoints provider identities before removing credentials or UID-owned queue sources. Failed discovery/checkpoint reads preserve those sources; mandatory local failures continue independent cleanup and then fail the Auth event for retry. Pending tombstones have no expiry. Completion follows scoped Firestore/Storage/operational absence verification, including deferred original-file and disconnect intents, and only completed markers receive a seven-day TTL. Provider deauthorization/archival remain best-effort and remote copies can remain. See [Delete User Data migration and recovery](delete-user-data-migration.md) for exact scope, release boundaries and deferred monitoring #836.
 
 ## 9. Frontend, help, public pages, and attribution
 
