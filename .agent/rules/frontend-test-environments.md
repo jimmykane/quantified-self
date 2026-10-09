@@ -25,6 +25,12 @@ runner configuration and verification commands.
 - Keep the Angular compiler plugin and `src/test-setup.ts` scoped to `angular`; Node/DOM helpers have no global
   setup file. Preserve isolated forks and the global two-worker cap. Optimize setup and imports without reducing
   required coverage or ignoring runner errors.
+- In mixed component suites, keep shared setup free of unconditional fixture rendering. Use explicit setup for
+  logic tests and real fixtures for template bindings, controls, view queries, effects or Angular lifecycle behavior.
+  A component injected through TestBed still belongs in `angular`; initialize the hooks it needs and preserve
+  TestBed teardown. Only use this approach after checking for component/view-scoped dependencies, and compare
+  unchanged assertions and covered source locations when benchmarking. See the
+  [component fixture benchmark](../../docs/ci-component-fixture-benchmark.md) for a verified example.
 - Discovery guards must use Vitest's glob library and matching options, including `dot: true` and the existing
   Functions/Rules exclusions. Node's native glob API omits hidden specs. Preserve the hidden-file/future-file
   regression fixtures and ensure each ordinary spec belongs to exactly one project.
