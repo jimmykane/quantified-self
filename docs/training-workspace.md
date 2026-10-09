@@ -512,7 +512,8 @@ Form history and canonical parent/activity join.
 Training is available to signed-in users from the sidenav. Its route header uses the shared `app-page-header` route
 primitive for the title, compact update disclosure, **Plans** navigation to `/training/plans`, and conditional derived-metrics
 **Retry** action. Plans uses the shared right-aligned action slot on desktop and a labelled action row below the subtitle
-on phones/tablets. The sport navigation does not pull upwards into the header's bottom spacing. Timeline notes, Feedback,
+on phones/tablets. Training uses a compact 12px gap before the sport navigation at every width, without negative margins.
+Expanded update details use 8px below the header and 12px before the sport controls. Timeline notes, Feedback,
 Calendar, and Dashboard shortcuts are omitted from this header; use app navigation for Calendar and Dashboard and the
 Training help article's email action for feedback. This presentation changes no chart-note reads, Training calculations,
 planning/MCP contract, consent, or mutation. The Dashboard header does not duplicate the Training or Health navigation

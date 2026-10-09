@@ -398,13 +398,15 @@ describe('TrainingWorkspaceComponent', () => {
     expect(compactActionsStyles).toContain('width: 48px;');
   });
 
-  it('leaves breathing room between the mobile header and the sport selector', () => {
+  it('uses a compact header-to-navigation gap at every width, including expanded update details', () => {
     const stylePath = resolve(process.cwd(), 'src/app/components/training/training-workspace.component.scss');
     const styles = readFileSync(stylePath, 'utf8');
-    const mobileHeaderRule = styles.match(/@media \(max-width: 640px\) \{ \.training-page-header \{([^}]*)\}/)?.[1];
+    const headerRules = [...styles.matchAll(/\.training-page-header \{([^}]*)\}/g)];
 
-    expect(mobileHeaderRule).toContain('margin-bottom: 24px;');
-    expect(styles).toContain('.training-page-header { margin-bottom: 32px; }');
+    expect(headerRules).toHaveLength(1);
+    expect(headerRules[0][1]).toContain('margin-bottom: 12px;');
+    expect(styles).toContain('.training-page-header:has(+ .training-update-details:not([hidden])) { margin-bottom: 8px; }');
+    expect(styles).toMatch(/\.training-update-details \{[^}]*margin: 0 0 12px;/);
     expect(styles).not.toContain('margin: -12px 0 0;');
   });
 
