@@ -45,14 +45,92 @@ I/O fails closed outside project `quantified-self-io`, so a different deployment
 cannot accidentally sweep this production bucket. Other projects need their own
 reviewed configuration rather than inheriting the bucket target.
 
+## Comparison with the installed extension source
+
+Reviewed on 9 October 2026 against the immutable source linked by the Firebase
+Extensions Hub for version 0.1.30, commit
+[`1ac8343194b1b009bbfee5d6da492ab499d4d030`](https://github.com/firebase/extensions/tree/1ac8343194b1b009bbfee5d6da492ab499d4d030/delete-user-data),
+including `extension.yaml`, `config.ts`, `index.ts`, `recursiveDelete.ts`, the
+search helpers and deletion tests. This compares the configured installation;
+it does not claim feature parity with every optional extension setting.
+
+| Behavior | Official 0.1.30 source / installed configuration | Prepared native owners |
+| --- | --- | --- |
+| Firestore roots | `users/{UID},customers/{UID}` in `(default)`, recursive mode | Same fixed roots and database; native `recursiveDelete` plus descendant readback |
+| Recursion | SDK recursive deletion with a custom BulkWriter and three write attempts | SDK recursive deletion, including unknown subcollections and missing parents; failed invocation can retry |
+| Storage boundary | `deleteFiles` with bare `users/<uid>` prefix | Exact object `users/<uid>` plus folder `users/<uid>/`; generation preconditions, 100-object pages, ten concurrent deletes |
+| Failure/completion | Fixed-path handlers catch and log errors; final completion log can still run | Mandatory failures reject; current-attempt receipt requires scoped absence checks |
+| Additional state | Configured roots only; discovery disabled | Explicit provider token, queue/DLQ, MCP, marketing and mail cleanup with existing retention exceptions |
+| Optional features | RTDB paths, discovery/custom search, alternate databases and outgoing extension events are configurable | Not a generic replacement for these; no RTDB/discovery configured here. Verify no custom-search or outgoing-event consumer before retirement |
+| Runtime | Installed Gen 1, 256 MB / 60 seconds; Auth retry unset | Gen 2 1 GiB / 540 seconds / retries; hardened transitional Gen 1 512 MB / 540 seconds / retries |
+
+Source references:
+[fixed-path handlers](https://github.com/firebase/extensions/blob/1ac8343194b1b009bbfee5d6da492ab499d4d030/delete-user-data/functions/src/index.ts#L226-L341),
+[recursive helper](https://github.com/firebase/extensions/blob/1ac8343194b1b009bbfee5d6da492ab499d4d030/delete-user-data/functions/src/recursiveDelete.ts),
+[extension specification](https://github.com/firebase/extensions/blob/1ac8343194b1b009bbfee5d6da492ab499d4d030/delete-user-data/extension.yaml).
+
+**High impact, conditional ownership risk — installed Storage prefix.** With
+prefix-related UIDs such as `example` and `example-long`, deleting the first
+account matches both folders in the extension. This requires prefix-related
+identifiers, such as custom/imported UIDs; this review found no evidence of an
+actual cross-account deletion. The prepared native helper excludes the neighbour,
+but cannot constrain concurrent extension writes. Do not describe keeping this
+extension configuration active as unconditionally safe. Before approved overlap,
+review a separately approved extension configuration change to the trailing-slash
+folder boundary, with the native owner handling any exact bare object, or plan
+separately approved retirement after replacement verification. Neither action is
+performed here. Adding the bare path alongside a slash path would retain the risk.
+
+**High impact, conditional target expansion — extension UID substitution.**
+The published `replaceUID` helper passes the UID as the replacement-string
+argument to `String.replace`. JavaScript interprets replacement tokens: a custom
+UID consisting of `$'` produces Storage prefix `users/`, while `$$` becomes `$`.
+This was reproduced locally by evaluating only the pinned source's pure helper,
+with no SDK, credentials or remote I/O. No affected production UID is established.
+The native implementation uses literal path segments and regression tests cover
+all four replacement-token forms. A trailing slash alone does not fix literal
+UID substitution. Extension overlap also requires excluding this case through
+reviewed UID constraints or correcting the extension implementation under a
+separately approved change; otherwise keep this as an unresolved cutover blocker.
+
+**High reliability impact — extension error acknowledgement.** A successful
+`clearData` invocation/log is not proof of erasure. The source catches fixed-path
+errors, and the installed short timeout has already proved insufficient for a
+large tree. Native failure propagation and readback address this gap; monitoring
+and recovery remain production gates.
+
+**Medium impact — concurrent callable receipt reset, fixed.** A successful Auth
+lookup could become stale before `deleteSelf` wrote its pending marker. The marker
+is now always checked and written in a transaction, preserving a completed receipt
+even when a competing deletion finishes between those operations.
+
+**Medium impact — mail reads and ownership, fixed for explicit UID records.**
+Mail cleanup previously fetched entire histories and deleted email matches without
+respecting another explicit UID. It now pages 100 records, checks UID markers,
+pins batch deletes to the queried document revision and verifies remaining owned
+matches. Confirmation mail remains retained. Legacy records without UID metadata
+still rely on their email match; this is an attribution limitation, not proof of
+immutable account ownership. Do not infer complete historical email coverage from
+the receipt. Removing that ambiguity requires a separately scoped mail ownership
+migration, not broadening destructive matching in this cleanup.
+
+Two **hardened native generations** may overlap temporarily. They use the same
+fixed scope and durable checkpoints; superseded attempts retry. This adds work,
+provider calls and possible transaction/precondition conflicts, so it is a staged
+cutover, not a permanent operating arrangement. The installed extension does not
+participate in those checkpoints. Never reuse an Auth UID for a different account
+while old deletion events/retries or retained checkpoints can still exist: neither
+implementation distinguishes account incarnations at the same path.
+
 ## Completion and retry contract
 
 1. `deleteSelf` writes a non-expiring, server-only deletion fence before the
    individual Auth deletion. Marker-write failure aborts the Auth call. An
    ambiguous failed Auth RPC retains the fence; the authenticated user can retry
    `deleteSelf`. An already-missing Auth user does not prove data erasure or emit
-   a fresh deletion event. A stale callable retry preserves an already verified
-   completion receipt instead of reopening a pending fence.
+   a fresh deletion event. Every callable marker write checks the receipt transactionally, including
+   when Auth was present at lookup and disappears before deletion, so a stale
+   request cannot reopen verified completion.
 2. The Auth cleanup handler also creates/upgrades the fence, covering deletion
    initiated through Auth administration. It reads provider identifiers from
    credentials, archived follow-up tokens and UID-owned queues. Before removing
@@ -151,14 +229,16 @@ writes, repeated cleanup, operational readback and other-owner preservation.
 Additional regressions cover lost queue/MCP parents, superseded attempts,
 provider ID collisions, reassigned or invalid checkpoint targets, stale callable
 retries and token descendants below missing parents. Storage unit fixtures cover pagination, prefix collisions, generations, partial
-failures, missing objects and a late object during final readback. Provider I/O
+failures, missing objects, literal replacement-pattern UIDs and a late object during final readback. Provider I/O
 and Storage I/O in Firestore tests are synthetic. No live provider or account
 mutation establishes this evidence. Functions build, secret/entrypoint checks,
 cold-import benchmark and the public Help contract accompany the PR. All existing
 owner behavior cases invoke the real Gen 2 SDK handler; additional tests cover the
 raw Eventarc `oldValue` payload, original email, tenant isolation and missing data.
 A real Firestore overlap test proves a stale Gen 1 attempt cannot replace the Gen 2
-receipt or erase another owner. These tests do not run Functions/Extensions
+receipt or erase another owner. Further regressions cover an 801-record mail
+history, confirmation/other-UID retention, and reassignment between query and
+batch commit. These tests do not run Functions/Extensions
 emulators or claim live Auth-to-Eventarc delivery.
 
 After separate deployment approval, first deploy the hardened legacy owner and
@@ -181,19 +261,24 @@ handlers safely share the attempt guards; a superseded pass requests retry and
 cannot overwrite a newer completion receipt. Concurrency one limits work per
 instance, not across instances or generations.
 
-Before production cutover, activate and verify the account-cleanup coverage in
+Resolve both installed-extension Storage-prefix and UID-substitution gates above before any
+approved overlapping account deletion. Before production cutover, activate and verify the account-cleanup coverage in
 #836; local tests do not replace overdue-pending alerts. Before deployment approval, verify the runtime identity can recursively delete/read
 both Firestore roots and list/read/delete objects in the exact bucket; do not
 copy the extension's broad RTDB/PubSub roles. Keep the installed extension and
-its manifest/env declarations during overlap. After deployment, read back both
+its manifest/env declarations until an exact configuration/retirement scope is
+separately approved; do not interpret their presence as overlap safety approval. After deployment, read back both
 owners' generation, trigger type/location, default-project tenant behavior, retry,
 timeout, memory, CPU/concurrency, region, runtime identity, secrets and bucket
 permissions. Check native errors and Cloud Run metrics for `cleanupUserAccountsV2`
 as well as the legacy function; the #836 activation must include both during overlap. Any
 live test-account deletion needs its own exact target/scope approval. Record
 complete Firestore/Storage/operational absence and actual native execution
-success before proposing retirement. Concurrent native/extension passes use
-idempotent deletes; event-file trigger bursts are not the account Storage owner.
+success before proposing retirement. Fixed-root Firestore deletes are idempotent across owners; the extension Storage
+prefix and UID-substitution exceptions above still apply. Event-file trigger bursts are not the
+account Storage owner. Reconfirm `SEARCH_FUNCTION`, outgoing extension event
+subscriptions and pending discovery/deletion Pub/Sub work before retirement;
+optional features are not carried over by the native implementation.
 
 Retiring extension `delete-user-data` from project `quantified-self-io` is a
 later, separately approved resource deletion. Inventory its three Functions,

@@ -1102,48 +1102,41 @@ async function cleanupDeletedUser(user: admin.auth.UserRecord): Promise<void> {
         const mailCollection = db.collection('mail');
         let deletionCount = 0;
 
-        // 1. Query by UID (toUids array)
-        const uidSnapshot = await mailCollection.where('toUids', 'array-contains', uid).get();
-
-        // Campaign mail uses Auth email plus a UID marker without toUids,
-        // avoiding a duplicate recipient in the Trigger Email extension.
-        const marketingSnapshot = await mailCollection.where('marketing.uid', '==', uid).get();
-
-        // 2. Query by Email (to field) - if email exists
-        let emailSnapshot: admin.firestore.QuerySnapshot | null = null;
-        if (user.email) {
-            emailSnapshot = await mailCollection.where('to', '==', user.email).get();
-        }
-
-        const docsToDelete = new Map<string, admin.firestore.DocumentReference>();
-        const accountDeletionMailDocId = `account_deleted_confirmation_${uid}`;
-        const accountDeletionTemplateName = 'account_deleted_confirmation';
-
-        const addMailDocIfDeletable = (doc: admin.firestore.QueryDocumentSnapshot) => {
-            const templateName = doc.data()?.template?.name;
-            const isDeletionConfirmationEmail = doc.id === accountDeletionMailDocId || templateName === accountDeletionTemplateName;
-            if (isDeletionConfirmationEmail) {
-                logger.info(`[Cleanup] Preserving account deletion confirmation email ${doc.id} for user ${uid}`);
-                return;
-            }
-            docsToDelete.set(doc.id, doc.ref);
+        const queries = [
+            mailCollection.where('toUids', 'array-contains', uid),
+            // Campaign mail uses an explicit owner without duplicate recipients.
+            mailCollection.where('marketing.uid', '==', uid),
+        ];
+        if (user.email) queries.push(mailCollection.where('to', '==', user.email));
+        const isDeletable = (doc: admin.firestore.QueryDocumentSnapshot): boolean => {
+            const data = doc.data();
+            if (doc.id === `account_deleted_confirmation_${uid}` || data.template?.name === 'account_deleted_confirmation') return false;
+            // An email address can be reused. Explicit ownership takes precedence
+            // over an email-only match, including conflicting legacy markers.
+            if (typeof data.marketing?.uid === 'string' && data.marketing.uid !== uid) return false;
+            if (Array.isArray(data.toUids) && data.toUids.length > 0 && !data.toUids.includes(uid)) return false;
+            return true;
         };
-
-        uidSnapshot.docs.forEach(addMailDocIfDeletable);
-        marketingSnapshot.docs.forEach(addMailDocIfDeletable);
-        if (emailSnapshot) {
-            emailSnapshot.docs.forEach(addMailDocIfDeletable);
-        }
-
-        // Mail documents are leaf records. A user can have more than 500
-        // campaign messages, so commit bounded batches to stay under Firestore's
-        // write limit and let the account-deletion trigger retry on failure.
-        const mailRefs = Array.from(docsToDelete.values());
-        for (let offset = 0; offset < mailRefs.length; offset += 400) {
-            const batch = db.batch();
-            for (const ref of mailRefs.slice(offset, offset + 400)) batch.delete(ref);
-            await batch.commit();
-            deletionCount += Math.min(400, mailRefs.length - offset);
+        for (const baseQuery of queries) {
+            let cursor: admin.firestore.QueryDocumentSnapshot | undefined;
+            while (true) {
+                let query = baseQuery.limit(100);
+                if (cursor) query = query.startAfter(cursor);
+                const page = await query.get();
+                const owned = page.docs.filter(isDeletable);
+                if (owned.length) {
+                    // Trigger Email records are leaf documents; delivery state and
+                    // template data are fields, never child collections. Pin revisions
+                    // so a changed owner/record causes retry instead of stale deletion.
+                    const batch = db.batch();
+                    for (const doc of owned) batch.delete(doc.ref, { lastUpdateTime: doc.updateTime });
+                    await batch.commit();
+                    deletionCount += owned.length;
+                }
+                if (page.docs.length < 100) break;
+                cursor = page.docs[page.docs.length - 1];
+            }
+            await assertAccountCleanupQueryEmpty(baseQuery, async doc => isDeletable(doc));
         }
 
         if (deletionCount > 0) {

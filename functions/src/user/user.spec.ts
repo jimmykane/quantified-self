@@ -68,10 +68,17 @@ const testEnv = firebaseFunctionsTest();
 vi.mock('firebase-admin', () => {
     const firestoreMock = vi.fn(() => ({
         collection: firestoreCollectionMock,
-        runTransaction: async (handler: (tx: unknown) => Promise<unknown>) => handler({
-            get: deletionMarkerGetMock,
-            set: (_ref: unknown, data: unknown, options: unknown) => deletionMarkerSetMock(data, options),
-        }),
+        runTransaction: async (handler: (tx: unknown) => Promise<unknown>) => {
+            const writes: Promise<unknown>[] = [];
+            const result = await handler({
+                get: deletionMarkerGetMock,
+                set: (_ref: unknown, data: unknown, options: unknown) => {
+                    writes.push(deletionMarkerSetMock(data, options));
+                },
+            });
+            await Promise.all(writes);
+            return result;
+        },
     }));
 
     return {
@@ -320,6 +327,21 @@ describe('deleteSelf Cloud Function', () => {
         });
         expect(result).toEqual({ success: true });
         expect(deletionMarkerSetMock).not.toHaveBeenCalled();
+    });
+
+    it('preserves cleanup completed after a successful Auth lookup and before the fence transaction', async () => {
+        getUserMock.mockResolvedValueOnce({ email: 'test@example.com' });
+        // A competing request deletes Auth and completes cleanup after that lookup.
+        deletionMarkerGetMock.mockResolvedValueOnce({ get: () => 'complete' });
+        deleteUserMock.mockRejectedValueOnce({ errorInfo: { code: 'auth/user-not-found' } });
+
+        await expect((deleteSelf as unknown as (data: unknown, context: unknown) => Promise<unknown>)({}, {
+            rawRequest: {}, auth: { uid: 'test-uid', token: {} }, app: { appId: 'mock-app-id' },
+        })).resolves.toEqual({ success: true });
+
+        expect(deletionMarkerGetMock).toHaveBeenCalledOnce();
+        expect(deletionMarkerSetMock).not.toHaveBeenCalled();
+        expect(deleteUserMock).toHaveBeenCalledWith('test-uid');
     });
 
     it('should throw "internal" error if deleteUser fails', async () => {

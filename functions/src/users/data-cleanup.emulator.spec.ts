@@ -123,6 +123,67 @@ describe.skipIf(!host)('native account deletion (loopback Firestore emulator)', 
         } finally { await db.recursiveDelete(intent); }
     }, 30_000);
 
+    it('pages a large mail history while preserving confirmations and another UID sharing the email', async () => {
+        const uid = owner();
+        const other = owner();
+        const email = `${uid}@example.invalid`;
+        const mail = db.collection('mail');
+        const retained = mail.doc(`${uid}-other`);
+        const confirmation = mail.doc(`account_deleted_confirmation_${uid}`);
+        await retained.set({ to: email, marketing: { uid: other } });
+        await confirmation.set({ to: email, template: { name: 'account_deleted_confirmation' } });
+        for (let offset = 0; offset < 801; offset += 400) {
+            const batch = db.batch();
+            for (let index = offset; index < Math.min(offset + 400, 801); index++) {
+                batch.set(mail.doc(`${uid}-${index}`), { to: email, marketing: { uid } });
+            }
+            await batch.commit();
+        }
+        try {
+            await cleanupUserAccounts({ uid, email } as admin.auth.UserRecord);
+            expect((await mail.where('marketing.uid', '==', uid).get()).empty).toBe(true);
+            expect((await mail.where('to', '==', email).get()).docs.map(doc => doc.id).sort()).toEqual(
+                [retained.id, confirmation.id].sort(),
+            );
+            expect((await db.doc(`userDeletionTombstones/${uid}`).get()).get('cleanupStatus')).toBe('complete');
+        } finally {
+            // Synthetic leaf Trigger Email records have no descendants.
+            const remaining = await mail.where('to', '==', email).get();
+            for (const doc of remaining.docs) await doc.ref.delete();
+        }
+    }, 30_000);
+
+    it('retries stale mail deletion without erasing a record reassigned after its query', async () => {
+        const uid = owner();
+        const other = owner();
+        const email = `${uid}@example.invalid`;
+        const mail = db.doc(`mail/${uid}`);
+        await mail.set({ to: email, marketing: { uid } });
+        const makeBatch = db.batch.bind(db);
+        let changed = false;
+        const interception = vi.spyOn(db, 'batch').mockImplementation(() => {
+            const batch = makeBatch();
+            const commit = batch.commit.bind(batch);
+            batch.commit = async () => {
+                if (!changed) {
+                    changed = true;
+                    await mail.update({ 'marketing.uid': other });
+                }
+                return commit();
+            };
+            return batch;
+        });
+        try {
+            await expect(cleanupUserAccounts({ uid, email } as admin.auth.UserRecord)).rejects.toThrow();
+            expect(changed).toBe(true);
+            expect((await mail.get()).get('marketing.uid')).toBe(other);
+            expect((await db.doc(`userDeletionTombstones/${uid}`).get()).get('cleanupStatus')).toBe('pending');
+            await cleanupUserAccounts({ uid, email } as admin.auth.UserRecord);
+            expect((await mail.get()).get('marketing.uid')).toBe(other);
+            expect((await db.doc(`userDeletionTombstones/${uid}`).get()).get('cleanupStatus')).toBe('complete');
+        } finally { interception.mockRestore(); await mail.delete(); }
+    }, 30_000);
+
     it('removes 4,955 deep Health/Sleep/reservation descendants, including absent parents, without crossing owners', async () => {
         const uid = owner();
         const other = owner();

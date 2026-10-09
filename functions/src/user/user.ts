@@ -57,12 +57,10 @@ export const deleteSelf = functions
 
         try {
             let userEmail: string | undefined;
-            let authAlreadyMissing = false;
             try {
                 const userRecord = await admin.auth().getUser(uid);
                 userEmail = userRecord.email ?? undefined;
             } catch (lookupError) {
-                authAlreadyMissing = isAuthUserNotFoundError(lookupError);
                 logger.warn(`Could not fetch user email before deletion for ${uid}. Continuing with deletion.`, lookupError);
             }
 
@@ -75,18 +73,15 @@ export const deleteSelf = functions
                     expireAt: FieldValue.delete(),
                     completedAt: FieldValue.delete(),
                 };
-                if (authAlreadyMissing) {
-                    await firestore.runTransaction(async transaction => {
-                        const existing = await transaction.get(deletionMarkerRef);
-                        // A stale authenticated retry emits no new Auth event. Preserve
-                        // a verified receipt instead of reopening it indefinitely.
-                        if (existing.get('cleanupStatus') !== 'complete') {
-                            transaction.set(deletionMarkerRef, pendingMarker, { merge: true });
-                        }
-                    });
-                } else {
-                    await deletionMarkerRef.set(pendingMarker, { merge: true });
-                }
+                await firestore.runTransaction(async transaction => {
+                    const existing = await transaction.get(deletionMarkerRef);
+                    // Another deletion can complete after the Auth lookup. Always
+                    // preserve its verified receipt atomically: a repeated deleteUser
+                    // may find Auth absent and emit no new event to finish a reset fence.
+                    if (existing.get('cleanupStatus') !== 'complete') {
+                        transaction.set(deletionMarkerRef, pendingMarker, { merge: true });
+                    }
+                });
             } catch (markerError) {
                 logger.error(`Failed to write user deletion marker for ${uid}. Aborting deletion.`, markerError);
                 throw markerError;

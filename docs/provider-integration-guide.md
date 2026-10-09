@@ -1217,6 +1217,10 @@ The transitional Gen 1 export shares the same implementation. Deploy its hardene
 checkpoint behavior before enabling Gen 2; an older legacy revision can otherwise
 remove identity sources before the new owner discovers them. Retirement of either
 the legacy trigger or installed extension requires separately approved cutover.
+The source comparison found that extension 0.1.30 uses a bare Storage prefix,
+which can include a longer custom UID, and interprets replacement tokens in
+custom UIDs. Native generation overlap and extension overlap therefore have
+different release gates; resolve both extension scope issues before overlapping deletion. See the runbook source comparison below.
 
 The deletion owner checkpoints provider identities before removing credentials or UID-owned queue sources. Failed discovery/checkpoint reads preserve those sources; mandatory local failures continue independent cleanup and then fail the Auth event for retry. Pending tombstones have no expiry. Completion follows scoped Firestore/Storage/operational absence verification, including deferred original-file and disconnect intents, and only completed markers receive a seven-day TTL. Provider deauthorization/archival remain best-effort and remote copies can remain. See [Delete User Data migration and recovery](delete-user-data-migration.md) for exact scope, release boundaries and deferred monitoring #836.
 

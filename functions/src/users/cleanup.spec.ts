@@ -655,8 +655,8 @@ describe('cleanupUserAccountsV2', () => {
 
         // Verify Deletion
         // expect(firestoreMock().batch).toHaveBeenCalled(); // Removed as firestoreMock returns new instance with new batch spy each time
-        expect(batchMock.delete).toHaveBeenCalledWith('ref1');
-        expect(batchMock.delete).toHaveBeenCalledWith('ref2');
+        expect(batchMock.delete).toHaveBeenCalledWith('ref1', { lastUpdateTime: undefined });
+        expect(batchMock.delete).toHaveBeenCalledWith('ref2', { lastUpdateTime: undefined });
         expect(batchMock.commit).toHaveBeenCalled();
     });
 
@@ -665,15 +665,36 @@ describe('cleanupUserAccountsV2', () => {
         const marketingDocs = Array.from({ length: 801 }, (_, index) => ({
             id: `marketing-${index}`, ref: `mail-ref-${index}`, data: () => ({}),
         }));
-        const getMock = vi.fn()
-            .mockResolvedValueOnce({ docs: [] })
-            .mockResolvedValueOnce({ docs: marketingDocs });
-        whereMock.mockImplementation((field: string) => ({ get: ['toUids', 'marketing.uid', 'to'].includes(field) ? getMock : vi.fn().mockResolvedValue({ docs: [] }) }));
+        const pages = Array.from({ length: 9 }, (_, page) => ({ docs: marketingDocs.slice(page * 100, (page + 1) * 100) }));
+        const paginated = createPaginatedLimitQueryMock(pages);
+        // Model successive reads from the same query, including deleted cursor rows.
+        whereMock.mockImplementation((field: string) => field === 'marketing.uid'
+            ? { get: paginated.get, startAfter: paginated.startAfter }
+            : { get: vi.fn().mockResolvedValue({ docs: [] }) });
 
         await cleanupUserAccounts(user, { eventId: 'eventId' } as unknown as functions.EventContext);
 
         expect(batchMock.delete).toHaveBeenCalledTimes(801);
-        expect(batchMock.commit).toHaveBeenCalledTimes(3);
+        expect(batchMock.commit).toHaveBeenCalledTimes(9);
+        expect(paginated.get).toHaveBeenCalledTimes(9);
+        expect(paginated.startAfter.mock.calls.map(([doc]) => doc.id)).toEqual(
+            Array.from({ length: 8 }, (_, index) => `marketing-${(index + 1) * 100 - 1}`),
+        );
+    });
+
+    it('preserves explicit other-owner mail sharing the deleted email and pins owned revisions', async () => {
+        const user = testEnv.auth.makeUserRecord({ uid: 'testUser123', email: 'shared@example.invalid' });
+        const revision = { seconds: 1, nanoseconds: 2 };
+        const docs = [
+            { id: 'other-campaign', ref: 'other-campaign', data: () => ({ marketing: { uid: 'anotherUser' } }) },
+            { id: 'other-uid', ref: 'other-uid', data: () => ({ toUids: ['anotherUser'] }) },
+            { id: 'owned', ref: 'owned', updateTime: revision, data: () => ({ marketing: { uid: user.uid } }) },
+        ];
+        whereMock.mockImplementation((field: string) => ({ get: vi.fn().mockResolvedValue({ docs: field === 'to' ? docs : [] }) }));
+
+        await cleanupUserAccounts(user, { eventId: 'eventId' } as unknown as functions.EventContext);
+
+        expect(batchMock.delete.mock.calls).toEqual([['owned', { lastUpdateTime: revision }]]);
     });
 
     it('requests an account cleanup retry after a campaign mail batch fails', async () => {
@@ -733,8 +754,8 @@ describe('cleanupUserAccountsV2', () => {
 
         await wrapped(user, { eventId: 'eventId' } as unknown as functions.EventContext);
 
-        expect(batchMock.delete).toHaveBeenCalledWith('deleteRef1');
-        expect(batchMock.delete).toHaveBeenCalledWith('deleteRef2');
+        expect(batchMock.delete).toHaveBeenCalledWith('deleteRef1', { lastUpdateTime: undefined });
+        expect(batchMock.delete).toHaveBeenCalledWith('deleteRef2', { lastUpdateTime: undefined });
         expect(batchMock.delete).not.toHaveBeenCalledWith('preservedRefById');
         expect(batchMock.delete).not.toHaveBeenCalledWith('preservedRefByTemplate');
         expect(batchMock.commit).toHaveBeenCalled();
