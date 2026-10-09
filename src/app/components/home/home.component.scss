@@ -65,6 +65,24 @@
 .faq-question mat-icon { flex-shrink: 0; }
 .faq-row p { margin-top: 0; font: var(--mat-sys-body-medium); }
 .final-cta-section { border-top: 1px solid var(--mat-sys-outline-variant); }
+@keyframes homeFadeInUp {
+  from { opacity: 0; transform: translateY(24px) scale(0.97); }
+  to { opacity: 1; transform: none; }
+}
+@media (prefers-reduced-motion: no-preference) {
+  .hero-content > * { animation: homeFadeInUp 0.6s cubic-bezier(0.2, 0.8, 0.2, 1) backwards; }
+  .hero-content h1 { animation-delay: 0.05s; }
+  .hero-content .hero-subtitle { animation-delay: 0.1s; }
+  .hero-content .hero-actions { animation-delay: 0.15s; }
+  .hero-content .trust-indicators { animation-delay: 0.2s; }
+  [appHomeReveal].home-reveal-visible { animation: homeFadeInUp 0.45s cubic-bezier(0.2, 0.8, 0.2, 1); }
+  [appHomeReveal].home-reveal-visible:focus-within { animation: none; }
+  .brand-badge, .landing-page a { transition: transform 0.2s ease; }
+  @media (hover: hover) and (pointer: fine) {
+    .brand-badge:hover { transform: scale(1.05); }
+    .landing-page a:hover { transform: translateY(-2px); }
+  }
+}
 @media (max-width: 799.98px) {
   .hero-section { padding-block: 1.5rem; }
   .feature-section { padding-block: 1.25rem; }

@@ -14,6 +14,7 @@ import { CompactRowComponent } from '../shared/compact-row/compact-row.component
 import { PublicFeaturePreviewComponent } from '../public-seo/public-feature-preview.component';
 import { HEALTH_FEATURE_CONTENT } from '../public-seo/health-feature.content';
 import { TRAINING_PLANS_HOME_CONTENT } from '../public-seo/training-plans-home.content';
+import { HomeRevealDirective } from './home-reveal.directive';
 
 const HOME_FEATURES = [
   { id: 'training', label: 'Training' },
@@ -42,7 +43,7 @@ interface HomeFeatureHistory {
   styleUrls: ['./home.component.scss'],
   standalone: true,
   imports: [RouterLink, MatButtonModule, MatCardModule, MatIconModule, MatTooltipModule,
-    PublicFeaturePreviewComponent, CompactRowComponent],
+    PublicFeaturePreviewComponent, CompactRowComponent, HomeRevealDirective],
   providers: [{ provide: MAT_TOOLTIP_DEFAULT_OPTIONS, useValue: {
     showDelay: 0, hideDelay: 0, touchendHideDelay: 1500, touchGestures: 'off',
   } }],
