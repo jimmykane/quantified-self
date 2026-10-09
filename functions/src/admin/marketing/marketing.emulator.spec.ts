@@ -23,11 +23,14 @@ const draft = {
 // unit-test default while the emulator resolves contention and the SDK backs off.
 describe.skipIf(!enabled)('marketing campaign durability (emulators)', { timeout: 30_000 }, () => {
   let db: admin.firestore.Firestore;
-  beforeAll(() => {
+  beforeAll(async () => {
     if (!/^(127\.0\.0\.1|localhost):\d+$/.test(process.env.FIRESTORE_EMULATOR_HOST || '') ||
         !/^(127\.0\.0\.1|localhost):\d+$/.test(process.env.FIREBASE_AUTH_EMULATOR_HOST || '')) throw new Error('Loopback emulators required');
     admin.initializeApp({ projectId: 'demo-marketing' });
     db = admin.firestore();
+    // Initialize the emulator transport in setup, before timed cases use the
+    // shared dispatch cap and concurrent transactions.
+    await db.collection('marketingCampaigns').limit(1).get();
   });
   afterAll(async () => { await admin.app().delete(); });
 
