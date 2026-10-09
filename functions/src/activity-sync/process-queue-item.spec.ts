@@ -5,6 +5,7 @@ import * as logger from 'firebase-functions/logger';
 import { ACTIVITY_SYNC_ROUTE_IDS, ACTIVITY_SYNC_ROUTES, HISTORICAL_MANUAL_ACTIVITY_ROUTE_IDS } from '../../../shared/activity-sync-routes';
 import { ActivitySyncQueueItemInterface } from '../queue/queue-item.interface';
 import { ProviderOperationError } from '../shared/provider-operation-error';
+import { MAX_RETRY_COUNT } from '../shared/queue-config';
 
 type MockActivitySyncQueueItemRef = NonNullable<ActivitySyncQueueItemInterface['ref']>;
 
@@ -1784,19 +1785,21 @@ describe('activity-sync/process-queue-item', () => {
     );
   });
 
-  it('moves a permanently rejected COROS status poll to DLQ', async () => {
+  it('restarts a confirmed COROS processing failure on the original account, then polls the new upload', async () => {
     const queueItem: ActivitySyncQueueItemInterface = {
       ...baseQueueItem,
       routeId: ACTIVITY_SYNC_ROUTE_IDS.GarminAPI_to_COROSAPI,
       destinationServiceName: ServiceNames.COROSAPI,
       destinationUploadID: '9223372036854775806',
       destinationProviderUserID: 'coros-user-1',
+      retryCount: 1,
       ref: {} as unknown as NonNullable<ActivitySyncQueueItemInterface['ref']>,
     };
     mockGetCOROSActivityUploadStatus.mockRejectedValueOnce(new ProviderOperationError({
       serviceName: ServiceNames.COROSAPI,
       operation: 'activity_upload_status',
-      disposition: 'permanent',
+      disposition: 'retryable',
+      retryMode: 'restart',
       code: 'provider-processing-failed',
       message: 'COROS could not process this activity file.',
       providerStatus: -1,
@@ -1807,24 +1810,158 @@ describe('activity-sync/process-queue-item', () => {
 
     const result = await processActivitySyncQueueItem(queueItem);
 
-    expect(result).toBe(QueueResult.MovedToDLQ);
-    expect(mockIncreaseRetryCountForQueueItem).not.toHaveBeenCalled();
-    expect(mockMoveToDeadLetterQueue).toHaveBeenCalledWith(
+    expect(result).toBe(QueueResult.RetryIncremented);
+    expect(mockMoveToDeadLetterQueue).not.toHaveBeenCalled();
+    expect(mockUploadActivityFileToCOROS).not.toHaveBeenCalled();
+    expect(mockIncreaseRetryCountForQueueItem).toHaveBeenCalledWith(
       queueItem,
       expect.objectContaining({
         code: 'provider-processing-failed',
         providerStatus: -1,
       }),
+      1,
       undefined,
       'COROS_ACTIVITY_UPLOAD_FAILED',
     );
-    expect(logger.error).toHaveBeenCalledWith(
-      '[ActivitySync] Destination provider failure moved to DLQ.',
+    expect(logger.warn).toHaveBeenCalledWith(
+      '[ActivitySync] Destination provider failure classified.',
       expect.objectContaining({
         providerStatus: -1,
-        outcome: 'dlq',
+        providerOperationId: '9223372036854775806',
+        retryMode: 'restart',
+        outcome: 'retry',
       }),
     );
+    expect(queueItem.destinationUploadID).toBeNull();
+    expect(queueItem.destinationProviderUserID).toBeNull();
+    expect(queueItem.destinationRestartProviderUserID).toBe('coros-user-1');
+    const restartUpdate = mockUpdateQueueItemIfUserActive.mock.calls
+      .map(([params]) => params)
+      .find(params => params.phase === 'before_activity_sync_pending_upload_restart');
+    expect(restartUpdate.updateData).toMatchObject({
+      destinationUploadID: null,
+      destinationProviderUserID: null,
+      destinationRestartProviderUserID: 'coros-user-1',
+    });
+    const providerClaim = mockUpdateQueueItemIfUserActive.mock.calls
+      .map(([params]) => params)
+      .find(params => params.phase === 'before_activity_sync_destination_provider_operation');
+    const claimedState = {
+      ...queueItem,
+      destinationUploadID: '9223372036854775806',
+      destinationProviderUserID: 'coros-user-1',
+      destinationRestartProviderUserID: undefined,
+      dispatchedToCloudTask: PROVIDER_OPERATION_IN_FLIGHT_QUEUE_DISPATCH_MARKER,
+      providerOperationStartedAt: providerClaim.updateData.providerOperationStartedAt,
+    };
+    expect(restartUpdate.isCurrent(claimedState)).toBe(true);
+    expect(restartUpdate.isCurrent({ ...claimedState, destinationRestartProviderUserID: 'coros-user-2' })).toBe(false);
+
+    // Simulate the durable counter increment and the next task's normal backoff delivery.
+    queueItem.retryCount = 2;
+    mockUploadActivityFileToCOROS.mockResolvedValueOnce({
+      status: 'pending', uploadId: '43', providerUserId: 'coros-user-1',
+    });
+    expect(await processActivitySyncQueueItem(queueItem)).toBe(QueueResult.ProviderStatusPending);
+    expect(mockUploadActivityFileToCOROS).toHaveBeenCalledExactlyOnceWith('user-1', Buffer.from('FITDATA'), {
+      expectedProviderUserId: 'coros-user-1',
+    });
+    expect(queueItem.destinationUploadID).toBe('43');
+    expect(mockGetCOROSActivityUploadStatus).toHaveBeenCalledTimes(1);
+
+    queueItem.retryCount = 3;
+    mockGetCOROSActivityUploadStatus.mockResolvedValueOnce({
+      status: 'success', uploadId: '43', providerUserId: 'coros-user-1',
+    });
+    expect(await processActivitySyncQueueItem(queueItem)).toBe(QueueResult.Processed);
+    expect(mockGetCOROSActivityUploadStatus).toHaveBeenLastCalledWith('user-1', '43', 'coros-user-1', {
+      queueItemRef: queueItem.ref,
+    });
+    expect(mockUploadActivityFileToCOROS).toHaveBeenCalledTimes(1);
+    expect(mockUpdateQueueItemIfUserActive).toHaveBeenCalledWith(expect.objectContaining({
+      phase: 'before_activity_sync_success_finalize',
+      updateData: expect.objectContaining({ processed: true, resultStatus: 'success', destinationUploadID: '43' }),
+    }));
+  });
+
+  it('retains the last failed COROS upload when the shared retry budget is exhausted', async () => {
+    const queueItem: ActivitySyncQueueItemInterface = {
+      ...baseQueueItem,
+      routeId: ACTIVITY_SYNC_ROUTE_IDS.GarminAPI_to_COROSAPI,
+      destinationServiceName: ServiceNames.COROSAPI,
+      destinationUploadID: '42',
+      destinationProviderUserID: 'coros-user-1',
+      retryCount: MAX_RETRY_COUNT - 1,
+    };
+    mockGetCOROSActivityUploadStatus.mockRejectedValueOnce(new ProviderOperationError({
+      serviceName: ServiceNames.COROSAPI,
+      operation: 'activity_upload_status',
+      disposition: 'retryable', retryMode: 'restart', code: 'provider-processing-failed',
+      message: 'COROS could not process this activity file.',
+      providerStatus: -1, providerOperationId: '42', providerUserId: 'coros-user-1',
+      dlqContext: 'COROS_ACTIVITY_UPLOAD_FAILED',
+    }));
+    mockIncreaseRetryCountForQueueItem.mockResolvedValueOnce(QueueResult.MovedToDLQ);
+
+    expect(await processActivitySyncQueueItem(queueItem)).toBe(QueueResult.MovedToDLQ);
+    expect(queueItem.destinationUploadID).toBe('42');
+    expect(queueItem.destinationProviderUserID).toBe('coros-user-1');
+    expect(mockUpdateQueueItemIfUserActive.mock.calls.some(
+      ([params]) => params.phase === 'before_activity_sync_pending_upload_restart',
+    )).toBe(false);
+    const retryParams = mockIncreaseRetryCountIfCurrentParams.mock.calls.at(-1)?.[0];
+    expect(retryParams).toMatchObject({
+      maxRetryDlqContext: 'COROS_ACTIVITY_UPLOAD_FAILED',
+      manualReconciliation: { additionalData: { destinationUploadID: '42', destinationProviderUserID: 'coros-user-1' } },
+      queueItem: { destinationUploadID: '42', destinationProviderUserID: 'coros-user-1' },
+    });
+    expect(mockSetActivitySyncFailedMetadata).toHaveBeenCalled();
+    expect(mockUploadActivityFileToCOROS).not.toHaveBeenCalled();
+  });
+
+  it.each(['not_current', 'skipped_deleted_user'])('does not schedule a COROS restart when clearing fails with %s', async outcome => {
+    const queueItem: ActivitySyncQueueItemInterface = {
+      ...baseQueueItem,
+      routeId: ACTIVITY_SYNC_ROUTE_IDS.GarminAPI_to_COROSAPI,
+      destinationServiceName: ServiceNames.COROSAPI,
+      destinationUploadID: '42', destinationProviderUserID: 'coros-user-1',
+    };
+    mockGetCOROSActivityUploadStatus.mockRejectedValueOnce(new ProviderOperationError({
+      serviceName: ServiceNames.COROSAPI, operation: 'activity_upload_status',
+      disposition: 'retryable', retryMode: 'restart', code: 'provider-processing-failed',
+      message: 'COROS could not process this activity file.', providerStatus: -1,
+    }));
+    mockUpdateQueueItemIfUserActive.mockImplementation(async params => (
+      params.phase === 'before_activity_sync_pending_upload_restart' ? outcome : 'updated'
+    ));
+
+    expect(await processActivitySyncQueueItem(queueItem)).toBe(QueueResult.Processed);
+    expect(queueItem.destinationUploadID).toBe('42');
+    expect(queueItem.destinationRestartProviderUserID).toBeUndefined();
+    expect(mockIncreaseRetryCountForQueueItem).not.toHaveBeenCalled();
+    expect(mockUploadActivityFileToCOROS).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    { code: 'invalid-argument', providerCode: '5096' },
+    { code: 'unexpected-provider-status', providerStatus: 99 },
+  ])('does not restart permanent COROS status rejection $code', async failure => {
+    const queueItem: ActivitySyncQueueItemInterface = {
+      ...baseQueueItem,
+      routeId: ACTIVITY_SYNC_ROUTE_IDS.GarminAPI_to_COROSAPI,
+      destinationServiceName: ServiceNames.COROSAPI,
+      destinationUploadID: '42', destinationProviderUserID: 'coros-user-1',
+    };
+    mockGetCOROSActivityUploadStatus.mockRejectedValueOnce(new ProviderOperationError({
+      serviceName: ServiceNames.COROSAPI, operation: 'activity_upload_status',
+      disposition: 'permanent', message: 'COROS rejected the file or returned an unknown status.',
+      ...failure,
+    }));
+
+    expect(await processActivitySyncQueueItem(queueItem)).toBe(QueueResult.MovedToDLQ);
+    expect(queueItem.destinationUploadID).toBe('42');
+    expect(mockIncreaseRetryCountForQueueItem).not.toHaveBeenCalled();
+    expect(mockUploadActivityFileToCOROS).not.toHaveBeenCalled();
   });
 
   it('retries COROS post-upload writes after the upload count marker is committed', async () => {

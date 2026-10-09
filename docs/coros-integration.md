@@ -99,11 +99,11 @@ A successful initialization must return an integer-shaped upload ID. JavaScript 
 
 - provider status `1` remains pending;
 - provider status `2` is success;
-- provider status `-1` is a terminal processing failure;
+- provider status `-1` confirms that this upload failed; direct clients retain their explicit failed-file restart action;
 - duplicate result `5082` is completed duplicate-as-success;
 - an unknown status or mismatched upload ID fails closed as a provider-contract error.
 
-After COROS issues an upload ID, status retries resume that operation and do not post the FIT again. A completed upload increments the COROS upload counter through an idempotency record keyed by the provider operation or queue item.
+After COROS issues an upload ID, pending status retries resume that operation and do not post the FIT again. A completed upload increments the COROS upload counter through an idempotency record keyed by the provider operation or queue item.
 
 ### Shared automatic and backfill delivery
 
@@ -124,6 +124,8 @@ If the event or retained original changes or disappears after scheduling, the wo
 The worker downloads the retained original FIT, verifies entitlement, both connection states, the active destination account, pending disconnect, and account deletion, then persists resume state before provider continuation. It never derives a replacement activity from event statistics.
 
 For COROS-bound shared rows, provider status `1` is an expected asynchronous wait rather than a Cloud Task failure. The worker retains the upload ID, consumes the bounded polling budget, durably records the next poll's due time, acknowledges the current task, and schedules the next status-only poll using the configured Cloud Tasks backoff (15 minutes through four hours). The queue reconciler respects that due time instead of bypassing it with an immediate task, pages past future scheduled polls so they cannot hide newer work, and an early retry re-enqueues the same planned task rather than polling COROS ahead of schedule. It emits an info-level structured poll-scheduled log; the next worker never posts the FIT again. Scheduler/transport failures, exhausted polling, and status `-1` remain warning/error paths.
+
+A matching status response with result `0000` and status `-1` uses the existing queued `restart` retry path, not immediate DLQ. The worker clears the confirmed-failed upload identifiers while retaining the original account in `destinationRestartProviderUserID`; a later task may resend the retained FIT only to that still-active account. It does not reset the shared retry count or add an adapter retry loop. Pending polls and restart failures consume the same ten-increment durable budget, so this is not ten new uploads. At exhaustion the last failed upload/account identifiers remain available for DLQ reconciliation. Structured failure logs retain each failed operation ID and status. Explicit unsupported-file result `5096`, unknown status, and mismatched operation IDs remain permanent; a pending or uncertain operation is never blindly resent. Direct callable error codes and manual retry controls are unchanged.
 
 ## Echo suppression
 

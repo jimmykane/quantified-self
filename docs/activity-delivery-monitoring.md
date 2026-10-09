@@ -47,6 +47,12 @@ its explicit `NEW`/`PROCESSING` results emit pending instead of failure telemetr
 Unknown/malformed status, transport failures and exhausted retries still emit actual
 failure/DLQ observations. This classification does not change polling or retry budgets.
 
+Confirmed COROS processing-failure restarts are covered by the existing committed
+`retry` outcome and per-destination processing-failure policy. Pending status checks
+remain `provider_pending`; budget exhaustion retains the failed upload identifiers
+and emits the existing DLQ/manual-reconciliation outcomes only after commit.
+Monitoring definitions, labels, thresholds and native queue scope are unchanged.
+
 Telemetry is best-effort after existing commits, not an audit ledger or an exactly-once
 counter: logging can fail, and a committed write followed by container loss can omit
 an observation. Logging failures never change delivery/acknowledgement behavior.

@@ -1646,6 +1646,9 @@ describe('help.content', () => {
     expect(serviceConnectionsSection?.content).toContain('If Garmin Health is temporarily disabled, the control falls back to **Import Sleep history**');
     expect(serviceConnectionsSection?.content).toContain('COROS to Suunto activity sync requires');
     expect(serviceConnectionsSection?.content).toContain('COROS FIT activity uploads in Services are asynchronous and use per-file status');
+    expect(serviceConnectionsSection?.content).toContain('Background activity delivery retries a confirmed COROS processing failure');
+    expect(serviceConnectionsSection?.content).toContain('Pending uploads are checked without sending the file again');
+    expect(serviceConnectionsSection?.content).toContain('An explicit unsupported-file rejection is not retried');
     expect(serviceConnectionsSection?.content).toContain('short provider upload pacing');
     expect(serviceConnectionsSection?.content).toContain('checks that same upload first instead of posting the FIT again');
     expect(serviceConnectionsSection?.content).toContain('### Activity types COROS accepts');

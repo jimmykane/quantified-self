@@ -60,6 +60,8 @@ export interface COROSActivityUploadCountOptions {
 }
 
 export interface COROSActivityUploadOptions {
+  /** Keep a queued restart on the account that accepted the failed upload. */
+  expectedProviderUserId?: string;
   beforeProviderRequest?: () => Promise<void>;
 }
 
@@ -341,9 +343,9 @@ export async function uploadActivityFileToCOROS(
     throw new HttpsError('invalid-argument', `Cannot upload activity because the size is greater than ${MAX_ACTIVITY_CALLABLE_UPLOAD_BYTES_LABEL}.`);
   }
 
-  let providerUserId = '';
+  let providerUserId = options.expectedProviderUserId || '';
   try {
-    return await withActiveCOROSToken<COROSActivityUploadResult>(userID, undefined, async (token, selectedProviderUserId) => {
+    return await withActiveCOROSToken<COROSActivityUploadResult>(userID, options.expectedProviderUserId, async (token, selectedProviderUserId) => {
       providerUserId = selectedProviderUserId;
       const openId = getOpenId(token, selectedProviderUserId, 'activity_upload_init');
       const { body, contentType } = buildCOROSActivityMultipartBody(openId, fileBuffer);
@@ -435,7 +437,8 @@ export async function getCOROSActivityUploadStatus(
         throw new ProviderOperationError({
           serviceName: ServiceNames.COROSAPI,
           operation: 'activity_upload_status',
-          disposition: 'permanent',
+          disposition: 'retryable',
+          retryMode: 'restart',
           code: 'provider-processing-failed',
           message: 'COROS could not process this activity file.',
           providerStatus: status,
@@ -526,6 +529,10 @@ function toCallableError(error: unknown): never {
   };
   if (error.disposition === 'auth_required') throw new HttpsError('unauthenticated', error.message, details);
   if (error.disposition === 'permission_required') throw new HttpsError('permission-denied', error.message, details);
+  // Direct uploads still require the existing explicit failed-file retry action.
+  if (error.operation === 'activity_upload_status' && error.code === 'provider-processing-failed') {
+    throw new HttpsError('failed-precondition', error.message, details);
+  }
   if (error.disposition === 'retryable') {
     throw new HttpsError(error.code === 'resource-exhausted' ? 'resource-exhausted' : 'unavailable', error.message, details);
   }

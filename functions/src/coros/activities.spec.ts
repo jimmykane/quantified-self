@@ -362,7 +362,7 @@ describe('COROS asynchronous activity uploads', () => {
     });
   });
 
-  it('retains COROS processing failure status for structured diagnostics', async () => {
+  it('classifies confirmed processing failure for a bounded restart with original diagnostics', async () => {
     mocks.get.mockResolvedValueOnce(JSON.stringify({
       result: '0000',
       data: [{ uploadId: '42', status: -1 }],
@@ -374,9 +374,39 @@ describe('COROS asynchronous activity uploads', () => {
       'open-id-1',
     )).rejects.toMatchObject({
       code: 'provider-processing-failed',
+      disposition: 'retryable',
+      retryMode: 'restart',
       providerStatus: -1,
       providerOperationId: '42',
+      providerUserId: 'open-id-1',
+      dlqContext: 'COROS_ACTIVITY_UPLOAD_FAILED',
     });
+    expect(mocks.post).not.toHaveBeenCalled();
+  });
+
+  it.each(['init', 'status'])('keeps explicit unsupported-file result 5096 permanent during %s', async phase => {
+    const response = JSON.stringify({ result: '5096', message: 'Unsupported workout data' });
+    if (phase === 'init') mocks.post.mockResolvedValueOnce(response);
+    else mocks.get.mockResolvedValueOnce(response);
+
+    await expect(phase === 'init'
+      ? uploadActivityFileToCOROS('test-user-id', Buffer.from('fit-data'))
+      : getCOROSActivityUploadStatus('test-user-id', '42', 'open-id-1')).rejects.toMatchObject({
+      disposition: 'permanent',
+      retryMode: 'none',
+      providerCode: '5096',
+      dlqContext: 'COROS_ACTIVITY_UPLOAD_REJECTED',
+    });
+  });
+
+  it('does not restart an upload on a different selected COROS account', async () => {
+    mocks.getActiveCOROSTokenSnapshot.mockResolvedValueOnce(tokenSnapshot('open-id-2'));
+
+    await expect(uploadActivityFileToCOROS('test-user-id', Buffer.from('fit-data'), {
+      expectedProviderUserId: 'open-id-1',
+    })).rejects.toMatchObject({ disposition: 'auth_required', providerUserId: 'open-id-1' });
+    expect(mocks.getActiveCOROSTokenSnapshot).toHaveBeenCalledWith('test-user-id', 'open-id-1');
+    expect(mocks.post).not.toHaveBeenCalled();
   });
 
   it('retains the upload operation when COROS returns an unknown status', async () => {

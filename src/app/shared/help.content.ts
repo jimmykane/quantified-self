@@ -1206,6 +1206,8 @@ For imported activities, Quantified Self can recover a missing or expired COROS 
 
 COROS FIT activity uploads in Services are asynchronous and use per-file status, short provider upload pacing, and failed-file retry controls. Once COROS issues an upload ID, refresh or retry checks that same upload first instead of posting the FIT again. A duplicate is shown as a completed result.
 
+Background activity delivery retries a confirmed COROS processing failure with increasing delays and a limited number of attempts, using the same COROS account. Pending uploads are checked without sending the file again. An explicit unsupported-file rejection is not retried. If retries run out, delivery remains failed rather than being shown as completed.
+
 ### Activity types COROS accepts
 
 COROS documents third-party activity import for these modes:
