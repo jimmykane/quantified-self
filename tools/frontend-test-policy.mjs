@@ -1,15 +1,15 @@
 import assert from 'node:assert/strict';
-import { readFileSync } from 'node:fs';
+import { existsSync, readFileSync, realpathSync } from 'node:fs';
 import { relative, resolve } from 'node:path';
 import ts from 'typescript';
+import { createIdResolver, DevEnvironment, loadConfigFromFile, mergeConfig, resolveConfig } from 'vite';
 
 export const reasonsFile = 'tools/frontend-test-environment-reasons.json';
 const weight = { 'helpers-node': 0, 'helpers-dom': 1, angular: 2 };
 const forbidden = /^(?:@angular\/[^/]+\/(?:[^/]+\/)*testing(?:\/|$)|@angular\/compiler(?:-cli)?(?:\/|$)|@analogjs\/(?:vitest-angular|vite-plugin-angular)(?:\/|$)|zone\.js(?:\/|$))/;
 const moduleCalls = new Set(['importActual', 'importMock', 'mock', 'doMock', 'requireActual', 'requireMock']);
-// TypeScript otherwise prefers .d.ts over the JavaScript that Vitest actually loads.
-const runtimeResolutionHost = { ...ts.sys,
-  fileExists: file => !/\.d\.[cm]?ts$/.test(file) && ts.sys.fileExists(file) };
+// Match Vite's exact asset query flags; ?raw=1 and ?url=1 still execute source.
+const dataImport = /[?&](?:raw|url)(?:&|$)/;
 
 function memberName(node) {
   if (ts.isPropertyAccessExpression(node)) return node.name.text;
@@ -79,7 +79,8 @@ function sharedFixtureSetup(source) {
   return found;
 }
 
-export function checkPolicy({ root, specs, baseFiles, baseRegistry, reasons, changedFiles = [] }) {
+export async function checkPolicy({ root, specs, baseFiles, baseRegistry, reasons, changedFiles = [] }) {
+  root = realpathSync(root);
   const errors = [];
   const warnings = [];
   const projects = new Map(specs.map(spec => [spec.file, spec.project]));
@@ -100,8 +101,26 @@ export function checkPolicy({ root, specs, baseFiles, baseRegistry, reasons, cha
   const oldNode = new Set(baseRegistry.node ?? []);
   const oldDom = new Set(baseRegistry.dom ?? []);
   const cache = new Map();
-  const options = { moduleResolution: ts.ModuleResolutionKind.Bundler, module: ts.ModuleKind.ESNext,
-    allowJs: true, baseUrl: root, paths: { '@shared/*': ['shared/*'], 'app/*': ['src/app/*'] } };
+  const configFile = resolve(root, 'vitest.config.ts');
+  const loaded = existsSync(configFile) ? await loadConfigFromFile({ command: 'serve', mode: 'test' }, configFile) : null;
+  const resolvers = new Map();
+  async function runtimeResolver(project) {
+    if (!resolvers.has(project)) {
+      const selected = loaded?.config.test?.projects?.find(item => item.test?.name === project);
+      if (loaded) assert(selected, `Missing inline frontend project: ${project}`);
+      const resolution = loaded
+        ? mergeConfig({ resolve: loaded.config.resolve ?? {} }, { resolve: selected.resolve ?? {} }).resolve
+        : { alias: { '@shared': resolve(root, 'shared'), app: resolve(root, 'src/app') } };
+      const config = await resolveConfig({ root, configFile: false, envFile: false, logLevel: 'silent', resolve: resolution,
+        environments: { ssr: { optimizeDeps: { noDiscovery: true, include: [] } } } }, 'serve', 'test');
+      // Resolve imports without starting a server, optimizer, or Angular/test setup.
+      const environment = new DevEnvironment('ssr', config, { hot: false });
+      await environment.init();
+      const resolveId = createIdResolver(config);
+      resolvers.set(project, { environment, resolveId: (id, importer, aliasOnly = false) => resolveId(environment, id, importer, aliasOnly) });
+    }
+    return resolvers.get(project).resolveId;
+  }
   function parse(file) {
     if (!cache.has(file)) {
       const source = ts.createSourceFile(file, readFileSync(file, 'utf8'), ts.ScriptTarget.Latest, true);
@@ -110,37 +129,47 @@ export function checkPolicy({ root, specs, baseFiles, baseRegistry, reasons, cha
     }
     return cache.get(file);
   }
-  for (const { file, project } of specs) {
-    assert(Object.hasOwn(weight, project), `Unknown frontend project: ${project}`);
-    const isNew = !existing.has(file);
-    const previous = oldNode.has(file) ? 'helpers-node' : oldDom.has(file) ? 'helpers-dom' : 'angular';
-    const heavier = !isNew && weight[project] > weight[previous];
-    if ((isNew && project === 'angular' || heavier) && reasons[file]?.environment !== project) {
-      errors.push(`${file}: ${isNew ? 'new Angular spec needs explicit classification' : `moving ${previous} to ${project} needs review`}; record its concrete reason in ${reasonsFile} (or register a verified Node/DOM spec in tools/frontend-test-environments.json)`);
-    }
-    if (project === 'angular') {
-      if ((isNew || changed.has(file)) && sharedFixtureSetup(parse(resolve(root, file)).source)) {
-        warnings.push(`${file}: shared beforeEach/beforeAll creates or renders a fixture; review whether all tests need it and move setup into the tests that do`);
+  try {
+    for (const { file, project } of specs) {
+      assert(Object.hasOwn(weight, project), `Unknown frontend project: ${project}`);
+      const isNew = !existing.has(file);
+      const previous = oldNode.has(file) ? 'helpers-node' : oldDom.has(file) ? 'helpers-dom' : 'angular';
+      const heavier = !isNew && weight[project] > weight[previous];
+      if ((isNew && project === 'angular' || heavier) && reasons[file]?.environment !== project) {
+        errors.push(`${file}: ${isNew ? 'new Angular spec needs explicit classification' : `moving ${previous} to ${project} needs review`}; record its concrete reason in ${reasonsFile} (or register a verified Node/DOM spec in tools/frontend-test-environments.json)`);
       }
-      continue;
-    }
-    const visited = new Set();
-    function walk(path) {
-      if (visited.has(path)) return;
-      visited.add(path);
-      for (const specifier of parse(path).imports) {
-        if (forbidden.test(specifier)) {
-          errors.push(`${file}: ${relative(root, path)} imports ${specifier}; Node/DOM suites must not load Angular testing/compiler/global setup`);
-          continue;
+      if (project === 'angular') {
+        if ((isNew || changed.has(file)) && sharedFixtureSetup(parse(resolve(root, file)).source)) {
+          warnings.push(`${file}: shared beforeEach/beforeAll creates or renders a fixture; review whether all tests need it and move setup into the tests that do`);
         }
-        const target = ts.resolveModuleName(specifier, path, options, runtimeResolutionHost).resolvedModule?.resolvedFileName;
-        if (!target || target.includes('/node_modules/')) continue;
-        const local = relative(root, target).replaceAll('\\', '/');
-        if (local === 'src/test-setup.ts') errors.push(`${file}: ${relative(root, path)} imports src/test-setup.ts; keep global setup scoped to Angular`);
-        else if (!local.startsWith('../')) walk(resolve(target));
+        continue;
       }
+      const resolveId = await runtimeResolver(project);
+      const visited = new Set();
+      async function walk(path) {
+        if (visited.has(path)) return;
+        visited.add(path);
+        for (const specifier of parse(path).imports) {
+          if (dataImport.test(specifier)) continue;
+          const module = forbidden.test(specifier) ? specifier : await resolveId(specifier, path, true) ?? specifier;
+          if (forbidden.test(module)) {
+            const name = module === specifier ? specifier : `${specifier} (alias for ${module})`;
+            errors.push(`${file}: ${relative(root, path)} imports ${name}; Node/DOM suites must not load Angular testing/compiler/global setup`);
+            continue;
+          }
+          const target = await resolveId(specifier, path);
+          if (!target || target.includes('/node_modules/') || dataImport.test(target)) continue;
+          const runtime = target.replace(/[?#].*$/, '');
+          if (!/\.[cm]?[jt]sx?$/.test(runtime) || /\.d\.[cm]?ts$/.test(runtime)) continue;
+          const local = relative(root, runtime).replaceAll('\\', '/');
+          if (local === 'src/test-setup.ts') errors.push(`${file}: ${relative(root, path)} imports src/test-setup.ts; keep global setup scoped to Angular`);
+          else if (!local.startsWith('../')) await walk(runtime);
+        }
+      }
+      await walk(resolve(root, file));
     }
-    walk(resolve(root, file));
+  } finally {
+    await Promise.all([...resolvers.values()].map(item => item.environment.close()));
   }
   return { errors, warnings };
 }

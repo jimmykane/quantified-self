@@ -29,7 +29,7 @@ try {
   const baseRegistry = baseFiles.includes(registryFile)
     ? JSON.parse(git(['show', `${base}:${registryFile}`])) : { node: [], dom: [] };
   const specs = await discoverSpecs(root);
-  const result = checkPolicy({ root, specs, baseFiles, baseRegistry,
+  const result = await checkPolicy({ root, specs, baseFiles, baseRegistry,
     reasons: JSON.parse(readFileSync(resolve(root, reasonsFile), 'utf8')),
     changedFiles: git(['diff', '--name-only', '-z', base, '--']).split('\0') });
   for (const message of result.warnings) {

@@ -58,5 +58,7 @@ runner configuration and verification commands.
   to retain unnecessary setup. CI enforces this policy before either frontend shard starts.
   Node/DOM tests must not load Angular testing/compiler/global setup through runtime imports, including local transitive
   imports or mocks. Type-only imports and plain Angular core decorators remain allowed after verifying the suite.
+  Keep the policy's runtime import scan aligned with Vite resolution and each project's aliases; TypeScript resolution
+  can inspect an unused sibling or declaration instead of the file the test loads. Data/raw imports are not executable source.
   Shared fixture hooks in new/changed Angular specs generate review warnings; inspect them and keep pure/static tests
   in separate light suites where practical. Keep real fixtures where bindings, view effects or teardown need coverage.

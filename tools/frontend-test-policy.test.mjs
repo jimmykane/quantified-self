@@ -35,41 +35,41 @@ test('explicit opt-ins support hidden/shared/root specs without widening ordinar
   }
 });
 
-test('new specs require classification; grandfathered Angular specs keep their fallback', t => {
+test('new specs require classification; grandfathered Angular specs keep their fallback', async t => {
   const { write, check } = fixture(t);
   write(angular);
-  assert.match(check([{ file: angular, project: 'angular' }]).errors[0], /new Angular spec/);
-  assert.deepEqual(check([{ file: angular, project: 'angular' }], { reasons: { [angular]: reason } }).errors, []);
-  assert.deepEqual(check([{ file: angular, project: 'angular' }], { baseFiles: [angular] }).errors, []);
+  assert.match((await check([{ file: angular, project: 'angular' }])).errors[0], /new Angular spec/);
+  assert.deepEqual((await check([{ file: angular, project: 'angular' }], { reasons: { [angular]: reason } })).errors, []);
+  assert.deepEqual((await check([{ file: angular, project: 'angular' }], { baseFiles: [angular] })).errors, []);
   write(helper, 'export const data = 1;');
-  for (const project of ['helpers-node', 'helpers-dom']) assert.deepEqual(check([{ file: helper, project }]).errors, []);
+  for (const project of ['helpers-node', 'helpers-dom']) assert.deepEqual((await check([{ file: helper, project }])).errors, []);
 });
 
-test('heavier reclassification needs a reason matching the selected environment', t => {
+test('heavier reclassification needs a reason matching the selected environment', async t => {
   const { write, check } = fixture(t);
   write(helper);
   for (const [from, to] of [['node', 'helpers-dom'], ['node', 'angular'], ['dom', 'angular']]) {
     const options = { baseFiles: [helper], baseRegistry: { [from]: [helper] } };
-    assert.match(check([{ file: helper, project: to }], options).errors[0], /needs review/);
-    assert.deepEqual(check([{ file: helper, project: to }], { ...options,
-      reasons: { [helper]: { environment: to, reason: 'Verifies browser locale or actual Angular integration.' } } }).errors, []);
+    assert.match((await check([{ file: helper, project: to }], options)).errors[0], /needs review/);
+    assert.deepEqual((await check([{ file: helper, project: to }], { ...options,
+      reasons: { [helper]: { environment: to, reason: 'Verifies browser locale or actual Angular integration.' } } })).errors, []);
   }
-  assert.deepEqual(check([{ file: helper, project: 'helpers-node' }], { baseFiles: [helper] }).errors, []);
+  assert.deepEqual((await check([{ file: helper, project: 'helpers-node' }], { baseFiles: [helper] })).errors, []);
 });
 
-test('stale, mismatched, vague and unsorted reason records fail', t => {
+test('stale, mismatched, vague and unsorted reason records fail', async t => {
   const { write, check } = fixture(t);
   write(angular);
   const specs = [{ file: angular, project: 'angular' }];
   for (const entry of [{ ...reason, reason: 'needed' }, { ...reason, extra: true }, { ...reason, environment: 'helpers-node' }, null]) {
-    assert(check(specs, { reasons: { [angular]: entry } }).errors.length > 0);
+    assert((await check(specs, { reasons: { [angular]: entry } })).errors.length > 0);
   }
-  assert.match(check(specs, { reasons: { [helper]: reason } }).errors[0], /stale or mismatched/);
-  assert.match(check(specs, { reasons: { [angular]: { ...reason, environment: 'helpers-dom' } } }).errors[0], /mismatched/);
-  assert.throws(() => check(specs, { reasons: { z: reason, a: reason } }), /sorted/);
+  assert.match((await check(specs, { reasons: { [helper]: reason } })).errors[0], /stale or mismatched/);
+  assert.match((await check(specs, { reasons: { [angular]: { ...reason, environment: 'helpers-dom' } } })).errors[0], /mismatched/);
+  await assert.rejects(() => check(specs, { reasons: { z: reason, a: reason } }), /sorted/);
 });
 
-test('runtime testing/compiler/setup imports fail in both lighter environments', t => {
+test('runtime testing/compiler/setup imports fail in both lighter environments', async t => {
   const { write, check } = fixture(t);
   const sources = [
     "import { TestBed as Bed } from '@angular/core/testing'; Bed.inject(Object);",
@@ -89,14 +89,14 @@ test('runtime testing/compiler/setup imports fail in both lighter environments',
   ];
   for (const source of sources) {
     write(helper, source);
-    for (const project of ['helpers-node', 'helpers-dom']) assert.match(check([{ file: helper, project }]).errors[0], /must not load Angular/);
+    for (const project of ['helpers-node', 'helpers-dom']) assert.match((await check([{ file: helper, project }])).errors[0], /must not load Angular/);
   }
   write('src/test-setup.ts');
   write(helper, "import '../../test-setup';");
-  assert.match(check([{ file: helper, project: 'helpers-node' }]).errors[0], /global setup/);
+  assert.match((await check([{ file: helper, project: 'helpers-node' }])).errors[0], /global setup/);
 });
 
-test('literal indexed framework mocks are inspected in both lighter environments', t => {
+test('literal indexed framework mocks are inspected in both lighter environments', async t => {
   const { write, check } = fixture(t);
   for (const source of [
     "vi['mock']('@angular/core/testing', () => ({}));",
@@ -105,23 +105,23 @@ test('literal indexed framework mocks are inspected in both lighter environments
   ]) {
     write(helper, source);
     for (const project of ['helpers-node', 'helpers-dom']) {
-      assert.match(check([{ file: helper, project }]).errors[0], /must not load Angular/);
+      assert.match((await check([{ file: helper, project }])).errors[0], /must not load Angular/);
     }
   }
 });
 
-test('transitive imports, aliases and cycles cannot hide framework setup', t => {
+test('transitive imports, aliases and cycles cannot hide framework setup', async t => {
   const { write, check } = fixture(t);
   write(helper, "import './bridge';");
   write('src/app/helpers/bridge.ts', "import 'app/helpers/cycle'; import '@shared/runtime';");
   write('src/app/helpers/cycle.ts', "import './bridge';");
   write('shared/runtime.ts', "import '@angular/core/testing';");
-  const errors = check([{ file: helper, project: 'helpers-node' }]).errors;
+  const errors = (await check([{ file: helper, project: 'helpers-node' }])).errors;
   assert.equal(errors.length, 1);
   assert.match(errors[0], /shared\/runtime.ts imports @angular\/core\/testing/);
 });
 
-test('local JavaScript runtime imports are inspected instead of their declaration files', t => {
+test('local JavaScript runtime imports are inspected instead of their declaration files', async t => {
   const { write, check } = fixture(t);
   for (const [runtime, declaration] of [
     ['bridge.js', 'bridge.d.ts'], ['bridge.mjs', 'bridge.d.mts'], ['bridge.cjs', 'bridge.d.cts'],
@@ -130,39 +130,97 @@ test('local JavaScript runtime imports are inspected instead of their declaratio
     write(`shared/${declaration}`, "import type { ComponentFixture } from '@angular/core/testing'; export declare const value: ComponentFixture<unknown>;");
     write(helper, `import { value } from '@shared/${runtime}';`);
     for (const project of ['helpers-node', 'helpers-dom']) {
-      const errors = check([{ file: helper, project }]).errors;
+      const errors = (await check([{ file: helper, project }])).errors;
       assert.equal(errors.length, 1);
       assert(errors[0].includes(`shared/${runtime} imports @angular/common/http/testing`));
     }
     write(`shared/${runtime}`, 'export const value = 1;');
-    assert.deepEqual(check([{ file: helper, project: 'helpers-node' }]).errors, []);
+    assert.deepEqual((await check([{ file: helper, project: 'helpers-node' }])).errors, []);
   }
 });
 
-test('type-only imports and plain Angular core decorators do not require Angular setup', t => {
+test('runtime inspection follows Vite source priority and extensionless modules', async t => {
   const { write, check } = fixture(t);
-  write(helper, "import type { ComponentFixture } from '@angular/core/testing';\nimport { type TestBed } from '@angular/core/testing';\nexport type { TestBed } from '@angular/core/testing';\nimport type { HttpTestingController } from '@angular/common/http/testing';\nimport { Injectable } from '@angular/core';");
-  assert.deepEqual(check([{ file: helper, project: 'helpers-node' }]).errors, []);
+  write('shared/twin.ts', 'export const value = 1;');
+  write('shared/twin.js', "import '@angular/core/testing'; export const value = 2;");
+  write('shared/esm.mjs', "import '@angular/core/testing'; export const value = 3;");
+  for (const [specifier, runtime] of [['@shared/twin.js', 'twin.js'], ['@shared/twin', 'twin.js'], ['@shared/esm', 'esm.mjs']]) {
+    write(helper, `import { value } from '${specifier}';`);
+    for (const project of ['helpers-node', 'helpers-dom']) {
+      const errors = (await check([{ file: helper, project }])).errors;
+      assert.equal(errors.length, 1, `Inspect ${runtime} for ${project}`);
+      assert(errors[0].includes(`shared/${runtime} imports @angular/core/testing`));
+    }
+  }
+  write('shared/twin.ts', "import '@angular/core/testing'; export const value = 1;");
+  write('shared/twin.js', 'export const value = 2;');
+  write(helper, "import { value } from '@shared/twin.js';");
+  assert.deepEqual((await check([{ file: helper, project: 'helpers-node' }])).errors, [], 'An unused TypeScript sibling must not cause a policy failure');
 });
 
-test('shared fixture hooks produce review warnings, not bans on legitimate rendering', t => {
+test('JSON, styles and raw source imports are data rather than executable modules', async t => {
+  const { write, check } = fixture(t);
+  write('shared/data.json', '{"value": 1}');
+  write('shared/styles.css', 'body { color: red; }');
+  write('shared/raw.ts', "import '@angular/compiler';");
+  write(helper, "import data from '@shared/data.json'; import '@shared/styles.css'; import source from '@shared/raw.ts?raw';");
+  assert.deepEqual((await check([{ file: helper, project: 'helpers-node' }])).errors, []);
+  for (const query of ['?raw=1', '?url=1', '?version=1']) {
+    write(helper, `import source from '@shared/raw.ts${query}';`);
+    assert.match((await check([{ file: helper, project: 'helpers-node' }])).errors[0], /@angular\/compiler/, `${query} does not turn executable code into data`);
+  }
+});
+
+test('runtime inspection merges root aliases and honors the selected project aliases', async t => {
+  const { root, write, check } = fixture(t);
+  const config = {
+    resolve: { alias: { '@base': resolve(root, 'shared') } },
+    test: { projects: [
+      { resolve: { alias: { '@runtime': resolve(root, 'shared/node.ts') } }, test: { name: 'helpers-node' } },
+      { resolve: { alias: { '@runtime': resolve(root, 'shared/dom.ts') } }, test: { name: 'helpers-dom' } },
+    ] },
+  };
+  write('vitest.config.ts', `export default ${JSON.stringify(config)};`);
+  write('shared/node.ts', "import '@base/blocked'; export const value = 1;");
+  write('shared/dom.ts', 'export const value = 2;');
+  write('shared/blocked.ts', "import '@angular/core/testing';");
+  write(helper, "import { value } from '@runtime';");
+  const errors = (await check([{ file: helper, project: 'helpers-node' }])).errors;
+  assert.equal(errors.length, 1);
+  assert.match(errors[0], /shared\/blocked.ts imports @angular\/core\/testing/);
+  assert.deepEqual((await check([{ file: helper, project: 'helpers-dom' }])).errors, []);
+  config.resolve.alias['@framework-testing'] = '@angular/common/http/testing';
+  write('vitest.config.ts', `export default ${JSON.stringify(config)};`);
+  write(helper, "import { HttpTestingController } from '@framework-testing';");
+  for (const project of ['helpers-node', 'helpers-dom']) {
+    assert.match((await check([{ file: helper, project }])).errors[0], /@angular\/common\/http\/testing/);
+  }
+});
+
+test('type-only imports and plain Angular core decorators do not require Angular setup', async t => {
+  const { write, check } = fixture(t);
+  write(helper, "import type { ComponentFixture } from '@angular/core/testing';\nimport { type TestBed } from '@angular/core/testing';\nexport type { TestBed } from '@angular/core/testing';\nimport type { HttpTestingController } from '@angular/common/http/testing';\nimport { Injectable } from '@angular/core';");
+  assert.deepEqual((await check([{ file: helper, project: 'helpers-node' }])).errors, []);
+});
+
+test('shared fixture hooks produce review warnings, not bans on legitimate rendering', async t => {
   const { write, check } = fixture(t);
   const options = { baseFiles: [angular], changedFiles: [angular] };
   write(angular, "import { beforeEach as setup } from 'vitest'; setup(() => { TestBed.createComponent(Component); fixture.detectChanges(); });");
-  assert.equal(check([{ file: angular, project: 'angular' }], options).warnings.length, 1);
-  assert.deepEqual(check([{ file: angular, project: 'angular' }], options).errors, []);
-  assert.equal(check([{ file: angular, project: 'angular' }], { baseFiles: [angular] }).warnings.length, 0);
+  assert.equal((await check([{ file: angular, project: 'angular' }], options)).warnings.length, 1);
+  assert.deepEqual((await check([{ file: angular, project: 'angular' }], options)).errors, []);
+  assert.equal((await check([{ file: angular, project: 'angular' }], { baseFiles: [angular] })).warnings.length, 0);
   write(angular, 'beforeEach(() => { mock = {}; }); it("renders", () => { TestBed.createComponent(Component); fixture.detectChanges(); });');
-  assert.equal(check([{ file: angular, project: 'angular' }], options).warnings.length, 0);
+  assert.equal((await check([{ file: angular, project: 'angular' }], options)).warnings.length, 0);
 });
 
-test('invalid source fails inspection instead of silently losing imports', t => {
+test('invalid source fails inspection instead of silently losing imports', async t => {
   const { write, check } = fixture(t);
   write(helper, 'import {');
-  assert.throws(() => check([{ file: helper, project: 'helpers-node' }]), /invalid source/);
+  await assert.rejects(() => check([{ file: helper, project: 'helpers-node' }]), /invalid source/);
 });
 
-test('CLI uses a merge base, catches hidden/new specs and fails when comparison is unavailable', t => {
+test('CLI uses a merge base, catches hidden/new specs and fails when comparison is unavailable', async t => {
   const { root, write } = fixture(t);
   const git = args => execFileSync('git', args, { cwd: root, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] }).trim();
   git(['init']);

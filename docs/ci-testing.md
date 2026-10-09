@@ -99,7 +99,9 @@ light suites where practical. Remove reason entries when their specs are deleted
 The guard rejects runtime Angular testing/compiler/global-setup imports in Node/DOM suites, including local transitive
 imports, aliases and module mocks, while allowing type-only imports and plain Angular core decorators. It inspects
 literal module names, including nested testing entry points and indexed mock calls such as `vi['mock'](...)`.
-Local JavaScript imports are inspected through their runtime files rather than accompanying declarations.
+Local imports use Vite's resolver and the selected project's merged root/project resolve options, so inspection
+follows runtime file priority, aliases and extensionless modules rather than TypeScript siblings or declarations.
+JSON, styles and `?raw`/`?url` imports are data and are not parsed as executable source.
 It does not traverse third-party package internals; the selected project's actual tests must
 still pass without fabricated globals.
 Direct fixture creation/rendering in shared hooks of new/changed Angular specs produces review warnings, including CI
