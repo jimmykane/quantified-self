@@ -121,6 +121,7 @@ import {
   type ServiceDisconnectRetryDetails,
   type ServiceConnectionAccountProjection,
 } from '@shared/service-connection';
+import { CONNECTION_HISTORY_DEFAULT_RANGE, type ConnectionHistoryRangePreset } from '@shared/connection-history';
 import {
   getUserLegalAgreementsPath,
   OPTIONAL_USER_LEGAL_CONSENT_FIELDS,
@@ -1361,7 +1362,8 @@ export class AppUserService implements OnDestroy {
     );
   }
 
-  async importServiceHistoryForCurrentUser(serviceName: ServiceNames, startDate: Date, endDate: Date) {
+  async importServiceHistoryForCurrentUser(serviceName: ServiceNames, startDate: Date, endDate: Date, expectedUserID?: string) {
+    const canExecute = this.captureHistoryImportAccount(expectedUserID);
     let functionName: FunctionName;
     let payload: any;
 
@@ -1389,7 +1391,7 @@ export class AppUserService implements OnDestroy {
         throw new Error(`Service ${serviceName} not supported for history import`);
     }
 
-    const result = await this.functionsService.call(functionName, payload);
+    const result = await this.functionsService.call(functionName, payload, { canExecute });
     return result.data;
   }
 
@@ -1426,8 +1428,9 @@ export class AppUserService implements OnDestroy {
     return request;
   }
 
-  async backfillSuuntoSleepForCurrentUser(): Promise<SleepBackfillQueueResponse> {
-    const result = await this.functionsService.call<undefined, SleepBackfillQueueResponse>('backfillSuuntoAppSleep');
+  async backfillSuuntoSleepForCurrentUser(expectedUserID?: string): Promise<SleepBackfillQueueResponse> {
+    const canExecute = this.captureHistoryImportAccount(expectedUserID);
+    const result = await this.functionsService.call<undefined, SleepBackfillQueueResponse>('backfillSuuntoAppSleep', undefined, { canExecute });
     return result.data;
   }
 
@@ -1438,8 +1441,9 @@ export class AppUserService implements OnDestroy {
     return result.data.available === true;
   }
 
-  async backfillCorosSleepForCurrentUser(): Promise<SleepBackfillQueueResponse> {
-    const result = await this.functionsService.call<undefined, SleepBackfillQueueResponse>('backfillCorosAPISleep');
+  async backfillCorosSleepForCurrentUser(expectedUserID?: string): Promise<SleepBackfillQueueResponse> {
+    const canExecute = this.captureHistoryImportAccount(expectedUserID);
+    const result = await this.functionsService.call<undefined, SleepBackfillQueueResponse>('backfillCorosAPISleep', undefined, { canExecute });
     return result.data;
   }
 
@@ -1455,8 +1459,9 @@ export class AppUserService implements OnDestroy {
     return result.data;
   }
 
-  async backfillGarminHealthForCurrentUser(): Promise<SleepBackfillQueueResponse> {
-    const result = await this.functionsService.call<undefined, SleepBackfillQueueResponse>('backfillGarminAPIHealth');
+  async backfillGarminHealthForCurrentUser(expectedUserID?: string): Promise<SleepBackfillQueueResponse> {
+    const canExecute = this.captureHistoryImportAccount(expectedUserID);
+    const result = await this.functionsService.call<undefined, SleepBackfillQueueResponse>('backfillGarminAPIHealth', undefined, { canExecute });
     return result.data;
   }
 
@@ -1581,7 +1586,28 @@ export class AppUserService implements OnDestroy {
       && (!isCurrentView || isCurrentView());
   }
 
-  async getCurrentUserServiceTokenAndRedirectURI(serviceName: ServiceNames, isCurrentView?: () => boolean): Promise<{ redirect_uri: string }> {
+  private captureHistoryImportAccount(expectedUserID?: string): () => boolean {
+    // Dialog closure does not cancel an accepted request; changing Firebase identity does.
+    return this.captureServiceConnectionAccount(() => expectedUserID === undefined || this.auth.currentUser?.uid === expectedUserID);
+  }
+
+  async retryConnectionHistoryImport(runId: string, isCurrentView?: () => boolean): Promise<void> {
+    const canExecute = this.captureServiceConnectionAccount(isCurrentView);
+    const result = await this.functionsService.call<{ runId: string }, { accepted: boolean }>('retryConnectionHistoryImport', { runId }, { canExecute })
+      .catch(error => {
+        if (!canExecute()) throw new Error('Operation cancelled because its account or view changed.');
+        throw error;
+      });
+    if (!canExecute()) throw new Error('Operation cancelled because its account or view changed.');
+    if (!result.data.accepted) throw new Error('History retry was not accepted.');
+  }
+
+  async getCurrentUserServiceTokenAndRedirectURI(
+    serviceName: ServiceNames,
+    importRecentHistory = false,
+    importHistoryRange: ConnectionHistoryRangePreset = CONNECTION_HISTORY_DEFAULT_RANGE,
+    isCurrentView?: () => boolean,
+  ): Promise<{ redirect_uri: string }> {
     const canExecute = this.captureServiceConnectionAccount(isCurrentView);
     const currentDomain = this.windowService.currentDomain;
     const redirectUri = encodeURI(`${currentDomain}/services?serviceName=${serviceName}&connect=1`);
@@ -1604,7 +1630,10 @@ export class AppUserService implements OnDestroy {
         throw new Error(`Service ${serviceName} not supported for auth redirect`);
     }
 
-    const result = await this.functionsService.call<{ redirectUri: string }, { redirect_uri: string }>(functionName, { redirectUri }, { canExecute });
+    const result = await this.functionsService.call<
+      { redirectUri: string; importRecentHistory: boolean; importHistoryRange: ConnectionHistoryRangePreset },
+      { redirect_uri: string }
+    >(functionName, { redirectUri, importRecentHistory, importHistoryRange }, { canExecute });
     return result.data;
   }
 

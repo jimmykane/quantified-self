@@ -173,7 +173,7 @@ describe('HomeWorkoutPreviewComponent', () => {
     expect(panels.every(panel => panel.zoneLegendItems.length === 0)).toBe(true);
     expect(panels.every(panel => panel.gradeLegendItems.length === 0)).toBe(true);
     expect(options.every(option => option.tooltip.show === true)).toBe(true);
-    expect(options.every(option => option.yAxis.axisLabel?.show === false)).toBe(true);
+    expect(options.every(option => option.yAxis.axisLabel?.show === true)).toBe(true);
     expect(options.every(option => option.series.every(series => !series.silent))).toBe(true);
     expect(heartRateOption?.visualMap?.[0]?.pieces.map(piece => piece.color)).toEqual([
       AppColors.LightBlue,

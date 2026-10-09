@@ -2,6 +2,7 @@ import { defineConfig, defineProject } from 'vitest/config';
 import angular from '@analogjs/vite-plugin-angular';
 import { resolve } from 'path';
 import environments from './tools/frontend-test-environments.json';
+import FrontendSequencer from './tools/frontend-test-sequencer.mjs';
 
 const ordinaryExcludes = ['functions/**', 'node_modules/**', 'src/firestore.rules.spec.ts', 'src/storage.rules.spec.ts'];
 const projectDefaults = {
@@ -29,6 +30,9 @@ export default defineConfig({
         pool: 'forks',
         maxWorkers: 2,
         minWorkers: 1,
+        sequence: {
+            sequencer: FrontendSequencer,
+        },
         // Keep the original discovery/coverage boundary at the root too.
         include: ['**/*.spec.ts'],
         exclude: ordinaryExcludes,

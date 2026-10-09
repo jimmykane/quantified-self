@@ -10,7 +10,8 @@ import type { EChartsOption, LineSeriesOption, SeriesOption } from 'echarts';
 import type { DashboardChartPreview } from './dashboard-chart-preview.helper';
 import type { DashboardChartTileViewModel, DashboardMapTileViewModel } from './dashboard-tile-view-model.helper';
 import { buildDashboardFormRenderPoints, extendDashboardFormPointsWithZeroLoadUntil, type DashboardFormPoint } from './dashboard-form.helper';
-import { resolveDashboardKpiSparklineStyle, resolveDashboardKpiTrend } from './dashboard-kpi-sparkline.helper';
+import { resolveDashboardKpiSparklineStyle, resolveDashboardKpiTrend, usesDashboardKpiHistoryColumns } from './dashboard-kpi-sparkline.helper';
+import { buildMetricHistoryChartOption } from './metric-history-chart.helper';
 import { buildDashboardCartesianPoints } from './dashboard-echarts-cartesian.helper';
 import { buildOfficialEChartsThemeTokens } from './echarts-theme.helper';
 import { buildRoutePreviewMapTracks } from './route-preview-map.helper';
@@ -158,6 +159,16 @@ export function buildDashboardChartThumbnailOption(preview: DashboardChartPrevie
   }
   if (C.isDashboardKpiChartType(type)) {
     const style = resolveDashboardKpiSparklineStyle(tile, theme.trendLineColor);
+    if (usesDashboardKpiHistoryColumns(type)) {
+      const historyStyle = buildDashboardEChartsStyleTokens(darkTheme, 72);
+      return {
+        ...buildMetricHistoryChartOption(resolveDashboardKpiTrend(tile), {
+          color: style.lineColor, mutedColor: historyStyle.gridColor, baselineColor: historyStyle.axisColor,
+          silent: true, barMaxWidth: 8,
+        }),
+        tooltip: base.tooltip, legend: base.legend, aria: base.aria,
+      };
+    }
     const series = line(resolveDashboardKpiTrend(tile).map(point => [point.time, point.value]), style.lineColor);
     return cartesian([{ ...series, smooth: true, areaStyle: { color: style.areaColor, opacity: style.areaOpacity } }]);
   }

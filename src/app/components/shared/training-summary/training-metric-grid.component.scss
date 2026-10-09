@@ -1,17 +1,36 @@
 :host {
   display: block;
   min-width: 0;
+  align-self: start;
+  container-type: inline-size;
 }
 .training-metric-grid {
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));
+  align-content: start;
   margin: 0;
 }
 
 .training-metric-grid > div {
+  display: flex;
+  flex-direction: column;
   min-width: 0;
   padding: 20px;
   border-left: 1px solid var(--qs-glass-panel-border, var(--mat-sys-outline-variant));
+}
+
+.training-metric-grid--workspace > div {
+  padding: 12px 16px;
+}
+
+// Keep plots aligned within a row when a metric explanation wraps on phones.
+.training-metric-grid app-metric-history-chart {
+  margin-top: auto;
+  padding-top: 8px;
+}
+
+.training-metric-grid--workspace app-metric-history-chart {
+  padding-top: 4px;
 }
 
 .training-metric-grid > div:nth-child(4n + 1) {
@@ -81,7 +100,9 @@
   line-height: 1.1;
 }
 
-@media (max-width: 640px) {
+// A desktop side panel can be narrower than a phone's full-width grid.
+// Match the column count and dividers to this component, not the viewport.
+@container (max-width: 640px) {
   .training-metric-grid--workspace,
   .training-metric-grid--preview-load {
     grid-template-columns: repeat(2, minmax(0, 1fr));

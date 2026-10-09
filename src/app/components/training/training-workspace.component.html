@@ -33,8 +33,12 @@
         </span>
       }
     </div>
-    @if (derivedMetricsRouteStatus?.showRetry) {
-      <div pageHeaderActions class="training-page-actions">
+    <div pageHeaderActions class="training-page-actions">
+      <a mat-stroked-button routerLink="/training/plans" appHapticTap class="training-plans-action">
+        <mat-icon aria-hidden="true">event_note</mat-icon>
+        Plans
+      </a>
+      @if (derivedMetricsRouteStatus?.showRetry) {
         <button
           mat-stroked-button
           type="button"
@@ -45,8 +49,8 @@
           <mat-icon aria-hidden="true">refresh</mat-icon>
           <span class="training-derived-metrics-retry-label">Retry</span>
         </button>
-      </div>
-    }
+      }
+    </div>
   </app-page-header>
 
   @if (derivedMetricsRouteStatus) {
@@ -85,24 +89,36 @@
         }
       </mat-button-toggle-group>
 
-      <mat-form-field appearance="outline" subscriptSizing="dynamic" class="training-all-sports-selector">
-        <mat-label>All sports</mat-label>
-        <mat-select
-          #desktopAllSportsSelect
-          [value]="desktopAllSportsSelectorValue"
-          (selectionChange)="selectDesktopTrainingDestination($event.value, desktopAllSportsSelect)">
-          @for (option of trainingDestinationOptions; track option.id) {
-            @if (option.id !== 'overview') {
-              <mat-option [value]="option.id">
-                @if (option.materialIcon) {
-                  <mat-icon aria-hidden="true" [style.color]="option.iconColor">{{ option.materialIcon }}</mat-icon>
-                }
-                <span>{{ option.label }}</span>
-              </mat-option>
+      <button
+        mat-button
+        type="button"
+        appHapticTap
+        class="training-all-sports-selector"
+        [matMenuTriggerFor]="desktopAllSportsMenu"
+        [attr.aria-label]="'Choose training sport. Current view: ' + trainingDestinationLabel">
+        <mat-icon aria-hidden="true" [style.color]="selectedTrainingDestinationOption?.iconColor">
+          {{ selectedTrainingDestinationOption?.materialIcon || 'monitoring' }}
+        </mat-icon>
+        <span>{{ isOverviewDestination ? 'All sports' : trainingDestinationLabel }}</span>
+        <mat-icon iconPositionEnd aria-hidden="true">expand_more</mat-icon>
+      </button>
+      <mat-menu #desktopAllSportsMenu="matMenu" class="qs-menu-panel" xPosition="before">
+        @for (option of trainingDestinationOptions; track option.id) {
+          <button
+            mat-menu-item
+            type="button"
+            role="menuitemradio"
+            [attr.aria-label]="'View ' + option.label"
+            [attr.aria-checked]="option.id === selectedTrainingDestination"
+            [class.training-destination-current-option]="option.id === selectedTrainingDestination"
+            (click)="selectTrainingDestination(option.id, 'desktop_selector')">
+            @if (option.materialIcon) {
+              <mat-icon aria-hidden="true" [style.color]="option.iconColor">{{ option.materialIcon }}</mat-icon>
             }
-          }
-        </mat-select>
-      </mat-form-field>
+            <span>{{ option.label }}</span>
+          </button>
+        }
+      </mat-menu>
 
       <button
         mat-button
@@ -631,6 +647,7 @@
         }
         <app-training-metric-grid
           [metrics]="trainingLoadMetricItems"
+          [darkTheme]="isDarkTheme()"
           ariaLabel="Training load metrics"
         ></app-training-metric-grid>
       </div>
@@ -1048,78 +1065,6 @@
     </section>
     }
 
-    @if (isOverviewDestination) {
-    <section class="training-section training-body-context-section" aria-labelledby="training-body-context-title">
-      <div class="training-section-heading">
-        <div>
-          <p>Body context</p>
-          <h2 id="training-body-context-title">Recorded body weight</h2>
-        </div>
-        <span class="training-section-note">Separate from training load and readiness</span>
-      </div>
-      <article class="training-body-weight-panel qs-glass-card-panel" aria-labelledby="training-body-weight-title">
-        <header>
-          <div>
-            <h3 id="training-body-weight-title" class="qs-dashboard-chart-title">Body-weight trend</h3>
-            <p>Source-separated observations</p>
-          </div>
-          <span>28-day view</span>
-        </header>
-        @if (bodyWeightTrend.state === 'unavailable') {
-          <p class="training-empty-state">{{ bodyWeightTrend.statusText }}</p>
-        } @else if (bodyWeightTrend.state === 'preparing') {
-          <div class="training-capacity-loading" role="status">
-            <mat-spinner diameter="24"></mat-spinner>
-            <div><strong>Preparing body-weight trend</strong><p>{{ bodyWeightTrend.statusText }}</p></div>
-          </div>
-        } @else if (bodyWeightTrend.state === 'empty') {
-          <p class="training-empty-state">{{ bodyWeightTrend.statusText }}</p>
-        } @else {
-          @if (bodyWeightTrend.isUpdating) {
-            <p class="training-recovery-update" role="status">Updating recorded measurements…</p>
-          }
-          @for (weightSeries of bodyWeightTrend.series; track weightSeries.sourceLabel) {
-            <section class="training-body-weight-series" [attr.aria-label]="weightSeries.sourceLabel + ' body-weight trend'">
-              <h4>{{ weightSeries.sourceLabel }}</h4>
-              <div class="training-body-weight-summary">
-                <div>
-                  <span>Latest</span>
-                  <strong><app-training-metric-text [text]="weightSeries.latestWeightText"></app-training-metric-text></strong>
-                  <small>{{ weightSeries.latestRecordedText }}</small>
-                </div>
-                <div>
-                  <span>7-day median</span>
-                  <strong><app-training-metric-text [text]="weightSeries.median7dText"></app-training-metric-text></strong>
-                  <small>{{ weightSeries.change7dText }}</small>
-                </div>
-                <div>
-                  <span>28-day median</span>
-                  <strong><app-training-metric-text [text]="weightSeries.median28dText"></app-training-metric-text></strong>
-                  <small>{{ weightSeries.change28dText }}</small>
-                </div>
-              </div>
-              @if (weightSeries.chartPoints.length) {
-                <app-training-body-weight-trend-chart
-                  [timelineNotes]="timelineNotes.context()"
-                  [points]="weightSeries.chartPoints"
-                  [ariaLabel]="weightSeries.chartAriaLabel"
-                  [darkTheme]="isDarkTheme()"
-                  [unitSettings]="unitSettings"
-                ></app-training-body-weight-trend-chart>
-                <div class="training-body-weight-trend-dates">
-                  <span>{{ weightSeries.chartStartLabel }}</span>
-                  <span>{{ weightSeries.chartEndLabel }}</span>
-                </div>
-              }
-              <p class="training-body-weight-coverage">{{ weightSeries.coverageText }}</p>
-              <p class="training-body-weight-source">{{ weightSeries.sourceText }}</p>
-            </section>
-          }
-          <p class="training-body-weight-source">{{ bodyWeightTrend.sourceText }}</p>
-        }
-      </article>
-    </section>
-    }
   }
 </main>
 

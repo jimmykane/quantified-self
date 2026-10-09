@@ -113,6 +113,14 @@ const TARGET_LOADERS: Readonly<Record<string, ModuleLoader>> = Object.freeze({
   dispatchMarketingCampaigns: loadMarketingHandlers,
   trackMarketingDelivery: loadMarketingHandlers,
   marketingUnsubscribe: loadMarketingHandlers,
+  processConnectionHistoryTask:
+    () => module.require('./connection-history/tasks') as FunctionModule,
+  onConnectionHistoryImportWritten:
+    () => module.require('./connection-history/tasks') as FunctionModule,
+  recoverConnectionHistoryImports:
+    () => module.require('./connection-history/tasks') as FunctionModule,
+  retryConnectionHistoryImport:
+    () => module.require('./connection-history/tasks') as FunctionModule,
   reconcileTrainingPlanCleanup:
     () => module.require('./training-plans/cleanup-worker') as FunctionModule,
   reconcileTrainingWorkoutExpiry:

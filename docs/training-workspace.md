@@ -285,7 +285,7 @@ metric payload, the sports-lib durability protocol, or the refresh pipeline chan
 
 Private [Timeline notes](timeline-notes.md) are managed from Dashboard, Health, or Calendar, independently of Training
 plan checks. Training keeps a hidden shared notes workspace outside its header to supply the bounded note context to readiness, load/Form,
-freshness forecast, body-weight, power-system history, swimming trends and weekly durability charts. Notes preserve each
+freshness forecast, power-system history, swimming trends and weekly durability charts. Notes preserve each
 chart's existing calendar convention; weekly tooltips retain actual dates. They never change Training inputs, formulas,
 readiness, forecasts, persisted snapshots or sport filters. The manager owns editing and account-scoped settings; charts
 never fetch private notes. The owner’s Dashboard reuses these adapters for Form and Freshness Forecast alongside HRV,
@@ -293,7 +293,7 @@ Sleep, and its calendars through one shared notes workspace. Public/library prev
 Note-only changes merge marker/shading series through the shared ECharts host; they do not rebuild Training options
 or reset metric series, zoom or legends. Normal data/theme changes still render the complete chart, retaining the
 weekly/date-offset adapters. Explicit time bounds bypass sample scans when projecting notes, and range registrations
-remain deduplicated until disposal. Readiness and body-weight date labels use the bounded shared Intl formatter cache;
+remain deduplicated until disposal. Readiness date labels use the bounded shared Intl formatter cache;
 local-time formatting remains uncached. Date, time, and number formatter calls that omit a locale resolve through the
 app-wide regional-formatting policy: an explicit account preference wins, **Automatic** uses the browser's first
 supported language, and unsupported or missing locales fall back to `en-GB`, never silently to Angular's built-in US
@@ -362,7 +362,7 @@ The following rules are architectural constraints:
 - Merged benchmark events are excluded from Training. Multisport parent events are retained, but their normalized child
   activities are classified and counted separately.
 - Changing the Training destination changes presentation only. **All training** owns global state, readiness, load,
-  sleep, body-weight, intensity, and the compact cross-sport mix. A sport destination owns that family's detailed mix,
+  sleep, intensity, and the compact cross-sport mix. A sport destination owns that family's detailed mix,
   Training Mix plus any capability-matched Best Build, rolling power types, or specialist evidence. Neither destination nor shortcuts change
   derived calculations or discard a sport from the account.
 - Sleep is context. It never changes the Training state and is not presented as a causal explanation of performance.
@@ -502,7 +502,6 @@ Form history and canonical parent/activity join.
 - Swimming chart: `src/app/components/training/training-swim-performance-chart.component.*`
 - Durability trajectory: `src/app/components/training/training-durability-trajectory-chart.component.*`
 - Readiness history chart: `src/app/components/training/training-readiness-trend-chart.component.*`
-- Body-weight trend chart: `src/app/components/training/training-body-weight-trend-chart.component.*`
 - Shared status/comparison cards: `src/app/components/shared/training-summary/training-summary-cards.component.*`
 - Shared exact-value metric grid: `src/app/components/shared/training-summary/training-metric-grid.component.*`
 - Snapshot service: `src/app/services/dashboard-derived-metrics.service.ts`
@@ -511,7 +510,10 @@ Form history and canonical parent/activity join.
 - User help copy: `src/app/shared/help.content.ts`
 
 Training is available to signed-in users from the sidenav. Its route header uses the shared `app-page-header` route
-primitive for the title, compact update disclosure, and conditional derived-metrics **Retry** action. Timeline notes, Feedback,
+primitive for the title, compact update disclosure, **Plans** navigation to `/training/plans`, and conditional derived-metrics
+**Retry** action. Plans uses the shared right-aligned action slot on desktop and a labelled action row below the subtitle
+on phones/tablets. Training uses a compact 12px gap before the sport navigation at every width, without negative margins.
+Expanded update details use 8px below the header and 12px before the sport controls. Timeline notes, Feedback,
 Calendar, and Dashboard shortcuts are omitted from this header; use app navigation for Calendar and Dashboard and the
 Training help article's email action for feedback. This presentation changes no chart-note reads, Training calculations,
 planning/MCP contract, consent, or mutation. The Dashboard header does not duplicate the Training or Health navigation
@@ -521,9 +523,12 @@ Dashboard dependencies or configurable tiles.
 The lightweight status/comparison cards and exact-value load grid are shared presentation primitives. The authenticated
 Training workspace supplies their live, normalized view models; the public homepage supplies a static example view model
 and selects the compact preview density. These components own the repeated semantic markup, numeric token formatting,
-indicator placement, and responsive layout, but they never subscribe to data, calculate a metric, initialize a chart,
-or access browser-only APIs. Training remains the source of truth for calculations and athlete-specific wording, while
-the homepage remains safe to render during SSR and prerendering.
+indicator placement, and responsive layout, but they never subscribe to data or calculate a metric.
+The metric grid can mount `MetricHistoryChartComponent` below an existing value. Its presentation model contains
+already formatted values and dated observations; the child owns the viewport-aware ECharts host, shared tooltip,
+mobile series-tap feedback, theme, resize and disposal behavior. It does not import account or data services.
+Training remains the source of truth for calculations and athlete-specific wording, while the homepage remains safe
+to render during SSR and prerendering and supplies deterministic examples only.
 
 The homepage and `/features/training-analysis` also share `TrainingExplorerPreviewComponent`: a 14-day readiness
 example and a compact tabbed explorer for sport mix, Best Build metrics, power-system history, and durability.
@@ -4047,11 +4052,12 @@ settings, sleep, swim lengths, or activity documents for unrelated metrics.
 | `training_durability` | Current/usual durability and 12-week trajectory | Persisted activity durability stats |
 | `training_build_comparison` | Eight modeled-family Best Build, context/profile summaries, and sleep context | Activities, settings, parent events, sleep |
 | `training_readiness` | Readiness 14-day trend | Form snapshot seed plus bounded sleep sessions |
-| `body_weight_trend` | Source-separated neutral body-weight context: latest value, 7/28-day medians, and sparse 28-day trend | Canonical Health Weight point measurements; workout profile Weight only when no Health Weight exists |
+| `body_weight_trend` | Retained compatibility snapshot; not rendered or requested by Training | Canonical Health Weight point measurements; workout profile Weight only when no Health Weight exists |
 | `training_swim_performance` | Pool/open-water pace and contextual SWOLF | Activities plus active swim lengths |
 
 The workspace also requests registered Easy/Hard and efficiency metrics because it currently uses the complete derived
-scope. They are not standalone Training cards. Do not assume every requested snapshot maps one-to-one to visible markup.
+scope except the retired Body context kind. They are not standalone Training cards. Do not assume every requested
+snapshot maps one-to-one to visible markup.
 
 The legacy MCP daily briefing uses only the two headline snapshots from this table: `training_summary` for the
 current-versus-usual 28-day Training context and `training_readiness` for current readiness. The additive
@@ -4064,7 +4070,8 @@ CTL/ATL, ACWR, ramp,
 recovery, capacity, durability, power systems, and other specialist snapshots remain independently queryable rather
 than being silently recast as a daily workout recommendation.
 
-Training currently watches `TRAINING_WORKSPACE_DERIVED_METRIC_KINDS`, which is all registered derived kinds. Training-only
+Training currently watches `TRAINING_WORKSPACE_DERIVED_METRIC_KINDS`, which excludes `body_weight_trend` from the registered
+derived kinds. Opening, retrying, or crossing a UTC day on Training never requests that retired UI dependency. Training-only
 kinds are excluded from the default Dashboard subscription and freshness scope. Dashboard adds `training_capacity` or
 `training_durability` to that scope only while a matching explicitly configured tile exists.
 `training_power_systems` has no Dashboard tile and is never added to normal Dashboard subscriptions. Opening a normal
@@ -4075,7 +4082,8 @@ resolver require the current Form payload version and exact daily counts. This l
 and rebuild `form` without invalidating every other derived kind. Compatible version-2 Form seeds preserve both daily
 load and count, while projection-sensitive builders continue to consume only the load series.
 
-`body_weight_trend` is also Training-only. It is calendar-sensitive because its current 7- and 28-day UTC windows
+`body_weight_trend` remains available to explicit snapshot consumers for compatibility, but neither Training nor the
+default Dashboard subscribes to it. It is calendar-sensitive because its current 7- and 28-day UTC windows
 advance at midnight, but it is not projection-sensitive and does not reuse the Form projection seed. It prefers actual
 canonical Health Weight point measurements across the account. Only when none exist does it use imported workout
 profile Weight as fallback context.
@@ -4099,6 +4107,12 @@ Training state and Readiness are fixed inside the optional Today summary:
   formula. Both surfaces render the state as plain heading text rather than a status tag. Dashboard Today intentionally
   shows the compact label, caption, and `TSS only` qualifier, while Training provides the full Material info control with
   the contributing values and state boundaries.
+- **Metric history columns** in the Training load grid and Dashboard weekly scalar KPI tiles share
+  `metric-history-chart.helper.ts`. Dashboard keeps its existing tile layout, semantic colors, tooltips and interaction
+  host; chart-library thumbnails use the same columns silently. Recovery Debt retains its underlying Form line,
+  while Aerobic Capacity and Aerobic Durability retain their existing evidence-series lines. The full Form and
+  Freshness Forecast charts are unchanged. Calendar has no load-metric history grid or KPI mini-chart consumer:
+  its Training impact remains a completed-workout contribution/day-result summary, not a history series.
 - **Readiness** uses the environment-neutral formula in `shared/readiness.ts` in both surfaces. Dashboard Today applies
   it to current Form/ramp and bounded live sleep. Training uses that same live current result and also reads a
   backend-derived
@@ -4158,9 +4172,9 @@ Training state and Readiness are fixed inside the optional Today summary:
   If any real Health Weight exists in the retained source window, workout profile Weight is excluded globally. Otherwise,
   workout Weight is retained as source-separated fallback context and labelled as not a weigh-in. Each series stores its
   latest 28 UTC days with missing days as null points, its latest value, and current 7- and 28-day medians. Change values
-  compare immediately adjacent equal-length windows and require at least three recorded days on each side. The frontend
-  uses Sports Lib and the user's weight-unit setting, renders one ECharts series per source without bridging gaps, and
-  never exposes source-account keys. This remains neutral context, not a health assessment, training prescription, or
+  compare immediately adjacent equal-length windows and require at least three recorded days on each side. This retained
+  snapshot is no longer presented in Training. Its builder, strict parser and frozen MCP projection remain available to
+  explicit consumers; source-account keys are never public. It is not a health assessment, training prescription, or
   input to Readiness, Form, or the TSS-only Training state.
 
 Dashboard **Reset to starter dashboard** restores Today, Weekly Training Time (90 days), and Calendar after confirmation.
@@ -4353,7 +4367,7 @@ The route has three destination kinds:
 
 - **All training** (`overview`, the default) renders the global state, readiness and recovery context, What drove this,
   Form/freshness/load, compact current-versus-usual cards for every recorded registered family, the global intensity
-  distribution, and body-weight context. It does not duplicate specialist or exact-type power panels.
+  distribution. It does not duplicate specialist or exact-type power panels. Body measurements belong in Health.
 - **Sport group** renders one detailed Training Mix and only the specialist surfaces enabled by that group's registry
   capabilities. The eight modeled families can render Best Build; Fitness & Gym and Other training remain volume-only.
   Sleep inside Best Build compares the same date windows but is explicitly labeled as not sport-filtered.
@@ -4362,9 +4376,12 @@ The route has three destination kinds:
   the account's saved destination before that evidence disappeared.
 
 Desktop uses one intrinsic-width Material button-toggle group for **All training** plus at most four sport shortcuts,
-with the complete **All sports** selector and shortcut editor grouped at the opposite edge. The toggle outline must end
-with its final choice rather than stretch across unused row space. The complete selector renders each sport as a direct
-Material option icon plus label, allowing `mat-option` to own the row geometry and reserve its native icon slot; compact
+with the complete **All sports** menu button and shortcut editor grouped at the opposite edge. Both actions use Material
+text buttons, not an outlined form field. The sport button shows **All sports** on Overview, or the selected destination's
+label and coloured registry icon even when it is also a visible shortcut. Its menu includes **All training**, marks the
+current destination, and uses the shared `qs-menu-panel` surface. The toggle outline must end
+with its final choice rather than stretch across unused row space. The complete menu renders each sport as a direct
+Material icon plus label, allowing `mat-menu-item` to own the row geometry and reserve its native icon slot; compact
 shortcut icons keep their smaller navigation size. Selecting a
 sport outside the four saved slots temporarily places it in the visible toggle group without mutating the saved shortcut
 set. At intermediate desktop/tablet
@@ -4573,9 +4590,9 @@ baseline evidence counts. The latest complete series may remain visible while it
 refresh. The live current calculation replaces today's plotted score only when the snapshot's `asOfDayMs` is the current
 UTC day, so newly imported sleep can update the card without waiting for a historical snapshot and a stale series cannot
 mislabel a new score as yesterday's. An open Training route schedules a narrow UTC-day rollover refresh for `form_now`,
-`ramp_rate`, `form_plus_7d`, `freshness_forecast`, `training_readiness`, and `body_weight_trend`. The first five
-projection-sensitive kinds can reuse a compatible Form seed and do not require an event or activity scan;
-`body_weight_trend` reads its narrow persisted Weight source so its UTC windows stay current.
+`ramp_rate`, `form_plus_7d`, `freshness_forecast`, and `training_readiness`. These five projection-sensitive kinds can
+reuse a compatible Form seed and do not require an event or activity scan. The retired Body context is not refreshed
+by the Training route.
 
 The compact ECharts chart uses a fixed 0–100 score axis, with the 75 and 55 Readiness thresholds marked so changes
 remain interpretable across days. Its shared app-standard hover or tap tooltip reports the UTC date, score,
@@ -4793,6 +4810,42 @@ This section reuses global derived load metrics:
 - Strain.
 - Form now.
 - Form after seven zero-load days.
+
+The existing exact-value grid adds compact history columns below CTL, ATL, Ramp, ACWR, Monotony, Strain and Form now.
+The shared grid uses its own inline-size container for responsive columns and dividers: at 640px or less it shows
+two load-metric columns, including narrow desktop side panels, rather than squeezing four columns into them.
+Wider grids retain four columns; the public context preview retains its existing one-column narrow layout.
+The workspace grid stays content-sized instead of stretching to a neighboring chart's height. Its cells use compact
+12px vertical / 16px horizontal padding and a 4px history inset; charts remain aligned within each row when details
+wrap. Missing histories do not reserve a synthetic chart. Public preview padding remains unchanged.
+CTL/ATL/Form/Ramp reuse the current-day Form context's last available sample in each of up to eight UTC weeks;
+ACWR and Strain reuse their prepared `trend8Weeks` observations. Monotony uses the existing Form series' daily TSS
+and the same `resolveTrainingMonotonyStrain` calculation in `shared/training-load.ts` as the backend: rolling up-to-seven-day
+mean divided by population standard deviation. Its latest available observation in each UTC week is bounded by the
+Monotony snapshot's day cutoff. Zero-variance windows and missing daily evidence stay unavailable; Strain history is
+never displayed under Monotony. These are weekly metric observations, not summed weekly load. No extra activity-history
+query, derived snapshot, persisted field, formula change or backend deployment is needed. A metric without observed history
+keeps its numeric value and explanation only. The public example includes explicitly synthetic Monotony columns.
+
+Columns use a zero baseline (signed metrics can extend below it), muted earlier observations and an accented latest
+observation. Real zero remains valid; internal missing weeks remain gaps, with empty edges trimmed and half-slot
+time-axis space to prevent endpoint clipping. Each plot has a dated accessible summary and uses the owner's
+formatted values in the shared tooltip. The +7-days cell instead shows the existing current-plus-future Form points
+as a dashed **no-additional-load scenario**, never as observed history or a prediction. Tooltip dates and scenario
+explanations wrap within the shared bounded surface on phones. Container resizes rebuild size-dependent tooltip
+options through the shared host, including tap-versus-hover behavior when crossing the phone breakpoint. Missing
+observations are named **Unavailable** in accessible summaries and tooltips instead of reading numeric placeholders.
+Dashboard KPI charts, including the real KPI components reused by the homepage preview, rebuild their size-dependent
+tooltip options through the same resize callback without recreating the chart or adding another haptic listener.
+Training and Dashboard column mini-charts use the shared viewport tooltip host even on phones: their small plots
+cannot contain a readable tooltip. The positioning adapter converts chart-local coordinates to viewport coordinates
+for the existing clamp, then converts back for ECharts; normal full-chart tooltip policies remain unchanged.
+Retained snapshots keep the existing route updating disclosure. The shared public example grid receives static
+synthetic histories without loading athlete data. Its CTL, ATL, Form and Ramp histories use one dated example Form
+series and the live view's `buildCurrentTrainingStateContext` helper; the forecast starts from that series' latest
+point. Ramp has no sample until a prior seven-day CTL observation exists, and its values agree with that comparison.
+This is presentation-only: no formula, stored data, planning behavior, MCP read/write schema,
+scope, consent, provider action or backend deployment change.
 
 Daily load is TSS on UTC days. CTL and ATL use exponentially decaying recurrences with 42-day and 7-day time constants:
 
@@ -5167,18 +5220,16 @@ header so the summary, chart title, benchmark values, and plot remain aligned at
 It also states the strongest supported conclusion before the chart, describes the number of recent/annual power workouts
 and comparable duration points, and only highlights a duration for follow-up when it is materially below its annual best.
 
-### 8. Body-weight Context
+### Retired Body Context
 
-Overview only.
+Training no longer renders Body context or the recorded body-weight trend. Recorded body measurements remain available
+in Health. The unused Training chart, view-model formatting and styles are removed, and `body_weight_trend` is excluded
+from Training's subscriptions, initial/retry ensures, UTC-day rollover refresh and route-status disclosure. A missing,
+stale or failed body-weight snapshot therefore cannot keep Training in a preparing/updating/error state.
 
-Body-weight context is the final Training section, after Settings vs Recent Evidence. Keeping it separate and last makes
-the recorded measurements available without presenting them as a performance marker or a primary training signal.
-
-The card shows one source-labelled section per provider/account, with latest value, current 7- and 28-day medians,
-eligible equal-window changes, and the sparse 28-day trend described in the shared Dashboard and Training insight reuse
-section. Actual Health Weight (including manual Weight) is preferred globally. Workout profile Weight appears only when
-there is no actual Health Weight and is explicitly labelled as fallback context rather than a weigh-in. It remains
-neutral context and does not affect Readiness, Form, TSS, the Training state, or any workout recommendation.
+This is a frontend retirement, not data deletion or an API retirement. Existing Health measurements, backend builders,
+snapshot schema, explicit snapshot reads and registered MCP contracts stay intact. No measurement write, migration,
+Rules change, backend deployment, planning behavior or change to Readiness/Form/TSS is introduced.
 
 ## Durability Deep Dive
 
@@ -5452,7 +5503,7 @@ UI principles:
 - Training-specific ECharts tooltips use the shared viewport-safe tooltip surface on larger screens so card and scroll
   containers cannot crop them. Narrow screens retain tap-triggered interaction; charts that fit their card remain
   confined, while the horizontally scrollable durability chart also uses the viewport-safe surface.
-- Readiness, body-weight, power-systems, swimming-performance, and durability plots use the shared
+- Readiness, power-systems, swimming-performance, and durability plots use the shared
   `EChartsHostController.deferUntilNearViewport` queue. Their titles, summaries, and controls render immediately;
   ECharts initialization waits until near the scroll viewport and is spread across frames after the library loads.
   The queue skips non-scrolling tab bodies and horizontal-only wrappers when finding the vertical scroll container.
@@ -5461,8 +5512,8 @@ UI principles:
 - Responsive icon-only Training actions use plain Material buttons rather than outlined containers, hide only their
   projected text label, and reset Material's icon-and-text margins. This keeps their visible icons consistent with
   Dashboard header actions while preserving Material focus, ripple, and touch-target elements.
-- Readiness history and body-weight trend use compact ECharts canvases inside their parent card surfaces rather than
-  nested neutral containers. Their null observations remain visible gaps, and their shared safe tooltip surface keeps
+- Readiness history uses a compact ECharts canvas inside its parent card surface rather than
+  nested neutral containers. Its null observations remain visible gaps, and its shared safe tooltip surface keeps
   the detail readable without being cropped by the card.
 - Durability evidence and its trajectory inherit their parent Training card surface. Borders and dividers preserve the
   hierarchy without stacking gray inset surfaces inside the card. Training panels use the shared flat card treatment;
@@ -5706,7 +5757,7 @@ training-swim-performance.helper.spec.ts
 training-durability-trajectory-chart.component.spec.ts
 durability-reading-guide.component.spec.ts
 training-readiness-trend-chart.component.spec.ts
-training-body-weight-trend-chart.component.spec.ts
+training-body-weight.helper.spec.ts
 training-summary-cards.component.spec.ts
 training-metric-grid.component.spec.ts
 event-json-sanitizer.spec.ts

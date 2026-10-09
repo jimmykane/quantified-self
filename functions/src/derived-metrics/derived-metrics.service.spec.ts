@@ -5332,8 +5332,8 @@ describe('writeDerivedMetricSnapshotsReady', () => {
 
         const monotonyPayload = findPersistedPayload(DERIVED_METRIC_KINDS.MonotonyStrain).payload as Record<string, unknown>;
         expect(monotonyPayload.weeklyLoad7).toBe(60);
-        expect(monotonyPayload.monotony).toBeTypeOf('number');
-        expect(monotonyPayload.strain).toBeTypeOf('number');
+        expect(monotonyPayload.monotony).toBe(2.4495);
+        expect(monotonyPayload.strain).toBe(146.97);
 
         const formNowPayload = findPersistedPayload(DERIVED_METRIC_KINDS.FormNow).payload as Record<string, unknown>;
         expect(formNowPayload.asOfDayMs).toBe(Date.UTC(2026, 0, 3));

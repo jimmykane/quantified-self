@@ -15,7 +15,6 @@ import { TrainingDurabilityTrajectoryChartComponent } from '../components/traini
 import { TrainingMetricTextComponent } from '../components/training/training-metric-text.component';
 import { TrainingPowerSystemsTrendChartComponent } from '../components/training/training-power-systems-trend-chart.component';
 import { TrainingReadinessTrendChartComponent } from '../components/training/training-readiness-trend-chart.component';
-import { TrainingBodyWeightTrendChartComponent } from '../components/training/training-body-weight-trend-chart.component';
 import { TrainingImpactRecapComponent } from '../components/training/training-impact-recap.component';
 import { TrainingSummaryCardsComponent } from '../components/shared/training-summary/training-summary-cards.component';
 import { TrainingMetricGridComponent } from '../components/shared/training-summary/training-metric-grid.component';
@@ -49,7 +48,6 @@ import { AppUserSettingsQueryService } from '../services/app.user-settings-query
     TrainingBuildBenchmarkDialogComponent,
     TrainingSportVisibilityDialogComponent,
     TrainingSwimPerformanceChartComponent,
-    TrainingBodyWeightTrendChartComponent,
   ],
   providers: [
     { provide: TRAINING_WORKSPACE_PREFERENCE_WRITER, useExisting: AppUserSettingsQueryService },

@@ -1301,6 +1301,16 @@ describe('OAuth2', () => {
                 - Number(mockTransactionDocumentData?.oauthFlowCreatedAt)).toBe(OAUTH_FLOW_TTL_MS);
         });
 
+        it.each([true, false, undefined])('binds history consent %s to the expiring OAuth flow', async consent => {
+            await getServiceOAuth2CodeRedirectAndSaveStateToUser(userID, ServiceNames.SuuntoApp, redirectUri, consent);
+            expect(mockTransactionDocumentData).toMatchObject({
+                oauthImportRecentHistory: consent === true,
+                oauthImportHistoryRange: '30_days',
+                oauthFlowGeneration: expect.any(String),
+                oauthFlowExpiresAt: expect.any(Number),
+            });
+        });
+
         it('should not save OAuth state when account deletion is active', async () => {
             mockGetUserDeletionGuardState.mockResolvedValueOnce({
                 userExists: true,
@@ -1968,7 +1978,35 @@ describe('OAuth2', () => {
                     fieldName: 'oauthFlowGeneration',
                     expectedGeneration: 'oauth-flow-generation',
                 }),
+                expect.objectContaining({ requested: false, runId: expect.any(String) }),
             );
+        });
+
+        it.each([true, false])('returns durable acceptance only when consent and admission are enabled (%s)', async enabled => {
+            vi.stubEnv('CONNECTION_HISTORY_IMPORT_ENABLED', String(enabled));
+            try {
+                mockTransactionDocumentData!.oauthImportRecentHistory = true;
+                const MockAuthCode = (await import('simple-oauth2')).AuthorizationCode;
+                vi.spyOn(MockAuthCode.prototype, 'getToken').mockResolvedValue({
+                    token: { user: 'test-external-user', access_token: 'mock-token' }, expired: () => false,
+                } as any);
+                (requestPromise.get as any).mockResolvedValueOnce({ userId: 'mock-garmin-user' });
+                (requestPromise.get as any).mockResolvedValueOnce({ permissions: [] });
+                const result = await getAndSetServiceOAuth2AccessTokenForUser(userID, ServiceNames.GarminAPI, redirectUri, code, 'some-state');
+                expect(result.connected).toBe(true);
+                expect(mockMarkServiceConnected.mock.calls[0][5]).toMatchObject({
+                    requested: enabled, rangePreset: '30_days', runId: expect.any(String), providerUserId: 'mock-garmin-user', credentialGeneration: expect.any(String),
+                });
+                if (enabled) {
+                    expect(result.historyImport?.runId).toMatch(/^[0-9a-f-]{36}$/);
+                    expect(result.historyImport?.runId).toBe(mockMarkServiceConnected.mock.calls[0][5].runId);
+                }
+                else expect(result).not.toHaveProperty('historyImport');
+                expect(mockUpdate).toHaveBeenCalledWith(expect.objectContaining({
+                    oauthImportRecentHistory: 'delete-sentinel',
+                    oauthImportHistoryRange: 'delete-sentinel',
+                }));
+            } finally { vi.unstubAllEnvs(); }
         });
 
         it('clears pending disconnect root fields before marking an OAuth reconnect as connected', async () => {
@@ -2013,6 +2051,7 @@ describe('OAuth2', () => {
                     fieldName: 'oauthFlowGeneration',
                     expectedGeneration: 'oauth-flow-generation',
                 }),
+                expect.objectContaining({ requested: false, runId: expect.any(String) }),
             );
             expect(mockClearServiceDisconnectPending.mock.invocationCallOrder[0])
                 .toBeLessThan(mockMarkServiceConnected.mock.invocationCallOrder[0]);
@@ -2068,6 +2107,7 @@ describe('OAuth2', () => {
                     fieldName: 'oauthFlowGeneration',
                     expectedGeneration: 'oauth-flow-generation',
                 }),
+                expect.objectContaining({ requested: false, runId: expect.any(String) }),
             );
         });
 

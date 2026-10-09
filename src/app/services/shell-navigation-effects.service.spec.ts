@@ -101,6 +101,16 @@ describe('ShellNavigationEffectsService', () => {
     expect(hapticsMock.selection).not.toHaveBeenCalled();
   });
 
+  it('leaves query-only metric and overview feedback to the active workspace', () => {
+    events$.next(new NavigationEnd(1, '/health', '/health'));
+    events$.next(new NavigationStart(2, '/health?metric=body_weight', 'imperative'));
+    events$.next(new NavigationEnd(2, '/health?metric=body_weight', '/health?metric=body_weight'));
+    events$.next(new NavigationStart(3, '/health', 'imperative'));
+    events$.next(new NavigationEnd(3, '/health', '/health'));
+
+    expect(hapticsMock.selection).not.toHaveBeenCalled();
+  });
+
   it('does not reset shell scroller or window scroll on initial navigation end', () => {
     const scrollSpy = vi.spyOn(window, 'scrollTo').mockImplementation(() => {});
     const drawerContent = document.createElement('div');

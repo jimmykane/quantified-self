@@ -42,9 +42,10 @@ test('emulator host consumers cannot disappear behind an ordinary spec filename'
 test('CI matrix gates every registered group, including the 400-workout stress test', () => {
   const workflow = readFileSync(resolve(root, '.github/workflows/_run-tests.yml'), 'utf8');
   const matrix = JSON.parse(workflow.match(/group: (\[[^\n]+\])/)[1]);
-  assert.deepEqual(matrix.sort(), Object.keys(EMULATOR_SUITES).sort());
+  assert.deepEqual([...matrix, 'delivery'].sort(), Object.keys(EMULATOR_SUITES).sort());
   assert.match(workflow, /fail-fast: false/);
   assert.match(workflow, /run: npm run test:functions-emulators -- \$\{\{ matrix.group \}\}/);
+  assert.match(workflow, /run: npm run test:functions-emulators -- delivery --plan tmp\/delivery-shards\/plan.json --shard \$\{\{ matrix.shard \}\} --output tmp\/delivery-shards\/report/);
   assert.ok(EMULATOR_SUITES.lifecycle.includes('src/training-plans/large-schedule.emulator.spec.ts'));
   assert.doesNotMatch(workflow, /run: npm run test:(disconnect|training-delivery)\n/);
   const emulatorJob = workflow.slice(workflow.indexOf('  functions_emulators:'));

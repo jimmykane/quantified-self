@@ -2405,6 +2405,81 @@ describe('AppUserService', () => {
         const startDate = new Date('2023-01-01');
         const endDate = new Date('2023-01-31');
 
+        describe('retryConnectionHistoryImport', () => {
+            it('rejects an unaccepted retry while preserving the current view', async () => {
+                mockFunctionsService.call.mockResolvedValueOnce({ data: { accepted: false } });
+                await expect(service.retryConnectionHistoryImport('run-id')).rejects.toThrow('History retry was not accepted.');
+            });
+            it('pins retry dispatch to the initiating Firebase account and view', async () => {
+                let currentView = true;
+                mockFunctionsService.call.mockResolvedValueOnce({ data: { accepted: true } });
+                await service.retryConnectionHistoryImport('run-id', () => currentView);
+                expect(mockFunctionsService.call).toHaveBeenCalledWith('retryConnectionHistoryImport', { runId: 'run-id' }, { canExecute: expect.any(Function) });
+                const canExecute = mockFunctionsService.call.mock.calls.at(-1)![2].canExecute;
+                expect(canExecute()).toBe(true);
+                currentView = false; expect(canExecute()).toBe(false);
+                currentView = true;
+                const original = mockAuth.currentUser;
+                mockAuth.currentUser = { ...original, uid: 'other-owner' }; expect(canExecute()).toBe(false);
+                mockAuth.currentUser = null; expect(canExecute()).toBe(false);
+                mockAuth.currentUser = { ...original }; expect(canExecute()).toBe(false);
+            });
+            it.each(['account', 'view'])('cancels a late accepted response after the %s changes', async change => {
+                let currentView = true;
+                let finish!: (value: { data: { accepted: boolean } }) => void;
+                mockFunctionsService.call.mockReturnValueOnce(new Promise(resolve => finish = resolve));
+                const pending = service.retryConnectionHistoryImport('run-id', () => currentView);
+                if (change === 'account') mockAuth.currentUser = { ...mockAuth.currentUser };
+                else currentView = false;
+                finish({ data: { accepted: true } });
+                await expect(pending).rejects.toThrow('Operation cancelled because its account or view changed.');
+            });
+            it.each(['account', 'view'])('cancels a late failed response after the %s changes', async change => {
+                let currentView = true;
+                let fail!: (error: Error) => void;
+                mockFunctionsService.call.mockReturnValueOnce(new Promise((_, reject) => fail = reject));
+                const pending = service.retryConnectionHistoryImport('run-id', () => currentView);
+                if (change === 'account') mockAuth.currentUser = { ...mockAuth.currentUser };
+                else currentView = false;
+                fail(new Error('Delayed provider failure'));
+                await expect(pending).rejects.toThrow('Operation cancelled because its account or view changed.');
+            });
+            it('preserves a genuine retry failure while its account and view are current', async () => {
+                const error = Object.assign(new Error('Retry unavailable'), { code: 'functions/unavailable' });
+                mockFunctionsService.call.mockRejectedValueOnce(error);
+                await expect(service.retryConnectionHistoryImport('run-id', () => true)).rejects.toBe(error);
+            });
+        });
+
+        describe.each(['activity', 'suunto-sleep', 'coros-sleep', 'garmin-health'] as const)('%s history account guard', kind => {
+            async function request(expectedUserID = 'u1') {
+                switch (kind) {
+                    case 'activity': return service.importServiceHistoryForCurrentUser(ServiceNames.COROSAPI, startDate, endDate, expectedUserID);
+                    case 'suunto-sleep': return service.backfillSuuntoSleepForCurrentUser(expectedUserID);
+                    case 'coros-sleep': return service.backfillCorosSleepForCurrentUser(expectedUserID);
+                    case 'garmin-health': return service.backfillGarminHealthForCurrentUser(expectedUserID);
+                }
+            }
+
+            it('fences dispatch after identity replacement, logout, and a return to the same UID', async () => {
+                await request();
+                const canExecute = mockFunctionsService.call.mock.calls.at(-1)![2].canExecute;
+                expect(canExecute()).toBe(true);
+                const original = mockAuth.currentUser;
+                mockAuth.currentUser = { ...original, uid: 'other-owner' };
+                expect(canExecute()).toBe(false);
+                mockAuth.currentUser = null;
+                expect(canExecute()).toBe(false);
+                mockAuth.currentUser = { ...original };
+                expect(canExecute()).toBe(false);
+            });
+
+            it('rejects an originating UID that already differs from the authenticated account', async () => {
+                await request('different-owner');
+                expect(mockFunctionsService.call.mock.calls.at(-1)![2].canExecute()).toBe(false);
+            });
+        });
+
         describe('importServiceHistoryForCurrentUser', () => {
             it('should call cloud function for COROS', async () => {
                 const serviceName = 'COROS API' as any; // Matches encoded value
@@ -2413,7 +2488,7 @@ describe('AppUserService', () => {
                 expect(mockFunctionsService.call).toHaveBeenCalledWith('addCOROSAPIHistoryToQueue', {
                     startDate: '2023-01-01',
                     endDate: '2023-01-31'
-                });
+                }, { canExecute: expect.any(Function) });
             });
 
             it('sends COROS history dates as local calendar dates rather than UTC timestamps', async () => {
@@ -2425,7 +2500,7 @@ describe('AppUserService', () => {
                 expect(mockFunctionsService.call).toHaveBeenCalledWith('addCOROSAPIHistoryToQueue', {
                     startDate: '2023-01-01',
                     endDate: '2023-01-02',
-                });
+                }, { canExecute: expect.any(Function) });
             });
 
             it('should call cloud function for Suunto', async () => {
@@ -2435,7 +2510,7 @@ describe('AppUserService', () => {
                 expect(mockFunctionsService.call).toHaveBeenCalledWith('addSuuntoAppHistoryToQueue', {
                     startDate: startDate.toISOString(),
                     endDate: endDate.toISOString()
-                });
+                }, { canExecute: expect.any(Function) });
             });
 
             it('should call cloud function for Garmin', async () => {
@@ -2445,7 +2520,7 @@ describe('AppUserService', () => {
                 expect(mockFunctionsService.call).toHaveBeenCalledWith('backfillGarminAPIActivities', {
                     startDate: startDate.toISOString(),
                     endDate: endDate.toISOString()
-                });
+                }, { canExecute: expect.any(Function) });
             });
 
             it('should call cloud function for Wahoo', async () => {
@@ -2454,7 +2529,7 @@ describe('AppUserService', () => {
                 expect(mockFunctionsService.call).toHaveBeenCalledWith('addWahooAPIHistoryToQueue', {
                     startDate: startDate.toISOString(),
                     endDate: endDate.toISOString(),
-                });
+                }, { canExecute: expect.any(Function) });
             });
         });
 
@@ -2470,7 +2545,7 @@ describe('AppUserService', () => {
 
                 await expect(service.backfillSuuntoSleepForCurrentUser()).resolves.toEqual(response);
 
-                expect(mockFunctionsService.call).toHaveBeenCalledWith('backfillSuuntoAppSleep');
+                expect(mockFunctionsService.call).toHaveBeenCalledWith('backfillSuuntoAppSleep', undefined, { canExecute: expect.any(Function) });
             });
         });
 
@@ -2502,7 +2577,7 @@ describe('AppUserService', () => {
 
                 await expect(service.backfillCorosSleepForCurrentUser()).resolves.toEqual(response);
 
-                expect(mockFunctionsService.call).toHaveBeenCalledWith('backfillCorosAPISleep');
+                expect(mockFunctionsService.call).toHaveBeenCalledWith('backfillCorosAPISleep', undefined, { canExecute: expect.any(Function) });
             });
         });
 
@@ -2550,7 +2625,7 @@ describe('AppUserService', () => {
 
                 await expect(service.backfillGarminHealthForCurrentUser()).resolves.toEqual(response);
 
-                expect(mockFunctionsService.call).toHaveBeenCalledWith('backfillGarminAPIHealth');
+                expect(mockFunctionsService.call).toHaveBeenCalledWith('backfillGarminAPIHealth', undefined, { canExecute: expect.any(Function) });
             });
         });
 
@@ -2775,6 +2850,8 @@ describe('AppUserService', () => {
 
                 expect(mockFunctionsService.call).toHaveBeenCalledWith('getCOROSAPIAuthRequestTokenRedirectURI', {
                     redirectUri: 'http://localhost/services?serviceName=COROS%20API&connect=1',
+                    importRecentHistory: false,
+                    importHistoryRange: '30_days',
                 }, { canExecute: expect.any(Function) });
             });
 
@@ -2784,6 +2861,8 @@ describe('AppUserService', () => {
 
                 expect(mockFunctionsService.call).toHaveBeenCalledWith('getSuuntoAPIAuthRequestTokenRedirectURI', {
                     redirectUri: 'http://localhost/services?serviceName=Suunto%20app&connect=1',
+                    importRecentHistory: false,
+                    importHistoryRange: '30_days',
                 }, { canExecute: expect.any(Function) });
             });
 
@@ -2793,6 +2872,8 @@ describe('AppUserService', () => {
 
                 expect(mockFunctionsService.call).toHaveBeenCalledWith('getGarminAPIAuthRequestTokenRedirectURI', {
                     redirectUri: 'http://localhost/services?serviceName=Garmin%20API&connect=1',
+                    importRecentHistory: false,
+                    importHistoryRange: '30_days',
                 }, { canExecute: expect.any(Function) });
             });
 
@@ -2801,12 +2882,14 @@ describe('AppUserService', () => {
 
                 expect(mockFunctionsService.call).toHaveBeenCalledWith('getWahooAPIAuthRequestTokenRedirectURI', {
                     redirectUri: 'http://localhost/services?serviceName=Wahoo%20API&connect=1',
+                    importRecentHistory: false,
+                    importHistoryRange: '30_days',
                 }, { canExecute: expect.any(Function) });
             });
 
             it('pins OAuth dispatch to the initiating Firebase user and view', async () => {
                 let currentView = true;
-                await service.getCurrentUserServiceTokenAndRedirectURI(ServiceNames.GarminAPI, () => currentView);
+                await service.getCurrentUserServiceTokenAndRedirectURI(ServiceNames.GarminAPI, false, '30_days', () => currentView);
                 const canExecute = mockFunctionsService.call.mock.calls[0][2].canExecute;
                 expect(canExecute()).toBe(true);
                 currentView = false;
@@ -2814,6 +2897,15 @@ describe('AppUserService', () => {
                 currentView = true;
                 mockAuth.currentUser = { ...mockAuth.currentUser };
                 expect(canExecute()).toBe(false);
+            });
+
+            it('forwards the selected provider-valid history range', async () => {
+                await service.getCurrentUserServiceTokenAndRedirectURI(ServiceNames.WahooAPI, true, 'maximum');
+                expect(mockFunctionsService.call).toHaveBeenCalledWith('getWahooAPIAuthRequestTokenRedirectURI', {
+                    redirectUri: 'http://localhost/services?serviceName=Wahoo%20API&connect=1',
+                    importRecentHistory: true,
+                    importHistoryRange: 'maximum',
+                }, { canExecute: expect.any(Function) });
             });
         });
 

@@ -6,7 +6,7 @@ import {
 } from './function-target-loader';
 
 describe('function target loader', () => {
-  it('optimizes the MCP, ingestion, maintenance, provider connection/webhook, admin, marketing, and Training endpoints', () => {
+  it('optimizes the MCP, ingestion, maintenance, provider connection/webhook, connection history, admin, marketing, and Training endpoints', () => {
     expect(OPTIMIZED_FUNCTION_TARGETS).toEqual([
       'mcpApi',
       'getSuuntoAPIAuthRequestTokenRedirectURI',
@@ -64,6 +64,10 @@ describe('function target loader', () => {
       'dispatchMarketingCampaigns',
       'trackMarketingDelivery',
       'marketingUnsubscribe',
+      'processConnectionHistoryTask',
+      'onConnectionHistoryImportWritten',
+      'recoverConnectionHistoryImports',
+      'retryConnectionHistoryImport',
       'reconcileTrainingPlanCleanup',
       'reconcileTrainingWorkoutExpiry',
       'reconcileTrainingBulkShift',

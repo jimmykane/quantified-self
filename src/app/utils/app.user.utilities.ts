@@ -763,25 +763,26 @@ export class AppUserUtilities {
         return settings;
     }
 
-    /**
-     * Returns true if the user's grace period is currently active.
-     * Supports Firestore Timestamp, Date object, or Unix milliseconds.
-     */
+    /** Shared deadline for grace-period checks and UI expiry scheduling. */
+    public static getGracePeriodExpiryMs(user: AppUserInterface | User | null): number | null {
+        const gracePeriodUntil: unknown = (user as AppUserInterface | null)?.gracePeriodUntil;
+        let expiryMillis: unknown = gracePeriodUntil;
+        if (gracePeriodUntil && typeof gracePeriodUntil === 'object') {
+            if ('toMillis' in gracePeriodUntil && typeof gracePeriodUntil.toMillis === 'function') {
+                expiryMillis = gracePeriodUntil.toMillis();
+            } else if ('getTime' in gracePeriodUntil && typeof gracePeriodUntil.getTime === 'function') {
+                expiryMillis = gracePeriodUntil.getTime();
+            } else if ('seconds' in gracePeriodUntil && typeof gracePeriodUntil.seconds === 'number') {
+                expiryMillis = gracePeriodUntil.seconds * 1000;
+            }
+        }
+        return typeof expiryMillis === 'number' && Number.isFinite(expiryMillis) ? expiryMillis : null;
+    }
+
+    /** Supports Firestore Timestamp, Date object, or Unix milliseconds. */
     public static isGracePeriodActive(user: AppUserInterface | User | null): boolean {
-        if (!user) return false;
-        const gracePeriodUntil = (user as any).gracePeriodUntil;
-        if (!gracePeriodUntil) return false;
-
-        // Handle Firestore Timestamp, Date, or Unix number from Claims
-        const expiryMillis = typeof gracePeriodUntil.toMillis === 'function'
-            ? gracePeriodUntil.toMillis()
-            : typeof gracePeriodUntil.getTime === 'function'
-                ? gracePeriodUntil.getTime()
-                : typeof gracePeriodUntil === 'object' && gracePeriodUntil.seconds
-                    ? gracePeriodUntil.seconds * 1000
-                    : gracePeriodUntil;
-
-        return expiryMillis > Date.now();
+        const expiryMillis = AppUserUtilities.getGracePeriodExpiryMs(user);
+        return expiryMillis !== null && expiryMillis > Date.now();
     }
 
     /**

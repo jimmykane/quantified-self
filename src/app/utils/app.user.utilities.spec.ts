@@ -57,6 +57,27 @@ describe('AppUserUtilities', () => {
         expect(AppUserUtilities.getResolvedChartFillOpacity({ fillOpacity: 0.6, fillOpacityVersion: 1 })).toBe(0.6);
     });
 
+    describe('getGracePeriodExpiryMs', () => {
+        const expiryMs = Date.parse('2026-10-09T12:00:00.000Z');
+        it.each([
+            ['Timestamp', { toMillis: () => expiryMs }],
+            ['Date', new Date(expiryMs)],
+            ['seconds', { seconds: expiryMs / 1000 }],
+            ['milliseconds', expiryMs],
+        ])('normalizes %s to the same grace deadline', (_type, gracePeriodUntil) => {
+            expect(AppUserUtilities.getGracePeriodExpiryMs({ ...mockUser, gracePeriodUntil })).toBe(expiryMs);
+        });
+
+        it('ignores missing, malformed and non-finite grace deadlines', () => {
+            expect(AppUserUtilities.getGracePeriodExpiryMs(null)).toBeNull();
+            for (const gracePeriodUntil of [undefined, null, {}, new Date(Number.NaN), Number.NaN,
+                Number.POSITIVE_INFINITY, { seconds: Number.POSITIVE_INFINITY }, { toMillis: () => 'bad date' }]) {
+                expect(AppUserUtilities.getGracePeriodExpiryMs({ ...mockUser, gracePeriodUntil })).toBeNull();
+                expect(AppUserUtilities.isGracePeriodActive({ ...mockUser, gracePeriodUntil })).toBe(false);
+            }
+        });
+    });
+
     describe('isGracePeriodActive', () => {
         it('should return false for null user', () => {
             expect(AppUserUtilities.isGracePeriodActive(null)).toBe(false);

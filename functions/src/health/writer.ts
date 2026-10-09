@@ -1,3 +1,4 @@
+import { assertHistoryWrite } from '../connection-history/context';
 import * as admin from 'firebase-admin';
 import * as logger from 'firebase-functions/logger';
 import {
@@ -585,6 +586,7 @@ async function replacePreparedHealthSourceRecordBatch(
     const db = dependencies.db || admin.firestore();
     const chunkCollection = userHealthCollection(db, userID, HEALTH_SAMPLE_CHUNKS_COLLECTION_ID);
     const results = await db.runTransaction(async transaction => {
+        await assertHistoryWrite(transaction);
         let deletionGuard;
         try {
             deletionGuard = await getUserDeletionGuardStateInTransaction(db, transaction, userID, nowMs);
@@ -903,6 +905,7 @@ export async function updateHealthSyncState(
     const db = dependencies.db || admin.firestore();
     const stateRef = userHealthCollection(db, userID, HEALTH_SYNC_STATE_COLLECTION_ID).doc(provider);
     const written = await db.runTransaction(async transaction => {
+        await assertHistoryWrite(transaction);
         let deletionGuard;
         try {
             deletionGuard = await getUserDeletionGuardStateInTransaction(db, transaction, userID, nowMs);

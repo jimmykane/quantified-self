@@ -22,6 +22,8 @@ Every automatic activity and saved-route direction is off by default. Empty roll
 
 The Connections overview exposes the daily replay as a dedicated **Sleep & daily Health history** card with an **Import history** action, separate from the COROS activity-history card. Both cards open the shared History import tool, where activity ranges and the three-month Sleep/Health replay remain distinct controls.
 
+The tool locks each request immediately and keeps its pending/result state across dialog reopenings in the same app, separately for the current user's COROS activities and Sleep/Health. Sleep/Health stays disabled until its cooldown status is read successfully; failed reads show **Retry status check**. Existing callable cooldown timestamps are shown as normal next-available dates, retained on reopening, without a frontend error report or error haptic. Closing a dispatched request leaves it running; late responses update shared status without notifying a destroyed or changed account/provider view. This frontend-only feedback uses existing callables and metadata. It adds no cross-tab server lease, queue change, Rules change or migration; server admission remains authoritative.
+
 ## Account identity
 
 All COROS imports and deliveries resolve the same active token through `functions/src/coros/account.ts`.
@@ -99,11 +101,11 @@ A successful initialization must return an integer-shaped upload ID. JavaScript 
 
 - provider status `1` remains pending;
 - provider status `2` is success;
-- provider status `-1` is a terminal processing failure;
+- provider status `-1` confirms that this upload failed; direct clients retain their explicit failed-file restart action;
 - duplicate result `5082` is completed duplicate-as-success;
-- an unknown status or mismatched upload ID fails closed as a provider-contract error.
+- an unknown or non-scalar status, or a mismatched upload ID, fails closed as a provider-contract error. Numeric-string statuses remain compatible; arrays/booleans cannot authorize a restart or completion.
 
-After COROS issues an upload ID, status retries resume that operation and do not post the FIT again. A completed upload increments the COROS upload counter through an idempotency record keyed by the provider operation or queue item.
+After COROS issues an upload ID, pending status retries resume that operation and do not post the FIT again. A completed upload increments the COROS upload counter through an idempotency record keyed by the provider operation or queue item.
 
 ### Shared automatic and backfill delivery
 
@@ -124,6 +126,8 @@ If the event or retained original changes or disappears after scheduling, the wo
 The worker downloads the retained original FIT, verifies entitlement, both connection states, the active destination account, pending disconnect, and account deletion, then persists resume state before provider continuation. It never derives a replacement activity from event statistics.
 
 For COROS-bound shared rows, provider status `1` is an expected asynchronous wait rather than a Cloud Task failure. The worker retains the upload ID, consumes the bounded polling budget, durably records the next poll's due time, acknowledges the current task, and schedules the next status-only poll using the configured Cloud Tasks backoff (15 minutes through four hours). The queue reconciler respects that due time instead of bypassing it with an immediate task, pages past future scheduled polls so they cannot hide newer work, and an early retry re-enqueues the same planned task rather than polling COROS ahead of schedule. It emits an info-level structured poll-scheduled log; the next worker never posts the FIT again. Scheduler/transport failures, exhausted polling, and status `-1` remain warning/error paths.
+
+A matching status response with result `0000` and status `-1` uses the existing queued `restart` retry path, not immediate DLQ. The worker clears the confirmed-failed upload identifiers while retaining the original account in `destinationRestartProviderUserID`; a later task may resend the retained FIT only to that still-active account. It does not reset the shared retry count or add an adapter retry loop. Pending polls and restart failures consume the same ten-increment durable budget, so this is not ten new uploads. At exhaustion the last failed upload/account identifiers remain available for DLQ reconciliation. Structured failure logs retain each failed operation ID and status. Explicit unsupported-file result `5096`, unknown status, and mismatched operation IDs remain permanent; a pending or uncertain operation is never blindly resent. Direct callable error codes and manual retry controls are unchanged.
 
 ## Echo suppression
 
@@ -260,3 +264,11 @@ imports. Deployment remains a separate explicitly approved operation.
 ## Rollback
 
 Automatic routes remain user-opt-in. If provider errors rise after release, populate the shared COROS route allowlist with approved internal accounts and deploy that narrow rollback while preserving disconnect and status reconciliation for already accepted uploads. A route-entitlement failure should roll back the COROS route UI/callable and Suunto-to-COROS route availability without disabling COROS activity import, sleep, or confirmed activity delivery. Never delete accepted upload IDs or live queue state as a rollback mechanism.
+
+## Optional history on connection
+
+Connections offers **Import history from this service**, selected by default for eligible Pro connections and reconnections, with **30 days** selected initially. Users can choose 60 days or COROS's maximum rolling 3 months. Clearing the checkbox connects without starting history. The server accepts a durable run only after successful authorization; users can keep using the app or close the page. Progress and recoverable retries appear on Connections, independently of connection status. Existing cooldowns and permissions apply, and no automatic import continues earlier than the selected boundary.
+
+COROS imports activities and uses one combined daily operation for Sleep and Health. The run binds the single newly authorized active account and stays within the provider’s existing date limits.
+
+See [connection history import](connection-history-import.md) for the shared architecture, capability-registration requirements and backend-first release order. Manual History Import retains its existing range and response contract.

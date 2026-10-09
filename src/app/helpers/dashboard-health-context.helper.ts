@@ -7,7 +7,7 @@ import { sleepEvidenceSourceKey } from '@shared/nightly-hrv';
 import type { SleepSession } from '@shared/sleep';
 import type { HealthWorkspaceRangeLoad } from '../services/app.health.service';
 import type { AppDashboardHealthMetricSettings } from '../models/app-user.interface';
-import { HEALTH_WORKSPACE_SAMPLE_MAX_DAYS, buildHealthMetricWorkspaceView, buildHealthHrvPersonalRangeStatus, selectActivityHealthObservations, selectWorkoutWeightContextFallback, type HealthWorkspaceWindow, type HealthWorkspaceSeries, formatHealthValue } from './health-workspace.helper';
+import { HEALTH_WORKSPACE_SAMPLE_MAX_DAYS, buildHealthMetricWorkspaceView, buildHealthHrvPersonalRangeStatus, selectActivityHealthObservations, selectWorkoutWeightContextFallback, filterHealthRangeResultByProviders, type HealthWorkspaceWindow, type HealthWorkspaceSeries, formatHealthValue } from './health-workspace.helper';
 import { buildHealthChartModels, buildHealthHrvChartStatusOverlay, healthHrvChartStatusDescription } from './health-metric-chart.helper';
 import { buildDashboardSleepTrendContext, resolveSleepTrendDate } from './dashboard-sleep-chart.helper';
 import type { DashboardChartAvailability } from './dashboard-chart-availability.helper';
@@ -20,6 +20,21 @@ export interface DashboardHealthEvidence {
     sessions: SleepSession[];
     errors: string[];
     staleSources?: string[];
+}
+/** Apply the Health workspace filter locally before overview source selection. No extra reads. */
+export function filterDashboardHealthEvidence(evidence: DashboardHealthEvidence, providers: readonly HealthProvider[]): DashboardHealthEvidence {
+    if (!providers.length) return evidence;
+    const allowed = new Set(providers);
+    const filterLoad = (load: HealthWorkspaceRangeLoad | null): HealthWorkspaceRangeLoad | null => {
+        if (!load) return null;
+        const visibleProviders = load.providers.filter(provider => allowed.has(provider));
+        const sampleBackedProviders = load.sampleBackedProviders.filter(provider => allowed.has(provider));
+        return { ...load, result: filterHealthRangeResultByProviders(load.result, providers), providers: visibleProviders,
+            sampleBackedProviders, hasMatchingSourceRecords: visibleProviders.length > 0, hasSampleBackedMetric: sampleBackedProviders.length > 0 };
+    };
+    return { ...evidence, health: filterLoad(evidence.health), history: filterLoad(evidence.history),
+        sessions: evidence.sessions.filter(session => allowed.has(session.source.provider as HealthProvider)),
+        activities: evidence.activities ? { ...evidence.activities, observations: evidence.activities.observations.filter(observation => allowed.has(observation.provider)) } : null };
 }
 export function buildDashboardHealthContext(evidence: DashboardHealthEvidence, settings: AppDashboardHealthMetricSettings, units: UserUnitSettingsInterface | null = null, preferredAccount?: string, providerFilter: readonly HealthProvider[] = [], nowMs = Date.now()) {
     const { window, health, history, activities } = evidence;

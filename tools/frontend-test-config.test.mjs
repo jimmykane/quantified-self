@@ -6,6 +6,7 @@ import { fileURLToPath } from 'node:url';
 import test from 'node:test';
 import { globSync } from 'tinyglobby';
 import { loadConfigFromFile } from 'vite';
+import { isExplicitOrdinarySpec } from './frontend-test-policy.mjs';
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const loaded = await loadConfigFromFile({ command: 'serve', mode: 'test' }, resolve(root, 'vitest.config.ts'));
@@ -32,14 +33,14 @@ function allocation(cwd) {
   return files;
 }
 
-test('opted-in specs exist, are explicit application paths and cannot overlap', () => {
+test('opted-in specs exist, are explicit ordinary paths and cannot overlap', () => {
   assert.deepEqual(Object.keys(registry).sort(), ['dom', 'node']);
   const all = Object.values(registry).flat();
   assert.equal(all.length, new Set(all).size, 'Duplicate or overlapping opt-ins');
   for (const files of Object.values(registry)) {
     assert(files.length > 0);
     for (const file of files) {
-      assert.match(file, /^src\/app\/(?:[a-z0-9-]+\/)+[a-z0-9.-]+\.spec\.ts$/);
+      assert(isExplicitOrdinarySpec(file), `Expected an exact ordinary spec path: ${file}`);
       assert(statSync(resolve(root, file)).isFile(), `Stale opt-in: ${file}`);
     }
   }
@@ -91,6 +92,9 @@ test('only Angular specs load the compiler plugin and global browser setup', () 
 test('projects retain aliases, isolated forks and the global two-worker bound', () => {
   assert.equal(config.test.maxWorkers, 2);
   assert.equal(config.test.minWorkers, 1);
+  assert.equal(typeof config.test.sequence.sequencer, 'function');
+  assert.equal(config.test.sequence.sequencer.name, 'FrontendSequencer');
+  assert.equal(typeof config.test.sequence.sequencer.prototype.shard, 'function');
   assert.equal(config.test.pool, 'forks');
   assert.deepEqual(config.test.include, ['**/*.spec.ts']);
   assert.deepEqual(config.test.exclude, ordinaryExcludes);

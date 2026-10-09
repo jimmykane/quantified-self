@@ -35,6 +35,7 @@ interface CloudTasksConfig {
     activitySyncQueue: string;
     sleepSyncQueue: string;
     garminHealthBackfillQueue: string;
+    connectionHistoryQueue: string;
     sportsLibReparseQueue: string;
     sportsLibReparseHeavyQueue: string;
     sportsLibRouteReparseQueue: string;
@@ -131,6 +132,7 @@ export const config: AppConfig = {
             trainingDeliveryQueue: 'processTrainingDeliveryTask',
             activitySyncQueue: 'processActivitySyncTask',
             sleepSyncQueue: 'processSleepSyncTask',
+            connectionHistoryQueue: FUNCTIONS_MANIFEST.processConnectionHistoryTask.name,
             garminHealthBackfillQueue: FUNCTIONS_MANIFEST.processGarminHealthBackfillTask.name,
             sportsLibReparseQueue: 'processSportsLibReparseTask',
             sportsLibReparseHeavyQueue: SPORTS_LIB_REPARSE_HEAVY_TASK_FUNCTION_NAME,

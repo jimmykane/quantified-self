@@ -16,9 +16,12 @@ import { FUNCTIONS_MANIFEST } from '../../../../shared/functions-manifest';
 import { hasServiceOAuthConnectAccess } from '../../service-oauth-access';
 import { FUNCTION_SECRET_BINDINGS } from '../../secrets';
 import type { ServiceOAuthCompletionResult } from '../../../../shared/service-connection';
+import type { ConnectionHistoryRangePreset } from '../../../../shared/connection-history';
 
 
 interface GetAuthRedirectURIRequest {
+  importRecentHistory?: boolean;
+  importHistoryRange?: ConnectionHistoryRangePreset;
   redirectUri: string;
 }
 
@@ -58,7 +61,13 @@ export const getCOROSAPIAuthRequestTokenRedirectURI = functions
 
     try {
       return {
-        redirect_uri: await getServiceOAuth2CodeRedirectAndSaveStateToUser(userID, SERVICE_NAME, redirectURI),
+        redirect_uri: await getServiceOAuth2CodeRedirectAndSaveStateToUser(
+          userID,
+          SERVICE_NAME,
+          redirectURI,
+          data.importRecentHistory,
+          data.importHistoryRange,
+        ),
       };
     } catch (error) {
       if (isServiceDisconnectInProgressError(error)) {

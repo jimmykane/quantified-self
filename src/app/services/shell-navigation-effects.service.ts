@@ -51,7 +51,8 @@ export class ShellNavigationEffectsService {
       .subscribe((event) => {
         if (event instanceof NavigationStart) {
           this.shouldTriggerNavigationHaptics =
-            this.hasCompletedInitialNavigation && event.navigationTrigger === 'imperative';
+            this.hasCompletedInitialNavigation && event.navigationTrigger === 'imperative'
+            && this.hasNavigationPathChanged(event.url);
           if (this.hasCompletedInitialNavigation && this.hasNavigationPathChanged(event.url)) {
             this.resetScrollPosition();
           }

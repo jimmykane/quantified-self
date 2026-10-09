@@ -20,7 +20,7 @@ describe('public-seo-pages.content', () => {
     const entities = schema['mainEntity'] as Record<string, unknown>[];
     expect(entities.find(entity => entity['@type'] === 'SoftwareApplication')?.['featureList'])
       .toEqual(expect.arrayContaining([...HEALTH_FEATURE_CONTENT.seo.featureList]));
-    expect(page.sections.slice(0, 3)).toEqual(HEALTH_FEATURE_CONTENT.rows.map(row => ({
+    expect(page.sections.slice(0, HEALTH_FEATURE_CONTENT.rows.length)).toEqual(HEALTH_FEATURE_CONTENT.rows.map(row => ({
       eyebrow: 'Health history', title: row.title, copy: row.copy, preview: row.preview, items: [],
     })));
     expect(page.faqItems[0].answer).toContain('Health (Beta) is available to all signed-in users');
@@ -166,12 +166,12 @@ describe('public-seo-pages.content', () => {
   });
 
   it('keeps the new pages focused on separate search intents', () => {
-    expect(PUBLIC_SEO_PAGES.featuresHub.h1).toBe('Features for endurance training data');
+    expect(PUBLIC_SEO_PAGES.featuresHub.h1).toBe('Features for your activities, training, and health');
     expect(PUBLIC_SEO_PAGES.featuresHub.intro).toContain('compare recordings');
     expect(PUBLIC_SEO_PAGES.featuresHub.description).toContain('Garmin, Suunto, COROS, Wahoo');
     expect(PUBLIC_SEO_PAGES.featuresHub.description).toContain('AI answers');
 
-    expect(PUBLIC_SEO_PAGES.activityCalendar.h1).toBe('Activity calendar for endurance training');
+    expect(PUBLIC_SEO_PAGES.activityCalendar.h1).toBe('Activity calendar for workouts and plans');
     expect(PUBLIC_SEO_PAGES.activityCalendar.description).toContain('Week, Month, and Year calendar views');
     expect(PUBLIC_SEO_PAGES.activityCalendar.intro).toContain('Garmin, Suunto, COROS, Wahoo');
     expect(PUBLIC_SEO_PAGES.activityCalendar.sections.some(section => (
@@ -184,7 +184,7 @@ describe('public-seo-pages.content', () => {
       item.question === 'Does the activity calendar follow the dashboard event search?'
     ))).toBe(true);
 
-    expect(PUBLIC_SEO_PAGES.trainingAnalysis.h1).toBe('Training analysis for endurance athletes');
+    expect(PUBLIC_SEO_PAGES.trainingAnalysis.h1).toBe('Training analysis, readiness, and recovery');
     expect(PUBLIC_SEO_PAGES.trainingAnalysis.description).toContain('training load, readiness, intensity, durability');
     expect(PUBLIC_SEO_PAGES.trainingAnalysis.description).toContain('sport-specific trends');
     expect(PUBLIC_SEO_PAGES.trainingAnalysis.intro).toContain('recent training compares with your usual workload');

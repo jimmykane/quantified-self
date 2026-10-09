@@ -30,8 +30,8 @@
   display: grid;
   grid-template-columns: 48px minmax(180px, 240px) minmax(0, 1fr) auto;
   align-items: start;
-  gap: 1.25rem;
-  padding: 1.25rem 0.5rem;
+  gap: var(--compact-row-gap, 1.25rem);
+  padding: var(--compact-row-padding, 1.25rem 0.5rem);
 }
 
 .compact-row__icon {
@@ -88,7 +88,7 @@
 .compact-row__body {
   display: grid;
   min-width: 0;
-  gap: 1rem;
+  gap: var(--compact-row-body-gap, 1rem);
   padding-top: 0.15rem;
 }
 

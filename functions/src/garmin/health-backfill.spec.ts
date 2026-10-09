@@ -1,4 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { withHistoryExecution } from '../connection-history/context';
+import { type HistoryExecution, HistoryLifecycleChangedError } from '../connection-history/execution';
 import * as logger from 'firebase-functions/logger';
 import { ServiceNames } from '@sports-alliance/sports-lib';
 import { QueueResult } from '../queue-utils';
@@ -258,6 +260,16 @@ describe('Garmin Health backfill processor', () => {
     const records = vi.mocked(logger.info).mock.calls.filter(([message]) => message === '[HealthSleep]');
     expect(records).toEqual([['[HealthSleep]', { telemetryVersion: 1, provider: 'GarminAPI', workload: 'garmin_health_backfill', event: 'committed', outcome: 'completed' }]]);
     expect(hoisted.queueData).toMatchObject({ processed: true, resultStatus: 'success' });
+  });
+
+  it('does not checkpoint or publish progress if automatic history authorization changes during provider I/O', async () => {
+    const queueItem = seedRangeQueueItem(0, 1000);
+    const execution = { inTransaction: vi.fn().mockRejectedValue(new HistoryLifecycleChangedError()) } as unknown as HistoryExecution;
+    await expect(withHistoryExecution(execution, () => processGarminHealthBackfillQueueItem(queueItem)))
+      .rejects.toBeInstanceOf(HistoryLifecycleChangedError);
+    expect(hoisted.requestGet).toHaveBeenCalledTimes(1);
+    expect(hoisted.queueData.garminHealthBackfillWindowsCompleted).toBe(0);
+    expect(hoisted.transactionSet).not.toHaveBeenCalled();
   });
 
   it.each([false, true])('finishes all families despite a moving cutoff (resuming: %s)', async (resuming) => {

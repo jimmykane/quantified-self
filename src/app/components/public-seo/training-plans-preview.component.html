@@ -70,7 +70,7 @@
       @if (profileWorkout(); as row) {
         <h4>{{ row.workout.title }}</h4>
         <p class="profile-preview-hint">{{ row.sport }} · {{ selectedDateLabel() }}{{ row.workout.lifecycle === 'skipped' ? ' · Skipped' : row.completed ? ' · Completed · activity linked' : ' · Planned' }}</p>
-        <p class="profile-preview-totals" aria-label="Workout totals"><strong>Workout totals</strong> · {{ row.totals }}</p>
+        <p class="profile-preview-totals" aria-label="Workout prescription"><strong>Workout prescription</strong> · {{ row.totals }}</p>
         <app-workout-profile [structure]="row.workout.structure" [unitSettings]="unitSettings()"
           [contextKey]="'public-preview/' + row.workout.id"></app-workout-profile>
       } @else {

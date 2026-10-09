@@ -14,6 +14,8 @@ Frontend-only rules:
 - When adding a new indexable public page, add it to `sitemap.xml` in the same change. Also verify its `robots.txt`
   policy, SSR/prerender registration, route SEO metadata, public-route handling, internal links, and tests. Deliberately
   exclude non-indexable pages from the sitemap and set their `noindex` policy where applicable.
+- When changing public content or sitemap `lastmod` values, update and run `src/firebase-hosting.config.spec.ts` in
+  the same change. Retain specific expected dates for each updated page.
 - Authenticated product workspace routes, except Settings, must apply the shared `qs-workspace-page` class to their route
   root. Do not add route-local outer width, margin, or padding rules. Settings intentionally uses a centered 800px
   overview layout with one column on desktop and phones. See `docs/frontend-ui.md` for the shell contract.

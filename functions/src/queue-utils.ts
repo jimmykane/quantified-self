@@ -32,6 +32,8 @@ import { recordImportCommit, recordImportCompletion } from './queue/import-monit
 import { recordHealthSleepCommit, recordHealthSleepCompletion, recordHealthSleepRetry } from './sleep/monitoring';
 import { recordActivityDeliveryCompletion } from './activity-sync/monitoring';
 import { recordRouteQueueCommit, recordRouteQueueCompletion, recordRouteQueueRetry } from './routes/monitoring';
+import { assertHistoryWrite, currentHistoryExecution } from './connection-history/context';
+import { HistoryLifecycleChangedError } from './connection-history/execution';
 
 
 export enum QueueResult {
@@ -218,6 +220,7 @@ function buildFailedQueueItem(
 }
 
 export async function moveToDeadLetterQueue(queueItem: QueueItemInterface, error: Error, bulkWriter?: admin.firestore.BulkWriter, context?: string): Promise<QueueResult.MovedToDLQ | QueueResult.Processed | QueueResult.Failed> {
+    await currentHistoryExecution()?.beforeRequest();
 
     if (!queueItem.ref) {
         throw new Error(`No document reference supplied for queue item ${queueItem.id}`);
@@ -282,6 +285,7 @@ export interface MoveToDeadLetterQueueIfCurrentAndNotCleanupTombstonedParams {
 export async function moveToDeadLetterQueueIfCurrentAndNotCleanupTombstoned(
     params: MoveToDeadLetterQueueIfCurrentAndNotCleanupTombstonedParams,
 ): Promise<QueueResult.MovedToDLQ | QueueResult.Processed | QueueResult.Failed> {
+    await currentHistoryExecution()?.beforeRequest();
     const queueItemRef = params.queueItem.ref;
     if (!queueItemRef) {
         throw new Error(`No document reference supplied for queue item ${params.queueItem.id}`);
@@ -296,6 +300,7 @@ export async function moveToDeadLetterQueueIfCurrentAndNotCleanupTombstoned(
     );
     try {
         const moved = await db.runTransaction(async transaction => {
+            await assertHistoryWrite(transaction);
             const [queueSnapshot, tombstoneSnapshot] = await Promise.all([
                 transaction.get(queueItemRef),
                 transaction.get(tombstoneRef),
@@ -327,6 +332,7 @@ export async function moveToDeadLetterQueueIfCurrentAndNotCleanupTombstoned(
         recordRouteQueueCommit(params.queueItem, 'dead_lettered');
         return QueueResult.MovedToDLQ;
     } catch (error) {
+        if (error instanceof HistoryLifecycleChangedError) throw error;
         logger.error(`[${params.logPrefix}] Failed guarded DLQ transition for ${params.queueItem.id}.`, {
             errorName: error instanceof Error ? error.name : 'UnknownError',
         });
@@ -380,6 +386,7 @@ async function runQueueItemTransitionIfCurrentUserActive(
 
     const db = admin.firestore();
     const transitionResult = await db.runTransaction(async transaction => {
+        await assertHistoryWrite(transaction);
         let deletionGuard;
         try {
             deletionGuard = await getUserDeletionGuardStateInTransaction(
@@ -448,6 +455,7 @@ function buildManualReconciliationUpdate(
 export async function moveToDeadLetterQueueIfCurrentUserActive(
     params: MoveToDeadLetterQueueIfCurrentUserActiveParams,
 ): Promise<QueueResult.MovedToDLQ | QueueResult.Processed | QueueResult.Failed> {
+    await currentHistoryExecution()?.beforeRequest();
     const { queueItem } = params;
     const db = admin.firestore();
     const failedDocRef = db.collection('failed_jobs').doc(queueItem.id);
@@ -498,6 +506,7 @@ export async function moveToDeadLetterQueueIfCurrentUserActive(
         if (params.manualReconciliation) recordRouteQueueCommit(queueItem, 'manual_reconciliation');
         return QueueResult.MovedToDLQ;
     } catch (error) {
+        if (error instanceof HistoryLifecycleChangedError) throw error;
         logger.error(new Error(`Failed to move item ${queueItem.id} to DLQ: ${error}`));
         return QueueResult.Failed;
     }
@@ -913,6 +922,7 @@ export async function increaseRetryCountIfCurrentUserActive(
         logger.info(`Updated retry count for ${params.queueItem.id} to ${nextRetryCount}`);
         return QueueResult.RetryIncremented;
     } catch (error) {
+        if (error instanceof HistoryLifecycleChangedError) throw error;
         logger.error(new Error(`Could not update guarded retry state on ${params.queueItem.id}: ${error}`));
         return QueueResult.Failed;
     }
@@ -929,6 +939,9 @@ export async function increaseRetryCountForQueueItem(
         'onRetryExhaustedInTransaction'
     ],
 ): Promise<QueueResult.MovedToDLQ | QueueResult.RetryIncremented | QueueResult.Processed | QueueResult.Failed> {
+    // Provider handlers may replace the original error with safe telemetry.
+    // Recheck history ownership before that error can consume retries or enter DLQ.
+    await currentHistoryExecution()?.beforeRequest();
     if (!queueItem.ref) {
         throw new Error(`No document reference supplied for queue item ${queueItem.id}`);
     }
@@ -1023,6 +1036,7 @@ async function updateToProcessedIfCurrentUserActive(
         }
         return QueueResult.Processed;
     } catch (error) {
+        if (error instanceof HistoryLifecycleChangedError) throw error;
         logger.error(new Error(`Could not update guarded processed state for ${queueItem.id}: ${error}`));
         return QueueResult.Failed;
     }

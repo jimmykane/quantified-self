@@ -1,59 +1,12 @@
-import { getDateTimeFormatter } from './date-time-format.helper';
-import { getNumberFormatter } from './number-format.helper';
-import { DataWeight, type UserUnitSettingsInterface } from '@sports-alliance/sports-lib';
 import type {
   DerivedBodyWeightTrendMetricPayload,
   DerivedBodyWeightTrendSeries,
-  DerivedBodyWeightSourceKind,
 } from '@shared/derived-metrics';
-import { HEALTH_PROVIDERS, type HealthProvider, isHealthProvider } from '@shared/health';
-import { resolveUnitAwareDisplayStat } from '@shared/unit-aware-display';
+import { isHealthProvider } from '@shared/health';
 
 type UnknownRecord = Record<string, unknown>;
 
-export type TrainingBodyWeightViewState = 'preparing' | 'empty' | 'ready' | 'unavailable';
-
-export interface TrainingBodyWeightTrendPointViewModel {
-  dayMs: number;
-  weightKg: number | null;
-}
-
-export interface TrainingBodyWeightViewModel {
-  state: TrainingBodyWeightViewState;
-  isUpdating: boolean;
-  latestWeightText: string;
-  latestRecordedText: string;
-  median7dText: string;
-  median28dText: string;
-  change7dText: string;
-  change28dText: string;
-  coverageText: string;
-  statusText: string;
-  sourceText: string;
-  chartAriaLabel: string;
-  chartStartLabel: string;
-  chartEndLabel: string;
-  chartPoints: TrainingBodyWeightTrendPointViewModel[];
-  series: TrainingBodyWeightSeriesViewModel[];
-}
-
-export interface TrainingBodyWeightSeriesViewModel {
-  sourceKind: DerivedBodyWeightSourceKind;
-  sourceLabel: string;
-  latestWeightText: string;
-  latestRecordedText: string;
-  median7dText: string;
-  median28dText: string;
-  change7dText: string;
-  change28dText: string;
-  coverageText: string;
-  sourceText: string;
-  chartAriaLabel: string;
-  chartStartLabel: string;
-  chartEndLabel: string;
-  chartPoints: TrainingBodyWeightTrendPointViewModel[];
-}
-
+/** Compatibility snapshot parser; the Training workspace no longer requests or renders this kind. */
 export function resolveTrainingBodyWeightMetricPayload(
   value: unknown,
 ): DerivedBodyWeightTrendMetricPayload | null {
@@ -129,156 +82,6 @@ export function resolveTrainingBodyWeightMetricPayload(
     points: points as DerivedBodyWeightTrendMetricPayload['points'],
     series: series as DerivedBodyWeightTrendSeries[],
   };
-}
-
-export function buildTrainingBodyWeightViewModel(
-  payload: DerivedBodyWeightTrendMetricPayload | null | undefined,
-  status: string | null | undefined,
-  unitSettings: UserUnitSettingsInterface | null | undefined,
-  locale?: string,
-): TrainingBodyWeightViewModel {
-  const sourceText = 'Each source stays separate. Health measurements are preferred; workout profile Weight appears only when no recorded Health measurement exists. Weight does not change Readiness, Form, or Training state.';
-  const metricStatus = `${status || ''}`;
-  if (!payload) {
-    const unavailable = metricStatus === 'failed';
-    return {
-      state: unavailable ? 'unavailable' : 'preparing',
-      isUpdating: !unavailable,
-      latestWeightText: '--',
-      latestRecordedText: unavailable ? 'Snapshot unavailable' : 'Preparing recorded measurements',
-      median7dText: '--',
-      median28dText: '--',
-      change7dText: '--',
-      change28dText: '--',
-      coverageText: '0/28 days recorded',
-      statusText: unavailable
-        ? 'Body-weight trend is unavailable right now. Refresh to request another snapshot.'
-        : 'Preparing the recorded body-weight trend.',
-      sourceText,
-      chartAriaLabel: 'No body-weight trend is available.',
-      chartStartLabel: '',
-      chartEndLabel: '',
-      chartPoints: [],
-      series: [],
-    };
-  }
-
-  const isUpdating = metricStatus !== 'ready';
-  const series = payload.series.map((candidate, index, candidates) => buildSeriesViewModel(
-    candidate,
-    buildSourceLabel(candidate, index, candidates),
-    unitSettings,
-    locale,
-  ));
-  const firstSeries = series[0];
-  if (!series.some(candidate => candidate.chartPoints.some(point => point.weightKg !== null))) {
-    return {
-      state: 'empty',
-      isUpdating,
-      latestWeightText: '--',
-      latestRecordedText: 'No recorded measurement in this snapshot',
-      median7dText: '--',
-      median28dText: '--',
-      change7dText: '--',
-      change28dText: '--',
-      coverageText: '0/28 days recorded',
-      statusText: isUpdating
-        ? 'Updating recorded measurements; no current 28-day entry is available yet.'
-        : 'No body-weight measurement was recorded in the last 28 days.',
-      sourceText,
-      chartAriaLabel: 'No body-weight measurement was recorded in this 28-day window.',
-      chartStartLabel: formatUtcDate(payload.points[0]?.dayMs, locale),
-      chartEndLabel: formatUtcDate(payload.points.at(-1)?.dayMs, locale),
-      chartPoints: [],
-      series,
-    };
-  }
-
-  return {
-    state: 'ready',
-    isUpdating,
-    latestWeightText: firstSeries?.latestWeightText || '--',
-    latestRecordedText: firstSeries?.latestRecordedText || 'No recorded measurement in this snapshot',
-    median7dText: firstSeries?.median7dText || '--',
-    median28dText: firstSeries?.median28dText || '--',
-    change7dText: firstSeries?.change7dText || '--',
-    change28dText: firstSeries?.change28dText || '--',
-    coverageText: firstSeries?.coverageText || '0/28 days recorded',
-    statusText: isUpdating
-      ? 'Updating recorded measurements; the latest complete trend remains visible.'
-      : '7-day and 28-day changes compare rolling medians with the preceding equal-length window.',
-    sourceText,
-    chartAriaLabel: firstSeries?.chartAriaLabel || 'No body-weight trend is available.',
-    chartStartLabel: firstSeries?.chartStartLabel || '',
-    chartEndLabel: firstSeries?.chartEndLabel || '',
-    chartPoints: firstSeries?.chartPoints || [],
-    series,
-  };
-}
-
-function buildSeriesViewModel(
-  payload: DerivedBodyWeightTrendSeries,
-  sourceLabel: string,
-  unitSettings: UserUnitSettingsInterface | null | undefined,
-  locale?: string,
-): TrainingBodyWeightSeriesViewModel {
-  const values = payload.points.flatMap(point => point.weightKg === null ? [] : [point.weightKg]);
-  return {
-    sourceKind: payload.sourceKind,
-    sourceLabel,
-    latestWeightText: formatWeight(payload.latestWeightKg, unitSettings),
-    latestRecordedText: payload.latestWeightDayMs === null
-      ? 'No recorded measurement in this snapshot'
-      : `Latest recorded ${formatUtcDate(payload.latestWeightDayMs, locale)}`,
-    median7dText: formatWeight(payload.median7dKg, unitSettings),
-    median28dText: formatWeight(payload.median28dKg, unitSettings),
-    change7dText: formatChange(payload.change7dKg, payload.change7dPercent, unitSettings, locale),
-    change28dText: formatChange(payload.change28dKg, payload.change28dPercent, unitSettings, locale),
-    coverageText: `${payload.recordedDayCount28d}/28 days recorded`,
-    sourceText: payload.sourceKind === 'health-measurement'
-      ? 'Recorded Health measurements; same-day readings are reduced to a median.'
-      : 'Workout profile context fallback; this is not a weigh-in.',
-    chartAriaLabel: values.length
-      ? `${sourceLabel} body-weight measurements over 28 UTC days. ${values.length} days have recorded measurements; missing days are gaps.`
-      : `${sourceLabel} has no body-weight measurement in this 28-day window.`,
-    chartStartLabel: formatUtcDate(payload.points[0]?.dayMs, locale),
-    chartEndLabel: formatUtcDate(payload.points.at(-1)?.dayMs, locale),
-    chartPoints: values.length
-      ? payload.points.map(point => ({ dayMs: point.dayMs, weightKg: point.weightKg }))
-      : [],
-  };
-}
-
-function buildSourceLabel(
-  source: DerivedBodyWeightTrendSeries,
-  index: number,
-  sources: readonly DerivedBodyWeightTrendSeries[],
-): string {
-  if (source.sourceKind === 'workout-profile-context') {
-    const workoutIndex = sources.slice(0, index + 1)
-      .filter(candidate => candidate.sourceKind === 'workout-profile-context').length;
-    const workoutCount = sources.filter(candidate => candidate.sourceKind === 'workout-profile-context').length;
-    return workoutCount > 1 ? `Workout profile context ${workoutIndex}` : 'Workout profile context';
-  }
-  const provider = source.provider;
-  const providerName = provider ? formatProvider(provider) : 'Health measurement';
-  const providerSources = sources.filter(candidate => (
-    candidate.sourceKind === 'health-measurement' && candidate.provider === provider
-  ));
-  const providerIndex = sources.slice(0, index + 1).filter(candidate => (
-    candidate.sourceKind === 'health-measurement' && candidate.provider === provider
-  )).length;
-  return providerSources.length > 1 ? `${providerName} account ${providerIndex}` : providerName;
-}
-
-function formatProvider(provider: HealthProvider): string {
-  switch (provider) {
-    case HEALTH_PROVIDERS.GarminAPI: return 'Garmin';
-    case HEALTH_PROVIDERS.SuuntoApp: return 'Suunto';
-    case HEALTH_PROVIDERS.COROSAPI: return 'COROS';
-    case HEALTH_PROVIDERS.WahooAPI: return 'Wahoo';
-    case HEALTH_PROVIDERS.QuantifiedSelf: return 'Manual';
-  }
 }
 
 function normalizePoint(value: unknown): DerivedBodyWeightTrendMetricPayload['points'][number] | null {
@@ -357,41 +160,6 @@ function normalizeSeries(
     recordedDayCount28d,
     points: points as DerivedBodyWeightTrendSeries['points'],
   };
-}
-
-function formatWeight(value: number | null, unitSettings: UserUnitSettingsInterface | null | undefined): string {
-  if (value === null) {
-    return '--';
-  }
-  const data = new DataWeight(value);
-  return resolveUnitAwareDisplayStat(data, unitSettings)?.text
-    || `${data.getDisplayValue()} ${data.getDisplayUnit()}`;
-}
-
-function formatChange(
-  changeKg: number | null,
-  changePercent: number | null,
-  unitSettings: UserUnitSettingsInterface | null | undefined,
-  locale?: string,
-): string {
-  if (changeKg === null || changePercent === null) {
-    return 'Not enough comparison data';
-  }
-  const sign = changeKg > 0 ? '+' : changeKg < 0 ? '−' : '';
-  const weightText = formatWeight(Math.abs(changeKg), unitSettings);
-  const percentageSign = changePercent > 0 ? '+' : changePercent < 0 ? '−' : '';
-  return `${sign}${weightText} (${percentageSign}${formatNumber(Math.abs(changePercent), 1, locale)}%)`;
-}
-
-function formatUtcDate(value: number | null | undefined, locale?: string): string {
-  if (!Number.isFinite(value)) {
-    return '';
-  }
-  return getDateTimeFormatter(locale, { month: 'short', day: 'numeric', timeZone: 'UTC' }).format(new Date(value as number));
-}
-
-function formatNumber(value: number, fractionDigits: number, locale?: string): string {
-  return getNumberFormatter(locale, { maximumFractionDigits: fractionDigits, minimumFractionDigits: 0 }).format(value);
 }
 
 function asRecord(value: unknown): UnknownRecord | null {

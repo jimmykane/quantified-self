@@ -14,6 +14,9 @@ import { AppHapticsService } from '../../../services/app.haptics.service';
 import { resolveHealthWorkspaceWindow } from '../../../helpers/health-workspace.helper';
 import { DashboardHealthEvidence } from '../../../helpers/dashboard-health-context.helper';
 import { projectLoadedHealthRange } from '@shared/health-query';
+import { WeightUnits } from '@sports-alliance/sports-lib';
+import { normalizeUserUnitSettings } from '@shared/unit-aware-display';
+import { HEALTH_METRIC_CATALOG, type HealthSourceRecord } from '@shared/health';
 
 describe('independent dashboard Health views',()=>{
   const owner=signal(true), watch=vi.fn(), haptics={selection:vi.fn()};
@@ -86,6 +89,68 @@ describe('independent dashboard Health views',()=>{
     fixture.componentRef.setInput('settings',{metric:'steps',range:'30d'});fixture.detectChanges();
     expect(watch).toHaveBeenCalledTimes(1);expect(haptics.selection).not.toHaveBeenCalled();
     fixture.destroy();expect(streams[0].observed).toBe(false);
+  });
+  it('keeps explicit public examples separate from owner reads, refreshes and evidence callbacks', () => {
+    const fixture = TestBed.createComponent(DashboardHealthChartComponent), component = fixture.componentInstance;
+    fixture.componentRef.setInput('user', { uid: 'owner', settings: { unitSettings: {} } });
+    fixture.componentRef.setInput('settings', { metric: 'body_weight', range: '30d' });
+    fixture.componentRef.setInput('exampleOnly', true);
+    fixture.componentRef.setInput('referenceDate', '2026-08-31');
+    component['visible'].set(true);
+    const contextChanged = vi.fn(); component.contextChange.subscribe(contextChanged);
+    fixture.detectChanges();
+    expect(component.showingExample()).toBe(true);
+    expect(component.displayContext()?.selected?.model.ariaLabel).toContain('Fictional readings');
+    expect(watch).not.toHaveBeenCalled();
+    component.reload();
+    fixture.componentRef.setInput('user', { uid: 'another-owner', settings: { unitSettings: {} } }); fixture.detectChanges();
+    expect(watch).not.toHaveBeenCalled();
+    expect(TestBed.inject(DashboardHealthService).invalidate).not.toHaveBeenCalled();
+    expect(contextChanged).not.toHaveBeenCalled();
+    expect(haptics.selection).not.toHaveBeenCalled();
+    fixture.destroy();
+  });
+  it('unsubscribes and clears private evidence when switching an owner chart to a public example', () => {
+    const fixture = create('body_weight'), component = fixture.componentInstance;
+    streams[0].next(result('body_weight')); fixture.detectChanges();
+    expect(component.context()).not.toBeNull();
+    fixture.componentRef.setInput('exampleOnly', true); fixture.detectChanges();
+    expect(streams[0].observed).toBe(false);
+    expect(component.context()).toBeNull();
+    expect(component.displayContext()?.selected?.model.ariaLabel).toContain('Fictional readings');
+    expect(watch).toHaveBeenCalledOnce();
+    fixture.destroy();
+  });
+  it('clears an account load error when switching to a public example and can resume account reads', () => {
+    const fixture = create('body_weight'), component = fixture.componentInstance;
+    streams[0].error(Error('offline')); fixture.detectChanges();
+    expect(component.error()).toBe(true);
+    fixture.componentRef.setInput('exampleOnly', true); fixture.detectChanges();
+    expect(component.error()).toBe(false);
+    expect(component.loading()).toBe(false);
+    expect(component.previewNotice()).not.toContain('could not be loaded');
+    component.reload();
+    expect(watch).toHaveBeenCalledOnce();
+    expect(TestBed.inject(DashboardHealthService).invalidate).not.toHaveBeenCalled();
+    fixture.componentRef.setInput('exampleOnly', false); fixture.detectChanges();
+    expect(watch).toHaveBeenCalledTimes(2);
+    expect(component.loading()).toBe(true);
+    streams[1].next(result('body_weight')); fixture.detectChanges();
+    expect(component.showingExample()).toBe(false);
+    expect(component.context()).not.toBeNull();
+    expect(haptics.selection).not.toHaveBeenCalled();
+    fixture.destroy();
+  });
+  it('advances an overview window without dropping its selected source or producing feedback', () => {
+    const fixture = create(), component = fixture.componentInstance;
+    fixture.componentRef.setInput('overview', true);
+    fixture.componentRef.setInput('settings', { metric: 'steps', range: '30d', sourceKey: 'saved-reading' });
+    fixture.componentRef.setInput('referenceDate', '2026-10-09'); fixture.detectChanges();
+    expect(component.window().endDate).toBe('2026-10-09');
+    fixture.componentRef.setInput('referenceDate', '2026-10-10'); fixture.detectChanges();
+    expect(watch.mock.lastCall?.[2]).toBe('2026-10-10');
+    expect(component.settings().sourceKey).toBe('saved-reading');
+    expect(haptics.selection).not.toHaveBeenCalled(); fixture.destroy();
   });
   it('keeps completed results during refresh and ignores stale responses',()=>{
     const fixture=create();const component=fixture.componentInstance;
@@ -284,6 +349,54 @@ describe('dashboard chart source interactions', () => {
       ...(multiple ? [{ ...session, id: 'other', source: { ...session.source, accountKey: 'second', providerUserId: 'second' } }] : [])] });
     fixture.detectChanges(); return fixture;
   }
+  it('renders recorded manual and synced Weight independently on overview cards with user units and source filters', () => {
+    const fixture = TestBed.createComponent(DashboardHealthChartComponent), component = fixture.componentInstance;
+    const user = { uid: 'owner', settings: { unitSettings: normalizeUserUnitSettings({}), appSettings: {} } };
+    fixture.componentRef.setInput('user', user);
+    fixture.componentRef.setInput('settings', { metric: 'body_weight', range: '30d' });
+    fixture.componentRef.setInput('overview', true);
+    fixture.componentRef.setInput('hideTitle', true);
+    component['visible'].set(true); fixture.detectChanges();
+    const window = component.window(), definition = HEALTH_METRIC_CATALOG.body_weight;
+    const records: HealthSourceRecord[] = (['QuantifiedSelf', 'GarminAPI'] as const).map((provider, index) => ({
+      schemaVersion: 1, id: provider, userID: 'owner', kind: 'point_measurement', calendarDate: window.endDate,
+      startTimeMs: window.endTimeMs - 3600000, endTimeMs: window.endTimeMs - 3600000,
+      source: { provider, accountKey: provider, sourceRecordKey: provider,
+        sourceRecordType: provider === 'QuantifiedSelf' ? 'manual_measurement' : 'body_composition',
+        revision: { order: 1, token: 'one', digest: 'one' }, receivedAtMs: window.endTimeMs + 86400000 },
+      metricIds: ['body_weight'], metrics: [{ kind: 'value', metricId: 'body_weight', valueType: definition.valueType,
+        aggregation: 'measurement', semanticVariant: 'point', origin: 'recorded', recordingMethod: provider === 'QuantifiedSelf' ? 'manual' : 'device',
+        quality: { status: 'valid' }, normalizationStatus: 'canonical',
+        native: { metric: 'weight', value: 72 + index, unit: definition.canonicalUnit }, canonical: { value: 72 + index, unit: definition.canonicalUnit } }],
+      coverage: { status: 'complete' }, sampleChunkIds: [], createdAtMs: 0, updatedAtMs: 0,
+    }));
+    const result = projectLoadedHealthRange(records, [], { startDate: window.startDate, endDate: window.endDate, metricIds: ['body_weight'], includeSamples: true }, { sourceRecordsComplete: true, samplesComplete: true });
+    const evidence: DashboardHealthEvidence = { window, health: { result, limitReached: null, sourceRecordCount: 2, sampleChunkCount: 0,
+      samplePointCount: 0, serializedBytes: 0, hasMatchingSourceRecords: true, hasSampleBackedMetric: false,
+      providers: ['QuantifiedSelf', 'GarminAPI'], sampleBackedProviders: [] }, history: null, activities: null, sessions: [], errors: [] };
+    readings.next(evidence); fixture.detectChanges();
+    const manual = component.context()!.sources.find(source => source.provider === 'QuantifiedSelf')!;
+    fixture.componentRef.setInput('settings', { metric: 'body_weight', range: '30d', sourceKey: manual.key }); fixture.detectChanges();
+    const host = fixture.nativeElement as HTMLElement;
+    expect(host.querySelector('.health-value-row strong')?.textContent).toBe('72.0 kg');
+    expect(host.querySelector('.health-range-controls')).toBeNull();
+    expect(host.querySelector('.health-recorded-date')?.textContent).toBe('Recorded ' + component.recordedDate());
+    expect(component.context()?.selected?.model.series.points).toHaveLength(1);
+    fixture.componentRef.setInput('user', { ...user, settings: { ...user.settings, unitSettings: normalizeUserUnitSettings({ weightUnits: WeightUnits.Pounds }) } }); fixture.detectChanges();
+    expect(host.querySelector('.health-value-row strong')?.textContent).toBe('158.7 lb');
+    expect(watch).toHaveBeenCalledTimes(1); expect(haptics.selection).not.toHaveBeenCalled();
+    fixture.componentRef.setInput('providerFilter', ['GarminAPI']); fixture.detectChanges();
+    expect(component.context()?.hasData).toBe(false); expect(component.context()?.selectedKey).toBe(manual.key);
+    expect(component.context()?.sources.map(source => source.provider)).toEqual(['GarminAPI']);
+    expect(host.querySelector('.health-value-row strong')).toBeNull();
+    fixture.componentRef.setInput('providerFilter', []); fixture.detectChanges();
+    watch.mock.calls[0][4](); fixture.detectChanges();
+    expect(host.querySelector('.health-value-row strong')?.textContent).toBe('158.7 lb');
+    expect(host.textContent).toContain('Updating readings');
+    readings.next(evidence); fixture.detectChanges();
+    expect(component.loading()).toBe(false); expect(watch).toHaveBeenCalledTimes(1);
+    fixture.destroy(); expect(readings.observed).toBe(false);
+  });
   it.each(['sleep_duration', 'sleep'] as const)('changes %s from a compact menu without additional reads or resetting the range', async metric => {
     const fixture = create(metric), component = fixture.componentInstance;
     const changed = vi.fn(); component.settingsChange.subscribe(changed);

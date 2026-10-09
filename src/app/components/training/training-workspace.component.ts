@@ -5,7 +5,6 @@ import { BreakpointObserver } from '@angular/cdk/layout';
 import { toSignal } from '@angular/core/rxjs-interop';
 import { MatBottomSheet, MatBottomSheetRef } from '@angular/material/bottom-sheet';
 import { MatDialog, MatDialogRef } from '@angular/material/dialog';
-import { MatSelect } from '@angular/material/select';
 import { MatSnackBar } from '@angular/material/snack-bar';
 import { AppThemes, DataAscent, DataAvgStrokeDistance, DataDistance, DataJumpDistance, DataStrokeRate, DataSwimDistance, SwimPaceUnits, type UserUnitSettingsInterface } from '@sports-alliance/sports-lib';
 import { Subscription } from 'rxjs';
@@ -17,12 +16,15 @@ import type {
   DashboardTrainingDisciplineSummary,
   DashboardTrainingRecoveryComparison,
   DashboardTrainingRecoveryWindow,
+  DashboardFreshnessForecastPoint,
 } from '../../helpers/dashboard-derived-metrics.helper';
 import {
   resolveDashboardFormNowContextFromPoints,
   resolveDashboardRampRateContextFromPoints,
+  resolveDashboardMonotonyHistoryFromFormPoints,
 } from '../../helpers/dashboard-derived-metrics.helper';
-import { buildCurrentTrainingStateContext } from '../../helpers/current-training-state.helper';
+import { buildCurrentTrainingStateContext, type CurrentTrainingStateContext } from '../../helpers/current-training-state.helper';
+import type { MetricHistory, MetricHistoryPoint } from '../../helpers/metric-history-chart.helper';
 import {
   resolveActivityTypeIconColor,
   resolveActivityTypeMaterialIcon,
@@ -88,10 +90,6 @@ import {
   type TrainingReadinessViewModel,
 } from '../../helpers/training-readiness.helper';
 import { resolveReadinessHrvRecentTrend } from '@shared/readiness';
-import {
-  buildTrainingBodyWeightViewModel,
-  type TrainingBodyWeightViewModel,
-} from '../../helpers/training-body-weight.helper';
 import {
   isDerivedMetricPendingStatus,
   resolveDerivedMetricsRefreshPhase,
@@ -332,7 +330,6 @@ export class TrainingWorkspaceComponent implements OnInit, OnDestroy {
   public derivedState: DashboardDerivedMetricsState = createDashboardDerivedMetricsMissingState();
   public trainingRecovery = createEmptyTrainingRecoveryViewModel();
   public trainingReadiness: TrainingReadinessViewModel = buildTrainingReadinessViewModel(null, { isPreparing: true });
-  public bodyWeightTrend: TrainingBodyWeightViewModel = buildTrainingBodyWeightViewModel(null, 'building', null);
   public trainingRecoveryEstimate: TrainingRecoveryEstimateViewModel | null = null;
   public trainingExplanationView: TrainingExplanationViewModel | null = null;
   public trainingDurabilityScopes: TrainingDurabilityScopeViewModel[] = [];
@@ -370,7 +367,7 @@ export class TrainingWorkspaceComponent implements OnInit, OnDestroy {
   public sportShortcuts: TrainingVisibleDiscipline[] = [];
   public visibleSportShortcuts: TrainingVisibleDiscipline[] = [];
   public visibleSportShortcutOptions: TrainingDestinationOptionViewModel[] = [];
-  public desktopAllSportsSelectorValue: TrainingDestinationId | null = null;
+  public selectedTrainingDestinationOption: TrainingDestinationOptionViewModel | null = null;
   public sportShortcutsCompactLabel = 'Automatic shortcuts';
   public sportShortcutsAccessibleLabel = 'Choose sport shortcuts. Automatic selection.';
   public isOverviewDestination = true;
@@ -795,7 +792,6 @@ export class TrainingWorkspaceComponent implements OnInit, OnDestroy {
     this.derivedState = createDashboardDerivedMetricsMissingState();
     this.trainingRecovery = createEmptyTrainingRecoveryViewModel();
     this.trainingReadiness = buildTrainingReadinessViewModel(null, { isPreparing: true });
-    this.bodyWeightTrend = buildTrainingBodyWeightViewModel(null, 'building', null);
     this.trainingRecoveryEstimate = null;
     this.trainingExplanationView = null;
     this.trainingDurabilityScopes = [];
@@ -840,7 +836,7 @@ export class TrainingWorkspaceComponent implements OnInit, OnDestroy {
     this.sportShortcuts = [];
     this.visibleSportShortcuts = [];
     this.visibleSportShortcutOptions = [];
-    this.desktopAllSportsSelectorValue = null;
+    this.selectedTrainingDestinationOption = null;
     this.sportShortcutsCompactLabel = 'Automatic shortcuts';
     this.sportShortcutsAccessibleLabel = 'Choose sport shortcuts. Automatic selection.';
     this.isOverviewDestination = true;
@@ -1048,7 +1044,6 @@ export class TrainingWorkspaceComponent implements OnInit, OnDestroy {
         this.derivedState.trainingExplanationStatus,
         this.derivedState.trainingReadinessStatus,
         this.derivedState.trainingBuildComparisonStatus,
-        this.derivedState.bodyWeightTrendStatus,
       );
       if (!currentTrainingState.formNowFromSeries) {
         statuses.push(this.derivedState.formNowStatus);
@@ -1208,9 +1203,8 @@ export class TrainingWorkspaceComponent implements OnInit, OnDestroy {
     this.visibleSportShortcutOptions = this.visibleSportShortcuts
       .map(id => this.trainingDestinationOptions.find(option => option.id === id))
       .filter((option): option is TrainingDestinationOptionViewModel => option !== undefined);
-    this.desktopAllSportsSelectorValue = this.isOtherPowerDestination
-      ? this.selectedTrainingDestination
-      : null;
+    this.selectedTrainingDestinationOption = this.trainingDestinationOptions
+      .find(option => option.id === this.selectedTrainingDestination) || null;
   }
 
   private reconcilePreferredTrainingDestination(): void {
@@ -1274,15 +1268,6 @@ export class TrainingWorkspaceComponent implements OnInit, OnDestroy {
     this.refreshSportSpecificViewModels();
     this.changeDetector.markForCheck();
     this.queuePreferredTrainingDestinationWrite(destination, source);
-  }
-
-  public selectDesktopTrainingDestination(value: unknown, select: MatSelect): void {
-    this.selectTrainingDestination(value, 'desktop_selector');
-    // MatSelect updates its own value before selectionChange. When a selected
-    // sport is then injected into the shortcut row, the bound value remains
-    // null and Angular has no changed input to write back, so clear it through
-    // the component's public value API to avoid showing the destination twice.
-    select.value = this.desktopAllSportsSelectorValue;
   }
 
   public refreshDurabilityChartsAfterTabAnimation(): void {
@@ -1798,11 +1783,6 @@ export class TrainingWorkspaceComponent implements OnInit, OnDestroy {
       currentTrainingState.info,
     );
     this.trainingExplanationView = buildTrainingExplanationViewModel(this.derivedState.trainingExplanation);
-    this.bodyWeightTrend = buildTrainingBodyWeightViewModel(
-      this.derivedState.bodyWeightTrend,
-      this.derivedState.bodyWeightTrendStatus,
-      this.unitSettings,
-    );
     this.refreshTrainingRecoveryEstimate();
     this.trainingRecovery = this.buildTrainingRecoveryViewModel(
       this.derivedState.trainingBuildComparison?.recovery || null,
@@ -1822,7 +1802,7 @@ export class TrainingWorkspaceComponent implements OnInit, OnDestroy {
       freshnessPlusSevenDaysText: this.formatNumber(finalForecastPoint?.formSameDay ?? this.derivedState.formPlus7d?.value, 1, true),
     };
     this.trainingSummaryCards = this.buildTrainingSummaryCards();
-    this.trainingLoadMetricItems = this.buildTrainingLoadMetricItems();
+    this.trainingLoadMetricItems = this.buildTrainingLoadMetricItems(currentTrainingState, forecastPoints);
     this.trainingLoadGuidance = buildTrainingLoadGuidance(
       currentFormNow?.value ?? latestCurrentPoint?.formSameDay ?? null,
       finalForecastPoint?.formSameDay ?? this.derivedState.formPlus7d?.value ?? null,
@@ -1950,7 +1930,6 @@ export class TrainingWorkspaceComponent implements OnInit, OnDestroy {
               DERIVED_METRIC_KINDS.FormPlus7d,
               DERIVED_METRIC_KINDS.FreshnessForecast,
               DERIVED_METRIC_KINDS.TrainingReadiness,
-              DERIVED_METRIC_KINDS.BodyWeightTrend,
             ],
           });
         }
@@ -2823,16 +2802,35 @@ export class TrainingWorkspaceComponent implements OnInit, OnDestroy {
     ];
   }
 
-  private buildTrainingLoadMetricItems(): TrainingSummaryMetric[] {
+  private buildTrainingLoadMetricItems(
+    current?: CurrentTrainingStateContext,
+    forecast: readonly DashboardFreshnessForecastPoint[] = [],
+  ): TrainingSummaryMetric[] {
+    const history = (points: readonly MetricHistoryPoint[] | undefined, digits = 0, signed = false): MetricHistory | undefined => points?.length ? {
+      caption: '8-week history',
+      points: points.map(point => ({ ...point, valueText: this.formatNumber(point.value, digits, signed) })),
+    } : undefined;
+    const monotonyHistory = resolveDashboardMonotonyHistoryFromFormPoints(
+      this.derivedState.formPoints,
+      this.derivedState.monotonyStrain?.latestDayMs ?? Date.now(),
+    );
+    const latestCurrentPoint = [...forecast].reverse().find(point => !point.isForecast);
+    const futurePoints = forecast.filter(point => point.isForecast);
+    const forecastHistory: MetricHistory | undefined = futurePoints.length ? {
+      caption: 'Next 7 days', mode: 'forecast',
+      points: [...(latestCurrentPoint ? [latestCurrentPoint] : []), ...futurePoints].map(point => ({
+        time: point.dayMs, value: point.formSameDay, valueText: this.formatNumber(point.formSameDay, 1, true),
+      })),
+    } : undefined;
     return [
-      { id: 'ctl', label: 'CTL', valueText: this.loadMetrics.ctlText },
-      { id: 'atl', label: 'ATL', valueText: this.loadMetrics.atlText },
-      { id: 'ramp', label: 'Ramp', valueText: this.loadMetrics.rampText },
-      { id: 'acwr', label: 'ACWR', valueText: this.loadMetrics.acwrText },
-      { id: 'monotony', label: 'Monotony', valueText: this.loadMetrics.monotonyText },
-      { id: 'strain', label: 'Strain', valueText: this.loadMetrics.strainText },
-      { id: 'now', label: 'Now', valueText: this.loadMetrics.freshnessNowText },
-      { id: 'plus-seven-days', label: '+7 days', valueText: this.loadMetrics.freshnessPlusSevenDaysText },
+      { id: 'ctl', label: 'CTL', valueText: this.loadMetrics.ctlText, detailText: '42-day load', history: history(current?.fitness?.trend8Weeks) },
+      { id: 'atl', label: 'ATL', valueText: this.loadMetrics.atlText, detailText: '7-day load', history: history(current?.fatigue?.trend8Weeks) },
+      { id: 'ramp', label: 'Ramp', valueText: this.loadMetrics.rampText, detailText: '7-day fitness change', history: history(current?.rampRate?.trend8Weeks, 2, true) },
+      { id: 'acwr', label: 'ACWR', valueText: this.loadMetrics.acwrText, detailText: 'Acute ÷ chronic load', history: history(this.derivedState.acwr?.trend8Weeks, 2) },
+      { id: 'monotony', label: 'Monotony', valueText: this.loadMetrics.monotonyText, detailText: 'Weekly load variability', history: history(monotonyHistory, 2) },
+      { id: 'strain', label: 'Strain', valueText: this.loadMetrics.strainText, detailText: 'Load × monotony', history: history(this.derivedState.monotonyStrain?.trend8Weeks) },
+      { id: 'now', label: 'Now', valueText: this.loadMetrics.freshnessNowText, detailText: 'Fitness − fatigue', history: history(current?.formNow?.trend8Weeks, 0, true) },
+      { id: 'plus-seven-days', label: '+7 days', valueText: this.loadMetrics.freshnessPlusSevenDaysText, detailText: 'No-additional-load scenario', history: forecastHistory },
     ];
   }
 

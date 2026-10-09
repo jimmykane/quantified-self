@@ -112,6 +112,7 @@ const STACK_BAR_EMPHASIS = { focus: 'none' as const };
 })
 export class ChartsSleepTrendComponent implements AfterViewInit, OnChanges, OnDestroy {
   @Input() hideTitle = false;
+  @Input() overview = false;
   @Input() darkTheme = false;
   @Input() unitSettings: UserUnitSettingsInterface | null = null;
   @Input() timelineNotes: TimelineNoteChartContext | null = null;

@@ -96,6 +96,7 @@
     "src/app/helpers/help-search.helper.spec.ts",
     "src/app/helpers/intensity-zones-chart-data-helper.spec.ts",
     "src/app/helpers/intensity-zones.spec.ts",
+    "src/app/helpers/metric-history-chart.helper.spec.ts",
     "src/app/helpers/metric-semantics.helper.spec.ts",
     "src/app/helpers/number-format.helper.spec.ts",
     "src/app/helpers/pace-axis.helper.spec.ts",
@@ -164,7 +165,9 @@
     "src/app/helpers/workout-profile.helper.spec.ts",
     "src/app/helpers/workout-reflection.shared.spec.ts",
     "src/app/helpers/workout-time-input.helper.spec.ts",
-    "src/app/shared/help.content.spec.ts"
+    "src/app/services/history-import-state.service.spec.ts",
+    "src/app/shared/help.content.spec.ts",
+    "src/app/utils/app.user.utilities.spec.ts"
   ],
   "dom": [
     "src/app/helpers/assistant-message-format.helper.spec.ts",

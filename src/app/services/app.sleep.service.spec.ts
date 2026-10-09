@@ -260,6 +260,12 @@ describe('AppSleepService', () => {
     const state = await firstValueFrom(service.watchSyncState('user-1', 'SuuntoApp'));
 
     expect(doc).toHaveBeenCalledWith(expect.anything(), 'users', 'user-1', 'sleepSyncState', 'SuuntoApp');
+    expect(docData).toHaveBeenCalledWith(expect.anything());
     expect(state?.nextBackfillAllowedAtMs).toBe(1_800_000_000_000);
+  });
+
+  it('uses server-confirmed snapshots when sync state controls import admission', async () => {
+    await expect(firstValueFrom(service.watchSyncState('user-1', 'SuuntoApp', { waitForServer: true }))).resolves.toBeNull();
+    expect(docData).toHaveBeenCalledWith(expect.anything(), { waitForServer: true });
   });
 });

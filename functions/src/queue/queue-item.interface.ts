@@ -8,6 +8,7 @@ import type { GarminSupportedSummaryType } from '../garmin/health-summary-types'
 import DocumentReference = admin.firestore.DocumentReference;
 
 export interface QueueItemInterface {
+  connectionHistoryRunId?: string;
   id: string,
   ref?: DocumentReference
   dateCreated: number,
@@ -112,6 +113,8 @@ export interface ActivitySyncQueueItemInterface extends QueueItemInterface {
   successProcessedAt?: number;
   destinationUploadID?: string | null;
   destinationProviderUserID?: string | null;
+  /** Original COROS account retained across confirmed processing-failure restarts. */
+  destinationRestartProviderUserID?: string;
   destinationWorkoutKey?: string | null;
   destinationInfoCode?: string | null;
   /** Wahoo type selected before upload and reused for every status/correction retry. */

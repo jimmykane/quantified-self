@@ -12,7 +12,7 @@ const NO_TARGET = '__NO_TARGET__';
 // Exercise a property inherited from Object.prototype so the fallback check
 // also guards against accidental prototype-based routing.
 const UNKNOWN_TARGET = 'toString';
-const EXPECTED_FULL_EXPORT_COUNT = 168;
+const EXPECTED_FULL_EXPORT_COUNT = 172;
 const MARKETING_TARGETS = new Set([
   'listMarketingCampaigns',
   'saveMarketingCampaign',
@@ -32,6 +32,24 @@ const MARKETING_SECRET_TARGETS = new Set([
   'dispatchMarketingCampaigns',
   'marketingUnsubscribe',
 ]);
+const CONNECTION_HISTORY_TARGETS = new Set([
+  'processConnectionHistoryTask',
+  'onConnectionHistoryImportWritten',
+  'recoverConnectionHistoryImports',
+  'retryConnectionHistoryImport',
+]);
+const CONNECTION_HISTORY_TASK_SECRETS = [
+  'COROSAPI_CLIENT_ID',
+  'COROSAPI_CLIENT_SECRET',
+  'GARMINAPI_CLIENT_ID',
+  'GARMINAPI_CLIENT_SECRET',
+  'SUUNTOAPP_CLIENT_ID',
+  'SUUNTOAPP_CLIENT_SECRET',
+  'SUUNTOAPP_SUBSCRIPTION_KEY',
+  'WAHOOAPI_CLIENT_ID',
+  'WAHOOAPI_CLIENT_SECRET',
+];
+
 const ADMIN_TARGET_METADATA: Readonly<Record<string, {
   ownerModule: string;
   memoryMb: number;
@@ -88,6 +106,7 @@ const GEN1_DISPATCHER_METADATA: Readonly<Record<string, {
   parseWahooAPIWorkoutQueue: { memoryMb: 1024, timeoutSeconds: 540 },
 };
 const RUNTIME_CONTRACT_TARGETS = [
+  ...CONNECTION_HISTORY_TARGETS,
   ...Object.keys(GEN1_DISPATCHER_METADATA),
   'processGarminHealthBackfillTask',
 ];
@@ -265,6 +284,10 @@ function arraysEqual(left: readonly string[], right: readonly string[]): boolean
   return left.length === right.length && left.every((value, index) => value === right[index]);
 }
 
+function isDefaultRuntimeValue(value: unknown): boolean {
+  return value == null || (typeof value === 'object' && value.constructor?.name === 'ResetValue');
+}
+
 function probe(targetArgument: string): void {
   if (targetArgument === NO_TARGET) delete process.env.FUNCTION_TARGET;
 
@@ -440,6 +463,7 @@ async function check(): Promise<void> {
   const canaryTarget = OPTIMIZED_FUNCTION_TARGETS[0];
   assert(canaryTarget, 'The optimized target registry is empty.');
   for (const target of [
+    ...CONNECTION_HISTORY_TARGETS,
     ...PROVIDER_CONNECTION_AND_HEALTH_TARGETS,
     ...Object.keys(GEN1_DISPATCHER_METADATA),
     ...Object.keys(INGESTION_TARGET_METADATA),
@@ -452,6 +476,7 @@ async function check(): Promise<void> {
   for (const target of [
     canaryTarget,
     'impersonateUser',
+    ...CONNECTION_HISTORY_TARGETS,
     ...PROVIDER_CONNECTION_AND_HEALTH_TARGETS,
     ...QUEUE_AND_CLEANUP_TARGETS,
     ...Object.keys(GEN1_DISPATCHER_METADATA),
@@ -492,6 +517,7 @@ async function check(): Promise<void> {
   }
 
   for (const target of [
+    ...CONNECTION_HISTORY_TARGETS,
     ...PROVIDER_CONNECTION_AND_HEALTH_TARGETS,
     ...Object.keys(GEN1_DISPATCHER_METADATA),
     ...Object.keys(INGESTION_TARGET_METADATA),
@@ -768,6 +794,34 @@ async function check(): Promise<void> {
         && (expected.trigger === 'callable' || endpoint.callableTrigger === undefined)
         && (expected.trigger === 'schedule' || endpoint.scheduleTrigger === undefined),
       target + ' trigger kind changed.');
+    } else if (CONNECTION_HISTORY_TARGETS.has(target)) {
+      const isTask = target === 'processConnectionHistoryTask';
+      assert(isTask ? endpoint.availableMemoryMb === 512 : isDefaultRuntimeValue(endpoint.availableMemoryMb),
+        `${target} memory configuration changed.`);
+      assert(arraysEqual(secretKeys, isTask ? CONNECTION_HISTORY_TASK_SECRETS : []),
+        `${target} secret bindings changed.`);
+      if (isTask) {
+        assert(endpoint.availableMemoryMb === 512 && endpoint.timeoutSeconds === 300,
+          `${target} runtime limits changed.`);
+        assert(endpoint.taskQueueTrigger?.rateLimits?.maxConcurrentDispatches === 1
+          && endpoint.taskQueueTrigger.rateLimits.maxDispatchesPerSecond === 1
+          && endpoint.taskQueueTrigger.retryConfig?.maxAttempts === 10
+          && endpoint.taskQueueTrigger.retryConfig.minBackoffSeconds === 900
+          && endpoint.taskQueueTrigger.retryConfig.maxBackoffSeconds === 14400,
+        `${target} task pacing or retry policy changed.`);
+      } else if (target === 'onConnectionHistoryImportWritten') {
+        assert(isDefaultRuntimeValue(endpoint.timeoutSeconds)
+          && endpoint.eventTrigger?.eventType === 'google.cloud.firestore.document.v1.written'
+          && endpoint.eventTrigger.eventFilterPathPatterns?.document === 'connectionHistoryImports/{runId}'
+          && endpoint.eventTrigger.retry === true,
+        `${target} Firestore trigger changed.`);
+      } else if (target === 'recoverConnectionHistoryImports') {
+        assert(endpoint.timeoutSeconds === 120 && endpoint.scheduleTrigger?.schedule === '* * * * *',
+          `${target} recovery schedule changed.`);
+      } else {
+        assert(isDefaultRuntimeValue(endpoint.timeoutSeconds)
+          && endpoint.callableTrigger !== undefined, `${target} callable trigger changed.`);
+      }
     } else if (MARKETING_TARGETS.has(target)) {
       const expectedMemory = target === 'trackMarketingDelivery' || target === 'marketingUnsubscribe'
         ? 256 : 512;

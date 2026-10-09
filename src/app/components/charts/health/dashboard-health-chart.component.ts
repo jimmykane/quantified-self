@@ -12,13 +12,14 @@ import type { HealthProvider } from '@shared/health';
 import { HEALTH_METRIC_CATALOG } from '@shared/health';
 import type { AppDashboardHealthMetricSettings, AppHealthWorkspaceRange, AppUserInterface } from '../../../models/app-user.interface';
 import type { TimelineNoteChartContext } from '../../../helpers/timeline-notes-chart.helper';
-import { buildDashboardHealthContext, DashboardHealthContext, DashboardHealthEvidence } from '../../../helpers/dashboard-health-context.helper';
+import { buildDashboardHealthContext, filterDashboardHealthEvidence, DashboardHealthContext, DashboardHealthEvidence } from '../../../helpers/dashboard-health-context.helper';
 import { HEALTH_WORKSPACE_SAMPLE_RANGE, localCalendarDate, navigateHealthWorkspaceWindow, resolveHealthWorkspaceWindow } from '../../../helpers/health-workspace.helper';
 import { DashboardHealthService } from '../../../services/dashboard-health.service';
 import { AppHapticsService } from '../../../services/app.haptics.service';
 import { HealthMetricSeriesChartComponent } from '../../health/health-metric-series-chart.component';
 import { ChartsSleepTrendComponent } from '../sleep-trend/charts.sleep-trend.component';
 import { chartViewportObserverOptions, shouldPreloadChartInBackground } from '../../../helpers/chart-viewport-queue';
+import { getDateTimeFormatter } from '../../../helpers/date-time-format.helper';
 /** Same projection, source identity and chart renderer as Health; navigation belongs to this tile. */
 @Component({ selector: 'app-dashboard-health-chart', standalone: true,
     imports: [DashboardChartThumbnailComponent, ChartSourcePickerComponent, MatButtonModule, MatIconModule, MatSelectModule, MatProgressBarModule, HealthMetricSeriesChartComponent, ChartsSleepTrendComponent],
@@ -32,7 +33,12 @@ export class DashboardHealthChartComponent {
     readonly thumbnailContext = input<{ uid: string; context: DashboardHealthContext } | null>(null);
     /** Library-only illustrations; saved tiles always render account evidence. */
     readonly preview = input(false);
+    /** Public fixtures never subscribe to account evidence, even for a signed-in owner. */
+    readonly exampleOnly = input(false);
     readonly hideTitle = input(false);
+    /** Fixed-period cards in the Health category overview reuse the same account evidence. */
+    readonly overview = input(false);
+    readonly referenceDate = input<string | null>(null);
     readonly reserveActions = input(false);
     readonly disabled = input(false);
     readonly timelineNotes = input<TimelineNoteChartContext | null>(null);
@@ -48,6 +54,7 @@ export class DashboardHealthChartComponent {
     readonly error = signal(false);
     private readonly visible = signal(false);
     private readonly endDate = signal(localCalendarDate());
+    private readonly effectiveEndDate = computed(() => this.referenceDate() || this.endDate());
     private readonly initialSource = signal<string | null>(null);
     private readonly retry = signal(0);
     private readonly data = inject(DashboardHealthService);
@@ -64,10 +71,16 @@ export class DashboardHealthChartComponent {
         source: 'user', loading: false, note: '', calendarEvents: [], anchorMs: Date.now(),
     }) as DashboardChartPreview);
     readonly title = computed(() => this.settings().metric === 'sleep' ? 'Sleep' : HEALTH_METRIC_CATALOG[this.settings().metric]?.label || 'Health');
+    readonly recordedDate = computed(() => {
+        const context = this.displayContext();
+        const date = context?.selected?.model.series.points.at(-1)?.calendarDate || context?.sleep.latestPoint?.sleepDate;
+        return date ? getDateTimeFormatter(undefined, { month: 'short', day: 'numeric', year: 'numeric', timeZone: 'UTC' })
+            .format(new Date(`${date}T12:00:00.000Z`)) : null;
+    });
     readonly showSleepSourcePicker = computed(() => this.settings().metric === 'sleep'
         && ((this.context()?.sources.length || 0) > 1 || !!this.context()?.missingSource));
     readonly effectiveSettings = computed(() => ({ ...this.settings(), ...(this.settings().sourceKey || !this.initialSource() ? {} : { sourceKey: this.initialSource()! }) }));
-    readonly window = computed(() => resolveHealthWorkspaceWindow({ ...this.settings(), endDate: this.endDate() }));
+    readonly window = computed(() => resolveHealthWorkspaceWindow({ ...this.settings(), endDate: this.effectiveEndDate() }));
     private readonly previewEvidence = computed(() => {
         const shared = this.thumbnailContext(), settings = this.settings();
         return this.thumbnail() && this.preview() && shared?.uid === this.user().uid && this.data.isOwner(this.user().uid)
@@ -76,7 +89,7 @@ export class DashboardHealthChartComponent {
             && (!settings.sourceKey || shared.context.selectedKey === settings.sourceKey)
             ? shared.context : this.context();
     });
-    readonly showingExample = computed(() => this.preview() && !this.previewEvidence()?.hasData);
+    readonly showingExample = computed(() => this.exampleOnly() || this.preview() && !this.previewEvidence()?.hasData);
     readonly displayContext = computed(() => this.showingExample()
         ? buildDashboardHealthExample(this.settings(), this.window(), this.user().settings.unitSettings)
         : this.previewEvidence());
@@ -97,9 +110,9 @@ export class DashboardHealthChartComponent {
     // Source and formatting changes select from the same bounded evidence.
     private readonly viewKey = computed(() => JSON.stringify([this.user().settings.unitSettings,
         this.user().settings.appSettings?.healthWorkspace?.highlightSources?.heart_rate_variability,
-        this.effectiveSettings().sourceKey, this.providerFilter()]));
-    private readonly requestKey = computed(() => JSON.stringify([this.user().uid, this.data.isOwner(this.user().uid),
-        this.settings().metric, this.settings().range, this.endDate(), this.visible(), this.priority(), this.retry()]));
+        this.effectiveSettings().sourceKey, this.providerFilter(), this.overview()]));
+    private readonly requestKey = computed(() => JSON.stringify([this.user().uid, this.exampleOnly(), this.exampleOnly() ? false : this.data.isOwner(this.user().uid),
+        this.settings().metric, this.settings().range, this.effectiveEndDate(), this.visible(), this.priority(), this.retry()]));
     constructor() {
         // Embedded views are detached during construction. Resolve their dashboard
         // scope and scroll root only after Angular has attached the completed view.
@@ -107,7 +120,7 @@ export class DashboardHealthChartComponent {
         effect(onCleanup => {
             this.requestKey();
             untracked(() => {
-                const user = this.user(), settings = this.settings(), endDate = this.endDate();
+                const user = this.user(), settings = this.settings(), endDate = this.effectiveEndDate();
                 if (settings.range !== '1y') this.sampleRangeCorrectionPending = false;
                 const identity = `${user.uid}:${settings.metric}`;
                 const visible = this.visible(), priority = this.priority();
@@ -119,10 +132,11 @@ export class DashboardHealthChartComponent {
                     this.sampleRangeCorrectionPending = false;
                 }
                 const version = ++this.version;
-                if (!visible || !this.data.isOwner(user.uid)) {
+                if (this.exampleOnly() || !visible || !this.data.isOwner(user.uid)) {
                     this.context.set(null);
                     this.evidence = null;
                     this.sampleRangeCorrectionPending = false;
+                    if (this.exampleOnly()) this.error.set(false);
                     this.loading.set(false);
                     return;
                 }
@@ -171,7 +185,8 @@ export class DashboardHealthChartComponent {
             || !newEvidence && this.projectionKey === this.viewKey()) return;
         const user = this.user(), settings = this.settings();
         const preferred = user.settings.appSettings?.healthWorkspace?.highlightSources?.heart_rate_variability;
-        const context = buildDashboardHealthContext(this.evidence, this.effectiveSettings(), user.settings.unitSettings, preferred, this.providerFilter());
+        const evidence = this.overview() ? filterDashboardHealthEvidence(this.evidence, this.providerFilter()) : this.evidence;
+        const context = buildDashboardHealthContext(evidence, this.effectiveSettings(), user.settings.unitSettings, preferred, this.providerFilter());
         if (!settings.sourceKey && !this.initialSource() && context.selectedKey) {
             this.initialSource.set(context.selectedKey);
             this.settingsChange.emit({ settings: { ...settings, sourceKey: context.selectedKey }, initial: true });
@@ -210,7 +225,7 @@ export class DashboardHealthChartComponent {
         this.endDate.set(navigateHealthWorkspaceWindow(this.window(), direction).endDate);
     }
     reload(): void {
-        if (this.loading() || this.disabled()) return;
+        if (this.exampleOnly() || this.loading() || this.disabled()) return;
         this.haptics.selection();
         this.data.invalidate(this.user().uid);
         // An errored observable is closed, so invalidation alone cannot restart it.

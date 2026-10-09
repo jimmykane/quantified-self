@@ -4,9 +4,23 @@ import {
   buildTrainingLoadPoints,
   buildTrainingSessionLoadImpact,
   resolveTrainingLoadDayImpact,
+  resolveTrainingMonotonyStrain,
 } from '@shared/training-load';
 
 describe('training load impact', () => {
+  it('uses the canonical population standard deviation for rolling Monotony and Strain', () => {
+    const points = [10, 20, 30].map(load => ({ load }));
+    const result = resolveTrainingMonotonyStrain(points, 2);
+    expect(result.weeklyLoad7).toBe(60);
+    expect(result.monotony).toBeCloseTo(20 / Math.sqrt(200 / 3));
+    expect(result.strain).toBeCloseTo(60 * result.monotony!);
+    expect(resolveTrainingMonotonyStrain([{ load: 20 }, { load: 20 }], 1).monotony).toBeNull();
+    expect(resolveTrainingMonotonyStrain([{ load: 0 }, { load: 0 }], 1).strain).toBeNull();
+    expect(resolveTrainingMonotonyStrain([], 0)).toEqual({ weeklyLoad7: 0, monotony: null, strain: null });
+    const eightDays = [1000, 10, 20, 0, 40, 0, 0, 0].map(load => ({ load }));
+    expect(resolveTrainingMonotonyStrain(eightDays, 7).weeklyLoad7).toBe(70);
+    expect(resolveTrainingMonotonyStrain(eightDays, 7)).toEqual(resolveTrainingMonotonyStrain(eightDays.slice(1), 6));
+  });
   it('splits one TSS load into CTL, ATL, and Form contributions', () => {
     expect(buildTrainingLoadContribution(84)).toEqual({
       trainingStressScore: 84,

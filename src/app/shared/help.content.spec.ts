@@ -14,6 +14,25 @@ import {
 } from './policies.content';
 
 describe('help.content', () => {
+  it('explains pending history requests, delayed records, and the Sleep status retry', () => {
+    const copy = HELP_SECTIONS.find(section => section.id === 'service-connections')!.content;
+    for (const phrase of ['History import buttons lock as soon as a request starts', 'reopening the tool in the same app',
+      'separate requests and cooldowns', 'records may arrive later', '**Checking import status**', '**Retry status check**',
+      'keeps the action disabled until that time', 'keeps your selection and shows a date error']) {
+      expect(copy).toContain(phrase);
+    }
+  });
+  it('explains Training history columns separately from unavailable history and forecasts', () => {
+    const training = HELP_SECTIONS.find(section => section.id === 'training-analysis')!.content;
+    expect(training).toContain('**Load metric history**');
+    expect(training).toContain('Monotony history uses recorded daily TSS');
+    expect(training).toContain('not Strain values');
+    expect(training).toContain('**Plans** in the Training header');
+    expect(training).toContain('dashed no-additional-load scenario');
+    const dashboard = HELP_SECTIONS.find(section => section.id === 'getting-started')!.content;
+    expect(dashboard).toContain('**history columns**');
+    expect(dashboard).toContain('past zero-load scenarios');
+  });
   it('explains campaign sender names, fixed addresses and retesting after sender edits', () => {
     const copy = HELP_SECTIONS.find(section => section.id === 'data-and-privacy')!.content;
     expect(copy).toContain('Set **Sender name**');
@@ -23,6 +42,24 @@ describe('help.content', () => {
     expect(copy).toContain('Changing only the **internal name** or **sending schedule** keeps the current test approval');
     expect(copy).toContain('sender name, subject, body, formatting, links or button');
     expect(copy).toContain('resume with the existing successful test');
+  });
+  it('explains the homepage sample and routes visitors to real onboarding rather than a demo account', () => {
+    const copy = HELP_SECTIONS.find(section => section.id === 'getting-started')!.content;
+    expect(copy).toContain('[homepage](/)');
+    expect(copy).toContain('fictional sample data');
+    expect(copy).toContain('nothing is saved');
+    expect(copy).toContain('Provider connections and history imports require Pro');
+    expect(copy).toContain('jump links below its introduction');
+    expect(copy).toContain('every feature section visible');
+    expect(copy).not.toContain('dropdown');
+    expect(copy).toContain('[Comparisons](/#home-comparisons)');
+    expect(copy).toContain('Back and Forward');
+    expect(copy).toContain('restore the exact place you were reading');
+    expect(copy).toContain('homepage view before your first jump');
+    expect(copy).toContain("Focus moves to the chosen section's heading, so Tab continues through that section's controls");
+    expect(copy).toContain('same category cards and charts as the signed-in workspace');
+    expect(copy).toContain('never loads your account data or saves changes');
+    expect(copy).not.toContain('/demo');
   });
   it('points users to the Privacy section and explains saving analytics and email opt-outs', () => {
     const copy = HELP_SECTIONS.find(section => section.id === 'data-and-privacy')!.content;
@@ -354,12 +391,21 @@ describe('help.content', () => {
     expect(content).not.toMatch(/Workout Import|WORKOUT_IMPORT/);
     expect(content).toContain('Retry may still require support');
   });
-  it('explains the compact mobile Health metric title picker and remembered selection', () => {
+  it('explains the category overview, recorded source choices and manual history actions', () => {
+    const health = HELP_SECTIONS.find(section => section.id === 'health')!.content;
+    for (const phrase of ['**Category overview**', 'latest 30 days', '**Body**', '**Vitals**', '**Movement & energy**',
+      '**Recovery & sleep**', '**Fitness**', '**View history**', '**Back to overview**', 'manual and synced readings separately',
+      'only manual rows can be edited or deleted', 'not training targets']) expect(health).toContain(phrase);
+  });
+  it('explains the Health metric title picker on both layouts and remembered selection', () => {
     const health = HELP_SECTIONS.find(section => section.id === 'health')?.content;
     expect(health).toContain('tap the metric title and its arrow');
     expect(health).toContain('closing the picker changes nothing');
-    expect(health).toContain('Desktop keeps the metric list beside the chart');
+    expect(health).toContain('Detailed history uses the full workspace width on mobile and desktop');
     expect(health).toContain('Your metric selection is remembered in your account settings');
+    expect(health).toContain('browser’s **Back** and **Forward** controls');
+    expect(health).toContain('inspected date window and source filters stay in place');
+    expect(health).toContain('Choosing the current metric or cancelling the picker adds no entry');
   });
   it('makes optional full-text notes access discoverable without implying chart visibility is consent', () => {
     const content = HELP_SECTIONS.map(section => section.content).join(' ');
@@ -551,7 +597,7 @@ describe('help.content', () => {
     expect(healthSection?.content).toContain('Use **1d**, **14d**, **30d**, or **90d** for detailed sample readings');
     expect(healthSection?.content).toContain('**1y** remains available for readings with daily summaries');
     expect(healthSection?.content).toContain('identifies **Today**, **Yesterday**, or the inspected date');
-    expect(healthSection?.content).toContain('selected metric and range are saved to your account without adding URL query parameters');
+    expect(healthSection?.content).toContain('selected metric and range are saved to your account');
     expect(healthSection?.content).toContain('older/newer position and provider filters remain local');
     expect(healthSection?.content).toContain('never creates a cross-provider headline average');
     expect(healthSection?.content).toContain('**Choose a Highlight source.**');
@@ -999,10 +1045,10 @@ describe('help.content', () => {
     expect(trainingSection?.content).toContain('do not mean that the workspace is filtered');
     expect(trainingSection?.content).toContain('neutral higher/lower language');
     expect(trainingSection?.content).toContain('plots a readable 12-week durability trend');
-    expect(trainingSection?.content).toContain('**Body-weight trend**');
-    expect(trainingSection?.content).toContain('appears last on Training as secondary, neutral context');
-    expect(trainingSection?.content).toContain('multiple measurements on one UTC day to a median');
-    expect(trainingSection?.content).toContain('does not change the Training state, Form, Readiness');
+    expect(trainingSection?.content).not.toContain('**Body-weight trend**');
+    expect(trainingSection?.content).toContain('Body measurements are available in [Health](/health), not Training');
+    expect(trainingSection?.content).toContain('does not delete recorded measurements');
+    expect(trainingSection?.content).toContain('change the Training state, Form, or Readiness');
     expect(trainingSection?.content).toContain('A Cycling Power Curve proves that power was recorded');
     expect(trainingSection?.content).toContain('**Power systems** is available to every signed-in Training user');
     expect(trainingSection?.content).toContain('It estimates current CP, W′, and Pmax');
@@ -1023,6 +1069,8 @@ describe('help.content', () => {
     expect(trainingSection?.content).toContain('intentional easing, terrain changes, coasting, or a pace change');
     expect(trainingSection?.content).toContain('no suitable comparison rather than zero');
     expect(trainingSection?.content).toContain('**All sports**');
+    expect(trainingSection?.content).toContain('text button beside **Shortcuts**');
+    expect(trainingSection?.content).toContain('keeps its name and coloured sport icon');
     expect(trainingSection?.content).toContain('compact swipeable sport buttons');
     expect(trainingSection?.content).toContain('compact **All sports** arrow button opens every currently available sport');
     expect(trainingSection?.content).toContain('**Fitness & Gym** appears when recorded');
@@ -1623,6 +1671,11 @@ describe('help.content', () => {
     expect(serviceConnectionsSection?.content).not.toContain('2016');
     expect(serviceConnectionsSection?.content).toContain('7-day cooldown');
     expect(serviceConnectionsSection?.content).toContain('30-day cooldown');
+    expect(serviceConnectionsSection?.content).toContain('**Import history from this service** is selected by default');
+    expect(serviceConnectionsSection?.content).toContain('Garmin supports up to its latest rolling five years');
+    expect(serviceConnectionsSection?.content).toContain('COROS up to its latest rolling three months');
+    expect(serviceConnectionsSection?.content).toContain('Suunto and Wahoo offer all history the provider makes available');
+    expect(serviceConnectionsSection?.content).toContain('never expands automatically');
     expect(serviceConnectionsSection?.content).toContain('one-time dashboard prompt');
     expect(serviceConnectionsSection?.content).toContain('only the latest rolling **5 years** of activity data');
     expect(serviceConnectionsSection?.content).toContain('does not support an arbitrary older five-year period');
@@ -1633,6 +1686,9 @@ describe('help.content', () => {
     expect(serviceConnectionsSection?.content).toContain('If Garmin Health is temporarily disabled, the control falls back to **Import Sleep history**');
     expect(serviceConnectionsSection?.content).toContain('COROS to Suunto activity sync requires');
     expect(serviceConnectionsSection?.content).toContain('COROS FIT activity uploads in Services are asynchronous and use per-file status');
+    expect(serviceConnectionsSection?.content).toContain('Background activity delivery retries a confirmed COROS processing failure');
+    expect(serviceConnectionsSection?.content).toContain('Pending uploads are checked without sending the file again');
+    expect(serviceConnectionsSection?.content).toContain('An explicit unsupported-file rejection is not retried');
     expect(serviceConnectionsSection?.content).toContain('short provider upload pacing');
     expect(serviceConnectionsSection?.content).toContain('checks that same upload first instead of posting the FIT again');
     expect(serviceConnectionsSection?.content).toContain('### Activity types COROS accepts');

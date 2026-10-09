@@ -1,4 +1,5 @@
 export type PublicFeaturePreviewKey =
+  | 'health-overview'
   | 'health-sleep'
   | 'health-hrv'
   | 'health-weight'

@@ -4,10 +4,10 @@ import { dashboardHealthMetric, dashboardHealthSettings, dashboardHealthPresetId
 import { getDashboardChartCatalog } from '../../helpers/dashboard-chart-catalog.helper';
 import { HealthMetricQueryService } from '../../services/health-metric-query.service';
 import { AppUserInterface } from '../../models/app-user.interface';
-import { Router } from '@angular/router';
+import { ActivatedRoute, Router } from '@angular/router';
 import { TimelineNotesWorkspaceComponent } from '../timeline-notes/timeline-notes-workspace.component';
-import { ChangeDetectionStrategy, Component, DestroyRef, ElementRef, computed, effect, inject, signal, untracked, viewChild } from '@angular/core';
-import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
+import { ChangeDetectionStrategy, Component, DestroyRef, ElementRef, Injector, afterNextRender, computed, effect, inject, signal, untracked, viewChild } from '@angular/core';
+import { takeUntilDestroyed, toSignal } from '@angular/core/rxjs-interop';
 import { MatButtonModule } from '@angular/material/button';
 import { MatButtonToggleModule } from '@angular/material/button-toggle';
 import { MatBottomSheet, MatBottomSheetRef } from '@angular/material/bottom-sheet';
@@ -44,7 +44,7 @@ import { projectLoadedHealthRange } from '@shared/health-query';
 import { healthMetricUsesSleep } from '../../helpers/health-workspace.helper';
 import { manualHealthEntryMetric, type ManualHealthMetricId } from '@shared/manual-health';
 import { from, Subscription } from 'rxjs';
-import { take } from 'rxjs/operators';
+import { distinctUntilChanged, map, take } from 'rxjs/operators';
 import { AppUserService } from '../../services/app.user.service';
 import { AppHapticsService } from '../../services/app.haptics.service';
 import { DASHBOARD_ECHARTS_MOBILE_TAP_FEEDBACK_OPTIONS } from '../../helpers/echarts-tooltip-interaction.helper';
@@ -124,6 +124,7 @@ import {
 import { healthMetricIcon } from '../../helpers/health-metric-icon.helper';
 import { HealthMetricsBottomSheetComponent, type HealthMetricsData } from './health-metrics-bottom-sheet.component';
 import type { AppDashboardSleepTrendRange } from '../../models/app-user.interface';
+import { HealthCategoryOverviewComponent } from './health-category-overview.component';
 
 type HealthLoadStatus = 'loading' | 'ready' | 'denied' | 'error';
 
@@ -188,6 +189,7 @@ const SELECTED_HRV_CONTEXT_DAYS = 60;
     HealthMetricChartComponent,
     HealthPrioritySummaryComponent,
     HealthSourceObservationTableComponent,
+    HealthCategoryOverviewComponent,
   ],
   templateUrl: './health-workspace.component.html',
   styleUrls: ['./health-workspace.component.scss'],
@@ -197,6 +199,14 @@ export class HealthWorkspaceComponent {
   private readonly healthQueries = inject(HealthMetricQueryService);
   readonly dashboardLibrary = inject(DashboardChartLibraryState);
   private readonly dashboardRouter = inject(Router);
+  private readonly activatedRoute = inject(ActivatedRoute);
+  private readonly metricQueryParam = toSignal(this.activatedRoute.queryParamMap.pipe(
+    map(params => params.get('metric')),
+    distinctUntilChanged(),
+    // Keep each URL transition distinct even if Back returns to the same metric
+    // before Angular has rendered the intervening overview.
+    map(metric => ({ metric })),
+  ), { initialValue: { metric: this.activatedRoute.snapshot.queryParamMap.get('metric') } });
   readonly dashboardUser = computed(() => this.userService.user() as AppUserInterface | null);
   private readonly dashboardRevision = signal(0);
   readonly dashboardSeed = computed(() => { this.dashboardRevision(); return {tiles:this.dashboardUser()?.settings?.dashboardSettings?.tiles || []}; });
@@ -231,6 +241,9 @@ export class HealthWorkspaceComponent {
   readonly metricPickerOpen = signal(false);
   private readonly destroyRef = inject(DestroyRef);
   private readonly metricDetail = viewChild<ElementRef<HTMLElement>>('metricDetail');
+  private readonly overview = viewChild<HealthCategoryOverviewComponent, ElementRef<HTMLElement>>('overview', { read: ElementRef });
+  private readonly injector = inject(Injector);
+  readonly metricDetailOpen = signal(false);
   private manualDialogRef: MatDialogRef<unknown> | null = null;
   private manualAccountGeneration = 0;
   private readonly snackBar = inject(MatSnackBar);
@@ -248,6 +261,7 @@ export class HealthWorkspaceComponent {
   private latestSyncStates = new Map<HealthProvider, HealthSyncState>();
   private hasSeenSyncStateSnapshot = false;
   private workspacePreferenceUserID: string | null = null;
+  private workspaceUrlState: { metric: string | null } | undefined;
   private metricPreferenceTouched = false;
   private rangePreferenceTouched = false;
   private readonly highlightPreferencesTouched = new Set<AppHealthHighlightId>();
@@ -320,6 +334,11 @@ export class HealthWorkspaceComponent {
   readonly selectedProviders = signal<HealthProvider[]>([]);
   private readonly sourceInventory = signal<{ uid: string | null; providers: HealthProvider[] }>({ uid: null, providers: [] });
   readonly refreshRevision = signal(0);
+  readonly overviewEndDate = computed(() => {
+    this.refreshRevision();
+    this.metricDetailOpen();
+    return this.todayDate;
+  });
   readonly manualMutationBusy = signal(false);
   readonly availableHealthMetricIds = signal<readonly HealthMetricId[] | null>(null);
   readonly healthMetricAvailabilityStatus = signal<HealthLoadStatus>('loading');
@@ -607,7 +626,8 @@ export class HealthWorkspaceComponent {
       ...providerView(provider),
       selected: selected.length === 0 || selected.includes(provider),
       sync: statuses.get(provider) || null,
-      hasDataInView: this.isLoading() ? null : inView.has(provider),
+      // Overview cards load independently; one remembered metric cannot describe their availability.
+      hasDataInView: !this.metricDetailOpen() || this.isLoading() ? null : inView.has(provider),
     })).sort((left, right) => left.label.localeCompare(right.label));
   });
   readonly allProvidersSelected = computed(() => this.effectiveProviderFilters().length === 0);
@@ -871,6 +891,7 @@ export class HealthWorkspaceComponent {
     effect(onCleanup => {
       this.signedInUserID();
       this.routeState();
+      this.metricDetailOpen();
       onCleanup(() => {
         const ref = this.sourcesRef;
         this.sourcesRef = null;
@@ -896,6 +917,12 @@ export class HealthWorkspaceComponent {
     effect(() => {
       const user = this.userService.user();
       const uid = `${user?.uid || ''}`.trim() || null;
+      const urlState = this.metricQueryParam();
+      const metricParam = urlState.metric;
+      const urlMetric = metricParam !== null && normalizeHealthWorkspaceMetric(metricParam) === metricParam
+        ? metricParam as HealthWorkspaceMetricSelection : null;
+      const urlMetricChanged = urlState !== this.workspaceUrlState;
+      this.workspaceUrlState = urlState;
       const savedRange = normalizeHealthWorkspaceRange(
         user?.settings?.appSettings?.healthWorkspace?.range,
       );
@@ -906,6 +933,15 @@ export class HealthWorkspaceComponent {
         user?.settings?.appSettings?.healthWorkspace?.highlightSources,
       );
       if (uid === this.workspacePreferenceUserID) {
+        if (urlMetricChanged) {
+          this.metricDetailOpen.set(urlMetric !== null);
+          if (urlMetric !== null) {
+            // URL hydration and Back/Forward restore the view without another
+            // history entry, preference write or selection pulse.
+            this.metricPreferenceTouched = true;
+            this.selectedMetric.set(urlMetric);
+          }
+        }
         if (!this.metricPreferenceTouched) {
           this.selectedMetric.set(savedMetric);
         }
@@ -917,10 +953,12 @@ export class HealthWorkspaceComponent {
         this.preferredHighlightSources.set(savedHighlightSources);
         return;
       }
+      const accountChanged = this.workspacePreferenceUserID !== null;
       this.workspacePreferenceUserID = uid;
+      this.metricDetailOpen.set(!accountChanged && urlMetric !== null);
       this.sourceInventory.set({ uid, providers: [] });
       this.selectedProviders.set([]);
-      this.metricPreferenceTouched = false;
+      this.metricPreferenceTouched = !accountChanged && urlMetric !== null;
       this.rangePreferenceTouched = false;
       this.highlightPreferencesTouched.clear();
       this.preferredHighlightSources.set(savedHighlightSources);
@@ -928,9 +966,10 @@ export class HealthWorkspaceComponent {
       this.queuedPreferenceWrite = null;
       this.isSavingPreferences.set(false);
       this.preferencesSaveFailed.set(false);
-      this.selectedMetric.set(savedMetric);
+      this.selectedMetric.set(this.metricPreferenceTouched ? urlMetric! : savedMetric);
       this.selectedEndDate.set(this.todayDate);
       this.selectedRange.set(savedRange);
+      if (accountChanged) this.navigateMetricHistory(null, true);
     });
 
     effect(() => {
@@ -1015,6 +1054,9 @@ export class HealthWorkspaceComponent {
       const fallback = priorityFallbacks.find(metric => selections.includes(metric)) || selections[0];
       if (fallback) {
         this.selectedMetric.set(fallback);
+        // Availability corrections replace the current entry rather than
+        // inserting a metric the user did not choose into browser history.
+        if (untracked(this.metricDetailOpen)) this.navigateMetricHistory(fallback, true);
       }
     });
 
@@ -1208,16 +1250,53 @@ export class HealthWorkspaceComponent {
     // Opening an already selected metric is still navigation from the highlights.
     this.haptics.selection();
     this.selectAndSaveMetric(metric);
-    const heading = this.metricDetail()?.nativeElement;
-    heading?.focus({ preventScroll: true });
-    heading?.scrollIntoView?.({ block: 'start', inline: 'nearest', behavior: 'auto' });
+    this.metricDetailOpen.set(true);
+    this.navigateMetricHistory(normalizeHealthWorkspaceMetric(metric));
+    afterNextRender(() => {
+      if (!this.metricDetailOpen()) return;
+      const heading = this.metricDetail()?.nativeElement;
+      heading?.focus({ preventScroll: true });
+      heading?.scrollIntoView?.({ block: 'start', inline: 'nearest', behavior: 'auto' });
+    }, { injector: this.injector });
+  }
+
+  showOverview(): void {
+    if (!this.metricDetailOpen()) return;
+    this.haptics.selection();
+    this.metricDetailOpen.set(false);
+    this.navigateMetricHistory(null);
+    afterNextRender(() => {
+      if (this.metricDetailOpen()) return;
+      const heading = this.overview()?.nativeElement.querySelector<HTMLElement>('#health-overview-title');
+      heading?.focus({ preventScroll: true });
+      heading?.scrollIntoView?.({ block: 'start', inline: 'nearest', behavior: 'auto' });
+    }, { injector: this.injector });
+  }
+
+  rememberOverviewProviders(event: { uid: string; providers: HealthProvider[] }): void {
+    if (event.uid !== this.signedInUserID()) return;
+    this.rememberProviders(event.uid, event.providers);
   }
 
   selectMetric(metric: HealthWorkspaceMetricSelection): void {
-    if (normalizeHealthWorkspaceMetric(metric) !== this.selectedMetric() || this.preferencesSaveFailed()) {
+    const normalizedMetric = normalizeHealthWorkspaceMetric(metric);
+    const changed = normalizedMetric !== this.selectedMetric();
+    if (changed || this.preferencesSaveFailed()) {
       this.haptics.selection();
     }
     this.selectAndSaveMetric(metric);
+    if (changed) this.navigateMetricHistory(normalizedMetric);
+  }
+
+  private navigateMetricHistory(metric: HealthWorkspaceMetricSelection | null, replaceUrl = false): void {
+    if (!replaceUrl && this.activatedRoute.snapshot.queryParamMap.get('metric') === metric) return;
+    void this.dashboardRouter.navigate([], {
+      relativeTo: this.activatedRoute,
+      queryParams: { metric },
+      queryParamsHandling: 'merge',
+      preserveFragment: true,
+      replaceUrl,
+    }).catch(() => undefined);
   }
 
   selectRange(range: HealthWorkspaceRange): void {
@@ -1614,6 +1693,7 @@ export class HealthWorkspaceComponent {
   }
 
   private revealManualMeasurement(metricId: ManualHealthMetricId, value: ManualHealthMeasurementDialogValue): void {
+    this.metricDetailOpen.set(true);
     const metricIdsAdded: HealthMetricId[] = metricId === HEALTH_METRIC_IDS.BloodPressureSystolic
       ? [metricId, HEALTH_METRIC_IDS.BloodPressureDiastolic, ...(value.pulseValue !== undefined ? [HEALTH_METRIC_IDS.PulseRate] : [])]
       : [metricId];
@@ -1627,6 +1707,7 @@ export class HealthWorkspaceComponent {
     if (date < window.startDate || date > window.endDate) this.selectedEndDate.set(date);
     this.selectedProviders.set([]);
     this.selectAndSaveMetric(metricId);
+    this.navigateMetricHistory(metricId);
     this.healthQueries.invalidate(this.signedInUserID() || '');
       this.refreshRevision.update(current => current + 1);
   }

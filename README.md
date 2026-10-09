@@ -38,10 +38,10 @@ The main repository areas are:
 
 ## Prerequisites
 
-For the frontend and the repository's CI-compatible workflow, install:
+For frontend tests and the repository's full development workflow, install:
 
 - Git.
-- Node.js 20.19 or later in the Node 20 line. The committed `.nvmrc` selects Node 20, so `nvm use` is the easiest way to match CI.
+- Node.js 22, matching the CI test jobs and Cloud Functions runtime.
 - npm, which is included with Node.js.
 - [Gitleaks](https://github.com/gitleaks/gitleaks), used by the pre-commit credential scan.
 - A [Mapbox public access token](https://docs.mapbox.com/help/getting-started/access-tokens/) for maps and geocoding.
@@ -52,7 +52,7 @@ For Firebase emulators and Rules tests, also install:
 - Java 21, matching the CI environment.
 
 > [!NOTE]
-> `functions/package.json` declares Node.js 22 as the Cloud Functions runtime. Installing Functions dependencies under Node 20 may show an engine warning. Use Node 22 when developing or deploying Functions runtime behavior; the root `.nvmrc` remains the frontend and CI default.
+> The root `.nvmrc` still selects Node 20 for local frontend development. Select Node 22 explicitly with `nvm use 22` for frontend tests and Functions development; the CI test jobs use Node 22 and `functions/package.json` declares the same runtime.
 
 ## Quick start
 
@@ -61,7 +61,8 @@ For Firebase emulators and Rules tests, also install:
 ```bash
 git clone https://github.com/jimmykane/quantified-self.git
 cd quantified-self
-nvm use
+nvm install 22
+nvm use 22
 npm ci
 npm --prefix functions ci
 ```
@@ -169,6 +170,7 @@ Never commit environment files, service-account JSON, API tokens, private keys, 
 | Health/Sleep monitoring configuration | `npm run test:health-sleep-monitoring` | Offline ordinary-ingestion/serialized-backfill dashboard and policies; no production changes by default |
 | Recorded-activity delivery monitoring configuration | `npm run test:activity-delivery-monitoring` | Offline outbound delivery dashboard/policies, including pending and manual-reconciliation outcomes; no production changes by default |
 | Route import/delivery monitoring configuration | `npm run test:route-monitoring` | Offline route dashboard, bounded labels, eight policies and safe provisioning; no cloud changes by default |
+| Connection-history monitoring configuration | `npm run test:connection-history-monitoring` | Offline coordinator dashboard/six policies, bounded observations and safe provisioning; activation needs separate approval |
 | Functions lint | `npm --prefix functions run lint` | Runs ESLint with `--fix` and may edit files |
 | Install Git hooks | `npm run hooks:install` | Reinstalls the repository Lefthook hooks; `npm ci` normally installs them automatically |
 | Test the local credential guard | `npm run credentials:test` | Checks the staged-file rejection policy without reading credential values |
@@ -235,9 +237,11 @@ Unified health history under `users/{uid}/healthSourceRecords` and `healthSample
 
 - [CI test coverage and emulator isolation](docs/ci-testing.md)
 - [Helper test environment benchmark](docs/ci-helper-test-benchmark.md)
+- [Component fixture benchmark](docs/ci-component-fixture-benchmark.md)
 - [Reusable event tag catalog and backfill](docs/event-tag-catalog.md)
 - [Firebase Functions target-aware entrypoint loading](docs/functions-entrypoint-loading.md)
 - [Temporary Garmin dispatch cost measurements](docs/garmin-dispatch-cost-measurements.md)
+- [Optional connection history import](docs/connection-history-import.md)
 - [Admin dashboard aggregate user history](docs/admin-dashboard-history.md)
 - [Unified health data foundation](docs/unified-health-data.md)
 - [Private Timeline notes](docs/timeline-notes.md)
@@ -251,6 +255,7 @@ Unified health history under `users/{uid}/healthSourceRecords` and `healthSample
 - [Recorded activity import monitoring and activation](docs/activity-import-monitoring.md)
 - [Recorded activity delivery monitoring and activation](docs/activity-delivery-monitoring.md)
 - [Route import and delivery monitoring](docs/route-monitoring.md)
+- [Connection-history imports and coordinator monitoring](docs/connection-history-import.md)
 - [Frontend UI composition and shared route headers](docs/frontend-ui.md)
 - [Event chart sport defaults and visibility persistence](docs/event-chart-visibility.md)
 - [Supported activities and metrics catalog](docs/supported-activities.md)

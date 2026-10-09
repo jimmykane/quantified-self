@@ -86,7 +86,7 @@ import {
     DisabledSyncRouteTransitionResult,
     finalizeDisabledSyncRouteIfCurrent,
 } from '../queue/sync-route-eligibility';
-import { getCloudTaskRetryBackoffSeconds } from '../shared/queue-config';
+import { getCloudTaskRetryBackoffSeconds, MAX_RETRY_COUNT } from '../shared/queue-config';
 import { activityDeliveryFailureOutcome, recordActivityDeliveryCommit, recordActivityDeliveryCompletion } from './monitoring';
 
 function toExtension(path?: string, extension?: string): string {
@@ -577,7 +577,11 @@ async function uploadToDestination(
             if (!fileBuffer) {
                 throw new Error('COROS activity upload is missing its source file.');
             }
-            return uploadActivityFileToCOROS(queueItem.userID, fileBuffer);
+            return queueItem.destinationRestartProviderUserID
+                ? uploadActivityFileToCOROS(queueItem.userID, fileBuffer, {
+                    expectedProviderUserId: queueItem.destinationRestartProviderUserID,
+                })
+                : uploadActivityFileToCOROS(queueItem.userID, fileBuffer);
         default:
             throw new Error(`Unsupported destination service ${queueItem.destinationServiceName}`);
     }
@@ -709,7 +713,11 @@ function isSameActivitySyncQueueItem(
         && currentQueueItem.eventID === queueItem.eventID
         && currentQueueItem.routeId === queueItem.routeId
         && currentQueueItem.sourceServiceName === queueItem.sourceServiceName
-        && currentQueueItem.destinationServiceName === queueItem.destinationServiceName;
+        && currentQueueItem.destinationServiceName === queueItem.destinationServiceName
+        && areEquivalentOptionalStrings(
+            currentQueueItem.destinationRestartProviderUserID,
+            queueItem.destinationRestartProviderUserID,
+        );
 }
 
 function areEquivalentOptionalStrings(left: unknown, right: unknown): boolean {
@@ -1204,6 +1212,10 @@ async function clearPendingDestinationUploadForRestart(
     const expectedWahooWorkoutTypeID = queueItem.destinationExpectedWorkoutTypeID;
     const expectedContinuation = queueItem.destinationUploadContinuation;
     const expectedProviderOperationStartedAt = queueItem.providerOperationStartedAt;
+    const expectedQueueItem = { ...queueItem };
+    const restartProviderUserID = queueItem.destinationServiceName === ServiceNames.COROSAPI
+        ? queueItem.destinationProviderUserID || queueItem.destinationRestartProviderUserID
+        : undefined;
 
     const updateResult = await updateQueueItemIfUserActive({
         queueItemDocument: queueItem.ref,
@@ -1213,6 +1225,7 @@ async function clearPendingDestinationUploadForRestart(
         updateData: {
             destinationUploadID: null,
             destinationProviderUserID: null,
+            ...(restartProviderUserID ? { destinationRestartProviderUserID: restartProviderUserID } : {}),
             destinationWorkoutKey: null,
             destinationInfoCode: null,
             destinationUploadContinuation: null,
@@ -1235,7 +1248,7 @@ async function clearPendingDestinationUploadForRestart(
             && areEquivalentOptionalStrings(currentQueueItem.destinationInfoCode, expectedInfoCode)
             && currentQueueItem.destinationExpectedWorkoutTypeID === expectedWahooWorkoutTypeID
             && isSameUploadContinuation(currentQueueItem.destinationUploadContinuation, expectedContinuation)
-            && isSameActivitySyncQueueItem(currentQueueItem, queueItem),
+            && isSameActivitySyncQueueItem(currentQueueItem, expectedQueueItem),
     });
     if (updateResult !== QueueItemUserGuardedUpdateResult.Updated) {
         return false;
@@ -1243,6 +1256,7 @@ async function clearPendingDestinationUploadForRestart(
 
     queueItem.destinationUploadID = null;
     queueItem.destinationProviderUserID = null;
+    if (restartProviderUserID) queueItem.destinationRestartProviderUserID = restartProviderUserID;
     queueItem.destinationWorkoutKey = undefined;
     queueItem.destinationInfoCode = undefined;
     queueItem.destinationUploadContinuation = null;
@@ -2266,9 +2280,14 @@ export async function processActivitySyncQueueItem(
                         : pollResult;
                 }
             } else if (actionableError.retryMode === 'restart') {
-                const cleared = await clearPendingDestinationUploadForRestart(queueItem);
-                if (!cleared) {
-                    return QueueResult.Processed;
+                // At exhaustion retain the failed COROS upload IDs for DLQ reconciliation.
+                const corosRetryExhausted = queueItem.destinationServiceName === ServiceNames.COROSAPI
+                    && (queueItem.retryCount || 0) + 1 >= MAX_RETRY_COUNT;
+                if (!corosRetryExhausted) {
+                    const cleared = await clearPendingDestinationUploadForRestart(queueItem);
+                    if (!cleared) {
+                        return QueueResult.Processed;
+                    }
                 }
             }
             await safelyWriteMetadata(() => setActivitySyncRetryingMetadata({

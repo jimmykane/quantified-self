@@ -1,3 +1,5 @@
+import { withHistoryExecution } from '../connection-history/context';
+import type { HistoryExecution } from '../connection-history/execution';
 import { describe, expect, it } from 'vitest';
 import { GARMIN_HEALTH_SUMMARY_TYPES } from './health-summary-types';
 import {
@@ -10,6 +12,12 @@ import {
 const DAY_MS = 24 * 60 * 60 * 1_000;
 
 describe('Garmin Health backfill ranges', () => {
+  it('uses a run snapshot rather than adding newly registered families to an existing import', async () => {
+    await withHistoryExecution({ garminHealthSummaryTypes: ['dailies'] } as HistoryExecution, async () => {
+      expect(countGarminHealthBackfillRequests(0, 86400000)).toBe(1);
+      expect(getGarminHealthBackfillWindow({ summaryIndex: 1, nextStartMs: 0 }, 86400000)).toBeNull();
+    });
+  });
   it('creates inclusive windows of at most 90 days', () => {
     const window = getGarminHealthBackfillWindow({ summaryIndex: 0, nextStartMs: 0 }, 100 * DAY_MS);
 

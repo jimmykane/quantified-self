@@ -12,10 +12,12 @@ const root = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const workflow = file => load(readFileSync(resolve(root, '.github/workflows', file), 'utf8'));
 const testing = workflow('testing.yaml');
 const shared = workflow('_run-tests.yml');
-const requiredJobs = ['unit_tests', 'functions_tests', 'frontend_tests', 'rules_tests', 'functions_emulators'];
+const requiredJobs = ['unit_tests', 'functions_tests', 'functions_build', 'frontend_plan', 'frontend_tests', 'rules_tests', 'functions_emulators', 'delivery_plan', 'delivery_emulators'];
 const resultVariables = {
   UNIT_RESULT: 'unit_tests', FUNCTIONS_RESULT: 'functions_tests', FRONTEND_RESULT: 'frontend_tests',
+  FUNCTIONS_BUILD_RESULT: 'functions_build', FRONTEND_PLAN_RESULT: 'frontend_plan',
   RULES_RESULT: 'rules_tests', EMULATOR_RESULT: 'functions_emulators',
+  DELIVERY_PLAN_RESULT: 'delivery_plan', DELIVERY_RESULT: 'delivery_emulators',
 };
 
 test('every check job uses the declared Functions Node runtime', () => {
@@ -34,9 +36,32 @@ test('Functions CI runs the complete suite serially and keeps runner errors fata
   assert.ok(commands.includes('npm ci'));
   assert.ok(commands.includes('npm run lint'));
   assert.ok(commands.includes('npm run test -- --no-file-parallelism'));
-  assert.ok(commands.includes('npm run build'));
-  assert.ok(commands.includes('npm run entrypoint:check:compiled'));
-  assert.ok(commands.includes('npm run mcp:contract:check:compiled'));
+  assert.ok(!commands.includes('npm run build'));
+  assert.ok(!commands.includes('npm run entrypoint:check:compiled'));
+  assert.ok(!commands.includes('npm run mcp:contract:check:compiled'));
+  assert.doesNotMatch(functionsStep.run, /dangerouslyIgnoreUnhandledErrors|passWithNoTests|\|\|\s*true/);
+});
+
+test('MCP push checks retain both complete suites with a non-interactive report and fatal runner errors', () => {
+  const scripts = JSON.parse(readFileSync(resolve(root, 'package.json'), 'utf8')).scripts;
+  const command = scripts['hooks:mcp:pre-push'];
+  assert.ok(command.startsWith('npm --prefix functions run mcp:contract:check && npm --prefix functions test -- '));
+  for (const argument of ['src/mcp/tool-output-schemas.spec.ts', 'src/mcp/server.spec.ts',
+    '--maxWorkers=1', '--fileParallelism=false', '--testTimeout=15000', '--reporter=json',
+    '--outputFile=../tmp/mcp-pre-push-results.json']) {
+    assert.ok(command.split(' ').includes(argument), `MCP push check must retain ${argument}`);
+  }
+  assert.doesNotMatch(command, /dangerouslyIgnoreUnhandledErrors|passWithNoTests|testNamePattern|--retry|\|\|/);
+});
+
+test('Functions build and compiled checks run independently with the same comparison revision', () => {
+  const steps = shared.jobs.functions_build.steps;
+  const functionsStep = steps.find(step => step.name === 'Build and verify functions');
+  const commands = functionsStep.run.split('\n').map(line => line.trim());
+  for (const command of ['npm ci', 'npm run build', 'npm run entrypoint:check:compiled', 'npm run mcp:contract:check:compiled']) {
+    assert.ok(commands.includes(command));
+  }
+  assert.ok(!commands.includes('npm run test -- --no-file-parallelism'));
   const comparison = '${{ github.event.pull_request.base.sha || github.event.before }}';
   assert.equal(functionsStep.env.MCP_CONTRACT_PREVIOUS_REVISION, comparison);
   const fetch = steps.find(step => step.name === 'Fetch MCP contract comparison revision');
@@ -49,27 +74,127 @@ test('Functions CI runs the complete suite serially and keeps runner errors fata
   assert.doesNotMatch(functionsStep.run, /dangerouslyIgnoreUnhandledErrors|passWithNoTests|\|\|\s*true/);
 });
 
-test('app CI checks discovery and runs every frontend project', () => {
+test('app CI checks discovery and runs two complete, independently isolated frontend shards', () => {
+  const job = shared.jobs.frontend_tests;
+  assert.equal(job.needs, 'frontend_plan');
+  assert.equal(job.strategy['fail-fast'], false);
+  assert.deepEqual(job.strategy.matrix, { shard: [1, 2] });
   const steps = shared.jobs.frontend_tests.steps;
   const discovery = steps.find(step => step.run === 'npm run test:frontend-config');
   assert.ok(discovery);
   const app = steps.find(step => step.name === 'Run app tests');
   assert.ok(steps.indexOf(discovery) < steps.indexOf(app));
-  assert.equal(app.run, 'npm run test -- --run');
+  assert.equal(app.run, 'npm run test -- --run --shard=${{ matrix.shard }}/2 --reporter=default --reporter=json --reporter=./tools/frontend-test-timing-reporter.mjs --outputFile=tmp/frontend-shards/report/report.json');
   assert.equal(app.env.NODE_OPTIONS, '--max-old-space-size=3072');
+  assert.equal(app.env.QS_FRONTEND_SHARD_PLAN, 'tmp/frontend-shards/plan.json');
+  assert.equal(app.env.QS_FRONTEND_TIMING_REPORT, 'tmp/frontend-shards/report/timing.json');
+  const plan = steps.find(step => step.uses === 'actions/download-artifact@v4');
+  assert.equal(plan.with.name, 'frontend-shard-plan');
+  assert.equal(plan.with.path, 'tmp/frontend-shards');
+  assert.ok(steps.indexOf(plan) < steps.indexOf(app));
+  const upload = steps.find(step => step.uses === 'actions/upload-artifact@v4');
+  assert.equal(upload.with.name, 'frontend-report-${{ matrix.shard }}');
+  assert.equal(upload.with['if-no-files-found'], 'error');
+});
+
+test('all frontend runners share one discovered plan and only a fully verified gate saves timings', () => {
+  const plan = shared.jobs.frontend_plan.steps;
+  assert.ok(plan.some(step => step.run === 'npm run test:frontend-config'));
+  assert.ok(plan.some(step => step.run === 'npm run test:frontend-shards'));
+  assert.ok(plan.some(step => step.run === 'node tools/frontend-test-shard-cli.mjs plan tmp/frontend-timings/history.json tmp/frontend-shards/plan.json'));
+  const upload = plan.find(step => step.uses === 'actions/upload-artifact@v4');
+  assert.equal(upload.with.name, 'frontend-shard-plan');
+  assert.equal(upload.with['if-no-files-found'], 'error');
+  const restore = plan.find(step => step.uses === 'actions/cache/restore@v4');
+  const gate = shared.jobs.run_tests.steps;
+  const merge = gate.find(step => step.name === 'Require complete frontend shard reports');
+  const save = gate.find(step => step.uses === 'actions/cache/save@v4');
+  assert.equal(merge.run, 'node tools/frontend-test-shard-cli.mjs merge tmp/frontend-shards/plan.json tmp/frontend-shards/reports tmp/frontend-timings/history.json');
+  assert.ok(gate.indexOf(merge) < gate.indexOf(save));
+  assert.equal(save.with.key, restore.with.key);
+  assert.equal(save.with.path, restore.with.path);
+  assert.ok(restore.with['restore-keys'].endsWith('-\n'));
+  const reports = gate.find(step => step.with?.pattern === 'frontend-report-*');
+  assert.equal(reports.with['merge-multiple'], undefined, 'Keep reports separate to reject missing/duplicate files');
+  assert.ok(!gate.some(step => step.run === 'npm ci'), 'Report validation must use Node built-ins');
+});
+
+test('frontend policy is mandatory before planning and compares the complete feature branch', () => {
+  const steps = shared.jobs.frontend_plan.steps;
+  assert.equal(steps.find(step => step.uses === 'actions/checkout@v4').with['fetch-depth'], 0);
+  const guards = steps.find(step => step.run === 'npm run test:frontend-policy-guards');
+  const policy = steps.find(step => step.run === 'npm run test:frontend-policy');
+  const plan = steps.find(step => step.name === 'Plan balanced frontend shards');
+  assert(guards && policy && plan);
+  assert(steps.indexOf(guards) < steps.indexOf(policy));
+  assert(steps.indexOf(policy) < steps.indexOf(plan));
+  assert.equal(policy.env.QS_FRONTEND_TEST_POLICY_BASE,
+    "${{ github.event.pull_request.base.sha || ((github.ref == 'refs/heads/develop' || github.ref == 'refs/heads/main') && github.event.before) || 'origin/develop' }}");
+  assert.equal(policy['continue-on-error'], undefined);
+  assert.equal(policy.if, undefined);
+  const expression = policy.env.QS_FRONTEND_TEST_POLICY_BASE;
+  assert.equal(evaluate(expression, { event: { pull_request: { base: { sha: 'pr-base' } } } }), 'pr-base');
+  const noPR = { pull_request: { base: { sha: '' } } };
+  assert.equal(evaluate(expression, { event: { ...noPR, before: 'last-push' }, ref: 'refs/heads/codex/example' }), 'origin/develop');
+  for (const branch of ['develop', 'main']) {
+    assert.equal(evaluate(expression, { event: { ...noPR, before: 'last-push' }, ref: `refs/heads/${branch}` }), 'last-push');
+  }
+  assert.equal(evaluate(expression, { event: noPR, ref: 'refs/heads/develop' }), 'origin/develop');
+});
+
+test('delivery runners share one plan, isolated emulators and strict reports before either timing cache is saved', () => {
+  const planner = shared.jobs.delivery_plan;
+  assert.equal(planner.needs, undefined);
+  assert.ok(!planner.steps.some(step => /npm ci|firebase emulators/.test(step.run || '')));
+  assert.ok(planner.steps.some(step => step.run === 'npm run test:delivery-shards'));
+  assert.ok(planner.steps.some(step => step.run === 'node tools/delivery-test-shard-cli.mjs plan tmp/delivery-timings/history.json tmp/delivery-shards/plan.json'));
+  const uploadPlan = planner.steps.find(step => step.uses === 'actions/upload-artifact@v4');
+  assert.equal(uploadPlan.with.name, 'delivery-shard-plan');
+  assert.equal(uploadPlan.with['if-no-files-found'], 'error');
+  const restore = planner.steps.find(step => step.uses === 'actions/cache/restore@v4');
+  assert.ok(restore.with['restore-keys'].endsWith('-\n'));
+  const job = shared.jobs.delivery_emulators;
+  assert.equal(job.needs, 'delivery_plan');
+  assert.equal(job.strategy['fail-fast'], false);
+  assert.deepEqual(job.strategy.matrix, { shard: [1, 2] });
+  assert.equal(job['timeout-minutes'], 25);
+  assert.ok(job.steps.some(step => step.uses === 'actions/setup-java@v4' && step.with['java-version'] === '21'));
+  const download = job.steps.find(step => step.uses === 'actions/download-artifact@v4');
+  assert.equal(download.with.name, 'delivery-shard-plan');
+  assert.equal(download.with.path, 'tmp/delivery-shards');
+  const run = job.steps.find(step => step.name === 'Run isolated delivery emulator tests');
+  assert.equal(run.run, 'npm run test:functions-emulators -- delivery --plan tmp/delivery-shards/plan.json --shard ${{ matrix.shard }} --output tmp/delivery-shards/report');
+  assert.ok(job.steps.indexOf(download) < job.steps.indexOf(run));
+  const upload = job.steps.find(step => step.uses === 'actions/upload-artifact@v4');
+  assert.equal(upload.with.name, 'delivery-report-${{ matrix.shard }}');
+  assert.equal(upload.with.path, 'tmp/delivery-shards/report');
+  assert.equal(upload.with['if-no-files-found'], 'error');
+  assert.deepEqual(shared.jobs.functions_emulators.strategy.matrix.group, ['lifecycle', 'completion', 'mcp-data']);
+  const gate = shared.jobs.run_tests.steps;
+  const merge = gate.find(step => step.name === 'Require complete delivery shard reports');
+  assert.equal(merge.run, 'node tools/delivery-test-shard-cli.mjs merge tmp/delivery-shards/plan.json tmp/delivery-shards/reports tmp/delivery-timings/history.json');
+  const reportDownload = gate.find(step => step.with?.pattern === 'delivery-report-*');
+  assert.equal(reportDownload.with['merge-multiple'], undefined);
+  assert.ok(gate.indexOf(reportDownload) < gate.indexOf(merge));
+  for (const save of gate.filter(step => step.uses === 'actions/cache/save@v4')) {
+    assert.ok(gate.indexOf(merge) < gate.indexOf(save), 'All required reports must pass before publishing timings');
+  }
+  const save = gate.find(step => step.name === 'Save successful delivery timings');
+  assert.equal(save.with.key, restore.with.key);
+  assert.equal(save.with.path, restore.with.path);
 });
 
 test('independent jobs retain every validation and Rules check without weakening failures', () => {
   assert.deepEqual(Object.keys(shared.jobs).sort(), [...requiredJobs, 'run_tests'].sort());
   for (const id of requiredJobs) {
     const job = shared.jobs[id];
-    assert.equal(job.needs, undefined, `${id} must start independently`);
+    assert.equal(job.needs, { frontend_tests: 'frontend_plan', delivery_emulators: 'delivery_plan' }[id], `${id} has unexpected dependencies`);
     assert.equal(job.if, undefined, `${id} must run for every test invocation`);
     assert.equal(job['continue-on-error'] ?? false, false);
     assert.ok(job.steps.every(step => !step.if && !step['continue-on-error']));
-    assert.ok(job.steps.some(step => step.run?.split('\n').includes('npm ci')));
+    if (id !== 'delivery_plan') assert.ok(job.steps.some(step => step.run?.split('\n').includes('npm ci')));
   }
-  const validationCommands = ['credentials:test', 'test:emulator-coverage', 'test:workflows',
+  const validationCommands = ['credentials:test', 'test:emulator-coverage', 'test:delivery-shards', 'test:workflows',
     'test:training-monitoring', 'test:import-monitoring', 'test:health-sleep-monitoring',
     'test:activity-delivery-monitoring', 'test:route-monitoring', 'plugin:tools', 'plugin:validate', 'lint'];
   const runs = shared.jobs.unit_tests.steps.flatMap(step => step.run?.split('\n').map(line => line.trim()) ?? []);
@@ -85,7 +210,7 @@ test('independent jobs retain every validation and Rules check without weakening
   assert.ok(rules.some(step => step.uses === 'actions/setup-java@v4' && step.with['java-version'] === '21'));
   assert.ok(rules.some(step => step.run === 'npm install -g firebase-tools'));
   assert.ok(rules.some(step => step.run === 'npm run test:rules'));
-  for (const command of ['npm run test -- --run', 'npm run test:rules', 'npm run lint']) {
+  for (const command of ['npm run test:rules', 'npm run lint']) {
     const owners = requiredJobs.filter(id => shared.jobs[id].steps.some(step => step.run === command));
     assert.equal(owners.length, 1, `${command} must run exactly once`);
   }

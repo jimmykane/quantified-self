@@ -325,7 +325,7 @@ beside the metric list, with a minimum plot height for multi-row grids. Mobile, 
 retain their existing chart heights. The existing ECharts host observes the resized plot; no manual resize loop or
 extra padding is needed.
 
-Dashboard plots, Health metric/Sleep-stage plots, and Training's readiness, body-weight, power-systems,
+Dashboard plots, Health metric/Sleep-stage plots, and Training's readiness, power-systems,
 swimming-performance, and durability plots opt into `EChartsHostController.deferUntilNearViewport`.
 `ChartViewportQueue` observes the nearest scroll container (including the app shell and bottom sheets) with a 600px
 preload margin and admits one plot per animation frame after the shared ECharts library is ready, so a cold
@@ -369,10 +369,10 @@ the host dismisses the active tooltip through ECharts: mobile click-triggered to
 private text after an edit, hide/remove or owner change. No chart recreation or resize is required. Full data/theme/range changes
 continue through ordinary rendering. Range registrations remain deduplicated, and disposal releases the retained
 option and registration. Explicit time bounds avoid traversing samples during overlay projection. Health, Sleep,
-Form, Forecast and the five Training trend adapters share this path, without chart-local fetches or haptics.
+Form, Forecast and the four Training trend adapters share this path, without chart-local fetches or haptics.
 
 `date-time-format.helper.ts` reuses at most 64 Intl date formatters for explicit timezone/locale/option combinations,
-with least-recently-used eviction. Health chart labels and workspace dates, Training readiness/body-weight dates,
+with least-recently-used eviction. Health chart labels and workspace dates, Training readiness dates,
 and dashboard calendar grouping use it. Formatted readings are never cached. Calls that omit a timezone remain
 uncached so a device timezone change does not retain an old local-time formatter. Recorded offsets, locale options,
 canonical metric value/unit formatting and range semantics are unchanged.
@@ -638,6 +638,18 @@ The Health lane follows Training State and uses Health's existing catalog groups
 Health tile reads depend on owner, metric and window, independently of source selection and unit formatting.
 Changing those display choices reprojects retained evidence without resubscribing or resetting loading state.
 Persisting an automatically selected source preserves the existing chart model instead of building it twice.
+
+Public Home and Health feature previews reuse `HealthCategoryOverviewComponent`, its category controls, and the shared
+Health/Sleep chart renderers through `HealthOverviewPreviewComponent`. The explicit `exampleOnly` input bypasses
+account subscriptions and refreshes even when the supplied identity matches an owner; switching into that mode clears
+retained private evidence. Examples use fixed fictional dates and canonical values from the shared example projection.
+Opening sample history preserves the overview's category and returns keyboard focus to its originating action.
+These controls never save settings or measurements. Existing detailed Sleep, HRV, and manual-measurement previews remain.
+`health-example-days.helper.ts` owns the invented month shared by overview cards and detailed public examples.
+Keep observations sparse for weigh-ins and fitness estimates, preserve stage/asleep/in-bed duration totals and morning
+wake times, and use the same nightly HRV values in both renderers. Daily movement and energy totals remain coherent.
+Older baseline variation is deterministic and independent by metric; never repeat one waveform across metrics or
+commit account records, identities, or exports as sample fixtures.
 
 The loading bar sits at the date toolbar's lower edge without reserving an extra flex row. The latest-value/source row follows its content height, retaining Material button touch targets when a selector is present. Embedded Sleep (`hideTitle`) removes its own top padding because the dashboard wrapper already supplies that spacing; standalone Sleep keeps its existing layout.
 

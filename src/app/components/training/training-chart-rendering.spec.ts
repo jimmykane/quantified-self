@@ -3,14 +3,12 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { chartViewportQueue } from '../../helpers/chart-viewport-queue';
 import { EChartsLoaderService } from '../../services/echarts-loader.service';
 import { LoggerService } from '../../services/logger.service';
-import { TrainingBodyWeightTrendChartComponent } from './training-body-weight-trend-chart.component';
 import { TrainingReadinessTrendChartComponent } from './training-readiness-trend-chart.component';
 import { TrainingPowerSystemsTrendChartComponent } from './training-power-systems-trend-chart.component';
 import { TrainingSwimPerformanceChartComponent } from './training-swim-performance-chart.component';
 import { TrainingDurabilityTrajectoryChartComponent } from './training-durability-trajectory-chart.component';
 
 const charts = [
-  { label: 'body weight', component: TrainingBodyWeightTrendChartComponent },
   { label: 'readiness', component: TrainingReadinessTrendChartComponent },
   { label: 'power systems', component: TrainingPowerSystemsTrendChartComponent },
   { label: 'swimming', component: TrainingSwimPerformanceChartComponent },

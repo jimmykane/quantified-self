@@ -141,3 +141,11 @@ Wahoo requires six composite indexes: one `tokens` collection-group index on `wa
 7. Monitor callable/webhook error rates, Training delivery outcomes and queue age/retries, reconnect prompts, skipped reasons, FIT download failures, Wahoo upload status failures, Wahoo 429 responses, and cleanup failures. Wahoo Training delivery is already live under approved enablement; #655 does not require code rollback work or disabling its source-controlled flag. Normal Stop, disconnect and deletion safeguards remain product behavior. Future deployment still needs separate approval.
 
 The running-history dialog fix requires only an approved frontend Hosting release. It adds no Functions, Rules, indexes, persisted fields, credentials, consent, provider requests, or MCP/Training contract changes. Verify dialog reopen, lease clear/expiry/renewal, completion cooldown, expected duplicate rejection, unexpected failure logging, and teardown with mocked calls before release. Rollback uses the previous frontend artifact; accepted server imports and their existing leases remain intact.
+
+## Optional history on connection
+
+Connections offers **Import history from this service**, selected by default for eligible Pro connections and reconnections, with **30 days** selected initially. Users can choose 90 days, 1 year, 2 years, or all eligible retained Wahoo history. Clearing the checkbox connects without starting history. The server accepts a durable run only after successful authorization; users can keep using the app or close the page. Progress and recoverable retries appear on Connections, independently of connection status. Existing cooldowns and permissions apply, and no automatic import continues earlier than the selected boundary.
+
+Wahoo imports eligible FIT-backed workouts only, one history page at a time. Route libraries and outbound delivery remain separate. Route-permission reconnect shortcuts open Connections before authorization so users can review the history checkbox.
+
+See [connection history import](connection-history-import.md) for the shared architecture, capability-registration requirements and backend-first release order. Manual History Import retains its existing range and response contract.

@@ -1,8 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { WeightUnits } from '@sports-alliance/sports-lib';
 import type { DerivedBodyWeightTrendMetricPayload } from '@shared/derived-metrics';
 import {
-  buildTrainingBodyWeightViewModel,
   resolveTrainingBodyWeightMetricPayload,
 } from './training-body-weight.helper';
 
@@ -64,79 +62,40 @@ describe('training body-weight helper', () => {
     })).toBeNull();
   });
 
-  it('builds a neutral, gap-preserving chart and comparison labels', () => {
-    const payload = createPayload();
-    const model = buildTrainingBodyWeightViewModel(payload, 'ready', null, 'en-US');
-
-    expect(model).toMatchObject({
-      state: 'ready',
-      isUpdating: false,
-      latestWeightText: '70.2 kg',
-      median7dText: '70.3 kg',
-      median28dText: '70.7 kg',
-      change7dText: '−0.4 kg (−0.6%)',
-      coverageText: '8/28 days recorded',
-    });
-    expect(model.chartPoints).toHaveLength(28);
-    expect(model.chartPoints[0]).toEqual({ dayMs: payload.points[0].dayMs, weightKg: null });
-    expect(model.chartPoints.filter(point => point.weightKg !== null)).toHaveLength(3);
-    expect(model.series).toHaveLength(1);
-    expect(model.series[0].sourceLabel).toBe('Manual');
-    expect(model.sourceText).toContain('does not change Readiness');
-  });
-
-  it('formats body-weight context and changes in pounds without changing canonical chart points', () => {
-    const payload = createPayload();
-    const model = buildTrainingBodyWeightViewModel(payload, 'ready', { weightUnits: WeightUnits.Pounds }, 'en-US');
-    expect(model.latestWeightText).toBe('154.8 lb');
-    expect(model.change7dText).toContain('lb');
-    expect(model.chartPoints[27].weightKg).toBe(70.2);
-  });
-
-  it('does not claim a comparison when its source windows are sparse', () => {
-    const payload = {
-      ...createPayload(),
-      change7dKg: null,
-      change7dPercent: null,
-      change28dKg: null,
-      change28dPercent: null,
-      series: createPayload().series.map(series => ({
-        ...series,
-        change7dKg: null,
-        change7dPercent: null,
-        change28dKg: null,
-        change28dPercent: null,
-      })),
-    };
-
-    const model = buildTrainingBodyWeightViewModel(payload, 'ready', null);
-
-    expect(model.change7dText).toBe('Not enough comparison data');
-    expect(model.change28dText).toBe('Not enough comparison data');
-  });
-
-  it('keeps providers and accounts separate without exposing opaque keys', () => {
+  it('preserves sparse canonical observations and separate provider/account sources for explicit consumers', () => {
     const payload = createPayload();
     payload.series = [
-      { ...payload.series[0], provider: 'GarminAPI', sourceKey: 'secret-one' },
-      { ...payload.series[0], provider: 'GarminAPI', sourceKey: 'secret-two' },
+      { ...payload.series[0], provider: 'GarminAPI', sourceKey: 'account-one' },
+      { ...payload.series[0], provider: 'GarminAPI', sourceKey: 'account-two' },
     ];
-    payload.latestWeightKg = null;
-    payload.latestWeightDayMs = null;
-    payload.median7dKg = null;
-    payload.median28dKg = null;
-    payload.change7dKg = null;
-    payload.change7dPercent = null;
-    payload.change28dKg = null;
-    payload.change28dPercent = null;
-    payload.recordedDayCount7d = 0;
-    payload.recordedDayCount28d = 0;
-    payload.points = payload.points.map(point => ({ ...point, weightKg: null }));
+    expect(resolveTrainingBodyWeightMetricPayload(payload)).toEqual(payload);
+    expect(resolveTrainingBodyWeightMetricPayload(payload)?.points[0].weightKg).toBeNull();
+    expect(resolveTrainingBodyWeightMetricPayload(payload)?.series).toHaveLength(2);
+  });
 
-    const model = buildTrainingBodyWeightViewModel(payload, 'ready', null, 'en-US');
+  it('rejects duplicate source identities and mixed Health/workout fallback sources', () => {
+    const payload = createPayload();
+    expect(resolveTrainingBodyWeightMetricPayload({
+      ...payload, series: [payload.series[0], payload.series[0]],
+    })).toBeNull();
+    expect(resolveTrainingBodyWeightMetricPayload({
+      ...payload, series: [
+        payload.series[0],
+        { ...payload.series[0], sourceKind: 'workout-profile-context', provider: null, sourceKey: 'workout' },
+      ],
+    })).toBeNull();
+  });
 
-    expect(model.series.map(series => series.sourceLabel)).toEqual(['Garmin account 1', 'Garmin account 2']);
-    expect(JSON.stringify(model)).not.toContain('secret-one');
-    expect(JSON.stringify(model)).not.toContain('secret-two');
+  it('preserves unavailable comparisons while rejecting unpaired deltas', () => {
+    const payload = createPayload();
+    const unavailable = {
+      ...payload, change7dKg: null, change7dPercent: null,
+      series: payload.series.map(series => ({ ...series, change7dKg: null, change7dPercent: null })),
+    };
+    expect(resolveTrainingBodyWeightMetricPayload(unavailable)).toEqual(unavailable);
+    expect(resolveTrainingBodyWeightMetricPayload({ ...unavailable, change7dPercent: 1 })).toBeNull();
+    expect(resolveTrainingBodyWeightMetricPayload({
+      ...unavailable, series: [{ ...unavailable.series[0], change7dPercent: 1 }],
+    })).toBeNull();
   });
 });

@@ -48,7 +48,9 @@ describe('TrainingPlansPreviewComponent', () => {
     expect(profile.metric()).toBe('power');
     expect(profile.model()?.metrics).toContain('cadence');
     expect(fixture.nativeElement.textContent).toContain('This sample is read-only; nothing is saved');
-    expect(fixture.nativeElement.textContent).toContain('Workout totals');
+    expect(fixture.nativeElement.textContent).toContain('Workout prescription');
+    expect(fixture.nativeElement.textContent).toContain('Completed · activity linked');
+    expect(fixture.nativeElement.querySelector('.profile-preview-totals').getAttribute('aria-label')).toBe('Workout prescription');
     expect(fixture.nativeElement.querySelector('.profile-preview-totals').textContent).toContain('48m');
     expect(profile.summary()).toContain('step order, not time or distance');
     expect(selection).toHaveBeenCalledOnce();

@@ -10,6 +10,8 @@ import { AppThemeService } from '../../services/app.theme.service';
 import { AppHapticsService } from '../../services/app.haptics.service';
 import { EChartsLoaderService } from '../../services/echarts-loader.service';
 import { LoggerService } from '../../services/logger.service';
+import { DashboardHealthService } from '../../services/dashboard-health.service';
+import { HealthOverviewPreviewComponent } from './health-overview-preview.component';
 import { TrainingExplorerPreviewComponent } from './training-explorer-preview.component';
 import { PublicFeaturePreviewComponent } from './public-feature-preview.component';
 import type { PublicFeaturePreviewKey } from './public-feature-preview.types';
@@ -32,6 +34,7 @@ describe('PublicFeaturePreviewComponent', () => {
   }
 
   it.each([
+    ['health-overview', 'health-overview'],
     ['health-sleep', 'health'],
     ['health-hrv', 'health'],
     ['health-weight', 'health'],
@@ -65,6 +68,26 @@ describe('PublicFeaturePreviewComponent', () => {
     await blocks[0].render(DeferBlockState.Complete);
     expect(element.querySelector('app-mcp-read-only-flow-preview')?.closest('div[data-nosnippet]')).toBe(wrapper);
   });
+  it('hydrates the current Health overview as a static example inside the snippet exclusion', async () => {
+    const watch = vi.fn(), selection = vi.fn();
+    TestBed.overrideProvider(DashboardHealthService, { useValue: { isOwner: () => true, watch } });
+    TestBed.overrideProvider(AppThemeService, { useValue: { appTheme: signal(AppThemes.Normal) } });
+    TestBed.overrideProvider(AppHapticsService, { useValue: { selection } });
+    TestBed.overrideProvider(EChartsLoaderService, { useValue: {
+      init: vi.fn().mockResolvedValue({ isDisposed: () => false, dispatchAction: vi.fn(), on: vi.fn(), off: vi.fn(), getWidth: () => 320 }),
+      setOption: vi.fn(), resize: vi.fn(), dispose: vi.fn(),
+      subscribeToViewportResize: () => () => undefined, attachMobileSeriesTapFeedback: () => () => undefined,
+    } });
+    TestBed.overrideProvider(LoggerService, { useValue: { error: vi.fn() } });
+    const element = renderPlaceholder('health-overview'), wrapper = element.querySelector('div[data-nosnippet]');
+    const [block] = await fixture.getDeferBlocks();
+    await block.render(DeferBlockState.Complete); fixture.detectChanges(); await fixture.whenStable();
+    const preview = fixture.debugElement.query(By.directive(HealthOverviewPreviewComponent));
+    expect(preview.nativeElement.closest('div[data-nosnippet]')).toBe(wrapper);
+    expect(preview.nativeElement.querySelectorAll('.health-overview-card')).toHaveLength(6);
+    expect(element.textContent).toContain('Fictional sample readings');
+    expect(watch).not.toHaveBeenCalled(); expect(selection).not.toHaveBeenCalled();
+  });
 
   it('hydrates the Training Plans fixture without account-data services', async () => {
     const selection = vi.fn();
@@ -93,7 +116,7 @@ describe('PublicFeaturePreviewComponent', () => {
     await fixture.whenStable();
     expect(element.querySelector('app-workout-profile')?.closest('div[data-nosnippet]')).toBe(wrapper);
     expect(element.textContent).toContain('This sample is read-only; nothing is saved');
-    expect(element.textContent).toContain('Workout totals');
+    expect(element.textContent).toContain('Workout prescription');
     expect(selection).toHaveBeenCalledOnce();
   });
 

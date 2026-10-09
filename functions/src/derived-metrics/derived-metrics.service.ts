@@ -159,6 +159,7 @@ import {
 } from '../../../shared/readiness';
 import {
     buildTrainingLoadPoints,
+    resolveTrainingMonotonyStrain,
     TRAINING_LOAD_ATL_TIME_CONSTANT_DAYS,
     TRAINING_LOAD_CTL_TIME_CONSTANT_DAYS,
     type TrainingLoadPoint,
@@ -973,21 +974,7 @@ function resolveMonotonyStrain(
     points: readonly DerivedLoadPoint[],
     index: number,
 ): { weeklyLoad7: number; monotony: number | null; strain: number | null } {
-    const startIndex = Math.max(0, index - 6);
-    const windowLoads = points.slice(startIndex, index + 1).map(point => point.load);
-    const weeklyLoad7 = windowLoads.reduce((sum, value) => sum + value, 0);
-    const mean = windowLoads.length ? (weeklyLoad7 / windowLoads.length) : 0;
-    const variance = windowLoads.length
-        ? windowLoads.reduce((sum, value) => sum + Math.pow(value - mean, 2), 0) / windowLoads.length
-        : 0;
-    const stddev = Math.sqrt(variance);
-    const monotony = stddev > 0 ? (mean / stddev) : null;
-    const strain = monotony === null ? null : weeklyLoad7 * monotony;
-    return {
-        weeklyLoad7,
-        monotony,
-        strain,
-    };
+    return resolveTrainingMonotonyStrain(points, index);
 }
 
 function buildMonotonyStrainMetricPayload(

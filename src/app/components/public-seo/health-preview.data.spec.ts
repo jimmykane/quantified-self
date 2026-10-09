@@ -4,6 +4,8 @@ import { MANUAL_HEALTH_AGGREGATION, MANUAL_POINT_SEMANTIC_VARIANT } from '@share
 import { buildHealthPreviewSeries, buildHealthPreviewSleepTrend, HEALTH_PREVIEW_END, HEALTH_PREVIEW_START, HEALTH_PREVIEW_NOTES } from './health-preview.data';
 import { validateTimelineFields } from '@shared/timeline-notes';
 import { addTimelineNotesToChart } from '../../helpers/timeline-notes-chart.helper';
+import { buildDashboardHealthExample } from '../../helpers/dashboard-health-preview.helper';
+import { resolveHealthWorkspaceWindow } from '../../helpers/health-workspace.helper';
 
 describe('public Health sample data', () => {
   it('uses valid fictional notes within the visible window without changing HRV values', () => {
@@ -22,15 +24,35 @@ describe('public Health sample data', () => {
     expect(result.option.series?.[0]).toBe(series);
     expect(series.data).toEqual(originalData);
   });
-  it('keeps the weight preview on a gentle, consistent trend without daily spikes', () => {
+  it('shows occasional weigh-ins with small fluctuations instead of an artificially perfect decline', () => {
     const values = buildHealthPreviewSeries('weight').points.map(point => Number(point.value));
-    expect(values).toHaveLength(14);
+    expect(values.length).toBeGreaterThan(3);
+    expect(values.length).toBeLessThan(14);
     expect(values[0] - values.at(-1)!).toBeGreaterThan(0);
     expect(values[0] - values.at(-1)!).toBeLessThan(0.5);
+    expect(values.some((value, index) => index > 0 && value > values[index - 1])).toBe(true);
     for (let index = 1; index < values.length; index++) {
       const change = values[index] - values[index - 1];
-      expect(change).toBeLessThanOrEqual(1e-10);
-      expect(Math.abs(change)).toBeLessThanOrEqual(0.08 + 1e-10);
+      expect(Math.abs(change)).toBeLessThanOrEqual(0.3 + 1e-10);
+    }
+  });
+
+  it('keeps detailed samples consistent with the overview and accounts for every minute in bed', () => {
+    const settings = { metric: 'heart_rate_variability' as const, range: '30d' as const };
+    const overview = buildDashboardHealthExample(settings, resolveHealthWorkspaceWindow({ ...settings, endDate: '2026-08-31' }));
+    const sleepSettings = { metric: 'sleep' as const, range: '30d' as const };
+    const sleepOverview = buildDashboardHealthExample(sleepSettings, resolveHealthWorkspaceWindow({ ...sleepSettings, endDate: '2026-08-31' }));
+    for (const point of buildHealthPreviewSeries('hrv').points.filter(point => point.timestampMs >= HEALTH_PREVIEW_START)) {
+      expect(point.value).toBe(overview.selected!.model.series.points.find(reading => reading.calendarDate === point.calendarDate)?.value);
+    }
+    for (const night of buildHealthPreviewSleepTrend().points) {
+      const overviewNight = sleepOverview.sleep.points.find(point => point.sleepDate === night.sleepDate)!;
+      expect(night.startTimeMs).toBe(overviewNight.startTimeMs);
+      expect(night.endTimeMs).toBe(overviewNight.endTimeMs);
+      expect(night.deepSeconds + night.lightSeconds + night.remSeconds).toBe(night.totalSeconds);
+      expect(night.endTimeMs - night.startTimeMs).toBe((night.totalSeconds + night.awakeSeconds) * 1000);
+      expect(new Date(night.endTimeMs).getHours()).toBeGreaterThanOrEqual(6);
+      expect(new Date(night.endTimeMs).getHours()).toBeLessThanOrEqual(8);
     }
   });
 
