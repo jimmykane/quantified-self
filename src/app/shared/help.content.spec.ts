@@ -14,6 +14,15 @@ import {
 } from './policies.content';
 
 describe('help.content', () => {
+  it('explains Training history columns separately from unavailable history and forecasts', () => {
+    const training = HELP_SECTIONS.find(section => section.id === 'training-analysis')!.content;
+    expect(training).toContain('**Load metric history**');
+    expect(training).toContain('Monotony stays numeric');
+    expect(training).toContain('dashed no-additional-load scenario');
+    const dashboard = HELP_SECTIONS.find(section => section.id === 'getting-started')!.content;
+    expect(dashboard).toContain('**history columns**');
+    expect(dashboard).toContain('past zero-load scenarios');
+  });
   it('explains campaign sender names, fixed addresses and retesting after sender edits', () => {
     const copy = HELP_SECTIONS.find(section => section.id === 'data-and-privacy')!.content;
     expect(copy).toContain('Set **Sender name**');

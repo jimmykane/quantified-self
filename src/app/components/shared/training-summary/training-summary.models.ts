@@ -2,6 +2,7 @@ import type {
   MetricIndicatorTone,
   MetricIndicatorVariant,
 } from '../metric-indicator/metric-indicator.component';
+import type { MetricHistory } from '../../../helpers/metric-history-chart.helper';
 
 export interface TrainingSummaryIndicator {
   label: string;
@@ -29,4 +30,5 @@ export interface TrainingSummaryMetric {
   label: string;
   valueText: string;
   detailText?: string;
+  history?: MetricHistory;
 }

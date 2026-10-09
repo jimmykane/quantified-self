@@ -96,6 +96,7 @@
     "src/app/helpers/help-search.helper.spec.ts",
     "src/app/helpers/intensity-zones-chart-data-helper.spec.ts",
     "src/app/helpers/intensity-zones.spec.ts",
+    "src/app/helpers/metric-history-chart.helper.spec.ts",
     "src/app/helpers/metric-semantics.helper.spec.ts",
     "src/app/helpers/number-format.helper.spec.ts",
     "src/app/helpers/pace-axis.helper.spec.ts",
