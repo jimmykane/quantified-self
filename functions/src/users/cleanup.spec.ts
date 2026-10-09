@@ -678,6 +678,26 @@ describe('cleanupUserAccountsV2', () => {
         expect(batchMock.commit).toHaveBeenCalled();
     });
 
+    it.each([
+        {},
+        { uid: null, marketing: { uid: null } },
+        { uid: '', marketing: { uid: '' }, toUids: [] },
+    ])('deletes email-only mail with missing ownership metadata: %j', async ownership => {
+        const user = testEnv.auth.makeUserRecord({ uid: 'testUser123', email: 'test@example.com' });
+        const get = vi.fn().mockResolvedValueOnce({ docs: [{
+            id: 'legacy-email', ref: 'legacy-ref', updateTime: 'selected-revision',
+            data: () => ({ to: user.email, ...ownership }),
+        }] }).mockResolvedValue({ docs: [] });
+        whereMock.mockImplementation((field: string) => ({
+            get: field === 'to' ? get : vi.fn().mockResolvedValue({ docs: [] }),
+        }));
+
+        await cleanupUserAccounts(user, { eventId: 'eventId' } as unknown as functions.EventContext);
+
+        expect(batchMock.delete).toHaveBeenCalledWith('legacy-ref', { lastUpdateTime: 'selected-revision' });
+        expect(batchMock.commit).toHaveBeenCalled();
+    });
+
     it('deletes a large campaign mail history in bounded batches', async () => {
         const user = testEnv.auth.makeUserRecord({ uid: 'testUser123' });
         const marketingDocs = Array.from({ length: 801 }, (_, index) => ({
@@ -706,6 +726,7 @@ describe('cleanupUserAccountsV2', () => {
         const docs = [
             { id: 'other-campaign', ref: 'other-campaign', data: () => ({ marketing: { uid: 'anotherUser' } }) },
             { id: 'other-uid', ref: 'other-uid', data: () => ({ toUids: ['anotherUser'] }) },
+            { id: 'literal-custom-uid', ref: 'literal-custom-uid', data: () => ({ uid: ' ' }) },
             { id: 'owned', ref: 'owned', updateTime: revision, data: () => ({ marketing: { uid: user.uid } }) },
         ];
         whereMock.mockImplementation((field: string) => ({ get: vi.fn().mockResolvedValue({ docs: field === 'to' ? docs : [] }) }));

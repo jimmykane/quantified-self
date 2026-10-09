@@ -1120,14 +1120,16 @@ async function cleanupDeletedUser(user: admin.auth.UserRecord): Promise<void> {
             mailCollection.where('marketing.uid', '==', uid),
             mailCollection.where('uid', '==', uid),
         ];
+        // Email matching is the intentional fallback for historical mail without
+        // UID metadata. Missing ownership must not leave account cleanup pending.
         if (user.email) queries.push(mailCollection.where('to', '==', user.email));
         const isDeletable = (doc: admin.firestore.QueryDocumentSnapshot): boolean => {
             const data = doc.data();
             if (doc.id === `account_deleted_confirmation_${uid}` || data.template?.name === 'account_deleted_confirmation') return false;
-            // An email address can be reused. Explicit ownership takes precedence
-            // over an email-only match, including conflicting legacy markers.
-            if (typeof data.uid === 'string' && data.uid !== uid) return false;
-            if (typeof data.marketing?.uid === 'string' && data.marketing.uid !== uid) return false;
+            // Preserve an explicitly different owner. Empty legacy fields carry
+            // no ownership and must still allow the email fallback.
+            if (typeof data.uid === 'string' && data.uid.length > 0 && data.uid !== uid) return false;
+            if (typeof data.marketing?.uid === 'string' && data.marketing.uid.length > 0 && data.marketing.uid !== uid) return false;
             if (Array.isArray(data.toUids) && data.toUids.length > 0 && !data.toUids.includes(uid)) return false;
             return true;
         };

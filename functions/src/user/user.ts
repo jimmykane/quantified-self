@@ -105,6 +105,7 @@ export const deleteSelf = functions
                 try {
                     await admin.firestore().collection('mail').doc(`account_deleted_confirmation_${uid}`).set({
                         to: userEmail,
+                        uid,
                         from: TRANSACTIONAL_EMAIL_FROM,
                         replyTo: TRANSACTIONAL_EMAIL_REPLY_TO,
                         template: {

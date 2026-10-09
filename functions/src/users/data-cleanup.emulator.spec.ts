@@ -223,7 +223,7 @@ describe.skipIf(!host)('native account deletion (loopback Firestore emulator)', 
         } finally { await db.recursiveDelete(intent); }
     }, 30_000);
 
-    it('pages a large mail history while preserving confirmations and another UID sharing the email', async () => {
+    it('completes cleanup of paged UID-owned and email-only mail while preserving confirmations and other owners', async () => {
         const uid = owner();
         const other = owner();
         const email = `${uid}@example.invalid`;
@@ -231,11 +231,17 @@ describe.skipIf(!host)('native account deletion (loopback Firestore emulator)', 
         const retained = mail.doc(`${uid}-other`);
         const confirmation = mail.doc(`account_deleted_confirmation_${uid}`);
         await retained.set({ to: email, marketing: { uid: other } });
-        await confirmation.set({ to: email, template: { name: 'account_deleted_confirmation' } });
+        await confirmation.set({ uid, to: email, template: { name: 'account_deleted_confirmation' } });
         for (let offset = 0; offset < 801; offset += 400) {
             const batch = db.batch();
             for (let index = offset; index < Math.min(offset + 400, 801); index++) {
-                batch.set(mail.doc(`${uid}-${index}`), { to: email, marketing: { uid } });
+                const ownership = [
+                    { marketing: { uid } },
+                    {}, // Legacy registration, subscription and CSV campaign mail.
+                    { uid: null, marketing: { uid: null } },
+                    { uid: '', marketing: { uid: '' }, toUids: [] },
+                ][index % 4];
+                batch.set(mail.doc(`${uid}-${index}`), { to: email, ...ownership });
             }
             await batch.commit();
         }

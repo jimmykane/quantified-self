@@ -104,23 +104,28 @@ lookup could become stale before `deleteSelf` wrote its pending marker. The mark
 is now always checked and written in a transaction, preserving a completed receipt
 even when a competing deletion finishes between those operations.
 
-**Medium impact — mail reads and ownership, fixed for explicit UID records.**
+**Medium impact — mail reads and ownership, fixed.**
 Mail cleanup previously fetched entire histories and deleted email matches without
 respecting another explicit UID. It now pages 100 records, queries `uid`, `toUids`
 and `marketing.uid`, rejects conflicting explicit owners,
 pins batch deletes to the queried document revision and verifies remaining owned
-matches. Confirmation mail remains retained. Legacy records without UID metadata
-still rely on their email match; this is an attribution limitation, not proof of
-immutable account ownership. Do not infer complete historical email coverage from
-the receipt. Removing that ambiguity requires a separately scoped mail ownership
-migration, not broadening destructive matching in this cleanup. Registration welcome
-and all four subscription lifecycle writers now store an inert `uid` field;
-existing records are not backfilled. Registration mail also embeds the UID in its
-exact document ID, while subscription mail uses subscription/event IDs. The old
-CSV development-update script and manual template-test script write email-only
-records and can address recipients without an app account. The installed Delete
-User Data extension never selected `mail`; email cleanup was already owned by the
-custom Gen 1 handler. Keep historical-mail policy separate from extension parity.
+matches. Confirmation mail remains retained. The approved policy deliberately
+deletes historical mail by `to == deletedUser.email` when UID metadata is absent,
+null or empty. Missing ownership metadata does not block deletion or completion;
+there is no prerequisite backfill. The app does not support email changes, and
+explicitly conflicting UID ownership still takes precedence over an email match.
+
+Registration welcome, all four subscription lifecycle writers and deletion
+confirmations now store an inert `uid` field without changing delivery recipients.
+Notifications and subscription gifts already use `toUids`; marketing uses
+`marketing.uid`, and the MCP campaign uses `uid`. The CSV development-update script
+now resolves the current Auth UID by email and skips deleted/missing accounts.
+The manual template-test script also attaches UID for registered recipients;
+an explicitly selected external test inbox has no app UID and remains email-only.
+Both scripts check the shared deletion guard inside the write transaction for
+registered accounts and abort on Auth lookup failures other than user-not-found.
+Existing records are not backfilled. The installed Delete User Data extension
+never selected `mail`; email cleanup was already owned by the custom Gen 1 handler.
 
 **Client and campaign writers, fixed.** Existing browser sessions can outlive the
 callable response. Rules now apply the active deletion tombstone check to every
@@ -268,8 +273,8 @@ email changes, and client Rules/transaction-time campaign fences. These tests do
 emulators or claim live Auth-to-Eventarc delivery.
 
 After separate deployment approval, first deploy the client write fence and
-UID-bearing registration/subscription mail writers. Historical mail needs its
-separate ownership decision; no backfill or policy migration is performed here.
+UID-bearing registration/subscription mail writers. Historical mail is cleaned
+by the approved email fallback without waiting for a UID backfill.
 Do not run the old unguarded campaign script against deleting accounts.
 
 ```sh
