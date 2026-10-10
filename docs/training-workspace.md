@@ -228,6 +228,12 @@ guidance; existing grounded-answer checks still apply. After a successful read, 
 provider action and destinations instead of hard-coding Send (notably for Stop sync). Completion checks also run after
 the last allowed continuation, without spending another model/tool-call budget. These are private Assistant
 implementation fixes, with no MCP wire, permission, persistence, provider adapter or app-help contract change.
+Common explanatory/advisory and sync-status/settings questions or problem reports do not trigger forced delivery previews.
+This fallback requires action/preview request phrasing; an independently requested action after a sentence, “then” or
+“but” remains supported. Decimal points are not sentence boundaries.
+This private intent hint grants no authority and does not replace source verification or app Apply. Tool execution is
+limited to the names advertised for that exact model response. A successful first read cannot retroactively authorize
+an unadvertised preview in the same parallel response, and a preview-only correction cannot call other tools.
 
 ### Plan activation and optional sync next steps
 

@@ -2582,6 +2582,12 @@ correction uses the expressly requested schema action, never hard-coded Send for
 Completion checks also run at the final continuation boundary without extending budgets. Verification covers refusal,
 successful read-to-preview, final-budget outcomes and the already-grounded daily context.
 These private fixes require neither public contract promotion nor plugin rebuilding or reauthorization.
+The private intent hint excludes common explanatory/advisory and sync-status/settings questions or problem reports from
+forced previews, requiring action/preview request phrasing without losing separately requested actions or splitting
+decimal numbers. It is not mutation or provider authority.
+Execution validates the exact tool-name set advertised for each model response, including read-first and preview-only
+correction requests; a read in the same response cannot unlock an unadvertised preview retroactively. Strict MCP
+validation, conversation consent and app-owned Apply remain unchanged. No public surface or Help update is needed.
 
 Garmin missing-copy recovery (#769) does not widen registered v1 Training provider actions. Existing
 `get_training_sync_status` reports `needs_attention` and zero synced workouts after a complete not-found Workout

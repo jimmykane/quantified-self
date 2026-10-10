@@ -73,7 +73,18 @@ describe('app-owned complete workout review', () => {
     'Create a workout. Don’t send or sync it.',
     'Do not send it or sync it.',
     'Never sync and deliver this session.',
-  ])('does not treat a negated delivery phrase as a sync request: %s', prompt => {
+    'How does plan sync work?',
+    'Why does my workout not sync to Suunto?',
+    'Should I send this workout to Garmin?',
+    'Can you explain how to sync a plan?',
+    'Please describe what happens when I stop sync.',
+    'Check my plan sync status.',
+    'Show my workout sync settings.',
+    'Can I sync a workout to Garmin?',
+    'Should I create a 1.5-hour workout and sync it?',
+    'My plan won’t sync to Suunto.',
+    'I can’t send my workout to Garmin.',
+  ])('does not treat negation or an informational prompt as a sync request: %s', prompt => {
     expect(requestsAssistantTrainingDelivery(prompt)).toBe(false);
   });
   it.each([
@@ -82,6 +93,20 @@ describe('app-owned complete workout review', () => {
     'Do not send to Garmin, but sync to Suunto.',
     'No provider sync for the old plan; send this workout to Garmin.',
     'Don’t send or sync the old workout; send the new one to Suunto.',
+    'Can you send this workout to Garmin?',
+    'Explain plan sync; then send my workout to Suunto.',
+    'Show me a preview to send the workout to Suunto.',
+    'Do send this workout to Garmin.',
+    'Can you please sync my plan to Suunto?',
+    'Stop sync for this plan with Garmin.',
+    'I want you to send this workout to Garmin.',
+    'I would like to sync my plan to Suunto.',
+    'Preview changes to sync my plan to Suunto.',
+    'Prepare to send this workout to Garmin.',
+    'Create a workout, send it to Suunto.',
+    'Activate my new strength plan and enable sync with Garmin and Suunto.',
+    'Set up plan sync with Suunto in America/New_York.',
+    'Recommend one standalone workout for today and sync it to Suunto.',
   ])('preserves an affirmative delivery request: %s', prompt => {
     expect(requestsAssistantTrainingDelivery(prompt)).toBe(true);
   });
@@ -1974,6 +1999,27 @@ describe('Assistant runtime', () => {
     expect(preview.execute).not.toHaveBeenCalled();
   });
 
+  it('answers a grounded plan-sync question without forcing a change preview', async () => {
+    const read: AssistantRuntimeTool = { name: 'get_training_sync_status', description: 'Read saved sync status.',
+      inputJsonSchema: { type: 'object', properties: {} }, execute: vi.fn().mockResolvedValue({ scheduleRevision: 7, services: [] }) };
+    const preview: AssistantRuntimeTool = { name: 'preview_training_changes', description: 'Prepare a change review.',
+      inputJsonSchema: { type: 'object', properties: {} }, execute: vi.fn() };
+    const generate = vi.spyOn(assistantGenkit, 'generate').mockResolvedValueOnce({
+      toolRequests: [{ toolRequest: { name: read.name, input: {} } }], messages: [],
+    } as never).mockResolvedValueOnce({ toolRequests: [], messages: [], text: JSON.stringify({
+      answer: 'Your plan has no service sync configured. Enabling it is a separate reviewed choice.',
+      visuals: { chart: null, map: null },
+    }) } as never);
+    await expect(generateAssistantModelAnswer({ currentTime: '2026-10-10T08:00:00Z', timeZone: 'UTC',
+      prompt: 'How does plan sync work?', history: [], mcpInstructions: 'Use current data.',
+      tools: [read, preview], workflow: null, onBillableAttempt: vi.fn() })).resolves.toMatchObject({
+      answer: 'Your plan has no service sync configured. Enabling it is a separate reviewed choice.',
+    });
+    expect(generate).toHaveBeenCalledTimes(2);
+    expect(generate.mock.calls[0]?.[0].system).toContain('does not request provider delivery');
+    expect(preview.execute).not.toHaveBeenCalled();
+  });
+
   it.each([
     [{ scheduleRevision: 260, plans: [] }, true],
     [{ assistantToolError: { code: 'invalid_request', retryable: false }, scheduleRevision: 260 }, false],
@@ -2014,6 +2060,23 @@ describe('Assistant runtime', () => {
     } as never);
     await expect(generateAssistantModelAnswer({ currentTime: '2026-10-10T08:00:00Z', timeZone: 'UTC',
       prompt: 'Preview a paused plan.', history: [], mcpInstructions: 'Use current data.',
+      tools: [read, preview], workflow: null, onBillableAttempt: vi.fn() })).rejects.toThrow('unavailable tool');
+    expect(preview.execute).not.toHaveBeenCalled();
+  });
+
+  it('rejects an unadvertised preview bundled with the first schedule read', async () => {
+    const read: AssistantRuntimeTool = { name: 'list_training_plans', description: 'Read current plans.',
+      inputJsonSchema: { type: 'object', properties: {} }, execute: vi.fn().mockResolvedValue({ scheduleRevision: 260, plans: [] }) };
+    const preview: AssistantRuntimeTool = { name: 'preview_training_changes', description: 'Prepare a review.',
+      inputJsonSchema: { type: 'object', properties: {} }, execute: vi.fn() };
+    vi.spyOn(assistantGenkit, 'generate').mockResolvedValueOnce({
+      toolRequests: [
+        { toolRequest: { name: read.name, input: {} } },
+        { toolRequest: { name: preview.name, input: { expectedScheduleRevision: 260 } } },
+      ], messages: [],
+    } as never);
+    await expect(generateAssistantModelAnswer({ currentTime: '2026-10-10T08:00:00Z', timeZone: 'UTC',
+      prompt: 'Preview a paused plan. No sync.', history: [], mcpInstructions: 'Use current data.',
       tools: [read, preview], workflow: null, onBillableAttempt: vi.fn() })).rejects.toThrow('unavailable tool');
     expect(preview.execute).not.toHaveBeenCalled();
   });
@@ -2157,6 +2220,26 @@ describe('Assistant runtime', () => {
     expect(generate.mock.calls[2]?.[0].system).not.toContain('action:"send"');
     expect(generate.mock.calls[2]?.[0].system).toContain('Preserve the expressly requested action');
     expect(generate.mock.calls[2]?.[0].tools).toHaveLength(1);
+  });
+
+  it('rejects another read when the correction advertised only the requested preview', async () => {
+    const read: AssistantRuntimeTool = { name: 'list_training_plans', description: 'Read current plans.',
+      inputJsonSchema: { type: 'object', properties: {} }, execute: vi.fn().mockResolvedValue({ scheduleRevision: 260, plans: [] }) };
+    const preview: AssistantRuntimeTool = { name: 'preview_training_changes', description: 'Prepare delivery review.',
+      inputJsonSchema: { type: 'object', properties: {} }, execute: vi.fn() };
+    const generate = vi.spyOn(assistantGenkit, 'generate').mockResolvedValueOnce({
+      toolRequests: [{ toolRequest: { name: read.name, input: {} } }], messages: [],
+    } as never).mockResolvedValueOnce({ toolRequests: [], messages: [], text: JSON.stringify({
+      answer: 'I have checked the schedule.', visuals: { chart: null, map: null },
+    }) } as never).mockResolvedValueOnce({
+      toolRequests: [{ toolRequest: { name: read.name, input: {} } }], messages: [],
+    } as never);
+    await expect(generateAssistantModelAnswer({ currentTime: '2026-10-10T08:00:00Z', timeZone: 'UTC',
+      prompt: 'Send my workout to Suunto.', history: [], mcpInstructions: 'Use current data.',
+      tools: [read, preview], workflow: null, onBillableAttempt: vi.fn() })).rejects.toThrow('unavailable tool');
+    expect(generate).toHaveBeenCalledTimes(3);
+    expect(read.execute).toHaveBeenCalledOnce();
+    expect(preview.execute).not.toHaveBeenCalled();
   });
 
   it.each(['invalid_request', 'detail_not_available'] as const)(

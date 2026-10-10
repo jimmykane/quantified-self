@@ -469,7 +469,23 @@ export function requestsAssistantTrainingDelivery(prompt: string): boolean {
     /\b(?:don't|don’t|do not|does not|never|without|no)\s+(?:(?:also|any|this|that|the|my|workout|session|provider|service|watch|device|automatic|garmin|suunto|coros|wahoo)\s+){0,4}(?:send|sync|deliver)\b(?:\s+(?:(?:it|them|this|that|the|my|workout|session|plan)\s+){0,3}(?:or|and)\s+(?:send|sync|deliver)\b){0,2}/gu,
     '',
   );
-  return /\b(?:send|sync|deliver)\b/u.test(request) || requestsGarminReplacement(prompt);
+  // Force a delivery preview only for request phrasing, not mentions of sync in
+  // questions or problem reports. This is a private routing hint, not authority.
+  // Keep separate actions after sentence/"then"/"but", not decimal points.
+  return request.split(/[!?;\n]+|\.(?=\s|$)|\b(?:then|but)\b/u).some(part => {
+    const clause = part.trim().replace(/^please\s+/u, '')
+      .replace(/^(?:can|could|would|will)\s+you(?:\s+please)?\s+/u, '');
+    const informationOnly = /^(?:explain|describe|what|why|how|when|where|is|are|does|should)\b/u.test(clause)
+      || /^(?:can|could|would)\s+(?:i|we)\b/u.test(clause)
+      || /^(?:show|check|review|tell)\b[^.!?;\n]{0,120}\b(?:status|settings|permissions|support|availability|compatibility)\b/u.test(clause);
+    const requestsAction = /^(?:do\s+)?(?:send|sync|deliver|enable|disable|stop|start|resume|retry|approve|change|edit|update|modify|activate|set|turn)\b/u.test(clause)
+      || /^(?:create|add|build|make|draft|propose|suggest|recommend|schedule)\b[^!?;\n]*\b(?:and|also|,)\s+(?:please\s+)?(?:send|sync|deliver)\b/u.test(clause)
+      || /^i\s+(?:want|need|would\s+like)\s+(?:you\s+)?to\s+(?:send|sync|deliver)\b/u.test(clause)
+      || /^(?:prepare|preview|propose)\b/u.test(clause)
+      || /^(?:show|review)\b[^!?;\n]{0,100}\b(?:preview|proposal)\b/u.test(clause);
+    return !informationOnly && ((requestsAction && /\b(?:send|sync|deliver)\b/u.test(clause))
+      || requestsGarminReplacement(clause));
+  });
 }
 
 function projectAssistantToolResultForModel(
@@ -1054,18 +1070,24 @@ export const generateAssistantModelAnswer: AssistantRuntimeDependencies['generat
     && !(typeof prefetchedScheduleRevision === 'number'
       && Number.isSafeInteger(prefetchedScheduleRevision) && prefetchedScheduleRevision >= 0);
   let hasTrainingScheduleRead = !needsTrainingRead;
+  let advertisedToolNames: ReadonlySet<AssistantMcpToolName> = new Set();
   const createGenkitTools = (
     allowedToolNames?: ReadonlySet<AssistantMcpToolName>,
-  ) => input.tools.filter(tool => (!allowedToolNames || allowedToolNames.has(tool.name))
-    && (hasTrainingScheduleRead || !(TRAINING_PREVIEW_TOOLS as readonly string[]).includes(tool.name)))
-    .map(tool => assistantGenkit.dynamicTool({
-    name: tool.name,
-    description: tool.description,
-    inputJsonSchema: tool.inputJsonSchema,
-  }, async toolInput => {
-    await input.onBillableAttempt();
-    return tool.execute(asToolInput(toolInput));
-  }));
+  ) => {
+    const available = input.tools.filter(tool => (!allowedToolNames || allowedToolNames.has(tool.name))
+      && (hasTrainingScheduleRead || !(TRAINING_PREVIEW_TOOLS as readonly string[]).includes(tool.name)));
+    // Reading inside a parallel tool response must not authorize another call
+    // that the model never saw. Freeze availability until the next generation.
+    advertisedToolNames = new Set(available.map(tool => tool.name));
+    return available.map(tool => assistantGenkit.dynamicTool({
+      name: tool.name,
+      description: tool.description,
+      inputJsonSchema: tool.inputJsonSchema,
+    }, async toolInput => {
+      await input.onBillableAttempt();
+      return tool.execute(asToolInput(toolInput));
+    }));
+  };
   const messages = input.history.map(message => ({
     role: message.role === 'assistant' ? 'model' as const : 'user' as const,
     content: [{ text: JSON.stringify({
@@ -1175,8 +1197,7 @@ export const generateAssistantModelAnswer: AssistantRuntimeDependencies['generat
     const toolResponses = [];
     for (const request of response.toolRequests) {
       const tool = toolsByName.get(request.toolRequest.name as AssistantMcpToolName);
-      if (!tool || (!hasTrainingScheduleRead
-        && (TRAINING_PREVIEW_TOOLS as readonly string[]).includes(tool.name))) {
+      if (!tool || !advertisedToolNames.has(tool.name)) {
         throw new Error('The Assistant model selected an unavailable tool.');
       }
       const output = await tool.execute(asToolInput(request.toolRequest.input));
