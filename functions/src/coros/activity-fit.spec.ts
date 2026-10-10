@@ -327,6 +327,51 @@ describe('COROS empty native field compatibility', () => {
     expect(output.length).toBe(input.length - 3 * 1001);
   });
 
+  it.each([1, 2, 3, 7, 15] as const)('preserves nonzero local message slot %i', localMessageNumber => {
+    const options = { sport: 1, localMessageNumber, developer: true,
+      compressed: localMessageNumber < 4, compressedLap: localMessageNumber < 4 };
+    expect(prepareCOROSActivityFITUpload(fixture({ ...options, emptyNativeFields: 'zero' })))
+      .toEqual(fixture({ ...options, emptyNativeFields: 'omitted' }));
+  });
+
+  it.each([false, true])('preserves data when an empty triplet comes first or in the middle (big endian=%s)', bigEndian => {
+    const options = { sport: 1, bigEndian, developer: true, compressedLap: true };
+    for (const [global, count, number] of [[21, 4, 3], [19, 5, 10]]) {
+      for (const position of [0, 2]) {
+        const input = fixture({ ...options, emptyNativeFields: 'zero' });
+        const definition = input.indexOf(Buffer.from([0x60, 0, bigEndian ? 1 : 0,
+          ...(bigEndian ? [0, global] : [global, 0]), count]));
+        expect(definition).toBeGreaterThan(0);
+        const emptyOffset = definition + 6 + (count - 1) * 3;
+        const insertAt = definition + 6 + position * 3;
+        expect(input.subarray(emptyOffset, emptyOffset + 3)).toEqual(Buffer.from([number, 0, 0x86]));
+        input.copy(input, insertAt + 3, insertAt, emptyOffset);
+        Buffer.from([number, 0, 0x86]).copy(input, insertAt);
+        repairCRC(input);
+        const original = Buffer.from(input);
+        expect(prepareCOROSActivityFITUpload(input)).toEqual(fixture({ ...options, emptyNativeFields: 'omitted' }));
+        expect(input).toEqual(original);
+      }
+    }
+  });
+
+  it('refuses malformed data after eligible empty definitions instead of returning a partial repair', () => {
+    const compressed = fixture({ sport: 1, emptyNativeFields: 'zero', compressedLap: true });
+    const header = compressed.indexOf(Buffer.from([0x85, 1, 7]));
+    expect(header).toBeGreaterThan(0);
+    compressed[header] = 0xa5; repairCRC(compressed); // Undeclared local slot 1, after both empty definitions.
+    const complete = fixture({ sport: 1, emptyNativeFields: 'zero' });
+    const truncated = Buffer.concat([complete.subarray(0, -3), Buffer.alloc(2)]);
+    truncated.writeUInt32LE(truncated.length - truncated[0] - 2, 4); repairCRC(truncated);
+    for (const input of [compressed, truncated]) {
+      const original = Buffer.from(input);
+      vi.mocked(logger.info).mockClear();
+      expect(prepareCOROSActivityFITUpload(input)).toBe(input);
+      expect(input).toEqual(original);
+      expect(logger.info).not.toHaveBeenCalled();
+    }
+  });
+
   it.each([82, 32])('repairs before applying the existing sport %i mapping', sport => {
     const input = fixture({ sport, emptyNativeFields: 'zero' });
     const clean = fixture({ sport, emptyNativeFields: 'omitted' });

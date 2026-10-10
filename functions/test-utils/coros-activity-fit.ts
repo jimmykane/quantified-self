@@ -8,6 +8,7 @@ export function createCOROSActivityFITFixture(options: {
   withSubSport?: boolean; developer?: boolean; compressed?: boolean; withGPS?: boolean;
   coordinates?: [number, number]; compressedLap?: boolean; fullSessionDefinition?: boolean; malformedSport?: boolean;
   emptyNativeFields?: 'zero' | 'omitted' | 'populated'; eventCount?: number;
+  localMessageNumber?: 0 | 1 | 2 | 3 | 7 | 15;
 } = {}): Buffer {
   const parts: Buffer[] = [];
   const u16 = (value: number) => {
@@ -21,12 +22,13 @@ export function createCOROSActivityFITFixture(options: {
     return b;
   };
   const message = (global: number, fields: Field[], developer = false, compressed = false) => {
-    parts.push(Buffer.concat([Buffer.from([developer ? 0x60 : 0x40, 0, options.bigEndian ? 1 : 0]),
+    const local = options.localMessageNumber ?? 0;
+    parts.push(Buffer.concat([Buffer.from([(developer ? 0x60 : 0x40) | local, 0, options.bigEndian ? 1 : 0]),
       u16(global), Buffer.from([fields.length]), ...fields.map(([n, t, b]) => Buffer.from([n, b.length, t])),
       ...(developer ? [Buffer.from([1, 7, 3, 0])] : [])]));
-    parts.push(Buffer.concat([Buffer.from([0]), ...fields.map(field => field[2]),
+    parts.push(Buffer.concat([Buffer.from([local]), ...fields.map(field => field[2]),
       ...(developer ? [Buffer.from([0xa1, 0xb2, 0xc3])] : [])]));
-    if (compressed) parts.push(Buffer.concat([Buffer.from([0x85]),
+    if (compressed) parts.push(Buffer.concat([Buffer.from([0x85 | (local << 5)]),
       ...fields.filter(field => field[0] !== 253).map(field => field[2]),
       ...(developer ? [Buffer.from([0xa1, 0xb2, 0xc3])] : [])]));
   };
