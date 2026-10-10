@@ -6240,6 +6240,29 @@ applicable durability evidence, and Training snapshots through the existing repa
 formula, derived schema, MCP field/scope/mutation, queue lifecycle, or monitoring changes are introduced by this batch.
 The package's importing guide owns the detailed FIT parent guards and native-JSON aliases.
 
+The next unreleased activity-mapping batch adds E-Enduro MTB (`cycling/e_bike_enduro`, `2/127`), Track Cycling
+(`cycling/track_cycling`, `2/13`), Recumbent Cycling (`cycling/recumbent`, `2/10`), Speed Walking
+(`walking/speed_walking`, `11/31`), Whitewater Kayaking (`kayaking/whitewater`, `41/41`), Whitewater Rafting
+(`rafting/whitewater`, `42/41`), Wingsuit Flying (`flying/wingsuit`, `20/40`), Brick Training (`multisport/brick`,
+`18/80`), and Hunting with Dogs (`hunting/hunting_with_dogs`, `28/72`). All nine exact canonical values currently
+resolve to volume-only Other training in the independent registry. Their library groups do not create modeled
+Training contexts, distance/intensity/load policies, planning, or provider delivery support. Explicit Indoor Track
+and Indoor Track Running names instead reuse the existing Indoor Running type and modeled indoor-running context;
+bare running/track remains Running when the source does not supply a recognized profile name.
+
+Track Cycling and Recumbent Cycling can produce library cycling durability evidence under the existing protocol.
+E-Enduro MTB retains Enduro MTB's unsupported-context gravity-MTB evidence, including replacement of stale eligible
+evidence without retained streams. The other six new types have no library durability adapter. Indoor Track aliases
+retain Indoor Running's existing durability behavior. Whitewater Kayaking retains Kayaking's stroke-rate semantics;
+Whitewater Rafting retains Rafting's existing cadence semantics. No metric token, formula, durability protocol,
+derived schema, MCP field/scope/mutation, queue lifecycle, write path, or monitoring changes are introduced.
+
+Adopt the library in the application and Functions together and review the dynamic supported-activities catalog.
+Recover historical broad types only from specific retained classifications or explicit names; native JSON can recover
+an explicit alias but cannot reconstruct detail already collapsed to Cycling or Running. Regenerate affected event
+summaries, activity-type aggregates, applicable durability evidence, and Training snapshots through the existing
+source-backed reparse and derived ingress. The Sports Lib importing guide owns the exact parent guards and aliases.
+
 Sports Lib `20.3.0` adds canonical Health and Sleep scalar JSON classes. Training uses the shared dual reader for the
 sleep duration, score, HRV, and sleep-heart-rate aggregates it already consumes; no Training formula or derived schema
 changes. Existing normalized Sleep documents use the dedicated Health/Sleep scalar migration, not an activity reparse,
