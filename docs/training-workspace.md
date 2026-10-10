@@ -4214,6 +4214,12 @@ before backend writes, and account for stale browser sessions: an old JSON reade
 from its installed catalog. Keep historical canonical names accepted, and verify split activity/event JSON round trips
 with the released package. No production reparse or data migration is authorized by this preparation.
 
+The frontend and Functions dependency trees also resolve FIT Parser 6.2.1 while retaining Sports Lib 21.5.0.
+Existing parsing options and Sports Lib metric mappings remain in use. Fresh imports and source-file reads can receive
+the parser's newly decoded fields; installing the dependency does not rewrite stored Training evidence. A parser-only
+version bump does not advance the Sports Lib reparse target. The
+[reparse runbook](../functions/src/reparse/SPORTS_LIB_REPARSE_RUNBOOK.md#fit-parser-621-dependency-update) records this rollout boundary.
+
 MCP impact: existing Training projections reuse the registry, and activity charts/samples reuse the shared identity
 matcher with unchanged owner checks, source/sample budgets, tools, schemas and scopes. Built-in Assistant workflow
 filters include only installed catalog values until the dependency upgrade, avoiding unsupported future enum inputs. The frozen public Training
