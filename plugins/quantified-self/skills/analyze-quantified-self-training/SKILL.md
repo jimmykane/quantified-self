@@ -231,6 +231,26 @@ explicitly requested, and that activating another plan pauses the current one. S
 sync, provider acceptance and watch receipt are separate outcomes. Use current delivery evidence/windows rather than
 claiming that an entire saved plan has been sent.
 
+### Offer the next step, not automatic consent
+
+After confirmed plan creation or a next-steps question, explain its verified lifecycle and configured sync. For a paused
+plan, offer once: **Would you like to make this your active plan?** Its workouts become visible in the main Calendar;
+any already-enabled plan sync can resume for eligible upcoming workouts. Name the plan that activation would pause
+when known; obtain current metadata before previewing the change. Activation never creates new service consent.
+After confirmed activation, offer optional automatic upcoming-workout sync when not already configured. Ask which
+services, then confirm an explicit IANA timezone; do not silently select all connected services. A bare yes to an
+ambiguous combined activation/sync question is not both choices: clarify. Respect declined choices without repeated
+upselling. If activation or named-service sync was already explicitly requested, use only those choices in the existing
+preview/approval workflow rather than asking again. Resolve prescription discrepancies before recommending activation
+or sending. Use existing verified results or bounded metadata/status reads, not polling or another full recipe audit.
+
+Missing Training change/sync grants use the existing permission-recovery flow, not disconnect/reinstall by default.
+Delivery still needs Pro, readiness, connection authority and compatibility. Saved sync evidence is not live connection
+availability; only a requested delivery preview establishes current availability and scheduling windows. Future or
+outside-window workouts are waiting, not sent. External changes retain native approval; the built-in Assistant prepares
+app review and cannot claim activation or sync before Apply. The app also offers **Activate plan** beside a paused
+plan; **Plan actions → Activate plan** remains available. Plan sync is a separate optional action.
+
 - Use version `1`, an exact advertised canonical sport, and stable unique node IDs. A repeat has a count and step
   children only; repeats are not nested. Respect the advertised node, repeat and target limits.
 - Store time in seconds, distance in metres, work in kilojoules, heart rate in bpm, power in watts, speed/pace in metres

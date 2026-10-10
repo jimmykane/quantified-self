@@ -62,6 +62,19 @@
 .plan-color-label > mat-icon { flex: 0 0 18px; width: 18px; height: 18px; font-size: 18px; }
 .plan-color-label > span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
+.plan-activation-hint {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 4px 12px;
+  margin-block: 8px;
+  color: var(--mat-sys-on-surface-variant);
+  font: var(--mat-sys-body-small);
+}
+.plan-activation-hint > div { flex: 0 1 640px; min-width: 0; overflow-wrap: anywhere; }
+.plan-activation-hint p { margin: 0; }
+.plan-activation-hint > button { flex: 0 0 auto; }
+
 .button-content {
   display: flex;
   align-items: center;

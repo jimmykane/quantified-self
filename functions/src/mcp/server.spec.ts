@@ -1,5 +1,5 @@
 import { AddressInfo } from 'node:net';
-import { TRAINING_PRESCRIPTION_AUTHORING_GUIDANCE, TRAINING_PRESCRIPTION_VERIFICATION_GUIDANCE } from '../shared/training-authoring-guidance';
+import { TRAINING_PLAN_NEXT_STEPS_GUIDANCE, TRAINING_PRESCRIPTION_AUTHORING_GUIDANCE, TRAINING_PRESCRIPTION_VERIFICATION_GUIDANCE } from '../shared/training-authoring-guidance';
 import { createServer as createHttpServer } from 'node:http';
 import { NodeStreamableHTTPServerTransport } from '@modelcontextprotocol/node';
 import { InMemoryTransport, McpServer } from '@modelcontextprotocol/server';
@@ -1294,6 +1294,7 @@ describe('MCP HTTP scope enforcement', () => {
       const instructions = client.getInstructions() || '';
       expect(instructions.includes(TRAINING_PRESCRIPTION_AUTHORING_GUIDANCE)).toBe(writable);
       expect(instructions.includes(TRAINING_PRESCRIPTION_VERIFICATION_GUIDANCE)).toBe(writable);
+      expect(instructions.includes(TRAINING_PLAN_NEXT_STEPS_GUIDANCE)).toBe(writable);
       const names = (await client.listTools()).tools.map(tool => tool.name);
       expect(names.includes('apply_training_changes')).toBe(writable);
       expect(names).toContain('get_planned_workout_v3');

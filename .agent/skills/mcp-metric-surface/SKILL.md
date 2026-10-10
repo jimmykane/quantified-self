@@ -64,6 +64,9 @@ Lib version or parser change, also use `.agent/skills/sports-lib-upgrade-and-rep
   fidelity. Preview recipe shape from validated structure, never infer it by parsing authored text. Preserve bounded
   summaries and paused/activation disclosure; verify saved recipes against the source with bounded read-back coverage,
   distinguishing sampled checks from full verification. Ambiguity needs clarification, not invented prescriptions.
+  Next-step offers must distinguish paused-plan activation (including previous-plan pause and existing opt-in resumption)
+  from new service consent. Ask for explicit services/timezone; ambiguous assent never grants both actions. Reuse bounded
+  current evidence, existing permission recovery and preview/approval paths; do not add onboarding writes or polling.
   Read extensions use `training-plans:read`. New mutation capability is never implied: it must fit the explicit safe
   Training lifecycle, use the independent `training-plans:write` or `training-delivery:write` child scope, enter one
   bounded preview, bind owner/connection/grant/revision/expiry, and expose an idempotent apply as a separately

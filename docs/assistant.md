@@ -154,6 +154,13 @@ source parser, new model tool, consent or provider authority is introduced. See
 [Prescription fidelity](training-workspace.md#prescription-fidelity-when-translating-a-supplied-plan). Changed hosted
 instructions require separate server release/client rescan; bundled guidance requires separate plugin sync.
 
+After confirmed plan creation or a next-steps question, shared guidance offers paused-plan activation once, explaining
+the previous plan pause and resumption of already-enabled eligible sync. Optional new service sync is a separate choice
+of services and IANA timezone, subject to the independent sync toggle, Pro and delivery gates. Ambiguous yes responses
+need clarification; declines are respected. The model uses bounded current evidence and prepares the existing review,
+never activates or enables sync itself. App Apply remains mandatory, and recipe discrepancies must be resolved first.
+The Plans screen also hints at activation beside paused plans, without adding a new onboarding state or permission.
+
 Two additional default-off toggles enable **Plan and workout changes** and **Planned-workout sync changes**. They require
 the read toggle but remain independent of each other. The first grants `training-plans:write`; the second grants
 `training-delivery:write`. A write-enabled in-process session exposes the focused single-workout preview plus the bounded

@@ -187,6 +187,35 @@ bundled-plugin sync remain separate. No reauthorization, Rules/index change, mig
 Verification uses synthetic collapsed-versus-structured recipes, exact approved read-back through owner-bound public
 references, paused creation without delivery, every ending/target label, strict output contracts and maximum-size reviews.
 
+### Plan activation and optional sync next steps
+
+Shared MCP/Assistant write guidance and the bundled Training workflow offer one next choice after confirmed plan creation
+or an explicit next-steps question. A paused plan can be made active, putting its workouts in the main Calendar and pausing
+the previous active plan. Activation can resume existing, still-authorized plan sync for eligible upcoming workouts;
+it does not grant consent to a new service. After confirmed activation, offer optional sync when not configured, asking
+for explicit destinations and an IANA timezone. Do not infer all providers or treat a bare yes to a combined ambiguous
+offer as both choices. Preserve explicit choices already requested, respect declines, and resolve prescription
+discrepancies first. Use current verified results or bounded metadata/status reads, not polling or another import audit.
+Existing evidence is not live availability; only a requested delivery preview checks readiness, connection, Pro,
+compatibility and scheduling windows. Future/outside-window workouts are waiting, never claimed sent. Missing grants
+use existing permission recovery; external changes still need native approval and Assistant changes need app Apply.
+
+Plans shows a surface-free, body-small hint and **Activate plan** action for the selected paused plan, including the
+name of the plan it will pause. Active and archived plans do not get the hint; archived activation remains in Plan actions.
+The action reuses the existing lifecycle mutation, revision checks and feedback. Pending activation has a stable
+spinner/label, blocks duplicate actions, retains failure recovery and suppresses late feedback after an owner/route change.
+Optional Pro sync gets a small explanatory line only after settings are known, no existing service records are present
+and setup is available. Loading, errors, archived plans, unavailable services, retained settings and signed-out state
+never acquire a misleading new-sync hint. No cards, expansion panels, onboarding store or new callable are introduced.
+
+MCP impact: server instructions change, but tools, strict schemas, scopes, read projections, approval and provider
+transport remain unchanged. The pending digest preserves all earlier additions and frozen registered baselines/history.
+Separate server release, registered-client rescan and bundled-plugin sync are still required; no reauthorization is
+introduced by this guidance. Verification includes real component actions, paused/active/archived states, revision-bound
+activation, loading/failed settings, duplicate and owner-change fences, haptics, consent-specific initialize instructions,
+Assistant guidance, strict outputs, plugin validators and responsive layout checks. Model guidance cannot guarantee that
+every external client/model will offer the follow-up; no user data, activation or provider action occurs during QA.
+
 ### Lost MCP apply replies (#791)
 
 The 25-change limit bounds the proposal shape, not the time an MCP host will wait. Redacted read-only logs from the

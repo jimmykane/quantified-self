@@ -180,6 +180,13 @@ existing summary wording, not schemas, tools, scopes or approval. The pending di
 deployment/rescan and bundled-guidance sync are required, not new consent. See
 [Prescription fidelity](training-workspace.md#prescription-fidelity-when-translating-a-supplied-plan) for limits and tests.
 
+Write-enabled clients also receive shared next-step guidance: offer paused-plan activation once after confirmed creation,
+explain the previous active plan pause and existing sync resumption, then separately offer optional named-service sync.
+Use explicit destinations/timezone, existing grants and native approval; an ambiguous yes never grants both choices.
+Saved sync evidence is not live availability or watch receipt. No tool/schema/scope changes or reauthorization are added;
+the instruction digest requires separate release/rescan and bundled guidance sync. See
+[Plan next steps](training-workspace.md#plan-activation-and-optional-sync-next-steps).
+
 For **Duplicate to…**, the existing `copy-workout` batch change takes an exact source reference, fresh proposal-local
 key, explicit destination date and destination plan reference or `null` for Standalone. Clients should read the exact
 source and current schedule revision, preserve its scope by default and ask if the source or date is ambiguous. The
