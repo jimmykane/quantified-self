@@ -6365,6 +6365,32 @@ and Training snapshots through the existing ingress. A collapsed broad label can
 routes need no reparse; no global reparse, package adoption, or deployment was run. The Sports Lib importing guide owns
 the detailed aliases, profile precedence, and FIT parent guards.
 
+The next approved Garmin profile-name batch adds 20 aliases for existing canonical types: Bike Indoor, Bike Tour,
+Road Bike, Gravel Bike, MTB, Climb Indoor, Row Indoor, XC Classic Ski, XC Skate Ski, Pool Swim, Bike, eBike, Cardio,
+Floor Climb, Strength, Fish, Horseback, Hunt, Kayak, and Row. It keeps the catalog at 196 unique types and reuses each
+target's group, indoor/stroke-rate hints, durability adapters, and TSS calculation eligibility. Indoor Climbing and
+Floor Climbing retain their existing Outdoor Adventures group. The shared eBike spelling also recognizes Polar's
+`E_BIKE` identifier. FIT classification uses the actual sport-profile field; existing numeric sport/subsport precedence
+is unchanged.
+
+Verification: the profile-name importer suite passes 286 tests, and the activity-type, JSON importer, FIT importer,
+and TSS integration suites pass 3,524 tests. Both package formats build, the documentation build verifies 13 pages,
+and all 20 aliases resolve to their canonical Training contexts. Full-catalog runtime checks cover both TSS settings,
+zero and methodless imported scores, JSON regeneration, strict MCP catalog output, and all 121 audited Suunto protocol
+pairs. The public MCP output and Training-impact suites pass 113 tests. Default/true keeps the provider's finite TSS;
+false discards it and uses the existing calculation policy.
+
+MCP impact review: this alias batch changes no numeric metric, unit, Training formula, planning surface, derived schema,
+wire schema, read projection, consent, scope, mutation, provider delivery, persisted write path, transport, queue lifecycle,
+or monitoring. Existing canonical classifications already fit the strict output contract. No MCP deferral is needed.
+Help's supported-activities list uses the installed dynamic catalog and remains accurate.
+
+Adopt the application and Functions packages together before using these aliases in production. Their installed catalog
+still has 131 types. A separately approved targeted source-backed reparse can correct historical Generic classifications
+when the original profile name is retained. Regenerate affected event summaries, activity-type aggregates, applicable
+durability evidence, and Training snapshots through the existing ingress. Saved routes need no reparse. No package
+adoption, source reparse, deployment, or production-data mutation was run for this batch.
+
 Sports Lib `20.3.0` adds canonical Health and Sleep scalar JSON classes. Training uses the shared dual reader for the
 sleep duration, score, HRV, and sleep-heart-rate aggregates it already consumes; no Training formula or derived schema
 changes. Existing normalized Sleep documents use the dedicated Health/Sleep scalar migration, not an activity reparse,
