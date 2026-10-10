@@ -300,6 +300,33 @@
   color: var(--mat-sys-error);
 }
 
+.workout-library .workout-empty-state {
+  align-items: flex-start;
+  justify-content: flex-start;
+  min-height: 0;
+  padding-block: 16px;
+}
+
+.workout-library .workout-empty-state > mat-icon,
+.workout-library .workout-empty-state > mat-spinner {
+  flex: 0 0 24px;
+}
+
+.workout-library .workout-empty-state > span,
+.library-status-copy {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.library-status-copy {
+  display: grid;
+  gap: 8px;
+}
+
+.library-status-copy > button {
+  justify-self: start;
+}
+
 .history-load-more {
   display: flex;
   justify-content: center;

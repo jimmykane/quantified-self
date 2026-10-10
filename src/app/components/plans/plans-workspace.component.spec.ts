@@ -1185,16 +1185,19 @@ describe('PlansWorkspaceComponent', () => {
   });
 
   it('retries a failed owner library listener without mounting one on Calendar or writing anything', async () => {
+    TestBed.overrideProvider(MAT_FORM_FIELD_DEFAULT_OPTIONS, { useValue: { appearance: 'outline' } });
     libraryWatch.mockReturnValueOnce(throwError(() => new Error('Offline')));
     setRouteState({ mode: 'library-browse' });
     const fixture = await renderPlans();
     expect(fixture.nativeElement.textContent).toContain('Could not load saved workouts');
+    exportLibraryQa(fixture, 'library-error');
     const retry = [...fixture.nativeElement.querySelectorAll('button')]
       .find((button: HTMLButtonElement) => button.textContent?.trim() === 'Retry') as HTMLButtonElement;
     retry.click();
     fixture.detectChanges(); await fixture.whenStable(); fixture.detectChanges();
     expect(libraryWatch).toHaveBeenCalledTimes(2);
     expect(fixture.nativeElement.textContent).toContain('No saved workouts yet');
+    exportLibraryQa(fixture, 'library-empty');
     expect(haptics.selection).toHaveBeenCalledOnce();
     expect(libraryMutate).not.toHaveBeenCalled();
   });
@@ -3445,11 +3448,11 @@ describe('PlansWorkspaceComponent', () => {
     const html =
       '<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">'
       + '<link rel="stylesheet" href="styles.css">' + Array.from(document.head.querySelectorAll('style')).map(style => style.outerHTML).join('')
-      + '<style>' + css + '</style></head><body><app-plans-workspace><main class="plans-workspace qs-workspace-page">'
+      + '<style>' + css + '</style></head><body class="app-hydrated"><app-plans-workspace><main class="plans-workspace qs-workspace-page">'
       + rendered.outerHTML + '</main></app-plans-workspace></body></html>';
     writeFileSync(join(process.env.TRAINING_DELIVERY_QA_DIR, `${name}.html`), html);
-    if (selector === '.plan-scope') writeFileSync(join(process.env.TRAINING_DELIVERY_QA_DIR, `${name}-dark.html`),
-      html.replace('<body>', '<body class="dark-theme">'));
+    writeFileSync(join(process.env.TRAINING_DELIVERY_QA_DIR, `${name}-dark.html`),
+      html.replace('<body class="app-hydrated">', '<body class="app-hydrated dark-theme">'));
   }
 
   async function renderPlans() {

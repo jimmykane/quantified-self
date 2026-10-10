@@ -1380,7 +1380,10 @@ or replaces a direct link with the safe browse route. Placement selects a destin
 inclusive dates and weekdays, previews count/overlaps, and honors the account week-start preference in weekday order.
 Title search, exact canonical sport and Active/Archived/All filters are local presentation state over the existing
 bounded library (200 entries); Active is the initial view. Empty-library, no-matches, loading and failed-listener states
-are distinct, and Retry resubscribes only on the owner library route. Filters reset on owner change and never persist
+are distinct. Library status rows sit directly below the filters with compact vertical padding, a fixed-size icon or
+spinner and wrapping text; failed reads keep Retry below the message at narrow widths. They do not inherit the
+schedule's tall centered empty state. This layout-only change has no MCP wire impact: reads, projections, recipes,
+scopes, consent and mutations are unchanged. Retry resubscribes only on the owner library route. Filters reset on owner change and never persist
 into a recipe. Compact rows show two prescription lines with a keyboard-accessible Show/Hide disclosure for the full
 prescription. Strength previews use the complete exercise draft, including each set's time/repetitions, external load
 and rest; interval previews retain repeats, targets, pool length, optional early-Lap endings and notes. Canonical values use the owner's Sports Lib

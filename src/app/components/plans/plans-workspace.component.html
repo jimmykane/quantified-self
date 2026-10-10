@@ -364,10 +364,16 @@
           </mat-form-field>
         </div>
         @if (libraryState().status === 'loading') {
-          <div class="workout-empty-state" role="status"><mat-spinner diameter="24"></mat-spinner>Loading saved workouts…</div>
+          <div class="workout-empty-state" role="status">
+            <mat-spinner diameter="24" aria-hidden="true"></mat-spinner><span>Loading saved workouts…</span>
+          </div>
         } @else if (libraryState().status === 'error') {
-          <div class="workout-empty-state" role="alert">Could not load saved workouts. {{ libraryState().message }}
-            <button mat-button type="button" appHapticTap (click)="retryLibraryLoad()">Retry</button>
+          <div class="workout-empty-state" role="alert">
+            <mat-icon aria-hidden="true">error_outline</mat-icon>
+            <div class="library-status-copy">
+              <span>Could not load saved workouts. {{ libraryState().message }}</span>
+              <button mat-button type="button" appHapticTap (click)="retryLibraryLoad()">Retry</button>
+            </div>
           </div>
         } @else if (libraryItems().length === 0) {
           <div class="workout-empty-state" role="status">
