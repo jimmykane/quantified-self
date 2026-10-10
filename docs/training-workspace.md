@@ -6397,6 +6397,47 @@ when the original profile name is retained. Regenerate affected event summaries,
 durability evidence, and Training snapshots through the existing ingress. Saved routes need no reparse. No package
 adoption, source reparse, deployment, or production-data mutation was run for this batch.
 
+The remaining approved provider-name batch maps 143 source entries (13 Garmin, 123 Polar, and 7 Strava). It adds
+46 canonical types and brings the local unreleased catalog to 242. Existing targets retain their exact Training contexts;
+all 46 new canonical types currently resolve to volume-only Other training with omitted distance. Library activity
+groups do not add a modeled Training discipline, intensity/load policy, planning capability, or provider delivery support.
+Crosscountry Running inherits Sports Lib's running-speed durability adapter, while Kickbiking and Mountain Bike
+Orienteering inherit cycling-power; the other 43 new types have no library durability adapter. Training's independent
+capability registry still controls whether that evidence is used. No Training registry or formula was changed here.
+
+The optional provider context on `ActivityTypesHelper.resolveActivityType` scopes ambiguous names such as Polar Enduro,
+Esports, Riding, Ultimate, and Garmin Ski. Native activity JSON uses recorded `creator.manufacturer`; FIT uses recorded
+manufacturer identity and the actual sport-profile field. Recognized Polar profiles can refine the documented broad
+FIT exports from its AccessLink appendix, while specific incompatible pairs remain unchanged. Garmin Snorkel requires
+its explicit profile name, preserving unnamed diving and explicit scuba/apnea classifications. Garmin Breathwork remains
+separate from Meditation; numeric Generic/Breathing without that profile stays Meditation. Backcountry Snowboarding
+remains distinct from Splitboarding. The Sports Lib importing guide owns the full mapping table and guards.
+
+Verification: all 4,525 focused activity catalog, FIT importer, profile, JSON, and TSS tests pass. ESM and CommonJS
+builds, lint (no errors), and the 13-page documentation build pass. Runtime checks cover both TSS settings across all
+242 types, including zero/methodless provider scores and JSON regeneration; all 143 approved mappings, all 121 Suunto
+protocol pairs, and every documented Garmin (100), Polar (175 names plus API identifiers), and Strava (56) name resolve
+with source context. All canonical values remain stable across provider contexts. The strict MCP catalog accepts all
+242 types, the public-output and Training-impact suites pass 113 tests, and the MCP contract check reports compatibility
+with the repository's existing reviewed developer-refresh changes. This sport batch introduces no public contract change.
+
+The unchanged FIT parser source also parses the external 68,003-file corpus: 68,002 pass strict mode, one known header-CRC
+failure recovers in force mode, and none is unrecoverable. Comparing the 4,129 activity sessions in 4,055 corpus files
+against the preceding Sports Lib build yields no classification changes. Five sessions omit the sport field, one uses
+unsupported sport ID 127, and 97 remain Generic. These source-data limitations are not inferred into specific sports.
+The aggregate unmapped-field report identifies decoding gaps for later investigation; no FIT parser profile was changed.
+
+MCP and monitoring impact: unchanged. There are no new numeric metric tokens/units, formulas, derived schemas, read
+projections, consent, scopes, mutations, planning/delivery capabilities, writes, provider transport, queues, or lifecycle
+changes. Existing dynamic catalogs handle the added canonical values; no MCP deferral is needed. Help's supported-activity
+section remains accurate because it uses the installed dynamic catalog and recorded-data semantics.
+
+Adopt Sports Lib in the application and Functions together before persisting these classifications; both currently
+retain their installed 131-type catalog. A separately approved targeted source-backed reparse requires the retained
+specific provider identifier/profile or original file. Regenerate affected event summaries, activity-type aggregates,
+applicable durability evidence, and Training snapshots through existing ingress. Saved routes need no reparse. No
+package adoption, publication, source reparse, deployment, or production-data mutation was run for this batch.
+
 Sports Lib `20.3.0` adds canonical Health and Sleep scalar JSON classes. Training uses the shared dual reader for the
 sleep duration, score, HRV, and sleep-heart-rate aggregates it already consumes; no Training formula or derived schema
 changes. Existing normalized Sleep documents use the dedicated Health/Sleep scalar migration, not an activity reparse,
