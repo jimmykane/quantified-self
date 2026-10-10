@@ -159,7 +159,7 @@ Never commit environment files, service-account JSON, API tokens, private keys, 
 | Firestore and Storage Rules tests | `npm run test:rules` | Uses the isolated `demo-test` emulator project |
 | Frontend build | `npm run build` | Development build |
 | Production build | `npm run build-production` | Builds locally; does not deploy |
-| Functions tests | `npm --prefix functions test` | One-shot Vitest suite |
+| Functions tests | `npm --prefix functions test` | One-shot unit suite; registered emulator files run separately |
 | Functions coverage | `npm --prefix functions run test:coverage` | Writes the Functions coverage report |
 | Functions build | `npm --prefix functions run build` | Compiles TypeScript to `functions/lib` |
 | Functions emulator tests | `npm run test:functions-emulators -- lifecycle` | Builds first; use no argument for all four isolated demo groups |

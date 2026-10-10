@@ -252,6 +252,19 @@ CI matrix. A newly added, removed or duplicated suite fails the gate until the r
 is updated. `queue-integration.spec.ts` is an ordinary mocked unit test, not an emulator file, and remains in the
 ordinary Functions test suite.
 
+Ordinary test, watch and coverage commands use `functions/vitest.config.ts`. It excludes only the exact registered
+emulator paths before collection, preserving Vitest's default exclusions and all other `src/**/*.spec.ts` files.
+The emulator runner and focused `test:disconnect` / `test:training-delivery` commands use
+`functions/vitest.emulators.config.ts`, which selects the registered emulator files with the same setup and isolated
+forks, one worker and serial files. Selection is explicit and does not depend on inherited emulator host variables.
+Provider unit tests remain in the ordinary runner; the focused Training delivery command selects emulator tests only.
+
+The coverage guard loads both real configurations and verifies that their discovered files partition all Functions
+specs exactly once. It also checks hidden/future unit discovery and rejects direct Vitest registrations outside an
+emulator-gated suite in excluded files. Keep ordinary assertions in separate unit specs rather than adding mixed
+unit/emulator files to the registry; unsupported gate shapes require deliberate guard review. This change avoids
+redundant emulator imports in ordinary runs without reducing the mandatory emulator workload.
+
 The runner also validates Vitest's JSON report: every selected file must contain passing tests, with no skipped,
 pending or TODO assertions. All counters must be non-negative integers, passing counts must match totals, and the
 reported assertion count must equal the total test count. Missing or inconsistent report fields fail closed.

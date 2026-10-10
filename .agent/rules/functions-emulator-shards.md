@@ -12,6 +12,11 @@ See [CI test coverage](../../docs/ci-testing.md#functions-emulator-matrix) for c
   referencing Firestore/Auth emulator hosts. Preserve the mandatory stress cases. New delivery specs join the
   `delivery` registry; never assign permanent file lists to its two CI shards. Inspect heavier group growth using
   successful CI timings before proposing additional concurrency.
+- Ordinary Functions tests use `functions/vitest.config.ts`, which excludes exact registered emulator paths before
+  collection. Real emulator entry points must use `functions/vitest.emulators.config.ts`; never switch this split
+  implicitly through inherited environment variables or broad filename exclusions. Keep emulator files wholly
+  emulator-gated and split mixed unit cases into ordinary specs before registering them. The coverage guard checks
+  both configurations, hidden/future unit discovery and mixed registrations; preserve complete, non-overlapping coverage.
 - Generate one delivery plan from the current registry and tested commit, shared by both runners. Timing history
   is optional scheduling data; corrupt/missing history or a newly registered file must never drop or skip tests.
   Preserve exact registry/discovery checks and reject stale, missing or duplicate selections.
