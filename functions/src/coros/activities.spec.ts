@@ -6,6 +6,7 @@ import { PRO_REQUIRED_MESSAGE } from '../utils';
 import { COROS_API_REQUEST_TIMEOUT_MS } from './constants';
 import { createCOROSActivityFITFixture } from '../../test-utils/coros-activity-fit';
 import { prepareCOROSActivityFITUpload } from './activity-fit';
+import { sessionlessFixture } from '../../test-utils/fit-activity-session';
 
 const mocks = vi.hoisted(() => ({
   post: vi.fn(),
@@ -231,6 +232,16 @@ describe('COROS asynchronous activity uploads', () => {
     await expect(importActivityToCOROSAPI(activityRequest(createCOROSActivityFITFixture())))
       .rejects.toBeDefined();
     expect(mocks.post).not.toHaveBeenCalled();
+  });
+
+  it('fingerprints and sends the shared missing-Session repair in a direct upload', async () => {
+    const input = sessionlessFixture({ bigEndian: true }), original = Buffer.from(input);
+    await importActivityToCOROSAPI(activityRequest(input));
+    const sent = mocks.recordActivitySyncOutboundFingerprint.mock.calls[0][0].fileBuffer as Buffer;
+    expect(sent).toEqual(prepareCOROSActivityFITUpload(input));
+    expect(sent).not.toEqual(input);
+    expect(mocks.post.mock.calls[0][0].body.includes(sent)).toBe(true);
+    expect(input).toEqual(original);
   });
 
   it('accepts a provider duplicate without starting another operation', async () => {

@@ -8,6 +8,7 @@ import { ProviderOperationError } from '../shared/provider-operation-error';
 import { MAX_RETRY_COUNT } from '../shared/queue-config';
 import { createCOROSActivityFITFixture } from '../../test-utils/coros-activity-fit';
 import { prepareCOROSActivityFITUpload } from '../coros/activity-fit';
+import { sessionlessFixture } from '../../test-utils/fit-activity-session';
 
 type MockActivitySyncQueueItemRef = NonNullable<ActivitySyncQueueItemInterface['ref']>;
 
@@ -1760,6 +1761,26 @@ describe('activity-sync/process-queue-item', () => {
     );
     expect(mockDownload).toHaveBeenCalledTimes(1);
     expect(mockUploadActivityFileToCOROS).toHaveBeenCalledTimes(1);
+  });
+
+  it('sends the shared Session-repaired copy once and keeps accepted work status-only', async () => {
+    const input = sessionlessFixture({ bigEndian: true }), original = Buffer.from(input);
+    mockDownload.mockResolvedValue([input]);
+    const queueItem: ActivitySyncQueueItemInterface = {
+      ...baseQueueItem, routeId: ACTIVITY_SYNC_ROUTE_IDS.GarminAPI_to_COROSAPI,
+      destinationServiceName: ServiceNames.COROSAPI,
+    };
+    expect(await processActivitySyncQueueItem(queueItem)).toBe(QueueResult.ProviderStatusPending);
+    const sent = mockUploadActivityFileToCOROS.mock.calls[0][1] as Buffer;
+    expect(sent).toEqual(prepareCOROSActivityFITUpload(input));
+    expect(sent).not.toEqual(input);
+    expect(mockRecordActivitySyncOutboundFingerprint).toHaveBeenCalledWith({
+      userID: 'user-1', destinationServiceName: ServiceNames.COROSAPI, fileBuffer: sent,
+    });
+    expect(await processActivitySyncQueueItem(queueItem)).toBe(QueueResult.Processed);
+    expect(mockUploadActivityFileToCOROS).toHaveBeenCalledTimes(1);
+    expect(mockDownload).toHaveBeenCalledTimes(1);
+    expect(input).toEqual(original);
   });
 
   it.each([[82, true, false, true], [82, false, false, true], [32, true, false, true],
