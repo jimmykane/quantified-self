@@ -696,6 +696,22 @@ describe('AppUserUtilities', () => {
             expect((settings.dashboardSettings?.tiles?.[0] as any).eventFilters).toBeUndefined();
         });
 
+        it('expands complete old family power-curve filters while preserving range and custom subsets', () => {
+            const legacyTypes = [ActivityTypes.IndoorRunning, ActivityTypes.Running, ActivityTypes.TrailRunning,
+                ActivityTypes.Treadmill, ActivityTypes.VirtualRunning];
+            const tile = {
+                name: 'Running Power Curve', type: TileTypes.Chart, order: 0,
+                size: { columns: 2, rows: 1 }, chartType: DASHBOARD_POWER_CURVE_CHART_TYPE,
+                eventFilters: { range: '90d', activityTypes: legacyTypes },
+            };
+            const settings = AppUserUtilities.fillMissingAppSettings({ settings: { dashboardSettings: {
+                tiles: [tile, { ...tile, order: 1, eventFilters: { range: '30d', activityTypes: [ActivityTypes.Running] } }],
+            } } } as unknown as User);
+            const tiles = settings.dashboardSettings!.tiles as any[];
+            expect(tiles[0].eventFilters).toEqual({ range: '90d', activityTypes: getDashboardPowerCurveActivityTypes('running') });
+            expect(tiles[1].eventFilters).toEqual({ range: '30d', activityTypes: [ActivityTypes.Running] });
+        });
+
         it('should normalize event filters on existing Power Curve tiles independently from legacy dashboard filters', () => {
             const user = {
                 settings: {

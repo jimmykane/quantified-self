@@ -1,3 +1,4 @@
+import { resolveCompatibleActivityType, WALKING_ACTIVITY_TYPE_GROUP } from '@shared/activity-type-compatibility';
 import {
   type ActivityTypeGroup,
   ActivityTypeGroups,
@@ -85,6 +86,7 @@ const PROFILE_IDS = {
   TrailRunning: 'trail-running',
   TrackAndField: 'track-and-field',
   Walking: 'walking',
+  IndoorWalking: 'indoor-walking',
   Hiking: 'hiking',
   SkiTouring: 'ski-touring',
   Paragliding: 'paragliding',
@@ -131,6 +133,7 @@ const PROFILES: Record<EventChartSportProfileID, EventChartSportProfile> = {
   [PROFILE_IDS.TrailRunning]: profile(PROFILE_IDS.TrailRunning, 'Trail Running', ['pace', 'power', 'altitude', 'heart-rate', 'vertical-speed', 'cadence', 'speed', 'epoc', 'temperature']),
   [PROFILE_IDS.TrackAndField]: profile(PROFILE_IDS.TrackAndField, 'Track and Field', ['heart-rate', 'pace', 'temperature']),
   [PROFILE_IDS.Walking]: profile(PROFILE_IDS.Walking, 'Walking', ['heart-rate', 'pace', 'power', 'cadence', 'altitude', 'vertical-speed', 'speed', 'temperature']),
+  [PROFILE_IDS.IndoorWalking]: profile(PROFILE_IDS.IndoorWalking, 'Indoor Walking', ['heart-rate', 'pace', 'power', 'cadence', 'speed', 'temperature']),
   [PROFILE_IDS.Hiking]: profile(PROFILE_IDS.Hiking, 'Hiking', ['heart-rate', 'altitude', 'speed', 'vertical-speed', 'temperature', 'pace', 'power', 'cadence', 'epoc']),
   [PROFILE_IDS.SkiTouring]: profile(PROFILE_IDS.SkiTouring, 'Ski Touring', ['heart-rate', 'altitude', 'vertical-speed', 'speed', 'cadence', 'pace', 'temperature', 'epoc']),
   [PROFILE_IDS.Paragliding]: profile(PROFILE_IDS.Paragliding, 'Paragliding', ['heart-rate', 'altitude', 'vertical-speed', 'speed', 'temperature', 'epoc']),
@@ -171,6 +174,7 @@ const PROFILES: Record<EventChartSportProfileID, EventChartSportProfile> = {
 type MappedActivityTypeGroup = Exclude<ActivityTypeGroup, typeof ActivityTypeGroups.UnspecifiedGroup>;
 
 const ACTIVITY_GROUP_PROFILE: Record<MappedActivityTypeGroup, EventChartSportProfileID> = {
+  ...{ [WALKING_ACTIVITY_TYPE_GROUP]: PROFILE_IDS.Walking },
   [ActivityTypeGroups.RunningGroup]: PROFILE_IDS.Running,
   [ActivityTypeGroups.TrailRunningGroup]: PROFILE_IDS.TrailRunning,
   [ActivityTypeGroups.CyclingGroup]: PROFILE_IDS.Cycling,
@@ -193,11 +197,12 @@ const ACTIVITY_TYPE_PROFILE = new Map<ActivityTypes, EventChartSportProfileID>()
 const ACTIVITY_TYPE_SOURCE = new Map<ActivityTypes, Exclude<EventChartSportProfileSource, 'shared-profile' | 'multisport'>>();
 
 register(PROFILE_IDS.Multisport, ['Triathlon', 'Duathlon', 'Swimrun', 'Aquathlon', 'Multisport', 'Adventure Racing']);
-register(PROFILE_IDS.Running, ['Running']);
-register(PROFILE_IDS.Treadmill, ['Treadmill', 'Indoor Running', 'Virtual Running'], 'alias');
-register(PROFILE_IDS.TrailRunning, ['Trail Running', 'Orienteering']);
+register(PROFILE_IDS.Running, ['Running', 'Road Running']);
+register(PROFILE_IDS.Treadmill, ['Treadmill', 'Indoor Running', 'Virtual Running', 'Indoor Track Running'], 'alias');
+register(PROFILE_IDS.TrailRunning, ['Trail Running', 'Orienteering', 'Vertical Running']);
 register(PROFILE_IDS.TrackAndField, ['Track and Field']);
-register(PROFILE_IDS.Walking, ['Walking', 'Nordic Walking']);
+register(PROFILE_IDS.Walking, ['Walking', 'Nordic Walking', 'Speed Walking']);
+register(PROFILE_IDS.IndoorWalking, ['Indoor Walking']);
 register(PROFILE_IDS.Hiking, ['Hiking', 'Trekking', 'Horseback Riding']);
 register(PROFILE_IDS.SkiTouring, ['Ski Touring', 'Mountaineering', 'Backcountry Skiing']);
 register(PROFILE_IDS.Paragliding, ['Paragliding', 'Hang Gliding', 'Flying']);
@@ -208,11 +213,11 @@ register(PROFILE_IDS.Climbing, ['Climbing', 'Rock Climbing', 'Canyoning', 'Via F
 register(PROFILE_IDS.IndoorClimbing, ['Indoor Climbing', 'Bouldering']);
 register(PROFILE_IDS.FloorClimbing, ['Floor Climbing', 'Stair Stepper']);
 register(PROFILE_IDS.SkyDiving, ['Sky Diving', 'Jumpmaster']);
-register(PROFILE_IDS.Cycling, ['Cycling', 'E-Biking', 'Hand Cycle', 'Velomobile', 'Wheel Chair']);
-register(PROFILE_IDS.IndoorCycling, ['Indoor Cycling', 'Virtual Cycling']);
+register(PROFILE_IDS.Cycling, ['Cycling', 'Road Cycling', 'Gravel Cycling', 'Track Cycling', 'Cyclocross', 'E-Biking', 'Hand Cycle', 'Velomobile', 'Wheel Chair']);
+register(PROFILE_IDS.IndoorCycling, ['Indoor Cycling', 'Virtual Cycling', 'LES MILLS RPM', 'LES MILLS SPRINT', 'LES MILLS THE TRIP']);
 register(PROFILE_IDS.MountainBiking, ['Mountain Biking', 'Enduro MTB', 'Downhill Cycling']);
 register(PROFILE_IDS.Motor, ['Motorcycling', 'Motorsports', 'Driving']);
-register(PROFILE_IDS.CrossCountrySkiing, ['Crosscountry Skiing', 'Roller Skiing', 'Nordic Skiing']);
+register(PROFILE_IDS.CrossCountrySkiing, ['Crosscountry Skiing', 'Roller Skiing', 'Nordic Skiing', 'Classic Crosscountry Skiing', 'Skate Skiing']);
 register(PROFILE_IDS.Snowshoeing, ['Snowshoeing']);
 register(PROFILE_IDS.AlpineSkiing, ['Alpine Skiing', 'Snowboarding', 'Telemark Skiing']);
 register(PROFILE_IDS.Snowmobiling, ['Snowmobiling']);
@@ -227,7 +232,7 @@ register(PROFILE_IDS.Fitness, [
   'Aerobics', 'Yoga', 'Circuit Training', 'Stretching', 'Gym', 'Cheerleading', 'Combat', 'Boxing',
   'Bowling', 'Dancing', 'Gymnastics', 'Kettlebell', 'Crossfit', 'Strength Training', 'Weight Training',
   'Workout', 'Training', 'Indoor Training', 'Fitness Equipment', 'HIIT', 'Cardio Training', 'Pilates',
-  'Flexibility Training', 'Tactical',
+  'Flexibility Training', 'Tactical', 'AMRAP', 'EMOM', 'Tabata', 'LES MILLS BODYPUMP',
 ]);
 register(PROFILE_IDS.TeamRacket, [
   'Softball', 'Floorball', 'Handball', 'Basketball', 'Soccer', 'Ice Hockey', 'Volleyball', 'American Football',
@@ -240,6 +245,22 @@ register(PROFILE_IDS.Mermaiding, ['Mermaiding']);
 register(PROFILE_IDS.Unknown, ['Unknown Sport', 'Other', 'Generic']);
 register(PROFILE_IDS.GeneralFallback, ['Route'], 'fallback');
 register(PROFILE_IDS.Empty, ['Transition'], 'empty');
+
+// Preserve explicit profiles above, and give every future canonical sport a
+// deliberate group-based presentation. This does not assign Training policy.
+ActivityTypesHelper.getActivityTypesAsUniqueArray().forEach((activityType) => {
+  const canonicalType = ActivityTypesHelper.resolveActivityType(activityType);
+  if (canonicalType && !ACTIVITY_TYPE_PROFILE.has(canonicalType)) {
+    const group = ActivityTypesHelper.getActivityGroupForActivityType(canonicalType);
+    register(group === ActivityTypeGroups.UnspecifiedGroup
+      ? PROFILE_IDS.GeneralFallback
+      : ACTIVITY_GROUP_PROFILE[group], [canonicalType], 'fallback');
+  }
+});
+
+const WALKING_HIKING_TYPES = new Set<string>([
+  'Walking', 'Nordic Walking', 'Speed Walking', 'Indoor Walking', 'Hiking', 'Trekking',
+]);
 
 const FAMILY_PRIMARY_TYPES: Record<Exclude<EventChartMetricFamily, 'swolf'>, string[]> = {
   'heart-rate': [DataHeartRate.type],
@@ -264,7 +285,7 @@ Object.entries(FAMILY_PRIMARY_TYPES).forEach(([family, dataTypes]) => {
 
 export function resolveEventChartSportProfile(activityTypes: readonly unknown[]): EventChartSportProfileResolution {
   const canonicalActivityTypes = [...new Set((activityTypes || [])
-    .map((activityType) => ActivityTypesHelper.resolveActivityType(activityType) || ActivityTypes.unknown))]
+    .map((activityType) => resolveCompatibleActivityType(activityType) || ActivityTypes.unknown))]
     .sort((left, right) => left.localeCompare(right));
   const normalizedTypes = canonicalActivityTypes.length > 0
     ? canonicalActivityTypes
@@ -285,9 +306,13 @@ export function resolveEventChartSportProfile(activityTypes: readonly unknown[])
     && uniqueActivityGroups.length === 1
     ? uniqueActivityGroups[0]
     : null;
-  const sharedGroupProfileID = sharedActivityGroup && sharedActivityGroup !== ActivityTypeGroups.UnspecifiedGroup
-    ? ACTIVITY_GROUP_PROFILE[sharedActivityGroup]
+  const walkingHikingProfileID = hasMultipleActivityTypes
+    && normalizedTypes.every(type => WALKING_HIKING_TYPES.has(type))
+    ? PROFILE_IDS.Hiking
     : null;
+  const sharedGroupProfileID = walkingHikingProfileID || (sharedActivityGroup && sharedActivityGroup !== ActivityTypeGroups.UnspecifiedGroup
+    ? ACTIVITY_GROUP_PROFILE[sharedActivityGroup]
+    : null);
   const isMixedProfile = hasMultipleActivityTypes && !sharedRegisteredProfileID && !sharedGroupProfileID;
   const profileID = !hasMultipleActivityTypes
     ? registeredProfileIDs[0]
@@ -390,7 +415,7 @@ function register(
   source: 'exact' | 'alias' | 'fallback' | 'empty' = 'exact'
 ): void {
   activityTypes.forEach((activityType) => {
-    const canonicalType = ActivityTypesHelper.resolveActivityType(activityType);
+    const canonicalType = resolveCompatibleActivityType(activityType);
     if (!canonicalType) {
       return;
     }

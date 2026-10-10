@@ -1,6 +1,8 @@
+import { WALKING_ACTIVITY_TYPE_GROUP } from '@shared/activity-type-compatibility';
 import { ActivityTypeGroups, type ActivityTypeGroup } from '@sports-alliance/sports-lib';
 
 export const AppActivityTypeGroupIcons: Record<ActivityTypeGroup, string> = {
+    ...{ [WALKING_ACTIVITY_TYPE_GROUP]: 'directions_walk' },
     [ActivityTypeGroups.RunningGroup]: 'directions_run',
     [ActivityTypeGroups.TrailRunningGroup]: 'directions_run',
     [ActivityTypeGroups.CyclingGroup]: 'directions_bike',

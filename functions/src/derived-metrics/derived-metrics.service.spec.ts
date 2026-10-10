@@ -3399,6 +3399,26 @@ describe('buildTrainingSummaryMetricPayload', () => {
         expect(cycling).not.toHaveProperty('criticalPower');
     });
 
+    it('combines generic provider cycling and refined names in the same Training context', async () => {
+        const { buildTrainingSummaryMetricPayload } = await import('./derived-metrics.service');
+        const currentDay = Date.UTC(2026, 6, 8);
+        const activities = buildTrainingActivitySources([
+            createEvent(currentDay, 'Cycling', 'Suunto', { [DataDistance.type]: 20_000 }),
+            createEvent(currentDay, 'Road Cycling', 'Garmin', { [DataDistance.type]: 30_000 }),
+        ]);
+        const result = buildTrainingSummaryMetricPayload(activities, nowMs);
+        const cycling = result.payload.disciplines.find(summary => summary.discipline === 'cycling');
+        const other = result.payload.disciplines.find(summary => summary.discipline === 'other-training');
+        expect(cycling?.current28d).toMatchObject({ activityCount: 2, durationSeconds: 7_200 });
+        expect(cycling?.current28d.contexts).toEqual([expect.objectContaining({
+            context: 'cycling',
+            activityCount: 2,
+            metrics: expect.arrayContaining([{ metric: 'distance', value: 50_000, sourceActivityCount: 2 }]),
+        })]);
+        expect(other?.current28d.activityCount).toBe(0);
+        expect(activities.map(activity => activity.activityData.type)).toEqual(['Cycling', 'Road Cycling']);
+    });
+
     it('builds all registered sport families while keeping gravity and strength volume-only', async () => {
         const { buildTrainingSummaryMetricPayload } = await import('./derived-metrics.service');
         const currentDay = Date.UTC(2026, 6, 8);

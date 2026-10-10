@@ -1,3 +1,4 @@
+import { WALKING_ACTIVITY_TYPE_GROUP } from './activity-type-compatibility';
 import {
   ActivityTypeGroups,
   type ActivityTypeGroup,
@@ -23,6 +24,14 @@ function isCanonicalActivityType(value: string): value is ActivityTypes {
 }
 
 const ActivityTypeGroupMetadataMap: Record<ActivityTypeGroup, ActivityTypeGroupMetadata> = {
+  ...{
+    [WALKING_ACTIVITY_TYPE_GROUP]: {
+      id: WALKING_ACTIVITY_TYPE_GROUP as ActivityTypeGroup,
+      label: 'Walking',
+      aliases: ['walking', 'walking group', 'walking family', 'walking activities'],
+      ambiguous: true,
+    },
+  },
   [ActivityTypeGroups.RunningGroup]: {
     id: ActivityTypeGroups.RunningGroup,
     label: 'Running',
@@ -147,7 +156,8 @@ export function getActivityTypeGroupMetadata(activityTypeGroup: ActivityTypeGrou
 }
 
 export function getActivityTypeGroupMetadataList(): ActivityTypeGroupMetadata[] {
-  return Object.values(ActivityTypeGroupMetadataMap);
+  return [...new Set(Object.values(ActivityTypeGroups))]
+    .map(group => ActivityTypeGroupMetadataMap[group]);
 }
 
 export function getActivityTypeGroupLabel(activityTypeGroup: ActivityTypeGroup): string {
@@ -180,8 +190,8 @@ export function resolveActivityTypeGroup(value: unknown): ActivityTypeGroup | nu
     const metadata = getActivityTypeGroupMetadata(enumValue);
     const searchValues = [
       enumKey,
-      metadata.label,
-      ...metadata.aliases,
+      metadata?.label || enumValue,
+      ...(metadata?.aliases || []),
     ];
 
     if (searchValues.some(candidate => normalizeActivityTypeGroupLookupKey(candidate) === normalizedRaw)) {
@@ -208,15 +218,6 @@ export function getActivityTypeGroupCatalog(): ActivityTypeGroupCatalogEntry[] {
   }));
 }
 
-const EXPLICIT_INDOOR_ACTIVITY_TYPES = new Set<ActivityTypes>([
-  ...getActivityTypesForGroup(ActivityTypeGroups.IndoorSportsGroup),
-  ActivityTypes.IndoorCycling,
-  ActivityTypes.IndoorRunning,
-  ActivityTypes.IndoorTraining,
-  ActivityTypes['Indoor Climbing'],
-  ActivityTypes.Treadmill,
-]);
-
 export function isIndoorActivityType(activityType: ActivityTypes): boolean {
-  return EXPLICIT_INDOOR_ACTIVITY_TYPES.has(activityType);
+  return ActivityTypesHelper.isIndoorActivityType(activityType);
 }

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { ActivityTypeGroups, ActivityTypes } from '@sports-alliance/sports-lib';
+import { ActivityTypeGroups, ActivityTypes, ActivityTypesHelper } from '@sports-alliance/sports-lib';
 import {
   SUPPORTED_ACTIVITIES_PATH,
   SUPPORTED_ACTIVITIES_DESCRIPTION,
@@ -15,8 +15,8 @@ describe('supported-activities-page.content', () => {
     const catalogTypes = SUPPORTED_ACTIVITY_FAMILIES.flatMap(family => family.activityTypes);
     const unspecified = SUPPORTED_ACTIVITY_FAMILIES.find(family => family.id === ActivityTypeGroups.UnspecifiedGroup);
 
-    expect(SUPPORTED_ACTIVITY_FAMILIES).toHaveLength(17);
-    expect(SUPPORTED_ACTIVITY_TYPE_COUNT).toBe(131);
+    expect(SUPPORTED_ACTIVITY_FAMILIES).toHaveLength(new Set(Object.values(ActivityTypeGroups)).size);
+    expect(SUPPORTED_ACTIVITY_TYPE_COUNT).toBe(ActivityTypesHelper.getActivityTypesAsUniqueArray().length);
     expect(SUPPORTED_ACTIVITY_FAMILIES.map(family => family.id).sort()).toEqual(
       [...new Set(Object.values(ActivityTypeGroups))].sort(),
     );

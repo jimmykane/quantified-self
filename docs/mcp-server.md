@@ -1815,6 +1815,11 @@ activity identity set, and validates every object path under `users/{uid}/events
 bucket. It streams at most four FIT, GPX, TCX, Suunto JSON/SML, or gzip source files. Sports Lib receives only requested
 streams plus derivation and axis dependencies. Multi-file events reuse `EventUtilities.mergeEvents`. The pure shared
 identity matcher tries source key and then progressively narrower unique identity signatures; ambiguity fails closed.
+After exact matching, a narrow documented import-name refinement can match historical activities with equal start/end,
+finite rounded duration, equal rounded distance (or no distance on both sides), compatible source keys, and a unique
+candidate in each direction. It never treats arbitrary sports in a Training family as the same identity or enables the
+reparse-only single-remaining fallback. See [preserved provider names and historical compatibility](training-workspace.md#preserved-provider-sport-names-and-historical-compatibility).
+The original persisted identity and public tools, scopes, schemas and budgets remain unchanged.
 
 This path never calls reparse persistence, metadata auto-healing, ID assignment, regeneration, event/activity writers,
 or source writes. Parsed objects are discarded after projection. Scalar streams preserve endpoints and per-bucket
