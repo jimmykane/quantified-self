@@ -1,11 +1,10 @@
 import type { UserUnitSettingsInterface } from '@sports-alliance/sports-lib';
 import type { CustomSeriesOption } from 'echarts/charts';
 import type { EChartsType } from 'echarts/core';
-import { buildDashboardEChartsStyleTokens, buildDashboardEChartsTooltipChrome, renderDashboardEChartsTooltipCard } from './dashboard-echarts-style.helper';
+import { buildDashboardEChartsStyleTokens } from './dashboard-echarts-style.helper';
 import { ECHARTS_GLOBAL_FONT_FAMILY } from './echarts-theme.helper';
-import { resolveEChartsTooltipSurfaceConfig, resolveEChartsTooltipTriggerOn } from './echarts-tooltip-interaction.helper';
 import { buildPaceAxisConfig } from './pace-axis.helper';
-import { formatWorkoutProfileAxis, workoutProfileMetricLabels, workoutProfilePaceUnitFactor, workoutProfileSpeedUnitFactor, WORKOUT_PROFILE_PURPOSE_SHORT_LABELS, type WorkoutProfileMetric, type WorkoutProfileModel } from './workout-profile.helper';
+import { formatWorkoutProfileAxis, workoutProfilePaceUnitFactor, workoutProfileSpeedUnitFactor, WORKOUT_PROFILE_PURPOSE_SHORT_LABELS, type WorkoutProfileMetric, type WorkoutProfileModel } from './workout-profile.helper';
 
 function speedAxis(maximum: number): { min: number; max: number; interval: number; inverse: boolean } {
   const paddedMax = Number.isFinite(maximum * 1.05) ? maximum * 1.05 : maximum;
@@ -19,9 +18,8 @@ function speedAxis(maximum: number): { min: number; max: number; interval: numbe
 
 export function buildWorkoutProfileChartOption(model: WorkoutProfileModel, metric: WorkoutProfileMetric | null,
   selectedKey: string | null, changedStepIds: readonly string[], dark: boolean, width: number,
-  mobile: boolean, units?: UserUnitSettingsInterface | null, locale?: string): Parameters<EChartsType['setOption']>[0] {
+  units?: UserUnitSettingsInterface | null, locale?: string): Parameters<EChartsType['setOption']>[0] {
   const style = buildDashboardEChartsStyleTokens(dark, width);
-  const metricLabels = workoutProfileMetricLabels(model.structure.sport);
   const metricBands = (step: WorkoutProfileModel['occurrences'][number]) => step.targets
     .filter(t => t.metric === metric && t.minimum !== null && t.maximum !== null);
   const bandValues = model.occurrences.flatMap(metricBands);
@@ -89,19 +87,8 @@ export function buildWorkoutProfileChartOption(model: WorkoutProfileModel, metri
         formatter: (value: number) => formatWorkoutProfileAxis(value / unitFactor, metric, model.structure, units, locale) } },
     { type: 'value', gridIndex: 1, min: 0, max: 1, show: false }]
       : [{ type: 'value', min: 0, max: 1, show: false }],
-    tooltip: { trigger: 'item', triggerOn: resolveEChartsTooltipTriggerOn(true, mobile),
-      // A horizontally scrollable chart can exceed the phone viewport. Use the shared viewport-bound tooltip host.
-      ...resolveEChartsTooltipSurfaceConfig(false), ...buildDashboardEChartsTooltipChrome(style),
-      formatter: (param: { value?: number[] }) => {
-        const step = model.occurrences[param?.value?.[0]];
-        if (!step) return '';
-        return renderDashboardEChartsTooltipCard(style, { title: step.label, stackHeader: true,
-          rows: [{ label: 'End', value: step.ending }, ...step.targets.map(t => ({ label: metricLabels[t.metric], value: t.text })),
-            ...(step.targets.length === 0 ? [{ label: 'Target', value: 'No target prescribed' }] : []),
-            ...(step.note ? [{ label: 'Note', value: step.note }] : [])],
-        });
-      },
-    },
+    // Selection already exposes all step details below the chart without obscuring the editor.
+    tooltip: { show: false, showContent: false, triggerOn: 'none' },
     series,
   };
 }

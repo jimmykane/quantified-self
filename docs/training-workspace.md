@@ -1244,13 +1244,13 @@ never elapsed time or distance. The shared prescription analyzer now supplies ca
 consumers; this renderer keeps its explicit step domain and does not estimate widths, average pace, zones or generic
 intensity. A future time-scaled view must consume that shared analysis and its uncertainty.
 One target metric is shown at a time (HR, power, pace, speed or cadence). Both authored targets remain in accessible
-details and tooltips. Editor/profile pickers and tooltips label pool/open-water pace as **Swim pace** and
+inline details. Editor/profile pickers label pool/open-water pace as **Swim pace** and
 outdoor/indoor rowing pace as **Rowing pace**; these are sport-specific labels for the existing pace presentation.
 Constant targets, including warm-up/cool-down targets, are rectangles rather than invented ramps;
 untargeted steps have empty metric spaces and a separately labelled purpose strip. Relative ranges resolve only from
 their saved reference snapshot, with percentage/reference and resolved-range text; missing/invalid snapshots fail closed.
 A valid relative pace target starting at 0% speed has no finite pace range. Its authored percentage/reference remains
-in details and tooltips with an explicit explanation; only that band is omitted, while all other steps remain visible.
+in inline details with an explicit explanation; only that band is omitted, while all other steps remain visible.
 If no finite bands exist, the purpose strip remains available and accessible text distinguishes that from no targets.
 Pace axes reverse speed bounds and use explicit time intervals in the owner's selected pace denominator,
 with Sports Lib labels for running/swimming and fixed per-500-m rowing pace. Whole-second ticks avoid floating-point
@@ -1273,12 +1273,13 @@ the complete occurrence count is disclosed, and every pass (including the last o
 inspectable. This is grouping, not truncation or a lower recipe limit. Selection keys combine canonical step ID,
 repeat ID and iteration; canonical IDs and recipe JSON never change. Editor selection highlights the source step and
 survives reordering and crossing the expansion budget: a selected repeat pass remains selected when grouping becomes
-necessary, without selection-only redraws dismissing the first tap's tooltip. Invalid drafts remove the chart instead
+necessary. Invalid drafts remove the chart instead
 of retaining the last valid preview. Owner/editor/revision
 context changes clear presentation selection. Saved disclosures shape data and instantiate charts only when opened.
 
-Rendering uses the shared ECharts loader/host controller, theme/resize and viewport-bound escaped tooltip helpers,
-including the viewport tooltip host for horizontally scrollable phone charts. Material selectors, labelled purpose
+Rendering uses the shared ECharts loader/host controller and theme/resize helpers. Floating profile tooltips are
+disabled on phones and desktops because selected-step details already show endings, both targets and notes below the
+chart; the redundant overlay could obscure editor controls. Material selectors, labelled purpose
 markers, text details, pressed-state buttons and arrow/Home/End navigation provide touch and keyboard equivalents.
 Accepted selection owns haptics; raw chart pointer feedback is disabled to avoid duplicate/no-op feedback. Component
 tests cover silent hydration/context changes, selection and disposal; browser checks use synthetic recipes, not private

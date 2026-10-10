@@ -89,7 +89,7 @@ describe('workout profile presentation', () => {
     expect(model.occurrences[0].targets[0].text).toContain('0–100%');
     expect(model.occurrences[0].targets[0].text).toContain('No finite pace range');
     expect(model.occurrences[1].targets[0]).toMatchObject({ metric: 'pace', minimum: 250, maximum: 1000 / 3 });
-    const option = buildWorkoutProfileChartOption(model, 'pace', null, [], false, 320, true) as {
+    const option = buildWorkoutProfileChartOption(model, 'pace', null, [], false, 320) as {
       series: Array<{ data: Array<{ value: number[]; occurrenceKey: string }> }>;
     };
     expect(option.series[0].data).toEqual([{ value: [1, 250, 1000 / 3], occurrenceKey: 'root/1/steady' }]);
