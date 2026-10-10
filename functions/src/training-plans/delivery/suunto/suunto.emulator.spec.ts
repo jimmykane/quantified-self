@@ -666,11 +666,12 @@ describe.skipIf(!process.env.FIRESTORE_EMULATOR_HOST)('Suunto worker with real F
     expect(server.calls.filter(call => ['POST', 'PUT'].includes(call.method))).toHaveLength(2);
   });
   it.each([assessSuuntoGuideV2ForRecovery, assessSuuntoGuideV3ForRecovery, assessSuuntoGuideV4ForRecovery,
-    assessSuuntoGuideV5ForRecovery, assessSuuntoGuideV6ForRecovery])(
-    'honors exact legacy loss approval through current delivery, but not a newly edited instruction', async assessLegacy => {
+    assessSuuntoGuideV5ForRecovery, assessSuuntoGuideV6ForRecovery, assessSuuntoGuideV7ForRecovery, assessSuuntoGuideV12ForRecovery])(
+    'honors exact legacy loss approval through upgrade and unit changes, but not a newly edited instruction', async assessLegacy => {
+    await user().update({ 'settings.unitSettings.distanceUnits': DistanceUnits.Miles });
     await user().collection('scheduledWorkouts').doc('w').update({ 'structure.nodes': [{
-      kind: 'step', id: 'step', purpose: 'work', ending: { kind: 'time', seconds: 600 }, targets: [], note: 'A'.repeat(45),
-    }] });
+      kind: 'step', id: 'step', purpose: 'work', ending: { kind: 'distance', meters: 1609.344 }, targets: [], note: 'A'.repeat(45),
+    }, { kind: 'step', id: 'rest', purpose: 'rest', ending: { kind: 'time', seconds: 15 }, targets: [] }] });
     const transport = runtime.transport('suunto')!;
     const previous = vi.spyOn(transport, 'assess').mockImplementation((workout, destination, zone, strength) =>
       assessLegacy(workout, destination, zone, 'Quantified Self', strength));
@@ -698,12 +699,22 @@ describe.skipIf(!process.env.FIRESTORE_EMULATOR_HOST)('Suunto worker with real F
     await processTrainingDelivery(runtime, uid, blocked.id); await drain();
     expect((await ledger()).status).toBe('delivered');
     expect((await setting.get()).get('approvedDigest')).toBe(blocked.approvalDigest);
-    await user().collection('scheduledWorkouts').doc('w').update({ 'structure.nodes': [{
-      kind: 'step', id: 'step', purpose: 'work', ending: { kind: 'time', seconds: 600 }, targets: [], note: 'A'.repeat(40) + 'BBBBB',
-    }] });
+    const steps = structuredClone(server.guides.get(actual.ids.guide)!.guide.steps);
+    for (const units of [DistanceUnits.Kilometers, DistanceUnits.Miles, DistanceUnits.Kilometers]) {
+      await user().update({ 'settings.unitSettings.distanceUnits': units }); await mark();
+      await processTrainingDelivery(runtime, uid, blocked.id); await drain();
+      expect(await ledger()).toMatchObject({ status: 'delivered', approvalDigest: null,
+        actual: { ids: actual.ids }, mappingApprovalProof: { suuntoMappingUnitSettings: { distanceUnits: units } } });
+      expect((await setting.get()).get('approvedDigest')).toBe(blocked.approvalDigest);
+      expect(server.guides.get(actual.ids.guide)!.guide.steps).toEqual(steps);
+      expect(server.guides.get(actual.ids.guide)!.guide.richText).toContain(units === DistanceUnits.Miles ? 'mi' : 'Km');
+    }
+    await user().collection('scheduledWorkouts').doc('w').update({ 'structure.nodes': workout.structure.nodes.map(node =>
+      node.kind === 'step' && node.id === 'step' ? { ...node, note: 'A'.repeat(40) + 'BBBBB' } : node) });
     await mark(); await processTrainingDelivery(runtime, uid, blocked.id); await drain();
     expect((await ledger()).status).toBe('approval_required');
-    expect(server.calls.filter(call => call.method === 'PUT')).toHaveLength(1);
+    expect(server.calls.filter(call => call.method === 'PUT')).toHaveLength(4);
+    expect(server.calls.filter(call => call.method === 'POST')).toHaveLength(0);
   });
   it.each((['v2', 'v3', 'v4'] as const).flatMap(version => ['running', 'cycling', 'swimming', 'strength'].map(sport => [version, sport] as const)))(
     'recovers a %s %s create with a lost ACK then upgrades without another POST', async (version, sport) => {

@@ -39,7 +39,14 @@ export async function readSuuntoGuideUnitSettings(tx: Transaction, user: Firebas
   provider: PlannedWorkoutProviderId, workouts: readonly ScheduledWorkoutV1[]): Promise<UserUnitSettingsInterface | undefined> {
   if (provider !== 'suunto' || !workouts.length) return undefined;
   const owner = await tx.get(user);
-  return normalizeUserUnitSettings(owner.get('settings.unitSettings'));
+  const units = normalizeUserUnitSettings(owner.get('settings.unitSettings'));
+  // Settings are owner-writable; duplicate valid enum entries must not inflate
+  // every operation/proof snapshot or the per-workout conversion work.
+  // First-occurrence order is unchanged, so display priority stays identical.
+  return { ...units, speedUnits: [...new Set(units.speedUnits)], paceUnits: [...new Set(units.paceUnits)],
+    swimPaceUnits: [...new Set(units.swimPaceUnits)], verticalSpeedUnits: [...new Set(units.verticalSpeedUnits)],
+    gradeAdjustedSpeedUnits: [...new Set(units.gradeAdjustedSpeedUnits)],
+    gradeAdjustedPaceUnits: [...new Set(units.gradeAdjustedPaceUnits)] };
 }
 
 export async function readDeliveryContext(runtime: DeliveryRuntime, tx: Transaction, uid: string,

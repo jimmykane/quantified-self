@@ -9,7 +9,7 @@ import { GarminTrainingTransport } from './garmin/transport';
 import { SuuntoGuideTransport } from './suunto/transport';
 import { assessSuuntoGuideV2ForRecovery, assessSuuntoGuideV3ForRecovery, assessSuuntoGuideV4ForRecovery, assessSuuntoGuideV5ForRecovery,
   assessSuuntoGuideV6ForRecovery, assessSuuntoGuideV7ForRecovery, assessSuuntoGuideV9ForRecovery,
-  assessSuuntoGuideV10ForRecovery, assessSuuntoGuideV11ForRecovery } from './suunto/mapping';
+  assessSuuntoGuideV10ForRecovery, assessSuuntoGuideV11ForRecovery, assessSuuntoGuideV12ForRecovery } from './suunto/mapping';
 
 const base: DeliveryContext = {
   workout: { schemaVersion: 1, id: 'workout', planId: null, revision: 1, localDate: '2026-09-10', lifecycle: 'planned',
@@ -168,6 +168,38 @@ describe('delivery intent', () => {
       ledger = { ...ledger, acceptedDigest: current.digest, mappingApprovalProof: current.mappingApprovalProof };
     }
   });
+  it.each([assessSuuntoGuideV7ForRecovery, assessSuuntoGuideV12ForRecovery])(
+    'retains legacy approval after the app-preview upgrade and subsequent unit changes (%#)', assessLegacy => {
+      const transport = new SuuntoGuideTransport(async () => { throw Error('No HTTP during assessment'); }, 'Quantified Self');
+      const workout = { ...base.workout!, structure: { ...base.workout!.structure, nodes: [
+        { kind: 'step' as const, id: 'work', purpose: 'work' as const,
+          ending: { kind: 'distance' as const, meters: 1609.344 }, targets: [], note: 'A'.repeat(45) },
+        { kind: 'step' as const, id: 'rest', purpose: 'rest' as const,
+          ending: { kind: 'time' as const, seconds: 15 }, targets: [] },
+      ] } };
+      const units = normalizeUserUnitSettings({ distanceUnits: DistanceUnits.Miles });
+      const legacy = assessLegacy(workout, 'account-a', 'Europe/Helsinki', 'Quantified Self');
+      const context: DeliveryContext = { ...base, workout, transport, suuntoUnitSettings: units,
+        setting: { ...base.setting!, provider: 'suunto', approvedDigest: legacy.digest } };
+      let ledger = { connectionEpoch: 0, destinationKey: 'account-a', acceptedDigest: legacy.digest,
+        acceptedContentDigest: deliveryContentDigest(workout, 'Europe/Helsinki') } as DeliveryLedgerV1;
+      const upgraded = resolveDeliveryIntent(context, ledger);
+      expect(upgraded).toMatchObject({ desired: 'present', status: 'pending', approvalDigest: null });
+      expect(upgraded.mappingApprovalProof!.suuntoMappingUnitSettings).toEqual(units);
+      expect(upgraded.mappingApprovalProof).not.toHaveProperty('suuntoApprovedUnitSettings');
+      ledger = { ...ledger, acceptedDigest: upgraded.digest, mappingApprovalProof: upgraded.mappingApprovalProof };
+      for (const distanceUnits of [DistanceUnits.Kilometers, DistanceUnits.Miles, DistanceUnits.Kilometers]) {
+        const changed = { ...context, suuntoUnitSettings: normalizeUserUnitSettings({ distanceUnits }) };
+        const current = resolveDeliveryIntent(changed, ledger);
+        expect(current).toMatchObject({ desired: 'present', status: 'pending', approvalDigest: null });
+        expect(current.mappingApprovalProof!.suuntoMappingUnitSettings).toEqual(changed.suuntoUnitSettings);
+        expect(resolveDeliveryIntent({ ...changed, workout: { ...workout, title: 'Edited' } }, ledger).status).toBe('approval_required');
+        expect(resolveDeliveryIntent({ ...changed, connection: { ...context.connection, epoch: 1 } }, ledger).status).toBe('fresh_consent_required');
+        expect(resolveDeliveryIntent(changed, { ...ledger, acceptedContentDigest: 'mismatch',
+          mappingApprovalProof: { ...ledger.mappingApprovalProof!, contentDigest: 'mismatch' } }).status).toBe('approval_required');
+        ledger = { ...ledger, acceptedDigest: current.digest, mappingApprovalProof: current.mappingApprovalProof };
+      }
+    });
   it('does not inherit strength approval when pounds adds a loss beyond the bounded public warning list', () => {
     const transport = new SuuntoGuideTransport(async () => { throw Error('No HTTP during assessment'); }, 'Quantified Self');
     const strength: StrengthWorkoutDetailsV1 = { version: 1, workoutId: base.workout!.id, revision: 1, exercises: [

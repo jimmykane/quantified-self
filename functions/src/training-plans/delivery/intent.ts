@@ -82,15 +82,17 @@ export function resolveDeliveryIntent(context: DeliveryContext, ledger?: Deliver
     && !compatibleApproval) {
     return result('preserve', 'approval_required', assessment.digest, assessment.issues, assessment.digest);
   }
-  const recordSuuntoUnits = assessment.mappingVersion === 'suunto-guides-v13' && context.suuntoUnitSettings
-    && requiresDeliveryMappingApproval(assessment) && approval === assessment.digest;
+  const suuntoMappingUnits = assessment.mappingVersion === 'suunto-guides-v13' ? context.suuntoUnitSettings : undefined;
+  const recordSuuntoUnits = suuntoMappingUnits && requiresDeliveryMappingApproval(assessment) && approval === assessment.digest;
   const approvedUnits = compatibleApproval && ledger?.mappingApprovalProof?.approvedDigest === approval
     ? ledger.mappingApprovalProof.suuntoApprovedUnitSettings : recordSuuntoUnits ? context.suuntoUnitSettings : undefined;
   return { ...result('present', ledger?.acceptedDigest === assessment.digest ? 'delivered' : 'pending', assessment.digest, assessment.issues),
     ...((compatibleApproval && contentDigest) || recordSuuntoUnits ? { mappingApprovalProof: {
       approvedDigest: approval!, mappingDigest: assessment.digest,
       contentDigest: contentDigest ?? deliveryContentDigest(workout, timeZone, context.strength)!,
-      ...(approvedUnits && context.suuntoUnitSettings
-        ? { suuntoApprovedUnitSettings: approvedUnits, suuntoMappingUnitSettings: context.suuntoUnitSettings } : {}),
+      // Legacy approval has no original unit snapshot, but the proved v13
+      // mapping still needs one so a later metadata-only update can carry it.
+      ...(approvedUnits ? { suuntoApprovedUnitSettings: approvedUnits } : {}),
+      ...(suuntoMappingUnits ? { suuntoMappingUnitSettings: suuntoMappingUnits } : {}),
     } } : {}) };
 }

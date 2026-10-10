@@ -2936,6 +2936,11 @@ v2–v12 reconstruction stays available, including exact v12 Rest recovery. Iden
 full-prescription approval evidence, and past/completed-copy protection are unchanged. Metadata-only unit updates
 can retain approval using at most two private, recomputed unit snapshots (original approval and latest proved
 mapping) and the complete loss signature; edited prescriptions or new losses still require approval.
+For legacy approvals without an original unit snapshot, retain the latest proved v13 mapping units independently.
+Regression checks cover the legacy upgrade followed by repeated unit-only updates, unchanged watch steps/same-ID
+updates and rejection of changed prescriptions, missing full-content evidence or changed connection authority.
+Private owner-unit snapshots deduplicate validated preference enums in first-occurrence order, bounding journal/proof
+size and conversion work even for malformed duplicate-heavy settings; the owner's stored settings are never rewritten.
 
 MCP impact review: **no public contract change**. The app preview and unit/proof snapshots are excluded from read,
 proposal and status schemas; existing strict read/write and transport tests reject injection. The delivery proposal
