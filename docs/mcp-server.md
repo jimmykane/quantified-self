@@ -367,6 +367,11 @@ cycling and swim Work/active Recovery preserve their current readings; all recip
 proposal and provider-action contracts remain unchanged. Strict schemas continue to reject Guide fields and
 private mapping/recovery diagnostics. No contract promotion, catalog refresh, plugin rebuild or new activity-lap
 read is required. See [Rest-first presentation and verification](training-workspace.md#rest-first-interval-screens-v12).
+The private v13 Suunto app `richText` preview likewise has **no MCP wire impact**. Existing canonical steps/notes,
+targets and strength details supply the preview; the Guide text, immutable unit snapshots and approval-unit provenance
+remain private and are explicitly rejected by strict recipe/status regressions. Delivery proposals assess the same
+owner units as native apply, without adding inputs, outputs, scopes, consent, tools or provider actions. No contract
+promotion, client refresh or plugin rebuild is needed. See [app preview impact review](training-workspace.md#suunto-app-workout-preview-v13).
 The manual editor's additional canonical running/cycling profiles also require no MCP contract change: the existing
 recipe schema already accepts the complete Sports Lib activity-type enum, and focused coverage proves an exact Mountain
 Biking sport survives the read projection. Suunto numeric activity recommendations and Garmin's broad

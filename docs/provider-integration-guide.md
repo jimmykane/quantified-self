@@ -485,7 +485,7 @@ same-identity update. Metrics, recorded laps, consent, approval, completion and 
 provider/event-based monitoring covers v11. See [manual instructions and verification](training-workspace.md#manual-instructions-in-other-sports).
 This is local implementation, not deployment or new live evidence.
 
-The current eligible Rest presentation uses private `suunto-guides-v12`: countdown first, current target readings/HR,
+The frozen v12 eligible Rest presentation uses: countdown first, current target readings/HR,
 actual pass labels for simple repeated Work/Rest pairs, and a next-phase hint where space permits. Running/walking/
 cycling variants and pool/open-water swimming are covered; active Recovery and Work retain their existing readings.
 Authored targets/notes, exact timing and the frozen execution/lap graph stay intact. No previous-effort statistics,
@@ -494,9 +494,18 @@ graph without optional numbering; the compact Rest layout is also checked agains
 If optional labels still cannot fit, preserve the frozen layout and all authored fields, without raising memory limits.
 Exact v10/v11 recovery precedes one eligible same-ID update,
 with pinning, current authority, approval and past/completed-copy protection unchanged. Other recipes retain their
-historical mapping identities. Existing provider/event monitoring covers v12 without queue or alert-policy changes.
+historical watch graphs. Existing provider/event monitoring covers this presentation without queue or alert-policy changes.
 See [Rest-first screens and verification](training-workspace.md#rest-first-interval-screens-v12).
 This needs separately approved Functions deployment and physical watch verification; it is not live evidence.
+
+Current Guide payloads use private v13 app descriptions: documented `richText` Markdown contains grouped workout
+steps, complete notes, targets and strength sets in owner units. Native watch steps remain identical to the recipe's
+frozen presentation above. Preview/UTF-8 archive budgets fall back to the short description without changing the
+workout or increasing memory bounds. Owner units are immutable attempt snapshots; exact historical v2–v12 recovery
+precedes a same-ID update, never a speculative replacement. MCP/public responses exclude description and unit/proof
+metadata. Monitoring is **covered/unchanged** by provider/event filters; no dashboard, queue or policy changes.
+See [app preview and verification](training-workspace.md#suunto-app-workout-preview-v13) for the impact review and
+separately approved release/app verification still required.
 
 For additional authored targets, [#773](https://github.com/jimmykane/quantified-self/issues/773) records the
 6 October contract review. The published JSON reference defines only the existing HR, power, speed/pace and cadence

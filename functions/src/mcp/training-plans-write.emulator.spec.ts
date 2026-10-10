@@ -1,6 +1,6 @@
 import { createHash, randomUUID } from 'node:crypto';
 import { Firestore } from 'firebase-admin/firestore';
-import { ActivityTypes, WeightUnits } from '@sports-alliance/sports-lib';
+import { ActivityTypes, DistanceUnits, WeightUnits } from '@sports-alliance/sports-lib';
 import { GARMIN_GENERIC_WORKOUT_SPORTS_V1 } from '../../../shared/planned-workout-providers';
 import { afterAll, afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { DeliveryRuntime } from '../training-plans/delivery/contracts';
@@ -1507,7 +1507,8 @@ describe.skipIf(!process.env.FIRESTORE_EMULATOR_HOST)('Training MCP write propos
       summary: expect.stringContaining('No separate mapping approval is needed') });
     expect(preview.providerPreviews[0].summary.match(/manual transitions/g)).toHaveLength(1);
     expect(assess).toHaveBeenCalledWith(expect.objectContaining({ structure: expect.objectContaining({ sport: ActivityTypes.StrengthTraining }) }),
-      expect.any(String), 'Europe/Helsinki', expect.objectContaining({ version: 1 }), WeightUnits.Pounds);
+      expect.any(String), 'Europe/Helsinki', expect.objectContaining({ version: 1 }), WeightUnits.Pounds,
+      expect.objectContaining({ weightUnits: WeightUnits.Pounds }));
     expect((await user.collection('trainingDeliverySettings').get()).empty).toBe(true);
     expect(suunto.calls).toHaveLength(0);
   });
@@ -1516,15 +1517,16 @@ describe.skipIf(!process.env.FIRESTORE_EMULATOR_HOST)('Training MCP write propos
     const suunto = new SuuntoHttpFixture();
     const guideTransport = new SuuntoGuideTransport(suunto.request, 'Quantified Self', deps.now);
     deps.runtime.transport = provider => provider === 'suunto' ? guideTransport : null;
+    const user = db.collection('users').doc(uid);
+    await user.update({ 'settings.unitSettings.distanceUnits': DistanceUnits.Miles });
     const preview = await previewCreatePlannedWorkout({ uid, connectionId: 'connection', scopes,
       arguments: { expectedScheduleRevision: 1, localDate: '2026-09-18', title: 'Easy ride',
         structure: { ...structure, sport: ActivityTypes.MountainBiking,
-          nodes: [{ ...structure.nodes[0], note: 'Ride easy' }] },
+          nodes: [{ ...structure.nodes[0], ending: { kind: 'distance', meters: 1609.344 }, note: 'Ride easy' }] },
         delivery: { providers: ['suunto'], timeZone: 'Europe/Helsinki' } } }, deps);
     expect(preview.providerPreviews).toEqual([expect.objectContaining({ provider: 'suunto', warningCount: 0 })]);
     const applied = await applyTrainingChanges({ uid, connectionId: 'connection', scopes,
       arguments: { proposalRef: preview.proposalRef, permissionMode: 'combined' } }, deps);
-    const user = db.collection('users').doc(uid);
     const workout = (await user.collection('scheduledWorkouts').get()).docs[0];
     expect((await user.collection('trainingDeliverySettings').doc(`workout_${workout.id}_suunto`).get())
       .get('approvedDigest')).toBeNull();
@@ -1534,6 +1536,10 @@ describe.skipIf(!process.env.FIRESTORE_EMULATOR_HOST)('Training MCP write propos
     expect((await user.collection('trainingDeliveryStatuses').doc(ledger.id).get()).get('status')).toBe('delivered');
     expect(applied.providers).toEqual([expect.objectContaining({ provider: 'suunto', status: 'applied' })]);
     expect(suunto.calls.filter(call => call.method === 'POST')).toHaveLength(1);
+    expect([...suunto.guides.values()][0].guide.richText).toContain('mi');
+    expect([...suunto.guides.values()][0].guide.richText).toContain('Ride easy');
+    expect(workout.get('structure.nodes')[0].ending).toEqual({ kind: 'distance', meters: 1609.344 });
+    expect(JSON.stringify(preview)).not.toMatch(/richText|suuntoUnitSettings/);
   });
 
   it('discloses Wahoo target limitations in the first proposal and delivers after one approval', async () => {

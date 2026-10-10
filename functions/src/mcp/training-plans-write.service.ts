@@ -7,7 +7,7 @@ import { HttpsError } from 'firebase-functions/v2/https';
 import { z } from 'zod';
 import { describeTrainingRecipeReview } from './training-recipe-review';
 import { ActivityTypes } from '@sports-alliance/sports-lib';
-import { readSuuntoStrengthWeightUnits } from '../training-plans/delivery/store';
+import { readSuuntoGuideUnitSettings } from '../training-plans/delivery/store';
 import { assertAssistantRecoveryDurationSeconds, isAssistantWorkoutReviews, type AssistantWorkoutReview, type AssistantWorkoutSnapshot } from '../../../shared/assistant-workout-review';
 import { assessDeliveryCompatibility } from './training-plans.service';
 import {
@@ -739,12 +739,12 @@ async function previewSimulatedProviderAvailability(
   const workouts = operation.targetType === 'workout'
     ? [workout!]
     : [...snapshot.workouts.values()].filter(item => item.planId === operation.targetId);
-  const suuntoWeightUnits = operation.provider === 'suunto'
-    && workouts.some(item => item.structure.sport === ActivityTypes.StrengthTraining)
-    ? await deps.db.runTransaction(tx => readSuuntoStrengthWeightUnits(tx, user, operation.provider, workouts), { readOnly: true })
+  const suuntoUnitSettings = operation.provider === 'suunto'
+    ? await deps.db.runTransaction(tx => readSuuntoGuideUnitSettings(tx, user, operation.provider, workouts), { readOnly: true })
     : undefined;
   const assessments = workouts.map(item => transport?.assess(item, connection.destinationKey, timeZone,
-    snapshot.strengthDetails?.get(item.id) ?? null, suuntoWeightUnits));
+    snapshot.strengthDetails?.get(item.id) ?? null,
+    item.structure.sport === ActivityTypes.StrengthTraining ? suuntoUnitSettings?.weightUnits : undefined, suuntoUnitSettings));
   const warningCount = assessments.filter(item => item && item.level !== 'exact').length;
   const today = trainingDeliveryLocalDate(deps.now(), timeZone);
   const eligibleCount = workouts.filter(item => item.lifecycle === 'planned' && item.localDate >= today

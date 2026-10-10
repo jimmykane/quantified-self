@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
-import { ActivityTypes, WeightUnits } from '@sports-alliance/sports-lib';
+import { ActivityTypes, DistanceUnits, WeightUnits } from '@sports-alliance/sports-lib';
+import { normalizeUserUnitSettings } from '../../../../shared/unit-aware-display';
 import { projectStrengthWorkoutToV1, type StrengthWorkoutDetailsV1 } from '../../../../shared/strength-workout';
 import { resolveDeliveryIntent, deliveryIdentity, deliveryContentDigest } from './intent';
 import type { DeliveryContext, DeliveryLedgerV1 } from './contracts';
@@ -142,6 +143,31 @@ describe('delivery intent', () => {
     expect(resolveDeliveryIntent({ ...context, suuntoWeightUnits: changedUnits, strength: edited,
       workout: { ...workout, structure: projectStrengthWorkoutToV1(edited) } }, ledger).status).toBe('approval_required');
   });
+  it('retains proved app-preview approval across repeated distance-unit changes, never across prescription or authority changes', () => {
+    const transport = new SuuntoGuideTransport(async () => { throw Error('No HTTP during assessment'); }, 'Quantified Self');
+    const workout = { ...base.workout!, structure: { ...base.workout!.structure, nodes: [{ kind: 'step' as const,
+      id: 'step', purpose: 'work' as const, ending: { kind: 'distance' as const, meters: 1609.344 }, targets: [], note: 'A'.repeat(45) }] } };
+    const units = normalizeUserUnitSettings({ distanceUnits: DistanceUnits.Miles });
+    const approval = transport.assess(workout, 'account-a', 'Europe/Helsinki', null, undefined, units).digest;
+    const context: DeliveryContext = { ...base, workout, transport, suuntoUnitSettings: units,
+      setting: { ...base.setting!, provider: 'suunto', approvedDigest: approval } };
+    let current = resolveDeliveryIntent(context);
+    expect(current.desired).toBe('present');
+    let ledger = { connectionEpoch: 0, destinationKey: 'account-a', acceptedDigest: current.digest,
+      acceptedContentDigest: deliveryContentDigest(workout, 'Europe/Helsinki'), mappingApprovalProof: current.mappingApprovalProof } as DeliveryLedgerV1;
+    for (const distanceUnits of [DistanceUnits.Kilometers, DistanceUnits.Miles, DistanceUnits.Kilometers]) {
+      const changed = { ...context, suuntoUnitSettings: normalizeUserUnitSettings({ distanceUnits }) };
+      current = resolveDeliveryIntent(changed, ledger);
+      expect(current.desired).toBe('present'); expect(current.approvalDigest).toBeNull();
+      expect(current.mappingApprovalProof!.suuntoApprovedUnitSettings).toEqual(units);
+      expect(resolveDeliveryIntent({ ...changed, workout: { ...workout, title: 'Edited' } }, ledger).status).toBe('approval_required');
+      expect(resolveDeliveryIntent({ ...changed, connection: { ...context.connection, epoch: 1 } }, ledger).status).toBe('fresh_consent_required');
+      if (current.digest !== approval) expect(resolveDeliveryIntent(changed, { ...ledger,
+        mappingApprovalProof: { ...ledger.mappingApprovalProof!, contentDigest: 'mismatch' },
+        acceptedContentDigest: 'mismatch' }).status).toBe('approval_required');
+      ledger = { ...ledger, acceptedDigest: current.digest, mappingApprovalProof: current.mappingApprovalProof };
+    }
+  });
   it('does not inherit strength approval when pounds adds a loss beyond the bounded public warning list', () => {
     const transport = new SuuntoGuideTransport(async () => { throw Error('No HTTP during assessment'); }, 'Quantified Self');
     const strength: StrengthWorkoutDetailsV1 = { version: 1, workoutId: base.workout!.id, revision: 1, exercises: [
@@ -196,7 +222,7 @@ describe('delivery intent', () => {
     const ledger = { connectionEpoch: 0, destinationKey: 'account-a', acceptedDigest: prior.digest,
       acceptedContentDigest: deliveryContentDigest(workout, 'Europe/Helsinki') } as DeliveryLedgerV1;
     expect(transport.assess(workout, 'account-a', 'Europe/Helsinki')).toMatchObject({
-      mappingVersion: restPresentation ? 'suunto-guides-v12' : manual ? 'suunto-guides-v11' : [ActivityTypes.Swimming, ActivityTypes.OpenWaterSwimming].includes(sport) ? 'suunto-guides-v10' : 'suunto-guides-v7',
+      mappingVersion: 'suunto-guides-v13',
       compatibleApprovalDigests: expect.arrayContaining([prior.digest]),
     });
     expect(resolveDeliveryIntent(context, ledger)).toMatchObject({ desired: 'present', status: 'pending', approvalDigest: null });

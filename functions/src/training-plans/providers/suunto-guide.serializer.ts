@@ -76,6 +76,8 @@ export interface SuuntoGuideJsonV1 {
     type: 'sequence';
     name: string;
     description: string;
+    /** App-only Markdown; never a watch step or authored recipe field. */
+    richText?: string;
     shortDescription: string;
     owner: string;
     url: string;
@@ -585,6 +587,14 @@ export function serializeSuuntoGuideV10ForRecovery(structureValue: unknown, opti
 }
 
 export function serializeSuuntoGuideJsonV1(
+    structureValue: unknown,
+    options: SerializeSuuntoGuideOptionsV1,
+): ProviderSerializationResultV1<SuuntoGuideJsonV1> {
+    return serializeSuuntoGuideV12ForRecovery(structureValue, options);
+}
+
+/** Frozen watch-only v12 graph. App metadata is added by the v13 delivery mapping. */
+export function serializeSuuntoGuideV12ForRecovery(
     structureValue: unknown,
     options: SerializeSuuntoGuideOptionsV1,
 ): ProviderSerializationResultV1<SuuntoGuideJsonV1> {

@@ -56,7 +56,10 @@ export function resolveDeliveryIntent(context: DeliveryContext, ledger?: Deliver
   if (!transport) return result('preserve', 'provider_unavailable');
   const days = (Date.parse(`${workout!.localDate}T00:00:00Z`) - Date.parse(`${today}T00:00:00Z`)) / 86_400_000;
   if (days > transport.horizonDays) return result(transport.withdrawOutsideHorizon ? 'absent' : 'preserve', 'outside_horizon');
-  const assessment = transport.assess(workout!, connection.destinationKey, timeZone, context.strength, context.suuntoWeightUnits);
+  const assessment = transport.assess(workout!, connection.destinationKey, timeZone, context.strength,
+    context.suuntoWeightUnits, context.suuntoUnitSettings,
+    [ledger?.mappingApprovalProof?.suuntoApprovedUnitSettings, ledger?.mappingApprovalProof?.suuntoMappingUnitSettings]
+      .filter((units): units is NonNullable<typeof units> => !!units));
   if (assessment.level === 'unsupported') return result('preserve', 'unsupported', assessment.digest, assessment.issues);
   const approval = override?.approvedDigest ?? setting?.approvedDigest;
   // A legacy payload digest can omit truncated authored text. Carry approval
@@ -79,8 +82,15 @@ export function resolveDeliveryIntent(context: DeliveryContext, ledger?: Deliver
     && !compatibleApproval) {
     return result('preserve', 'approval_required', assessment.digest, assessment.issues, assessment.digest);
   }
+  const recordSuuntoUnits = assessment.mappingVersion === 'suunto-guides-v13' && context.suuntoUnitSettings
+    && requiresDeliveryMappingApproval(assessment) && approval === assessment.digest;
+  const approvedUnits = compatibleApproval && ledger?.mappingApprovalProof?.approvedDigest === approval
+    ? ledger.mappingApprovalProof.suuntoApprovedUnitSettings : recordSuuntoUnits ? context.suuntoUnitSettings : undefined;
   return { ...result('present', ledger?.acceptedDigest === assessment.digest ? 'delivered' : 'pending', assessment.digest, assessment.issues),
-    ...(compatibleApproval && contentDigest ? { mappingApprovalProof: {
-      approvedDigest: approval!, mappingDigest: assessment.digest, contentDigest,
+    ...((compatibleApproval && contentDigest) || recordSuuntoUnits ? { mappingApprovalProof: {
+      approvedDigest: approval!, mappingDigest: assessment.digest,
+      contentDigest: contentDigest ?? deliveryContentDigest(workout, timeZone, context.strength)!,
+      ...(approvedUnits && context.suuntoUnitSettings
+        ? { suuntoApprovedUnitSettings: approvedUnits, suuntoMappingUnitSettings: context.suuntoUnitSettings } : {}),
     } } : {}) };
 }

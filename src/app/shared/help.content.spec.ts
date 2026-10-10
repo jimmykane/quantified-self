@@ -217,6 +217,12 @@ describe('help.content', () => {
       'Rowing and strength screens are unchanged', 'Sync your Suunto app and watch']) expect(content).toContain(phrase);
     expect(searchHelpSections(HELP_SECTIONS, 'Rest rem').map(section => section.id)).toContain('training-plans');
   });
+  it('explains the app-only Suunto Guide preview without promising new watch behavior', () => {
+    const content = HELP_SECTIONS.find(section => section.id === 'training-plans')!.content;
+    for (const phrase of ["a Guide's Description includes a readable workout preview", 'steps in order, grouped repeats',
+      'your complete step notes', 'exercises, sets, loads and rests', 'app-only text, not a new watch screen',
+      'Extremely large previews keep the short description', 'past and completed copies remain unchanged']) expect(content).toContain(phrase);
+  });
   it('explains pool-only measured SWOLF without target, pool-length or sensor promises', () => {
     const content = HELP_SECTIONS.find(section => section.id === 'training-plans')!.content;
     for (const phrase of ['pool-only **AvgSWOLF**', '**Avg SWOLF** on older Guides', '**SWOLF is a measured reading, not a target.**',

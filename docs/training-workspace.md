@@ -2894,6 +2894,38 @@ one same-ID update, current-v12 lost create/enriched update responses, strict un
 handling, consent withdrawal without speculative recreation and past/completed-copy preservation. Full loss-
 approval equivalence is retained only for unchanged content/authority, never newly edited instructions.
 
+##### Suunto app workout preview (v13)
+
+Current sends use private `suunto-guides-v13` to add the documented optional Guide `richText` Markdown field.
+Suunto app Guide details show a definition-order preview: title/sport, step purpose, exact prescribed ending,
+target ranges and complete notes. Repeats are grouped, not expanded. Manual endings explicitly say Lap finishes
+the current step; early-Lap alternatives remain visible. Strength uses the validated complete companion for
+exercise names, every set/repetition or timed ending, external load and optional rest, including a final rest.
+Generated descriptions use shared workout formatters and normalized owner units, not hand-written conversions.
+Authored Markdown/HTML is escaped as literal text rather than becoming description markup.
+
+Only app metadata changes: each recipe retains its exact v7/v8/v10/v11/v12 watch execution/presentation graph,
+targets, instructions, timing and lap boundaries. `description` remains the existing short fallback. The preview
+must fit Suunto's 100,000-character limit **and** the existing 256 KiB enriched JSON readback budget; if the full
+preview cannot fit, omit optional `richText` without truncating instructions, rejecting an otherwise valid workout,
+altering steps or raising archive/decompression limits. ZIP readback/recovery compares this metadata strictly.
+
+The owner-unit snapshot is private immutable upsert-operation data. A settings change during an uncertain send
+cannot alter its recovery payload; prove the old acceptance first, then update the same eligible copy once. Frozen
+v2–v12 reconstruction stays available, including exact v12 Rest recovery. Identity, pinning, consent, Pro, authority,
+full-prescription approval evidence, and past/completed-copy protection are unchanged. Metadata-only unit updates
+can retain approval using at most two private, recomputed unit snapshots (original approval and latest proved
+mapping) and the complete loss signature; edited prescriptions or new losses still require approval.
+
+MCP impact review: **no public contract change**. The app preview and unit/proof snapshots are excluded from read,
+proposal and status schemas; existing strict read/write and transport tests reject injection. The delivery proposal
+assessment reads the same owner units as native apply so their private digests agree. No new tool, field, scope,
+provider action, consent or contract promotion is introduced. Help explains app-versus-watch behavior and fallback.
+Monitoring is **covered/unchanged**: existing provider/event metrics, dashboard, alerts and queue administration
+cover v13; only the private diagnostic version allowlist grows. No queue, scheduler, retention or resource changes.
+Release needs separately approved Functions deployment. Local ZIP/Firestore fixtures are not live Suunto app proof;
+after release, sync an eligible future Guide and confirm the full Description in the Suunto app.
+
 ##### Current readings and boundary notifications (#784)
 
 The v5 screen baseline (retained by v6 for absent/false early Lap) builds on Training 01's reviewed v4 boundary/recovery logic and independently implements the documented partner [Guide schema](https://apizone.suunto.com/suuntoplus-guide-description),
@@ -2986,17 +3018,16 @@ marker is private readback metadata, never persisted in authored recipes or proj
 file GETs by default; lifecycle tests cover lost responses, rescheduling, duplicate dispatch and strict mismatch cases.
 
 Existing `[TrainingDelivery]` Suunto acceptance, recovered-acceptance, stale-suppression, failure and checkpoint-failure
-events include two transient allowlisted labels: `guideMappingVersion` (`suunto-guides-v12`, `suunto-guides-v11`, `suunto-guides-v10`, `suunto-guides-v9`, `suunto-guides-v8`, `suunto-guides-v7`, `suunto-guides-v6`, `suunto-guides-v5`, `suunto-guides-v4`, `suunto-guides-v3`, `suunto-guides-v2`, `unknown`,
+events include two transient allowlisted labels: `guideMappingVersion` (`suunto-guides-v13`, `suunto-guides-v12`, `suunto-guides-v11`, `suunto-guides-v10`, `suunto-guides-v9`, `suunto-guides-v8`, `suunto-guides-v7`, `suunto-guides-v6`, `suunto-guides-v5`, `suunto-guides-v4`, `suunto-guides-v3`, `suunto-guides-v2`, `unknown`,
 or `not_applicable` for removal) and `deliveryPhase` (`execute` or `recover`). The version is proved by recomputing the
 immutable upsert operation's exact payload digest, including strength details, rather than copying the current adapter's
 version onto a legacy attempt. An unrecognized digest or classification failure yields `unknown` and cannot alter
 delivery/recovery. Classification runs once per claimed operation without credentials or HTTP; the phase switches to
 `execute` if recovery resumes a safe request. Other providers' existing events are unchanged.
 For rollout triage, combine `jsonPayload.message="[TrainingDelivery]"`, `jsonPayload.provider="suunto"` and
-`jsonPayload.event="failure"` with the current recipe-specific mapping (`suunto-guides-v12` for eligible Rest presentation, `suunto-guides-v11` for other generated non-swim manual instructions, `suunto-guides-v10` for other pool/open-water swimming,
-`suunto-guides-v8` for strength, `suunto-guides-v7` for non-swim interval sports), or the exact historical label and
+`jsonPayload.event="failure"` with current `suunto-guides-v13` for app-preview delivery, or the exact historical label and
 `jsonPayload.deliveryPhase="recover"` for legacy recovery. The aggregate monitoring metrics filter provider/event,
-not Guide mapping version, and already cover v10/v11/v12 without additional policies or queue changes.
+not Guide mapping version, and already cover v13 and historical versions without additional policies or queue changes.
 Checkpoint failures use `jsonPayload.event="checkpoint_failed"`. These labels are not stored in Firestore or exposed
 to the browser/MCP, and contain no UID, account/Guide/workout identity, digest, recipe, instruction, sensor reading,
 credential, provider body or raw error. They report serializer/recovery provenance, not app/watch receipt or completion.
