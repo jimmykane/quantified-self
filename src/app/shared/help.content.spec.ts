@@ -408,6 +408,9 @@ describe('help.content', () => {
     expect(health).toContain('not repeated as cards on All');
     expect(health).toContain('category views do not repeat the highlights above their cards');
     expect(health).toContain('Recent-health highlights stay on the overview, not above the selected metric');
+    expect(health).toContain('previous scroll position');
+    expect(health).toContain('Changing to a different metric starts at the top');
+    expect(health).toContain('refreshing readings does not reset your scroll');
     expect(health).not.toContain("detailed charts, Highlights, and **Source observations**");
   });
   it('explains the Health metric title picker on both layouts and remembered selection', () => {
