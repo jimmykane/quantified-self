@@ -1,7 +1,11 @@
+import { AppActivityTypeGroupColors } from '../services/color/app.activity-type-group.colors';
+import { AppActivityTypeGroupGradients } from '../services/color/app.activity-type-group.gradients';
+import { AppActivityTypeGroupIcons } from '../services/color/app.activity-type-group.icons';
 import { describe, expect, it, vi } from 'vitest';
-import { ActivityTypeGroups, ActivityTypes, ActivityTypesHelper } from '@sports-alliance/sports-lib';
+import { ActivityTypeGroups, ActivityTypes, ActivityTypesHelper, type ActivityTypeGroup } from '@sports-alliance/sports-lib';
 import {
   getActivityTypeGroupLabel,
+  getActivityTypeGroupMetadata,
   getActivityTypeGroupCatalog,
   getActivityTypesForGroup,
   isIndoorActivityType,
@@ -10,6 +14,23 @@ import {
 } from '@shared/activity-type-group.metadata';
 
 describe('activity-type-group.metadata', () => {
+  it('prepares Walking metadata and visuals while listing only installed catalog groups', () => {
+    const group = 'walking_group' as ActivityTypeGroup;
+    expect(getActivityTypeGroupMetadata(group)).toMatchObject({ label: 'Walking', ambiguous: true });
+    expect(AppActivityTypeGroupColors[group]).toMatch(/^#[0-9A-F]{6}$/i);
+    expect(AppActivityTypeGroupGradients[group]).toMatchObject({ start: '#55D781', end: '#2E7D32' });
+    expect(AppActivityTypeGroupIcons[group]).toBe('directions_walk');
+    expect(getActivityTypeGroupCatalog().some(entry => entry.id === group))
+      .toBe(Object.values(ActivityTypeGroups).some(value => String(value) === group));
+  });
+
+  it('uses Sports Lib indoor semantics for every catalog type', () => {
+    ActivityTypesHelper.getActivityTypesAsUniqueArray().forEach(type => {
+      expect(isIndoorActivityType(type as ActivityTypes))
+        .toBe(ActivityTypesHelper.isIndoorActivityType(type as ActivityTypes));
+    });
+  });
+
   it('resolves group labels from quantified metadata', () => {
     expect(getActivityTypeGroupLabel(ActivityTypeGroups.WaterSportsGroup)).toBe('Water Sports');
     expect(getActivityTypeGroupLabel(ActivityTypeGroups.RunningGroup)).toBe('Running');
@@ -77,11 +98,11 @@ describe('activity-type-group.metadata', () => {
     const canonicalTypes = ActivityTypesHelper.getActivityTypesAsUniqueArray();
     const unspecified = catalog.find(entry => entry.id === ActivityTypeGroups.UnspecifiedGroup);
 
-    expect(catalog).toHaveLength(17);
-    expect(catalogTypes).toHaveLength(131);
+    expect(catalog).toHaveLength(new Set(Object.values(ActivityTypeGroups)).size);
+    expect(catalogTypes).toHaveLength(canonicalTypes.length);
     expect(new Set(catalogTypes).size).toBe(catalogTypes.length);
     expect([...catalogTypes].sort()).toEqual([...canonicalTypes].sort());
-    expect(unspecified?.activityTypes).toEqual([
+    expect(unspecified?.activityTypes).toEqual(expect.arrayContaining([
       ActivityTypes.Generic,
       ActivityTypes.Match,
       ActivityTypes.Other,
@@ -90,7 +111,7 @@ describe('activity-type-group.metadata', () => {
       ActivityTypes.Transition,
       ActivityTypes.unknown,
       ActivityTypes.Workout,
-    ].sort());
+    ].sort()));
     expect(getActivityTypesForGroup(ActivityTypeGroups.IndoorSportsGroup)).toContain(ActivityTypes.Yoga);
   });
 

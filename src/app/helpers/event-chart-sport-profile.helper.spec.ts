@@ -30,9 +30,40 @@ import {
 } from './event-chart-sport-profile.helper';
 
 describe('event chart sport profiles', () => {
-  it('classifies every canonical Sports Lib activity type explicitly', () => {
+  it('covers every canonical Sports Lib activity type with an explicit or group profile', () => {
     expect(ActivityTypesHelper.getActivityTypesAsUniqueArray().length).toBeGreaterThan(100);
     expect(getUnclassifiedEventChartActivityTypes()).toEqual([]);
+  });
+
+  it.each([
+    ['Road Running', 'running'],
+    ['Indoor Track Running', 'treadmill'],
+    ['Vertical Running', 'trail-running'],
+    ['Road Cycling', 'cycling'],
+    ['Gravel Cycling', 'cycling'],
+    ['Track Cycling', 'cycling'],
+    ['Cyclocross', 'cycling'],
+    ['LES MILLS RPM', 'indoor-cycling'],
+    ['LES MILLS SPRINT', 'indoor-cycling'],
+    ['LES MILLS THE TRIP', 'indoor-cycling'],
+    ['Speed Walking', 'walking'],
+    ['Indoor Walking', 'indoor-walking'],
+    ['Classic Crosscountry Skiing', 'cross-country-skiing'],
+    ['Skate Skiing', 'cross-country-skiing'],
+    ['AMRAP', 'fitness'],
+    ['EMOM', 'fitness'],
+    ['Tabata', 'fitness'],
+    ['LES MILLS BODYPUMP', 'fitness'],
+  ])('keeps %s named while reusing the compatible chart profile', (name, profileID) => {
+    const resolution = resolveEventChartSportProfile([name]);
+    expect(resolution.canonicalActivityTypes).toEqual([name]);
+    expect(resolution.profileID).toBe(profileID);
+    expect(resolution.label).toBe(name);
+  });
+
+  it('shares cycling recommendations with generic provider cycling and keeps indoor walking terrain-free', () => {
+    expect(resolveEventChartSportProfile(['Cycling', 'Road Cycling']).profileID).toBe('cycling');
+    expect(resolveEventChartSportProfile(['Indoor Walking']).candidateFamilies).not.toContain('altitude');
   });
 
   it.each([

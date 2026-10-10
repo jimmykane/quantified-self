@@ -38,6 +38,31 @@ describe('shared Training sport registry', () => {
     ]);
   });
 
+  it.each([
+    ['Road Running', 'running', 'running'],
+    ['Indoor Track Running', 'running', 'indoor-running'],
+    ['Vertical Running', 'running', 'trail-running'],
+    ['Road Cycling', 'cycling', 'cycling'],
+    ['Gravel Cycling', 'cycling', 'cycling'],
+    ['Track Cycling', 'cycling', 'cycling'],
+    ['Cyclocross', 'cycling', 'cycling'],
+    ['LES MILLS RPM', 'cycling', 'indoor-cycling'],
+    ['LES MILLS SPRINT', 'cycling', 'indoor-cycling'],
+    ['LES MILLS THE TRIP', 'cycling', 'indoor-cycling'],
+    ['Indoor Walking', 'walking-hiking', 'walking'],
+    ['Speed Walking', 'walking-hiking', 'walking'],
+    ['Classic Crosscountry Skiing', 'nordic-skiing', 'snow-nordic-skiing'],
+    ['Skate Skiing', 'nordic-skiing', 'snow-nordic-skiing'],
+    ['AMRAP', 'fitness-gym', 'conditioning'],
+    ['EMOM', 'fitness-gym', 'conditioning'],
+    ['Tabata', 'fitness-gym', 'conditioning'],
+    ['LES MILLS BODYPUMP', 'strength', 'strength'],
+  ])('includes %s in the approved family/context without changing its name', (name, sport, context) => {
+    expect(resolveTrainingSportContextFromActivityType(name)).toMatchObject({ sport, context });
+    expect(resolveTrainingSportContextFromActivityType(`  ${name.toLowerCase()}  `))
+      .toMatchObject({ sport, context });
+  });
+
   it('normalizes account-saved Training destinations to a safe overview fallback', () => {
     expect(normalizeTrainingDestinationId('overview')).toBe('overview');
     expect(normalizeTrainingDestinationId('cycling')).toBe('cycling');
