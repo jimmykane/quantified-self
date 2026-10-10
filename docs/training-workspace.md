@@ -6223,6 +6223,23 @@ Sports Lib `20.2.0` classifies Hand Cycle and Velomobile in the Cycling group. Q
 standard Cycling context, where they use the normal endurance summaries and Cycling durability protocol when their
 recorded evidence qualifies. This group-membership change does not require a derived-schema bump or source reparse.
 
+The unreleased Sports Lib activity-mapping audit adds BMX (`cycling/bmx`, FIT `2/29`), Indoor Skiing
+(`fitness_equipment/indoor_skiing`, `4/25`, also named XC Ski Indoor), ATV (`motorcycling/atv`, `22/35`),
+Motocross (`motorcycling/motocross`, `22/36`), and Pool Triathlon (`multisport/pool_triathlon`, `18/126`).
+BMX belongs to Cycling and can produce library durability evidence when the existing cycling protocol qualifies;
+Indoor Skiing belongs to Indoor Sports, ATV and Motocross to Motorized, and Pool Triathlon to Performance.
+Only Indoor Skiing establishes an indoor hint. ATV and Motocross omit library-calculated TSS and stale calculated
+scores while retaining finite imported scores. The other four types have no library durability adapter.
+
+These five exact canonical values are not yet modeled Training contexts: the existing registry resolves each to
+volume-only Other training, including BMX despite its Cycling group. Classification does not widen Training planning,
+intensity, load, distance, or provider delivery support. Adopt the library changes in the application and Functions
+together and review the dynamic supported-activities catalog. Recover historical broad labels only from their specific
+retained source classifications or explicit names, then regenerate affected event summaries, activity-type aggregates,
+applicable durability evidence, and Training snapshots through the existing reparse/derived ingress. No Training
+formula, derived schema, MCP field/scope/mutation, queue lifecycle, or monitoring changes are introduced by this batch.
+The package's importing guide owns the detailed FIT parent guards and native-JSON aliases.
+
 Sports Lib `20.3.0` adds canonical Health and Sleep scalar JSON classes. Training uses the shared dual reader for the
 sleep duration, score, HRV, and sleep-heart-rate aggregates it already consumes; no Training formula or derived schema
 changes. Existing normalized Sleep documents use the dedicated Health/Sleep scalar migration, not an activity reparse,
