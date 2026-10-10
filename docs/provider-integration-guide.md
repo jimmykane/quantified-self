@@ -14,6 +14,10 @@ lifecycle. The current provider matrix therefore stays unchanged. Follow the
 before using these types in production. Official mapping names are tested with synthetic FIT; downloaded recordings
 remain temporary because redistribution rights were not established. The app's Help uses the installed activity catalog.
 
+Follow-up review keeps recognized profiles within compatible FIT parents, preserves existing broad-parent refinements,
+and retains every documented context for shared profile names. Route and route-file JSON now apply the same invalid
+scalar summary policy as activities. These corrections retain the existing provider and queue contracts.
+
 ## 1. Define the product contract before writing code
 
 Start with a concise support matrix agreed with product and the provider. Do not infer capability from an OAuth scope alone.

@@ -6456,7 +6456,14 @@ capability changes. Queue lifecycle and sanitized persistence paths remain uncha
 The downloaded public files remain outside the repositories, and profile-only cases use documented names and synthetic
 FIT. FIT Parser decoding work belongs to the separate agent; no parser changes are part of this task.
 
-Verification: 3,936 Sports Lib tests pass across 36 suites; both package formats build and 13 documentation pages verify.
+Follow-up review prevents a known provider profile from replacing an unrelated FIT parent through a general alias;
+compatible broad-parent refinements and explicit parent/profile composites retain their existing behavior. Shared Polar
+profile spellings retain all documented FIT contexts. Route and route-file JSON also omit invalid scalar summaries and
+skip legacy null/non-finite values; files with no valid summaries use existing child-route aggregation. This read-only
+compatibility correction needs no saved-route source reparse. Training formulas, the installed packages, the public MCP
+contract and the sanitized persistence boundary remain unchanged; no MCP deferral is needed.
+
+Verification after follow-up review: 4,164 Sports Lib tests pass across 41 suites; both package formats build and 13 documentation pages verify.
 All 171 Polar FIT appendix profiles resolve under their documented pair/name inputs. All 170 valid public FIT files
 survive JSON re-import (112 failed before the correction); one truncated sample remains rejected. All 41 provider TSS
 scores pass default/true preservation and false removal/recalculation. Runtime checks cover all 245 types, the 121

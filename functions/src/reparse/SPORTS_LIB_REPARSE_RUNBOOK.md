@@ -15,6 +15,10 @@ Cross-trainer and Stretching profiles on their documented broad pairs. Australia
 separate Team/Racket types, bringing the unreleased catalog to 245. Unnamed generic records remain broad; no numeric
 sport IDs or undocumented API tokens are assigned to the three new types.
 
+Known profiles cannot replace an unrelated FIT parent through a standalone alias fallback. Existing compatible broad
+parents and explicit parent/profile composites retain their refinements. Shared profile names retain every documented
+FIT context, including Polar Open water swimming on Swimming/Generic and Swimming/Backcountry.
+
 Adopt the same released Sports Lib version in the application and Functions before persisting these classifications.
 Retained original files or specific saved provider profiles are required to correct historical broad labels through the
 existing targeted reparse lifecycle. Regenerate affected event summaries, activity-type aggregates, applicable
@@ -24,6 +28,8 @@ Event/activity/lap JSON reads now skip legacy null/non-finite scalar stats; fini
 and method, structured stats and stream gaps remain intact. Summary exports omit non-finite scalar numbers while
 runtime zero-speed pace can remain infinite. This compatibility read does not require an original file or a reparse.
 Any explicitly requested persistence rewrite must still use the existing sanitized writer, never direct Firestore edits.
+Route and route-file JSON apply the same invalid-scalar summary policy. When no valid route-file summaries remain,
+existing aggregation regenerates them from the child routes. Saved routes need no source reparse for this read correction.
 TSS preservation remains true/default = retain finite provider score; false = discard and use existing calculation policy.
 
 There are no new numeric metric tokens/units, formulas, derived schemas, planning/delivery capabilities, registered
