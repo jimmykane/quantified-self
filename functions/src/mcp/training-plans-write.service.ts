@@ -5,6 +5,7 @@ import { Timestamp } from 'firebase-admin/firestore';
 import * as logger from 'firebase-functions/logger';
 import { HttpsError } from 'firebase-functions/v2/https';
 import { z } from 'zod';
+import { describeTrainingRecipeReview } from './training-recipe-review';
 import { ActivityTypes } from '@sports-alliance/sports-lib';
 import { readSuuntoStrengthWeightUnits } from '../training-plans/delivery/store';
 import { assertAssistantRecoveryDurationSeconds, isAssistantWorkoutReviews, type AssistantWorkoutReview, type AssistantWorkoutSnapshot } from '../../../shared/assistant-workout-review';
@@ -438,15 +439,15 @@ function describeAppliedProviderDeletion(removePastProviderCopies: boolean): str
 
 function describeOperation(operation: TrainingScheduleMutationOperationV1): string {
   switch (operation.kind) {
-    case 'create-plan': return `Create plan “${operation.name}” from ${operation.startLocalDate} to ${operation.endLocalDate}${operation.activate ? ' and make it active' : ''}.`;
+    case 'create-plan': return `Create plan “${operation.name}” from ${operation.startLocalDate} to ${operation.endLocalDate}${operation.activate ? ' and make it active' : ' as paused (not active; no plan delivery)'}.`;
     case 'rename-plan': return `Rename a plan to “${operation.name}”.`;
     case 'set-plan-color': return `Change the plan color to ${operation.color}.`;
     case 'set-plan-phases': return `Replace the plan phases with ${operation.phases.items.length} phase${operation.phases.items.length === 1 ? '' : 's'}; plan dates become ${operation.startLocalDate} to ${operation.endLocalDate}. Workouts and provider delivery settings stay unchanged.`;
     case 'set-plan-lifecycle': return `${operation.lifecycle === 'active' ? 'Activate' : operation.lifecycle === 'paused' ? 'Pause' : 'Archive'} the plan.`;
     case 'shift-plan': return `Shift the plan ${Math.abs(operation.days)} day${Math.abs(operation.days) === 1 ? '' : 's'} ${operation.days > 0 ? 'later' : 'earlier'}.`;
-    case 'create-workout': return `Create “${operation.title}” on ${operation.localDate}${operation.planId ? ' in the selected plan' : ' as a standalone workout'}.`;
+    case 'create-workout': return `Create “${operation.title}” on ${operation.localDate} (${operation.planId ? 'selected plan' : 'standalone'}).`;
     case 'bulk-create-workouts': return `Create ${operation.placements.length} independent copies of “${operation.title}”${operation.planId ? ' in the selected plan' : ' as standalone workouts'}.`;
-    case 'update-workout': return `Update “${operation.title}” and schedule it for ${operation.localDate}.`;
+    case 'update-workout': return `Update “${operation.title}” on ${operation.localDate}.`;
     case 'move-workout': return `Move the workout to ${operation.localDate}${operation.planId ? ' in the selected plan' : ' as a standalone workout'}.`;
     case 'copy-workout': return `Copy the workout to ${operation.localDate}${operation.planId ? ' in the selected plan' : ' as a standalone workout'}.`;
     case 'set-workout-lifecycle': return `${operation.lifecycle === 'skipped' ? 'Mark' : 'Restore'} the workout ${operation.lifecycle === 'skipped' ? 'as skipped' : 'to planned'}.`;
@@ -481,12 +482,17 @@ function describeScheduleEffects(
       : null;
   if (workoutId) {
     const workout = after.workouts.get(workoutId);
+    if (workout && operation.kind !== 'move-workout') {
+      details.push(workout.structure.sport === ActivityTypes.StrengthTraining
+        ? 'Strength recipe: review the full exercise prescription; the v1 structure is only a compatibility summary.'
+        : describeTrainingRecipeReview(workout.structure));
+    }
     const planId = workout?.planId ?? null;
     const priorPlan = planId ? before.plans.get(planId) : null;
     const nextPlan = planId ? after.plans.get(planId) : null;
     if (priorPlan && nextPlan
       && (priorPlan.startLocalDate !== nextPlan.startLocalDate || priorPlan.endLocalDate !== nextPlan.endLocalDate)) {
-      details.push(`The destination plan range will extend to ${nextPlan.startLocalDate} through ${nextPlan.endLocalDate}.`);
+      details.push(`Extend plan range: ${nextPlan.startLocalDate} to ${nextPlan.endLocalDate}.`);
     }
   }
   return [describeOperation(operation), ...details].join(' ');

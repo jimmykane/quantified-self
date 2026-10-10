@@ -9,6 +9,7 @@ import {
 import { onRequest, Request } from 'firebase-functions/v2/https';
 import * as logger from 'firebase-functions/logger';
 import { isIP } from 'node:net';
+import { TRAINING_PRESCRIPTION_AUTHORING_GUIDANCE, TRAINING_PRESCRIPTION_VERIFICATION_GUIDANCE } from '../shared/training-authoring-guidance';
 import { z } from 'zod';
 import { DERIVED_METRIC_KINDS } from '../../../shared/derived-metrics';
 import { prepareDerivedMetricsForUser } from '../derived-metrics/ensure-derived-metrics';
@@ -847,6 +848,7 @@ function buildMcpServerInstructions(auth: AuthenticatedMcpRequest): string {
     if (!trainingChangesAvailable) {
       instructions.push(`${readGuidance} No planning edits or provider actions are available.`);
     } else if (auth.scopes.includes(MCP_OAUTH_SCOPES.TrainingPlansWrite)) {
+      instructions.push(TRAINING_PRESCRIPTION_AUTHORING_GUIDANCE, TRAINING_PRESCRIPTION_VERIFICATION_GUIDANCE);
       instructions.push('For a requested library change, read the exact saved recipe or source workout and current schedule/library revisions, then call preview_saved_workout_v2_change once. Preserve every unchanged recipe field, including absent, false and true allowEarlyLap values; enable it only on explicit athlete request. Ask if the source, destination plan, or dates are ambiguous. Explicitly review permanent library deletion and plan-range extension. After presenting the preview, call only the separately approval-gated apply_saved_workout_change. Library placement makes independent scheduled copies and never grants provider consent; existing active-plan consent may deliver plan copies. Do not treat a saved recipe as a completed workout.');
       const focusedCreateGuidance = auth.scopes.includes(MCP_OAUTH_SCOPES.TrainingDeliveryWrite)
         ? 'include its optional delivery object when the same workout should be sent immediately to providers'

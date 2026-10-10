@@ -366,7 +366,7 @@ describe('Firebase Hosting configuration', () => {
     expect(sitemapXml).not.toContain(`${siteOrigin}/features/sports-watch-benchmark`);
     // Health overview/history navigation and activity-history busy-state Help
     // were updated on this date; keep the specific public Help lastmod.
-    expect(sitemapLastmodForUrl(`${siteOrigin}/help`)).toBe('2026-10-09');
+    expect(sitemapLastmodForUrl(`${siteOrigin}/help`)).toBe('2026-10-10');
     expect(sitemapLastmodForUrl(`${siteOrigin}/policies`)).toBe('2026-10-07');
     expect(sitemapLastmodForUrl(`${siteOrigin}/privacy`)).toBe('2026-10-07');
     expect(sitemapLastmodForUrl(`${siteOrigin}/terms`)).toBe('2026-10-07');

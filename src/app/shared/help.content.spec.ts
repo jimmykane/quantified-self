@@ -942,6 +942,11 @@ describe('help.content', () => {
     const planningSection = HELP_SECTIONS.find(section => section.id === 'training-plans');
 
     expect(planningSection?.content).toContain('You do not need to create a plan first');
+    expect(planningSection?.content).toContain('five three-minute efforts, not a five-mile run');
+    expect(planningSection?.content).toContain('titles and notes alone do not create repeats or HR/pace targets');
+    expect(planningSection?.content).toContain('a sample does not verify every workout');
+    expect(planningSection?.content).toContain('Plan actions -> Activate plan');
+    expect(planningSection?.content).toContain('Activation and service sync are separate choices');
     expect(planningSection?.content).toContain('[Training Plans overview](/features/training-plans)');
     expect(planningSection?.content).toContain('Plans and standalone workouts work without a service connection');
     expect(planningSection?.content).toContain('Settings -> Units & formatting -> Start of the Week');

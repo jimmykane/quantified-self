@@ -20,7 +20,9 @@ import { processTrainingDelivery } from '../training-plans/delivery/worker';
 import { processTrainingVerification } from '../training-plans/delivery/verification-worker';
 import { trainingDeliveryCommand } from '../training-plans/delivery/commands';
 import { parseStrengthWorkoutDetailsV1, projectStrengthWorkoutToV1 } from '../../../shared/strength-workout';
-import { encodeOpaqueValue } from './data.service';
+import { parseWorkoutStructureV1 } from '../../../shared/planned-workout';
+import { decodeOpaqueValue, encodeOpaqueValue } from './data.service';
+import { createFirestoreTrainingReads, readTrainingPlans } from './training-plans.service';
 import { processTrainingBulkShift, reconcileTrainingBulkShifts } from '../training-plans/bulk-shift-worker';
 import { mutateTrainingScheduleForUser } from '../training-plans/persistence';
 import { BULK_SHIFT_LEASE_MS } from '../training-plans/staged-shift';
@@ -82,6 +84,96 @@ describe.skipIf(!process.env.FIRESTORE_EMULATOR_HOST)('Training MCP write propos
 
   const statusInput = (proposalRef: string) => ({ uid, connectionId: 'connection', scopes,
     arguments: { proposalRef, permissionMode: 'combined' } });
+
+  it('reviews actual prescriptions, discloses paused creation and reads back exact approved interval recipes', async () => {
+    const intervals = { ...structure, nodes: [{ kind: 'repeat' as const, id: 'intervals', count: 5, steps: [
+      { ...structure.nodes[0], id: 'work', ending: { kind: 'time' as const, seconds: 180 }, targets: [
+        { kind: 'heart-rate' as const, mode: 'absolute' as const, minimumBpm: 148, maximumBpm: 156 },
+      ] },
+      { ...structure.nodes[0], id: 'recovery', purpose: 'recovery' as const, ending: { kind: 'time' as const, seconds: 120 } },
+    ] }] };
+    const collapsed = { ...structure, nodes: [{ ...structure.nodes[0], ending: { kind: 'distance' as const, meters: 8046.72 },
+      note: '5 x 3 mins steady, 148–156 bpm. This prose is not a structured prescription.' }] };
+    const preview = await previewTrainingChanges({ uid, connectionId: 'connection', scopes, arguments: {
+      expectedScheduleRevision: 1, changes: [
+        { kind: 'create-plan', localKey: 'plan', name: 'Synthetic intervals', startDate: '2026-09-18', endDate: '2026-10-18' },
+        { kind: 'create-workout', localKey: 'intervals', plan: { localKey: 'plan' }, localDate: '2026-09-18', title: '5 x 3 mins steady', structure: intervals },
+        { kind: 'create-workout', localKey: 'collapsed', plan: { localKey: 'plan' }, localDate: '2026-09-19', title: '5 x 3 mins steady', structure: collapsed },
+      ],
+    } }, deps);
+    expect(preview.changes[0].summary).toContain('as paused (not active; no plan delivery)');
+    expect(preview.changes[1].summary).toContain('2 defined steps, 1 repeat block ×5; time endings; targets HR');
+    expect(preview.changes[2].summary).toContain('1 defined step, 0 repeat blocks; distance endings; targets none');
+    expect((await db.collection('users').doc(uid).collection('scheduledWorkouts').get()).empty).toBe(true);
+    const result = await applyTrainingChanges({ uid, connectionId: 'connection', scopes,
+      arguments: { proposalRef: preview.proposalRef, permissionMode: 'schedule' } }, deps);
+    const codec = {
+      encode: (value: Record<string, unknown>, owner: string, connection: string) => encodeOpaqueValue('training_read', value, owner, connection),
+      decode: (value: string, owner: string, connection: string) => decodeOpaqueValue('training_read', value, owner, connection, 'Training reference'),
+    };
+    const reads = createFirestoreTrainingReads(() => db);
+    for (const [localKey, recipe] of [['intervals', intervals], ['collapsed', collapsed]] as const) {
+      const reference = result.createdReferences.find(item => item.localKey === localKey)!.reference;
+      const saved = await readTrainingPlans({ uid, connectionId: 'connection', scopes, tool: 'get_planned_workout_v3',
+        arguments: { workoutRef: reference } }, reads, codec, deps.now());
+      expect(saved).toMatchObject({ workout: { structure: JSON.parse(JSON.stringify(recipe)) } });
+    }
+    expect((await db.collection('users').doc(uid).collection('trainingPlanState').doc('current').get()).get('activePlanId')).toBeNull();
+    expect((await db.collection('users').doc(uid).collection('trainingDeliverySettings').get()).empty).toBe(true);
+    expect(transport!.calls).toHaveLength(0);
+  });
+
+  it('retains recipe, date extension, pool and early-Lap review within the frozen summary bound', async () => {
+    const variants = [
+      { kind: 'step', id: 'time', purpose: 'work', ending: { kind: 'time', seconds: 180, allowEarlyLap: true }, targets: [
+        { kind: 'heart-rate', mode: 'absolute', minimumBpm: 148, maximumBpm: 156 },
+        { kind: 'power', mode: 'absolute', minimumWatts: 100, maximumWatts: 200 },
+      ] },
+      { kind: 'step', id: 'distance', purpose: 'work', ending: { kind: 'distance', meters: 100, allowEarlyLap: true }, targets: [
+        { kind: 'speed', mode: 'absolute', minimumMetersPerSecond: 2, maximumMetersPerSecond: 3, presentation: 'pace' },
+        { kind: 'cadence', mode: 'absolute', minimumRpm: 80, maximumRpm: 90 },
+      ] },
+      { kind: 'step', id: 'energy', purpose: 'work', ending: { kind: 'kilojoules', kilojoules: 1 }, targets: [] },
+      { kind: 'step', id: 'reps', purpose: 'work', ending: { kind: 'repetitions', repetitions: 5 }, targets: [] },
+      { kind: 'step', id: 'manual', purpose: 'recovery', ending: { kind: 'manual' }, targets: [] },
+    ];
+    const recipe = parseWorkoutStructureV1({ version: 1, sport: ActivityTypes.Swimming,
+      poolLength: { meters: 123.456789, presentation: 'yards' }, nodes: Array.from({ length: 100 }, (_, index) =>
+        ({ ...variants[index % variants.length], id: `step-${index}` })) });
+    const title = '界'.repeat(120);
+    const setup = await previewPlannedWorkoutV3Change({ uid, connectionId: 'connection', scopes, arguments: {
+      expectedScheduleRevision: 1, change: { kind: 'create-workout', localKey: 'swim', plan: null,
+        localDate: '2026-09-18', title, structure: recipe },
+    } }, deps);
+    expect(setup.changes[0].summary.length).toBeLessThanOrEqual(500);
+    const created = await applyTrainingChanges({ uid, connectionId: 'connection', scopes,
+      arguments: { proposalRef: setup.proposalRef, permissionMode: 'schedule' } }, deps);
+    const planPreview = await previewTrainingChanges({ uid, connectionId: 'connection', scopes, arguments: {
+      expectedScheduleRevision: created.scheduleRevision, changes: [{ kind: 'create-plan', localKey: 'plan',
+        name: 'Synthetic bound', startDate: '2026-09-18', endDate: '2026-09-19' }],
+    } }, deps);
+    const plan = await applyTrainingChanges({ uid, connectionId: 'connection', scopes,
+      arguments: { proposalRef: planPreview.proposalRef, permissionMode: 'schedule' } }, deps);
+    const edited = parseWorkoutStructureV1({ ...recipe, nodes: recipe.nodes.map((node, index) => {
+      if (node.kind !== 'step' || !['time', 'distance'].includes(node.ending.kind)) return node;
+      return { ...node, ending: { ...node.ending, allowEarlyLap: index === 0 } };
+    }) });
+    const preview = await previewPlannedWorkoutV3Change({ uid, connectionId: 'connection', scopes, arguments: {
+      expectedScheduleRevision: plan.scheduleRevision, change: { kind: 'update-workout',
+        workout: { ref: created.createdReferences[0].reference }, plan: { ref: plan.createdReferences[0].reference },
+        localDate: '2026-09-20', title, structure: edited },
+    } }, deps);
+    const summary = preview.changes[0].summary;
+    expect(summary.length).toBeLessThanOrEqual(500);
+    expect(summary).toContain(title);
+    expect(summary).toContain('100 defined steps, 0 repeat blocks');
+    expect(summary).toContain('time/distance/energy/reps/Lap endings; targets HR/power/pace/speed/cadence');
+    expect(summary).toContain('Extend plan range: 2026-09-18 to 2026-09-20');
+    expect(summary).toContain('Selected pool length:');
+    expect(summary).toContain('(yards presentation)');
+    expect(summary).toContain('Early Lap: enabled on 1 timed/distance step. Removed from 39 previously enabled steps.');
+    expect(transport!.calls).toHaveLength(0);
+  });
 
   it('persists exact mixed target snapshots and their order through approved create/update and idempotent replay', async () => {
     const recipe = { ...structure, sport: ActivityTypes.Cycling, nodes: [{ kind: 'repeat', id: 'block', count: 3,
@@ -1667,7 +1759,7 @@ describe.skipIf(!process.env.FIRESTORE_EMULATOR_HOST)('Training MCP write propos
       ] } }, deps);
     expect(preview).toMatchObject({ permissionMode: 'schedule', requiresConfirmation: true,
       changes: [{ kind: 'copy-workout', summary: expect.stringContaining('2027-01-02') }] });
-    expect(preview.changes[0].summary).toContain('The destination plan range will extend to 2026-09-18 through 2027-01-02.');
+    expect(preview.changes[0].summary).toContain('Extend plan range: 2026-09-18 to 2027-01-02.');
     const input = { uid, connectionId: 'connection', scopes,
       arguments: { proposalRef: preview.proposalRef, permissionMode: 'schedule' as const } };
     const applied = await applyTrainingChanges(input, deps);

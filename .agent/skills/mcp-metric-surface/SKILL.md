@@ -59,6 +59,11 @@ Lib version or parser change, also use `.agent/skills/sports-lib-upgrade-and-rep
   that JSON-round-trip each shared variant through public read and write validation. A shared-model addition must fail
   closed until its MCP schema, formatting, Assistant/plugin authoring guidance, contract digest and tests are reviewed;
   never make the coverage map an automatic field-exposure mechanism.
+  Keep shared MCP/Assistant authoring guidance and bundled workflows explicit about source-unit legends, ordered
+  work/recovery repeats and typed numeric targets: notes/titles and schema-valid writes do not prove prescription
+  fidelity. Preview recipe shape from validated structure, never infer it by parsing authored text. Preserve bounded
+  summaries and paused/activation disclosure; verify saved recipes against the source with bounded read-back coverage,
+  distinguishing sampled checks from full verification. Ambiguity needs clarification, not invented prescriptions.
   Read extensions use `training-plans:read`. New mutation capability is never implied: it must fit the explicit safe
   Training lifecycle, use the independent `training-plans:write` or `training-delivery:write` child scope, enter one
   bounded preview, bind owner/connection/grant/revision/expiry, and expose an idempotent apply as a separately

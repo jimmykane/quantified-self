@@ -1,7 +1,7 @@
 {
   "formatVersion": 1,
-  "candidateSha256": "dd9659d46041827941b36c9e47d08eae1c91ba5edab41eca2d98fd6a9fb3538b",
+  "candidateSha256": "1b2089bf255099187ef15811004d4943f4b423ed369f2bd6e19f802bebb2d636",
   "lifecycleAction": "developer-refresh",
-  "summary": "Preserve all pending additions, including Garmin replacement, prescription analysis and note-only workout reflections. Add bounded plan-phase reads and a focused full before/after preview under existing planning grants, reusing native/app-confirmed idempotent Apply. Frozen schemas/baselines stay unchanged. RPE stays in Edit details. Phases do not alter metrics, recipes, completion or provider authority. Reader-first release, exact rescan and bundled-guidance sync remain separate.",
+  "summary": "Preserve pending Garmin replacement, prescription analysis, note-only reflections and plan-phase reads/previews. Add shared MCP/Assistant unit/repeat/target fidelity, actual-recipe review, paused-creation and bounded read-back guidance. Frozen schemas/baselines stay unchanged; native/app-confirmed Apply remains mandatory. RPE stays in Edit details; phases do not change recipes, metrics, completion or provider authority. Release, exact rescan and bundled sync remain separate.",
   "rescanRequired": true
 }

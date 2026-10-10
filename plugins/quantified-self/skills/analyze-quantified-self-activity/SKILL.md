@@ -166,6 +166,8 @@ For several planned workouts, prefer the bounded bulk completion read; use the s
 Never infer completion from activity similarity. Route any
 request to create/edit a planned workout or change provider delivery through the Training skill's separate permissions
 and preview/native-approval workflow; activity permission alone never authorizes it.
+For plan imports or recipe construction, use that workflow's prescription-fidelity checks and bounded saved-recipe
+verification. Titles, notes or a successful save do not establish correctly encoded intervals/targets.
 
 
 For a planned recipe with early Lap, route through the focused Training workflow and discover the latest full scheduled

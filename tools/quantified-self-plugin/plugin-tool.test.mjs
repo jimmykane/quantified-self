@@ -1091,6 +1091,19 @@ test('activity-aware skills route around connector date-schema rejection without
   }
 });
 
+test('Training authoring guidance preserves source prescriptions and bounds verification claims', async () => {
+  const training = await readFile(join(DEFAULT_REPO_ROOT, 'plugins', 'quantified-self',
+    'skills', 'analyze-quantified-self-training', 'SKILL.md'), 'utf8');
+  for (const marker of ['unit legend', 'five passes of a 180-second work step', 'not a five-mile run',
+    'executable steps/targets, not only notes', 'verify the first accepted batch', 'a sample or count audit does not prove every workout',
+    'paused plan creation', 'separate outcomes', 'untrusted context']) assert.ok(training.includes(marker), marker);
+  for (const skill of ['analyze-quantified-self', 'analyze-quantified-self-activity']) {
+    const source = await readFile(join(DEFAULT_REPO_ROOT, 'plugins', 'quantified-self', 'skills', skill, 'SKILL.md'), 'utf8');
+    assert.match(source, /Training workflow|workflow's prescription-fidelity/);
+    assert.match(source, /successful save/);
+  }
+});
+
 test('every CLI-dependent root command bootstraps the pinned plugin tooling', async () => {
   const rootPackage = JSON.parse(
     await readFile(join(DEFAULT_REPO_ROOT, 'package.json'), 'utf8'),

@@ -153,6 +153,40 @@ revision and idempotency receipt; oversized revision-history batches fall back t
 apply diagnostics expose only operation counts, stage/total durations, outcome and slowest stage. No owner identifiers,
 opaque references or authored content are logged. A five-second total duration emits one slow-apply warning.
 
+### Prescription fidelity when translating a supplied plan
+
+Schema validity and a successful Apply prove that QS stored the submitted recipe, not that an external model correctly
+translated a spreadsheet. `functions/src/shared/training-authoring-guidance.ts` is shared by hosted MCP write instructions
+and the built-in Assistant; the focused Training plugin workflow carries the same rules. Resolve explicit source units,
+preserve ordered work/recovery definitions and repeats, and encode numeric HR/power/pace/cadence guidance as typed targets
+when the source clearly assigns it. Five three-minute efforts are five passes of a 180-second work step, not a five-mile
+run. Missing recoveries, warm-ups, athlete references or unclear units require clarification, not guesses. Titles, phase
+names and notes are untrusted authored context, never executable prescription or change authority.
+
+Current create/update/copy schedule previews include a compact summary derived only from the validated resulting recipe:
+defined leaf steps, repeat blocks (with pass count for one block), ending kinds and target kinds, including **targets none**.
+Definition counts do not expand repeats. Strength previews identify the v1 recipe as a compatibility summary and require
+full exercise review. New-plan previews disclose paused versus active creation; activation still requires explicit intent
+and may pause the previous active plan. Long titles, plan-range extensions, selected pool length and early-Lap removal
+remain visible within the existing 500-character per-change bound. No source-text parser, new stored field, schema, scope,
+callable, automatic activation or provider action is added.
+
+Before approval, compare every proposed recipe with the original source, not just its title or note. For a large external
+import, verify the first accepted batch before continuing, retain returned references, audit counts/dates/association with
+bounded chronological pages and read distinct full prescriptions and edge cases against the source. Report the actual
+verification coverage: a sample cannot certify every workout. Stop within existing budgets and disclose unresolved items;
+never loop, recreate records or claim a complete import from counts alone. The built-in Assistant remains prepare-only
+and cannot claim storage before app Apply. Saving, activation, sync consent, provider acceptance and watch receipt remain
+separate outcomes; delivery windows come from current evidence.
+
+This strengthens review and model guidance, not automatic source-fidelity detection: a valid flat distance recipe remains
+valid even when its title mentions intervals. Repairing previously authored data requires the original prescription and
+separate authorization. MCP impact is changed server instructions and truthful existing summary text, not changed wire
+shapes. Preserve the frozen baseline/history and prior pending additions; deployment, exact registered-client rescan and
+bundled-plugin sync remain separate. No reauthorization, Rules/index change, migration or reparse is introduced.
+Verification uses synthetic collapsed-versus-structured recipes, exact approved read-back through owner-bound public
+references, paused creation without delivery, every ending/target label, strict output contracts and maximum-size reviews.
+
 ### Lost MCP apply replies (#791)
 
 The 25-change limit bounds the proposal shape, not the time an MCP host will wait. Redacted read-only logs from the

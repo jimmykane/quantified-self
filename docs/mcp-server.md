@@ -171,6 +171,15 @@ The 25-change schema limit is not a host response-time guarantee. The redacted #
 30-day result lifetime and deployment/catalog boundary are detailed in
 [Training workspace](training-workspace.md#lost-mcp-apply-replies-791). This read is not added to the Assistant model's
 tools and does not widen consent. Source support requires separate deployment and registered-client discovery.
+Supplied-plan authoring must preserve source units, ordered work/recovery repeats and explicitly assigned numeric targets,
+not translate the first number in a title into distance or keep all guidance only in notes. Shared MCP/Assistant write
+instructions require clarification for ambiguity and bounded source-versus-saved-recipe verification. Schedule
+create/update/copy summaries expose actual definition/repeat-block, ending and target kinds; paused plan creation is
+explicit. Successful storage and sampled checks never prove full prescription fidelity. This changes instructions and
+existing summary wording, not schemas, tools, scopes or approval. The pending digest preserves earlier additions; separate
+deployment/rescan and bundled-guidance sync are required, not new consent. See
+[Prescription fidelity](training-workspace.md#prescription-fidelity-when-translating-a-supplied-plan) for limits and tests.
+
 For **Duplicate to…**, the existing `copy-workout` batch change takes an exact source reference, fresh proposal-local
 key, explicit destination date and destination plan reference or `null` for Standalone. Clients should read the exact
 source and current schedule revision, preserve its scope by default and ask if the source or date is ambiguous. The
