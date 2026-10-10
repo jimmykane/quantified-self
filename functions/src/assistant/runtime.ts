@@ -5,6 +5,7 @@ import type { ManualHealthMeasurementFields } from '../../../shared/manual-healt
 import { DataDuration } from '@sports-alliance/sports-lib';
 import { TRAINING_PLAN_NEXT_STEPS_GUIDANCE, TRAINING_PRESCRIPTION_AUTHORING_GUIDANCE, TRAINING_PRESCRIPTION_VERIFICATION_GUIDANCE } from '../shared/training-authoring-guidance';
 import { z } from 'genkit';
+import { ZodError as McpSchemaError } from 'zod';
 import { retry } from 'genkit/model/middleware';
 import * as logger from 'firebase-functions/logger';
 import {
@@ -56,6 +57,7 @@ import {
   isAssistantContentProposalTool,
 } from './content-proposal';
 import { addAssistantMetricBucketCalendarContext } from './metric-bucket-context';
+import { AssistantConversationStoreError } from './conversation-store';
 import {
   collectDailyWorkoutContext,
   canPreviewDailyWorkout,
@@ -113,6 +115,7 @@ class AssistantRuntimeStageError extends Error {
     readonly reason: string,
     readonly cause: unknown,
     readonly toolName: AssistantMcpToolName | null = null,
+    readonly toolFailureStage = 'assistant_tool_execution',
   ) {
     super(`The Assistant ${reason} stage failed.`);
     this.name = 'AssistantRuntimeStageError';
@@ -136,7 +139,8 @@ export function getAssistantRuntimeToolFailureDiagnostic(error: unknown): {
   }
   return error.cause instanceof AssistantMcpToolFailure
     ? { toolErrorCode: error.cause.code, toolFailureStage: error.cause.stage }
-    : { toolErrorCode: 'unclassified_error', toolFailureStage: 'assistant_tool_execution' };
+    : { toolErrorCode: error.cause instanceof McpSchemaError ? 'invalid_assistant_preview' : 'unclassified_error',
+      toolFailureStage: error.toolFailureStage };
 }
 
 export interface AssistantRuntimeTool {
@@ -1416,6 +1420,7 @@ export function createAssistantRuntime(
             );
             await input.onBillableAttempt?.();
             let result;
+            let toolFailureStage = 'assistant_tool_execution';
             try {
               if ((MCP_MANUAL_MEASUREMENT_READ_TOOLS as readonly string[]).includes(tool.name)) {
                 if (!input.measurementChangesEnabled || !input.assertContentWriteAccess) throw new Error('Manual measurement access is unavailable.');
@@ -1482,9 +1487,12 @@ export function createAssistantRuntime(
               }
               if ((TRAINING_PREVIEW_TOOLS as readonly string[]).includes(tool.name)) {
                 await input.assertTrainingWriteAccess!();
+                toolFailureStage = 'training_preview_validation';
                 const preview = TRAINING_ASSISTANT_PREVIEW_OUTPUT.parse(result.structuredContent);
+                toolFailureStage = 'training_review_loading';
                 const workoutReviews = session.getTrainingWorkoutReviews && !tool.name.startsWith('preview_saved_workout')
                   ? await session.getTrainingWorkoutReviews(preview.proposalRef, input.prompt) : [];
+                toolFailureStage = 'training_review_validation';
                 try { assertAssistantRecoveryDurationEdit(input.prompt, workoutReviews); }
                 catch {
                   throw new AssistantRecoverableMcpToolError('invalid_request',
@@ -1495,7 +1503,7 @@ export function createAssistantRuntime(
                 pendingTrainingProposal = reviewed;
               }
             } catch (error) {
-              if (error instanceof AssistantTrainingMetricsPreparingError) {
+              if (error instanceof AssistantTrainingMetricsPreparingError || error instanceof AssistantConversationStoreError) {
                 throw error;
               }
               if (error instanceof AssistantRecoverableMcpToolError) {
@@ -1512,7 +1520,7 @@ export function createAssistantRuntime(
                   },
                 };
               }
-              throw new AssistantRuntimeStageError('mcp_tool_failed', error, tool.name);
+              throw new AssistantRuntimeStageError('mcp_tool_failed', error, tool.name, toolFailureStage);
             }
             const modelProjection = addAssistantMetricBucketCalendarContext(
               tool.name,

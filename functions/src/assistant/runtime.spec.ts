@@ -58,8 +58,53 @@ import type {
 import { AssistantMcpToolFailure, AssistantRecoverableMcpToolError,
   ASSISTANT_GARMIN_REPLACEMENT_BLOCKED_GUIDANCE } from './mcp-session';
 import { createAssistantContentProposal } from './content-proposal';
+import { AssistantConversationStoreError } from './conversation-store';
 
 describe('app-owned complete workout review', () => {
+  it.each(['before', 'after'] as const)('preserves consent revocation %s a Training tool call without retry wrapping', async when => {
+    const { session, callTool } = createSession();
+    session.tools.push({ name: 'preview_training_changes', title: 'Preview', description: 'Prepare only', inputSchema: { type: 'object' } });
+    callTool.mockResolvedValue({ structuredContent: {} });
+    session.getTrainingWorkoutReviews = vi.fn();
+    const revoked = new AssistantConversationStoreError('conversation_changed', 'The Assistant data-access setting changed.');
+    const assertTrainingWriteAccess = vi.fn().mockRejectedValue(revoked);
+    if (when === 'after') assertTrainingWriteAccess.mockResolvedValueOnce(undefined);
+    const runtime = createAssistantRuntime({ createMcpSession: vi.fn().mockResolvedValue(session),
+      generateAnswer: async input => {
+        await input.tools.find(tool => tool.name === 'preview_training_changes')!.execute({});
+        return { answer: 'Must not release a review.', visualRequest: { chart: null, map: null } };
+      } });
+    await expect(runtime.answer({ uid: 'owner', appBaseUrl: 'https://quantified-self.io', prompt: 'Create a new plan with workouts.',
+      timeZone: 'Europe/Helsinki', history: [], trainingPlansEnabled: true, trainingPlanChangesEnabled: true,
+      assertTrainingPlansAccess: vi.fn().mockResolvedValue(undefined), assertTrainingWriteAccess })).rejects.toBe(revoked);
+    expect(callTool).toHaveBeenCalledTimes(when === 'before' ? 0 : 1);
+    expect(session.getTrainingWorkoutReviews).not.toHaveBeenCalled();
+  });
+  it.each(['preview', 'load', 'review'] as const)('classifies a %s review failure without exposing authored data', async stage => {
+    const { session, callTool } = createSession();
+    session.tools.push({ name: 'preview_training_changes', title: 'Preview', description: 'Prepare only', inputSchema: { type: 'object' } });
+    const preview = { proposalRef: 'bound-preview', expiresAtMs: Date.parse('2026-10-06T12:15:00Z'), permissionMode: 'schedule', scheduleRevision: 1,
+      requiresConfirmation: true, summary: 'Review source prescriptions.', changes: [{ index: 0, kind: 'create-workout', summary: 'One workout.' }], providerPreviews: [] };
+    callTool.mockResolvedValue({ structuredContent: stage === 'preview' ? { privateTitle: 'Never log this' } : preview });
+    session.getTrainingWorkoutReviews = stage === 'load'
+      ? vi.fn().mockRejectedValue(new Error('Never log this private title'))
+      : vi.fn().mockResolvedValue([{ privateTitle: 'Never log this' }]);
+    const runtime = createAssistantRuntime({ createMcpSession: vi.fn().mockResolvedValue(session), now: () => new Date('2026-10-06T12:00:00Z'),
+      generateAnswer: async input => {
+        await input.tools.find(tool => tool.name === 'preview_training_changes')!.execute({});
+        return { answer: 'Review before applying.', visualRequest: { chart: null, map: null } };
+      } });
+    let failure: unknown;
+    try {
+      await runtime.answer({ uid: 'owner', appBaseUrl: 'https://quantified-self.io', prompt: 'Create a new plan with workouts.',
+        timeZone: 'Europe/Helsinki', history: [], trainingPlansEnabled: true, trainingPlanChangesEnabled: true,
+        assertTrainingPlansAccess: vi.fn().mockResolvedValue(undefined), assertTrainingWriteAccess: vi.fn().mockResolvedValue(undefined) });
+    } catch (error) { failure = error; }
+    const diagnostic = getAssistantRuntimeToolFailureDiagnostic(failure);
+    expect(diagnostic).toEqual({ toolErrorCode: stage === 'preview' ? 'invalid_assistant_preview' : 'unclassified_error',
+      toolFailureStage: stage === 'preview' ? 'training_preview_validation' : stage === 'load' ? 'training_review_loading' : 'training_review_validation' });
+    expect(JSON.stringify(diagnostic)).not.toMatch(/private|Never log|bound-preview|owner/);
+  });
   it.each([
     ['Add a note to my strength workout.', 'preview_strength_workout_change'],
     ['Delete the recovery step from my strength workout.', 'preview_strength_workout_change'],

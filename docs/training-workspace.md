@@ -207,6 +207,12 @@ references. Real loopback Firestore tests cover external MCP and the Assistant's
 without delivery, every ending/target label, unchanged legacy edits, strict outputs and maximum-size reviews. Deterministic
 contract/transaction fixtures do not prove how a live ChatGPT/Claude model will translate a new spreadsheet.
 
+First-party write rechecks normalize omitted optional permissions to off. Schedule-only and delivery-only consent
+work independently; changed consent or conversation generations still stop the read before releasing a proposal,
+without a grounded retry. Live first-party review diagnostics distinguish preview-schema validation, complete-review
+loading and final review validation without logging recipes, notes, exception messages, references or identity. These private diagnostic stages
+do not change the MCP wire contract, read projections, consent or app help.
+
 ### Plan activation and optional sync next steps
 
 Shared MCP/Assistant write guidance and the bundled Training workflow offer one next choice after confirmed plan creation

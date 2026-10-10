@@ -2564,6 +2564,13 @@ after validation, but no additional server deployment or registered-app rescan o
 
 ## Local verification and release
 
+First-party Training review failures report only allowlisted stages: preview validation, complete-review loading,
+and review validation. MCP-schema failures use the MCP Zod error class, distinct from Genkit's model-output schema.
+Do not log exception messages, issues, authored fields, proposal references or owner identity. These diagnostics and
+authority fixes preserve the public MCP contract, consent, projections and app help; they require no catalog refresh.
+Training write authority treats omitted optional switches as off, so schedule-only consent does not require provider
+delivery consent. Rechecks still reject changed permissions/generations and propagate revocation without retry.
+
 Garmin missing-copy recovery (#769) does not widen registered v1 Training provider actions. Existing
 `get_training_sync_status` reports `needs_attention` and zero synced workouts after a complete not-found Workout
 observation, retaining the historical accepted-send timestamp without private inspection or provider identities.
