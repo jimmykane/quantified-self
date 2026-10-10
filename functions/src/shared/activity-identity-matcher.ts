@@ -137,6 +137,85 @@ function assignUniqueMatches(
   });
 }
 
+// Verified import-name refinements, not Training-family equivalence. In
+// particular, Generic -> Chores and Generic -> Meditation are separate edges;
+// they never make Chores and Meditation interchangeable.
+const HISTORICAL_IMPORT_TYPE_REFINEMENTS = [
+  ['Cycling', 'Road Cycling'],
+  ['Running', 'Road Running'],
+  ['Indoor Running', 'Indoor Track Running'],
+  ['Elliptical Trainer', 'Crosstrainer'],
+  ['Flexibility Training', 'Stretching'],
+  ['Rock Climbing', 'Climbing'],
+  ['Generic', 'Chores'],
+  ['Generic', 'Meditation'],
+] as const;
+
+const compatibleImportTypes = new Set(HISTORICAL_IMPORT_TYPE_REFINEMENTS.flatMap(([oldType, newType]) => [
+  `${normalizedType(oldType)}|${normalizedType(newType)}`,
+  `${normalizedType(newType)}|${normalizedType(oldType)}`,
+]));
+
+function finiteRoundedStat(activity: ActivityIdentityLike, type: string): number | null {
+  const value = activity.getStat?.(type)?.getValue?.();
+  return typeof value === 'number' && Number.isFinite(value) ? Math.round(value) : null;
+}
+
+function refinementSignature(activity: ActivityIdentityLike): string | null {
+  const startMs = toTimestampMs(activity.startDate);
+  const endMs = toTimestampMs(activity.endDate);
+  const duration = finiteRoundedStat(activity, DataDuration.type);
+  if (startMs === null || endMs === null || endMs < startMs || duration === null) {
+    return null;
+  }
+  return [startMs, endMs, duration, finiteRoundedStat(activity, DataDistance.type) ?? 'na'].join('|');
+}
+
+function assignUniqueImportRefinements(
+  existing: readonly ActivityIdentityLike[],
+  parsed: readonly ActivityIdentityLike[],
+  assignments: Map<number, number>,
+  usedExisting: Set<number>,
+): void {
+  const existingBySignature = new Map<string, number[]>();
+  existing.forEach((activity, index) => {
+    const key = usedExisting.has(index) ? null : refinementSignature(activity);
+    if (key) {
+      existingBySignature.set(key, [...(existingBySignature.get(key) || []), index]);
+    }
+  });
+  const candidates = new Map<number, number>();
+  const parsedCandidateCountsByExisting = new Map<number, number>();
+  parsed.forEach((activity, parsedIndex) => {
+    const key = assignments.has(parsedIndex) ? null : refinementSignature(activity);
+    if (!key) {
+      return;
+    }
+    const matches = (existingBySignature.get(key) || []).filter(existingIndex => {
+      const previous = existing[existingIndex];
+      const previousSourceKey = sourceKey(previous);
+      const parsedSourceKey = sourceKey(activity);
+      return !(previousSourceKey && parsedSourceKey && previousSourceKey !== parsedSourceKey)
+        && compatibleImportTypes.has(`${normalizedType(previous.type)}|${normalizedType(activity.type)}`);
+    });
+    if (matches.length === 1) {
+      candidates.set(parsedIndex, matches[0]);
+    }
+    matches.forEach(existingIndex => {
+      parsedCandidateCountsByExisting.set(existingIndex,
+        (parsedCandidateCountsByExisting.get(existingIndex) || 0) + 1);
+    });
+  });
+  // Check uniqueness on both sides before assigning any edge. Iterating and
+  // consuming candidates would otherwise turn an ambiguous graph into a match.
+  candidates.forEach((existingIndex, parsedIndex) => {
+    if (parsedCandidateCountsByExisting.get(existingIndex) === 1) {
+      assignments.set(parsedIndex, existingIndex);
+      usedExisting.add(existingIndex);
+    }
+  });
+}
+
 /**
  * Matches parsed activities to persisted identities without mutating either side.
  * Ambiguous signatures remain unmatched so callers can fail closed.
@@ -157,6 +236,8 @@ export function resolveActivityIdentityAssignments(
       signature,
     ),
   );
+
+  assignUniqueImportRefinements(existing, parsed, assignments, usedExisting);
 
   const unmatchedParsedIndexes = parsed
     .map((_activity, index) => index)

@@ -1,6 +1,6 @@
+import { CompatibleTrainingActivityTypes as RefinedTypes, resolveCompatibleActivityType } from './activity-type-compatibility';
 import {
   ActivityTypes,
-  ActivityTypesHelper,
   DataAscent,
   DataAvgStrokeDistance,
   DataCadenceAvg,
@@ -220,7 +220,7 @@ export const TRAINING_SPORT_DEFINITIONS = [
       {
         id: 'running',
         label: 'Running',
-        activityTypes: [ActivityTypes.Running],
+        activityTypes: [ActivityTypes.Running, RefinedTypes.RoadRunning],
         profile: 'endurance',
         intensityPolicy: 'zones',
         loadPolicy: 'recorded',
@@ -230,7 +230,7 @@ export const TRAINING_SPORT_DEFINITIONS = [
       {
         id: 'trail-running',
         label: 'Trail running',
-        activityTypes: [ActivityTypes.TrailRunning],
+        activityTypes: [ActivityTypes.TrailRunning, RefinedTypes.VerticalRunning],
         profile: 'vertical-endurance',
         intensityPolicy: 'zones',
         loadPolicy: 'recorded',
@@ -240,7 +240,10 @@ export const TRAINING_SPORT_DEFINITIONS = [
       {
         id: 'indoor-running',
         label: 'Indoor running',
-        activityTypes: [ActivityTypes.Treadmill, ActivityTypes.IndoorRunning, ActivityTypes.VirtualRunning],
+        activityTypes: [
+          ActivityTypes.Treadmill, ActivityTypes.IndoorRunning, ActivityTypes.VirtualRunning,
+          RefinedTypes.IndoorTrackRunning,
+        ],
         profile: 'endurance',
         intensityPolicy: 'zones',
         loadPolicy: 'recorded',
@@ -263,6 +266,10 @@ export const TRAINING_SPORT_DEFINITIONS = [
         label: 'Cycling',
         activityTypes: [
           ActivityTypes.Cycling,
+          RefinedTypes.RoadCycling,
+          RefinedTypes.GravelCycling,
+          RefinedTypes.TrackCycling,
+          RefinedTypes.Cyclocross,
           ActivityTypes.EBiking,
           ActivityTypes.Handcycle,
           ActivityTypes.Velomobile,
@@ -276,7 +283,10 @@ export const TRAINING_SPORT_DEFINITIONS = [
       {
         id: 'indoor-cycling',
         label: 'Indoor cycling',
-        activityTypes: [ActivityTypes.IndoorCycling, ActivityTypes.VirtualCycling],
+        activityTypes: [
+          ActivityTypes.IndoorCycling, ActivityTypes.VirtualCycling, RefinedTypes.LesMillsRPM,
+          RefinedTypes.LesMillsSPRINT, RefinedTypes.LesMillsTheTrip,
+        ],
         profile: 'endurance',
         intensityPolicy: 'zones',
         loadPolicy: 'recorded',
@@ -389,7 +399,10 @@ export const TRAINING_SPORT_DEFINITIONS = [
       {
         id: 'walking',
         label: 'Walking',
-        activityTypes: [ActivityTypes.Walking, ActivityTypes.NordicWalking],
+        activityTypes: [
+          ActivityTypes.Walking, ActivityTypes.NordicWalking, RefinedTypes.SpeedWalking,
+          RefinedTypes.IndoorWalking,
+        ],
         profile: 'vertical-endurance',
         intensityPolicy: 'zones',
         loadPolicy: 'recorded',
@@ -420,7 +433,10 @@ export const TRAINING_SPORT_DEFINITIONS = [
       {
         id: 'snow-nordic-skiing',
         label: 'Snow',
-        activityTypes: [ActivityTypes.CrosscountrySkiing, ActivityTypes.NordicSki],
+        activityTypes: [
+          ActivityTypes.CrosscountrySkiing, ActivityTypes.NordicSki, RefinedTypes.ClassicCrosscountrySkiing,
+          RefinedTypes.SkateSkiing,
+        ],
         profile: 'vertical-endurance',
         intensityPolicy: 'zones',
         loadPolicy: 'recorded',
@@ -451,7 +467,10 @@ export const TRAINING_SPORT_DEFINITIONS = [
       {
         id: 'strength',
         label: 'Strength',
-        activityTypes: [ActivityTypes.StrengthTraining, ActivityTypes.WeightTraining, ActivityTypes.Kettlebell],
+        activityTypes: [
+          ActivityTypes.StrengthTraining, ActivityTypes.WeightTraining, ActivityTypes.Kettlebell,
+          RefinedTypes.LesMillsBODYPUMP,
+        ],
         profile: 'strength',
         intensityPolicy: 'volume-only',
         loadPolicy: 'volume-only',
@@ -490,6 +509,9 @@ export const TRAINING_SPORT_DEFINITIONS = [
         label: 'Conditioning',
         activityTypes: [
           ActivityTypes.HIIT,
+          RefinedTypes.AMRAP,
+          RefinedTypes.EMOM,
+          RefinedTypes.Tabata,
           ActivityTypes['Circuit Training'],
           ActivityTypes['Cardio Training'],
           ActivityTypes.Aerobics,
@@ -756,15 +778,15 @@ export function resolveTrainingSportContextFromActivityType(
   if (typeof value !== 'string') {
     return null;
   }
-  const canonicalType = ActivityTypesHelper.resolveActivityType(value);
-  if (typeof canonicalType !== 'string' || !knownActivityTypes.has(canonicalType)) {
+  const canonicalType = resolveCompatibleActivityType(value);
+  if (typeof canonicalType !== 'string') {
     return null;
   }
   const exactContext = contextByActivityType.get(canonicalType);
   if (exactContext) {
     return exactContext;
   }
-  return aggregateActivityTypes.has(canonicalType)
+  return !knownActivityTypes.has(canonicalType) || aggregateActivityTypes.has(canonicalType)
     ? null
     : otherTrainingFallbackContext || null;
 }

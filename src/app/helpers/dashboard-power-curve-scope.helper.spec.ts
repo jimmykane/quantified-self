@@ -11,6 +11,7 @@ import { DASHBOARD_FORM_TRAINING_STRESS_SCORE_TYPE } from './dashboard-form.help
 import { DASHBOARD_POWER_CURVE_CHART_TYPE } from './dashboard-special-chart-types';
 import {
   buildDashboardPowerCurveAutoTileForScope,
+  expandHistoricalDashboardPowerCurveDefaultTypes,
   getDashboardPowerCurveActivityTypes,
   isLegacyDefaultDashboardPowerCurveTile,
   isDashboardPowerCurveTileForScope,
@@ -83,6 +84,25 @@ describe('dashboard-power-curve-scope.helper', () => {
     expect(resolveDashboardPowerCurveTileDisplayScope(mixedCyclingTile)).toBe('cycling');
     expect(resolveDashboardPowerCurveTileScope(mixedGenericTile)).toBeNull();
     expect(resolveDashboardPowerCurveTileDisplayScope(mixedGenericTile)).toBeNull();
+  });
+
+  it('expands only complete historical default sport lists to the installed catalog', () => {
+    const cycling = [
+      ActivityTypes.Cycling, ActivityTypes.DownhillCycling, ActivityTypes.EBiking,
+      ActivityTypes['Enduro MTB'], ActivityTypes.Handcycle, ActivityTypes.IndoorCycling,
+      ActivityTypes.MountainBiking, ActivityTypes.Velomobile, ActivityTypes.VirtualCycling,
+    ];
+    const running = [ActivityTypes.IndoorRunning, ActivityTypes.Running, ActivityTypes.TrailRunning,
+      ActivityTypes.Treadmill, ActivityTypes.VirtualRunning];
+    expect(expandHistoricalDashboardPowerCurveDefaultTypes([...cycling].reverse()))
+      .toEqual(getDashboardPowerCurveActivityTypes('cycling'));
+    expect(expandHistoricalDashboardPowerCurveDefaultTypes(running))
+      .toEqual(getDashboardPowerCurveActivityTypes('running'));
+    const custom = cycling.slice(0, -1);
+    expect(expandHistoricalDashboardPowerCurveDefaultTypes(custom)).toBe(custom);
+    const mixed = [...cycling, ActivityTypes.Running];
+    expect(expandHistoricalDashboardPowerCurveDefaultTypes(mixed)).toBe(mixed);
+    expect(expandHistoricalDashboardPowerCurveDefaultTypes([])).toEqual([]);
   });
 
   it('keeps generated scope filters stable', () => {

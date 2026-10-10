@@ -4133,14 +4133,14 @@ rendering derive from it.
 
 | Training family | Registered contexts and profiles | Conservative canonical membership |
 | --- | --- | --- |
-| Running | Running (`endurance`), Trail running (`vertical-endurance`), Indoor running (`endurance`) | Running; Trail Running; Treadmill, Indoor Running, Virtual Running |
-| Cycling | Cycling and Indoor cycling (`endurance`), Mountain biking (`endurance`), Enduro MTB (`mixed-gravity`), Downhill MTB (`gravity`) | Cycling, E-Biking, Hand Cycle, Velomobile; Indoor Cycling, Virtual Cycling; Mountain Biking; Enduro MTB; Downhill Cycling |
+| Running | Running (`endurance`), Trail running (`vertical-endurance`), Indoor running (`endurance`) | Running, Road Running; Trail Running, Vertical Running; Treadmill, Indoor Running, Virtual Running, Indoor Track Running |
+| Cycling | Cycling and Indoor cycling (`endurance`), Mountain biking (`endurance`), Enduro MTB (`mixed-gravity`), Downhill MTB (`gravity`) | Cycling, Road Cycling, Gravel Cycling, Track Cycling, Cyclocross, E-Biking, Hand Cycle, Velomobile; Indoor Cycling, Virtual Cycling, LES MILLS RPM, LES MILLS SPRINT, LES MILLS THE TRIP; Mountain Biking; Enduro MTB; Downhill Cycling |
 | Swimming | Pool swimming (`pool`), Open-water swimming (`open-water`) | Swimming; Open Water Swimming |
 | Rowing | Indoor rowing and On-water rowing (`rowing`) | Indoor Rowing; Rowing |
-| Walking & Hiking | Walking and Hiking (`vertical-endurance`) | Walking, Nordic Walking; Hiking, Trekking |
-| Nordic Skiing | Snow and Roller skiing (`vertical-endurance`) | Crosscountry Skiing, Nordic Skiing; Roller Skiing |
-| Strength | Strength (`strength`) | Strength Training, Weight Training, Kettlebell |
-| Fitness & Gym | General fitness, Conditioning, Mobility & movement (`general`) | Training, Indoor Training, Workout, Generic, Fitness Equipment; HIIT, Circuit Training, Cardio Training, Aerobics, CrossFit, Crosstrainer, Elliptical Trainer, Stair Stepper; Yoga, Pilates, Flexibility Training, Stretching, Gymnastics |
+| Walking & Hiking | Walking and Hiking (`vertical-endurance`) | Walking, Nordic Walking, Speed Walking, Indoor Walking; Hiking, Trekking |
+| Nordic Skiing | Snow and Roller skiing (`vertical-endurance`) | Crosscountry Skiing, Classic Crosscountry Skiing, Skate Skiing, Nordic Skiing; Roller Skiing |
+| Strength | Strength (`strength`) | Strength Training, Weight Training, Kettlebell, LES MILLS BODYPUMP |
+| Fitness & Gym | General fitness, Conditioning, Mobility & movement (`general`) | Training, Indoor Training, Workout, Generic, Fitness Equipment; HIIT, AMRAP, EMOM, Tabata, Circuit Training, Cardio Training, Aerobics, CrossFit, Crosstrainer, Elliptical Trainer, Stair Stepper; Yoga, Pilates, Flexibility Training, Stretching, Gymnastics |
 | Paddling | Canoeing, Kayaking, Paddling, and Stand-up paddling (`paddling`) | Canoeing; Kayaking; Paddling; Stand Up Paddling |
 | Other training | Other training (`general`) | Every other known, non-aggregate Sports Lib activity type through the explicit fallback policy |
 
@@ -4172,6 +4172,59 @@ stroke rate, and stroke distance; and distance-weighted 500 m rowing pace. Strok
 rowing, and paddling contexts. Each emitted metric carries its contributing
 activity count. A future family or context should be added to this registry with focused registry, builder, normalizer,
 presentation, and documentation tests; it must not require another set of family-specific accumulators or UI branches.
+
+### Preserved provider sport names and historical compatibility
+
+Canonical sport identity and Training analysis membership are separate. Road Cycling and generic Cycling contribute
+to the same Cycling context; QS keeps each stored name. Road/Gravel/Track Cycling and Cyclocross use the existing
+Cycling context, while the three declared LES MILLS cycling classes use Indoor cycling. Track Cycling alone does not
+establish an indoor venue. Road Running shares Running, Vertical Running shares Trail running, and Indoor Track
+Running shares Indoor running. Classic and skate skiing share the Snow context. AMRAP, EMOM and Tabata share
+Conditioning; LES MILLS BODYPUMP shares Strength. Indoor Walking and Speed Walking share Walking. Indoor Walking
+keeps its explicit chart profile without terrain recommendations; Training only aggregates actual recorded metrics.
+Missing distance, ascent or descent is never created from a sport label.
+
+`shared/activity-type-compatibility.ts` bridges only these 18 approved canonical names while the dependency still pins
+the published catalog. It does not infer Road Cycling from generic Cycling, guess a provider's missing profile, or
+assign other new sports to modeled families. Other new catalog types still use the conservative Other training policy.
+The Walking catalog group has metadata, icon, color, gradient and a chart default. Public catalog coverage follows the
+installed Sports Lib enum, without listing an empty future group under the old release. Event chart profiles preserve
+explicit existing choices and use catalog-group defaults for newly recognized canonical sports.
+
+The Running/Cycling family power-curve builders include refined types through the Training registry; newly generated
+Dashboard family power-curve filters use the installed catalog groups. Saved full default lists from the previous
+catalog expand on settings normalization to the current family list,
+while preserving their date range. Custom subsets and mixed-family selections remain exact.
+CP/W′/Pmax capacity fitting and its sparse history remain isolated by exact canonical activity type as specified in the
+Power systems section; family membership does not authorize pooling those fits. Snapshot schema 21 invalidates prior
+Training memberships through the existing bounded freshness/rebuild path. No TSS formula or imported-TSS rule changes.
+
+Original-file chart/sample reads also retain historical identities across eight verified import refinements: Cycling
+↔ Road Cycling, Running ↔ Road Running, Indoor Running ↔ Indoor Track Running, Elliptical Trainer ↔ Crosstrainer,
+Flexibility Training ↔ Stretching, Rock Climbing ↔ Climbing, Generic ↔ Chores, and Generic ↔ Meditation. After existing
+exact matching, this fallback requires matching start/end timestamps, finite rounded duration, equal rounded distance
+or missing distance on both sides, and uniqueness on both sides. Conflicting source keys block this fallback. Separate
+refinement edges never imply Chores ↔ Meditation or arbitrary Training-family identity equivalence. Persisted IDs and
+sport names are unchanged by these read-only matches. The shared reparse carryover matcher also gains these matches;
+its separate single-remaining fallback remains opt-in and is never enabled for read consumers.
+
+This compatibility preparation does not upgrade or publish Sports Lib. Before writing new canonical types, release
+Sports Lib under a unique version and align root and Functions pins in the upgrade PR. Ship compatible frontend readers
+before backend writes, and account for stale browser sessions: an old JSON reader cannot hydrate enum values absent
+from its installed catalog. Keep historical canonical names accepted, and verify split activity/event JSON round trips
+with the released package. No production reparse or data migration is authorized by this preparation.
+
+The frontend and Functions dependency trees also resolve FIT Parser 6.2.1 while retaining Sports Lib 21.5.0.
+Existing parsing options and Sports Lib metric mappings remain in use. Fresh imports and source-file reads can receive
+the parser's newly decoded fields; installing the dependency does not rewrite stored Training evidence. A parser-only
+version bump does not advance the Sports Lib reparse target. The
+[reparse runbook](../functions/src/reparse/SPORTS_LIB_REPARSE_RUNBOOK.md#fit-parser-621-dependency-update) records this rollout boundary.
+
+MCP impact: existing Training projections reuse the registry, and activity charts/samples reuse the shared identity
+matcher with unchanged owner checks, source/sample budgets, tools, schemas and scopes. Built-in Assistant workflow
+filters include only installed catalog values until the dependency upgrade, avoiding unsupported future enum inputs. The frozen public Training
+projection remains Running/Cycling/Swimming plus Other. Training plans, scheduled workouts, proposal/confirmation
+contracts and provider delivery mappings do not change, so no new planning read or mutation surface is required.
 
 ## Derived-Metric Refresh Pipeline
 
@@ -4211,7 +4264,7 @@ current-versus-usual 28-day Training context and `training_readiness` for curren
 `get_daily_report` tool reuses that same strict Training Summary projection but combines it with the live Dashboard
 Today-equivalent readiness path and safe latest sleep HRV/heart-rate aggregates. Both project a compact identity-free
 total and the frozen public Running/Cycling/Swimming breakdown, not the rest of the Training workspace. Internal
-schema-20 snapshots contain all ten groups and context/profile fields; MCP projection removes those fields and folds
+schema-21 snapshots contain all ten groups and context/profile fields; MCP projection removes those fields and folds
 the seven non-public groups into Other where an explanation payload needs a complete composition total. Form,
 CTL/ATL, ACWR, ramp,
 recovery, capacity, durability, power systems, and other specialist snapshots remain independently queryable rather

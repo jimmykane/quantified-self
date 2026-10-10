@@ -93,6 +93,7 @@ import {
 } from '../helpers/dashboard-auto-tile.helper';
 import {
     getDashboardPowerCurveEventFiltersForScope,
+    expandHistoricalDashboardPowerCurveDefaultTypes,
     getDashboardPowerCurveScopeDefinition,
     isLegacyDefaultDashboardPowerCurveTile,
     resolveDashboardPowerCurveTileScope,
@@ -615,6 +616,9 @@ export class AppUserUtilities {
                         chartTile.eventFilters,
                         '1y',
                         [],
+                    );
+                    normalizedPowerCurveFilters.activityTypes = expandHistoricalDashboardPowerCurveDefaultTypes(
+                        normalizedPowerCurveFilters.activityTypes,
                     );
                     const resolvedPowerCurveScope = resolveDashboardPowerCurveTileScope({
                         ...chartTile,

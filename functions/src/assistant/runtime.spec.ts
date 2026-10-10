@@ -26,7 +26,7 @@ describe('Training phase preview routing', () => {
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { GenkitError } from 'genkit';
 import { retry } from 'genkit/model/middleware';
-import { ActivityTypes, ChartDataCategoryTypes, DataDuration, TimeIntervals } from '@sports-alliance/sports-lib';
+import { ActivityTypes, ActivityTypesHelper, ChartDataCategoryTypes, DataDuration, TimeIntervals } from '@sports-alliance/sports-lib';
 import {
   ASSISTANT_ANALYTICAL_PROMPT_WORKFLOWS,
   ASSISTANT_CREATE_TODAYS_WORKOUT_PROMPT,
@@ -1531,8 +1531,11 @@ describe('Assistant runtime', () => {
             TRAINING_SPORT_DEFINITIONS
               .filter(sport => sport.id === activityDiscipline)
               .flatMap(sport => sport.contexts)
-              .flatMap(context => context.activityTypes),
+              .flatMap(context => context.activityTypes)
+              .filter(type => ActivityTypesHelper.getActivityTypesAsUniqueArray().includes(type)),
           )]);
+          const catalog = new Set(ActivityTypesHelper.getActivityTypesAsUniqueArray());
+          expect((calledInput.activityTypes as string[]).every(type => catalog.has(type))).toBe(true);
         }
         if (workflow.dateRange?.toolNames.includes(toolName)) {
           expect(calledInput.start).toBe(new Date(

@@ -7,6 +7,18 @@ Target version source of truth:
 - `SPORTS_LIB_REPARSE_TARGET_VERSION`
 - File: `functions/src/reparse/sports-lib-reparse.config.ts`
 
+### FIT Parser 6.2.1 dependency update
+
+Both frontend and Functions dependency trees resolve `fit-file-parser` 6.2.1. Functions pins the version directly;
+the frontend locks the compatible transitive dependency from Sports Lib. Existing parser options remain in use;
+this update does not opt into strict validation or concatenated-file parsing. Newly decoded source fields flow through
+the existing Sports Lib mappings and sanitized ingress.
+
+The Sports Lib version remains 21.5.0, so this parser-only update does not advance the event or route reparse target.
+Installing the dependency does not rewrite stored events, routes or Training snapshots. Historical source corrections
+require a separately authorized targeted reparse through the existing lifecycle; do not enable a scanner solely for
+this parser update. See the [Training compatibility notes](../../../docs/training-workspace.md#preserved-provider-sport-names-and-historical-compatibility).
+
 ### Unreleased provider-profile and JSON compatibility corrections
 
 The local Sports Lib branch corrects Garmin Breathwork for Generic/Breathing and Training/Breathing with an explicit

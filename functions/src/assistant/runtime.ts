@@ -2,7 +2,7 @@ import { TRAINING_PREVIEW_TOOLS, TRAINING_READ_TOOLS } from '../mcp/training-pla
 import { MCP_MANUAL_MEASUREMENT_READ_TOOLS, MCP_MANUAL_MEASUREMENT_SCHEMA, MCP_MANUAL_MEASUREMENT_INPUTS } from '../mcp/manual-measurements.schemas';
 import { resolveManualMeasurementFields } from '../mcp/manual-measurements.service';
 import type { ManualHealthMeasurementFields } from '../../../shared/manual-health';
-import { DataDuration } from '@sports-alliance/sports-lib';
+import { ActivityTypesHelper, DataDuration } from '@sports-alliance/sports-lib';
 import { TRAINING_PLAN_NEXT_STEPS_GUIDANCE, TRAINING_PRESCRIPTION_AUTHORING_GUIDANCE, TRAINING_PRESCRIPTION_VERIFICATION_GUIDANCE } from '../shared/training-authoring-guidance';
 import { z } from 'genkit';
 import { ZodError as McpSchemaError } from 'zod';
@@ -284,7 +284,14 @@ function resolveAssistantWorkflowActivityTypes(
       continue;
     }
     for (const context of sport.contexts) {
-      context.activityTypes.forEach(activityType => activityTypes.add(activityType));
+      context.activityTypes.forEach(activityType => {
+        // The registry prepares future canonical names; MCP query filters must
+        // still be accepted by the currently installed Sports Lib catalog.
+        const canonicalType = ActivityTypesHelper.resolveActivityType(activityType);
+        if (canonicalType) {
+          activityTypes.add(canonicalType);
+        }
+      });
     }
   }
   return [...activityTypes];

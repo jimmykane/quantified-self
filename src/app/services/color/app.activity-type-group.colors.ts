@@ -1,6 +1,8 @@
+import { WALKING_ACTIVITY_TYPE_GROUP } from '@shared/activity-type-compatibility';
 import { ActivityTypeGroups, ActivityTypes, ActivityTypesHelper, type ActivityTypeGroup } from '@sports-alliance/sports-lib';
 
 export const AppActivityTypeGroupColors: Record<ActivityTypeGroup, string> = {
+    ...{ [WALKING_ACTIVITY_TYPE_GROUP]: '#55D781' },
   [ActivityTypeGroups.RunningGroup]: '#FDD300',
   [ActivityTypeGroups.TrailRunningGroup]: '#c7ef0c',
   [ActivityTypeGroups.CyclingGroup]: '#FF7C3B',
