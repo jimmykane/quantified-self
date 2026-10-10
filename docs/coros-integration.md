@@ -160,6 +160,41 @@ There are no new functions, schedules, retries, credentials or persistence paths
 Help/category contracts are unchanged; this is binary compatibility, not a new
 supported activity type. Deployment and any replay require separate approval.
 
+### Missing FIT Session compatibility
+
+`functions/src/shared/fit-activity-session-repair.ts` owns the provider-neutral
+`FitActivitySessionRepair` class. COROS's existing shared preparation boundary
+uses it only when a strictly valid activity FIT has no Session messages. Direct
+and fresh/restarted queue uploads therefore send and fingerprint the same copy;
+already accepted uploads remain status-only. Other providers are not opted in.
+
+Recovery requires one manual Activity footer, one complete start/stop timer,
+contiguous same-sport laps with complete start/end/elapsed/timer/distance evidence,
+and timestamped samples inside that interval. Any supplied lap indexes must be
+sequential. The footer must declare one session or the lap count; explicit
+multisport, inconsistent times/totals, missing required evidence, corrupt CRCs and
+ambiguous files pass through unchanged. No existing Session is ever replaced.
+
+The copy adds one Session with the lap-derived totals and lap association, and
+corrects only the footer's session count to one. Optional calories are summed
+only when every lap supplies them. No GPS, sensor samples, sport fallback or
+average is invented. The original native/developer messages remain byte-for-byte
+apart from that footer count; the retained Storage original is never overwritten.
+`fit-file-parser` supplies strict validation, summary encoding, profile lookup
+and CRC calculation; binary span handling stays inside the shared repair class.
+The resulting summary follows the required fields in the official
+[FIT Activity specification](https://developer.garmin.com/fit/articles/file-types/activity.html).
+
+A separately authorized real-account test on 10 October 2026 reached final COROS
+status `2` on the first repaired swimming upload. That proves this repair case,
+not universal acceptance or watch/app visibility. Regression fixtures use invented
+data only, including big-endian fields, compressed records and developer bytes.
+The INFO log contains only the restored-session count, not files or identifiers.
+Existing #832 delivery monitoring is **covered/unchanged**: the same COROS
+pending/failure/DLQ/committed outcomes remain authoritative. Help/supported sports,
+MCP, Training, retries, credentials, queues and runtime options are unchanged.
+Deployment and recovery of the original user's queue job require separate approval.
+
 ### Recorded-activity category fallbacks (#600)
 
 Both direct FIT uploads and new/restarted queued uploads call
