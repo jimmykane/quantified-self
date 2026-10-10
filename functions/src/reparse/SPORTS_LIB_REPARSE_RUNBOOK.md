@@ -17,9 +17,13 @@ Nordic Walking, Hiking and Trekking skip calculated pace and power. HR requires 
 maximum HR; missing calibration can fall back to the calorie-derived MET estimate when its file inputs exist.
 Valid imported TSS retains precedence. See `docs/training-workspace.md` for the exact calculation and policy contract.
 
-Regenerate mode restores file-only calculation inputs before refreshing TSS candidates. Imported scores, including
-zero, retain their provenance; unavailable calculated scores are removed. Recorded TSS and private evaluations must
-agree before EventWriter persists them. This uses the existing persistence stages without additional database calls.
+Regenerate mode keeps the freshly parsed FTP, timing and HR/MET inputs available before rebuilding derived statistics
+and refreshing TSS candidates. It does not copy calibration from the old stored activity. Imported scores, including
+zero and methodless imports, retain their provenance by default; unavailable calculated scores are removed. An internal
+explicit `preserveImportedTss: false` removes score and method at the QS boundary because sports-lib 21.6.1 does not
+honor that flag alone. Recorded TSS and private evaluations must agree before EventWriter persists them. See
+`docs/training-workspace.md` for the protected inputs and recalculation contract. This uses the existing transform,
+persistence and failure stages without additional database calls or changes to monitoring, retries or queues.
 
 Historical recordings keep their current recorded values until source-backed reparse. Numeric overrides and exclusions
 work immediately; HR/MET selection needs cached evaluations. Before overwriting any event/activity document, reparse

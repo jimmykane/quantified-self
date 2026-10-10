@@ -4941,13 +4941,23 @@ evidence before old leg cleanup. Metadata preparation and persistence failures p
 serializes source statistics, including native JSON imports whose power evaluation derives additional statistics.
 Final metadata persistence reads those cached results so source fingerprints describe exactly what was saved.
 
-The source-file **Regenerate statistics** path refreshes TSS evaluations after restoring file statistics that generic
-regeneration temporarily clears, including calories, body mass and gender. It restores the parsed TSS score and method
-together before evaluation, preserving imported scores (including zero), recalculating known calculated scores, and
-removing unavailable calculated scores instead of resurrecting them from the backup stats. Recorded TSS and private
-candidates therefore describe the same completed regeneration. This correction adds only in-memory evaluation, with
-no additional Firestore reads/writes, queue work, provider calls, or MCP schema/scope/mutation changes. Monitoring
-coverage is unchanged: existing reparse persistence and failure stages still own the operation and its retries.
+The source-file **Regenerate statistics** path protects freshly parsed FTP, duration, timer/elapsed/moving time, pause,
+energy, body mass, gender and maximum-HR setting before regenerating derived statistics. These inputs come from the
+new original-file parse, never the stored activity or current athlete settings. File HR calibration and intensity zones
+remain attached to the same activity. Keeping inputs available prevents an imported FTP from being replaced by a
+20-minute estimate and paused timer time from being replaced by wall-clock duration. Normalized power and intensity
+factor still regenerate from the streams and protected inputs; the existing missing-FTP estimation policy is unchanged.
+
+After restoring any other missing parsed statistics, regeneration refreshes all TSS evaluations. By default (or with
+`preserveImportedTss: true`) it restores the parsed score and method together, preserving imported scores including zero
+and methodless legacy imports, recalculating known calculated scores, and removing unavailable calculated scores.
+For an explicit `preserveImportedTss: false`, QS removes both score and method before the final evaluation: sports-lib
+21.6.1 always preserves an imported stat regardless of that deprecated option, so forwarding the flag is insufficient.
+This is an internal regeneration contract, not a new UI setting. No score is restored after evaluation. Recorded TSS
+and private candidates therefore describe the same completed regeneration, including repeated runs and unavailable
+results. This correction adds only in-memory work, with no additional Firestore reads/writes, queue work, provider calls,
+or MCP schema/scope/mutation changes. Training planning reads, proposals and provider delivery are unaffected. Monitoring
+coverage is unchanged: existing reparse transform, persistence and failure stages still own the operation and its retries.
 
 Reconciliation uses the existing unique identity matcher with its unmatched-leg fallback disabled. Derived TSS is
 excluded from control identity. Ambiguous identities retain saved policies/controls and make modeled load

@@ -162,7 +162,16 @@ vi.mock('@sports-alliance/sports-lib', async (importOriginal) => {
             constructor(public opts: unknown) { }
         },
         DataDistance: { type: 'distance' },
-        DataDuration: { type: 'duration' },
+        DataDuration: actual.DataDuration,
+        DataElapsedTime: actual.DataElapsedTime,
+        DataEnergy: actual.DataEnergy,
+        DataFTP: actual.DataFTP,
+        DataGender: actual.DataGender,
+        DataMaxHRSetting: actual.DataMaxHRSetting,
+        DataMovingTime: actual.DataMovingTime,
+        DataPause: actual.DataPause,
+        DataTimerTime: actual.DataTimerTime,
+        DataWeight: actual.DataWeight,
         DataTrainingStressScore: actual.DataTrainingStressScore,
         DataTrainingStressScoreMethod: actual.DataTrainingStressScoreMethod,
         EventImporterFIT: hoisted.fitImporter,
@@ -2316,29 +2325,38 @@ describe('sports-lib-reparse.service', () => {
         { label: 'calorie MET', score: undefined, method: undefined, expected: 9, expectedMethod: 'MET', calories: true },
         { label: 'imported score', score: 42, method: 'IMPORTED', expected: 42, expectedMethod: 'IMPORTED', calories: true },
         { label: 'imported zero', score: 0, method: 'IMPORTED', expected: 0, expectedMethod: 'IMPORTED', calories: true },
+        { label: 'methodless imported score', score: 42, method: undefined, expected: 42, expectedMethod: 'IMPORTED', calories: true },
+        { label: 'methodless imported zero', score: 0, method: undefined, expected: 0, expectedMethod: 'IMPORTED', calories: true },
         { label: 'imported score over generated power', score: 42, method: 'IMPORTED', expected: 42, expectedMethod: 'IMPORTED', calories: true, power: true },
+        { label: 'explicit recalculation of imported score', score: 42, method: 'IMPORTED', expected: 9, expectedMethod: 'MET', calories: true, preserveImportedTss: false },
+        { label: 'explicit recalculation of methodless zero', score: 0, method: undefined, expected: 9, expectedMethod: 'MET', calories: true, preserveImportedTss: false },
+        { label: 'walking rejects power and uses MET', score: 42, method: 'IMPORTED', expected: 9, expectedMethod: 'MET', calories: true, power: true, walking: true, preserveImportedTss: false },
+        { label: 'walking power alone is unavailable', score: 42, method: 'IMPORTED', expected: null, expectedMethod: null, calories: false, power: true, walking: true, preserveImportedTss: false },
+        { label: 'explicit recalculation without inputs', score: 42, method: 'IMPORTED', expected: null, expectedMethod: null, calories: false, preserveImportedTss: false },
+        { label: 'explicit recalculation of unsupported sport', score: 42, method: 'IMPORTED', expected: null, expectedMethod: null, calories: true, preserveImportedTss: false, unsupported: true },
         { label: 'stale calculated score', score: 87.3, method: 'HR', expected: null, expectedMethod: null, calories: false },
-    ])('regenerate keeps recorded and cached TSS consistent for $label', async ({ score, method, expected, expectedMethod, calories, power = false }) => {
+    ])('regenerate keeps recorded and cached TSS consistent for $label', async ({ score, method, expected, expectedMethod, calories, power = false, walking = false, preserveImportedTss, unsupported = false }) => {
         const sports = await vi.importActual<typeof import('@sports-alliance/sports-lib')>('@sports-alliance/sports-lib');
         const parsedEvent = sports.EventImporterJSON.getEventFromJSON({
             name: 'Synthetic walk', startDate: 0, endDate: 3600000,
-            activities: [{ startDate: 0, endDate: 3600000, type: power ? sports.ActivityTypes.Cycling : sports.ActivityTypes.Walking,
+            activities: [{ startDate: 0, endDate: 3600000, type: unsupported ? sports.ActivityTypes.Driving : power && !walking ? sports.ActivityTypes.Cycling : sports.ActivityTypes.Walking,
                 creator: { name: 'Test' }, laps: [], intensityZones: [], streams: [],
                 stats: { ...(calories ? { Energy: 210, Weight: 70 } : {}),
-                    ...(score === undefined ? {} : { 'Training Stress Score': score, 'Training Stress Score Method': method }) } }],
+                    ...(score === undefined ? {} : { 'Training Stress Score': score }),
+                    ...(method === undefined ? {} : { 'Training Stress Score Method': method }) } }],
         } as any);
         const activity = parsedEvent.getFirstActivity();
+        activity.parseOptions = new sports.ActivityParsingOptions({ tss: { preserveImportedTss } });
         if (power) {
             const stream = activity.createStream(sports.DataPower.type);
             stream.setData(Array.from({ length: 3601 }, () => 200));
             activity.addStream(stream);
         }
         if (expected !== null) sports.ActivityUtilities.generateMissingStreamsAndStatsForActivity(activity);
+        if (score !== undefined && method === undefined) activity.removeStat(sports.DataTrainingStressScoreMethod.type);
         hoisted.fitImporter.getFromArrayBuffer.mockResolvedValue(parsedEvent);
-        hoisted.generateMissingStreamsAndStatsForActivity.mockImplementation(item => {
-            sports.ActivityUtilities.generateMissingStreamsAndStatsForActivity(item);
-            if (power) expect(item.getStat(sports.DataTrainingStressScoreMethod.type)?.getValue()).toBe('POWER');
-        });
+        hoisted.generateMissingStreamsAndStatsForActivity.mockImplementation(
+            item => sports.ActivityUtilities.generateMissingStreamsAndStatsForActivity(item));
         hoisted.evaluateTrainingStressScore.mockImplementation(
             item => sports.ActivityUtilities.evaluateTrainingStressScore(item));
 
@@ -2353,6 +2371,73 @@ describe('sports-lib-reparse.service', () => {
         }
         expect(activity.getStat(sports.DataTrainingStressScore.type)?.getValue() ?? null).toBe(expected);
         expect(activity.getStat(sports.DataTrainingStressScoreMethod.type)?.getValue() ?? null).toBe(expectedMethod);
+    });
+
+    it.each([
+        { preserveImportedTss: undefined, ftp: 250 },
+        { preserveImportedTss: true, ftp: 250 },
+        { preserveImportedTss: false, ftp: 250 },
+        { preserveImportedTss: false, ftp: undefined },
+    ])('regenerate preserves parsed inputs and existing FTP fallback with %j', async ({ preserveImportedTss, ftp }) => {
+        const sports = await vi.importActual<typeof import('@sports-alliance/sports-lib')>('@sports-alliance/sports-lib');
+        const inputs = {
+            ...(ftp === undefined ? {} : { [sports.DataFTP.type]: ftp }),
+            [sports.DataDuration.type]: 3300,
+            [sports.DataTimerTime.type]: 3300,
+            [sports.DataElapsedTime.type]: 3600,
+            [sports.DataMovingTime.type]: 3150,
+            [sports.DataPause.type]: 300,
+            [sports.DataEnergy.type]: 210,
+            [sports.DataWeight.type]: 70,
+            [sports.DataGender.type]: 'female',
+            [sports.DataMaxHRSetting.type]: 190,
+        };
+        const parsedEvent = sports.EventImporterJSON.getEventFromJSON({
+            name: 'Synthetic paused ride', startDate: 0, endDate: 3600000,
+            activities: [{ startDate: 0, endDate: 3600000, type: sports.ActivityTypes.Cycling,
+                creator: { name: 'Test' }, laps: [], intensityZones: [], streams: [],
+                stats: { ...inputs,
+                    [sports.DataPowerNormalized.type]: 180,
+                    [sports.DataPowerIntensityFactor.type]: 0.72,
+                    [sports.DataTrainingStressScore.type]: 42,
+                    [sports.DataTrainingStressScoreMethod.type]: 'IMPORTED',
+                } }],
+        } as any);
+        const activity = parsedEvent.getFirstActivity();
+        activity.parseOptions = new sports.ActivityParsingOptions({ tss: { preserveImportedTss } });
+        const power = activity.createStream(sports.DataPower.type);
+        power.setData(Array.from({ length: 3601 }, () => 200));
+        activity.addStream(power);
+        hoisted.fitImporter.getFromArrayBuffer.mockResolvedValue(parsedEvent);
+        hoisted.generateMissingStreamsAndStatsForActivity.mockImplementation(
+            item => sports.ActivityUtilities.generateMissingStreamsAndStatsForActivity(item));
+        hoisted.evaluateTrainingStressScore.mockImplementation(
+            item => sports.ActivityUtilities.evaluateTrainingStressScore(item));
+
+        // A repeated regeneration must neither drift the inputs nor turn calculated TSS into an import.
+        for (let pass = 0; pass < 2; pass++) {
+            await reparseEventFromOriginalFiles('u1', 'e1', { mode: 'regenerate',
+                eventData: { originalFile: { path: 'users/u1/events/e1/original.fit' } },
+                activityDocs: [], targetSportsLibVersion: TARGET_SPORTS_LIB_VERSION });
+
+            for (const [type, value] of Object.entries(inputs)) {
+                expect(activity.getStat(type)?.getValue(), type).toBe(value);
+            }
+            expect(activity.getStat(sports.DataPowerNormalized.type)?.getValue()).toBeCloseTo(200);
+            expect(activity.getStat(sports.DataFTP.type)?.getValue()).toBe(ftp ?? 190);
+            expect(activity.getStat(sports.DataPowerIntensityFactor.type)?.getValue()).toBe(ftp === undefined ? 1.053 : 0.8);
+            const evaluations = sports.ActivityUtilities.getTrainingStressScoreEvaluations(activity);
+            const expected = preserveImportedTss === false
+                ? { score: ftp === undefined ? 100.7 : 58.2, method: 'POWER', provenance: 'calculated' }
+                : { score: 42, method: 'IMPORTED', provenance: 'imported' };
+            expect(evaluations.automatic).toMatchObject(expected);
+            expect(evaluations.hr).toMatchObject(expected);
+            expect(evaluations.met).toMatchObject(preserveImportedTss === false
+                ? { score: 9.8, method: 'MET', provenance: 'calculated', estimated: true }
+                : expected);
+            expect(activity.getStat(sports.DataTrainingStressScore.type)?.getValue()).toBe(expected.score);
+            expect(activity.getStat(sports.DataTrainingStressScoreMethod.type)?.getValue()).toBe(expected.method);
+        }
     });
 
     it('reparseEventFromOriginalFiles should skip activity-level regeneration in reimport mode', async () => {

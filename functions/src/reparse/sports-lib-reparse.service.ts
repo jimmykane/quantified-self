@@ -9,8 +9,17 @@ import {
     ActivityUtilities,
     DataDistance,
     DataDuration,
+    DataElapsedTime,
+    DataEnergy,
+    DataFTP,
+    DataGender,
+    DataMaxHRSetting,
+    DataMovingTime,
+    DataPause,
+    DataTimerTime,
     DataTrainingStressScore,
     DataTrainingStressScoreMethod,
+    DataWeight,
     EventInterface,
     EventUtilities,
 } from '@sports-alliance/sports-lib';
@@ -1995,19 +2004,31 @@ export async function reparseEventFromOriginalFiles(
 
                 const previousStats = new Map(activityAny.getStats());
                 activityAny.clearStats();
+                // These freshly parsed inputs must be present before generation: otherwise
+                // sports-lib can estimate a different FTP or substitute wall-clock duration.
+                // Stream-derived outputs (for example NP and IF) are still regenerated.
+                for (const type of [DataFTP.type, DataDuration.type, DataTimerTime.type,
+                    DataElapsedTime.type, DataMovingTime.type, DataPause.type,
+                    DataEnergy.type, DataWeight.type, DataGender.type, DataMaxHRSetting.type]) {
+                    const parsedStat = previousStats.get(type);
+                    if (parsedStat) activityAny.addStat(parsedStat);
+                }
                 ActivityUtilities.generateMissingStreamsAndStatsForActivity(activity as any);
                 previousStats.forEach((stat, type) => {
+                    if (type === DataTrainingStressScore.type || type === DataTrainingStressScoreMethod.type) return;
                     if (!activityAny.getStat(type)) {
                         activityAny.addStat(stat);
                     }
                 });
-                // Regeneration temporarily removes file inputs (energy, mass, gender,
-                // etc.). Restore the parsed score and its provenance as a pair, then
-                // refresh candidates from the complete inputs before persistence.
+                // Restore score and provenance together unless recalculation was explicitly
+                // requested. Sports-lib 21.6.1 always preserves an imported stat, so passing
+                // preserveImportedTss=false alone is insufficient; remove both here.
                 for (const type of [DataTrainingStressScore.type, DataTrainingStressScoreMethod.type]) {
                     activity.removeStat(type);
                     const parsedStat = previousStats.get(type);
-                    if (parsedStat) activityAny.addStat(parsedStat);
+                    if (parsedStat && activity.parseOptions?.tss?.preserveImportedTss !== false) {
+                        activityAny.addStat(parsedStat);
+                    }
                 }
                 const automatic = ActivityUtilities.evaluateTrainingStressScore(activity).automatic;
                 if (automatic.score !== null && automatic.method !== null) {
