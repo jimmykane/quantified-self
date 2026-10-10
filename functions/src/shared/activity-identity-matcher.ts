@@ -184,8 +184,8 @@ function assignUniqueImportRefinements(
       existingBySignature.set(key, [...(existingBySignature.get(key) || []), index]);
     }
   });
-  const candidates = new Map<number, number[]>();
-  const parsedCandidatesByExisting = new Map<number, number[]>();
+  const candidates = new Map<number, number>();
+  const parsedCandidateCountsByExisting = new Map<number, number>();
   parsed.forEach((activity, parsedIndex) => {
     const key = assignments.has(parsedIndex) ? null : refinementSignature(activity);
     if (!key) {
@@ -198,19 +198,20 @@ function assignUniqueImportRefinements(
       return !(previousSourceKey && parsedSourceKey && previousSourceKey !== parsedSourceKey)
         && compatibleImportTypes.has(`${normalizedType(previous.type)}|${normalizedType(activity.type)}`);
     });
-    candidates.set(parsedIndex, matches);
+    if (matches.length === 1) {
+      candidates.set(parsedIndex, matches[0]);
+    }
     matches.forEach(existingIndex => {
-      parsedCandidatesByExisting.set(existingIndex, [
-        ...(parsedCandidatesByExisting.get(existingIndex) || []), parsedIndex,
-      ]);
+      parsedCandidateCountsByExisting.set(existingIndex,
+        (parsedCandidateCountsByExisting.get(existingIndex) || 0) + 1);
     });
   });
   // Check uniqueness on both sides before assigning any edge. Iterating and
   // consuming candidates would otherwise turn an ambiguous graph into a match.
-  candidates.forEach((matches, parsedIndex) => {
-    if (matches.length === 1 && parsedCandidatesByExisting.get(matches[0])?.length === 1) {
-      assignments.set(parsedIndex, matches[0]);
-      usedExisting.add(matches[0]);
+  candidates.forEach((existingIndex, parsedIndex) => {
+    if (parsedCandidateCountsByExisting.get(existingIndex) === 1) {
+      assignments.set(parsedIndex, existingIndex);
+      usedExisting.add(existingIndex);
     }
   });
 }
