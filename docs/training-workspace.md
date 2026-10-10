@@ -212,7 +212,8 @@ work independently; changed consent or conversation generations still stop the r
 without a grounded retry. Live first-party review diagnostics distinguish preview-schema validation, complete-review
 loading and final review validation without logging recipes, notes, exception messages, references or identity. These private diagnostic stages
 do not change the MCP wire contract, read projections, consent or app help.
-Delivery intent ignores explicit negation such as “No provider sync” and “don’t sync”; an independent affirmative
+Delivery intent ignores explicit negation such as “No provider sync”, “don’t sync” and directly coordinated
+“don’t send or sync”; an independent affirmative
 send/sync clause remains actionable. A schedule-only request must not enter the forced provider-preview correction path.
 For ordinary first-party Training turns, previews are withheld from the model until a successful Training read supplies
 a safe current schedule revision. The pre-collected daily-workout path already supplies its validated context. Gemini's
@@ -221,6 +222,12 @@ and mixed plan/step/repeat/target fields. These descriptions are derived from th
 those strict schemas, normalize rejected payloads or change external clients' contracts or approval requirements.
 Repeated projected recipe references are deduplicated before outer batch unions merge, preserving the same step/repeat
 and ending/target shape guidance in focused and batch previews instead of merging it a second time.
+A failed or revision-less read keeps previews unavailable. If the model stops there, the delivery correction must not
+issue a required-tool request with an empty tool list or echo an unsupported success claim. It returns fixed no-proposal
+guidance; existing grounded-answer checks still apply. After a successful read, correction preserves the requested
+provider action and destinations instead of hard-coding Send (notably for Stop sync). Completion checks also run after
+the last allowed continuation, without spending another model/tool-call budget. These are private Assistant
+implementation fixes, with no MCP wire, permission, persistence, provider adapter or app-help contract change.
 
 ### Plan activation and optional sync next steps
 

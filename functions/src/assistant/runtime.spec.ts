@@ -70,6 +70,9 @@ describe('app-owned complete workout review', () => {
     'Create my plan with no Garmin sync.',
     'Do not send the workout.',
     'Never deliver this session.',
+    'Create a workout. Don’t send or sync it.',
+    'Do not send it or sync it.',
+    'Never sync and deliver this session.',
   ])('does not treat a negated delivery phrase as a sync request: %s', prompt => {
     expect(requestsAssistantTrainingDelivery(prompt)).toBe(false);
   });
@@ -78,6 +81,7 @@ describe('app-owned complete workout review', () => {
     'Sync this plan to Suunto.',
     'Do not send to Garmin, but sync to Suunto.',
     'No provider sync for the old plan; send this workout to Garmin.',
+    'Don’t send or sync the old workout; send the new one to Suunto.',
   ])('preserves an affirmative delivery request: %s', prompt => {
     expect(requestsAssistantTrainingDelivery(prompt)).toBe(true);
   });
@@ -1898,6 +1902,7 @@ describe('Assistant runtime', () => {
   });
 
   it('requires one preview tool call for an explicit daily workout change', async () => {
+    const dynamicTool = vi.spyOn(assistantGenkit, 'dynamicTool');
     const generate = vi.spyOn(assistantGenkit, 'generate').mockResolvedValueOnce({
       toolRequests: [],
       text: JSON.stringify({ answer: 'Review the proposed session.',
@@ -1922,7 +1927,10 @@ describe('Assistant runtime', () => {
       prompt: ASSISTANT_CREATE_TODAYS_WORKOUT_PROMPT, history: [],
       mcpInstructions: 'Use current data.', workflow: null,
       dailyWorkoutContext, tools: [{ name: 'preview_create_planned_workout', description: 'Preview one workout.',
-        inputJsonSchema: { type: 'object', properties: {} }, execute: vi.fn() }],
+        inputJsonSchema: { type: 'object', properties: {} }, execute: vi.fn() }, {
+        name: 'list_training_plans', description: 'Read current plans.', inputJsonSchema: { type: 'object', properties: {} },
+        execute: vi.fn(),
+      }],
       onBillableAttempt: vi.fn().mockResolvedValue(undefined),
     });
 
@@ -1932,6 +1940,7 @@ describe('Assistant runtime', () => {
         'call the available Training preview tool exactly once',
       ),
     }));
+    expect(dynamicTool.mock.calls.map(call => call[0].name)).toContain('preview_create_planned_workout');
     expect(generate).toHaveBeenCalledWith(expect.objectContaining({
       system: expect.stringContaining('use an empty targets array'),
     }));
@@ -2009,13 +2018,90 @@ describe('Assistant runtime', () => {
     expect(preview.execute).not.toHaveBeenCalled();
   });
 
-  it('forces a delivery preview when the model stops after reading the workout', async () => {
+  it.each([
+    { assistantToolError: { code: 'invalid_request', retryable: false }, scheduleRevision: 260 },
+    { plans: [] },
+    { scheduleRevision: -1 },
+    { scheduleRevision: null },
+  ])('does not force an unavailable delivery preview after an unsuccessful revision read: %j', async output => {
+    const read: AssistantRuntimeTool = { name: 'list_training_plans', description: 'Read current plans.',
+      inputJsonSchema: { type: 'object', properties: {} }, execute: vi.fn().mockResolvedValue(output) };
+    const preview: AssistantRuntimeTool = { name: 'preview_training_changes', description: 'Prepare delivery review.',
+      inputJsonSchema: { type: 'object', properties: {} }, execute: vi.fn() };
+    const generate = vi.spyOn(assistantGenkit, 'generate').mockResolvedValueOnce({
+      toolRequests: [{ toolRequest: { name: read.name, input: {} } }], messages: [],
+    } as never).mockResolvedValueOnce({ toolRequests: [], messages: [], text: JSON.stringify({
+      answer: 'The workout has been sent.', visuals: { chart: null, map: null },
+    }) } as never);
+    await expect(generateAssistantModelAnswer({ currentTime: '2026-10-10T08:00:00Z', timeZone: 'UTC',
+      prompt: 'Send my workout to Suunto.', history: [], mcpInstructions: 'Use current data.',
+      tools: [read, preview], workflow: null, onBillableAttempt: vi.fn() })).resolves.toMatchObject({
+      answer: 'I couldn’t read your current Training schedule, so no sync proposal was prepared and nothing was sent. Please try again once your Training data is available.',
+      visualRequest: { chart: null, map: null },
+    });
+    expect(generate).toHaveBeenCalledTimes(2);
+    expect(preview.execute).not.toHaveBeenCalled();
+  });
+
+  it.each([false, true])('checks a missing delivery preview after the last allowed continuation (revision read=%s)', async readSucceeded => {
+    const read: AssistantRuntimeTool = { name: 'list_training_plans', description: 'Read current plans.',
+      inputJsonSchema: { type: 'object', properties: {} }, execute: vi.fn().mockResolvedValue({
+        scheduleRevision: readSucceeded ? 260 : null, plans: [],
+      }) };
+    const preview: AssistantRuntimeTool = { name: 'preview_training_changes', description: 'Prepare delivery review.',
+      inputJsonSchema: { type: 'object', properties: {} }, execute: vi.fn() };
+    let modelCalls = 0;
+    const generate = vi.spyOn(assistantGenkit, 'generate').mockImplementation(async () => {
+      modelCalls += 1;
+      return modelCalls <= 6
+        ? { toolRequests: [{ toolRequest: { name: read.name, input: {} } }], messages: [] } as never
+        : { toolRequests: [], messages: [], text: JSON.stringify({ answer: 'The workout has been sent.',
+          visuals: { chart: null, map: null } }) } as never;
+    });
+    const result = generateAssistantModelAnswer({ currentTime: '2026-10-10T08:00:00Z', timeZone: 'UTC',
+      prompt: 'Send my workout to Suunto.', history: [], mcpInstructions: 'Use current data.',
+      tools: [read, preview], workflow: null, onBillableAttempt: vi.fn() });
+    if (readSucceeded) {
+      await expect(result).rejects.toThrow('The Assistant did not prepare the requested provider delivery preview.');
+    } else {
+      await expect(result).resolves.toMatchObject({ answer: expect.stringContaining('no sync proposal was prepared and nothing was sent'),
+        visualRequest: { chart: null, map: null } });
+    }
+    expect(generate).toHaveBeenCalledTimes(7);
+    expect(read.execute).toHaveBeenCalledTimes(6);
+    expect(preview.execute).not.toHaveBeenCalled();
+  });
+
+  it('executes a Training preview after reading its exact current revision', async () => {
+    const read: AssistantRuntimeTool = { name: 'list_training_plans', description: 'Read current plans.',
+      inputJsonSchema: { type: 'object', properties: {} }, execute: vi.fn().mockResolvedValue({ scheduleRevision: 260, plans: [] }) };
+    const preview: AssistantRuntimeTool = { name: 'preview_training_changes', description: 'Prepare schedule review.',
+      inputJsonSchema: { type: 'object', properties: {} }, execute: vi.fn().mockResolvedValue({ proposalRef: 'review' }) };
+    const generate = vi.spyOn(assistantGenkit, 'generate').mockResolvedValueOnce({
+      toolRequests: [{ toolRequest: { name: read.name, input: {} } }], messages: [],
+    } as never).mockResolvedValueOnce({
+      toolRequests: [{ toolRequest: { name: preview.name, input: { expectedScheduleRevision: 260, changes: [] } } }], messages: [],
+    } as never).mockResolvedValueOnce({ toolRequests: [], messages: [], text: JSON.stringify({
+      answer: 'Review the proposed plan.', visuals: { chart: null, map: null },
+    }) } as never);
+    await generateAssistantModelAnswer({ currentTime: '2026-10-10T08:00:00Z', timeZone: 'UTC',
+      prompt: 'Preview a paused plan. No sync.', history: [], mcpInstructions: 'Use current data.',
+      tools: [read, preview], workflow: null, onBillableAttempt: vi.fn() });
+    expect(preview.execute).toHaveBeenCalledExactlyOnceWith({ expectedScheduleRevision: 260, changes: [] });
+    expect(generate).toHaveBeenCalledTimes(3);
+  });
+
+  it.each([
+    { prompt: 'Send the Recovery ride scheduled for today to Suunto. Show me the proposal before applying it.', action: 'send' },
+    { prompt: 'Stop sync for the Recovery ride with Suunto. Show me the proposal before applying it.', action: 'stop' },
+  ])('preserves the requested $action when correcting a missing delivery preview', async ({ prompt, action }) => {
     const readTool: AssistantRuntimeTool = {
       name: 'get_planned_workout',
       description: 'Read one planned workout.',
       inputJsonSchema: { type: 'object', properties: {} },
       execute: vi.fn().mockResolvedValue({
         workoutRef: 'workout-ref', title: 'Recovery ride', localDate: '2026-09-25',
+        scheduleRevision: 8,
       }),
     };
     const previewTool: AssistantRuntimeTool = {
@@ -2038,7 +2124,8 @@ describe('Assistant runtime', () => {
       } as never)
       .mockResolvedValueOnce({
         toolRequests: [{ toolRequest: { name: 'preview_training_changes',
-          input: { expectedScheduleRevision: 8, changes: [] }, ref: 'preview-1' } }],
+          input: { expectedScheduleRevision: 8, changes: [{ kind: 'provider-delivery', targetType: 'workout',
+            target: { ref: 'workout-ref' }, providers: ['suunto'], action }] }, ref: 'preview-1' } }],
         messages: [],
       } as never)
       .mockResolvedValueOnce({
@@ -2050,8 +2137,10 @@ describe('Assistant runtime', () => {
 
     await expect(generateAssistantModelAnswer({
       currentTime: '2026-09-25T12:00:00.000Z', timeZone: 'Europe/Helsinki',
-      prompt: 'Send the Recovery ride scheduled for today to Suunto. Show me the proposal before applying it.',
-      history: [], mcpInstructions: 'Use current data.', tools: [readTool, previewTool],
+      prompt, history: [], mcpInstructions: 'Use current data.', tools: [readTool, previewTool, {
+        name: 'list_training_plans', description: 'Read current plans.', inputJsonSchema: { type: 'object', properties: {} },
+        execute: vi.fn(),
+      }],
       workflow: null, onBillableAttempt: vi.fn().mockResolvedValue(undefined),
     })).resolves.toMatchObject({
       answer: 'Review the Suunto delivery proposal before applying it.',
@@ -2065,6 +2154,8 @@ describe('Assistant runtime', () => {
       tools: expect.any(Array),
     }));
     expect(generate.mock.calls[2]?.[0].system).toContain('kind:"provider-delivery"');
+    expect(generate.mock.calls[2]?.[0].system).not.toContain('action:"send"');
+    expect(generate.mock.calls[2]?.[0].system).toContain('Preserve the expressly requested action');
     expect(generate.mock.calls[2]?.[0].tools).toHaveLength(1);
   });
 

@@ -74,6 +74,8 @@ const ASSISTANT_MAX_CUMULATIVE_TOOL_OUTPUT_BYTES = 512 * 1024;
 const ASSISTANT_INITIAL_MODEL_MAX_OUTPUT_TOKENS = 1_024;
 const ASSISTANT_RESPONSE_MODEL_MAX_OUTPUT_TOKENS = 2_048;
 const ASSISTANT_WORKFLOW_DAY_MS = 24 * 60 * 60 * 1_000;
+const ASSISTANT_TRAINING_READ_BLOCKED_GUIDANCE =
+  'I couldn’t read your current Training schedule, so no sync proposal was prepared and nothing was sent. Please try again once your Training data is available.';
 export const ASSISTANT_MODEL_RETRY_OPTIONS = {
   maxRetries: 2,
   statuses: ['UNAVAILABLE'],
@@ -461,8 +463,10 @@ function requestsGarminReplacement(prompt: string): boolean {
 }
 
 export function requestsAssistantTrainingDelivery(prompt: string): boolean {
+  // Keep directly coordinated verbs under the same explicit negation. Do not
+  // consume punctuation or an independent affirmative clause (e.g. "but sync").
   const request = prompt.toLowerCase().replace(
-    /\b(?:don't|don’t|do not|does not|never|without|no)\s+(?:(?:also|any|this|that|the|my|workout|session|provider|service|watch|device|automatic|garmin|suunto|coros|wahoo)\s+){0,4}(?:send|sync|deliver)\b/gu,
+    /\b(?:don't|don’t|do not|does not|never|without|no)\s+(?:(?:also|any|this|that|the|my|workout|session|provider|service|watch|device|automatic|garmin|suunto|coros|wahoo)\s+){0,4}(?:send|sync|deliver)\b(?:\s+(?:(?:it|them|this|that|the|my|workout|session|plan)\s+){0,3}(?:or|and)\s+(?:send|sync|deliver)\b){0,2}/gu,
     '',
   );
   return /\b(?:send|sync|deliver)\b/u.test(request) || requestsGarminReplacement(prompt);
@@ -1038,7 +1042,7 @@ export const generateAssistantModelAnswer: AssistantRuntimeDependencies['generat
     ? input.tools.find(tool => (TRAINING_PREVIEW_TOOLS as readonly string[]).includes(tool.name))
     : undefined;
   const deliveryPreviewInputGuidance = requiredDeliveryPreview?.name === 'preview_training_changes'
-    ? 'For one existing provider-delivery target, pass the exact schedule revision from the read and one change shaped as {kind:"provider-delivery",targetType:"workout" or "plan",target:{ref:"the exact read reference"},providers:["the requested lowercase provider id"],action:"send",timeZone:"the explicit IANA timezone"}. Do not add fields or use a title as the target reference.'
+    ? 'For one existing provider-delivery target, pass the exact schedule revision from the read and one change with kind:"provider-delivery", targetType matching the plan or workout, target:{ref:"the exact read reference"}, and providers containing only the requested lowercase provider IDs. Preserve the expressly requested action using its exact schema value: Stop sync means stop, not send; enabling plan sync means enable. Never substitute Send for Stop, Retry, Check or approval. Include the explicit IANA timezone when configuring delivery; do not invent one or add unrelated fields. Do not use a title as the target reference.'
     : requiredDeliveryPreview?.name === 'preview_garmin_workout_replacement'
       ? 'Use only {workoutRef,expectedScheduleRevision,expectedWorkoutRevision} from the exact current workout read. Review possible duplicates before app confirmation. If fresh Check evidence is unavailable, ask the user to Check in the app; never fall back to Send, Retry or a new workout.'
       : '';
@@ -1138,6 +1142,12 @@ export const generateAssistantModelAnswer: AssistantRuntimeDependencies['generat
   ) {
     if (response.toolRequests.length === 0) {
       if (requiredDeliveryPreview && !deliveryPreviewCompleted) {
+        if (!hasTrainingScheduleRead) {
+          // A required preview with no available tools is not a correction.
+          // Keep the read gate closed and do not echo unsupported success claims.
+          return { answer: ASSISTANT_TRAINING_READ_BLOCKED_GUIDANCE,
+            visualRequest: { chart: null, map: null } };
+        }
         if (deliveryPreviewCorrectionIssued) {
           throw new Error('The Assistant did not prepare the requested provider delivery preview.');
         }
@@ -1224,6 +1234,15 @@ export const generateAssistantModelAnswer: AssistantRuntimeDependencies['generat
   }
   if (response.toolRequests.length > 0) {
     throw new Error('The Assistant model exceeded the continuation-turn budget.');
+  }
+  // The last continuation can finish without another loop iteration. Apply the
+  // same completion checks without spending an extra model/tool-call budget.
+  if (requiredDeliveryPreview && !deliveryPreviewCompleted) {
+    if (!hasTrainingScheduleRead) {
+      return { answer: ASSISTANT_TRAINING_READ_BLOCKED_GUIDANCE,
+        visualRequest: { chart: null, map: null } };
+    }
+    throw new Error('The Assistant did not prepare the requested provider delivery preview.');
   }
   return parseAssistantModelText(response.text);
 };

@@ -2570,11 +2570,18 @@ Do not log exception messages, issues, authored fields, proposal references or o
 authority fixes preserve the public MCP contract, consent, projections and app help; they require no catalog refresh.
 Training write authority treats omitted optional switches as off, so schedule-only consent does not require provider
 delivery consent. Rechecks still reject changed permissions/generations and propagate revocation without retry.
-Explicit “No provider sync” and curly-apostrophe “don’t sync” phrases are not delivery requests. They do not force
+Explicit “No provider sync”, curly-apostrophe “don’t sync” and directly coordinated “don’t send or sync” phrases
+are not delivery requests. They do not force
 provider preview retries; a separate affirmative send/sync clause still retains its existing consent/review requirements.
 The first-party model reads a safe current Training revision before previews become visible (except the already-grounded
 daily-workout context). Its private Gemini projection retains schema-derived object-shape guidance when merging unions;
 the original MCP schema still validates every invocation. No new callable, public wire change or consent is introduced.
+A failed or revision-less read cannot trigger a forced preview with no available tools or release model-authored
+delivery-success claims; fixed no-proposal guidance is still subject to existing grounding checks. Successful-read
+correction uses the expressly requested schema action, never hard-coded Send for Stop sync or another action.
+Completion checks also run at the final continuation boundary without extending budgets. Verification covers refusal,
+successful read-to-preview, final-budget outcomes and the already-grounded daily context.
+These private fixes require neither public contract promotion nor plugin rebuilding or reauthorization.
 
 Garmin missing-copy recovery (#769) does not widen registered v1 Training provider actions. Existing
 `get_training_sync_status` reports `needs_attention` and zero synced workouts after a complete not-found Workout
