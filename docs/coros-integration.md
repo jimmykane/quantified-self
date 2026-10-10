@@ -129,6 +129,37 @@ For COROS-bound shared rows, provider status `1` is an expected asynchronous wai
 
 A matching status response with result `0000` and status `-1` uses the existing queued `restart` retry path, not immediate DLQ. The worker clears the confirmed-failed upload identifiers while retaining the original account in `destinationRestartProviderUserID`; a later task may resend the retained FIT only to that still-active account. It does not reset the shared retry count or add an adapter retry loop. Pending polls and restart failures consume the same ten-increment durable budget, so this is not ten new uploads. At exhaustion the last failed upload/account identifiers remain available for DLQ reconciliation. Structured failure logs retain each failed operation ID and status. Explicit unsupported-file result `5096`, unknown status, and mismatched operation IDs remain permanent; a pending or uncertain operation is never blindly resent. Direct callable error codes and manual retry controls are unchanged.
 
+### Empty FIT field compatibility
+
+Direct uploads and new/restarted queued uploads use the same COROS-only outgoing
+copy repair in `functions/src/coros/activity-fit.ts`. It removes **zero-byte native
+definitions only** for Event `data` (message 21, field 3) and Lap `total_cycles`
+(message 19, field 10), both with base type `0x86`. These definitions contain no
+data bytes. Definition counts, file length and CRCs are updated; every nonempty
+native field, developer field, data record and timestamp header retains its bytes.
+Populated values are never removed, and the retained original is not modified.
+
+The original header, length and CRCs must pass the strict reader first. Repair
+requires one activity File ID and one existing Session, bounded input and a
+strictly valid result. Unknown empty fields, duplicate definitions, corrupt files,
+multisession files and files missing a Session pass through unchanged. No summary,
+GPS, sport mapping or sensor value is reconstructed.
+
+A separately authorized synthetic A/B test on 10 October 2026 reproduced terminal
+COROS status `-1` with these two empty definitions and status `2` after removing
+them from the otherwise identical file. This establishes the tested defect, not
+universal acceptance or Walking support. Regression fixtures are entirely synthetic.
+
+Fingerprints use the actual sent copy, including the existing guarded replacement
+of an old exact-file marker on fresh/restarted queue uploads. Accepted uploads keep
+their receipts and status-only reconciliation. The repair emits INFO with only the
+removed-definition count; it is not evidence of provider acceptance. Existing
+delivery monitoring is **covered/unchanged**: the same COROS worker, destination,
+retry, pending and committed outcomes remain in the #832 metrics and policies.
+There are no new functions, schedules, retries, credentials or persistence paths.
+Help/category contracts are unchanged; this is binary compatibility, not a new
+supported activity type. Deployment and any replay require separate approval.
+
 ### Recorded-activity category fallbacks (#600)
 
 Both direct FIT uploads and new/restarted queued uploads call
@@ -143,9 +174,10 @@ sending the file. The fixed mappings are:
 The adapter only converts structurally valid, single-session activity FITs with
 consistent category fields. Snorkeling converts with or without recorded GPS;
 Sailing still requires at least one valid recorded latitude/longitude pair.
-GPS-less Sailing, mixed/multi-session, malformed and unrelated files pass through
-unchanged for the existing provider inference/rejection behavior; no support for
-those cases is claimed. FIT sub_sport `17` is pool swimming, not open water.
+Apart from the empty-field repair above, GPS-less Sailing, mixed/multi-session,
+malformed and unrelated files pass through unchanged for the existing provider
+inference/rejection behavior; no support for those cases is claimed.
+FIT sub_sport `17` is pool swimming, not open water.
 COROS's API `mode=18/subMode=1` is not a FIT sport enum or an upload parameter.
 
 Only Session, Lap and optional Sport classification fields change, with missing

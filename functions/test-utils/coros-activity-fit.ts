@@ -7,6 +7,7 @@ export function createCOROSActivityFITFixture(options: {
   headerSize?: 12 | 14; bigEndian?: boolean; sport?: number; sessionCount?: number;
   withSubSport?: boolean; developer?: boolean; compressed?: boolean; withGPS?: boolean;
   coordinates?: [number, number]; compressedLap?: boolean; fullSessionDefinition?: boolean; malformedSport?: boolean;
+  emptyNativeFields?: 'zero' | 'omitted' | 'populated'; eventCount?: number;
 } = {}): Buffer {
   const parts: Buffer[] = [];
   const u16 = (value: number) => {
@@ -37,8 +38,17 @@ export function createCOROSActivityFITFixture(options: {
   message(65280, [[9, 13, Buffer.from([11, 22, 33, 44])]], options.developer);
   message(12, [[0, 0, Buffer.from([options.sport ?? 82])], [3, 7, Buffer.from('Snorkel\0')],
     ...(options.withSubSport ? [[1, 0, Buffer.from([0])]] as Field[] : [])]);
+  if (options.emptyNativeFields) {
+    for (let i = 0; i < (options.eventCount ?? 1); i++) {
+      message(21, [[253, 0x86, u32(1000)], [0, 0, Buffer.from([0])], [1, 0, Buffer.from([0])],
+        ...(options.emptyNativeFields === 'omitted' ? [] : [[3, 0x86,
+          options.emptyNativeFields === 'zero' ? Buffer.alloc(0) : u32(17)]] as Field[])], options.developer);
+    }
+  }
   message(19, [[253, 0x86, u32(1000)], [25, 0, Buffer.from([options.sport ?? 82])],
     [26, 2, Buffer.from([7])], [7, 0x86, u32(90000)],
+    ...(!options.emptyNativeFields || options.emptyNativeFields === 'omitted' ? [] : [[10, 0x86,
+      options.emptyNativeFields === 'zero' ? Buffer.alloc(0) : u32(17)]] as Field[]),
     ...(options.withSubSport ? [[39, 0, Buffer.from([0])]] as Field[] : [])], options.developer, options.compressedLap);
   for (let i = 0; i < (options.sessionCount ?? 1); i++) {
     const extraFields: Field[] = options.fullSessionDefinition

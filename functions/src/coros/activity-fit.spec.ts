@@ -2,7 +2,9 @@ import { FitEncoder } from 'fit-file-parser/encoder';
 import { getFitSportName, getFitSubSportName } from 'fit-file-parser/profile';
 import { readFitMessages } from 'fit-file-parser/raw';
 import { ActivityTypes, EventImporterFIT } from '@sports-alliance/sports-lib';
+import * as logger from 'firebase-functions/logger';
 import { createParsingOptions } from '../../../shared/parsing-options';
+import { buildActivitySyncOutboundFingerprintIds } from '../activity-sync/outbound-fingerprint';
 import { createCOROSSailingFIT, createCOROSSnorkelingFIT, prepareCOROSActivityFITUpload } from './activity-fit';
 import { createCOROSActivityFITFixture as fixture } from '../../test-utils/coros-activity-fit';
 
@@ -264,5 +266,122 @@ describe('COROS production FIT preparation', () => {
     expect(index).toBeGreaterThan(0);
     input[index + 5] = 1; repairCRC(input);
     expect(prepareCOROSActivityFITUpload(input)).toBe(input);
+  });
+});
+
+describe('COROS empty native field compatibility', () => {
+  it('logs only the removal count, not workout data or identifiers', () => {
+    vi.mocked(logger.info).mockClear();
+    prepareCOROSActivityFITUpload(fixture({ sport: 1, emptyNativeFields: 'zero' }));
+    expect(logger.info).toHaveBeenCalledExactlyOnceWith('[COROS] Removed empty activity FIT field definitions.', {
+      removedFieldDefinitions: 2,
+    });
+  });
+
+  it('changes the exact fingerprint while keeping the real parsed semantic fingerprint', async () => {
+    const input = fixture({ sport: 1, emptyNativeFields: 'zero', developer: true, compressed: true });
+    const output = prepareCOROSActivityFITUpload(input);
+    const before = await buildActivitySyncOutboundFingerprintIds(input);
+    const after = await buildActivitySyncOutboundFingerprintIds(output);
+    expect(before.fingerprintIds).toHaveLength(2);
+    expect(after.fingerprintIds).toHaveLength(2);
+    expect(after.exactFingerprintId).not.toBe(before.exactFingerprintId);
+    expect(after.fingerprintIds[1]).toBe(before.fingerprintIds[1]);
+    expect(after.activityTypes).toEqual(before.activityTypes);
+  });
+
+  it('does not remove populated event data or lap cycles', () => {
+    const input = fixture({ sport: 1, emptyNativeFields: 'populated' });
+    expect(prepareCOROSActivityFITUpload(input)).toBe(input);
+    const messages = readFitMessages(input).messages;
+    for (const [global, number] of [[21, 3], [19, 10]]) {
+      expect(messages.find(message => message.globalMessageNumber === global)!
+        .fields.find(field => field.fieldNumber === number)!.bytes).toEqual(Buffer.from([17, 0, 0, 0]));
+    }
+  });
+
+  it.each([12, 14] as const)('removes only the two empty triplets with a %i-byte header', headerSize => {
+    const input = fixture({ sport: 1, headerSize, emptyNativeFields: 'zero' });
+    const original = Buffer.from(input);
+    expect(() => readFitMessages(input)).toThrow('invalid_structure');
+    const output = prepareCOROSActivityFITUpload(input);
+    expect(output).toEqual(fixture({ sport: 1, headerSize, emptyNativeFields: 'omitted' }));
+    expect(output.length).toBe(input.length - 6);
+    expect(input).toEqual(original);
+    expect(readFitMessages(output).issues).toEqual([]);
+    expect(prepareCOROSActivityFITUpload(output)).toBe(output);
+  });
+
+  it.each([false, true])('preserves data, developer fields and compressed headers (big endian=%s)', bigEndian => {
+    const options = { sport: 1, bigEndian, developer: true, compressed: true, compressedLap: true };
+    const input = fixture({ ...options, emptyNativeFields: 'zero' });
+    const expected = fixture({ ...options, emptyNativeFields: 'omitted' });
+    expect(prepareCOROSActivityFITUpload(input)).toEqual(expected);
+    expect(readFitMessages(expected).messages.filter(message => message.globalMessageNumber === 19)).toHaveLength(2);
+  });
+
+  it('handles repeated local definitions without changing their data records', () => {
+    const input = fixture({ sport: 1, emptyNativeFields: 'zero', eventCount: 1000 });
+    const output = prepareCOROSActivityFITUpload(input);
+    expect(output).toEqual(fixture({ sport: 1, emptyNativeFields: 'omitted', eventCount: 1000 }));
+    expect(output.length).toBe(input.length - 3 * 1001);
+  });
+
+  it.each([82, 32])('repairs before applying the existing sport %i mapping', sport => {
+    const input = fixture({ sport, emptyNativeFields: 'zero' });
+    const clean = fixture({ sport, emptyNativeFields: 'omitted' });
+    expect(prepareCOROSActivityFITUpload(input)).toEqual(prepareCOROSActivityFITUpload(clean));
+  });
+
+  it('repairs GPS-less sailing without changing its category or adding GPS', () => {
+    const input = fixture({ sport: 32, withGPS: false, emptyNativeFields: 'zero' });
+    expect(prepareCOROSActivityFITUpload(input))
+      .toEqual(fixture({ sport: 32, withGPS: false, emptyNativeFields: 'omitted' }));
+  });
+
+  it.each([[2, 0x86], [3, 0x85], [0, 0x86]])(
+    'does not repair an unknown, mistyped or duplicate empty event field %i/%i', (number, baseType) => {
+      const input = fixture({ sport: 1, emptyNativeFields: 'zero' });
+      const offset = input.indexOf(Buffer.from([3, 0, 0x86]));
+      expect(offset).toBeGreaterThan(0);
+      input[offset] = number; input[offset + 2] = baseType; repairCRC(input);
+      const original = Buffer.from(input);
+      expect(prepareCOROSActivityFITUpload(input)).toBe(input);
+      expect(input).toEqual(original);
+    },
+  );
+
+  it.each([0, 2])('does not construct a summary for a %i-session file', sessionCount => {
+    const input = fixture({ sport: 1, sessionCount, emptyNativeFields: 'zero' });
+    expect(prepareCOROSActivityFITUpload(input)).toBe(input);
+  });
+
+  it('does not hide malformed nonempty or developer definitions', () => {
+    const invalidType = fixture({ sport: 1, emptyNativeFields: 'zero' });
+    const typeOffset = invalidType.indexOf(Buffer.from([9, 4, 13]));
+    expect(typeOffset).toBeGreaterThan(0);
+    invalidType[typeOffset + 2] = 0x89; repairCRC(invalidType); // A four-byte field cannot contain float64.
+    const invalidTimestamp = fixture({ sport: 1, emptyNativeFields: 'zero' });
+    const timestampOffset = invalidTimestamp.indexOf(Buffer.from([253, 4, 0x86]));
+    expect(timestampOffset).toBeGreaterThan(0);
+    invalidTimestamp[timestampOffset + 2] = 0x85; repairCRC(invalidTimestamp);
+    const emptyDeveloper = fixture({ sport: 1, emptyNativeFields: 'zero', developer: true });
+    const developerOffset = emptyDeveloper.indexOf(Buffer.from([1, 7, 3, 0]));
+    expect(developerOffset).toBeGreaterThan(0);
+    emptyDeveloper[developerOffset + 2] = 0; repairCRC(emptyDeveloper);
+    for (const input of [invalidType, invalidTimestamp, emptyDeveloper]) expect(prepareCOROSActivityFITUpload(input)).toBe(input);
+  });
+
+  it('does not repair a non-activity, corrupt, truncated or oversized file', () => {
+    const nonActivity = fixture({ sport: 1, emptyNativeFields: 'zero' });
+    nonActivity[nonActivity[0] + 13] = 6; repairCRC(nonActivity);
+    const corruptFile = fixture({ sport: 1, emptyNativeFields: 'zero' });
+    corruptFile[corruptFile.length - 1] ^= 1;
+    const corruptHeader = fixture({ sport: 1, emptyNativeFields: 'zero' });
+    corruptHeader[12] ^= 1;
+    for (const input of [nonActivity, corruptFile, corruptHeader, corruptFile.subarray(0, -3),
+      Buffer.alloc(30 * 1024 * 1024 + 1)]) {
+      expect(prepareCOROSActivityFITUpload(input)).toBe(input);
+    }
   });
 });

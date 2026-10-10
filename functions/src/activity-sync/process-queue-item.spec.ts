@@ -1762,18 +1762,20 @@ describe('activity-sync/process-queue-item', () => {
     expect(mockUploadActivityFileToCOROS).toHaveBeenCalledTimes(1);
   });
 
-  it.each([[82, true], [82, false], [32, true]] as const)(
-    'queued sport %i refreshes the converted receipt and then only polls (GPS=%s)', async (sport, withGPS) => {
-      const input = createCOROSActivityFITFixture({ sport, withGPS });
+  it.each([[82, true, false, true], [82, false, false, true], [32, true, false, true],
+    [1, true, true, true], [1, true, true, false]] as const)(
+    'queued sport %i refreshes the prepared receipt and then only polls (GPS=%s, empty fields=%s, restart=%s)', async (sport, withGPS, emptyFields, restart) => {
+      const input = createCOROSActivityFITFixture({ sport, withGPS, emptyNativeFields: emptyFields ? 'zero' : undefined });
       const original = Buffer.from(input);
       mockDownload.mockResolvedValue([input]);
       const queueItem: ActivitySyncQueueItemInterface = {
         ...baseQueueItem, routeId: ACTIVITY_SYNC_ROUTE_IDS.GarminAPI_to_COROSAPI,
-        destinationServiceName: ServiceNames.COROSAPI, destinationRestartProviderUserID: 'coros-user-1',
+        destinationServiceName: ServiceNames.COROSAPI, destinationRestartProviderUserID: restart ? 'coros-user-1' : undefined,
       };
       expect(await processActivitySyncQueueItem(queueItem)).toBe(QueueResult.ProviderStatusPending);
       const sent = mockUploadActivityFileToCOROS.mock.calls[0][1] as Buffer;
       expect(sent).toEqual(prepareCOROSActivityFITUpload(input));
+      expect(sent).not.toEqual(input);
       expect(mockRecordActivitySyncOutboundFingerprint).toHaveBeenCalledExactlyOnceWith({
         userID: 'user-1', destinationServiceName: ServiceNames.COROSAPI, fileBuffer: sent,
       });
@@ -1793,8 +1795,8 @@ describe('activity-sync/process-queue-item', () => {
     },
   );
 
-  it('does not convert a legacy accepted COROS upload while repairing its missing receipt', async () => {
-    const input = createCOROSActivityFITFixture();
+  it.each([false, true])('does not prepare an accepted COROS upload while repairing its receipt (empty fields=%s)', async emptyFields => {
+    const input = createCOROSActivityFITFixture({ sport: emptyFields ? 1 : 82, emptyNativeFields: emptyFields ? 'zero' : undefined });
     mockDownload.mockResolvedValue([input]);
     const queueItem: ActivitySyncQueueItemInterface = {
       ...baseQueueItem, routeId: ACTIVITY_SYNC_ROUTE_IDS.GarminAPI_to_COROSAPI,
@@ -1823,7 +1825,7 @@ describe('activity-sync/process-queue-item', () => {
   });
 
   it.each([ServiceNames.SuuntoApp, ServiceNames.WahooAPI])('leaves snorkeling FIT unchanged for %s', async destinationServiceName => {
-    const input = createCOROSActivityFITFixture();
+    const input = createCOROSActivityFITFixture({ emptyNativeFields: 'zero' });
     mockDownload.mockResolvedValue([input]);
     const queueItem: ActivitySyncQueueItemInterface = {
       ...baseQueueItem, destinationServiceName,
