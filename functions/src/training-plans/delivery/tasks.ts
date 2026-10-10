@@ -48,14 +48,31 @@ export const processTrainingDeliveryTask = onTaskDispatched({ region, timeoutSec
   retryConfig: CLOUD_TASK_RETRY_CONFIG, rateLimits: { maxConcurrentDispatches: 10, maxDispatchesPerSecond: 10 } }, async request => {
   const id = request.data?.queueItemId;
   if (typeof id !== 'string' || !/^(reconcile_)?[a-f0-9]{64}$/.test(id)) return;
-  const runtime = productionDeliveryRuntime();
-  const doc = await runtime.db.collection(DELIVERY_QUEUE).doc(id).get();
-  // Queue rows are leaves. A deleted row is a completed/cancelled task, never a reason to recreate it.
-  if (!doc.exists) return;
-  const job = doc.data()!;
-  if (job.kind === 'reconcile') await reconcileTrainingDeliveryPage(runtime, job.uid);
-  else if (job.kind === 'delivery') await processTrainingDelivery(runtime, job.uid, job.deliveryId);
-  else if (job.kind === 'verification') await processTrainingVerification(runtime, job.uid, job.deliveryId);
+  const context = { queueItemId: id, taskId: request.id, taskRetryCount: request.retryCount };
+  let jobKind = 'unread';
+  logger.info('[TrainingDeliveryTask]', { event: 'started', ...context });
+  try {
+    const runtime = productionDeliveryRuntime();
+    const doc = await runtime.db.collection(DELIVERY_QUEUE).doc(id).get();
+    // Queue rows are leaves. A deleted row is a completed/cancelled task, never a reason to recreate it.
+    if (!doc.exists) {
+      logger.info('[TrainingDeliveryTask]', { event: 'acknowledged', ...context, reason: 'missing_job' });
+      return;
+    }
+    const job = doc.data()!;
+    jobKind = ['reconcile', 'delivery', 'verification'].includes(job.kind) ? job.kind : 'unknown';
+    if (job.kind === 'reconcile') await reconcileTrainingDeliveryPage(runtime, job.uid);
+    else if (job.kind === 'delivery') await processTrainingDelivery(runtime, job.uid, job.deliveryId);
+    else if (job.kind === 'verification') await processTrainingVerification(runtime, job.uid, job.deliveryId);
+    // A normal handler return is not proof of provider acceptance or committed delivery.
+    logger.info('[TrainingDeliveryTask]', { event: 'acknowledged', ...context, jobKind,
+      reason: jobKind === 'unknown' ? 'unknown_job_kind' : 'handler_returned' });
+  } catch (error) {
+    const code = error && typeof error === 'object' && 'code' in error ? error.code : undefined;
+    logger.error('[TrainingDeliveryTask]', { event: 'failed', ...context, jobKind,
+      errorCode: typeof code === 'number' && Number.isInteger(code) && code >= 0 && code <= 16 ? code : 'unknown' });
+    throw error; // Preserve the original retry behavior; never log raw errors, payloads or credentials.
+  }
 });
 
 export const onTrainingDeliveryQueued = onDocumentWritten({
