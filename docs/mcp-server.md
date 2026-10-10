@@ -2572,6 +2572,9 @@ Training write authority treats omitted optional switches as off, so schedule-on
 delivery consent. Rechecks still reject changed permissions/generations and propagate revocation without retry.
 Explicit “No provider sync” and curly-apostrophe “don’t sync” phrases are not delivery requests. They do not force
 provider preview retries; a separate affirmative send/sync clause still retains its existing consent/review requirements.
+The first-party model reads a safe current Training revision before previews become visible (except the already-grounded
+daily-workout context). Its private Gemini projection retains schema-derived object-shape guidance when merging unions;
+the original MCP schema still validates every invocation. No new callable, public wire change or consent is introduced.
 
 Garmin missing-copy recovery (#769) does not widen registered v1 Training provider actions. Existing
 `get_training_sync_status` reports `needs_attention` and zero synced workouts after a complete not-found Workout

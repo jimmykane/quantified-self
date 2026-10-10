@@ -1965,6 +1965,50 @@ describe('Assistant runtime', () => {
     expect(preview.execute).not.toHaveBeenCalled();
   });
 
+  it.each([
+    [{ scheduleRevision: 260, plans: [] }, true],
+    [{ assistantToolError: { code: 'invalid_request', retryable: false }, scheduleRevision: 260 }, false],
+    [{ plans: [] }, false],
+    [{ scheduleRevision: -1 }, false],
+    [{ scheduleRevision: null }, false],
+  ] as const)('exposes Training previews only after a safe successful current revision read: %j', async (output, unlocked) => {
+    const read: AssistantRuntimeTool = { name: 'list_training_plans', description: 'Read current plans.',
+      inputJsonSchema: { type: 'object', properties: {} }, execute: vi.fn().mockResolvedValue(output) };
+    const preview: AssistantRuntimeTool = { name: 'preview_training_changes', description: 'Prepare a review.',
+      inputJsonSchema: { type: 'object', properties: {} }, execute: vi.fn() };
+    const dynamicTool = vi.spyOn(assistantGenkit, 'dynamicTool');
+    const advertised: string[][] = [];
+    vi.spyOn(assistantGenkit, 'generate').mockImplementationOnce(async () => {
+      advertised.push(dynamicTool.mock.calls.map(call => call[0].name));
+      dynamicTool.mockClear();
+      return { toolRequests: [{ toolRequest: { name: read.name, input: {} } }], messages: [] } as never;
+    }).mockImplementationOnce(async () => {
+      advertised.push(dynamicTool.mock.calls.map(call => call[0].name));
+      return { toolRequests: [], messages: [], text: JSON.stringify({ answer: 'Current Training state checked.',
+        visuals: { chart: null, map: null } }) } as never;
+    });
+    await generateAssistantModelAnswer({ currentTime: '2026-10-10T08:00:00Z', timeZone: 'Europe/Helsinki',
+      prompt: 'Preview a paused plan, no sync.', history: [], mcpInstructions: 'Use current data.',
+      tools: [read, preview], workflow: null, onBillableAttempt: vi.fn() });
+    expect(advertised[0]).toEqual([read.name]);
+    expect(advertised[1]).toEqual(unlocked ? [read.name, preview.name] : [read.name]);
+    expect(preview.execute).not.toHaveBeenCalled();
+  });
+
+  it('rejects a fabricated Training preview call before the required read', async () => {
+    const read: AssistantRuntimeTool = { name: 'list_training_plans', description: 'Read current plans.',
+      inputJsonSchema: { type: 'object', properties: {} }, execute: vi.fn() };
+    const preview: AssistantRuntimeTool = { name: 'preview_training_changes', description: 'Prepare a review.',
+      inputJsonSchema: { type: 'object', properties: {} }, execute: vi.fn() };
+    vi.spyOn(assistantGenkit, 'generate').mockResolvedValueOnce({
+      toolRequests: [{ toolRequest: { name: preview.name, input: { expectedScheduleRevision: 0 } } }], messages: [],
+    } as never);
+    await expect(generateAssistantModelAnswer({ currentTime: '2026-10-10T08:00:00Z', timeZone: 'UTC',
+      prompt: 'Preview a paused plan.', history: [], mcpInstructions: 'Use current data.',
+      tools: [read, preview], workflow: null, onBillableAttempt: vi.fn() })).rejects.toThrow('unavailable tool');
+    expect(preview.execute).not.toHaveBeenCalled();
+  });
+
   it('forces a delivery preview when the model stops after reading the workout', async () => {
     const readTool: AssistantRuntimeTool = {
       name: 'get_planned_workout',

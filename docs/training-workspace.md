@@ -214,6 +214,13 @@ loading and final review validation without logging recipes, notes, exception me
 do not change the MCP wire contract, read projections, consent or app help.
 Delivery intent ignores explicit negation such as “No provider sync” and “don’t sync”; an independent affirmative
 send/sync clause remains actionable. A schedule-only request must not enter the forced provider-preview correction path.
+For ordinary first-party Training turns, previews are withheld from the model until a successful Training read supplies
+a safe current schedule revision. The pre-collected daily-workout path already supplies its validated context. Gemini's
+private union projection describes each exact object shape and its required/optional keys, discouraging guessed revisions
+and mixed plan/step/repeat/target fields. These descriptions are derived from the existing MCP schemas; they do not loosen
+those strict schemas, normalize rejected payloads or change external clients' contracts or approval requirements.
+Repeated projected recipe references are deduplicated before outer batch unions merge, preserving the same step/repeat
+and ending/target shape guidance in focused and batch previews instead of merging it a second time.
 
 ### Plan activation and optional sync next steps
 

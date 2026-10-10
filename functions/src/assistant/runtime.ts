@@ -1042,9 +1042,18 @@ export const generateAssistantModelAnswer: AssistantRuntimeDependencies['generat
     : requiredDeliveryPreview?.name === 'preview_garmin_workout_replacement'
       ? 'Use only {workoutRef,expectedScheduleRevision,expectedWorkoutRevision} from the exact current workout read. Review possible duplicates before app confirmation. If fresh Check evidence is unavailable, ask the user to Check in the app; never fall back to Send, Retry or a new workout.'
       : '';
+  // The private model projection cannot enforce the public discriminated
+  // unions. Read the current Training revision before exposing its previews
+  // rather than inviting the model to fabricate an optimistic-lock value.
+  const prefetchedScheduleRevision = input.dailyWorkoutContext?.plannedWorkouts.scheduleRevision;
+  const needsTrainingRead = input.tools.some(tool => tool.name === 'list_training_plans')
+    && !(typeof prefetchedScheduleRevision === 'number'
+      && Number.isSafeInteger(prefetchedScheduleRevision) && prefetchedScheduleRevision >= 0);
+  let hasTrainingScheduleRead = !needsTrainingRead;
   const createGenkitTools = (
     allowedToolNames?: ReadonlySet<AssistantMcpToolName>,
-  ) => input.tools.filter(tool => !allowedToolNames || allowedToolNames.has(tool.name))
+  ) => input.tools.filter(tool => (!allowedToolNames || allowedToolNames.has(tool.name))
+    && (hasTrainingScheduleRead || !(TRAINING_PREVIEW_TOOLS as readonly string[]).includes(tool.name)))
     .map(tool => assistantGenkit.dynamicTool({
     name: tool.name,
     description: tool.description,
@@ -1075,6 +1084,9 @@ export const generateAssistantModelAnswer: AssistantRuntimeDependencies['generat
     ASSISTANT_SYSTEM_INSTRUCTIONS,
     'History is dated conversational context, not current account evidence. Resolve today/tomorrow in an earlier message relative to its recordedAt timestamp, using the turn timezone. Fresh validated reads override earlier answers, including earlier sleep, readiness, activities and plan claims. Never carry yesterday’s completed workouts or measurements into today. Prior suggestions and pending previews are not applied changes. Only server-owned confirmation evidence establishes an accepted authored change; a queued provider action does not prove delivery. Preserve the user’s latest constraints and do not inherit write or provider consent from previous requests.',
     input.mcpInstructions,
+    needsTrainingRead
+      ? 'Read the current Training schedule first. Its successful response supplies expectedScheduleRevision; never guess that revision or use zero as a placeholder. Training previews become available after that read. Follow each exact object shape: include only the fields for its selected kind and mode, never fill unrelated fields with null.'
+      : '',
     input.locationAccess === 'precise_activity'
       ? ASSISTANT_PRECISE_ACTIVITY_LOCATION_INSTRUCTIONS
       : ASSISTANT_INTERNAL_BOUNDARY_INSTRUCTIONS,
@@ -1153,10 +1165,17 @@ export const generateAssistantModelAnswer: AssistantRuntimeDependencies['generat
     const toolResponses = [];
     for (const request of response.toolRequests) {
       const tool = toolsByName.get(request.toolRequest.name as AssistantMcpToolName);
-      if (!tool) {
+      if (!tool || (!hasTrainingScheduleRead
+        && (TRAINING_PREVIEW_TOOLS as readonly string[]).includes(tool.name))) {
         throw new Error('The Assistant model selected an unavailable tool.');
       }
       const output = await tool.execute(asToolInput(request.toolRequest.input));
+      if ((TRAINING_READ_TOOLS as readonly string[]).includes(tool.name)
+        && typeof output === 'object' && output !== null && !('assistantToolError' in output)
+        && 'scheduleRevision' in output && Number.isSafeInteger(output.scheduleRevision)
+        && (output.scheduleRevision as number) >= 0) {
+        hasTrainingScheduleRead = true;
+      }
       if (tool.name === 'preview_garmin_workout_replacement'
         && typeof output === 'object' && output !== null && 'assistantToolError' in output) {
         const rejection = output.assistantToolError;

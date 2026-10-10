@@ -116,10 +116,26 @@ describe('Assistant MCP session', () => {
         description: 'Allowed value: 1.' });
       expect((structure.properties as Record<string, { enum?: unknown[] }>).version.enum).toBeUndefined();
       expect(((nodes.items.properties as Record<string, { enum?: string[] }>).kind.enum)).toEqual(['step', 'repeat']);
+      expect(nodes.items.description).toContain('step: required keys kind, id, purpose, ending, targets;');
+      expect(nodes.items.description).toContain('repeat: required keys kind, id, count, steps;');
+      expect(nodes.items.description).toContain('Do not mix shapes or fill unrelated fields with null');
+      expect((nodes.items.properties as Record<string, { description: string }>).count.description)
+        .toContain('Allowed only for repeat; omit for other shapes.');
       const ending = (nodes.items.properties as Record<string, { properties: Record<string, { description?: string }> }>).ending;
       expect(ending.properties.seconds.description).toContain('Required for time');
+      expect((ending as { description?: string }).description).toContain('time: required keys kind, seconds;');
       const batch = session.tools.find(tool => tool.name === 'preview_training_changes')!;
       expect((batch.inputSchema.properties as Record<string, { items: { type: string } }>).changes.items.type).toBe('object');
+      expect((batch.inputSchema.properties as Record<string, { items: { description: string } }>).changes.items.description)
+        .toContain('create-plan: required keys kind, localKey, name, startDate, endDate;');
+      const changes = (batch.inputSchema.properties as Record<string, { items: { properties: Record<string, unknown> } }>).changes.items;
+      const batchStructure = changes.properties.structure as typeof structure;
+      const batchNodes = (batchStructure.properties as Record<string, { items: Record<string, unknown> }>).nodes;
+      expect(batchNodes.items.description).toEqual(nodes.items.description);
+      expect(batchNodes.items.required).toEqual(nodes.items.required);
+      const batchEnding = (batchNodes.items.properties as Record<string, { description: string }>).ending;
+      expect(batchEnding.description).toEqual((ending as { description: string }).description);
+      expect(batchNodes.items.description).not.toContain('shape 1: required keys kind, id;');
     } finally { await session.close(); }
   });
 
