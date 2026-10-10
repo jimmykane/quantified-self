@@ -6286,7 +6286,8 @@ Biking despite its Mountain Biking group. Library group membership does not wide
 modeled contexts or provider delivery support. Indoor Cycling and E-Mountain Biking retain library cycling durability;
 the other eight types have no durability adapter. Paramotoring and RC Drone Flying omit calculated POWER/HR/MET
 TSS and remove stale calculated scores/methods while preserving finite imported scores, including legacy scores
-without a method and when imported-score preservation is disabled. Other Aerial Sports and Unspecified activities
+without a method, when preservation is true or omitted. With false, both TSS and its method stay unset for these
+two sports. Other Aerial Sports and Unspecified activities
 retain their existing TSS eligibility. No numeric metric token, unit, formula or durability protocol is added.
 
 MCP impact review: the built 193-type catalog passes the existing strict activity-type output schema, and the 99
@@ -6297,6 +6298,21 @@ library in application and Functions together; recover historical broad labels o
 or explicit aliases, then regenerate event summaries, activity-type aggregates, applicable durability evidence and
 Training snapshots through existing source-backed reparse and derived ingress. Broad stored values cannot recover
 lost detail. The Sports Lib importing guide owns exact aliases and parent guards; no reparse or deployment was run.
+
+The sport-mapping audit adds 62 canonical types and adds or corrects aliases for 70 types. The full 193-type
+catalog follows one `preserveImportedTss` policy. True or omission (the default) retains finite imported TSS exactly,
+including zero and legacy scores without a method, even for sports excluded from calculation. False discards the
+existing score and method, calculates a replacement where supported with sufficient inputs, and leaves both unset
+otherwise. The same flag applies to Motorized, Adaptive Mobility, Video Gaming, Paramotoring and RC Drone Flying.
+Calculated scores on eligible sports retain their existing true/default preservation behavior and refresh with false.
+
+MCP impact review: the canonical numeric TSS token, aliases, units, JSON representation, activity catalog, read
+projections, scopes, consent and registered schemas remain unchanged. No Training formula, derived schema, planning
+capability, plugin rebuild, write path, queue lifecycle or monitoring change is added. Current app help remains accurate
+because the default retains imported scores and there is no user-facing false-flag override. Adopt the library in the
+application and Functions together. No global reparse is required; a separately approved targeted source-backed
+reparse can correct specifically affected imports that previously ignored false or retained TSS after calculation
+failed. Regenerate affected event summaries and Training snapshots through the existing ingress when a score changes.
 
 Sports Lib `20.3.0` adds canonical Health and Sleep scalar JSON classes. Training uses the shared dual reader for the
 sleep duration, score, HRV, and sleep-heart-rate aggregates it already consumes; no Training formula or derived schema
