@@ -168,9 +168,10 @@ describe('COROS sailing FIT copy', () => {
 });
 
 describe('COROS production FIT preparation', () => {
-  it.each([[82, ActivityTypes.OpenWaterSwimming], [32, ActivityTypes.Generic]] as const)(
-    'sport %i parses as %s with the original timing, duration and distance', async (sport, expectedType) => {
-      const input = fixture({ sport });
+  it.each([[82, ActivityTypes.OpenWaterSwimming, true], [82, ActivityTypes.OpenWaterSwimming, false],
+    [32, ActivityTypes.Generic, true]] as const)(
+    'sport %i parses as %s with original metrics (GPS=%s)', async (sport, expectedType, withGPS) => {
+      const input = fixture({ sport, withGPS });
       const output = prepareCOROSActivityFITUpload(input);
       const parse = (file: Buffer) => EventImporterFIT.getFromArrayBuffer(
         file.buffer.slice(file.byteOffset, file.byteOffset + file.byteLength) as ArrayBuffer, createParsingOptions(),
@@ -187,7 +188,7 @@ describe('COROS production FIT preparation', () => {
     },
   );
 
-  it.each([82, 32])('converts only the verified outdoor sport %i without mutating the original', sport => {
+  it.each([82, 32])('converts only the verified sport %i without mutating the original', sport => {
     const input = fixture({ sport, bigEndian: true, compressed: true, developer: true });
     const original = Buffer.from(input);
     const output = prepareCOROSActivityFITUpload(input);
@@ -202,9 +203,30 @@ describe('COROS production FIT preparation', () => {
     expect(prepareCOROSActivityFITUpload(input)).toBe(input);
   });
 
-  it.each([82, 32])('leaves GPS-less, multisession and malformed sport %i unchanged', sport => {
+  it.each([false, true])('converts GPS-less snorkeling without adding samples (big endian=%s)', bigEndian => {
+    const input = fixture({ withGPS: false, withSubSport: true, bigEndian, developer: true, compressed: true });
+    const original = Buffer.from(input);
+    const output = prepareCOROSActivityFITUpload(input);
+    expect(output).toEqual(createCOROSSnorkelingFIT(input));
+    expect(output).not.toEqual(input);
+    expect(input).toEqual(original);
+    const before = readFitMessages(input), after = readFitMessages(output);
+    const categoryFields = new Map([[12, [0, 1]], [18, [5, 6]], [19, [25, 39]]]);
+    const withoutCategory = (message: typeof before.messages[number]) => ({ ...message,
+      fields: message.fields.filter(field => !(categoryFields.get(message.globalMessageNumber) ?? []).includes(field.fieldNumber)) });
+    expect(after.issues).toEqual([]);
+    expect(after.messages.map(withoutCategory)).toEqual(before.messages.map(withoutCategory));
+    expect(prepareCOROSActivityFITUpload(output)).toBe(output);
+  });
+
+  it('keeps GPS-less sailing unchanged', () => {
+    const input = fixture({ sport: 32, withGPS: false });
+    expect(prepareCOROSActivityFITUpload(input)).toBe(input);
+  });
+
+  it.each([82, 32])('leaves multisession and malformed sport %i unchanged', sport => {
     const corrupt = fixture({ sport }); corrupt[corrupt.length - 1] ^= 1;
-    for (const input of [fixture({ sport, withGPS: false }), fixture({ sport, sessionCount: 2 }),
+    for (const input of [fixture({ sport, sessionCount: 2 }),
       fixture({ sport, malformedSport: true }), fixture({ sport, fullSessionDefinition: true }), corrupt]) {
       const original = Buffer.from(input);
       expect(prepareCOROSActivityFITUpload(input)).toBe(input);
@@ -213,11 +235,20 @@ describe('COROS production FIT preparation', () => {
   });
 
   it.each([[0x7fffffff, 1234], [1234, 0x7fffffff], [0x50000000, 1234]])(
-    'does not treat invalid coordinates %s/%s as recorded GPS', (latitude, longitude) => {
-      const input = fixture({ coordinates: [latitude, longitude] });
+    'keeps sailing with invalid coordinates %s/%s unchanged', (latitude, longitude) => {
+      const input = fixture({ sport: 32, coordinates: [latitude, longitude] });
       expect(prepareCOROSActivityFITUpload(input)).toBe(input);
     },
   );
+
+  it('converts snorkeling with unavailable GPS without inventing coordinates', () => {
+    const input = fixture({ coordinates: [0x7fffffff, 0x7fffffff] });
+    const output = prepareCOROSActivityFITUpload(input);
+    expect(output).toEqual(createCOROSSnorkelingFIT(input));
+    expect(output).not.toEqual(input);
+    expect(readFitMessages(output, { messageNumbers: [20] }).messages)
+      .toEqual(readFitMessages(input, { messageNumbers: [20] }).messages);
+  });
 
   it('accepts recorded zero coordinates and preserves their bytes', () => {
     const input = fixture({ coordinates: [0, 0] });

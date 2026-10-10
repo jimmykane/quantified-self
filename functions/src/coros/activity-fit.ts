@@ -43,8 +43,8 @@ export function createCOROSSailingFIT(input: Buffer, requireGPS = false): Buffer
 }
 
 /**
- * Only adapt the two verified outdoor cases. Unrelated, GPS-less, mixed or invalid
- * inputs retain the existing provider-inference/rejection path, not a guessed type.
+ * Only adapt the two verified mappings. Snorkeling needs no GPS; sailing retains
+ * its recorded-GPS requirement. Unrelated, mixed or invalid inputs pass through.
  * No original is mutated or retained. Fingerprint and send the returned buffer.
  */
 export function prepareCOROSActivityFITUpload(input: Buffer): Buffer {
@@ -55,7 +55,7 @@ export function prepareCOROSActivityFITUpload(input: Buffer): Buffer {
     if (parsed.messages.length !== 1) return input;
     const session = parsed.messages[0];
     sourceSport = readFitUnsignedField(session.fields.find(field => field.fieldNumber === 5), 0, 1, session.littleEndian);
-    if (sourceSport === SNORKELING) output = createCOROSSnorkelingFIT(input, true);
+    if (sourceSport === SNORKELING) output = createCOROSSnorkelingFIT(input);
     else if (sourceSport === SAILING) output = createCOROSSailingFIT(input, true);
     else return input;
   } catch {

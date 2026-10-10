@@ -102,7 +102,8 @@ describe('integration-pages.content', () => {
     expect(PROVIDER_INTEGRATION_PAGES.coros.syncFlows.some(flow => flow.title === 'Send routes to COROS')).toBe(true);
     expect(PROVIDER_INTEGRATION_PAGES.coros.tools.some(tool => tool.title === 'GPX and FIT route delivery')).toBe(true);
     const corosFIT = PROVIDER_INTEGRATION_PAGES.coros.tools.find(tool => tool.title === 'FIT activity upload to COROS')!.copy;
-    expect(corosFIT).toContain('Snorkeling FITs with recorded GPS are sent as Open Water Swim');
+    expect(corosFIT).toContain('Snorkeling FITs with or without recorded GPS are sent as Open Water Swim');
+    expect(corosFIT).toContain('Missing GPS is not added');
     expect(corosFIT).toContain('Sailing FITs with recorded GPS as GPS Cardio');
     expect(corosFIT).toContain('Direct uploads and activity sync change only the outgoing copy');
     expect(corosFIT).toContain('keeping your QS activity type and retained original unchanged');

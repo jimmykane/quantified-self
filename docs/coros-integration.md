@@ -141,8 +141,9 @@ sending the file. The fixed mappings are:
 | Sailing (`32`) | Generic / Generic (`0` / `0`) | GPS Cardio |
 
 The adapter only converts structurally valid, single-session activity FITs with
-consistent category fields and at least one valid recorded latitude/longitude
-pair. GPS-less, mixed/multi-session, malformed and unrelated files pass through
+consistent category fields. Snorkeling converts with or without recorded GPS;
+Sailing still requires at least one valid recorded latitude/longitude pair.
+GPS-less Sailing, mixed/multi-session, malformed and unrelated files pass through
 unchanged for the existing provider inference/rejection behavior; no support for
 those cases is claimed. FIT sub_sport `17` is pool swimming, not open water.
 COROS's API `mode=18/subMode=1` is not a FIT sport enum or an upload parameter.
@@ -163,6 +164,12 @@ Neither imported copy appeared in the inspected history API responses, so catego
 confirmation came from the owner's app checks, not inferred API readback.
 This proves the two tested files, not universal COROS acceptance. No test identifiers,
 files, screenshots or credentials belong in this repository.
+
+On 10 October 2026, a separately authorized owner-account test of one GPS-less
+Snorkeling copy reached terminal status `2`. Its sport/sub_sport were changed to
+swimming/open-water without adding GPS or changing timing, duration, distance or
+the retained original. This extends the tested mapping to GPS-less Snorkeling,
+not Sailing or universal acceptance; app category confirmation is separate.
 
 Fingerprint receipts are computed from the actual sent copy. A converted fresh
 send/restart replaces a legacy original-file queue fingerprint marker through the
