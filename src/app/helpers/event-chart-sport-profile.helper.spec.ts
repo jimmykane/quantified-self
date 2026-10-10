@@ -61,6 +61,16 @@ describe('event chart sport profiles', () => {
     expect(resolution.label).toBe(name);
   });
 
+  it.each([
+    [['Indoor Walking', 'Walking'], 'walking'],
+    [['Indoor Walking', 'Speed Walking'], 'walking'],
+    [['Walking', 'Trekking'], 'hiking'],
+  ])('keeps the mixed walking/hiking selection %s in %s', (types, profileID) => {
+    const resolution = resolveEventChartSportProfile(types as string[]);
+    expect(resolution.profileID).toBe(profileID);
+    expect(resolution.source).toBe('shared-profile');
+  });
+
   it('shares cycling recommendations with generic provider cycling and keeps indoor walking terrain-free', () => {
     expect(resolveEventChartSportProfile(['Cycling', 'Road Cycling']).profileID).toBe('cycling');
     expect(resolveEventChartSportProfile(['Indoor Walking']).candidateFamilies).not.toContain('altitude');

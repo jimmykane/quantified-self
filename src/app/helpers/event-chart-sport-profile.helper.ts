@@ -306,9 +306,10 @@ export function resolveEventChartSportProfile(activityTypes: readonly unknown[])
     && uniqueActivityGroups.length === 1
     ? uniqueActivityGroups[0]
     : null;
+  const hasHikingType = normalizedTypes.some(type => type === ActivityTypes.Hiking || type === ActivityTypes.Trekking);
   const walkingHikingProfileID = hasMultipleActivityTypes
     && normalizedTypes.every(type => WALKING_HIKING_TYPES.has(type))
-    ? PROFILE_IDS.Hiking
+    ? (hasHikingType ? PROFILE_IDS.Hiking : PROFILE_IDS.Walking)
     : null;
   const sharedGroupProfileID = walkingHikingProfileID || (sharedActivityGroup && sharedActivityGroup !== ActivityTypeGroups.UnspecifiedGroup
     ? ACTIVITY_GROUP_PROFILE[sharedActivityGroup]
