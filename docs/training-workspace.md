@@ -4912,6 +4912,12 @@ revision effective at the leg's recorded start time, so old/delayed uploads do n
 leg freezes that applied policy; duplicate uploads, resyncs and reparses preserve it. Matched legs reuse that
 snapshot without querying policy history again; only new legs select a dated policy.
 
+Only saves that create a future sport-policy revision request a UUID, using the shared browser compatibility guard.
+Workout-only overrides, exclusion and resets do not depend on UUID support. If a browser cannot create the revision
+ID, Settings and the combined workout/future-preference save fail before opening a transaction, explain that the
+browser needs updating, and retain the draft. Combined saves remain atomic. Revision IDs remain stable across
+transaction retries; server timestamps, policy history, Rules and MCP contracts are unchanged.
+
 The Settings editor retains dirty drafts while policy updates arrive. After a successful save it displays the newest
 observed policy head and uses that revision for the next edit. Pending save completions belong to the current account
 and editor lifetime; switching accounts or closing Settings prevents stale completions from changing form state or

@@ -7,6 +7,7 @@ import { DEFAULT_TRAINING_LOAD_POLICY, isTrainingLoadMethod, resolveEffectiveTra
   type EffectiveTrainingLoad, type TrainingLoadActivity, type TrainingLoadControl, type TrainingLoadMetadata, type TrainingLoadPolicy } from '@shared/training-load-policy';
 import { isTrainingDiscipline, type TrainingSportId } from '@shared/training-disciplines';
 import { AppUserService } from './app.user.service';
+import { BrowserCompatibilityService } from './browser.compatibility.service';
 import { browserTrainingLoadSourceFingerprint, canonicalTrainingLoadValue } from '@shared/training-load-source';
 
 export interface TrainingLoadView extends EffectiveTrainingLoad { updatedAtMs?: number; }
@@ -18,6 +19,7 @@ export type TrainingLoadEdit = { key: string; control: TrainingLoadControl | nul
 export class TrainingLoadService {
   private readonly firestore = inject(Firestore);
   private readonly users = inject(AppUserService);
+  private readonly browser = inject(BrowserCompatibilityService);
 
   watch(uid: string, eventId: string): Observable<TrainingLoadMetadata | null> {
     return this.users.user$.pipe(switchMap(user => user?.uid === uid
@@ -78,7 +80,7 @@ export class TrainingLoadService {
     const eventRef = doc(this.firestore, `users/${uid}/events/${eventId}`);
     const ref = doc(this.firestore, `users/${uid}/events/${eventId}/metaData/trainingLoad`);
     const policyRef = future ? doc(this.firestore, `users/${uid}/trainingLoadPolicies/${future.family}`) : null;
-    const revisionId = crypto.randomUUID();
+    const revisionId = future ? this.createPolicyRevisionId() : null;
     await runTransaction(this.firestore, async transaction => {
       const event = await transaction.get(eventRef);
       const snapshot = await transaction.get(ref);
@@ -116,7 +118,7 @@ export class TrainingLoadService {
   async savePolicy(uid: string, family: TrainingSportId, expectedRevision: number, policy: TrainingLoadPolicy): Promise<void> {
     this.validatePolicy(family, policy);
     const ref = doc(this.firestore, `users/${uid}/trainingLoadPolicies/${family}`);
-    const revisionId = crypto.randomUUID();
+    const revisionId = this.createPolicyRevisionId();
     await runTransaction(this.firestore, async transaction => {
       const snapshot = await transaction.get(ref);
       if ((snapshot.data()?.['revision'] ?? 0) !== expectedRevision) throw new Error('Preferences changed elsewhere. Reload and try again.');
@@ -124,6 +126,12 @@ export class TrainingLoadService {
       transaction.set(ref, next);
       transaction.set(doc(ref, 'revisions', revisionId), next);
     });
+  }
+
+  private createPolicyRevisionId(): string {
+    const id = this.browser.createRandomUUID();
+    if (!id) throw new Error('Your browser cannot save sport preferences. Update it and try again.');
+    return id;
   }
 
   private validatePolicy(family: unknown, policy: TrainingLoadPolicy): void {

@@ -136,6 +136,29 @@ describe('TrainingLoadService', () => {
       revision: 5, controls: { other: { included: false } }, updatedAt: 'SERVER_TIME' }));
     expect(set).not.toHaveBeenCalled();
   });
+  it.each([
+    { key: 'leg', control: { override: 0 } },
+    { key: 'leg', control: null },
+    { excluded: true },
+    { reset: true as const },
+  ])('saves workout controls without UUID support: %j', async edit => {
+    vi.stubGlobal('crypto', { subtle: webcrypto.subtle });
+    await service.save('u', 'e', 4, edit);
+    expect(update).toHaveBeenCalledTimes(1);
+    expect(set).not.toHaveBeenCalled();
+  });
+  it.each(['missing', 'throws'])('fails future defaults before any write when UUID generation %s', async failure => {
+    vi.stubGlobal('crypto', failure === 'missing' ? { subtle: webcrypto.subtle }
+      : { randomUUID: () => { throw new Error('Browser API failure'); } });
+    await expect(service.save('u', 'e', 4, { key: 'leg', control: { override: 0 } },
+      { family: 'walking-hiking', expectedRevision: 0, policy: { method: 'HR', included: true } }))
+      .rejects.toThrow('Your browser cannot save sport preferences');
+    await expect(service.savePolicy('u', 'walking-hiking', 0, { method: 'MET', included: true }))
+      .rejects.toThrow('Your browser cannot save sport preferences');
+    expect(runTransaction).not.toHaveBeenCalled();
+    expect(update).not.toHaveBeenCalled();
+    expect(set).not.toHaveBeenCalled();
+  });
   it('does not advance the load timestamp for a semantic no-op', async () => {
     await service.save('u', 'e', 4, { excluded: false });
     expect(update).not.toHaveBeenCalled(); expect(set).not.toHaveBeenCalled();
