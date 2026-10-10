@@ -51,26 +51,27 @@
   @if (dashboardUser(); as user) {
     <app-health-category-overview #overview [hidden]="metricDetailOpen()" [user]="user"
       [groups]="metricCatalogGroups()" [showSleep]="showSleepMetric()" [darkTheme]="isDarkTheme()"
+      [highlightedMetrics]="highlightedOverviewMetrics()"
       [referenceDate]="overviewEndDate()" [providerFilter]="selectedProviders()" [timelineNotes]="timelineNotes.context()"
-      (metricSelected)="selectPriorityMetric($event)" (providersObserved)="rememberOverviewProviders($event)" />
+      (metricSelected)="selectPriorityMetric($event)" (providersObserved)="rememberOverviewProviders($event)">
+      <app-health-priority-summary healthOverviewHighlights
+        [timelineNotes]="timelineNotes.context()"
+        [cards]="visiblePriorityCards()"
+        [startTimeMs]="priorityWindow.startTimeMs"
+        [endTimeMs]="priorityWindow.endTimeMs"
+        [darkTheme]="isDarkTheme()"
+        [unitSettings]="unitSettings()"
+        [preferredSources]="preferredHighlightSources()"
+        (sourceSelected)="selectHighlightSource($event)"
+        (metricSelected)="selectPriorityMetric($event)">
+      </app-health-priority-summary>
+    </app-health-category-overview>
   }
 
   <div class="health-history" [hidden]="!metricDetailOpen()">
     <button mat-button type="button" class="health-back-overview" (click)="showOverview()">
       <mat-icon aria-hidden="true">arrow_back</mat-icon>Back to overview
     </button>
-
-  <app-health-priority-summary
-    [timelineNotes]="timelineNotes.context()"
-    [cards]="visiblePriorityCards()"
-    [startTimeMs]="priorityWindow.startTimeMs"
-    [endTimeMs]="priorityWindow.endTimeMs"
-    [darkTheme]="isDarkTheme()"
-    [unitSettings]="unitSettings()"
-    [preferredSources]="preferredHighlightSources()"
-    (sourceSelected)="selectHighlightSource($event)"
-    (metricSelected)="selectPriorityMetric($event)">
-  </app-health-priority-summary>
 
   <section class="health-explorer" aria-labelledby="health-explorer-title">
     <div class="health-section-heading health-explorer-heading">

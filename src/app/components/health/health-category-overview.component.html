@@ -11,6 +11,10 @@
     }
   </mat-chip-listbox>
 
+  <div class="health-overview-highlights" [hidden]="!hasOverviewHighlights()">
+    <ng-content select="[healthOverviewHighlights]"></ng-content>
+  </div>
+
   <div class="health-overview-grid" aria-label="Recorded Health metrics">
     @for (card of cards(); track card.id) {
       <mat-card appearance="outlined" class="health-overview-card qs-glass-card-panel" [attr.aria-labelledby]="'health-overview-' + card.id">
@@ -27,7 +31,9 @@
         </mat-card-actions>
       </mat-card>
     } @empty {
-      <p class="health-overview-empty" role="status">No recorded Health metrics yet. Add a measurement or connect a service to get started.</p>
+      @if (!hasOverviewHighlights()) {
+        <p class="health-overview-empty" role="status">No recorded Health metrics yet. Add a measurement or connect a service to get started.</p>
+      }
     }
   </div>
 

@@ -3,6 +3,7 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import * as requestHelper from '../request-helper';
 import { backfillGarminAPIActivities, processGarminBackfill } from './backfill';
 import * as utils from '../utils';
+import * as logger from 'firebase-functions/logger';
 
 // Simple, robust mock setup
 const getMock = vi.fn();
@@ -264,6 +265,30 @@ describe('Garmin Backfill', () => {
 
         expect(tokens.getTokenData).not.toHaveBeenCalled();
         expect(requestHelper.get).not.toHaveBeenCalled();
+        expect(logger.info).toHaveBeenCalledWith('[GarminHistoryImport] History import is already running.');
+        expect(logger.error).not.toHaveBeenCalled();
+    });
+
+    it('preserves an automatic-history reservation conflict as HTTP 409 before provider work', async () => {
+        metaState.connectionHistoryReservation = 'automatic-run';
+        metaState.connectionHistoryReservationExpiresAt = Date.now() + 60_000;
+        const originalMeta = { ...metaState };
+
+        await expect((backfillGarminAPIActivities as any)({
+            startDate: '2023-01-01',
+            endDate: '2023-01-10',
+        }, context)).rejects.toMatchObject({
+            code: 'already-exists',
+            httpErrorCode: { status: 409 },
+            message: 'A recent-history import is already running. Please wait for it to finish.',
+        });
+
+        expect(tokens.getTokenData).not.toHaveBeenCalled();
+        expect(requestHelper.get).not.toHaveBeenCalled();
+        expect(setMock).not.toHaveBeenCalled();
+        expect(metaState).toEqual(originalMeta);
+        expect(logger.info).toHaveBeenCalledWith('[GarminHistoryImport] History import is already running.');
+        expect(logger.error).not.toHaveBeenCalled();
     });
 
     it('should reclaim an expired history import lease', async () => {
@@ -294,6 +319,7 @@ describe('Garmin Backfill', () => {
         expect(metaState.historyImportLeaseOwner).toBeUndefined();
         expect(metaState.historyImportLeaseExpiresAt).toBeUndefined();
         expect(metaState.didLastHistoryImport).toBeUndefined();
+        expect(logger.error).toHaveBeenCalledWith('Error backfilling Garmin:', expect.anything());
     });
 
     it('should expose deletion-guard read failures as retryable', async () => {

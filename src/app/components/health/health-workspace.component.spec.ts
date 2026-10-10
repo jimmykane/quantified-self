@@ -94,11 +94,12 @@ class DashboardChartLibraryStubComponent {
 }
 
 @Component({ selector: 'app-health-category-overview', standalone: true,
-  template: '<h2 id="health-overview-title" tabindex="-1">Your overview</h2><button (click)="metricSelected.emit(\'body_weight\')">View Weight history</button>' })
+  template: '<h2 id="health-overview-title" tabindex="-1">Your overview</h2><ng-content select="[healthOverviewHighlights]"></ng-content><button (click)="metricSelected.emit(\'body_weight\')">View Weight history</button>' })
 class HealthCategoryOverviewStubComponent {
   @Input() user: unknown;
   @Input() groups: unknown;
   @Input() showSleep = false;
+  @Input() highlightedMetrics: readonly HealthWorkspaceMetricSelection[] = [];
   @Input() darkTheme = false;
   @Input() providerFilter: readonly HealthProvider[] = [];
   @Input() referenceDate: string | null = null;
@@ -587,12 +588,19 @@ describe('HealthWorkspaceComponent', () => {
     expect(component.metricDetailOpen()).toBe(false);
     expect(host.querySelector<HTMLElement>('.health-history')!.hidden).toBe(true);
     expect(host.querySelector<HTMLElement>('app-health-category-overview')!.hidden).toBe(false);
+    const highlights = host.querySelector('app-health-priority-summary')!;
+    expect(highlights.closest('app-health-category-overview')).not.toBeNull();
+    expect(host.querySelector('.health-history app-health-priority-summary')).toBeNull();
+    const overview = fixture.debugElement.query(By.directive(HealthCategoryOverviewStubComponent)).componentInstance as HealthCategoryOverviewStubComponent;
+    expect(overview.highlightedMetrics).toEqual(component.visiblePriorityCards().map(card => card.metric));
     component.toggleProvider(HEALTH_PROVIDERS.GarminAPI);
     haptics.selection.mockClear();
-    host.querySelector<HTMLButtonElement>('app-health-category-overview button')!.click();
+    host.querySelector<HTMLButtonElement>('app-health-category-overview > button')!.click();
     fixture.detectChanges(); await fixture.whenStable(); fixture.detectChanges();
     expect(component.metricDetailOpen()).toBe(true);
     expect(host.querySelector<HTMLElement>('.health-history')!.hidden).toBe(false);
+    expect(host.querySelector<HTMLElement>('app-health-category-overview')!.hidden).toBe(true);
+    expect(host.querySelector('app-health-priority-summary')).toBe(highlights);
     expect(component.routeState()).toMatchObject({ metric: 'body_weight', range: '14d' });
     expect(component.selectedProviders()).toEqual([HEALTH_PROVIDERS.GarminAPI]);
     expect(haptics.selection).toHaveBeenCalledTimes(1);
@@ -600,6 +608,8 @@ describe('HealthWorkspaceComponent', () => {
     host.querySelector<HTMLButtonElement>('.health-back-overview')!.click();
     fixture.detectChanges(); await fixture.whenStable();
     expect(component.metricDetailOpen()).toBe(false);
+    expect(host.querySelector<HTMLElement>('app-health-category-overview')!.hidden).toBe(false);
+    expect(host.querySelector('app-health-priority-summary')).toBe(highlights);
     expect(component.routeState()).toMatchObject({ metric: 'body_weight', range: '14d' });
     expect(component.selectedProviders()).toEqual([HEALTH_PROVIDERS.GarminAPI]);
     expect(updateHealthWorkspacePreferences).toHaveBeenCalledTimes(saveCount);
@@ -1150,12 +1160,15 @@ describe('HealthWorkspaceComponent', () => {
     expect(heading.scrollIntoView).toHaveBeenCalledWith({ block: 'start', inline: 'nearest', behavior: 'auto' });
     expect(haptics.selection).toHaveBeenCalledTimes(1);
 
-    // Reopening the same metric must still take the user from its highlight to the chart.
+    // Returning to All and reopening the same metric must still focus its chart.
+    host.querySelector<HTMLButtonElement>('.health-back-overview')!.click();
+    fixture.detectChanges(); await fixture.whenStable(); fixture.detectChanges();
+    expect(host.querySelector<HTMLElement>('app-health-category-overview')!.hidden).toBe(false);
     openHeartRate?.click();
     fixture.detectChanges(); await fixture.whenStable();
     expect(document.activeElement).toBe(heading);
     expect(heading.scrollIntoView).toHaveBeenCalledTimes(2);
-    expect(haptics.selection).toHaveBeenCalledTimes(2);
+    expect(haptics.selection).toHaveBeenCalledTimes(3);
     expect(component.selectedRange()).toBe('30d');
   });
 

@@ -3,22 +3,18 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import * as utils from '../utils';
 import * as history from '../history';
+import { HttpsError } from 'firebase-functions/v2/https';
+import * as logger from 'firebase-functions/logger';
 import { SERVICE_NAME } from './constants';
 
 // Mock firebase-functions/v2/https
-vi.mock('firebase-functions/v2/https', () => {
+vi.mock('firebase-functions/v2/https', async (importOriginal) => {
+    const actual = await importOriginal<typeof import('firebase-functions/v2/https')>();
     return {
+        ...actual,
         onCall: (options: any, handler: any) => {
             return handler;
         },
-        HttpsError: class HttpsError extends Error {
-            code: string;
-            constructor(code: string, message: string) {
-                super(message);
-                this.code = code;
-                this.name = 'HttpsError';
-            }
-        }
     };
 });
 
@@ -128,7 +124,41 @@ describe('Suunto History to Queue', () => {
             });
 
             await expect(addSuuntoAppHistoryToQueue(request as any))
-                .rejects.toThrow('Queue failure');
+                .rejects.toMatchObject({ code: 'internal', message: 'Queue failure' });
+            expect(logger.error).toHaveBeenCalledWith(expect.objectContaining({ message: 'Queue failure' }));
+        });
+
+        it.each([
+            'A recent-history import is already running. Please wait for it to finish.',
+            'Another history import is running.',
+        ])('preserves the busy reservation response "%s" without logging an error', async message => {
+            const error = new HttpsError('already-exists', message);
+            vi.mocked(history.addHistoryToQueue).mockRejectedValueOnce(error);
+            const request = createMockRequest({ data: {
+                startDate: new Date(Date.now() - 86400000).toISOString(),
+                endDate: new Date().toISOString(),
+            } });
+
+            await expect(addSuuntoAppHistoryToQueue(request as any)).rejects.toBe(error);
+            expect(error.httpErrorCode.status).toBe(409);
+            expect(history.addHistoryToQueue).toHaveBeenCalledTimes(1);
+            expect(logger.info).toHaveBeenCalledWith('[SuuntoHistoryImport] History import is already running.');
+            expect(logger.error).not.toHaveBeenCalled();
+        });
+
+        it('does not downgrade a generic failure that happens to have an already-exists code', async () => {
+            const error = Object.assign(new Error('Unexpected queue failure'), { code: 'already-exists' });
+            vi.mocked(history.addHistoryToQueue).mockRejectedValueOnce(error);
+            const request = createMockRequest({ data: {
+                startDate: new Date(Date.now() - 86400000).toISOString(),
+                endDate: new Date().toISOString(),
+            } });
+
+            await expect(addSuuntoAppHistoryToQueue(request as any)).rejects.toMatchObject({
+                code: 'internal', httpErrorCode: { status: 500 },
+            });
+            expect(logger.error).toHaveBeenCalledWith(error);
+            expect(logger.info).not.toHaveBeenCalled();
         });
 
         it('should throw error if App Check fails', async () => {

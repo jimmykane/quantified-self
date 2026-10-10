@@ -364,7 +364,9 @@ export class HistoryImportFormComponent implements OnInit, OnDestroy, OnChanges 
   private syncActivityHistoryImportRunning(): void {
     this.clearActivityHistoryLeaseTimer();
     const providerName = this.serviceName === ServiceNames.GarminAPI ? 'Garmin'
-      : this.serviceName === ServiceNames.WahooAPI ? 'Wahoo' : null;
+      : this.serviceName === ServiceNames.WahooAPI ? 'Wahoo'
+        : this.serviceName === ServiceNames.SuuntoApp ? 'Suunto'
+          : this.serviceName === ServiceNames.COROSAPI ? 'COROS' : null;
     this.historyImportRunningMessage = providerName
       ? `A ${providerName} history import is already running. Please wait for it to finish.`
       : '';
@@ -491,7 +493,8 @@ export class HistoryImportFormComponent implements OnInit, OnDestroy, OnChanges 
         }
         return;
       }
-      if ((serviceName === ServiceNames.WahooAPI || serviceName === ServiceNames.GarminAPI)
+      if ((serviceName === ServiceNames.WahooAPI || serviceName === ServiceNames.GarminAPI
+        || serviceName === ServiceNames.SuuntoApp || serviceName === ServiceNames.COROSAPI)
         && (e?.code === 'functions/already-exists' || e?.code === 'already-exists')) {
         this.importState.finish(key, operation, {
           status: 'running', retryAllowedAtMs: Date.now() + HISTORY_IMPORT_BUSY_RETRY_DELAY_MS,

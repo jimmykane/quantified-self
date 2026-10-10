@@ -14,6 +14,14 @@ import {
 } from './policies.content';
 
 describe('help.content', () => {
+  it('explains a busy activity-history request for all four providers without claiming success or failure', () => {
+    const copy = HELP_SECTIONS.find(section => section.id === 'service-connections')!.content;
+    expect(copy).toContain('For Garmin, Suunto, COROS, and Wahoo, **Import already running**');
+    expect(copy).toContain('The duplicate request does not start another import');
+    expect(copy).toContain('does not mean the original import failed');
+    expect(copy).toContain('Wait for the active import to finish');
+  });
+
   it('explains pending history requests, delayed records, and the Sleep status retry', () => {
     const copy = HELP_SECTIONS.find(section => section.id === 'service-connections')!.content;
     for (const phrase of ['History import buttons lock as soon as a request starts', 'reopening the tool in the same app',
@@ -396,6 +404,11 @@ describe('help.content', () => {
     for (const phrase of ['**Category overview**', 'latest 30 days', '**Body**', '**Vitals**', '**Movement & energy**',
       '**Recovery & sleep**', '**Fitness**', '**View history**', '**Back to overview**', 'manual and synced readings separately',
       'only manual rows can be edited or deleted', 'not training targets']) expect(health).toContain(phrase);
+    expect(health).toContain('**All** starts with **Your recent Health** highlights');
+    expect(health).toContain('not repeated as cards on All');
+    expect(health).toContain('category views do not repeat the highlights above their cards');
+    expect(health).toContain('Recent-health highlights stay on the overview, not above the selected metric');
+    expect(health).not.toContain("detailed charts, Highlights, and **Source observations**");
   });
   it('explains the Health metric title picker on both layouts and remembered selection', () => {
     const health = HELP_SECTIONS.find(section => section.id === 'health')?.content;

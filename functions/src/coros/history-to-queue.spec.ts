@@ -1,6 +1,8 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import * as utils from '../utils';
 import * as history from '../history';
+import { https } from 'firebase-functions/v1';
+import * as logger from 'firebase-functions/logger';
 import { SERVICE_NAME } from './constants';
 import { COROS_HISTORY_IMPORT_LIMIT_MONTHS } from '../../../shared/history-import.constants';
 
@@ -98,6 +100,15 @@ describe('COROS History to Queue', () => {
     });
 
     describe('addCOROSAPIHistoryToQueue', () => {
+        it('preserves a busy reservation before importing any window', async () => {
+            const error = new https.HttpsError('already-exists', 'A recent-history import is already running. Please wait for it to finish.');
+            vi.mocked(history.withActivityHistoryImportReservation).mockRejectedValueOnce(error);
+
+            await expect(addCOROSAPIHistoryToQueue(data, context)).rejects.toBe(error);
+            expect(history.addHistoryToQueue).not.toHaveBeenCalled();
+            expect(logger.error).not.toHaveBeenCalled();
+        });
+
         it('should add history to queue and return success', async () => {
             const result = await addCOROSAPIHistoryToQueue(data, context);
 

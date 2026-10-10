@@ -870,6 +870,7 @@ export class HealthWorkspaceComponent {
     card.id === 'heart_rate_variability' || card.id === 'heart_rate'
       ? card.chartSeries.length > 0
       : card.loading || card.error || card.rows.length > 0 || card.chartSeries.length > 0));
+  readonly highlightedOverviewMetrics = computed(() => this.visiblePriorityCards().map(card => card.metric));
   readonly syncStateViews = computed<HealthSyncStateView[]>(() => this.syncStates()
     .map(state => syncStateView(state))
     .sort((left, right) => left.label.localeCompare(right.label)));

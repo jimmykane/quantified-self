@@ -27,6 +27,7 @@ export class HealthCategoryOverviewComponent {
   readonly user = input.required<AppUserInterface>();
   readonly groups = input.required<readonly HealthMetricCatalogGroup[]>();
   readonly showSleep = input(false);
+  readonly highlightedMetrics = input<readonly HealthWorkspaceMetricSelection[]>([]);
   readonly exampleOnly = input(false);
   readonly darkTheme = input(false);
   readonly referenceDate = input<string | null>(null);
@@ -40,9 +41,15 @@ export class HealthCategoryOverviewComponent {
   private readonly sourceSettings = signal<Partial<Record<HealthWorkspaceMetricSelection, AppDashboardHealthMetricSettings>>>({});
   readonly categories = computed(() => buildHealthOverviewCategories(this.groups(), this.showSleep()));
   readonly selectedCategory = computed(() => this.categories().some(category => category.id === this.category()) ? this.category() : 'all');
+  readonly hasOverviewHighlights = computed(() => this.selectedCategory() === 'all' && this.highlightedMetrics().length > 0);
   readonly cards = computed(() => {
     const categories = this.categories();
-    const metrics = this.selectedCategory() === 'all' ? selectHealthOverviewMetrics(categories)
+    // Highlights already cover these metrics on All. Explicit categories still
+    // expose their full catalog, including history outside the highlight window.
+    const highlighted = new Set(this.highlightedMetrics());
+    const metrics = this.selectedCategory() === 'all' ? selectHealthOverviewMetrics(categories.map(category => ({
+      ...category, metrics: category.metrics.filter(metric => !highlighted.has(metric.id)),
+    })))
       : categories.find(category => category.id === this.selectedCategory())!.metrics;
     const settings = this.sourceSettings();
     return metrics.map(metric => ({ ...metric, icon: healthMetricIcon(metric.id),

@@ -888,7 +888,7 @@ describe('HistoryImportFormComponent', () => {
             expect(text).not.toContain('Next import available in 30 days');
         });
 
-        it.each([ServiceNames.WahooAPI, ServiceNames.GarminAPI])('retains a late %s running response and blocks immediate retries across reopening', async provider => {
+        it.each([ServiceNames.WahooAPI, ServiceNames.GarminAPI, ServiceNames.SuuntoApp, ServiceNames.COROSAPI])('retains a late %s running response and blocks immediate retries across reopening', async provider => {
             await reopen(provider);
             vi.useFakeTimers();
             let reject!: (error: Error) => void;
@@ -910,7 +910,27 @@ describe('HistoryImportFormComponent', () => {
             expect(component.formGroup.enabled).toBe(true);
         });
 
-        it.each([ServiceNames.WahooAPI, ServiceNames.GarminAPI])('keeps %s locked by live metadata after its local retry buffer expires', async provider => {
+        it.each([ServiceNames.WahooAPI, ServiceNames.GarminAPI, ServiceNames.SuuntoApp, ServiceNames.COROSAPI])('keeps a late %s busy reply scoped to the original account', async provider => {
+            const user$ = new Subject<{ uid: string; stripeRole: string }>();
+            mockAuthService.user$ = user$;
+            await reopen(provider);
+            let reject!: (error: Error) => void;
+            mockUserService.importServiceHistoryForCurrentUser.mockReturnValueOnce(new Promise((_resolve, failure) => reject = failure));
+            const submission = submit('activity');
+            user$.next({ uid: 'different-owner', stripeRole: 'pro' });
+            reject(Object.assign(new Error('A recent-history import is already running. Please wait for it to finish.'), { code: 'functions/already-exists' }));
+            await submission;
+            fixture.detectChanges();
+
+            expect(component.isActivityHistoryImportRunning()).toBe(false);
+            expect(component.formGroup.enabled).toBe(true);
+            expect(mockLoggerService.error).not.toHaveBeenCalled();
+            expect(snackBar.open).not.toHaveBeenCalled();
+            expect(haptics.success).not.toHaveBeenCalled();
+            expect(haptics.error).not.toHaveBeenCalled();
+        });
+
+        it.each([ServiceNames.WahooAPI, ServiceNames.GarminAPI, ServiceNames.SuuntoApp, ServiceNames.COROSAPI])('keeps %s locked by live metadata after its local retry buffer expires', async provider => {
             await reopen(provider);
             vi.useFakeTimers();
             mockUserService.importServiceHistoryForCurrentUser.mockRejectedValueOnce(Object.assign(
@@ -959,6 +979,8 @@ describe('HistoryImportFormComponent', () => {
     describe.each([
         [ServiceNames.WahooAPI, 'Wahoo'],
         [ServiceNames.GarminAPI, 'Garmin'],
+        [ServiceNames.SuuntoApp, 'Suunto'],
+        [ServiceNames.COROSAPI, 'COROS'],
     ] as const)('%s running activity history imports', (serviceName, providerName) => {
         beforeEach(async () => {
             await fixture.whenStable();
@@ -1126,10 +1148,11 @@ describe('HistoryImportFormComponent', () => {
             expect(component.formGroup.enabled).toBe(true);
         });
 
-        it('does not apply an activity-history lease to COROS', () => {
-            fixture.componentRef.setInput('serviceName', ServiceNames.COROSAPI);
-            fixture.componentRef.setInput('userMetaForService', { historyImportLeaseExpiresAt: Date.now() + 60_000 });
+        it('does not use an automatic reservation expiry as a browser lock deadline', () => {
+            fixture.componentRef.setInput('userMetaForService', { connectionHistoryReservationExpiresAt: Date.now() + 7 * 86_400_000 });
             fixture.detectChanges();
+
+            expect(component.isActivityHistoryImportRunning()).toBe(false);
             expect(component.formGroup.enabled).toBe(true);
         });
 
@@ -1154,7 +1177,7 @@ describe('HistoryImportFormComponent', () => {
             expect(haptics.error).not.toHaveBeenCalled();
         });
 
-        it.each([['provider failure', serviceName, 'functions/unavailable'], ['permission failure', serviceName, 'functions/permission-denied'], ['other provider', ServiceNames.SuuntoApp, 'functions/already-exists']] as const)(
+        it.each([['provider failure', serviceName, 'functions/unavailable'], ['permission failure', serviceName, 'functions/permission-denied']] as const)(
             'still reports an unexpected import error for %s', async (_case, service, code) => {
                 fixture.componentRef.setInput('serviceName', service);
                 fixture.detectChanges();
