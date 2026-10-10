@@ -64,4 +64,16 @@ describe('shared missing FIT activity Session repair', () => {
       expect(FitActivitySessionRepair.createCopy(input)).toBe(input);
     }
   });
+
+  it.each(['recordField', 'vendorField'] as const)('does not repair malformed unselected %s definitions', field => {
+    for (const invalid of [{ type: 31, bytes: Buffer.from([1]) }, { type: 0x84, bytes: Buffer.from([1]) }]) {
+      const input = sessionlessFixture({ [field]: invalid }), before = Buffer.from(input);
+      // The filtered summary read accepts this envelope, but a full read rejects
+      // the reserved type / scalar width. The repair must not alter it either.
+      expect(() => readFitMessages(input, { messageNumbers: [0, 12, 18, 19, 21, 34] })).not.toThrow();
+      expect(() => readFitMessages(input)).toThrow();
+      expect(FitActivitySessionRepair.createCopy(input)).toBe(input);
+      expect(input).toEqual(before);
+    }
+  });
 });

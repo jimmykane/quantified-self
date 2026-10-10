@@ -1,5 +1,5 @@
 import { FitBaseType as T, FitEncoder, FitEncoderField } from 'fit-file-parser/encoder';
-import { FitRawMessage, readFitMessages, readFitUnsignedField } from 'fit-file-parser/raw';
+import { FitRawMessage, getFitBaseTypeId, readFitMessages, readFitUnsignedField } from 'fit-file-parser/raw';
 import { getFitSportName } from 'fit-file-parser/profile';
 import { MAX_ACTIVITY_CALLABLE_UPLOAD_BYTES } from './activity-processing-config';
 
@@ -103,6 +103,7 @@ export class FitActivitySessionRepair {
 
   /** Walk only a strictly validated envelope; keep binary span work in this class. */
   private static locateFooter(input: Buffer, start: number, end: number) {
+    const widths = [1, 1, 1, 2, 2, 4, 4, 1, 4, 8, 1, 2, 4, 1, 8, 8, 8];
     const definitions = new Map<number, { global: number; littleEndian: boolean; fields: Array<{ number: number; size: number }>;
       developerSize: number; start: number; end: number }>();
     const dataEnd = input[0] + input.readUInt32LE(4);
@@ -116,7 +117,13 @@ export class FitActivitySessionRepair {
         const global = littleEndian ? input.readUInt16LE(cursor + 2) : input.readUInt16BE(cursor + 2);
         const count = input[cursor + 4], fields: Array<{ number: number; size: number }> = [];
         cursor += 5;
-        for (let i = 0; i < count; i++, cursor += 3) fields.push({ number: input[cursor], size: input[cursor + 1] });
+        for (let i = 0; i < count; i++, cursor += 3) {
+          const type = getFitBaseTypeId(input[cursor + 2]), size = input[cursor + 1];
+          // Filtered reads skip type checks for unretained samples/vendor fields.
+          // Validate their definitions without materializing every sample.
+          if (type === null || size % widths[type] !== 0) throw new Error('Invalid FIT field definition.');
+          fields.push({ number: input[cursor], size });
+        }
         let developerSize = 0;
         if ((header & 0x20) !== 0) {
           const developerCount = input[cursor++];

@@ -8,6 +8,7 @@ export function sessionlessFixture(options: {
   compressed?: boolean; developer?: boolean; indexed?: boolean;
   firstRecordTime?: number; lastRecordTime?: number; noRecords?: boolean; leadingVendor?: boolean;
   activityType?: number; activityTimer?: number; lapElapsed?: number; lapTimer?: number;
+  recordField?: { type: number; bytes: Buffer }; vendorField?: { type: number; bytes: Buffer };
 } = {}): Buffer {
   type F = [number, number, number | Buffer];
   const parts: Buffer[] = [];
@@ -34,8 +35,9 @@ export function sessionlessFixture(options: {
   message(0, [[0, 0, options.invalidType ? 6 : 4], [1, 0x84, 255]]);
   if (options.footerFirst) footer();
   message(21, [[253, 0x86, 1000], [0, 0, 0], [1, 0, 0]]);
-  if (!options.noRecords) message(20, [[253, 0x86, options.firstRecordTime ?? 1000], [3, 2, 120], [5, 0x86, 0]], false, options.compressed);
-  message(65280, [[200, 13, Buffer.from([1, 2, 3, 4])]], !!options.developer);
+  if (!options.noRecords) message(20, [[253, 0x86, options.firstRecordTime ?? 1000],
+    [3, options.recordField?.type ?? 2, options.recordField?.bytes ?? 120], [5, 0x86, 0]], false, options.compressed);
+  message(65280, [[200, options.vendorField?.type ?? 13, options.vendorField?.bytes ?? Buffer.from([1, 2, 3, 4])]], !!options.developer);
   for (const i of [0, 1]) {
     const fields: F[] = [[253, 0x86, 1200 + i * 200], [2, 0x86, i ? options.secondStart ?? 1200 : 1000],
       [7, 0x86, options.lapElapsed ?? 200000], [8, 0x86, options.lapTimer ?? 199000], [9, 0x86, options.overflow ? 0xfffffffe : 50000 + i * 20000],
