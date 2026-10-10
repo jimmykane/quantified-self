@@ -174,8 +174,14 @@ tools and does not widen consent. Source support requires separate deployment an
 Supplied-plan authoring must preserve source units, ordered work/recovery repeats and explicitly assigned numeric targets,
 not translate the first number in a title into distance or keep all guidance only in notes. Shared MCP/Assistant write
 instructions require clarification for ambiguity and bounded source-versus-saved-recipe verification. Schedule
-create/update/copy summaries expose actual definition/repeat-block, ending and target kinds; paused plan creation is
-explicit. Successful storage and sampled checks never prove full prescription fidelity. This changes instructions and
+create/update/copy summaries expose actual definition/repeat-block, ending and target kinds and a budgeted owner-unit
+sample of ordered endings/numeric targets; omitted nodes are identified and full instructions still need review.
+New/replaced non-strength recipe previews reject narrow literal title contradictions before persisting a proposal:
+missing timed efforts, labelled numeric HR without an HR target, or an explicit race-unit mismatch in a single distance
+step. Notes/ambiguous titles are never translated into steps; unchanged legacy date/scope edits remain possible.
+Paused plan creation is explicit. Verify a small source-representative first batch before later batches, including
+changed numeric prescriptions rather than only similar shapes; stop on discrepancies and separate saved count from
+verified coverage. Successful storage and sampled checks never prove full prescription fidelity. This changes instructions and
 existing summary wording, not schemas, tools, scopes or approval. The pending digest preserves earlier additions; separate
 deployment/rescan and bundled-guidance sync are required, not new consent. See
 [Prescription fidelity](training-workspace.md#prescription-fidelity-when-translating-a-supplied-plan) for limits and tests.

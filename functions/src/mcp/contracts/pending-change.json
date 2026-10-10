@@ -1,7 +1,7 @@
 {
   "formatVersion": 1,
-  "candidateSha256": "d6bc493c7a18509d612ef1bdfeb3806dd5ee4a201794b94dc0187743bb7d0636",
+  "candidateSha256": "7c11a3881067c5e19e23599e219ab62fc3719e4c65eba530999e681ae7ebcdf9",
   "lifecycleAction": "developer-refresh",
-  "summary": "Preserve Garmin replacement, prescription analysis, note-only reflections and plan-phase additions. Add shared MCP/Assistant source-fidelity, actual-recipe review, bounded read-back and consent-separated activation/sync next-step guidance. Frozen schemas/baselines stay unchanged; native/app Apply stays mandatory. RPE remains in Edit details; phases do not change recipes, metrics, completion or provider authority. Release, exact rescan and bundled sync remain separate.",
+  "summary": "Preserve Garmin replacement, prescription analysis, note-only reflections and plan-phase additions. Extend shared MCP/Assistant source-fidelity, actual-recipe review, representative first-batch/changed-value read-back, title-conflict recovery and separate activation/sync guidance. Frozen schemas and native/app Apply stay unchanged; RPE stays in Edit details and phases grant no recipe/provider authority. Release, exact rescan and bundled sync remain separate.",
   "rescanRequired": true
 }

@@ -85,7 +85,13 @@ describe.skipIf(!process.env.FIRESTORE_EMULATOR_HOST)('Training MCP write propos
   const statusInput = (proposalRef: string) => ({ uid, connectionId: 'connection', scopes,
     arguments: { proposalRef, permissionMode: 'combined' } });
 
-  it('reviews actual prescriptions, discloses paused creation and reads back exact approved interval recipes', async () => {
+  it.each(['external', 'assistant'])('rejects contradictory batches and reads back exact approved recipes through %s', async client => {
+    let connectionId = 'connection';
+    const store = createAssistantConversationStore({ db: () => db, now: () => new Date(deps.now()),
+      createId: () => `assistant-${++sequence}` });
+    const chat = client === 'assistant'
+      ? await store.resetConversation(uid, 'coordinate_free', false, null, true, true, true) : null;
+    if (chat) connectionId = `first-party-assistant-v1:${chat.conversationId}`;
     const intervals = { ...structure, nodes: [{ kind: 'repeat' as const, id: 'intervals', count: 5, steps: [
       { ...structure.nodes[0], id: 'work', ending: { kind: 'time' as const, seconds: 180 }, targets: [
         { kind: 'heart-rate' as const, mode: 'absolute' as const, minimumBpm: 148, maximumBpm: 156 },
@@ -94,19 +100,51 @@ describe.skipIf(!process.env.FIRESTORE_EMULATOR_HOST)('Training MCP write propos
     ] }] };
     const collapsed = { ...structure, nodes: [{ ...structure.nodes[0], ending: { kind: 'distance' as const, meters: 8046.72 },
       note: '5 x 3 mins steady, 148–156 bpm. This prose is not a structured prescription.' }] };
-    const preview = await previewTrainingChanges({ uid, connectionId: 'connection', scopes, arguments: {
-      expectedScheduleRevision: 1, changes: [
+    const changes = [
         { kind: 'create-plan', localKey: 'plan', name: 'Synthetic intervals', startDate: '2026-09-18', endDate: '2026-10-18' },
         { kind: 'create-workout', localKey: 'intervals', plan: { localKey: 'plan' }, localDate: '2026-09-18', title: '5 x 3 mins steady', structure: intervals },
         { kind: 'create-workout', localKey: 'collapsed', plan: { localKey: 'plan' }, localDate: '2026-09-19', title: '5 x 3 mins steady', structure: collapsed },
-      ],
+    ];
+    await expect(previewTrainingChanges({ uid, connectionId, scopes,
+      arguments: { expectedScheduleRevision: 1, changes } }, deps)).rejects.toThrow('Prescription conflict');
+    const user = db.collection('users').doc(uid);
+    expect((await user.collection('trainingMcpProposals').get()).empty).toBe(true);
+    expect((await user.collection('trainingPlans').get()).empty).toBe(true);
+    expect((await user.collection('scheduledWorkouts').get()).empty).toBe(true);
+    expect((await user.collection('trainingPlanState').doc('current').get()).get('revision')).toBe(1);
+    const preview = await previewTrainingChanges({ uid, connectionId, scopes, arguments: {
+      expectedScheduleRevision: 1, changes: changes.map(change => change.localKey === 'collapsed'
+        ? { ...change, title: 'Easy run' } : change),
     } }, deps);
     expect(preview.changes[0].summary).toContain('as paused (not active; no plan delivery)');
     expect(preview.changes[1].summary).toContain('2 defined steps, 1 repeat block ×5; time endings; targets HR');
+    expect(preview.changes[1].summary).toContain('5× [Work');
+    expect(preview.changes[1].summary).toContain('148–156 bpm');
     expect(preview.changes[2].summary).toContain('1 defined step, 0 repeat blocks; distance endings; targets none');
     expect((await db.collection('users').doc(uid).collection('scheduledWorkouts').get()).empty).toBe(true);
-    const result = await applyTrainingChanges({ uid, connectionId: 'connection', scopes,
+    const apply = () => applyTrainingChanges({ uid, connectionId, scopes,
       arguments: { proposalRef: preview.proposalRef, permissionMode: 'schedule' } }, deps);
+    expect(preview.permissionMode).toBe('schedule');
+    let result: Awaited<ReturnType<typeof applyTrainingChanges>>;
+    if (chat) {
+      const begun = await store.beginTurn(uid, chat.conversationId, undefined, undefined,
+        'coordinate_free', false, true, true, true);
+      if (begun.kind !== 'started') throw new Error('Expected an Assistant turn.');
+      const createdAt = new Date(deps.now()).toISOString();
+      await store.completeTurn(uid, begun, { id: 'question', role: 'user', createdAt, text: 'Save these two supplied workouts.' },
+        { id: 'proposal', role: 'assistant', createdAt, text: 'Review the actual interval and easy-run prescriptions.' }, preview);
+      const appApply = vi.fn(input => applyTrainingChanges(input, deps));
+      const confirmed = await runApplyAssistantTrainingProposal({ proposalRef: preview.proposalRef, permissionMode: 'schedule',
+        conversationId: chat.conversationId, confirm: true }, { auth: { uid }, app: { appId: 'synthetic-emulator-app' } },
+      store, appApply);
+      expect(confirmed.status).toBe('applied');
+      expect(appApply).toHaveBeenCalledTimes(1);
+      result = await appApply.mock.results[0].value;
+      expect((await store.getActiveConversationState(uid)).pendingTrainingProposal).toBeUndefined();
+    } else {
+      result = await apply();
+      await expect(apply()).resolves.toEqual(result);
+    }
     const codec = {
       encode: (value: Record<string, unknown>, owner: string, connection: string) => encodeOpaqueValue('training_read', value, owner, connection),
       decode: (value: string, owner: string, connection: string) => decodeOpaqueValue('training_read', value, owner, connection, 'Training reference'),
@@ -114,12 +152,61 @@ describe.skipIf(!process.env.FIRESTORE_EMULATOR_HOST)('Training MCP write propos
     const reads = createFirestoreTrainingReads(() => db);
     for (const [localKey, recipe] of [['intervals', intervals], ['collapsed', collapsed]] as const) {
       const reference = result.createdReferences.find(item => item.localKey === localKey)!.reference;
-      const saved = await readTrainingPlans({ uid, connectionId: 'connection', scopes, tool: 'get_planned_workout_v3',
+      const saved = await readTrainingPlans({ uid, connectionId, scopes, tool: 'get_planned_workout_v3',
         arguments: { workoutRef: reference } }, reads, codec, deps.now());
       expect(saved).toMatchObject({ workout: { structure: JSON.parse(JSON.stringify(recipe)) } });
     }
     expect((await db.collection('users').doc(uid).collection('trainingPlanState').doc('current').get()).get('activePlanId')).toBeNull();
     expect((await db.collection('users').doc(uid).collection('trainingDeliverySettings').get()).empty).toBe(true);
+    expect(transport!.calls).toHaveLength(0);
+  });
+
+  it.each([
+    { title: '25 km race', recipe: { ...structure, nodes: [{ ...structure.nodes[0], ending: { kind: 'distance', meters: 40233.6 } }] } },
+    { title: '5 x 3 mins, HR 148–156 bpm', recipe: { ...structure, nodes: [{ kind: 'repeat', id: 'set', count: 5,
+      steps: [{ ...structure.nodes[0], ending: { kind: 'time', seconds: 180 } }] }] } },
+  ])('focused create rejects $title without persisting a proposal or requesting delivery', async ({ title, recipe }) => {
+    await expect(previewCreatePlannedWorkout({ uid, connectionId: 'connection', scopes, arguments: {
+      expectedScheduleRevision: 1, planRef: null, localDate: '2026-09-18', title, structure: recipe,
+      delivery: { providers: ['garmin'], timeZone: 'Europe/Helsinki' },
+    } }, deps)).rejects.toThrow('Prescription conflict');
+    const user = db.collection('users').doc(uid);
+    expect((await user.collection('trainingMcpProposals').get()).empty).toBe(true);
+    expect((await user.collection('trainingDeliverySettings').get()).empty).toBe(true);
+    expect(transport!.calls).toHaveLength(0);
+  });
+
+  it('rejects replaced contradictory recipes but permits unchanged legacy date edits and copies', async () => {
+    const recipe = { ...structure, nodes: [{ ...structure.nodes[0], ending: { kind: 'distance' as const, meters: 8046.72 } }] };
+    const preview = await previewCreatePlannedWorkout({ uid, connectionId: 'connection', scopes, arguments: {
+      expectedScheduleRevision: 1, planRef: null, localDate: '2026-09-18', title: 'Easy run', structure: recipe,
+    } }, deps);
+    const applied = await applyTrainingChanges({ uid, connectionId: 'connection', scopes,
+      arguments: { proposalRef: preview.proposalRef, permissionMode: 'schedule' } }, deps);
+    const user = db.collection('users').doc(uid);
+    const doc = (await user.collection('scheduledWorkouts').get()).docs[0];
+    // Seed pre-safeguard data in this synthetic account; never rewrite a production user's recipe.
+    await doc.ref.update({ title: '5 x 3 mins steady' });
+    const workoutRef = applied.createdReferences[0].reference;
+    const change = { kind: 'update-workout', workout: { ref: workoutRef }, plan: null, localDate: '2026-09-19',
+      title: '5 x 3 mins steady', structure: recipe };
+    await expect(previewPlannedWorkoutV3Change({ uid, connectionId: 'connection', scopes, arguments: {
+      expectedScheduleRevision: applied.scheduleRevision, change: { ...change,
+        structure: { ...recipe, nodes: [{ ...recipe.nodes[0], ending: { kind: 'distance', meters: 1000 } }] } },
+    } }, deps)).rejects.toThrow('Prescription conflict');
+    expect((await doc.ref.get()).get('structure')).toEqual(recipe);
+    const moved = await previewPlannedWorkoutV3Change({ uid, connectionId: 'connection', scopes, arguments: {
+      expectedScheduleRevision: applied.scheduleRevision, change,
+    } }, deps);
+    const edited = await applyTrainingChanges({ uid, connectionId: 'connection', scopes,
+      arguments: { proposalRef: moved.proposalRef, permissionMode: 'schedule' } }, deps);
+    const copied = await previewTrainingChanges({ uid, connectionId: 'connection', scopes, arguments: {
+      expectedScheduleRevision: edited.scheduleRevision, changes: [{ kind: 'copy-workout',
+        sourceWorkout: { ref: workoutRef }, localKey: 'duplicate', plan: null, localDate: '2026-09-20' }],
+    } }, deps);
+    await applyTrainingChanges({ uid, connectionId: 'connection', scopes,
+      arguments: { proposalRef: copied.proposalRef, permissionMode: 'schedule' } }, deps);
+    expect((await user.collection('scheduledWorkouts').get()).docs.map(item => item.get('structure'))).toEqual([recipe, recipe]);
     expect(transport!.calls).toHaveLength(0);
   });
 

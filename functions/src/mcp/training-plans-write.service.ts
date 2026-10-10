@@ -5,8 +5,9 @@ import { Timestamp } from 'firebase-admin/firestore';
 import * as logger from 'firebase-functions/logger';
 import { HttpsError } from 'firebase-functions/v2/https';
 import { z } from 'zod';
-import { describeTrainingRecipeReview } from './training-recipe-review';
-import { ActivityTypes } from '@sports-alliance/sports-lib';
+import { describeTrainingRecipeReview, describeTrainingRecipeSteps } from './training-recipe-review';
+import { findTrainingPrescriptionConflict } from './training-prescription-consistency';
+import { ActivityTypes, type UserUnitSettingsInterface } from '@sports-alliance/sports-lib';
 import { readSuuntoGuideUnitSettings } from '../training-plans/delivery/store';
 import { assertAssistantRecoveryDurationSeconds, isAssistantWorkoutReviews, type AssistantWorkoutReview, type AssistantWorkoutSnapshot } from '../../../shared/assistant-workout-review';
 import { assessDeliveryCompatibility } from './training-plans.service';
@@ -333,14 +334,15 @@ async function loadSnapshot(
   uid: string,
   connectionId: string,
   required: readonly string[],
-): Promise<{ snapshot: TrainingScheduleSnapshotV1; accessGeneration: string }> {
+): Promise<{ snapshot: TrainingScheduleSnapshotV1; accessGeneration: string; units: UserUnitSettingsInterface | null }> {
   const user = deps.db.collection('users').doc(uid);
   return deps.db.runTransaction(async tx => {
     const generation = await assertAuthorityInTransaction(deps, tx, uid, connectionId, required);
-    const [stateDoc, plansDocs, workoutsDocs] = await Promise.all([
+    const [stateDoc, plansDocs, workoutsDocs, unitDocs] = await Promise.all([
       tx.get(user.collection('trainingPlanState').doc('current')),
       tx.get(user.collection('trainingPlans')),
       tx.get(user.collection('scheduledWorkouts').where('lifecycle', 'in', ['planned', 'skipped'])),
+      tx.getAll(user, { fieldMask: ['settings.unitSettings'] }),
     ]);
     const plans = new Map<string, TrainingPlanV1>();
     plansDocs.docs.forEach(doc => {
@@ -365,7 +367,7 @@ async function loadSnapshot(
       if (details.workoutId !== workout.id || !strengthProjectionMatchesDetails(workout.structure, details)) unavailable();
       strengthDetails.set(workout.id, details);
     });
-    return { accessGeneration: generation, snapshot: {
+    return { accessGeneration: generation, units: unitDocs[0].get('settings.unitSettings') ?? null, snapshot: {
       state: stateDoc.exists ? parseTrainingPlanStateV1(stateDoc.data()) : createEmptyTrainingPlanState(),
       plans, workouts, strengthDetails,
     } };
@@ -957,6 +959,17 @@ export async function previewTrainingChanges(
     const before = simulated;
     try { simulated = applyTrainingScheduleMutation(simulated, request, deps.now() + index).after; }
     catch (error) { invalid(publicErrorMessage(error) ?? `Training change ${index + 1} is invalid.`); }
+    // Validate only newly authored/replaced recipes, not unrelated lifecycle, move or copy actions
+    // against an existing legacy title. No text can rewrite structure or authorize another action.
+    if (operation.kind === 'create-workout' || operation.kind === 'update-workout') {
+      const previous = operation.kind === 'update-workout' ? before.workouts.get(operation.workoutId) : null;
+      const unchangedRecipeAndTitle = previous?.title === operation.title
+        && JSON.stringify(previous.structure) === JSON.stringify(operation.structure);
+      if (!unchangedRecipeAndTitle && operation.structure.sport !== ActivityTypes.StrengthTraining) {
+        const conflict = findTrainingPrescriptionConflict(operation.title, operation.structure);
+        if (conflict) invalid(`Change ${index + 1}: ${conflict}`);
+      }
+    }
     scheduleRequests.push({ index, request });
     if (input.connectionId.startsWith('first-party-assistant-v1:')) {
       const review = projectAssistantWorkoutReview(index, operation, before, simulated);
@@ -974,10 +987,15 @@ export async function previewTrainingChanges(
     }
     const deletionTarget = recipeMode === 'deletion' && operation.kind === 'delete-workout'
       ? before.workouts.get(operation.workoutId) : null;
-    publicChanges.push({ index, kind: operation.kind, summary: (deletionTarget
+    const summary = (deletionTarget
       ? `Delete “${deletionTarget.title}” on ${deletionTarget.localDate}. ` : '') + describeScheduleEffects(operation, before, simulated)
       + (['v2', 'v3'].includes(recipeMode) ? describePoolLengthEffect(operation, before, simulated) : '')
-      + (recipeMode === 'v3' ? describeEarlyLapEffect(operation, before, simulated) : '') });
+      + (recipeMode === 'v3' ? describeEarlyLapEffect(operation, before, simulated) : '');
+    const reviewStructure = ['create-workout', 'update-workout', 'copy-workout'].includes(operation.kind)
+      && 'workoutId' in operation ? simulated.workouts.get(operation.workoutId)?.structure : null;
+    publicChanges.push({ index, kind: operation.kind, summary: summary + (reviewStructure
+      && reviewStructure.sport !== ActivityTypes.StrengthTraining
+      ? describeTrainingRecipeSteps(reviewStructure, loaded.units, 500 - summary.length) : '') });
   });
 
   const providerOperations: StoredProviderOperation[] = [];

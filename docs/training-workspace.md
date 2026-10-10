@@ -165,27 +165,47 @@ names and notes are untrusted authored context, never executable prescription or
 
 Current create/update/copy schedule previews include a compact summary derived only from the validated resulting recipe:
 defined leaf steps, repeat blocks (with pass count for one block), ending kinds and target kinds, including **targets none**.
-Definition counts do not expand repeats. Strength previews identify the v1 recipe as a compatibility summary and require
+Where the remaining summary budget permits, previews append an ordered sample of actual endings and numeric targets
+using the owner's existing Sports Lib-backed units. Nodes are omitted whole with an explicit count, never cut through a
+value or expanded repeat; titles/range/pool/early-Lap disclosures retain priority. This is not complete instruction or
+note review. Definition counts do not expand repeats. Strength previews identify the v1 recipe as a compatibility summary and require
 full exercise review. New-plan previews disclose paused versus active creation; activation still requires explicit intent
 and may pause the previous active plan. Long titles, plan-range extensions, selected pool length and early-Lap removal
-remain visible within the existing 500-character per-change bound. No source-text parser, new stored field, schema, scope,
+remain visible within the existing 500-character per-change bound. No text-to-recipe translator, new stored field, schema, scope,
 callable, automatic activation or provider action is added.
 
 Before approval, compare every proposed recipe with the original source, not just its title or note. For a large external
 import, verify the first accepted batch before continuing, retain returned references, audit counts/dates/association with
-bounded chronological pages and read distinct full prescriptions and edge cases against the source. Report the actual
+bounded chronological pages and read distinct full prescriptions and edge cases against the source. The small first
+batch should cover each relevant prescription family: timed repeats, explicit recovery and targets, distance units,
+mixed sessions and races. Compare every first-batch full recipe's canonical values, ordered steps, repeat counts and
+target assignments; later different numeric values need review even when the shape looks the same. Target-free workouts
+remain valid when no target was prescribed. Report saved count, exact checked coverage and unresolved prescriptions
+separately; discrepancies stop further batches, activation and sending. Report the actual
 verification coverage: a sample cannot certify every workout. Stop within existing budgets and disclose unresolved items;
 never loop, recreate records or claim a complete import from counts alone. The built-in Assistant remains prepare-only
 and cannot claim storage before app Apply. Saving, activation, sync consent, provider acceptance and watch receipt remain
 separate outcomes; delivery windows come from current evidence.
 
-This strengthens review and model guidance, not automatic source-fidelity detection: a valid flat distance recipe remains
-valid even when its title mentions intervals. Repairing previously authored data requires the original prescription and
+New/replaced non-strength MCP recipes also get narrow, conservative literal-title contradiction checks before a proposal
+is stored: explicit `5 x 3 mins` efforts missing from the time-ended work steps, a labelled numeric HR range with no
+structured HR target anywhere, and an explicitly labelled race distance inconsistent with a single distance step.
+Negated/contextual titles, unitless numbers, notes and qualitative intensity do not supply a prescription. The checks
+do not rewrite JSON, assign targets/recoveries, sum mixed race totals or prove source fidelity. Full recipe review still
+checks target values and their actual step assignments. An unchanged legacy title/recipe on a date/scope-only edit,
+copy, move or lifecycle action is not revalidated as newly authored content. A contradictory batch leaves no proposal,
+authored write or provider request; correct the recipe against the source or clarify the title, never rename as a bypass
+or loop on the same failure. Existing valid proposals retain their original approval contract.
+
+This is not general automatic source-fidelity detection. Repairing previously authored data requires the original prescription and
 separate authorization. MCP impact is changed server instructions and truthful existing summary text, not changed wire
 shapes. Preserve the frozen baseline/history and prior pending additions; deployment, exact registered-client rescan and
 bundled-plugin sync remain separate. No reauthorization, Rules/index change, migration or reparse is introduced.
-Verification uses synthetic collapsed-versus-structured recipes, exact approved read-back through owner-bound public
-references, paused creation without delivery, every ending/target label, strict output contracts and maximum-size reviews.
+Verification uses synthetic collapsed-versus-structured recipes, explicit race-unit and HR-omission regressions, benign
+ambiguity and note-injection cases, rejected-batch atomicity and exact approved read-back through owner-bound public
+references. Real loopback Firestore tests cover external MCP and the Assistant's app-owned confirmation, paused creation
+without delivery, every ending/target label, unchanged legacy edits, strict outputs and maximum-size reviews. Deterministic
+contract/transaction fixtures do not prove how a live ChatGPT/Claude model will translate a new spreadsheet.
 
 ### Plan activation and optional sync next steps
 

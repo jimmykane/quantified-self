@@ -168,6 +168,8 @@ request to create/edit a planned workout or change provider delivery through the
 and preview/native-approval workflow; activity permission alone never authorizes it.
 For plan imports or recipe construction, use that workflow's prescription-fidelity checks and bounded saved-recipe
 verification. Titles, notes or a successful save do not establish correctly encoded intervals/targets.
+Verify a small representative first batch against the source before later batches; a conflict needs correction or
+clarification, never an unchanged retry or renamed bypass. Keep saved, source-verified and unresolved outcomes separate.
 
 
 For a planned recipe with early Lap, route through the focused Training workflow and discover the latest full scheduled

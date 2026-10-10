@@ -257,6 +257,14 @@ describe('help.content', () => {
     expect(HELP_SECTIONS.some(section => section.id === 'activity-calendar')).toBe(true);
   });
 
+  it('makes prescription conflict recovery searchable without promising source verification', () => {
+    const content = HELP_SECTIONS.find(section => section.id === 'training-plans')!.content;
+    expect(searchHelpSections(HELP_SECTIONS, 'Prescription conflict').map(section => section.id)).toContain('training-plans');
+    expect(content).toContain('not just rename it or retry');
+    expect(content).toContain('saved count, exactly which recipes it verified and any unresolved items separately');
+    expect(content).toContain('can remain target-free');
+  });
+
   it('distinguishes standard Suunto strength guidance from additional mapping-loss approval', () => {
     const content = HELP_SECTIONS.find(section => section.id === 'training-plans')!.content;
     expect(content).toContain('rep-based sets require manual transitions');
