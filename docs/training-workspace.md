@@ -6306,7 +6306,7 @@ or explicit aliases, then regenerate event summaries, activity-type aggregates, 
 Training snapshots through existing source-backed reparse and derived ingress. Broad stored values cannot recover
 lost detail. The Sports Lib importing guide owns exact aliases and parent guards; no reparse or deployment was run.
 
-The sport-mapping audit adds 62 canonical types and adds or corrects aliases for 70 types. The full 193-type
+The initial sport-mapping audit adds 62 canonical types and adds or corrects aliases for 70 types. Its 193-type
 catalog follows one `preserveImportedTss` policy. True or omission (the default) retains finite imported TSS exactly,
 including zero and legacy scores without a method, even for sports excluded from calculation. False discards the
 existing score and method, calculates a replacement where supported with sufficient inputs, and leaves both unset
@@ -6320,6 +6320,43 @@ because the default retains imported scores and there is no user-facing false-fl
 application and Functions together. No global reparse is required; a separately approved targeted source-backed
 reparse can correct specifically affected imports that previously ignored false or retained TSS after calculation
 failed. Regenerate affected event summaries and Training snapshots through the existing ingress when a score changes.
+
+The next approved unreleased batch adds Racket Sport and Ultimate Disc in Team/Racket and Para Sport in Unspecified,
+bringing the library catalog to 196 canonical types. Bare FIT Racket (`64`) preserves the broad category; recognized
+Racket sub-sports or precise racket profile names retain their specific types. Para Sport (`68`) retains a recognized
+specific profile when supplied. Ultimate Disc and Ultimate Frisbee names establish Ultimate Disc; sub-sport `92`
+alone does not. Suunto's bare `64` exports for Badminton, Table tennis, Racquet ball, and Squash become Racket Sport
+without precise source/profile names; Padel (`64/85`) remains Padel.
+
+The other seven mappings reuse existing types: AMRAP, EMOM, and Tabata use HIIT (`62/73`, `62/74`, `62/75`),
+Dynamic Apnea uses Pool Apnea (`53/121`), E-Bike Fitness uses E-Biking (`21/28`), Casual Walking uses Walking
+(`11/30`), and Bike Commute uses Cycling (`2/48`). Specific FIT pairs require their documented parents before
+sub-sport fallback. Existing canonical Racquet Ball JSON stays Racquet Ball; the broad `racket` alias now resolves
+to Racket Sport. Do not reinterpret stored Racquet Ball records without retained source evidence.
+
+The existing Training registry resolves the three new types and Pool Apnea to volume-only Other training with omitted
+distance. HIIT aliases retain Fitness/Gym conditioning; E-Biking and Cycling retain the Cycling context, recorded-load
+and zone policies, and applicable cycling durability; Walking retains its Walking context and recorded-load policies.
+The three new types have no library durability adapter. Dynamic Apnea inherits Pool Apnea's Diving terrain-summary
+exclusions, including native JSON normalization. Usable power curves stay isolated by exact canonical type. The same
+TSS policy holds for all 196 types: true or omission preserves finite provider TSS exactly, including zero and legacy
+methodless scores; false discards the score and method, recalculates with sufficient eligible inputs, and leaves both
+unset otherwise.
+
+MCP impact review: the built 196-type catalog passes the existing strict activity-type output schema in ESM and CJS;
+the public output and Training-impact suites pass 113 tests. Canonical numeric tokens, units, metric discovery,
+read projections, scopes, consent, tools, mutations, and registered wire schemas are unchanged. No Training formula,
+derived schema, planning or provider-delivery capability, write path, provider transport, queue lifecycle, or monitoring
+change is introduced. This is classification work, with no Training planning surface change or MCP deferral. Current
+Help remains accurate because supported activities use the installed dynamic catalog.
+
+Adopt the library in the application and Functions together. Their installed Sports Lib `21.5.0` catalog still contains
+131 types; the local unreleased build has the same package version but is not adopted. A separately approved targeted
+source-backed reparse can correct identified historical Generic, Racquet Ball, or Diving classifications when the source
+retains enough detail. Regenerate affected event summaries, activity-type aggregates, applicable durability evidence,
+and Training snapshots through the existing ingress. A collapsed broad label cannot recover missing detail. Saved
+routes need no reparse; no global reparse, package adoption, or deployment was run. The Sports Lib importing guide owns
+the detailed aliases, profile precedence, and FIT parent guards.
 
 Sports Lib `20.3.0` adds canonical Health and Sleep scalar JSON classes. Training uses the shared dual reader for the
 sleep duration, score, HRV, and sleep-heart-rate aggregates it already consumes; no Training formula or derived schema
