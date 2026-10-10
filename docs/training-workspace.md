@@ -6438,6 +6438,32 @@ specific provider identifier/profile or original file. Regenerate affected event
 applicable durability evidence, and Training snapshots through existing ingress. Saved routes need no reparse. No
 package adoption, publication, source reparse, deployment, or production-data mutation was run for this batch.
 
+The subsequent local compatibility corrections add Australian Football, Korfball and Netball as distinct Team/Racket
+sports, taking the unreleased catalog to 245. Each retains the existing volume-only Other training fallback with omitted
+distance, a false indoor hint, ordinary cadence semantics and no durability adapter. Fourteen Polar FIT display aliases,
+explicit Polar Cross-trainer/Stretching profiles, and Garmin's English/French Breathwork profiles recover the already
+approved classifications only when the retained input establishes them. Existing specific sport contexts and Training
+formulas remain unchanged. Source-backed historical classification corrections require ordinary summary/snapshot
+regeneration after coordinated package adoption; the [reparse runbook](../functions/src/reparse/SPORTS_LIB_REPARSE_RUNBOOK.md#unreleased-provider-profile-and-json-compatibility-corrections)
+owns the operational transition.
+
+Native event/activity/lap JSON reads tolerate legacy null/non-finite scalar stats, and summary exports omit non-finite
+numbers. Runtime stopped pace remains infinite; finite zero/negative metrics, imported TSS and method, structured stats
+and stream null gaps remain intact. Every canonical type keeps a finite provider TSS when preservation is true/default;
+false discards it and uses the existing calculation policy. This read correction needs no source reparse or Training
+schema bump. No numeric catalog token/unit, MCP output field, scope, projection, consent, mutation, planning or delivery
+capability changes. Queue lifecycle and sanitized persistence paths remain unchanged; no MCP deferral is needed.
+The downloaded public files remain outside the repositories, and profile-only cases use documented names and synthetic
+FIT. FIT Parser decoding work belongs to the separate agent; no parser changes are part of this task.
+
+Verification: 3,936 Sports Lib tests pass across 36 suites; both package formats build and 13 documentation pages verify.
+All 171 Polar FIT appendix profiles resolve under their documented pair/name inputs. All 170 valid public FIT files
+survive JSON re-import (112 failed before the correction); one truncated sample remains rejected. All 41 provider TSS
+scores pass default/true preservation and false removal/recalculation. Runtime checks cover all 245 types, the 121
+Suunto protocol pairs and the strict MCP catalog. The 113 MCP output/Training-impact tests and contract check pass.
+Changed-file lint passes; repository-wide lint reports existing errors in unchanged files. No package adoption or
+production rewrite was performed.
+
 Sports Lib `20.3.0` adds canonical Health and Sleep scalar JSON classes. Training uses the shared dual reader for the
 sleep duration, score, HRV, and sleep-heart-rate aggregates it already consumes; no Training formula or derived schema
 changes. Existing normalized Sleep documents use the dedicated Health/Sleep scalar migration, not an activity reparse,

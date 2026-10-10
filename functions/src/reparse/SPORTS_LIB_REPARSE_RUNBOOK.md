@@ -7,6 +7,30 @@ Target version source of truth:
 - `SPORTS_LIB_REPARSE_TARGET_VERSION`
 - File: `functions/src/reparse/sports-lib-reparse.config.ts`
 
+### Unreleased provider-profile and JSON compatibility corrections
+
+The local Sports Lib branch corrects Garmin Breathwork for Generic/Breathing and Training/Breathing with an explicit
+English `Breathwork` or French `Ex. respiration` profile. It adds 14 Polar FIT display aliases and honors explicit Polar
+Cross-trainer and Stretching profiles on their documented broad pairs. Australian Football, Korfball and Netball are
+separate Team/Racket types, bringing the unreleased catalog to 245. Unnamed generic records remain broad; no numeric
+sport IDs or undocumented API tokens are assigned to the three new types.
+
+Adopt the same released Sports Lib version in the application and Functions before persisting these classifications.
+Retained original files or specific saved provider profiles are required to correct historical broad labels through the
+existing targeted reparse lifecycle. Regenerate affected event summaries, activity-type aggregates, applicable
+existing durability evidence and Training snapshots through normal sanitized ingress. Saved routes need no source reparse.
+
+Event/activity/lap JSON reads now skip legacy null/non-finite scalar stats; finite zero/negative values, provider TSS
+and method, structured stats and stream gaps remain intact. Summary exports omit non-finite scalar numbers while
+runtime zero-speed pace can remain infinite. This compatibility read does not require an original file or a reparse.
+Any explicitly requested persistence rewrite must still use the existing sanitized writer, never direct Firestore edits.
+TSS preservation remains true/default = retain finite provider score; false = discard and use existing calculation policy.
+
+There are no new numeric metric tokens/units, formulas, derived schemas, planning/delivery capabilities, registered
+MCP fields/scopes, queue lifecycle, write paths or monitoring changes. Dynamic activity discovery uses existing fields.
+Help remains accurate against the installed dynamic catalog. Both packages still use their installed 131-type catalog;
+this task does not adopt a package, deploy, enable scanners, start reparsing or change FIT Parser source.
+
 ### Sports Lib 21.5.0 recorded swim distance display
 
 Sports Lib 21.5.0 adds optional meter/yard display units to `DataSwimDistance`. Quantified Self selects these units

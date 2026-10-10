@@ -6,6 +6,14 @@ Keep it current in the same change whenever a provider is added, removed, rename
 
 Use the provider-specific architecture document for exact API behavior and release decisions. [Wahoo integration](wahoo-integration.md) records its scope and launch checklist; [COROS integration](coros-integration.md) records its daily Health mapping, asynchronous upload, route, single-account, echo-suppression, and entitlement decisions; [Suunto 24/7 Health integration](suunto-integration.md) records its metric mapping, bounded pulls, webhooks, lifecycle fencing, production-wide polling, and rollback switch; [Garmin Health integration](garmin-integration.md) records its Health API 1.2.4 family mapping, Ping/Pull trust boundary, callback credential handling, lifecycle fencing, production-wide availability, rollback switch, and Summary Resender procedure.
 
+The local unreleased Sports Lib profile corrections refine Garmin Breathwork and Polar explicit sport names, including
+three distinct Team/Racket types (Australian Football, Korfball and Netball). They change normalized activity
+classification and JSON compatibility without changing provider transport, permissions, delivery, disconnect or queue
+lifecycle. The current provider matrix therefore stays unchanged. Follow the
+[coordinated adoption and historical reparse decision](../functions/src/reparse/SPORTS_LIB_REPARSE_RUNBOOK.md#unreleased-provider-profile-and-json-compatibility-corrections)
+before using these types in production. Official mapping names are tested with synthetic FIT; downloaded recordings
+remain temporary because redistribution rights were not established. The app's Help uses the installed activity catalog.
+
 ## 1. Define the product contract before writing code
 
 Start with a concise support matrix agreed with product and the provider. Do not infer capability from an OAuth scope alone.
