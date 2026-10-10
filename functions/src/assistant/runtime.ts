@@ -460,9 +460,9 @@ function requestsGarminReplacement(prompt: string): boolean {
     && !/\b(?:don't|don’t|do not|never|no|without)\b[^,.!?;\n]{0,80}\b(?:replace|replacement)\b/u.test(request);
 }
 
-function requestsAssistantTrainingDelivery(prompt: string): boolean {
+export function requestsAssistantTrainingDelivery(prompt: string): boolean {
   const request = prompt.toLowerCase().replace(
-    /\b(?:don't|do not|does not|never|without)\s+(?:(?:also|any|this|that|the|my|workout|session)\s+){0,4}(?:send|sync|deliver)\b/gu,
+    /\b(?:don't|don’t|do not|does not|never|without|no)\s+(?:(?:also|any|this|that|the|my|workout|session|provider|service|watch|device|automatic|garmin|suunto|coros|wahoo)\s+){0,4}(?:send|sync|deliver)\b/gu,
     '',
   );
   return /\b(?:send|sync|deliver)\b/u.test(request) || requestsGarminReplacement(prompt);

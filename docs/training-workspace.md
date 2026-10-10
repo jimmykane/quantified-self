@@ -212,6 +212,8 @@ work independently; changed consent or conversation generations still stop the r
 without a grounded retry. Live first-party review diagnostics distinguish preview-schema validation, complete-review
 loading and final review validation without logging recipes, notes, exception messages, references or identity. These private diagnostic stages
 do not change the MCP wire contract, read projections, consent or app help.
+Delivery intent ignores explicit negation such as “No provider sync” and “don’t sync”; an independent affirmative
+send/sync clause remains actionable. A schedule-only request must not enter the forced provider-preview correction path.
 
 ### Plan activation and optional sync next steps
 

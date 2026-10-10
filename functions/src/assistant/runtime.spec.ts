@@ -48,6 +48,7 @@ import {
   getAssistantRuntimeErrorReason,
   getAssistantRuntimeErrorToolName,
   getAssistantRuntimeToolFailureDiagnostic,
+  requestsAssistantTrainingDelivery,
   selectAssistantTrainingPreviewTool,
   type AssistantRuntimeTool,
 } from './runtime';
@@ -61,6 +62,25 @@ import { createAssistantContentProposal } from './content-proposal';
 import { AssistantConversationStoreError } from './conversation-store';
 
 describe('app-owned complete workout review', () => {
+  it.each([
+    'Create a paused plan. No provider sync, activation or other changes.',
+    'Create one workout, no sync.',
+    'Preview a workout without provider sync.',
+    'Create my workout but don’t sync it.',
+    'Create my plan with no Garmin sync.',
+    'Do not send the workout.',
+    'Never deliver this session.',
+  ])('does not treat a negated delivery phrase as a sync request: %s', prompt => {
+    expect(requestsAssistantTrainingDelivery(prompt)).toBe(false);
+  });
+  it.each([
+    'Create one workout and send it to Garmin.',
+    'Sync this plan to Suunto.',
+    'Do not send to Garmin, but sync to Suunto.',
+    'No provider sync for the old plan; send this workout to Garmin.',
+  ])('preserves an affirmative delivery request: %s', prompt => {
+    expect(requestsAssistantTrainingDelivery(prompt)).toBe(true);
+  });
   it.each(['before', 'after'] as const)('preserves consent revocation %s a Training tool call without retry wrapping', async when => {
     const { session, callTool } = createSession();
     session.tools.push({ name: 'preview_training_changes', title: 'Preview', description: 'Prepare only', inputSchema: { type: 'object' } });
@@ -1925,6 +1945,24 @@ describe('Assistant runtime', () => {
       dailyWorkoutContext, tools: [], workflow: null, onBillableAttempt: vi.fn() });
     expect(generate).toHaveBeenLastCalledWith(expect.objectContaining({ toolChoice: 'auto',
       system: expect.stringContaining('Do not prepare or imply a schedule/provider change') }));
+  });
+
+  it('does not force a provider preview for an explicit no-provider-sync plan request', async () => {
+    const read: AssistantRuntimeTool = { name: 'list_training_plans', description: 'Read current plans.',
+      inputJsonSchema: { type: 'object', properties: {} }, execute: vi.fn().mockResolvedValue({ scheduleRevision: 7, plans: [] }) };
+    const preview: AssistantRuntimeTool = { name: 'preview_training_changes', description: 'Review Training changes.',
+      inputJsonSchema: { type: 'object', properties: {} }, execute: vi.fn() };
+    const generate = vi.spyOn(assistantGenkit, 'generate').mockResolvedValueOnce({
+      toolRequests: [{ toolRequest: { name: read.name, input: {} } }], messages: [],
+    } as never).mockResolvedValueOnce({ toolRequests: [], messages: [],
+      text: JSON.stringify({ answer: 'I need the source prescriptions before preparing the plan.', visuals: { chart: null, map: null } }) } as never);
+    await expect(generateAssistantModelAnswer({ currentTime: '2026-10-10T08:00:00Z', timeZone: 'Europe/Helsinki',
+      prompt: 'Preview a new paused plan. No provider sync, activation or other changes.', history: [],
+      mcpInstructions: 'Use current data.', tools: [read, preview], workflow: null, onBillableAttempt: vi.fn() }))
+      .resolves.toMatchObject({ answer: 'I need the source prescriptions before preparing the plan.' });
+    expect(generate).toHaveBeenCalledTimes(2);
+    expect(generate.mock.calls[0]?.[0].system).toContain('does not request provider delivery');
+    expect(preview.execute).not.toHaveBeenCalled();
   });
 
   it('forces a delivery preview when the model stops after reading the workout', async () => {
