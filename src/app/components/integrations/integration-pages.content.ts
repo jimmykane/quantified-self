@@ -467,7 +467,7 @@ export const PROVIDER_INTEGRATION_PAGES: Record<IntegrationProviderKey, Provider
       {
         icon: 'upload_file',
         title: 'FIT activity upload to COROS',
-        copy: 'Use asynchronous FIT activity uploads for corrections, migrations, or missing sessions. Valid single-session Snorkeling FITs with recorded GPS are sent as Open Water Swim; Sailing FITs with recorded GPS as GPS Cardio. Direct uploads and activity sync change only the outgoing copy, keeping your QS activity type and retained original unchanged. Other files keep their original classification. Per-file status and retry controls resume the same COROS upload instead of blindly sending it again.',
+        copy: 'Use asynchronous FIT activity uploads for corrections, migrations, or missing sessions. Valid single-session Snorkeling FITs with or without recorded GPS are sent as Open Water Swim; Sailing FITs with recorded GPS as GPS Cardio. Missing GPS is not added. Direct uploads and activity sync change only the outgoing copy, keeping your QS activity type and retained original unchanged. Other files keep their original classification. Per-file status and retry controls resume the same COROS upload instead of blindly sending it again.',
       },
       {
         icon: 'route',

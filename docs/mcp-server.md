@@ -171,6 +171,28 @@ The 25-change schema limit is not a host response-time guarantee. The redacted #
 30-day result lifetime and deployment/catalog boundary are detailed in
 [Training workspace](training-workspace.md#lost-mcp-apply-replies-791). This read is not added to the Assistant model's
 tools and does not widen consent. Source support requires separate deployment and registered-client discovery.
+Supplied-plan authoring must preserve source units, ordered work/recovery repeats and explicitly assigned numeric targets,
+not translate the first number in a title into distance or keep all guidance only in notes. Shared MCP/Assistant write
+instructions require clarification for ambiguity and bounded source-versus-saved-recipe verification. Schedule
+create/update/copy summaries expose actual definition/repeat-block, ending and target kinds and a budgeted owner-unit
+sample of ordered endings/numeric targets; omitted nodes are identified and full instructions still need review.
+New/replaced non-strength recipe previews reject narrow literal title contradictions before persisting a proposal:
+missing timed efforts, labelled numeric HR without an HR target, or an explicit race-unit mismatch in a single distance
+step. Notes/ambiguous titles are never translated into steps; unchanged legacy date/scope edits remain possible.
+Paused plan creation is explicit. Verify a small source-representative first batch before later batches, including
+changed numeric prescriptions rather than only similar shapes; stop on discrepancies and separate saved count from
+verified coverage. Successful storage and sampled checks never prove full prescription fidelity. This changes instructions and
+existing summary wording, not schemas, tools, scopes or approval. The pending digest preserves earlier additions; separate
+deployment/rescan and bundled-guidance sync are required, not new consent. See
+[Prescription fidelity](training-workspace.md#prescription-fidelity-when-translating-a-supplied-plan) for limits and tests.
+
+Write-enabled clients also receive shared next-step guidance: offer paused-plan activation once after confirmed creation,
+explain the previous active plan pause and existing sync resumption, then separately offer optional named-service sync.
+Use explicit destinations/timezone, existing grants and native approval; an ambiguous yes never grants both choices.
+Saved sync evidence is not live availability or watch receipt. No tool/schema/scope changes or reauthorization are added;
+the instruction digest requires separate release/rescan and bundled guidance sync. See
+[Plan next steps](training-workspace.md#plan-activation-and-optional-sync-next-steps).
+
 For **Duplicate to…**, the existing `copy-workout` batch change takes an exact source reference, fresh proposal-local
 key, explicit destination date and destination plan reference or `null` for Standalone. Clients should read the exact
 source and current schedule revision, preserve its scope by default and ask if the source or date is ambiguous. The
@@ -351,6 +373,11 @@ cycling and swim Work/active Recovery preserve their current readings; all recip
 proposal and provider-action contracts remain unchanged. Strict schemas continue to reject Guide fields and
 private mapping/recovery diagnostics. No contract promotion, catalog refresh, plugin rebuild or new activity-lap
 read is required. See [Rest-first presentation and verification](training-workspace.md#rest-first-interval-screens-v12).
+The private v13 Suunto app `richText` preview likewise has **no MCP wire impact**. Existing canonical steps/notes,
+targets and strength details supply the preview; the Guide text, immutable unit snapshots and approval-unit provenance
+remain private and are explicitly rejected by strict recipe/status regressions. Delivery proposals assess the same
+owner units as native apply, without adding inputs, outputs, scopes, consent, tools or provider actions. No contract
+promotion, client refresh or plugin rebuild is needed. See [app preview impact review](training-workspace.md#suunto-app-workout-preview-v13).
 The manual editor's additional canonical running/cycling profiles also require no MCP contract change: the existing
 recipe schema already accepts the complete Sports Lib activity-type enum, and focused coverage proves an exact Mountain
 Biking sport survives the read projection. Suunto numeric activity recommendations and Garmin's broad
@@ -2536,6 +2563,31 @@ after validation, but no additional server deployment or registered-app rescan o
   sleep data, or user IDs.
 
 ## Local verification and release
+
+First-party Training review failures report only allowlisted stages: preview validation, complete-review loading,
+and review validation. MCP-schema failures use the MCP Zod error class, distinct from Genkit's model-output schema.
+Do not log exception messages, issues, authored fields, proposal references or owner identity. These diagnostics and
+authority fixes preserve the public MCP contract, consent, projections and app help; they require no catalog refresh.
+Training write authority treats omitted optional switches as off, so schedule-only consent does not require provider
+delivery consent. Rechecks still reject changed permissions/generations and propagate revocation without retry.
+Explicit “No provider sync”, curly-apostrophe “don’t sync” and directly coordinated “don’t send or sync” phrases
+are not delivery requests. They do not force
+provider preview retries; a separate affirmative send/sync clause still retains its existing consent/review requirements.
+The first-party model reads a safe current Training revision before previews become visible (except the already-grounded
+daily-workout context). Its private Gemini projection retains schema-derived object-shape guidance when merging unions;
+the original MCP schema still validates every invocation. No new callable, public wire change or consent is introduced.
+A failed or revision-less read cannot trigger a forced preview with no available tools or release model-authored
+delivery-success claims; fixed no-proposal guidance is still subject to existing grounding checks. Successful-read
+correction uses the expressly requested schema action, never hard-coded Send for Stop sync or another action.
+Completion checks also run at the final continuation boundary without extending budgets. Verification covers refusal,
+successful read-to-preview, final-budget outcomes and the already-grounded daily context.
+These private fixes require neither public contract promotion nor plugin rebuilding or reauthorization.
+The private intent hint excludes common explanatory/advisory and sync-status/settings questions or problem reports from
+forced previews, requiring action/preview request phrasing without losing separately requested actions or splitting
+decimal numbers. It is not mutation or provider authority.
+Execution validates the exact tool-name set advertised for each model response, including read-first and preview-only
+correction requests; a read in the same response cannot unlock an unadvertised preview retroactively. Strict MCP
+validation, conversation consent and app-owned Apply remain unchanged. No public surface or Help update is needed.
 
 Garmin missing-copy recovery (#769) does not widen registered v1 Training provider actions. Existing
 `get_training_sync_status` reports `needs_attention` and zero synced workouts after a complete not-found Workout

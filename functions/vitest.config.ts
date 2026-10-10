@@ -1,5 +1,6 @@
-import { defineConfig } from 'vitest/config';
+import { configDefaults, defineConfig } from 'vitest/config';
 import { resolve } from 'path';
+import { EMULATOR_SUITES } from '../tools/functions-emulator-suites.mjs';
 
 export default defineConfig({
     root: resolve(__dirname),
@@ -17,6 +18,9 @@ export default defineConfig({
         globals: true,
         environment: 'node',
         include: ['src/**/*.spec.ts'],
+        // Real emulator suites have a separate mandatory runner. Exclude exact
+        // registered paths so their imports are never collected in unit runs.
+        exclude: [...configDefaults.exclude, ...Object.values(EMULATOR_SUITES).flat()],
         coverage: {
             provider: 'v8',
             reporter: ['text', 'html'],

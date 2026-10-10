@@ -963,6 +963,11 @@ export class PlansWorkspaceComponent {
   }
 
   async setPlanLifecycle(plan: TrainingPlanV1, lifecycle: TrainingPlanLifecycle): Promise<void> {
+    const uid = this.currentUser()?.uid;
+    if (!uid || !this.browsing() || this.scheduleState().status !== 'ready' || this.busyAction()
+      || plan.lifecycle === lifecycle) return;
+    const generation = this.editorGeneration;
+    const isCurrent = () => uid === this.currentUser()?.uid && generation === this.editorGeneration;
     const planIds = [plan.id];
     if (lifecycle === 'active' && this.activePlan() && this.activePlan()!.id !== plan.id) {
       planIds.push(this.activePlan()!.id);
@@ -974,8 +979,8 @@ export class PlansWorkspaceComponent {
         planRevisionOverrides: new Map([[plan.id, plan.revision]]),
       }),
       operation: { kind: 'set-plan-lifecycle', planId: plan.id, lifecycle },
-    }, `lifecycle-${plan.id}`);
-    if (!response) return;
+    }, `lifecycle-${plan.id}`, isCurrent);
+    if (!response || !isCurrent()) return;
     if (lifecycle === 'archived' && this.deletingPlanId() === plan.id) {
       this.deletingPlanId.set(null);
     }

@@ -3,7 +3,7 @@ import { TestBed } from '@angular/core/testing';
 import { MatDialog } from '@angular/material/dialog';
 import { provideNoopAnimations } from '@angular/platform-browser/animations';
 import { provideRouter } from '@angular/router';
-import { BehaviorSubject, of, throwError } from 'rxjs';
+import { BehaviorSubject, Subject, of, throwError } from 'rxjs';
 import { createHash, webcrypto } from 'node:crypto';
 import { readFileSync, writeFileSync } from 'node:fs';
 import { createRequire } from 'node:module';
@@ -83,6 +83,34 @@ describe('Training delivery summaries on the workspace', () => {
     } }));
     user.set(null); user$.next(null); fixture.detectChanges();
     expect(fixture.nativeElement.querySelector('button')).toBeNull();
+  });
+  it('hints at optional plan sync only after settings load and a destination is ready, without opting in', async () => {
+    service.anyReady.mockReturnValue(true); service.isReady.mockImplementation(provider => provider === 'garmin');
+    service.watchPresence.mockReturnValue(of(false));
+    const pendingView = new Subject<TrainingDeliveryView>();
+    service.watchSummaryScope.mockReturnValue(pendingView);
+    const fixture = TestBed.createComponent(TrainingDeliveryButtonComponent);
+    fixture.componentRef.setInput('scope', 'plan'); fixture.componentRef.setInput('entityId', 'p');
+    fixture.componentRef.setInput('title', plan.name); fixture.componentRef.setInput('summaryWorkouts', [workout]);
+    fixture.componentRef.setInput('summaryPlan', { ...plan, lifecycle: 'paused' });
+    fixture.detectChanges();
+    expect(fixture.nativeElement.querySelector('.delivery-setup-hint')).toBeNull();
+    pendingView.next({ settings: [], statuses: [] });
+    await vi.waitFor(() => { fixture.detectChanges(); expect(fixture.componentInstance.readState().loaded).toBe(true); });
+    expect(fixture.nativeElement.querySelector('.delivery-setup-hint').textContent)
+      .toContain('Optional Pro sync. Sends eligible upcoming workouts while this plan is active.');
+    expect(open).not.toHaveBeenCalled(); expect(selection).not.toHaveBeenCalled();
+    pendingView.next({ settings: [], statuses: [], summaryComplete: false }); fixture.detectChanges();
+    expect(fixture.nativeElement.querySelector('.delivery-setup-hint')).toBeNull();
+    pendingView.next({ settings: [], statuses: [] }); fixture.detectChanges();
+    fixture.componentRef.setInput('summaryPlan', { ...plan, lifecycle: 'archived' }); fixture.detectChanges();
+    expect(fixture.nativeElement.querySelector('.delivery-setup-hint')).toBeNull();
+    fixture.componentRef.setInput('summaryPlan', plan); fixture.detectChanges();
+    pendingView.next({ settings: [setting], statuses: [] });
+    await vi.waitFor(() => { fixture.detectChanges(); expect(fixture.componentInstance.hasRecords()).toBe(true); });
+    expect(fixture.nativeElement.querySelector('.delivery-setup-hint')).toBeNull();
+    user.set(null); user$.next(null); fixture.detectChanges();
+    expect(fixture.nativeElement.querySelector('.delivery-setup-hint')).toBeNull();
   });
   it.each(['plan', 'workout'] as const)('shows %s destination confirmation and opens details without granting consent', async scope => {
     const fixture = await render(scope);

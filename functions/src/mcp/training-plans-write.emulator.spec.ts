@@ -1,6 +1,6 @@
 import { createHash, randomUUID } from 'node:crypto';
 import { Firestore } from 'firebase-admin/firestore';
-import { ActivityTypes, WeightUnits } from '@sports-alliance/sports-lib';
+import { ActivityTypes, DistanceUnits, WeightUnits } from '@sports-alliance/sports-lib';
 import { GARMIN_GENERIC_WORKOUT_SPORTS_V1 } from '../../../shared/planned-workout-providers';
 import { afterAll, afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { DeliveryRuntime } from '../training-plans/delivery/contracts';
@@ -20,7 +20,9 @@ import { processTrainingDelivery } from '../training-plans/delivery/worker';
 import { processTrainingVerification } from '../training-plans/delivery/verification-worker';
 import { trainingDeliveryCommand } from '../training-plans/delivery/commands';
 import { parseStrengthWorkoutDetailsV1, projectStrengthWorkoutToV1 } from '../../../shared/strength-workout';
-import { encodeOpaqueValue } from './data.service';
+import { parseWorkoutStructureV1 } from '../../../shared/planned-workout';
+import { decodeOpaqueValue, encodeOpaqueValue } from './data.service';
+import { createFirestoreTrainingReads, readTrainingPlans } from './training-plans.service';
 import { processTrainingBulkShift, reconcileTrainingBulkShifts } from '../training-plans/bulk-shift-worker';
 import { mutateTrainingScheduleForUser } from '../training-plans/persistence';
 import { BULK_SHIFT_LEASE_MS } from '../training-plans/staged-shift';
@@ -82,6 +84,183 @@ describe.skipIf(!process.env.FIRESTORE_EMULATOR_HOST)('Training MCP write propos
 
   const statusInput = (proposalRef: string) => ({ uid, connectionId: 'connection', scopes,
     arguments: { proposalRef, permissionMode: 'combined' } });
+
+  it.each(['external', 'assistant'])('rejects contradictory batches and reads back exact approved recipes through %s', async client => {
+    let connectionId = 'connection';
+    const store = createAssistantConversationStore({ db: () => db, now: () => new Date(deps.now()),
+      createId: () => `assistant-${++sequence}` });
+    const chat = client === 'assistant'
+      ? await store.resetConversation(uid, 'coordinate_free', false, null, true, true, true) : null;
+    if (chat) connectionId = `first-party-assistant-v1:${chat.conversationId}`;
+    const intervals = { ...structure, nodes: [{ kind: 'repeat' as const, id: 'intervals', count: 5, steps: [
+      { ...structure.nodes[0], id: 'work', ending: { kind: 'time' as const, seconds: 180 }, targets: [
+        { kind: 'heart-rate' as const, mode: 'absolute' as const, minimumBpm: 148, maximumBpm: 156 },
+      ] },
+      { ...structure.nodes[0], id: 'recovery', purpose: 'recovery' as const, ending: { kind: 'time' as const, seconds: 120 } },
+    ] }] };
+    const collapsed = { ...structure, nodes: [{ ...structure.nodes[0], ending: { kind: 'distance' as const, meters: 8046.72 },
+      note: '5 x 3 mins steady, 148–156 bpm. This prose is not a structured prescription.' }] };
+    const changes = [
+        { kind: 'create-plan', localKey: 'plan', name: 'Synthetic intervals', startDate: '2026-09-18', endDate: '2026-10-18' },
+        { kind: 'create-workout', localKey: 'intervals', plan: { localKey: 'plan' }, localDate: '2026-09-18', title: '5 x 3 mins steady', structure: intervals },
+        { kind: 'create-workout', localKey: 'collapsed', plan: { localKey: 'plan' }, localDate: '2026-09-19', title: '5 x 3 mins steady', structure: collapsed },
+    ];
+    await expect(previewTrainingChanges({ uid, connectionId, scopes,
+      arguments: { expectedScheduleRevision: 1, changes } }, deps)).rejects.toThrow('Prescription conflict');
+    const user = db.collection('users').doc(uid);
+    expect((await user.collection('trainingMcpProposals').get()).empty).toBe(true);
+    expect((await user.collection('trainingPlans').get()).empty).toBe(true);
+    expect((await user.collection('scheduledWorkouts').get()).empty).toBe(true);
+    expect((await user.collection('trainingPlanState').doc('current').get()).get('revision')).toBe(1);
+    const preview = await previewTrainingChanges({ uid, connectionId, scopes, arguments: {
+      expectedScheduleRevision: 1, changes: changes.map(change => change.localKey === 'collapsed'
+        ? { ...change, title: 'Easy run' } : change),
+    } }, deps);
+    expect(preview.changes[0].summary).toContain('as paused (not active; no plan delivery)');
+    expect(preview.changes[1].summary).toContain('2 defined steps, 1 repeat block ×5; time endings; targets HR');
+    expect(preview.changes[1].summary).toContain('5× [Work');
+    expect(preview.changes[1].summary).toContain('148–156 bpm');
+    expect(preview.changes[2].summary).toContain('1 defined step, 0 repeat blocks; distance endings; targets none');
+    expect((await db.collection('users').doc(uid).collection('scheduledWorkouts').get()).empty).toBe(true);
+    const apply = () => applyTrainingChanges({ uid, connectionId, scopes,
+      arguments: { proposalRef: preview.proposalRef, permissionMode: 'schedule' } }, deps);
+    expect(preview.permissionMode).toBe('schedule');
+    let result: Awaited<ReturnType<typeof applyTrainingChanges>>;
+    if (chat) {
+      const begun = await store.beginTurn(uid, chat.conversationId, undefined, undefined,
+        'coordinate_free', false, true, true, true);
+      if (begun.kind !== 'started') throw new Error('Expected an Assistant turn.');
+      const createdAt = new Date(deps.now()).toISOString();
+      await store.completeTurn(uid, begun, { id: 'question', role: 'user', createdAt, text: 'Save these two supplied workouts.' },
+        { id: 'proposal', role: 'assistant', createdAt, text: 'Review the actual interval and easy-run prescriptions.' }, preview);
+      const appApply = vi.fn(input => applyTrainingChanges(input, deps));
+      const confirmed = await runApplyAssistantTrainingProposal({ proposalRef: preview.proposalRef, permissionMode: 'schedule',
+        conversationId: chat.conversationId, confirm: true }, { auth: { uid }, app: { appId: 'synthetic-emulator-app' } },
+      store, appApply);
+      expect(confirmed.status).toBe('applied');
+      expect(appApply).toHaveBeenCalledTimes(1);
+      result = await appApply.mock.results[0].value;
+      expect((await store.getActiveConversationState(uid)).pendingTrainingProposal).toBeUndefined();
+    } else {
+      result = await apply();
+      await expect(apply()).resolves.toEqual(result);
+    }
+    const codec = {
+      encode: (value: Record<string, unknown>, owner: string, connection: string) => encodeOpaqueValue('training_read', value, owner, connection),
+      decode: (value: string, owner: string, connection: string) => decodeOpaqueValue('training_read', value, owner, connection, 'Training reference'),
+    };
+    const reads = createFirestoreTrainingReads(() => db);
+    for (const [localKey, recipe] of [['intervals', intervals], ['collapsed', collapsed]] as const) {
+      const reference = result.createdReferences.find(item => item.localKey === localKey)!.reference;
+      const saved = await readTrainingPlans({ uid, connectionId, scopes, tool: 'get_planned_workout_v3',
+        arguments: { workoutRef: reference } }, reads, codec, deps.now());
+      expect(saved).toMatchObject({ workout: { structure: JSON.parse(JSON.stringify(recipe)) } });
+    }
+    expect((await db.collection('users').doc(uid).collection('trainingPlanState').doc('current').get()).get('activePlanId')).toBeNull();
+    expect((await db.collection('users').doc(uid).collection('trainingDeliverySettings').get()).empty).toBe(true);
+    expect(transport!.calls).toHaveLength(0);
+  });
+
+  it.each([
+    { title: '25 km race', recipe: { ...structure, nodes: [{ ...structure.nodes[0], ending: { kind: 'distance', meters: 40233.6 } }] } },
+    { title: '5 x 3 mins, HR 148–156 bpm', recipe: { ...structure, nodes: [{ kind: 'repeat', id: 'set', count: 5,
+      steps: [{ ...structure.nodes[0], ending: { kind: 'time', seconds: 180 } }] }] } },
+  ])('focused create rejects $title without persisting a proposal or requesting delivery', async ({ title, recipe }) => {
+    await expect(previewCreatePlannedWorkout({ uid, connectionId: 'connection', scopes, arguments: {
+      expectedScheduleRevision: 1, planRef: null, localDate: '2026-09-18', title, structure: recipe,
+      delivery: { providers: ['garmin'], timeZone: 'Europe/Helsinki' },
+    } }, deps)).rejects.toThrow('Prescription conflict');
+    const user = db.collection('users').doc(uid);
+    expect((await user.collection('trainingMcpProposals').get()).empty).toBe(true);
+    expect((await user.collection('trainingDeliverySettings').get()).empty).toBe(true);
+    expect(transport!.calls).toHaveLength(0);
+  });
+
+  it('rejects replaced contradictory recipes but permits unchanged legacy date edits and copies', async () => {
+    const recipe = { ...structure, nodes: [{ ...structure.nodes[0], ending: { kind: 'distance' as const, meters: 8046.72 } }] };
+    const preview = await previewCreatePlannedWorkout({ uid, connectionId: 'connection', scopes, arguments: {
+      expectedScheduleRevision: 1, planRef: null, localDate: '2026-09-18', title: 'Easy run', structure: recipe,
+    } }, deps);
+    const applied = await applyTrainingChanges({ uid, connectionId: 'connection', scopes,
+      arguments: { proposalRef: preview.proposalRef, permissionMode: 'schedule' } }, deps);
+    const user = db.collection('users').doc(uid);
+    const doc = (await user.collection('scheduledWorkouts').get()).docs[0];
+    // Seed pre-safeguard data in this synthetic account; never rewrite a production user's recipe.
+    await doc.ref.update({ title: '5 x 3 mins steady' });
+    const workoutRef = applied.createdReferences[0].reference;
+    const change = { kind: 'update-workout', workout: { ref: workoutRef }, plan: null, localDate: '2026-09-19',
+      title: '5 x 3 mins steady', structure: recipe };
+    await expect(previewPlannedWorkoutV3Change({ uid, connectionId: 'connection', scopes, arguments: {
+      expectedScheduleRevision: applied.scheduleRevision, change: { ...change,
+        structure: { ...recipe, nodes: [{ ...recipe.nodes[0], ending: { kind: 'distance', meters: 1000 } }] } },
+    } }, deps)).rejects.toThrow('Prescription conflict');
+    expect((await doc.ref.get()).get('structure')).toEqual(recipe);
+    const moved = await previewPlannedWorkoutV3Change({ uid, connectionId: 'connection', scopes, arguments: {
+      expectedScheduleRevision: applied.scheduleRevision, change,
+    } }, deps);
+    const edited = await applyTrainingChanges({ uid, connectionId: 'connection', scopes,
+      arguments: { proposalRef: moved.proposalRef, permissionMode: 'schedule' } }, deps);
+    const copied = await previewTrainingChanges({ uid, connectionId: 'connection', scopes, arguments: {
+      expectedScheduleRevision: edited.scheduleRevision, changes: [{ kind: 'copy-workout',
+        sourceWorkout: { ref: workoutRef }, localKey: 'duplicate', plan: null, localDate: '2026-09-20' }],
+    } }, deps);
+    await applyTrainingChanges({ uid, connectionId: 'connection', scopes,
+      arguments: { proposalRef: copied.proposalRef, permissionMode: 'schedule' } }, deps);
+    expect((await user.collection('scheduledWorkouts').get()).docs.map(item => item.get('structure'))).toEqual([recipe, recipe]);
+    expect(transport!.calls).toHaveLength(0);
+  });
+
+  it('retains recipe, date extension, pool and early-Lap review within the frozen summary bound', async () => {
+    const variants = [
+      { kind: 'step', id: 'time', purpose: 'work', ending: { kind: 'time', seconds: 180, allowEarlyLap: true }, targets: [
+        { kind: 'heart-rate', mode: 'absolute', minimumBpm: 148, maximumBpm: 156 },
+        { kind: 'power', mode: 'absolute', minimumWatts: 100, maximumWatts: 200 },
+      ] },
+      { kind: 'step', id: 'distance', purpose: 'work', ending: { kind: 'distance', meters: 100, allowEarlyLap: true }, targets: [
+        { kind: 'speed', mode: 'absolute', minimumMetersPerSecond: 2, maximumMetersPerSecond: 3, presentation: 'pace' },
+        { kind: 'cadence', mode: 'absolute', minimumRpm: 80, maximumRpm: 90 },
+      ] },
+      { kind: 'step', id: 'energy', purpose: 'work', ending: { kind: 'kilojoules', kilojoules: 1 }, targets: [] },
+      { kind: 'step', id: 'reps', purpose: 'work', ending: { kind: 'repetitions', repetitions: 5 }, targets: [] },
+      { kind: 'step', id: 'manual', purpose: 'recovery', ending: { kind: 'manual' }, targets: [] },
+    ];
+    const recipe = parseWorkoutStructureV1({ version: 1, sport: ActivityTypes.Swimming,
+      poolLength: { meters: 123.456789, presentation: 'yards' }, nodes: Array.from({ length: 100 }, (_, index) =>
+        ({ ...variants[index % variants.length], id: `step-${index}` })) });
+    const title = '界'.repeat(120);
+    const setup = await previewPlannedWorkoutV3Change({ uid, connectionId: 'connection', scopes, arguments: {
+      expectedScheduleRevision: 1, change: { kind: 'create-workout', localKey: 'swim', plan: null,
+        localDate: '2026-09-18', title, structure: recipe },
+    } }, deps);
+    expect(setup.changes[0].summary.length).toBeLessThanOrEqual(500);
+    const created = await applyTrainingChanges({ uid, connectionId: 'connection', scopes,
+      arguments: { proposalRef: setup.proposalRef, permissionMode: 'schedule' } }, deps);
+    const planPreview = await previewTrainingChanges({ uid, connectionId: 'connection', scopes, arguments: {
+      expectedScheduleRevision: created.scheduleRevision, changes: [{ kind: 'create-plan', localKey: 'plan',
+        name: 'Synthetic bound', startDate: '2026-09-18', endDate: '2026-09-19' }],
+    } }, deps);
+    const plan = await applyTrainingChanges({ uid, connectionId: 'connection', scopes,
+      arguments: { proposalRef: planPreview.proposalRef, permissionMode: 'schedule' } }, deps);
+    const edited = parseWorkoutStructureV1({ ...recipe, nodes: recipe.nodes.map((node, index) => {
+      if (node.kind !== 'step' || !['time', 'distance'].includes(node.ending.kind)) return node;
+      return { ...node, ending: { ...node.ending, allowEarlyLap: index === 0 } };
+    }) });
+    const preview = await previewPlannedWorkoutV3Change({ uid, connectionId: 'connection', scopes, arguments: {
+      expectedScheduleRevision: plan.scheduleRevision, change: { kind: 'update-workout',
+        workout: { ref: created.createdReferences[0].reference }, plan: { ref: plan.createdReferences[0].reference },
+        localDate: '2026-09-20', title, structure: edited },
+    } }, deps);
+    const summary = preview.changes[0].summary;
+    expect(summary.length).toBeLessThanOrEqual(500);
+    expect(summary).toContain(title);
+    expect(summary).toContain('100 defined steps, 0 repeat blocks');
+    expect(summary).toContain('time/distance/energy/reps/Lap endings; targets HR/power/pace/speed/cadence');
+    expect(summary).toContain('Extend plan range: 2026-09-18 to 2026-09-20');
+    expect(summary).toContain('Selected pool length:');
+    expect(summary).toContain('(yards presentation)');
+    expect(summary).toContain('Early Lap: enabled on 1 timed/distance step. Removed from 39 previously enabled steps.');
+    expect(transport!.calls).toHaveLength(0);
+  });
 
   it('persists exact mixed target snapshots and their order through approved create/update and idempotent replay', async () => {
     const recipe = { ...structure, sport: ActivityTypes.Cycling, nodes: [{ kind: 'repeat', id: 'block', count: 3,
@@ -1415,7 +1594,8 @@ describe.skipIf(!process.env.FIRESTORE_EMULATOR_HOST)('Training MCP write propos
       summary: expect.stringContaining('No separate mapping approval is needed') });
     expect(preview.providerPreviews[0].summary.match(/manual transitions/g)).toHaveLength(1);
     expect(assess).toHaveBeenCalledWith(expect.objectContaining({ structure: expect.objectContaining({ sport: ActivityTypes.StrengthTraining }) }),
-      expect.any(String), 'Europe/Helsinki', expect.objectContaining({ version: 1 }), WeightUnits.Pounds);
+      expect.any(String), 'Europe/Helsinki', expect.objectContaining({ version: 1 }), WeightUnits.Pounds,
+      expect.objectContaining({ weightUnits: WeightUnits.Pounds }));
     expect((await user.collection('trainingDeliverySettings').get()).empty).toBe(true);
     expect(suunto.calls).toHaveLength(0);
   });
@@ -1424,15 +1604,16 @@ describe.skipIf(!process.env.FIRESTORE_EMULATOR_HOST)('Training MCP write propos
     const suunto = new SuuntoHttpFixture();
     const guideTransport = new SuuntoGuideTransport(suunto.request, 'Quantified Self', deps.now);
     deps.runtime.transport = provider => provider === 'suunto' ? guideTransport : null;
+    const user = db.collection('users').doc(uid);
+    await user.update({ 'settings.unitSettings.distanceUnits': DistanceUnits.Miles });
     const preview = await previewCreatePlannedWorkout({ uid, connectionId: 'connection', scopes,
       arguments: { expectedScheduleRevision: 1, localDate: '2026-09-18', title: 'Easy ride',
         structure: { ...structure, sport: ActivityTypes.MountainBiking,
-          nodes: [{ ...structure.nodes[0], note: 'Ride easy' }] },
+          nodes: [{ ...structure.nodes[0], ending: { kind: 'distance', meters: 1609.344 }, note: 'Ride easy' }] },
         delivery: { providers: ['suunto'], timeZone: 'Europe/Helsinki' } } }, deps);
     expect(preview.providerPreviews).toEqual([expect.objectContaining({ provider: 'suunto', warningCount: 0 })]);
     const applied = await applyTrainingChanges({ uid, connectionId: 'connection', scopes,
       arguments: { proposalRef: preview.proposalRef, permissionMode: 'combined' } }, deps);
-    const user = db.collection('users').doc(uid);
     const workout = (await user.collection('scheduledWorkouts').get()).docs[0];
     expect((await user.collection('trainingDeliverySettings').doc(`workout_${workout.id}_suunto`).get())
       .get('approvedDigest')).toBeNull();
@@ -1442,6 +1623,10 @@ describe.skipIf(!process.env.FIRESTORE_EMULATOR_HOST)('Training MCP write propos
     expect((await user.collection('trainingDeliveryStatuses').doc(ledger.id).get()).get('status')).toBe('delivered');
     expect(applied.providers).toEqual([expect.objectContaining({ provider: 'suunto', status: 'applied' })]);
     expect(suunto.calls.filter(call => call.method === 'POST')).toHaveLength(1);
+    expect([...suunto.guides.values()][0].guide.richText).toContain('mi');
+    expect([...suunto.guides.values()][0].guide.richText).toContain('Ride easy');
+    expect(workout.get('structure.nodes')[0].ending).toEqual({ kind: 'distance', meters: 1609.344 });
+    expect(JSON.stringify(preview)).not.toMatch(/richText|suuntoUnitSettings/);
   });
 
   it('discloses Wahoo target limitations in the first proposal and delivers after one approval', async () => {
@@ -1667,7 +1852,7 @@ describe.skipIf(!process.env.FIRESTORE_EMULATOR_HOST)('Training MCP write propos
       ] } }, deps);
     expect(preview).toMatchObject({ permissionMode: 'schedule', requiresConfirmation: true,
       changes: [{ kind: 'copy-workout', summary: expect.stringContaining('2027-01-02') }] });
-    expect(preview.changes[0].summary).toContain('The destination plan range will extend to 2026-09-18 through 2027-01-02.');
+    expect(preview.changes[0].summary).toContain('Extend plan range: 2026-09-18 to 2027-01-02.');
     const input = { uid, connectionId: 'connection', scopes,
       arguments: { proposalRef: preview.proposalRef, permissionMode: 'schedule' as const } };
     const applied = await applyTrainingChanges(input, deps);

@@ -5,11 +5,98 @@ import { tmpdir } from 'node:os';
 import { dirname, resolve } from 'node:path';
 import test from 'node:test';
 import { fileURLToPath } from 'node:url';
+import { globSync } from 'tinyglobby';
+import { loadConfigFromFile } from 'vite';
+import { configDefaults } from 'vitest/config';
+import { assertEmulatorOnlySpec } from './functions-emulator-spec-policy.mjs';
 import { assertExecutedReport, assertLoopbackEmulators, assertSuiteCoverage, discoverEmulatorSpecs,
   emulatorEnvironment, EMULATOR_SUITES, suiteFiles } from './functions-emulator-suites.mjs';
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const functionsRoot = resolve(root, 'functions');
+const unit = (await loadConfigFromFile({ command: 'serve', mode: 'test' },
+  resolve(functionsRoot, 'vitest.config.ts'))).config;
+const emulator = (await loadConfigFromFile({ command: 'serve', mode: 'test' },
+  resolve(functionsRoot, 'vitest.emulators.config.ts'))).config;
+const registered = Object.values(EMULATOR_SUITES).flat().sort();
+const discover = (config, cwd = functionsRoot) => globSync(config.test.include, {
+  cwd, ignore: config.test.exclude, dot: true, expandDirectories: false,
+}).sort();
+
+test('unit and emulator configurations partition all Functions specs exactly once', () => {
+  const all = globSync('src/**/*.spec.ts', {
+    cwd: functionsRoot, ignore: configDefaults.exclude, dot: true,
+  }).sort();
+  const ordinary = discover(unit);
+  const realEmulators = discover(emulator);
+  assert.deepEqual(realEmulators, registered);
+  assert.deepEqual(ordinary, all.filter(file => !registered.includes(file)));
+  assert.deepEqual([...ordinary, ...realEmulators].sort(), all);
+  assert.equal(new Set([...ordinary, ...realEmulators]).size, all.length);
+  assert.equal(unit.test.root ?? unit.root, functionsRoot);
+  assert.equal(emulator.test.root ?? emulator.root, functionsRoot);
+  assert.equal(emulator.test.maxWorkers, 1);
+  assert.equal(emulator.test.minWorkers, 1);
+  assert.equal(emulator.test.fileParallelism, false);
+  assert.deepEqual(emulator.test.exclude, [...configDefaults.exclude]);
+  for (const config of [unit, emulator]) {
+    assert.equal(config.test.pool, 'forks');
+    assert.notEqual(config.test.isolate, false);
+    assert.notEqual(config.test.dangerouslyIgnoreUnhandledErrors, true);
+    assert.notEqual(config.test.passWithNoTests, true);
+    assert.deepEqual(config.test.setupFiles, [resolve(functionsRoot, 'src/test-setup.ts')]);
+  }
+});
+
+test('future and hidden unit specs remain discoverable while exact emulator paths stay excluded', t => {
+  const fixture = mkdtempSync(resolve(tmpdir(), 'qs-functions-partition-'));
+  t.after(() => rmSync(fixture, { recursive: true, force: true }));
+  const future = ['src/new.spec.ts', 'src/queue-integration.spec.ts', 'src/.hidden/unit.spec.ts', 'src/.unit.spec.ts'];
+  for (const file of [...future, ...registered, 'node_modules/dependency/src/unit.spec.ts',
+    'src/node_modules/dependency/unit.spec.ts', 'src/.git/unit.spec.ts']) {
+    mkdirSync(dirname(resolve(fixture, file)), { recursive: true });
+    writeFileSync(resolve(fixture, file), '');
+  }
+  assert.deepEqual(discover(unit, fixture), future.sort());
+  assert.deepEqual(discover(emulator, fixture), registered);
+});
+
+test('every excluded file contains emulator-gated tests without mixed unit registrations', () => {
+  for (const file of registered) assertEmulatorOnlySpec(readFileSync(resolve(functionsRoot, file), 'utf8'), file);
+});
+
+test('mixed, aliased and parameterized unit registrations cannot hide in emulator-only files', () => {
+  const imports = 'import { describe, it, test as check } from "vitest";';
+  const gated = 'describe.skipIf(!process.env.FIRESTORE_EMULATOR_HOST)("real", () => { it("emulator", () => {}); });';
+  for (const extra of ['it("unit", () => {});', 'check.each([1])("unit", () => {});',
+    'describe("unit", () => { it("ordinary", () => {}); });', 'check.todo("unit");']) {
+    assert.throws(() => assertEmulatorOnlySpec(imports + gated + extra, 'mixed.spec.ts'), /Mixed unit\/emulator/);
+  }
+  assert.throws(() => assertEmulatorOnlySpec(imports
+    + 'describe.skipIf(!!process.env.FIRESTORE_EMULATOR_HOST)("inverted", () => { it("unit", () => {}); });',
+  'inverted.spec.ts'), /Mixed unit\/emulator/);
+  assertEmulatorOnlySpec(imports + 'const host = process.env.FIRESTORE_EMULATOR_HOST;'
+    + 'describe.skipIf(!host)("real", () => { check.each([1])("emulator", () => {}); });', 'alias.spec.ts');
+  assertEmulatorOnlySpec('import * as v from "vitest";'
+    + 'v.describe.skipIf(!process.env.FIRESTORE_EMULATOR_HOST)("real", () => { v.it("emulator", () => {}); });',
+  'namespace.spec.ts');
+  assert.throws(() => assertEmulatorOnlySpec(gated + 'test("global unit", () => {});', 'globals.spec.ts'),
+    /Mixed unit\/emulator/);
+  assert.throws(() => assertEmulatorOnlySpec('import * as v from "vitest";' + gated
+    + 'v["test"]("unit", () => {});', 'namespace-unit.spec.ts'), /Mixed unit\/emulator/);
+  assert.throws(() => assertEmulatorOnlySpec(imports + 'let host = process.env.FIRESTORE_EMULATOR_HOST;'
+    + 'describe.skipIf(!host)("mutable", () => { it("test", () => {}); });', 'mutable.spec.ts'),
+  /Mixed unit\/emulator/);
+});
+
+test('all emulator entry points select the emulator configuration', () => {
+  const runner = readFileSync(resolve(root, 'tools/test-functions-emulators.mjs'), 'utf8');
+  assert.match(runner, /'--config', join\(functionsRoot, 'vitest\.emulators\.config\.ts'\)/);
+  const scripts = JSON.parse(readFileSync(resolve(root, 'package.json'), 'utf8')).scripts;
+  for (const name of ['test:disconnect', 'test:training-delivery']) {
+    assert.match(scripts[name], /--config functions\/vitest\.emulators\.config\.ts/);
+  }
+});
 
 test('every real emulator/integration file is registered exactly once', () => {
   assertSuiteCoverage(discoverEmulatorSpecs(functionsRoot));

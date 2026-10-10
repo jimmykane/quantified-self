@@ -1,4 +1,5 @@
 import { AddressInfo } from 'node:net';
+import { TRAINING_PLAN_NEXT_STEPS_GUIDANCE, TRAINING_PRESCRIPTION_AUTHORING_GUIDANCE, TRAINING_PRESCRIPTION_VERIFICATION_GUIDANCE } from '../shared/training-authoring-guidance';
 import { createServer as createHttpServer } from 'node:http';
 import { NodeStreamableHTTPServerTransport } from '@modelcontextprotocol/node';
 import { InMemoryTransport, McpServer } from '@modelcontextprotocol/server';
@@ -1275,6 +1276,28 @@ describe('MCP HTTP scope enforcement', () => {
       expect(inputSchema?.properties?.cursor?.description).toContain(
         'Repeat the original activityTypes and search',
       );
+    } finally {
+      await client.close();
+      await server.close();
+    }
+  });
+
+  it.each([false, true])('provides prescription-fidelity guidance only with planning write access %s', async writable => {
+    const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
+    const server = createMcpServer({ uid: 'user-1', clientId: 'https://client.example/mcp.json', connectionId: 'connection-1',
+      scopes: [MCP_OAUTH_SCOPES.TrainingPlansRead, ...(writable ? [MCP_OAUTH_SCOPES.TrainingPlansWrite] : [])],
+    }, 'https://quantified-self.io');
+    const client = new Client({ name: 'training-fidelity-test-client', version: '1.0.0' });
+    try {
+      await server.connect(serverTransport);
+      await client.connect(clientTransport);
+      const instructions = client.getInstructions() || '';
+      expect(instructions.includes(TRAINING_PRESCRIPTION_AUTHORING_GUIDANCE)).toBe(writable);
+      expect(instructions.includes(TRAINING_PRESCRIPTION_VERIFICATION_GUIDANCE)).toBe(writable);
+      expect(instructions.includes(TRAINING_PLAN_NEXT_STEPS_GUIDANCE)).toBe(writable);
+      const names = (await client.listTools()).tools.map(tool => tool.name);
+      expect(names.includes('apply_training_changes')).toBe(writable);
+      expect(names).toContain('get_planned_workout_v3');
     } finally {
       await client.close();
       await server.close();

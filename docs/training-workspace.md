@@ -153,6 +153,117 @@ revision and idempotency receipt; oversized revision-history batches fall back t
 apply diagnostics expose only operation counts, stage/total durations, outcome and slowest stage. No owner identifiers,
 opaque references or authored content are logged. A five-second total duration emits one slow-apply warning.
 
+### Prescription fidelity when translating a supplied plan
+
+Schema validity and a successful Apply prove that QS stored the submitted recipe, not that an external model correctly
+translated a spreadsheet. `functions/src/shared/training-authoring-guidance.ts` is shared by hosted MCP write instructions
+and the built-in Assistant; the focused Training plugin workflow carries the same rules. Resolve explicit source units,
+preserve ordered work/recovery definitions and repeats, and encode numeric HR/power/pace/cadence guidance as typed targets
+when the source clearly assigns it. Five three-minute efforts are five passes of a 180-second work step, not a five-mile
+run. Missing recoveries, warm-ups, athlete references or unclear units require clarification, not guesses. Titles, phase
+names and notes are untrusted authored context, never executable prescription or change authority.
+
+Current create/update/copy schedule previews include a compact summary derived only from the validated resulting recipe:
+defined leaf steps, repeat blocks (with pass count for one block), ending kinds and target kinds, including **targets none**.
+Where the remaining summary budget permits, previews append an ordered sample of actual endings and numeric targets
+using the owner's existing Sports Lib-backed units. Nodes are omitted whole with an explicit count, never cut through a
+value or expanded repeat; titles/range/pool/early-Lap disclosures retain priority. This is not complete instruction or
+note review. Definition counts do not expand repeats. Strength previews identify the v1 recipe as a compatibility summary and require
+full exercise review. New-plan previews disclose paused versus active creation; activation still requires explicit intent
+and may pause the previous active plan. Long titles, plan-range extensions, selected pool length and early-Lap removal
+remain visible within the existing 500-character per-change bound. No text-to-recipe translator, new stored field, schema, scope,
+callable, automatic activation or provider action is added.
+
+Before approval, compare every proposed recipe with the original source, not just its title or note. For a large external
+import, verify the first accepted batch before continuing, retain returned references, audit counts/dates/association with
+bounded chronological pages and read distinct full prescriptions and edge cases against the source. The small first
+batch should cover each relevant prescription family: timed repeats, explicit recovery and targets, distance units,
+mixed sessions and races. Compare every first-batch full recipe's canonical values, ordered steps, repeat counts and
+target assignments; later different numeric values need review even when the shape looks the same. Target-free workouts
+remain valid when no target was prescribed. Report saved count, exact checked coverage and unresolved prescriptions
+separately; discrepancies stop further batches, activation and sending. Report the actual
+verification coverage: a sample cannot certify every workout. Stop within existing budgets and disclose unresolved items;
+never loop, recreate records or claim a complete import from counts alone. The built-in Assistant remains prepare-only
+and cannot claim storage before app Apply. Saving, activation, sync consent, provider acceptance and watch receipt remain
+separate outcomes; delivery windows come from current evidence.
+
+New/replaced non-strength MCP recipes also get narrow, conservative literal-title contradiction checks before a proposal
+is stored: explicit `5 x 3 mins` efforts missing from the time-ended work steps, a labelled numeric HR range with no
+structured HR target anywhere, and an explicitly labelled race distance inconsistent with a single distance step.
+Negated/contextual titles, unitless numbers, notes and qualitative intensity do not supply a prescription. The checks
+do not rewrite JSON, assign targets/recoveries, sum mixed race totals or prove source fidelity. Full recipe review still
+checks target values and their actual step assignments. An unchanged legacy title/recipe on a date/scope-only edit,
+copy, move or lifecycle action is not revalidated as newly authored content. A contradictory batch leaves no proposal,
+authored write or provider request; correct the recipe against the source or clarify the title, never rename as a bypass
+or loop on the same failure. Existing valid proposals retain their original approval contract.
+
+This is not general automatic source-fidelity detection. Repairing previously authored data requires the original prescription and
+separate authorization. MCP impact is changed server instructions and truthful existing summary text, not changed wire
+shapes. Preserve the frozen baseline/history and prior pending additions; deployment, exact registered-client rescan and
+bundled-plugin sync remain separate. No reauthorization, Rules/index change, migration or reparse is introduced.
+Verification uses synthetic collapsed-versus-structured recipes, explicit race-unit and HR-omission regressions, benign
+ambiguity and note-injection cases, rejected-batch atomicity and exact approved read-back through owner-bound public
+references. Real loopback Firestore tests cover external MCP and the Assistant's app-owned confirmation, paused creation
+without delivery, every ending/target label, unchanged legacy edits, strict outputs and maximum-size reviews. Deterministic
+contract/transaction fixtures do not prove how a live ChatGPT/Claude model will translate a new spreadsheet.
+
+First-party write rechecks normalize omitted optional permissions to off. Schedule-only and delivery-only consent
+work independently; changed consent or conversation generations still stop the read before releasing a proposal,
+without a grounded retry. Live first-party review diagnostics distinguish preview-schema validation, complete-review
+loading and final review validation without logging recipes, notes, exception messages, references or identity. These private diagnostic stages
+do not change the MCP wire contract, read projections, consent or app help.
+Delivery intent ignores explicit negation such as “No provider sync”, “don’t sync” and directly coordinated
+“don’t send or sync”; an independent affirmative
+send/sync clause remains actionable. A schedule-only request must not enter the forced provider-preview correction path.
+For ordinary first-party Training turns, previews are withheld from the model until a successful Training read supplies
+a safe current schedule revision. The pre-collected daily-workout path already supplies its validated context. Gemini's
+private union projection describes each exact object shape and its required/optional keys, discouraging guessed revisions
+and mixed plan/step/repeat/target fields. These descriptions are derived from the existing MCP schemas; they do not loosen
+those strict schemas, normalize rejected payloads or change external clients' contracts or approval requirements.
+Repeated projected recipe references are deduplicated before outer batch unions merge, preserving the same step/repeat
+and ending/target shape guidance in focused and batch previews instead of merging it a second time.
+A failed or revision-less read keeps previews unavailable. If the model stops there, the delivery correction must not
+issue a required-tool request with an empty tool list or echo an unsupported success claim. It returns fixed no-proposal
+guidance; existing grounded-answer checks still apply. After a successful read, correction preserves the requested
+provider action and destinations instead of hard-coding Send (notably for Stop sync). Completion checks also run after
+the last allowed continuation, without spending another model/tool-call budget. These are private Assistant
+implementation fixes, with no MCP wire, permission, persistence, provider adapter or app-help contract change.
+Common explanatory/advisory and sync-status/settings questions or problem reports do not trigger forced delivery previews.
+This fallback requires action/preview request phrasing; an independently requested action after a sentence, “then” or
+“but” remains supported. Decimal points are not sentence boundaries.
+This private intent hint grants no authority and does not replace source verification or app Apply. Tool execution is
+limited to the names advertised for that exact model response. A successful first read cannot retroactively authorize
+an unadvertised preview in the same parallel response, and a preview-only correction cannot call other tools.
+
+### Plan activation and optional sync next steps
+
+Shared MCP/Assistant write guidance and the bundled Training workflow offer one next choice after confirmed plan creation
+or an explicit next-steps question. A paused plan can be made active, putting its workouts in the main Calendar and pausing
+the previous active plan. Activation can resume existing, still-authorized plan sync for eligible upcoming workouts;
+it does not grant consent to a new service. After confirmed activation, offer optional sync when not configured, asking
+for explicit destinations and an IANA timezone. Do not infer all providers or treat a bare yes to a combined ambiguous
+offer as both choices. Preserve explicit choices already requested, respect declines, and resolve prescription
+discrepancies first. Use current verified results or bounded metadata/status reads, not polling or another import audit.
+Existing evidence is not live availability; only a requested delivery preview checks readiness, connection, Pro,
+compatibility and scheduling windows. Future/outside-window workouts are waiting, never claimed sent. Missing grants
+use existing permission recovery; external changes still need native approval and Assistant changes need app Apply.
+
+Plans shows a surface-free, body-small hint and **Activate plan** action for the selected paused plan, including the
+name of the plan it will pause. Active and archived plans do not get the hint; archived activation remains in Plan actions.
+The action reuses the existing lifecycle mutation, revision checks and feedback. Pending activation has a stable
+spinner/label, blocks duplicate actions, retains failure recovery and suppresses late feedback after an owner/route change.
+Optional Pro sync gets a small explanatory line only after settings are known, no existing service records are present
+and setup is available. Loading, errors, archived plans, unavailable services, retained settings and signed-out state
+never acquire a misleading new-sync hint. No cards, expansion panels, onboarding store or new callable are introduced.
+
+MCP impact: server instructions change, but tools, strict schemas, scopes, read projections, approval and provider
+transport remain unchanged. The pending digest preserves all earlier additions and frozen registered baselines/history.
+Separate server release, registered-client rescan and bundled-plugin sync are still required; no reauthorization is
+introduced by this guidance. Verification includes real component actions, paused/active/archived states, revision-bound
+activation, loading/failed settings, duplicate and owner-change fences, haptics, consent-specific initialize instructions,
+Assistant guidance, strict outputs, plugin validators and responsive layout checks. Model guidance cannot guarantee that
+every external client/model will offer the follow-up; no user data, activation or provider action occurs during QA.
+
 ### Lost MCP apply replies (#791)
 
 The 25-change limit bounds the proposal shape, not the time an MCP host will wait. Redacted read-only logs from the
@@ -2831,6 +2942,43 @@ one same-ID update, current-v12 lost create/enriched update responses, strict un
 handling, consent withdrawal without speculative recreation and past/completed-copy preservation. Full loss-
 approval equivalence is retained only for unchanged content/authority, never newly edited instructions.
 
+##### Suunto app workout preview (v13)
+
+Current sends use private `suunto-guides-v13` to add the documented optional Guide `richText` Markdown field.
+Suunto app Guide details show a definition-order preview: title/sport, step purpose, exact prescribed ending,
+target ranges and complete notes. Repeats are grouped, not expanded. Manual endings explicitly say Lap finishes
+the current step; early-Lap alternatives remain visible. Strength uses the validated complete companion for
+exercise names, every set/repetition or timed ending, external load and optional rest, including a final rest.
+Generated descriptions use shared workout formatters and normalized owner units, not hand-written conversions.
+Authored Markdown/HTML is escaped as literal text rather than becoming description markup.
+
+Only app metadata changes: each recipe retains its exact v7/v8/v10/v11/v12 watch execution/presentation graph,
+targets, instructions, timing and lap boundaries. `description` remains the existing short fallback. The preview
+must fit Suunto's 100,000-character limit **and** the existing 256 KiB enriched JSON readback budget; if the full
+preview cannot fit, omit optional `richText` without truncating instructions, rejecting an otherwise valid workout,
+altering steps or raising archive/decompression limits. ZIP readback/recovery compares this metadata strictly.
+
+The owner-unit snapshot is private immutable upsert-operation data. A settings change during an uncertain send
+cannot alter its recovery payload; prove the old acceptance first, then update the same eligible copy once. Frozen
+v2–v12 reconstruction stays available, including exact v12 Rest recovery. Identity, pinning, consent, Pro, authority,
+full-prescription approval evidence, and past/completed-copy protection are unchanged. Metadata-only unit updates
+can retain approval using at most two private, recomputed unit snapshots (original approval and latest proved
+mapping) and the complete loss signature; edited prescriptions or new losses still require approval.
+For legacy approvals without an original unit snapshot, retain the latest proved v13 mapping units independently.
+Regression checks cover the legacy upgrade followed by repeated unit-only updates, unchanged watch steps/same-ID
+updates and rejection of changed prescriptions, missing full-content evidence or changed connection authority.
+Private owner-unit snapshots deduplicate validated preference enums in first-occurrence order, bounding journal/proof
+size and conversion work even for malformed duplicate-heavy settings; the owner's stored settings are never rewritten.
+
+MCP impact review: **no public contract change**. The app preview and unit/proof snapshots are excluded from read,
+proposal and status schemas; existing strict read/write and transport tests reject injection. The delivery proposal
+assessment reads the same owner units as native apply so their private digests agree. No new tool, field, scope,
+provider action, consent or contract promotion is introduced. Help explains app-versus-watch behavior and fallback.
+Monitoring is **covered/unchanged**: existing provider/event metrics, dashboard, alerts and queue administration
+cover v13; only the private diagnostic version allowlist grows. No queue, scheduler, retention or resource changes.
+Release needs separately approved Functions deployment. Local ZIP/Firestore fixtures are not live Suunto app proof;
+after release, sync an eligible future Guide and confirm the full Description in the Suunto app.
+
 ##### Current readings and boundary notifications (#784)
 
 The v5 screen baseline (retained by v6 for absent/false early Lap) builds on Training 01's reviewed v4 boundary/recovery logic and independently implements the documented partner [Guide schema](https://apizone.suunto.com/suuntoplus-guide-description),
@@ -2923,17 +3071,16 @@ marker is private readback metadata, never persisted in authored recipes or proj
 file GETs by default; lifecycle tests cover lost responses, rescheduling, duplicate dispatch and strict mismatch cases.
 
 Existing `[TrainingDelivery]` Suunto acceptance, recovered-acceptance, stale-suppression, failure and checkpoint-failure
-events include two transient allowlisted labels: `guideMappingVersion` (`suunto-guides-v12`, `suunto-guides-v11`, `suunto-guides-v10`, `suunto-guides-v9`, `suunto-guides-v8`, `suunto-guides-v7`, `suunto-guides-v6`, `suunto-guides-v5`, `suunto-guides-v4`, `suunto-guides-v3`, `suunto-guides-v2`, `unknown`,
+events include two transient allowlisted labels: `guideMappingVersion` (`suunto-guides-v13`, `suunto-guides-v12`, `suunto-guides-v11`, `suunto-guides-v10`, `suunto-guides-v9`, `suunto-guides-v8`, `suunto-guides-v7`, `suunto-guides-v6`, `suunto-guides-v5`, `suunto-guides-v4`, `suunto-guides-v3`, `suunto-guides-v2`, `unknown`,
 or `not_applicable` for removal) and `deliveryPhase` (`execute` or `recover`). The version is proved by recomputing the
 immutable upsert operation's exact payload digest, including strength details, rather than copying the current adapter's
 version onto a legacy attempt. An unrecognized digest or classification failure yields `unknown` and cannot alter
 delivery/recovery. Classification runs once per claimed operation without credentials or HTTP; the phase switches to
 `execute` if recovery resumes a safe request. Other providers' existing events are unchanged.
 For rollout triage, combine `jsonPayload.message="[TrainingDelivery]"`, `jsonPayload.provider="suunto"` and
-`jsonPayload.event="failure"` with the current recipe-specific mapping (`suunto-guides-v12` for eligible Rest presentation, `suunto-guides-v11` for other generated non-swim manual instructions, `suunto-guides-v10` for other pool/open-water swimming,
-`suunto-guides-v8` for strength, `suunto-guides-v7` for non-swim interval sports), or the exact historical label and
+`jsonPayload.event="failure"` with current `suunto-guides-v13` for app-preview delivery, or the exact historical label and
 `jsonPayload.deliveryPhase="recover"` for legacy recovery. The aggregate monitoring metrics filter provider/event,
-not Guide mapping version, and already cover v10/v11/v12 without additional policies or queue changes.
+not Guide mapping version, and already cover v13 and historical versions without additional policies or queue changes.
 Checkpoint failures use `jsonPayload.event="checkpoint_failed"`. These labels are not stored in Firestore or exposed
 to the browser/MCP, and contain no UID, account/Guide/workout identity, digest, recipe, instruction, sensor reading,
 credential, provider body or raw error. They report serializer/recovery provenance, not app/watch receipt or completion.
@@ -6103,6 +6250,226 @@ solely for these dive records.
 Sports Lib `20.2.0` classifies Hand Cycle and Velomobile in the Cycling group. Quantified Self routes both to the
 standard Cycling context, where they use the normal endurance summaries and Cycling durability protocol when their
 recorded evidence qualifies. This group-membership change does not require a derived-schema bump or source reparse.
+
+The unreleased Sports Lib activity-mapping audit adds BMX (`cycling/bmx`, FIT `2/29`), Indoor Skiing
+(`fitness_equipment/indoor_skiing`, `4/25`, also named XC Ski Indoor), ATV (`motorcycling/atv`, `22/35`),
+Motocross (`motorcycling/motocross`, `22/36`), and Pool Triathlon (`multisport/pool_triathlon`, `18/126`).
+BMX belongs to Cycling and can produce library durability evidence when the existing cycling protocol qualifies;
+Indoor Skiing belongs to Indoor Sports, ATV and Motocross to Motorized, and Pool Triathlon to Performance.
+Only Indoor Skiing establishes an indoor hint. ATV and Motocross omit library-calculated TSS and stale calculated
+scores while retaining finite imported scores. The other four types have no library durability adapter.
+
+These five exact canonical values are not yet modeled Training contexts: the existing registry resolves each to
+volume-only Other training, including BMX despite its Cycling group. Classification does not widen Training planning,
+intensity, load, distance, or provider delivery support. Adopt the library changes in the application and Functions
+together and review the dynamic supported-activities catalog. Recover historical broad labels only from their specific
+retained source classifications or explicit names, then regenerate affected event summaries, activity-type aggregates,
+applicable durability evidence, and Training snapshots through the existing reparse/derived ingress. No Training
+formula, derived schema, MCP field/scope/mutation, queue lifecycle, or monitoring changes are introduced by this batch.
+The package's importing guide owns the detailed FIT parent guards and native-JSON aliases.
+
+The next unreleased activity-mapping batch adds E-Enduro MTB (`cycling/e_bike_enduro`, `2/127`), Track Cycling
+(`cycling/track_cycling`, `2/13`), Recumbent Cycling (`cycling/recumbent`, `2/10`), Speed Walking
+(`walking/speed_walking`, `11/31`), Whitewater Kayaking (`kayaking/whitewater`, `41/41`), Whitewater Rafting
+(`rafting/whitewater`, `42/41`), Wingsuit Flying (`flying/wingsuit`, `20/40`), Brick Training (`multisport/brick`,
+`18/80`), and Hunting with Dogs (`hunting/hunting_with_dogs`, `28/72`). All nine exact canonical values currently
+resolve to volume-only Other training in the independent registry. Their library groups do not create modeled
+Training contexts, distance/intensity/load policies, planning, or provider delivery support. Explicit Indoor Track
+and Indoor Track Running names instead reuse the existing Indoor Running type and modeled indoor-running context;
+bare running/track remains Running when the source does not supply a recognized profile name.
+
+Track Cycling and Recumbent Cycling can produce library cycling durability evidence under the existing protocol.
+E-Enduro MTB retains Enduro MTB's unsupported-context gravity-MTB evidence, including replacement of stale eligible
+evidence without retained streams. The other six new types have no library durability adapter. Indoor Track aliases
+retain Indoor Running's existing durability behavior. Whitewater Kayaking retains Kayaking's stroke-rate semantics;
+Whitewater Rafting retains Rafting's existing cadence semantics. No metric token, formula, durability protocol,
+derived schema, MCP field/scope/mutation, queue lifecycle, write path, or monitoring changes are introduced.
+
+Adopt the library in the application and Functions together and review the dynamic supported-activities catalog.
+Recover historical broad types only from specific retained classifications or explicit names; native JSON can recover
+an explicit alias but cannot reconstruct detail already collapsed to Cycling or Running. Regenerate affected event
+summaries, activity-type aggregates, applicable durability evidence, and Training snapshots through the existing
+source-backed reparse and derived ingress. The Sports Lib importing guide owns the exact parent guards and aliases.
+
+The approved Spin, E-bike Mountain, Adventure Race, flying-variant and broad-sport batch reuses Indoor Cycling
+(`cycling/spin`, `2/5`), E-Mountain Biking (`cycling/e_bike_mountain`, `2/47`, retaining `21/47`), Adventure
+Racing (`multisport/adventure_race`, `18/82`, and `running/adventure_race`, `1/82`), and Paragliding
+(`flying/fly_paraglide`, `20/111`). It adds Hockey (`73`) and Team Sport (`70`) in Team/Racket, Winter Sport
+(`58`) in Winter Sports, Water Sport (`78`) in Water Sports, Paramotoring (`20/112`) in Aerial Sports, and
+RC Drone Flying (`20/39`) in Unspecified. Broad source classifications do not infer a specific sport or venue;
+explicit Field Hockey (`73/90`) and Ice Hockey (`73/91`) remain distinct. Only Spin's reused Indoor Cycling
+establishes an indoor hint. Sport-specific sub-sports require documented parents across manufacturers.
+
+Indoor Cycling reuses the existing modeled indoor-cycling context. The other nine exact canonical types currently
+resolve to volume-only Other training with omitted distance in the independent registry, including E-Mountain
+Biking despite its Mountain Biking group. Library group membership does not widen planning, intensity/load policies,
+modeled contexts or provider delivery support. Indoor Cycling and E-Mountain Biking retain library cycling durability;
+the other eight types have no durability adapter. Paramotoring and RC Drone Flying omit calculated POWER/HR/MET
+TSS and remove stale calculated scores/methods while preserving finite imported scores, including legacy scores
+without a method, when preservation is true or omitted. With false, both TSS and its method stay unset for these
+two sports. Other Aerial Sports and Unspecified activities
+retain their existing TSS eligibility. No numeric metric token, unit, formula or durability protocol is added.
+
+MCP impact review: the built 193-type catalog passes the existing strict activity-type output schema, and the 99
+public output-contract tests pass. No MCP field, scope, projection, consent, mutation, plugin or registered-contract
+change is needed. No Training formula, derived-schema, write-path, queue-lifecycle or monitoring change is introduced.
+The supported-activities help remains accurate and its dynamic catalog reflects the installed library. Adopt the
+library in application and Functions together; recover historical broad labels only from specific retained sources
+or explicit aliases, then regenerate event summaries, activity-type aggregates, applicable durability evidence and
+Training snapshots through existing source-backed reparse and derived ingress. Broad stored values cannot recover
+lost detail. The Sports Lib importing guide owns exact aliases and parent guards; no reparse or deployment was run.
+
+The initial sport-mapping audit adds 62 canonical types and adds or corrects aliases for 70 types. Its 193-type
+catalog follows one `preserveImportedTss` policy. True or omission (the default) retains finite imported TSS exactly,
+including zero and legacy scores without a method, even for sports excluded from calculation. False discards the
+existing score and method, calculates a replacement where supported with sufficient inputs, and leaves both unset
+otherwise. The same flag applies to Motorized, Adaptive Mobility, Video Gaming, Paramotoring and RC Drone Flying.
+Calculated scores on eligible sports retain their existing true/default preservation behavior and refresh with false.
+
+MCP impact review: the canonical numeric TSS token, aliases, units, JSON representation, activity catalog, read
+projections, scopes, consent and registered schemas remain unchanged. No Training formula, derived schema, planning
+capability, plugin rebuild, write path, queue lifecycle or monitoring change is added. Current app help remains accurate
+because the default retains imported scores and there is no user-facing false-flag override. Adopt the library in the
+application and Functions together. No global reparse is required; a separately approved targeted source-backed
+reparse can correct specifically affected imports that previously ignored false or retained TSS after calculation
+failed. Regenerate affected event summaries and Training snapshots through the existing ingress when a score changes.
+
+The next approved unreleased batch adds Racket Sport and Ultimate Disc in Team/Racket and Para Sport in Unspecified,
+bringing the library catalog to 196 canonical types. Bare FIT Racket (`64`) preserves the broad category; recognized
+Racket sub-sports or precise racket profile names retain their specific types. Para Sport (`68`) retains a recognized
+specific profile when supplied. Ultimate Disc and Ultimate Frisbee names establish Ultimate Disc; sub-sport `92`
+alone does not. Suunto's bare `64` exports for Badminton, Table tennis, Racquet ball, and Squash become Racket Sport
+without precise source/profile names; Padel (`64/85`) remains Padel.
+
+The other seven mappings reuse existing types: AMRAP, EMOM, and Tabata use HIIT (`62/73`, `62/74`, `62/75`),
+Dynamic Apnea uses Pool Apnea (`53/121`), E-Bike Fitness uses E-Biking (`21/28`), Casual Walking uses Walking
+(`11/30`), and Bike Commute uses Cycling (`2/48`). Specific FIT pairs require their documented parents before
+sub-sport fallback. Existing canonical Racquet Ball JSON stays Racquet Ball; the broad `racket` alias now resolves
+to Racket Sport. Do not reinterpret stored Racquet Ball records without retained source evidence.
+
+The existing Training registry resolves the three new types and Pool Apnea to volume-only Other training with omitted
+distance. HIIT aliases retain Fitness/Gym conditioning; E-Biking and Cycling retain the Cycling context, recorded-load
+and zone policies, and applicable cycling durability; Walking retains its Walking context and recorded-load policies.
+The three new types have no library durability adapter. Dynamic Apnea inherits Pool Apnea's Diving terrain-summary
+exclusions, including native JSON normalization. Usable power curves stay isolated by exact canonical type. The same
+TSS policy holds for all 196 types: true or omission preserves finite provider TSS exactly, including zero and legacy
+methodless scores; false discards the score and method, recalculates with sufficient eligible inputs, and leaves both
+unset otherwise.
+
+MCP impact review: the built 196-type catalog passes the existing strict activity-type output schema in ESM and CJS;
+the public output and Training-impact suites pass 113 tests. Canonical numeric tokens, units, metric discovery,
+read projections, scopes, consent, tools, mutations, and registered wire schemas are unchanged. No Training formula,
+derived schema, planning or provider-delivery capability, write path, provider transport, queue lifecycle, or monitoring
+change is introduced. This is classification work, with no Training planning surface change or MCP deferral. Current
+Help remains accurate because supported activities use the installed dynamic catalog.
+
+Adopt the library in the application and Functions together. Their installed Sports Lib `21.5.0` catalog still contains
+131 types; the local unreleased build has the same package version but is not adopted. A separately approved targeted
+source-backed reparse can correct identified historical Generic, Racquet Ball, or Diving classifications when the source
+retains enough detail. Regenerate affected event summaries, activity-type aggregates, applicable durability evidence,
+and Training snapshots through the existing ingress. A collapsed broad label cannot recover missing detail. Saved
+routes need no reparse; no global reparse, package adoption, or deployment was run. The Sports Lib importing guide owns
+the detailed aliases, profile precedence, and FIT parent guards.
+
+The next approved Garmin profile-name batch adds 20 aliases for existing canonical types: Bike Indoor, Bike Tour,
+Road Bike, Gravel Bike, MTB, Climb Indoor, Row Indoor, XC Classic Ski, XC Skate Ski, Pool Swim, Bike, eBike, Cardio,
+Floor Climb, Strength, Fish, Horseback, Hunt, Kayak, and Row. It keeps the catalog at 196 unique types and reuses each
+target's group, indoor/stroke-rate hints, durability adapters, and TSS calculation eligibility. Indoor Climbing and
+Floor Climbing retain their existing Outdoor Adventures group. The shared eBike spelling also recognizes Polar's
+`E_BIKE` identifier. FIT classification uses the actual sport-profile field; existing numeric sport/subsport precedence
+is unchanged.
+
+Verification: the profile-name importer suite passes 286 tests, and the activity-type, JSON importer, FIT importer,
+and TSS integration suites pass 3,524 tests. Both package formats build, the documentation build verifies 13 pages,
+and all 20 aliases resolve to their canonical Training contexts. Full-catalog runtime checks cover both TSS settings,
+zero and methodless imported scores, JSON regeneration, strict MCP catalog output, and all 121 audited Suunto protocol
+pairs. The public MCP output and Training-impact suites pass 113 tests. Default/true keeps the provider's finite TSS;
+false discards it and uses the existing calculation policy.
+
+MCP impact review: this alias batch changes no numeric metric, unit, Training formula, planning surface, derived schema,
+wire schema, read projection, consent, scope, mutation, provider delivery, persisted write path, transport, queue lifecycle,
+or monitoring. Existing canonical classifications already fit the strict output contract. No MCP deferral is needed.
+Help's supported-activities list uses the installed dynamic catalog and remains accurate.
+
+Adopt the application and Functions packages together before using these aliases in production. Their installed catalog
+still has 131 types. A separately approved targeted source-backed reparse can correct historical Generic classifications
+when the original profile name is retained. Regenerate affected event summaries, activity-type aggregates, applicable
+durability evidence, and Training snapshots through the existing ingress. Saved routes need no reparse. No package
+adoption, source reparse, deployment, or production-data mutation was run for this batch.
+
+The remaining approved provider-name batch maps 143 source entries (13 Garmin, 123 Polar, and 7 Strava). It adds
+46 canonical types and brings the local unreleased catalog to 242. Existing targets retain their exact Training contexts;
+all 46 new canonical types currently resolve to volume-only Other training with omitted distance. Library activity
+groups do not add a modeled Training discipline, intensity/load policy, planning capability, or provider delivery support.
+Crosscountry Running inherits Sports Lib's running-speed durability adapter, while Kickbiking and Mountain Bike
+Orienteering inherit cycling-power; the other 43 new types have no library durability adapter. Training's independent
+capability registry still controls whether that evidence is used. No Training registry or formula was changed here.
+
+The optional provider context on `ActivityTypesHelper.resolveActivityType` scopes ambiguous names such as Polar Enduro,
+Esports, Riding, Ultimate, and Garmin Ski. Native activity JSON uses recorded `creator.manufacturer`; FIT uses recorded
+manufacturer identity and the actual sport-profile field. Recognized Polar profiles can refine the documented broad
+FIT exports from its AccessLink appendix, while specific incompatible pairs remain unchanged. Garmin Snorkel requires
+its explicit profile name, preserving unnamed diving and explicit scuba/apnea classifications. Garmin Breathwork remains
+separate from Meditation; numeric Generic/Breathing without that profile stays Meditation. Backcountry Snowboarding
+remains distinct from Splitboarding. The Sports Lib importing guide owns the full mapping table and guards.
+
+Verification: all 4,525 focused activity catalog, FIT importer, profile, JSON, and TSS tests pass. ESM and CommonJS
+builds, lint (no errors), and the 13-page documentation build pass. Runtime checks cover both TSS settings across all
+242 types, including zero/methodless provider scores and JSON regeneration; all 143 approved mappings, all 121 Suunto
+protocol pairs, and every documented Garmin (100), Polar (175 names plus API identifiers), and Strava (56) name resolve
+with source context. All canonical values remain stable across provider contexts. The strict MCP catalog accepts all
+242 types, the public-output and Training-impact suites pass 113 tests, and the MCP contract check reports compatibility
+with the repository's existing reviewed developer-refresh changes. This sport batch introduces no public contract change.
+
+The unchanged FIT parser source also parses the external 68,003-file corpus: 68,002 pass strict mode, one known header-CRC
+failure recovers in force mode, and none is unrecoverable. Comparing the 4,129 activity sessions in 4,055 corpus files
+against the preceding Sports Lib build yields no classification changes. Five sessions omit the sport field, one uses
+unsupported sport ID 127, and 97 remain Generic. These source-data limitations are not inferred into specific sports.
+The aggregate unmapped-field report identifies decoding gaps for later investigation; no FIT parser profile was changed.
+
+MCP and monitoring impact: unchanged. There are no new numeric metric tokens/units, formulas, derived schemas, read
+projections, consent, scopes, mutations, planning/delivery capabilities, writes, provider transport, queues, or lifecycle
+changes. Existing dynamic catalogs handle the added canonical values; no MCP deferral is needed. Help's supported-activity
+section remains accurate because it uses the installed dynamic catalog and recorded-data semantics.
+
+Adopt Sports Lib in the application and Functions together before persisting these classifications; both currently
+retain their installed 131-type catalog. A separately approved targeted source-backed reparse requires the retained
+specific provider identifier/profile or original file. Regenerate affected event summaries, activity-type aggregates,
+applicable durability evidence, and Training snapshots through existing ingress. Saved routes need no reparse. No
+package adoption, publication, source reparse, deployment, or production-data mutation was run for this batch.
+
+The subsequent local compatibility corrections add Australian Football, Korfball and Netball as distinct Team/Racket
+sports, taking the unreleased catalog to 245. Each retains the existing volume-only Other training fallback with omitted
+distance, a false indoor hint, ordinary cadence semantics and no durability adapter. Fourteen Polar FIT display aliases,
+explicit Polar Cross-trainer/Stretching profiles, and Garmin's English/French Breathwork profiles recover the already
+approved classifications only when the retained input establishes them. Existing specific sport contexts and Training
+formulas remain unchanged. Source-backed historical classification corrections require ordinary summary/snapshot
+regeneration after coordinated package adoption; the [reparse runbook](../functions/src/reparse/SPORTS_LIB_REPARSE_RUNBOOK.md#unreleased-provider-profile-and-json-compatibility-corrections)
+owns the operational transition.
+
+Native event/activity/lap JSON reads tolerate legacy null/non-finite scalar stats, and summary exports omit non-finite
+numbers. Runtime stopped pace remains infinite; finite zero/negative metrics, imported TSS and method, structured stats
+and stream null gaps remain intact. Every canonical type keeps a finite provider TSS when preservation is true/default;
+false discards it and uses the existing calculation policy. This read correction needs no source reparse or Training
+schema bump. No numeric catalog token/unit, MCP output field, scope, projection, consent, mutation, planning or delivery
+capability changes. Queue lifecycle and sanitized persistence paths remain unchanged; no MCP deferral is needed.
+The downloaded public files remain outside the repositories, and profile-only cases use documented names and synthetic
+FIT. FIT Parser decoding work belongs to the separate agent; no parser changes are part of this task.
+
+Follow-up review prevents a known provider profile from replacing an unrelated FIT parent through a general alias;
+compatible broad-parent refinements and explicit parent/profile composites retain their existing behavior. Shared Polar
+profile spellings retain all documented FIT contexts. Route and route-file JSON also omit invalid scalar summaries and
+skip legacy null/non-finite values; files with no valid summaries use existing child-route aggregation. This read-only
+compatibility correction needs no saved-route source reparse. Training formulas, the installed packages, the public MCP
+contract and the sanitized persistence boundary remain unchanged; no MCP deferral is needed.
+
+Verification after follow-up review: 4,164 Sports Lib tests pass across 41 suites; both package formats build and 13 documentation pages verify.
+All 171 Polar FIT appendix profiles resolve under their documented pair/name inputs. All 170 valid public FIT files
+survive JSON re-import (112 failed before the correction); one truncated sample remains rejected. All 41 provider TSS
+scores pass default/true preservation and false removal/recalculation. Runtime checks cover all 245 types, the 121
+Suunto protocol pairs and the strict MCP catalog. The 113 MCP output/Training-impact tests and contract check pass.
+Changed-file lint passes; repository-wide lint reports existing errors in unchanged files. No package adoption or
+production rewrite was performed.
 
 Sports Lib `20.3.0` adds canonical Health and Sleep scalar JSON classes. Training uses the shared dual reader for the
 sleep duration, score, HRV, and sleep-heart-rate aggregates it already consumes; no Training formula or derived schema

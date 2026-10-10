@@ -2110,6 +2110,73 @@ describe('PlansWorkspaceComponent', () => {
     expect(fixture.componentInstance.selectedPlanId()).toBe('active-plan');
   });
 
+  it('offers activation for a paused plan without enabling new service sync, and locks duplicate actions', async () => {
+    const plan = { ...schedule.plans[0], id: 'paused-plan', name: 'Next block', lifecycle: 'paused' as const };
+    schedule.plans.push(plan);
+    const delivery = TestBed.inject(TrainingDeliveryService);
+    vi.spyOn(delivery, 'anyReady').mockReturnValue(true);
+    vi.spyOn(delivery, 'isSetupAvailable').mockImplementation(provider => provider === 'garmin');
+    setRouteState({ planId: plan.id });
+    const fixture = await renderPlans();
+    const hint: HTMLElement = fixture.nativeElement.querySelector('.plan-activation-hint');
+    expect(hint.textContent).toContain('Any plan sync you’ve already enabled resumes for eligible upcoming workouts.');
+    expect(hint.textContent).toContain('This will pause Autumn build.');
+    expect(mutate).not.toHaveBeenCalled(); expect(haptics.selection).not.toHaveBeenCalled();
+    exportLibraryQa(fixture, 'plan-activation', '.plan-scope');
+    let finish!: (value: unknown) => void;
+    mutate.mockImplementationOnce(() => new Promise(resolve => { finish = resolve; }));
+    const button: HTMLButtonElement = hint.querySelector('button')!;
+    button.click(); fixture.detectChanges();
+    expect(button.disabled).toBe(true); expect(button.textContent).toContain('Activating…');
+    expect(hint.querySelector('mat-spinner')).not.toBeNull();
+    exportLibraryQa(fixture, 'plan-activating', '.plan-scope');
+    await fixture.componentInstance.setPlanLifecycle(plan, 'active');
+    expect(mutate).toHaveBeenCalledOnce();
+    expect(mutate.mock.calls[0][0]).toMatchObject({
+      operation: { kind: 'set-plan-lifecycle', planId: plan.id, lifecycle: 'active' },
+      expectedRevisions: [
+        { scope: 'state', id: 'current', revision: 4 },
+        { scope: 'plan', id: 'paused-plan', revision: 2 },
+        { scope: 'plan', id: 'active-plan', revision: 2 },
+      ],
+    });
+    expect(haptics.selection).toHaveBeenCalledOnce(); expect(haptics.success).not.toHaveBeenCalled();
+    finish({ state: schedule.state, plans: [], workouts: [], removedPlanIds: [], permanentlyDeletedWorkoutIds: [] });
+    await fixture.whenStable(); fixture.detectChanges();
+    expect(haptics.success).toHaveBeenCalledOnce(); expect(button.disabled).toBe(false);
+  });
+
+  it.each(['active', 'archived'] as const)('does not show an activation hint for a %s plan', async lifecycle => {
+    schedule.plans[0] = { ...schedule.plans[0], lifecycle };
+    const fixture = await renderPlans();
+    expect(fixture.nativeElement.querySelector('.plan-activation-hint')).toBeNull();
+    expect(mutate).not.toHaveBeenCalled();
+  });
+
+  it('keeps failed activation available and suppresses late feedback after an owner change', async () => {
+    schedule.plans[0] = { ...schedule.plans[0], lifecycle: 'paused' };
+    schedule.state.activePlanId = null;
+    const fixture = await renderPlans();
+    const plan = fixture.componentInstance.selectedPlan()!;
+    expect(fixture.nativeElement.querySelector('.plan-activation-hint').textContent).not.toContain('This will pause');
+    mutate.mockRejectedValueOnce(new Error('Reload the schedule'));
+    await fixture.componentInstance.setPlanLifecycle(plan, 'active'); fixture.detectChanges();
+    expect(haptics.error).toHaveBeenCalledOnce(); expect(haptics.success).not.toHaveBeenCalled();
+    expect(fixture.nativeElement.querySelector('.plan-activation-hint button').disabled).toBe(false);
+    haptics.error.mockClear(); snackBarOpen.mockClear();
+    let finish!: (value: unknown) => void;
+    mutate.mockImplementationOnce(() => new Promise(resolve => { finish = resolve; }));
+    const pending = fixture.componentInstance.setPlanLifecycle(plan, 'active');
+    userSignal.set(null); userSubject.next(null); fixture.detectChanges();
+    expect(fixture.nativeElement.querySelector('.plan-activation-hint')).toBeNull();
+    finish({ state: schedule.state, plans: [], workouts: [], removedPlanIds: [], permanentlyDeletedWorkoutIds: [] });
+    await pending;
+    expect(haptics.success).not.toHaveBeenCalled(); expect(haptics.error).not.toHaveBeenCalled();
+    expect(snackBarOpen).not.toHaveBeenCalled();
+    await fixture.componentInstance.setPlanLifecycle(plan, 'active');
+    expect(mutate).toHaveBeenCalledTimes(2);
+  });
+
   it('offers named colors on creation, retains a failed draft, and saves only the selected palette key', async () => {
     const fixture = await renderPlans();
     fixture.componentInstance.beginPlanCreation();
@@ -3359,26 +3426,30 @@ describe('PlansWorkspaceComponent', () => {
     expect(mutate).not.toHaveBeenCalled();
   });
 
-  function exportLibraryQa(fixture: ComponentFixture<PlansWorkspaceComponent>, name: string): void {
+  function exportLibraryQa(fixture: ComponentFixture<PlansWorkspaceComponent>, name: string, selector = '.workout-library'): void {
     if (!process.env.TRAINING_DELIVERY_QA_DIR) return;
     const sass = createRequire(createRequire(resolve('package.json')).resolve('@angular/build/package.json'))('sass');
     const css = [
       ['app-plans-workspace', 'src/app/components/plans/plans-workspace.component.scss'],
       ['app-compact-row', 'src/app/components/shared/compact-row/compact-row.component.scss'],
+      ['app-training-delivery-button', 'src/app/components/plans/training-delivery-button.component.scss'],
     ].map(([host, file]) => sass.compileString(host + ' {' + readFileSync(file, 'utf8')
       .replace(/:host\(([^)]+)\)/g, '&$1').replace(/:host/g, '&') + '}').css).join('\n');
-    const source = fixture.nativeElement.querySelector('.workout-library') as HTMLElement;
+    const source = fixture.nativeElement.querySelector(selector) as HTMLElement;
     const rendered = source.cloneNode(true) as HTMLElement;
     const inputs = rendered.querySelectorAll('input');
     source.querySelectorAll('input').forEach((input, index) => {
       inputs[index].setAttribute('value', input.value);
       inputs[index].toggleAttribute('checked', input.checked);
     });
-    writeFileSync(join(process.env.TRAINING_DELIVERY_QA_DIR, `${name}.html`),
+    const html =
       '<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">'
       + '<link rel="stylesheet" href="styles.css">' + Array.from(document.head.querySelectorAll('style')).map(style => style.outerHTML).join('')
       + '<style>' + css + '</style></head><body><app-plans-workspace><main class="plans-workspace qs-workspace-page">'
-      + rendered.outerHTML + '</main></app-plans-workspace></body></html>');
+      + rendered.outerHTML + '</main></app-plans-workspace></body></html>';
+    writeFileSync(join(process.env.TRAINING_DELIVERY_QA_DIR, `${name}.html`), html);
+    if (selector === '.plan-scope') writeFileSync(join(process.env.TRAINING_DELIVERY_QA_DIR, `${name}-dark.html`),
+      html.replace('<body>', '<body class="dark-theme">'));
   }
 
   async function renderPlans() {

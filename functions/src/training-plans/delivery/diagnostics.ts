@@ -3,7 +3,7 @@ import type { PlannedWorkoutProviderId } from '../../../../shared/planned-workou
 import type { DeliveryOperation, DeliveryTransportProgress, TrainingDeliveryTransport } from './contracts';
 
 export type DeliveryDiagnosticPhase = 'execute' | 'recover';
-type SuuntoDiagnosticMapping = 'suunto-guides-v2' | 'suunto-guides-v3' | 'suunto-guides-v4' | 'suunto-guides-v5' | 'suunto-guides-v6' | 'suunto-guides-v7' | 'suunto-guides-v8' | 'suunto-guides-v9' | 'suunto-guides-v10' | 'suunto-guides-v11' | 'suunto-guides-v12' | 'unknown' | 'not_applicable';
+type SuuntoDiagnosticMapping = 'suunto-guides-v2' | 'suunto-guides-v3' | 'suunto-guides-v4' | 'suunto-guides-v5' | 'suunto-guides-v6' | 'suunto-guides-v7' | 'suunto-guides-v8' | 'suunto-guides-v9' | 'suunto-guides-v10' | 'suunto-guides-v11' | 'suunto-guides-v12' | 'suunto-guides-v13' | 'unknown' | 'not_applicable';
 
 /** Resolve once per claimed operation. Diagnostics must never cause transport
  * failure or fall back to the adapter's current version for an old journal. */
@@ -13,7 +13,7 @@ export function deliveryDiagnosticMapping(provider: PlannedWorkoutProviderId, tr
   if (operation.kind === 'remove') return 'not_applicable';
   try {
     const version = transport.diagnosticMappingVersion?.(operation);
-    return version === 'suunto-guides-v2' || version === 'suunto-guides-v3' || version === 'suunto-guides-v4' || version === 'suunto-guides-v5' || version === 'suunto-guides-v6' || version === 'suunto-guides-v7' || version === 'suunto-guides-v8' || version === 'suunto-guides-v9' || version === 'suunto-guides-v10' || version === 'suunto-guides-v11' || version === 'suunto-guides-v12' ? version : 'unknown';
+    return version === 'suunto-guides-v2' || version === 'suunto-guides-v3' || version === 'suunto-guides-v4' || version === 'suunto-guides-v5' || version === 'suunto-guides-v6' || version === 'suunto-guides-v7' || version === 'suunto-guides-v8' || version === 'suunto-guides-v9' || version === 'suunto-guides-v10' || version === 'suunto-guides-v11' || version === 'suunto-guides-v12' || version === 'suunto-guides-v13' ? version : 'unknown';
   } catch { return 'unknown'; } // Never log an exception or private prescription.
 }
 
@@ -21,7 +21,7 @@ export function deliveryDiagnosticLabels(mapping: SuuntoDiagnosticMapping | unde
   if (mapping === undefined) return {};
   // Allowlist again at the log boundary, including malformed runtime values.
   return {
-    guideMappingVersion: ['suunto-guides-v2', 'suunto-guides-v3', 'suunto-guides-v4', 'suunto-guides-v5', 'suunto-guides-v6', 'suunto-guides-v7', 'suunto-guides-v8', 'suunto-guides-v9', 'suunto-guides-v10', 'suunto-guides-v11', 'suunto-guides-v12', 'not_applicable'].includes(mapping) ? mapping : 'unknown',
+    guideMappingVersion: ['suunto-guides-v2', 'suunto-guides-v3', 'suunto-guides-v4', 'suunto-guides-v5', 'suunto-guides-v6', 'suunto-guides-v7', 'suunto-guides-v8', 'suunto-guides-v9', 'suunto-guides-v10', 'suunto-guides-v11', 'suunto-guides-v12', 'suunto-guides-v13', 'not_applicable'].includes(mapping) ? mapping : 'unknown',
     deliveryPhase: phase === 'recover' || phase === 'execute' ? phase : 'unknown',
   };
 }

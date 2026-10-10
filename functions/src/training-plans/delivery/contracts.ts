@@ -1,5 +1,5 @@
 import type { Firestore, Transaction } from 'firebase-admin/firestore';
-import type { WeightUnits } from '@sports-alliance/sports-lib';
+import type { WeightUnits, UserUnitSettingsInterface } from '@sports-alliance/sports-lib';
 import type { PlannedWorkoutProviderId } from '../../../../shared/planned-workout-providers';
 import type { ScheduledWorkoutV1 } from '../../../../shared/training-plans';
 import type { StrengthWorkoutDetailsV1 } from '../../../../shared/strength-workout';
@@ -58,6 +58,8 @@ export interface DeliveryOperation {
   strength?: StrengthWorkoutDetailsV1 | null;
   /** Immutable owner preference for Suunto strength text, never an authored recipe field. */
   suuntoWeightUnits?: WeightUnits;
+  /** Immutable private app-preview units, excluded from client/MCP projections. */
+  suuntoUnitSettings?: UserUnitSettingsInterface;
   artifact: DeliveryArtifact | null;
   /** One explicitly requested removal of a past, uncompleted owned copy. */
   allowPastRemoval?: boolean;
@@ -146,7 +148,9 @@ export interface TrainingDeliveryTransport {
   /** Provider/product policy: withdraw an existing upcoming copy when moved beyond its window. */
   withdrawOutsideHorizon?: boolean;
   assess(workout: ScheduledWorkoutV1, destinationKey: string, timeZone: string,
-    strength?: StrengthWorkoutDetailsV1 | null, suuntoWeightUnits?: WeightUnits): DeliveryAssessment;
+    strength?: StrengthWorkoutDetailsV1 | null, suuntoWeightUnits?: WeightUnits,
+    suuntoUnitSettings?: UserUnitSettingsInterface,
+    suuntoApprovalUnitSettings?: readonly UserUnitSettingsInterface[]): DeliveryAssessment;
   canRemove(artifact: DeliveryArtifact, today: string, allowPastRemoval?: boolean): boolean;
   execute(operation: DeliveryOperation, checkpoint: DeliveryCheckpoint, guard: DeliveryRequestGuard): Promise<DeliveryArtifact | null>;
   recover(operation: DeliveryOperation, checkpoint: DeliveryCheckpoint, guard: DeliveryRequestGuard): Promise<DeliveryRecovery>;
@@ -252,6 +256,9 @@ export interface DeliveryLedgerV1 {
   updatedAtMs: number;
 }
 export interface MappingApprovalProof {
+  /** Private bounded provenance for unchanged Suunto app-preview unit conversions. */
+  suuntoApprovedUnitSettings?: UserUnitSettingsInterface;
+  suuntoMappingUnitSettings?: UserUnitSettingsInterface;
   approvedDigest: string;
   mappingDigest: string;
   contentDigest: string;
@@ -276,6 +283,7 @@ export interface DeliveryContext {
   workout: ScheduledWorkoutV1 | null;
   strength?: StrengthWorkoutDetailsV1 | null;
   suuntoWeightUnits?: WeightUnits;
+  suuntoUnitSettings?: UserUnitSettingsInterface;
   planActive: boolean;
   setting: TrainingDeliverySettingsV1 | null;
   override: TrainingDeliverySettingsV1 | null;

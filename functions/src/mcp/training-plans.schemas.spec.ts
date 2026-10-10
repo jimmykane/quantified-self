@@ -150,7 +150,7 @@ describe('ordered and duplicated interval recipes', () => {
       savedWorkoutRef: 'opaque-saved', title: 'Ordered intervals', status: 'active', revision: 2,
       createdAtMs: 1, updatedAtMs: 2, structure: input,
     } }).savedWorkout.structure).toEqual(input);
-    for (const field of ['sourceDuration', 'sourceDistance', 'sourcePace', 'providerWorkoutId', 'swolf', 'guideFields']) {
+    for (const field of ['sourceDuration', 'sourceDistance', 'sourcePace', 'providerWorkoutId', 'swolf', 'guideFields', 'richText', 'suuntoUnitSettings']) {
       const leaked = { ...input, nodes: [{ ...input.nodes[0], [field]: { private: true } }, ...input.nodes.slice(1)] };
       expect(TRAINING_CHANGE_SCHEMA.safeParse({ ...update, structure: leaked }).success).toBe(false);
       expect(TRAINING_READ_OUTPUTS.get_saved_workout.safeParse({ libraryRevision: 3, savedWorkout: {

@@ -26,7 +26,7 @@ function runInsideEmulators(group, files, options, revision) {
   const started = performance.now();
   try {
     run(process.execPath, [join(functionsRoot, 'node_modules/vitest/vitest.mjs'), 'run',
-      '--config', join(functionsRoot, 'vitest.config.ts'), ...files,
+      '--config', join(functionsRoot, 'vitest.emulators.config.ts'), ...files,
       '--maxWorkers=1', '--fileParallelism=false', '--reporter=default', '--reporter=json', `--outputFile.json=${output}`]);
     const report = JSON.parse(readFileSync(output, 'utf8'));
     assertExecutedReport(report, files, functionsRoot);

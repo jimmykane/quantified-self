@@ -5,8 +5,9 @@ import { getDashboardChartCatalog } from '../../helpers/dashboard-chart-catalog.
 import { HealthMetricQueryService } from '../../services/health-metric-query.service';
 import { AppUserInterface } from '../../models/app-user.interface';
 import { ActivatedRoute, Router } from '@angular/router';
+import { DOCUMENT, isPlatformBrowser } from '@angular/common';
 import { TimelineNotesWorkspaceComponent } from '../timeline-notes/timeline-notes-workspace.component';
-import { ChangeDetectionStrategy, Component, DestroyRef, ElementRef, Injector, afterNextRender, computed, effect, inject, signal, untracked, viewChild } from '@angular/core';
+import { ChangeDetectionStrategy, Component, DestroyRef, ElementRef, Injector, PLATFORM_ID, afterNextRender, computed, effect, inject, signal, untracked, viewChild } from '@angular/core';
 import { takeUntilDestroyed, toSignal } from '@angular/core/rxjs-interop';
 import { MatButtonModule } from '@angular/material/button';
 import { MatButtonToggleModule } from '@angular/material/button-toggle';
@@ -146,6 +147,13 @@ interface QueuedHealthWorkspacePreferenceWrite {
   highlightSources?: AppHealthHighlightSources;
 }
 
+interface HealthOverviewPosition {
+  scroller: HTMLElement;
+  top: number;
+  left: number;
+  focus: HTMLElement | null;
+}
+
 const RANGE_LABELS: Record<HealthWorkspaceRange, string> = {
   today: '1 day',
   '14d': '14 days',
@@ -242,8 +250,15 @@ export class HealthWorkspaceComponent {
   private readonly destroyRef = inject(DestroyRef);
   private readonly metricDetail = viewChild<ElementRef<HTMLElement>>('metricDetail');
   private readonly overview = viewChild<HealthCategoryOverviewComponent, ElementRef<HTMLElement>>('overview', { read: ElementRef });
+  private readonly host = inject<ElementRef<HTMLElement>>(ElementRef);
+  private readonly document = inject(DOCUMENT);
+  private readonly isBrowser = isPlatformBrowser(inject(PLATFORM_ID));
   private readonly injector = inject(Injector);
   readonly metricDetailOpen = signal(false);
+  private metricNavigationView: HealthWorkspaceMetricSelection | null = null;
+  private metricNavigationGeneration = 0;
+  private overviewPosition: HealthOverviewPosition | null = null;
+  private pendingMetricNavigation: { metric: HealthWorkspaceMetricSelection | null } | null = null;
   private manualDialogRef: MatDialogRef<unknown> | null = null;
   private manualAccountGeneration = 0;
   private readonly snackBar = inject(MatSnackBar);
@@ -935,6 +950,7 @@ export class HealthWorkspaceComponent {
       );
       if (uid === this.workspacePreferenceUserID) {
         if (urlMetricChanged) {
+          untracked(() => this.prepareMetricNavigation(urlMetric));
           this.metricDetailOpen.set(urlMetric !== null);
           if (urlMetric !== null) {
             // URL hydration and Back/Forward restore the view without another
@@ -956,6 +972,12 @@ export class HealthWorkspaceComponent {
       }
       const accountChanged = this.workspacePreferenceUserID !== null;
       this.workspacePreferenceUserID = uid;
+      this.metricNavigationGeneration += 1;
+      this.metricNavigationView = null;
+      this.overviewPosition = null;
+      if (!accountChanged && urlMetric !== null) {
+        untracked(() => this.prepareMetricNavigation(urlMetric));
+      }
       this.metricDetailOpen.set(!accountChanged && urlMetric !== null);
       this.sourceInventory.set({ uid, providers: [] });
       this.selectedProviders.set([]);
@@ -1250,27 +1272,61 @@ export class HealthWorkspaceComponent {
   selectPriorityMetric(metric: HealthWorkspaceMetricSelection): void {
     // Opening an already selected metric is still navigation from the highlights.
     this.haptics.selection();
+    this.prepareMetricNavigation(normalizeHealthWorkspaceMetric(metric));
     this.selectAndSaveMetric(metric);
     this.metricDetailOpen.set(true);
     this.navigateMetricHistory(normalizeHealthWorkspaceMetric(metric));
-    afterNextRender(() => {
-      if (!this.metricDetailOpen()) return;
-      const heading = this.metricDetail()?.nativeElement;
-      heading?.focus({ preventScroll: true });
-      heading?.scrollIntoView?.({ block: 'start', inline: 'nearest', behavior: 'auto' });
-    }, { injector: this.injector });
   }
 
   showOverview(): void {
     if (!this.metricDetailOpen()) return;
     this.haptics.selection();
+    this.prepareMetricNavigation(null);
     this.metricDetailOpen.set(false);
     this.navigateMetricHistory(null);
+  }
+
+  private pageScroller(): HTMLElement {
+    // The app scrolls its Material shell, not the browser viewport. Standalone
+    // workspace rendering falls back to the document's actual scroll owner.
+    return this.host.nativeElement.closest<HTMLElement>('mat-sidenav-content')
+      || (this.document.scrollingElement as HTMLElement | null) || this.document.documentElement;
+  }
+
+  private prepareMetricNavigation(metric: HealthWorkspaceMetricSelection | null): void {
+    if (!this.isBrowser || metric === this.metricNavigationView) return;
+    const uid = this.signedInUserID();
+    const generation = ++this.metricNavigationGeneration;
+    // Back followed by another opening can happen before overview is rendered.
+    // Do not mistake the still-visible detail scroll for a new overview position.
+    if (metric !== null && this.metricNavigationView === null && !this.overview()?.nativeElement.hidden) {
+      const scroller = this.pageScroller();
+      const active = this.document.activeElement as HTMLElement | null;
+      this.overviewPosition = {
+        scroller, top: scroller.scrollTop, left: scroller.scrollLeft,
+        focus: active && this.overview()?.nativeElement.contains(active) ? active : null,
+      };
+    }
+    this.metricNavigationView = metric;
     afterNextRender(() => {
-      if (this.metricDetailOpen()) return;
-      const heading = this.overview()?.nativeElement.querySelector<HTMLElement>('#health-overview-title');
-      heading?.focus({ preventScroll: true });
-      heading?.scrollIntoView?.({ block: 'start', inline: 'nearest', behavior: 'auto' });
+      if (this.destroyRef.destroyed || generation !== this.metricNavigationGeneration
+        || uid !== this.signedInUserID() || this.metricDetailOpen() !== (metric !== null)) return;
+      if (metric !== null) {
+        if (this.selectedMetric() !== metric) return;
+        this.metricDetail()?.nativeElement.focus({ preventScroll: true });
+        const scroller = this.pageScroller();
+        scroller.scrollTop = 0;
+        scroller.scrollLeft = 0;
+      } else {
+        const position = this.overviewPosition;
+        const overview = this.overview()?.nativeElement;
+        const focus = position?.focus?.isConnected && overview?.contains(position.focus)
+          ? position.focus : overview?.querySelector<HTMLElement>('#health-overview-title');
+        focus?.focus({ preventScroll: true });
+        const scroller = this.pageScroller();
+        scroller.scrollTop = position?.scroller === scroller ? position.top : 0;
+        scroller.scrollLeft = position?.scroller === scroller ? position.left : 0;
+      }
     }, { injector: this.injector });
   }
 
@@ -1285,19 +1341,26 @@ export class HealthWorkspaceComponent {
     if (changed || this.preferencesSaveFailed()) {
       this.haptics.selection();
     }
+    if (changed && this.metricDetailOpen()) this.prepareMetricNavigation(normalizedMetric);
     this.selectAndSaveMetric(metric);
     if (changed) this.navigateMetricHistory(normalizedMetric);
   }
 
   private navigateMetricHistory(metric: HealthWorkspaceMetricSelection | null, replaceUrl = false): void {
-    if (!replaceUrl && this.activatedRoute.snapshot.queryParamMap.get('metric') === metric) return;
+    // A rapid Back must supersede an opening whose URL has not committed yet.
+    if (!replaceUrl && (this.pendingMetricNavigation?.metric === metric
+      || !this.pendingMetricNavigation && this.activatedRoute.snapshot.queryParamMap.get('metric') === metric)) return;
+    const pending = { metric };
+    this.pendingMetricNavigation = pending;
     void this.dashboardRouter.navigate([], {
       relativeTo: this.activatedRoute,
       queryParams: { metric },
       queryParamsHandling: 'merge',
       preserveFragment: true,
       replaceUrl,
-    }).catch(() => undefined);
+    }).catch(() => undefined).finally(() => {
+      if (this.pendingMetricNavigation === pending) this.pendingMetricNavigation = null;
+    });
   }
 
   selectRange(range: HealthWorkspaceRange): void {
@@ -1694,6 +1757,7 @@ export class HealthWorkspaceComponent {
   }
 
   private revealManualMeasurement(metricId: ManualHealthMetricId, value: ManualHealthMeasurementDialogValue): void {
+    this.prepareMetricNavigation(metricId);
     this.metricDetailOpen.set(true);
     const metricIdsAdded: HealthMetricId[] = metricId === HEALTH_METRIC_IDS.BloodPressureSystolic
       ? [metricId, HEALTH_METRIC_IDS.BloodPressureDiastolic, ...(value.pulseValue !== undefined ? [HEALTH_METRIC_IDS.PulseRate] : [])]

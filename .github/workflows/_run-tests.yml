@@ -368,7 +368,7 @@ jobs:
         uses: actions/cache/save@v4
         with:
           path: tmp/delivery-timings/history.json
-          key: delivery-timings-v1-${{ runner.os }}-${{ hashFiles('package-lock.json', 'functions/package-lock.json', 'functions/vitest.config.ts', 'functions/src/test-setup.ts', 'tools/test-functions-emulators.mjs', 'tools/delivery-test-shards.mjs', 'tools/delivery-test-shard-cli.mjs') }}-${{ github.run_id }}-${{ github.run_attempt }}
+          key: delivery-timings-v1-${{ runner.os }}-${{ hashFiles('package-lock.json', 'functions/package-lock.json', 'functions/vitest.config.ts', 'functions/vitest.emulators.config.ts', 'functions/src/test-setup.ts', 'tools/functions-emulator-suites.mjs', 'tools/test-functions-emulators.mjs', 'tools/delivery-test-shards.mjs', 'tools/delivery-test-shard-cli.mjs') }}-${{ github.run_id }}-${{ github.run_attempt }}
 
   delivery_plan:
     runs-on: ubuntu-latest
@@ -390,9 +390,9 @@ jobs:
         uses: actions/cache/restore@v4
         with:
           path: tmp/delivery-timings/history.json
-          key: delivery-timings-v1-${{ runner.os }}-${{ hashFiles('package-lock.json', 'functions/package-lock.json', 'functions/vitest.config.ts', 'functions/src/test-setup.ts', 'tools/test-functions-emulators.mjs', 'tools/delivery-test-shards.mjs', 'tools/delivery-test-shard-cli.mjs') }}-${{ github.run_id }}-${{ github.run_attempt }}
+          key: delivery-timings-v1-${{ runner.os }}-${{ hashFiles('package-lock.json', 'functions/package-lock.json', 'functions/vitest.config.ts', 'functions/vitest.emulators.config.ts', 'functions/src/test-setup.ts', 'tools/functions-emulator-suites.mjs', 'tools/test-functions-emulators.mjs', 'tools/delivery-test-shards.mjs', 'tools/delivery-test-shard-cli.mjs') }}-${{ github.run_id }}-${{ github.run_attempt }}
           restore-keys: |
-            delivery-timings-v1-${{ runner.os }}-${{ hashFiles('package-lock.json', 'functions/package-lock.json', 'functions/vitest.config.ts', 'functions/src/test-setup.ts', 'tools/test-functions-emulators.mjs', 'tools/delivery-test-shards.mjs', 'tools/delivery-test-shard-cli.mjs') }}-
+            delivery-timings-v1-${{ runner.os }}-${{ hashFiles('package-lock.json', 'functions/package-lock.json', 'functions/vitest.config.ts', 'functions/vitest.emulators.config.ts', 'functions/src/test-setup.ts', 'tools/functions-emulator-suites.mjs', 'tools/test-functions-emulators.mjs', 'tools/delivery-test-shards.mjs', 'tools/delivery-test-shard-cli.mjs') }}-
 
       - name: Plan balanced delivery shards
         run: node tools/delivery-test-shard-cli.mjs plan tmp/delivery-timings/history.json tmp/delivery-shards/plan.json

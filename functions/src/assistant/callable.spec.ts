@@ -581,6 +581,57 @@ describe('Assistant callable', () => {
     );
   });
 
+  it.each([
+    { trainingPlanChangesEnabled: true, trainingDeliveryEnabled: false },
+    { trainingPlanChangesEnabled: false, trainingDeliveryEnabled: true },
+    { trainingPlanChangesEnabled: true, trainingDeliveryEnabled: true },
+  ])('accepts independent Training consent with omitted off switches: %j', async permissions => {
+    const { dependencies, store, conversation } = createDependencies();
+    const consent = { trainingPlansEnabled: true,
+      ...(permissions.trainingPlanChangesEnabled ? { trainingPlanChangesEnabled: true } : {}),
+      ...(permissions.trainingDeliveryEnabled ? { trainingDeliveryEnabled: true } : {}) };
+    vi.mocked(store.beginTurn).mockResolvedValue({ kind: 'started', conversationId: conversation.conversationId,
+      turnId: 'turn-1', history: [], locationAccess: 'coordinate_free', ...consent });
+    vi.mocked(store.getActiveConversationState).mockResolvedValue({ conversation, pendingRequestId: null,
+      locationAccess: 'coordinate_free', ...consent });
+    vi.mocked(dependencies.answer).mockImplementation(async input => {
+      await input.assertTrainingWriteAccess!();
+      await input.onBillableAttempt();
+      await input.assertTrainingWriteAccess!();
+      return { answer: 'Review the proposal before applying.', evidence: [], toolNames: [] };
+    });
+    await expect(runAssistantChat({ requestId: REQUEST_ID, message: 'Prepare a Training change.',
+      timeZone: 'Europe/Helsinki', conversationId: conversation.conversationId,
+      trainingPlansEnabled: true, ...permissions }, context, dependencies)).resolves.toMatchObject({ conversation });
+    expect(store.getActiveConversationState).toHaveBeenCalledTimes(2);
+    expect(dependencies.answer).toHaveBeenCalledOnce();
+    expect(store.completeTurn).toHaveBeenCalledOnce();
+  });
+
+  it.each(['schedule', 'delivery', 'read', 'generation'] as const)('rejects %s consent changes during a Training read', async revoked => {
+    const { dependencies, store, conversation } = createDependencies();
+    const consent = { trainingPlansEnabled: true, trainingPlanChangesEnabled: true, trainingDeliveryEnabled: true };
+    vi.mocked(store.beginTurn).mockResolvedValue({ kind: 'started', conversationId: conversation.conversationId,
+      turnId: 'turn-1', history: [], locationAccess: 'coordinate_free', ...consent });
+    const current = { conversation, pendingRequestId: null, locationAccess: 'coordinate_free' as const, ...consent };
+    const changed = { ...current, ...(revoked === 'generation' ? { conversation: { ...conversation, conversationId: 'new-chat' } }
+      : revoked === 'read' ? { trainingPlansEnabled: undefined }
+      : revoked === 'schedule' ? { trainingPlanChangesEnabled: undefined } : { trainingDeliveryEnabled: undefined }) };
+    vi.mocked(store.getActiveConversationState).mockResolvedValueOnce(current).mockResolvedValue(changed);
+    vi.mocked(dependencies.answer).mockImplementation(async input => {
+      await input.assertTrainingWriteAccess!();
+      await input.onBillableAttempt();
+      await input.assertTrainingWriteAccess!();
+      return { answer: 'Must not release this proposal.', evidence: [], toolNames: [] };
+    });
+    await expect(runAssistantChat({ requestId: REQUEST_ID, message: 'Prepare a Training change.',
+      timeZone: 'Europe/Helsinki', conversationId: conversation.conversationId, ...consent }, context, dependencies))
+      .rejects.toMatchObject({ code: 'aborted' });
+    expect(dependencies.answer).toHaveBeenCalledOnce();
+    expect(store.completeTurn).not.toHaveBeenCalled();
+    expect(store.releaseTurn).toHaveBeenCalledOnce();
+  });
+
   it('releases a pending Training preparation turn without finalizing its allowance', async () => {
     const { dependencies, store, reservation } = createDependencies();
     vi.mocked(dependencies.answer).mockImplementation(async input => {

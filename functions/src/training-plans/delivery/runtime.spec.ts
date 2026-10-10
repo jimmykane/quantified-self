@@ -81,7 +81,7 @@ describe('Production Training delivery rollout', () => {
       destinationKey: inspection.destinationKey, connectionGeneration: inspection.connectionGeneration, timeZone: inspection.timeZone,
       workout: strengthWorkout, strength, suuntoWeightUnits: WeightUnits.Pounds, artifact: null, progress: null, contentDigest: 'fixture-content',
       digest: transport.assess(strengthWorkout, inspection.destinationKey, inspection.timeZone, strength, WeightUnits.Pounds).digest };
-    expect(transport.diagnosticMappingVersion?.(operation)).toBe('suunto-guides-v8');
+    expect(transport.diagnosticMappingVersion?.(operation)).toBe('suunto-guides-v13');
     operation.digest = assessSuuntoGuideV7ForRecovery(strengthWorkout, inspection.destinationKey, inspection.timeZone, owner, strength).digest;
     expect(transport.diagnosticMappingVersion?.(operation)).toBe('suunto-guides-v7');
     operation.digest = assessSuuntoGuideV6ForRecovery(strengthWorkout, inspection.destinationKey, inspection.timeZone, owner, strength).digest;

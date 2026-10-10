@@ -44,6 +44,9 @@
       [matTooltip]="scope() === 'history' && historyLabel() !== 'Workout sync history' ? 'Workout sync history' : ''">
     <mat-icon aria-hidden="true">sync</mat-icon>{{ buttonLabel() }}
   </button>
+    @if (showSetupHint()) {
+      <p class="delivery-setup-hint delivery-summary-detail">Optional Pro sync. Sends eligible upcoming workouts while this plan is active.</p>
+    }
     @if (!readState().loaded) {
       <span class="delivery-summary-detail" role="status">Loading sync settings…</span>
     } @else if (readState().error || summaryState().error) {

@@ -217,6 +217,12 @@ describe('help.content', () => {
       'Rowing and strength screens are unchanged', 'Sync your Suunto app and watch']) expect(content).toContain(phrase);
     expect(searchHelpSections(HELP_SECTIONS, 'Rest rem').map(section => section.id)).toContain('training-plans');
   });
+  it('explains the app-only Suunto Guide preview without promising new watch behavior', () => {
+    const content = HELP_SECTIONS.find(section => section.id === 'training-plans')!.content;
+    for (const phrase of ["a Guide's Description includes a readable workout preview", 'steps in order, grouped repeats',
+      'your complete step notes', 'exercises, sets, loads and rests', 'app-only text, not a new watch screen',
+      'Extremely large previews keep the short description', 'past and completed copies remain unchanged']) expect(content).toContain(phrase);
+  });
   it('explains pool-only measured SWOLF without target, pool-length or sensor promises', () => {
     const content = HELP_SECTIONS.find(section => section.id === 'training-plans')!.content;
     for (const phrase of ['pool-only **AvgSWOLF**', '**Avg SWOLF** on older Guides', '**SWOLF is a measured reading, not a target.**',
@@ -249,6 +255,14 @@ describe('help.content', () => {
     expect(HELP_SECTIONS.some(section => section.id === 'training-analysis')).toBe(true);
     expect(HELP_SECTIONS.some(section => section.id === 'plans-and-billing')).toBe(true);
     expect(HELP_SECTIONS.some(section => section.id === 'activity-calendar')).toBe(true);
+  });
+
+  it('makes prescription conflict recovery searchable without promising source verification', () => {
+    const content = HELP_SECTIONS.find(section => section.id === 'training-plans')!.content;
+    expect(searchHelpSections(HELP_SECTIONS, 'Prescription conflict').map(section => section.id)).toContain('training-plans');
+    expect(content).toContain('not just rename it or retry');
+    expect(content).toContain('saved count, exactly which recipes it verified and any unresolved items separately');
+    expect(content).toContain('can remain target-free');
   });
 
   it('distinguishes standard Suunto strength guidance from additional mapping-loss approval', () => {
@@ -408,6 +422,9 @@ describe('help.content', () => {
     expect(health).toContain('not repeated as cards on All');
     expect(health).toContain('category views do not repeat the highlights above their cards');
     expect(health).toContain('Recent-health highlights stay on the overview, not above the selected metric');
+    expect(health).toContain('previous scroll position');
+    expect(health).toContain('Changing to a different metric starts at the top');
+    expect(health).toContain('refreshing readings does not reset your scroll');
     expect(health).not.toContain("detailed charts, Highlights, and **Source observations**");
   });
   it('explains the Health metric title picker on both layouts and remembered selection', () => {
@@ -942,6 +959,13 @@ describe('help.content', () => {
     const planningSection = HELP_SECTIONS.find(section => section.id === 'training-plans');
 
     expect(planningSection?.content).toContain('You do not need to create a plan first');
+    expect(planningSection?.content).toContain('five three-minute efforts, not a five-mile run');
+    expect(planningSection?.content).toContain('titles and notes alone do not create repeats or HR/pace targets');
+    expect(planningSection?.content).toContain('a sample does not verify every workout');
+    expect(planningSection?.content).toContain('Plan actions -> Activate plan');
+    expect(planningSection?.content).toContain('does not enable a new service');
+    expect(planningSection?.content).toContain('later workouts wait');
+    expect(planningSection?.content).toContain('Activation and service sync are separate choices');
     expect(planningSection?.content).toContain('[Training Plans overview](/features/training-plans)');
     expect(planningSection?.content).toContain('Plans and standalone workouts work without a service connection');
     expect(planningSection?.content).toContain('Settings -> Units & formatting -> Start of the Week');
@@ -1712,7 +1736,10 @@ describe('help.content', () => {
     expect(serviceConnectionsSection?.content).toContain('**Sailing as GPS Cardio**');
     expect(serviceConnectionsSection?.content).toContain('for both direct uploads and activity sync');
     expect(serviceConnectionsSection?.content).toContain('your retained original FIT and activity type in Quantified Self stay unchanged');
-    expect(serviceConnectionsSection?.content).toContain('GPS-less, mixed/multi-session, malformed and other activity types');
+    expect(serviceConnectionsSection?.content).toContain('**Snorkeling as Open Water Swim** with or without recorded GPS');
+    expect(serviceConnectionsSection?.content).toContain('**Sailing as GPS Cardio** only with recorded GPS');
+    expect(serviceConnectionsSection?.content).toContain('missing GPS is not added');
+    expect(serviceConnectionsSection?.content).toContain('GPS-less Sailing, mixed/multi-session, malformed and other activity types');
     expect(serviceConnectionsSection?.content).toContain('COROS currently reports these processing failures only as a generic failed status');
     expect(serviceConnectionsSection?.content).toContain('https://support.coros.com/hc/en-us/articles/360040256971-How-to-Import-Activities-to-Your-COROS-Account');
     expect(serviceConnectionsSection?.content).toContain('uploading selected GPX or FIT routes to COROS');

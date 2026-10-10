@@ -348,7 +348,7 @@ describe('Firebase Hosting configuration', () => {
     expect(sitemapLastmodForUrl(`${siteOrigin}/integrations`)).toBe('2026-09-02');
     expect(sitemapLastmodForUrl(`${siteOrigin}/integrations/garmin`)).toBe('2026-08-03');
     expect(sitemapLastmodForUrl(`${siteOrigin}/integrations/suunto`)).toBe('2026-10-09');
-    expect(sitemapLastmodForUrl(`${siteOrigin}/integrations/coros`)).toBe('2026-10-09');
+    expect(sitemapLastmodForUrl(`${siteOrigin}/integrations/coros`)).toBe('2026-10-10');
     expect(sitemapLastmodForUrl(`${siteOrigin}/integrations/wahoo`)).toBe('2026-08-03');
     expect(sitemapLastmodForUrl(`${siteOrigin}/features/workout-data-comparison`)).toBe('2026-10-09');
     expect(sitemapLastmodForUrl(`${siteOrigin}/features/supported-activities`)).toBe('2026-08-24');
@@ -364,9 +364,9 @@ describe('Firebase Hosting configuration', () => {
     expect(sitemapLastmodForUrl(`${siteOrigin}/features/fit-gpx-tcx-file-analyzer`)).toBe('2026-09-02');
     expect(sitemapXml).not.toContain(`${siteOrigin}/features/workout-file-comparison`);
     expect(sitemapXml).not.toContain(`${siteOrigin}/features/sports-watch-benchmark`);
-    // Health overview/history navigation and activity-history busy-state Help
+    // Health overview/history navigation, scroll restoration and activity-history busy-state Help
     // were updated on this date; keep the specific public Help lastmod.
-    expect(sitemapLastmodForUrl(`${siteOrigin}/help`)).toBe('2026-10-09');
+    expect(sitemapLastmodForUrl(`${siteOrigin}/help`)).toBe('2026-10-10');
     expect(sitemapLastmodForUrl(`${siteOrigin}/policies`)).toBe('2026-10-07');
     expect(sitemapLastmodForUrl(`${siteOrigin}/privacy`)).toBe('2026-10-07');
     expect(sitemapLastmodForUrl(`${siteOrigin}/terms`)).toBe('2026-10-07');

@@ -209,20 +209,22 @@ describe('COROS asynchronous activity uploads', () => {
     expect(mocks.post).not.toHaveBeenCalled();
   });
 
-  it.each([82, 32])('direct sport %i fingerprints and posts the same converted FIT, keeping the input intact', async sport => {
-    const input = createCOROSActivityFITFixture({ sport });
-    const original = Buffer.from(input);
-    const converted = prepareCOROSActivityFITUpload(input);
-    await importActivityToCOROSAPI(activityRequest(input));
-    const sent = mocks.recordActivitySyncOutboundFingerprint.mock.calls[0][0].fileBuffer as Buffer;
-    expect(sent).toEqual(converted);
-    expect(sent).not.toEqual(input);
-    expect(mocks.post.mock.calls[0][0].body.includes(sent)).toBe(true);
-    expect(mocks.post.mock.calls[0][0].body.includes(input)).toBe(false);
-    expect(input).toEqual(original);
-    expect(mocks.recordActivitySyncOutboundFingerprint.mock.invocationCallOrder[0])
-      .toBeLessThan(mocks.post.mock.invocationCallOrder[0]);
-  });
+  it.each([[82, true, false], [82, false, false], [32, true, false], [1, true, true]] as const)(
+    'direct sport %i fingerprints and posts the same prepared FIT (GPS=%s, empty fields=%s)', async (sport, withGPS, emptyFields) => {
+      const input = createCOROSActivityFITFixture({ sport, withGPS, emptyNativeFields: emptyFields ? 'zero' : undefined });
+      const original = Buffer.from(input);
+      const converted = prepareCOROSActivityFITUpload(input);
+      await importActivityToCOROSAPI(activityRequest(input));
+      const sent = mocks.recordActivitySyncOutboundFingerprint.mock.calls[0][0].fileBuffer as Buffer;
+      expect(sent).toEqual(converted);
+      expect(sent).not.toEqual(input);
+      expect(mocks.post.mock.calls[0][0].body.includes(sent)).toBe(true);
+      expect(mocks.post.mock.calls[0][0].body.includes(input)).toBe(false);
+      expect(input).toEqual(original);
+      expect(mocks.recordActivitySyncOutboundFingerprint.mock.invocationCallOrder[0])
+        .toBeLessThan(mocks.post.mock.invocationCallOrder[0]);
+    },
+  );
 
   it('does not send a converted direct FIT when its echo receipt fails', async () => {
     mocks.recordActivitySyncOutboundFingerprint.mockRejectedValueOnce(new Error('receipt unavailable'));

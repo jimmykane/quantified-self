@@ -112,6 +112,10 @@ export class TrainingDeliveryButtonComponent {
     return this.scope() === 'plan' ? label ? `Sync plan with ${label}` : 'Sync plan'
       : this.standalone() ? label ? `Send to ${label}` : 'Send workout' : 'Workout sync';
   });
+  readonly showSetupHint = computed(() => this.scope() === 'plan' && this.summaryPlan()?.lifecycle !== 'archived'
+    && this.readState().loaded && !this.readState().error && !this.summaryState().error && !this.hasRecords()
+    && this.readState().view?.summaryComplete !== false
+    && PLANNED_WORKOUT_PROVIDER_IDS.some(provider => this.delivery.isSetupAvailable(provider, true)));
   open(): void {
     if (!this.visible() || this.disabled()) return;
     const provider = this.singleProvider();

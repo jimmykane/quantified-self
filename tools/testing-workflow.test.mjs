@@ -152,6 +152,9 @@ test('delivery runners share one plan, isolated emulators and strict reports bef
   assert.equal(uploadPlan.with.name, 'delivery-shard-plan');
   assert.equal(uploadPlan.with['if-no-files-found'], 'error');
   const restore = planner.steps.find(step => step.uses === 'actions/cache/restore@v4');
+  for (const file of ['functions/vitest.emulators.config.ts', 'tools/functions-emulator-suites.mjs']) {
+    assert.ok(restore.with.key.includes(`'${file}'`), `Delivery timings must track ${file}`);
+  }
   assert.ok(restore.with['restore-keys'].endsWith('-\n'));
   const job = shared.jobs.delivery_emulators;
   assert.equal(job.needs, 'delivery_plan');

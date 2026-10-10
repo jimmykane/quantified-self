@@ -2,7 +2,7 @@ import { getDashboardChartCatalog } from '../../helpers/dashboard-chart-catalog.
 import { HealthMetricQueryService } from '../../services/health-metric-query.service';
 import { DashboardLibraryModule } from '../../modules/dashboard-library.module';
 import { DashboardConfigurationService } from '../../services/dashboard-configuration.service';
-import { Component, Input, signal } from '@angular/core';
+import { Component, Input, PLATFORM_ID, signal } from '@angular/core';
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { Location } from '@angular/common';
 import { provideLocationMocks } from '@angular/common/testing';
@@ -385,11 +385,16 @@ function hrvBaselineSleepSessions(): SleepSession[] {
 }
 
 describe('HealthWorkspaceComponent', () => {
+  let pageScroller: HTMLElement | null = null;
   beforeEach(() => {
     vi.useFakeTimers({ toFake: ['Date'] });
     vi.setSystemTime(testNowMs);
   });
-  afterEach(() => vi.useRealTimers());
+  afterEach(() => {
+    pageScroller?.remove();
+    pageScroller = null;
+    vi.useRealTimers();
+  });
 
   let haptics: { selection: ReturnType<typeof vi.fn>; success: ReturnType<typeof vi.fn>; error: ReturnType<typeof vi.fn> };
   let fixture: ComponentFixture<HealthWorkspaceComponent>;
@@ -412,6 +417,13 @@ describe('HealthWorkspaceComponent', () => {
   let syncStates: BehaviorSubject<HealthSyncState[]>;
   let setCurrentUserID: (uid: string) => void;
 
+  function attachPageScroller(): HTMLElement {
+    pageScroller = document.createElement('mat-sidenav-content');
+    document.body.append(pageScroller);
+    pageScroller.append(fixture.nativeElement);
+    return pageScroller;
+  }
+
   async function createComponent(
     loadImplementation?: (metricId: HealthMetricId) => Promise<HealthWorkspaceRangeLoad>,
     savedRange?: AppHealthWorkspaceRange,
@@ -425,6 +437,7 @@ describe('HealthWorkspaceComponent', () => {
     savedMetric?: AppHealthWorkspaceMetric,
     highlightSources?: AppHealthHighlightSources,
     initialUrl = '/',
+    platformId = 'browser',
   ): Promise<void> {
     haptics = { selection: vi.fn(), success: vi.fn(), error: vi.fn() };
     sourcesDismissed = new Subject();
@@ -503,6 +516,7 @@ describe('HealthWorkspaceComponent', () => {
       providers: [
         provideRouter([]),
         provideLocationMocks(),
+        { provide: PLATFORM_ID, useValue: platformId },
         {provide:DashboardConfigurationService,useValue:{save:vi.fn().mockResolvedValue(undefined)}},
         { provide: AppHapticsService, useValue: haptics },
         { provide: MatBottomSheet, useValue: { open: openBottomSheet } },
@@ -641,6 +655,149 @@ describe('HealthWorkspaceComponent', () => {
     await navigation;
     fixture.detectChanges(); await fixture.whenStable(); fixture.detectChanges();
   }
+
+  it('opens metric history at the shell top and restores overview scroll and focus on Back', async () => {
+    await createComponent();
+    const scroller = attachPageScroller();
+    const card = scroller.querySelector<HTMLButtonElement>('app-health-category-overview > button')!;
+    card.focus();
+    scroller.scrollTop = 740; scroller.scrollLeft = 12;
+    card.click();
+    fixture.detectChanges(); await fixture.whenStable(); fixture.detectChanges();
+    expect(scroller.scrollTop).toBe(0);
+    expect(scroller.scrollLeft).toBe(0);
+    expect(document.activeElement).toBe(scroller.querySelector('#health-detail-title'));
+    scroller.scrollTop = 420;
+    component.showOverview();
+    fixture.detectChanges(); await fixture.whenStable(); fixture.detectChanges();
+    expect(scroller.scrollTop).toBe(740);
+    expect(scroller.scrollLeft).toBe(12);
+    expect(document.activeElement).toBe(card);
+    // Reopening the same remembered metric captures the new overview position.
+    scroller.scrollTop = 880;
+    card.click(); fixture.detectChanges(); await fixture.whenStable();
+    expect(scroller.scrollTop).toBe(0);
+    component.showOverview(); fixture.detectChanges(); await fixture.whenStable();
+    expect(scroller.scrollTop).toBe(880);
+  });
+
+  it('resets different metric navigation, including browser history, without losing the overview position', async () => {
+    await createComponent();
+    const scroller = attachPageScroller();
+    scroller.scrollTop = 640;
+    component.selectPriorityMetric('body_weight'); fixture.detectChanges(); await fixture.whenStable();
+    scroller.scrollTop = 320;
+    component.openMetricPicker(); metricsDismissed.next('sleep');
+    fixture.detectChanges(); await fixture.whenStable(); fixture.detectChanges();
+    expect(scroller.scrollTop).toBe(0);
+    scroller.scrollTop = 230;
+    await moveBrowserHistory('back');
+    expect(component.selectedMetric()).toBe('body_weight');
+    expect(scroller.scrollTop).toBe(0);
+    await moveBrowserHistory('back');
+    expect(component.metricDetailOpen()).toBe(false);
+    expect(scroller.scrollTop).toBe(640);
+    await moveBrowserHistory('forward');
+    expect(scroller.scrollTop).toBe(0);
+    await moveBrowserHistory('back');
+    expect(scroller.scrollTop).toBe(640);
+  });
+
+  it('keeps scroll and focus for unchanged metrics, date/source changes and background hydration', async () => {
+    await createComponent();
+    const scroller = attachPageScroller();
+    component.selectPriorityMetric('body_weight'); fixture.detectChanges(); await fixture.whenStable();
+    const back = scroller.querySelector<HTMLButtonElement>('.health-back-overview')!;
+    back.focus(); scroller.scrollTop = 350;
+    haptics.selection.mockClear();
+    component.selectMetric('body_weight'); fixture.detectChanges(); await fixture.whenStable();
+    expect(scroller.scrollTop).toBe(350);
+    expect(document.activeElement).toBe(back);
+    expect(haptics.selection).not.toHaveBeenCalled();
+    component.selectRange('14d');
+    component.navigateWindow('older');
+    component.toggleProvider(HEALTH_PROVIDERS.GarminAPI);
+    component.refreshRevision.update(value => value + 1);
+    hydrateSavedMetric('steps');
+    fixture.detectChanges(); await fixture.whenStable(); fixture.detectChanges();
+    expect(scroller.scrollTop).toBe(350);
+    expect(document.activeElement).toBe(back);
+    expect(component.selectedMetric()).toBe('body_weight');
+  });
+
+  it('keeps the overview position across rapid navigation before the next render', async () => {
+    await createComponent();
+    const scroller = attachPageScroller();
+    scroller.scrollTop = 720;
+    component.selectPriorityMetric('body_weight');
+    component.selectMetric('steps');
+    fixture.detectChanges(); await fixture.whenStable(); fixture.detectChanges();
+    expect(component.selectedMetric()).toBe('steps');
+    expect(scroller.scrollTop).toBe(0);
+    scroller.scrollTop = 310;
+    // The detail DOM is still visible when the new opening is requested.
+    component.showOverview();
+    component.selectPriorityMetric('sleep');
+    fixture.detectChanges(); await fixture.whenStable(); fixture.detectChanges();
+    expect(component.selectedMetric()).toBe('sleep');
+    expect(scroller.scrollTop).toBe(0);
+    component.showOverview(); fixture.detectChanges(); await fixture.whenStable();
+    expect(scroller.scrollTop).toBe(720);
+    // Opening and immediately backing out must not run the old detail callback.
+    component.selectPriorityMetric('body_weight');
+    component.showOverview();
+    fixture.detectChanges(); await fixture.whenStable(); fixture.detectChanges();
+    expect(component.metricDetailOpen()).toBe(false);
+    expect(scroller.scrollTop).toBe(720);
+  });
+
+  it('uses the document scroll owner when rendered outside the app shell', async () => {
+    await createComponent();
+    const scroller = (document.scrollingElement || document.documentElement) as HTMLElement;
+    const previous = { top: scroller.scrollTop, left: scroller.scrollLeft };
+    try {
+      scroller.scrollTop = 560; scroller.scrollLeft = 8;
+      expect(component.metricDetailOpen()).toBe(false);
+      component.selectPriorityMetric('body_weight');
+      expect(component['overviewPosition']).toMatchObject({ scroller, top: 560, left: 8 });
+      fixture.detectChanges(); await fixture.whenStable(); fixture.detectChanges();
+      expect(scroller.scrollTop).toBe(0);
+      expect(scroller.scrollLeft).toBe(0);
+      expect(component['overviewPosition']).toMatchObject({ scroller, top: 560, left: 8 });
+      component.showOverview(); fixture.detectChanges(); await fixture.whenStable(); fixture.detectChanges();
+      expect(component.metricDetailOpen()).toBe(false);
+      expect(component['overviewPosition']).toMatchObject({ scroller, top: 560, left: 8 });
+      expect(scroller.scrollTop).toBe(560);
+      expect(scroller.scrollLeft).toBe(8);
+    } finally {
+      scroller.scrollTop = previous.top; scroller.scrollLeft = previous.left;
+    }
+  });
+
+  it('does not apply a stale detail scroll after an account change or workspace destruction', async () => {
+    await createComponent();
+    const scroller = attachPageScroller();
+    scroller.scrollTop = 610;
+    component.selectPriorityMetric('body_weight');
+    setCurrentUserID('user-2');
+    fixture.detectChanges(); await fixture.whenStable(); fixture.detectChanges();
+    expect(component.metricDetailOpen()).toBe(false);
+    expect(scroller.scrollTop).toBe(610);
+    component.selectPriorityMetric('steps');
+    fixture.destroy();
+    await TestBed.inject(Router).navigateByUrl('/');
+    expect(scroller.scrollTop).toBe(610);
+  });
+
+  it('does not read or change page scroll during server-side rendering', async () => {
+    await createComponent(undefined, undefined, {}, undefined, undefined, '/?metric=steps', 'server');
+    expect(component.metricDetailOpen()).toBe(true);
+    const readScroller = vi.spyOn(component as never, 'pageScroller' as never);
+    component.showOverview(); fixture.detectChanges(); await fixture.whenStable(); fixture.detectChanges();
+    expect(component.metricDetailOpen()).toBe(false);
+    expect(readScroller).not.toHaveBeenCalled();
+    expect(component['overviewPosition']).toBeNull();
+  });
 
   it('restores metrics and overview with browser Back/Forward while retaining the inspected window and sources', async () => {
     await createComponent(undefined, '14d', {}, undefined, undefined, '/?from=health#readings');
@@ -1157,7 +1314,7 @@ describe('HealthWorkspaceComponent', () => {
     expect(openHeartRate?.getAttribute('aria-pressed')).toBeNull();
     expect(component.metricDetailOpen()).toBe(true);
     expect(document.activeElement).toBe(heading);
-    expect(heading.scrollIntoView).toHaveBeenCalledWith({ block: 'start', inline: 'nearest', behavior: 'auto' });
+    expect(heading.scrollIntoView).not.toHaveBeenCalled();
     expect(haptics.selection).toHaveBeenCalledTimes(1);
 
     // Returning to All and reopening the same metric must still focus its chart.
@@ -1167,7 +1324,7 @@ describe('HealthWorkspaceComponent', () => {
     openHeartRate?.click();
     fixture.detectChanges(); await fixture.whenStable();
     expect(document.activeElement).toBe(heading);
-    expect(heading.scrollIntoView).toHaveBeenCalledTimes(2);
+    expect(heading.scrollIntoView).not.toHaveBeenCalled();
     expect(haptics.selection).toHaveBeenCalledTimes(3);
     expect(component.selectedRange()).toBe('30d');
   });

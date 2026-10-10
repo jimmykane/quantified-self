@@ -45,9 +45,13 @@ function discriminatorLabel(schema: JsonSchema): string | null {
 }
 
 function unionSchemas(variants: JsonSchema[]): JsonSchema {
-  const nonNull = variants.filter(variant => variant.type !== 'null');
+  const usable = variants.filter(variant => variant.type !== 'null');
+  // Reused recipe refs are already projected when outer change variants merge.
+  // Merging identical projected unions again erases their discriminator-specific
+  // required keys and descriptions (e.g. step versus repeat).
+  const nonNull = [...new Map(usable.map(variant => [JSON.stringify(variant), variant])).values()];
   if (nonNull.length === 0) throw new Error('Assistant tool schema has no usable type.');
-  const nullable = nonNull.length !== variants.length;
+  const nullable = usable.length !== variants.length;
   if (nonNull.length === 1) {
     return { ...nonNull[0], ...(nullable ? { nullable: true } : {}) };
   }
@@ -78,12 +82,22 @@ function unionSchemas(variants: JsonSchema[]): JsonSchema {
         const label = discriminatorLabel(variant);
         return required && label && !commonRequired.includes(name) ? [label] : [];
       });
-      properties[name] = condition.length
+      const allowedFor = present.map(({ variant }) => discriminatorLabel(variant)).filter(Boolean);
+      const exclusive = present.length < nonNull.length && allowedFor.length === present.length
+        ? `Allowed only for ${[...new Set(allowedFor)].join(', ')}; omit for other shapes.` : '';
+      properties[name] = condition.length || exclusive
         ? { ...projected, description: [projected.description,
-          `Required for ${[...new Set(condition)].join(', ')}.`].filter(Boolean).join(' ') }
+          condition.length ? `Required for ${[...new Set(condition)].join(', ')}.` : '',
+          exclusive].filter(Boolean).join(' ') }
         : projected;
     }
+    const shapes = nonNull.map((variant, index) => {
+      const required = Array.isArray(variant.required) ? variant.required as string[] : [];
+      const optional = Object.keys(objectValue(variant.properties) ?? {}).filter(name => !required.includes(name));
+      return `${discriminatorLabel(variant) ?? `shape ${index + 1}`}: required keys ${required.join(', ') || 'none'}; optional keys ${optional.join(', ') || 'none'}.`;
+    });
     return { type: 'object', properties, ...(commonRequired.length ? { required: commonRequired } : {}),
+      description: `Choose exactly one object shape using its kind and mode when present. Include its required keys and only its optional keys. Do not mix shapes or fill unrelated fields with null. ${shapes.join(' ')}`,
       ...(nullable ? { nullable: true } : {}) };
   }
   if (type === 'array') {
@@ -108,7 +122,8 @@ function project(schema: JsonSchema, root: JsonSchema, references: Set<string>):
   if (typeof schema.$ref === 'string') {
     if (references.has(schema.$ref)) throw new Error('Recursive Assistant tool schema reference.');
     const projected = project(resolveLocalRef(schema.$ref, root), root, new Set([...references, schema.$ref]));
-    return { ...projected, ...(typeof schema.description === 'string' ? { description: schema.description } : {}) };
+    return { ...projected, ...((schema.description || projected.description)
+      ? { description: [schema.description, projected.description].filter(value => typeof value === 'string').join(' ') } : {}) };
   }
   if (Array.isArray(schema.allOf)) {
     const parts = schema.allOf.map(objectValue).filter((value): value is JsonSchema => value !== null)
@@ -129,7 +144,7 @@ function project(schema: JsonSchema, root: JsonSchema, references: Set<string>):
   if (alternatives) {
     if (alternatives.length === 0) throw new Error('Assistant tool schema has no alternatives.');
     const merged = unionSchemas(alternatives.map(variant => project(variant, root, references)));
-    return { ...merged, ...(typeof schema.description === 'string' ? { description: schema.description } : {}) };
+    return { ...merged, description: [schema.description, merged.description].filter(value => typeof value === 'string').join(' ') };
   }
   const rawType = schema.type;
   if (Array.isArray(rawType)) {

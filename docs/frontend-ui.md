@@ -390,8 +390,14 @@ legend columns wrap to the available card width, including the narrow columns in
 The shared Health ECharts option renders Stress state as colored horizontal time blocks on named category lanes.
 The Health explorer, dashboard tiles, chart-library previews and thumbnails all use that same projection, while
 other categorical Health metrics retain their stepped series. Unknown provider states stay neutral and readable.
-Highlight **Open** actions scroll to and focus the explorer heading, including when that metric is already selected.
-They preserve the selected date range and source filters; opening the current metric does not save preferences again.
+Health overview **View history** and Highlight **Open** actions focus the metric heading without scrolling it into
+view, then reset the actual page scroll owner (`mat-sidenav-content`, or the document for standalone rendering) to
+the top after rendering. Switching to a different metric, including browser Back/Forward, also starts at the top.
+Returning to overview restores its saved scroll position and originating control focus; changing metrics while in
+history does not overwrite that overview position. Date/source changes, refreshes, saved-preference hydration and
+unchanged picker selections do not reset scroll. Pending render callbacks are guarded against newer navigation,
+account changes and teardown. These are local navigation-only changes: no metric, measurement or MCP contract changes.
+They preserve the selected date range and source filters; reopening the remembered metric does not save preferences again.
 
 ### Bounded surfaces
 

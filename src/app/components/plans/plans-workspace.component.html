@@ -198,10 +198,31 @@
               <mat-chip [highlighted]="plan.lifecycle === 'active'">{{ plan.lifecycle | titlecase }}</mat-chip>
             </mat-chip-set>
             <span>{{ plan.startLocalDate | date:'mediumDate' }} – {{ plan.endLocalDate | date:'mediumDate' }}</span>
-            @if (plan.lifecycle !== 'active') {
+            @if (plan.lifecycle === 'archived') {
               <span>Visible here. Hidden from the main Calendar until this plan is active.</span>
             }
           </div>
+          @if (plan.lifecycle === 'paused') {
+            <div class="plan-activation-hint">
+              <div>
+                <p>Activate to show workouts in Calendar. Any plan sync you’ve already enabled resumes for eligible upcoming workouts.</p>
+                @if (activePlan(); as currentPlan) {
+                  @if (currentPlan.id !== plan.id) { <p>This will pause {{ currentPlan.name }}.</p> }
+                }
+              </div>
+              <button mat-button appHapticTap type="button" (click)="setPlanLifecycle(plan, 'active')"
+                [disabled]="busyAction() !== null">
+                <span class="button-content">
+                  @if (busyAction() === 'lifecycle-' + plan.id) {
+                    <mat-spinner diameter="18"></mat-spinner>
+                  } @else {
+                    <mat-icon aria-hidden="true">play_circle</mat-icon>
+                  }
+                  <span>{{ busyAction() === 'lifecycle-' + plan.id ? 'Activating…' : 'Activate plan' }}</span>
+                </span>
+              </button>
+            </div>
+          }
           <app-training-delivery-button scope="plan" [entityId]="plan.id" [title]="plan.name"
             [summaryWorkouts]="schedule().workouts" [summaryPlan]="plan" [summaryCompletions]="completions()"
             [summaryNowMs]="nowMs()"

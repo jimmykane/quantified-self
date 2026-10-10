@@ -392,7 +392,8 @@ describe('Training plan MCP reads', () => {
       { createManualLap: true }, { window: 'manualLap' }, { aggregate: 'average' }, { strokeRate: 40 },
       { compatibleApprovalDigests: ['private-v4'] }, { mappingVersion: 'suunto-guides-v5' }, { compatibleApprovalDigest: 'private' },
       { mappingApprovalProof: { approvedDigest: 'private', mappingDigest: 'private', contentDigest: 'private' } },
-      { guideMappingVersion: 'suunto-guides-v5' }, { deliveryPhase: 'recover' }]) {
+      { guideMappingVersion: 'suunto-guides-v5' }, { deliveryPhase: 'recover' }, { richText: 'private-preview' },
+      { suuntoUnitSettings: { distanceUnits: 'mi' } }, { suuntoApprovedUnitSettings: {} }, { suuntoMappingUnitSettings: {} }]) {
       expect(TRAINING_RECIPE_SCHEMA.safeParse({ ...before.workout.structure, ...fields }).success).toBe(false);
     }
     f.collections.trainingDeliverySettings.suunto = { scope: 'plan', scopeId: 'p1', provider: 'suunto', enabled: true,
@@ -412,7 +413,8 @@ describe('Training plan MCP reads', () => {
     await expect(f.run('get_training_sync_status', args)).rejects.toThrow();
     delete f.collections.trainingDeliveryStatuses[id].mappingApprovalProof;
     for (const [key, value] of [['guideMappingVersion', 'suunto-guides-v5'], ['deliveryPhase', 'recover'], ['createManualLap', true],
-      ['window', 'manualLap'], ['aggregate', 'average'], ['strokeRate', 40],
+      ['window', 'manualLap'], ['aggregate', 'average'], ['strokeRate', 40], ['richText', 'private-preview'],
+      ['suuntoUnitSettings', { distanceUnits: 'mi' }], ['suuntoApprovedUnitSettings', {}], ['suuntoMappingUnitSettings', {}],
       ['notification', { type: 'default', title: 'Complete', text: 'Guide complete' }]]) {
       f.collections.trainingDeliveryStatuses[id][key] = value;
       await expect(f.run('get_training_sync_status', args)).rejects.toThrow();

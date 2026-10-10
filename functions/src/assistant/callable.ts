@@ -674,8 +674,8 @@ export async function runAssistantChat(
         const current = await dependencies.conversationStore.getActiveConversationState(uid);
         if (current.conversation?.conversationId !== notesConversationId
           || current.trainingPlansEnabled !== true
-          || current.trainingPlanChangesEnabled !== trainingPlanChangesEnabled
-          || current.trainingDeliveryEnabled !== trainingDeliveryEnabled) {
+          || (current.trainingPlanChangesEnabled === true) !== trainingPlanChangesEnabled
+          || (current.trainingDeliveryEnabled === true) !== trainingDeliveryEnabled) {
           throw new AssistantConversationStoreError('conversation_changed', 'The Assistant data-access setting changed.');
         }
       } } : {}),
