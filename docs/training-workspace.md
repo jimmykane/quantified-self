@@ -4568,6 +4568,12 @@ before backend writes, and account for stale browser sessions: an old JSON reade
 from its installed catalog. Keep historical canonical names accepted, and verify split activity/event JSON round trips
 with the released package. No production reparse or data migration is authorized by this preparation.
 
+Root and Functions now pin published Sports Lib 22.0.0 with FIT Parser 6.2.2. Existing parser options remain in use.
+Installing these dependencies does not rewrite stored Training evidence. Historical source corrections still use the
+authorized original-file reparse lifecycle and normal derived refresh. The
+[reparse runbook](../functions/src/reparse/SPORTS_LIB_REPARSE_RUNBOOK.md#energysense-support-in-sports-lib-2200)
+records the current dependency and rollout boundary.
+
 MCP impact: existing Training projections reuse the registry, and activity charts/samples reuse the shared identity
 matcher with unchanged owner checks, source/sample budgets, tools, schemas and scopes. Built-in Assistant workflow
 filters include only installed catalog values until the dependency upgrade, avoiding unsupported future enum inputs. The frozen public Training
