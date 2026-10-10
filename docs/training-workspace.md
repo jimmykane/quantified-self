@@ -6269,6 +6269,33 @@ an explicit alias but cannot reconstruct detail already collapsed to Cycling or 
 summaries, activity-type aggregates, applicable durability evidence, and Training snapshots through the existing
 source-backed reparse and derived ingress. The Sports Lib importing guide owns the exact parent guards and aliases.
 
+The approved Spin, E-bike Mountain, Adventure Race, flying-variant and broad-sport batch reuses Indoor Cycling
+(`cycling/spin`, `2/5`), E-Mountain Biking (`cycling/e_bike_mountain`, `2/47`, retaining `21/47`), Adventure
+Racing (`multisport/adventure_race`, `18/82`, and `running/adventure_race`, `1/82`), and Paragliding
+(`flying/fly_paraglide`, `20/111`). It adds Hockey (`73`) and Team Sport (`70`) in Team/Racket, Winter Sport
+(`58`) in Winter Sports, Water Sport (`78`) in Water Sports, Paramotoring (`20/112`) in Aerial Sports, and
+RC Drone Flying (`20/39`) in Unspecified. Broad source classifications do not infer a specific sport or venue;
+explicit Field Hockey (`73/90`) and Ice Hockey (`73/91`) remain distinct. Only Spin's reused Indoor Cycling
+establishes an indoor hint. Sport-specific sub-sports require documented parents across manufacturers.
+
+Indoor Cycling reuses the existing modeled indoor-cycling context. The other nine exact canonical types currently
+resolve to volume-only Other training with omitted distance in the independent registry, including E-Mountain
+Biking despite its Mountain Biking group. Library group membership does not widen planning, intensity/load policies,
+modeled contexts or provider delivery support. Indoor Cycling and E-Mountain Biking retain library cycling durability;
+the other eight types have no durability adapter. Paramotoring and RC Drone Flying omit calculated POWER/HR/MET
+TSS and remove stale calculated scores/methods while preserving finite imported scores, including legacy scores
+without a method and when imported-score preservation is disabled. Other Aerial Sports and Unspecified activities
+retain their existing TSS eligibility. No numeric metric token, unit, formula or durability protocol is added.
+
+MCP impact review: the built 193-type catalog passes the existing strict activity-type output schema, and the 99
+public output-contract tests pass. No MCP field, scope, projection, consent, mutation, plugin or registered-contract
+change is needed. No Training formula, derived-schema, write-path, queue-lifecycle or monitoring change is introduced.
+The supported-activities help remains accurate and its dynamic catalog reflects the installed library. Adopt the
+library in application and Functions together; recover historical broad labels only from specific retained sources
+or explicit aliases, then regenerate event summaries, activity-type aggregates, applicable durability evidence and
+Training snapshots through existing source-backed reparse and derived ingress. Broad stored values cannot recover
+lost detail. The Sports Lib importing guide owns exact aliases and parent guards; no reparse or deployment was run.
+
 Sports Lib `20.3.0` adds canonical Health and Sleep scalar JSON classes. Training uses the shared dual reader for the
 sleep duration, score, HRV, and sleep-heart-rate aggregates it already consumes; no Training formula or derived schema
 changes. Existing normalized Sleep documents use the dedicated Health/Sleep scalar migration, not an activity reparse,
