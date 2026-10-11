@@ -158,6 +158,7 @@ vi.mock('firebase-admin/firestore', () => ({
 vi.mock('@sports-alliance/sports-lib', async (importOriginal) => {
     const actual = await importOriginal<typeof import('@sports-alliance/sports-lib')>();
     return {
+        ActivityTypes: actual.ActivityTypes,
         ActivityParsingOptions: class ActivityParsingOptions {
             constructor(public opts: unknown) { }
         },
@@ -2835,6 +2836,68 @@ describe('sports-lib-reparse.service', () => {
                     expect(activity.getStat(sports.DataTrainingStressScore.type)?.getValue()).toBe(0);
                     expect(activity.getStat(sports.DataTrainingStressScoreMethod.type)?.getValue()).toBe('IMPORTED');
                 }
+            }
+        });
+
+    it.each(['truncated', 'late-first-length', 'complete', 'incomplete-lengths', 'contradictory-lap', 'overlapping-lengths'] as const)(
+        'regenerate requires independent pool distance evidence: %s', async kind => {
+            const sports = await vi.importActual<typeof import('@sports-alliance/sports-lib')>('@sports-alliance/sports-lib');
+            const { FitEncoder, FitBaseType } = await import('fit-file-parser/encoder');
+            const encoder = new FitEncoder();
+            const start = FitEncoder.toFitTimestamp(new Date('2026-01-01T10:00:00Z'));
+            const field = (number: number, value: number, baseType = FitBaseType.Uint8) => ({ number, value, baseType,
+                size: baseType === FitBaseType.Uint32 ? 4 : baseType === FitBaseType.Uint16 ? 2 : 1 });
+            const lengthCount = kind === 'incomplete-lengths' ? 9 : 10;
+            const corroborated = kind !== 'incomplete-lengths' && kind !== 'contradictory-lap' && kind !== 'overlapping-lengths';
+            const counterEnd = kind === 'truncated' || !corroborated ? 120 : 300;
+            encoder.writeMessage(0, [field(0, 4, FitBaseType.Enum), field(1, 23, FitBaseType.Uint16)]);
+            for (let index = 0; index < lengthCount; index++) encoder.writeMessage(101, [field(254, index, FitBaseType.Uint16),
+                field(253, start + (kind === 'overlapping-lengths' && index === 1 ? 45 : (index + 1) * 30), FitBaseType.Uint32),
+                field(2, start + (kind === 'overlapping-lengths' && index === 1 ? 15 : index * 30), FitBaseType.Uint32),
+                field(3, 30000, FitBaseType.Uint32), field(4, 30000, FitBaseType.Uint32), field(12, 1, FitBaseType.Enum)], 1);
+            for (let second = kind === 'late-first-length' ? 30 : 0; second <= counterEnd; second += 30)
+                encoder.writeMessage(20, [field(253, start + second, FitBaseType.Uint32),
+                    field(5, Math.round(second * 25000 / 300), FitBaseType.Uint32)], 2);
+            encoder.writeMessage(19, [field(254, 0, FitBaseType.Uint16), field(253, start + 300, FitBaseType.Uint32),
+                field(2, start, FitBaseType.Uint32), field(7, 300000, FitBaseType.Uint32), field(8, 300000, FitBaseType.Uint32),
+                field(9, kind === 'contradictory-lap' ? 22500 : 25000, FitBaseType.Uint32),
+                field(32, lengthCount, FitBaseType.Uint16), field(35, 0, FitBaseType.Uint16)], 3);
+            const tss = kind === 'late-first-length' ? 0 : 18.7;
+            encoder.writeMessage(18, [field(254, 0, FitBaseType.Uint16), field(253, start + 300, FitBaseType.Uint32),
+                field(2, start, FitBaseType.Uint32), field(5, 5, FitBaseType.Enum), field(6, 17, FitBaseType.Enum),
+                field(7, 300000, FitBaseType.Uint32), field(8, 300000, FitBaseType.Uint32), field(9, 25000, FitBaseType.Uint32),
+                field(25, 0, FitBaseType.Uint16), field(26, 1, FitBaseType.Uint16), field(44, 2500, FitBaseType.Uint16),
+                field(35, tss * 10, FitBaseType.Uint16)], 4);
+            const bytes = encoder.close();
+            const parsed = await sports.EventImporterFIT.getFromArrayBuffer(
+                bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength) as ArrayBuffer,
+                new sports.ActivityParsingOptions({ generateUnitStreams: false }));
+            const activity = parsed.getFirstActivity();
+            const counter = [...activity.getStreamData(sports.DataDistance.type)];
+            const expectedEvaluations = sports.ActivityUtilities.getTrainingStressScoreEvaluations(activity);
+            expect(activity.getStat(sports.DataDistance.type)?.getValue()).toBe(250);
+            expect(activity.getSwimLengths()).toHaveLength(lengthCount);
+            expect(activity.getSwimLengths().reduce((total, length) => total + length.distance!.getValue(), 0)).toBe(lengthCount * 25);
+            const recorded = counter.filter((value): value is number => typeof value === 'number');
+            expect(recorded.at(-1)! - recorded[0])
+                .toBe(counterEnd === 120 ? 100 : kind === 'late-first-length' ? 225 : 250);
+            hoisted.mockDownload.mockResolvedValue([Buffer.from(bytes)]);
+            hoisted.fitImporter.getFromArrayBuffer.mockResolvedValue(parsed);
+            hoisted.generateMissingStreamsAndStatsForActivity.mockImplementation(
+                item => sports.ActivityUtilities.generateMissingStreamsAndStatsForActivity(item));
+            hoisted.evaluateTrainingStressScore.mockImplementation(item => sports.ActivityUtilities.evaluateTrainingStressScore(item));
+            for (let pass = 0; pass < 2; pass++) {
+                hoisted.reGenerateStatsForEvent.mockImplementationOnce(event => sports.EventUtilities.reGenerateStatsForEvent(event));
+                const result = await reparseEventFromOriginalFiles('u1', 'e1', { mode: 'regenerate',
+                    eventData: { originalFile: { path: 'users/u1/events/e1/synthetic-pool.fit' } },
+                    activityDocs: [], targetSportsLibVersion: TARGET_SPORTS_LIB_VERSION });
+                expect(result.status).toBe('completed');
+                expect(activity.getStat(sports.DataDistance.type)?.getValue()).toBe(corroborated ? 250 : 100);
+                expect(parsed.getStat(sports.DataDistance.type)?.getValue()).toBe(corroborated ? 250 : 100);
+                expect(activity.getStreamData(sports.DataDistance.type)).toEqual(counter);
+                expect(activity.getStat(sports.DataDuration.type)?.getValue()).toBe(300);
+                expect(activity.getStat(sports.DataTrainingStressScore.type)?.getValue()).toBe(tss);
+                expect(sports.ActivityUtilities.getTrainingStressScoreEvaluations(activity)).toEqual(expectedEvaluations);
             }
         });
 

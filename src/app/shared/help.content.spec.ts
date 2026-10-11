@@ -60,12 +60,15 @@ describe('help.content', () => {
     expect(copy).toContain('Pool imports support swims recorded as one lap');
     expect(copy).toContain('Rest lengths add no generated distance');
     expect(copy).toContain('ambiguous length ownership is not guessed');
+    expect(copy).toContain("Readings calculated from pool lengths stay within that swim's recorded times");
   });
   it('explains source distance preservation during reimport', () => {
     const copy = HELP_SECTIONS.find(section => section.content.includes('### Form tile (CTL / ATL / TSB)'))!.content;
     expect(copy).toContain('Reimport keeps a positive file distance summary');
     expect(copy).toContain('Missing readings or a constant zero counter do not erase that distance');
     expect(copy).toContain('usable measurements still rebuild it normally');
+    expect(copy).toContain("the original file's complete pool lengths and lap totals agree with its full distance");
+    expect(copy).toContain('distance readings stop early or begin after the first length');
   });
   it('distinguishes measured zero power from missing sensor evidence', () => {
     const copy = HELP_SECTIONS.find(section => section.content.includes('### Form tile (CTL / ATL / TSB)'))!.content;

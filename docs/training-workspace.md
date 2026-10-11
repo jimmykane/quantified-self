@@ -5359,6 +5359,18 @@ or after the last observation. Interior smart-recording gaps retain the existing
 gap cutoff is added. Observed resting HR can still establish valid zero load. Explicit reevaluation refreshes privately
 tagged calculated NP/IF after input changes, preserving device-supplied NP, imported TSS and cached getter semantics.
 
+The coordinated Sports Lib 21.6.12 update also preserves valid session-scoped FIT HR/FTP calibration ahead of unrelated
+global defaults, merges complementary same-time sensor records, retains invalid pool-HR boundaries, and calculates
+TCX timing across its tracks without double-counting overlapping laps. Missing FIT duration summaries use credible
+session timestamps or unambiguous session-owned records, retaining existing duration limits. Pool-length dates and
+generated readings stay inside their owning swim/lap and applicable recorded timer interval; actual recorded streams
+remain intact. Native event/activity/lap JSON safely skips legacy null/non-finite scalar summaries and omits non-finite
+summary exports, retaining finite zero, provider scores, structured values and raw stream gaps. This is the isolated
+JSON compatibility correction, not adoption of the separate unreleased activity catalog. The read correction needs no
+source reparse; historical parser/timing corrections require the original-file lifecycle and normal derived refresh.
+No new fields, schemas, storage operations, MCP scopes or planning/delivery capabilities are introduced. Neither this
+adoption nor a package release starts a production reparse campaign; saved routes need no source reparse.
+
 The 21.6.10 consumer build exposed computed namespace access in dashboard speed-unit selection that retained the
 whole Sports Lib export namespace. Explicit canonical speed-stat imports preserve supported and legacy units,
 including base metres-per-second statistics, while reducing the initial bundle by approximately 70 kB. The production
@@ -5542,6 +5554,22 @@ Without a counter, valid aligned GPS positions must support a positive distance 
 Usable counter/GPS measurements still regenerate distance normally. This guard does not copy old stored distances,
 invent a missing distance, or replace a valid zero summary with a positive default. Seeding the source summary before
 generation also protects its dependent speed/pace statistics and the event's summed volume.
+
+Pool swimming has an additional source-evidence check: a recorded cumulative counter can stop early or first appear
+after a completed length. Regeneration keeps the freshly parsed positive distance when every lap's distance agrees
+with its uniquely assigned active lengths, and the lap totals agree with the activity summary. Active lengths must
+have unique identities and nonduplicate, finite positive time intervals, one consistent positive pool length, and
+distance equal to that pool length. Recorded timers bound each active exposure, so a later message timestamp cannot
+turn following rest into overlapping swimming. Conflicting active exposures are rejected; a fractional timer endpoint
+may overlap the next whole-second start only within that same encoded FIT second. A zero timer, repeated start or
+explicit fractional-start overlap cannot corroborate a completed length. Idle lengths cannot contribute distance;
+unknown types, incomplete ownership, missing or contradictory totals fail this check. Equality allows floating-point
+summation error only, with no distance or percentage cutoff. Recorded streams and generic counter/GPS calculations remain unchanged. This protects volume
+and dependent pace without treating a summary alone as evidence or changing imported TSS. Historical corrections
+require original-file **Regenerate statistics** and its existing derived refresh; a Training rebuild alone cannot
+recover this source evidence. This in-memory check adds no storage operations or public fields. Existing MCP reads
+continue to expose the corrected canonical Distance; schemas, scopes, consent, mutations and Training planning
+contracts are unchanged.
 
 After restoring any other missing parsed statistics, regeneration refreshes all TSS evaluations. By default (or with
 `preserveImportedTss: true`) it restores the parsed score and method together, preserving imported scores including zero

@@ -20,6 +20,20 @@ Do not patch stored file bytes, bypass the normal writer, or turn this dependenc
 Package publication and dependency adoption do not deploy QS, enable scanners, or authorize production reparsing.
 There are no new public metric tokens, schemas, MCP fields/scopes, write paths, or monitoring lifecycle changes.
 
+### Sports Lib 21.6.12 source evidence and JSON compatibility
+
+The coordinated root/Functions update retains session-scoped FIT HR/FTP calibration, complementary sensor records,
+pool HR dropout boundaries, multi-track TCX timing and evidence-backed FIT session bounds when duration summaries
+are missing. Pool-length dates and generated readings stay within their owning swim/lap and applicable timer interval;
+recorded streams remain intact. The isolated native event/activity/lap JSON correction safely skips legacy null or
+non-finite scalar summaries and omits non-finite summary exports, retaining finite zero, imported scores and raw stream
+gaps. It does not adopt the separate unreleased activity catalog described below.
+
+JSON reads need no original-file reparse. Apply historical parser and timing corrections only through the authorized
+original-file lifecycle and existing derived refresh, including QS's corroborated pool-distance guard described below.
+No new fields, schemas, storage operations, MCP capabilities, saved-route reparse or automatic campaign are required.
+Package adoption does not deploy QS or authorize production rewrites.
+
 ### Unreleased provider-profile and JSON compatibility corrections
 
 The local Sports Lib branch corrects Garmin Breathwork for Generic/Breathing and Training/Breathing with an explicit
@@ -113,6 +127,13 @@ cannot support positive recalculation. This covers summary-only files and consta
 measurements still rebuild distance; old stored statistics never supply this fallback. Derived speed/pace and event
 volume use the preserved summary. Apply historical corrections through original-file reparse and the existing derived
 refresh lifecycle. This adds no database operations, provider requests, public MCP fields or mutation capabilities.
+
+For pool swims, a positive recorded counter can also be incomplete or start after the first length. Regenerate mode
+preserves the freshly parsed total only when uniquely owned active lengths with valid, nonduplicate time intervals
+and consistent pool distance corroborate every lap and the activity total. Recorded timers bound active exposure;
+conflicting exposures are rejected, allowing only timer fractions within the same encoded FIT second as the next
+whole-second start. Idle lengths add no distance. Missing, ambiguous or contradictory evidence does not qualify; only floating-point summation noise is tolerated. Raw counters
+remain intact and generic counter/GPS behavior is unchanged. See `docs/training-workspace.md` for the complete contract.
 
 New provider imports and manual uploads cache Automatic/HR/MET evaluations in owner-only event metadata. Walking,
 Nordic Walking, Hiking and Trekking skip calculated pace and power. HR requires file-supplied resting, threshold and
