@@ -5526,8 +5526,9 @@ history. No derived schema bump or route reparse is required for this calculatio
 Editor tests load these additive diagnostics through the metadata reader, so a newer server diagnostic remains
 compatible with the older Sports Lib version used to build an existing frontend.
 
-The swimming correction is verified against locally packed Sports Lib 21.6.3. Its publication and the root/Functions
-dependency updates are pending; both packages still pin published Sports Lib 21.6.2, with FIT Parser 6.2.1.
+The published [Sports Lib 21.6.3](https://github.com/sports-alliance/sports-lib/releases/tag/v21.6.3) artifact is pinned
+in both root and Functions, with FIT Parser 6.2.1. Both lockfiles match its npm integrity, and all 1,328 package files
+match the candidate used for the 100-file swimming replay and integration checks.
 Release Functions/Rules/frontend together after separate approval. Deployment and production reparse remain separate
 explicit approvals; no historical values are rewritten merely by deploying this change.
 
