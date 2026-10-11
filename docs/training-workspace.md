@@ -7705,8 +7705,11 @@ first, then coordinate builder and new-schema frontend activation:
 
 ### Historical library expansion batches
 
-The following entries record the policies and catalog sizes at each earlier library batch. The current Training registry,
-saved-TSS rule and rolling-capacity policy are specified above and govern the prepared schema-22 implementation.
+The following entries record the policies, mappings and verification results at each earlier library batch. Their
+catalog sizes and initial Other training classifications describe those earlier stages. The current 284-type catalog
+has completed classifications: 25 Training groups, 23 benchmark-capable families, nine explicit Other training labels
+and 11 aggregate/route exclusions. The [Training registry and contexts](#training-sport-registry-and-contexts), saved-TSS
+rule and rolling-capacity policy above govern the prepared schema-22 implementation.
 
 Existing snapshots rebuild lazily after a schema bump. Schema 16 added the original eight-family context/profile
 summaries; schema 17 added their reusable maximum aggregation and longest-jump metric. Schema 19 adds the exact
@@ -7721,9 +7724,10 @@ aggregator also rejects legacy eligible Enduro/Downhill durability evidence defe
 activities through the targeted sports-lib reparse lifecycle so their persisted compact evidence adopts the corrected
 result. This is a policy correction within durability protocol v1, not a v2 migration.
 
-Sports-lib 18.1.3 also canonicalizes Snorkeling and Mermaiding and assigns both to the existing Diving group. They do
-not join a modeled Training family or change durability; schema 20 places them in volume-only Other training without a
-historical source reparse.
+Sports-lib 18.1.3 canonicalized Snorkeling and Mermaiding and assigned both to the existing Diving library group.
+Schema 20 initially placed them in volume-only Other training without a historical source reparse. The current
+schema-22 registry gives each its own Diving context, using recorded elapsed time and saved TSS including zero,
+with omitted zones, distance and durability.
 Sports-lib 18.1.4's FIT record-depth mapping supports frontend Event Details dive profiles.
 That continuous source-hydrated stream is not a Training input, does not change durability or derived schemas, and does
 not require a Training rebuild or historical reparse.
@@ -7771,9 +7775,11 @@ Indoor Skiing belongs to Indoor Sports, ATV and Motocross to Motorized, and Pool
 Only Indoor Skiing establishes an indoor hint. ATV and Motocross omit library-calculated TSS and stale calculated
 scores while retaining finite imported scores. The other four types have no library durability adapter.
 
-These five exact canonical values are not yet modeled Training contexts: the existing registry resolves each to
-volume-only Other training, including BMX despite its Cycling group. Classification does not widen Training planning,
-intensity, load, distance, or provider delivery support. Adopt the library changes in the application and Functions
+These five canonical values initially used the Other training fallback. Their approved current classifications are
+Cycling's BMX context, Fitness & Gym's General fitness context for Indoor Skiing, and separate Motorized Activities
+contexts for ATV and Motocross. Pool Triathlon follows the aggregate rule: recorded individual legs are classified,
+while an unsplit recording retains global saved TSS without a standalone Training Mix or Best Build workout.
+These classifications retain the approved planning and provider-delivery mappings. Adopt the library changes in the application and Functions
 together and review the dynamic supported-activities catalog. Recover historical broad labels only from their specific
 retained source classifications or explicit names, then regenerate affected event summaries, activity-type aggregates,
 applicable durability evidence, and Training snapshots through the existing reparse/derived ingress. No Training
@@ -7786,9 +7792,10 @@ The next unreleased activity-mapping batch adds E-Enduro MTB (`cycling/e_bike_en
 (`rafting/whitewater`, `42/41`), Wingsuit Flying (`flying/wingsuit`, `20/40`), Brick Training (`multisport/brick`,
 `18/80`), and Hunting with Dogs (`hunting/hunting_with_dogs`, `28/72`). At that initial audit stage, all nine exact canonical values resolved to Other training. The approved current
 contexts and policies are listed in the Training registry table above. Their library groups do not create modeled
-Training contexts, distance/intensity/load policies, planning, or provider delivery support. Explicit Indoor Track
-and Indoor Track Running names instead reuse the existing Indoor Running type and modeled indoor-running context;
-bare running/track remains Running when the source does not supply a recognized profile name.
+Training contexts, distance/intensity/load policies, planning, or provider delivery support. Indoor Track aliases
+initially reused the Indoor Running canonical type. The current catalog preserves Indoor Track Running as a distinct
+canonical name, while QS shares its approved Indoor running context with Indoor Running. Bare running/track remains
+Running when the source does not supply a recognized profile name.
 
 Track Cycling and Recumbent Cycling can produce library cycling durability evidence under the existing protocol.
 E-Enduro MTB retains Enduro MTB's unsupported-context gravity-MTB evidence, including replacement of stale eligible
@@ -7858,8 +7865,10 @@ Dynamic Apnea uses Pool Apnea (`53/121`), E-Bike Fitness uses E-Biking (`21/28`)
 sub-sport fallback. Existing canonical Racquet Ball JSON stays Racquet Ball; the broad `racket` alias now resolves
 to Racket Sport. Do not reinterpret stored Racquet Ball records without retained source evidence.
 
-The existing Training registry resolves the three new types and Pool Apnea to volume-only Other training with omitted
-distance. HIIT aliases retain Fitness/Gym conditioning; E-Biking and Cycling retain the Cycling context, recorded-load
+At this earlier stage, Racket Sport, Ultimate Disc, Para Sport and Pool Apnea used volume-only Other training.
+The current approved registry places Racket Sport in Racket Sports, Ultimate Disc in Team Sports, and Pool Apnea
+in Diving. Para Sport is explicitly assigned to Other training, with recorded duration and saved TSS including zero.
+HIIT aliases retain Fitness/Gym conditioning; E-Biking and Cycling retain the Cycling context, recorded-load
 and zone policies, and applicable cycling durability; Walking retains its Walking context and recorded-load policies.
 The three new types have no library durability adapter. Dynamic Apnea inherits Pool Apnea's Diving terrain-summary
 exclusions, including native JSON normalization. Usable power curves stay isolated by exact canonical type. The same
@@ -7875,7 +7884,7 @@ change is introduced. This is classification work, with no Training planning sur
 Help remains accurate because supported activities use the installed dynamic catalog.
 
 Adopt the library in the application and Functions together. Their installed Sports Lib `21.5.0` catalog still contains
-131 types; the local unreleased build has the same package version but is not adopted. A separately approved targeted
+131 types. The current candidate prepares `21.7.0` with 284 types and remains unadopted. A separately approved targeted
 source-backed reparse can correct identified historical Generic, Racquet Ball, or Diving classifications when the source
 retains enough detail. Regenerate affected event summaries, activity-type aggregates, applicable durability evidence,
 and Training snapshots through the existing ingress. A collapsed broad label cannot recover missing detail. Saved
@@ -7909,10 +7918,10 @@ durability evidence, and Training snapshots through the existing ingress. Saved 
 adoption, source reparse, deployment, or production-data mutation was run for this batch.
 
 The remaining approved provider-name batch maps 143 source entries (13 Garmin, 123 Polar, and 7 Strava). It adds
-46 canonical types and brings the local unreleased catalog to 242. Existing targets retain their exact Training contexts;
-At that initial audit stage, all 46 new types resolved to Other training; their current approved contexts and policies
-are listed in the registry table above. Library activity
-groups do not add a modeled Training discipline, intensity/load policy, planning capability, or provider delivery support.
+46 canonical types and brought that stage's unreleased catalog to 242. Existing targets retained their exact Training
+contexts. At that initial audit stage, all 46 new types resolved to Other training; their current approved contexts and
+policies are listed in the registry table above. Library activity groups do not add a modeled Training discipline,
+intensity/load policy, planning capability or provider delivery support.
 Crosscountry Running inherits Sports Lib's running-speed durability adapter, while Kickbiking and Mountain Bike
 Orienteering inherit cycling-power; the other 43 new types have no library durability adapter. Training's independent
 capability registry still controls whether that evidence is used. No Training registry or formula was changed here.
@@ -7951,8 +7960,10 @@ applicable durability evidence, and Training snapshots through existing ingress.
 package adoption, publication, source reparse, deployment, or production-data mutation was run for this batch.
 
 The subsequent local compatibility corrections add Australian Football, Korfball and Netball as distinct Team/Racket
-sports, taking the unreleased catalog to 245. Each retains the existing volume-only Other training fallback with omitted
-distance, a false indoor hint, ordinary cadence semantics and no durability adapter. Fourteen Polar FIT display aliases,
+sports, taking that stage's unreleased catalog to 245. Each initially used the volume-only Other training fallback.
+The current registry gives all three separate Team Sports contexts, with recorded elapsed time and saved TSS including
+zero, and omitted zones, distance and durability. Their library metadata retains a false indoor hint, ordinary cadence
+semantics and no durability adapter. Fourteen Polar FIT display aliases,
 explicit Polar Cross-trainer/Stretching profiles, and Garmin's English/French Breathwork profiles recover the already
 approved classifications only when the retained input establishes them. Existing specific sport contexts and Training
 formulas remain unchanged. Source-backed historical classification corrections require ordinary summary/snapshot
