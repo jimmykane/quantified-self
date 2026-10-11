@@ -2948,6 +2948,33 @@ describe('buildTrainingPowerSystemsMetricPayload', () => {
         expect(buildTrainingPowerSystemsMetricPayload([...activities].reverse(), nowMs)).toEqual(result);
     });
 
+    it.each([
+        [ActivityTypes.Cycling, RefinedTypes.RoadCycling, ActivityTypes.IndoorCycling],
+        [ActivityTypes.Running, RefinedTypes.RoadRunning, ActivityTypes.TrailRunning],
+    ])('counts older %s events that supply the discovered %s model history', async (generic, road, separate) => {
+        const { buildTrainingPowerSystemsMetricPayload, buildLegacyTrainingPowerSystemsMetricPayload } = await import('./derived-metrics.service');
+        const olderDayMs = asOfDayMs - (90 * DAY_MS);
+        const recentDayMs = asOfDayMs - (70 * DAY_MS);
+        const activities = [
+            source('generic-before-history', generic, olderDayMs),
+            source('road-in-history', road, recentDayMs),
+            source('separate-before-history', separate, olderDayMs),
+        ];
+        const fitSpy = vi.fn(fitThreeDimensionalCapacityModel);
+        const result = buildTrainingPowerSystemsMetricPayload(activities, nowMs, fitSpy);
+
+        expect(result.payload.activityTypes.map(entry => entry.activityType)).toEqual([road]);
+        const historicalFit = fitSpy.mock.calls.find(([, options]) => (
+            options.effectiveDate === new Date(recentDayMs).toISOString().slice(0, 10)
+        ));
+        expect(historicalFit?.[0]).toEqual([datedCurve('generic-before-history', generic, olderDayMs)]);
+        expect(result.sourceEventCount).toBe(2);
+
+        const legacy = buildLegacyTrainingPowerSystemsMetricPayload(activities, nowMs);
+        expect(legacy.payload.activityTypes.map(entry => entry.activityType)).toEqual([road]);
+        expect(legacy.sourceEventCount).toBe(1);
+    });
+
     it('stores independently fitted policy-1 inputs only for the four affected canonical labels', async () => {
         const { buildTrainingPowerSystemsMetricPayload, buildLegacyTrainingPowerSystemsMetricPayload } = await import('./derived-metrics.service');
         const dates = [asOfDayMs - (40 * DAY_MS), asOfDayMs - (20 * DAY_MS), asOfDayMs - DAY_MS];

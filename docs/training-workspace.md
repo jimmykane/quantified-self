@@ -6467,6 +6467,9 @@ Internal policy version 2 is fixed:
   those repeated counts are not additive across selector entries. Other sports retain separate input histories.
 - Repeated model/day calculations are cached within one build. Model keys are only the two approved pairs or the
   unchanged actual label; broad Training-family membership never defines a model key.
+- Snapshot `sourceEventCount` counts distinct parent events in the input history for discovered models, including an
+  older generic/road partner whose label is absent from the latest 84 days but supplies a historical fit. Events from
+  undiscovered models remain excluded; the policy-1 exact-type count retains its separate inputs.
 - Functions passes the dated curves directly to `fitThreeDimensionalCapacityModel`. There is no fallback window, FTP
   substitution, population default, or Quantified Self fitting formula. For the two pairs only, QS supplies the generic
   model type on the fitter's input curves while preserving source IDs, dates, power points and actual output labels.

@@ -2303,9 +2303,10 @@ function buildTrainingPowerSystemsMetricPayloadForPolicy<TPolicy extends 1 | 2>(
             },
         };
     });
+    const discoveredModelActivityTypes = new Set(discoveredActivityTypes.map(resolveModelActivityType));
     const sourceEventCount = new Set(
         candidates
-            .filter(candidate => discoveredActivityTypes.includes(candidate.activityType))
+            .filter(candidate => discoveredModelActivityTypes.has(candidate.modelActivityType))
             .map(candidate => candidate.eventId)
             .filter(Boolean),
     ).size;
