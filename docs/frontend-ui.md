@@ -645,6 +645,15 @@ Health tile reads depend on owner, metric and window, independently of source se
 Changing those display choices reprojects retained evidence without resubscribing or resetting loading state.
 Persisting an automatically selected source preserves the existing chart model instead of building it twice.
 
+Health's All overview uses an explicit ordered selection: Sleep, HRV, resting heart rate, VO₂ max, weight, and steps.
+Missing metrics reduce the selection; catalog order never supplies replacement cards. Available Sleep/HRV highlights
+own those two presentations on All. Today's eligible heart-rate highlight belongs to Vitals, where it replaces the
+general Heart rate card while keeping its full-history action. Without today's readings, the category retains that
+general card. Other categories retain their full available catalogs. Both projected highlight slots remain mounted
+while hidden so category and history navigation preserve source choices and loaded chart state. Their heading IDs
+are distinct. This changes presentation only; availability, provider reads, calculations, and account settings stay
+with the existing Health workspace and chart projections.
+
 Public Home and Health feature previews reuse `HealthCategoryOverviewComponent`, its category controls, and the shared
 Health/Sleep chart renderers through `HealthOverviewPreviewComponent`. The explicit `exampleOnly` input bypasses
 account subscriptions and refreshes even when the supplied identity matches an owner; switching into that mode clears

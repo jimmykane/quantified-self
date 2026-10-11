@@ -28,6 +28,7 @@ export class HealthCategoryOverviewComponent {
   readonly groups = input.required<readonly HealthMetricCatalogGroup[]>();
   readonly showSleep = input(false);
   readonly highlightedMetrics = input<readonly HealthWorkspaceMetricSelection[]>([]);
+  readonly vitalsHighlightedMetrics = input<readonly HealthWorkspaceMetricSelection[]>([]);
   readonly exampleOnly = input(false);
   readonly darkTheme = input(false);
   readonly referenceDate = input<string | null>(null);
@@ -42,15 +43,17 @@ export class HealthCategoryOverviewComponent {
   readonly categories = computed(() => buildHealthOverviewCategories(this.groups(), this.showSleep()));
   readonly selectedCategory = computed(() => this.categories().some(category => category.id === this.category()) ? this.category() : 'all');
   readonly hasOverviewHighlights = computed(() => this.selectedCategory() === 'all' && this.highlightedMetrics().length > 0);
+  readonly hasVitalsHighlights = computed(() => this.selectedCategory() === 'vitals' && this.vitalsHighlightedMetrics().length > 0);
   readonly cards = computed(() => {
     const categories = this.categories();
-    // Highlights already cover these metrics on All. Explicit categories still
-    // expose their full catalog, including history outside the highlight window.
+    // Each visible highlight owns its metric's presentation and history action.
+    // Other categories retain their full catalog, including historical readings.
     const highlighted = new Set(this.highlightedMetrics());
     const metrics = this.selectedCategory() === 'all' ? selectHealthOverviewMetrics(categories.map(category => ({
       ...category, metrics: category.metrics.filter(metric => !highlighted.has(metric.id)),
     })))
-      : categories.find(category => category.id === this.selectedCategory())!.metrics;
+      : categories.find(category => category.id === this.selectedCategory())!.metrics
+        .filter(metric => !this.hasVitalsHighlights() || !this.vitalsHighlightedMetrics().includes(metric.id));
     const settings = this.sourceSettings();
     return metrics.map(metric => ({ ...metric, icon: healthMetricIcon(metric.id),
       settings: settings[metric.id] || { metric: metric.id, range: '30d' as const },

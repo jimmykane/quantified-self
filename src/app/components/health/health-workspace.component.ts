@@ -885,7 +885,11 @@ export class HealthWorkspaceComponent {
     card.id === 'heart_rate_variability' || card.id === 'heart_rate'
       ? card.chartSeries.length > 0
       : card.loading || card.error || card.rows.length > 0 || card.chartSeries.length > 0));
-  readonly highlightedOverviewMetrics = computed(() => this.visiblePriorityCards().map(card => card.metric));
+  readonly visibleOverviewPriorityCards = computed(() => this.visiblePriorityCards()
+    .filter(card => card.id === 'sleep' || card.id === 'heart_rate_variability'));
+  readonly visibleVitalsPriorityCards = computed(() => this.visiblePriorityCards().filter(card => card.id === 'heart_rate'));
+  readonly highlightedOverviewMetrics = computed(() => this.visibleOverviewPriorityCards().map(card => card.metric));
+  readonly highlightedVitalsMetrics = computed(() => this.visibleVitalsPriorityCards().map(card => card.metric));
   readonly syncStateViews = computed<HealthSyncStateView[]>(() => this.syncStates()
     .map(state => syncStateView(state))
     .sort((left, right) => left.label.localeCompare(right.label)));

@@ -52,13 +52,26 @@
     <app-health-category-overview #overview [hidden]="metricDetailOpen()" [user]="user"
       [groups]="metricCatalogGroups()" [showSleep]="showSleepMetric()" [darkTheme]="isDarkTheme()"
       [highlightedMetrics]="highlightedOverviewMetrics()"
+      [vitalsHighlightedMetrics]="highlightedVitalsMetrics()"
       [referenceDate]="overviewEndDate()" [providerFilter]="selectedProviders()" [timelineNotes]="timelineNotes.context()"
       (metricSelected)="selectPriorityMetric($event)" (providersObserved)="rememberOverviewProviders($event)">
       <app-health-priority-summary healthOverviewHighlights
         [timelineNotes]="timelineNotes.context()"
-        [cards]="visiblePriorityCards()"
+        [cards]="visibleOverviewPriorityCards()"
         [startTimeMs]="priorityWindow.startTimeMs"
         [endTimeMs]="priorityWindow.endTimeMs"
+        [darkTheme]="isDarkTheme()"
+        [unitSettings]="unitSettings()"
+        [preferredSources]="preferredHighlightSources()"
+        (sourceSelected)="selectHighlightSource($event)"
+        (metricSelected)="selectPriorityMetric($event)">
+      </app-health-priority-summary>
+      <app-health-priority-summary healthVitalsHighlights titleId="health-vitals-highlight-title" heading="Today in Vitals"
+        description="Recorded heart rate throughout today."
+        [timelineNotes]="timelineNotes.context()"
+        [cards]="visibleVitalsPriorityCards()"
+        [startTimeMs]="priorityHeartRateWindow.startTimeMs"
+        [endTimeMs]="priorityHeartRateWindow.endTimeMs"
         [darkTheme]="isDarkTheme()"
         [unitSettings]="unitSettings()"
         [preferredSources]="preferredHighlightSources()"

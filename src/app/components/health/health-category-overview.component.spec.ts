@@ -44,11 +44,11 @@ describe('Health category overview', () => {
   }
   it('opens with six real catalog cards and forwards shared chart inputs without example data', () => {
     const fixture = create(), component = fixture.componentInstance;
-    expect(component.cards().map(card => card.id)).toEqual(['body_weight', 'heart_rate_variability', 'resting_heart_rate', 'steps', 'vo2_max', 'sleep']);
+    expect(component.cards().map(card => card.id)).toEqual(['sleep', 'heart_rate_variability', 'resting_heart_rate', 'vo2_max', 'body_weight', 'steps']);
     const chart = fixture.debugElement.query(By.directive(HealthChartStubComponent)).componentInstance as HealthChartStubComponent;
     expect(chart.overview()).toBe(true);
     expect(chart.exampleOnly()).toBe(false);
-    expect(chart.settings()).toEqual({ metric: 'body_weight', range: '30d' });
+    expect(chart.settings()).toEqual({ metric: 'sleep', range: '30d' });
     fixture.componentRef.setInput('providerFilter', ['GarminAPI']); fixture.componentRef.setInput('darkTheme', true); fixture.detectChanges();
     expect(chart.providerFilter()).toEqual(['GarminAPI']); expect(chart.darkTheme()).toBe(true);
     fixture.componentRef.setInput('referenceDate', '2026-10-10'); fixture.detectChanges();
@@ -68,7 +68,7 @@ describe('Health category overview', () => {
     const fixture = create(), component = fixture.componentInstance;
     fixture.componentRef.setInput('highlightedMetrics', ['sleep', 'heart_rate_variability', 'heart_rate']);
     fixture.detectChanges();
-    expect(component.cards()).toHaveLength(6);
+    expect(component.cards().map(card => card.id)).toEqual(['resting_heart_rate', 'vo2_max', 'body_weight', 'steps']);
     expect(component.cards().some(card => ['sleep', 'heart_rate_variability', 'heart_rate'].includes(card.id))).toBe(false);
     expect(component.cards().map(card => card.id)).toContain('resting_heart_rate');
     const highlights = fixture.nativeElement.querySelector('.health-overview-highlights') as HTMLElement;
@@ -126,6 +126,23 @@ describe('Health category overview', () => {
     component.selectCategory('movement'); fixture.detectChanges();
     expect(component.cards().map(card => card.id)).toEqual(['moderate_intensity_duration', 'vigorous_intensity_duration']);
   });
+  it('shows today’s heart rate only in Vitals without repeating its metric card', () => {
+    const fixture = create(), component = fixture.componentInstance;
+    fixture.componentRef.setInput('highlightedMetrics', ['sleep', 'heart_rate_variability']);
+    fixture.componentRef.setInput('vitalsHighlightedMetrics', ['heart_rate']); fixture.detectChanges();
+    const vitals = fixture.nativeElement.querySelector('.health-vitals-highlights') as HTMLElement;
+    expect(vitals.hidden).toBe(true);
+    component.selectCategory('vitals'); fixture.detectChanges();
+    expect(vitals.hidden).toBe(false);
+    expect(component.cards().map(card => card.id)).not.toContain('heart_rate');
+    expect(component.cards().map(card => card.id)).toContain('heart_rate_variability');
+    fixture.componentRef.setInput('vitalsHighlightedMetrics', []); fixture.detectChanges();
+    expect(vitals.hidden).toBe(true);
+    expect(component.cards().map(card => card.id)).toContain('heart_rate');
+    component.selectCategory('all'); fixture.detectChanges();
+    expect(component.cards().map(card => card.id)).toEqual(['resting_heart_rate', 'vo2_max', 'body_weight', 'steps']);
+    expect(haptics.selection).toHaveBeenCalledTimes(2);
+  });
   it('filters by category using Material semantic selection and keeps unchanged actions silent', () => {
     const fixture = create(), component = fixture.componentInstance;
     const chips = fixture.nativeElement.querySelectorAll('mat-chip-option button');
@@ -152,18 +169,18 @@ describe('Health category overview', () => {
     const fixture = create(), component = fixture.componentInstance;
     component.updateCardSettings({ metric: 'body_weight', range: '30d', sourceKey: 'manual-source' });
     component.selectCategory('fitness'); component.selectCategory('all'); fixture.detectChanges();
-    expect(component.cards()[0].settings.sourceKey).toBe('manual-source');
+    expect(component.cards().find(card => card.id === 'body_weight')!.settings.sourceKey).toBe('manual-source');
     fixture.componentRef.setInput('user', { uid: 'owner', settings: { unitSettings: { weightUnits: ['Pounds'] } } }); fixture.detectChanges();
-    expect(component.cards()[0].settings.sourceKey).toBe('manual-source');
+    expect(component.cards().find(card => card.id === 'body_weight')!.settings.sourceKey).toBe('manual-source');
     component.updateCardSettings({ metric: 'body_weight', range: '1y', sourceKey: 'other' });
-    expect(component.cards()[0].settings.sourceKey).toBe('manual-source');
+    expect(component.cards().find(card => card.id === 'body_weight')!.settings.sourceKey).toBe('manual-source');
     fixture.componentRef.setInput('user', { uid: 'new-owner', settings: { unitSettings: {} } }); fixture.detectChanges();
-    expect(component.cards()[0].settings.sourceKey).toBeUndefined(); expect(component.selectedCategory()).toBe('all');
+    expect(component.cards().find(card => card.id === 'body_weight')!.settings.sourceKey).toBeUndefined(); expect(component.selectedCategory()).toBe('all');
   });
   it('emits history navigation once, leaves feedback to the workspace and handles empty or removed categories', () => {
     const fixture = create(), component = fixture.componentInstance, selected = vi.fn();
     component.metricSelected.subscribe(selected);
-    fixture.nativeElement.querySelector('mat-card-actions button').click();
+    fixture.nativeElement.querySelector('button[aria-label="View Body weight history"]').click();
     expect(selected).toHaveBeenCalledExactlyOnceWith('body_weight'); expect(haptics.selection).not.toHaveBeenCalled();
     component.selectCategory('body');
     fixture.componentRef.setInput('groups', []); fixture.componentRef.setInput('showSleep', false); fixture.detectChanges();

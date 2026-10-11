@@ -488,19 +488,14 @@ export function buildHealthOverviewCategories(
   })).filter(category => category.metrics.length > 0);
 }
 
-/** A bounded landing selection; category filters reveal every available catalog entry. */
+/** Curated landing selection; category filters reveal every available catalog entry. */
 export function selectHealthOverviewMetrics(categories: readonly HealthOverviewCategory[]): HealthOverviewMetric[] {
-  // Intensity durations remain in Movement & energy, but never fill landing cards.
-  const available = new Map(categories.flatMap(category => category.metrics)
-    .filter(metric => metric.id !== HEALTH_METRIC_IDS.ModerateIntensityDuration
-      && metric.id !== HEALTH_METRIC_IDS.VigorousIntensityDuration)
-    .map(metric => [metric.id, metric]));
+  const available = new Map(categories.flatMap(category => category.metrics).map(metric => [metric.id, metric]));
   const preferred: readonly HealthWorkspaceMetricSelection[] = [
-    HEALTH_METRIC_IDS.BodyWeight, HEALTH_METRIC_IDS.HeartRateVariability,
-    HEALTH_METRIC_IDS.RestingHeartRate, HEALTH_METRIC_IDS.Steps, HEALTH_METRIC_IDS.Vo2Max, 'sleep',
+    'sleep', HEALTH_METRIC_IDS.HeartRateVariability, HEALTH_METRIC_IDS.RestingHeartRate,
+    HEALTH_METRIC_IDS.Vo2Max, HEALTH_METRIC_IDS.BodyWeight, HEALTH_METRIC_IDS.Steps,
   ];
-  const ordered = [...preferred, ...available.keys()];
-  return [...new Set(ordered)].flatMap(id => available.has(id) ? [available.get(id)!] : []).slice(0, 6);
+  return preferred.flatMap(id => available.has(id) ? [available.get(id)!] : []);
 }
 
 export function filterHealthRangeResultByProviders(

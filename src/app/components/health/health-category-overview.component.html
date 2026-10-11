@@ -14,6 +14,9 @@
   <div class="health-overview-highlights" [hidden]="!hasOverviewHighlights()">
     <ng-content select="[healthOverviewHighlights]"></ng-content>
   </div>
+  <div class="health-vitals-highlights health-overview-highlights" [hidden]="!hasVitalsHighlights()">
+    <ng-content select="[healthVitalsHighlights]"></ng-content>
+  </div>
 
   <div class="health-overview-grid" aria-label="Recorded Health metrics">
     @for (card of cards(); track card.id) {
@@ -31,7 +34,7 @@
         </mat-card-actions>
       </mat-card>
     } @empty {
-      @if (!hasOverviewHighlights()) {
+      @if (!hasOverviewHighlights() && !hasVitalsHighlights()) {
         <p class="health-overview-empty" role="status">{{ categories().length ? 'Choose a category to explore your recorded Health metrics.' : 'No recorded Health metrics yet. Add a measurement or connect a service to get started.' }}</p>
       }
     }

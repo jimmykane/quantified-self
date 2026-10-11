@@ -42,7 +42,7 @@ describe('public Health overview', () => {
 
   it('renders the actual six-card overview with fixed examples and no account reads or initial feedback', () => {
     const overview = fixture.debugElement.query(By.directive(HealthCategoryOverviewComponent)).componentInstance;
-    expect(overview.cards().map(card => card.id)).toEqual(['body_weight', 'heart_rate_variability', 'resting_heart_rate', 'steps', 'vo2_max', 'sleep']);
+    expect(overview.cards().map(card => card.id)).toEqual(['sleep', 'heart_rate_variability', 'resting_heart_rate', 'vo2_max', 'body_weight', 'steps']);
     const charts = fixture.debugElement.queryAll(By.directive(DashboardHealthChartComponent));
     expect(charts).toHaveLength(6);
     expect(charts.every(chart => chart.componentInstance.exampleOnly() && chart.componentInstance.overview()
