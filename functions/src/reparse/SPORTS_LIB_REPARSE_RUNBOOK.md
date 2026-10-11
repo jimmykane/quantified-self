@@ -7,6 +7,19 @@ Target version source of truth:
 - `SPORTS_LIB_REPARSE_TARGET_VERSION`
 - File: `functions/src/reparse/sports-lib-reparse.config.ts`
 
+### Sports Lib 21.6.11 reserved FIT header compatibility
+
+Root and Functions adopt Sports Lib 21.6.11 with FIT Parser 6.2.2. Ordinary activity decoding can again read
+existing Bryton and Magene originals whose normal record headers set reserved bit 4. Compatibility requires complete
+message definitions and payloads within the declared data section. Strict/raw readers retain their rejection policy;
+other invalid data-header bits and checksum policy are unchanged. Imported TSS and existing Training formulas retain
+their meaning. Successfully parsed files need no migration or rebuild solely for this correction.
+
+Retry a previously rejected retained original through the existing authorized upload/reparse lifecycle after deployment.
+Do not patch stored file bytes, bypass the normal writer, or turn this dependency update into a global repair campaign.
+Package publication and dependency adoption do not deploy QS, enable scanners, or authorize production reparsing.
+There are no new public metric tokens, schemas, MCP fields/scopes, write paths, or monitoring lifecycle changes.
+
 ### Unreleased provider-profile and JSON compatibility corrections
 
 The local Sports Lib branch corrects Garmin Breathwork for Generic/Breathing and Training/Breathing with an explicit
@@ -39,7 +52,7 @@ this task does not adopt a package, deploy, enable scanners, start reparsing or 
 
 ### Sports Lib 21.6.1 file-calibrated Training load
 
-Sports Lib 21.6.9 is published and pinned in root and Functions, with FIT Parser 6.2.1. It retains the file-calibrated
+Sports Lib 21.6.11 is published and pinned in root and Functions, with FIT Parser 6.2.2. It retains the file-calibrated
 load rules introduced in 21.6.1 and includes the swimming threshold, independent cycling FTP, rolling NP, explicit
 HR-pause, running pace, pool-length/recorded-stream and measured-zero power corrections. This release also corrects
 FIT session-boundary and zone ownership, missing timer recovery, Suunto pause/resume events and positive recorded-power
