@@ -20,6 +20,32 @@ Follow-up review keeps recognized profiles within compatible FIT parents, preser
 and retains every documented context for shared profile names. Route and route-file JSON now apply the same invalid
 scalar summary policy as activities. These corrections retain the existing provider and queue contracts.
 
+### Refined sport names at recorded-activity and route boundaries
+
+QS keeps the source sport name. Recorded-activity correction and route delivery have their own explicit approvals,
+separate from planned-workout aliases. `shared/wahoo-activity-types.ts` adds 28 approved recorded-activity aliases to
+existing Wahoo Workout types. The complete table is in [Wahoo recorded-activity profiles](wahoo-integration.md#recorded-activity-sport-profiles).
+Unmapped types keep Wahoo inference; native Nordic Walking, virtual and other existing mappings retain their IDs.
+A queued upload persists its chosen type before provider I/O and reuses it on resume; a new table does not rewrite
+already accepted uploads or authorize a historical correction job.
+
+`shared/route-sport-aliases.ts` covers the separately approved route folds:
+
+| QS route sport | Garmin course profile | COROS route type | Wahoo route family |
+| --- | --- | --- | --- |
+| BMX; LES MILLS RPM / SPRINT / THE TRIP | Road Cycling | Bike | Cycling |
+| Obstacle Racing | Running | Running | Running |
+| Vertical Running | Trail Running | Running | Running |
+| Enduro MTB; E-Enduro MTB | Mountain Biking | Bike | Cycling |
+
+These aliases select metadata only at the destination boundary. Original files, QS sport names, provider identity,
+echo receipts, permissions, account guards, revisions, leases, retries and queue terminal states retain their existing
+contracts. No FIT bytes or encoding logic changes. Monitoring coverage is **unchanged**: the recorded-activity and route
+bundles filter existing destination/worker/outcome labels, independently of sport names. Existing backlog-age,
+dispatch/processing failure, new DLQ/reconciliation and unavailable-observation policies cover these same workers.
+See [activity delivery monitoring](activity-delivery-monitoring.md) and [route monitoring](route-monitoring.md).
+Local tests do not establish provider/device acceptance or activate production configuration.
+
 ## 1. Define the product contract before writing code
 
 Start with a concise support matrix agreed with product and the provider. Do not infer capability from an OAuth scope alone.

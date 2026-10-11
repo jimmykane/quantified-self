@@ -222,6 +222,18 @@ describe('help.content', () => {
     expect(copy).toContain('never loads your account data or saves changes');
     expect(copy).not.toContain('/demo');
   });
+  it('explains separate destination profiles while retaining recorded and route sport names', () => {
+    const uploads = HELP_SECTIONS.find(section => section.id === 'uploads-and-imports')!.content;
+    const services = HELP_SECTIONS.find(section => section.id === 'service-connections')!.content;
+    expect(uploads).toContain('BMX and LES MILLS RPM / SPRINT / THE TRIP use Garmin Road Cycling, COROS Bike, and Wahoo Cycling');
+    expect(uploads).toContain('Vertical Running uses Garmin Trail Running');
+    expect(uploads).toContain('Your saved route keeps its original sport name');
+    expect(services).toContain('Road Cycling and BMX use Cycling');
+    expect(services).toContain('AMRAP, EMOM and Tabata use Cardio Class');
+    expect(services).toContain('Your QS activity keeps its original sport name');
+    expect(services).toContain('separate from route profiles and planned workouts');
+  });
+
   it('points users to the Privacy section and explains saving analytics and email opt-outs', () => {
     const copy = HELP_SECTIONS.find(section => section.id === 'data-and-privacy')!.content;
     expect(copy).toContain('[Settings → Privacy & emails](/settings?section=privacy)');

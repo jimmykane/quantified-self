@@ -115,7 +115,7 @@ start a production campaign or authorize direct data edits.
 The local Sports Lib branch corrects Garmin Breathwork for Generic/Breathing and Training/Breathing with an explicit
 English `Breathwork` or French `Ex. respiration` profile. It adds 14 Polar FIT display aliases and honors explicit Polar
 Cross-trainer and Stretching profiles on their documented broad pairs. Australian Football, Korfball and Netball are
-separate Team/Racket types, bringing the unreleased catalog to 245. Unnamed generic records remain broad; no numeric
+separate Team/Racket types, bringing the full unreleased catalog to 284. Unnamed generic records remain broad; no numeric
 sport IDs or undocumented API tokens are assigned to the three new types.
 
 Known profiles cannot replace an unrelated FIT parent through a standalone alias fallback. Existing compatible broad
@@ -137,8 +137,12 @@ remain separate and unreleased; adopting the JSON subset does not adopt those cl
 Current sports-lib calculations preserve valid nonnegative imported TSS, including zero, regardless of method preference
 or the deprecated preservation flag. QS's explicit internal regeneration removal is documented separately below.
 
-There are no new numeric metric tokens/units, formulas, derived schemas, planning/delivery capabilities, registered
-MCP fields/scopes, queue lifecycle, write paths or monitoring changes. Dynamic activity discovery uses existing fields.
+These Sports Lib corrections add no numeric metric tokens/units or formulas and keep provider TSS policy unchanged.
+Coordinated QS preparation separately covers Training schema-22 builders, approved planning aliases and MCP recipe
+coverage, plus recorded-activity and route destination metadata mappings. See the
+[Training compatibility notes](../../../docs/training-workspace.md#preserved-provider-sport-names-and-historical-compatibility)
+and [provider boundary tables](../../../docs/provider-integration-guide.md#refined-sport-names-at-recorded-activity-and-route-boundaries).
+Those changes retain queue lifecycles and sanitized write paths; dynamic activity discovery uses existing fields.
 Help remains accurate against the installed dynamic catalog. Both packages still use their installed 131-type catalog;
 the separate catalog/profile correction remains unadopted. It does not deploy, enable scanners, start reparsing or change
 FIT Parser source.

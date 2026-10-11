@@ -1,4 +1,5 @@
-import { ActivityTypes, ActivityTypesHelper } from '@sports-alliance/sports-lib';
+import { ActivityTypes } from '@sports-alliance/sports-lib';
+import { CompatibleTrainingActivityTypes as Refined, resolveCompatibleActivityType } from './activity-type-compatibility';
 
 export interface WahooWorkoutType {
   id: number;
@@ -72,6 +73,35 @@ const WAHOO_WORKOUT_TYPES_BY_ACTIVITY_TYPE = new Map<ActivityTypes, WahooWorkout
   [ActivityTypes['Virtual Cycling'], { id: 68, name: 'BIKING_INDOOR_VIRTUAL' }],
   [ActivityTypes['Hand Cycle'], { id: 70, name: 'HANDCYCLING' }],
   [ActivityTypes['Virtual Running'], { id: 71, name: 'RUNNING_INDOOR_VIRTUAL' }],
+  // Recorded-activity aliases are approved separately from Training delivery profiles.
+  [Refined.RoadRunning, { id: 1, name: 'RUNNING' }],
+  [Refined.TrackRunning, { id: 1, name: 'RUNNING' }],
+  [Refined.UltraRunning, { id: 1, name: 'RUNNING' }],
+  [Refined.CrosscountryRunning, { id: 1, name: 'RUNNING' }],
+  [Refined.ObstacleRacing, { id: 1, name: 'RUNNING' }],
+  [Refined.VerticalRunning, { id: 4, name: 'RUNNING_TRAIL' }],
+  [Refined.IndoorTrackRunning, { id: 5, name: 'RUNNING_TREADMILL' }],
+  [Refined.RoadCycling, { id: 0, name: 'BIKING' }],
+  [Refined.GravelCycling, { id: 0, name: 'BIKING' }],
+  [Refined.TrackCycling, { id: 0, name: 'BIKING' }],
+  [Refined.RecumbentCycling, { id: 0, name: 'BIKING' }],
+  [Refined.Cyclocross, { id: 0, name: 'BIKING' }],
+  [Refined.BMX, { id: 0, name: 'BIKING' }],
+  [Refined.Kickbiking, { id: 0, name: 'BIKING' }],
+  [Refined.EMountainBiking, { id: 64, name: 'EBIKING' }],
+  [Refined.EEnduroMTB, { id: 64, name: 'EBIKING' }],
+  [Refined.MountainBikeOrienteering, { id: 13, name: 'BIKING_MOUNTAIN' }],
+  [Refined.IndoorHandCycle, { id: 70, name: 'HANDCYCLING' }],
+  [Refined.LesMillsRPM, { id: 12, name: 'BIKING_INDOOR' }],
+  [Refined.LesMillsSPRINT, { id: 12, name: 'BIKING_INDOOR' }],
+  [Refined.LesMillsTheTrip, { id: 12, name: 'BIKING_INDOOR' }],
+  [Refined.SpeedWalking, { id: 6, name: 'WALKING' }],
+  [Refined.IndoorWalking, { id: 6, name: 'WALKING' }],
+  [Refined.ClassicCrosscountrySkiing, { id: 30, name: 'SKIINGCROSS_COUNTRY' }],
+  [Refined.SkateSkiing, { id: 30, name: 'SKIINGCROSS_COUNTRY' }],
+  [Refined.AMRAP, { id: 43, name: 'CARDIO_CLASS' }],
+  [Refined.EMOM, { id: 43, name: 'CARDIO_CLASS' }],
+  [Refined.Tabata, { id: 43, name: 'CARDIO_CLASS' }],
 ]);
 
 const WAHOO_WORKOUT_TYPES_BY_ID = new Map<number, WahooWorkoutType>();
@@ -82,7 +112,7 @@ for (const workoutType of WAHOO_WORKOUT_TYPES_BY_ACTIVITY_TYPE.values()) {
 export function resolveCanonicalActivityTypes(value: unknown): ActivityTypes[] {
   const values = Array.isArray(value) ? value : [value];
   return Array.from(new Set(values
-    .map(activityType => ActivityTypesHelper.resolveActivityType(activityType))
+    .map(activityType => resolveCompatibleActivityType(activityType))
     .filter((activityType): activityType is ActivityTypes => activityType !== null)));
 }
 

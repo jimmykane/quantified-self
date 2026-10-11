@@ -178,6 +178,15 @@ and rechecked before dispatch. Server-side connection authority and operations a
 OAuth-start and disconnect dispatch/retries also check the original Firebase auth user after App Check waits, stopping
 unsent work when the account or view changes instead of letting a delayed retry use a replacement account.
 
+## Refined route sport profiles
+
+The course uploader uses existing Garmin profiles for the separately approved expanded sport names: BMX and
+LES MILLS RPM / SPRINT / THE TRIP use `ROAD_CYCLING`; Obstacle Racing uses `RUNNING`; Vertical Running uses
+`TRAIL_RUNNING`. Enduro MTB and E-Enduro MTB retain `MOUNTAIN_BIKING`. These are course metadata aliases, separate
+from Training Workout mappings. QS retains each source route sport and original file. Course Import permission,
+account/revision guards, route identity, retry and lifecycle rules stay unchanged. The existing Garmin route delivery
+worker/outcome labels cover these sends, so monitoring coverage is unchanged.
+
 ## Training-planning proof boundary
 
 The ignored local Garmin Training API V2 version 1.0 partner contract is available for development, but it is never

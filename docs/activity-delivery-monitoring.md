@@ -92,6 +92,11 @@ an observation. Logging failures never change delivery/acknowledgement behavior.
 Existing private operational logs and retained jobs remain the investigation source;
 do not copy their sensitive contents into issues, email or metric labels.
 
+The 28 approved expanded sport-name aliases for recorded Wahoo uploads retain the existing type-correction and
+status-only resume flow. Monitoring coverage is **unchanged**: Wahoo destination/worker/outcome filters already
+cover these sends, and sport names are not labels. Accepted uploads retain their durable selected ID; this table
+change does not authorize historical replay, new telemetry or production monitoring changes.
+
 ## Bounded read-only observation
 
 Historical-send preview performance has **unchanged** delivery coverage. Its existing callable batches bounded exact

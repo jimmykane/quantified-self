@@ -232,6 +232,30 @@ describe('Wahoo route uploads', () => {
     expect(request.form.get('route[workout_type_family_id]')).toBe('0');
   });
 
+  it.each([
+    ['BMX', '0'],
+    ['LES MILLS RPM', '0'],
+    ['LES MILLS SPRINT', '0'],
+    ['LES MILLS THE TRIP', '0'],
+    ['Enduro MTB', '0'],
+    ['E-Enduro MTB', '0'],
+    ['Obstacle Racing', '1'],
+    ['Vertical Running', '1'],
+    ['Unknown profile', '31'],
+  ])('sends %s through the approved Wahoo route family %s', async (sport, familyId) => {
+    const file = routeFile({ getRoutes: () => [{
+      activityType: sport,
+      getPointData: () => [{ latitudeDegrees: 60.1699, longitudeDegrees: 24.9384 }],
+    }] });
+    mocks.parseRoutePayload.mockResolvedValue(file);
+    mocks.requestWahooAPI
+      .mockResolvedValueOnce({ data: [] })
+      .mockResolvedValueOnce({ data: { id: 42 } });
+    await uploadFitRouteToWahoo('user-1', Buffer.from('FIT'), 'route.fit');
+    expect(mocks.requestWahooAPI.mock.calls[1][2].form.get('route[workout_type_family_id]')).toBe(familyId);
+    expect(file.getRoutes()[0].activityType).toBe(sport);
+  });
+
   it('converts a GPX route to FIT before creating an idempotent Wahoo route', async () => {
     mocks.parseRoutePayload.mockResolvedValue(routeFile({
       name: 'New Route File',

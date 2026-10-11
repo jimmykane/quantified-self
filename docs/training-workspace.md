@@ -4617,11 +4617,15 @@ authorized original-file reparse lifecycle and normal derived refresh. The
 [reparse runbook](../functions/src/reparse/SPORTS_LIB_REPARSE_RUNBOOK.md#energysense-support-in-sports-lib-2200)
 records the current dependency and rollout boundary.
 
-MCP impact: existing Training projections reuse the registry, and activity charts/samples reuse the shared identity
-matcher with unchanged owner checks, source/sample budgets, tools, schemas and scopes. Built-in Assistant workflow
-filters include only installed catalog values until the dependency upgrade, avoiding unsupported future enum inputs. The frozen public Training
-projection remains Running/Cycling/Swimming plus Other. Training plans, scheduled workouts, proposal/confirmation
-contracts and provider delivery mappings do not change, so no new planning read or mutation surface is required.
+MCP impact: existing Training metric projections reuse the registry, and activity charts/samples reuse the shared
+identity matcher with unchanged owner checks, source/sample budgets and scopes. Built-in Assistant workflow filters
+include only installed catalog values until the dependency upgrade, avoiding unsupported future enum inputs. The
+frozen public Training metric projection remains Running/Cycling/Swimming plus Other. Planning separately extends
+approved sport names through full recipe reads, previews and existing proposal/confirmation contracts, with the
+pending registered-contract digest covering those strict enum additions. Provider serializers use the approved
+outbound aliases and existing mapping review; no new tool, mutation kind, provider action or consent scope is added.
+Recorded-activity correction and route aliases are separate approvals documented in the
+[provider boundary tables](provider-integration-guide.md#refined-sport-names-at-recorded-activity-and-route-boundaries).
 
 ## Derived-Metric Refresh Pipeline
 
