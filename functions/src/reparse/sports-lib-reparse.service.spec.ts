@@ -2562,6 +2562,91 @@ describe('sports-lib-reparse.service', () => {
         }
     });
 
+    it.each(['pool', 'multisport', 'pace-uphill', 'pace-gap', 'pace-zero'] as const)(
+        'preserves corrected %s file inputs through QS regeneration', async kind => {
+            const sports = await vi.importActual<typeof import('@sports-alliance/sports-lib')>('@sports-alliance/sports-lib');
+            const origin = new Date('2026-01-01T10:00:00Z');
+            let parsedEvent: Awaited<ReturnType<typeof sports.EventImporterFIT.getFromArrayBuffer>>;
+            if (kind.startsWith('pace-')) {
+                const iso = (second: number) => new Date(+origin + second * 1000).toISOString();
+                const seconds = kind === 'pace-gap' ? [0, 3600] : Array.from({ length: 3601 }, (_, second) => second);
+                parsedEvent = await sports.EventImporterSuuntoJSON.getFromJSONString(JSON.stringify({ DeviceLog: {
+                    Device: { Name: 'Synthetic', Info: { HW: '1', SW: '1' } },
+                    Samples: [{ TimeISO8601: iso(0), Events: [{ Activity: { ActivityType: 3 } }] },
+                        ...seconds.map(second => ({ TimeISO8601: iso(second), Speed: kind === 'pace-zero' ? 0 : 3,
+                            VerticalSpeed: kind === 'pace-uphill' ? 0.3 : 0 })),
+                        { TimeISO8601: iso(3600), Events: [{ Lap: { Type: 'Stop' } }] }],
+                    Windows: [{ Window: { Type: 'Activity', Duration: 3600 } }],
+                    Header: { DateTime: iso(0), Duration: 3600, SpeedZones: { Zone1Duration: 0, Zone2Duration: 0,
+                        Zone3Duration: 0, Zone4Duration: 0, Zone5Duration: 3600, Zone2LowerLimit: 1,
+                        Zone3LowerLimit: 2, Zone4LowerLimit: 2.5, Zone5LowerLimit: 3 } },
+                } }), new sports.ActivityParsingOptions({ generateUnitStreams: false }));
+            } else {
+                const { FitEncoder, FitBaseType } = await import('fit-file-parser/encoder');
+                const field = (number: number, value: number, baseType = FitBaseType.Uint8) => ({ number, value, baseType,
+                    size: baseType === FitBaseType.Uint32 ? 4 : baseType === FitBaseType.Uint16 ? 2 : 1 });
+                const encoder = new FitEncoder(), start = FitEncoder.toFitTimestamp(origin);
+                encoder.writeMessage(0, [field(0, 4, FitBaseType.Enum), field(1, 1, FitBaseType.Uint16)]);
+                const seconds = kind === 'pool' ? [600, 1800, 3000] : Array.from({ length: 3601 }, (_, second) => second);
+                for (const second of seconds) encoder.writeMessage(20, [field(253, start + second, FitBaseType.Uint32),
+                    field(3, 165)], 1);
+                if (kind === 'multisport') {
+                    for (const [second, type] of [[0, 0], [1200, 4], [2400, 0], [3600, 4]]) {
+                        encoder.writeMessage(21, [field(253, start + second, FitBaseType.Uint32),
+                            field(0, 0, FitBaseType.Enum), field(1, type, FitBaseType.Enum)], 2);
+                    }
+                } else {
+                    for (let lap = 0; lap < 2; lap++) {
+                        const time = start + lap * 1800;
+                        encoder.writeMessage(101, [field(254, lap, FitBaseType.Uint16), field(253, time + 1799, FitBaseType.Uint32),
+                            field(2, time, FitBaseType.Uint32), field(3, 1800000, FitBaseType.Uint32),
+                            field(4, 1800000, FitBaseType.Uint32), field(6, 1000, FitBaseType.Uint16), field(12, 1, FitBaseType.Enum)], 6);
+                        encoder.writeMessage(19, [field(254, lap, FitBaseType.Uint16), field(253, time + 1800, FitBaseType.Uint32),
+                            field(2, time, FitBaseType.Uint32), field(7, 1800000, FitBaseType.Uint32),
+                            field(8, 1800000, FitBaseType.Uint32), field(9, 180000, FitBaseType.Uint32),
+                            field(32, 1, FitBaseType.Uint16), field(35, lap, FitBaseType.Uint16), field(15, 100)], 3);
+                    }
+                }
+                for (let leg = 0; leg < (kind === 'pool' ? 1 : 2); leg++) {
+                    encoder.writeMessage(18, [field(254, leg, FitBaseType.Uint16),
+                        field(253, start + (kind === 'pool' ? 3600 : (leg + 1) * 1800), FitBaseType.Uint32),
+                        field(2, start + leg * 1800, FitBaseType.Uint32), field(5, kind === 'pool' ? 5 : 11, FitBaseType.Enum),
+                        field(7, kind === 'pool' ? 3600000 : 1800000, FitBaseType.Uint32),
+                        field(8, kind === 'pool' ? 3600000 : 1200000, FitBaseType.Uint32),
+                        ...(kind === 'pool' ? [field(6, 17, FitBaseType.Enum), field(26, 2, FitBaseType.Uint16)] : [])], 4);
+                    encoder.writeMessage(216, [field(0, 18, FitBaseType.Uint16), field(1, leg, FitBaseType.Uint16),
+                        field(11, 190), field(12, 55), field(13, 165)], 5);
+                }
+                const bytes = encoder.close();
+                parsedEvent = await sports.EventImporterFIT.getFromArrayBuffer(
+                    bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength) as ArrayBuffer,
+                    new sports.ActivityParsingOptions({ generateUnitStreams: false }));
+            }
+            const activities = parsedEvent.getActivities();
+            const expected = activities.map(item => sports.ActivityUtilities.getTrainingStressScoreEvaluations(item));
+            const score = kind === 'pool' ? 83.3 : kind === 'multisport' ? 33.3
+                : kind === 'pace-uphill' ? 274.8 : kind === 'pace-zero' ? 0 : null;
+            expect(expected.every(item => item.automatic.score === score)).toBe(true);
+            hoisted.fitImporter.getFromArrayBuffer.mockResolvedValue(parsedEvent);
+            hoisted.generateMissingStreamsAndStatsForActivity.mockImplementation(
+                item => sports.ActivityUtilities.generateMissingStreamsAndStatsForActivity(item));
+            hoisted.evaluateTrainingStressScore.mockImplementation(item => sports.ActivityUtilities.evaluateTrainingStressScore(item));
+            for (let pass = 0; pass < 2; pass++) {
+                await reparseEventFromOriginalFiles('u1', 'e1', { mode: 'regenerate',
+                    eventData: { originalFile: { path: 'users/u1/events/e1/synthetic.fit' } },
+                    activityDocs: [], targetSportsLibVersion: TARGET_SPORTS_LIB_VERSION });
+                expect(activities.map(item => sports.ActivityUtilities.getTrainingStressScoreEvaluations(item))).toEqual(expected);
+                for (const item of activities) expect(item.getStat(sports.DataTrainingStressScore.type)?.getValue() ?? null).toBe(score);
+                if (kind === 'pool') {
+                    expect(activities[0].getStream(sports.DataHeartRate.type).getData(true, true)).toEqual([165, 165, 165]);
+                    expect(activities[0].getStreamData(sports.DataHeartRate.type)[1200]).toBeNull();
+                }
+                if (kind === 'multisport') expect(activities[1].getAllEvents()).toEqual(expect.arrayContaining([
+                    expect.objectContaining({ timestamp: 0 }),
+                ]));
+            }
+        });
+
     it('reparseEventFromOriginalFiles should skip activity-level regeneration in reimport mode', async () => {
         const parsedEvent = makeEvent();
         hoisted.fitImporter.getFromArrayBuffer.mockResolvedValue(parsedEvent);

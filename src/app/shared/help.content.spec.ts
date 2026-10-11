@@ -55,6 +55,13 @@ describe('help.content', () => {
       'saved tag remains available', '**Refresh tags and activities**', 'Generated timestamp names are hidden',
       'the sport stays visible and opens the activity', 'Custom names remain visible']) expect(copy).toContain(phrase);
   });
+  it('explains running pace coverage, recorded pool HR and confirmed multisport pauses', () => {
+    const copy = HELP_SECTIONS.find(section => section.content.includes('### Form tile (CTL / ATL / TSB)'))!.content;
+    expect(copy).toContain('Running pace TSS uses the energy cost of hills, recorded zero speed and complete 30-second windows');
+    expect(copy).toContain('insufficient usable pace data falls back to another eligible method');
+    expect(copy).toContain('Pool swims keep recorded heart-rate readings instead of replacing them with lap averages');
+    expect(copy).toContain('missing or conflicting timing is not used to guess a pause');
+  });
   it('explains HR pauses and independent power calibration without promising historical rewrites', () => {
     const copy = HELP_SECTIONS.find(section => section.content.includes('### Form tile (CTL / ATL / TSB)'))!.content;
     expect(copy).toContain('Calculated HR TSS excludes explicit timer pauses');

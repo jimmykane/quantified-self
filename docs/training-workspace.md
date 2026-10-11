@@ -5329,6 +5329,19 @@ retains `missing-pace-inputs`. Imported nonnegative TSS, including zero, remains
 or replaces stale calculated swim scores. The shared duration resolver, rest handling and calorie/MET formula are
 unchanged by this correction.
 
+Running pace TSS uses equivalent flat speed `speed × Cost(grade) / 3.6`, where Cost is the Minetti running-cost
+polynomial. It retains valid zero-speed samples, requires complete rolling 30-second windows, and restarts those
+windows at invalid readings, gaps and explicit timer state changes. The full eligible active duration supplies the
+TSS duration factor. Insufficient pace coverage falls through to the existing candidates; complete all-zero coverage
+can produce valid zero TSS. No threshold, body mass or pause position is inferred.
+
+FIT pool imports preserve real recorded HR instead of replacing it with lap/length averages. On the parsed activity
+instance, gaps remain gaps through repeated stream/statistic regeneration; private source evidence is not serialized
+into Activity JSON. Length/lap HR is used only when valid recorded HR is wholly absent. Existing length-derived swim
+speed, distance and stroke streams keep their behavior. FIT multisport imports retain a pre-leg stopped timer state
+only when original session timing unambiguously corroborates it. Full-duration sessions retain implicit restarts,
+while missing or conflicting timing does not invent pauses. These in-memory corrections add no database operations.
+
 MET remains an estimate: `hours = duration / 3600`, `MET = kcal / (file kg × hours)`, `TSS = 100 × hours × (MET /
 10)²`. Require valid file energy, body mass and duration; 210 kcal, 70 kg and one hour yield MET 3 and 9 TSS. Do
 not invent mass, subtract resting calories, use reference-MET tables, or adopt STT's linear score or zone weights.
@@ -5541,11 +5554,13 @@ history. No derived schema bump or route reparse is required for this calculatio
 Editor tests load these additive diagnostics through the metadata reader, so a newer server diagnostic remains
 compatible with the older Sports Lib version used to build an existing frontend.
 
-The published [Sports Lib 21.6.6](https://github.com/sports-alliance/sports-lib/releases/tag/v21.6.6) artifact is pinned
+The published [Sports Lib 21.6.7](https://github.com/sports-alliance/sports-lib/releases/tag/v21.6.7) artifact is pinned
 in both root and Functions, with FIT Parser 6.2.1. Both lockfiles match its npm integrity. The release incorporates
-the swimming, cycling calibration/NP and explicit HR-pause corrections. A read-only replay of 300 original files
-(313 legs) passed 4,478 checks, preserving all 113 imported scores and changing only the three identified HR-pause
-scores relative to 21.6.5. Private originals and detailed audit results remain outside Git.
+the swimming, cycling calibration/NP, explicit HR-pause, running pace, recorded pool-HR and multisport timer
+corrections. A read-only replay of 540 original files (578 legs) passed 9,854 checks, preserving all 181 imported
+scores. Relative to 21.6.6, one calculated trail-running score changed; recorded HR was corrected in 30 pool legs and
+four initial pauses were recovered across multisport boundaries. All differences were validated against the source
+inputs. Private originals and detailed audit results remain outside Git.
 MCP review: this update adds no metric token, unit, output field, reason code, scope, mutation, planning capability or
 plugin change. Recorded queries consume saved statistics; Training impact consumes the existing modeled-load resolver.
 Corrected historical load needs original-file reparse and the normal derived-summary refresh. Existing controls and
