@@ -55,6 +55,17 @@ describe('help.content', () => {
       'saved tag remains available', '**Refresh tags and activities**', 'Generated timestamp names are hidden',
       'the sport stays visible and opens the activity', 'Custom names remain visible']) expect(copy).toContain(phrase);
   });
+  it('explains swimming threshold requirements, file-only fallbacks and imported-score preservation', () => {
+    const copy = HELP_SECTIONS.find(section => section.content.includes('### Form tile (CTL / ATL / TSB)'))!.content;
+    expect(copy).toContain('Pool and open-water swimming need a usable swim threshold for pace-based TSS');
+    expect(copy).toContain("The workout's average pace is never used as its own threshold");
+    expect(copy).toContain('other eligible methods, including calibrated HR or a calorie/MET estimate');
+    expect(copy).toContain('If none has the required file inputs, load stays unavailable');
+    expect(copy).toContain('File-imported TSS, including zero, still takes precedence');
+    expect(copy).toContain('Complete, valid HR settings recorded for the session');
+    expect(copy).toContain('Missing or invalid session settings are not guessed');
+    expect(copy).toContain('Older activities retain recorded values until **Reimport activity from file**');
+  });
   it('explains a busy activity-history request for all four providers without claiming success or failure', () => {
     const copy = HELP_SECTIONS.find(section => section.id === 'service-connections')!.content;
     expect(copy).toContain('For Garmin, Suunto, COROS, and Wahoo, **Import already running**');

@@ -9,7 +9,7 @@ import { AppHapticsService } from '../../services/app.haptics.service';
 import { defaultAppliedTrainingLoadPolicy } from '@shared/training-load-policy';
 import { browserTrainingLoadSourceFingerprint } from '@shared/training-load-source';
 import * as trainingLoadSource from '@shared/training-load-source';
-import { ActivityTypes, EventImporterJSON } from '@sports-alliance/sports-lib';
+import { ActivityTypes, EventImporterJSON, TrainingStressScoreMethod } from '@sports-alliance/sports-lib';
 
 describe('Training load editor', () => {
   const save = vi.fn(); const selection = vi.fn(); const success = vi.fn(); const error = vi.fn();
@@ -179,6 +179,31 @@ describe('Training load editor', () => {
         policy: defaultAppliedTrainingLoadPolicy('Walking'), recordedTss: 87.3,
         evaluations: { version: 1, automatic: result, hr: { ...result, preference: 'HR' }, met: { ...result, preference: 'MET' } } } } });
     expect(component.automatic).toBeNull(); expect(component.recorded).toBe(87.3);
+  });
+  it.each([ActivityTypes.Swimming, ActivityTypes.OpenWaterSwimming])('explains the missing threshold for %s with an unavailable or estimated fallback', type => {
+    component.activities[0].type = type;
+    const result = { preference: 'AUTOMATIC' as const, method: null, score: null, estimated: false,
+      provenance: null, reasons: ['missing-swim-threshold' as const, 'missing-met-inputs' as const] };
+    component.metadata.set({ version: 1, revision: 1, excluded: false, controls: {}, legs: {
+      walk: { activityId: 'walk', identity: { startMs: 1000, endMs: 3601000, type, duration: 3600, distance: null },
+        policy: defaultAppliedTrainingLoadPolicy(type), recordedTss: 87.3,
+        evaluations: { version: 1, automatic: result, hr: { ...result, preference: 'HR' }, met: { ...result, preference: 'MET' } } } } });
+    expect(component.legModel).toMatchObject({ status: 'unavailable', score: null });
+    expect(component.explanation).toContain('No eligible load calculation');
+    expect(component.reasonText).toContain('No usable swim threshold is available');
+    expect(component.reasonText).toContain('average pace is not used as its threshold');
+    expect(component.reasonText).toContain('MET requires valid file calories, body mass and duration');
+
+    component.leg!.evaluations!.automatic = { ...result, score: 9, method: TrainingStressScoreMethod.MET,
+      estimated: true, provenance: 'calculated', reasons: ['missing-hr-calibration', 'missing-swim-threshold'] };
+    expect(component.legModel).toMatchObject({ status: 'available', score: 9, method: 'MET', estimated: true });
+    expect(component.explanation).toContain('Estimate from file calories, body mass and duration');
+    expect(component.reasonText).toContain('No usable swim threshold is available');
+    expect(component.reasonText).not.toContain('MET requires');
+
+    component.leg!.evaluations!.automatic = { ...result, reasons: ['missing-pace-inputs'] };
+    expect(component.reasonText).toBe('Pace calculation inputs are unavailable.');
+    expect(component.reasonText).not.toContain('threshold');
   });
   it('accepts restored power-curve zeros as the same saved leg and allows its override', async () => {
     const parent = { name: 'Ride', startDate: 1000, endDate: 3601000, stats: { 'Training Stress Score': 9 } };

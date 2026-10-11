@@ -5302,6 +5302,19 @@ threshold HR < maximum HR`. Session-matched FIT `time_in_zone` settings take pri
 setting. Observed peak HR, guessed threshold ratios and weighted HR zones are ineligible. QS supplies no athlete
 settings. The synthetic one-hour recovery walk with calibration 190/55/165 produces approximately 7.6 HR TSS.
 
+A complete, unique session-matched FIT calibration that satisfies the same HR ordering may ignore zero placeholders
+in lower-priority `zones_target` or profile settings. This exception does not fill missing session settings or accept
+invalid session calibration. Ambiguous session references, conflicting repeated settings, nonnumeric values and
+negative settings retain the existing rejection checks. QS still supplies no athlete settings.
+
+Pool and open-water swim pace calculations never infer a threshold from the workout's own average speed, even when
+heuristic fallbacks are enabled. Existing explicit threshold override interfaces remain compatible; other eligible
+Automatic methods keep their order. Missing swim threshold skips swim pace and records `missing-swim-threshold`,
+which the owner editor explains alongside an available fallback or unavailable result. Invalid speed or duration
+retains `missing-pace-inputs`. Imported nonnegative TSS, including zero, remains authoritative; recalculation removes
+or replaces stale calculated swim scores. The shared duration resolver, rest handling and calorie/MET formula are
+unchanged by this correction.
+
 MET remains an estimate: `hours = duration / 3600`, `MET = kcal / (file kg × hours)`, `TSS = 100 × hours × (MET /
 10)²`. Require valid file energy, body mass and duration; 210 kcal, 70 kg and one hour yield MET 3 and 9 TSS. Do
 not invent mass, subtract resting calories, use reference-MET tables, or adopt STT's linear score or zone weights.
@@ -5502,6 +5515,14 @@ Recent owner exclusions still wait for the Form rebuild. Actual service response
 checked against the strict output validator, including partial days. Built-in Assistant instructions distinguish
 recorded metrics from modeled load. This is a completed-load feature, with no plan/workout read or mutation contract impact and no
 provider delivery changes.
+
+Swimming correction MCP review: the new missing-threshold reason stays in owner-only load metadata and the editor.
+Training impact uses the existing ready/partial/unavailable projection and frozen reasons, while recorded statistic
+queries retain their existing meaning. Focused service tests cover an unavailable swim and its estimated fallback,
+validate the strict public output schema, and reject private reason/calibration/policy leakage. No tool, scope,
+public schema, mutation, planning read, provider delivery or bundled-plugin change is needed. Existing activities
+retain their values until an approved original-file reparse refreshes candidates; deployment alone does not rewrite
+history. No derived schema bump or route reparse is required for this calculation-only change.
 
 The verified Sports Lib 21.6.2 artifact is published and pinned in both QS packages, with FIT Parser 6.2.1.
 Release Functions/Rules/frontend together after separate approval. Deployment and production reparse remain separate

@@ -113,6 +113,7 @@ export class TrainingLoadDialogComponent implements OnInit {
       'missing-hr-samples': 'No usable heart-rate samples are available.',
       'missing-met-inputs': 'MET requires valid file calories, body mass and duration.',
       'missing-power-inputs': 'Power calculation inputs are unavailable.',
+      'missing-swim-threshold': 'No usable swim threshold is available. The workout’s average pace is not used as its threshold.',
       'missing-pace-inputs': 'Pace calculation inputs are unavailable.',
     };
     return [...new Set(this.legModel.reasons.map(reason => messages[reason]).filter(Boolean))].join(' ');
