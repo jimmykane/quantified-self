@@ -138,6 +138,23 @@ describe('setTrainingBuildBenchmark', () => {
         expect(result).toEqual({ accepted: true, queued: true, generation: 14 });
     });
 
+    it.each(['Wheel Chair', 'Wheelchair Push Walk', 'Wheelchair Push Run',
+        'Indoor Wheelchair Push Walk', 'Indoor Wheelchair Push Run', 'Wheelchair Racing'])(
+        'saves a wheelchair benchmark from a recorded %s child after JSON transport', async type => {
+            hoisted.transactionGet.mockImplementation(async (ref: unknown) => ref === hoisted.activitiesQuery
+                ? { docs: [{ data: () => ({ type }) }] }
+                : { exists: true, data: () => ({ startDate: Date.UTC(2026, 2, 1, 9) }) });
+            const data = JSON.parse(JSON.stringify({
+                discipline: 'wheelchair', selection: { mode: 'event', durationWeeks: 12, eventId: 'wheelchair-event' },
+            }));
+            await expect((setTrainingBuildBenchmark as any)({ auth: { uid: 'user-1' }, app: {}, data }))
+                .resolves.toMatchObject({ accepted: true });
+            expect(hoisted.transactionSet).toHaveBeenCalledWith(expect.anything(), {
+                trainingSettings: { buildBenchmarks: { wheelchair: data.selection } },
+            }, { merge: true });
+        },
+    );
+
     it('accepts a valid historical event with an ISO start date', async () => {
         hoisted.transactionGet.mockResolvedValueOnce({
             exists: true,

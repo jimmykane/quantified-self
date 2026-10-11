@@ -544,7 +544,7 @@ describe('dashboard-derived-metrics.helper', () => {
     };
     const context = resolveDashboardTrainingBuildComparisonContext(payload);
 
-    expect(context?.disciplines).toHaveLength(10);
+    expect(context?.disciplines).toHaveLength(11);
     expect(context?.disciplines[0].current?.trainingStressScore).toBeNull();
     expect(context?.disciplines[0].selection?.mode).toBe('event');
     expect(context?.disciplines[0].selection?.label).toBe('Spring marathon');

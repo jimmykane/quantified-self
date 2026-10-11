@@ -13,6 +13,7 @@ import {
 import {
     ActivityTypeGroups,
     ActivityTypes,
+    ActivityTypesHelper,
     DataAscent,
     DataActivityTypes,
     DataAvgStrokeDistance,
@@ -2207,7 +2208,7 @@ describe('buildTrainingBuildComparisonMetricPayload', () => {
 
         expect(result.payload.disciplines.map(item => item.discipline)).toEqual([
             'running', 'cycling', 'swimming', 'rowing', 'walking-hiking', 'nordic-skiing', 'strength',
-            'fitness-gym', 'paddling', 'other-training',
+            'fitness-gym', 'paddling', 'wheelchair', 'other-training',
         ]);
         [cycling, strength].forEach((discipline) => {
             expect(discipline?.status).toBe('ready');
@@ -2703,6 +2704,34 @@ describe('buildTrainingPowerSystemsMetricPayload', () => {
         activityType,
         date: new Date(dayMs).toISOString().slice(0, 10),
         powerCurve,
+    });
+
+    it('keeps six wheelchair power histories independent across recorded indoor and outdoor types', async () => {
+        const { buildTrainingPowerSystemsMetricPayload } = await import('./derived-metrics.service');
+        const types = ['Wheel Chair', 'Wheelchair Push Walk', 'Wheelchair Push Run',
+            'Indoor Wheelchair Push Walk', 'Indoor Wheelchair Push Run', 'Wheelchair Racing'];
+        const activities = types.flatMap((type, index) => [
+            source(`wheelchair-${index}-1`, type as ActivityTypes, asOfDayMs - (20 * DAY_MS)),
+            source(`wheelchair-${index}-2`, type as ActivityTypes, asOfDayMs - DAY_MS),
+        ]);
+        const fitSpy = vi.fn(fitThreeDimensionalCapacityModel);
+        const result = buildTrainingPowerSystemsMetricPayload(activities, nowMs, fitSpy);
+        expect(result.payload.activityTypes.map(item => item.activityType)).toEqual([...types].sort());
+        const currentFits = fitSpy.mock.calls.filter(([, options]) => options?.effectiveDate === '2026-07-20');
+        expect(currentFits).toHaveLength(6);
+        for (const [curves] of currentFits) {
+            expect(curves).toHaveLength(2);
+            expect(new Set(curves.map(curve => curve.activityType)).size).toBe(1);
+        }
+        for (const entry of result.payload.activityTypes) {
+            // New exact names become fitter inputs when the expanded catalog is adopted.
+            const available = ActivityTypesHelper.resolveActivityType(entry.activityType) !== null;
+            expect(entry.current.diagnostics.sourceCount).toBe(available ? 2 : 0);
+            expect(entry.current.activityType).toBe(entry.activityType);
+            expect(entry.evidenceCounts.usableCurveActivityCount).toBe(available ? 2 : 0);
+        }
+        const availableEntries = result.payload.activityTypes.filter(item => ActivityTypesHelper.resolveActivityType(item.activityType));
+        expect(new Set(availableEntries.map(item => item.current.sourceFingerprint)).size).toBe(availableEntries.length);
     });
 
     it('uses the exact closed-open 42-day window and matches the Sports-lib public fitter', async () => {
@@ -3767,6 +3796,93 @@ describe('buildTrainingSummaryMetricPayload', () => {
         ]));
     });
 
+    it.each([
+        ['Rucking', 'walking-hiking', 'rucking', true, true],
+        ['Orienteering', 'running', 'orienteering', true, true],
+        ['Ski Orienteering', 'nordic-skiing', 'ski-orienteering', true, true],
+        ['Biathlon', 'nordic-skiing', 'biathlon', true, true],
+        ['Fitness Racing', 'fitness-gym', 'conditioning', false, false],
+        ['Aqua Fitness', 'fitness-gym', 'conditioning', false, false],
+        ['Water Running', 'fitness-gym', 'water-running', true, false],
+        ['Wheel Chair', 'wheelchair', 'wheelchair-general', true, true],
+        ['Wheelchair Push Walk', 'wheelchair', 'wheelchair-push-walk', true, true],
+        ['Wheelchair Push Run', 'wheelchair', 'wheelchair-push-run', true, true],
+        ['Indoor Wheelchair Push Walk', 'wheelchair', 'indoor-wheelchair-push-walk', true, true],
+        ['Indoor Wheelchair Push Run', 'wheelchair', 'indoor-wheelchair-push-run', true, true],
+        ['Wheelchair Racing', 'wheelchair', 'wheelchair-racing', true, true],
+    ])('builds %s summaries with saved TSS, recorded zones and distinct comparisons', async (name, sport, context, zones, distance) => {
+        const { buildTrainingSummaryMetricPayload, buildTrainingBuildComparisonMetricPayload, buildTrainingExplanationMetricPayload } = await import('./derived-metrics.service');
+        const docs = [Date.UTC(2026, 6, 8), Date.UTC(2026, 3, 1)].flatMap(day => [
+            createEvent(day, name, 'Garmin', {
+                [DataDistance.type]: 2_000, 'Training Stress Score': 71.25,
+                [DataPowerZoneOneDuration.type]: 300,
+                [DataPowerZoneThreeDuration.type]: 400,
+                [DataPowerZoneFiveDuration.type]: 500,
+            }),
+            createEvent(day, name, 'Polar', { [DataDistance.type]: 3_000, 'Training Stress Score': 0 }),
+        ]);
+        const activities = buildTrainingActivitySources(docs);
+        const summary = buildTrainingSummaryMetricPayload(activities, nowMs);
+        expect(summary.sourceEventCount).toBe(4);
+        const current = summary.payload.disciplines.find(item => item.discipline === sport)?.current28d;
+        expect(current).toMatchObject({
+            activityCount: 2, durationSeconds: 7_200,
+            easySeconds: zones ? 1_500 : 0,
+            moderateSeconds: zones ? 1_600 : 0,
+            hardSeconds: zones ? 1_100 : 0,
+        });
+        expect(current?.contexts).toEqual([expect.objectContaining({ context, activityCount: 2 })]);
+        const metrics = current?.contexts[0].metrics;
+        expect(metrics).toContainEqual({ metric: 'elapsed-time', value: 7_200, sourceActivityCount: 2 });
+        if (distance) {
+            expect(metrics).toContainEqual({ metric: 'distance', value: 5_000, sourceActivityCount: 2 });
+        } else {
+            expect(metrics).toHaveLength(1);
+        }
+        const build = buildTrainingBuildComparisonMetricPayload(activities, {
+            trainingSettings: { buildBenchmarks: {
+                [sport]: { mode: 'period', durationWeeks: 8, endDayMs: Date.UTC(2026, 3, 30) },
+            } },
+        }, nowMs).payload.disciplines.find(item => item.discipline === sport);
+        if (sport === 'fitness-gym') {
+            expect(build).toMatchObject({ status: 'not-configured', current: null, benchmark: null });
+        } else {
+            expect(build?.status).toBe('ready');
+            for (const window of [build?.current, build?.benchmark]) {
+                expect(window).toMatchObject({ activityCount: 2, trainingStressScore: 71.25, trainingStressScoreEventCount: 2 });
+                expect(window?.contexts).toEqual([expect.objectContaining({ context, activityCount: 2 })]);
+            }
+        }
+        const explanation = buildTrainingExplanationMetricPayload(docs as never, activities, nowMs).payload.current;
+        expect(explanation).toMatchObject({ parentTrainingStressScore: 71.25, childTrainingStressScore: 71.25 });
+        expect(explanation.sportLoads).toContainEqual(expect.objectContaining({
+            sport, activityCount: 2, loadActivityCount: 2, trainingStressScore: 71.25,
+        }));
+        expect(activities.map(activity => activity.activityData.type)).toEqual([name, name, name, name]);
+    });
+
+    it('keeps missing wheelchair load and intensity unavailable while counting recorded volume', async () => {
+        const { buildTrainingSummaryMetricPayload, buildTrainingBuildComparisonMetricPayload } = await import('./derived-metrics.service');
+        const activities = buildTrainingActivitySources([createEvent(Date.UTC(2026, 6, 8), 'Wheelchair Racing', 'Polar', {
+            [DataHeartRateZoneOneDuration.type]: 0,
+            [DataHeartRateZoneThreeDuration.type]: 0,
+            [DataHeartRateZoneFiveDuration.type]: 0,
+        })]);
+        const current = buildTrainingSummaryMetricPayload(activities, nowMs).payload.disciplines
+            .find(item => item.discipline === 'wheelchair')?.current28d;
+        expect(current).toMatchObject({ activityCount: 1, durationSeconds: 3_600, easySeconds: 0, moderateSeconds: 0, hardSeconds: 0 });
+        expect(current?.contexts[0].metrics).toEqual([
+            { metric: 'moving-time', value: 3_600, sourceActivityCount: 1 },
+            { metric: 'elapsed-time', value: 3_600, sourceActivityCount: 1 },
+        ]);
+        const build = buildTrainingBuildComparisonMetricPayload(activities, {
+            trainingSettings: { buildBenchmarks: { wheelchair: {
+                mode: 'period', durationWeeks: 8, endDayMs: Date.UTC(2026, 3, 30),
+            } } },
+        }, nowMs).payload.disciplines.find(item => item.discipline === 'wheelchair');
+        expect(build?.current).toMatchObject({ activityCount: 1, trainingStressScore: null, trainingStressScoreEventCount: 0, intensitySourceEventCount: 0 });
+    });
+
     it('keeps generic fitness and known unmodeled sports visible as volume-only training', async () => {
         const { buildTrainingSummaryMetricPayload } = await import('./derived-metrics.service');
         const currentDay = Date.UTC(2026, 6, 8);
@@ -4026,6 +4142,7 @@ describe('training explanation and durability metrics', () => {
             { sport: 'strength', label: 'Strength' },
             { sport: 'fitness-gym', label: 'Fitness & Gym' },
             { sport: 'paddling', label: 'Paddling' },
+            { sport: 'wheelchair', label: 'Wheelchair Training' },
             { sport: 'other-training', label: 'Other training' },
             { sport: 'other', label: 'Other' },
             { sport: 'unclassified', label: 'Unclassified' },
@@ -4504,6 +4621,7 @@ describe('activity-level Training sources and swimming performance', () => {
             ['strength', 0],
             ['fitness-gym', 0],
             ['paddling', 0],
+            ['wheelchair', 0],
             ['other-training', 0],
         ]);
     });
@@ -5556,6 +5674,7 @@ describe('writeDerivedMetricSnapshotsReady', () => {
                 { discipline: 'strength', current28d: { activityCount: 0 } },
                 { discipline: 'fitness-gym', current28d: { activityCount: 0 } },
                 { discipline: 'paddling', current28d: { activityCount: 0 } },
+                { discipline: 'wheelchair', current28d: { activityCount: 0 } },
                 { discipline: 'other-training', current28d: { activityCount: 0 } },
             ],
         });

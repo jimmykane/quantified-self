@@ -330,7 +330,7 @@ describe('TrainingWorkspaceComponent', () => {
     expect(element.querySelector('.training-status-grid .training-recovery-estimate-panel')).toBeNull();
     expect(element.querySelector('.training-mix-panel')).toBeNull();
     expect(element.querySelector('.training-capacity-panel')).toBeNull();
-    expect(element.textContent).toContain('No eligible running, cycling, swimming, rowing, walking & hiking, nordic skiing, strength, fitness & gym, paddling or other training workouts in the last 28 days.');
+    expect(element.textContent).toContain('No eligible running, cycling, swimming, rowing, walking & hiking, nordic skiing, strength, fitness & gym, paddling, wheelchair training or other training workouts in the last 28 days.');
     expect(element.textContent).not.toContain('Preparing imported capacity markers');
     expect(element.querySelector('.training-power-systems-section')).toBeNull();
     expect(derivedMetrics.ensureForDashboard).toHaveBeenCalledTimes(1);
@@ -1710,7 +1710,7 @@ describe('TrainingWorkspaceComponent', () => {
     expect(component.sportShortcuts).toEqual(['running']);
     expect(component.visibleDisciplines).toEqual([
       'running', 'cycling', 'swimming', 'rowing', 'walking-hiking', 'nordic-skiing', 'strength',
-      'fitness-gym', 'paddling', 'other-training',
+      'fitness-gym', 'paddling', 'wheelchair', 'other-training',
     ]);
 
     component.openTrainingSportVisibilityDialog();
@@ -1899,6 +1899,7 @@ describe('TrainingWorkspaceComponent', () => {
         baselineWindowDays: 84,
         disciplines: [
           { discipline: 'fitness-gym', current28d: window(1), baseline28d: window(0) },
+          { discipline: 'wheelchair', current28d: window(0), baseline28d: window(1) },
           { discipline: 'other-training', current28d: window(0), baseline28d: window(0) },
         ],
       } as any,
@@ -1907,6 +1908,9 @@ describe('TrainingWorkspaceComponent', () => {
     (component as any).refreshTrainingSportVisibility();
 
     expect(component.trainingDestinationOptions.map(option => option.id)).toContain('fitness-gym');
+    expect(component.trainingDestinationOptions.find(option => option.id === 'wheelchair')).toMatchObject({
+      label: 'Wheelchair Training', materialIcon: 'accessible_forward',
+    });
     expect(component.trainingDestinationOptions.map(option => option.id)).not.toContain('other-training');
   });
 

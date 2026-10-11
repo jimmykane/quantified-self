@@ -1,4 +1,5 @@
-import { ActivityTypes } from '@sports-alliance/sports-lib';
+import { ActivityTypes, ActivityTypesHelper } from '@sports-alliance/sports-lib';
+import { resolveActivityTypeMaterialIcon } from '../helpers/activity-type-presentation.helper';
 import { MANUAL_WORKOUT_EDITOR_SPORTS_V1 } from '@shared/planned-workout';
 import {
   createTrainingSportRecord,
@@ -24,6 +25,7 @@ describe('shared Training sport registry', () => {
       'strength',
       'fitness-gym',
       'paddling',
+      'wheelchair',
       'other-training',
     ]);
     expect(TRAINING_SPORT_DEFINITIONS.map(({ id, label }) => ({ id, label }))).toEqual([
@@ -36,6 +38,7 @@ describe('shared Training sport registry', () => {
       { id: 'strength', label: 'Strength' },
       { id: 'fitness-gym', label: 'Fitness & Gym' },
       { id: 'paddling', label: 'Paddling' },
+      { id: 'wheelchair', label: 'Wheelchair Training' },
       { id: 'other-training', label: 'Other training' },
     ]);
   });
@@ -123,6 +126,44 @@ describe('shared Training sport registry', () => {
     });
     expect(resolveTrainingPowerSystemsModelActivityType(sport)).toBe(sport);
     expect(MANUAL_WORKOUT_EDITOR_SPORTS_V1 as readonly string[]).not.toContain(sport);
+  });
+
+  it.each([
+    ['Rucking', 'walking-hiking', 'rucking', 'zones', 'recorded'],
+    ['Orienteering', 'running', 'orienteering', 'zones', 'recorded'],
+    ['Ski Orienteering', 'nordic-skiing', 'ski-orienteering', 'zones', 'recorded'],
+    ['Biathlon', 'nordic-skiing', 'biathlon', 'zones', 'recorded'],
+    ['Fitness Racing', 'fitness-gym', 'conditioning', 'volume-only', 'omit'],
+    ['Aqua Fitness', 'fitness-gym', 'conditioning', 'volume-only', 'omit'],
+    ['Water Running', 'fitness-gym', 'water-running', 'zones', 'omit'],
+    ['Wheel Chair', 'wheelchair', 'wheelchair-general', 'zones', 'recorded'],
+    ['Wheelchair Push Walk', 'wheelchair', 'wheelchair-push-walk', 'zones', 'recorded'],
+    ['Wheelchair Push Run', 'wheelchair', 'wheelchair-push-run', 'zones', 'recorded'],
+    ['Indoor Wheelchair Push Walk', 'wheelchair', 'indoor-wheelchair-push-walk', 'zones', 'recorded'],
+    ['Indoor Wheelchair Push Run', 'wheelchair', 'indoor-wheelchair-push-run', 'zones', 'recorded'],
+    ['Wheelchair Racing', 'wheelchair', 'wheelchair-racing', 'zones', 'recorded'],
+  ])('classifies %s for recorded analysis with the approved policies', (name, sport, context, intensityPolicy, distancePolicy) => {
+    expect(resolveTrainingSportContextFromActivityType(name)).toMatchObject({
+      sport, context, intensityPolicy, distancePolicy, loadPolicy: 'recorded', durabilityPolicy: 'omit',
+    });
+    expect(resolveTrainingSportContextFromActivityType(`  ${name.toLowerCase()}  `))
+      .toEqual(resolveTrainingSportContextFromActivityType(name));
+    expect(resolveTrainingPowerSystemsModelActivityType(name)).toBe(name);
+    expect(MANUAL_WORKOUT_EDITOR_SPORTS_V1 as readonly string[]).not.toContain(name);
+  });
+
+  it.each(['Wheelchair Basketball', 'Wheelchair Tennis'])('keeps %s outside the approved wheelchair endurance group', name => {
+    const available = ActivityTypesHelper.resolveActivityType(name) !== null;
+    expect(resolveTrainingDisciplineFromActivityType(name)).toBe(available ? 'other-training' : null);
+  });
+
+  it('gives recorded wheelchair training its own supported views and existing Material icon', () => {
+    const sport = getTrainingSportDefinition('wheelchair');
+    expect(sport?.capabilities).toEqual(['training-mix', 'best-build', 'power-systems']);
+    expect(sport?.selectionAvailability).toBe('recorded');
+    expect(sport?.contexts).toHaveLength(6);
+    expect(resolveActivityTypeMaterialIcon(sport?.iconActivityType)).toBe('accessible_forward');
+    expect(normalizeTrainingDestinationId('wheelchair')).toBe('wheelchair');
   });
 
   it('keeps saved TSS available for every Training context independently of specialist policies', () => {
@@ -289,6 +330,7 @@ describe('shared Training sport registry', () => {
       strength: 'Strength',
       'fitness-gym': 'Fitness & Gym',
       paddling: 'Paddling',
+      wheelchair: 'Wheelchair Training',
       'other-training': 'Other training',
     });
     expect(getTrainingSportDefinition('cycling')?.capabilities).toContain('durability');

@@ -52,6 +52,7 @@ describe('resolveTrainingSportVisibility', () => {
       { discipline: 'strength', label: 'Strength' },
       { discipline: 'fitness-gym', label: 'Fitness & Gym' },
       { discipline: 'paddling', label: 'Paddling' },
+      { discipline: 'wheelchair', label: 'Wheelchair Training' },
       { discipline: 'other-training', label: 'Other training' },
     ]);
     expect(formatTrainingVisibleDisciplinesLabel(['rowing', 'strength'])).toBe('Rowing + Strength');
@@ -67,6 +68,14 @@ describe('resolveTrainingSportVisibility', () => {
       .toBe('Choose sports shown. Fixed selection: Rowing + Paddling.');
     expect(formatTrainingVisibleDisciplinesAccessibleLabel([], true))
       .toBe('Choose sports shown. Automatic selection: no sport-specific cards.');
+  });
+
+  it('preserves wheelchair shortcuts through JSON storage and automatic evidence', () => {
+    const saved = JSON.parse(JSON.stringify(['wheelchair']));
+    expect(normalizeTrainingSportShortcuts(saved)).toEqual(['wheelchair']);
+    expect(resolveTrainingSportVisibility(saved, summary({}), true, {})).toMatchObject({ disciplines: ['wheelchair'] });
+    expect(resolveTrainingSportShortcuts(null, undefined, summary({ wheelchair: 3 }, { wheelchair: 3_600 }), true, {}))
+      .toMatchObject({ disciplines: ['wheelchair'], source: 'automatic' });
   });
 
   it('honors a valid explicit selection regardless of recent activity', () => {

@@ -247,6 +247,20 @@ describe('help.content', () => {
     expect(training).toContain('QS does not invent legs from the sport name');
   });
 
+  it('explains recorded endurance, aquatic and wheelchair Training classifications', () => {
+    const training = HELP_SECTIONS.find(section => section.id === 'training-analysis')!.content;
+    expect(training).toContain('Rucking uses **Walking & Hiking → Rucking**');
+    expect(training).toContain('Orienteering uses **Running → Orienteering**');
+    expect(training).toContain('Ski Orienteering and Biathlon have their own rows within **Nordic Skiing**');
+    expect(training).toContain('Fitness Racing and Aqua Fitness use **Fitness & Gym → Conditioning**');
+    expect(training).toContain('**Fitness & Gym → Water Running** row with duration and recorded intensity zones');
+    expect(training).toContain('**Wheelchair Training** supports Training Mix, Best build and Power systems');
+    expect(training).toContain('Walk/Run describes pushing speed');
+    expect(training).toContain('every exact sport retains its separate power history');
+    expect(training).toContain('nine benchmark families');
+    expect(training).toContain('**Wheelchair Training** appears when wheelchair workouts exist');
+  });
+
   it('explains the approved strength, conditioning, mobility and equipment memberships', () => {
     const training = HELP_SECTIONS.find(section => section.id === 'training-analysis')!.content;
     expect(training).toContain('Calisthenics, Core Training, LES MILLS CORE and LES MILLS GRIT Strength use **Strength**');

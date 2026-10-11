@@ -75,6 +75,17 @@ export const RefinedRecordedActivityTypes = {
   IndoorSkiing: 'Indoor Skiing',
   IndoorGrinding: 'Indoor Grinding',
   TruckerWorkout: 'Trucker Workout',
+  Rucking: 'Rucking',
+  SkiOrienteering: 'Ski Orienteering',
+  Biathlon: 'Biathlon',
+  FitnessRacing: 'Fitness Racing',
+  AquaFitness: 'Aqua Fitness',
+  WaterRunning: 'Water Running',
+  WheelchairPushWalk: 'Wheelchair Push Walk',
+  WheelchairPushRun: 'Wheelchair Push Run',
+  IndoorWheelchairPushWalk: 'Indoor Wheelchair Push Walk',
+  IndoorWheelchairPushRun: 'Indoor Wheelchair Push Run',
+  WheelchairRacing: 'Wheelchair Racing',
 } as const;
 
 const refinedActivityTypes = { ...RefinedTrainingActivityTypes, ...RefinedRecordedActivityTypes } as const;

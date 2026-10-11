@@ -184,6 +184,16 @@ describe('training-power-systems.helper', () => {
     expect(resolveTrainingPowerSystemsMetricPayload({ ...payload(), policyVersion: 1 })).toBeNull();
   });
 
+  it('groups all six wheelchair types without pooling their exact power entries', () => {
+    const types = ['Wheel Chair', 'Wheelchair Push Walk', 'Wheelchair Push Run',
+      'Indoor Wheelchair Push Walk', 'Indoor Wheelchair Push Run', 'Wheelchair Racing'];
+    const normalized = resolveTrainingPowerSystemsMetricPayload(JSON.parse(JSON.stringify(payload(types.map(type => entry(type))))));
+    expect(normalized?.activityTypes).toHaveLength(6);
+    const groups = groupTrainingPowerSystemsActivityTypeViewModels(buildTrainingPowerSystemsActivityTypeViewModels(normalized));
+    expect(groups.bySport.wheelchair.map(item => item.activityType)).toEqual([...types].sort());
+    expect(groups.other).toHaveLength(0);
+  });
+
   it('groups registered exact types by sport and preserves unmatched types as Other', () => {
     const normalized = resolveTrainingPowerSystemsMetricPayload(payload([
       entry('Cycling'),

@@ -5428,6 +5428,7 @@ describe('MCP data service', () => {
       strength: ['strength', 'strength'],
       'fitness-gym': ['general-fitness', 'general'],
       paddling: ['kayaking', 'paddling'],
+      wheelchair: ['wheelchair-racing', 'general'],
       'other-training': ['other-training', 'general'],
     } as const;
     const window = (discipline: typeof TRAINING_DISCIPLINES[number]) => ({
@@ -5622,6 +5623,7 @@ describe('MCP data service', () => {
       ['strength', 'Strength', null],
       ['fitness-gym', 'Fitness & Gym', null],
       ['paddling', 'Paddling', 70],
+      ['wheelchair', 'Wheelchair Training', 100],
       ['other-training', 'Other training', null],
       ['other', 'Other', 80],
       ['unclassified', 'Unclassified', 90],
@@ -5634,20 +5636,20 @@ describe('MCP data service', () => {
       loadSharePercent: trainingStressScore === null ? null : 10,
     }));
     const coverage = {
-      totalCount: 12,
-      loadedCount: 9,
-      classifiedCount: 11,
+      totalCount: 13,
+      loadedCount: 10,
+      classifiedCount: 12,
       unclassifiedCount: 1,
-      ratio: 0.75,
+      ratio: 10 / 13,
     };
     const windowMetrics = {
-      parentEventCount: 12,
-      parentLoadEventCount: 9,
-      parentTrainingStressScore: 450,
+      parentEventCount: 13,
+      parentLoadEventCount: 10,
+      parentTrainingStressScore: 550,
       parentLoadCoverage: coverage,
-      childActivityCount: 12,
-      childLoadActivityCount: 9,
-      childTrainingStressScore: 450,
+      childActivityCount: 13,
+      childLoadActivityCount: 10,
+      childTrainingStressScore: 550,
       childLoadCoverage: coverage,
       sportLoads: loads,
       rhythms: TRAINING_DISCIPLINES.map(discipline => ({
@@ -5669,7 +5671,7 @@ describe('MCP data service', () => {
       status: 'ready',
       schemaVersion: DERIVED_METRIC_SCHEMA_VERSION,
       updatedAtMs: 123,
-      sourceEventCount: 12,
+      sourceEventCount: 13,
       payload: {
         dayBoundary: 'UTC',
         asOfDayMs: 2,
@@ -5687,7 +5689,7 @@ describe('MCP data service', () => {
           startDayMs: 2,
           trainingStressScore: 50,
           loadSharePercent: 10,
-          childComposition: [loads[0], loads[3], loads[6]],
+          childComposition: [loads[0], loads[3], loads[6], loads[9]],
         }],
       },
     });
@@ -5702,15 +5704,17 @@ describe('MCP data service', () => {
     expect(payload.current.sportLoads.map(load => load.sport))
       .toEqual(['running', 'cycling', 'swimming', 'other', 'unclassified']);
     expect(payload.current.sportLoads.find(load => load.sport === 'other')).toMatchObject({
-      activityCount: 8,
-      loadActivityCount: 5,
-      trainingStressScore: 300,
+      activityCount: 9,
+      loadActivityCount: 6,
+      trainingStressScore: 400,
     });
     expect(payload.topContributors[0].childComposition).toEqual([
       expect.objectContaining({ sport: 'running', trainingStressScore: 10 }),
-      expect.objectContaining({ sport: 'other', activityCount: 2, trainingStressScore: 40 }),
+      expect.objectContaining({ sport: 'other', activityCount: 3, trainingStressScore: 140 }),
     ]);
     expect(payload.topContributors[0].childComposition.every(load => !('label' in load))).toBe(true);
+    expect(JSON.stringify(payload)).not.toContain('wheelchair');
+    expect(JSON.stringify(payload)).not.toContain('Wheelchair Training');
   });
 
   it('fails closed when an expanded Training payload is malformed before projection', () => {
