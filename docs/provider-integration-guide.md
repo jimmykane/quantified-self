@@ -1060,12 +1060,22 @@ The browser shows checked/eligible progress after each page, keeps Send disabled
 and renders results above its actions. Stop discards the read-only page already dispatched and prevents later pages;
 stale replies cannot replace a restarted preview. Async state uses Angular signals so completion updates controls without
 another click. Duplicate cursor detection stops a repeated-page loop without publishing an incomplete preview.
+The completed preview displays only ready-to-send counts per selected source. Exclusion rows group existing reason
+counts into sent, queued, original unavailable/unsupported, merged/derived, delivery review, unavailable activity,
+failed checks and an unknown-reason fallback. `not_imported_from_source` and `not_manual_upload` are source mismatches,
+so neither appears in exclusion rows or an inflated per-source skipped total. Reason counts remain source checks,
+not unique activities; the UI explicitly labels possible overlap. Failed checks remain visible even when their reason
+breakdown is absent. A visible, accessible Send description distinguishes a required preview, invalid filters, empty
+dates, no matching sources, previous delivery and failed checks. This changes presentation only: server eligibility,
+duplicate protection, callable contracts, source admission and queue behavior are unchanged.
 Safe per-page diagnostics contain only destination, source count, scanned/failure counts, continuation presence and
 elapsed milliseconds; no dates, cursors, owners, activity/file/provider identities or raw errors. Logging is best-effort.
 
 Monitoring impact for preview performance: **unchanged**. The reviewed activity-delivery bundle covers the same queues,
 workers, dispatchers, historical/manual labels and committed outcomes; preview diagnostics are read timings, not delivery
 success. No lifecycle, retry, lease, permission, data contract, Training planning or MCP/Assistant behavior changes.
+The preview exclusion presentation also leaves monitoring **unchanged**: no worker, dispatcher, state, log, alert,
+query or delivery contract changes. It consumes existing response counts; it requires only a frontend release.
 Release requires a separately approved deployment of `backfillActivitySyncRoute` plus the frontend; no index, migration,
 secret, monitoring apply or provider replay is needed. Unit evidence verifies fewer RPCs, not production wall-clock speed.
 

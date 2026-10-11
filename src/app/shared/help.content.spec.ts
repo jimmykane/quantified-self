@@ -1693,6 +1693,10 @@ describe('help.content', () => {
     expect(serviceConnectionsSection?.content).toContain('Preview checks saved activities in batches');
     expect(serviceConnectionsSection?.content).toContain('**Send** becomes available after the full preview finishes');
     expect(serviceConnectionsSection?.content).toContain('stopping a preview sends nothing');
+    expect(serviceConnectionsSection?.content).toContain('Checks against unrelated sources are not counted as exclusions');
+    expect(serviceConnectionsSection?.content).toContain('Reason counts are by source');
+    expect(serviceConnectionsSection?.content).toContain('explains why it is disabled');
+    expect(serviceConnectionsSection?.content).toContain('failed checks can be retried with **Preview**');
     expect(serviceConnectionsSection?.content).toContain('send past activities while automatic activity sync is off');
     expect(serviceConnectionsSection?.content).toContain('dashboard may offer a one-time action prompt to turn on automatic Garmin to Suunto activity sync');
     expect(serviceConnectionsSection?.content).toContain('Disconnecting Garmin, COROS, Suunto, or Wahoo turns off related automatic activity or route delivery');

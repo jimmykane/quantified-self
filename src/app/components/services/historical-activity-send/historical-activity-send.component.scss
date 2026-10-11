@@ -35,6 +35,32 @@
   color: var(--mat-sys-on-surface-variant);
 }
 
+.historical-send__exclusions {
+  display: grid;
+  gap: 4px;
+  margin-top: 12px;
+}
+
+.historical-send__exclusions dl {
+  display: grid;
+  gap: 4px;
+  margin: 0;
+}
+
+.historical-send__exclusions dl > div {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.historical-send__exclusions dd {
+  margin: 0;
+}
+
+.historical-send__exclusions .historical-send__note {
+  font: var(--mat-sys-body-small);
+}
+
 .historical-send__actions {
   display: flex;
   flex-wrap: wrap;

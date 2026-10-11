@@ -17,6 +17,24 @@ interface SourceOption {
 
 type SendSummary = Omit<HistoricalSendResponse, 'nextCursor'>;
 
+interface PreviewExclusion {
+  key: string;
+  label: string;
+  count: number;
+}
+
+const SOURCE_MISMATCH_REASONS = new Set(['not_imported_from_source', 'not_manual_upload']);
+const PREVIEW_EXCLUSION_GROUPS = [
+  { key: 'already_sent', label: 'Already sent', reasons: ['already_sent'] },
+  { key: 'already_queued', label: 'Already queued', reasons: ['already_queued'] },
+  { key: 'original_unavailable', label: 'Original file unavailable or unsupported',
+    reasons: ['missing_original_files', 'unsupported_original_file', 'missing_invalid_or_oversized_original'] },
+  { key: 'merged', label: 'Merged or derived activity', reasons: ['merged_or_derived_event'] },
+  { key: 'delivery_review', label: 'Previous delivery needs review', reasons: ['manual_reconciliation_required'] },
+  { key: 'invalid_event', label: 'Activity unavailable', reasons: ['invalid_event'] },
+  { key: 'processing_failed', label: 'Couldn’t check', reasons: ['processing_failed'] },
+] as const;
+
 @Component({
   selector: 'app-historical-activity-send',
   templateUrl: './historical-activity-send.component.html',
@@ -24,6 +42,8 @@ type SendSummary = Omit<HistoricalSendResponse, 'nextCursor'>;
   standalone: false,
 })
 export class HistoricalActivitySendComponent implements OnChanges, OnDestroy {
+  private static nextInstanceID = 0;
+  readonly sendHintID = `historical-send-hint-${HistoricalActivitySendComponent.nextInstanceID++}`;
   @Input() user!: AppUserInterface;
   @Input() destinationServiceName!: ServiceNames;
   @Input() destinationConnected = false;
@@ -49,6 +69,26 @@ export class HistoricalActivitySendComponent implements OnChanges, OnDestroy {
   readonly progress = signal<SendSummary | null>(null);
   readonly progressEligibleCount = computed(() => Object.values(this.progress()?.eligibleBySource || {}).reduce((total, count) => total + count, 0));
   readonly previewEligibleCount = computed(() => Object.values(this.preview()?.eligibleBySource || {}).reduce((total, count) => total + count, 0));
+  readonly previewExclusions = computed(() => {
+    const summary = this.preview();
+    const remaining = new Map(Object.entries(summary?.skippedByReason || {})
+      .filter(([reason, count]) => count > 0 && !SOURCE_MISMATCH_REASONS.has(reason)));
+    // Failure counts remain visible even if an older response omits its reason breakdown.
+    if (summary?.failedCount) {
+      remaining.set('processing_failed', Math.max(summary.failedCount, remaining.get('processing_failed') || 0));
+    }
+    const rows: PreviewExclusion[] = PREVIEW_EXCLUSION_GROUPS.map(group => {
+      let count = 0;
+      for (const reason of group.reasons) {
+        count += remaining.get(reason) || 0;
+        remaining.delete(reason);
+      }
+      return { key: group.key, label: group.label, count };
+    }).filter(row => row.count > 0);
+    const otherCount = [...remaining.values()].reduce((total, count) => total + count, 0);
+    if (otherCount) rows.push({ key: 'other', label: 'Other exclusions', count: otherCount });
+    return rows;
+  });
 
   ngOnChanges(changes: SimpleChanges): void {
     if (changes['destinationServiceName']) {
@@ -90,8 +130,29 @@ export class HistoricalActivitySendComponent implements OnChanges, OnDestroy {
       && this.previewEligibleCount() > 0;
   }
 
-  get previewSkippedCount(): number {
-    return Object.values(this.preview()?.skippedBySource || {}).reduce((total, count) => total + count, 0);
+  get sendDisabledReason(): string | null {
+    if (this.busy() || !this.user?.uid || !this.hasProAccess || !this.destinationConnected) return null;
+    if (!this.selectedSourceCount) return 'Choose at least one source, then run Preview to enable Send.';
+    if (this.dateRangeInvalid) return 'Choose valid dates, then run Preview to enable Send.';
+    const summary = this.preview();
+    if (!summary || this.previewSignature() !== this.signature()) return 'Run Preview to check which activities can be sent.';
+    if (this.previewEligibleCount()) return null;
+    const exclusions = this.previewExclusions();
+    if (exclusions.some(row => row.key === 'processing_failed')) {
+      return 'No activities are confirmed ready to send. Run Preview again to retry the checks that failed.';
+    }
+    if (!summary.scanned) return 'No activities found in these dates. Choose a different date range and run Preview again.';
+    const destination = getProviderDisplayName(this.destinationServiceName, 'destination');
+    if (exclusions.length && exclusions.every(row => row.key === 'already_sent' || row.key === 'already_queued')) {
+      const status = exclusions.length > 1 ? `sent to or queued for ${destination}`
+        : exclusions[0].key === 'already_sent' ? `sent to ${destination}` : `queued for ${destination}`;
+      return `Nothing new to send: matching activities are already ${status}.`;
+    }
+    if (!exclusions.length && Object.entries(summary.skippedByReason).some(([reason, count]) =>
+      count > 0 && SOURCE_MISMATCH_REASONS.has(reason))) {
+      return 'No activities match the selected sources. Choose different sources or dates and run Preview again.';
+    }
+    return 'No activities are ready to send. Choose different sources or dates and run Preview again.';
   }
 
   onSourceChange(option: SourceOption, selected: boolean): void {

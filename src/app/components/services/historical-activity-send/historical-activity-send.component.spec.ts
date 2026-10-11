@@ -9,6 +9,7 @@ import { MatInputModule } from '@angular/material/input';
 import { MatProgressSpinnerModule } from '@angular/material/progress-spinner';
 import { MatSnackBar } from '@angular/material/snack-bar';
 import { ServiceNames } from '@sports-alliance/sports-lib';
+import { HistoricalSendResponse } from '@shared/historical-activity-send';
 import dayjs from 'dayjs';
 import 'dayjs/locale/en-gb';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -398,5 +399,118 @@ describe('HistoricalActivitySendComponent', () => {
     expect(component.error()).toContain('after 2 activities');
     expect(component.canSend).toBe(true);
     expect(haptics.error).toHaveBeenCalledOnce();
+  });
+
+  it('shows ready activities and genuine exclusion reasons without inflating counts with unrelated sources', async () => {
+    fixture = TestBed.createComponent(HistoricalActivitySendComponent);
+    component = fixture.componentInstance;
+    configureComponent(ServiceNames.COROSAPI);
+    for (const option of component.sourceOptions) component.onSourceChange(option, true);
+    userService.historicalSendActivityPage.mockResolvedValueOnce({
+      scanned: 5, eligibleBySource: { [ServiceNames.GarminAPI]: 1 },
+      skippedBySource: { [ServiceNames.GarminAPI]: 4, [ServiceNames.SuuntoApp]: 5, [ServiceNames.WahooAPI]: 5, manualUpload: 5 },
+      skippedByReason: { not_imported_from_source: 9, not_manual_upload: 5,
+        already_sent: 2, already_queued: 1, missing_original_files: 1, processing_failed: 1 },
+      queued: 0, failedCount: 1, nextCursor: null,
+    });
+    await component.runPreview();
+    fixture.detectChanges();
+    const text = fixture.nativeElement.querySelector('app-status-info').textContent;
+    expect(text).toContain('Activities checked: 5');
+    expect(text).toContain('Garmin imports: 1 ready to send');
+    expect(text).toContain('Already sent2');
+    expect(text).toContain('Already queued1');
+    expect(text).toContain('Original file unavailable or unsupported1');
+    expect(text).toContain('Couldn’t check1');
+    expect(text).toContain('Counts are source checks; an activity can appear more than once.');
+    expect(text).not.toContain('skipped');
+    expect(text).not.toContain('not_imported_from_source');
+    expect(component.canSend).toBe(true);
+    expect(component.sendDisabledReason).toBeNull();
+    expect(fixture.nativeElement.querySelector('.historical-send__actions button:last-child').disabled).toBe(false);
+    expect(haptics.warning).toHaveBeenCalledOnce();
+  });
+
+  it('aggregates file reasons across pages, retains unknown exclusions and counts failures only once', async () => {
+    component.onSourceChange(component.sourceOptions[3], true);
+    userService.historicalSendActivityPage
+      .mockResolvedValueOnce({ scanned: 50, eligibleBySource: {}, skippedBySource: { manualUpload: 50 }, queued: 0,
+        skippedByReason: { missing_original_files: 2, unsupported_original_file: 3, processing_failed: 1, not_manual_upload: 44 },
+        failedCount: 1, nextCursor: { lastStartDate: 1, lastEventID: 'event-50', queryHash: 'hash' } })
+      .mockResolvedValueOnce({ scanned: 4, eligibleBySource: {}, skippedBySource: { manualUpload: 4 }, queued: 0,
+        skippedByReason: { missing_invalid_or_oversized_original: 1, merged_or_derived_event: 1,
+          manual_reconciliation_required: 1, new_server_exclusion: 1 }, failedCount: 0, nextCursor: null });
+    await component.runPreview();
+    expect(component.previewExclusions()).toEqual([
+      { key: 'original_unavailable', label: 'Original file unavailable or unsupported', count: 6 },
+      { key: 'merged', label: 'Merged or derived activity', count: 1 },
+      { key: 'delivery_review', label: 'Previous delivery needs review', count: 1 },
+      { key: 'processing_failed', label: 'Couldn’t check', count: 1 },
+      { key: 'other', label: 'Other exclusions', count: 1 },
+    ]);
+    expect(component.sendDisabledReason).toContain('retry the checks that failed');
+    expect(component.canSend).toBe(false);
+    await component.runSend();
+    expect(userService.historicalSendActivityPage).toHaveBeenCalledTimes(2);
+  });
+
+  it.each([
+    { reasons: { already_sent: 2, not_imported_from_source: 4 }, expected: 'already sent to COROS' },
+    { reasons: { already_queued: 2, not_manual_upload: 4 }, expected: 'already queued for COROS' },
+    { reasons: { already_sent: 1, already_queued: 1, not_imported_from_source: 4 }, expected: 'already sent to or queued for COROS' },
+    { reasons: { not_imported_from_source: 4, not_manual_upload: 2 }, expected: 'No activities match the selected sources' },
+    { reasons: { already_sent: 1, new_server_exclusion: 1 }, expected: 'No activities are ready to send' },
+    { reasons: { missing_original_files: 2 }, expected: 'No activities are ready to send' },
+  ])('explains a disabled Send without treating unrelated sources as exclusions: $expected', async ({ reasons, expected }) => {
+    configureComponent(ServiceNames.COROSAPI);
+    component.onSourceChange(component.sourceOptions[0], true);
+    userService.historicalSendActivityPage.mockResolvedValueOnce({
+      scanned: 2, eligibleBySource: {}, skippedBySource: {}, queued: 0,
+      skippedByReason: reasons, failedCount: 0, nextCursor: null,
+    });
+    await component.runPreview();
+    expect(component.sendDisabledReason).toContain(expected);
+    expect(component.canSend).toBe(false);
+    const selectionCount = haptics.selection.mock.calls.length;
+    await component.runSend();
+    expect(userService.historicalSendActivityPage).toHaveBeenCalledOnce();
+    expect(haptics.selection.mock.calls.length).toBe(selectionCount);
+  });
+
+  it('distinguishes an empty date range from incomplete checks even without a failure reason', async () => {
+    component.onSourceChange(component.sourceOptions[3], true);
+    const response: HistoricalSendResponse = { scanned: 0, eligibleBySource: {}, skippedBySource: {},
+      skippedByReason: {}, queued: 0, failedCount: 0, nextCursor: null };
+    userService.historicalSendActivityPage.mockResolvedValueOnce(response);
+    await component.runPreview();
+    expect(component.sendDisabledReason).toContain('No activities found in these dates');
+    expect(component.previewExclusions()).toEqual([]);
+    userService.historicalSendActivityPage.mockResolvedValueOnce({ ...response, scanned: 1, failedCount: 1 });
+    await component.runPreview();
+    expect(component.previewExclusions()).toEqual([{ key: 'processing_failed', label: 'Couldn’t check', count: 1 }]);
+    expect(component.sendDisabledReason).toContain('retry the checks that failed');
+  });
+
+  it('links Send to its visible explanation and updates it when filters invalidate the preview', async () => {
+    fixture = TestBed.createComponent(HistoricalActivitySendComponent);
+    component = fixture.componentInstance;
+    configureComponent(ServiceNames.COROSAPI);
+    component.onSourceChange(component.sourceOptions[3], true);
+    userService.historicalSendActivityPage.mockResolvedValueOnce({ scanned: 1, eligibleBySource: {}, skippedBySource: {},
+      skippedByReason: { already_sent: 1 }, queued: 0, failedCount: 0, nextCursor: null });
+    await component.runPreview();
+    fixture.detectChanges();
+    const button: HTMLButtonElement = fixture.nativeElement.querySelector('.historical-send__actions button:last-child');
+    expect(button.disabled).toBe(true);
+    const hint = fixture.nativeElement.querySelector(`#${button.getAttribute('aria-describedby')}`);
+    expect(hint.textContent).toContain('already sent to COROS');
+    component.onSourceChange(component.sourceOptions[0], true);
+    fixture.detectChanges();
+    expect(hint.textContent).toBe('Run Preview to check which activities can be sent.');
+    expect(fixture.nativeElement.querySelector('app-status-info')).toBeNull();
+    component.endDate = null;
+    component.onDateInput();
+    fixture.detectChanges();
+    expect(hint.textContent).toBe('Choose valid dates, then run Preview to enable Send.');
   });
 });

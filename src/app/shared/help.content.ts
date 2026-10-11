@@ -1215,6 +1215,8 @@ You can send past activities while automatic activity sync is off. A source conn
 
 Preview checks saved activities in batches and shows how many have been checked and are eligible so far. Large date ranges take longer. **Send** becomes available after the full preview finishes with eligible activities. You can **Stop** a preview and choose a shorter range; stopping a preview sends nothing. The completed result explains when there are no eligible activities or some files could not be checked.
 
+The completed preview shows how many activities are **ready to send** from each selected source. **Not ready to send** lists reasons such as **Already sent**, **Already queued**, an unavailable or unsupported original file, or **Couldn’t check**. Checks against unrelated sources are not counted as exclusions. Reason counts are by source, so one activity can appear more than once when several sources are selected. If nothing is ready, a message beside **Send** explains why it is disabled. Already sent or queued activities are protected from duplicate delivery; failed checks can be retried with **Preview**.
+
 When Garmin and Suunto are connected, the dashboard may offer a one-time action prompt to turn on automatic Garmin to Suunto activity sync. Dismissing the prompt hides it permanently; **Send past activities** remains available in Services.
 
 ## COROS

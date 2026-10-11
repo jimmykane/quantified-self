@@ -364,9 +364,8 @@ describe('Firebase Hosting configuration', () => {
     expect(sitemapLastmodForUrl(`${siteOrigin}/features/fit-gpx-tcx-file-analyzer`)).toBe('2026-09-02');
     expect(sitemapXml).not.toContain(`${siteOrigin}/features/workout-file-comparison`);
     expect(sitemapXml).not.toContain(`${siteOrigin}/features/sports-watch-benchmark`);
-    // Curated Health defaults, confirmed-empty cards and chart periods update public Help.
+    // Health defaults, chart periods, and historical preview progress/exclusion guidance update Help.
     expect(sitemapLastmodForUrl(`${siteOrigin}/help`)).toBe('2026-10-11');
-    // Includes historical activity preview progress and Stop guidance.
     expect(sitemapLastmodForUrl(`${siteOrigin}/policies`)).toBe('2026-10-07');
     expect(sitemapLastmodForUrl(`${siteOrigin}/privacy`)).toBe('2026-10-07');
     expect(sitemapLastmodForUrl(`${siteOrigin}/terms`)).toBe('2026-10-07');
