@@ -1082,7 +1082,9 @@ describe('help.content', () => {
     expect(trainingSection?.content).toContain('**This workout’s contribution**');
     expect(trainingSection?.content).toContain('**Day result**');
     expect(trainingSection?.content).toContain('includes all training counted for that day, not only this workout');
-    expect(trainingSection?.content).toContain('**How it’s calculated**');
+    expect(trainingSection?.content).toContain('**info icon** beside the day result');
+    expect(trainingSection?.content).toContain('**How Training impact is calculated**');
+    expect(trainingSection?.content).toContain('You can scroll normally over the icon on a phone');
     expect(trainingSection?.content).toContain('fixed daily cutoff, which may differ from local midnight');
     expect(trainingSection?.content).not.toContain('**About Training impact**');
     expect(trainingSection?.content).toContain('their event detail pages do not show Training impact');

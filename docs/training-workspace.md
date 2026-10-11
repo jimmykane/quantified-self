@@ -5074,8 +5074,10 @@ It explicitly includes all training counted for that day, not only this workout.
 maintenance headline appears in event details, and UTC terminology stays out of its main presentation.
 When the strip is present, the activity summary uses the shared
 header's bottom-padding hooks to leave an 8px join instead of stacking summary and phone metric padding. Other summary
-surfaces retain their existing spacing. A surface-free **How it’s calculated** Material text button sits alongside the
-day result and wraps beneath it when needed. It controls a labelled hidden region through `aria-expanded` and
+surfaces retain their existing spacing. A Material info icon stays beside the day result, including on phones, with
+the accessible label and hover/keyboard tooltip **How Training impact is calculated**. Its native tooltip touch gestures
+are disabled (`matTooltipTouchGestures="off"`), so long-press handling never suppresses mobile scrolling. A tap or
+keyboard activation still controls a labelled hidden region through `aria-expanded` and
 `aria-controls`, with one selection-haptic owner per activation. The initially collapsed explanation contains the
 workout's recorded TSS, contribution formulas, all-training/day-decay meaning, fixed daily cutoff caveat, and existing
 physiological-adaptation disclaimer. Disclosure state is component-local, survives same-event ready refreshes, and

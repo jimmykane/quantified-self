@@ -2,6 +2,7 @@ import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { LOCALE_ID } from '@angular/core';
 import { By } from '@angular/platform-browser';
 import { MatTooltip } from '@angular/material/tooltip';
+import { Platform } from '@angular/cdk/platform';
 import { NoopAnimationsModule } from '@angular/platform-browser/animations';
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
@@ -78,7 +79,8 @@ describe('TrainingImpactComponent', () => {
     expect(element.textContent).not.toContain('Helped push the day above maintenance');
     expect(element.textContent).not.toContain('Training-day outcome');
     expect(element.textContent).not.toContain('UTC');
-    expect(button.textContent).toContain('How it’s calculated');
+    expect(button.textContent?.trim()).toBe('info_outline');
+    expect(button.getAttribute('aria-label')).toBe('How Training impact is calculated');
     expect(button.getAttribute('aria-expanded')).toBe('false');
     const details = element.querySelector('.training-impact-calculation') as HTMLElement;
     expect(button.getAttribute('aria-controls')).toBe(details.id);
@@ -88,7 +90,10 @@ describe('TrainingImpactComponent', () => {
     expect(details.textContent).toContain('this workout’s 84 TSS');
     expect(details.textContent).toContain('fixed daily cutoff');
     expect(details.textContent).toContain('not measured physiological adaptation');
-    expect(fixture.debugElement.query(By.directive(MatTooltip))).toBeNull();
+    const tooltip = fixture.debugElement.query(By.directive(MatTooltip)).injector.get(MatTooltip);
+    expect(tooltip.message).toBe('How Training impact is calculated');
+    expect(tooltip.position).toBe('above');
+    expect(tooltip.touchGestures).toBe('off');
     expect(element.querySelector('.training-impact-disclaimer')).toBeNull();
     expect(element.textContent).not.toContain('About this estimate');
     expect(haptics.selection).not.toHaveBeenCalled();
@@ -112,6 +117,32 @@ describe('TrainingImpactComponent', () => {
     expect(button.getAttribute('aria-expanded')).toBe('false');
     expect(details.hidden).toBe(true);
     expect(haptics.selection).toHaveBeenCalledTimes(2);
+  });
+
+  it('leaves touch scrolling available on the info icon without opening details or giving feedback', () => {
+    TestBed.overrideProvider(Platform, { useValue: { isBrowser: true, ANDROID: true, IOS: false } });
+    const fixture = render(session(), 'strip');
+    const button = fixture.nativeElement.querySelector('button') as HTMLButtonElement;
+    const tooltip = fixture.debugElement.query(By.directive(MatTooltip)).injector.get(MatTooltip);
+    const show = vi.spyOn(tooltip, 'show');
+    const touchStart = new TouchEvent('touchstart', { bubbles: true, cancelable: true });
+    const touchMove = new TouchEvent('touchmove', { bubbles: true, cancelable: true });
+    button.dispatchEvent(touchStart);
+    button.dispatchEvent(touchMove);
+    button.dispatchEvent(new TouchEvent('touchcancel', { bubbles: true }));
+
+    expect(tooltip.touchGestures).toBe('off');
+    expect(button.style.touchAction).not.toBe('none');
+    expect(touchStart.defaultPrevented).toBe(false);
+    expect(touchMove.defaultPrevented).toBe(false);
+    expect(show).not.toHaveBeenCalled();
+    expect(fixture.componentInstance.calculationExpanded()).toBe(false);
+    expect(haptics.selection).not.toHaveBeenCalled();
+
+    button.click(); fixture.detectChanges();
+    expect(fixture.componentInstance.calculationExpanded()).toBe(true);
+    expect(haptics.selection).toHaveBeenCalledOnce();
+    expect(show).not.toHaveBeenCalled();
   });
 
   it.each([

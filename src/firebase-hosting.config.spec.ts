@@ -364,7 +364,7 @@ describe('Firebase Hosting configuration', () => {
     expect(sitemapLastmodForUrl(`${siteOrigin}/features/fit-gpx-tcx-file-analyzer`)).toBe('2026-09-02');
     expect(sitemapXml).not.toContain(`${siteOrigin}/features/workout-file-comparison`);
     expect(sitemapXml).not.toContain(`${siteOrigin}/features/sports-watch-benchmark`);
-    // Health defaults, automatic source selection and historical preview guidance update Help.
+    // Health source selection, historical previews, and the scroll-safe Training impact info icon update Help.
     expect(sitemapLastmodForUrl(`${siteOrigin}/help`)).toBe('2026-10-11');
     expect(sitemapLastmodForUrl(`${siteOrigin}/policies`)).toBe('2026-10-07');
     expect(sitemapLastmodForUrl(`${siteOrigin}/privacy`)).toBe('2026-10-07');
