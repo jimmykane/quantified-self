@@ -419,7 +419,7 @@ They retain the same exact finite sport vocabulary and strict validation while k
 family byte budgets, including the expanded catalog.
 
 The subsequently approved fitness/mobility, endurance, aquatic and wheelchair Training classifications affect recorded analysis only. The compatibility
-bridge keeps its 49 recorded-only names separate from the original 29 approved future public recipe names. The installed
+bridge keeps its 72 recorded-only names separate from the original 29 approved future public recipe names. The installed
 canonical catalog continues to supply all other accepted recipe sports; adding analysis membership does not add a future
 name to the public enum before catalog adoption. Strict runtime and advertised JSON Schema checks cover every recorded-only
 bridge entry with both catalogs. Existing Training metric projections retain their frozen Running/Cycling/Swimming-plus-Other
@@ -432,6 +432,14 @@ installed canonical catalog, so its existing recipe acceptance is unchanged. The
 remain private to the workspace; public Training summaries omit Fitness & Gym and context details, while explanation
 folds its saved load into the existing Other total. Scopes, proposals, provider profiles and the pending contract digest
 remain unchanged. No plugin rebuild or contract promotion is required.
+
+The approved 50-sport recorded-analysis batch adds Snowshoeing and seven internal families: Climbing & Mountaineering,
+Mountain Snow Sports, Skating, Combat & Martial Arts, Dance, Team Sports and Racket Sports. All 50 keep separate contexts,
+exact canonical identities and saved TSS (including zero); the 23 unpublished names extend only the recorded bridge.
+Public Training summary/build projections still expose Running/Cycling/Swimming and omit private contexts/metrics.
+Explanation projections combine the seven families into the existing Other row and redact internal family labels in
+contributors. Installed/candidate tests cover that folding and all recorded-only recipe boundaries. No public schema,
+scope, mutation kind, provider action or plugin content changes; the pending digest remains unchanged.
 
 Manual pool and open-water swimming use the exact canonical sport strings `Swimming` and `Open Water Swimming`.
 Planned-workout summaries format swim distances in metres and pace with the owner's /100 m or /100 yd setting.

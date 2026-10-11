@@ -40,7 +40,7 @@ import {
   buildTrainingCapacityViewModels,
   type TrainingCapacityDisciplineViewModel,
 } from '../../helpers/training-capacity.helper';
-import { resolveUnitAwareDisplayStat } from '@shared/unit-aware-display';
+import { resolveUnitAwareDisplayStat, resolveUnitAwareDisplayFromValue } from '@shared/unit-aware-display';
 import { resolveMetricSemantics, type MetricSemanticsDirection } from '@shared/metric-semantics';
 import {
   DERIVED_METRIC_KINDS,
@@ -668,7 +668,9 @@ export class TrainingWorkspaceComponent implements OnInit, OnDestroy {
       const metrics = profileMetrics
         .filter(metric => metric !== 'moving-time')
         .filter(metric => metric !== 'elapsed-time'
-          || (showSummaryCommonMetrics && contextDefinition.showElapsedTimeInSummary === true))
+          || (showSummaryCommonMetrics
+            ? contextDefinition.showElapsedTimeInSummary === true
+            : contextDefinition.showElapsedTimeInComparison === true))
         .filter(metric => metric !== 'distance' || showSummaryCommonMetrics || observedContextCount > 1)
         .flatMap((metric): TrainingContextMetricViewModel[] => {
           const definition = getTrainingProfileMetricDefinition(metric);
@@ -718,7 +720,9 @@ export class TrainingWorkspaceComponent implements OnInit, OnDestroy {
         return formattedDistance || `${this.formatNumber(value, 1)} m`;
       }
       case 'duration':
-        return this.formatTrainingBuildDuration(value);
+        return resolveUnitAwareDisplayFromValue(definition.statTypes[0], value, this.unitSettings, {
+          compactDuration: true, stripRepeatedUnit: true,
+        })?.text || '--';
       case 'count':
         return this.formatNumber(value, 0);
       case 'jump-distance': {
@@ -760,9 +764,6 @@ export class TrainingWorkspaceComponent implements OnInit, OnDestroy {
     const definition = getTrainingProfileMetricDefinition(metric);
     if (definition?.unit === 'pace-500m') {
       return `${this.formatTrainingProfileMetric(metric, Math.abs(delta), discipline)} ${delta < 0 ? 'faster' : 'slower'}`;
-    }
-    if (definition?.unit === 'duration') {
-      return this.formatTrainingBuildDurationDelta(current, reference);
     }
     const formatted = this.formatTrainingProfileMetric(metric, Math.abs(delta), discipline);
     return `${delta > 0 ? '+' : '−'}${formatted}`;

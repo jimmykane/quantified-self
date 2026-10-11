@@ -194,6 +194,28 @@ describe('training-power-systems.helper', () => {
     expect(groups.other).toHaveLength(0);
   });
 
+  it('groups all 50 approved exact power entries without pooling sports after JSON reload', () => {
+    const expected = {
+      'walking-hiking': ['Snowshoeing'],
+      'climbing-mountaineering': ['Bouldering', 'Climbing', 'Rock Climbing', 'Indoor Climbing', 'Via Ferrata', 'Mountaineering'],
+      'mountain-snow': ['Ski Touring', 'Ski Mountaineering', 'Backcountry Skiing', 'Backcountry Snowboarding', 'Splitboarding', 'Alpine Skiing', 'Snowboarding', 'Telemark Skiing'],
+      'skating': ['Inline Skating', 'Skating', 'Ice Skating', 'Skateboarding'],
+      'combat-martial-arts': ['Boxing', 'Combat', 'Judo', 'Kickboxing', 'Mixed Martial Arts', 'Taekwondo'],
+      'dance': ['Ballet Dancing', 'Ballroom Dancing', 'Dancing', 'Jazz Dancing', 'Latin Dancing', 'Modern Dancing', 'Show Dancing', 'Street Dancing'],
+      'team-sports': ['Basketball', 'Wheelchair Basketball', 'Football', 'Soccer', 'Volleyball', 'Beach Volleyball'],
+      'racket-sports': ['Badminton', 'Beach Tennis', 'Padel', 'Pickleball', 'Platform Tennis', 'Racket Sport', 'Racquet Ball', 'Squash', 'Table Tennis', 'Tennis', 'Wheelchair Tennis'],
+
+    };
+    const types = Object.values(expected).flat();
+    const normalized = resolveTrainingPowerSystemsMetricPayload(JSON.parse(JSON.stringify(payload(types.map(type => entry(type))))));
+    expect(normalized?.activityTypes).toHaveLength(50);
+    const groups = groupTrainingPowerSystemsActivityTypeViewModels(buildTrainingPowerSystemsActivityTypeViewModels(normalized));
+    Object.entries(expected).forEach(([sport, names]) => {
+      expect(groups.bySport[sport].map(item => item.activityType)).toEqual([...names].sort());
+    });
+    expect(groups.other).toEqual([]);
+  });
+
   it('groups registered exact types by sport and preserves unmatched types as Other', () => {
     const normalized = resolveTrainingPowerSystemsMetricPayload(payload([
       entry('Cycling'),

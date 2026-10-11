@@ -1,4 +1,4 @@
-import { ActivityTypes, ActivityTypesHelper } from '@sports-alliance/sports-lib';
+import { ActivityTypes } from '@sports-alliance/sports-lib';
 import { resolveActivityTypeMaterialIcon } from '../helpers/activity-type-presentation.helper';
 import { MANUAL_WORKOUT_EDITOR_SPORTS_V1 } from '@shared/planned-workout';
 import {
@@ -26,6 +26,13 @@ describe('shared Training sport registry', () => {
       'fitness-gym',
       'paddling',
       'wheelchair',
+      'climbing-mountaineering',
+      'mountain-snow',
+      'skating',
+      'combat-martial-arts',
+      'dance',
+      'team-sports',
+      'racket-sports',
       'other-training',
     ]);
     expect(TRAINING_SPORT_DEFINITIONS.map(({ id, label }) => ({ id, label }))).toEqual([
@@ -39,6 +46,14 @@ describe('shared Training sport registry', () => {
       { id: 'fitness-gym', label: 'Fitness & Gym' },
       { id: 'paddling', label: 'Paddling' },
       { id: 'wheelchair', label: 'Wheelchair Training' },
+      { id: 'climbing-mountaineering', label: 'Climbing & Mountaineering' },
+      { id: 'mountain-snow', label: 'Mountain Snow Sports' },
+      { id: 'skating', label: 'Skating' },
+      { id: 'combat-martial-arts', label: 'Combat & Martial Arts' },
+      { id: 'dance', label: 'Dance' },
+      { id: 'team-sports', label: 'Team Sports' },
+      { id: 'racket-sports', label: 'Racket Sports' },
+
       { id: 'other-training', label: 'Other training' },
     ]);
   });
@@ -152,10 +167,6 @@ describe('shared Training sport registry', () => {
     expect(MANUAL_WORKOUT_EDITOR_SPORTS_V1 as readonly string[]).not.toContain(name);
   });
 
-  it.each(['Wheelchair Basketball', 'Wheelchair Tennis'])('keeps %s outside the approved wheelchair endurance group', name => {
-    const available = ActivityTypesHelper.resolveActivityType(name) !== null;
-    expect(resolveTrainingDisciplineFromActivityType(name)).toBe(available ? 'other-training' : null);
-  });
 
   it('classifies floor climbing separately from rock climbing and gym stair equipment', () => {
     expect(resolveTrainingSportContextFromActivityType('floor_climbing')).toMatchObject({
@@ -168,11 +179,95 @@ describe('shared Training sport registry', () => {
     expect(resolveTrainingPowerSystemsModelActivityType(ActivityTypes.FloorClimbing)).toBe(ActivityTypes.FloorClimbing);
     expect(resolveTrainingSportContextFromActivityType(ActivityTypes['Stair Stepper'])?.context).toBe('conditioning');
     [ActivityTypes.Climbing, ActivityTypes.RockClimbing, ActivityTypes['Indoor Climbing']].forEach(type => {
-      expect(resolveTrainingSportContextFromActivityType(type)?.sport).toBe('other-training');
+      expect(resolveTrainingSportContextFromActivityType(type)?.sport).toBe('climbing-mountaineering');
     });
     expect(getTrainingSportDefinition('fitness-gym')?.capabilities).toEqual(['training-mix']);
     expect(getTrainingSportDefinition('fitness-gym')?.contexts.find(context => context.id === 'stair-climbing')?.label)
       .toBe('Stair Climbing');
+  });
+
+  it.each([
+    ['Snowshoeing', 'walking-hiking', 'snowshoeing', 'zones', ['distance', 'moving-time', 'elapsed-time', 'ascent', 'descent']],
+    ['Bouldering', 'climbing-mountaineering', 'bouldering', 'volume-only', ['elapsed-time', 'ascent']],
+    ['Climbing', 'climbing-mountaineering', 'climbing', 'volume-only', ['elapsed-time', 'ascent']],
+    ['Rock Climbing', 'climbing-mountaineering', 'rock-climbing', 'volume-only', ['elapsed-time', 'ascent']],
+    ['Indoor Climbing', 'climbing-mountaineering', 'indoor-climbing', 'volume-only', ['elapsed-time', 'ascent']],
+    ['Via Ferrata', 'climbing-mountaineering', 'via-ferrata', 'volume-only', ['elapsed-time', 'ascent']],
+    ['Mountaineering', 'climbing-mountaineering', 'mountaineering', 'zones', ['distance', 'moving-time', 'elapsed-time', 'ascent', 'descent']],
+    ['Ski Touring', 'mountain-snow', 'ski-touring', 'zones', ['distance', 'moving-time', 'elapsed-time', 'ascent', 'descent', 'descent-time']],
+    ['Ski Mountaineering', 'mountain-snow', 'ski-mountaineering', 'zones', ['distance', 'moving-time', 'elapsed-time', 'ascent', 'descent', 'descent-time']],
+    ['Backcountry Skiing', 'mountain-snow', 'backcountry-skiing', 'zones', ['distance', 'moving-time', 'elapsed-time', 'ascent', 'descent', 'descent-time']],
+    ['Backcountry Snowboarding', 'mountain-snow', 'backcountry-snowboarding', 'zones', ['distance', 'moving-time', 'elapsed-time', 'ascent', 'descent', 'descent-time']],
+    ['Splitboarding', 'mountain-snow', 'splitboarding', 'zones', ['distance', 'moving-time', 'elapsed-time', 'ascent', 'descent', 'descent-time']],
+    ['Alpine Skiing', 'mountain-snow', 'alpine-skiing', 'volume-only', ['distance', 'moving-time', 'elapsed-time', 'ascent', 'descent', 'descent-time']],
+    ['Snowboarding', 'mountain-snow', 'snowboarding', 'volume-only', ['distance', 'moving-time', 'elapsed-time', 'ascent', 'descent', 'descent-time']],
+    ['Telemark Skiing', 'mountain-snow', 'telemark-skiing', 'volume-only', ['distance', 'moving-time', 'elapsed-time', 'ascent', 'descent', 'descent-time']],
+    ['Inline Skating', 'skating', 'inline-skating', 'zones', ['distance', 'moving-time', 'elapsed-time']],
+    ['Skating', 'skating', 'skating', 'volume-only', ['distance', 'moving-time', 'elapsed-time']],
+    ['Ice Skating', 'skating', 'ice-skating', 'volume-only', ['distance', 'moving-time', 'elapsed-time']],
+    ['Skateboarding', 'skating', 'skateboarding', 'volume-only', ['distance', 'moving-time', 'elapsed-time']],
+    ['Boxing', 'combat-martial-arts', 'boxing', 'volume-only', ['elapsed-time']],
+    ['Combat', 'combat-martial-arts', 'combat', 'volume-only', ['elapsed-time']],
+    ['Judo', 'combat-martial-arts', 'judo', 'volume-only', ['elapsed-time']],
+    ['Kickboxing', 'combat-martial-arts', 'kickboxing', 'volume-only', ['elapsed-time']],
+    ['Mixed Martial Arts', 'combat-martial-arts', 'mixed-martial-arts', 'volume-only', ['elapsed-time']],
+    ['Taekwondo', 'combat-martial-arts', 'taekwondo', 'volume-only', ['elapsed-time']],
+    ['Ballet Dancing', 'dance', 'ballet-dancing', 'volume-only', ['elapsed-time']],
+    ['Ballroom Dancing', 'dance', 'ballroom-dancing', 'volume-only', ['elapsed-time']],
+    ['Dancing', 'dance', 'dancing', 'volume-only', ['elapsed-time']],
+    ['Jazz Dancing', 'dance', 'jazz-dancing', 'volume-only', ['elapsed-time']],
+    ['Latin Dancing', 'dance', 'latin-dancing', 'volume-only', ['elapsed-time']],
+    ['Modern Dancing', 'dance', 'modern-dancing', 'volume-only', ['elapsed-time']],
+    ['Show Dancing', 'dance', 'show-dancing', 'volume-only', ['elapsed-time']],
+    ['Street Dancing', 'dance', 'street-dancing', 'volume-only', ['elapsed-time']],
+    ['Basketball', 'team-sports', 'basketball', 'volume-only', ['elapsed-time']],
+    ['Wheelchair Basketball', 'team-sports', 'wheelchair-basketball', 'volume-only', ['elapsed-time']],
+    ['Football', 'team-sports', 'football', 'volume-only', ['elapsed-time']],
+    ['Soccer', 'team-sports', 'soccer', 'volume-only', ['elapsed-time']],
+    ['Volleyball', 'team-sports', 'volleyball', 'volume-only', ['elapsed-time']],
+    ['Beach Volleyball', 'team-sports', 'beach-volleyball', 'volume-only', ['elapsed-time']],
+    ['Badminton', 'racket-sports', 'badminton', 'volume-only', ['elapsed-time']],
+    ['Beach Tennis', 'racket-sports', 'beach-tennis', 'volume-only', ['elapsed-time']],
+    ['Padel', 'racket-sports', 'padel', 'volume-only', ['elapsed-time']],
+    ['Pickleball', 'racket-sports', 'pickleball', 'volume-only', ['elapsed-time']],
+    ['Platform Tennis', 'racket-sports', 'platform-tennis', 'volume-only', ['elapsed-time']],
+    ['Racket Sport', 'racket-sports', 'racket-sport', 'volume-only', ['elapsed-time']],
+    ['Racquet Ball', 'racket-sports', 'racquet-ball', 'volume-only', ['elapsed-time']],
+    ['Squash', 'racket-sports', 'squash', 'volume-only', ['elapsed-time']],
+    ['Table Tennis', 'racket-sports', 'table-tennis', 'volume-only', ['elapsed-time']],
+    ['Tennis', 'racket-sports', 'tennis', 'volume-only', ['elapsed-time']],
+    ['Wheelchair Tennis', 'racket-sports', 'wheelchair-tennis', 'volume-only', ['elapsed-time']],
+  ] as const)('preserves %s in its approved recorded context and exact power history', (name, sport, context, intensityPolicy, metrics) => {
+    const resolved = resolveTrainingSportContextFromActivityType(name);
+    expect(resolved).toMatchObject({ sport, context, intensityPolicy, profileMetrics: metrics,
+      loadPolicy: 'recorded', durabilityPolicy: 'omit', distancePolicy: metrics.some(metric => metric === 'distance') ? 'recorded' : 'omit',
+    });
+    expect(resolveTrainingSportContextFromActivityType(`  ${name.toLowerCase()}  `)).toEqual(resolved);
+    expect(resolveTrainingPowerSystemsModelActivityType(name)).toBe(name);
+    const definition = getTrainingSportDefinition(sport);
+    expect(definition?.contexts.find(item => item.id === context)).toMatchObject({
+      label: name, activityTypes: [name], showElapsedTimeInSummary: true, showElapsedTimeInComparison: true,
+    });
+    expect(definition?.capabilities).toEqual(['training-mix', 'best-build', 'power-systems']);
+  });
+
+  it('uses existing Material icons and recorded discovery for the seven new groups', () => {
+    const expectedIcons = [
+      ['climbing-mountaineering', 'hiking'], ['mountain-snow', 'downhill_skiing'], ['skating', 'roller_skating'],
+      ['combat-martial-arts', 'fitness_center'], ['dance', 'fitness_center'],
+      ['team-sports', 'sports_basketball'], ['racket-sports', 'sports_tennis'],
+    ] as const;
+    expectedIcons.forEach(([id, icon]) => {
+      const definition = getTrainingSportDefinition(id);
+      expect(definition?.selectionAvailability).toBe('recorded');
+      expect(resolveActivityTypeMaterialIcon(definition?.iconActivityType)).toBe(icon);
+      expect(normalizeTrainingDestinationId(id)).toBe(id);
+    });
+    expect(resolveTrainingDisciplineFromActivityType('Wheelchair Basketball')).toBe('team-sports');
+    expect(resolveTrainingDisciplineFromActivityType('Wheelchair Tennis')).toBe('racket-sports');
+    expect(resolveTrainingDisciplineFromActivityType('Fitness Boxing')).toBe('fitness-gym');
+    expect(resolveTrainingDisciplineFromActivityType('Fitness Dancing')).toBe('fitness-gym');
+    expect(resolveTrainingDisciplineFromActivityType('Fitness Martial Arts')).toBe('fitness-gym');
   });
 
   it('gives recorded wheelchair training its own supported views and existing Material icon', () => {
@@ -315,9 +410,6 @@ describe('shared Training sport registry', () => {
 
   it('places known unmodeled sports in Other Training without classifying aggregate parents', () => {
     [
-      ActivityTypes.SkiTouring,
-      ActivityTypes.BackCountrySkiing,
-      ActivityTypes.Snowshoeing,
       ActivityTypes.Surfing,
       ActivityTypes.Sailing,
     ].forEach(activityType => expect(resolveTrainingSportContextFromActivityType(activityType)).toMatchObject({
@@ -349,6 +441,14 @@ describe('shared Training sport registry', () => {
       'fitness-gym': 'Fitness & Gym',
       paddling: 'Paddling',
       wheelchair: 'Wheelchair Training',
+      'climbing-mountaineering': 'Climbing & Mountaineering',
+      'mountain-snow': 'Mountain Snow Sports',
+      'skating': 'Skating',
+      'combat-martial-arts': 'Combat & Martial Arts',
+      'dance': 'Dance',
+      'team-sports': 'Team Sports',
+      'racket-sports': 'Racket Sports',
+
       'other-training': 'Other training',
     });
     expect(getTrainingSportDefinition('cycling')?.capabilities).toContain('durability');

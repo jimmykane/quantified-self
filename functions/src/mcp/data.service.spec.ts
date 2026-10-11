@@ -5429,6 +5429,14 @@ describe('MCP data service', () => {
       'fitness-gym': ['general-fitness', 'general'],
       paddling: ['kayaking', 'paddling'],
       wheelchair: ['wheelchair-racing', 'general'],
+      'climbing-mountaineering': ['bouldering', 'general'],
+      'mountain-snow': ['ski-touring', 'mixed-gravity'],
+      'skating': ['inline-skating', 'endurance'],
+      'combat-martial-arts': ['boxing', 'general'],
+      'dance': ['ballet-dancing', 'general'],
+      'team-sports': ['basketball', 'general'],
+      'racket-sports': ['badminton', 'general'],
+
       'other-training': ['other-training', 'general'],
     } as const;
     const window = (discipline: typeof TRAINING_DISCIPLINES[number]) => ({
@@ -5445,6 +5453,7 @@ describe('MCP data service', () => {
         profile: contextByDiscipline[discipline][1],
         activityCount: 1,
         metrics: discipline === 'fitness-gym' || discipline === 'other-training'
+          || ['climbing-mountaineering', 'mountain-snow', 'skating', 'combat-martial-arts', 'dance', 'team-sports', 'racket-sports'].includes(discipline)
           ? [{ metric: 'elapsed-time', value: 3_600, sourceActivityCount: 1 }]
           : discipline === 'cycling'
           ? [{ metric: 'max-jump-distance', value: 7.4, sourceActivityCount: 1 }]
@@ -5491,6 +5500,7 @@ describe('MCP data service', () => {
     expect(serialized).not.toContain('privateContextNote');
     expect(serialized).not.toContain('max-jump-distance');
     expect(serialized).not.toContain('stroke-rate');
+    ['climbing-mountaineering', 'mountain-snow', 'skating', 'combat-martial-arts', 'dance', 'team-sports', 'racket-sports'].forEach(id => expect(serialized).not.toContain(id));
   });
 
   it('projects the versioned internal Form payload without exact activity counts', () => {
@@ -5624,6 +5634,14 @@ describe('MCP data service', () => {
       ['fitness-gym', 'Fitness & Gym', null],
       ['paddling', 'Paddling', 70],
       ['wheelchair', 'Wheelchair Training', 100],
+      ['climbing-mountaineering', 'Climbing & Mountaineering', 5],
+      ['mountain-snow', 'Mountain Snow Sports', 5],
+      ['skating', 'Skating', 5],
+      ['combat-martial-arts', 'Combat & Martial Arts', 5],
+      ['dance', 'Dance', 5],
+      ['team-sports', 'Team Sports', 5],
+      ['racket-sports', 'Racket Sports', 5],
+
       ['other-training', 'Other training', null],
       ['other', 'Other', 80],
       ['unclassified', 'Unclassified', 90],
@@ -5636,20 +5654,20 @@ describe('MCP data service', () => {
       loadSharePercent: trainingStressScore === null ? null : 10,
     }));
     const coverage = {
-      totalCount: 13,
-      loadedCount: 10,
-      classifiedCount: 12,
+      totalCount: 20,
+      loadedCount: 17,
+      classifiedCount: 19,
       unclassifiedCount: 1,
-      ratio: 10 / 13,
+      ratio: 17 / 20,
     };
     const windowMetrics = {
-      parentEventCount: 13,
-      parentLoadEventCount: 10,
-      parentTrainingStressScore: 550,
+      parentEventCount: 20,
+      parentLoadEventCount: 17,
+      parentTrainingStressScore: 585,
       parentLoadCoverage: coverage,
-      childActivityCount: 13,
-      childLoadActivityCount: 10,
-      childTrainingStressScore: 550,
+      childActivityCount: 20,
+      childLoadActivityCount: 17,
+      childTrainingStressScore: 585,
       childLoadCoverage: coverage,
       sportLoads: loads,
       rhythms: TRAINING_DISCIPLINES.map(discipline => ({
@@ -5671,7 +5689,7 @@ describe('MCP data service', () => {
       status: 'ready',
       schemaVersion: DERIVED_METRIC_SCHEMA_VERSION,
       updatedAtMs: 123,
-      sourceEventCount: 13,
+      sourceEventCount: 20,
       payload: {
         dayBoundary: 'UTC',
         asOfDayMs: 2,
@@ -5689,7 +5707,7 @@ describe('MCP data service', () => {
           startDayMs: 2,
           trainingStressScore: 50,
           loadSharePercent: 10,
-          childComposition: [loads[0], loads[3], loads[6], loads[9]],
+          childComposition: [loads[0], loads[3], loads[6], loads[9], ...loads.slice(10, 17)],
         }],
       },
     });
@@ -5704,17 +5722,18 @@ describe('MCP data service', () => {
     expect(payload.current.sportLoads.map(load => load.sport))
       .toEqual(['running', 'cycling', 'swimming', 'other', 'unclassified']);
     expect(payload.current.sportLoads.find(load => load.sport === 'other')).toMatchObject({
-      activityCount: 9,
-      loadActivityCount: 6,
-      trainingStressScore: 400,
+      activityCount: 16,
+      loadActivityCount: 13,
+      trainingStressScore: 435,
     });
     expect(payload.topContributors[0].childComposition).toEqual([
       expect.objectContaining({ sport: 'running', trainingStressScore: 10 }),
-      expect.objectContaining({ sport: 'other', activityCount: 3, trainingStressScore: 140 }),
+      expect.objectContaining({ sport: 'other', activityCount: 10, trainingStressScore: 175 }),
     ]);
     expect(payload.topContributors[0].childComposition.every(load => !('label' in load))).toBe(true);
     expect(JSON.stringify(payload)).not.toContain('wheelchair');
     expect(JSON.stringify(payload)).not.toContain('Wheelchair Training');
+    ['climbing-mountaineering', 'mountain-snow', 'skating', 'combat-martial-arts', 'dance', 'team-sports', 'racket-sports'].forEach(id => expect(JSON.stringify(payload)).not.toContain(id));
   });
 
   it('fails closed when an expanded Training payload is malformed before projection', () => {

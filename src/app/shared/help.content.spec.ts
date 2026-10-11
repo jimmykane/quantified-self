@@ -257,8 +257,33 @@ describe('help.content', () => {
     expect(training).toContain('**Wheelchair Training** supports Training Mix, Best build and Power systems');
     expect(training).toContain('Walk/Run describes pushing speed');
     expect(training).toContain('every exact sport retains its separate power history');
-    expect(training).toContain('nine benchmark families');
+    expect(training).toContain('sixteen benchmark families');
     expect(training).toContain('**Wheelchair Training** appears when wheelchair workouts exist');
+  });
+
+  it('explains all 50 approved sport names and the recorded-only analysis policies', () => {
+    const training = HELP_SECTIONS.find(section => section.id === 'training-analysis')!.content;
+    for (const name of [
+      'Snowshoeing',
+      'Bouldering', 'Climbing', 'Rock Climbing', 'Indoor Climbing', 'Via Ferrata',
+      'Mountaineering',
+      'Ski Touring', 'Ski Mountaineering', 'Backcountry Skiing', 'Backcountry Snowboarding', 'Splitboarding',
+      'Alpine Skiing', 'Snowboarding', 'Telemark Skiing',
+      'Inline Skating',
+      'Skating', 'Ice Skating', 'Skateboarding',
+      'Boxing', 'Combat', 'Judo', 'Kickboxing', 'Mixed Martial Arts', 'Taekwondo',
+      'Ballet Dancing', 'Ballroom Dancing', 'Dancing', 'Jazz Dancing', 'Latin Dancing', 'Modern Dancing', 'Show Dancing', 'Street Dancing',
+      'Basketball', 'Wheelchair Basketball', 'Football', 'Soccer', 'Volleyball', 'Beach Volleyball',
+      'Badminton', 'Beach Tennis', 'Padel', 'Pickleball', 'Platform Tennis', 'Racket Sport', 'Racquet Ball', 'Squash', 'Table Tennis', 'Tennis', 'Wheelchair Tennis',
+
+    ]) expect(training).toContain(name);
+    expect(training).toContain('**Walking & Hiking → Snowshoeing**');
+    expect(training).toContain('The eight zone-enabled additions use power first, then heart rate');
+    expect(training).toContain('All 50 newly classified sports omit durability analysis');
+    expect(training).toContain('including zero');
+    expect(training).toContain('Zones cover the whole recording');
+    expect(training).toContain('existing planned-workout and provider-delivery mappings');
+    expect(training).toContain('sixteen benchmark families');
   });
 
   it('explains stair climbing classification and its recorded evidence', () => {

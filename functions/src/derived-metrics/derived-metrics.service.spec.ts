@@ -2208,7 +2208,7 @@ describe('buildTrainingBuildComparisonMetricPayload', () => {
 
         expect(result.payload.disciplines.map(item => item.discipline)).toEqual([
             'running', 'cycling', 'swimming', 'rowing', 'walking-hiking', 'nordic-skiing', 'strength',
-            'fitness-gym', 'paddling', 'wheelchair', 'other-training',
+            'fitness-gym', 'paddling', 'wheelchair', 'climbing-mountaineering', 'mountain-snow', 'skating', 'combat-martial-arts', 'dance', 'team-sports', 'racket-sports', 'other-training',
         ]);
         [cycling, strength].forEach((discipline) => {
             expect(discipline?.status).toBe('ready');
@@ -2730,6 +2730,44 @@ describe('buildTrainingPowerSystemsMetricPayload', () => {
             expect(entry.current.activityType).toBe(entry.activityType);
             expect(entry.evidenceCounts.usableCurveActivityCount).toBe(available ? 2 : 0);
         }
+        const availableEntries = result.payload.activityTypes.filter(item => ActivityTypesHelper.resolveActivityType(item.activityType));
+        expect(new Set(availableEntries.map(item => item.current.sourceFingerprint)).size).toBe(availableEntries.length);
+    });
+
+    it('keeps all 50 approved sport power histories independent after JSON reload', async () => {
+        const { buildTrainingPowerSystemsMetricPayload } = await import('./derived-metrics.service');
+        const types = [
+            'Snowshoeing', 'Bouldering', 'Climbing', 'Rock Climbing', 'Indoor Climbing',
+            'Via Ferrata', 'Mountaineering', 'Ski Touring', 'Ski Mountaineering', 'Backcountry Skiing',
+            'Backcountry Snowboarding', 'Splitboarding', 'Alpine Skiing', 'Snowboarding', 'Telemark Skiing',
+            'Inline Skating', 'Skating', 'Ice Skating', 'Skateboarding', 'Boxing',
+            'Combat', 'Judo', 'Kickboxing', 'Mixed Martial Arts', 'Taekwondo',
+            'Ballet Dancing', 'Ballroom Dancing', 'Dancing', 'Jazz Dancing', 'Latin Dancing',
+            'Modern Dancing', 'Show Dancing', 'Street Dancing', 'Basketball', 'Wheelchair Basketball',
+            'Football', 'Soccer', 'Volleyball', 'Beach Volleyball', 'Badminton',
+            'Beach Tennis', 'Padel', 'Pickleball', 'Platform Tennis', 'Racket Sport',
+            'Racquet Ball', 'Squash', 'Table Tennis', 'Tennis', 'Wheelchair Tennis',
+
+        ];
+        const activities = JSON.parse(JSON.stringify(types.flatMap((type, index) => [
+            source(`approved-${index}-1`, type as ActivityTypes, asOfDayMs - 20 * DAY_MS),
+            source(`approved-${index}-2`, type as ActivityTypes, asOfDayMs - DAY_MS),
+        ])));
+        const fitSpy = vi.fn(fitThreeDimensionalCapacityModel);
+        const result = buildTrainingPowerSystemsMetricPayload(activities, nowMs, fitSpy);
+        expect(result.payload.activityTypes.map(item => item.activityType)).toEqual([...types].sort());
+        const currentFits = fitSpy.mock.calls.filter(([, options]) => options?.effectiveDate === '2026-07-20');
+        expect(currentFits).toHaveLength(50);
+        currentFits.forEach(([curves]) => {
+            expect(curves).toHaveLength(2);
+            expect(new Set(curves.map(curve => curve.activityType)).size).toBe(1);
+        });
+        result.payload.activityTypes.forEach(entry => {
+            const available = ActivityTypesHelper.resolveActivityType(entry.activityType) !== null;
+            expect(entry.current.activityType).toBe(entry.activityType);
+            expect(entry.current.diagnostics.sourceCount).toBe(available ? 2 : 0);
+            expect(entry.evidenceCounts.usableCurveActivityCount).toBe(available ? 2 : 0);
+        });
         const availableEntries = result.payload.activityTypes.filter(item => ActivityTypesHelper.resolveActivityType(item.activityType));
         expect(new Set(availableEntries.map(item => item.current.sourceFingerprint)).size).toBe(availableEntries.length);
     });
@@ -3861,6 +3899,115 @@ describe('buildTrainingSummaryMetricPayload', () => {
         expect(activities.map(activity => activity.activityData.type)).toEqual([name, name, name, name]);
     });
 
+    it.each([
+        ['Snowshoeing', 'walking-hiking', 'snowshoeing', true, ['distance', 'moving-time', 'elapsed-time', 'ascent', 'descent']],
+        ['Bouldering', 'climbing-mountaineering', 'bouldering', false, ['elapsed-time', 'ascent']],
+        ['Climbing', 'climbing-mountaineering', 'climbing', false, ['elapsed-time', 'ascent']],
+        ['Rock Climbing', 'climbing-mountaineering', 'rock-climbing', false, ['elapsed-time', 'ascent']],
+        ['Indoor Climbing', 'climbing-mountaineering', 'indoor-climbing', false, ['elapsed-time', 'ascent']],
+        ['Via Ferrata', 'climbing-mountaineering', 'via-ferrata', false, ['elapsed-time', 'ascent']],
+        ['Mountaineering', 'climbing-mountaineering', 'mountaineering', true, ['distance', 'moving-time', 'elapsed-time', 'ascent', 'descent']],
+        ['Ski Touring', 'mountain-snow', 'ski-touring', true, ['distance', 'moving-time', 'elapsed-time', 'ascent', 'descent', 'descent-time']],
+        ['Ski Mountaineering', 'mountain-snow', 'ski-mountaineering', true, ['distance', 'moving-time', 'elapsed-time', 'ascent', 'descent', 'descent-time']],
+        ['Backcountry Skiing', 'mountain-snow', 'backcountry-skiing', true, ['distance', 'moving-time', 'elapsed-time', 'ascent', 'descent', 'descent-time']],
+        ['Backcountry Snowboarding', 'mountain-snow', 'backcountry-snowboarding', true, ['distance', 'moving-time', 'elapsed-time', 'ascent', 'descent', 'descent-time']],
+        ['Splitboarding', 'mountain-snow', 'splitboarding', true, ['distance', 'moving-time', 'elapsed-time', 'ascent', 'descent', 'descent-time']],
+        ['Alpine Skiing', 'mountain-snow', 'alpine-skiing', false, ['distance', 'moving-time', 'elapsed-time', 'ascent', 'descent', 'descent-time']],
+        ['Snowboarding', 'mountain-snow', 'snowboarding', false, ['distance', 'moving-time', 'elapsed-time', 'ascent', 'descent', 'descent-time']],
+        ['Telemark Skiing', 'mountain-snow', 'telemark-skiing', false, ['distance', 'moving-time', 'elapsed-time', 'ascent', 'descent', 'descent-time']],
+        ['Inline Skating', 'skating', 'inline-skating', true, ['distance', 'moving-time', 'elapsed-time']],
+        ['Skating', 'skating', 'skating', false, ['distance', 'moving-time', 'elapsed-time']],
+        ['Ice Skating', 'skating', 'ice-skating', false, ['distance', 'moving-time', 'elapsed-time']],
+        ['Skateboarding', 'skating', 'skateboarding', false, ['distance', 'moving-time', 'elapsed-time']],
+        ['Boxing', 'combat-martial-arts', 'boxing', false, ['elapsed-time']],
+        ['Combat', 'combat-martial-arts', 'combat', false, ['elapsed-time']],
+        ['Judo', 'combat-martial-arts', 'judo', false, ['elapsed-time']],
+        ['Kickboxing', 'combat-martial-arts', 'kickboxing', false, ['elapsed-time']],
+        ['Mixed Martial Arts', 'combat-martial-arts', 'mixed-martial-arts', false, ['elapsed-time']],
+        ['Taekwondo', 'combat-martial-arts', 'taekwondo', false, ['elapsed-time']],
+        ['Ballet Dancing', 'dance', 'ballet-dancing', false, ['elapsed-time']],
+        ['Ballroom Dancing', 'dance', 'ballroom-dancing', false, ['elapsed-time']],
+        ['Dancing', 'dance', 'dancing', false, ['elapsed-time']],
+        ['Jazz Dancing', 'dance', 'jazz-dancing', false, ['elapsed-time']],
+        ['Latin Dancing', 'dance', 'latin-dancing', false, ['elapsed-time']],
+        ['Modern Dancing', 'dance', 'modern-dancing', false, ['elapsed-time']],
+        ['Show Dancing', 'dance', 'show-dancing', false, ['elapsed-time']],
+        ['Street Dancing', 'dance', 'street-dancing', false, ['elapsed-time']],
+        ['Basketball', 'team-sports', 'basketball', false, ['elapsed-time']],
+        ['Wheelchair Basketball', 'team-sports', 'wheelchair-basketball', false, ['elapsed-time']],
+        ['Football', 'team-sports', 'football', false, ['elapsed-time']],
+        ['Soccer', 'team-sports', 'soccer', false, ['elapsed-time']],
+        ['Volleyball', 'team-sports', 'volleyball', false, ['elapsed-time']],
+        ['Beach Volleyball', 'team-sports', 'beach-volleyball', false, ['elapsed-time']],
+        ['Badminton', 'racket-sports', 'badminton', false, ['elapsed-time']],
+        ['Beach Tennis', 'racket-sports', 'beach-tennis', false, ['elapsed-time']],
+        ['Padel', 'racket-sports', 'padel', false, ['elapsed-time']],
+        ['Pickleball', 'racket-sports', 'pickleball', false, ['elapsed-time']],
+        ['Platform Tennis', 'racket-sports', 'platform-tennis', false, ['elapsed-time']],
+        ['Racket Sport', 'racket-sports', 'racket-sport', false, ['elapsed-time']],
+        ['Racquet Ball', 'racket-sports', 'racquet-ball', false, ['elapsed-time']],
+        ['Squash', 'racket-sports', 'squash', false, ['elapsed-time']],
+        ['Table Tennis', 'racket-sports', 'table-tennis', false, ['elapsed-time']],
+        ['Tennis', 'racket-sports', 'tennis', false, ['elapsed-time']],
+        ['Wheelchair Tennis', 'racket-sports', 'wheelchair-tennis', false, ['elapsed-time']],
+    ] as const)('builds %s with its own comparison, recorded metrics and preserved positive/zero/missing TSS', async (name, sport, context, zones, expectedMetricIds) => {
+        const { buildTrainingSummaryMetricPayload, buildTrainingBuildComparisonMetricPayload, buildTrainingExplanationMetricPayload } = await import('./derived-metrics.service');
+        const docs = [Date.UTC(2026, 6, 8), Date.UTC(2026, 3, 1)].flatMap(day => [
+            createEvent(day, name, 'Garmin', {
+                [DataDistance.type]: 2_000, [DataAscent.type]: 120, [DataDescent.type]: 80, [DataDescentTime.type]: 240,
+                'Training Stress Score': 71.25,
+                [DataPowerZoneOneDuration.type]: 300, [DataPowerZoneThreeDuration.type]: 400, [DataPowerZoneFiveDuration.type]: 500,
+            }),
+            createEvent(day, name, 'Polar', {
+                [DataDistance.type]: 3_000, [DataAscent.type]: 0, [DataDescent.type]: 0, [DataDescentTime.type]: 0,
+                'Training Stress Score': 0,
+            }),
+            createEvent(day, name, 'Suunto', {
+                [DataDistance.type]: -1, [DataAscent.type]: -1, [DataDescent.type]: -1, [DataDescentTime.type]: -1,
+                [DataHeartRateZoneOneDuration.type]: 0, [DataHeartRateZoneThreeDuration.type]: 0, [DataHeartRateZoneFiveDuration.type]: 0,
+            }),
+        ]);
+        const activities = buildTrainingActivitySources(docs);
+        const summary = buildTrainingSummaryMetricPayload(activities, nowMs);
+        expect(summary.sourceEventCount).toBe(6);
+        const current = summary.payload.disciplines.find(item => item.discipline === sport)?.current28d;
+        expect(current).toMatchObject({ activityCount: 3, durationSeconds: 10_800,
+            easySeconds: zones ? 1_500 : 0, moderateSeconds: zones ? 1_600 : 0, hardSeconds: zones ? 1_100 : 0,
+        });
+        expect(current?.contexts).toHaveLength(1);
+        expect(current?.contexts[0]).toMatchObject({ context, activityCount: 3 });
+        const metricValues = {
+            distance: [5_000, 2], 'moving-time': [10_800, 3], 'elapsed-time': [10_800, 3],
+            ascent: [120, 2], descent: [80, 2], 'descent-time': [240, 2],
+        };
+        expect(current?.contexts[0].metrics).toEqual(expectedMetricIds.map(metric => ({
+            metric, value: metricValues[metric][0], sourceActivityCount: metricValues[metric][1],
+        })));
+        expect(summary.payload.disciplines.find(item => item.discipline === 'other-training')?.current28d.activityCount).toBe(0);
+        const build = buildTrainingBuildComparisonMetricPayload(activities, {
+            trainingSettings: { buildBenchmarks: { [sport]: { mode: 'period', durationWeeks: 8, endDayMs: Date.UTC(2026, 3, 30) } } },
+        }, nowMs).payload.disciplines.find(item => item.discipline === sport);
+        expect(build?.status).toBe('ready');
+        for (const window of [build?.current, build?.benchmark]) {
+            expect(window).toMatchObject({ activityCount: 3, durationSeconds: 10_800,
+                trainingStressScore: 71.25, trainingStressScoreEventCount: 2, durability: null,
+                easySeconds: zones ? 1_500 : null, moderateSeconds: zones ? 1_600 : null, hardSeconds: zones ? 1_100 : null,
+                intensitySourceEventCount: zones ? 2 : 0,
+                distanceMeters: expectedMetricIds.some(metric => metric === 'distance') ? 5_000 : null,
+                distanceEventCount: expectedMetricIds.some(metric => metric === 'distance') ? 2 : 0,
+            });
+            expect(window?.contexts).toEqual(current?.contexts);
+        }
+        const explanation = buildTrainingExplanationMetricPayload(docs as never, activities, nowMs).payload.current;
+        expect(explanation).toMatchObject({ parentTrainingStressScore: 71.25, childTrainingStressScore: 71.25,
+            childActivityCount: 3, childLoadActivityCount: 2,
+        });
+        expect(explanation.sportLoads).toContainEqual(expect.objectContaining({ sport, activityCount: 3,
+            loadActivityCount: 2, trainingStressScore: 71.25,
+        }));
+        expect(activities.map(activity => activity.activityData.type)).toEqual(Array(6).fill(name));
+    });
+
     it('summarizes floor climbing with recorded ascent, saved load and power-first intensity', async () => {
         const { buildTrainingSummaryMetricPayload, buildTrainingBuildComparisonMetricPayload, buildTrainingExplanationMetricPayload } = await import('./derived-metrics.service');
         const docs = [Date.UTC(2026, 6, 8), Date.UTC(2026, 3, 1)].flatMap(day => [
@@ -4195,6 +4342,14 @@ describe('training explanation and durability metrics', () => {
             { sport: 'fitness-gym', label: 'Fitness & Gym' },
             { sport: 'paddling', label: 'Paddling' },
             { sport: 'wheelchair', label: 'Wheelchair Training' },
+            { sport: 'climbing-mountaineering', label: 'Climbing & Mountaineering' },
+            { sport: 'mountain-snow', label: 'Mountain Snow Sports' },
+            { sport: 'skating', label: 'Skating' },
+            { sport: 'combat-martial-arts', label: 'Combat & Martial Arts' },
+            { sport: 'dance', label: 'Dance' },
+            { sport: 'team-sports', label: 'Team Sports' },
+            { sport: 'racket-sports', label: 'Racket Sports' },
+
             { sport: 'other-training', label: 'Other training' },
             { sport: 'other', label: 'Other' },
             { sport: 'unclassified', label: 'Unclassified' },
@@ -4674,6 +4829,14 @@ describe('activity-level Training sources and swimming performance', () => {
             ['fitness-gym', 0],
             ['paddling', 0],
             ['wheelchair', 0],
+            ['climbing-mountaineering', 0],
+            ['mountain-snow', 0],
+            ['skating', 0],
+            ['combat-martial-arts', 0],
+            ['dance', 0],
+            ['team-sports', 0],
+            ['racket-sports', 0],
+
             ['other-training', 0],
         ]);
     });
@@ -5727,6 +5890,14 @@ describe('writeDerivedMetricSnapshotsReady', () => {
                 { discipline: 'fitness-gym', current28d: { activityCount: 0 } },
                 { discipline: 'paddling', current28d: { activityCount: 0 } },
                 { discipline: 'wheelchair', current28d: { activityCount: 0 } },
+                { discipline: 'climbing-mountaineering', current28d: { activityCount: 0 } },
+                { discipline: 'mountain-snow', current28d: { activityCount: 0 } },
+                { discipline: 'skating', current28d: { activityCount: 0 } },
+                { discipline: 'combat-martial-arts', current28d: { activityCount: 0 } },
+                { discipline: 'dance', current28d: { activityCount: 0 } },
+                { discipline: 'team-sports', current28d: { activityCount: 0 } },
+                { discipline: 'racket-sports', current28d: { activityCount: 0 } },
+
                 { discipline: 'other-training', current28d: { activityCount: 0 } },
             ],
         });

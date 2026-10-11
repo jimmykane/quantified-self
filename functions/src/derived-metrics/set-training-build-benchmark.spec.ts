@@ -155,6 +155,27 @@ describe('setTrainingBuildBenchmark', () => {
         },
     );
 
+    it.each([
+        ['climbing-mountaineering', 'Bouldering'],
+        ['mountain-snow', 'Ski Touring'],
+        ['skating', 'Inline Skating'],
+        ['combat-martial-arts', 'Boxing'],
+        ['dance', 'Ballet Dancing'],
+        ['team-sports', 'Basketball'],
+        ['racket-sports', 'Badminton'],
+
+    ])('saves a %s benchmark using the matching recorded child and preserves sibling settings', async (discipline, type) => {
+        hoisted.transactionGet.mockImplementation(async (ref: unknown) => ref === hoisted.activitiesQuery
+            ? { docs: [{ data: () => ({ type }) }] }
+            : { exists: true, data: () => ({ startDate: Date.UTC(2026, 2, 1, 9) }) });
+        const data = JSON.parse(JSON.stringify({ discipline, selection: { mode: 'event', durationWeeks: 12, eventId: 'approved-sport-event' } }));
+        await expect((setTrainingBuildBenchmark as any)({ auth: { uid: 'user-1' }, app: {}, data })).resolves.toMatchObject({ accepted: true });
+        expect(hoisted.transactionSet).toHaveBeenCalledWith(expect.anything(), {
+            trainingSettings: { buildBenchmarks: { [discipline]: data.selection } },
+        }, { merge: true });
+        expect(hoisted.transactionUpdate).not.toHaveBeenCalled();
+    });
+
     it('accepts a valid historical event with an ISO start date', async () => {
         hoisted.transactionGet.mockResolvedValueOnce({
             exists: true,

@@ -53,6 +53,14 @@ describe('resolveTrainingSportVisibility', () => {
       { discipline: 'fitness-gym', label: 'Fitness & Gym' },
       { discipline: 'paddling', label: 'Paddling' },
       { discipline: 'wheelchair', label: 'Wheelchair Training' },
+      { discipline: 'climbing-mountaineering', label: 'Climbing & Mountaineering' },
+      { discipline: 'mountain-snow', label: 'Mountain Snow Sports' },
+      { discipline: 'skating', label: 'Skating' },
+      { discipline: 'combat-martial-arts', label: 'Combat & Martial Arts' },
+      { discipline: 'dance', label: 'Dance' },
+      { discipline: 'team-sports', label: 'Team Sports' },
+      { discipline: 'racket-sports', label: 'Racket Sports' },
+
       { discipline: 'other-training', label: 'Other training' },
     ]);
     expect(formatTrainingVisibleDisciplinesLabel(['rowing', 'strength'])).toBe('Rowing + Strength');
@@ -76,6 +84,14 @@ describe('resolveTrainingSportVisibility', () => {
     expect(resolveTrainingSportVisibility(saved, summary({}), true, {})).toMatchObject({ disciplines: ['wheelchair'] });
     expect(resolveTrainingSportShortcuts(null, undefined, summary({ wheelchair: 3 }, { wheelchair: 3_600 }), true, {}))
       .toMatchObject({ disciplines: ['wheelchair'], source: 'automatic' });
+  });
+
+  it.each(['climbing-mountaineering', 'mountain-snow', 'skating', 'combat-martial-arts', 'dance', 'team-sports', 'racket-sports'] as const)('retains %s after JSON shortcut storage and discovers its recorded evidence', sport => {
+    const saved = JSON.parse(JSON.stringify([sport]));
+    expect(normalizeTrainingSportShortcuts(saved)).toEqual([sport]);
+    expect(resolveTrainingSportVisibility(saved, summary({}), true, {})).toMatchObject({ disciplines: [sport] });
+    expect(resolveTrainingSportShortcuts(null, undefined, summary({ [sport]: 1 }, { [sport]: 1_800 }), true, {}))
+      .toMatchObject({ disciplines: [sport], source: 'automatic' });
   });
 
   it('honors a valid explicit selection regardless of recent activity', () => {

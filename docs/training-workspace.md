@@ -421,7 +421,7 @@ Current compatibility baseline:
 
 - Quantified Self derived-metric schema: `22`
 - Installed `@sports-alliance/sports-lib`: `21.5.0`; the provider-sport expansion is verified against its candidate build before package adoption
-- Training sport groups: nine benchmark-capable families plus data-backed Fitness & Gym and Other training groups
+- Training sport groups: sixteen benchmark-capable families plus data-backed Fitness & Gym and Other training groups
 - Imported FTP/VO2 capacity disciplines: Running and Cycling only
 - Rolling power-system capacity: every canonical activity type with usable persisted power curves; only Cycling/Road Cycling and Running/Road Running share histories
 - Calendar boundaries: UTC unless a section explicitly says otherwise
@@ -4522,17 +4522,24 @@ rendering derive from it.
 | Cycling | Cycling and Indoor cycling (`endurance`), Mountain biking (`endurance`), Enduro MTB (`mixed-gravity`), Downhill MTB (`gravity`), BMX (`general`), Kickbiking (`endurance`) | Cycling, Road Cycling, Gravel Cycling, Track Cycling, Cyclocross, E-Biking, Hand Cycle, Velomobile, Recumbent Cycling; Indoor Cycling, Virtual Cycling, LES MILLS RPM, LES MILLS SPRINT, LES MILLS THE TRIP, Indoor Hand Cycle; Mountain Biking, E-Mountain Biking, Mountain Bike Orienteering; Enduro MTB, E-Enduro MTB; Downhill Cycling; BMX; Kickbiking |
 | Swimming | Pool swimming (`pool`), Open-water swimming (`open-water`) | Swimming; Open Water Swimming |
 | Rowing | Indoor rowing and On-water rowing (`rowing`) | Indoor Rowing, Virtual Rowing; Rowing |
-| Walking & Hiking | Walking, Hiking, and Rucking (`vertical-endurance`) | Walking, Nordic Walking, Speed Walking, Indoor Walking; Hiking, Trekking; Rucking |
+| Walking & Hiking | Walking, Hiking, Rucking, and Snowshoeing (`vertical-endurance`) | Walking, Nordic Walking, Speed Walking, Indoor Walking; Hiking, Trekking; Rucking; Snowshoeing |
 | Nordic Skiing | Snow, Roller skiing, Ski Orienteering, and Biathlon (`vertical-endurance`) | Crosscountry Skiing, Classic Crosscountry Skiing, Skate Skiing, Nordic Skiing; Roller Skiing, Classic Roller Skiing, Skate Roller Skiing; Ski Orienteering; Biathlon |
 | Strength | Strength (`strength`) | Strength Training, Weight Training, Kettlebell, LES MILLS BODYPUMP, Calisthenics, Core Training, LES MILLS CORE, LES MILLS GRIT Strength |
 | Fitness & Gym | General fitness, Conditioning, Mobility & movement, Water Running, Stair Climbing (`general`) | Training, Indoor Training, Workout, Generic, Fitness Equipment, Indoor Skiing, Indoor Grinding, Trucker Workout; HIIT, AMRAP, EMOM, Tabata, Circuit Training, Cardio Training, Aerobics, CrossFit, Crosstrainer, Elliptical Trainer, Stair Stepper, Bootcamp, Functional Training, Fitness Boxing, Fitness Dancing, Fitness Martial Arts, Jump Rope, Step Training, LES MILLS BODYATTACK, BODYCOMBAT, BODYJAM, BODYSTEP, GRIT Athletic, GRIT Cardio, SH'BAM, TONE, Fitness Racing, Aqua Fitness; Yoga, Pilates, Flexibility Training, Stretching, Gymnastics, Barre, Mobility, Dynamic Mobility, Static Mobility, Mind-Body Training, Physical Therapy, LES MILLS BARRE, BODYBALANCE; Water Running; Floor Climbing |
 | Paddling | Canoeing, Kayaking, Paddling, and Stand-up paddling (`paddling`) | Canoeing; Kayaking, Whitewater Kayaking; Paddling; Stand Up Paddling |
 | Wheelchair Training | Six distinct wheelchair contexts (`general`) | Wheel Chair; Wheelchair Push Walk; Wheelchair Push Run; Indoor Wheelchair Push Walk; Indoor Wheelchair Push Run; Wheelchair Racing |
+| Climbing & Mountaineering | Bouldering/Climbing/Rock Climbing/Indoor Climbing/Via Ferrata (`general`); Mountaineering (`vertical-endurance`) | Bouldering; Climbing; Rock Climbing; Indoor Climbing; Via Ferrata; Mountaineering |
+| Mountain Snow Sports | Touring/mountaineering/backcountry/splitboarding (`mixed-gravity`); alpine/snowboard/telemark (`gravity`) | Ski Touring; Ski Mountaineering; Backcountry Skiing; Backcountry Snowboarding; Splitboarding; Alpine Skiing; Snowboarding; Telemark Skiing |
+| Skating | Inline Skating (`endurance`); other skating (`general`) | Inline Skating; Skating; Ice Skating; Skateboarding |
+| Combat & Martial Arts | Separate context per exact sport (`general`) | Boxing; Combat; Judo; Kickboxing; Mixed Martial Arts; Taekwondo |
+| Dance | Separate context per exact sport (`general`) | Ballet Dancing; Ballroom Dancing; Dancing; Jazz Dancing; Latin Dancing; Modern Dancing; Show Dancing; Street Dancing |
+| Team Sports | Separate context per exact sport (`general`) | Basketball; Wheelchair Basketball; Football; Soccer; Volleyball; Beach Volleyball |
+| Racket Sports | Separate context per exact sport (`general`) | Badminton; Beach Tennis; Padel; Pickleball; Platform Tennis; Racket Sport; Racquet Ball; Squash; Table Tennis; Tennis; Wheelchair Tennis |
 | Other training | Other training (`general`) | Every other known, non-aggregate Sports Lib activity type through the explicit fallback policy |
 
 Important behavior:
 
-- Every group supports Training Mix. The original eight modeled families and Wheelchair Training support Best Build; Fitness & Gym and Other
+- Every group supports Training Mix. Sixteen modeled families support Best Build; Fitness & Gym and Other
   training deliberately do not. Specialist surfaces are capability-gated: durability,
   imported capacity, power profiles, and swimming performance are enabled only where declared. Reusable context
   summaries are driven directly by each context's profile and metric declarations.
@@ -4557,9 +4564,9 @@ Important behavior:
 - Known non-aggregate sports outside the modeled families use `Other training` with recorded duration and saved TSS,
   retaining intensity exclusions. Aggregate parents can still be reported as `Other` in load explanation; unknown
   strings are `Unclassified`.
-- Modeled membership remains intentionally conservative. Fitness & Gym classes use the declared general volume profile;
-  ski touring/backcountry skiing, snowshoeing, surfing, sailing, team sports, and other unmodeled types remain Other
-  training rather than inheriting a nearby Training profile.
+- Modeled membership follows explicit approvals. Fitness & Gym classes use the declared general volume profile.
+  The 50-sport classification below adds seven groups and separate recorded contexts; the remaining 96 known
+  non-aggregate canonical types, including surfing and sailing, retain Other training.
 - The overall state and explanation remain on **All training**. Sport shortcuts affect navigation only and never filter
   global calculations or remove a registered family from the complete selector.
 
@@ -4581,8 +4588,8 @@ Conditioning; LES MILLS BODYPUMP shares Strength. Indoor Walking and Speed Walki
 keeps its explicit chart profile without terrain recommendations; Training only aggregates actual recorded metrics.
 Missing distance, ascent or descent is never created from a sport label.
 
-`shared/activity-type-compatibility.ts` bridges 78 approved canonical names while the dependency still pins the
-published catalog: 74 context memberships and four combined-sport exclusions. It does not infer Road Cycling from
+`shared/activity-type-compatibility.ts` bridges 101 approved canonical names while the dependency still pins the
+published catalog: 97 context memberships and four combined-sport exclusions. It does not infer Road Cycling from
 generic Cycling, guess a provider's missing profile, or assign other new sports to modeled families. The additional
 memberships are Track/Ultra/Crosscountry Running, Recumbent Cycling, Indoor Hand Cycle, E-Mountain Biking, Mountain
 Bike Orienteering, E-Enduro MTB, BMX, Kickbiking, Obstacle Racing, Classic/Skate Roller Skiing, Virtual Rowing and
@@ -4611,13 +4618,13 @@ and omit durability. Fitness Racing and Aqua Fitness use the existing volume-onl
 Water Running has a separate Fitness & Gym context with recorded zones and elapsed time; distance and durability
 are omitted. This separates aqua jogging from land-running pace and from swimming stroke analysis.
 
-Wheelchair Training is the ninth benchmark-capable family and eleventh Training group. Its six disjoint contexts
+Wheelchair Training supports Best Build as one of the eighteen Training groups. Its six disjoint contexts
 keep Wheel Chair, outdoor/indoor Push Walk and Push Run, and Wheelchair Racing separate. Every context uses recorded
 zones, saved TSS, distance and moving/elapsed time with omitted durability. The family is discovered from recorded
 workouts or retained navigation state and supports Training Mix, Best Build and exact-type Power systems. Its icon
 uses the existing Material `accessible_forward` through Adaptive Mobility. No wheelchair-specific energy, threshold,
-stride, VO2 or durability formula is inferred. Hand Cycle remains Cycling; wheelchair team/racket sports remain in
-Other training until separately classified. Generic Wheel Chair never implies an indoor venue or pushing speed.
+stride, VO2 or durability formula is inferred. Hand Cycle remains Cycling; Wheelchair Basketball belongs to Team Sports and Wheelchair Tennis belongs to
+Racket Sports under their separately approved contexts. Generic Wheel Chair never implies an indoor venue or pushing speed.
 
 All 13 keep their original activity names and finite nonnegative saved TSS, including zero. The 11 unpublished names
 join only the recorded-analysis compatibility bridge; the original 29 public recipe additions, manual editor options,
@@ -4637,10 +4644,49 @@ context uses recorded power zones first, then heart-rate zones, saved TSS includ
 ascent. Missing or invalid ascent remains unavailable; recorded zero ascent remains valid. Distance and durability
 are omitted. The registry's `showElapsedTimeInSummary` flag keeps its duration row visible even without ascent;
 Strength retains its existing elapsed-time row through the same presentation metadata. Fitness & Gym retains Training Mix only, so this membership adds no Best Build benchmark, manual-editor
-sport or provider profile. Stair Stepper remains Conditioning; rock and indoor climbing retain their existing Other
-training classification pending separate approval. [Garmin lists Floor Climb under Gym](https://support.garmin.com/en-ZA/?faq=g9VOolzNBr08b7mfclmxt7).
+sport or provider profile. Stair Stepper remains Conditioning; rock and indoor climbing have their own contexts in
+Climbing & Mountaineering under the subsequent approval. [Garmin lists Floor Climb under Gym](https://support.garmin.com/en-ZA/?faq=g9VOolzNBr08b7mfclmxt7).
 This recorded-analysis change joins the same unreleased schema-22 rebuild preparation, with no additional bridge name
-or public MCP contract change. The remaining 146 unmodeled canonical sports retain Other training.
+or public MCP contract change. The subsequent 50-sport approval below leaves 96 unmodeled canonical sports in Other training.
+
+The approved 50-sport batch adds seven recorded-discovery groups and Snowshoeing's own Walking & Hiking context.
+Each of the 50 sports retains its canonical name, a distinct comparison context, saved TSS including
+zero, and an independent exact-type Power systems history. Climbing & Mountaineering, Mountain Snow Sports, Skating,
+Combat & Martial Arts, Dance, Team Sports and Racket Sports support Training Mix, Best Build and existing Power systems
+when recorded curves exist. Training now has eighteen groups and sixteen benchmark-capable families; Fitness & Gym
+and Other training retain Training Mix only. New groups reuse existing Material icons from their representative
+canonical sports. Recorded evidence or a retained selection/benchmark discovers their navigation destinations.
+
+Eight new contexts use recorded power zones first and heart-rate zones otherwise: Snowshoeing, Mountaineering,
+Ski Touring, Ski Mountaineering, Backcountry Skiing, Backcountry Snowboarding, Splitboarding and Inline Skating. The
+other 42 use duration and saved TSS with volume-only intensity. Climbing contexts declare elapsed time and ascent;
+Mountaineering and Snowshoeing declare distance, moving/elapsed time, ascent and descent. Mountain snow contexts also
+declare recorded descent time; skating contexts declare distance and moving/elapsed time. Combat, dance, team and
+racket contexts declare elapsed time only. Each opts into its named elapsed-time summary and Best Build comparison through the registry's
+`showElapsedTimeInSummary` and `showElapsedTimeInComparison` flags. Existing contexts retain their previous display
+policy; the fifty additions retain separate duration rows even when distance/ascent is missing. Context duration
+values and deltas use the declared Sports Lib duration class through the shared unit-aware formatter, including
+recorded zero (`0s`) and long durations; missing values remain unavailable.
+Metric sources must be finite and nonnegative; missing/invalid evidence stays unavailable and recorded zero stays
+valid. Snow zones describe the whole recorded activity; uphill, downhill and lift splits are never inferred.
+
+All 50 omit durability and introduce no VO2, energy, threshold or other sport-specific model. Canonical Football and
+Soccer remain separate contexts; generic Climbing, Skating, Dancing and Racket Sport never imply a named subtype.
+Fitness Boxing, Fitness Dancing and Fitness Martial Arts retain the previous Fitness & Gym classifications, while
+Wheelchair Basketball and Wheelchair Tennis use their approved team/racket contexts. The 23 names absent from the
+installed catalog join only the recorded-analysis bridge, bringing it to 72 recorded-only additions plus the original
+29 future recipe names. Original canonical aliases continue to come from Sports Lib. The batch changes no manual
+editor options, planning profiles or provider mappings and remains in the same unreleased schema-22 snapshot/workout
+rebuild preparation. Exact power fits for unpublished types require the expanded Sports Lib catalog; QS keeps their
+input names and curves while pinned to 21.5.0. Candidate-catalog tests cover all 50 exact histories.
+
+The classifications are the approved QS product decisions informed by [Polar's distinct sport profiles](https://support.polar.com/us-en/polar-flow-sport-profiles),
+[UIAA's climbing/mountaineering distinctions](https://www.theuiaa.org/tyrol-declaration-archive/) and
+[ISMF's ski mountaineering formats](https://ismf-ski.com/ismf/); these organizations do not prescribe QS's analysis policies.
+Frontend JSON-reload, capability/navigation, canonical-unit display, backend saved-load/metric/comparison and exact-power
+coverage protect all 50 contexts. MCP impact: public Training summaries retain Running/Cycling/Swimming, explanations
+fold all seven private families into Other, and context metrics stay private. Recipe acceptance, scopes, provider
+transport, metric tokens, plugin content and the pending contract digest are unchanged.
 
 The Walking catalog group has metadata, icon, color, gradient and a chart default. Public catalog coverage follows the
 installed Sports Lib enum, without listing an empty future group under the old release. Event chart profiles preserve
@@ -4686,7 +4732,7 @@ pending registered-contract digest covering those strict enum additions. Provide
 outbound aliases and existing mapping review; no new tool, mutation kind, provider action or consent scope is added.
 The follow-up roller-skiing, rowing, kayaking, fitness/mobility and combined-sport classifications change no public MCP schema,
 metric token, planning recipe enum, scope, proposal/confirmation contract or plugin content. Public recipe schemas
-keep the original 29 approved future names separate from the 49 recorded-only bridge additions; the installed
+keep the original 29 approved future names separate from the 72 recorded-only bridge additions; the installed
 canonical catalog continues to define the other accepted recipe sports. Regression checks cover advertised JSON
 Schema and runtime validation before and after catalog adoption. Existing safe Training
 projections retain their frozen Running/Cycling/Swimming-plus-Other shape and identity redaction. Recorded-activity
@@ -5097,7 +5143,7 @@ The route has three destination kinds:
   Form/freshness/load, compact current-versus-usual cards for every recorded registered family, the global intensity
   distribution. It does not duplicate specialist or exact-type power panels. Body measurements belong in Health.
 - **Sport group** renders one detailed Training Mix and only the specialist surfaces enabled by that group's registry
-  capabilities. The nine benchmark-capable families can render Best Build; Fitness & Gym and Other training support Training Mix only.
+  capabilities. The sixteen benchmark-capable families can render Best Build; Fitness & Gym and Other training support Training Mix only.
   Sleep inside Best Build compares the same date windows but is explicitly labeled as not sport-filtered.
 - **Other power activities** renders only exact rolling-power types that cannot be resolved into the Training registry.
   The destination is discoverable when such evidence exists and remains renderable as an honest empty state if it was
@@ -5133,7 +5179,7 @@ Sport shortcuts have two modes:
 
 Missing new shortcut state falls back to legacy `trainingSettings.visibleDisciplines`; explicit `null` bypasses that
 fallback and restores automatic mode. Shortcuts affect navigation only. Every registry sport remains available in the
-complete selector except the data-backed Fitness & Gym, Wheelchair Training and Other training groups, which appear when the retained
+complete selector except groups with recorded-only selection availability (Fitness & Gym, Wheelchair Training, the seven newly classified groups, and Other training), which appear when the retained
 summary contains matching workouts or while preserving an already selected/saved shortcut. Their visibility is based
 on workout count, never TSS, zones, power, or durability evidence. Overview totals remain global, and navigation does
 not change derived calculations.
@@ -5409,7 +5455,7 @@ Sleep values remain visible without deltas when coverage or provider comparabili
 
 Benchmark-capable sport destinations only; exactly one sport card is built and rendered.
 
-`training_build_comparison` builds one independent card per visible benchmark-capable family. The nine benchmark-capable families
+`training_build_comparison` builds one independent card per visible benchmark-capable family. The sixteen benchmark-capable families
 support one saved benchmark; Fitness & Gym and Other training reject benchmark writes and keep only schema-complete
 `not-configured` placeholders. Specialist rows remain capability- and evidence-gated.
 
