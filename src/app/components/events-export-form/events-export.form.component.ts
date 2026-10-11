@@ -1,4 +1,5 @@
 import { Component, Inject, inject } from '@angular/core';
+import { isRunningFamilyActivityType } from '@shared/activity-type-family';
 import { EventInterface } from '@sports-alliance/sports-lib';
 import { UntypedFormControl, UntypedFormGroup, Validators } from '@angular/forms';
 import { MAT_DIALOG_DATA, MatDialogRef } from '@angular/material/dialog';
@@ -213,7 +214,7 @@ export class EventsExportFormComponent extends FormsAbstract {
     // Go over the events
     this.events.forEach((event) => {
       const activityTypes = <DataActivityTypes>event.getStat(DataActivityTypes.type);
-      const isRunning = activityTypes && [<string>ActivityTypes.running, <string>ActivityTypes.trail_running, <string>ActivityTypes.treadmill].indexOf(activityTypes.getValue()[0]) !== -1;
+      const isRunning = activityTypes && isRunningFamilyActivityType(activityTypes.getValue()[0]);
       const isSwimming = activityTypes && [<string>ActivityTypes.swimming, <string>ActivityTypes['open water swimming']].indexOf(activityTypes.getValue()[0]) !== -1;
 
       const row = [];

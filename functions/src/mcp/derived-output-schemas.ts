@@ -2,7 +2,6 @@ import { z } from 'zod';
 import {
   DERIVED_METRIC_KINDS,
   DERIVED_TRAINING_POWER_SYSTEMS_HISTORY_DAYS,
-  DERIVED_TRAINING_POWER_SYSTEMS_POLICY_VERSION,
   DERIVED_TRAINING_POWER_SYSTEMS_WINDOW_DAYS,
   DerivedMetricKind,
   TRAINING_BUILD_DURATION_WEEKS,
@@ -32,6 +31,7 @@ const nullableBoundedString = boundedString.nullable();
  */
 export const MCP_TRAINING_METRIC_SCHEMA_VERSION = 15 as const;
 export const MCP_TRAINING_RECOVERY_VERSION = 3 as const;
+export const MCP_TRAINING_POWER_SYSTEMS_POLICY_VERSION = 1 as const;
 
 const trainingDiscipline = z.enum(PUBLIC_TRAINING_DISCIPLINES);
 const powerCapacityDiscipline = z.enum(POWER_CAPACITY_DISCIPLINES);
@@ -390,7 +390,7 @@ const powerSystemsActivityType = z.strictObject({
 const trainingPowerSystemsPayload = z.strictObject({
   dayBoundary: utcBoundary,
   asOfDayMs: timestampMs,
-  policyVersion: z.literal(DERIVED_TRAINING_POWER_SYSTEMS_POLICY_VERSION),
+  policyVersion: z.literal(MCP_TRAINING_POWER_SYSTEMS_POLICY_VERSION),
   windowDays: z.literal(DERIVED_TRAINING_POWER_SYSTEMS_WINDOW_DAYS),
   historyDays: z.literal(DERIVED_TRAINING_POWER_SYSTEMS_HISTORY_DAYS),
   cadence: z.literal('workout-date'),

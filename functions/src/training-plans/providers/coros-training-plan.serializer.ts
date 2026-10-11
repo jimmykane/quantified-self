@@ -1,4 +1,5 @@
 import { ActivityTypes } from '@sports-alliance/sports-lib';
+import { plannedWorkoutSportAliasV1 } from '../../../../shared/planned-workout-sport-aliases';
 import {
     parseWorkoutStructureV1,
     type WorkoutEndingV1,
@@ -123,6 +124,7 @@ function normalizeCorosLocalDateTime(value: string): string {
 }
 
 function sportToCoros(sport: ActivityTypes): CorosWorkoutTypeV1 {
+    sport = plannedWorkoutSportAliasV1('coros', sport);
     if (sport === ActivityTypes.StrengthTraining) return 'strength';
     if (sport === ActivityTypes.Swimming) return 'swim';
     if (sport === ActivityTypes.Running) return 'run';

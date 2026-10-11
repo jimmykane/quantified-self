@@ -20,6 +20,7 @@ import { AppUserSettingsQueryService } from '../../services/app.user-settings-qu
 import { PolylineSimplificationService } from '../../services/polyline-simplification.service';
 import { of, Subject } from 'rxjs';
 import { ActivityTypes, AppThemes, DataPaceAvg, DataSpeedAvg, DataStartPosition, DateRanges } from '@sports-alliance/sports-lib';
+import { CompatibleTrainingActivityTypes } from '@shared/activity-type-compatibility';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { Overlay } from '@angular/cdk/overlay';
 import { MaterialModule } from '../../modules/material.module';
@@ -2489,6 +2490,23 @@ describe('TracksComponent', () => {
         ActivityTypes.Running,
         ActivityTypes.Cycling,
       ]);
+    });
+
+    it('keeps a saved specific sport visible in Tracks without changing exact matching', async () => {
+      const savedType = CompatibleTrainingActivityTypes.RoadRunning;
+      const roadRunning = createMockEvent('filter-road-running', '2024-11-08T08:00:00Z', 40.64, 22.94, savedType);
+      const broadRunning = createMockEvent('filter-broad-running', '2024-11-09T08:00:00Z', 40.66, 22.96, ActivityTypes.Running);
+      mockEventService.getEventsBy.mockReturnValue(of([roadRunning, broadRunning]));
+
+      await (component as any).loadTracksMapForUserByDateRange(mockUser, DateRanges.all, [savedType]);
+      await waitForAsyncWork();
+
+      expect(component.availableMyTracksActivityTypes()).toEqual([savedType, ActivityTypes.Running]);
+      expect(mockTripDetectionService.detectTripsWithContext).toHaveBeenCalledWith([
+        expect.objectContaining({ eventId: 'filter-road-running' }),
+      ], {
+        homeInferenceInputs: [expect.objectContaining({ eventId: 'filter-road-running' })],
+      });
     });
 
     it('resolves location labels per trip for revisits that share a destination id', async () => {

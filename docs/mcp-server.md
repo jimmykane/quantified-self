@@ -405,6 +405,19 @@ explicit folds cover the QS running and cycling Training profiles, including ind
 velomobile, Enduro MTB and Downhill Cycling. Every non-base profile remains an approval-bound degradation; clients must
 not rewrite the authored sport just to satisfy a provider.
 
+The provider-name preservation preparation extends the pending Training recipe and prescription-analysis sport enums
+with the explicit canonical names in `shared/activity-type-compatibility.ts`, alongside all accepted installed canonical
+sports. The catalog's `Unknown Sport` placeholder remains invalid for workout recipes.
+Scheduled and saved recipe reads and complete-recipe proposals keep the exact authored sport through JSON round trips;
+unknown labels, provider profile fields and private source identifiers remain rejected. This does not imply delivery
+support for every catalog sport: existing local compatibility assessment and mapping approval still apply. The registered
+baseline contains no Training recipe tools, so these enum additions belong to the existing pending metadata transition;
+they do not alter a registered tool, mutation kind, grant, consent or provider action. Update the exact pending contract
+digest after integration and use the existing explicit deployment/client-refresh lifecycle.
+Core planned-workout preview inputs use local JSON Schema definitions for repeated recipe fields and proposal variants.
+They retain the same exact finite sport vocabulary and strict validation while keeping discovery within the existing
+family byte budgets, including the expanded catalog.
+
 Manual pool and open-water swimming use the exact canonical sport strings `Swimming` and `Open Water Swimming`.
 Planned-workout summaries format swim distances in metres and pace with the owner's /100 m or /100 yd setting.
 The #733 recipe's optional physical pool length is independent of a distance step. The registered v1 read and write
@@ -1600,8 +1613,11 @@ single-field indexes and require no new composite index. First-class body measur
 
 The optional `activityGroup` input takes an exact group value returned by `list_activity_types` and expands it through
 Sports Lib's `ActivityTypesHelper`. It is combined with any explicit activity types, canonicalized, deduplicated, and
-kept under the same 20-type input limit before Firestore access. This keeps sport-family membership in the shared
-library instead of relying on each Assistant or MCP client to maintain its own subtype list.
+the explicit caller list retains its 20-type input limit. Larger catalog groups use disjoint `in` queries of at most
+20 types for all-history rankings, with one shared 2,000-record and cumulative-byte budget across every batch and page.
+Date-range rankings scan the range once and apply the complete family filter. No group is clipped, and an over-budget
+family fails instead of returning a partial record. This keeps sport-family membership in the shared library instead
+of relying on each Assistant or MCP client to maintain its own subtype list. The tool schema and grants are unchanged.
 
 MTB jump superlatives reuse this generic metric path rather than introducing a second jump-ranking store or tool.
 Discover the Mountain Biking group value, pass it as `activityGroup` so the server expands every canonical type, and
@@ -2037,7 +2053,7 @@ instead of being serialized. For example, `body_weight_trend` is discoverable th
 `get_training_metric` when ready; its safe payload contains only UTC day/value points, window coverage, medians, and
 change values—never source document or measurement identities.
 
-Internal derived schema 20 includes the original eight modeled families, the data-backed Fitness & Gym and Other
+Internal derived schema 22 includes the original eight modeled families, the data-backed Fitness & Gym and Other
 training volume groups, and the context/profile summaries introduced in schema 16. It retains the reusable maximum
 aggregation used for MTB longest-jump distance in schema 17 and canonical swimming, rowing, and paddling stroke-rate
 profile metrics with bounded pre-19 Cadence read compatibility. The registered MCP contract maps
@@ -2055,6 +2071,15 @@ redaction and strict validation:
   for the registered three.
 - `training_durability` retains its existing Running, Cycling, Pool, and Open-water scopes. Its workspace-only exact
   supporting-workout start time is reduced to the existing UTC `startDayMs` public field.
+- `training_power_systems` retains registered policy 1 and its independent exact-sport fits. Internal policy 2 pools
+  only Cycling/Road Cycling and Running/Road Running evidence while preserving the actual sport labels. The worker
+  independently fits those four affected labels under policy 1 from the same bounded curve inputs and stores a private
+  `legacyPowerSystemsPolicy1` sidecar. MCP combines its validated entries with the unchanged types, then validates the
+  frozen public policy-1 payload. It requires matching window metadata, unique actual labels, complete affected-label
+  membership, at most four sidecar entries and 85 history points per entry, and a 128-KiB sidecar bound. A missing,
+  malformed or incomplete sidecar fails closed as not ready; pooled results are never relabelled as policy 1. Genuine
+  stored policy-1 payloads retain their original projection. The sidecar and source fingerprints never enter MCP output.
+  This preserves the existing tool, wire version, scopes and consent without adding a public policy-2 tool.
 
 Intensity uses existing recorded QS zone durations with approximate source-specific groups: HR Easy Z1–Z2, Moderate Z3,
 Hard Z4–Z5; power Easy Z1–Z2, Moderate Z3–Z4, Hard Z5–Z7. Auto selects power per joined child activity when its valid zone

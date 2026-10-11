@@ -5,6 +5,8 @@ import {
     DERIVED_METRIC_SCHEMA_VERSION,
     DERIVED_RECOVERY_LOOKBACK_WINDOW_SECONDS,
     DERIVED_TRAINING_BUILD_COMPARISON_RECOVERY_VERSION,
+    DERIVED_TRAINING_POWER_SYSTEMS_POLICY_VERSION,
+    DERIVED_TRAINING_POWER_SYSTEMS_MAX_SNAPSHOT_BYTES,
     DERIVED_TRAINING_POWER_SYSTEMS_HISTORY_DAYS,
     DERIVED_TRAINING_POWER_SYSTEMS_WINDOW_DAYS,
 } from '../../../shared/derived-metrics';
@@ -50,7 +52,8 @@ import {
 } from '@sports-alliance/sports-lib';
 import { getActivityTypesForGroup } from '../../../shared/activity-type-group.metadata';
 import { POWER_CURVE_STAT_TYPE } from '../../../shared/power-curve';
-import { resolveTrainingDisciplineFromActivityType } from '../../../shared/training-disciplines';
+import { resolveTrainingDisciplineFromActivityType, TRAINING_SPORT_DEFINITIONS } from '../../../shared/training-disciplines';
+import { CompatibleTrainingActivityTypes as RefinedTypes } from '../../../shared/activity-type-compatibility';
 import {
     HEALTH_COVERAGE_STATUSES,
     HEALTH_METRIC_IDS,
@@ -2114,7 +2117,39 @@ describe('buildTrainingBuildComparisonMetricPayload', () => {
         expect(running?.current?.activeWeekCount).toBe(12);
     });
 
-    it('supports every benchmark-capable sport and keeps volume-only families out of benchmark claims', async () => {
+    it('keeps zero TSS in new-context build totals and event suggestions while intensity follows its own policy', async () => {
+        const { buildTrainingBuildComparisonMetricPayload } = await import('./derived-metrics.service');
+        const nowMs = Date.UTC(2026, 6, 14, 12);
+        const types = [RefinedTypes.BMX, RefinedTypes.Kickbiking, RefinedTypes.ObstacleRacing,
+            RefinedTypes.EEnduroMTB, ActivityTypes.StrengthTraining];
+        const docs = types.flatMap((type, index) => [Date.UTC(2026, 6, 1), Date.UTC(2026, 3, 1)].map((startDate, window) => ({
+            id: `zero-${index}-${window}`,
+            data: () => ({ startDate, stats: {
+                [DataActivityTypes.type]: [type], [DataDuration.type]: 3600,
+                'Training Stress Score': 0, [DataHeartRateZoneOneDuration.type]: 1800,
+            } }),
+        })));
+        const result = buildTrainingBuildComparisonMetricPayload(buildTrainingActivitySources(docs), {
+            trainingSettings: { buildBenchmarks: Object.fromEntries(['cycling', 'running', 'strength'].map(sport =>
+                [sport, { mode: 'period', durationWeeks: 8, endDayMs: Date.UTC(2026, 3, 30) }])) },
+        }, nowMs);
+        const cycling = result.payload.disciplines.find(sport => sport.discipline === 'cycling')!;
+        const running = result.payload.disciplines.find(sport => sport.discipline === 'running')!;
+        const strength = result.payload.disciplines.find(sport => sport.discipline === 'strength')!;
+        [cycling, running, strength].forEach(sport => {
+            expect(sport.status).toBe('ready');
+            expect(sport.current?.trainingStressScore).toBe(0);
+            expect(sport.current?.trainingStressScoreEventCount).toBe(sport.current?.activityCount);
+            expect(sport.benchmark?.trainingStressScore).toBe(0);
+            expect(sport.suggestedEvents.length).toBeGreaterThan(0);
+            sport.suggestedEvents.forEach(event => expect(event.trainingStressScore).toBe(0));
+        });
+        expect(cycling.current).toMatchObject({ activityCount: 3, easySeconds: 1800, intensitySourceEventCount: 1 });
+        expect(running.current).toMatchObject({ activityCount: 1, easySeconds: 1800, intensitySourceEventCount: 1 });
+        expect(strength.current).toMatchObject({ activityCount: 1, easySeconds: null, intensitySourceEventCount: 0 });
+    });
+
+    it('counts saved TSS for benchmark-capable sports while retaining specialist intensity exclusions', async () => {
         const { buildTrainingBuildComparisonMetricPayload } = await import('./derived-metrics.service');
         const nowMs = Date.UTC(2026, 6, 10, 12);
         const benchmarkEndDayMs = Date.UTC(2026, 3, 30);
@@ -2179,8 +2214,8 @@ describe('buildTrainingBuildComparisonMetricPayload', () => {
             expect(discipline?.current).toMatchObject({
                 activityCount: 1,
                 durationSeconds: 3_600,
-                trainingStressScore: null,
-                trainingStressScoreEventCount: 0,
+                trainingStressScore: 90,
+                trainingStressScoreEventCount: 1,
                 easySeconds: null,
                 moderateSeconds: null,
                 hardSeconds: null,
@@ -2865,6 +2900,102 @@ describe('buildTrainingPowerSystemsMetricPayload', () => {
             '2026-07-05',
             '2026-07-19',
         ]);
+    });
+
+    it.each([
+        [ActivityTypes.Cycling, RefinedTypes.RoadCycling, ActivityTypes.IndoorCycling],
+        [ActivityTypes.Running, RefinedTypes.RoadRunning, ActivityTypes.TrailRunning],
+    ])('pools only %s with %s, retaining actual labels and one fit per model/date', async (generic, road, separate) => {
+        const { buildTrainingPowerSystemsMetricPayload } = await import('./derived-metrics.service');
+        const dates = [asOfDayMs - (40 * DAY_MS), asOfDayMs - (20 * DAY_MS), asOfDayMs - DAY_MS];
+        const activities = [
+            source('generic-old', generic, dates[0]),
+            source('road-middle', road, dates[1]),
+            source('generic-new', generic, dates[2]),
+            source('road-no-curve', road, dates[2], []),
+            source('separate', separate, dates[1]),
+            source('road-effective-day', road, asOfDayMs),
+            source('road-future', road, asOfDayMs + DAY_MS),
+            source('road-outside', road, asOfDayMs - (43 * DAY_MS)),
+        ];
+        const fitSpy = vi.fn(fitThreeDimensionalCapacityModel);
+        const result = buildTrainingPowerSystemsMetricPayload(activities, nowMs, fitSpy);
+        const genericEntry = result.payload.activityTypes.find(item => item.activityType === generic)!;
+        const roadEntry = result.payload.activityTypes.find(item => item.activityType === road)!;
+        const separateEntry = result.payload.activityTypes.find(item => item.activityType === separate)!;
+        const expected = fitThreeDimensionalCapacityModel([
+            datedCurve('generic-old', generic, dates[0]),
+            datedCurve('road-middle', generic, dates[1]),
+            datedCurve('generic-new', generic, dates[2]),
+        ], { effectiveDate: '2026-07-20' });
+        expect(genericEntry.current.sourceFingerprint).toBe(expected.sourceFingerprint);
+        expect(roadEntry.current.sourceFingerprint).toBe(expected.sourceFingerprint);
+        expect(genericEntry.current.activityType).toBe(generic);
+        expect(roadEntry.current.activityType).toBe(road);
+        expect(genericEntry.current.criticalPower).toEqual(expected.criticalPower);
+        expect(roadEntry.current.criticalPower).toEqual(expected.criticalPower);
+        expect(genericEntry.history).toEqual(roadEntry.history);
+        expect(genericEntry.history.map(point => point.effectiveDayMs)).toEqual([
+            asOfDayMs - (43 * DAY_MS), ...dates, asOfDayMs,
+        ]);
+        expect(genericEntry.evidenceCounts).toEqual({
+            candidateActivityCount: 4, usableCurveActivityCount: 3, excludedActivityCount: 1,
+        });
+        expect(roadEntry.evidenceCounts).toEqual(genericEntry.evidenceCounts);
+        expect(separateEntry.current.diagnostics.sourceCount).toBe(1);
+        expect(separateEntry.current.sourceFingerprint).not.toBe(expected.sourceFingerprint);
+        expect(fitSpy).toHaveBeenCalledTimes(7);
+        expect(buildTrainingPowerSystemsMetricPayload([...activities].reverse(), nowMs)).toEqual(result);
+    });
+
+    it('stores independently fitted policy-1 inputs only for the four affected canonical labels', async () => {
+        const { buildTrainingPowerSystemsMetricPayload, buildLegacyTrainingPowerSystemsMetricPayload } = await import('./derived-metrics.service');
+        const dates = [asOfDayMs - (40 * DAY_MS), asOfDayMs - (20 * DAY_MS), asOfDayMs - DAY_MS];
+        const activities = [
+            source('cycling-old', ActivityTypes.Cycling, dates[0]),
+            source('cycling-new', ActivityTypes.Cycling, dates[2]),
+            source('road-cycling', RefinedTypes.RoadCycling, dates[1]),
+            source('running-old', ActivityTypes.Running, dates[0]),
+            source('running-new', ActivityTypes.Running, dates[2]),
+            source('road-running', RefinedTypes.RoadRunning, dates[1]),
+            source('indoor', ActivityTypes.IndoorCycling, dates[1]),
+        ];
+        const legacy = buildLegacyTrainingPowerSystemsMetricPayload(activities, nowMs);
+        const current = buildTrainingPowerSystemsMetricPayload(activities, nowMs);
+        expect(legacy.payload.policyVersion).toBe(1);
+        expect(current.payload.policyVersion).toBe(2);
+        expect(legacy.payload.activityTypes.map(entry => entry.activityType)).toEqual([
+            'Cycling', 'Road Cycling', 'Road Running', 'Running',
+        ]);
+        legacy.payload.activityTypes.forEach(entry => {
+            const actualSources = activities.filter(activity => activity.activityData.type === entry.activityType);
+            const expected = fitThreeDimensionalCapacityModel(actualSources.map(activity =>
+                datedCurve(activity.activityId, activity.activityData.type, activity.startDayMs)), { effectiveDate: '2026-07-20' });
+            expect(entry.current.sourceFingerprint).toBe(expected.sourceFingerprint);
+            expect(entry.current.diagnostics.sourceCount).toBe(expected.diagnostics.sourceCount);
+            expect(entry.current.activityType).toBe(entry.activityType);
+            expect(entry.history.map(point => point.effectiveDayMs)).toEqual([
+                ...actualSources.map(activity => activity.startDayMs).sort((left, right) => left - right), asOfDayMs,
+            ]);
+        });
+        expect(legacy.payload.activityTypes.find(entry => entry.activityType === 'Cycling')?.current.diagnostics.sourceCount).toBe(2);
+        expect(current.payload.activityTypes.find(entry => entry.activityType === 'Cycling')?.current.diagnostics.sourceCount).toBe(3);
+        expect(buildLegacyTrainingPowerSystemsMetricPayload([...activities].reverse(), nowMs)).toEqual(legacy);
+    });
+
+    it('bounds the private legacy sidecar to four current snapshots and 340 observed history points', async () => {
+        const { buildLegacyTrainingPowerSystemsMetricPayload } = await import('./derived-metrics.service');
+        const activities = [ActivityTypes.Cycling, RefinedTypes.RoadCycling, ActivityTypes.Running, RefinedTypes.RoadRunning]
+            .flatMap(type => Array.from({ length: 85 }, (_, index) => source(`${type}-${index}`, type, asOfDayMs - (index * DAY_MS))));
+        const result = buildLegacyTrainingPowerSystemsMetricPayload(activities, nowMs);
+        expect(result.payload.activityTypes).toHaveLength(4);
+        expect(result.payload.activityTypes.reduce((sum, entry) => sum + entry.history.length, 0)).toBe(340);
+        expect(Buffer.byteLength(JSON.stringify(result.payload), 'utf8')).toBeLessThan(128 * 1024);
+        const oversizedFit = vi.fn((...args: Parameters<typeof fitThreeDimensionalCapacityModel>) => ({
+            ...fitThreeDimensionalCapacityModel(...args), sourceFingerprint: 'x'.repeat(128 * 1024),
+        }));
+        expect(() => buildLegacyTrainingPowerSystemsMetricPayload(activities.slice(0, 3), nowMs, oversizedFit))
+            .toThrow('Legacy power-system sidecar exceeds its fixed storage bounds');
     });
 
     it('keeps related cycling types and a non-Training power sport completely separate', async () => {
@@ -3708,7 +3839,32 @@ describe('training explanation and durability metrics', () => {
         });
     });
 
-    it('uses the registry for sport loads and rhythms without surfacing gravity or strength TSS', async () => {
+    it('counts finite zero TSS across every registered Training activity type', async () => {
+        const { buildTrainingExplanationMetricPayload, joinTrainingActivitySources } = await import('./derived-metrics.service');
+        const nowMs = Date.UTC(2026, 6, 14, 12);
+        const startDate = Date.UTC(2026, 6, 12, 8);
+        const types = [...new Set(TRAINING_SPORT_DEFINITIONS.flatMap(sport =>
+            sport.contexts.flatMap(context => [...context.activityTypes])))];
+        const events = [eventDoc('zero-training', { startDate, stats: { 'Training Stress Score': 0 } })];
+        const activities = types.map((type, index) => activityDoc(`zero-${index}`, 'zero-training', {
+            startDate, type, stats: { 'Training Stress Score': 0 },
+        }));
+        const result = buildTrainingExplanationMetricPayload(
+            events as never, joinTrainingActivitySources(activities as never, events as never), nowMs,
+        );
+        expect(result.payload.current).toMatchObject({
+            parentTrainingStressScore: 0,
+            childTrainingStressScore: 0,
+            childLoadActivityCount: types.length,
+            childLoadCoverage: { loadedCount: types.length, totalCount: types.length, ratio: 1 },
+        });
+        result.payload.current.sportLoads.filter(sport => sport.activityCount > 0).forEach(sport => {
+            expect(sport.trainingStressScore).toBe(0);
+            expect(sport.loadActivityCount).toBe(sport.activityCount);
+        });
+    });
+
+    it('counts saved TSS for gravity, strength and gym sport loads independently of analysis', async () => {
         const { buildTrainingExplanationMetricPayload, joinTrainingActivitySources } = await import('./derived-metrics.service');
         const nowMs = Date.UTC(2026, 6, 14, 12);
         const startDate = Date.UTC(2026, 6, 12, 8);
@@ -3751,29 +3907,30 @@ describe('training explanation and durability metrics', () => {
         });
         expect(sportLoads.find(item => item.sport === 'strength')).toMatchObject({
             activityCount: 1,
-            loadActivityCount: 0,
-            trainingStressScore: null,
+            loadActivityCount: 1,
+            trainingStressScore: 70,
         });
         expect(sportLoads.find(item => item.sport === 'cycling')).toMatchObject({
             activityCount: 1,
-            loadActivityCount: 0,
-            trainingStressScore: null,
+            loadActivityCount: 1,
+            trainingStressScore: 60,
         });
         expect(sportLoads.find(item => item.sport === 'fitness-gym')).toMatchObject({
             activityCount: 1,
-            loadActivityCount: 0,
-            trainingStressScore: null,
+            loadActivityCount: 1,
+            trainingStressScore: 40,
         });
         expect(result.payload.current).toMatchObject({
             childActivityCount: 4,
-            childLoadActivityCount: 1,
-            childTrainingStressScore: 50,
+            parentTrainingStressScore: 180,
+            childLoadActivityCount: 4,
+            childTrainingStressScore: 220,
             childLoadCoverage: {
                 totalCount: 4,
-                loadedCount: 1,
+                loadedCount: 4,
                 classifiedCount: 4,
                 unclassifiedCount: 0,
-                ratio: 0.25,
+                ratio: 1,
             },
         });
         expect(result.payload.current.rhythms.find(item => item.discipline === 'rowing')?.sessionCount).toBe(1);
@@ -3914,7 +4071,7 @@ describe('training explanation and durability metrics', () => {
         });
     });
 
-    it('rejects legacy eligible gravity evidence but retains explicit unsupported-context evidence', async () => {
+    it.each([ActivityTypes.DownhillCycling, ActivityTypes['Enduro MTB'], RefinedTypes.EEnduroMTB])('rejects legacy eligible %s evidence but retains explicit unsupported-context evidence', async (activityType) => {
         const { aggregatePersistedTrainingDurability } = await import('./derived-metrics.service');
         const startDate = Date.UTC(2026, 6, 10);
         const legacyEligible = aerobicEvidence(4, {
@@ -3944,7 +4101,7 @@ describe('training explanation and durability metrics', () => {
             data: () => ({
                 startDate,
                 stats: {
-                    [DataActivityTypes.type]: [ActivityTypes.DownhillCycling],
+                    [DataActivityTypes.type]: [activityType],
                     [DataDurabilityEvidence.type]: durability,
                 },
             }),
@@ -3964,6 +4121,34 @@ describe('training explanation and durability metrics', () => {
             missingEvidenceActivityCount: 0,
             excludedActivityCount: 1,
             exclusions: [{ reason: 'unsupported-context', activityCount: 1 }],
+        });
+    });
+
+    it.each([RefinedTypes.BMX, RefinedTypes.Kickbiking, RefinedTypes.ObstacleRacing])('omits persisted specialist durability for %s', async (activityType) => {
+        const { aggregatePersistedTrainingDurability } = await import('./derived-metrics.service');
+        const activity = buildTrainingActivitySources([eventDoc('unsupported-specialist', {
+            startDate: Date.UTC(2026, 6, 12),
+            stats: {
+                [DataActivityTypes.type]: [activityType],
+                [DataDurabilityEvidence.type]: aerobicEvidence(4, {
+                    discipline: activityType === RefinedTypes.ObstacleRacing ? 'running' : 'cycling',
+                    outputSource: 'power', outputUnit: 'W',
+                }),
+            },
+        })]);
+        expect(aggregatePersistedTrainingDurability(activity).coverage).toMatchObject({
+            candidateActivityCount: 0, evidenceActivityCount: 0, eligibleActivityCount: 0,
+        });
+    });
+
+    it.each([RefinedTypes.TrackRunning, RefinedTypes.UltraRunning, RefinedTypes.CrosscountryRunning])('accepts existing protocol-qualified durability for %s', async (activityType) => {
+        const { aggregatePersistedTrainingDurability } = await import('./derived-metrics.service');
+        const activity = buildTrainingActivitySources([eventDoc('supported-running', {
+            startDate: Date.UTC(2026, 6, 12),
+            stats: { [DataActivityTypes.type]: [activityType], [DataDurabilityEvidence.type]: aerobicEvidence(4) },
+        })]);
+        expect(aggregatePersistedTrainingDurability(activity).coverage).toMatchObject({
+            candidateActivityCount: 1, evidenceActivityCount: 1, eligibleActivityCount: 1,
         });
     });
 
@@ -3998,14 +4183,19 @@ describe('training explanation and durability metrics', () => {
             ActivityTypes.IndoorCycling,
             ActivityTypes.VirtualCycling,
             ActivityTypes.MountainBiking,
+            RefinedTypes.RecumbentCycling,
+            RefinedTypes.IndoorHandCycle,
+            RefinedTypes.EMountainBiking,
+            RefinedTypes.MountainBikeOrienteering,
             ActivityTypes['Enduro MTB'],
+            RefinedTypes.EEnduroMTB,
             ActivityTypes.DownhillCycling,
         ];
         const docs = activityTypes.map((activityType, index) => eventDoc(`cycling-context-${index}`, {
-            startDate: Date.UTC(2026, 6, 8 + index),
+            startDate: Date.UTC(2026, 6, 12),
             stats: {
                 [DataActivityTypes.type]: [activityType],
-                [DataDurabilityEvidence.type]: index < 4
+                [DataDurabilityEvidence.type]: index < 8
                     ? eligibleCyclingEvidence
                     : unsupportedGravityEvidence,
             },
@@ -4015,13 +4205,13 @@ describe('training explanation and durability metrics', () => {
             .payload.scopes.find(scope => scope.scope === 'cycling')!;
 
         expect(cycling.current.coverage).toEqual({
-            candidateActivityCount: 6,
-            evidenceActivityCount: 6,
-            eligibleActivityCount: 4,
+            candidateActivityCount: 11,
+            evidenceActivityCount: 11,
+            eligibleActivityCount: 8,
             missingEvidenceActivityCount: 0,
-            excludedActivityCount: 2,
-            eligibilityRatio: 0.6667,
-            exclusions: [{ reason: 'unsupported-context', activityCount: 2 }],
+            excludedActivityCount: 3,
+            eligibilityRatio: 0.7273,
+            exclusions: [{ reason: 'unsupported-context', activityCount: 3 }],
         });
         expect(cycling.current.summaries).toEqual([
             expect.objectContaining({
@@ -4030,7 +4220,7 @@ describe('training explanation and durability metrics', () => {
                     scope: 'cycling',
                     outputSource: 'power',
                 }),
-                sampleCount: 4,
+                sampleCount: 8,
             }),
         ]);
     });
@@ -5222,6 +5412,33 @@ describe('writeDerivedMetricSnapshotsReady', () => {
         });
     });
 
+    it('rejects an oversized complete power snapshot before persisting any queued metric', async () => {
+        const { writeDerivedMetricSnapshotsReady } = await import('./derived-metrics.service');
+        const sportsLib = await import('@sports-alliance/sports-lib');
+        const originalFit = sportsLib.fitThreeDimensionalCapacityModel;
+        const fitSpy = vi.spyOn(sportsLib, 'fitThreeDimensionalCapacityModel').mockImplementation((...args) => ({
+            ...originalFit(...args), sourceFingerprint: 'x'.repeat(DERIVED_TRAINING_POWER_SYSTEMS_MAX_SNAPSHOT_BYTES),
+        }));
+        const nowMs = Date.UTC(2026, 6, 20, 12);
+        const activities = buildTrainingActivitySources([{
+            id: 'rowing-event',
+            data: () => ({ startDate: Date.UTC(2026, 6, 19), stats: {
+                [DataActivityTypes.type]: [ActivityTypes.Rowing], [DataDuration.type]: 3600,
+                [POWER_CURVE_STAT_TYPE]: [{ duration: 180, power: 350 }],
+            } }),
+        }]);
+        try {
+            await expect(writeDerivedMetricSnapshotsReady('user-1', [
+                DERIVED_METRIC_KINDS.FormNow, DERIVED_METRIC_KINDS.TrainingPowerSystems,
+            ], { trainingActivities: activities }, { buildAtMs: nowMs }))
+                .rejects.toThrow('Power-system snapshot exceeds its fixed storage bound');
+            expect(hoisted.transactionSet).not.toHaveBeenCalled();
+            expect(hoisted.runTransaction).not.toHaveBeenCalled();
+        } finally {
+            fitSpy.mockRestore();
+        }
+    });
+
     it('writes a schema-compatible rolling power-systems snapshot through the targeted lifecycle', async () => {
         const { writeDerivedMetricSnapshotsReady } = await import('./derived-metrics.service');
         const nowMs = Date.UTC(2026, 6, 20, 12);
@@ -5269,9 +5486,21 @@ describe('writeDerivedMetricSnapshotsReady', () => {
             sourceEventCount: 1,
             lastError: null,
         });
+        expect(persisted.legacyPowerSystemsPolicy1).toMatchObject({
+            policyVersion: 1,
+            asOfDayMs: Date.UTC(2026, 6, 20),
+            activityTypes: [{ activityType: ActivityTypes.Cycling }],
+        });
+        expect(persisted.payload).not.toHaveProperty('legacyPowerSystemsPolicy1');
+        expect(Buffer.byteLength(JSON.stringify(persisted), 'utf8')).toBeLessThan(DERIVED_TRAINING_POWER_SYSTEMS_MAX_SNAPSHOT_BYTES);
+        const { isDerivedMetricSnapshotReadableByMcp } = await import('./ensure-derived-metrics');
+        expect(isDerivedMetricSnapshotReadableByMcp(DERIVED_METRIC_KINDS.TrainingPowerSystems, persisted.payload,
+            persisted.sourceEventCount, persisted.legacyPowerSystemsPolicy1)).toBe(true);
+        expect(isDerivedMetricSnapshotReadableByMcp(DERIVED_METRIC_KINDS.TrainingPowerSystems, persisted.payload,
+            persisted.sourceEventCount)).toBe(false);
         expect(persisted.payload).toMatchObject({
             asOfDayMs: Date.UTC(2026, 6, 20),
-            policyVersion: 1,
+            policyVersion: DERIVED_TRAINING_POWER_SYSTEMS_POLICY_VERSION,
             windowDays: 42,
             historyDays: 84,
             activityTypes: [{

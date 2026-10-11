@@ -7,3 +7,9 @@ mat-option {
   line-height: 3em !important;
   height: 3em !important;
 }
+.activity-family-shortcuts {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 12px;
+  margin-bottom: 8px;
+}

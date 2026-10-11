@@ -1,4 +1,5 @@
 import { ActivityTypes } from '@sports-alliance/sports-lib';
+import { plannedWorkoutSportAliasV1 } from '../../../../shared/planned-workout-sport-aliases';
 import type { WorkoutStepV1, WorkoutStructureV1 } from '../../../../shared/planned-workout';
 import { suuntoGuideLiveReadingsV1, suuntoGuideWatchTextV1 } from '../../../../shared/suunto-guide-presentation';
 import type { SuuntoGuideFieldV1, SuuntoGuideFieldsStepV1, SuuntoGuideStepV1 } from './suunto-guide.serializer';
@@ -13,7 +14,7 @@ const MAX_SCREENS = 1000;
 const MAX_JSON_BYTES = 256 * 1024;
 
 export function hasSuuntoRestPresentation(structure: WorkoutStructureV1): boolean {
-  return SPORTS.has(structure.sport) && structure.nodes.some(node => {
+  return SPORTS.has(plannedWorkoutSportAliasV1('suunto', structure.sport)) && structure.nodes.some(node => {
     if (node.kind === 'repeat' && node.steps.length === 2
       && node.steps[0].purpose === 'work' && node.steps[1].purpose === 'rest') return true;
     return (node.kind === 'step' ? [node] : node.steps).some(step => step.purpose === 'rest'

@@ -3,6 +3,7 @@ import { supplementNightlyHrvSleepDocuments } from '../sleep/nightly-hrv';
 import { nightlyHealthAccountKey, type NightlyHrvRecord } from '../../../shared/nightly-hrv';
 import {
   ActivityTypes,
+  ActivityTypesHelper,
   ChartDataCategoryTypes,
   ChartDataValueTypes,
   DataActivityTypes,
@@ -42,7 +43,7 @@ import {
   EventInterface,
   TimeIntervals,
 } from '@sports-alliance/sports-lib';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   DERIVED_FORM_PAYLOAD_VERSION,
   DERIVED_METRIC_KINDS,
@@ -1895,6 +1896,92 @@ describe('MCP data service', () => {
       code: 'invalid_metric',
     });
     expect(dependencies.fetchActivityRankingDocuments).not.toHaveBeenCalled();
+  });
+
+  describe('complete catalog group ranking', () => {
+    let family: string[];
+
+    beforeEach(async () => {
+      // The shared setup deliberately mocks a small provider-era catalog. These
+      // cases exercise the installed catalog without changing that shared mock.
+      const actual = await vi.importActual<typeof import('@sports-alliance/sports-lib')>('@sports-alliance/sports-lib');
+      family = actual.ActivityTypesHelper.getActivityTypesForActivityGroup(actual.ActivityTypeGroups.IndoorSportsGroup)
+        .map(String).sort();
+      vi.spyOn(ActivityTypesHelper, 'getActivityTypeGroupsAsUniqueArray')
+        .mockReturnValue(actual.ActivityTypesHelper.getActivityTypeGroupsAsUniqueArray());
+      vi.spyOn(ActivityTypesHelper, 'getActivityTypesForActivityGroup')
+        .mockImplementation(group => actual.ActivityTypesHelper.getActivityTypesForActivityGroup(group));
+    });
+
+    afterEach(() => vi.restoreAllMocks());
+
+    it('ranks a complete catalog group beyond the public explicit-type limit without clipping it', async () => {
+      expect(family.length).toBeGreaterThan(20);
+      vi.mocked(dependencies.fetchActivityRankingDocuments).mockImplementation(async (_uid, _start, _end, _metric, types) => [{
+        ...activityDocument({ type: types.at(-1), stats: { [DataAscent.type]: 12, providerPayload: 'PRIVATE' } }),
+        id: `activity-${family.indexOf(types[0])}`,
+      }]);
+      const result = await createMcpDataService(dependencies).rankActivitiesByMetric({
+        uid: 'user-1', connectionId: 'connection-1', metric: DataAscent.type,
+        activityGroup: 'indoor_sports_group', order: 'highest', limit: 25,
+      });
+      const queries = vi.mocked(dependencies.fetchActivityRankingDocuments).mock.calls;
+      expect(queries.flatMap(query => query[4])).toEqual(family);
+      expect(queries.every(query => query[4].length <= 20 && query[5] === 25)).toBe(true);
+      expect(result.matchedActivityCount).toBe(Math.ceil(family.length / 20));
+      expect(result.activities.some(activity => activity.activityType === family.at(-1))).toBe(true);
+      expect(JSON.stringify(result)).not.toContain('PRIVATE');
+      expect(createMcpOutputSchemaRegistry({ activityLocation: false, routeLocation: false }).rank_activities_by_metric.safeParse(result).success).toBe(true);
+    });
+
+    it('retains one date-range scan for an expanded group and rejects oversized explicit inputs', async () => {
+      const service = createMcpDataService(dependencies);
+      await service.rankActivitiesByMetric({
+        uid: 'user-1', connectionId: 'connection-1', metric: DataAscent.type,
+        activityGroup: 'indoor_sports_group', order: 'highest',
+        startTimeMs: Date.parse('2026-07-01T00:00:00Z'), endTimeMs: Date.parse('2026-07-02T00:00:00Z'),
+      });
+      const queries = vi.mocked(dependencies.fetchActivityRankingDocuments).mock.calls;
+      expect(queries).toHaveLength(1);
+      expect(queries[0][4].length).toBeGreaterThan(20);
+      vi.mocked(dependencies.fetchActivityRankingDocuments).mockClear();
+      await expect(service.rankActivitiesByMetric({
+        uid: 'user-1', connectionId: 'connection-1', metric: DataAscent.type,
+        activityTypes: Array(21).fill(ActivityTypes.Running),
+        activityGroup: 'indoor_sports_group', order: 'highest',
+      })).rejects.toMatchObject({ code: 'invalid_request' });
+      expect(dependencies.fetchActivityRankingDocuments).not.toHaveBeenCalled();
+    });
+
+    it('shares the ranking byte budget across expanded family queries', async () => {
+      vi.mocked(dependencies.fetchActivityRankingDocuments).mockImplementation(async (_uid, _start, _end, _metric, types) => [{
+        ...activityDocument({ type: types[0], stats: { [DataAscent.type]: 12 }, privatePadding: 'x'.repeat(300 * 1024) }),
+      }]);
+      await expect(createMcpDataService(dependencies).rankActivitiesByMetric({
+        uid: 'user-1', connectionId: 'connection-1', metric: DataAscent.type,
+        activityGroup: 'indoor_sports_group', order: 'highest',
+      })).rejects.toMatchObject({ code: 'query_too_large' });
+      expect(dependencies.fetchActivityRankingDocuments).toHaveBeenCalledTimes(2);
+    });
+
+    it('shares the ranking record budget and pagination across every expanded family query', async () => {
+      vi.mocked(dependencies.fetchActivityRankingDocuments).mockImplementation(async (_uid, _start, _end, _metric, types, limit, cursor) => {
+        const offset = typeof cursor === 'number' ? cursor : 0;
+        return Array.from({ length: Math.min(limit, 1_100 - offset) }, (_, index) => ({
+          data: { type: types[0], stats: { [DataAscent.type]: 12 } },
+          id: `activity-${types[0]}-${offset + index}`, cursor: offset + index + 1,
+        }));
+      });
+      await expect(createMcpDataService(dependencies).rankActivitiesByMetric({
+        uid: 'user-1', connectionId: 'connection-1', metric: DataAscent.type,
+        activityGroup: 'indoor_sports_group', order: 'highest',
+      })).rejects.toMatchObject({ code: 'query_too_large' });
+      const queries = vi.mocked(dependencies.fetchActivityRankingDocuments).mock.calls;
+      expect(new Set(queries.map(query => query[4][0])).size).toBe(2);
+      expect(queries.at(-1)?.[5]).toBe(1);
+      expect(queries.some(query => typeof query[6] === 'number')).toBe(true);
+    });
+
   });
 
   it('ranks pre-19 stroke-rate activities through the canonical metric', async () => {

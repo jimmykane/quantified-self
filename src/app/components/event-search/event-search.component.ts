@@ -237,7 +237,6 @@ export class EventSearchComponent extends LoadingAbstractDirective implements On
   }
 
   async onActivityTypesChange(activityTypes) {
-    this.hapticsService?.selection();
     this.selectedActivityTypes = activityTypes;
     return this.search();
   }

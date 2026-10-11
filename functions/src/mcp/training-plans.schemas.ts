@@ -1,6 +1,7 @@
 import { z } from 'zod';
 import { WORKOUT_PRESCRIPTION_ANALYSIS_SCHEMA } from './workout-prescription-analysis.schemas';
 import { ActivityTypesHelper } from '@sports-alliance/sports-lib';
+import { CompatibleTrainingActivityTypes } from '../../../shared/activity-type-compatibility';
 import {
   WORKOUT_STEP_PURPOSES,
   WORKOUT_STRUCTURE_MAX_NODES,
@@ -193,7 +194,14 @@ const target = z.union([
 const step = z.strictObject({ kind: z.literal('step'), id: nodeId, purpose: z.enum(WORKOUT_STEP_PURPOSES),
   ending, targets: z.array(target).max(WORKOUT_STRUCTURE_MAX_TARGETS_PER_STEP), note: z.string().max(500).optional() });
 /** Explicit public contract. New stored fields must never appear here implicitly. */
-const recipeFields = { version: z.literal(WORKOUT_STRUCTURE_VERSION), sport: z.enum(ActivityTypesHelper.getActivityTypesAsUniqueArray()),
+// These tools are additive pending contracts. Keep every published canonical
+// value and the explicitly approved bridge names; never accept arbitrary labels.
+// The catalog's unknown placeholder is already rejected by recipe validation.
+const recipeSport = z.enum([...new Set([
+  ...ActivityTypesHelper.getActivityTypesAsUniqueArray(),
+  ...Object.values(CompatibleTrainingActivityTypes),
+])].filter(sport => sport !== 'Unknown Sport'));
+const recipeFields = { version: z.literal(WORKOUT_STRUCTURE_VERSION), sport: recipeSport,
   nodes: z.array(z.union([step, z.strictObject({ kind: z.literal('repeat'), id: nodeId,
     count: z.number().int().min(1).max(WORKOUT_STRUCTURE_MAX_REPEAT_COUNT),
     steps: z.array(step).min(1).max(WORKOUT_STRUCTURE_MAX_NODES) })])).min(1).max(WORKOUT_STRUCTURE_MAX_NODES),
@@ -259,7 +267,7 @@ export const TRAINING_READ_OUTPUTS = {
     startDate: trainingDate, endDate: trainingDate, phases: TRAINING_PLAN_PHASES_SCHEMA }),
   get_workout_prescription_analysis: z.strictObject({ source: z.enum(['scheduled', 'saved']), reference: ref,
     revision: count, scheduleRevision: count.nullable(), libraryRevision: count.nullable(),
-    sport: z.enum(ActivityTypesHelper.getActivityTypesAsUniqueArray()),
+    sport: recipeSport,
     analysis: WORKOUT_PRESCRIPTION_ANALYSIS_SCHEMA, displaySummary: z.string().max(2000) }),
   list_training_plans: z.strictObject({ ...envelope, plans: z.array(plan).max(100) }),
   list_saved_workouts: z.strictObject({ libraryRevision: count, scanComplete: z.boolean(),
@@ -459,6 +467,23 @@ export const TRAINING_WRITE_INPUTS = {
     permissionMode: z.enum(['schedule', 'delivery', 'combined']) }),
   apply_saved_workout_change: z.strictObject({ proposalRef: ref, permissionMode: z.literal('schedule') }),
 };
+
+/** Keep the pending core discovery budget without weakening recipe validation. */
+function withReusableRecipeDefinitions<T extends z.ZodType>(schema: T): T {
+  const definition = z.toJSONSchema(schema, {
+    target: 'draft-2020-12', io: 'input', reused: 'ref',
+  });
+  delete definition.$schema;
+  // Zod remains responsible for runtime validation. Its equivalent generated
+  // schema reuses local definitions instead of repeating complete recipes.
+  return schema.meta(definition);
+}
+TRAINING_WRITE_INPUTS.preview_create_planned_workout = withReusableRecipeDefinitions(
+  TRAINING_WRITE_INPUTS.preview_create_planned_workout,
+);
+TRAINING_WRITE_INPUTS.preview_training_changes = withReusableRecipeDefinitions(
+  TRAINING_WRITE_INPUTS.preview_training_changes,
+);
 
 const trainingPreviewOutput = z.strictObject({ proposalRef: ref, expiresAtMs: count,
     permissionMode: z.enum(['schedule', 'delivery', 'combined']),

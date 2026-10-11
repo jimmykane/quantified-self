@@ -7,7 +7,7 @@ import { take, filter } from 'rxjs/operators';
 import { AppUserInterface } from '../../models/app-user.interface';
 import { Subject, Subscription, firstValueFrom } from 'rxjs';
 import { DateRanges, ActivityTypes, DataPaceAvg, DataSpeedAvg, DataSwimPaceAvg, DaysOfTheWeek } from '@sports-alliance/sports-lib';
-import { ActivityTypesHelper } from '@sports-alliance/sports-lib';
+import { resolveCompatibleActivityType } from '@shared/activity-type-compatibility';
 import { DataStartPosition } from '@sports-alliance/sports-lib';
 import { DataPositionInterface } from '@sports-alliance/sports-lib';
 import { DataJumpEvent } from '@sports-alliance/sports-lib';
@@ -1596,13 +1596,7 @@ export class TracksComponent implements OnInit, OnDestroy {
       return null;
     }
 
-    const resolvedActivityType = ActivityTypesHelper.resolveActivityType(candidate);
-    if (resolvedActivityType) {
-      return resolvedActivityType;
-    }
-
-    const enumActivityType = Object.values(ActivityTypes).find((activityType) => activityType === candidate);
-    return typeof enumActivityType === 'string' ? enumActivityType as ActivityTypes : null;
+    return resolveCompatibleActivityType(candidate);
   }
 
   private matchesRequestedActivityTypes(

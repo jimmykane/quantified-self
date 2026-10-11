@@ -12,6 +12,7 @@ import { SummaryPrimaryInfoMetric } from '../../components/shared/summary-primar
 import { AppUserSettingsQueryService } from '../app.user-settings-query.service';
 import { buildHeroMetric, resolvePrimaryUnitAwareDisplayStat } from '../../helpers/summary-display.helper';
 import {
+  shouldHideDefaultSpeedSummary,
   resolvePreferredSpeedDerivedAverageTypeForActivity,
   resolvePreferredSpeedDerivedAverageTypesForActivity
 } from '../../helpers/summary-stats.helper';
@@ -58,7 +59,7 @@ export class MapEventPopupContentService {
         activityTypes,
       ),
       this.resolveSummaryMetricFromEvent(event, DataDistance.type, activityTypes),
-      this.resolveEffortMetricFromEvent(event, activityTypes),
+      ...(shouldHideDefaultSpeedSummary(activityTypes) ? [] : [this.resolveEffortMetricFromEvent(event, activityTypes)]),
     ];
   }
 

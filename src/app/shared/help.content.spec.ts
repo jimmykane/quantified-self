@@ -1370,7 +1370,11 @@ describe('help.content', () => {
     expect(trainingSection?.content).toContain('unmatched types appear under **Other power activities**');
     expect(trainingSection?.content).toContain('standard mountain biking, Enduro MTB, and Downhill MTB');
     expect(trainingSection?.content).toContain('hand cycle, velomobile');
-    expect(trainingSection?.content).toContain('does not invent downhill runs or uplift/lift segments');
+    expect(trainingSection?.content).toContain('Durations for downhill runs and uplift/lift segments need recorded evidence');
+    expect(trainingSection?.content).toContain('Every Training group counts an activity\'s saved TSS when present, including zero');
+    expect(trainingSection?.content).toContain('Cycling and Road Cycling share a rolling capacity history');
+    expect(trainingSection?.content).toContain('Running and Road Running share another');
+    expect(trainingSection?.content).toContain('Every other sport keeps its own history');
     expect(trainingSection?.content).toContain('Longest jump is the maximum persisted jump distance');
     expect(trainingSection?.content).toContain('gravity MTB jump count and longest jump');
     expect(trainingSection?.content).toContain('Rowing does not have a durability adapter');
@@ -2378,6 +2382,8 @@ it('explains separately approved activity description access and event semantics
   expect(content).toContain('without truncation');
 
 
+
+
 });
 
   it('explains early Lap separately from indefinite Lap and gates unsupported delivery', () => {
@@ -2410,4 +2416,11 @@ it('documents durable activity sending, explicit review, Pro and retention', () 
   expect(content).toContain('cleanup resumes automatically after partial failures');
   expect(content).toContain('Temporary Suunto initialization errors are retried automatically, within a limited retry budget, before any recording bytes are sent');
   expect(content).toContain('unknown acceptance never triggers an automatic replacement upload');
+});
+
+it('explains explicit family shortcuts and the climbing default display rule', () => {
+  const section = HELP_SECTIONS.find(section => section.id === 'supported-activities');
+  for (const phrase of ['**All Running / Trail**', '**All Cycling / MTB**', '**All Walking / Hiking**', 'Existing saved individual selections stay exact', 'partial check', 'full stats, exports, and explicitly selected metrics', 'unconfigured lap columns', 'saved lap columns', 'Floor Climbing']) {
+    expect(section?.content).toContain(phrase);
+  }
 });

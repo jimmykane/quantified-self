@@ -661,7 +661,7 @@ describe('PlansWorkspaceComponent', () => {
     { sport: ActivityTypes.OpenWaterSwimming, first: 'speed', cadence: false },
     { sport: ActivityTypes.Rowing, first: 'speed', cadence: false },
     { sport: ActivityTypes.IndoorRowing, first: 'speed', cadence: false },
-    { sport: ActivityTypes.Hiking, first: 'speed', cadence: false },
+    { sport: ActivityTypes.Hiking, first: 'power', cadence: false },
   ])('orders $sport targets without replacing the selected target', async ({ sport, first, cadence }) => {
     setRouteState({ mode: 'create', scope: 'standalone', date: '2026-10-05' });
     const fixture = await renderPlans(); const component = fixture.componentInstance;
@@ -2580,50 +2580,21 @@ describe('PlansWorkspaceComponent', () => {
     expect(haptics.selection).toHaveBeenCalledTimes(2);
   });
 
-  it('offers exact running, cycling, swimming, walking, hiking, and rowing profiles in sport groups', async () => {
+  it('offers all approved exact endurance names in their sport groups', async () => {
     const fixture = await renderPlans();
-    expect(fixture.componentInstance.sportOptionGroups).toEqual([
-      {
-        label: 'Running',
-        options: [
-          { value: ActivityTypes.Running, label: 'Running' },
-          { value: ActivityTypes.TrailRunning, label: 'Trail Running' },
-          { value: ActivityTypes.Treadmill, label: 'Treadmill' },
-        ],
-      },
-      {
-        label: 'Cycling',
-        options: [
-          { value: ActivityTypes.Cycling, label: 'Cycling' },
-          { value: ActivityTypes.MountainBiking, label: 'Mountain Biking' },
-          { value: ActivityTypes.IndoorCycling, label: 'Indoor Cycling' },
-          { value: ActivityTypes.EBiking, label: 'E-Biking' },
-          { value: ActivityTypes.Handcycle, label: 'Hand Cycle' },
-        ],
-      },
-      {
-        label: 'Swimming',
-        options: [
-          { value: ActivityTypes.Swimming, label: 'Pool swimming' },
-          { value: ActivityTypes.OpenWaterSwimming, label: 'Open-water swimming' },
-        ],
-      },
-      {
-        label: 'Walking & hiking',
-        options: [
-          { value: ActivityTypes.Walking, label: 'Walking' },
-          { value: ActivityTypes.Hiking, label: 'Hiking' },
-        ],
-      },
-      {
-        label: 'Rowing',
-        options: [
-          { value: ActivityTypes.Rowing, label: 'Rowing' },
-          { value: ActivityTypes.IndoorRowing, label: 'Indoor Rowing' },
-        ],
-      },
-      { label: 'Strength', options: [{ value: ActivityTypes.StrengthTraining, label: 'Strength Training' }] },
-    ]);
+    const groups = fixture.componentInstance.sportOptionGroups;
+    const values = (label: string) => groups.find(group => group.label === label)!.options.map(option => option.value);
+    expect(values('Running')).toEqual(['Running', 'Trail Running', 'Treadmill', 'Road Running', 'Track Running',
+      'Ultra Running', 'Crosscountry Running', 'Vertical Running', 'Indoor Track Running', 'Indoor Running', 'Virtual Running', 'Obstacle Racing']);
+    expect(values('Cycling')).toEqual(['Cycling', 'Mountain Biking', 'Indoor Cycling', 'E-Biking', 'Hand Cycle',
+      'Road Cycling', 'Gravel Cycling', 'Track Cycling', 'Cyclocross', 'Recumbent Cycling', 'Velomobile', 'BMX', 'Kickbiking',
+      'LES MILLS RPM', 'LES MILLS SPRINT', 'LES MILLS THE TRIP', 'Virtual Cycling', 'Indoor Hand Cycle',
+      'Mountain Bike Orienteering', 'E-Mountain Biking', 'E-Enduro MTB', 'Enduro MTB', 'Downhill Cycling']);
+    expect(values('Walking & hiking')).toEqual(['Walking', 'Hiking', 'Speed Walking', 'Nordic Walking', 'Indoor Walking', 'Trekking']);
+    expect(groups.find(group => group.label === 'Swimming')!.options).toEqual([
+      { value: ActivityTypes.Swimming, label: 'Pool swimming' }, { value: ActivityTypes.OpenWaterSwimming, label: 'Open-water swimming' }]);
+    expect(values('Rowing')).toEqual(['Rowing', 'Indoor Rowing']);
+    expect(values('Strength')).toEqual(['Strength Training']);
   });
 
   it.each(['plans', 'standalone'] as const)('creates a lap-ended workout in %s through the Material selector', async scope => {

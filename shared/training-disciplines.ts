@@ -42,6 +42,7 @@ export type TrainingSportCapability =
 
 export type TrainingSportIntensityPolicy = 'zones' | 'volume-only';
 export type TrainingSportLoadPolicy = 'recorded' | 'volume-only';
+export type TrainingSportDurabilityPolicy = 'supported' | 'unsupported-context' | 'omit';
 export type TrainingSportDistancePolicy = 'recorded' | 'omit';
 
 export type TrainingProfileMetricId =
@@ -187,6 +188,7 @@ interface TrainingSportContextDefinitionShape {
   profile: TrainingAnalysisProfile;
   intensityPolicy: TrainingSportIntensityPolicy;
   loadPolicy: TrainingSportLoadPolicy;
+  durabilityPolicy: TrainingSportDurabilityPolicy;
   distancePolicy: TrainingSportDistancePolicy;
   profileMetrics: readonly TrainingProfileMetricId[];
 }
@@ -220,10 +222,14 @@ export const TRAINING_SPORT_DEFINITIONS = [
       {
         id: 'running',
         label: 'Running',
-        activityTypes: [ActivityTypes.Running, RefinedTypes.RoadRunning],
+        activityTypes: [
+          ActivityTypes.Running, RefinedTypes.RoadRunning, RefinedTypes.TrackRunning,
+          RefinedTypes.UltraRunning, RefinedTypes.CrosscountryRunning,
+        ],
         profile: 'endurance',
         intensityPolicy: 'zones',
         loadPolicy: 'recorded',
+        durabilityPolicy: 'supported',
         distancePolicy: 'recorded',
         profileMetrics: ['distance', 'moving-time', 'elapsed-time', 'ascent', 'descent'],
       },
@@ -234,6 +240,7 @@ export const TRAINING_SPORT_DEFINITIONS = [
         profile: 'vertical-endurance',
         intensityPolicy: 'zones',
         loadPolicy: 'recorded',
+        durabilityPolicy: 'supported',
         distancePolicy: 'recorded',
         profileMetrics: ['distance', 'moving-time', 'elapsed-time', 'ascent', 'descent'],
       },
@@ -247,8 +254,20 @@ export const TRAINING_SPORT_DEFINITIONS = [
         profile: 'endurance',
         intensityPolicy: 'zones',
         loadPolicy: 'recorded',
+        durabilityPolicy: 'supported',
         distancePolicy: 'recorded',
         profileMetrics: ['distance', 'moving-time', 'elapsed-time'],
+      },
+      {
+        id: 'obstacle-racing',
+        label: 'Obstacle racing',
+        activityTypes: [RefinedTypes.ObstacleRacing],
+        profile: 'endurance',
+        intensityPolicy: 'zones',
+        loadPolicy: 'recorded',
+        durabilityPolicy: 'omit',
+        distancePolicy: 'recorded',
+        profileMetrics: ['distance', 'moving-time', 'elapsed-time', 'ascent', 'descent'],
       },
     ],
   },
@@ -273,10 +292,12 @@ export const TRAINING_SPORT_DEFINITIONS = [
           ActivityTypes.EBiking,
           ActivityTypes.Handcycle,
           ActivityTypes.Velomobile,
+          RefinedTypes.RecumbentCycling,
         ],
         profile: 'endurance',
         intensityPolicy: 'zones',
         loadPolicy: 'recorded',
+        durabilityPolicy: 'supported',
         distancePolicy: 'recorded',
         profileMetrics: ['distance', 'moving-time', 'elapsed-time', 'ascent', 'descent'],
       },
@@ -285,31 +306,36 @@ export const TRAINING_SPORT_DEFINITIONS = [
         label: 'Indoor cycling',
         activityTypes: [
           ActivityTypes.IndoorCycling, ActivityTypes.VirtualCycling, RefinedTypes.LesMillsRPM,
-          RefinedTypes.LesMillsSPRINT, RefinedTypes.LesMillsTheTrip,
+          RefinedTypes.LesMillsSPRINT, RefinedTypes.LesMillsTheTrip, RefinedTypes.IndoorHandCycle,
         ],
         profile: 'endurance',
         intensityPolicy: 'zones',
         loadPolicy: 'recorded',
+        durabilityPolicy: 'supported',
         distancePolicy: 'recorded',
         profileMetrics: ['distance', 'moving-time', 'elapsed-time'],
       },
       {
         id: 'mountain-biking',
         label: 'Mountain biking',
-        activityTypes: [ActivityTypes.MountainBiking],
+        activityTypes: [
+          ActivityTypes.MountainBiking, RefinedTypes.EMountainBiking, RefinedTypes.MountainBikeOrienteering,
+        ],
         profile: 'endurance',
         intensityPolicy: 'zones',
         loadPolicy: 'recorded',
+        durabilityPolicy: 'supported',
         distancePolicy: 'recorded',
         profileMetrics: ['distance', 'moving-time', 'elapsed-time', 'ascent', 'descent', 'jump-count', 'max-jump-distance', 'grit', 'flow'],
       },
       {
         id: 'enduro',
         label: 'Enduro MTB',
-        activityTypes: [ActivityTypes['Enduro MTB']],
+        activityTypes: [ActivityTypes['Enduro MTB'], RefinedTypes.EEnduroMTB],
         profile: 'mixed-gravity',
         intensityPolicy: 'volume-only',
-        loadPolicy: 'volume-only',
+        loadPolicy: 'recorded',
+        durabilityPolicy: 'unsupported-context',
         distancePolicy: 'recorded',
         profileMetrics: ['distance', 'moving-time', 'elapsed-time', 'ascent', 'descent', 'descent-time', 'jump-count', 'max-jump-distance', 'grit', 'flow'],
       },
@@ -319,9 +345,32 @@ export const TRAINING_SPORT_DEFINITIONS = [
         activityTypes: [ActivityTypes.DownhillCycling],
         profile: 'gravity',
         intensityPolicy: 'volume-only',
-        loadPolicy: 'volume-only',
+        loadPolicy: 'recorded',
+        durabilityPolicy: 'unsupported-context',
         distancePolicy: 'recorded',
         profileMetrics: ['distance', 'moving-time', 'elapsed-time', 'descent', 'descent-time', 'jump-count', 'max-jump-distance', 'grit', 'flow'],
+      },
+      {
+        id: 'bmx',
+        label: 'BMX',
+        activityTypes: [RefinedTypes.BMX],
+        profile: 'general',
+        intensityPolicy: 'volume-only',
+        loadPolicy: 'recorded',
+        durabilityPolicy: 'omit',
+        distancePolicy: 'recorded',
+        profileMetrics: ['distance', 'moving-time', 'elapsed-time', 'ascent', 'descent'],
+      },
+      {
+        id: 'kickbiking',
+        label: 'Kickbiking',
+        activityTypes: [RefinedTypes.Kickbiking],
+        profile: 'endurance',
+        intensityPolicy: 'zones',
+        loadPolicy: 'recorded',
+        durabilityPolicy: 'omit',
+        distancePolicy: 'recorded',
+        profileMetrics: ['distance', 'moving-time', 'elapsed-time', 'ascent', 'descent'],
       },
     ],
   },
@@ -341,6 +390,7 @@ export const TRAINING_SPORT_DEFINITIONS = [
         profile: 'pool',
         intensityPolicy: 'zones',
         loadPolicy: 'recorded',
+        durabilityPolicy: 'supported',
         distancePolicy: 'recorded',
         profileMetrics: ['distance', 'moving-time', 'elapsed-time', 'stroke-rate'],
       },
@@ -351,6 +401,7 @@ export const TRAINING_SPORT_DEFINITIONS = [
         profile: 'open-water',
         intensityPolicy: 'zones',
         loadPolicy: 'recorded',
+        durabilityPolicy: 'supported',
         distancePolicy: 'recorded',
         profileMetrics: ['distance', 'moving-time', 'elapsed-time', 'stroke-rate'],
       },
@@ -372,6 +423,7 @@ export const TRAINING_SPORT_DEFINITIONS = [
         profile: 'rowing',
         intensityPolicy: 'zones',
         loadPolicy: 'recorded',
+        durabilityPolicy: 'omit',
         distancePolicy: 'recorded',
         profileMetrics: ['distance', 'moving-time', 'elapsed-time', 'pace-500m', 'stroke-rate', 'stroke-distance'],
       },
@@ -382,6 +434,7 @@ export const TRAINING_SPORT_DEFINITIONS = [
         profile: 'rowing',
         intensityPolicy: 'zones',
         loadPolicy: 'recorded',
+        durabilityPolicy: 'omit',
         distancePolicy: 'recorded',
         profileMetrics: ['distance', 'moving-time', 'elapsed-time', 'pace-500m', 'stroke-rate', 'stroke-distance'],
       },
@@ -406,6 +459,7 @@ export const TRAINING_SPORT_DEFINITIONS = [
         profile: 'vertical-endurance',
         intensityPolicy: 'zones',
         loadPolicy: 'recorded',
+        durabilityPolicy: 'omit',
         distancePolicy: 'recorded',
         profileMetrics: ['distance', 'moving-time', 'elapsed-time', 'ascent', 'descent'],
       },
@@ -416,6 +470,7 @@ export const TRAINING_SPORT_DEFINITIONS = [
         profile: 'vertical-endurance',
         intensityPolicy: 'zones',
         loadPolicy: 'recorded',
+        durabilityPolicy: 'omit',
         distancePolicy: 'recorded',
         profileMetrics: ['distance', 'moving-time', 'elapsed-time', 'ascent', 'descent'],
       },
@@ -440,6 +495,7 @@ export const TRAINING_SPORT_DEFINITIONS = [
         profile: 'vertical-endurance',
         intensityPolicy: 'zones',
         loadPolicy: 'recorded',
+        durabilityPolicy: 'omit',
         distancePolicy: 'recorded',
         profileMetrics: ['distance', 'moving-time', 'elapsed-time', 'ascent', 'descent'],
       },
@@ -450,6 +506,7 @@ export const TRAINING_SPORT_DEFINITIONS = [
         profile: 'vertical-endurance',
         intensityPolicy: 'zones',
         loadPolicy: 'recorded',
+        durabilityPolicy: 'omit',
         distancePolicy: 'recorded',
         profileMetrics: ['distance', 'moving-time', 'elapsed-time', 'ascent', 'descent'],
       },
@@ -473,7 +530,8 @@ export const TRAINING_SPORT_DEFINITIONS = [
         ],
         profile: 'strength',
         intensityPolicy: 'volume-only',
-        loadPolicy: 'volume-only',
+        loadPolicy: 'recorded',
+        durabilityPolicy: 'omit',
         distancePolicy: 'omit',
         profileMetrics: ['elapsed-time'],
       },
@@ -500,7 +558,8 @@ export const TRAINING_SPORT_DEFINITIONS = [
         ],
         profile: 'general',
         intensityPolicy: 'volume-only',
-        loadPolicy: 'volume-only',
+        loadPolicy: 'recorded',
+        durabilityPolicy: 'omit',
         distancePolicy: 'omit',
         profileMetrics: ['elapsed-time'],
       },
@@ -522,7 +581,8 @@ export const TRAINING_SPORT_DEFINITIONS = [
         ],
         profile: 'general',
         intensityPolicy: 'volume-only',
-        loadPolicy: 'volume-only',
+        loadPolicy: 'recorded',
+        durabilityPolicy: 'omit',
         distancePolicy: 'omit',
         profileMetrics: ['elapsed-time'],
       },
@@ -538,7 +598,8 @@ export const TRAINING_SPORT_DEFINITIONS = [
         ],
         profile: 'general',
         intensityPolicy: 'volume-only',
-        loadPolicy: 'volume-only',
+        loadPolicy: 'recorded',
+        durabilityPolicy: 'omit',
         distancePolicy: 'omit',
         profileMetrics: ['elapsed-time'],
       },
@@ -560,6 +621,7 @@ export const TRAINING_SPORT_DEFINITIONS = [
         profile: 'paddling',
         intensityPolicy: 'zones',
         loadPolicy: 'recorded',
+        durabilityPolicy: 'omit',
         distancePolicy: 'recorded',
         profileMetrics: ['distance', 'moving-time', 'elapsed-time', 'stroke-rate', 'stroke-distance'],
       },
@@ -570,6 +632,7 @@ export const TRAINING_SPORT_DEFINITIONS = [
         profile: 'paddling',
         intensityPolicy: 'zones',
         loadPolicy: 'recorded',
+        durabilityPolicy: 'omit',
         distancePolicy: 'recorded',
         profileMetrics: ['distance', 'moving-time', 'elapsed-time', 'stroke-rate', 'stroke-distance'],
       },
@@ -580,6 +643,7 @@ export const TRAINING_SPORT_DEFINITIONS = [
         profile: 'paddling',
         intensityPolicy: 'zones',
         loadPolicy: 'recorded',
+        durabilityPolicy: 'omit',
         distancePolicy: 'recorded',
         profileMetrics: ['distance', 'moving-time', 'elapsed-time', 'stroke-rate', 'stroke-distance'],
       },
@@ -590,6 +654,7 @@ export const TRAINING_SPORT_DEFINITIONS = [
         profile: 'paddling',
         intensityPolicy: 'zones',
         loadPolicy: 'recorded',
+        durabilityPolicy: 'omit',
         distancePolicy: 'recorded',
         profileMetrics: ['distance', 'moving-time', 'elapsed-time', 'stroke-rate', 'stroke-distance'],
       },
@@ -610,7 +675,8 @@ export const TRAINING_SPORT_DEFINITIONS = [
         activityTypes: [ActivityTypes.Other],
         profile: 'general',
         intensityPolicy: 'volume-only',
-        loadPolicy: 'volume-only',
+        loadPolicy: 'recorded',
+        durabilityPolicy: 'omit',
         distancePolicy: 'omit',
         profileMetrics: ['elapsed-time'],
       },
@@ -657,6 +723,7 @@ export interface ResolvedTrainingSportContext {
   profile: TrainingAnalysisProfile;
   intensityPolicy: TrainingSportIntensityPolicy;
   loadPolicy: TrainingSportLoadPolicy;
+  durabilityPolicy: TrainingSportDurabilityPolicy;
   distancePolicy: TrainingSportDistancePolicy;
   profileMetrics: readonly TrainingProfileMetricId[];
 }
@@ -721,6 +788,7 @@ TRAINING_SPORT_DEFINITIONS.forEach((sport) => {
         profile: context.profile,
         intensityPolicy: context.intensityPolicy,
         loadPolicy: context.loadPolicy,
+        durabilityPolicy: context.durabilityPolicy,
         distancePolicy: context.distancePolicy,
         profileMetrics: context.profileMetrics,
       });
@@ -768,7 +836,8 @@ export function createTrainingSportRecord<T>(
 /**
  * Resolves stored provider aliases through Sports Lib before applying the
  * exact, disjoint Training context registry. Known non-aggregate types that do
- * not have a modeled family resolve to the volume-only Other Training context.
+ * not have a modeled family resolve to Other Training with saved TSS and
+ * duration summaries; their intensity and specialist exclusions remain separate.
  * Aggregate types such as Triathlon remain excluded; normalized child
  * activities are resolved independently.
  */
@@ -789,6 +858,18 @@ export function resolveTrainingSportContextFromActivityType(
   return !knownActivityTypes.has(canonicalType) || aggregateActivityTypes.has(canonicalType)
     ? null
     : otherTrainingFallbackContext || null;
+}
+
+/** Only the provider's generic/road refinements share rolling capacity history. */
+export function resolveTrainingPowerSystemsModelActivityType(value: unknown): ActivityType | null {
+  const activityType = resolveCompatibleActivityType(value);
+  if (activityType === ActivityTypes.Cycling || activityType === RefinedTypes.RoadCycling) {
+    return ActivityTypes.Cycling;
+  }
+  if (activityType === ActivityTypes.Running || activityType === RefinedTypes.RoadRunning) {
+    return ActivityTypes.Running;
+  }
+  return activityType;
 }
 
 export function resolveTrainingDisciplineFromActivityType(value: unknown): TrainingDiscipline | null {

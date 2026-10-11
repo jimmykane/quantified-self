@@ -5,6 +5,7 @@ import {
   normalizeTrainingDestinationId,
   resolveTrainingDisciplineFromActivityType,
   resolveTrainingSportContextFromActivityType,
+  resolveTrainingPowerSystemsModelActivityType,
   TRAINING_DISCIPLINES,
   TRAINING_PROFILE_METRIC_DEFINITIONS,
   TRAINING_SPORT_DEFINITIONS,
@@ -40,9 +41,20 @@ describe('shared Training sport registry', () => {
 
   it.each([
     ['Road Running', 'running', 'running'],
+    ['Track Running', 'running', 'running'],
+    ['Ultra Running', 'running', 'running'],
+    ['Crosscountry Running', 'running', 'running'],
+    ['Obstacle Racing', 'running', 'obstacle-racing'],
     ['Indoor Track Running', 'running', 'indoor-running'],
     ['Vertical Running', 'running', 'trail-running'],
     ['Road Cycling', 'cycling', 'cycling'],
+    ['Recumbent Cycling', 'cycling', 'cycling'],
+    ['Indoor Hand Cycle', 'cycling', 'indoor-cycling'],
+    ['E-Mountain Biking', 'cycling', 'mountain-biking'],
+    ['Mountain Bike Orienteering', 'cycling', 'mountain-biking'],
+    ['E-Enduro MTB', 'cycling', 'enduro'],
+    ['BMX', 'cycling', 'bmx'],
+    ['Kickbiking', 'cycling', 'kickbiking'],
     ['Gravel Cycling', 'cycling', 'cycling'],
     ['Track Cycling', 'cycling', 'cycling'],
     ['Cyclocross', 'cycling', 'cycling'],
@@ -61,6 +73,34 @@ describe('shared Training sport registry', () => {
     expect(resolveTrainingSportContextFromActivityType(name)).toMatchObject({ sport, context });
     expect(resolveTrainingSportContextFromActivityType(`  ${name.toLowerCase()}  `))
       .toMatchObject({ sport, context });
+  });
+
+  it('keeps saved TSS available for every Training context independently of specialist policies', () => {
+    TRAINING_SPORT_DEFINITIONS.forEach(sport => sport.contexts.forEach(context => {
+      expect(context.loadPolicy).toBe('recorded');
+    }));
+    ['BMX', 'Kickbiking', 'Obstacle Racing'].forEach(type => {
+      expect(resolveTrainingSportContextFromActivityType(type)?.durabilityPolicy).toBe('omit');
+    });
+    expect(resolveTrainingSportContextFromActivityType('BMX')?.intensityPolicy).toBe('volume-only');
+    ['Kickbiking', 'Obstacle Racing'].forEach(type => {
+      expect(resolveTrainingSportContextFromActivityType(type)?.intensityPolicy).toBe('zones');
+    });
+    ['Enduro MTB', 'E-Enduro MTB', 'Downhill Cycling'].forEach(type => {
+      expect(resolveTrainingSportContextFromActivityType(type)?.durabilityPolicy).toBe('unsupported-context');
+    });
+    ['Track Running', 'Ultra Running', 'Crosscountry Running', 'Recumbent Cycling',
+      'Indoor Hand Cycle', 'E-Mountain Biking', 'Mountain Bike Orienteering'].forEach(type => {
+      expect(resolveTrainingSportContextFromActivityType(type)?.durabilityPolicy).toBe('supported');
+    });
+  });
+
+  it('pools rolling power model history only for generic and road cycling/running pairs', () => {
+    ['Cycling', 'Road Cycling'].forEach(type => expect(resolveTrainingPowerSystemsModelActivityType(type)).toBe(ActivityTypes.Cycling));
+    ['Running', 'Road Running'].forEach(type => expect(resolveTrainingPowerSystemsModelActivityType(type)).toBe(ActivityTypes.Running));
+    ['Indoor Cycling', 'Mountain Biking', 'Gravel Cycling', 'Track Running', 'BMX', 'Kickbiking', 'Obstacle Racing']
+      .forEach(type => expect(resolveTrainingPowerSystemsModelActivityType(type)).toBe(type));
+    expect(resolveTrainingPowerSystemsModelActivityType('Provider Mystery')).toBeNull();
   });
 
   it('normalizes account-saved Training destinations to a safe overview fallback', () => {
@@ -111,14 +151,14 @@ describe('shared Training sport registry', () => {
       context: 'enduro',
       profile: 'mixed-gravity',
       intensityPolicy: 'volume-only',
-      loadPolicy: 'volume-only',
+      loadPolicy: 'recorded',
     });
     expect(resolveTrainingSportContextFromActivityType(ActivityTypes.DownhillCycling)).toMatchObject({
       sport: 'cycling',
       context: 'downhill',
       profile: 'gravity',
       intensityPolicy: 'volume-only',
-      loadPolicy: 'volume-only',
+      loadPolicy: 'recorded',
     });
 
     const cycling = getTrainingSportDefinition('cycling');
@@ -147,7 +187,7 @@ describe('shared Training sport registry', () => {
     });
   });
 
-  it('uses volume-only Fitness & Gym contexts for generic training and classes', () => {
+  it('keeps Fitness & Gym intensity separate from recorded TSS for generic training and classes', () => {
     [
       ActivityTypes.Crossfit,
       ActivityTypes.Training,
@@ -159,7 +199,7 @@ describe('shared Training sport registry', () => {
       sport: 'fitness-gym',
       profile: 'general',
       intensityPolicy: 'volume-only',
-      loadPolicy: 'volume-only',
+      loadPolicy: 'recorded',
       distancePolicy: 'omit',
     }));
   });
@@ -176,7 +216,7 @@ describe('shared Training sport registry', () => {
       context: 'other-training',
       profile: 'general',
       intensityPolicy: 'volume-only',
-      loadPolicy: 'volume-only',
+      loadPolicy: 'recorded',
       distancePolicy: 'omit',
     }));
     [ActivityTypes.Triathlon, ActivityTypes.Multisport, ActivityTypes.Transition, ActivityTypes.Route]

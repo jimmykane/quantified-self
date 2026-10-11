@@ -20,6 +20,16 @@
 
     <mat-divider></mat-divider>
 
+    @for (family of activityFamilyOptions; track family.id) {
+    <button mat-menu-item type="button" class="activity-types-filter-option" [class.is-selected]="family.selected || family.partial"
+      [disabled]="disabled" [attr.aria-checked]="family.partial ? 'mixed' : family.selected" role="menuitemcheckbox"
+      (click)="$event.stopPropagation(); onActivityFamilyToggle(family)">
+      <mat-icon>{{ family.selected ? 'check_box' : family.partial ? 'indeterminate_check_box' : 'check_box_outline_blank' }}</mat-icon>
+      <span>{{ family.label }}</span>
+    </button>
+    }
+    <mat-divider></mat-divider>
+
     @for (activityType of activityTypeOptions; track activityType.value) {
     <button mat-menu-item type="button" class="activity-types-filter-option" [class.is-selected]="activityType.selected"
       [disabled]="disabled" [attr.aria-checked]="activityType.selected" role="menuitemcheckbox"

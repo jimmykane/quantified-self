@@ -4,6 +4,7 @@ import {
   ActivityTypesHelper,
   type ActivityTypeGroup,
 } from '@sports-alliance/sports-lib';
+import { isActivityTypeInFilterFamily, isRunningFamilyActivityType } from '@shared/activity-type-family';
 import { AppActivityTypeGroupColors } from '../services/color/app.activity-type-group.colors';
 import { AppActivityTypeGroupIcons } from '../services/color/app.activity-type-group.icons';
 
@@ -37,6 +38,11 @@ const ACTIVITY_TYPE_ICON_OVERRIDES: Readonly<Record<string, string>> = {
   yoga: 'self_improvement',
   pilates: 'self_improvement',
   flexibilitytraining: 'self_improvement',
+  stretching: 'self_improvement',
+  meditation: 'self_improvement',
+  breathwork: 'self_improvement',
+  emountainbiking: 'electric_bike',
+  eenduromtb: 'electric_bike',
   weighttraining: 'fitness_center',
   strengthtraining: 'exercise',
   kettlebell: 'weight',
@@ -96,6 +102,14 @@ export function resolveActivityTypeMaterialIcon(activityType: unknown): string {
   const overrideIcon = ACTIVITY_TYPE_ICON_OVERRIDES[normalizedActivityType];
   if (overrideIcon) {
     return overrideIcon;
+  }
+
+  if (isRunningFamilyActivityType(activity)) return 'directions_run';
+  if (['indoorwalking', 'speedwalking'].includes(normalizedActivityType)) return 'directions_walk';
+  if (normalizedActivityType === 'mountainbikeorienteering') return 'terrain';
+  if (isActivityTypeInFilterFamily(activity, 'cycling')
+    && ActivityTypesHelper.getActivityGroupForActivityType(ActivityTypesHelper.resolveActivityType(activity) || ActivityTypes.Other) !== ActivityTypeGroups.MountainBikingGroup) {
+    return 'directions_bike';
   }
 
   const activityTypeEnum = ActivityTypesHelper.resolveActivityType(activity) || ActivityTypes.Other;

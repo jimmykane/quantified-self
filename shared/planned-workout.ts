@@ -1,6 +1,5 @@
 import {
   ActivityTypes,
-  ActivityTypesHelper,
   DataCadence,
   DataDistance,
   DataDuration,
@@ -14,6 +13,7 @@ import {
   DistanceUnits,
   type UserUnitSettingsInterface,
 } from '@sports-alliance/sports-lib';
+import { CompatibleTrainingActivityTypes as Refined, resolveCompatibleActivityType } from './activity-type-compatibility';
 import {
   normalizeUserUnitSettings,
   resolveUnitAwareDisplayFromValue,
@@ -281,6 +281,15 @@ export const MANUAL_WORKOUT_EDITOR_RUNNING_SPORTS_V1 = [
   ActivityTypes.Running,
   ActivityTypes.TrailRunning,
   ActivityTypes.Treadmill,
+  Refined.RoadRunning,
+  Refined.TrackRunning,
+  Refined.UltraRunning,
+  Refined.CrosscountryRunning,
+  Refined.VerticalRunning,
+  Refined.IndoorTrackRunning,
+  ActivityTypes.IndoorRunning,
+  ActivityTypes.VirtualRunning,
+  Refined.ObstacleRacing,
 ] as const;
 export const MANUAL_WORKOUT_EDITOR_CYCLING_SPORTS_V1 = [
   ActivityTypes.Cycling,
@@ -288,6 +297,24 @@ export const MANUAL_WORKOUT_EDITOR_CYCLING_SPORTS_V1 = [
   ActivityTypes.IndoorCycling,
   ActivityTypes.EBiking,
   ActivityTypes.Handcycle,
+  Refined.RoadCycling,
+  Refined.GravelCycling,
+  Refined.TrackCycling,
+  Refined.Cyclocross,
+  Refined.RecumbentCycling,
+  ActivityTypes.Velomobile,
+  Refined.BMX,
+  Refined.Kickbiking,
+  Refined.LesMillsRPM,
+  Refined.LesMillsSPRINT,
+  Refined.LesMillsTheTrip,
+  ActivityTypes.VirtualCycling,
+  Refined.IndoorHandCycle,
+  Refined.MountainBikeOrienteering,
+  Refined.EMountainBiking,
+  Refined.EEnduroMTB,
+  ActivityTypes['Enduro MTB'],
+  ActivityTypes.DownhillCycling,
 ] as const;
 export const MANUAL_WORKOUT_EDITOR_SWIMMING_SPORTS_V1 = [
   ActivityTypes.Swimming,
@@ -296,6 +323,10 @@ export const MANUAL_WORKOUT_EDITOR_SWIMMING_SPORTS_V1 = [
 export const MANUAL_WORKOUT_EDITOR_WALKING_SPORTS_V1 = [
   ActivityTypes.Walking,
   ActivityTypes.Hiking,
+  Refined.SpeedWalking,
+  ActivityTypes.NordicWalking,
+  Refined.IndoorWalking,
+  ActivityTypes.Trekking,
 ] as const;
 export const MANUAL_WORKOUT_EDITOR_ROWING_SPORTS_V1 = [
   ActivityTypes.Rowing,
@@ -805,7 +836,7 @@ export function parseWorkoutStructureV1(value: unknown): WorkoutStructureV1 {
     );
   }
 
-  const sport = ActivityTypesHelper.resolveActivityType(record.sport);
+  const sport = resolveCompatibleActivityType(record.sport);
   if (!sport || sport === ActivityTypes.unknown) {
     pushIssue(context, 'invalid_value', '$.sport', 'Expected a supported canonical activity type or alias.');
   }

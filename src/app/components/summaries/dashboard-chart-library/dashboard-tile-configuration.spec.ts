@@ -1903,6 +1903,15 @@ describe('DashboardTileConfiguration', () => {
     expect(hapticsMock.selection).toHaveBeenCalledTimes(10);
   });
 
+  it('accepts chart and map sport filters without duplicating selector feedback', () => {
+    component.onCustomEventActivityTypesChange([ActivityTypes.Running]);
+    component.onMapEventActivityTypesChange([ActivityTypes.Hiking]);
+
+    expect(component.customEventActivityTypes).toEqual([ActivityTypes.Running]);
+    expect(component.mapEventActivityTypes).toEqual([ActivityTypes.Hiking]);
+    expect(hapticsMock.selection).not.toHaveBeenCalled();
+  });
+
   it('allows add save flow when dashboard already has many tiles', async () => {
     dialogData.user.settings.dashboardSettings.tiles = Array.from({ length: 12 }, (_value, index) => ({
       type: TileTypes.Chart,

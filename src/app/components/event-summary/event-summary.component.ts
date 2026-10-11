@@ -21,7 +21,7 @@ import { EventStatsBottomSheetComponent } from '../event/stats-table/event-stats
 import { EventDevicesBottomSheetComponent } from '../event/devices/event-devices-bottom-sheet/event-devices-bottom-sheet.component';
 import { AppBenchmarkFlowService } from '../../services/app.benchmark-flow.service';
 import { resolvePrimaryUnitAwareDisplayStat, buildHeroMetric } from '../../helpers/summary-display.helper';
-import { resolvePreferredSpeedDerivedAverageTypeForActivity } from '../../helpers/summary-stats.helper';
+import { resolvePreferredSpeedDerivedAverageTypeForActivity, shouldHideDefaultSpeedSummary } from '../../helpers/summary-stats.helper';
 import { SummaryPrimaryInfoMetric } from '../shared/summary-primary-info/summary-primary-info.component';
 import { EventDevicesService } from '../../services/event-devices.service';
 import { MatDialog } from '@angular/material/dialog';
@@ -368,7 +368,7 @@ export class EventSummaryComponent implements OnChanges {
     return [
       DataDuration.type,
       DataDistance.type,
-      this.heroEffortStatTypeValue || DataSpeedAvg.type,
+      ...(shouldHideDefaultSpeedSummary(this.eventActivityTypesValue) ? [] : [this.heroEffortStatTypeValue || DataSpeedAvg.type]),
     ];
   }
 

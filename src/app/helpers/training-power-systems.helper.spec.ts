@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { DERIVED_TRAINING_POWER_SYSTEMS_POLICY_VERSION } from '@shared/derived-metrics';
 import type {
   DerivedTrainingPowerSystemsComponentStatus,
   DerivedTrainingPowerSystemsReason,
@@ -145,7 +146,7 @@ function payload(activityTypes = [entry('Rowing'), entry('Cycling')]) {
   return {
     dayBoundary: 'UTC',
     asOfDayMs,
-    policyVersion: 1,
+    policyVersion: DERIVED_TRAINING_POWER_SYSTEMS_POLICY_VERSION,
     windowDays: 42,
     historyDays: 84,
     cadence: 'workout-date',
@@ -166,6 +167,21 @@ describe('training-power-systems.helper', () => {
       wPrime: { value: 18_500 },
       maximumPower: { value: 1_200 },
     });
+  });
+
+  it('preserves generic and road labels alongside newly supported Training sports', () => {
+    const types = ['Cycling', 'Road Cycling', 'Running', 'Road Running', 'Track Running',
+      'Ultra Running', 'Crosscountry Running', 'Recumbent Cycling', 'Indoor Hand Cycle',
+      'E-Mountain Biking', 'Mountain Bike Orienteering', 'E-Enduro MTB', 'BMX',
+      'Kickbiking', 'Obstacle Racing'];
+    const normalized = resolveTrainingPowerSystemsMetricPayload(payload(types.map(type => entry(type))));
+    expect(normalized?.activityTypes.map(item => item.activityType)).toEqual([...types].sort());
+    normalized?.activityTypes.forEach(item => expect(item.current.activityType).toBe(item.activityType));
+    const grouped = groupTrainingPowerSystemsActivityTypeViewModels(buildTrainingPowerSystemsActivityTypeViewModels(normalized));
+    expect(grouped.bySport.running).toHaveLength(6);
+    expect(grouped.bySport.cycling).toHaveLength(9);
+    expect(grouped.other).toHaveLength(0);
+    expect(resolveTrainingPowerSystemsMetricPayload({ ...payload(), policyVersion: 1 })).toBeNull();
   });
 
   it('groups registered exact types by sport and preserves unmatched types as Other', () => {

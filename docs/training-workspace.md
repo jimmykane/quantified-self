@@ -419,11 +419,11 @@ presentation-only optimizations with no Training calculation, planning, or MCP c
 
 Current compatibility baseline:
 
-- Quantified Self derived-metric schema: `19`
-- `@sports-alliance/sports-lib`: `21.4.0`
+- Quantified Self derived-metric schema: `22`
+- Installed `@sports-alliance/sports-lib`: `21.5.0`; the provider-sport expansion is verified against its candidate build before package adoption
 - Training sport groups: eight modeled benchmark families plus data-backed Fitness & Gym and Other training volume groups
 - Imported FTP/VO2 capacity disciplines: Running and Cycling only
-- Rolling power-system capacity: every exact canonical activity type with usable persisted power curves
+- Rolling power-system capacity: every canonical activity type with usable persisted power curves; only Cycling/Road Cycling and Running/Road Running share histories
 - Calendar boundaries: UTC unless a section explicitly says otherwise
 
 Sports Lib 21.4.0 adds bounded, nonnumeric Wahoo app FIT Plan/Workout references. QS consumes them only at the
@@ -485,14 +485,15 @@ The following rules are architectural constraints:
 - Sleep is context. It never changes the Training state and is not presented as a causal explanation of performance.
 - Imported FTP and VO2 max values are settings or source observations. They are not silently relabeled as new estimates.
 - Durability shown on Training comes only from the persisted sports-lib `Durability Evidence` activity stat.
-- Standard mountain biking retains the steady-aerobic Cycling durability protocol. Enduro MTB and Downhill Cycling are
-  gravity contexts: they use reliable recorded summaries only, are volume-only for Training load/intensity, and are
-  explicitly ineligible for durability. Training does not infer downhill runs or lift/uplift segments.
+- Standard mountain biking retains the steady-aerobic Cycling durability protocol. Enduro MTB, E-Enduro MTB and
+  Downhill Cycling retain saved TSS and reliable recorded summaries, with intensity-zone and durability exclusions.
+  Training does not infer downhill runs or lift/uplift segments.
 - Rowing participates in Training Mix and Best Build, but it does not have a durability adapter in this release.
 - The parser does not generate CP, W′, Pmax, or three-dimensional workout strain. Rolling power-system capacity is a
   Training-derived snapshot built from persisted activity power curves and Sports-lib's public dated-capacity fitter.
-- Rolling capacity is isolated by exact canonical activity type. It is separate from TSS, Form, Readiness, and imported
-  FTP, and only components that pass Sports-lib's `ready` gates expose a value.
+- Rolling capacity pools only Cycling with Road Cycling, and Running with Road Running. Every other canonical type
+  has a separate history. It is separate from TSS, Form, Readiness, and imported FTP; only components that pass
+  Sports-lib's `ready` gates expose a value.
 - Power systems remains available to every authenticated user, but its exact activity types are routed into a matching
   power-systems-capable sport destination. Types in a volume-only family or outside the modeled registry are routed to
   **Other power activities**. No
@@ -531,7 +532,7 @@ The following rules are architectural constraints:
 | Dated power-duration envelope and confidence-gated CP/W′/Pmax fitting | sports-lib | `src/events/utilities/three-dimensional-capacity.ts` |
 | Curated Training disciplines | Quantified Self shared layer | `shared/training-disciplines.ts` |
 | Joining normalized activities to parent events | Quantified Self Functions | `functions/src/derived-metrics/derived-metrics.service.ts` |
-| Exact-type 42-day window policy and rolling capacity history | Quantified Self Functions | `training_power_systems` builder in `derived-metrics.service.ts` |
+| Pair-aware 42-day window policy and rolling capacity history | Quantified Self Functions | `training_power_systems` builder in `derived-metrics.service.ts` |
 | Current, usual, weekly, and benchmark windows | Quantified Self Functions | derived-metric builders |
 | Derived snapshot persistence and refresh | Quantified Self Functions | coordinator, triggers, ingress worker, and derived worker |
 | Workspace destination and shortcut preferences | Quantified Self frontend | owner-writable `appSettings.trainingWorkspace` |
@@ -545,7 +546,7 @@ In short:
 
 ```text
 sports-lib answers:       Is durability valid, and what CP/W′/Pmax fit is supported by the dated curves supplied?
-Quantified Self answers:  Which exact-type curves belong in each 42-day window, and how is the result persisted and shown?
+Quantified Self answers:  Which dated curves belong in each approved 42-day model window, and how is the result persisted and shown?
 ```
 
 Do not duplicate sports-lib durability formulas or the CP/W′/Pmax fitter inside Functions. Functions owns the dated
@@ -577,7 +578,7 @@ flowchart TD
     S --> K
     K --> R["training_readiness: Form seed + bounded sleep envelope"]
     R --> L["Per-kind derived snapshot documents"]
-    K --> PS["training_power_systems: exact-type [D-42, D) capacity fits"]
+    K --> PS["training_power_systems: approved model [D-42, D) capacity fits"]
     PS --> L
     K --> L
     L --> M["Angular snapshot listeners"]
@@ -939,13 +940,43 @@ athlete's metre/yard presentation choice. It is independent of step distance and
 strict codec rejects unknown fields and discriminants, unsupported versions or sports, duplicate IDs, non-finite or
 negative values, non-positive endings/reference snapshots, inverted ranges, more than 100 nodes, repeat counts above
 100, nested repeats, and more than two targets per step. Its JSON output must remain Firestore-safe and must round-trip through stringify/parse without changing
-the persisted v1 value. The manual editor exposes canonical Running, Trail Running, Treadmill, Cycling, Mountain Biking,
-Indoor Cycling, E-Biking, Hand Cycle, Swimming (labelled Pool swimming), and Open Water Swimming sports plus date-only,
+the persisted v1 value. The manual editor exposes 45 canonical sports: the original 14 choices (Running, Trail Running,
+Treadmill, Cycling, Mountain Biking, Indoor Cycling, E-Biking, Hand Cycle, Swimming labelled Pool swimming, Open Water
+Swimming, Walking, Hiking, Rowing and Indoor Rowing), plus the 31 approved aliases below, with date-only,
 time/distance/lap-button, fixed-repeat, and up to two unique absolute or relative HR/power/speed/cadence targets. Both swim profiles enter distance steps in metres
 rather than kilometres, and pace targets follow the user's swim-pace preference (/100 m or /100 yd). Changing an unsaved
 editor sport converts displayed distances and paces without changing their canonical values. The pool editor may
 select an optional physical length; a 25 m step alone never asserts a 25 m pool, and open-water swimming has no pool
 length. Other providers do not receive the selected length and require explicit degradation review. These are Sports Lib activity-type strings, not provider profile IDs.
+
+### Sport names and provider profiles
+
+`shared/planned-workout-sport-aliases.ts` is the approved planning-only alias table. The authored canonical sport remains
+on the QS recipe, its JSON round trip and the destination-bound approval digest. Delivery reuses the provider's existing
+tested base profile and that profile's target, ending, step and repeat limits. A more specific QS name does not establish
+a provider's native support for that subtype. Existing degradation review and stale-approval invalidation still apply.
+
+| Additional authored sports | Suunto profile | Garmin profile | COROS profile | Wahoo profile |
+| --- | --- | --- | --- | --- |
+| Road Running, Track Running, Ultra Running, Crosscountry Running, Indoor Track Running, Obstacle Racing | Running | Running | Running | Running |
+| Vertical Running | Trail Running | Running | Trail Running | Trail Running |
+| Indoor Running | Treadmill | Running | Running | Treadmill |
+| Virtual Running | Treadmill | Running | Running | Virtual Running |
+| Road Cycling, Gravel Cycling, Track Cycling, Cyclocross, Recumbent Cycling, Velomobile, BMX, Kickbiking | Cycling | Cycling | Cycling | Cycling |
+| LES MILLS RPM, LES MILLS SPRINT, LES MILLS THE TRIP | Indoor Cycling | Cycling | Cycling | Indoor Cycling |
+| Virtual Cycling | Indoor Cycling | Cycling | Cycling | Virtual Cycling |
+| Indoor Hand Cycle | Hand Cycle | Cycling | Cycling | Hand Cycle |
+| Mountain Bike Orienteering | Mountain Biking | Cycling | Cycling | Mountain Biking |
+| E-Mountain Biking, E-Enduro MTB | E-Biking | Cycling | Cycling | E-Biking |
+| Enduro MTB, Downhill Cycling | Mountain Biking | Cycling | Cycling | Mountain Biking |
+| Speed Walking, Nordic Walking, Indoor Walking | Walking | Walking | Unsupported | Walking |
+| Trekking | Hiking | Hiking | Unsupported | Hiking |
+
+COROS walking/hiking aliases remain unsupported with delivery disabled. Wahoo walking/hiking aliases inherit the
+existing timed/untargeted envelope, and every alias keeps its base profile's existing limitations. The table adds neither
+recorded-activity import mappings nor provider transports. Broader FIT sport catalogs alone never authorize planned
+workout delivery. The manual editor presents and preserves the exact authored sport while compatibility review explains
+the base profile delivered to each selected provider.
 
 The interval editor's **End by → Lap button press** choice is available for every purpose (warmup, work, recovery,
 cooldown, rest, other), including repeat children and library recipes. It stores the existing strict `{ kind: 'manual' }`
@@ -4397,7 +4428,7 @@ Normalized child activity documents provide sport-specific stats and activity ty
 The join deliberately uses activity-level stats. Parent stats and `endDate` must not leak into a child leg. Provider and
 device provenance may fall back to the parent when the child does not carry it. Functions creates one canonical joined
 activity source per valid parent/child relationship. Known non-aggregate activity types that do not join a modeled
-family resolve to the volume-only Other training group; unknown strings remain unclassified. When
+family resolve to Other training with saved-TSS load, duration summaries and intensity exclusions; unknown strings remain unclassified. When
 `training_power_systems` is dirty, those sources are also retained so every canonical activity type with a usable power
 curve can be fitted independently. Registry-driven Training Summary uses all ten groups. Best Build uses only the eight
 benchmark-capable families, while Explanation retains aggregate/unknown sources for Other/Unclassified coverage.
@@ -4487,8 +4518,8 @@ rendering derive from it.
 
 | Training family | Registered contexts and profiles | Conservative canonical membership |
 | --- | --- | --- |
-| Running | Running (`endurance`), Trail running (`vertical-endurance`), Indoor running (`endurance`) | Running, Road Running; Trail Running, Vertical Running; Treadmill, Indoor Running, Virtual Running, Indoor Track Running |
-| Cycling | Cycling and Indoor cycling (`endurance`), Mountain biking (`endurance`), Enduro MTB (`mixed-gravity`), Downhill MTB (`gravity`) | Cycling, Road Cycling, Gravel Cycling, Track Cycling, Cyclocross, E-Biking, Hand Cycle, Velomobile; Indoor Cycling, Virtual Cycling, LES MILLS RPM, LES MILLS SPRINT, LES MILLS THE TRIP; Mountain Biking; Enduro MTB; Downhill Cycling |
+| Running | Running (`endurance`), Trail running (`vertical-endurance`), Indoor running (`endurance`), Obstacle racing (`endurance`) | Running, Road Running, Track Running, Ultra Running, Crosscountry Running; Trail Running, Vertical Running; Treadmill, Indoor Running, Virtual Running, Indoor Track Running; Obstacle Racing |
+| Cycling | Cycling and Indoor cycling (`endurance`), Mountain biking (`endurance`), Enduro MTB (`mixed-gravity`), Downhill MTB (`gravity`), BMX (`general`), Kickbiking (`endurance`) | Cycling, Road Cycling, Gravel Cycling, Track Cycling, Cyclocross, E-Biking, Hand Cycle, Velomobile, Recumbent Cycling; Indoor Cycling, Virtual Cycling, LES MILLS RPM, LES MILLS SPRINT, LES MILLS THE TRIP, Indoor Hand Cycle; Mountain Biking, E-Mountain Biking, Mountain Bike Orienteering; Enduro MTB, E-Enduro MTB; Downhill Cycling; BMX; Kickbiking |
 | Swimming | Pool swimming (`pool`), Open-water swimming (`open-water`) | Swimming; Open Water Swimming |
 | Rowing | Indoor rowing and On-water rowing (`rowing`) | Indoor Rowing; Rowing |
 | Walking & Hiking | Walking and Hiking (`vertical-endurance`) | Walking, Nordic Walking, Speed Walking, Indoor Walking; Hiking, Trekking |
@@ -4504,16 +4535,24 @@ Important behavior:
   training deliberately do not. Specialist surfaces are capability-gated: durability,
   imported capacity, power profiles, and swimming performance are enabled only where declared. Reusable context
   summaries are driven directly by each context's profile and metric declarations.
-- Standard Mountain Biking is an endurance Cycling context. Enduro MTB and Downhill Cycling stay in Cycling but use
-  `mixed-gravity` and `gravity` profiles with `volume-only` load and intensity policies. Strength, Fitness & Gym, and
-  Other training are also volume-only and omit distance. Other registered contexts use recorded load/intensity and
-  distance when available.
+- Every context uses existing finite, nonnegative saved TSS, including zero, through its `recorded` load policy.
+  Specialist exclusions never suppress that load. Parent TSS still owns global load; child TSS owns sport composition.
+- Standard, E-Mountain Biking and Mountain Bike Orienteering share the endurance Mountain biking context. Enduro MTB,
+  E-Enduro MTB and Downhill Cycling use `mixed-gravity`/`gravity` profiles with `volume-only` intensity. BMX has its own
+  Cycling context with volume-only intensity; Kickbiking and Obstacle Racing have separate contexts with recorded zones.
+  Strength, Fitness & Gym and Other training retain intensity exclusions and omit distance. Other contexts retain
+  their declared recorded metrics when available.
+- Context `durabilityPolicy` is independent of family membership: `supported` still requires Sports Lib protocol-qualified
+  evidence; `omit` excludes BMX, Kickbiking and Obstacle Racing from candidates and detail analysis; `unsupported-context`
+  retains explicit Enduro/E-Enduro/Downhill exclusion counts while rejecting stale eligible evidence. The same policy
+  gates Training durability, Best Build and activity-detail durability curves.
 - A triathlon or multisport aggregate type is not classified. Its normalized registered child legs are classified
   individually.
 - Each child leg counts as a session in its discipline.
 - One multisport parent event can anchor a separate benchmark for every registered family represented by a child leg.
-- Known non-aggregate sports outside the modeled families use the `Other training` volume-only fallback. Aggregate
-  parents can still be reported as `Other` in load explanation; unknown strings are `Unclassified`.
+- Known non-aggregate sports outside the modeled families use `Other training` with recorded duration and saved TSS,
+  retaining intensity exclusions. Aggregate parents can still be reported as `Other` in load explanation; unknown
+  strings are `Unclassified`.
 - Modeled membership remains intentionally conservative. Fitness classes get only the declared generic volume profile;
   ski touring/backcountry skiing, snowshoeing, surfing, sailing, team sports, and other unmodeled types remain Other
   training rather than inheriting a nearby Training profile.
@@ -4538,9 +4577,11 @@ Conditioning; LES MILLS BODYPUMP shares Strength. Indoor Walking and Speed Walki
 keeps its explicit chart profile without terrain recommendations; Training only aggregates actual recorded metrics.
 Missing distance, ascent or descent is never created from a sport label.
 
-`shared/activity-type-compatibility.ts` bridges only these 18 approved canonical names while the dependency still pins
+`shared/activity-type-compatibility.ts` bridges these 29 approved canonical names while the dependency still pins
 the published catalog. It does not infer Road Cycling from generic Cycling, guess a provider's missing profile, or
-assign other new sports to modeled families. Other new catalog types still use the conservative Other training policy.
+assign other new sports to modeled families. The eleven additional memberships are Track/Ultra/Crosscountry Running,
+Recumbent Cycling, Indoor Hand Cycle, E-Mountain Biking, Mountain Bike Orienteering, E-Enduro MTB, BMX, Kickbiking and
+Obstacle Racing as listed above. Other new catalog types use Other training with saved TSS and existing specialist exclusions.
 The Walking catalog group has metadata, icon, color, gradient and a chart default. Public catalog coverage follows the
 installed Sports Lib enum, without listing an empty future group under the old release. Event chart profiles preserve
 explicit existing choices and use catalog-group defaults for newly recognized canonical sports.
@@ -4549,9 +4590,11 @@ The Running/Cycling family power-curve builders include refined types through th
 Dashboard family power-curve filters use the installed catalog groups. Saved full default lists from the previous
 catalog expand on settings normalization to the current family list,
 while preserving their date range. Custom subsets and mixed-family selections remain exact.
-CP/W′/Pmax capacity fitting and its sparse history remain isolated by exact canonical activity type as specified in the
-Power systems section; family membership does not authorize pooling those fits. Snapshot schema 21 invalidates prior
-Training memberships through the existing bounded freshness/rebuild path. No TSS formula or imported-TSS rule changes.
+CP/W′/Pmax capacity fitting pools only Cycling/Road Cycling and Running/Road Running as specified in Power systems;
+all other exact types stay separate. Snapshot schema 22 invalidates previous membership, load, durability and rolling
+capacity projections through the existing freshness/rebuild path, including cached workout seeds. Rebuilding uses stored
+summaries and power curves. TSS formulas and imported-TSS preservation remain owned by Sports Lib; no reparse or cloud
+mutation is performed by these source changes.
 
 Original-file chart/sample reads also retain historical identities across eight verified import refinements: Cycling
 ↔ Road Cycling, Running ↔ Road Running, Indoor Running ↔ Indoor Track Running, Elliptical Trainer ↔ Crosstrainer,
@@ -4618,7 +4661,7 @@ current-versus-usual 28-day Training context and `training_readiness` for curren
 `get_daily_report` tool reuses that same strict Training Summary projection but combines it with the live Dashboard
 Today-equivalent readiness path and safe latest sleep HRV/heart-rate aggregates. Both project a compact identity-free
 total and the frozen public Running/Cycling/Swimming breakdown, not the rest of the Training workspace. Internal
-schema-21 snapshots contain all ten groups and context/profile fields; MCP projection removes those fields and folds
+schema-22 snapshots contain all ten groups and context/profile fields; MCP projection removes those fields and folds
 the seven non-public groups into Other where an explanation payload needs a complete composition total. Form,
 CTL/ATL, ACWR, ramp,
 recovery, capacity, durability, power systems, and other specialist snapshots remain independently queryable rather
@@ -5077,9 +5120,10 @@ use their raw 8-, 10-, or 12-week totals and counts.
 
 The top training time and workout values sum all ten Training groups and appear only on Overview. Generic provider
 `Training` workouts and known unmodeled sports therefore no longer disappear from those totals.
-Gravity Cycling, Strength, Fitness & Gym, and Other training contexts contribute reliable time/workout volume, but their
-profile policy prevents zones or TSS from being presented as sport-specific intensity/load evidence. These volume-only
-groups omit distance where the registry does not model a comparable distance.
+Gravity Cycling, BMX, Strength, Fitness & Gym and Other training retain their intensity-zone exclusions while counting
+existing saved TSS. They contribute reliable time/workout volume, and distance remains omitted where the registry does
+not model it. Kickbiking and Obstacle Racing use recorded zones. Missing TSS remains unavailable; saved zero counts as
+recorded load in Explanation, eligible Best Build totals and event suggestions.
 
 #### Training state
 
@@ -6345,9 +6389,8 @@ Discipline cards use `training_summary` for:
 
 The compact Overview cards also use the matching-cutoff `training_explanation` snapshot for each family's current
 activity TSS and usual TSS. Its usual TSS is the median of the three preceding 28-day blocks, rather than the
-summary's normalized 84-day count/duration baseline. TSS stays unavailable (`--`) when the family has no eligible
-sport-specific recorded load (including intentionally volume-only contexts), or while the two snapshots do not share
-the same cutoff; it is never treated as zero.
+summary's normalized 84-day count/duration baseline. TSS stays unavailable (`--`) when the family has no saved finite
+nonnegative score or while the snapshots do not share the same cutoff. A saved score of zero is valid recorded load.
 
 Power zones take priority over heart-rate zones per activity when their valid recorded time is positive. HR falls back
 using the separate mappings above. If neither source is usable, that activity contributes to count and duration but not
@@ -6409,19 +6452,34 @@ A registered sport renders Power systems only when at least one matching exact t
 retains the section and its confirmed-empty state when selected even if its previously available evidence disappears.
 Overview deliberately omits the section because every exact type has a dedicated destination.
 
-Policy version 1 is fixed:
+Internal policy version 2 is fixed:
 
-- For an effective UTC day `D`, supply only same-type power curves in the closed-open interval `[D - 42 days, D)`.
+- For an effective UTC day `D`, supply only same-model power curves in the closed-open interval `[D - 42 days, D)`.
+  Cycling/Road Cycling share the Cycling model; Running/Road Running share the Running model. Every other exact
+  canonical sport is its own model, including indoor, trail, gravel, MTB, BMX, Kickbiking and Obstacle Racing.
 - The workout on `D`, later workouts on `D`, and every future workout are excluded. A result can therefore be used for
   that workout date without learning from the workout itself.
 - The current snapshot is effective today.
-- Historical points are calculated only for distinct qualifying workout UTC dates in the latest 84 days, plus today.
+- Historical points are calculated only for distinct qualifying model workout UTC dates in the latest 84 days, plus today.
   Rest dates are not manufactured as chart points.
-- Related sports remain separate. Cycling, Indoor Cycling, Mountain Biking, Rowing, and every other canonical type each
-  get their own input history and fit.
-- Repeated type/day calculations are cached within one build.
+- Each discovered actual canonical label remains a separate selector entry and retains that label on its current
+  snapshot. Both members of an approved pair show the same pooled fit, history, fingerprint and evidence counts;
+  those repeated counts are not additive across selector entries. Other sports retain separate input histories.
+- Repeated model/day calculations are cached within one build. Model keys are only the two approved pairs or the
+  unchanged actual label; broad Training-family membership never defines a model key.
 - Functions passes the dated curves directly to `fitThreeDimensionalCapacityModel`. There is no fallback window, FTP
-  substitution, population default, or Quantified Self fitting formula.
+  substitution, population default, or Quantified Self fitting formula. For the two pairs only, QS supplies the generic
+  model type on the fitter's input curves while preserving source IDs, dates, power points and actual output labels.
+
+The registered MCP policy-1 read retains independently fitted exact-type histories. The private top-level snapshot
+`legacyPowerSystemsPolicy1` contains only Cycling, Road Cycling, Running and Road Running under policy 1, with matching
+cutoff/window metadata. It uses the same already-fetched persisted curves and no additional reads or streams. At most
+four current snapshots and 340 sparse history points are stored, with a 128 KiB sidecar guard. The public policy-1
+projection combines these true exact-type fits with unchanged other-sport entries and requires complete affected-label
+coverage. The private sidecar is excluded from policy-2 payloads and public outputs; policy 2 is never relabelled as 1.
+The complete power snapshot, including the sidecar and metadata, has a 900 KiB serialized-size guard below Firestore's
+document limit. Exceeding either bound fails before the snapshot transaction begins, so another queued metric is not
+partially persisted and no ready result is truncated.
 
 The bounded payload persists:
 
@@ -6968,7 +7026,8 @@ state without extending recursive deletion handling and deletion guards.
 1. Add or normalize the activity type in sports-lib.
 2. Add the exact canonical type to one existing context in `TRAINING_SPORT_DEFINITIONS`; duplicate assignment fails at
    registry initialization.
-3. Confirm the context's profile, load/intensity/distance policies, metrics, and family capabilities are still correct.
+3. Confirm the context's profile, intensity/durability/distance policies, metrics, and family capabilities. Every context
+   keeps saved finite nonnegative TSS, including zero; specialist analysis exclusions never suppress recorded load.
 4. Update the registry membership and resolver tests, including an explicit nearby type that must stay Other.
 5. Decide independently whether sports-lib durability has a physiologically valid adapter. Add sports-lib tests when it
    should be supported; otherwise leave it unsupported or add an explicit policy ineligibility when stale evidence must
@@ -7435,16 +7494,34 @@ For durability specifically, distinguish:
 
 ## Release Order
 
-When a Training change depends on a new sports-lib version:
+This preparation change retains Sports Lib `21.5.0` while moving internal Training snapshots to schema 22 and rolling
+capacity policy 2. Use the established coordinated builder/frontend release: deploy matching Functions builders before
+the new-schema frontend. Cached old snapshots rebuild through the existing ensure lifecycle during that transition;
+the app does not relabel an old policy-1 fit as policy 2. Registered MCP policy-1 behavior remains available through the
+private exact-type sidecar. Source validation does not deploy either component or reparse production files.
+
+The later provider-catalog package upgrade has a separate reader-first boundary. Publish a unique verified Sports Lib
+version, align root and Functions dependency artifacts, and ship compatible frontend canonical-JSON readers before
+Functions starts emitting the new provider-specific names. That upgrade can retain the already-deployed schema-22
+builders. A later separately authorized source-backed activity reparse can restore specific names where originals
+retain the evidence. Package adoption, deployment and reparse are separate actions; this change performs none of them.
+
+For a later library upgrade that also changes Training-derived contracts, make canonical reader compatibility available
+first, then coordinate builder and new-schema frontend activation:
 
 1. Build and test sports-lib.
 2. Publish the exact sports-lib version.
 3. Install that published version in both root and `functions`, then verify both lockfiles resolve the same artifact.
 4. Deploy Functions before the frontend so new-schema clients do not read old builders.
-5. If the release introduced a parser-owned activity stat, allow the existing reparse process to populate it where
-   original sources exist. Rolling power-system capacity does not use this step because it rebuilds from stored curves.
-6. Deploy the frontend.
-7. Verify a real account with ready, partial, sparse, and missing-data states.
+5. Deploy the frontend that activates the new derived contracts.
+6. Verify a real account with ready, partial, sparse, and missing-data states.
+7. After release, run a separately authorized source-backed reparse when new classification or parser-owned evidence
+   needs original files. Rolling power-system capacity rebuilds from stored curves and does not require reparse.
+
+### Historical library expansion batches
+
+The following entries record the policies and catalog sizes at each earlier library batch. The current Training registry,
+saved-TSS rule and rolling-capacity policy are specified above and govern the prepared schema-22 implementation.
 
 Existing snapshots rebuild lazily after a schema bump. Schema 16 added the original eight-family context/profile
 summaries; schema 17 added their reusable maximum aggregation and longest-jump metric. Schema 19 adds the exact
@@ -7790,7 +7867,8 @@ Before merging a Training change, confirm:
 - [ ] The frontend does not query activity/event history or raw streams.
 - [ ] sports-lib remains the only durability calculation owner.
 - [ ] Sports-lib remains the only CP/W′/Pmax fitting owner; Quantified Self owns only the documented dated-window policy.
-- [ ] Power-system capacity is isolated by exact canonical activity type and excludes its effective day.
+- [ ] Power-system capacity pools only Cycling/Road Cycling and Running/Road Running, preserves actual labels, keeps
+      every other exact type separate and excludes its effective day. Registered policy-1 reads retain true exact fits.
 - [ ] Settings writes are authenticated, App-Check protected, deletion guarded, normalized, and branch-scoped.
 - [ ] Source dependencies are fetched only for metric kinds that need them.
 - [ ] Snapshot schema and frontend normalizers agree.

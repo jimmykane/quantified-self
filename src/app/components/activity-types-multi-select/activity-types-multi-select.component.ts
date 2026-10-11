@@ -5,6 +5,7 @@ import {
   Input,
   OnChanges,
   OnInit,
+  Optional,
   Output,
   SimpleChanges
 } from '@angular/core';
@@ -12,6 +13,8 @@ import { UntypedFormControl } from '@angular/forms';
 import { Observable } from 'rxjs';
 import { map, startWith } from 'rxjs/operators';
 import { ActivityTypes, ActivityTypesHelper } from '@sports-alliance/sports-lib';
+import { AppHapticsService } from '../../services/app.haptics.service';
+import { type ActivityTypeFamilyFilterOption, getActivityTypeFamilyFilterOptions, isSameActivityTypeSelection, normalizeActivityTypeSelection, toggleActivityTypeFamilySelection } from '../../helpers/activity-type-family-filter.helper';
 import { AppUserService } from '../../services/app.user.service';
 
 export class ActivityTypeSelectionModel {
@@ -31,14 +34,22 @@ export class ActivityTypeSelectionModel {
 })
 export class ActivityTypesMultiSelectComponent implements OnInit, OnChanges {
 
-  @Input() selectedActivityTypes: ActivityTypes[];
+  @Input() selectedActivityTypes: ActivityTypes[] = [];
+  @Input() availableActivityTypes: ActivityTypes[] | null | undefined;
+  @Input() disabled = false;
+  activityFamilyOptions: ActivityTypeFamilyFilterOption[] = [];
   @Input() label = 'Filter by activities';
   @Input() placeholder = 'Filter by activities';
   @Output() selectedActivityTypesChange: EventEmitter<ActivityTypes[]> = new EventEmitter<ActivityTypes[]>();
 
   activityTypesControl = new UntypedFormControl();
 
-  activityTypesSelectionModelList: ActivityTypeSelectionModel[] = ActivityTypesHelper.getActivityTypesAsUniqueArray().map(a => new ActivityTypeSelectionModel(ActivityTypes[a]));
+  private readonly catalogActivityTypes = ActivityTypesHelper.getActivityTypesAsUniqueArray()
+    .map(value => ActivityTypesHelper.resolveActivityType(value))
+    .filter((type): type is ActivityTypes => Boolean(type));
+
+  activityTypesSelectionModelList: ActivityTypeSelectionModel[] = this.catalogActivityTypes
+    .map(type => new ActivityTypeSelectionModel(type));
 
   selectedActivityTypesSelectionModel: ActivityTypeSelectionModel[] = new Array<ActivityTypeSelectionModel>();
 
@@ -46,7 +57,7 @@ export class ActivityTypesMultiSelectComponent implements OnInit, OnChanges {
   lastFilter = '';
   private selectedActivityTypesSignature = '';
 
-  constructor(private userService: AppUserService) {
+  constructor(private userService: AppUserService, @Optional() private haptics: AppHapticsService | null = null) {
   }
 
   ngOnInit() {
@@ -58,18 +69,34 @@ export class ActivityTypesMultiSelectComponent implements OnInit, OnChanges {
   }
 
   ngOnChanges(changes: SimpleChanges): void {
-    const selectedActivityTypes = this.selectedActivityTypes || [];
+    if (changes.disabled) {
+      if (this.disabled) this.activityTypesControl.disable({ emitEvent: false });
+      else this.activityTypesControl.enable({ emitEvent: false });
+    }
+    const selectedActivityTypes = normalizeActivityTypeSelection(this.selectedActivityTypes || []);
+    this.activityFamilyOptions = getActivityTypeFamilyFilterOptions(selectedActivityTypes, this.availableActivityTypes);
     this.selectedActivityTypes = selectedActivityTypes;
     const selectedActivityTypesSignature = selectedActivityTypes.join('|');
-    if (!changes.selectedActivityTypes || selectedActivityTypesSignature === this.selectedActivityTypesSignature) {
+    if ((!changes.selectedActivityTypes && !changes.availableActivityTypes) || selectedActivityTypesSignature === this.selectedActivityTypesSignature) {
+      if (changes.availableActivityTypes) this.activityTypesControl.updateValueAndValidity({ emitEvent: true });
       return;
     }
 
-    this.selectedActivityTypesSignature = selectedActivityTypesSignature;
+    this.setSelectionModels(selectedActivityTypes);
+    // Refresh autocomplete choices after hydration without emitting a user
+    // selection or feedback, including already-selected catalog bridge names.
+    this.activityTypesControl.updateValueAndValidity({ emitEvent: true });
+  }
+
+  private setSelectionModels(selectedActivityTypes: ActivityTypes[], emitEvent = false): void {
+    this.selectedActivityTypes = selectedActivityTypes;
+    this.selectedActivityTypesSignature = selectedActivityTypes.join('|');
+    this.activityFamilyOptions = getActivityTypeFamilyFilterOptions(selectedActivityTypes, this.availableActivityTypes);
+    const previousModels = new Map(this.activityTypesSelectionModelList.map(model => [model.activityType, model]));
+    this.activityTypesSelectionModelList = [...new Set([...this.catalogActivityTypes, ...selectedActivityTypes])]
+      .map(type => previousModels.get(type) || new ActivityTypeSelectionModel(type));
     this.selectedActivityTypesSelectionModel = [];
-    this.activityTypesSelectionModelList.forEach(model => {
-      model.selected = false;
-    });
+    this.activityTypesSelectionModelList.forEach(model => { model.selected = false; });
     this.selectedActivityTypes.forEach(activityType => {
       const model = this.activityTypesSelectionModelList.find(ac => ac.activityType === activityType);
       if (model) {
@@ -77,18 +104,21 @@ export class ActivityTypesMultiSelectComponent implements OnInit, OnChanges {
         this.selectedActivityTypesSelectionModel.push(model)
       }
     })
-    this.activityTypesControl.setValue(this.selectedActivityTypesSelectionModel, { emitEvent: false });
+    this.activityTypesControl.setValue(this.selectedActivityTypesSelectionModel, { emitEvent });
   }
 
 
   filter(filter: string): ActivityTypeSelectionModel[] {
     this.lastFilter = filter;
+    const available = Array.isArray(this.availableActivityTypes)
+      ? new Set(normalizeActivityTypeSelection([...this.availableActivityTypes, ...this.selectedActivityTypes])) : null;
+    const models = this.activityTypesSelectionModelList.filter(model => !available || available.has(model.activityType));
     if (filter) {
-      return this.activityTypesSelectionModelList.filter(activityType => {
+      return models.filter(activityType => {
         return activityType.activityType.toLowerCase().indexOf(filter.toLowerCase()) !== -1
       })
     } else {
-      return this.activityTypesSelectionModelList.slice();
+      return models.slice();
     }
   }
 
@@ -116,27 +146,27 @@ export class ActivityTypesMultiSelectComponent implements OnInit, OnChanges {
     this.toggleSelection(activityTypeSelectionModel);
   }
 
-  toggleSelection(activityTypeSelectionModel: ActivityTypeSelectionModel) {
-    activityTypeSelectionModel.selected = !activityTypeSelectionModel.selected;
-    if (activityTypeSelectionModel.selected) {
-      this.selectedActivityTypesSelectionModel.push(activityTypeSelectionModel);
-    } else {
-      const i = this.selectedActivityTypesSelectionModel.findIndex(value => value.activityType === activityTypeSelectionModel.activityType);
-      this.selectedActivityTypesSelectionModel.splice(i, 1);
-    }
+  toggleSelection(model: ActivityTypeSelectionModel) {
+    if (this.disabled) return;
+    const current = normalizeActivityTypeSelection(this.selectedActivityTypes);
+    const next = model.selected ? current.filter(type => type !== model.activityType) : [...current, model.activityType];
+    this.applyUserSelection(next);
+  }
 
-    this.activityTypesControl.setValue(this.selectedActivityTypesSelectionModel);
-    this.selectedActivityTypesChange.emit(this.activityTypesControl.value.map(a => a.activityType));
+  toggleFamily(option: ActivityTypeFamilyFilterOption, checked: boolean): void {
+    if (this.disabled) return;
+    this.applyUserSelection(toggleActivityTypeFamilySelection(this.selectedActivityTypes, option, checked));
+  }
+
+  private applyUserSelection(next: ActivityTypes[]): void {
+    if (isSameActivityTypeSelection(normalizeActivityTypeSelection(this.selectedActivityTypes), next)) return;
+    this.setSelectionModels(next, true);
+    this.haptics?.selection();
+    this.selectedActivityTypesChange.emit(next);
   }
 
   clearSelection() {
-    this.selectedActivityTypes = [];
-    this.selectedActivityTypesSignature = '';
-    this.selectedActivityTypesSelectionModel = [];
-    this.activityTypesSelectionModelList.forEach(model => {
-      model.selected = false;
-    });
-    this.activityTypesControl.setValue([], { emitEvent: false });
-    this.selectedActivityTypesChange.emit([]);
+    if (this.disabled) return;
+    this.applyUserSelection([]);
   }
 }

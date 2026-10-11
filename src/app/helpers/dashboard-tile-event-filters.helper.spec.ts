@@ -1,5 +1,6 @@
 import { describe, expect, it, vi, afterEach } from 'vitest';
 import { ActivityTypes, DateRanges, DaysOfTheWeek } from '@sports-alliance/sports-lib';
+import { CompatibleTrainingActivityTypes } from '@shared/activity-type-compatibility';
 import {
   AppDashboardTileEventFilterRange,
 } from '../models/app-user.interface';
@@ -105,6 +106,22 @@ describe('dashboard-tile-event-filters.helper', () => {
       ActivityTypes.Running,
       'not-valid' as ActivityTypes,
     ])).toEqual([ActivityTypes.Running]);
+  });
+
+  it.each(Object.values(CompatibleTrainingActivityTypes))('retains the exact saved %s filter before the catalog upgrade', sport => {
+    const filters = { range: '30d' as const, activityTypes: [sport, sport, 'not-valid' as ActivityTypes] };
+    expect(normalizeDashboardTileEventFilters(filters)).toEqual({ range: '30d', activityTypes: [sport] });
+    expect(cloneDashboardTileEventFilters(filters)?.activityTypes).toEqual([sport]);
+    expect(normalizeDashboardEventTableFilters({ activityTypes: [sport] }).activityTypes).toEqual([sport]);
+  });
+
+  it('matches specific saved filters exactly instead of silently falling back to all activities', () => {
+    const roadRunning = makeEvent([CompatibleTrainingActivityTypes.RoadRunning]);
+    const running = makeEvent([ActivityTypes.Running]);
+    const cycling = makeEvent([ActivityTypes.Cycling]);
+    expect(filterDashboardTileEventsByActivityTypes([roadRunning, running, cycling], [CompatibleTrainingActivityTypes.RoadRunning]))
+      .toEqual([roadRunning]);
+    expect(filterDashboardTileEventsByActivityTypes([roadRunning, running, cycling], [ActivityTypes.Running])).toEqual([running]);
   });
 
   it('matches event activity types defensively', () => {

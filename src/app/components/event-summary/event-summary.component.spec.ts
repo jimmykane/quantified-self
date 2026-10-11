@@ -495,6 +495,12 @@ describe('EventSummaryComponent', () => {
             expect(component.getHeroStats()).toEqual([DataDuration.type, DataDistance.type, DataSpeedAvg.type]);
         });
 
+        it('omits speed from the default climbing hero while leaving the raw stat available', () => {
+            component.event = { ...mockEvent, getActivities: () => [{ type: ActivityTypes.Climbing }] } as any;
+            fixture.detectChanges();
+            expect(component.getHeroStats()).toEqual([DataDuration.type, DataDistance.type]);
+        });
+
         it('should resolve hero stat value from unit-aware DynamicDataLoader output', () => {
             const basePaceStat = {
                 getType: () => DataPaceAvg.type,

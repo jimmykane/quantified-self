@@ -5,10 +5,25 @@ import type { ScheduledWorkoutV1 } from '../../../../shared/training-plans';
 import { projectStrengthWorkoutToV1 } from '../../../../shared/strength-workout';
 import { productionDeliveryRuntime } from './runtime';
 import { GARMIN_GENERIC_WORKOUT_SPORTS_V1 } from '../../../../shared/planned-workout-providers';
+import { PLANNED_WORKOUT_SPORT_ALIASES_V1 } from '../../../../shared/planned-workout-sport-aliases';
 const workout: ScheduledWorkoutV1 = { schemaVersion: 1, id: 'w', planId: null, localDate: '2026-09-10', revision: 1,
   title: 'Easy run', lifecycle: 'planned', createdAtMs: 1, updatedAtMs: 1, structure: { version: 1, sport: ActivityTypes.Running,
     nodes: [{ kind: 'step', id: 'a', purpose: 'work', ending: { kind: 'time', seconds: 600 }, targets: [] }] } };
 describe('Training delivery mapping and production boundary', () => {
+  it.each(PLANNED_WORKOUT_SPORT_ALIASES_V1)('binds $sport mapping reviews to exact content and destination', alias => {
+    const authored = { ...workout, structure: { ...workout.structure, sport: alias.sport } };
+    for (const provider of ['suunto', 'garmin', 'coros', 'wahoo'] as const) {
+      if (alias[provider] === null) continue;
+      const result = assessTrainingDeliveryMapping(provider, authored, 'destination', 'UTC');
+      expect(result.level).not.toBe('unsupported');
+      const changedSport = alias[provider] === alias.sport ? ActivityTypes.Cycling : alias[provider]!;
+      expect(assessTrainingDeliveryMapping(provider, { ...authored, structure: { ...authored.structure, sport: changedSport } },
+        'destination', 'UTC').digest).not.toBe(result.digest);
+      expect(assessTrainingDeliveryMapping(provider, authored, 'other-account', 'UTC').digest).not.toBe(result.digest);
+      expect(assessTrainingDeliveryMapping(provider, { ...authored, localDate: '2026-09-11' }, 'destination', 'UTC').digest).not.toBe(result.digest);
+      expect(authored.structure.sport).toBe(alias.sport);
+    }
+  });
   it.each([
     [ActivityTypes.IndoorRunning, ActivityTypes.Running], [ActivityTypes.VirtualRunning, ActivityTypes.Running],
     [ActivityTypes.VirtualCycling, ActivityTypes.Cycling], [ActivityTypes.Velomobile, ActivityTypes.Cycling],

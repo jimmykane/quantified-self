@@ -18,6 +18,6 @@ export const AppActivityTypeGroupIcons: Record<ActivityTypeGroup, string> = {
     [ActivityTypeGroups.AdaptiveMobilityGroup]: 'accessible_forward',
     [ActivityTypeGroups.WaterSportsGroup]: 'waves',
     [ActivityTypeGroups.DivingGroup]: 'scuba_diving',
-    [ActivityTypeGroups.TeamRacketGroup]: 'sports_soccer',
+    [ActivityTypeGroups.TeamRacketGroup]: 'sports',
     [ActivityTypeGroups.UnspecifiedGroup]: 'category',
 };

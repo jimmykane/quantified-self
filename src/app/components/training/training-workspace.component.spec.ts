@@ -17,6 +17,7 @@ import { AppSleepService } from '../../services/app.sleep.service';
 import { AppAnalyticsService } from '../../services/app.analytics.service';
 import { AppHapticsService } from '../../services/app.haptics.service';
 import { SLEEP_PROVIDERS, type SleepSession } from '@shared/sleep';
+import { DERIVED_TRAINING_POWER_SYSTEMS_POLICY_VERSION } from '@shared/derived-metrics';
 import type {
   DerivedTrainingDurabilityMetricPayload,
   TrainingBuildBenchmarkSelection,
@@ -1345,7 +1346,7 @@ describe('TrainingWorkspaceComponent', () => {
       trainingPowerSystems: {
         dayBoundary: 'UTC',
         asOfDayMs,
-        policyVersion: 1,
+        policyVersion: DERIVED_TRAINING_POWER_SYSTEMS_POLICY_VERSION,
         windowDays: 42,
         historyDays: 84,
         cadence: 'workout-date',

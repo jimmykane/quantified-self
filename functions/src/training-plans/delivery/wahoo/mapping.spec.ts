@@ -49,8 +49,9 @@ describe('Wahoo delivery mapping (no editor changes)', () => {
   });
   it('covers every editor sport and only the explicit additional running/cycling profiles', () => {
     expect(new Set(WAHOO_PLANNED_WORKOUT_SPORTS_V1)).toEqual(new Set([
-      ...WAHOO_SPORT_FIXTURES.map(row => row.sport), ActivityTypes.StrengthTraining,
+      ...MANUAL_WORKOUT_EDITOR_SPORTS_V1, ActivityTypes.StrengthTraining,
     ]));
+    for (const row of WAHOO_SPORT_FIXTURES) expect(WAHOO_PLANNED_WORKOUT_SPORTS_V1).toContain(row.sport);
     for (const sport of MANUAL_WORKOUT_EDITOR_SPORTS_V1) expect(WAHOO_PLANNED_WORKOUT_SPORTS_V1).toContain(sport);
   });
   it.each([ActivityTypes.Walking, ActivityTypes.Hiking, ActivityTypes.Swimming, ActivityTypes.OpenWaterSwimming,

@@ -299,7 +299,28 @@ Every provider retains Pro, explicit consent, connection authority, provider con
 permission checks. Legacy connections must reconnect rather than have permission inferred. See the
 [Garmin public delivery boundary](training-workspace.md#garmin-public-delivery-boundary) for live availability and consent.
 #655 no longer requires code rollback work for this live rollout; normal Stop/disconnect/deletion controls and the
-source-controlled availability decisions are unchanged. Provider status is:
+source-controlled availability decisions are unchanged.
+
+The manual editor additionally preserves the 31 approved Running, Cycling and Walking/Hiking subtype names,
+for 45 endurance choices in total. `shared/planned-workout-sport-aliases.ts` is the explicit outbound alias registry;
+the complete table and editor rules live in [Training sport names and provider profiles](training-workspace.md#sport-names-and-provider-profiles).
+An alias uses an existing tested delivery profile and its existing prescription limits. It establishes no native
+provider support for the newly offered QS name. QS retains the exact recipe sport through saved recipes, copies,
+JSON reloads and history; serializers select the provider profile only at their boundary. Every actual sport fold
+is disclosed through the existing mapping review and bound to the authored content, date and destination.
+Changed or unsupported recipes retain an existing provider copy until a supported replacement is approved.
+The 21 previously verified Wahoo profiles keep their payload behavior; walking aliases retain timed, untargeted
+steps. COROS walking aliases remain unsupported and COROS delivery stays disabled. Classic/Skate Skiing and
+AMRAP/EMOM/Tabata/BODYPUMP have no approved outbound mapping. Recorded-activity uploads use their independent
+mapping contract; this planning table does not widen that contract.
+
+Monitoring coverage decision for this alias extension: **unchanged**. The existing Training monitoring bundle
+(`tools/training-monitoring/definitions.mjs`) already selects Garmin, Wahoo and Suunto delivery outcome/failure
+labels, due queue age, dispatch failures and unknown health samples. Aliases keep the same adapters, dispatchers,
+leases, revisions, retry policies, terminal states and low-cardinality provider labels. COROS remains excluded
+from active-provider alert conditions while delivery is disabled. Existing approval-required/unsupported states
+remain user-action states rather than provider-failure pages. No production monitoring configuration is applied
+as part of the local compatibility work.
 
 The v1 manual editor also accepts exact Walking, Hiking, Rowing, and Indoor Rowing sports. Suunto's catalog maps them
 to Guide activity IDs `0`, `11`, `15`, and `57` respectively; `0` is a valid activity ID, never a missing value.
