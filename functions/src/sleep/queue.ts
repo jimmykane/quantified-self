@@ -3347,7 +3347,7 @@ async function processHistoryGuardedSleepQueueItem(queueItem: SleepSyncQueueItem
                     await markSleepSyncError(queueItem.userID, queueItem.provider, error);
                 }
             }
-            logger.warn(`[SleepSync] Queue item ${queueItem.id} has no connected ${error.provider} token; moving to DLQ`);
+            logger.warn(`[SleepSync] Skipping provider work for queue item ${queueItem.id}: no matching connected ${error.provider} token; moving to failed_jobs (NO_TOKEN_FOUND).`);
             return moveSleepQueueItemToDeadLetterQueue(
                 queueItem,
                 error,

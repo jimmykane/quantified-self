@@ -3028,9 +3028,43 @@ describe('sleep queue', () => {
             context: 'NO_TOKEN_FOUND',
             error: 'No SuuntoApp token found',
         }));
+        expect(hoisted.loggerWarn).toHaveBeenCalledWith(
+            '[SleepSync] Skipping provider work for queue item suunto-sleep-no-token: no matching connected SuuntoApp token; moving to failed_jobs (NO_TOKEN_FOUND).',
+        );
         expect(hoisted.loggerWarn.mock.calls.flat().join(' ')).not.toContain('unknown-suunto-user');
         expect(hoisted.batchDelete).toHaveBeenCalledWith(queueRef);
         expect(hoisted.docUpdate).not.toHaveBeenCalled();
+    });
+
+    it('describes missing-token Suunto Health work as skipped without changing its DLQ outcome', async () => {
+        const queueRef = { parent: { id: 'sleepSyncQueue' } };
+        const result = await processSleepSyncQueueItem({
+            id: 'suunto-health-no-token',
+            dateCreated: 1_700_000_000_000,
+            processed: false,
+            provider: 'SuuntoApp',
+            userID: 'test-user-uid',
+            providerUserId: 'private-suunto-account',
+            retryCount: 0,
+            type: 'suunto_health_poll',
+            healthTrigger: 'webhook',
+            rangeStartMs: 1_700_000_000_000,
+            rangeEndMs: 1_700_086_400_000,
+            ref: queueRef as unknown as admin.firestore.DocumentReference,
+        });
+
+        expect(result).toBe(QueueResult.MovedToDLQ);
+        expect(hoisted.loggerWarn).toHaveBeenCalledWith(
+            '[SleepSync] Skipping provider work for queue item suunto-health-no-token: no matching connected SuuntoApp token; moving to failed_jobs (NO_TOKEN_FOUND).',
+        );
+        expect(hoisted.loggerWarn.mock.calls.flat().join(' ')).not.toContain('private-suunto-account');
+        expect(hoisted.processSuuntoHealthQueueItem).not.toHaveBeenCalled();
+        expect(hoisted.requestGet).not.toHaveBeenCalled();
+        expect(hoisted.batchSet).toHaveBeenCalledWith(expect.any(Object), expect.objectContaining({
+            context: 'NO_TOKEN_FOUND',
+            processed: false,
+        }));
+        expect(hoisted.batchDelete).toHaveBeenCalledWith(queueRef);
     });
 
     it('drops a previously queued embedded Suunto webhook when its provider-authorized binding is absent', async () => {
