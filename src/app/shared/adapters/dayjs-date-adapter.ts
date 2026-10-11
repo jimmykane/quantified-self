@@ -147,7 +147,14 @@ export class DayjsDateAdapter extends DateAdapter<Dayjs> {
 
     parse(value: any, parseFormat: any): Dayjs | null {
         if (value && typeof value === 'string') {
-            return dayjs(value, parseFormat, this.locale);
+            const formats = (Array.isArray(parseFormat) ? parseFormat : [parseFormat]).flatMap(pattern => {
+                if (pattern !== 'L') return [pattern];
+                const localized = dayjs().locale(this.locale).localeData().longDateFormat('L');
+                // Accept common single-digit day/month input without rolling impossible dates forward.
+                return [localized, localized.replace('DD', 'D'), localized.replace('MM', 'M'),
+                    localized.replace('DD', 'D').replace('MM', 'M')];
+            });
+            return dayjs(value.trim(), formats, this.locale, true);
         }
         return value ? dayjs(value).locale(this.locale) : null;
     }

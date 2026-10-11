@@ -377,6 +377,11 @@ and dashboard calendar grouping use it. Formatted readings are never cached. Cal
 uncached so a device timezone change does not retain an old local-time formatter. Recorded offsets, locale options,
 canonical metric value/unit formatting and range semantics are unchanged.
 
+The shared Material `DayjsDateAdapter` validates typed calendar dates strictly in the active regional format.
+Impossible dates and trailing text remain invalid rather than moving the selection to another month. Numeric `L`
+formats accept single-digit days/months and surrounding whitespace. This changes only input validation; local-day
+request boundaries and Timeline notes' independent fixed-date carrier remain unchanged.
+
 An open chart picker keeps its original Material shell when the viewport crosses a breakpoint. Its mobile sheet
 can widen to accommodate the desktop list and preview, while a desktop dialog retains content insets when narrowed.
 

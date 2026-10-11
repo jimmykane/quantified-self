@@ -8,19 +8,21 @@
   }
 
   <div class="historical-send__dates">
-    <mat-form-field appearance="outline">
+    <mat-form-field appearance="outline" subscriptSizing="dynamic">
       <mat-label>From</mat-label>
-      <input matInput [matDatepicker]="startPicker" [(ngModel)]="startDate" [max]="endDate"
-        (dateChange)="onDateChange()" (click)="startPicker.open()" [disabled]="!!busy">
+      <input matInput required [matDatepicker]="startPicker" [(ngModel)]="startDate" [max]="endDate || today"
+        (dateInput)="onDateInput()" (click)="startPicker.open()" [disabled]="!!busy">
       <mat-datepicker-toggle matSuffix [for]="startPicker"></mat-datepicker-toggle>
-      <mat-datepicker #startPicker></mat-datepicker>
+      <mat-datepicker #startPicker (opened)="onDatePickerOpened()" (closed)="onDatePickerClosed()"></mat-datepicker>
+      <mat-error>Choose a valid start date on or before the end date.</mat-error>
     </mat-form-field>
-    <mat-form-field appearance="outline">
+    <mat-form-field appearance="outline" subscriptSizing="dynamic">
       <mat-label>To</mat-label>
-      <input matInput [matDatepicker]="endPicker" [(ngModel)]="endDate" [min]="startDate" [max]="today"
-        (dateChange)="onDateChange()" (click)="endPicker.open()" [disabled]="!!busy">
+      <input matInput required [matDatepicker]="endPicker" [(ngModel)]="endDate" [min]="startDate" [max]="today"
+        (dateInput)="onDateInput()" (click)="endPicker.open()" [disabled]="!!busy">
       <mat-datepicker-toggle matSuffix [for]="endPicker"></mat-datepicker-toggle>
-      <mat-datepicker #endPicker></mat-datepicker>
+      <mat-datepicker #endPicker (opened)="onDatePickerOpened()" (closed)="onDatePickerClosed()"></mat-datepicker>
+      <mat-error>Choose a valid end date between the start date and today.</mat-error>
     </mat-form-field>
   </div>
 
