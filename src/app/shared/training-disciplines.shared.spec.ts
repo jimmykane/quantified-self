@@ -157,6 +157,24 @@ describe('shared Training sport registry', () => {
     expect(resolveTrainingDisciplineFromActivityType(name)).toBe(available ? 'other-training' : null);
   });
 
+  it('classifies floor climbing separately from rock climbing and gym stair equipment', () => {
+    expect(resolveTrainingSportContextFromActivityType('floor_climbing')).toMatchObject({
+      sport: 'fitness-gym', context: 'stair-climbing', profile: 'general',
+      intensityPolicy: 'zones', loadPolicy: 'recorded', durabilityPolicy: 'omit', distancePolicy: 'omit',
+      profileMetrics: ['elapsed-time', 'ascent'],
+    });
+    expect(resolveTrainingSportContextFromActivityType(ActivityTypes.FloorClimbing))
+      .toEqual(resolveTrainingSportContextFromActivityType('floor_climbing'));
+    expect(resolveTrainingPowerSystemsModelActivityType(ActivityTypes.FloorClimbing)).toBe(ActivityTypes.FloorClimbing);
+    expect(resolveTrainingSportContextFromActivityType(ActivityTypes['Stair Stepper'])?.context).toBe('conditioning');
+    [ActivityTypes.Climbing, ActivityTypes.RockClimbing, ActivityTypes['Indoor Climbing']].forEach(type => {
+      expect(resolveTrainingSportContextFromActivityType(type)?.sport).toBe('other-training');
+    });
+    expect(getTrainingSportDefinition('fitness-gym')?.capabilities).toEqual(['training-mix']);
+    expect(getTrainingSportDefinition('fitness-gym')?.contexts.find(context => context.id === 'stair-climbing')?.label)
+      .toBe('Stair Climbing');
+  });
+
   it('gives recorded wheelchair training its own supported views and existing Material icon', () => {
     const sport = getTrainingSportDefinition('wheelchair');
     expect(sport?.capabilities).toEqual(['training-mix', 'best-build', 'power-systems']);

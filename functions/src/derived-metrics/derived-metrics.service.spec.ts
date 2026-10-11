@@ -3861,6 +3861,58 @@ describe('buildTrainingSummaryMetricPayload', () => {
         expect(activities.map(activity => activity.activityData.type)).toEqual([name, name, name, name]);
     });
 
+    it('summarizes floor climbing with recorded ascent, saved load and power-first intensity', async () => {
+        const { buildTrainingSummaryMetricPayload, buildTrainingBuildComparisonMetricPayload, buildTrainingExplanationMetricPayload } = await import('./derived-metrics.service');
+        const docs = [Date.UTC(2026, 6, 8), Date.UTC(2026, 3, 1)].flatMap(day => [
+            createEvent(day, 'Floor Climbing', 'Garmin', {
+                [DataDistance.type]: 2_000, [DataDescent.type]: 120, [DataAscent.type]: 120,
+                'Training Stress Score': 71.25,
+                [DataPowerZoneOneDuration.type]: 300,
+                [DataPowerZoneThreeDuration.type]: 400,
+                [DataPowerZoneFiveDuration.type]: 500,
+            }),
+            createEvent(day, 'Floor Climbing', 'Polar', {
+                [DataDistance.type]: 3_000, [DataAscent.type]: 0, 'Training Stress Score': 0,
+            }),
+            createEvent(day, 'Floor Climbing', 'Suunto', {
+                [DataDistance.type]: 4_000, [DataAscent.type]: -30,
+                [DataHeartRateZoneOneDuration.type]: 0,
+                [DataHeartRateZoneThreeDuration.type]: 0,
+                [DataHeartRateZoneFiveDuration.type]: 0,
+            }),
+        ]);
+        const activities = buildTrainingActivitySources(docs);
+        const summary = buildTrainingSummaryMetricPayload(activities, nowMs);
+        expect(summary.sourceEventCount).toBe(6);
+        const fitness = summary.payload.disciplines.find(item => item.discipline === 'fitness-gym');
+        expect(fitness?.current28d).toMatchObject({
+            activityCount: 3, durationSeconds: 10_800, easySeconds: 1_500, moderateSeconds: 1_600, hardSeconds: 1_100,
+            contexts: [{ context: 'stair-climbing', profile: 'general', activityCount: 3, metrics: [
+                { metric: 'elapsed-time', value: 10_800, sourceActivityCount: 3 },
+                { metric: 'ascent', value: 120, sourceActivityCount: 2 },
+            ] }],
+        });
+        expect(fitness?.baseline28d.contexts).toEqual([{ context: 'stair-climbing', profile: 'general', activityCount: 1, metrics: [
+            { metric: 'elapsed-time', value: 3_600, sourceActivityCount: 1 },
+            { metric: 'ascent', value: 40, sourceActivityCount: 0.67 },
+        ] }]);
+        expect(fitness?.current28d.contexts[0].metrics).toHaveLength(2);
+        expect(summary.payload.disciplines.find(item => item.discipline === 'other-training')?.current28d.activityCount).toBe(0);
+        const explanation = buildTrainingExplanationMetricPayload(docs as never, activities, nowMs).payload.current;
+        expect(explanation).toMatchObject({
+            parentTrainingStressScore: 71.25, childTrainingStressScore: 71.25,
+            childActivityCount: 3, childLoadActivityCount: 2,
+        });
+        expect(explanation.sportLoads).toContainEqual(expect.objectContaining({
+            sport: 'fitness-gym', activityCount: 3, loadActivityCount: 2, trainingStressScore: 71.25,
+        }));
+        expect(buildTrainingBuildComparisonMetricPayload(activities, {}, nowMs).payload.disciplines
+            .find(item => item.discipline === 'fitness-gym')).toMatchObject({
+                status: 'not-configured', current: null, benchmark: null,
+            });
+        expect(activities.map(activity => activity.activityData.type)).toEqual(Array(6).fill('Floor Climbing'));
+    });
+
     it('keeps missing wheelchair load and intensity unavailable while counting recorded volume', async () => {
         const { buildTrainingSummaryMetricPayload, buildTrainingBuildComparisonMetricPayload } = await import('./derived-metrics.service');
         const activities = buildTrainingActivitySources([createEvent(Date.UTC(2026, 6, 8), 'Wheelchair Racing', 'Polar', {

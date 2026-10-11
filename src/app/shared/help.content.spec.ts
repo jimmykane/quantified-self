@@ -261,6 +261,14 @@ describe('help.content', () => {
     expect(training).toContain('**Wheelchair Training** appears when wheelchair workouts exist');
   });
 
+  it('explains stair climbing classification and its recorded evidence', () => {
+    const training = HELP_SECTIONS.find(section => section.id === 'training-analysis')!.content;
+    expect(training).toContain('Floor Climbing uses **Fitness & Gym → Stair Climbing**');
+    expect(training).toContain('recorded duration and ascent when available');
+    expect(training).toContain('Its intensity uses recorded power zones first, then heart-rate zones');
+    expect(training).toContain('Saved TSS stays preserved, including zero, and durability analysis is omitted');
+  });
+
   it('explains the approved strength, conditioning, mobility and equipment memberships', () => {
     const training = HELP_SECTIONS.find(section => section.id === 'training-analysis')!.content;
     expect(training).toContain('Calisthenics, Core Training, LES MILLS CORE and LES MILLS GRIT Strength use **Strength**');

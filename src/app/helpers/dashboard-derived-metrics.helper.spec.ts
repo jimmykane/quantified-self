@@ -358,6 +358,31 @@ describe('dashboard-derived-metrics.helper', () => {
     ]);
   });
 
+  it('retains stair climbing metrics and zones through JSON reloads while rejecting undeclared metrics', () => {
+    const emptyWindow = {
+      periodDays: 28, windowStartDayMs: 1, windowEndDayMs: 2,
+      activityCount: 0, durationSeconds: 0, easySeconds: 0, moderateSeconds: 0, hardSeconds: 0, contexts: [],
+    };
+    const stairWindow = {
+      ...emptyWindow, activityCount: 2, durationSeconds: 3_600, easySeconds: 600, moderateSeconds: 300, hardSeconds: 100,
+      contexts: [{ context: 'stair-climbing', profile: 'general', activityCount: 2, metrics: [
+        { metric: 'elapsed-time', value: 3_600, sourceActivityCount: 2 },
+        { metric: 'ascent', value: 0, sourceActivityCount: 1 },
+      ] }],
+    };
+    const payload = JSON.parse(JSON.stringify({
+      dayBoundary: 'UTC', asOfDayMs: Date.UTC(2026, 6, 10), currentWindowDays: 28, baselineWindowDays: 84, excludesMergedEvents: true,
+      disciplines: TRAINING_DISCIPLINES.map(discipline => ({
+        discipline, current28d: discipline === 'fitness-gym' ? stairWindow : emptyWindow, baseline28d: emptyWindow,
+      })),
+    }));
+    expect(resolveDashboardTrainingSummaryContext(payload)?.disciplines
+      .find(item => item.discipline === 'fitness-gym')?.current28d).toEqual(stairWindow);
+    const stair = payload.disciplines.find(item => item.discipline === 'fitness-gym').current28d.contexts[0];
+    stair.metrics.push({ metric: 'distance', value: 2_000, sourceActivityCount: 1 });
+    expect(resolveDashboardTrainingSummaryContext(payload)).toBeNull();
+  });
+
   it('normalizes imported capacity markers without a QS-owned power model', () => {
     const context = resolveDashboardTrainingCapacityContext({
       dayBoundary: 'UTC',

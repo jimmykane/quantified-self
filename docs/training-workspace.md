@@ -4525,7 +4525,7 @@ rendering derive from it.
 | Walking & Hiking | Walking, Hiking, and Rucking (`vertical-endurance`) | Walking, Nordic Walking, Speed Walking, Indoor Walking; Hiking, Trekking; Rucking |
 | Nordic Skiing | Snow, Roller skiing, Ski Orienteering, and Biathlon (`vertical-endurance`) | Crosscountry Skiing, Classic Crosscountry Skiing, Skate Skiing, Nordic Skiing; Roller Skiing, Classic Roller Skiing, Skate Roller Skiing; Ski Orienteering; Biathlon |
 | Strength | Strength (`strength`) | Strength Training, Weight Training, Kettlebell, LES MILLS BODYPUMP, Calisthenics, Core Training, LES MILLS CORE, LES MILLS GRIT Strength |
-| Fitness & Gym | General fitness, Conditioning, Mobility & movement, Water Running (`general`) | Training, Indoor Training, Workout, Generic, Fitness Equipment, Indoor Skiing, Indoor Grinding, Trucker Workout; HIIT, AMRAP, EMOM, Tabata, Circuit Training, Cardio Training, Aerobics, CrossFit, Crosstrainer, Elliptical Trainer, Stair Stepper, Bootcamp, Functional Training, Fitness Boxing, Fitness Dancing, Fitness Martial Arts, Jump Rope, Step Training, LES MILLS BODYATTACK, BODYCOMBAT, BODYJAM, BODYSTEP, GRIT Athletic, GRIT Cardio, SH'BAM, TONE, Fitness Racing, Aqua Fitness; Yoga, Pilates, Flexibility Training, Stretching, Gymnastics, Barre, Mobility, Dynamic Mobility, Static Mobility, Mind-Body Training, Physical Therapy, LES MILLS BARRE, BODYBALANCE; Water Running |
+| Fitness & Gym | General fitness, Conditioning, Mobility & movement, Water Running, Stair Climbing (`general`) | Training, Indoor Training, Workout, Generic, Fitness Equipment, Indoor Skiing, Indoor Grinding, Trucker Workout; HIIT, AMRAP, EMOM, Tabata, Circuit Training, Cardio Training, Aerobics, CrossFit, Crosstrainer, Elliptical Trainer, Stair Stepper, Bootcamp, Functional Training, Fitness Boxing, Fitness Dancing, Fitness Martial Arts, Jump Rope, Step Training, LES MILLS BODYATTACK, BODYCOMBAT, BODYJAM, BODYSTEP, GRIT Athletic, GRIT Cardio, SH'BAM, TONE, Fitness Racing, Aqua Fitness; Yoga, Pilates, Flexibility Training, Stretching, Gymnastics, Barre, Mobility, Dynamic Mobility, Static Mobility, Mind-Body Training, Physical Therapy, LES MILLS BARRE, BODYBALANCE; Water Running; Floor Climbing |
 | Paddling | Canoeing, Kayaking, Paddling, and Stand-up paddling (`paddling`) | Canoeing; Kayaking, Whitewater Kayaking; Paddling; Stand Up Paddling |
 | Wheelchair Training | Six distinct wheelchair contexts (`general`) | Wheel Chair; Wheelchair Push Walk; Wheelchair Push Run; Indoor Wheelchair Push Walk; Indoor Wheelchair Push Run; Wheelchair Racing |
 | Other training | Other training (`general`) | Every other known, non-aggregate Sports Lib activity type through the explicit fallback policy |
@@ -4542,7 +4542,7 @@ Important behavior:
   E-Enduro MTB and Downhill Cycling use `mixed-gravity`/`gravity` profiles with `volume-only` intensity. BMX has its own
   Cycling context with volume-only intensity; Kickbiking and Obstacle Racing have separate contexts with recorded zones.
   Strength, general fitness, conditioning, mobility and Other training retain intensity exclusions and omit distance.
-  Water Running retains recorded zones while omitting distance. Wheelchair Training retains recorded zones and distance. Other contexts retain
+  Water Running and Stair Climbing retain recorded zones while omitting distance. Wheelchair Training retains recorded zones and distance. Other contexts retain
   their declared recorded metrics when available.
 - Context `durabilityPolicy` is independent of family membership: `supported` still requires Sports Lib protocol-qualified
   evidence; `omit` excludes BMX, Kickbiking and Obstacle Racing from candidates and detail analysis; `unsupported-context`
@@ -4631,6 +4631,17 @@ approved product decision informed by [Garmin rucking](https://www.garmin.com/en
 [Polar water running](https://www.polar.com/blog/new-polar-sports-profiles/), and
 [Garmin wheelchair mode](https://support.garmin.com/en-CA/?faq=N2kd8s5yav8h7ZSPX0Icp8).
 
+Floor Climbing additionally uses Fitness & Gym's separate `stair-climbing` context, labelled Stair Climbing.
+It retains its existing canonical name and aliases from both installed and candidate Sports Lib catalogs. The
+context uses recorded power zones first, then heart-rate zones, saved TSS including zero, elapsed time and recorded
+ascent. Missing or invalid ascent remains unavailable; recorded zero ascent remains valid. Distance and durability
+are omitted. The registry's `showElapsedTimeInSummary` flag keeps its duration row visible even without ascent;
+Strength retains its existing elapsed-time row through the same presentation metadata. Fitness & Gym retains Training Mix only, so this membership adds no Best Build benchmark, manual-editor
+sport or provider profile. Stair Stepper remains Conditioning; rock and indoor climbing retain their existing Other
+training classification pending separate approval. [Garmin lists Floor Climb under Gym](https://support.garmin.com/en-ZA/?faq=g9VOolzNBr08b7mfclmxt7).
+This recorded-analysis change joins the same unreleased schema-22 rebuild preparation, with no additional bridge name
+or public MCP contract change. The remaining 146 unmodeled canonical sports retain Other training.
+
 The Walking catalog group has metadata, icon, color, gradient and a chart default. Public catalog coverage follows the
 installed Sports Lib enum, without listing an empty future group under the old release. Event chart profiles preserve
 explicit existing choices and use catalog-group defaults for newly recognized canonical sports.
@@ -4675,7 +4686,7 @@ pending registered-contract digest covering those strict enum additions. Provide
 outbound aliases and existing mapping review; no new tool, mutation kind, provider action or consent scope is added.
 The follow-up roller-skiing, rowing, kayaking, fitness/mobility and combined-sport classifications change no public MCP schema,
 metric token, planning recipe enum, scope, proposal/confirmation contract or plugin content. Public recipe schemas
-keep the original 29 approved future names separate from the 38 recorded-only bridge additions; the installed
+keep the original 29 approved future names separate from the 49 recorded-only bridge additions; the installed
 canonical catalog continues to define the other accepted recipe sports. Regression checks cover advertised JSON
 Schema and runtime validation before and after catalog adoption. Existing safe Training
 projections retain their frozen Running/Cycling/Swimming-plus-Other shape and identity redaction. Recorded-activity

@@ -2693,6 +2693,34 @@ describe('TrainingWorkspaceComponent', () => {
       .toBe(`${rangeFormatter.format(new Date(Date.UTC(2026, 0, 1)))} – ${rangeFormatter.format(new Date(Date.UTC(2026, 0, 2)))}`);
   });
 
+  it('presents canonical stair climbing ascent under metric and miles settings with its recorded-zone policy', () => {
+    const component = new TrainingWorkspaceComponent(
+      {} as any, {} as any, {} as any,
+      { appTheme: () => AppThemes.Normal } as any,
+      { open: vi.fn() } as any, { markForCheck: vi.fn() } as any,
+    );
+    const contexts = [{ context: 'stair-climbing', profile: 'general', activityCount: 1, metrics: [
+      { metric: 'elapsed-time', value: 1_800, sourceActivityCount: 1 },
+      { metric: 'ascent', value: 120, sourceActivityCount: 1 },
+    ] }];
+    expect((component as any).areObservedTrainingContextsVolumeOnly(contexts, 'intensityPolicy')).toBe(false);
+    expect((component as any).buildTrainingContextMetricViews(contexts, [], 'fitness-gym', true)).toEqual([
+      expect.objectContaining({ context: 'stair-climbing', label: 'Stair Climbing', metrics: [
+        expect.objectContaining({ metric: 'elapsed-time', currentText: '30m', referenceText: '--' }),
+        expect.objectContaining({ metric: 'ascent', currentText: '120 m', referenceText: '--' }),
+      ] }),
+    ]);
+    component.unitSettings = normalizeUserUnitSettings({ distanceUnits: DistanceUnits.Miles });
+    expect((component as any).buildTrainingContextMetricViews(contexts, [], 'fitness-gym', true)[0].metrics[1].currentText)
+      .toBe('120 m');
+    expect((component as any).buildTrainingContextMetricViews([{ ...contexts[0], metrics: [contexts[0].metrics[0]] }], [], 'fitness-gym', true))
+      .toEqual([expect.objectContaining({ label: 'Stair Climbing', metrics: [
+        expect.objectContaining({ metric: 'elapsed-time', currentText: '30m' }),
+      ] })]);
+    expect((component as any).buildTrainingContextMetricViews([{ ...contexts[0], metrics: [] }], [], 'fitness-gym', true))
+      .toEqual([]);
+  });
+
   it('keeps build sleep comparison compact until details are requested', async () => {
     const derivedState$ = new Subject<DashboardDerivedMetricsState>();
     const derivedMetrics = { watch: vi.fn(() => derivedState$), ensureForDashboard: vi.fn() };

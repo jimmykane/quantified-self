@@ -418,14 +418,20 @@ Core planned-workout preview inputs use local JSON Schema definitions for repeat
 They retain the same exact finite sport vocabulary and strict validation while keeping discovery within the existing
 family byte budgets, including the expanded catalog.
 
-The 30 subsequently approved fitness/mobility Training classifications affect recorded analysis only. The compatibility
-bridge keeps its 38 recorded-only names separate from the original 29 approved future public recipe names. The installed
+The subsequently approved fitness/mobility, endurance, aquatic and wheelchair Training classifications affect recorded analysis only. The compatibility
+bridge keeps its 49 recorded-only names separate from the original 29 approved future public recipe names. The installed
 canonical catalog continues to supply all other accepted recipe sports; adding analysis membership does not add a future
 name to the public enum before catalog adoption. Strict runtime and advertised JSON Schema checks cover every recorded-only
 bridge entry with both catalogs. Existing Training metric projections retain their frozen Running/Cycling/Swimming-plus-Other
 shape, identity redaction, scopes and bounds. No public schema, consent, proposal kind, provider action, metric token or
 plugin content changes, so the pending digest remains unchanged and no plugin rebuild or registered-contract promotion is
 required for these memberships. See [Training sport registry](training-workspace.md#training-sport-registry-and-contexts).
+
+Floor Climbing's Stair Climbing context also affects recorded Training analysis only. The sport already exists in the
+installed canonical catalog, so its existing recipe acceptance is unchanged. The context's elapsed-time/ascent metrics
+remain private to the workspace; public Training summaries omit Fitness & Gym and context details, while explanation
+folds its saved load into the existing Other total. Scopes, proposals, provider profiles and the pending contract digest
+remain unchanged. No plugin rebuild or contract promotion is required.
 
 Manual pool and open-water swimming use the exact canonical sport strings `Swimming` and `Open Water Swimming`.
 Planned-workout summaries format swim distances in metres and pace with the owner's /100 m or /100 yd setting.

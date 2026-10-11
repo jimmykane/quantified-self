@@ -191,6 +191,7 @@ interface TrainingSportContextDefinitionShape {
   durabilityPolicy: TrainingSportDurabilityPolicy;
   distancePolicy: TrainingSportDistancePolicy;
   profileMetrics: readonly TrainingProfileMetricId[];
+  showElapsedTimeInSummary?: boolean;
 }
 
 interface TrainingSportDefinitionShape {
@@ -579,6 +580,7 @@ export const TRAINING_SPORT_DEFINITIONS = [
         durabilityPolicy: 'omit',
         distancePolicy: 'omit',
         profileMetrics: ['elapsed-time'],
+        showElapsedTimeInSummary: true,
       },
     ],
   },
@@ -661,6 +663,18 @@ export const TRAINING_SPORT_DEFINITIONS = [
         durabilityPolicy: 'omit',
         distancePolicy: 'omit',
         profileMetrics: ['elapsed-time'],
+      },
+      {
+        id: 'stair-climbing',
+        label: 'Stair Climbing',
+        activityTypes: [ActivityTypes.FloorClimbing],
+        profile: 'general',
+        intensityPolicy: 'zones',
+        loadPolicy: 'recorded',
+        durabilityPolicy: 'omit',
+        distancePolicy: 'omit',
+        profileMetrics: ['elapsed-time', 'ascent'],
+        showElapsedTimeInSummary: true,
       },
       {
         id: 'mobility-fitness',
@@ -849,7 +863,8 @@ export type TrainingSportDefinition = typeof TRAINING_SPORT_DEFINITIONS[number];
 export type TrainingSportId = TrainingSportDefinition['id'];
 export type TrainingDiscipline = TrainingSportId;
 export type TrainingDestinationId = 'overview' | TrainingSportId | 'other-power';
-export type TrainingSportContextDefinition = TrainingSportDefinition['contexts'][number];
+export type TrainingSportContextDefinition = TrainingSportDefinition['contexts'][number]
+  & Pick<TrainingSportContextDefinitionShape, 'showElapsedTimeInSummary'>;
 export type TrainingSportContextId = TrainingSportContextDefinition['id'];
 
 export const TRAINING_DISCIPLINES = TRAINING_SPORT_DEFINITIONS.map(

@@ -664,10 +664,11 @@ export class TrainingWorkspaceComponent implements OnInit, OnDestroy {
       }
       const currentMetrics = new Map(currentContext?.metrics.map(metric => [metric.metric, metric]) || []);
       const referenceMetrics = new Map(referenceContext?.metrics.map(metric => [metric.metric, metric]) || []);
-      const metrics = contextDefinition.profileMetrics
+      const profileMetrics: readonly TrainingProfileMetricId[] = contextDefinition.profileMetrics;
+      const metrics = profileMetrics
         .filter(metric => metric !== 'moving-time')
         .filter(metric => metric !== 'elapsed-time'
-          || (showSummaryCommonMetrics && contextDefinition.profile === 'strength'))
+          || (showSummaryCommonMetrics && contextDefinition.showElapsedTimeInSummary === true))
         .filter(metric => metric !== 'distance' || showSummaryCommonMetrics || observedContextCount > 1)
         .flatMap((metric): TrainingContextMetricViewModel[] => {
           const definition = getTrainingProfileMetricDefinition(metric);
