@@ -143,8 +143,8 @@ describe('HistoricalActivitySendComponent', () => {
     component.endDate = component.today.subtract(1, 'day');
     expect(component.canSend).toBe(false);
     component.onDateInput();
-    expect(component.preview).toBeNull();
-    expect(component.previewSignature).toBeNull();
+    expect(component.preview()).toBeNull();
+    expect(component.previewSignature()).toBeNull();
     await component.runSend();
     expect(userService.historicalSendActivityPage).toHaveBeenCalledTimes(1);
     await component.runPreview();
@@ -171,7 +171,7 @@ describe('HistoricalActivitySendComponent', () => {
       input.dispatchEvent(new Event('input', { bubbles: true }));
       fixture.detectChanges();
       await fixture.whenStable();
-      expect(component.preview).toBeNull();
+      expect(component.preview()).toBeNull();
       expect(component.canSend).toBe(false);
     }
     expect(haptics.selection).not.toHaveBeenCalled();
@@ -185,9 +185,9 @@ describe('HistoricalActivitySendComponent', () => {
     expect(component.canSend).toBe(true);
     userService.historicalSendActivityPage.mockRejectedValueOnce(new Error('temporary failure'));
     await component.runPreview();
-    expect(component.error).toBe('Could not preview past activities.');
-    expect(component.preview).toBeNull();
-    expect(component.previewSignature).toBeNull();
+    expect(component.error()).toBe('Could not preview past activities.');
+    expect(component.preview()).toBeNull();
+    expect(component.previewSignature()).toBeNull();
     expect(component.canSend).toBe(false);
     await component.runSend();
     expect(userService.historicalSendActivityPage).toHaveBeenCalledTimes(2);
@@ -241,7 +241,7 @@ describe('HistoricalActivitySendComponent', () => {
       let resolvePage!: (value: unknown) => void;
       userService.historicalSendActivityPage.mockReturnValueOnce(new Promise(resolve => { resolvePage = resolve; }));
       const pending = component.runPreview();
-      expect(component.busy).toBe('preview');
+      expect(component.busy()).toBe('preview');
       component[field] = false;
       component.ngOnChanges({ [field]: {} as never });
       resolvePage({ scanned: 1, eligibleBySource: { manualUpload: 1 }, skippedBySource: {}, queued: 0,
@@ -249,7 +249,7 @@ describe('HistoricalActivitySendComponent', () => {
       await pending;
       component[field] = true;
       component.ngOnChanges({ [field]: {} as never });
-      expect(component.preview).toBeNull();
+      expect(component.preview()).toBeNull();
       expect(component.canPreview).toBe(true);
       expect(component.canSend).toBe(false);
       expect(haptics.success).not.toHaveBeenCalled();
@@ -280,12 +280,14 @@ describe('HistoricalActivitySendComponent', () => {
     expect(userService.historicalSendActivityPage.mock.calls[0][0]).toMatchObject({
       version: 2, action: 'preview', destinationServiceName: ServiceNames.SuuntoApp, sources: ['manualUpload'],
     });
-    expect(component.preview?.eligibleBySource.manualUpload).toBe(3);
+    expect(userService.historicalSendActivityPage.mock.calls[0][0]).not.toHaveProperty('cursor');
+    expect(userService.historicalSendActivityPage.mock.calls[1][0].cursor.lastEventID).toBe('event-50');
+    expect(component.preview()?.eligibleBySource.manualUpload).toBe(3);
     expect(component.canSend).toBe(true);
     expect(haptics.success).toHaveBeenCalledOnce();
 
     component.onSourceChange(component.sourceOptions[0], true);
-    expect(component.preview).toBeNull();
+    expect(component.preview()).toBeNull();
     expect(component.canSend).toBe(false);
   });
 
@@ -303,9 +305,76 @@ describe('HistoricalActivitySendComponent', () => {
 
     expect(userService.historicalSendActivityPage.mock.calls[1][0]).toMatchObject({ action: 'send', sources: ['manualUpload'] });
     expect(userService.historicalSendActivityPage.mock.calls[1][0]).not.toHaveProperty('eventIDs');
-    expect(component.sendResult?.queued).toBe(1);
+    expect(component.sendResult()?.queued).toBe(1);
     expect(snackBar.open).toHaveBeenCalledWith(expect.stringContaining('1 activities scheduled'), undefined, expect.anything());
     expect(haptics.error).not.toHaveBeenCalled();
+  });
+
+  it('renders progress and enables Send after async completion without another user interaction', async () => {
+    fixture = TestBed.createComponent(HistoricalActivitySendComponent);
+    component = fixture.componentInstance;
+    configureComponent(ServiceNames.COROSAPI);
+    component.onSourceChange(component.sourceOptions[3], true);
+    fixture.autoDetectChanges();
+    await fixture.whenStable();
+    let resolveLast!: (value: unknown) => void;
+    userService.historicalSendActivityPage
+      .mockResolvedValueOnce({ scanned: 50, eligibleBySource: { manualUpload: 2 }, skippedBySource: {}, queued: 0,
+        skippedByReason: {}, failedCount: 0, nextCursor: { lastStartDate: 1, lastEventID: 'event-50', queryHash: 'hash' } })
+      .mockReturnValueOnce(new Promise(resolve => { resolveLast = resolve; }));
+
+    const pending = component.runPreview();
+    await fixture.whenStable();
+    expect(fixture.nativeElement.querySelector('[role="status"]').textContent).toContain('50 activities checked · 2 eligible so far');
+    expect(component.preview()).toBeNull();
+    expect(component.canSend).toBe(false);
+    expect(haptics.success).not.toHaveBeenCalled();
+    resolveLast({ scanned: 1, eligibleBySource: { manualUpload: 1 }, skippedBySource: {}, queued: 0,
+      skippedByReason: {}, failedCount: 0, nextCursor: null });
+    await pending;
+    await fixture.whenStable();
+    expect(fixture.nativeElement.querySelector('.historical-send__actions button:last-child').disabled).toBe(false);
+    expect(fixture.nativeElement.querySelector('app-status-info').textContent).toContain('Activities checked: 51');
+    expect(component.progress()).toBeNull();
+  });
+
+  it('stops requesting preview pages and discards a late reply without affecting a restarted preview', async () => {
+    component.onSourceChange(component.sourceOptions[3], true);
+    let resolveOld!: (value: unknown) => void;
+    userService.historicalSendActivityPage.mockReturnValueOnce(new Promise(resolve => { resolveOld = resolve; }));
+    const old = component.runPreview();
+    const selectionCount = haptics.selection.mock.calls.length;
+    component.stopPreview();
+    expect(haptics.selection.mock.calls.length).toBe(selectionCount + 1);
+    component.stopPreview();
+    expect(haptics.selection.mock.calls.length).toBe(selectionCount + 1);
+    expect(component.busy()).toBeNull();
+    expect(component.progress()).toBeNull();
+    expect(component.canSend).toBe(false);
+    userService.historicalSendActivityPage.mockResolvedValueOnce({ scanned: 1, eligibleBySource: { manualUpload: 1 },
+      skippedBySource: {}, queued: 0, skippedByReason: {}, failedCount: 0, nextCursor: null });
+    await component.runPreview();
+    resolveOld({ scanned: 50, eligibleBySource: { manualUpload: 50 }, skippedBySource: {}, queued: 0,
+      skippedByReason: {}, failedCount: 0, nextCursor: { lastStartDate: 1, lastEventID: 'old', queryHash: 'hash' } });
+    await old;
+    expect(userService.historicalSendActivityPage).toHaveBeenCalledTimes(2);
+    expect(component.preview()?.scanned).toBe(1);
+    expect(haptics.success).toHaveBeenCalledOnce();
+    expect(haptics.error).not.toHaveBeenCalled();
+  });
+
+  it('stops repeated cursors without exposing an incomplete preview or enabling Send', async () => {
+    component.onSourceChange(component.sourceOptions[3], true);
+    userService.historicalSendActivityPage.mockResolvedValue({ scanned: 50, eligibleBySource: { manualUpload: 1 },
+      skippedBySource: {}, queued: 0, skippedByReason: {}, failedCount: 0,
+      nextCursor: { lastStartDate: 1, lastEventID: 'event-50', queryHash: 'hash' } });
+    await component.runPreview();
+    expect(userService.historicalSendActivityPage).toHaveBeenCalledTimes(2);
+    expect(component.preview()).toBeNull();
+    expect(component.canSend).toBe(false);
+    expect(component.error()).toBe('Could not preview past activities.');
+    expect(haptics.error).toHaveBeenCalledOnce();
+    expect(haptics.success).not.toHaveBeenCalled();
   });
 
   it('keeps the admitted count visible when a later send page fails, and allows retry', async () => {
@@ -325,8 +394,8 @@ describe('HistoricalActivitySendComponent', () => {
 
     await component.runSend();
 
-    expect(component.sendResult?.queued).toBe(2);
-    expect(component.error).toContain('after 2 activities');
+    expect(component.sendResult()?.queued).toBe(2);
+    expect(component.error()).toContain('after 2 activities');
     expect(component.canSend).toBe(true);
     expect(haptics.error).toHaveBeenCalledOnce();
   });

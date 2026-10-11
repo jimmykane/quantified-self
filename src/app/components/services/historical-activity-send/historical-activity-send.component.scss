@@ -41,6 +41,21 @@
   gap: 12px;
 }
 
+.historical-send__progress {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.historical-send__progress p {
+  min-width: 0;
+}
+
+.historical-send__progress .historical-send__note {
+  display: block;
+}
+
 .historical-send__button-content {
   display: flex;
   align-items: center;

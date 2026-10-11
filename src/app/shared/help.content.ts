@@ -1213,6 +1213,8 @@ For a one-time send, open **Send past activities** under the destination service
 
 You can send past activities while automatic activity sync is off. A source connection is not required for a saved import, but the destination must be connected. This does not turn on automatic sync for future imports. Preview does not send anything; **Send** schedules background delivery, which may still fail or be rejected by the destination. Retrying the same selection safely skips one-time sends already queued or completed.
 
+Preview checks saved activities in batches and shows how many have been checked and are eligible so far. Large date ranges take longer. **Send** becomes available after the full preview finishes with eligible activities. You can **Stop** a preview and choose a shorter range; stopping a preview sends nothing. The completed result explains when there are no eligible activities or some files could not be checked.
+
 When Garmin and Suunto are connected, the dashboard may offer a one-time action prompt to turn on automatic Garmin to Suunto activity sync. Dismissing the prompt hides it permanently; **Send past activities** remains available in Services.
 
 ## COROS

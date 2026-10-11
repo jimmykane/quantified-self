@@ -1,4 +1,4 @@
-import { Component, Input, OnChanges, OnDestroy, SimpleChanges, inject } from '@angular/core';
+import { Component, Input, OnChanges, OnDestroy, SimpleChanges, inject, signal, computed } from '@angular/core';
 import { MatSnackBar } from '@angular/material/snack-bar';
 import dayjs, { type Dayjs } from 'dayjs';
 import { ServiceNames } from '@sports-alliance/sports-lib';
@@ -41,11 +41,14 @@ export class HistoricalActivitySendComponent implements OnChanges, OnDestroy {
   startDate: Dayjs | null = this.today.subtract(30, 'day');
   endDate: Dayjs | null = this.today;
   sourceOptions: SourceOption[] = [];
-  busy: 'preview' | 'send' | null = null;
-  preview: SendSummary | null = null;
-  sendResult: SendSummary | null = null;
-  previewSignature: string | null = null;
-  error: string | null = null;
+  readonly busy = signal<'preview' | 'send' | null>(null);
+  readonly preview = signal<SendSummary | null>(null);
+  readonly sendResult = signal<SendSummary | null>(null);
+  readonly previewSignature = signal<string | null>(null);
+  readonly error = signal<string | null>(null);
+  readonly progress = signal<SendSummary | null>(null);
+  readonly progressEligibleCount = computed(() => Object.values(this.progress()?.eligibleBySource || {}).reduce((total, count) => total + count, 0));
+  readonly previewEligibleCount = computed(() => Object.values(this.preview()?.eligibleBySource || {}).reduce((total, count) => total + count, 0));
 
   ngOnChanges(changes: SimpleChanges): void {
     if (changes['destinationServiceName']) {
@@ -79,16 +82,16 @@ export class HistoricalActivitySendComponent implements OnChanges, OnDestroy {
 
   get canPreview(): boolean {
     return !!this.user?.uid && this.hasProAccess && this.destinationConnected
-      && this.selectedSourceCount > 0 && !this.dateRangeInvalid && !this.busy;
+      && this.selectedSourceCount > 0 && !this.dateRangeInvalid && !this.busy();
   }
 
   get canSend(): boolean {
-    return this.canPreview && !!this.preview && this.previewSignature === this.signature()
-      && Object.values(this.preview.eligibleBySource).some(count => count > 0);
+    return this.canPreview && !!this.preview() && this.previewSignature() === this.signature()
+      && this.previewEligibleCount() > 0;
   }
 
   get previewSkippedCount(): number {
-    return Object.values(this.preview?.skippedBySource || {}).reduce((total, count) => total + count, 0);
+    return Object.values(this.preview()?.skippedBySource || {}).reduce((total, count) => total + count, 0);
   }
 
   onSourceChange(option: SourceOption, selected: boolean): void {
@@ -126,13 +129,21 @@ export class HistoricalActivitySendComponent implements OnChanges, OnDestroy {
     await this.run('send');
   }
 
+  stopPreview(): void {
+    if (this.busy() !== 'preview') return;
+    this.haptics.selection();
+    // The dispatched page is read-only; discard its reply and stop requesting further pages.
+    this.invalidate();
+  }
+
   private invalidate(): void {
     this.revision += 1;
-    this.preview = null;
-    this.previewSignature = null;
-    this.sendResult = null;
-    this.error = null;
-    this.busy = null;
+    this.preview.set(null);
+    this.previewSignature.set(null);
+    this.sendResult.set(null);
+    this.error.set(null);
+    this.busy.set(null);
+    this.progress.set(null);
   }
 
   private signature(): string {
@@ -163,20 +174,27 @@ export class HistoricalActivitySendComponent implements OnChanges, OnDestroy {
   private async run(action: 'preview' | 'send'): Promise<void> {
     const revision = this.revision;
     const signature = this.signature();
-    const request = this.request(action);
+    let request = this.request(action);
     const summary: SendSummary = { scanned: 0, eligibleBySource: {}, skippedBySource: {}, queued: 0, skippedByReason: {}, failedCount: 0 };
     if (action === 'preview') {
-      this.preview = null;
-      this.previewSignature = null;
-      this.sendResult = null;
+      this.preview.set(null);
+      this.previewSignature.set(null);
+      this.sendResult.set(null);
     }
-    this.busy = action;
-    this.error = null;
+    this.busy.set(action);
+    this.error.set(null);
+    this.progress.set({ ...summary });
     try {
+      const seenCursors = new Set<string>();
       let hasNextPage = true;
       while (hasNextPage) {
         const page = await this.userService.historicalSendActivityPage(request);
         if (this.destroyed || this.revision !== revision) return;
+        if (page.nextCursor) {
+          const cursorKey = JSON.stringify([page.nextCursor.lastStartDate, page.nextCursor.lastEventID]);
+          if (seenCursors.has(cursorKey)) throw new Error('Historical activity preview did not advance.');
+          seenCursors.add(cursorKey);
+        }
         summary.scanned += page.scanned;
         summary.queued += page.queued;
         summary.failedCount += page.failedCount;
@@ -190,25 +208,29 @@ export class HistoricalActivitySendComponent implements OnChanges, OnDestroy {
           summary.skippedByReason[reason] = (summary.skippedByReason[reason] || 0) + count;
         }
         hasNextPage = !!page.nextCursor;
-        if (page.nextCursor) request.cursor = page.nextCursor;
+        this.progress.set({ ...summary });
+        if (page.nextCursor) request = { ...request, cursor: page.nextCursor };
       }
       if (action === 'preview') {
-        this.preview = summary;
-        this.previewSignature = signature;
+        this.preview.set(summary);
+        this.previewSignature.set(signature);
       } else {
-        this.sendResult = summary;
+        this.sendResult.set(summary);
         this.snackBar.open(`${summary.queued} activities scheduled for ${getProviderDisplayName(this.destinationServiceName, 'destination')}.`, undefined, { duration: 4500 });
       }
       if (summary.failedCount) this.haptics.warning();
       else this.haptics.success();
     } catch {
       if (this.destroyed || this.revision !== revision) return;
-      if (action === 'send') this.sendResult = summary;
-      this.error = action === 'preview' ? 'Could not preview past activities.'
-        : `Scheduling stopped after ${summary.queued} activities. You can retry safely.`;
+      if (action === 'send') this.sendResult.set(summary);
+      this.error.set(action === 'preview' ? 'Could not preview past activities.'
+        : `Scheduling stopped after ${summary.queued} activities. You can retry safely.`);
       this.haptics.error();
     } finally {
-      if (!this.destroyed && this.revision === revision) this.busy = null;
+      if (!this.destroyed && this.revision === revision) {
+        this.busy.set(null);
+        this.progress.set(null);
+      }
     }
   }
 }

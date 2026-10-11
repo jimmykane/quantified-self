@@ -82,6 +82,12 @@ do not copy their sensitive contents into issues, email or metric labels.
 
 ## Bounded read-only observation
 
+Historical-send preview performance has **unchanged** delivery coverage. Its existing callable batches bounded exact
+Firestore reads and emits `[HistoricalActivitySend] Preview page checked.` with only fixed destination, source count,
+checked/failure counts, continuation presence and elapsed milliseconds. These diagnostics describe read-only eligibility
+checks, not queue admission or provider success; they intentionally do not match this bundle's `[ActivityDelivery]`
+metric filters. Workers, dispatchers, retry/lease policy and committed outcome signals remain unchanged.
+
 The existing **30-minute** dispatcher emits three destination observations, even when
 idle. Its probe reads at most **20 unprocessed records plus one look-ahead**, ordered
 by creation time, with a field mask. It does not read original files, errors, secrets

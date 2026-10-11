@@ -1049,6 +1049,26 @@ Material controls, not only constructor defaults.
 The datepicker audit also covers activity search, history import, Timeline notes and Training workout dates; those
 already handle Dayjs. Admin changelog uses its explicit native adapter and normalizes saved values.
 
+Historical previews batch exact document reads within each 50-event page: delivery status first, queue state for
+unsent source matches next, then source provenance for remaining candidates. Each RPC contains at most 100 documents,
+with at most two RPCs in flight and 600 documents per page for all four sources. Invocation-local snapshots preserve
+the existing skip-reason priority; completed/accepted queue rows never require an original-file check. Storage checks,
+trusted manual-origin validation and legacy FIT identity verification remain unchanged. Send does not reuse preview
+snapshots: it re-reads current state and uses the existing guarded queue admission.
+
+The browser shows checked/eligible progress after each page, keeps Send disabled until the entire preview completes,
+and renders results above its actions. Stop discards the read-only page already dispatched and prevents later pages;
+stale replies cannot replace a restarted preview. Async state uses Angular signals so completion updates controls without
+another click. Duplicate cursor detection stops a repeated-page loop without publishing an incomplete preview.
+Safe per-page diagnostics contain only destination, source count, scanned/failure counts, continuation presence and
+elapsed milliseconds; no dates, cursors, owners, activity/file/provider identities or raw errors. Logging is best-effort.
+
+Monitoring impact for preview performance: **unchanged**. The reviewed activity-delivery bundle covers the same queues,
+workers, dispatchers, historical/manual labels and committed outcomes; preview diagnostics are read timings, not delivery
+success. No lifecycle, retry, lease, permission, data contract, Training planning or MCP/Assistant behavior changes.
+Release requires a separately approved deployment of `backfillActivitySyncRoute` plus the frontend; no index, migration,
+secret, monitoring apply or provider replay is needed. Unit evidence verifies fewer RPCs, not production wall-clock speed.
+
 Monitoring impact for this date-entry fix: **unchanged**. Reviewed `tools/activity-delivery-monitoring/definitions.mjs`
 and [activity delivery monitoring](activity-delivery-monitoring.md): the same historical source/destination/mode labels,
 queues, committed outcomes, failure/DLQ signals and unknown telemetry apply. No worker, dispatcher, retry, lease,
