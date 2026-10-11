@@ -1,3 +1,4 @@
+import { APPROVED_REMAINING_SPORT_CASES } from '../../../shared/testing/training-remaining-sport-cases';
 import { APPROVED_WATER_TEAM_SPORT_CASES } from '../../../shared/testing/training-water-team-cases';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { DERIVED_METRIC_KINDS } from '../../../shared/derived-metrics';
@@ -165,6 +166,7 @@ describe('setTrainingBuildBenchmark', () => {
         ['team-sports', 'Basketball'],
         ['racket-sports', 'Badminton'],
         ...APPROVED_WATER_TEAM_SPORT_CASES.map(item => [item.sport, item.name]),
+        ...APPROVED_REMAINING_SPORT_CASES.filter(item => item.sport !== 'fitness-gym').map(item => [item.sport, item.name]),
 
     ])('saves a %s benchmark using the matching recorded child and preserves sibling settings', async (discipline, type) => {
         hoisted.transactionGet.mockImplementation(async (ref: unknown) => ref === hoisted.activitiesQuery

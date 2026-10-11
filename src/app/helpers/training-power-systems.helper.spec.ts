@@ -1,3 +1,4 @@
+import { APPROVED_REMAINING_SPORT_CASES, APPROVED_OTHER_TRAINING_NAMES } from '@shared/testing/training-remaining-sport-cases';
 import { APPROVED_WATER_TEAM_SPORT_CASES } from '@shared/testing/training-water-team-cases';
 import { describe, expect, it } from 'vitest';
 import { DERIVED_TRAINING_POWER_SYSTEMS_POLICY_VERSION } from '@shared/derived-metrics';
@@ -206,6 +207,20 @@ describe('training-power-systems.helper', () => {
       expect(groups.bySport[sport].map(item => item.activityType)).toEqual([...names].sort());
     });
     expect(groups.other).toEqual([]);
+  });
+
+  it('retains all 46 final exact power histories through JSON and the approved navigation groups', () => {
+    const types = [...APPROVED_REMAINING_SPORT_CASES.map(item => item.name), ...APPROVED_OTHER_TRAINING_NAMES];
+    const normalized = resolveTrainingPowerSystemsMetricPayload(JSON.parse(JSON.stringify(payload(types.map(type => entry(type))))));
+    expect(normalized?.activityTypes).toHaveLength(46);
+    const groups = groupTrainingPowerSystemsActivityTypeViewModels(buildTrainingPowerSystemsActivityTypeViewModels(normalized));
+    ['performance-sports', 'outdoor-adventures', 'aerial-sports', 'motorized-activities', 'team-sports'].forEach(sport => {
+      const names = APPROVED_REMAINING_SPORT_CASES.filter(item => item.sport === sport).map(item => item.name);
+      expect(groups.bySport[sport].map(item => item.activityType)).toEqual([...names].sort());
+    });
+    expect(groups.other.map(item => item.activityType)).toEqual([
+      'Breathwork', 'Meditation', ...APPROVED_OTHER_TRAINING_NAMES,
+    ].sort());
   });
 
   it('groups all 50 approved exact power entries without pooling sports after JSON reload', () => {

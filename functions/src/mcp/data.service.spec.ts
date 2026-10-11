@@ -5440,6 +5440,10 @@ describe('MCP data service', () => {
       'water-sports': ['surfing', 'general'],
       'diving': ['diving', 'general'],
 
+      'performance-sports': ['parkour', 'general'],
+      'outdoor-adventures': ['adventure-racing', 'general'],
+      'aerial-sports': ['flying', 'general'],
+      'motorized-activities': ['atv', 'general'],
       'other-training': ['other-training', 'general'],
     } as const;
     const window = (discipline: typeof TRAINING_DISCIPLINES[number]) => ({
@@ -5456,7 +5460,7 @@ describe('MCP data service', () => {
         profile: contextByDiscipline[discipline][1],
         activityCount: 1,
         metrics: discipline === 'fitness-gym' || discipline === 'other-training'
-          || ['climbing-mountaineering', 'mountain-snow', 'skating', 'combat-martial-arts', 'dance', 'team-sports', 'racket-sports', 'precision-sports', 'water-sports', 'diving'].includes(discipline)
+          || ['climbing-mountaineering', 'mountain-snow', 'skating', 'combat-martial-arts', 'dance', 'team-sports', 'racket-sports', 'precision-sports', 'water-sports', 'diving', 'performance-sports', 'outdoor-adventures', 'aerial-sports', 'motorized-activities'].includes(discipline)
           ? [{ metric: 'elapsed-time', value: 3_600, sourceActivityCount: 1 }]
           : discipline === 'cycling'
           ? [{ metric: 'max-jump-distance', value: 7.4, sourceActivityCount: 1 }]
@@ -5503,7 +5507,7 @@ describe('MCP data service', () => {
     expect(serialized).not.toContain('privateContextNote');
     expect(serialized).not.toContain('max-jump-distance');
     expect(serialized).not.toContain('stroke-rate');
-    ['climbing-mountaineering', 'mountain-snow', 'skating', 'combat-martial-arts', 'dance', 'team-sports', 'racket-sports', 'precision-sports', 'water-sports', 'diving'].forEach(id => expect(serialized).not.toContain(id));
+    ['climbing-mountaineering', 'mountain-snow', 'skating', 'combat-martial-arts', 'dance', 'team-sports', 'racket-sports', 'precision-sports', 'water-sports', 'diving', 'performance-sports', 'outdoor-adventures', 'aerial-sports', 'motorized-activities'].forEach(id => expect(serialized).not.toContain(id));
   });
 
   it('projects the versioned internal Form payload without exact activity counts', () => {
@@ -5648,6 +5652,10 @@ describe('MCP data service', () => {
       ['water-sports', 'Water Sports', 5],
       ['diving', 'Diving', 5],
 
+      ['performance-sports', 'Performance Sports', 5],
+      ['outdoor-adventures', 'Outdoor Adventures', 5],
+      ['aerial-sports', 'Aerial Sports', 5],
+      ['motorized-activities', 'Motorized Activities', 5],
       ['other-training', 'Other training', null],
       ['other', 'Other', 80],
       ['unclassified', 'Unclassified', 90],
@@ -5713,7 +5721,7 @@ describe('MCP data service', () => {
           startDayMs: 2,
           trainingStressScore: 50,
           loadSharePercent: 10,
-          childComposition: [loads[0], loads[3], loads[6], loads[9], ...loads.slice(10, 20)],
+          childComposition: [loads[0], loads[3], loads[6], loads[9], ...loads.slice(10, 24)],
         }],
       },
     });
@@ -5728,18 +5736,18 @@ describe('MCP data service', () => {
     expect(payload.current.sportLoads.map(load => load.sport))
       .toEqual(['running', 'cycling', 'swimming', 'other', 'unclassified']);
     expect(payload.current.sportLoads.find(load => load.sport === 'other')).toMatchObject({
-      activityCount: 19,
-      loadActivityCount: 16,
-      trainingStressScore: 450,
+      activityCount: 23,
+      loadActivityCount: 20,
+      trainingStressScore: 470,
     });
     expect(payload.topContributors[0].childComposition).toEqual([
       expect.objectContaining({ sport: 'running', trainingStressScore: 10 }),
-      expect.objectContaining({ sport: 'other', activityCount: 13, trainingStressScore: 190 }),
+      expect.objectContaining({ sport: 'other', activityCount: 17, trainingStressScore: 210 }),
     ]);
     expect(payload.topContributors[0].childComposition.every(load => !('label' in load))).toBe(true);
     expect(JSON.stringify(payload)).not.toContain('wheelchair');
     expect(JSON.stringify(payload)).not.toContain('Wheelchair Training');
-    ['climbing-mountaineering', 'mountain-snow', 'skating', 'combat-martial-arts', 'dance', 'team-sports', 'racket-sports', 'precision-sports', 'water-sports', 'diving'].forEach(id => expect(JSON.stringify(payload)).not.toContain(id));
+    ['climbing-mountaineering', 'mountain-snow', 'skating', 'combat-martial-arts', 'dance', 'team-sports', 'racket-sports', 'precision-sports', 'water-sports', 'diving', 'performance-sports', 'outdoor-adventures', 'aerial-sports', 'motorized-activities'].forEach(id => expect(JSON.stringify(payload)).not.toContain(id));
   });
 
   it('fails closed when an expanded Training payload is malformed before projection', () => {

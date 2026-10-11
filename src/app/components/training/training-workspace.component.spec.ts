@@ -1,3 +1,4 @@
+import { APPROVED_REMAINING_SPORT_CASES } from '@shared/testing/training-remaining-sport-cases';
 import { APPROVED_WATER_TEAM_SPORT_CASES } from '@shared/testing/training-water-team-cases';
 import { TrainingBuildMetricsComponent } from '../shared/training-summary/training-build-metrics.component';
 import { TrainingMixDetailsComponent } from '../shared/training-summary/training-mix-details.component';
@@ -331,7 +332,7 @@ describe('TrainingWorkspaceComponent', () => {
     expect(element.querySelector('.training-status-grid .training-recovery-estimate-panel')).toBeNull();
     expect(element.querySelector('.training-mix-panel')).toBeNull();
     expect(element.querySelector('.training-capacity-panel')).toBeNull();
-    expect(element.textContent).toContain('No eligible running, cycling, swimming, rowing, walking & hiking, nordic skiing, strength, fitness & gym, paddling, wheelchair training, climbing & mountaineering, mountain snow sports, skating, combat & martial arts, dance, team sports, racket sports, precision sports, water sports, diving or other training workouts in the last 28 days.');
+    expect(element.textContent).toContain('No eligible running, cycling, swimming, rowing, walking & hiking, nordic skiing, strength, fitness & gym, paddling, wheelchair training, climbing & mountaineering, mountain snow sports, skating, combat & martial arts, dance, team sports, racket sports, precision sports, water sports, diving, performance sports, outdoor adventures, aerial sports, motorized activities or other training workouts in the last 28 days.');
     expect(element.textContent).not.toContain('Preparing imported capacity markers');
     expect(element.querySelector('.training-power-systems-section')).toBeNull();
     expect(derivedMetrics.ensureForDashboard).toHaveBeenCalledTimes(1);
@@ -1711,7 +1712,7 @@ describe('TrainingWorkspaceComponent', () => {
     expect(component.sportShortcuts).toEqual(['running']);
     expect(component.visibleDisciplines).toEqual([
       'running', 'cycling', 'swimming', 'rowing', 'walking-hiking', 'nordic-skiing', 'strength',
-      'fitness-gym', 'paddling', 'wheelchair', 'climbing-mountaineering', 'mountain-snow', 'skating', 'combat-martial-arts', 'dance', 'team-sports', 'racket-sports', 'precision-sports', 'water-sports', 'diving', 'other-training',
+      'fitness-gym', 'paddling', 'wheelchair', 'climbing-mountaineering', 'mountain-snow', 'skating', 'combat-martial-arts', 'dance', 'team-sports', 'racket-sports', 'precision-sports', 'water-sports', 'diving', 'performance-sports', 'outdoor-adventures', 'aerial-sports', 'motorized-activities', 'other-training',
     ]);
 
     component.openTrainingSportVisibilityDialog();
@@ -2777,6 +2778,7 @@ describe('TrainingWorkspaceComponent', () => {
       { sport: 'racket-sports', name: 'Tennis', context: 'tennis', profile: 'general', zones: false },
       { sport: 'racket-sports', name: 'Wheelchair Tennis', context: 'wheelchair-tennis', profile: 'general', zones: false },
       ...APPROVED_WATER_TEAM_SPORT_CASES,
+      ...APPROVED_REMAINING_SPORT_CASES,
 
     ];
     for (const item of expected) {

@@ -1,3 +1,4 @@
+import { APPROVED_REMAINING_SPORT_CASES, APPROVED_OTHER_TRAINING_NAMES } from '@shared/testing/training-remaining-sport-cases';
 import { APPROVED_WATER_TEAM_SPORT_CASES } from '@shared/testing/training-water-team-cases';
 import { describe, expect, it } from 'vitest';
 import { HELP_ACTIONS, HELP_SECTIONS, HelpSectionId } from './help.content';
@@ -258,8 +259,19 @@ describe('help.content', () => {
     expect(training).toContain('**Wheelchair Training** supports Training Mix, Best build and Power systems');
     expect(training).toContain('Walk/Run describes pushing speed');
     expect(training).toContain('every exact sport retains its separate power history');
-    expect(training).toContain('nineteen benchmark families');
+    expect(training).toContain('twenty-three benchmark families');
     expect(training).toContain('**Wheelchair Training** appears when wheelchair workouts exist');
+  });
+
+  it('explains the final 46 approved classifications and their saved-load analysis', () => {
+    const training = HELP_SECTIONS.find(section => section.id === 'training-analysis')!.content;
+    [...APPROVED_REMAINING_SPORT_CASES.map(item => item.name), ...APPROVED_OTHER_TRAINING_NAMES]
+      .forEach(name => expect(training).toContain(name));
+    ['**Performance Sports**', '**Outdoor Adventures**', '**Aerial Sports**', '**Motorized Activities**',
+      'All 37 newly classified sports', 'saved TSS, including zero', 'zones, distance and durability are omitted',
+      'twenty-three benchmark families', 'Training Mix-only capability', 'Planned-workout and provider-delivery mappings stay as previously tested']
+      .forEach(phrase => expect(training).toContain(phrase));
+    expect(training).not.toContain('such as surfing or sailing, remain visible');
   });
 
   it('explains all 50 approved sport names and the recorded-only analysis policies', () => {
@@ -284,7 +296,7 @@ describe('help.content', () => {
     expect(training).toContain('including zero');
     expect(training).toContain('Zones cover the whole recording');
     expect(training).toContain('existing planned-workout and provider-delivery mappings');
-    expect(training).toContain('nineteen benchmark families');
+    expect(training).toContain('twenty-three benchmark families');
   });
 
   it('explains all 50 water, team, precision and diving classifications and their approved analysis', () => {
@@ -293,7 +305,7 @@ describe('help.content', () => {
     ['**Precision Sports**', '**Water Sports**', '**Diving**', 'recording elapsed time and saved TSS',
       'Their recorded zones use power first, then heart rate', 'stroke metrics when present',
       'All 50 additional classifications keep their original names', 'including zero, and omit durability analysis',
-      'Planned-workout and provider-delivery mappings stay as previously tested', 'nineteen benchmark families']
+      'Planned-workout and provider-delivery mappings stay as previously tested', 'twenty-three benchmark families']
       .forEach(phrase => expect(training).toContain(phrase));
   });
 

@@ -1,3 +1,4 @@
+import { APPROVED_REMAINING_SPORT_CASES, APPROVED_OTHER_TRAINING_NAMES } from '@shared/testing/training-remaining-sport-cases';
 import { APPROVED_WATER_TEAM_SPORT_CASES } from '@shared/testing/training-water-team-cases';
 import { ActivityTypes } from '@sports-alliance/sports-lib';
 import { resolveActivityTypeMaterialIcon } from '../helpers/activity-type-presentation.helper';
@@ -30,6 +31,41 @@ describe('shared Training sport registry', () => {
     });
     expect(definition?.capabilities).toEqual(['training-mix', 'best-build', 'power-systems']);
     expect(MANUAL_WORKOUT_EDITOR_SPORTS_V1 as readonly string[]).not.toContain(item.name);
+  });
+
+  it.each(APPROVED_REMAINING_SPORT_CASES)('classifies $name with the approved final duration/saved-load policy', item => {
+    const resolved = resolveTrainingSportContextFromActivityType(item.name);
+    expect(resolved).toEqual({ sport: item.sport, context: item.context, profile: 'general',
+      intensityPolicy: 'volume-only', profileMetrics: ['elapsed-time'], loadPolicy: 'recorded',
+      durabilityPolicy: 'omit', distancePolicy: 'omit' });
+    expect(resolveTrainingSportContextFromActivityType(`  ${item.name.toLowerCase()}  `)).toEqual(resolved);
+    expect(resolveTrainingPowerSystemsModelActivityType(item.name)).toBe(item.name);
+    const definition = getTrainingSportDefinition(item.sport);
+    expect(definition?.contexts.find(context => context.id === item.context)).toMatchObject({
+      label: item.name, activityTypes: [item.name], showElapsedTimeInSummary: true, showElapsedTimeInComparison: true,
+    });
+    expect(definition?.capabilities).toEqual(item.sport === 'fitness-gym'
+      ? ['training-mix'] : ['training-mix', 'best-build', 'power-systems']);
+    expect(MANUAL_WORKOUT_EDITOR_SPORTS_V1 as readonly string[]).not.toContain(item.name);
+  });
+
+  it.each(APPROVED_OTHER_TRAINING_NAMES)('deliberately retains %s in Other training with its exact name', name => {
+    expect(resolveTrainingSportContextFromActivityType(name)).toEqual({ sport: 'other-training', context: 'other-training',
+      profile: 'general', intensityPolicy: 'volume-only', profileMetrics: ['elapsed-time'],
+      loadPolicy: 'recorded', durabilityPolicy: 'omit', distancePolicy: 'omit' });
+    expect(resolveTrainingPowerSystemsModelActivityType(name)).toBe(name);
+  });
+
+  it('discovers the final four groups with existing Material icons and benchmark capability', () => {
+    const groups = [['performance-sports', 'workspace_premium'], ['outdoor-adventures', 'hiking'],
+      ['aerial-sports', 'paragliding'], ['motorized-activities', 'directions_car']] as const;
+    groups.forEach(([id, icon]) => {
+      const definition = getTrainingSportDefinition(id);
+      expect(definition?.selectionAvailability).toBe('recorded');
+      expect(resolveActivityTypeMaterialIcon(definition?.iconActivityType)).toBe(icon);
+      expect(normalizeTrainingDestinationId(id)).toBe(id);
+      expect(definition?.capabilities).toEqual(['training-mix', 'best-build', 'power-systems']);
+    });
   });
 
   it('discovers the three new groups with existing Material icons', () => {
@@ -69,6 +105,10 @@ describe('shared Training sport registry', () => {
       'precision-sports',
       'water-sports',
       'diving',
+      'performance-sports',
+      'outdoor-adventures',
+      'aerial-sports',
+      'motorized-activities',
       'other-training',
     ]);
     expect(TRAINING_SPORT_DEFINITIONS.map(({ id, label }) => ({ id, label }))).toEqual([
@@ -93,6 +133,10 @@ describe('shared Training sport registry', () => {
       { id: 'water-sports', label: 'Water Sports' },
       { id: 'diving', label: 'Diving' },
 
+      { id: 'performance-sports', label: 'Performance Sports' },
+      { id: 'outdoor-adventures', label: 'Outdoor Adventures' },
+      { id: 'aerial-sports', label: 'Aerial Sports' },
+      { id: 'motorized-activities', label: 'Motorized Activities' },
       { id: 'other-training', label: 'Other training' },
     ]);
   });
@@ -448,10 +492,7 @@ describe('shared Training sport registry', () => {
   });
 
   it('places known unmodeled sports in Other Training without classifying aggregate parents', () => {
-    [
-      ActivityTypes.Motorcycling,
-      ActivityTypes.Fishing,
-    ].forEach(activityType => expect(resolveTrainingSportContextFromActivityType(activityType)).toMatchObject({
+    APPROVED_OTHER_TRAINING_NAMES.forEach(activityType => expect(resolveTrainingSportContextFromActivityType(activityType)).toMatchObject({
       sport: 'other-training',
       context: 'other-training',
       profile: 'general',
@@ -491,6 +532,10 @@ describe('shared Training sport registry', () => {
       'water-sports': 'Water Sports',
       'diving': 'Diving',
 
+      'performance-sports': 'Performance Sports',
+      'outdoor-adventures': 'Outdoor Adventures',
+      'aerial-sports': 'Aerial Sports',
+      'motorized-activities': 'Motorized Activities',
       'other-training': 'Other training',
     });
     expect(getTrainingSportDefinition('cycling')?.capabilities).toContain('durability');

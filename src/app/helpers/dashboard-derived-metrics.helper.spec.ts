@@ -1,3 +1,4 @@
+import { APPROVED_REMAINING_SPORT_CASES } from '@shared/testing/training-remaining-sport-cases';
 import { APPROVED_WATER_TEAM_SPORT_CASES } from '@shared/testing/training-water-team-cases';
 import { describe, expect, it } from 'vitest';
 import { DERIVED_TRAINING_BUILD_COMPARISON_RECOVERY_VERSION } from '@shared/derived-metrics';
@@ -437,6 +438,7 @@ describe('dashboard-derived-metrics.helper', () => {
       { sport: 'racket-sports', profile: 'general', context: 'tennis', metrics: ['elapsed-time'] },
       { sport: 'racket-sports', profile: 'general', context: 'wheelchair-tennis', metrics: ['elapsed-time'] },
       ...APPROVED_WATER_TEAM_SPORT_CASES,
+      ...APPROVED_REMAINING_SPORT_CASES,
 
     ];
     const empty = { periodDays: 28, windowStartDayMs: 1, windowEndDayMs: 2, activityCount: 0,
@@ -453,7 +455,7 @@ describe('dashboard-derived-metrics.helper', () => {
     }));
     const normalized = resolveDashboardTrainingSummaryContext(payload);
     expect(normalized?.disciplines).toEqual(payload.disciplines);
-    expect(normalized?.disciplines.flatMap(item => item.current28d.contexts)).toHaveLength(100);
+    expect(normalized?.disciplines.flatMap(item => item.current28d.contexts)).toHaveLength(137);
     const diving = payload.disciplines.find(item => item.discipline === 'diving').current28d.contexts[0];
     diving.metrics.push({ metric: 'ascent', value: 0, sourceActivityCount: 1 });
     expect(resolveDashboardTrainingSummaryContext(payload)).toBeNull();
@@ -650,7 +652,7 @@ describe('dashboard-derived-metrics.helper', () => {
     };
     const context = resolveDashboardTrainingBuildComparisonContext(payload);
 
-    expect(context?.disciplines).toHaveLength(21);
+    expect(context?.disciplines).toHaveLength(25);
     expect(context?.disciplines[0].current?.trainingStressScore).toBeNull();
     expect(context?.disciplines[0].selection?.mode).toBe('event');
     expect(context?.disciplines[0].selection?.label).toBe('Spring marathon');

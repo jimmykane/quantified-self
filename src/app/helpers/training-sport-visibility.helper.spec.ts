@@ -64,6 +64,10 @@ describe('resolveTrainingSportVisibility', () => {
       { discipline: 'water-sports', label: 'Water Sports' },
       { discipline: 'diving', label: 'Diving' },
 
+      { discipline: 'performance-sports', label: 'Performance Sports' },
+      { discipline: 'outdoor-adventures', label: 'Outdoor Adventures' },
+      { discipline: 'aerial-sports', label: 'Aerial Sports' },
+      { discipline: 'motorized-activities', label: 'Motorized Activities' },
       { discipline: 'other-training', label: 'Other training' },
     ]);
     expect(formatTrainingVisibleDisciplinesLabel(['rowing', 'strength'])).toBe('Rowing + Strength');
@@ -89,7 +93,7 @@ describe('resolveTrainingSportVisibility', () => {
       .toMatchObject({ disciplines: ['wheelchair'], source: 'automatic' });
   });
 
-  it.each(['climbing-mountaineering', 'mountain-snow', 'skating', 'combat-martial-arts', 'dance', 'team-sports', 'racket-sports', 'precision-sports', 'water-sports', 'diving'] as const)('retains %s after JSON shortcut storage and discovers its recorded evidence', sport => {
+  it.each(['climbing-mountaineering', 'mountain-snow', 'skating', 'combat-martial-arts', 'dance', 'team-sports', 'racket-sports', 'precision-sports', 'water-sports', 'diving', 'performance-sports', 'outdoor-adventures', 'aerial-sports', 'motorized-activities'] as const)('retains %s after JSON shortcut storage and discovers its recorded evidence', sport => {
     const saved = JSON.parse(JSON.stringify([sport]));
     expect(normalizeTrainingSportShortcuts(saved)).toEqual([sport]);
     expect(resolveTrainingSportVisibility(saved, summary({}), true, {})).toMatchObject({ disciplines: [sport] });
