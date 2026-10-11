@@ -5,9 +5,11 @@ import { NoopAnimationsModule } from '@angular/platform-browser/animations';
 import { HealthCategoryOverviewComponent } from './health-category-overview.component';
 import { DashboardHealthChartComponent } from '../charts/health/dashboard-health-chart.component';
 import { AppHapticsService } from '../../services/app.haptics.service';
-import { buildHealthMetricCatalogGroups } from '../../helpers/health-workspace.helper';
+import { buildHealthMetricCatalogGroups, resolveHealthWorkspaceWindow, type HealthWorkspaceMetricSelection } from '../../helpers/health-workspace.helper';
 import type { AppDashboardHealthMetricSettings } from '../../models/app-user.interface';
-import type { DashboardHealthContext } from '../../helpers/dashboard-health-context.helper';
+import { buildDashboardHealthContext, type DashboardHealthContext, type DashboardHealthEvidence } from '../../helpers/dashboard-health-context.helper';
+import { DashboardHealthService } from '../../services/dashboard-health.service';
+import { Subject } from 'rxjs';
 
 @Component({ selector: 'app-dashboard-health-chart', standalone: true, template: '' })
 class HealthChartStubComponent {
@@ -22,6 +24,7 @@ class HealthChartStubComponent {
   readonly timelineNotes = input(null);
   readonly settingsChange = output<{ settings: AppDashboardHealthMetricSettings; initial: boolean }>();
   readonly contextChange = output<DashboardHealthContext>();
+  readonly readFailed = output<void>();
 }
 
 describe('Health category overview', () => {
@@ -42,6 +45,72 @@ describe('Health category overview', () => {
     fixture.detectChanges();
     return fixture;
   }
+  function emptyContext(metric: HealthWorkspaceMetricSelection, endDate = '2026-10-11'): DashboardHealthContext {
+    const settings = { metric, range: '30d' as const };
+    return buildDashboardHealthContext({
+      window: resolveHealthWorkspaceWindow({ ...settings, endDate }),
+      health: null, history: null, activities: null, sessions: [], errors: [],
+    }, settings);
+  }
+  it('omits confirmed empty default readings while retaining their readers and category history', () => {
+    const fixture = create(), component = fixture.componentInstance;
+    fixture.componentRef.setInput('groups', buildHealthMetricCatalogGroups(['body_weight', 'vo2_max']));
+    fixture.componentRef.setInput('showSleep', false); fixture.detectChanges();
+    const host = fixture.nativeElement as HTMLElement;
+    const weight = host.querySelector<HTMLElement>('[aria-labelledby="health-overview-body_weight"]')!;
+    const chart = fixture.debugElement.queryAll(By.directive(HealthChartStubComponent))
+      .find(item => item.componentInstance.settings().metric === 'body_weight')!.componentInstance as HealthChartStubComponent;
+    for (const item of fixture.debugElement.queryAll(By.directive(HealthChartStubComponent))) {
+      item.componentInstance.contextChange.emit(emptyContext(item.componentInstance.settings().metric));
+    }
+    fixture.detectChanges();
+    expect(weight.hidden).toBe(true);
+    expect(host.querySelector<HTMLElement>('[aria-labelledby="health-overview-vo2_max"]')!.hidden).toBe(true);
+    expect(host.textContent).toContain('Choose a category to explore your recorded Health metrics');
+    expect(fixture.debugElement.queryAll(By.directive(HealthChartStubComponent))).toHaveLength(2);
+    component.selectCategory('body'); fixture.detectChanges();
+    expect(host.querySelector('[aria-labelledby="health-overview-body_weight"]')).toBe(weight);
+    expect(weight.hidden).toBe(false);
+    component.selectCategory('all'); fixture.detectChanges();
+    expect(weight.hidden).toBe(true);
+    chart.readFailed.emit(); fixture.detectChanges();
+    expect(weight.hidden).toBe(false);
+    expect(host.querySelector('.health-overview-empty')).toBeNull();
+    chart.contextChange.emit(emptyContext('body_weight')); fixture.detectChanges();
+    expect(weight.hidden).toBe(true);
+    const empty = emptyContext('body_weight');
+    chart.contextChange.emit({ ...empty, hasData: true, availability: { ...empty.availability, state: 'ready', hasData: true } });
+    fixture.detectChanges();
+    expect(host.querySelector('[aria-labelledby="health-overview-body_weight"]')).toBe(weight);
+    expect(weight.hidden).toBe(false);
+    expect(host.querySelector('.health-overview-empty')).toBeNull();
+  });
+  it('retains missing-source, incomplete and failed default cards and scopes empty results to the inspected account and filters', () => {
+    const fixture = create();
+    fixture.componentRef.setInput('referenceDate', '2026-10-11'); fixture.detectChanges();
+    const host = fixture.nativeElement as HTMLElement;
+    const weight = host.querySelector<HTMLElement>('[aria-labelledby="health-overview-body_weight"]')!;
+    const chart = fixture.debugElement.queryAll(By.directive(HealthChartStubComponent))
+      .find(item => item.componentInstance.settings().metric === 'body_weight')!.componentInstance as HealthChartStubComponent;
+    const empty = emptyContext('body_weight');
+    for (const context of [
+      { ...empty, missingSource: true },
+      { ...empty, sampleOnly: true },
+      { ...empty, availability: { ...empty.availability, state: 'error' as const } },
+    ]) {
+      chart.contextChange.emit(context); fixture.detectChanges();
+      expect(weight.hidden).toBe(false);
+    }
+    chart.contextChange.emit(empty); fixture.detectChanges(); expect(weight.hidden).toBe(true);
+    fixture.componentRef.setInput('providerFilter', ['GarminAPI']); fixture.detectChanges(); expect(weight.hidden).toBe(false);
+    chart.contextChange.emit(empty); fixture.detectChanges(); expect(weight.hidden).toBe(true);
+    fixture.componentRef.setInput('referenceDate', '2026-10-10'); fixture.detectChanges(); expect(weight.hidden).toBe(false);
+    chart.contextChange.emit(empty); fixture.detectChanges(); expect(weight.hidden).toBe(false);
+    chart.contextChange.emit(emptyContext('body_weight', '2026-10-10')); fixture.detectChanges(); expect(weight.hidden).toBe(true);
+    fixture.componentRef.setInput('user', { uid: 'other-owner', settings: { unitSettings: {} } }); fixture.detectChanges();
+    expect(weight.hidden).toBe(false);
+    expect(haptics.selection).not.toHaveBeenCalled();
+  });
   it('opens with six real catalog cards and forwards shared chart inputs without example data', () => {
     const fixture = create(), component = fixture.componentInstance;
     expect(component.cards().map(card => card.id)).toEqual(['sleep', 'heart_rate_variability', 'resting_heart_rate', 'vo2_max', 'body_weight', 'steps']);
@@ -134,6 +203,7 @@ describe('Health category overview', () => {
     expect(vitals.hidden).toBe(true);
     component.selectCategory('vitals'); fixture.detectChanges();
     expect(vitals.hidden).toBe(false);
+    expect(fixture.nativeElement.querySelector('.health-overview-heading p').textContent).not.toContain('Last 30 days');
     expect(component.cards().map(card => card.id)).not.toContain('heart_rate');
     expect(component.cards().map(card => card.id)).toContain('heart_rate_variability');
     fixture.componentRef.setInput('vitalsHighlightedMetrics', []); fixture.detectChanges();
@@ -161,7 +231,7 @@ describe('Health category overview', () => {
     const fixture = create(), reported = vi.fn();
     fixture.componentInstance.providersObserved.subscribe(reported);
     const chart = fixture.debugElement.query(By.directive(HealthChartStubComponent)).componentInstance as HealthChartStubComponent;
-    chart.contextChange.emit({ sources: [{ provider: 'QuantifiedSelf' }, { provider: 'GarminAPI' }, { provider: 'GarminAPI' }] } as DashboardHealthContext);
+    chart.contextChange.emit({ ...emptyContext('sleep'), sources: [{ provider: 'QuantifiedSelf' }, { provider: 'GarminAPI' }, { provider: 'GarminAPI' }] } as DashboardHealthContext);
     expect(reported).toHaveBeenCalledExactlyOnceWith({ uid: 'owner', providers: ['QuantifiedSelf', 'GarminAPI'] });
     expect(haptics.selection).not.toHaveBeenCalled();
   });
@@ -186,5 +256,55 @@ describe('Health category overview', () => {
     fixture.componentRef.setInput('groups', []); fixture.componentRef.setInput('showSleep', false); fixture.detectChanges();
     expect(component.selectedCategory()).toBe('all'); expect(component.cards()).toEqual([]);
     expect(fixture.nativeElement.textContent).toContain('No recorded Health metrics yet');
+  });
+});
+
+describe('Health overview reader lifecycle', () => {
+  afterEach(() => vi.unstubAllGlobals());
+  it('restarts omitted readers after category browsing and reveals a failed refresh with retry access', async () => {
+    vi.stubGlobal('IntersectionObserver', vi.fn(function () {
+      return { observe: vi.fn(), disconnect: vi.fn() };
+    }));
+    const streams: { metric: string; stream: Subject<DashboardHealthEvidence> }[] = [];
+    const watch = vi.fn((_uid: string, settings: AppDashboardHealthMetricSettings) => {
+      const stream = new Subject<DashboardHealthEvidence>();
+      streams.push({ metric: settings.metric, stream }); return stream;
+    });
+    const haptics = { selection: vi.fn() };
+    await TestBed.configureTestingModule({ imports: [HealthCategoryOverviewComponent, NoopAnimationsModule], providers: [
+      { provide: AppHapticsService, useValue: haptics },
+      { provide: DashboardHealthService, useValue: { isOwner: () => true, watch, invalidate: vi.fn() } },
+    ] }).overrideComponent(DashboardHealthChartComponent, { set: { template: '', imports: [] } }).compileComponents();
+    const fixture = TestBed.createComponent(HealthCategoryOverviewComponent);
+    fixture.componentRef.setInput('user', { uid: 'owner', settings: { unitSettings: {}, appSettings: {} } });
+    fixture.componentRef.setInput('groups', buildHealthMetricCatalogGroups(['body_weight', 'vo2_max']));
+    fixture.componentRef.setInput('referenceDate', '2026-10-11'); fixture.detectChanges();
+    const chartForWeight = () => fixture.debugElement.queryAll(By.directive(DashboardHealthChartComponent))
+      .find(item => item.componentInstance.settings().metric === 'body_weight')!.componentInstance as DashboardHealthChartComponent;
+    chartForWeight()['visible'].set(true); fixture.detectChanges();
+    const empty: DashboardHealthEvidence = {
+      window: resolveHealthWorkspaceWindow({ metric: 'body_weight', range: '30d', endDate: '2026-10-11' }),
+      health: null, history: null, activities: null, sessions: [], errors: [],
+    };
+    streams[0].stream.next(empty); fixture.detectChanges();
+    const weightCard = () => fixture.nativeElement.querySelector('[aria-labelledby="health-overview-body_weight"]') as HTMLElement;
+    expect(weightCard().hidden).toBe(true);
+    fixture.componentInstance.selectCategory('fitness'); fixture.detectChanges();
+    expect(streams[0].stream.observed).toBe(false);
+    fixture.componentInstance.selectCategory('all'); fixture.detectChanges(); await fixture.whenStable(); fixture.detectChanges();
+    expect(weightCard().querySelector('app-dashboard-health-chart')?.getAttribute('data-chart-preload')).toBe('background');
+    expect(streams.filter(item => item.metric === 'body_weight')).toHaveLength(2);
+    expect(weightCard().hidden).toBe(true);
+    streams[1].stream.error(new Error('refresh failed')); fixture.detectChanges();
+    expect(weightCard().hidden).toBe(false);
+    expect(chartForWeight().error()).toBe(true);
+    expect(haptics.selection).toHaveBeenCalledTimes(2);
+    chartForWeight().reload(); fixture.detectChanges();
+    expect(streams.filter(item => item.metric === 'body_weight')).toHaveLength(3);
+    streams[2].stream.next(empty); fixture.detectChanges();
+    expect(weightCard().hidden).toBe(true);
+    expect(chartForWeight().error()).toBe(false);
+    expect(haptics.selection).toHaveBeenCalledTimes(3);
+    fixture.destroy();
   });
 });

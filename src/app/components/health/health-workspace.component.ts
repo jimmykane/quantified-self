@@ -363,6 +363,11 @@ export class HealthWorkspaceComponent {
   readonly priorityRecentSleepSessions = computed(() => this.prioritySleepSessions().filter(session =>
     session.endTimeMs >= this.priorityWindow.startTimeMs
     && session.endTimeMs <= this.priorityWindow.endTimeMs));
+  readonly priorityHeartRateSeries = computed(() => selectTodayHeartRateHighlightSeries(
+    this.priorityHeartRateLoad()?.result,
+    this.priorityHeartRateWindow,
+    this.unitSettings(),
+  ));
   readonly priorityHrvTrendSeries = computed(() => selectHealthPriorityTrendSeries(
     this.priorityHrvLoad()?.result,
     this.prioritySleepSessions(),
@@ -427,6 +432,9 @@ export class HealthWorkspaceComponent {
       return this.completeMetricCatalogGroups;
     }
     const availableMetricIds = new Set(this.availableHealthMetricIds() || []);
+    // Successful current readings may arrive after an older inventory snapshot.
+    // Keep Vitals and its full-history action reachable from that same evidence.
+    if (this.priorityHeartRateSeries().length > 0) availableMetricIds.add(HEALTH_METRIC_IDS.HeartRate);
     const sleepMetrics = this.observedSleepSummaryMetrics();
     if (sleepMetrics.uid === this.signedInUserID()) {
       sleepMetrics.metrics.forEach(metric => availableMetricIds.add(metric));
@@ -849,11 +857,7 @@ export class HealthWorkspaceComponent {
         healthMetricIcon(HEALTH_METRIC_IDS.HeartRate),
         HEALTH_METRIC_IDS.HeartRate,
         [],
-        selectTodayHeartRateHighlightSeries(
-          this.priorityHeartRateLoad()?.result,
-          this.priorityHeartRateWindow,
-          this.unitSettings(),
-        ),
+        this.priorityHeartRateSeries(),
         this.priorityHeartRateStatus(),
         'No recorded heart rate today.',
         !healthAvailabilityIsKnown || available.has(HEALTH_METRIC_IDS.HeartRate),

@@ -1,7 +1,7 @@
 <section aria-labelledby="health-overview-title">
   <header class="health-overview-heading">
     <h2 id="health-overview-title" tabindex="-1">Your overview</h2>
-    <p>{{ exampleOnly() ? 'Fictional sample readings' : 'Latest recorded readings' }} · Last 30 days</p>
+    <p>{{ exampleOnly() ? 'Fictional sample readings · Last 30 days' : 'Latest recorded readings' }}</p>
   </header>
 
   <mat-chip-listbox aria-label="Health categories" [value]="selectedCategory()" (change)="selectCategory($event.value)">
@@ -20,23 +20,23 @@
 
   <div class="health-overview-grid" aria-label="Recorded Health metrics">
     @for (card of cards(); track card.id) {
-      <mat-card appearance="outlined" class="health-overview-card qs-glass-card-panel" [attr.aria-labelledby]="'health-overview-' + card.id">
+      <mat-card appearance="outlined" class="health-overview-card qs-glass-card-panel" [hidden]="card.hidden" [attr.aria-labelledby]="'health-overview-' + card.id">
         <mat-card-header>
           <mat-card-title [id]="'health-overview-' + card.id"><mat-icon aria-hidden="true">{{ card.icon }}</mat-icon><span>{{ card.label }}</span></mat-card-title>
         </mat-card-header>
         <mat-card-content>
-          <app-dashboard-health-chart [user]="user()" [settings]="card.settings" [overview]="true" [hideTitle]="true" [exampleOnly]="exampleOnly()"
+          <app-dashboard-health-chart [attr.data-chart-preload]="card.hidden ? 'background' : null"
+            [user]="user()" [settings]="card.settings" [overview]="true" [hideTitle]="true" [exampleOnly]="exampleOnly()"
             [darkTheme]="darkTheme()" [referenceDate]="referenceDate()" [providerFilter]="providerFilter()" [timelineNotes]="timelineNotes()"
-            (settingsChange)="updateCardSettings($event.settings)" (contextChange)="observeSources($event)" />
+            (settingsChange)="updateCardSettings($event.settings)" (contextChange)="observeSources($event)" (readFailed)="observeReadFailure(card.id)" />
         </mat-card-content>
         <mat-card-actions>
           <button mat-button type="button" [attr.aria-label]="'View ' + card.label + ' history'" (click)="metricSelected.emit(card.id)">View history<mat-icon iconPositionEnd aria-hidden="true">arrow_forward</mat-icon></button>
         </mat-card-actions>
       </mat-card>
-    } @empty {
-      @if (!hasOverviewHighlights() && !hasVitalsHighlights()) {
-        <p class="health-overview-empty" role="status">{{ categories().length ? 'Choose a category to explore your recorded Health metrics.' : 'No recorded Health metrics yet. Add a measurement or connect a service to get started.' }}</p>
-      }
+    }
+    @if (!hasVisibleCards() && !hasOverviewHighlights() && !hasVitalsHighlights()) {
+      <p class="health-overview-empty" role="status">{{ categories().length ? 'Choose a category to explore your recorded Health metrics.' : 'No recorded Health metrics yet. Add a measurement or connect a service to get started.' }}</p>
     }
   </div>
 

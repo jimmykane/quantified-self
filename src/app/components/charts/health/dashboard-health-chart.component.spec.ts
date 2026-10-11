@@ -39,6 +39,26 @@ describe('independent dashboard Health views',()=>{
   function result(metric='steps',endDate='2026-09-15'):DashboardHealthEvidence {
     return {window:resolveHealthWorkspaceWindow({metric:metric as never,range:'30d',endDate},endDate),health:null,history:null,activities:null,sessions:[],errors:[]};
   }
+  it('reports a fatal refresh failure after an empty context and supports retrying the closed reader', () => {
+    const fixture = create('body_weight'), component = fixture.componentInstance;
+    const failed = vi.fn(); component.readFailed.subscribe(failed);
+    streams[0].next(result('body_weight')); fixture.detectChanges();
+    expect(component.context()?.availability.state).toBe('no-data');
+    expect(failed).not.toHaveBeenCalled();
+    streams[0].error(new Error('read failed')); fixture.detectChanges();
+    expect(component.error()).toBe(true);
+    expect(component.loading()).toBe(false);
+    expect(failed).toHaveBeenCalledOnce();
+    expect(haptics.selection).not.toHaveBeenCalled();
+    component.reload(); fixture.detectChanges();
+    expect(watch).toHaveBeenCalledTimes(2);
+    expect(component.error()).toBe(false);
+    streams[1].next(result('body_weight')); fixture.detectChanges();
+    expect(component.loading()).toBe(false);
+    expect(failed).toHaveBeenCalledOnce();
+    expect(haptics.selection).toHaveBeenCalledOnce();
+    fixture.destroy();
+  });
   it('starts a saved dashboard chart after its host is attached, without waiting for scrolling', () => {
     const observer = { observe: vi.fn(), disconnect: vi.fn() };
     vi.stubGlobal('IntersectionObserver', vi.fn(function () { return observer; }));

@@ -895,7 +895,8 @@ describe('HealthWorkspaceComponent', () => {
   });
 
   it('replaces an unavailable URL metric with the existing catalog fallback without a new entry or preference write', async () => {
-    await createComponent(undefined, '14d', { metricIds: [HEALTH_METRIC_IDS.Steps], hasSleep: false },
+    await createComponent(metric => Promise.resolve(rangeLoad(metric, metric !== HEALTH_METRIC_IDS.Steps)),
+      '14d', { metricIds: [HEALTH_METRIC_IDS.Steps], hasSleep: false },
       undefined, undefined, '/?metric=body_fat');
     expect(component.selectedMetric()).toBe('steps');
     expect(router.parseUrl(router.url).queryParamMap.get('metric')).toBe('steps');
@@ -1808,6 +1809,22 @@ describe('HealthWorkspaceComponent', () => {
     expect(component.priorityWindow.dayCount).toBe(30);
     expect(component.priorityHrvWindow.label).toBe('14-day trend');
     expect(component.selectedRange()).toBe('1y');
+  });
+
+  it('keeps successfully loaded today readings reachable when the metric inventory is stale', async () => {
+    await createComponent(undefined, undefined, { metricIds: [], hasSleep: false });
+    expect(component.metricCatalogGroups().flatMap(group => group.metrics.map(metric => metric.id)))
+      .toContain(HEALTH_METRIC_IDS.HeartRate);
+    const overview = fixture.debugElement.query(By.directive(HealthCategoryOverviewStubComponent)).componentInstance as HealthCategoryOverviewStubComponent;
+    expect(overview.vitalsHighlightedMetrics).toEqual([HEALTH_METRIC_IDS.HeartRate]);
+    const summary = fixture.debugElement.query(By.css('[healthVitalsHighlights]')).componentInstance as HealthPrioritySummaryComponent;
+    expect(summary.renderedCards().find(card => card.id === 'heart_rate')!.available).toBe(true);
+    const action = (fixture.nativeElement as HTMLElement).querySelector<HTMLButtonElement>('[aria-label="Open Today’s heart rate"]')!;
+    expect(action.disabled).toBe(false);
+    action.click(); fixture.detectChanges(); await fixture.whenStable(); fixture.detectChanges();
+    expect(component.routeState().metric).toBe(HEALTH_METRIC_IDS.HeartRate);
+    expect(component.metricDetailOpen()).toBe(true);
+    expect(haptics.selection).toHaveBeenCalledTimes(1);
   });
 
   it('hides today’s HR without eligible samples, including empty, failed, and filtered sources', async () => {

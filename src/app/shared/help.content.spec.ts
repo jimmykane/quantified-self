@@ -423,6 +423,11 @@ describe('help.content', () => {
     expect(health).toContain('Moderate and vigorous intensity durations appear in **Movement & energy**, and are not shown by default on **All**');
     expect(health).toContain('**Sleep → HRV → Resting heart rate → VO₂ max → Weight → Steps**');
     expect(health).toContain('Missing metrics leave fewer cards; other measurements never fill their places');
+    expect(health).toContain('Default metric cards with no readings in the last 30 days are omitted after loading finishes');
+    expect(health).toContain('an unavailable selected source or an incomplete or failed load stay visible');
+    expect(health).toContain('New readings can bring an omitted card back');
+    expect(health).toContain('Each chart identifies its own period');
+    expect(health).toContain('the HRV highlight uses 14 days');
     expect(health).toContain('**Vitals** includes today’s heart-rate highlight');
     expect(health).toContain('replacing its general Heart rate card');
     expect(health).toContain('Other category views show their metric cards without highlights');

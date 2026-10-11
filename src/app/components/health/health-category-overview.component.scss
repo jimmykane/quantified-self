@@ -13,6 +13,7 @@ mat-chip-listbox { display: block; margin-bottom: 1rem; }
   --health-overview-plot-height: 220px;
   --qs-dashboard-chart-content-inset: var(--health-overview-card-inset);
 }
+.health-overview-card[hidden] { display: none; }
 mat-card-header { padding: var(--health-overview-card-inset) var(--health-overview-card-inset) 0; }
 mat-card-title { display: flex; align-items: center; gap: 0.5rem; font: var(--mat-sys-title-medium); min-width: 0; }
 mat-card-title span { overflow-wrap: anywhere; }
