@@ -1036,6 +1036,20 @@ The callable also accepts a version 2 `preview` or `send` request with destinati
 
 `manualUpload` is a one-time source for Suunto, Wahoo, and COROS only, with distinct route IDs that have no automatic setting. New manual uploads receive a server-owned `metaData/manualUploadOrigin` marker; older uploads are accepted only if the original FIT bytes reproduce the upload endpoint's deterministic event ID. FIT.gz is decompressed within a 20 MiB output bound before upload. Merged and derived events, non-FIT files, changed generations, and missing originals are excluded. For saved provider imports, source connection state is not required at send time; destination lifecycle, Pro access, account deletion, rollout gate, and provider-side authorization still apply in the worker. A preview is an eligibility snapshot, not a promise of provider acceptance.
 
+The historical-send dialog uses the app's Dayjs datepicker values throughout validation, preview identity and
+request creation. Validate calendar dates rather than native `Date` instances or time-of-day ordering; missing,
+invalid, reversed and future ranges remain blocked with field errors. Serialize the selected local dates as inclusive
+start/end-of-day ISO instants, including DST transitions. Any changed date or source requires a new eligible preview
+before Send. Regression tests must enter dates through the real Material controls, not only constructor defaults.
+The datepicker audit also covers activity search, history import, Timeline notes and Training workout dates; those
+already handle Dayjs. Admin changelog uses its explicit native adapter and normalizes saved values.
+
+Monitoring impact for this date-entry fix: **unchanged**. Reviewed `tools/activity-delivery-monitoring/definitions.mjs`
+and [activity delivery monitoring](activity-delivery-monitoring.md): the same historical source/destination/mode labels,
+queues, committed outcomes, failure/DLQ signals and unknown telemetry apply. No worker, dispatcher, retry, lease,
+provider capability, permission, callable, stored contract or MCP/Assistant change is introduced. Existing Help's
+preview-before-send instructions remain accurate. Release needs only the separately approved frontend workflow.
+
 After scheduling, a deleted event, changed provenance or file generation, or missing/invalid retained original completes the historical queue row as skipped before provider upload. Temporary Storage errors remain retryable. Once a provider upload has an accepted resume ID, the worker retains reconciliation instead of treating a missing original as an ordinary skip. Historical metadata writes require the event root to still exist, so a deleted event does not gain an orphaned status child.
 
 - Make directions explicit. A provider can be a destination without being a source; do not create reverse routes merely because both APIs exist. Wahoo has deliberate Wahoo -> Suunto and Wahoo -> COROS routes because its import path retains native Wahoo FIT files, while Wahoo does not disclose workout summaries that it identifies as third-party-app activity. Document the partner behavior that prevents a reciprocal Wahoo import loop instead of assuming every provider has that protection.

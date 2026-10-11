@@ -1,5 +1,6 @@
 import { Component, Input, OnChanges, OnDestroy, SimpleChanges, inject } from '@angular/core';
 import { MatSnackBar } from '@angular/material/snack-bar';
+import dayjs, { type Dayjs } from 'dayjs';
 import { ServiceNames } from '@sports-alliance/sports-lib';
 import { ACTIVITY_SYNC_ROUTES, ActivityDeliverySource } from '@shared/activity-sync-routes';
 import { HistoricalSendRequest, HistoricalSendResponse } from '@shared/historical-activity-send';
@@ -34,9 +35,10 @@ export class HistoricalActivitySendComponent implements OnChanges, OnDestroy {
   private destroyed = false;
   private revision = 0;
 
-  readonly today = new Date();
-  startDate = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
-  endDate = new Date();
+  // Material's app-wide adapter emits Dayjs values for both typing and calendar selection.
+  readonly today = dayjs().startOf('day');
+  startDate: Dayjs | null = this.today.subtract(30, 'day');
+  endDate: Dayjs | null = this.today;
   sourceOptions: SourceOption[] = [];
   busy: 'preview' | 'send' | null = null;
   preview: SendSummary | null = null;
@@ -68,9 +70,9 @@ export class HistoricalActivitySendComponent implements OnChanges, OnDestroy {
   }
 
   get dateRangeInvalid(): boolean {
-    return !(this.startDate instanceof Date) || Number.isNaN(this.startDate.getTime())
-      || !(this.endDate instanceof Date) || Number.isNaN(this.endDate.getTime())
-      || this.startDate > this.endDate;
+    return !dayjs.isDayjs(this.startDate) || !this.startDate.isValid()
+      || !dayjs.isDayjs(this.endDate) || !this.endDate.isValid()
+      || this.startDate.isAfter(this.endDate, 'day') || this.endDate.isAfter(this.today, 'day');
   }
 
   get canPreview(): boolean {
@@ -95,8 +97,8 @@ export class HistoricalActivitySendComponent implements OnChanges, OnDestroy {
   }
 
   onDateChange(): void {
-    this.haptics.selection();
     this.invalidate();
+    if (!this.dateRangeInvalid) this.haptics.selection();
   }
 
   async runPreview(): Promise<void> {
@@ -124,15 +126,13 @@ export class HistoricalActivitySendComponent implements OnChanges, OnDestroy {
     return JSON.stringify([
       this.user?.uid, this.destinationServiceName,
       this.sourceOptions.filter(option => option.selected).map(option => option.id),
-      this.startDate?.getTime(), this.endDate?.getTime(),
+      this.startDate?.format('YYYY-MM-DD'), this.endDate?.format('YYYY-MM-DD'),
     ]);
   }
 
   private request(action: 'preview' | 'send'): HistoricalSendRequest {
-    const start = new Date(this.startDate);
-    const end = new Date(this.endDate);
-    start.setHours(0, 0, 0, 0);
-    end.setHours(23, 59, 59, 999);
+    const start = this.startDate!.startOf('day');
+    const end = this.endDate!.endOf('day');
     return {
       version: 2,
       action,
