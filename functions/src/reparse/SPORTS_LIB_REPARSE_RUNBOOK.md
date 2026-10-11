@@ -9,7 +9,7 @@ Target version source of truth:
 
 ### Sports Lib 21.6.11 reserved FIT header compatibility
 
-Root and Functions adopt Sports Lib 21.6.11 with FIT Parser 6.2.2. Ordinary activity decoding can again read
+Sports Lib 21.6.11 introduced FIT Parser 6.2.2 compatibility, retained by the current root/Functions pin. Ordinary activity decoding can again read
 existing Bryton and Magene originals whose normal record headers set reserved bit 4. Compatibility requires complete
 message definitions and payloads within the declared data section. Strict/raw readers retain their rejection policy;
 other invalid data-header bits and checksum policy are unchanged. Imported TSS and existing Training formulas retain
@@ -51,22 +51,27 @@ Retained original files or specific saved provider profiles are required to corr
 existing targeted reparse lifecycle. Regenerate affected event summaries, activity-type aggregates, applicable
 existing durability evidence and Training snapshots through normal sanitized ingress. Saved routes need no source reparse.
 
-Event/activity/lap JSON reads now skip legacy null/non-finite scalar stats; finite zero/negative values, provider TSS
-and method, structured stats and stream gaps remain intact. Summary exports omit non-finite scalar numbers while
-runtime zero-speed pace can remain infinite. This compatibility read does not require an original file or a reparse.
+The event/activity/lap JSON subset of these compatibility changes is included in Sports Lib 21.6.12. Those reads skip
+legacy null/non-finite scalar stats; finite zero/negative values, provider TSS and method, structured stats and stream
+gaps remain intact. Summary exports omit non-finite scalar numbers while runtime zero-speed pace can remain infinite.
+This compatibility read does not require an original file or a reparse.
 Any explicitly requested persistence rewrite must still use the existing sanitized writer, never direct Firestore edits.
-Route and route-file JSON apply the same invalid-scalar summary policy. When no valid route-file summaries remain,
-existing aggregation regenerates them from the child routes. Saved routes need no source reparse for this read correction.
-TSS preservation remains true/default = retain finite provider score; false = discard and use existing calculation policy.
+Route and route-file JSON restoration and empty-summary fallback remain on the separate unreleased branch alongside
+the catalog changes. The shared serializer already omits non-finite scalar exports in 21.6.12. The pending route read
+correction skips legacy null/non-finite values and uses existing child-route aggregation when no valid file summaries
+remain; it requires no saved-route source reparse when adopted.
+Current sports-lib calculations preserve valid nonnegative imported TSS, including zero, regardless of method preference
+or the deprecated preservation flag. QS's explicit internal regeneration removal is documented separately below.
 
 There are no new numeric metric tokens/units, formulas, derived schemas, planning/delivery capabilities, registered
 MCP fields/scopes, queue lifecycle, write paths or monitoring changes. Dynamic activity discovery uses existing fields.
 Help remains accurate against the installed dynamic catalog. Both packages still use their installed 131-type catalog;
-this task does not adopt a package, deploy, enable scanners, start reparsing or change FIT Parser source.
+the separate catalog/route correction remains unadopted. It does not deploy, enable scanners, start reparsing or change
+FIT Parser source.
 
 ### Sports Lib 21.6.1 file-calibrated Training load
 
-Sports Lib 21.6.11 is published and pinned in root and Functions, with FIT Parser 6.2.2. It retains the file-calibrated
+Sports Lib 21.6.12 is published and pinned in root and Functions, with FIT Parser 6.2.2. It retains the file-calibrated
 load rules introduced in 21.6.1 and includes the swimming threshold, independent cycling FTP, rolling NP, explicit
 HR-pause, running pace, pool-length/recorded-stream and measured-zero power corrections. This release also corrects
 FIT session-boundary and zone ownership, missing timer recovery, Suunto pause/resume events and positive recorded-power

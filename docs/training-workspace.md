@@ -7189,29 +7189,32 @@ formulas remain unchanged. Source-backed historical classification corrections r
 regeneration after coordinated package adoption; the [reparse runbook](../functions/src/reparse/SPORTS_LIB_REPARSE_RUNBOOK.md#unreleased-provider-profile-and-json-compatibility-corrections)
 owns the operational transition.
 
-Native event/activity/lap JSON reads tolerate legacy null/non-finite scalar stats, and summary exports omit non-finite
-numbers. Runtime stopped pace remains infinite; finite zero/negative metrics, imported TSS and method, structured stats
-and stream null gaps remain intact. Every canonical type keeps a finite provider TSS when preservation is true/default;
-false discards it and uses the existing calculation policy. This read correction needs no source reparse or Training
-schema bump. No numeric catalog token/unit, MCP output field, scope, projection, consent, mutation, planning or delivery
-capability changes. Queue lifecycle and sanitized persistence paths remain unchanged; no MCP deferral is needed.
+The native event/activity/lap JSON subset of these compatibility changes is included in Sports Lib 21.6.12: reads
+tolerate legacy null/non-finite scalar stats, and summary exports omit non-finite numbers. Runtime stopped pace remains
+infinite; finite zero/negative metrics, imported TSS and method, structured stats and stream null gaps remain intact.
+Current sports-lib calculations preserve valid nonnegative imported TSS, including zero, regardless of method preference
+or the deprecated preservation flag. QS's explicit internal regeneration removal is documented in the Training load
+contract above. This read correction needs no source reparse or Training schema bump. No numeric catalog token/unit,
+MCP output field, scope, projection, consent, mutation, planning or delivery capability changes. Queue lifecycle and
+sanitized persistence paths remain unchanged; no MCP deferral is needed.
 The downloaded public files remain outside the repositories, and profile-only cases use documented names and synthetic
 FIT. FIT Parser decoding work belongs to the separate agent; no parser changes are part of this task.
 
 Follow-up review prevents a known provider profile from replacing an unrelated FIT parent through a general alias;
 compatible broad-parent refinements and explicit parent/profile composites retain their existing behavior. Shared Polar
-profile spellings retain all documented FIT contexts. Route and route-file JSON also omit invalid scalar summaries and
-skip legacy null/non-finite values; files with no valid summaries use existing child-route aggregation. This read-only
-compatibility correction needs no saved-route source reparse. Training formulas, the installed packages, the public MCP
-contract and the sanitized persistence boundary remain unchanged; no MCP deferral is needed.
+profile spellings retain all documented FIT contexts. Route and route-file JSON restoration and empty-summary fallback
+remain on the separate unreleased branch alongside the catalog changes. The shared serializer already omits non-finite
+scalar exports in 21.6.12. The pending route read correction skips legacy null/non-finite values and uses existing
+child-route aggregation when no valid file summaries remain. It needs no saved-route source reparse when adopted. Training formulas, the public MCP contract and the
+sanitized persistence boundary remain unchanged; no MCP deferral is needed.
 
 Verification after follow-up review: 4,164 Sports Lib tests pass across 41 suites; both package formats build and 13 documentation pages verify.
 All 171 Polar FIT appendix profiles resolve under their documented pair/name inputs. All 170 valid public FIT files
 survive JSON re-import (112 failed before the correction); one truncated sample remains rejected. All 41 provider TSS
-scores pass default/true preservation and false removal/recalculation. Runtime checks cover all 245 types, the 121
+scores pass default/true preservation. Runtime checks cover all 245 types, the 121
 Suunto protocol pairs and the strict MCP catalog. The 113 MCP output/Training-impact tests and contract check pass.
-Changed-file lint passes; repository-wide lint reports existing errors in unchanged files. No package adoption or
-production rewrite was performed.
+Changed-file lint passes; repository-wide lint reports existing errors in unchanged files. No catalog/route package
+adoption or production rewrite was performed for that branch validation.
 
 Sports Lib `20.3.0` adds canonical Health and Sleep scalar JSON classes. Training uses the shared dual reader for the
 sleep duration, score, HRV, and sleep-heart-rate aggregates it already consumes; no Training formula or derived schema
