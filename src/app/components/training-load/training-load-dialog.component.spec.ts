@@ -180,28 +180,37 @@ describe('Training load editor', () => {
         evaluations: { version: 1, automatic: result, hr: { ...result, preference: 'HR' }, met: { ...result, preference: 'MET' } } } } });
     expect(component.automatic).toBeNull(); expect(component.recorded).toBe(87.3);
   });
-  it.each([ActivityTypes.Swimming, ActivityTypes.OpenWaterSwimming])('explains the missing threshold for %s with an unavailable or estimated fallback', type => {
+  it.each([ActivityTypes.Swimming, ActivityTypes.OpenWaterSwimming])('explains the missing threshold for %s with an unavailable or estimated fallback', async type => {
     component.activities[0].type = type;
     const result = { preference: 'AUTOMATIC' as const, method: null, score: null, estimated: false,
       provenance: null, reasons: ['missing-swim-threshold' as const, 'missing-met-inputs' as const] };
-    component.metadata.set({ version: 1, revision: 1, excluded: false, controls: {}, legs: {
+    const metadata = { version: 1, revision: 1, excluded: false, controls: {}, legs: {
       walk: { activityId: 'walk', identity: { startMs: 1000, endMs: 3601000, type, duration: 3600, distance: null },
         policy: defaultAppliedTrainingLoadPolicy(type), recordedTss: 87.3,
-        evaluations: { version: 1, automatic: result, hr: { ...result, preference: 'HR' }, met: { ...result, preference: 'MET' } } } } });
+        evaluations: { version: 1, automatic: result, hr: { ...result, preference: 'HR' }, met: { ...result, preference: 'MET' } } } } };
+    // A newer parser can persist diagnostics before this frontend upgrades its SDK.
+    watch.mockReturnValue(of(metadata));
+    await component.ngOnInit();
     expect(component.legModel).toMatchObject({ status: 'unavailable', score: null });
     expect(component.explanation).toContain('No eligible load calculation');
     expect(component.reasonText).toContain('No usable swim threshold is available');
     expect(component.reasonText).toContain('average pace is not used as its threshold');
     expect(component.reasonText).toContain('MET requires valid file calories, body mass and duration');
 
-    component.leg!.evaluations!.automatic = { ...result, score: 9, method: TrainingStressScoreMethod.MET,
-      estimated: true, provenance: 'calculated', reasons: ['missing-hr-calibration', 'missing-swim-threshold'] };
+    watch.mockReturnValue(of({ ...metadata, legs: { walk: { ...metadata.legs.walk, evaluations: {
+      ...metadata.legs.walk.evaluations, automatic: { ...result, score: 9, method: TrainingStressScoreMethod.MET,
+        estimated: true, provenance: 'calculated', reasons: ['missing-hr-calibration', 'missing-swim-threshold'] },
+    } } } }));
+    await component.ngOnInit();
     expect(component.legModel).toMatchObject({ status: 'available', score: 9, method: 'MET', estimated: true });
     expect(component.explanation).toContain('Estimate from file calories, body mass and duration');
     expect(component.reasonText).toContain('No usable swim threshold is available');
     expect(component.reasonText).not.toContain('MET requires');
 
-    component.leg!.evaluations!.automatic = { ...result, reasons: ['missing-pace-inputs'] };
+    watch.mockReturnValue(of({ ...metadata, legs: { walk: { ...metadata.legs.walk, evaluations: {
+      ...metadata.legs.walk.evaluations, automatic: { ...result, reasons: ['missing-pace-inputs'] },
+    } } } }));
+    await component.ngOnInit();
     expect(component.reasonText).toBe('Pace calculation inputs are unavailable.');
     expect(component.reasonText).not.toContain('threshold');
   });

@@ -5523,8 +5523,11 @@ validate the strict public output schema, and reject private reason/calibration/
 public schema, mutation, planning read, provider delivery or bundled-plugin change is needed. Existing activities
 retain their values until an approved original-file reparse refreshes candidates; deployment alone does not rewrite
 history. No derived schema bump or route reparse is required for this calculation-only change.
+Editor tests load these additive diagnostics through the metadata reader, so a newer server diagnostic remains
+compatible with the older Sports Lib version used to build an existing frontend.
 
-The verified Sports Lib 21.6.2 artifact is published and pinned in both QS packages, with FIT Parser 6.2.1.
+The swimming correction is verified against locally packed Sports Lib 21.6.3. Its publication and the root/Functions
+dependency updates are pending; both packages still pin published Sports Lib 21.6.2, with FIT Parser 6.2.1.
 Release Functions/Rules/frontend together after separate approval. Deployment and production reparse remain separate
 explicit approvals; no historical values are rewritten merely by deploying this change.
 
