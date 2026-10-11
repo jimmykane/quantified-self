@@ -2565,6 +2565,104 @@ describe('sports-lib-reparse.service', () => {
         }
     });
 
+    it.each(['missing-power', 'missing-timer', 'stopped-zero-timer'] as const)(
+        'retains file evidence for %s through repeated regeneration', async kind => {
+            const sports = await vi.importActual<typeof import('@sports-alliance/sports-lib')>('@sports-alliance/sports-lib');
+            const { FitEncoder, FitBaseType } = await import('fit-file-parser/encoder');
+            const field = (number: number, value: number, baseType = FitBaseType.Uint8) => ({ number, value, baseType,
+                size: baseType === FitBaseType.Uint32 ? 4 : baseType === FitBaseType.Uint16 ? 2 : 1 });
+            const encoder = new FitEncoder();
+            const start = FitEncoder.toFitTimestamp(new Date('2026-01-01T10:00:00Z'));
+            encoder.writeMessage(0, [field(0, 4, FitBaseType.Enum), field(1, 1, FitBaseType.Uint16)]);
+            for (let second = 0; second <= 3600; second++) {
+                encoder.writeMessage(20, [field(253, start + second, FitBaseType.Uint32), field(3, 165),
+                    ...(kind !== 'missing-power' || second === 0 ? [field(7, 250, FitBaseType.Uint16)] : [])], 1);
+            }
+            const timerEvents = kind === 'missing-timer' ? [[0, 0], [1200, 4], [2400, 0], [3600, 4]]
+                : kind === 'stopped-zero-timer' ? [[0, 4]] : [[0, 0], [3600, 4]];
+            for (const [second, type] of timerEvents) {
+                encoder.writeMessage(21, [field(253, start + second, FitBaseType.Uint32),
+                    field(0, 0, FitBaseType.Enum), field(1, type, FitBaseType.Enum)], 2);
+            }
+            encoder.writeMessage(18, [field(254, 0, FitBaseType.Uint16), field(253, start + 3600, FitBaseType.Uint32),
+                field(2, start, FitBaseType.Uint32), field(5, 2, FitBaseType.Enum), field(7, 3600000, FitBaseType.Uint32),
+                ...(kind === 'missing-timer' ? [] : [field(8, kind === 'stopped-zero-timer' ? 0 : 3600000, FitBaseType.Uint32)]),
+                field(45, 250, FitBaseType.Uint16)], 3);
+            encoder.writeMessage(216, [field(0, 18, FitBaseType.Uint16), field(1, 0, FitBaseType.Uint16),
+                field(11, 190), field(12, 55), field(13, 165)], 4);
+            const bytes = encoder.close();
+            const parsedEvent = await sports.EventImporterFIT.getFromArrayBuffer(
+                bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength) as ArrayBuffer,
+                new sports.ActivityParsingOptions({ generateUnitStreams: false }));
+            const activity = parsedEvent.getFirstActivity();
+            const expected = sports.ActivityUtilities.getTrainingStressScoreEvaluations(activity);
+            const duration = kind === 'missing-timer' ? 2400 : kind === 'stopped-zero-timer' ? 0 : 3600;
+            if (kind === 'missing-power') {
+                // Dense HR records cannot turn the sole power reading into a complete power window.
+                expect(expected.automatic).toMatchObject({ method: 'HR', score: 100, provenance: 'calculated' });
+                expect(activity.getStat(sports.DataPowerNormalized.type)).toBeUndefined();
+            } else if (kind === 'missing-timer') {
+                expect(expected.automatic).toMatchObject({ method: 'POWER', score: 66.7, provenance: 'calculated' });
+            } else {
+                // All-paused zero is evidence, not a missing duration that may fall back to elapsed time.
+                expect(expected.automatic).toMatchObject({ score: null, method: null });
+            }
+            hoisted.fitImporter.getFromArrayBuffer.mockResolvedValue(parsedEvent);
+            hoisted.generateMissingStreamsAndStatsForActivity.mockImplementation(
+                item => sports.ActivityUtilities.generateMissingStreamsAndStatsForActivity(item));
+            hoisted.evaluateTrainingStressScore.mockImplementation(item => sports.ActivityUtilities.evaluateTrainingStressScore(item));
+            for (let pass = 0; pass < 2; pass++) {
+                await reparseEventFromOriginalFiles('u1', 'e1', { mode: 'regenerate',
+                    eventData: { originalFile: { path: 'users/u1/events/e1/synthetic.fit' } },
+                    activityDocs: [], targetSportsLibVersion: TARGET_SPORTS_LIB_VERSION });
+                expect(activity.getStat(sports.DataDuration.type)?.getValue()).toBe(duration);
+                expect(activity.getStat(sports.DataTimerTime.type)?.getValue()).toBe(duration);
+                expect(activity.getStat(sports.DataElapsedTime.type)?.getValue()).toBe(3600);
+                expect(sports.ActivityUtilities.getTrainingStressScoreEvaluations(activity)).toEqual(expected);
+                expect(activity.getStat(sports.DataTrainingStressScore.type)?.getValue() ?? null).toBe(expected.automatic.score);
+                if (kind === 'missing-power') expect(activity.getStat(sports.DataPowerNormalized.type)).toBeUndefined();
+            }
+        });
+
+    it('retains Suunto recorded pauses through repeated original-file regeneration', async () => {
+        const sports = await vi.importActual<typeof import('@sports-alliance/sports-lib')>('@sports-alliance/sports-lib');
+        const origin = Date.parse('2026-01-01T10:00:00Z');
+        const iso = (second: number) => new Date(origin + second * 1000).toISOString();
+        const source = JSON.stringify({ DeviceLog: {
+            Device: { Name: 'Synthetic', Info: { HW: '1', SW: '1' } },
+            Samples: [{ TimeISO8601: iso(0), Events: [{ Activity: { ActivityType: 3 } }] },
+                ...Array.from({ length: 3601 }, (_, second) => ({ TimeISO8601: iso(second),
+                    Speed: second >= 1200 && second < 2400 ? 10 : 3,
+                    ...(second === 1200 || second === 2400 ? { Events: [{ Pause: { State: second === 1200 } }] } : {}) })),
+                { TimeISO8601: iso(3600), Events: [{ Lap: { Type: 'Stop' } }] }],
+            Windows: [{ Window: { Type: 'Activity', Duration: 3600, PauseDuration: 1200 } }],
+            Header: { SpeedZones: { Zone1Duration: 0, Zone2Duration: 0, Zone3Duration: 0, Zone4Duration: 0,
+                Zone5Duration: 2400, Zone1LowerLimit: 1, Zone2LowerLimit: 1.5, Zone3LowerLimit: 2,
+                Zone4LowerLimit: 2.5, Zone5LowerLimit: 3 } },
+        } });
+        const parsedEvent = await sports.EventImporterSuuntoJSON.getFromJSONString(source,
+            new sports.ActivityParsingOptions({ generateUnitStreams: false }));
+        const activity = parsedEvent.getFirstActivity();
+        const expected = sports.ActivityUtilities.getTrainingStressScoreEvaluations(activity);
+        expect(expected.automatic).toMatchObject({ method: 'PACE', score: 66.7, provenance: 'calculated' });
+        hoisted.suuntoJSONImporter.getFromJSONString.mockResolvedValue(parsedEvent);
+        hoisted.mockDownload.mockResolvedValue([Buffer.from(source)]);
+        hoisted.generateMissingStreamsAndStatsForActivity.mockImplementation(
+            item => sports.ActivityUtilities.generateMissingStreamsAndStatsForActivity(item));
+        hoisted.evaluateTrainingStressScore.mockImplementation(item => sports.ActivityUtilities.evaluateTrainingStressScore(item));
+        for (let pass = 0; pass < 2; pass++) {
+            await reparseEventFromOriginalFiles('u1', 'e1', { mode: 'regenerate',
+                eventData: { originalFile: { path: 'users/u1/events/e1/synthetic.json' } },
+                activityDocs: [], targetSportsLibVersion: TARGET_SPORTS_LIB_VERSION });
+            expect(activity.getStat(sports.DataDuration.type)?.getValue()).toBe(2400);
+            expect(activity.getStat(sports.DataTrainingStressScore.type)?.getValue()).toBe(66.7);
+            expect(sports.ActivityUtilities.getTrainingStressScoreEvaluations(activity)).toEqual(expected);
+            expect(activity.getAllEvents()).toEqual(expect.arrayContaining([
+                expect.objectContaining({ timestamp: 1200 }), expect.objectContaining({ timestamp: 2400 }),
+            ]));
+        }
+    });
+
     it.each(['pool', 'multisport', 'pace-uphill', 'pace-gap', 'pace-zero'] as const)(
         'preserves corrected %s file inputs through QS regeneration', async kind => {
             const sports = await vi.importActual<typeof import('@sports-alliance/sports-lib')>('@sports-alliance/sports-lib');

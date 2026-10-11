@@ -2115,6 +2115,14 @@ Training calculation, schema, invalidation, rebuild, and extension guidance rema
 [`training-workspace.md`](training-workspace.md). Adding a kind requires its normal derived pipeline, exact safe MCP
 payload schema, structured-output fixture, and positive and negative redaction-contract tests.
 
+Sports Lib 21.6.9 corrects source timer events/duration, multisport record and zone ownership, and recorded-power
+coverage. Existing metric reads still return persisted statistics; corrected historical values require original-file
+reparse and the normal Training refresh. On-demand source reads remain transient and do not update saved statistics.
+Training impact continues to project the existing modeled-load resolver through its strict public schema. Private
+source evidence, calibration and saved controls stay excluded. No metric token, unit, tool, field, reason, scope,
+consent, plan/workout read, mutation or provider-delivery contract changes; no registered-contract promotion,
+catalog rescan or bundled-plugin sync is required for these parser corrections.
+
 ## Sleep projection
 
 MCP reads normalized `users/{uid}/sleepSessions` documents through a Firestore field mask and creates a new allowlisted

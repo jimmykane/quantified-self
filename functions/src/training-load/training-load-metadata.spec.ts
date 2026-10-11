@@ -17,6 +17,17 @@ describe('training load reconciliation', () => {
       policy: { method: 'HR', included: false, revision: 3 } });
     expect(next.controls).toEqual({ old: { override: 0 } });
   });
+  it.each([0, 2400])('retains saved controls when source timer recovery corrects active duration to %s', duration => {
+    const prior = previous();
+    const candidate = { ...leg('new'), identity: { ...leg('new').identity, duration },
+      recordedTss: duration === 0 ? null : 66.7 };
+    const next = reconcileTrainingLoadLegs(prior, [candidate]);
+    expect(Object.keys(next.legs!)).toEqual(['old']);
+    expect(next.legs!.old).toMatchObject({ activityId: 'new', identity: { duration }, recordedTss: candidate.recordedTss });
+    expect(next.legs!.old.policy).toEqual(prior.legs!.old.policy);
+    expect(next.controls).toEqual({ old: { override: 0 } });
+    expect(reconcileTrainingLoadLegs({ ...prior, ...next }, [candidate])).toEqual(next);
+  });
   it('never uses the one-unmatched-leg fallback, and retains ambiguous controls', () => {
     const next = reconcileTrainingLoadLegs(previous(), [leg('new', 2000)]);
     expect(next.legs?.old.activityId).toBeNull();

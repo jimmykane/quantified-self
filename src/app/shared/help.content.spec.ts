@@ -71,6 +71,16 @@ describe('help.content', () => {
     const copy = HELP_SECTIONS.find(section => section.content.includes('### Form tile (CTL / ATL / TSB)'))!.content;
     expect(copy).toContain('Valid recorded zero-power windows can produce zero power-based TSS');
     expect(copy).toContain('A zero summary or missing sensor readings alone cannot establish zero load');
+    expect(copy).toContain('Missing power readings do not count as recorded zero power');
+    expect(copy).toContain('calculated power load falls back to another eligible method or stays unavailable');
+  });
+  it('explains recorded timer recovery and the original-file boundary for historical corrections', () => {
+    const copy = HELP_SECTIONS.find(section => section.content.includes('### Form tile (CTL / ATL / TSB)'))!.content;
+    expect(copy).toContain('Recorded Suunto pauses and resumes are used in load calculations');
+    expect(copy).toContain('consistent, unambiguous timer timeline');
+    expect(copy).toContain('a recorded positive timer summary remains authoritative');
+    expect(copy).toContain('refreshing Training alone cannot recover readings or pauses discarded during an earlier import');
+    expect(copy).toContain('Your saved load preferences and overrides are retained');
   });
   it('explains running pace coverage, recorded pool HR and confirmed multisport pauses', () => {
     const copy = HELP_SECTIONS.find(section => section.content.includes('### Form tile (CTL / ATL / TSB)'))!.content;

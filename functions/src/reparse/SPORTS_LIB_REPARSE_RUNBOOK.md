@@ -39,10 +39,11 @@ this task does not adopt a package, deploy, enable scanners, start reparsing or 
 
 ### Sports Lib 21.6.1 file-calibrated Training load
 
-Sports Lib 21.6.8 is published and pinned in root and Functions, with FIT Parser 6.2.1. It retains the file-calibrated
+Sports Lib 21.6.9 is published and pinned in root and Functions, with FIT Parser 6.2.1. It retains the file-calibrated
 load rules introduced in 21.6.1 and includes the swimming threshold, independent cycling FTP, rolling NP, explicit
-HR-pause, running pace, pool-length/recorded-stream, measured-zero power and multisport timer corrections. Deployment and production reparse each
-require separate approval.
+HR-pause, running pace, pool-length/recorded-stream and measured-zero power corrections. This release also corrects
+FIT session-boundary and zone ownership, missing timer recovery, Suunto pause/resume events and positive recorded-power
+coverage. Deployment and production reparse each require separate approval.
 
 New source-file imports use the corrected calculations. Historical calculated power scores without independent FTP
 may fall back or become unavailable; calculated HR scores exclude explicit timer pauses, including gaps spanning a
@@ -59,6 +60,21 @@ calibration remain available. Existing recorded values are not rewritten by a de
 Complete eligible recorded zero-power windows can establish POWER TSS 0 with independent FTP and duration. A zero NP
 summary or zeros inserted for missing FIT/TCX/GPX power fields do not establish this. Private source evidence stays attached
 to the same parsed instance through regeneration; ordinary JSON cannot restore it.
+
+Sports Lib 21.6.9 extends recorded-power coverage to positive calculated NP windows: missing fields padded with
+zeros cannot create a usable window or suppress an eligible HR fallback. Its FIT corrections assign shared-boundary
+records to the next leg, match zone durations by unique session message index, and derive a missing/zero timer summary
+only from an unambiguous start-anchored timeline consistent with session bounds. Positive timer summaries retain
+precedence; a validated all-paused zero cannot fall back to elapsed time during regeneration. Suunto JSON/SML pause
+and resume events now reach the existing timer-aware calculations. See the Training guide for exact eligibility.
+
+Apply these five corrections to historical activities through original-file reparse and normal derived refresh;
+a Training rebuild or reconstruction from stored Activity JSON cannot restore discarded source evidence. Keep the
+same parsed instances through regeneration and metadata finalization. Saved load controls, dated policies, imported
+scores and strict leg/deletion checks remain unchanged. No saved-route reparse or schema migration is required.
+Monitoring impact is unchanged: no provider labels, commit outcomes, queue stages, retries, dispatch limits or heavy
+routing change. Existing provider-import metrics and reparse diagnostics remain applicable; this release neither
+enables scanners nor provisions monitoring resources.
 
 Pool FIT imports retain final boundary/rest lengths, support generated streams from one lap while preserving its
 recorded streams, and repair invalid summary end times from valid file durations before assigning lengths. Rest

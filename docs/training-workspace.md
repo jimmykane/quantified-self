@@ -5322,6 +5322,37 @@ with zeros are excluded from that evidence; short, gappy and paused-only records
 Private recorded-zero provenance survives same-instance regeneration and is absent from ordinary Activity JSON.
 This does not change positive device-NP precedence, HR gap integration, calorie MET, or imported-score priority.
 
+Sports Lib 21.6.9 applies recorded-power coverage to every calculated NP window, including windows with positive
+power. Missing sensor fields remain unknown even when compatibility streams contain padded zeros. One recorded
+250 W sample among an hour of HR-only records cannot establish calculated NP or POWER TSS; with valid threshold
+HR throughout, Automatic falls back to 100 HR TSS. Actual recorded zero-power windows remain eligible. Positive
+device NP and imported TSS retain their normal-import priority. Regenerate mode deliberately rebuilds derived NP
+from recorded coverage and preserves its private evidence on the same parsed Activity instance.
+
+FIT session boundaries assign a record shared with the next session only to that next session, preventing HR or
+power from one leg from supplying another leg's calculation. A standalone or final session retains its own terminal
+record. Session zone durations resolve `time_in_zone.reference_index` against the unique session `message_index`,
+not the session's array position; missing or ambiguous matches do not borrow another leg's zones. Corrected zone
+durations can change intensity summaries even when imported TSS stays unchanged.
+
+When a FIT timer summary is absent, null or zero, an unambiguous timer timeline anchored at the leg's start can
+supply active duration. It must agree with the elapsed session bounds and contain known, non-conflicting timer
+states. A positive file timer summary remains authoritative. Forty active minutes at threshold plus twenty paused
+minutes then yield 66.7 POWER TSS even without a timer summary. An explicitly all-paused timeline establishes zero
+active duration; private provenance prevents subsequent regeneration from substituting elapsed time. Generic
+legacy zero durations without that evidence retain their existing compatibility behavior. Suunto JSON/SML
+`Pause.State` events supply leg-relative stop/resume events, so readings recorded during a pause do not inflate
+calculated HR, power or running-pace load.
+
+These source-evidence corrections apply to new imports. Historical corrections require the existing original-file
+reparse or original-file **Regenerate statistics** action, followed by normal derived-summary refresh. A Training
+rebuild or Activity JSON reconstruction alone cannot recover discarded source timer events, session ownership or
+raw power coverage. Reparse preserves imported TSS, saved load controls and dated policies through the existing
+strict identity/deletion checks. No saved-route reparse, stored schema, additional database operation or provider
+request is needed. Monitoring coverage is unchanged: the import bundle retains the same four provider labels and
+committed-outcome/failure signals; reparse retains its existing worker stages, version guards, retries and heavy routing.
+This calculation change neither enables scanners nor applies monitoring resources.
+
 A complete, unique session-matched FIT calibration that satisfies the same HR ordering may ignore zero placeholders
 in lower-priority `zones_target` or profile settings. This exception does not fill missing session settings or accept
 invalid session calibration. Ambiguous session references, conflicting repeated settings, nonnumeric values and
@@ -5576,13 +5607,16 @@ history. No derived schema bump or route reparse is required for this calculatio
 Editor tests load these additive diagnostics through the metadata reader, so a newer server diagnostic remains
 compatible with the older Sports Lib version used to build an existing frontend.
 
-The published [Sports Lib 21.6.8](https://github.com/sports-alliance/sports-lib/releases/tag/v21.6.8) artifact is pinned
+The published [Sports Lib 21.6.9](https://github.com/sports-alliance/sports-lib/releases/tag/v21.6.9) artifact is pinned
 in both root and Functions, with FIT Parser 6.2.1. Both lockfiles match its npm integrity. The release incorporates
-the earlier file-calibrated load corrections plus pool-length ownership, recorded-stream preservation and measured-zero
-power eligibility. A read-only replay of 780 unique original files (834 legs) passed 14,209 checks, preserving all 245
-imported scores. Automatic/HR/MET evaluations were unchanged relative to 21.6.7; regeneration avoided 47 zeroed
-distances. Other swim-distance reductions correct duplicated overlapping-lap totals. All differences were validated
-against source inputs. Private originals and detailed audit results remain outside Git.
+the earlier file-calibrated load corrections plus FIT session-boundary/zone ownership, source-backed timer recovery,
+Suunto pause/resume events and complete recorded-power coverage. A read-only replay of 1,100 unique original files
+(1,176 legs) had no parse failures. All 3,528 Automatic/HR/MET evaluations retained their scores and methods relative
+to 21.6.8, and all 366 imported scores were preserved. Independent source checks verified all 98 normalized-power
+statistic changes and eight Suunto timer timelines. A separate QS regeneration replay of 320 files (342 legs) passed
+6,613 checks without violations; its one two-metre distance reduction follows the corrected shared-boundary record
+ownership. Synthetic regressions verify the load corrections that this sample did not exercise. Private originals
+and detailed audit results remain outside Git.
 MCP review: this update adds no metric token, unit, output field, reason code, scope, mutation, planning capability or
 plugin change. Recorded queries consume saved statistics; Training impact consumes the existing modeled-load resolver.
 Corrected historical load needs original-file reparse and the normal derived-summary refresh. Existing controls and
