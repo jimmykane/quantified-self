@@ -4836,6 +4836,17 @@ The picker shows up to 20 tagged races and up to 100 other historical events. It
 or earlier history, and sort by latest, longest, or highest load. Generic `New Event` names are suppressed; date and
 available distance, duration, and TSS provide identity.
 
+The benchmark dialog uses flat, labelled event sections inside the shared Material dialog shell, without nested cards
+or list borders. Native two-line event rows use the public Material list tokens for compact 56px rows (72px when an
+unavailable race needs an explanation), while retaining the tonal selected-row state. Lists stay independently bounded
+and scrollable; on mobile the sections stack. Content flexes within the shared Material shell rather than using fixed
+viewport offsets, so wrapped titles do not clip footer actions. Selected reference details and exact window dates wrap
+instead of truncating. User changes and disclosure/cancel actions have one haptic owner; hydration, repeated selections
+and date typing remain silent. Save/clear feedback waits for the actual callable outcome. Pending writes block duplicate
+submissions and edits.
+This presentation change does not alter benchmark eligibility, stored selections, callable/MCP contracts, plan/workout
+read coverage or consent. Existing Best Build help remains accurate; no user-facing calculation or workflow changed.
+
 The Best Build card identifies event-mode selections as a **Selected reference event** and explains that the event day is
 excluded from the compared workload. It shows a meaningful selected-event name when one exists. Default, blank, or
 timestamp-like event names are never repeated as a card heading: event-mode benchmarks instead show `Event on <UTC
