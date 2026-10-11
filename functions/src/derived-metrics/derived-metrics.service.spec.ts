@@ -1,3 +1,4 @@
+import { APPROVED_WATER_TEAM_SPORT_CASES } from '../../../shared/testing/training-water-team-cases';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import {
     DERIVED_FORM_PAYLOAD_VERSION,
@@ -2208,7 +2209,7 @@ describe('buildTrainingBuildComparisonMetricPayload', () => {
 
         expect(result.payload.disciplines.map(item => item.discipline)).toEqual([
             'running', 'cycling', 'swimming', 'rowing', 'walking-hiking', 'nordic-skiing', 'strength',
-            'fitness-gym', 'paddling', 'wheelchair', 'climbing-mountaineering', 'mountain-snow', 'skating', 'combat-martial-arts', 'dance', 'team-sports', 'racket-sports', 'other-training',
+            'fitness-gym', 'paddling', 'wheelchair', 'climbing-mountaineering', 'mountain-snow', 'skating', 'combat-martial-arts', 'dance', 'team-sports', 'racket-sports', 'precision-sports', 'water-sports', 'diving', 'other-training',
         ]);
         [cycling, strength].forEach((discipline) => {
             expect(discipline?.status).toBe('ready');
@@ -2734,7 +2735,7 @@ describe('buildTrainingPowerSystemsMetricPayload', () => {
         expect(new Set(availableEntries.map(item => item.current.sourceFingerprint)).size).toBe(availableEntries.length);
     });
 
-    it('keeps all 50 approved sport power histories independent after JSON reload', async () => {
+    it('keeps both approved 50-sport power-history batches independent after JSON reload', async () => {
         const { buildTrainingPowerSystemsMetricPayload } = await import('./derived-metrics.service');
         const types = [
             'Snowshoeing', 'Bouldering', 'Climbing', 'Rock Climbing', 'Indoor Climbing',
@@ -2747,6 +2748,7 @@ describe('buildTrainingPowerSystemsMetricPayload', () => {
             'Football', 'Soccer', 'Volleyball', 'Beach Volleyball', 'Badminton',
             'Beach Tennis', 'Padel', 'Pickleball', 'Platform Tennis', 'Racket Sport',
             'Racquet Ball', 'Squash', 'Table Tennis', 'Tennis', 'Wheelchair Tennis',
+            ...APPROVED_WATER_TEAM_SPORT_CASES.map(item => item.name),
 
         ];
         const activities = JSON.parse(JSON.stringify(types.flatMap((type, index) => [
@@ -2757,7 +2759,7 @@ describe('buildTrainingPowerSystemsMetricPayload', () => {
         const result = buildTrainingPowerSystemsMetricPayload(activities, nowMs, fitSpy);
         expect(result.payload.activityTypes.map(item => item.activityType)).toEqual([...types].sort());
         const currentFits = fitSpy.mock.calls.filter(([, options]) => options?.effectiveDate === '2026-07-20');
-        expect(currentFits).toHaveLength(50);
+        expect(currentFits).toHaveLength(100);
         currentFits.forEach(([curves]) => {
             expect(curves).toHaveLength(2);
             expect(new Set(curves.map(curve => curve.activityType)).size).toBe(1);
@@ -3950,19 +3952,23 @@ describe('buildTrainingSummaryMetricPayload', () => {
         ['Table Tennis', 'racket-sports', 'table-tennis', false, ['elapsed-time']],
         ['Tennis', 'racket-sports', 'tennis', false, ['elapsed-time']],
         ['Wheelchair Tennis', 'racket-sports', 'wheelchair-tennis', false, ['elapsed-time']],
+        ...APPROVED_WATER_TEAM_SPORT_CASES.map(item => [item.name, item.sport, item.context, item.zones, item.metrics] as const),
     ] as const)('builds %s with its own comparison, recorded metrics and preserved positive/zero/missing TSS', async (name, sport, context, zones, expectedMetricIds) => {
         const { buildTrainingSummaryMetricPayload, buildTrainingBuildComparisonMetricPayload, buildTrainingExplanationMetricPayload } = await import('./derived-metrics.service');
         const docs = [Date.UTC(2026, 6, 8), Date.UTC(2026, 3, 1)].flatMap(day => [
             createEvent(day, name, 'Garmin', {
+                [DataStrokeRateAvg.type]: 60, [DataAvgStrokeDistance.type]: 3,
                 [DataDistance.type]: 2_000, [DataAscent.type]: 120, [DataDescent.type]: 80, [DataDescentTime.type]: 240,
                 'Training Stress Score': 71.25,
                 [DataPowerZoneOneDuration.type]: 300, [DataPowerZoneThreeDuration.type]: 400, [DataPowerZoneFiveDuration.type]: 500,
             }),
             createEvent(day, name, 'Polar', {
+                [DataStrokeRateAvg.type]: 0, [DataAvgStrokeDistance.type]: 0,
                 [DataDistance.type]: 3_000, [DataAscent.type]: 0, [DataDescent.type]: 0, [DataDescentTime.type]: 0,
                 'Training Stress Score': 0,
             }),
             createEvent(day, name, 'Suunto', {
+                [DataStrokeRateAvg.type]: -1, [DataAvgStrokeDistance.type]: -1,
                 [DataDistance.type]: -1, [DataAscent.type]: -1, [DataDescent.type]: -1, [DataDescentTime.type]: -1,
                 [DataHeartRateZoneOneDuration.type]: 0, [DataHeartRateZoneThreeDuration.type]: 0, [DataHeartRateZoneFiveDuration.type]: 0,
             }),
@@ -3978,7 +3984,7 @@ describe('buildTrainingSummaryMetricPayload', () => {
         expect(current?.contexts[0]).toMatchObject({ context, activityCount: 3 });
         const metricValues = {
             distance: [5_000, 2], 'moving-time': [10_800, 3], 'elapsed-time': [10_800, 3],
-            ascent: [120, 2], descent: [80, 2], 'descent-time': [240, 2],
+            ascent: [120, 2], descent: [80, 2], 'descent-time': [240, 2], 'stroke-rate': [30, 2], 'stroke-distance': [1.5, 2],
         };
         expect(current?.contexts[0].metrics).toEqual(expectedMetricIds.map(metric => ({
             metric, value: metricValues[metric][0], sourceActivityCount: metricValues[metric][1],
@@ -4087,7 +4093,7 @@ describe('buildTrainingSummaryMetricPayload', () => {
         const currentDay = Date.UTC(2026, 6, 8);
         const result = buildTrainingSummaryMetricPayload(buildTrainingActivitySources([
             createEvent(currentDay, ActivityTypes.Training, 'Suunto'),
-            createEvent(currentDay, ActivityTypes.Surfing, 'Garmin'),
+            createEvent(currentDay, ActivityTypes.Motorcycling, 'Garmin'),
             createEvent(currentDay, ActivityTypes.Triathlon, 'Garmin'),
         ]), nowMs);
         const fitness = result.payload.disciplines.find(item => item.discipline === 'fitness-gym');
@@ -4349,6 +4355,9 @@ describe('training explanation and durability metrics', () => {
             { sport: 'dance', label: 'Dance' },
             { sport: 'team-sports', label: 'Team Sports' },
             { sport: 'racket-sports', label: 'Racket Sports' },
+            { sport: 'precision-sports', label: 'Precision Sports' },
+            { sport: 'water-sports', label: 'Water Sports' },
+            { sport: 'diving', label: 'Diving' },
 
             { sport: 'other-training', label: 'Other training' },
             { sport: 'other', label: 'Other' },
@@ -4836,6 +4845,9 @@ describe('activity-level Training sources and swimming performance', () => {
             ['dance', 0],
             ['team-sports', 0],
             ['racket-sports', 0],
+            ['precision-sports', 0],
+            ['water-sports', 0],
+            ['diving', 0],
 
             ['other-training', 0],
         ]);
@@ -5897,6 +5909,9 @@ describe('writeDerivedMetricSnapshotsReady', () => {
                 { discipline: 'dance', current28d: { activityCount: 0 } },
                 { discipline: 'team-sports', current28d: { activityCount: 0 } },
                 { discipline: 'racket-sports', current28d: { activityCount: 0 } },
+                { discipline: 'precision-sports', current28d: { activityCount: 0 } },
+                { discipline: 'water-sports', current28d: { activityCount: 0 } },
+                { discipline: 'diving', current28d: { activityCount: 0 } },
 
                 { discipline: 'other-training', current28d: { activityCount: 0 } },
             ],

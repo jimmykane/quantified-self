@@ -1,3 +1,4 @@
+import { APPROVED_WATER_TEAM_SPORT_CASES } from '@shared/testing/training-water-team-cases';
 import { describe, expect, it } from 'vitest';
 import { DERIVED_TRAINING_POWER_SYSTEMS_POLICY_VERSION } from '@shared/derived-metrics';
 import type {
@@ -192,6 +193,19 @@ describe('training-power-systems.helper', () => {
     const groups = groupTrainingPowerSystemsActivityTypeViewModels(buildTrainingPowerSystemsActivityTypeViewModels(normalized));
     expect(groups.bySport.wheelchair.map(item => item.activityType)).toEqual([...types].sort());
     expect(groups.other).toHaveLength(0);
+  });
+
+  it('keeps the next 50 exact power entries in their approved groups after JSON reload', () => {
+    const types = APPROVED_WATER_TEAM_SPORT_CASES.map(item => item.name);
+    const normalized = resolveTrainingPowerSystemsMetricPayload(JSON.parse(JSON.stringify(payload(types.map(type => entry(type))))));
+    expect(normalized?.activityTypes).toHaveLength(50);
+    const groups = groupTrainingPowerSystemsActivityTypeViewModels(buildTrainingPowerSystemsActivityTypeViewModels(normalized));
+    const sports = [...new Set(APPROVED_WATER_TEAM_SPORT_CASES.map(item => item.sport))];
+    sports.forEach(sport => {
+      const names = APPROVED_WATER_TEAM_SPORT_CASES.filter(item => item.sport === sport).map(item => item.name);
+      expect(groups.bySport[sport].map(item => item.activityType)).toEqual([...names].sort());
+    });
+    expect(groups.other).toEqual([]);
   });
 
   it('groups all 50 approved exact power entries without pooling sports after JSON reload', () => {

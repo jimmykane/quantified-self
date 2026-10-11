@@ -1,3 +1,4 @@
+import { APPROVED_WATER_TEAM_SPORT_CASES } from '@shared/testing/training-water-team-cases';
 import { describe, expect, it } from 'vitest';
 import { HELP_ACTIONS, HELP_SECTIONS, HelpSectionId } from './help.content';
 import { searchHelpSections } from '../helpers/help-search.helper';
@@ -257,7 +258,7 @@ describe('help.content', () => {
     expect(training).toContain('**Wheelchair Training** supports Training Mix, Best build and Power systems');
     expect(training).toContain('Walk/Run describes pushing speed');
     expect(training).toContain('every exact sport retains its separate power history');
-    expect(training).toContain('sixteen benchmark families');
+    expect(training).toContain('nineteen benchmark families');
     expect(training).toContain('**Wheelchair Training** appears when wheelchair workouts exist');
   });
 
@@ -283,7 +284,17 @@ describe('help.content', () => {
     expect(training).toContain('including zero');
     expect(training).toContain('Zones cover the whole recording');
     expect(training).toContain('existing planned-workout and provider-delivery mappings');
-    expect(training).toContain('sixteen benchmark families');
+    expect(training).toContain('nineteen benchmark families');
+  });
+
+  it('explains all 50 water, team, precision and diving classifications and their approved analysis', () => {
+    const training = HELP_SECTIONS.find(section => section.id === 'training-analysis')!.content;
+    APPROVED_WATER_TEAM_SPORT_CASES.forEach(item => expect(training).toContain(item.name));
+    ['**Precision Sports**', '**Water Sports**', '**Diving**', 'recording elapsed time and saved TSS',
+      'Their recorded zones use power first, then heart rate', 'stroke metrics when present',
+      'All 50 additional classifications keep their original names', 'including zero, and omit durability analysis',
+      'Planned-workout and provider-delivery mappings stay as previously tested', 'nineteen benchmark families']
+      .forEach(phrase => expect(training).toContain(phrase));
   });
 
   it('explains stair climbing classification and its recorded evidence', () => {

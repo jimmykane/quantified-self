@@ -1,3 +1,4 @@
+import { APPROVED_WATER_TEAM_SPORT_CASES } from '@shared/testing/training-water-team-cases';
 import { TrainingBuildMetricsComponent } from '../shared/training-summary/training-build-metrics.component';
 import { TrainingMixDetailsComponent } from '../shared/training-summary/training-mix-details.component';
 import { ComponentFixture, TestBed, type TestModuleMetadata } from '@angular/core/testing';
@@ -330,7 +331,7 @@ describe('TrainingWorkspaceComponent', () => {
     expect(element.querySelector('.training-status-grid .training-recovery-estimate-panel')).toBeNull();
     expect(element.querySelector('.training-mix-panel')).toBeNull();
     expect(element.querySelector('.training-capacity-panel')).toBeNull();
-    expect(element.textContent).toContain('No eligible running, cycling, swimming, rowing, walking & hiking, nordic skiing, strength, fitness & gym, paddling, wheelchair training, climbing & mountaineering, mountain snow sports, skating, combat & martial arts, dance, team sports, racket sports or other training workouts in the last 28 days.');
+    expect(element.textContent).toContain('No eligible running, cycling, swimming, rowing, walking & hiking, nordic skiing, strength, fitness & gym, paddling, wheelchair training, climbing & mountaineering, mountain snow sports, skating, combat & martial arts, dance, team sports, racket sports, precision sports, water sports, diving or other training workouts in the last 28 days.');
     expect(element.textContent).not.toContain('Preparing imported capacity markers');
     expect(element.querySelector('.training-power-systems-section')).toBeNull();
     expect(derivedMetrics.ensureForDashboard).toHaveBeenCalledTimes(1);
@@ -1710,7 +1711,7 @@ describe('TrainingWorkspaceComponent', () => {
     expect(component.sportShortcuts).toEqual(['running']);
     expect(component.visibleDisciplines).toEqual([
       'running', 'cycling', 'swimming', 'rowing', 'walking-hiking', 'nordic-skiing', 'strength',
-      'fitness-gym', 'paddling', 'wheelchair', 'climbing-mountaineering', 'mountain-snow', 'skating', 'combat-martial-arts', 'dance', 'team-sports', 'racket-sports', 'other-training',
+      'fitness-gym', 'paddling', 'wheelchair', 'climbing-mountaineering', 'mountain-snow', 'skating', 'combat-martial-arts', 'dance', 'team-sports', 'racket-sports', 'precision-sports', 'water-sports', 'diving', 'other-training',
     ]);
 
     component.openTrainingSportVisibilityDialog();
@@ -2721,7 +2722,7 @@ describe('TrainingWorkspaceComponent', () => {
       .toEqual([]);
   });
 
-  it('presents the 50 approved contexts with separate canonical labels, durations and unit-aware recorded metrics', () => {
+  it('presents both approved 50-sport context batches with separate canonical labels, durations and unit-aware recorded metrics', () => {
     const component = new TrainingWorkspaceComponent({} as any, {} as any, {} as any,
       { appTheme: () => AppThemes.Normal } as any, { open: vi.fn() } as any, { markForCheck: vi.fn() } as any);
     const expected = [
@@ -2775,11 +2776,18 @@ describe('TrainingWorkspaceComponent', () => {
       { sport: 'racket-sports', name: 'Table Tennis', context: 'table-tennis', profile: 'general', zones: false },
       { sport: 'racket-sports', name: 'Tennis', context: 'tennis', profile: 'general', zones: false },
       { sport: 'racket-sports', name: 'Wheelchair Tennis', context: 'wheelchair-tennis', profile: 'general', zones: false },
+      ...APPROVED_WATER_TEAM_SPORT_CASES,
 
     ];
     for (const item of expected) {
+      expect((component as any).formatTrainingProfileMetric('elapsed-time', 0, item.sport)).toBe('0s');
       const contexts = [{ context: item.context, profile: item.profile, activityCount: 1,
         metrics: [{ metric: 'elapsed-time', value: 1_800, sourceActivityCount: 1 }] }];
+      const zeroContexts = [{ ...contexts[0], metrics: [{ metric: 'elapsed-time', value: 0, sourceActivityCount: 1 }] }];
+      expect((component as any).buildTrainingContextMetricViews(zeroContexts, [], item.sport, true)[0]?.metrics)
+        .toContainEqual(expect.objectContaining({ metric: 'elapsed-time', currentText: '0s', referenceText: '--' }));
+      expect((component as any).buildTrainingBuildContextMetricRows({ contexts: zeroContexts }, { contexts: [] }, item.sport))
+        .toContainEqual(expect.objectContaining({ label: `${item.name} · Elapsed time`, currentText: '0s', benchmarkText: '--' }));
       expect((component as any).areObservedTrainingContextsVolumeOnly(contexts, 'intensityPolicy')).toBe(!item.zones);
       expect((component as any).buildTrainingBuildContextMetricRows({ contexts }, { contexts: [] }, item.sport))
         .toContainEqual(expect.objectContaining({ label: `${item.name} · Elapsed time`, currentText: '30m', benchmarkText: '--' }));

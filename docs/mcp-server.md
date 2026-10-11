@@ -419,7 +419,7 @@ They retain the same exact finite sport vocabulary and strict validation while k
 family byte budgets, including the expanded catalog.
 
 The subsequently approved fitness/mobility, endurance, aquatic and wheelchair Training classifications affect recorded analysis only. The compatibility
-bridge keeps its 72 recorded-only names separate from the original 29 approved future public recipe names. The installed
+bridge keeps its 100 recorded-only names separate from the original 29 approved future public recipe names. The installed
 canonical catalog continues to supply all other accepted recipe sports; adding analysis membership does not add a future
 name to the public enum before catalog adoption. Strict runtime and advertised JSON Schema checks cover every recorded-only
 bridge entry with both catalogs. Existing Training metric projections retain their frozen Running/Cycling/Swimming-plus-Other
@@ -440,6 +440,14 @@ Public Training summary/build projections still expose Running/Cycling/Swimming 
 Explanation projections combine the seven families into the existing Other row and redact internal family labels in
 contributors. Installed/candidate tests cover that folding and all recorded-only recipe boundaries. No public schema,
 scope, mutation kind, provider action or plugin content changes; the pending digest remains unchanged.
+
+The second approved 50-sport batch adds Precision Sports, Water Sports and Diving, plus exact Team Sports and
+Rafting/Whitewater Rafting contexts. Its 28 unpublished names extend only the recorded bridge, now 100 entries; the
+original future public recipe bridge remains 29 entries. All 50 retain canonical identities and saved TSS including
+zero. The three new families and every context/profile metric remain private in summary/build projections; explanation
+folds their saved load and counts into Other and strips contributor labels. Installed/candidate tests cover all recorded
+recipe boundaries, all three new group leakage canaries and complete Other totals. Scopes, strict schemas, proposals,
+provider transport and the pending digest are unchanged. This requires no plugin rebuild or contract promotion.
 
 Manual pool and open-water swimming use the exact canonical sport strings `Swimming` and `Open Water Swimming`.
 Planned-workout summaries format swim distances in metres and pace with the owner's /100 m or /100 yd setting.
@@ -2076,8 +2084,8 @@ instead of being serialized. For example, `body_weight_trend` is discoverable th
 `get_training_metric` when ready; its safe payload contains only UTC day/value points, window coverage, medians, and
 change values—never source document or measurement identities.
 
-Internal derived schema 22 includes the original eight modeled families, Wheelchair Training, the data-backed
-Fitness & Gym and Other training groups, and the context/profile summaries introduced in schema 16. It retains the reusable maximum
+Internal derived schema 22 includes all 21 registered Training groups: 19 benchmark-capable families plus the data-backed
+Fitness & Gym and Other training groups, with the context/profile summaries introduced in schema 16. It retains the reusable maximum
 aggregation used for MTB longest-jump distance in schema 17 and canonical swimming, rowing, and paddling stroke-rate
 profile metrics with bounded pre-19 Cadence read compatibility. The registered MCP contract maps
 current snapshots to its frozen wire schema version 15 and three-family shape through an explicit projection before
@@ -2090,7 +2098,8 @@ redaction and strict validation:
 - `training_summary` and `training_build_comparison` retain only Running, Cycling, and Swimming and reconstruct their
   exact registered window objects, so internal `contexts`, profile IDs, and profile metrics cannot leak.
 - `training_explanation` retains those three named families, folds Rowing, Walking & Hiking, Nordic Skiing, Strength,
-  Fitness & Gym, Paddling, Wheelchair Training, and Other training into Other for complete load/composition totals, and exposes rhythm only
+  Fitness & Gym, Paddling, Wheelchair Training, Climbing & Mountaineering, Mountain Snow Sports, Skating,
+  Combat & Martial Arts, Dance, Team Sports, Racket Sports, Precision Sports, Water Sports, Diving and Other training into Other for complete load/composition totals, and exposes rhythm only
   for the registered three.
 - `training_durability` retains its existing Running, Cycling, Pool, and Open-water scopes. Its workspace-only exact
   supporting-workout start time is reduced to the existing UTC `startDayMs` public field.
@@ -2119,7 +2128,7 @@ The bundled Training and cross-domain workflows already discover these descripti
 their advertised guidance needs no change or plugin rebuild for this correction.
 
 The same projection protects the compact briefing and daily report Training summary. Negative fixtures include
-all eleven internal groups, general/gravity/rowing contexts, the internal maximum-jump and stroke-rate profile metrics, and
+all twenty-one internal groups, general/gravity/rowing contexts, the internal maximum-jump and stroke-rate profile metrics, and
 undeclared private fields, then prove the public result validates and contains none of them. Because advertised tools, schemas,
 instructions, plugin metadata, and starter prompts do not change, this internal expansion needs neither a
 registered-app rescan nor a local plugin sync.

@@ -1,3 +1,4 @@
+import { APPROVED_WATER_TEAM_SPORT_CASES } from '@shared/testing/training-water-team-cases';
 import { ActivityTypes } from '@sports-alliance/sports-lib';
 import { resolveActivityTypeMaterialIcon } from '../helpers/activity-type-presentation.helper';
 import { MANUAL_WORKOUT_EDITOR_SPORTS_V1 } from '@shared/planned-workout';
@@ -14,6 +15,38 @@ import {
 } from '@shared/training-disciplines';
 
 describe('shared Training sport registry', () => {
+
+  it.each(APPROVED_WATER_TEAM_SPORT_CASES)('preserves $name in its approved Training context and exact power history', item => {
+    const resolved = resolveTrainingSportContextFromActivityType(item.name);
+    expect(resolved).toMatchObject({ sport: item.sport, context: item.context, profile: item.profile,
+      intensityPolicy: item.zones ? 'zones' : 'volume-only', profileMetrics: item.metrics,
+      loadPolicy: 'recorded', durabilityPolicy: 'omit', distancePolicy: item.zones ? 'recorded' : 'omit',
+    });
+    expect(resolveTrainingSportContextFromActivityType(`  ${item.name.toLowerCase()}  `)).toEqual(resolved);
+    expect(resolveTrainingPowerSystemsModelActivityType(item.name)).toBe(item.name);
+    const definition = getTrainingSportDefinition(item.sport);
+    expect(definition?.contexts.find(context => context.id === item.context)).toMatchObject({
+      label: item.name, activityTypes: [item.name], showElapsedTimeInSummary: true, showElapsedTimeInComparison: true,
+    });
+    expect(definition?.capabilities).toEqual(['training-mix', 'best-build', 'power-systems']);
+    expect(MANUAL_WORKOUT_EDITOR_SPORTS_V1 as readonly string[]).not.toContain(item.name);
+  });
+
+  it('discovers the three new groups with existing Material icons', () => {
+    const groups = [['precision-sports', 'sports_golf'], ['water-sports', 'surfing'], ['diving', 'scuba_diving']] as const;
+    groups.forEach(([id, icon]) => {
+      const definition = getTrainingSportDefinition(id);
+      expect(definition?.selectionAvailability).toBe('recorded');
+      expect(resolveActivityTypeMaterialIcon(definition?.iconActivityType)).toBe(icon);
+      expect(normalizeTrainingDestinationId(id)).toBe(id);
+    });
+    expect(resolveTrainingSportContextFromActivityType('Indoor Grinding')?.sport).toBe('fitness-gym');
+    expect(resolveTrainingSportContextFromActivityType('Grinding')?.context).toBe('grinding');
+    ['Hockey', 'Field Hockey', 'Ice Hockey', 'Sled Hockey'].forEach(name => {
+      expect(resolveTrainingSportContextFromActivityType(name)?.context).toBe(name.toLowerCase().replaceAll(' ', '-'));
+    });
+  });
+
   it('defines modeled and fallback sport families in presentation order', () => {
     expect(TRAINING_DISCIPLINES).toEqual([
       'running',
@@ -33,6 +66,9 @@ describe('shared Training sport registry', () => {
       'dance',
       'team-sports',
       'racket-sports',
+      'precision-sports',
+      'water-sports',
+      'diving',
       'other-training',
     ]);
     expect(TRAINING_SPORT_DEFINITIONS.map(({ id, label }) => ({ id, label }))).toEqual([
@@ -53,6 +89,9 @@ describe('shared Training sport registry', () => {
       { id: 'dance', label: 'Dance' },
       { id: 'team-sports', label: 'Team Sports' },
       { id: 'racket-sports', label: 'Racket Sports' },
+      { id: 'precision-sports', label: 'Precision Sports' },
+      { id: 'water-sports', label: 'Water Sports' },
+      { id: 'diving', label: 'Diving' },
 
       { id: 'other-training', label: 'Other training' },
     ]);
@@ -410,8 +449,8 @@ describe('shared Training sport registry', () => {
 
   it('places known unmodeled sports in Other Training without classifying aggregate parents', () => {
     [
-      ActivityTypes.Surfing,
-      ActivityTypes.Sailing,
+      ActivityTypes.Motorcycling,
+      ActivityTypes.Fishing,
     ].forEach(activityType => expect(resolveTrainingSportContextFromActivityType(activityType)).toMatchObject({
       sport: 'other-training',
       context: 'other-training',
@@ -448,6 +487,9 @@ describe('shared Training sport registry', () => {
       'dance': 'Dance',
       'team-sports': 'Team Sports',
       'racket-sports': 'Racket Sports',
+      'precision-sports': 'Precision Sports',
+      'water-sports': 'Water Sports',
+      'diving': 'Diving',
 
       'other-training': 'Other training',
     });
