@@ -125,6 +125,13 @@ describe('help.content', () => {
       expect(copy).toContain(phrase);
     }
   });
+  it('explains copied merge load controls and the retained original workouts', () => {
+    const copy = HELP_SECTIONS.find(section => section.id === 'getting-started')!.content;
+    expect(copy).toContain('The combined modeled load sums included activities once');
+    expect(copy).toContain('Your original workouts remain unchanged');
+    expect(copy).toContain('A whole-workout exclusion applies to its copied legs');
+    expect(copy).toContain('Exclusion keeps its history and volume');
+  });
   it('explains Training history columns separately from unavailable history and forecasts', () => {
     const training = HELP_SECTIONS.find(section => section.id === 'training-analysis')!.content;
     expect(training).toContain('**Load metric history**');

@@ -5353,6 +5353,27 @@ request is needed. Monitoring coverage is unchanged: the import bundle retains t
 committed-outcome/failure signals; reparse retains its existing worker stages, version guards, retries and heavy routing.
 This calculation change neither enables scanners nor applies monitoring resources.
 
+Sports Lib 21.6.10 additionally requires a positive-duration supported HR interval. Invalid or zero HR readings break
+integration; a single isolated reading cannot establish HR load, and readings are not extrapolated before the first
+or after the last observation. Interior smart-recording gaps retain the existing handling; no arbitrary
+gap cutoff is added. Observed resting HR can still establish valid zero load. Explicit reevaluation refreshes privately
+tagged calculated NP/IF after input changes, preserving device-supplied NP, imported TSS and cached getter semantics.
+
+The 21.6.10 consumer build exposed computed namespace access in dashboard speed-unit selection that retained the
+whole Sports Lib export namespace. Explicit canonical speed-stat imports preserve supported and legacy units,
+including base metres-per-second statistics, while reducing the initial bundle by approximately 70 kB. The production
+build passes the unchanged `1440kb` initial budget and existing public-output checks. This import correction changes
+no stored units, Training calculations or MCP contracts.
+
+Suunto JSON/SML locates Activity, Lap, Stop and Altitude entries by event kind rather than array position. Consistent
+all-paused duration summaries preserve zero active duration. Multisport zone durations come from each leg's window;
+whole-workout zone duration is used only for a single leg, while shared thresholds remain usable. FIT pool length is
+canonical metres; a narrow nonconforming Suunto statute-unit correction requires consistent independent recorded
+speed/timer/lap-distance evidence and no conflicting native-metre evidence. FIT lap ownership honors unique explicit
+references when summary order differs; missing-session active time must be supported by complete contiguous lap
+timers or an unambiguous recorded timer timeline. Historical parser corrections require original-file reparse and
+normal derived refresh, preserving the existing control/deletion fences and public schemas.
+
 A complete, unique session-matched FIT calibration that satisfies the same HR ordering may ignore zero placeholders
 in lower-priority `zones_target` or profile settings. This exception does not fill missing session settings or accept
 invalid session calibration. Ambiguous session references, conflicting repeated settings, nonnumeric values and
@@ -5417,6 +5438,33 @@ eligible combined workout. Comparison records do not offer the load editor, and 
 Owner-excluded standard workouts retain the editor so they can be included again. Incidental benchmark display
 metadata does not override the persisted Training classification. This UI alignment changes no stored controls,
 calculations, database write paths, MCP schema/scope or Training planning/provider delivery contract.
+
+Event-table merges assemble stored activity summaries without regenerating child statistics. In particular, a calculated
+POWER/HR score retains its method and value even though stored activity documents have no streams or private file
+calibration. Merging never replaces it with a calorie MET fallback or relabels it as imported. The merged workout
+copies each source leg's saved evaluations, immutable applied policy and effective method/inclusion/override controls;
+a whole-source exclusion becomes exclusion of its corresponding merged legs. Imported zero and override zero stay
+valid. Legacy source legs retain recorded scores without inventing evaluations or distributing a parent-only score.
+The combined modeled total sums included legs once; it never adds the parent score again. Benchmark classification
+is unchanged. Original workouts remain unchanged and still contribute according to their own controls: owners must
+exclude the originals or the combined result when both represent the same effort. Exclusion retains history and volume.
+
+Merge-specific EventWriter preparation reads source load metadata and validates the selected parent/child snapshots and original-file
+references/generations in an owner-scoped, deletion-guarded transaction. It rejects pending, stale or unresolved source load instead of guessing.
+Stable result/source-derived activity IDs prevent duplicate children after partial failures. A pending result/cache is
+written before source writes; finalization verifies the persisted result and refreshes its compact load cache while
+retaining concurrent target control edits. Source snapshots are frozen at preparation; later source control changes do
+not edit the separate merged workout. Preparation-only retries reuse saved target policies and controls. Completed
+request replay still returns the existing result. No extra original-file parse or athlete settings are needed; the
+additional reads/writes are bounded to this explicit merge, with no recurring rebuild join. Older completed merges are
+not silently repaired: original-file reparse can refresh calculations, but owners must review their load controls because
+lost source snapshots cannot be reconstructed from the merged activity summaries alone.
+
+MCP impact: existing recorded-stat reads preserve their meaning, and Training impact uses the same effective-load
+resolver/cache for the merged event. Saved policies, control maps, source identities and fingerprints remain private.
+No public schema, scope, reason, tool, planning/delivery capability or plugin changes are introduced. Tests cover actual
+Sports Lib JSON aggregation, calculated scores, imported zero, copied exclusions/overrides, parent/leg totals, source
+changes, preparation-only retries, concurrent target edits and deletion fences, including real Firestore transactions.
 
 After saving controls, the editor reloads its metadata and sport policy heads before showing updated load or allowing
 another edit. If that refresh fails, it hides the old load and form, stops the loading indicator, and explains that the

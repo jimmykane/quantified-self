@@ -648,6 +648,9 @@ HRV and Sleep each have their own date range and older/newer navigation. While a
 - Selected events must still have original source file metadata available.
 - **Benchmark merge** creates a merged event for benchmark workflows.
 - **Multi activity merge** creates a standard merged event for regular multi-activity analysis.
+- Merging preserves each activity's recorded TSS and method, saved Training load preferences, numeric overrides and exclusions. A whole-workout exclusion applies to its copied legs; numeric overrides stay per activity.
+- The combined modeled load sums included activities once. Your original workouts remain unchanged: if the originals and merged workout represent the same effort, exclude one representation in **Training load** to avoid counting it twice. Exclusion keeps its history and volume.
+- A merge waits for current source data. If a selected workout is updating or its load needs review, finish that review or reparse it, then retry the merge.
 - Retrying the same selected events with the same merge type reuses the same merged result instead of creating a duplicate.
 
 ### Benchmark workflows

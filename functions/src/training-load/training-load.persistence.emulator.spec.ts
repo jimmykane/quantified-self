@@ -11,6 +11,9 @@ import { completeTrainingLoadCacheWarmup, prepareTrainingLoadCacheWrite, readTra
 import { attachEventTrainingLoads } from './training-load-reader';
 import { attachedEffectiveTrainingLoad, resolveEffectiveTrainingLoad, type TrainingLoadMetadata } from '../../../shared/training-load-policy';
 
+import { mergeRecordedEvents } from '../events/merge-recorded-events';
+import { prepareMergedTrainingLoad, type MergeTrainingLoadSource } from '../events/merge-training-load';
+
 const enabled = !!process.env.FIRESTORE_EMULATOR_HOST;
 // Contended real Firestore transactions can retry beyond the five-second unit-test budget.
 describe.skipIf(!enabled)('Training load persistence in Firestore', { timeout: 30_000 }, () => {
@@ -47,6 +50,65 @@ describe.skipIf(!enabled)('Training load persistence in Firestore', { timeout: 3
     }
     await db.terminate();
   });
+  async function saveMergeEvent(uid: string, event: EventInterface) {
+    const eventId = event.getID()!;
+    await db.doc(`users/${uid}/events/${eventId}`).set(JSON.parse(JSON.stringify(sanitizeEventFirestoreWritePayload(event.toJSON()))));
+    for (const activity of event.getActivities()) await db.doc(`users/${uid}/activities/${activity.getID()}`).set({
+      ...JSON.parse(JSON.stringify(sanitizeActivityFirestoreWritePayload(activity.toJSON()))), eventID: eventId });
+  }
+  async function mergeFixtures(uid: string) {
+    await db.doc(`users/${uid}`).set({ test: true });
+    const events: EventInterface[] = [];
+    const sources: MergeTrainingLoadSource[] = [];
+    for (const id of ['a', 'b']) {
+      const event = workout(`${id}-leg`).setID(id);
+      const finish = await prepareTrainingLoadMetadata(uid, event);
+      await saveMergeEvent(uid, event); await finish(); events.push(event);
+      sources.push({ eventId: id, parent: (await db.doc(`users/${uid}/events/${id}`).get()).data()!,
+        activities: [{ id: `${id}-leg`, data: (await db.doc(`users/${uid}/activities/${id}-leg`).get()).data()! }] });
+    }
+    return { events, sources };
+  }
+  it('merges saved load snapshots without reparsing, retains source exclusions, and finalizes concurrent controls atomically', async () => {
+    const uid = setup(); const { events, sources } = await mergeFixtures(uid);
+    const firstMetadata = db.doc(`users/${uid}/events/a/metaData/trainingLoad`);
+    await firstMetadata.update({ excluded: true, controls: { 'a-leg': { override: 777 } } });
+    const originalSource = (await firstMetadata.get()).data();
+    const merged = mergeRecordedEvents(events, 'combined');
+    const finish = await prepareMergedTrainingLoad(uid, merged, sources);
+    const mergedRef = db.doc(`users/${uid}/events/combined/metaData/trainingLoad`);
+    expect((await mergedRef.get()).data()?.sourceWritePending).toBe(true);
+    await saveMergeEvent(uid, merged);
+    const secondId = merged.getActivities()[1].getID()!;
+    const pending = (await mergedRef.get()).data()!;
+    await mergedRef.update({ controls: { ...pending.controls, [secondId]: { override: 0 } }, revision: pending.revision + 1 });
+    await finish();
+    const saved = (await mergedRef.get()).data() as TrainingLoadMetadata;
+    expect(resolveEffectiveTrainingLoad(merged, saved)).toMatchObject({ score: 0, status: 'available' });
+    expect(saved.legs![merged.getFirstActivity().getID()!].evaluations?.automatic.score).toBe(9);
+    expect((await firstMetadata.get()).data()).toEqual(originalSource);
+    await completeTrainingLoadCacheWarmup(uid);
+    expect((await readTrainingLoadSummaries(uid))?.get('combined')?.load).toMatchObject({ score: 0, status: 'available' });
+    const timestamp = (await mergedRef.get()).updateTime;
+    await finish();
+    expect((await mergedRef.get()).updateTime?.isEqual(timestamp!)).toBe(true);
+  });
+  it('rejects stale merge sources and deletion during pending merge completion', async () => {
+    const uid = setup(); const { events, sources } = await mergeFixtures(uid);
+    const merged = mergeRecordedEvents(events, 'combined');
+    const original = sources[0].activities[0].data;
+    await db.doc(`users/${uid}/activities/a-leg`).update({ 'stats.Energy': 999 });
+    await expect(prepareMergedTrainingLoad(uid, merged, sources)).rejects.toThrow(/changed|review/);
+    const mergedRef = db.doc(`users/${uid}/events/combined/metaData/trainingLoad`);
+    expect((await mergedRef.get()).exists).toBe(false);
+    await db.doc(`users/${uid}/activities/a-leg`).set(original);
+    const finish = await prepareMergedTrainingLoad(uid, merged, sources);
+    await saveMergeEvent(uid, merged);
+    await db.doc(`userDeletionTombstones/${uid}`).set({ startedAt: Timestamp.now() });
+    await expect(finish()).rejects.toThrow(/deletion/);
+    expect((await mergedRef.get()).data()?.sourceWritePending).toBe(true);
+  });
+
   it('commits pending and final load together, skips identical refreshes, and reuses matched policy history', async () => {
     const uid = setup(); await db.doc(`users/${uid}`).set({ test: true });
     const event = workout(); const finish = await prepareTrainingLoadMetadata(uid, event);

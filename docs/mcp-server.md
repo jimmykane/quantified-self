@@ -2123,6 +2123,12 @@ source evidence, calibration and saved controls stay excluded. No metric token, 
 consent, plan/workout read, mutation or provider-delivery contract changes; no registered-contract promotion,
 catalog rescan or bundled-plugin sync is required for these parser corrections.
 
+Stats-only event-table merges preserve recorded per-leg TSS/method and transfer saved load evaluations, policies and
+controls through private transactional metadata. Training impact resolves the resulting included-leg total without
+adding the parent score; source workout exclusion becomes exclusion of its copied legs. Originals remain unchanged.
+These merge corrections add no public field, reason, schema, scope, mutation or planning capability. Private source
+snapshots and controls remain excluded from MCP projections; existing frozen-contract checks remain authoritative.
+
 ## Sleep projection
 
 MCP reads normalized `users/{uid}/sleepSessions` documents through a Firestore field mask and creates a new allowlisted

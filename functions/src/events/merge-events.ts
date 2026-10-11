@@ -9,7 +9,6 @@ import {
   EventImporterJSON,
   EventJSONInterface,
   EventInterface,
-  EventUtilities,
 } from '@sports-alliance/sports-lib';
 
 import {
@@ -45,6 +44,9 @@ import {
   MergeType,
 } from './merge-operation';
 
+import { mergeRecordedEvents } from './merge-recorded-events';
+import { prepareMergedTrainingLoad, type MergeTrainingLoadSource } from './merge-training-load';
+
 interface MergeEventRequest {
   eventIds: string[];
   mergeType: MergeType;
@@ -60,6 +62,7 @@ interface SourceFileMeta {
 interface SourceEventLoadResult {
   event: EventInterface;
   sourceFiles: SourceFileMeta[];
+  trainingLoadSource: MergeTrainingLoadSource;
 }
 
 type SourceEventDocumentData = FirestoreEventJSON | Record<string, unknown>;
@@ -376,8 +379,17 @@ function clearGeneratedMergeDescription(event: EventInterface): void {
   eventAny.description = '';
 }
 
-function getFirestoreAdapter(userID: string): FirestoreAdapter {
+function getFirestoreAdapter(userID: string, sources: MergeTrainingLoadSource[],
+  rememberTrainingLoadError: (error: unknown) => void): FirestoreAdapter {
+  const retainFailure = async <T>(work: () => Promise<T>): Promise<T> => {
+    try { return await work(); }
+    catch (error) { rememberTrainingLoadError(error); throw error; }
+  };
   return {
+    prepareTrainingLoad: async event => {
+      const finish = await retainFailure(() => prepareMergedTrainingLoad(userID, event, sources));
+      return () => retainFailure(finish);
+    },
     setDoc: async (path: string[], data: unknown) => {
       const documentPath = path.join('/');
       await setEventDocumentIfUserActive(
@@ -547,7 +559,8 @@ async function loadSourceEvent(
     throw new HttpsError('failed-precondition', `Event ${eventID} has no original source files.`);
   }
 
-  return { event, sourceFiles };
+  return { event, sourceFiles, trainingLoadSource: { eventId: eventID, parent: eventData as Record<string, unknown>,
+    activities: sortedActivityDocs.map(document => ({ id: document.id, data: document.data() })) } };
 }
 
 async function downloadOriginalFilesForMerge(sourceFiles: SourceFileMeta[]): Promise<OriginalFile[]> {
@@ -664,15 +677,23 @@ export const mergeEvents = onCall({
     assertNoDuplicateSourceFileReferences(sourceFiles);
     const originalFiles = await downloadOriginalFilesForMerge(sourceFiles);
 
-    const mergedEvent = EventUtilities.mergeEvents(sourceEvents);
     const mergedEventID = executionClaim.resultEventId;
+    const mergedEvent = mergeRecordedEvents(sourceEvents, mergedEventID);
     mergedEvent.setID(mergedEventID);
     (mergedEvent as { isMerge?: boolean; mergeType?: MergeType }).isMerge = mergeType === 'benchmark';
     (mergedEvent as { isMerge?: boolean; mergeType?: MergeType }).mergeType = mergeType;
     clearGeneratedMergeDescription(mergedEvent);
 
-    const writer = new EventWriter(getFirestoreAdapter(userID), getStorageAdapter(userID));
-    await writer.writeAllEventData(userID, mergedEvent as any, originalFiles);
+    let trainingLoadError: unknown;
+    const writer = new EventWriter(getFirestoreAdapter(userID, sourceLoadResults.map(result => result.trainingLoadSource),
+      error => { trainingLoadError = error; }), getStorageAdapter(userID));
+    try {
+      await writer.writeAllEventData(userID, mergedEvent as any, originalFiles);
+    } catch (error) {
+      // EventWriter wraps ordinary failures. Keep this merge's actionable source/review error without
+      // changing other writers or exposing storage/internal errors as callable preconditions.
+      throw trainingLoadError instanceof HttpsError ? trainingLoadError : error;
+    }
     await finalizeMergedEventMetadata(userID, mergedEventID, mergeType);
 
     const response: MergeEventResponse = {

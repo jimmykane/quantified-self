@@ -2565,7 +2565,7 @@ describe('sports-lib-reparse.service', () => {
         }
     });
 
-    it.each(['missing-power', 'missing-timer', 'stopped-zero-timer'] as const)(
+    it.each(['missing-power', 'missing-timer', 'stopped-zero-timer', 'missing-hr'] as const)(
         'retains file evidence for %s through repeated regeneration', async kind => {
             const sports = await vi.importActual<typeof import('@sports-alliance/sports-lib')>('@sports-alliance/sports-lib');
             const { FitEncoder, FitBaseType } = await import('fit-file-parser/encoder');
@@ -2574,9 +2574,10 @@ describe('sports-lib-reparse.service', () => {
             const encoder = new FitEncoder();
             const start = FitEncoder.toFitTimestamp(new Date('2026-01-01T10:00:00Z'));
             encoder.writeMessage(0, [field(0, 4, FitBaseType.Enum), field(1, 1, FitBaseType.Uint16)]);
+            if (kind === 'missing-hr') encoder.writeMessage(3, [field(4, 700, FitBaseType.Uint16)], 5);
             for (let second = 0; second <= 3600; second++) {
-                encoder.writeMessage(20, [field(253, start + second, FitBaseType.Uint32), field(3, 165),
-                    ...(kind !== 'missing-power' || second === 0 ? [field(7, 250, FitBaseType.Uint16)] : [])], 1);
+                encoder.writeMessage(20, [field(253, start + second, FitBaseType.Uint32), field(3, kind === 'missing-hr' && second !== 1800 ? 0 : 165),
+                    ...(kind !== 'missing-hr' && (kind !== 'missing-power' || second === 0) ? [field(7, 250, FitBaseType.Uint16)] : [])], 1);
             }
             const timerEvents = kind === 'missing-timer' ? [[0, 0], [1200, 4], [2400, 0], [3600, 4]]
                 : kind === 'stopped-zero-timer' ? [[0, 4]] : [[0, 0], [3600, 4]];
@@ -2587,7 +2588,7 @@ describe('sports-lib-reparse.service', () => {
             encoder.writeMessage(18, [field(254, 0, FitBaseType.Uint16), field(253, start + 3600, FitBaseType.Uint32),
                 field(2, start, FitBaseType.Uint32), field(5, 2, FitBaseType.Enum), field(7, 3600000, FitBaseType.Uint32),
                 ...(kind === 'missing-timer' ? [] : [field(8, kind === 'stopped-zero-timer' ? 0 : 3600000, FitBaseType.Uint32)]),
-                field(45, 250, FitBaseType.Uint16)], 3);
+                field(11, 210, FitBaseType.Uint16), field(45, 250, FitBaseType.Uint16)], 3);
             encoder.writeMessage(216, [field(0, 18, FitBaseType.Uint16), field(1, 0, FitBaseType.Uint16),
                 field(11, 190), field(12, 55), field(13, 165)], 4);
             const bytes = encoder.close();
@@ -2601,6 +2602,9 @@ describe('sports-lib-reparse.service', () => {
                 // Dense HR records cannot turn the sole power reading into a complete power window.
                 expect(expected.automatic).toMatchObject({ method: 'HR', score: 100, provenance: 'calculated' });
                 expect(activity.getStat(sports.DataPowerNormalized.type)).toBeUndefined();
+            } else if (kind === 'missing-hr') {
+                // A lone HR reading cannot establish load; explicit invalid readings remain boundaries.
+                expect(expected.automatic).toMatchObject({ method: 'MET', score: 9, provenance: 'calculated' });
             } else if (kind === 'missing-timer') {
                 expect(expected.automatic).toMatchObject({ method: 'POWER', score: 66.7, provenance: 'calculated' });
             } else {
@@ -2624,27 +2628,31 @@ describe('sports-lib-reparse.service', () => {
             }
         });
 
-    it('retains Suunto recorded pauses through repeated original-file regeneration', async () => {
+    it.each(['recorded-pauses', 'nonfirst-activity', 'all-paused'] as const)(
+        'retains Suunto %s evidence through repeated original-file regeneration', async kind => {
         const sports = await vi.importActual<typeof import('@sports-alliance/sports-lib')>('@sports-alliance/sports-lib');
         const origin = Date.parse('2026-01-01T10:00:00Z');
         const iso = (second: number) => new Date(origin + second * 1000).toISOString();
+        const allPaused = kind === 'all-paused';
+        const duration = allPaused ? 0 : 2400;
+        const expectedScore = allPaused ? null : 66.7;
         const source = JSON.stringify({ DeviceLog: {
             Device: { Name: 'Synthetic', Info: { HW: '1', SW: '1' } },
-            Samples: [{ TimeISO8601: iso(0), Events: [{ Activity: { ActivityType: 3 } }] },
+            Samples: [{ TimeISO8601: iso(0), Events: [...(kind === 'nonfirst-activity' ? [{ Pause: { State: false } }] : []), { Activity: { ActivityType: 3 } }] },
                 ...Array.from({ length: 3601 }, (_, second) => ({ TimeISO8601: iso(second),
-                    Speed: second >= 1200 && second < 2400 ? 10 : 3,
-                    ...(second === 1200 || second === 2400 ? { Events: [{ Pause: { State: second === 1200 } }] } : {}) })),
+                    Speed: !allPaused && second >= 1200 && second < 2400 ? 10 : 3,
+                    ...(!allPaused && (second === 1200 || second === 2400) ? { Events: [{ Pause: { State: second === 1200 } }] } : {}) })),
                 { TimeISO8601: iso(3600), Events: [{ Lap: { Type: 'Stop' } }] }],
-            Windows: [{ Window: { Type: 'Activity', Duration: 3600, PauseDuration: 1200 } }],
-            Header: { SpeedZones: { Zone1Duration: 0, Zone2Duration: 0, Zone3Duration: 0, Zone4Duration: 0,
-                Zone5Duration: 2400, Zone1LowerLimit: 1, Zone2LowerLimit: 1.5, Zone3LowerLimit: 2,
+            Windows: [{ Window: { Type: 'Activity', Duration: 3600, PauseDuration: allPaused ? 3600 : 1200 } }],
+            Header: { DateTime: iso(0), Duration: 3600, PauseDuration: allPaused ? 3600 : 1200, SpeedZones: { Zone1Duration: 0, Zone2Duration: 0, Zone3Duration: 0, Zone4Duration: 0,
+                Zone5Duration: duration, Zone1LowerLimit: 1, Zone2LowerLimit: 1.5, Zone3LowerLimit: 2,
                 Zone4LowerLimit: 2.5, Zone5LowerLimit: 3 } },
         } });
         const parsedEvent = await sports.EventImporterSuuntoJSON.getFromJSONString(source,
             new sports.ActivityParsingOptions({ generateUnitStreams: false }));
         const activity = parsedEvent.getFirstActivity();
         const expected = sports.ActivityUtilities.getTrainingStressScoreEvaluations(activity);
-        expect(expected.automatic).toMatchObject({ method: 'PACE', score: 66.7, provenance: 'calculated' });
+        expect(expected.automatic).toMatchObject({ method: allPaused ? null : 'PACE', score: expectedScore });
         hoisted.suuntoJSONImporter.getFromJSONString.mockResolvedValue(parsedEvent);
         hoisted.mockDownload.mockResolvedValue([Buffer.from(source)]);
         hoisted.generateMissingStreamsAndStatsForActivity.mockImplementation(
@@ -2654,10 +2662,11 @@ describe('sports-lib-reparse.service', () => {
             await reparseEventFromOriginalFiles('u1', 'e1', { mode: 'regenerate',
                 eventData: { originalFile: { path: 'users/u1/events/e1/synthetic.json' } },
                 activityDocs: [], targetSportsLibVersion: TARGET_SPORTS_LIB_VERSION });
-            expect(activity.getStat(sports.DataDuration.type)?.getValue()).toBe(2400);
-            expect(activity.getStat(sports.DataTrainingStressScore.type)?.getValue()).toBe(66.7);
+            expect(activity.getStat(sports.DataDuration.type)?.getValue()).toBe(duration);
+            expect(activity.getStat(sports.DataTrainingStressScore.type)?.getValue() ?? null).toBe(expectedScore);
             expect(sports.ActivityUtilities.getTrainingStressScoreEvaluations(activity)).toEqual(expected);
-            expect(activity.getAllEvents()).toEqual(expect.arrayContaining([
+            if (allPaused) expect(activity.getAllEvents()).toEqual([]);
+            else expect(activity.getAllEvents()).toEqual(expect.arrayContaining([
                 expect.objectContaining({ timestamp: 1200 }), expect.objectContaining({ timestamp: 2400 }),
             ]));
         }
@@ -2725,7 +2734,8 @@ describe('sports-lib-reparse.service', () => {
             }
             const activities = parsedEvent.getActivities();
             const expected = activities.map(item => sports.ActivityUtilities.getTrainingStressScoreEvaluations(item));
-            const score = kind === 'pool' ? 83.3 : kind === 'multisport' ? 33.3
+            // Pool HR covers 600..3000 seconds; do not extrapolate before its first observation.
+            const score = kind === 'pool' ? 66.7 : kind === 'multisport' ? 33.3
                 : kind === 'pace-uphill' ? 274.8 : kind === 'pace-zero' ? 0 : null;
             expect(expected.every(item => item.automatic.score === score)).toBe(true);
             hoisted.fitImporter.getFromArrayBuffer.mockResolvedValue(parsedEvent);

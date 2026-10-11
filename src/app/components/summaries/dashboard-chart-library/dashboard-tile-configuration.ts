@@ -29,6 +29,27 @@ import {
   DataPowerMax,
   DataPowerMin,
   DataRPE,
+  DataSpeedAvg,
+  DataSpeedAvgKilometersPerHour,
+  DataSpeedAvgMilesPerHour,
+  DataSpeedAvgFeetPerSecond,
+  DataSpeedAvgMetersPerMinute,
+  DataSpeedAvgFeetPerMinute,
+  DataSpeedAvgKnots,
+  DataSpeedMin,
+  DataSpeedMinKilometersPerHour,
+  DataSpeedMinMilesPerHour,
+  DataSpeedMinFeetPerSecond,
+  DataSpeedMinMetersPerMinute,
+  DataSpeedMinFeetPerMinute,
+  DataSpeedMinKnots,
+  DataSpeedMax,
+  DataSpeedMaxKilometersPerHour,
+  DataSpeedMaxMilesPerHour,
+  DataSpeedMaxFeetPerSecond,
+  DataSpeedMaxMetersPerMinute,
+  DataSpeedMaxFeetPerMinute,
+  DataSpeedMaxKnots,
   DataStrokeRateAvg,
   DataStrokeRateMax,
   DataStrokeRateMin,
@@ -42,9 +63,6 @@ import {
   TileTypes,
   TimeIntervals,
 } from '@sports-alliance/sports-lib';
-import * as SpeedAvg from '@sports-alliance/sports-lib';
-import * as SpeedMin from '@sports-alliance/sports-lib';
-import * as SpeedMax from '@sports-alliance/sports-lib';
 import { AppUserService } from '../../../services/app.user.service';
 import { AppUserInterface } from '../../../models/app-user.interface';
 import type {
@@ -1905,14 +1923,23 @@ export class DashboardTileConfiguration {
       },
     ];
 
+    // Keep the lookup finite: computed access on a package namespace retains
+    // every Sports Lib export, including importers, in the shared startup chunk.
+    const speedTypesByUnit: Record<string, readonly string[]> = {
+      MetersPerSecond: [DataSpeedAvg.type, DataSpeedMin.type, DataSpeedMax.type],
+      KilometersPerHour: [DataSpeedAvgKilometersPerHour.type, DataSpeedMinKilometersPerHour.type, DataSpeedMaxKilometersPerHour.type],
+      MilesPerHour: [DataSpeedAvgMilesPerHour.type, DataSpeedMinMilesPerHour.type, DataSpeedMaxMilesPerHour.type],
+      FeetPerSecond: [DataSpeedAvgFeetPerSecond.type, DataSpeedMinFeetPerSecond.type, DataSpeedMaxFeetPerSecond.type],
+      MetersPerMinute: [DataSpeedAvgMetersPerMinute.type, DataSpeedMinMetersPerMinute.type, DataSpeedMaxMetersPerMinute.type],
+      FeetPerMinute: [DataSpeedAvgFeetPerMinute.type, DataSpeedMinFeetPerMinute.type, DataSpeedMaxFeetPerMinute.type],
+      Knots: [DataSpeedAvgKnots.type, DataSpeedMinKnots.type, DataSpeedMaxKnots.type],
+    };
     try {
       const speedUnits: string[] = [];
       const unitSettings = this.data.user?.settings?.unitSettings;
       (unitSettings?.speedUnits || []).forEach(speedUnitKey => {
         const unit = SpeedUnitsToGradeAdjustedSpeedUnits[speedUnitKey];
-        speedUnits.push(SpeedAvg['DataSpeedAvg' + unit].type);
-        speedUnits.push(SpeedMin['DataSpeedMin' + unit].type);
-        speedUnits.push(SpeedMax['DataSpeedMax' + unit].type);
+        speedUnits.push(...speedTypesByUnit[unit]);
       });
       if (speedUnits.length > 0) {
         groups.push({

@@ -52,6 +52,20 @@ authoritative by default. Correct historical values only through the existing or
 refresh derived Training summaries. Saved routes and schemas need no migration. The target continues to follow the
 installed runtime version; this dependency update does not enable either automatic scanner or launch a campaign.
 
+Event-table merging is a distinct stats-only path: it preserves recorded leg TSS/method and copies the source's saved
+Training load evaluations, applied policies and controls without reparsing originals. Pending/stale or unresolved
+source metadata blocks the merge for review. Preparation/finalization use stable activity IDs, source fingerprints,
+concurrency/deletion fences and the existing private load cache. Source workouts are not altered; users can exclude a
+duplicate representation themselves. Completed older merges are not rewritten automatically. Original-file reparse
+can recover file-based candidates, but owners must review their controls when earlier merges lost source snapshots.
+No production repair, scanner or new recurring rebuild read is enabled by this correction.
+
+Sports Lib 21.6.10 further corrects unsupported HR coverage, explicit reevaluation of calculated NP, Suunto event-array
+selection and validated zero active time, multisport zone-duration ownership, FIT canonical pool-length units and
+source-backed lap/session timing. Apply parser corrections only through the existing original-file lifecycle for
+historical records; ordinary JSON cannot restore raw source evidence. Public metric/schema/MCP shapes stay unchanged.
+See the Training guide for precise input eligibility and the narrow Suunto pool-unit compatibility rule.
+
 Running pace corrections require original-file reparse to apply grade cost, zero-speed, active-duration and complete
 window semantics. Pool HR preservation and unambiguous multisport initial timer-state recovery likewise require the
 original source file. Regeneration keeps the same parsed instance so private recorded-HR gap provenance and source
