@@ -73,6 +73,60 @@ describe('dashboard Health semantics',()=>{
       expect(view.hasData).toBe(true);
     }
   });
+  it.each(['steps', 'resting_heart_rate', 'heart_rate_variability', 'body_weight', 'vo2_max', 'active_energy'] as const)(
+    'defaults %s to useful readings while retaining explicit zero-source choices and filters', metric => {
+      const data = evidence(metric, ['zero', 'real']);
+      for (const observation of data.health!.result.observations) {
+        observation.provider = observation.accountKey === 'real' ? 'SuuntoApp' : 'GarminAPI';
+        if (observation.entry.kind === 'value') observation.entry.canonical!.value = observation.accountKey === 'real' ? 54 : 0;
+      }
+      const settings = { metric, range: '30d' as const };
+      const automatic = buildDashboardHealthContext(data, settings);
+      expect(automatic.selected?.model.series.provider).toBe('SuuntoApp');
+      const zeroKey = automatic.sources.find(source => source.provider === 'GarminAPI')!.key;
+      const explicit = buildDashboardHealthContext(data, { ...settings, sourceKey: zeroKey });
+      expect(explicit.selectedKey).toBe(zeroKey);
+      expect(explicit.selected?.model.series.points[0].value).toBe(0);
+      expect(explicit.hasData).toBe(true);
+      expect(buildDashboardHealthContext(data, settings, null, undefined, ['GarminAPI']).selectedKey).toBe(zeroKey);
+      expect(buildDashboardHealthContext(data, settings, null, undefined, ['GarminAPI', 'SuuntoApp']).selected?.model.series.provider).toBe('SuuntoApp');
+    });
+  it('ranks freshness without provider preference for meaningful zero readings', () => {
+    const data = evidence('skin_temperature_deviation', ['older', 'recent']);
+    for (const observation of data.health!.result.observations) {
+      observation.provider = observation.accountKey === 'recent' ? 'SuuntoApp' : 'GarminAPI';
+      observation.endTimeMs = Date.parse(observation.accountKey === 'recent' ? '2026-09-15T12:00:00Z' : '2026-09-14T12:00:00Z');
+      observation.calendarDate = observation.accountKey === 'recent' ? '2026-09-15' : '2026-09-14';
+      if (observation.entry.kind === 'value') observation.entry.canonical!.value = observation.accountKey === 'recent' ? 0 : 2;
+    }
+    const view = buildDashboardHealthContext(data, { metric: 'skin_temperature_deviation', range: '30d' });
+    expect(view.selected?.model.series.provider).toBe('SuuntoApp');
+    expect(view.selected?.model.series.points[0].value).toBe(0);
+  });
+  it('honors an HRV account preference within the provider filter and an explicit source over that preference', () => {
+    const data = evidence('heart_rate_variability', ['preferred', 'other']);
+    data.health!.result.observations.find(item => item.accountKey === 'other')!.provider = 'SuuntoApp';
+    const settings = { metric: 'heart_rate_variability' as const, range: '30d' as const };
+    const view = buildDashboardHealthContext(data, settings);
+    const garmin = view.sources.find(source => source.provider === 'GarminAPI')!;
+    const suunto = view.sources.find(source => source.provider === 'SuuntoApp')!;
+    const hint = buildDashboardHealthContext(data, { ...settings, sourceKey: suunto.key }).selected!.model.series.sourceSelectionKey;
+    expect(buildDashboardHealthContext(data, settings, null, hint).selectedKey).toBe(suunto.key);
+    expect(buildDashboardHealthContext(data, settings, null, hint, ['GarminAPI']).selectedKey).toBe(garmin.key);
+    expect(buildDashboardHealthContext(data, { ...settings, sourceKey: garmin.key }, null, hint).selectedKey).toBe(garmin.key);
+  });
+  it('defaults Sleep to the source with the newest rendered night', () => {
+    const data = evidence('sleep_duration', []);
+    const base = { userID: 'owner', startTimeMs: Date.parse('2026-09-13T22:00:00Z'),
+      endTimeMs: Date.parse('2026-09-14T06:00:00Z'), durationSeconds: 28800,
+      stages: [], isNap: false, createdAtMs: 0, updatedAtMs: 0 };
+    data.sessions = [
+      { ...base, id: 'older', sleepDate: '2026-09-14', source: { provider: 'GarminAPI', providerUserId: 'garmin', sourceSessionKey: 'older' } },
+      { ...base, id: 'recent', sleepDate: '2026-09-15', startTimeMs: base.startTimeMs + 86400000,
+        endTimeMs: base.endTimeMs + 86400000, source: { provider: 'SuuntoApp', providerUserId: 'suunto', sourceSessionKey: 'recent' } },
+    ];
+    expect(buildDashboardHealthContext(data, { metric: 'sleep', range: '30d' }).sleep.latestPoint?.provider).toBe('SuuntoApp');
+  });
   it('does not offer a Sleep source whose sessions cannot be rendered', () => {
     const data = evidence('sleep_duration', []);
     const session = { id: 'night', userID: 'owner', sleepDate: '2026-09-14',

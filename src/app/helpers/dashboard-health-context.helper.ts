@@ -12,6 +12,7 @@ import { buildHealthChartModels, buildHealthHrvChartStatusOverlay, healthHrvChar
 import { buildDashboardSleepTrendContext, resolveSleepTrendDate } from './dashboard-sleep-chart.helper';
 import type { DashboardChartAvailability } from './dashboard-chart-availability.helper';
 import { healthChartSourceChoice } from './chart-source.helper';
+import { selectDefaultHealthSourceKey, type HealthSourceSelectionCandidate } from './health-source-selection.helper';
 export interface DashboardHealthEvidence {
     window: HealthWorkspaceWindow;
     health: HealthWorkspaceRangeLoad | null;
@@ -75,18 +76,26 @@ export function buildDashboardHealthContext(evidence: DashboardHealthEvidence, s
         if (!context.hasRealPoints) return [];
         const provider = session.source.provider as HealthProvider;
         const label = context.latestPoint!.providerLabel;
-        return [{ key, provider, label }];
+        return [{ key, provider, label, points: context.points.filter(point => !point.isPlaceholder).map(point => ({
+            value: point.totalSeconds, timestampMs: point.endTimeMs, calendarDate: point.sleepDate,
+        })) }];
     });
     const sources = settings.metric === 'sleep' ? sleepSources.map(source => {
         const providerSources = sleepSources.filter(item => item.provider === source.provider);
         const providerIndex = providerSources.findIndex(item => item.key === source.key);
         const label = providerSources.length > 1 ? `${source.label} · Account ${providerIndex + 1}` : source.label;
-        return { ...source, label, shortLabel: label, sourceLabel: label, detail: 'Sleep overview' };
+        return { key: source.key, provider: source.provider, label, shortLabel: label, sourceLabel: label, detail: 'Sleep overview' };
     }) : charts.map(chart => ({ ...healthChartSourceChoice(chart.model.series), provider: chart.model.series.provider }));
-    const initial = providerFilter.length
-        ? sources.find(source => providerFilter.includes(source.provider))
-        : (settings.metric === HEALTH_METRIC_IDS.HeartRateVariability && preferredAccount
-            ? sources.find(source => charts.find(chart => chart.key === source.key)?.model.series.sourceSelectionKey === preferredAccount) : null) || sources[0];
+    const allowed = providerFilter.length ? sources.filter(source => providerFilter.includes(source.provider)) : sources;
+    const preferred = settings.metric === HEALTH_METRIC_IDS.HeartRateVariability && preferredAccount
+        ? allowed.filter(source => charts.find(chart => chart.key === source.key)?.model.series.sourceSelectionKey === preferredAccount) : [];
+    const eligible = preferred.length ? preferred : allowed;
+    const candidates: HealthSourceSelectionCandidate[] = settings.metric === 'sleep'
+        ? sleepSources.map(source => ({ ...source, metricId: HEALTH_METRIC_IDS.SleepDuration }))
+        : charts.map(chart => ({ ...chart.model.series, key: chart.key }));
+    const eligibleKeys = new Set(eligible.map(source => source.key));
+    const defaultKey = selectDefaultHealthSourceKey(candidates.filter(candidate => eligibleKeys.has(candidate.key)));
+    const initial = eligible.find(source => source.key === defaultKey) || eligible[0];
     const missingFilteredSource = !settings.sourceKey && providerFilter.length > 0 && !initial;
     const selectedKey = settings.sourceKey || initial?.key || null;
     const selected = charts.find(chart => chart.key === selectedKey) || null;

@@ -1810,6 +1810,31 @@ describe('HealthWorkspaceComponent', () => {
     expect(component.priorityHrvWindow.label).toBe('14-day trend');
     expect(component.selectedRange()).toBe('1y');
   });
+  it('uses the shared default source policy for highlights and preserves an explicit provider choice', async () => {
+    await createComponent();
+    const summaryFixture = TestBed.createComponent(HealthPrioritySummaryComponent);
+    const heart = component.priorityCards().find(card => card.id === 'heart_rate')!;
+    const series = heart.chartSeries.map(source => ({ ...source, points: source.points.map(point => ({
+      ...point, value: source.provider === HEALTH_PROVIDERS.GarminAPI ? 0 : point.value,
+    })) })).sort((left, right) => left.provider.localeCompare(right.provider));
+    const garmin = series.find(source => source.provider === HEALTH_PROVIDERS.GarminAPI)!;
+    garmin.points.push({ ...garmin.points[0], value: 120, timestampMs: component.priorityHeartRateWindow.endTimeMs + 1000 });
+    summaryFixture.componentRef.setInput('cards', [{ ...heart, chartSeries: series }]);
+    summaryFixture.componentRef.setInput('startTimeMs', component.priorityHeartRateWindow.startTimeMs);
+    summaryFixture.componentRef.setInput('endTimeMs', component.priorityHeartRateWindow.endTimeMs);
+    summaryFixture.detectChanges();
+    const selected = () => {
+      const card = summaryFixture.componentInstance.renderedCards()[0]; return card.sources[card.selectedSourceIndex];
+    };
+    expect(selected().label).toBe('Suunto');
+    const garminKey = garmin.sourceSelectionKey!;
+    summaryFixture.componentRef.setInput('preferredSources', { heart_rate: garminKey }); summaryFixture.detectChanges();
+    expect(selected().label).toBe('Garmin');
+    expect(selected().valueText).toBe('0 bpm');
+    expect(selected().chart?.model.displayedPoints.every(point => point.value === 0)).toBe(true);
+    expect(haptics.selection).not.toHaveBeenCalled();
+    summaryFixture.destroy();
+  });
 
   it('keeps successfully loaded today readings reachable when the metric inventory is stale', async () => {
     await createComponent(undefined, undefined, { metricIds: [], hasSleep: false });

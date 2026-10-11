@@ -650,6 +650,17 @@ Health tile reads depend on owner, metric and window, independently of source se
 Changing those display choices reprojects retained evidence without resubscribing or resetting loading state.
 Persisting an automatically selected source preserves the existing chart model instead of building it twice.
 
+`health-source-selection.helper.ts` owns automatic source choice for every Health metric, Sleep overview and Health
+highlights. It ranks drawable readings in the inspected period by useful evidence, main-Sleep/canonical semantics,
+latest recorded calendar date and time, then distinct days of coverage. Activity totals and positive measurements
+with only zeros rank behind sources with non-zero readings; trailing zeros do not manufacture newer useful evidence.
+Zero stress, temperature deviations, altitude, resources, recovery and Sleep scores remain meaningful. Boolean and
+categorical states remain eligible. Zeros are never removed or rewritten, raw sample frequency and value magnitude
+never win a comparison, and exact ties retain the existing deterministic order. Provider filters bound the candidates;
+explicit sources and an eligible HRV account preference take precedence. Overview defaults remain automatic across
+refreshes until the user chooses a source; saved dashboard tile source persistence stays unchanged. These decisions
+reuse loaded evidence and do not change provider ingestion, metric calculations, stored values or MCP contracts.
+
 Health's All overview uses an explicit ordered selection: Sleep, HRV, resting heart rate, VO₂ max, weight, and steps.
 Missing metrics reduce the selection; catalog order never supplies replacement cards. Completed shared chart contexts
 also hide default cards with no sources and confirmed `no-data` availability. Their readers remain mounted so refreshes

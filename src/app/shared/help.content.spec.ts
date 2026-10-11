@@ -428,6 +428,10 @@ describe('help.content', () => {
     expect(health).toContain('New readings can bring an omitted card back');
     expect(health).toContain('Each chart identifies its own period');
     expect(health).toContain('the HRV highlight uses 14 days');
+    expect(health).toContain('**Automatic source selection** considers usable readings, freshness, and distinct days of coverage');
+    expect(health).toContain('All recorded zeros remain available');
+    expect(health).toContain('selecting a source explicitly keeps it selected');
+    expect(health).toContain('An automatic overview choice can update when new readings arrive');
     expect(health).toContain('**Vitals** includes today’s heart-rate highlight');
     expect(health).toContain('replacing its general Heart rate card');
     expect(health).toContain('Other category views show their metric cards without highlights');
