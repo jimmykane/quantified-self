@@ -30,7 +30,8 @@ import { applyTrainingChanges, getTrainingChangeStatus, previewCreatePlannedWork
   previewStrengthWorkoutChange, previewPlannedWorkoutV2Change, previewPlannedWorkoutV3Change, previewTrainingDeletion,
   previewGarminWorkoutReplacement, loadAssistantTrainingWorkoutReviews,
   type TrainingWriteDependencies } from './training-plans-write.service';
-import { TRAINING_DELIVERY_WRITE_SCOPE, TRAINING_PLANS_SCOPE, TRAINING_PLANS_WRITE_SCOPE } from './training-plans.schemas';
+import { TRAINING_CHANGE_STATUS_OUTPUT, TRAINING_DELIVERY_WRITE_SCOPE, TRAINING_PLANS_SCOPE,
+  TRAINING_PLANS_WRITE_SCOPE } from './training-plans.schemas';
 import { createAssistantConversationStore } from '../assistant/conversation-store';
 import { runApplyAssistantTrainingProposal } from '../assistant/callable';
 
@@ -519,7 +520,8 @@ describe.skipIf(!process.env.FIRESTORE_EMULATOR_HOST)('Training MCP write propos
     expect(recovered).toMatchObject({ state: 'applied', recordedChangeCount: 13, recordedProviderCount: 12,
       retryAfterSeconds: null, result: { status: 'applied', changes: expect.any(Array), providers: expect.any(Array) } });
     expect(recovered.result!.createdReferences).toHaveLength(13);
-    expect(JSON.stringify(recovered)).not.toMatch(/accessGeneration|destinationKey|scheduleRequests|leaseUntilMs|uid/);
+    // Opaque encrypted references can contain "uid" by chance. The strict schema checks actual fields recursively.
+    expect(TRAINING_CHANGE_STATUS_OUTPUT.parse(recovered)).toEqual(recovered);
     const proposal = (await user.collection('trainingMcpProposals').get()).docs[0];
     const beforeStatusRead = proposal.data();
     await expect(getTrainingChangeStatus(input, deps)).resolves.toEqual(recovered);
