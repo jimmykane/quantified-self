@@ -34,6 +34,39 @@ original-file lifecycle and existing derived refresh, including QS's corroborate
 No new fields, schemas, storage operations, MCP capabilities, saved-route reparse or automatic campaign are required.
 Package adoption does not deploy QS or authorize production rewrites.
 
+### Sports Lib 21.6.13 source classification, HR and distance corrections
+
+Keep root and Functions on the same released version. This parser update rejects explicit non-workout FIT file types,
+including daily monitoring, settings and course files, instead of generating Unknown Sport workouts. Completed Wahoo
+and other `activity_summary` files remain supported when they contain an explicit session, including summaries with no
+sensor records or with imported TSS zero. Sessionless summary files cannot synthesize workouts from timestamped events.
+Ordinary activity files and legacy files without a file type retain compatibility. A historical monitoring original
+now fails source reparse terminally: the job/status record reports failure and retries are suppressed, while the existing
+event, activities, controls and original remain intact.
+Do not delete those historical records or count this rejection as an automatic volume repair. No Health import is added.
+
+COROS GPX direct `hr` in the ClueTrust GPXDATA 1/0 namespace restores the existing Heart Rate stream, preserving zero,
+namespace independence and legacy heartrate/Garmin precedence. Unrelated, blank/non-finite or ambiguous readings are
+ignored. Restoring samples does not invent HR calibration and therefore need not make HR TSS available.
+
+Mixed-sport Suunto JSON/SML no longer copies unscoped header SpeedZones boundaries onto every leg. Single-sport header
+thresholds and applicable leg-local thresholds remain eligible; conflicting sport identifiers cannot donate calibration.
+Imported TSS, valid HR/MET fallback and native JSON roundtrip behavior retain their established contracts.
+
+FIT pool-distance recovery avoids adding earlier fallback length distance to a whole-session total repeated only on
+the final active lap. Recovery requires complete, uniquely owned positive pool lengths with consistent counts and
+nonoverlapping active intervals across multiple active laps. Prefer a complete monotonic zero-to-total recorded counter
+covering those lengths, including when a session summary disagrees. Otherwise use complete length geometry only if the
+independent session summary agrees. Incomplete or conflicting evidence does not qualify; consistent lap distances and
+single-lap behavior remain unchanged. See the Training guide for the precise source-evidence contract.
+
+Use authorized original-file reparse/regeneration and normal derived refresh for historical corrections. A Training
+rebuild cannot recover lost source samples or threshold ownership. Package publication/dependency adoption starts no
+campaign, deploys nothing, and adds no storage queries, provider calls, public schemas or MCP capabilities.
+Monitoring review: provider parse rejections retain existing import failure/DLQ telemetry. Reparse uses its existing
+terminal job/per-event status, failure log and retry-suppression path; the recorded-import alert bundle explicitly does
+not cover Sports Lib reprocessing. No monitoring configuration is changed or applied by this update.
+
 ### Unreleased provider-profile and JSON compatibility corrections
 
 The local Sports Lib branch corrects Garmin Breathwork for Generic/Breathing and Training/Breathing with an explicit
@@ -71,7 +104,7 @@ FIT Parser source.
 
 ### Sports Lib 21.6.1 file-calibrated Training load
 
-Sports Lib 21.6.12 is published and pinned in root and Functions, with FIT Parser 6.2.2. It retains the file-calibrated
+The coordinated root and Functions dependency target is Sports Lib 21.6.13, with FIT Parser 6.2.2. It retains the file-calibrated
 load rules introduced in 21.6.1 and includes the swimming threshold, independent cycling FTP, rolling NP, explicit
 HR-pause, running pace, pool-length/recorded-stream and measured-zero power corrections. This release also corrects
 FIT session-boundary and zone ownership, missing timer recovery, Suunto pause/resume events and positive recorded-power

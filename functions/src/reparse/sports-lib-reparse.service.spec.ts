@@ -1947,6 +1947,33 @@ describe('sports-lib-reparse.service', () => {
         expect(isSportsLibReparseTerminalFailureMessage('parse failed')).toBe(false);
     });
 
+    it.each([
+        'Strict original-file reparse failed. users/u1/events/e1/original.fit: FIT file is not an activity file',
+        'Strict original-file reparse failed. monitoring.fit: FIT file is not an activity file; other.fit: download failed',
+        'Strict original-file reparse failed. other.fit: download failed; monitoring.fit: FIT file is not an activity file',
+    ])('terminalizes an explicitly non-activity source without repeated automatic retries: %s', message => {
+        expect(isSportsLibReparseTerminalFailureMessage(message)).toBe(true);
+    });
+
+    it('does not classify other FIT parsing failures as non-activity files', () => {
+        expect(isSportsLibReparseTerminalFailureMessage(
+            'Strict original-file reparse failed. original.fit: FIT file is not an activity file candidate',
+        )).toBe(false);
+    });
+
+    it('leaves existing workout data intact when a monitoring original is rejected', async () => {
+        hoisted.fitImporter.getFromArrayBuffer.mockRejectedValue(new Error('FIT file is not an activity file'));
+        await expect(reparseEventFromOriginalFiles('u1', 'e1', {
+            eventData: { originalFile: { path: 'users/u1/events/e1/original.fit' } },
+            activityDocs: [{ id: 'existing-activity', data: () => ({ type: 'Unknown Sport' }) } as any],
+            targetSportsLibVersion: TARGET_SPORTS_LIB_VERSION,
+        })).rejects.toThrow('FIT file is not an activity file');
+        expect(hoisted.mockWriteAllEventData).not.toHaveBeenCalled();
+        expect(hoisted.reGenerateStatsForEvent).not.toHaveBeenCalled();
+        expect(hoisted.mockBatchDelete).not.toHaveBeenCalled();
+        expect(hoisted.mockTransactionDelete).not.toHaveBeenCalled();
+    });
+
     it('applyAutoHealedSourceBucketMetadata should skip invalid resolved entries and only rewrite mapped paths', () => {
         const existingEventDoc = {
             originalFile: { path: 'matched.fit', bucket: 'legacy-bucket' },

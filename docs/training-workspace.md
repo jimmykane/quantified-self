@@ -5371,6 +5371,40 @@ source reparse; historical parser/timing corrections require the original-file l
 No new fields, schemas, storage operations, MCP scopes or planning/delivery capabilities are introduced. Neither this
 adoption nor a package release starts a production reparse campaign; saved routes need no source reparse.
 
+Sports Lib 21.6.13 adds four source-parser corrections. FIT daily monitoring, settings, course and other explicit
+non-workout file types are rejected before they can become synthetic Unknown Sport workouts. Completed workout
+`activity_summary` files, including Wahoo exports without sensor records, remain accepted when they contain an explicit
+session; timestamped events alone cannot create a session for that type. Ordinary `activity` files and missing file
+types retain legacy activity compatibility. Rejected new imports fail normally; a retained historical monitoring file
+reaches the existing terminal reparse-failure path without deleting or replacing its saved event, activities, load controls or source.
+This does not route monitoring files into Health or clean up historical workout volume automatically.
+
+COROS GPX direct `hr` readings in the ClueTrust GPXDATA 1/0 namespace now populate the existing Heart Rate stream.
+Namespace prefixes are irrelevant; unrelated direct `hr` tags, blank/non-finite values and ambiguous repeated tags
+are not accepted. Finite zero and existing direct `heartrate`/nested Garmin precedence are retained. Restored HR
+samples do not supply missing resting/threshold/maximum calibration, so calculated HR TSS can remain unavailable.
+
+Mixed-sport Suunto JSON/SML no longer assigns unscoped header SpeedZones boundaries to every leg. A leg needs its
+own applicable speed-zone thresholds; a single resolved sport may still use the shared header. Conflicting explicit
+sport identifiers cannot donate another leg's thresholds. Leg-local durations/boundaries remain intact, and native
+JSON roundtrips cannot restore rejected global thresholds. Imported TSS and eligible HR/MET fallback retain priority.
+
+FIT pool-distance recovery recognizes a whole-session distance repeated only on the final active lap when earlier
+active laps omit distance. Multiple active laps must have complete, uniquely owned, positive, nonoverlapping pool
+lengths whose total agrees with that final value, including declared active-length counts when present. A complete
+monotonic recorded counter covering those lengths from zero to the same total is preferred, even when a session
+summary disagrees. Otherwise the generator uses complete length distance only if an independent session summary
+agrees. Partial, reset, invalid, late-starting or early-ending counters cannot corroborate this correction. Conflicting
+or incomplete evidence retains existing behavior; consistent lap distances and single-lap handling are unchanged.
+Comparisons use encoded FIT centimetre/second precision. This avoids adding earlier fallback lengths to a repeated
+session total, preserving the corrected counter through source-backed statistics regeneration.
+
+Apply these historical parser corrections through the existing original-file lifecycle and derived refresh; merely
+refreshing Training cannot recover discarded source evidence. Source hydration can show corrected existing HR/distance
+chart metrics without persisting them. No new metric classes, units, schemas, MCP fields/scopes, storage operations,
+provider requests or automatic reparse campaign are introduced. Existing import failure/DLQ signals and terminal
+reparse diagnostics remain applicable; this release provisions no additional monitoring resources.
+
 The 21.6.10 consumer build exposed computed namespace access in dashboard speed-unit selection that retained the
 whole Sports Lib export namespace. Explicit canonical speed-stat imports preserve supported and legacy units,
 including base metres-per-second statistics, while reducing the initial bundle by approximately 70 kB. The production
@@ -5379,7 +5413,8 @@ no stored units, Training calculations or MCP contracts.
 
 Suunto JSON/SML locates Activity, Lap, Stop and Altitude entries by event kind rather than array position. Consistent
 all-paused duration summaries preserve zero active duration. Multisport zone durations come from each leg's window;
-whole-workout zone duration is used only for a single leg, while shared thresholds remain usable. FIT pool length is
+whole-workout zone duration is used only for a single leg. Shared speed thresholds are eligible only when the source
+resolves to one sport; mixed-sport legs require applicable local thresholds. FIT pool length is
 canonical metres; a narrow nonconforming Suunto statute-unit correction requires consistent independent recorded
 speed/timer/lap-distance evidence and no conflicting native-metre evidence. FIT lap ownership honors unique explicit
 references when summary order differs; missing-session active time must be supported by complete contiguous lap

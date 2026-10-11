@@ -98,6 +98,7 @@ const SPORTS_LIB_REPARSE_TERMINAL_ERROR_PATTERNS = [
     /^\[sports-lib-reparse\] Reparse target sports-lib version ".*" does not match runtime sports-lib version ".*"$/,
     /^Event .* was not found for user .*$/,
     /^Strict original-file reparse failed\. .*: No activities found in GPX; use importRoutesFromGPX for routes$/,
+    /^Strict original-file reparse failed\. .*: FIT file is not an activity file(?:; |$)/,
     /^Strict original-file reparse failed\. .*: Original file exceeds reparse size limit\./,
     /^Strict original-file reparse failed\. .*: \[sports-lib-reparse\] Reparse exceeded safe runtime budget /,
     /^\[sports-lib-reparse\] Reparse exceeded safe runtime budget /,

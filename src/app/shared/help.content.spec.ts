@@ -55,6 +55,21 @@ describe('help.content', () => {
       'saved tag remains available', '**Refresh tags and activities**', 'Generated timestamp names are hidden',
       'the sport stays visible and opens the activity', 'Custom names remain visible']) expect(copy).toContain(phrase);
   });
+  it('explains source parser corrections without promising calibration or historical deletion', () => {
+    const copy = HELP_SECTIONS.find(section => section.content.includes('### Form tile (CTL / ATL / TSB)'))!.content;
+    expect(copy).toContain('pace-based load needs a threshold belonging to that sport');
+    expect(copy).toContain('An unassigned whole-workout speed threshold is not copied across different sports');
+    expect(copy).toContain('COROS GPX files can supply recorded heart-rate readings');
+    expect(copy).toContain('Readings alone do not supply the resting, threshold and maximum HR settings');
+    expect(copy).toContain('Daily monitoring FIT files are not workouts');
+    expect(copy).toContain('Completed workout summaries, including Wahoo files without sensor readings, remain supported');
+    expect(copy).toContain('when the file contains a recorded workout session');
+    expect(copy).toContain('reports a failure and keeps the existing saved activity');
+    expect(copy).toContain('does not automatically remove it or import Health data');
+    expect(copy).toContain('complete pool lengths and a complete recorded distance counter or an independent session total agree');
+    expect(copy).toContain('that distance is counted once');
+    expect(copy).toContain('Missing or conflicting evidence is not used to guess a correction');
+  });
   it('explains single-lap pool imports and retained boundary rests', () => {
     const copy = HELP_SECTIONS.find(section => section.content.includes('### Form tile (CTL / ATL / TSB)'))!.content;
     expect(copy).toContain('Pool imports support swims recorded as one lap');

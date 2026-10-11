@@ -1542,6 +1542,17 @@ existing retained Suunto or FIT source gains the new metrics. This changes neith
 scopes, nor bundled plugin instructions, so it does not itself add a registered-app refresh, contract promotion, or local
 plugin-sync requirement beyond any independently pending contract update.
 
+Sports Lib 21.6.13 corrects existing source data without adding metric tokens or changing registered contracts:
+COROS GPX ClueTrust HR becomes the existing Heart Rate stream, mixed-sport Suunto pace calibration requires applicable
+sport-owned thresholds, and corroborated pool distance avoids a cumulative final-lap double count. On-demand charts
+can expose corrected existing HR/distance streams after runtime adoption; recorded metric queries change only after
+source-backed import/reparse persists corrected summaries. Imported TSS and private load controls retain priority.
+Explicit non-workout FIT files are rejected during source hydration/reparse; completed activity-summary FIT files with
+an explicit session remain supported, including Wahoo summaries without sensor records. Historical summary reads remain
+unchanged until a separate authorized lifecycle action. A rejected reparse does not delete the saved event or route data into
+Health. No MCP scope, tool, reason, field, unit, schema, plugin instruction, or mutation capability is added; no contract
+promotion or registered-app refresh is needed solely for these source corrections.
+
 `query_metric` selects only the requested canonical stat and the activity-type stat from Firestore before applying its
 cumulative work budgets, imports that bounded projection through `EventImporterJSON`, and reuses the shared event-stat
 aggregation engine. It excludes benchmark-merge events and accepts an explicit IANA timezone for date buckets. Existing
