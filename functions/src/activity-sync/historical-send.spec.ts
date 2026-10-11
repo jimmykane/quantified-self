@@ -1,7 +1,9 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-const { queryGet, fileMetadata, fileDownload, queueGet, enqueue, queuedMetadata, destinationStatus } = vi.hoisted(() => ({
+const { queryGet, bulkGet, queryStartAfter, fileMetadata, fileDownload, queueGet, enqueue, queuedMetadata, destinationStatus } = vi.hoisted(() => ({
   queryGet: vi.fn(),
+  bulkGet: vi.fn(),
+  queryStartAfter: vi.fn(),
   fileMetadata: vi.fn(),
   fileDownload: vi.fn(),
   queueGet: vi.fn(),
@@ -10,21 +12,22 @@ const { queryGet, fileMetadata, fileDownload, queueGet, enqueue, queuedMetadata,
   destinationStatus: vi.fn(),
 }));
 
-vi.mock('firebase-functions/logger', () => ({ error: vi.fn() }));
+vi.mock('firebase-functions/logger', () => ({ error: vi.fn(), info: vi.fn() }));
 vi.mock('firebase-admin/firestore', () => ({ FieldPath: { documentId: () => '__name__' } }));
 
 vi.mock('firebase-admin', () => {
   const query = {
-    where: vi.fn(), orderBy: vi.fn(), limit: vi.fn(), startAfter: vi.fn(), get: queryGet,
+    where: vi.fn(), orderBy: vi.fn(), limit: vi.fn(), startAfter: queryStartAfter, get: queryGet,
   };
   query.where.mockReturnValue(query);
   query.orderBy.mockReturnValue(query);
   query.limit.mockReturnValue(query);
   query.startAfter.mockReturnValue(query);
   const firestore = () => ({
+    getAll: bulkGet,
     collection: (name: string) => name === 'users'
       ? { doc: () => ({ collection: () => query }) }
-      : { doc: () => ({ get: queueGet }) },
+      : { doc: (id: string) => ({ path: `${name}/${id}`, get: queueGet }) },
   });
   return {
     firestore,
@@ -34,7 +37,7 @@ vi.mock('firebase-admin', () => {
 
 vi.mock('./process-queue-item', () => ({ getDestinationConnectionStatus: destinationStatus }));
 vi.mock('./queue', () => ({
-  buildActivitySyncQueueItemId: vi.fn(async () => 'queue-id'),
+  buildActivitySyncQueueItemId: vi.fn(async (route: string, owner: string, event: string) => `${route}-${owner}-${event}`),
   enqueueActivitySyncQueueItem: enqueue,
 }));
 vi.mock('./metadata', () => ({
@@ -44,13 +47,14 @@ vi.mock('./metadata', () => ({
 }));
 
 import { runHistoricalSendPage } from './historical-send';
+import * as logger from 'firebase-functions/logger';
 import { ACTIVITY_SYNC_ROUTES, getHistoricalActivityRouteId } from '../../../shared/activity-sync-routes';
 
 const source = ACTIVITY_SYNC_ROUTES.GarminAPI_to_SuuntoApp.sourceServiceName;
 const destination = ACTIVITY_SYNC_ROUTES.GarminAPI_to_SuuntoApp.destinationServiceName;
 const eventRef = {
   collection: () => ({
-    doc: (name: string) => ({ get: async () => name === source
+    doc: (name: string) => ({ path: `users/user-1/events/event-1/metaData/${name}`, get: async () => name === source
       ? { exists: true, data: () => ({ activityFileID: 'source-1' }) }
       : name === 'manualUploadOrigin'
         ? { exists: true, data: () => ({ kind: 'manualUpload', version: 1 }) }
@@ -78,6 +82,7 @@ describe('historical activity send pages', () => {
     vi.clearAllMocks();
     queryGet.mockResolvedValue({ size: 1, docs: [eventSnapshot] });
     queueGet.mockResolvedValue({ exists: false, data: () => undefined });
+    bulkGet.mockImplementation(async (...refs) => Promise.all(refs.map(async ref => ({ ...await ref.get(), ref }))));
     fileMetadata.mockResolvedValue([{ generation: '42', size: '1024' }]);
     const fit = Buffer.alloc(14);
     fit[0] = 12;
@@ -107,6 +112,65 @@ describe('historical activity send pages', () => {
       originalFile: expect.objectContaining({ generation: '42', extension: 'fit' }),
     }));
     expect(queuedMetadata).toHaveBeenCalledOnce();
+    expect(bulkGet).not.toHaveBeenCalled();
+  });
+
+  it('checks fifty events and all four sources in six bounded bulk reads without individual Firestore reads', async () => {
+    const destination = ACTIVITY_SYNC_ROUTES.GarminAPI_to_COROSAPI.destinationServiceName;
+    const sources = [source, ACTIVITY_SYNC_ROUTES.SuuntoApp_to_COROSAPI.sourceServiceName,
+      ACTIVITY_SYNC_ROUTES.WahooAPI_to_COROSAPI.sourceServiceName, 'manualUpload'] as const;
+    const individualGet = vi.fn(() => { throw new Error('Unexpected individual preview read'); });
+    const docs = Array.from({ length: 50 }, (_, index) => {
+      const id = `event-${index.toString().padStart(2, '0')}`;
+      const root = `users/user-1/events/${id}`;
+      return { id, data: () => ({ startDate: Date.parse('2026-01-02T00:00:00Z'),
+        originalFiles: [{ path: `${root}/original.fit`, generation: '42' }] }),
+        ref: { collection: () => ({ doc: (name: string) => ({ path: `${root}/metaData/${name}`, get: individualGet }) }) } };
+    });
+    queryGet.mockResolvedValue({ size: docs.length, docs });
+    let activeReads = 0;
+    let maxActiveReads = 0;
+    bulkGet.mockImplementation(async (...refs) => {
+      maxActiveReads = Math.max(maxActiveReads, ++activeReads);
+      await Promise.resolve();
+      activeReads -= 1;
+      return refs.map(ref => ({ ref,
+        exists: ref.path.endsWith(`/metaData/${source}`),
+        data: () => ref.path.endsWith(`/metaData/${source}`) ? { activityFileID: 'source-file' } : undefined,
+      }));
+    });
+
+    const result = await runHistoricalSendPage('user-1', { ...request, destinationServiceName: destination, sources: [...sources] });
+
+    expect(result.eligibleBySource).toEqual({ [source]: 50 });
+    expect(result.skippedBySource).toEqual({ [sources[1]]: 50, [sources[2]]: 50, manualUpload: 50 });
+    expect(result.failedCount).toBe(0);
+    expect(result.nextCursor?.lastEventID).toBe('event-49');
+    expect(bulkGet).toHaveBeenCalledTimes(6);
+    expect(bulkGet.mock.calls.every(refs => refs.length <= 100)).toBe(true);
+    expect(maxActiveReads).toBe(2);
+    expect(individualGet).not.toHaveBeenCalled();
+    expect(queueGet).not.toHaveBeenCalled();
+    expect(fileMetadata).toHaveBeenCalledTimes(50);
+    expect(fileDownload).not.toHaveBeenCalled();
+    expect(enqueue).not.toHaveBeenCalled();
+  });
+
+  it('fails a bulk-read outage without publishing an eligible page or writing anything', async () => {
+    bulkGet.mockRejectedValueOnce(new Error('Firestore unavailable'));
+    await expect(runHistoricalSendPage('user-1', request)).rejects.toThrow('Firestore unavailable');
+    expect(enqueue).not.toHaveBeenCalled();
+    expect(fileMetadata).not.toHaveBeenCalled();
+  });
+
+  it('does not read queue rows or provenance for activities already marked sent', async () => {
+    bulkGet.mockImplementation(async (...refs) => refs.map(ref => ({ ref, exists: true, data: () => ({ status: 'success' }) })));
+    const result = await runHistoricalSendPage('user-1', request);
+    expect(result.skippedByReason.already_sent).toBe(1);
+    expect(bulkGet).toHaveBeenCalledOnce();
+    expect(bulkGet.mock.calls[0][0].path).toContain('/metaData/activitySync_');
+    expect(queueGet).not.toHaveBeenCalled();
+    expect(fileMetadata).not.toHaveBeenCalled();
   });
 
   it('includes an unaccepted automatic queue row in preview and one-time send', async () => {
@@ -152,6 +216,37 @@ describe('historical activity send pages', () => {
     expect(fileMetadata).not.toHaveBeenCalled();
   });
 
+  it.each([
+    { deliveryMode: 'historical' }, { destinationUploadID: 'accepted-upload' },
+    { providerOperationStartedAt: 1 }, { destinationUploadContinuation: { retained: true } },
+    { resultStatus: 'manual_reconciliation_required' },
+  ])('keeps pending or accepted queue rows protected with batched preview reads: %j', async protection => {
+    queueGet.mockResolvedValue({ exists: true, data: () => ({ processed: false, ...protection }) });
+    const result = await runHistoricalSendPage('user-1', request);
+    expect(result.eligibleBySource[source]).toBeUndefined();
+    expect(result.skippedByReason.already_queued).toBe(1);
+    expect(fileMetadata).not.toHaveBeenCalled();
+    expect(enqueue).not.toHaveBeenCalled();
+  });
+
+  it('re-reads queue state on Send rather than reusing preview snapshots', async () => {
+    expect((await runHistoricalSendPage('user-1', request)).eligibleBySource[source]).toBe(1);
+    queueGet.mockResolvedValue({ exists: true, data: () => ({ processed: true, resultStatus: 'success' }) });
+    const result = await runHistoricalSendPage('user-1', { ...request, action: 'send' });
+    expect(result.queued).toBe(0);
+    expect(result.skippedByReason.already_sent).toBe(1);
+    expect(enqueue).not.toHaveBeenCalled();
+  });
+
+  it('logs only bounded count/timing diagnostics and retains success if diagnostic logging fails', async () => {
+    await runHistoricalSendPage('user-1', request);
+    expect(logger.info).toHaveBeenCalledWith('[HistoricalActivitySend] Preview page checked.', {
+      destination, sourceCount: 1, scanned: 1, failedCount: 0, hasNextPage: false, elapsedMs: expect.any(Number),
+    });
+    vi.mocked(logger.info).mockImplementationOnce(() => { throw new Error('Logger unavailable'); });
+    expect((await runHistoricalSendPage('user-1', request)).eligibleBySource[source]).toBe(1);
+  });
+
   it('rejects invalid source selection and a disconnected destination before scanning', async () => {
     await expect(runHistoricalSendPage('user-1', { ...request, sources: [] })).rejects.toMatchObject({ code: 'invalid-argument' });
     expect(queryGet).not.toHaveBeenCalled();
@@ -195,6 +290,11 @@ describe('historical activity send pages', () => {
       lastStartDate: Date.parse('2026-01-02T00:00:00.000Z'),
       lastEventID: 'event-49',
     });
+
+    queryGet.mockResolvedValueOnce({ size: 1, docs: [eventSnapshot] });
+    const next = await runHistoricalSendPage('user-1', { ...request, cursor: first.nextCursor! });
+    expect(queryStartAfter).toHaveBeenCalledWith(first.nextCursor!.lastStartDate, 'event-49');
+    expect(next.nextCursor).toBeNull();
 
     await expect(runHistoricalSendPage('user-1', {
       ...request, sources: ['manualUpload'], cursor: first.nextCursor!,

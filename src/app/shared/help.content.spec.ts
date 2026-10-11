@@ -1690,6 +1690,9 @@ describe('help.content', () => {
     expect(serviceConnectionsSection?.content).toContain('allow Activity Export in Garmin');
     expect(serviceConnectionsSection?.content).toContain('open **Send past activities** under the destination service in Services');
     expect(serviceConnectionsSection?.content).toContain('Only retained FIT files are eligible');
+    expect(serviceConnectionsSection?.content).toContain('Preview checks saved activities in batches');
+    expect(serviceConnectionsSection?.content).toContain('**Send** becomes available after the full preview finishes');
+    expect(serviceConnectionsSection?.content).toContain('stopping a preview sends nothing');
     expect(serviceConnectionsSection?.content).toContain('send past activities while automatic activity sync is off');
     expect(serviceConnectionsSection?.content).toContain('dashboard may offer a one-time action prompt to turn on automatic Garmin to Suunto activity sync');
     expect(serviceConnectionsSection?.content).toContain('Disconnecting Garmin, COROS, Suunto, or Wahoo turns off related automatic activity or route delivery');
