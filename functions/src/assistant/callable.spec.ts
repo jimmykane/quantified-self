@@ -1,5 +1,8 @@
 import { describe, expect, it, vi } from 'vitest';
 import { HttpsError } from 'firebase-functions/v2/https';
+import * as logger from 'firebase-functions/logger';
+import { z } from 'zod';
+import { createAssistantRuntime } from './runtime';
 import { encodeOpaqueValue } from '../mcp/data.service';
 import {
   AssistantConversationStoreError,
@@ -126,6 +129,43 @@ const context = {
 };
 
 describe('Assistant callable', () => {
+  it('logs bounded cause diagnostics on retry and final failure without private request/schema data', async () => {
+    const warn = vi.spyOn(logger, 'warn').mockImplementation(() => undefined);
+    const logError = vi.spyOn(logger, 'error').mockImplementation(() => undefined);
+    try {
+      const { dependencies } = createDependencies();
+      const invalid = z.object({ title: z.string() }).strict().safeParse({
+        title: { token: 'private-token' }, 'private-user-id': 'private-activity',
+      });
+      const runtime = createAssistantRuntime({
+        createMcpSession: vi.fn().mockResolvedValue({
+          instructions: 'Use current evidence.',
+          tools: [{ name: 'get_daily_report', description: 'Read', inputSchema: { type: 'object' } }],
+          callTool: vi.fn().mockRejectedValue(invalid.error), close: vi.fn(),
+        }),
+        generateAnswer: async ({ tools }) => {
+          await tools[0].execute({});
+          return { answer: 'unreachable', visualRequest: { chart: null, map: null } };
+        },
+      });
+      dependencies.answer = runtime.answer;
+      await expect(runAssistantChat({ requestId: REQUEST_ID, message: 'private-prompt', timeZone: 'UTC' }, context, dependencies))
+        .rejects.toMatchObject({ code: 'unavailable' });
+      const fields = {
+        errorReason: 'mcp_tool_failed', toolName: 'get_daily_report',
+        toolErrorCode: 'invalid_assistant_preview', toolFailureStage: 'assistant_tool_execution',
+        causeErrorType: 'ZodError', causeErrorCode: 'unknown',
+        causeSchemaIssues: [
+          { code: 'invalid_type', path: '$.title' }, { code: 'unrecognized_keys', path: '$' },
+        ],
+      };
+      expect(warn).toHaveBeenCalledWith('[Assistant] Retrying grounded response generation.', expect.objectContaining(fields));
+      expect(logError).toHaveBeenCalledWith('[Assistant] Grounded response generation failed.', expect.objectContaining(fields));
+      expect(JSON.stringify([...warn.mock.calls, ...logError.mock.calls]))
+        .not.toMatch(/private|user-1|conversation-1|reservation-1/);
+    } finally { warn.mockRestore(); logError.mockRestore(); }
+  });
+
   it.each(['create_manual_measurement', 'update_manual_measurement', 'delete_manual_measurement'] as const)('applies %s only with the current independent choice and review', async kind => {
     const { store, conversation } = createDependencies();
     const fields = { metricId: 'body_weight' as const, canonicalValue: 80, observedAtMs: Date.now(), timezoneOffsetSeconds: 0 };
