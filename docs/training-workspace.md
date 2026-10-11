@@ -4524,8 +4524,8 @@ rendering derive from it.
 | Rowing | Indoor rowing and On-water rowing (`rowing`) | Indoor Rowing, Virtual Rowing; Rowing |
 | Walking & Hiking | Walking and Hiking (`vertical-endurance`) | Walking, Nordic Walking, Speed Walking, Indoor Walking; Hiking, Trekking |
 | Nordic Skiing | Snow and Roller skiing (`vertical-endurance`) | Crosscountry Skiing, Classic Crosscountry Skiing, Skate Skiing, Nordic Skiing; Roller Skiing, Classic Roller Skiing, Skate Roller Skiing |
-| Strength | Strength (`strength`) | Strength Training, Weight Training, Kettlebell, LES MILLS BODYPUMP |
-| Fitness & Gym | General fitness, Conditioning, Mobility & movement (`general`) | Training, Indoor Training, Workout, Generic, Fitness Equipment; HIIT, AMRAP, EMOM, Tabata, Circuit Training, Cardio Training, Aerobics, CrossFit, Crosstrainer, Elliptical Trainer, Stair Stepper; Yoga, Pilates, Flexibility Training, Stretching, Gymnastics |
+| Strength | Strength (`strength`) | Strength Training, Weight Training, Kettlebell, LES MILLS BODYPUMP, Calisthenics, Core Training, LES MILLS CORE, LES MILLS GRIT Strength |
+| Fitness & Gym | General fitness, Conditioning, Mobility & movement (`general`) | Training, Indoor Training, Workout, Generic, Fitness Equipment, Indoor Skiing, Indoor Grinding, Trucker Workout; HIIT, AMRAP, EMOM, Tabata, Circuit Training, Cardio Training, Aerobics, CrossFit, Crosstrainer, Elliptical Trainer, Stair Stepper, Bootcamp, Functional Training, Fitness Boxing, Fitness Dancing, Fitness Martial Arts, Jump Rope, Step Training, LES MILLS BODYATTACK, BODYCOMBAT, BODYJAM, BODYSTEP, GRIT Athletic, GRIT Cardio, SH'BAM, TONE; Yoga, Pilates, Flexibility Training, Stretching, Gymnastics, Barre, Mobility, Dynamic Mobility, Static Mobility, Mind-Body Training, Physical Therapy, LES MILLS BARRE, BODYBALANCE |
 | Paddling | Canoeing, Kayaking, Paddling, and Stand-up paddling (`paddling`) | Canoeing; Kayaking, Whitewater Kayaking; Paddling; Stand Up Paddling |
 | Other training | Other training (`general`) | Every other known, non-aggregate Sports Lib activity type through the explicit fallback policy |
 
@@ -4555,7 +4555,7 @@ Important behavior:
 - Known non-aggregate sports outside the modeled families use `Other training` with recorded duration and saved TSS,
   retaining intensity exclusions. Aggregate parents can still be reported as `Other` in load explanation; unknown
   strings are `Unclassified`.
-- Modeled membership remains intentionally conservative. Fitness classes get only the declared generic volume profile;
+- Modeled membership remains intentionally conservative. Fitness & Gym classes use the declared general volume profile;
   ski touring/backcountry skiing, snowshoeing, surfing, sailing, team sports, and other unmodeled types remain Other
   training rather than inheriting a nearby Training profile.
 - The overall state and explanation remain on **All training**. Sport shortcuts affect navigation only and never filter
@@ -4579,8 +4579,8 @@ Conditioning; LES MILLS BODYPUMP shares Strength. Indoor Walking and Speed Walki
 keeps its explicit chart profile without terrain recommendations; Training only aggregates actual recorded metrics.
 Missing distance, ascent or descent is never created from a sport label.
 
-`shared/activity-type-compatibility.ts` bridges 37 approved canonical names while the dependency still pins the
-published catalog: 33 context memberships and four combined-sport exclusions. It does not infer Road Cycling from
+`shared/activity-type-compatibility.ts` bridges 67 approved canonical names while the dependency still pins the
+published catalog: 63 context memberships and four combined-sport exclusions. It does not infer Road Cycling from
 generic Cycling, guess a provider's missing profile, or assign other new sports to modeled families. The additional
 memberships are Track/Ultra/Crosscountry Running, Recumbent Cycling, Indoor Hand Cycle, E-Mountain Biking, Mountain
 Bike Orienteering, E-Enduro MTB, BMX, Kickbiking, Obstacle Racing, Classic/Skate Roller Skiing, Virtual Rowing and
@@ -4590,6 +4590,18 @@ retain their existing durability omission and exact power-system histories. Thes
 no manual-editor sport, planned-workout alias or provider workout profile. Other known non-aggregate catalog types
 use Other training with saved TSS and existing specialist exclusions. The combined-sport exclusions above and these
 memberships are included in the same unreleased schema-22 preparation.
+
+The additional 30 approved fitness/mobility memberships are listed in the registry table above: four share Strength,
+15 share Conditioning, eight share Mobility & movement and three share General fitness. Calisthenics, Core Training,
+LES MILLS CORE and GRIT Strength use the existing Strength profile and its Training Mix, Best Build and Power systems
+capabilities. The other 26 reuse Fitness & Gym's Training Mix summaries. Every context counts saved duration/session
+and TSS evidence, including zero; all 30 omit intensity zones, distance and durability. Indoor Skiing and Indoor Grinding
+use General fitness rather than outdoor skiing or rowing analysis. The exact activity names and individual Power
+systems histories remain preserved. These memberships do not add manual-editor options, planning aliases or provider
+profiles. The classification follows the approved grouping decision; descriptions from [Polar](https://support.polar.com/au-en/polar-flow-sport-profiles),
+[Les Mills](https://www.lesmills.com/uk/workouts/all) and its [Barre explanation](https://www.lesmills.com/articles/barre-basics)
+informed the recommendations. These changes remain part of the same unreleased schema-22 rebuild preparation.
+
 The Walking catalog group has metadata, icon, color, gradient and a chart default. Public catalog coverage follows the
 installed Sports Lib enum, without listing an empty future group under the old release. Event chart profiles preserve
 explicit existing choices and use catalog-group defaults for newly recognized canonical sports.
@@ -4632,9 +4644,9 @@ frozen public Training metric projection remains Running/Cycling/Swimming plus O
 approved sport names through full recipe reads, previews and existing proposal/confirmation contracts, with the
 pending registered-contract digest covering those strict enum additions. Provider serializers use the approved
 outbound aliases and existing mapping review; no new tool, mutation kind, provider action or consent scope is added.
-The follow-up roller-skiing, rowing, kayaking and combined-sport classifications change no public MCP schema,
+The follow-up roller-skiing, rowing, kayaking, fitness/mobility and combined-sport classifications change no public MCP schema,
 metric token, planning recipe enum, scope, proposal/confirmation contract or plugin content. Public recipe schemas
-keep the original 29 approved future names separate from the eight recorded-only bridge additions; the installed
+keep the original 29 approved future names separate from the 38 recorded-only bridge additions; the installed
 canonical catalog continues to define the other accepted recipe sports. Regression checks cover advertised JSON
 Schema and runtime validation before and after catalog adoption. Existing safe Training
 projections retain their frozen Running/Cycling/Swimming-plus-Other shape and identity redaction. Recorded-activity

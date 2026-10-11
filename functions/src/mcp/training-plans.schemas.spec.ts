@@ -4,7 +4,7 @@ import { z } from 'zod';
 import Ajv2020 from 'ajv/dist/2020';
 import addFormats from 'ajv-formats';
 import { ActivityTypes, ActivityTypesHelper } from '@sports-alliance/sports-lib';
-import { RefinedTrainingActivityTypes } from '../../../shared/activity-type-compatibility';
+import { RefinedTrainingActivityTypes, RefinedRecordedActivityTypes } from '../../../shared/activity-type-compatibility';
 import {
   WORKOUT_ENDING_KINDS,
   WORKOUT_STEP_PURPOSES,
@@ -549,8 +549,7 @@ describe('strict additive workout prescription analysis', () => {
 
 
 describe('canonical sport compatibility for pending Training recipes', () => {
-  it.each(['Classic Roller Skiing', 'Skate Roller Skiing', 'Virtual Rowing', 'Whitewater Kayaking',
-    'Brick Training', 'Pool Triathlon', 'Offroad Triathlon', 'Offroad Duathlon'])(
+  it.each(Object.values(RefinedRecordedActivityTypes))(
     'keeps recorded-only %s outside future recipe enums until catalog adoption', sport => {
       const installed = ActivityTypesHelper.getActivityTypesAsUniqueArray().includes(sport);
       const structure = { ...recipe({ kind: 'time', seconds: 60 }), sport };

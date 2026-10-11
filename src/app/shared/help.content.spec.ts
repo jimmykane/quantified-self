@@ -247,6 +247,16 @@ describe('help.content', () => {
     expect(training).toContain('QS does not invent legs from the sport name');
   });
 
+  it('explains the approved strength, conditioning, mobility and equipment memberships', () => {
+    const training = HELP_SECTIONS.find(section => section.id === 'training-analysis')!.content;
+    expect(training).toContain('Calisthenics, Core Training, LES MILLS CORE and LES MILLS GRIT Strength use **Strength**');
+    expect(training).toContain('**Fitness & Gym → Conditioning** includes Bootcamp, Functional Training');
+    expect(training).toContain('**Fitness & Gym → Mobility & movement** includes Barre, Mobility, Dynamic Mobility, Static Mobility');
+    expect(training).toContain('**Fitness & Gym → General fitness** includes Indoor Skiing, Indoor Grinding and Trucker Workout');
+    expect(training).toContain('These groups summarize recorded duration, session counts and saved TSS');
+    expect(training).toContain('Your activities keep their original sport names');
+  });
+
   it('points users to the Privacy section and explains saving analytics and email opt-outs', () => {
     const copy = HELP_SECTIONS.find(section => section.id === 'data-and-privacy')!.content;
     expect(copy).toContain('[Settings → Privacy & emails](/settings?section=privacy)');

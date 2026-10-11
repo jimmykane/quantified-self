@@ -3707,6 +3707,66 @@ describe('buildTrainingSummaryMetricPayload', () => {
         }
     });
 
+    it('counts all approved fitness and mobility recordings with saved TSS and strength-only Best Build', async () => {
+        const { buildTrainingSummaryMetricPayload, buildTrainingBuildComparisonMetricPayload, buildTrainingExplanationMetricPayload } = await import('./derived-metrics.service');
+        const groups = [
+            { sport: 'strength', context: 'strength', names: ['Calisthenics', 'Core Training', 'LES MILLS CORE', 'LES MILLS GRIT Strength'] },
+            { sport: 'fitness-gym', context: 'conditioning', names: [
+                'Bootcamp', 'Functional Training', 'Fitness Boxing', 'Fitness Dancing', 'Fitness Martial Arts',
+                'Jump Rope', 'Step Training', 'LES MILLS BODYATTACK', 'LES MILLS BODYCOMBAT', 'LES MILLS BODYJAM',
+                'LES MILLS BODYSTEP', 'LES MILLS GRIT Athletic', 'LES MILLS GRIT Cardio', "LES MILLS SH'BAM", 'LES MILLS TONE',
+            ] },
+            { sport: 'fitness-gym', context: 'mobility-fitness', names: [
+                'Barre', 'Mobility', 'Dynamic Mobility', 'Static Mobility', 'Mind-Body Training', 'Physical Therapy',
+                'LES MILLS BARRE', 'LES MILLS BODYBALANCE',
+            ] },
+            { sport: 'fitness-gym', context: 'general-fitness', names: ['Indoor Skiing', 'Indoor Grinding', 'Trucker Workout'] },
+        ];
+        const names = groups.flatMap(group => group.names);
+        const docs = [Date.UTC(2026, 6, 8), Date.UTC(2026, 3, 1)].flatMap(day => names.flatMap(name => [
+            createEvent(day, name, 'Polar', { [DataDistance.type]: 2_000, 'Training Stress Score': 71.25 }),
+            createEvent(day, name, 'Garmin', { [DataDistance.type]: 3_000, 'Training Stress Score': 0 }),
+        ]));
+        const activities = buildTrainingActivitySources(docs);
+        const result = buildTrainingSummaryMetricPayload(activities, nowMs);
+        expect(result.sourceEventCount).toBe(120);
+        for (const { sport, context, names: contextNames } of groups) {
+            const current = result.payload.disciplines.find(item => item.discipline === sport)?.current28d;
+            expect(current?.contexts).toContainEqual(expect.objectContaining({
+                context, activityCount: contextNames.length * 2,
+                metrics: [{ metric: 'elapsed-time', value: contextNames.length * 7_200, sourceActivityCount: contextNames.length * 2 }],
+            }));
+            expect(current).toMatchObject({ easySeconds: 0, moderateSeconds: 0, hardSeconds: 0 });
+        }
+        expect(result.payload.disciplines.find(item => item.discipline === 'strength')?.current28d.activityCount).toBe(8);
+        expect(result.payload.disciplines.find(item => item.discipline === 'fitness-gym')?.current28d.activityCount).toBe(52);
+        expect(result.payload.disciplines.find(item => item.discipline === 'other-training')?.current28d.activityCount).toBe(0);
+        expect(activities.map(activity => activity.activityData.type)).toEqual([names, names].flatMap(windowNames => windowNames.flatMap(name => [name, name])));
+        const build = buildTrainingBuildComparisonMetricPayload(activities, {
+            trainingSettings: { buildBenchmarks: {
+                strength: { mode: 'period', durationWeeks: 8, endDayMs: Date.UTC(2026, 3, 30) },
+            } },
+        }, nowMs).payload;
+        const strength = build.disciplines.find(item => item.discipline === 'strength');
+        expect(strength?.status).toBe('ready');
+        for (const window of [strength?.current, strength?.benchmark]) {
+            expect(window).toMatchObject({ activityCount: 8, trainingStressScore: 285, trainingStressScoreEventCount: 8 });
+        }
+        expect(build.disciplines.find(item => item.discipline === 'fitness-gym')).toMatchObject({
+            status: 'not-configured', current: null, benchmark: null, suggestedEvents: [],
+        });
+        const explanation = buildTrainingExplanationMetricPayload(docs as never, activities, nowMs).payload.current;
+        expect(explanation).toMatchObject({
+            parentTrainingStressScore: 2_137.5, childTrainingStressScore: 2_137.5,
+            childActivityCount: 60, childLoadActivityCount: 60,
+            childLoadCoverage: { loadedCount: 60, totalCount: 60, ratio: 1 },
+        });
+        expect(explanation.sportLoads).toEqual(expect.arrayContaining([
+            expect.objectContaining({ sport: 'strength', activityCount: 8, loadActivityCount: 8, trainingStressScore: 285 }),
+            expect.objectContaining({ sport: 'fitness-gym', activityCount: 52, loadActivityCount: 52, trainingStressScore: 1_852.5 }),
+        ]));
+    });
+
     it('keeps generic fitness and known unmodeled sports visible as volume-only training', async () => {
         const { buildTrainingSummaryMetricPayload } = await import('./derived-metrics.service');
         const currentDay = Date.UTC(2026, 6, 8);
