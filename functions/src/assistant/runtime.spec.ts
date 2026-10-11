@@ -56,7 +56,7 @@ import type {
   AssistantMcpSession,
   AssistantMcpToolName,
 } from './mcp-session';
-import { AssistantMcpToolFailure, AssistantRecoverableMcpToolError,
+import { AssistantMcpToolFailure, AssistantRecoverableMcpToolError, createAssistantMcpSession,
   ASSISTANT_GARMIN_REPLACEMENT_BLOCKED_GUIDANCE } from './mcp-session';
 import { createAssistantContentProposal } from './content-proposal';
 import { AssistantConversationStoreError } from './conversation-store';
@@ -1223,6 +1223,72 @@ describe('Assistant runtime', () => {
       summary: 'Change tags on Running from 2026-09-22.',
     });
     expect(access).toHaveBeenCalledTimes(4);
+  });
+
+  it('corrects a malformed Timeline-note date in the same runtime turn without applying it', async () => {
+    const session = await createAssistantMcpSession('owner', 'https://quantified-self.io',
+      undefined, 'coordinate_free', true, false, false, false, 'note-chat', false, true);
+    const createSession = vi.fn().mockResolvedValue(session);
+    const callTool = vi.spyOn(session, 'callTool');
+    const access = vi.fn().mockResolvedValue(undefined);
+    const fields = { mutationId: '11111111-1111-4111-8111-111111111111', category: 'travel',
+      title: 'Synthetic trip', startDate: '2026-10-11', endDate: null, timeZone: 'Europe/Helsinki' };
+    const generateAnswer = vi.fn(async ({ tools }: Parameters<typeof generateAssistantModelAnswer>[0]) => {
+      const prepare = tools.find(tool => tool.name === 'prepare_timeline_note_create')!;
+      const invalid = await prepare.execute({ ...fields, startDate: '2026-10-11T12:00:00Z' });
+      expect(invalid).toMatchObject({ assistantToolError: {
+        code: 'invalid_tool_input', guidance: expect.stringContaining('YYYY-MM-DD'),
+      } });
+      expect(invalid).not.toHaveProperty('proposalRef');
+      await prepare.execute(fields);
+      return { answer: 'Review and apply the prepared note in Quantified Self.', visualRequest: { chart: null, map: null } };
+    });
+    const runtime = createAssistantRuntime({ createMcpSession: createSession, generateAnswer });
+    const result = await runtime.answer({ uid: 'owner', appBaseUrl: 'https://quantified-self.io',
+      prompt: 'Prepare a travel note for today.', timeZone: 'Europe/Helsinki', history: [],
+      timelineNotesEnabled: true, timelineNoteChangesEnabled: true, assertContentWriteAccess: access });
+    expect(result.pendingContentProposal).toMatchObject({ kind: 'create_timeline_note', requiresConfirmation: true,
+      arguments: { ...fields, details: null, showOnCharts: true, color: 'default' } });
+    expect(createSession).toHaveBeenCalledOnce();
+    expect(generateAnswer).toHaveBeenCalledOnce();
+    expect(callTool).toHaveBeenCalledTimes(2);
+    expect(access).toHaveBeenCalledTimes(3);
+  });
+
+  it('counts correctable note-input failures against the existing tool-call budget', async () => {
+    const { session, callTool } = createSession();
+    session.tools = [{ name: 'prepare_timeline_note_create', title: 'Prepare note', description: 'Prepare only',
+      inputSchema: { type: 'object' } }];
+    callTool.mockRejectedValue(new AssistantRecoverableMcpToolError('invalid_tool_input', 'Correct the note dates.'));
+    const runtime = createAssistantRuntime({ createMcpSession: vi.fn().mockResolvedValue(session),
+      generateAnswer: async ({ tools }) => {
+        for (let index = 0; index < 7; index += 1) await tools[0].execute({});
+        return 'Unreachable.';
+      } });
+    await expect(runtime.answer({ uid: 'owner', appBaseUrl: 'https://quantified-self.io',
+      prompt: 'Prepare a travel note.', timeZone: 'UTC', history: [], timelineNotesEnabled: true,
+      timelineNoteChangesEnabled: true, assertContentWriteAccess: vi.fn().mockResolvedValue(undefined) }))
+      .rejects.toThrow('budget was exceeded');
+    expect(callTool).toHaveBeenCalledTimes(6);
+  });
+
+  it('rechecks note-change consent before a corrected attempt and propagates revocation', async () => {
+    const { session, callTool } = createSession();
+    session.tools = [{ name: 'prepare_timeline_note_create', title: 'Prepare note', description: 'Prepare only',
+      inputSchema: { type: 'object' } }];
+    callTool.mockRejectedValueOnce(new AssistantRecoverableMcpToolError('invalid_tool_input', 'Correct the note dates.'));
+    const revoked = new AssistantConversationStoreError('conversation_changed', 'Note-change consent was revoked.');
+    const access = vi.fn().mockResolvedValueOnce(undefined).mockRejectedValue(revoked);
+    const runtime = createAssistantRuntime({ createMcpSession: vi.fn().mockResolvedValue(session),
+      generateAnswer: async ({ tools }) => {
+        expect(await tools[0].execute({})).toHaveProperty('assistantToolError');
+        await tools[0].execute({});
+        return 'Unreachable.';
+      } });
+    await expect(runtime.answer({ uid: 'owner', appBaseUrl: 'https://quantified-self.io',
+      prompt: 'Prepare a travel note.', timeZone: 'UTC', history: [], timelineNotesEnabled: true,
+      timelineNoteChangesEnabled: true, assertContentWriteAccess: access })).rejects.toBe(revoked);
+    expect(callTool).toHaveBeenCalledOnce();
   });
 
   it('keeps the prerequisite content reads available in bounded prompt workflows', async () => {

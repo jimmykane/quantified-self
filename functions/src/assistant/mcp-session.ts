@@ -3,6 +3,7 @@ import { MCP_MANUAL_MEASUREMENT_READ_TOOLS } from '../mcp/manual-measurements.sc
 import { InMemoryTransport } from '@modelcontextprotocol/server';
 import type { McpServer } from '@modelcontextprotocol/server';
 import { Client } from '@modelcontextprotocol/client';
+import { ZodError } from 'zod';
 import {
   createMcpServer,
   MCP_ACTIVITY_SAMPLES_INSTRUCTIONS,
@@ -190,6 +191,7 @@ interface AssistantMcpSessionDependencies {
 const ASSISTANT_TOOL_NAME_SET = new Set<string>(ASSISTANT_MCP_TOOL_NAMES);
 const ASSISTANT_CONNECTION_ID = 'first-party-assistant-v1';
 const ASSISTANT_CLIENT_ID = 'https://quantified-self.io/internal/assistant';
+const TIMELINE_NOTE_DATE_GUIDANCE = 'Use valid YYYY-MM-DD calendar dates for startDate and endDate, never timestamps. Use endDate: null for an ongoing note. Supply timeZone as a separate IANA timezone; ask the user if dates are ambiguous.';
 
 const ASSISTANT_CONTENT_TOOL_COPY: Record<AssistantContentProposalTool, { title: string; description: string }> = {
   prepare_workout_reflection_save: { title: 'Prepare workout reflection', description: 'Prepare explicit private reflection text for QS review only. First discover the exact activity and read get_workout_reflection for the explicit activity or whole-recording target and current revision. This cannot change workout RPE; direct RPE changes to QS Edit details. This never writes or adapts Training.' },
@@ -203,11 +205,11 @@ const ASSISTANT_CONTENT_TOOL_COPY: Record<AssistantContentProposalTool, { title:
   },
   prepare_timeline_note_create: {
     title: 'Prepare a Timeline note',
-    description: 'Prepare one new Timeline note from explicit user-provided content for review in Quantified Self. This never writes data.',
+    description: `Prepare one new Timeline note from explicit user-provided content for review in Quantified Self. ${TIMELINE_NOTE_DATE_GUIDANCE} Reuse the same mutationId when correcting or retrying this create attempt. This never writes data.`,
   },
   prepare_timeline_note_update: {
     title: 'Prepare a Timeline note edit',
-    description: 'Prepare a complete replacement of one current Timeline note for review in Quantified Self. First read its current reference, revision and authored fields. This never writes data.',
+    description: `Prepare a complete replacement of one current Timeline note for review in Quantified Self. First read its current reference, revision and authored fields. ${TIMELINE_NOTE_DATE_GUIDANCE} This never writes data.`,
   },
   prepare_timeline_note_delete: {
     title: 'Prepare Timeline note deletion',
@@ -535,9 +537,21 @@ export async function createAssistantMcpSession(
           if (preparedContentProposalRef) {
             throw new Error('The Assistant can prepare only one content change per response.');
           }
-          const proposal = createAssistantContentProposal(name, args);
-          preparedContentProposalRef = proposal.proposalRef;
-          return { structuredContent: proposal as unknown as Record<string, unknown> };
+          try {
+            const proposal = createAssistantContentProposal(name, args);
+            preparedContentProposalRef = proposal.proposalRef;
+            return { structuredContent: proposal as unknown as Record<string, unknown> };
+          } catch (error) {
+            // Only local note-input validation is correctable. Never turn
+            // permission, output-validation or backend failures into model guidance.
+            if (error instanceof ZodError
+              && (name === 'prepare_timeline_note_create' || name === 'prepare_timeline_note_update')) {
+              throw new AssistantRecoverableMcpToolError('invalid_tool_input',
+                `Correct the Timeline-note input to match the advertised schema. ${TIMELINE_NOTE_DATE_GUIDANCE}${name === 'prepare_timeline_note_create'
+                  ? ' Reuse the same mutationId for this create attempt.' : ''}`);
+            }
+            throw error;
+          }
         }
         let metricHistoryPages: Record<string, unknown>[] | null;
         try {
