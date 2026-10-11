@@ -4,6 +4,10 @@ import { UsageLimitExceededError, checkEventUsageLimit, hasBasicAccess, hasProAc
 import { SPORTS_LIB_VERSION } from './shared/sports-lib-version.node';
 import { USAGE_LIMITS } from '../../shared/limits';
 import { preserveEventTagsOnRewrite } from '../../shared/event-tags';
+import { withHistoryExecution } from './connection-history/context';
+import * as trainingLoadMetadata from './training-load/training-load-metadata';
+import type { HistoryExecution } from './connection-history/execution';
+import type { firestore } from 'firebase-admin';
 
 type SetEventParameters = Parameters<typeof setEvent>;
 
@@ -400,6 +404,56 @@ describe('utils higher-level helpers', () => {
     });
 
     describe('setEvent', () => {
+        it.each(['prepare', 'finalize'] as const)('blocks Training metadata %s when history-import authority changes', async phase => {
+            hoisted.getUser.mockResolvedValue({ customClaims: { stripeRole: 'pro' } });
+            const event = { getID: () => 'event-1', setID: vi.fn(), getActivities: () => [] };
+            const metaData = { serviceName: 'GARMINAPI', toJSON: () => ({}) };
+            const failure = new Error('History import was superseded');
+            const inTransaction = vi.fn().mockResolvedValue(undefined);
+            const additionalAuthorization = vi.fn().mockResolvedValue(undefined);
+            const db = hoisted.firestore() as unknown as firestore.Firestore;
+            const prepareTransaction = {} as firestore.Transaction;
+            const finalizeTransaction = {} as firestore.Transaction;
+            const committedMetadata = vi.fn();
+            const execution: HistoryExecution = {
+                runId: 'history-run', cooldownStartedAtMs: 0, requiredDocumentFieldValues: [],
+                tokenPath: 'tokens/test', providerUserId: 'provider-test',
+                beforeRequest: async () => undefined, onQueued: () => undefined, inTransaction,
+            };
+            const prepare = vi.spyOn(trainingLoadMetadata, 'prepareTrainingLoadMetadata')
+                .mockImplementationOnce(async (_uid, _event, authorize) => {
+                    if (phase === 'prepare') inTransaction.mockRejectedValueOnce(failure);
+                    await authorize?.(db, prepareTransaction);
+                    return async () => {
+                        if (phase === 'finalize') inTransaction.mockRejectedValueOnce(failure);
+                        await authorize?.(db, finalizeTransaction);
+                        committedMetadata();
+                    };
+                });
+            writeAllEventDataMock.mockImplementationOnce(async () => {
+                const [adapter] = eventWriterConstructorMock.mock.calls.at(-1)!;
+                const finalize = await adapter.prepareTrainingLoad(event);
+                await finalize();
+                return mockSavedOriginalFiles;
+            });
+            try {
+                await expect(withHistoryExecution(execution, () => setEvent(
+                    'user-1', 'event-1', event as unknown as SetEventParameters[2], metaData,
+                    undefined, undefined, undefined, undefined,
+                    { assertWriteAuthorizationInTransaction: additionalAuthorization },
+                ))).rejects.toBe(failure);
+                expect(inTransaction.mock.calls.at(-1)?.[0]).toBe(phase === 'prepare' ? prepareTransaction : finalizeTransaction);
+                expect(committedMetadata).not.toHaveBeenCalled();
+                expect(hoisted.transactionSet).not.toHaveBeenCalled();
+                if (phase === 'finalize') {
+                    expect(additionalAuthorization.mock.calls.some(([database, transaction]) => database === db && transaction === prepareTransaction)).toBe(true);
+                    expect(additionalAuthorization.mock.calls.some(([, transaction]) => transaction === finalizeTransaction)).toBe(false);
+                }
+            } finally {
+                prepare.mockRestore();
+            }
+        });
+
         it('does not write event data or original files when subscription verification is unavailable', async () => {
             hoisted.getUser.mockRejectedValue(Object.assign(new Error('Auth network failure'), { code: 'app/network-error' }));
             const event = { setID: vi.fn(), getActivities: () => [] };

@@ -81,6 +81,20 @@ describe('EventWriter', () => {
         expect(adapter.prepareTrainingLoad).toHaveBeenCalledOnce();
         expect(persist).toHaveBeenCalledOnce();
     });
+    it.each(['prepare', 'source', 'finalize'] as const)('preserves a history lifecycle skip during %s without logging a write failure', async phase => {
+        const skipped = Object.assign(new Error('History import was superseded'), { name: 'HistoryLifecycleChangedError' });
+        const logger: LogAdapter = { info: vi.fn(), warn: vi.fn(), error: vi.fn() };
+        const guardedWriter = new EventWriter(adapter, storageAdapter, undefined, logger);
+        if (phase === 'source') adapter.setDoc = vi.fn().mockRejectedValue(skipped);
+        adapter.prepareTrainingLoad = vi.fn(async () => {
+            if (phase === 'prepare') throw skipped;
+            return async () => { if (phase === 'finalize') throw skipped; };
+        });
+        await expect(guardedWriter.writeAllEventData('user-1', eventMock)).rejects.toBe(skipped);
+        expect(logger.error).not.toHaveBeenCalled();
+        if (phase === 'prepare') expect(adapter.setDoc).not.toHaveBeenCalled();
+    });
+
     it('should write activities, streams, and event in order', async () => {
         await writer.writeAllEventData('user-1', eventMock);
 

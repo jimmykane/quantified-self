@@ -63,6 +63,14 @@
     "environment": "angular",
     "reason": "Compiles the comparisons landing route with real Material navigation links and shared header to verify owner-scoped signal rendering, pagination, explicit manager actions, teardown and haptic ownership."
   },
+  "src/app/components/training-load/training-load-dialog.component.spec.ts": {
+    "environment": "angular",
+    "reason": "Uses TestBed injection context and Material dialog providers to exercise reactive forms, component lifecycle, subscription teardown and asynchronous save/reload haptics without opening real overlays."
+  },
+  "src/app/components/training-load/training-load-settings.component.spec.ts": {
+    "environment": "angular",
+    "reason": "Uses TestBed injection context for component-owned services and reactive forms, exercising account changes, lifecycle teardown, saved-policy subscriptions and asynchronous haptic outcomes."
+  },
   "src/app/services/activity-send.service.spec.ts": {
     "environment": "angular",
     "reason": "Instantiates the live signal/effect service with TestBed to verify account-scoped Firestore subscription teardown, global job reconciliation and authenticated binary staging."
@@ -74,5 +82,9 @@
   "src/app/services/timeline-note-comparison.service.spec.ts": {
     "environment": "angular",
     "reason": "Instantiates the injected comparison read adapter with TestBed to verify shared-query dependencies, bounded requests, account fences and independent source failures."
+  },
+  "src/app/services/training-load.service.spec.ts": {
+    "environment": "angular",
+    "reason": "Uses TestBed to verify injected Firestore, user and Calendar services together, including owner-scoped subscriptions, transactions and shared browser compatibility handling."
   }
 }

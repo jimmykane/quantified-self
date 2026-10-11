@@ -5239,7 +5239,7 @@ The workspace grid stays content-sized instead of stretching to a neighboring ch
 12px vertical / 16px horizontal padding and a 4px history inset; charts remain aligned within each row when details
 wrap. Missing histories do not reserve a synthetic chart. Public preview padding remains unchanged.
 CTL/ATL/Form/Ramp reuse the current-day Form context's last available sample in each of up to eight UTC weeks;
-ACWR and Strain reuse their prepared `trend8Weeks` observations. Monotony uses the existing Form series' daily TSS
+ACWR and Strain reuse their prepared `trend8Weeks` observations. Monotony uses the existing Form series' effective modeled daily TSS
 and the same `resolveTrainingMonotonyStrain` calculation in `shared/training-load.ts` as the backend: rolling up-to-seven-day
 mean divided by population standard deviation. Its latest available observation in each UTC week is bounded by the
 Monotony snapshot's day cutoff. Zero-variance windows and missing daily evidence stay unavailable; Strain history is
@@ -5386,6 +5386,14 @@ evidence before old leg cleanup. Metadata preparation and persistence failures p
 serializes source statistics, including native JSON imports whose power evaluation derives additional statistics.
 Final metadata persistence reads those cached results so source fingerprints describe exactly what was saved.
 
+When an import runs inside the connection-history execution context, both metadata preparation and finalization
+recheck that context's connection/credential/lease authority in their own transaction, alongside the caller's existing
+write authorization. Revocation or a superseded history run cannot commit load metadata or its cache after authority
+changes. EventWriter preserves `HistoryLifecycleChangedError` through source and metadata writes so the coordinator
+records its existing lifecycle skip rather than a retryable write failure. Ordinary imports have no history guard reads.
+This reuses the current context, transactions and monitoring skip classification; it adds no queue, provider request,
+public MCP contract or Training calculation.
+
 The source-file **Regenerate statistics** path protects freshly parsed FTP, duration, timer/elapsed/moving time, pause,
 energy, body mass, gender and maximum-HR setting before regenerating derived statistics. These inputs come from the
 new original-file parse, never the stored activity or current athlete settings. File HR calibration and intensity zones
@@ -5495,14 +5503,15 @@ checked against the strict output validator, including partial days. Built-in As
 recorded metrics from modeled load. This is a completed-load feature, with no plan/workout read or mutation contract impact and no
 provider delivery changes.
 
-Release order: publish the verified Sports Lib 21.6.1 artifact first, then install that registry version in both QS
-packages and release Functions/Rules/frontend together after separate approval. Local validation uses a packed
-library artifact. Publication, deployment and production reparse are separate explicit approvals; no historical
-values are rewritten merely by deploying this change.
+The verified Sports Lib 21.6.2 artifact is published and pinned in both QS packages, with FIT Parser 6.2.1.
+Release Functions/Rules/frontend together after separate approval. Deployment and production reparse remain separate
+explicit approvals; no historical values are rewritten merely by deploying this change.
 
 Training load policy/helper tests use the frontend `helpers-node` project; editor/service tests remain in `angular`.
 The Settings disclosure regression explicitly renders its fixture, preserving the shared logic-only setup.
-Training load persistence remains registered once in the lifecycle emulator group. The rebase retains the current
+Editor/service specs record their Angular injection and lifecycle requirements in the frontend policy registry.
+Training load persistence remains registered once in the lifecycle emulator group, excluded from ordinary Functions
+collection and run through the dedicated emulator configuration. The rebase retains the current
 frontend/delivery shard planners, worker limits and complete report gates; it changes no load or MCP contract.
 
 Local verification covers the encoded synthetic recovery walk (7.6 HR TSS), MET inputs (9 TSS), library package

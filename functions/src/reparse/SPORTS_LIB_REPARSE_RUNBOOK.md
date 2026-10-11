@@ -39,9 +39,8 @@ this task does not adopt a package, deploy, enable scanners, start reparsing or 
 
 ### Sports Lib 21.6.1 file-calibrated Training load
 
-
-Publish sports-lib before releasing QS with aligned root and Functions dependencies. Local verification uses the
-packed 21.6.1 library; publication, deployment and production reparse each require separate approval.
+Sports Lib 21.6.2 is published and pinned in root and Functions, with FIT Parser 6.2.1. It retains the file-calibrated
+load rules introduced in 21.6.1. Deployment and production reparse each require separate approval.
 
 New provider imports and manual uploads cache Automatic/HR/MET evaluations in owner-only event metadata. Walking,
 Nordic Walking, Hiking and Trekking skip calculated pace and power. HR requires file-supplied resting, threshold and
@@ -71,7 +70,6 @@ inputs is idempotent. Changed load metadata invalidates affected Training snapsh
 Keep automatic event and route scanners disabled. This change needs no saved-route reparse. Use the existing targeted
 original-file action for an approved historical correction; do not bulk-rewrite recorded scores or distribute parent
 TSS across multisport legs. Validate the installed runtime/target version before any separately approved campaign.
-
 
 ### Sports Lib 21.5.0 recorded swim distance display
 

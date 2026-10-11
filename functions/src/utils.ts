@@ -358,7 +358,10 @@ export async function setEvent(userID: string, eventID: string, event: EventInte
 
 
   const adapter: FirestoreAdapter = {
-    prepareTrainingLoad: event => prepareTrainingLoadMetadata(userID, event, writeOptions.assertWriteAuthorizationInTransaction),
+    prepareTrainingLoad: event => prepareTrainingLoadMetadata(userID, event, async (db, transaction) => {
+      await assertHistoryWrite(transaction);
+      await writeOptions.assertWriteAuthorizationInTransaction?.(db, transaction);
+    }),
     setDoc: async (path: string[], data: any) => {
       // path is ['users', userID, 'events', eventID, ...]
       let ref: any = admin.firestore();
