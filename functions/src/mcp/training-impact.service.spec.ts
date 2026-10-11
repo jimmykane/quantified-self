@@ -1,4 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
+import { Timestamp } from 'firebase-admin/firestore';
 import { createMcpOutputSchemaRegistry } from './tool-output-schemas';
 import { defaultAppliedTrainingLoadPolicy, type TrainingLoadLeg } from '../../../shared/training-load-policy';
 import {
@@ -155,12 +156,25 @@ describe('MCP Training impact service', () => {
     expect(schema.safeParse(excluded).success).toBe(true);
     expect(schema.safeParse({ ...excluded, coverage: { ...excluded.coverage, benchmarkOrMergeSessionCount: 2 } }).success).toBe(false);
   });
-  it('holds impact while its Form snapshot predates the load edit', async () => {
+  it.each(['epoch-ms', 'firestore-fractional'])('holds impact until Form includes a load edit timestamped as %s', async timestampKind => {
     const loadReads = reads();
+    const updatedAt = timestampKind === 'epoch-ms' ? NOW : new Timestamp(NOW / 1000, 123456000);
+    vi.mocked(loadReads.fetchFormSnapshot).mockResolvedValue({
+      ...formSnapshot([{ dayMs: DAY_ONE, load: 42 }]), updatedAtMs: NOW - 1000,
+    });
     loadReads.fetchLoadMetadata = vi.fn().mockResolvedValue(new Map([['event-1', {
-      version: 1, revision: 2, excluded: false, controls: { 'activity-1': { override: 5 } }, updatedAt: NOW,
+      version: 1, revision: 2, excluded: false, controls: { 'activity-1': { override: 5 } }, updatedAt,
     }]]));
-    expect(await getMcpTrainingImpact(sessionInput(), loadReads)).toMatchObject({ status: 'updating', reason: 'form_updating', contribution: null });
+    const pending = await getMcpTrainingImpact(sessionInput(), loadReads);
+    expect(pending).toMatchObject({ status: 'updating', reason: 'form_updating', contribution: null });
+    vi.mocked(loadReads.fetchFormSnapshot).mockResolvedValue({
+      ...formSnapshot([{ dayMs: DAY_ONE, load: 5 }]), updatedAtMs: NOW + 1000,
+    });
+    const ready = await getMcpTrainingImpact(sessionInput(), loadReads);
+    expect(ready).toMatchObject({ status: 'ready', contribution: { trainingStressScore: 5 } });
+    const schema = createMcpOutputSchemaRegistry({ activityLocation: false, routeLocation: false }).get_training_impact;
+    expect(schema.safeParse(pending).success).toBe(true); expect(schema.safeParse(ready).success).toBe(true);
+    expect(JSON.stringify([pending, ready])).not.toMatch(/updatedAt|controls|revision|activity-1|event-1/);
   });
   it.each(['excluded', 'review', 'benchmark'])('validates partial-day coverage when another selected workout is %s', async state => {
     const loadReads = reads({ activities: [
@@ -181,14 +195,15 @@ describe('MCP Training impact service', () => {
         missingTssSessionCount: 0, benchmarkOrMergeSessionCount: state === 'benchmark' ? 1 : 0, notCompletedSessionCount: 0 } });
     expect(createMcpOutputSchemaRegistry({ activityLocation: false, routeLocation: false }).get_training_impact.safeParse(result).success).toBe(true);
   });
-  it('waits for the day rebuild when a different selected workout was just excluded', async () => {
+  it.each(['epoch-ms', 'firestore-fractional'])('waits for the day rebuild when another workout exclusion is timestamped as %s', async timestampKind => {
     const loadReads = reads({ activities: [
       activity('activity-1', 'event-1', '2026-01-01T10:00:00.000Z', 42),
       activity('activity-2', 'event-2', '2026-01-01T12:00:00.000Z', 42),
     ], events: [{ id: 'event-1', data: {} }, { id: 'event-2', data: {} }],
     snapshot: formSnapshot([{ dayMs: DAY_ONE, load: 84 }]) });
     loadReads.fetchLoadMetadata = vi.fn().mockResolvedValue(new Map([['event-2', {
-      version: 1, revision: 1, excluded: true, controls: {}, updatedAt: NOW,
+      version: 1, revision: 1, excluded: true, controls: {},
+      updatedAt: timestampKind === 'epoch-ms' ? NOW : new Timestamp(NOW / 1000, 123456000),
     }]]));
     expect(await getMcpTrainingImpact(sessionInput({ mode: 'day', localDate: '2026-01-01', timeZone: 'UTC',
       references: [{ activityId: 'activity-1', eventId: 'event-1' }, { activityId: 'activity-2', eventId: 'event-2' }],

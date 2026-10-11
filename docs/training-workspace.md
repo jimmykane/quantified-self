@@ -5515,8 +5515,11 @@ collection and run through the dedicated emulator configuration. The rebase reta
 frontend/delivery shard planners, worker limits and complete report gates; it changes no load or MCP contract.
 
 Local verification covers the encoded synthetic recovery walk (7.6 HR TSS), MET inputs (9 TSS), library package
-exports, provider/manual/reparse writers, modeled-load builders, owner Rules and frozen MCP reads. The Firestore
-emulator verifies delayed policy selection, idempotent duplicates, changed/reused leg IDs, partial-write retries,
+exports, provider/manual/reparse writers, modeled-load builders, owner Rules and frozen MCP reads. Timestamp
+coverage uses real Admin SDK timestamps with nonzero sub-millisecond nanoseconds: load decreases and
+mixed-day exclusions still wait for a newer Form snapshot, and session impact resumes after that snapshot arrives.
+These timestamps remain private; output validation and identity-redaction checks cover both pending and ready results.
+The Firestore emulator verifies delayed policy selection, idempotent duplicates, changed/reused leg IDs, partial-write retries,
 missing legacy identity, edits during first import, concurrent reparse/control edits and deletion guards. Cache tests
 cover the warm/cold read paths, transactionally split buckets, unchanged-write suppression, policy query avoidance,
 zero/excluded/reset projections, source-trigger coordination and private Rules. The 1,001-workout fixture verifies
