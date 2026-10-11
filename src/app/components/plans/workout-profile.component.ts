@@ -12,7 +12,6 @@ import { LoggerService } from '../../services/logger.service';
 import { EChartsLoaderService } from '../../services/echarts-loader.service';
 import { ECHARTS_CARTESIAN_IMMEDIATE_UPDATE_SETTINGS, EChartsHostController } from '../../helpers/echarts-host-controller';
 import { resolveEChartsThemeName } from '../../helpers/echarts-theme.helper';
-import { isEChartsMobileTooltipViewport } from '../../helpers/echarts-tooltip-interaction.helper';
 import { buildWorkoutProfileChartOption } from '../../helpers/workout-profile-chart.helper';
 import { buildWorkoutProfile, workoutProfileOccurrenceCount, workoutProfileMetricLabels, WORKOUT_PROFILE_EXPANSION_BUDGET, type WorkoutProfileMetric, type WorkoutProfileOccurrence, type WorkoutProfileSelection } from '../../helpers/workout-profile.helper';
 
@@ -54,8 +53,7 @@ export class WorkoutProfileComponent {
   readonly model = computed(() => {
     if (!this.expanded() || !this.structure() || this.isStrength()) return null;
     try {
-      // Only an actual displayed-pass change redraws content. Remembering a selected
-      // pass must not dismiss the first tap's tooltip, including after count edits.
+      // Remembering a selected pass should not rebuild unchanged profile content.
       return buildWorkoutProfile(this.structure(), this.unitSettings(), this.locale, this.displayRepeatPasses());
     }
     catch { return null; }
@@ -85,8 +83,6 @@ export class WorkoutProfileComponent {
     mobileTapFeedbackOptions: { clickFeedback: 'off', axisPointerFeedback: 'off', surfaceClickFeedback: false, surfaceDragFeedback: false },
   });
   private renderGeneration = 0;
-  private renderedScene: { model: ReturnType<typeof buildWorkoutProfile>; metric: WorkoutProfileMetric | null;
-    dark: boolean; changed: readonly string[]; context: string } | null = null;
 
   constructor() {
     effect(() => {
@@ -102,21 +98,16 @@ export class WorkoutProfileComponent {
       const changed = this.changedStepIds();
       const units = this.unitSettings();
       const dark = this.theme.darkTheme();
-      const context = this.contextKey();
+      this.contextKey();
       const generation = ++this.renderGeneration;
-      if (!host || !model) { this.chartHost.dispose(); this.renderedScene = null; return; }
+      if (!host || !model) { this.chartHost.dispose(); return; }
       void this.chartHost.init(host, resolveEChartsThemeName(dark)).then(chart => {
         if (!chart || generation !== this.renderGeneration) return;
         chart.off('click', this.onChartClick);
         chart.on('click', this.onChartClick);
-        const previous = this.renderedScene;
-        // Keep the first tap's tooltip visible while updating selection. Only content/context changes invalidate it.
-        if (!previous || previous.model !== model || previous.metric !== metric || previous.dark !== dark
-          || previous.changed !== changed || previous.context !== context) this.chartHost.hideTooltip();
         this.chartHost.setOption(buildWorkoutProfileChartOption(model, metric, selectedKey, changed, dark,
-          host.clientWidth, isEChartsMobileTooltipViewport(), units, this.locale), ECHARTS_CARTESIAN_IMMEDIATE_UPDATE_SETTINGS);
+          host.clientWidth, units, this.locale), ECHARTS_CARTESIAN_IMMEDIATE_UPDATE_SETTINGS);
         this.chartHost.scheduleResize();
-        this.renderedScene = { model, metric, dark, changed, context };
       });
     });
     inject(DestroyRef).onDestroy(() => { this.renderGeneration++; this.chartHost.dispose(); });

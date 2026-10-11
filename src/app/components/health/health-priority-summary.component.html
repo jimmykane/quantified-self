@@ -1,11 +1,11 @@
 @if (renderedCards().length > 0) {
-  <section class="health-priority-section" aria-labelledby="health-priority-title">
+  <section class="health-priority-section" [attr.aria-labelledby]="titleId()">
     <div class="health-section-heading">
       <div>
         <p class="health-eyebrow">Highlights</p>
-        <h2 id="health-priority-title">Your recent Health</h2>
+        <h2 [id]="titleId()">{{ heading() }}</h2>
       </div>
-      <p>A quick look at your latest sleep and heart trends.</p>
+      <p>{{ description() }}</p>
     </div>
 
     <div

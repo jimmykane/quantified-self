@@ -58,6 +58,7 @@ import {
 } from './content-proposal';
 import { addAssistantMetricBucketCalendarContext } from './metric-bucket-context';
 import { AssistantConversationStoreError } from './conversation-store';
+import { getAssistantErrorDiagnostic, type AssistantErrorDiagnostic } from './error-diagnostics';
 import {
   collectDailyWorkoutContext,
   canPreviewDailyWorkout,
@@ -135,14 +136,14 @@ export function getAssistantRuntimeErrorToolName(
 export function getAssistantRuntimeToolFailureDiagnostic(error: unknown): {
   toolErrorCode: string;
   toolFailureStage: string;
-} | null {
+} & Partial<AssistantErrorDiagnostic> | null {
   if (!(error instanceof AssistantRuntimeStageError) || error.reason !== 'mcp_tool_failed') {
     return null;
   }
   return error.cause instanceof AssistantMcpToolFailure
-    ? { toolErrorCode: error.cause.code, toolFailureStage: error.cause.stage }
+    ? { toolErrorCode: error.cause.code, toolFailureStage: error.cause.stage, ...error.cause.diagnostic }
     : { toolErrorCode: error.cause instanceof McpSchemaError ? 'invalid_assistant_preview' : 'unclassified_error',
-      toolFailureStage: error.toolFailureStage };
+      toolFailureStage: error.toolFailureStage, ...getAssistantErrorDiagnostic(error.cause) };
 }
 
 export interface AssistantRuntimeTool {

@@ -94,12 +94,13 @@ class DashboardChartLibraryStubComponent {
 }
 
 @Component({ selector: 'app-health-category-overview', standalone: true,
-  template: '<h2 id="health-overview-title" tabindex="-1">Your overview</h2><ng-content select="[healthOverviewHighlights]"></ng-content><button (click)="metricSelected.emit(\'body_weight\')">View Weight history</button>' })
+  template: '<h2 id="health-overview-title" tabindex="-1">Your overview</h2><ng-content select="[healthOverviewHighlights]"></ng-content><ng-content select="[healthVitalsHighlights]"></ng-content><button (click)="metricSelected.emit(\'body_weight\')">View Weight history</button>' })
 class HealthCategoryOverviewStubComponent {
   @Input() user: unknown;
   @Input() groups: unknown;
   @Input() showSleep = false;
   @Input() highlightedMetrics: readonly HealthWorkspaceMetricSelection[] = [];
+  @Input() vitalsHighlightedMetrics: readonly HealthWorkspaceMetricSelection[] = [];
   @Input() darkTheme = false;
   @Input() providerFilter: readonly HealthProvider[] = [];
   @Input() referenceDate: string | null = null;
@@ -606,7 +607,12 @@ describe('HealthWorkspaceComponent', () => {
     expect(highlights.closest('app-health-category-overview')).not.toBeNull();
     expect(host.querySelector('.health-history app-health-priority-summary')).toBeNull();
     const overview = fixture.debugElement.query(By.directive(HealthCategoryOverviewStubComponent)).componentInstance as HealthCategoryOverviewStubComponent;
-    expect(overview.highlightedMetrics).toEqual(component.visiblePriorityCards().map(card => card.metric));
+    expect(overview.highlightedMetrics).toEqual(component.visibleOverviewPriorityCards().map(card => card.metric));
+    expect(overview.vitalsHighlightedMetrics).toEqual([HEALTH_METRIC_IDS.HeartRate]);
+    expect(host.querySelector('[healthOverviewHighlights] #health-priority-card-heart_rate')).toBeNull();
+    expect(host.querySelector('[healthVitalsHighlights] #health-priority-card-heart_rate')).not.toBeNull();
+    expect(host.querySelectorAll('#health-priority-title')).toHaveLength(1);
+    expect(host.querySelector('#health-vitals-highlight-title')?.textContent).toBe('Today in Vitals');
     component.toggleProvider(HEALTH_PROVIDERS.GarminAPI);
     haptics.selection.mockClear();
     host.querySelector<HTMLButtonElement>('app-health-category-overview > button')!.click();
@@ -889,7 +895,8 @@ describe('HealthWorkspaceComponent', () => {
   });
 
   it('replaces an unavailable URL metric with the existing catalog fallback without a new entry or preference write', async () => {
-    await createComponent(undefined, '14d', { metricIds: [HEALTH_METRIC_IDS.Steps], hasSleep: false },
+    await createComponent(metric => Promise.resolve(rangeLoad(metric, metric !== HEALTH_METRIC_IDS.Steps)),
+      '14d', { metricIds: [HEALTH_METRIC_IDS.Steps], hasSleep: false },
       undefined, undefined, '/?metric=body_fat');
     expect(component.selectedMetric()).toBe('steps');
     expect(router.parseUrl(router.url).queryParamMap.get('metric')).toBe('steps');
@@ -1145,7 +1152,7 @@ describe('HealthWorkspaceComponent', () => {
     expect((fixture.nativeElement as HTMLElement).querySelectorAll('.health-priority-source-tabs [role="tab"]')).toHaveLength(2);
     expect((fixture.nativeElement as HTMLElement).querySelector('[aria-label="Open HRV"]')).toBeNull();
     expect((fixture.nativeElement as HTMLElement).querySelector('.health-priority-grid')?.classList)
-      .toContain('health-priority-grid-double');
+      .toContain('health-priority-grid-single');
     const sleepDetails = (fixture.nativeElement as HTMLElement).querySelector('.health-priority-card:first-child')?.textContent;
     expect(sleepDetails).toContain('Score86');
     expect(sleepDetails).toContain('HRV58 ms');
@@ -1344,7 +1351,7 @@ describe('HealthWorkspaceComponent', () => {
     expect(cards).toHaveLength(2);
     expect(cards.map(card => card.querySelector('h3')?.textContent?.trim())).toEqual(['Sleep', 'Today’s heart rate']);
     expect((fixture.nativeElement as HTMLElement).querySelector('.health-priority-grid')?.classList)
-      .toContain('health-priority-grid-double');
+      .toContain('health-priority-grid-single');
   });
 
   it('surfaces normalized Sleep HRV when standalone Health HRV is unavailable', async () => {
@@ -1784,7 +1791,7 @@ describe('HealthWorkspaceComponent', () => {
 
   it('shows today’s recorded HR and its latest time independently of the explorer range', async () => {
     await createComponent(undefined, '1y');
-    const summary = fixture.debugElement.query(By.directive(HealthPrioritySummaryComponent)).componentInstance as HealthPrioritySummaryComponent;
+    const summary = fixture.debugElement.query(By.css('[healthVitalsHighlights]')).componentInstance as HealthPrioritySummaryComponent;
     const heart = summary.renderedCards().find(card => card.id === 'heart_rate')!;
     const window = component.priorityHeartRateWindow;
     expect(window.dayCount).toBe(1);
@@ -1802,6 +1809,22 @@ describe('HealthWorkspaceComponent', () => {
     expect(component.priorityWindow.dayCount).toBe(30);
     expect(component.priorityHrvWindow.label).toBe('14-day trend');
     expect(component.selectedRange()).toBe('1y');
+  });
+
+  it('keeps successfully loaded today readings reachable when the metric inventory is stale', async () => {
+    await createComponent(undefined, undefined, { metricIds: [], hasSleep: false });
+    expect(component.metricCatalogGroups().flatMap(group => group.metrics.map(metric => metric.id)))
+      .toContain(HEALTH_METRIC_IDS.HeartRate);
+    const overview = fixture.debugElement.query(By.directive(HealthCategoryOverviewStubComponent)).componentInstance as HealthCategoryOverviewStubComponent;
+    expect(overview.vitalsHighlightedMetrics).toEqual([HEALTH_METRIC_IDS.HeartRate]);
+    const summary = fixture.debugElement.query(By.css('[healthVitalsHighlights]')).componentInstance as HealthPrioritySummaryComponent;
+    expect(summary.renderedCards().find(card => card.id === 'heart_rate')!.available).toBe(true);
+    const action = (fixture.nativeElement as HTMLElement).querySelector<HTMLButtonElement>('[aria-label="Open Today’s heart rate"]')!;
+    expect(action.disabled).toBe(false);
+    action.click(); fixture.detectChanges(); await fixture.whenStable(); fixture.detectChanges();
+    expect(component.routeState().metric).toBe(HEALTH_METRIC_IDS.HeartRate);
+    expect(component.metricDetailOpen()).toBe(true);
+    expect(haptics.selection).toHaveBeenCalledTimes(1);
   });
 
   it('hides today’s HR without eligible samples, including empty, failed, and filtered sources', async () => {
@@ -1827,7 +1850,7 @@ describe('HealthWorkspaceComponent', () => {
 
   it('falls back without overwriting a saved source when only another source has today’s readings', async () => {
     await createComponent();
-    const summary = fixture.debugElement.query(By.directive(HealthPrioritySummaryComponent)).componentInstance as HealthPrioritySummaryComponent;
+    const summary = fixture.debugElement.query(By.css('[healthVitalsHighlights]')).componentInstance as HealthPrioritySummaryComponent;
     const heart = () => summary.renderedCards().find(card => card.id === 'heart_rate');
     const key = heart()!.sources[1].key;
     hydrateHighlightSources({ heart_rate: key });
@@ -1894,7 +1917,7 @@ describe('HealthWorkspaceComponent', () => {
     fixture.destroy();
     TestBed.resetTestingModule();
     await createComponent(undefined, '14d', {}, undefined, { heart_rate: key });
-    const summary = fixture.debugElement.query(By.directive(HealthPrioritySummaryComponent)).componentInstance as HealthPrioritySummaryComponent;
+    const summary = fixture.debugElement.query(By.css('[healthVitalsHighlights]')).componentInstance as HealthPrioritySummaryComponent;
     const units = normalizeUserUnitSettings({ distanceUnits: DistanceUnits.Miles });
     (TestBed.inject(AppUserSettingsQueryService).unitSettings as ReturnType<typeof signal<UserUnitSettingsInterface>>).set(units);
     fixture.detectChanges();
@@ -1909,7 +1932,7 @@ describe('HealthWorkspaceComponent', () => {
 
   it('hydrates a saved highlight independently and retains it through filters and late settings', async () => {
     await createComponent();
-    const summary = fixture.debugElement.query(By.directive(HealthPrioritySummaryComponent)).componentInstance as HealthPrioritySummaryComponent;
+    const summary = fixture.debugElement.query(By.css('[healthVitalsHighlights]')).componentInstance as HealthPrioritySummaryComponent;
     const heart = () => summary.renderedCards().find(card => card.id === 'heart_rate')!;
     const selectedKey = heart().sources[1].key;
     hydrateHighlightSources({ heart_rate: selectedKey });
@@ -1942,7 +1965,7 @@ describe('HealthWorkspaceComponent', () => {
 
   it('keeps the selected source when newer data changes source ordering', async () => {
     await createComponent();
-    const summary = fixture.debugElement.query(By.directive(HealthPrioritySummaryComponent)).componentInstance as HealthPrioritySummaryComponent;
+    const summary = fixture.debugElement.query(By.css('[healthVitalsHighlights]')).componentInstance as HealthPrioritySummaryComponent;
     const heart = () => summary.renderedCards().find(card => card.id === 'heart_rate')!;
     const key = heart().sources[1].key;
     hydrateHighlightSources({ heart_rate: key });

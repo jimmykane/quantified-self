@@ -150,7 +150,8 @@ describe('app-owned complete workout review', () => {
         assertTrainingPlansAccess: vi.fn().mockResolvedValue(undefined), assertTrainingWriteAccess: vi.fn().mockResolvedValue(undefined) });
     } catch (error) { failure = error; }
     const diagnostic = getAssistantRuntimeToolFailureDiagnostic(failure);
-    expect(diagnostic).toEqual({ toolErrorCode: stage === 'preview' ? 'invalid_assistant_preview' : 'unclassified_error',
+    expect(diagnostic).toMatchObject({ toolErrorCode: stage === 'preview' ? 'invalid_assistant_preview' : 'unclassified_error',
+      causeErrorType: stage === 'preview' ? 'ZodError' : 'Error', causeErrorCode: 'unknown',
       toolFailureStage: stage === 'preview' ? 'training_preview_validation' : stage === 'load' ? 'training_review_loading' : 'training_review_validation' });
     expect(JSON.stringify(diagnostic)).not.toMatch(/private|Never log|bound-preview|owner/);
   });
@@ -2477,6 +2478,8 @@ describe('Assistant runtime', () => {
     expect(getAssistantRuntimeToolFailureDiagnostic(caught)).toEqual({
       toolErrorCode: 'unclassified_error',
       toolFailureStage: 'assistant_tool_execution',
+      causeErrorType: 'Error',
+      causeErrorCode: 'unknown',
     });
     expect(caught).not.toHaveProperty('message', 'User-controlled provider message');
   });

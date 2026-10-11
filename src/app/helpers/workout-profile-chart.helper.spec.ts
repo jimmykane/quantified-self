@@ -33,7 +33,7 @@ describe('workout profile chart axes and bands', () => {
     const structure = recipe(sport, fastest, slowest);
     const before = JSON.stringify(structure);
     const model = buildWorkoutProfile(structure, units);
-    const option = buildWorkoutProfileChartOption(model, 'pace', null, [], false, 320, true, units) as ProfileOption;
+    const option = buildWorkoutProfileChartOption(model, 'pace', null, [], false, 320, units) as ProfileOption;
     const axis = option.yAxis[0];
     expect(axis.inverse).toBe(true);
     expect(axis.interval).toBe(interval);
@@ -50,7 +50,7 @@ describe('workout profile chart axes and bands', () => {
 
   it('preserves a broad authored recovery range and uses whole-minute ticks', () => {
     const model = buildWorkoutProfile(recipe(ActivityTypes.Running, 270, 3390));
-    const option = buildWorkoutProfileChartOption(model, 'pace', null, [], false, 1400, false) as ProfileOption;
+    const option = buildWorkoutProfileChartOption(model, 'pace', null, [], false, 1400) as ProfileOption;
     const axis = option.yAxis[0];
     expect(axis.interval).toBe(600);
     expect(axis.max).toBeGreaterThan(3390);
@@ -62,7 +62,7 @@ describe('workout profile chart axes and bands', () => {
   });
 
   it('places each band edge exactly at its data coordinate and centers constant targets', () => {
-    const option = buildWorkoutProfileChartOption(buildWorkoutProfile(recipe()), 'pace', null, [], false, 320, true) as ProfileOption;
+    const option = buildWorkoutProfileChartOption(buildWorkoutProfile(recipe()), 'pace', null, [], false, 320) as ProfileOption;
     const series = option.series[0];
     const render = (low: number, high: number) => series.renderItem({ dataIndex: 0 }, {
       value: (dimension: number) => [0, 270, 330][dimension],
@@ -88,7 +88,7 @@ describe('workout profile chart axes and bands', () => {
     const before = JSON.stringify(structure);
     const units = unit === null ? null : normalizeUserUnitSettings({ speedUnits: [unit] });
     const model = buildWorkoutProfile(structure, units);
-    const option = buildWorkoutProfileChartOption(model, 'speed', null, [], false, 320, true, units) as ProfileOption;
+    const option = buildWorkoutProfileChartOption(model, 'speed', null, [], false, 320, units) as ProfileOption;
     expect(option.yAxis[0]).toMatchObject({ inverse: false, min: 0, max, interval });
     expect(option.series[0].data[0].value[1]).toBeCloseTo(5 * factor, 4);
     expect(option.series[0].data[0].value[2]).toBeCloseTo(10 * factor, 4);

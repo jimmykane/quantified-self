@@ -98,6 +98,9 @@ export interface HealthPriorityCardView {
   changeDetection: ChangeDetectionStrategy.OnPush,
 })
 export class HealthPrioritySummaryComponent {
+  readonly titleId = input('health-priority-title');
+  readonly heading = input('Your recent Health');
+  readonly description = input('A quick look at your latest sleep and heart trends.');
   readonly cards = input.required<readonly HealthPriorityCardView[]>();
   readonly startTimeMs = input.required<number>();
   readonly endTimeMs = input.required<number>();

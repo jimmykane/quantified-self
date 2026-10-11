@@ -1,8 +1,9 @@
 import { TRAINING_PREVIEW_TOOLS, TRAINING_READ_TOOLS } from '../mcp/training-plans.schemas';
 import { McpServer, type CallToolResult } from '@modelcontextprotocol/server';
+import { Client } from '@modelcontextprotocol/client';
 import { TimeIntervals } from '@sports-alliance/sports-lib';
 import { z } from 'zod';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import {
   ASSISTANT_ANALYTICAL_PROMPT_WORKFLOWS,
   ASSISTANT_PROMPT_EXAMPLES,
@@ -71,6 +72,29 @@ function createTestServer(options: {
 }
 
 describe('Assistant MCP session', () => {
+  it('retains only a sanitized snapshot of an SDK client failure', async () => {
+    const session = await createAssistantMcpSession('user-1', 'https://quantified-self.io', {
+      createServer: () => createTestServer(),
+    });
+    const cause = Object.assign(new TypeError('private-prompt private-token'), {
+      code: 'ETIMEDOUT', name: 'private-user-id', stack: 'private-url',
+    });
+    const callTool = vi.spyOn(Client.prototype, 'callTool').mockRejectedValueOnce(cause);
+    try {
+      let failure: unknown;
+      try { await session.callTool('get_daily_report', {}); }
+      catch (error) { failure = error; }
+      expect(failure).toBeInstanceOf(AssistantMcpToolFailure);
+      expect(failure).toMatchObject({ code: 'client_call_failed', stage: 'client_call', diagnostic: {
+        causeErrorType: 'TypeError', causeErrorCode: 'ETIMEDOUT',
+      } });
+      expect(failure).not.toHaveProperty('cause');
+      cause.code = 'private-code';
+      expect(JSON.stringify(failure)).not.toContain('private');
+      expect((failure as AssistantMcpToolFailure).diagnostic?.causeErrorCode).toBe('ETIMEDOUT');
+    } finally { callTool.mockRestore(); await session.close(); }
+  });
+
   it('offers only reads and local reflection preparation after independent consent, never direct model writes', async () => {
     const session = await createAssistantMcpSession('owner', 'https://quantified-self.io',
       undefined, 'coordinate_free', false, false, false, false, 'reflection-chat', false, false, false, true);

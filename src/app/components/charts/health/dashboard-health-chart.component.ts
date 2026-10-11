@@ -49,6 +49,8 @@ export class DashboardHealthChartComponent {
         initial: boolean;
     }>();
     readonly contextChange = output<DashboardHealthContext>();
+    /** Fatal reads do not produce a context; overview parents must retain retry access. */
+    readonly readFailed = output<void>();
     readonly context = signal<DashboardHealthContext | null>(null);
     readonly loading = signal(false);
     readonly error = signal(false);
@@ -157,6 +159,7 @@ export class DashboardHealthChartComponent {
                     }, error: () => { if (version === this.version) {
                         this.error.set(true);
                         this.loading.set(false);
+                        this.readFailed.emit();
                     } },
                 });
                 onCleanup(() => subscription.unsubscribe());

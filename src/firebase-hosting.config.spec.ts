@@ -339,8 +339,8 @@ describe('Firebase Hosting configuration', () => {
   });
 
   it('marks recently updated public discovery surfaces in sitemap', () => {
-    expect(sitemapLastmodForUrl(`${siteOrigin}/`)).toBe('2026-10-09');
-    expect(sitemapLastmodForUrl(`${siteOrigin}/features/health`)).toBe('2026-10-09');
+    expect(sitemapLastmodForUrl(`${siteOrigin}/`)).toBe('2026-10-11');
+    expect(sitemapLastmodForUrl(`${siteOrigin}/features/health`)).toBe('2026-10-11');
     expect(sitemapLastmodForUrl(`${siteOrigin}/features`)).toBe('2026-10-09');
     expect(sitemapLastmodForUrl(`${siteOrigin}/features/activity-calendar`)).toBe('2026-10-09');
     expect(sitemapLastmodForUrl(`${siteOrigin}/features/ai-insights`)).toBe('2026-09-02');
@@ -364,9 +364,8 @@ describe('Firebase Hosting configuration', () => {
     expect(sitemapLastmodForUrl(`${siteOrigin}/features/fit-gpx-tcx-file-analyzer`)).toBe('2026-09-02');
     expect(sitemapXml).not.toContain(`${siteOrigin}/features/workout-file-comparison`);
     expect(sitemapXml).not.toContain(`${siteOrigin}/features/sports-watch-benchmark`);
-    // Health overview/history navigation, scroll restoration and activity-history busy-state Help
-    // were updated on this date; keep the specific public Help lastmod.
-    expect(sitemapLastmodForUrl(`${siteOrigin}/help`)).toBe('2026-10-10');
+    // Curated Health defaults, confirmed-empty cards and chart periods update public Help.
+    expect(sitemapLastmodForUrl(`${siteOrigin}/help`)).toBe('2026-10-11');
     expect(sitemapLastmodForUrl(`${siteOrigin}/policies`)).toBe('2026-10-07');
     expect(sitemapLastmodForUrl(`${siteOrigin}/privacy`)).toBe('2026-10-07');
     expect(sitemapLastmodForUrl(`${siteOrigin}/terms`)).toBe('2026-10-07');

@@ -420,7 +420,17 @@ describe('help.content', () => {
       'only manual rows can be edited or deleted', 'not training targets']) expect(health).toContain(phrase);
     expect(health).toContain('**All** starts with **Your recent Health** highlights');
     expect(health).toContain('not repeated as cards on All');
-    expect(health).toContain('category views do not repeat the highlights above their cards');
+    expect(health).toContain('Moderate and vigorous intensity durations appear in **Movement & energy**, and are not shown by default on **All**');
+    expect(health).toContain('**Sleep → HRV → Resting heart rate → VO₂ max → Weight → Steps**');
+    expect(health).toContain('Missing metrics leave fewer cards; other measurements never fill their places');
+    expect(health).toContain('Default metric cards with no readings in the last 30 days are omitted after loading finishes');
+    expect(health).toContain('an unavailable selected source or an incomplete or failed load stay visible');
+    expect(health).toContain('New readings can bring an omitted card back');
+    expect(health).toContain('Each chart identifies its own period');
+    expect(health).toContain('the HRV highlight uses 14 days');
+    expect(health).toContain('**Vitals** includes today’s heart-rate highlight');
+    expect(health).toContain('replacing its general Heart rate card');
+    expect(health).toContain('Other category views show their metric cards without highlights');
     expect(health).toContain('Recent-health highlights stay on the overview, not above the selected metric');
     expect(health).toContain('previous scroll position');
     expect(health).toContain('Changing to a different metric starts at the top');
@@ -632,6 +642,8 @@ describe('help.content', () => {
     expect(healthSection?.content).toContain('never creates a cross-provider headline average');
     expect(healthSection?.content).toContain('**Choose a Highlight source.**');
     expect(healthSection?.content).toContain('**Today’s heart rate**');
+    expect(healthSection?.content).toContain('**Today’s heart rate** appears in **Vitals**');
+    expect(healthSection?.content).toContain('the general Heart rate card remains available in Vitals');
     expect(healthSection?.content).toContain('whole highlight is hidden when none do');
     expect(healthSection?.content).toContain('not a live sensor feed');
     expect(healthSection?.content).toContain('remembered separately for each highlight in your account settings');

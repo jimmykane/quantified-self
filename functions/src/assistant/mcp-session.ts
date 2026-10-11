@@ -25,6 +25,7 @@ import {
   splitAssistantMetricHistoryQuery,
 } from './metric-history-query';
 import { projectGeminiToolInputSchema } from './gemini-tool-schema';
+import { getAssistantErrorDiagnostic, type AssistantErrorDiagnostic } from './error-diagnostics';
 
 export const ASSISTANT_BASE_MCP_TOOL_NAMES = [
   'list_activity_types',
@@ -116,12 +117,16 @@ export type AssistantMcpToolFailureStage = 'input_validation' | 'tool_response'
   | 'client_call' | 'result_validation';
 
 export class AssistantMcpToolFailure extends Error {
+  readonly diagnostic?: AssistantErrorDiagnostic;
+
   constructor(
     readonly code: AssistantMcpToolFailureCode,
     readonly stage: AssistantMcpToolFailureStage,
+    cause?: unknown,
   ) {
     super('The Assistant MCP tool could not complete the request.');
     this.name = 'AssistantMcpToolFailure';
+    if (cause !== undefined) this.diagnostic = getAssistantErrorDiagnostic(cause);
   }
 }
 
@@ -261,8 +266,8 @@ async function callAssistantMcpTool(
   let result: Awaited<ReturnType<Client['callTool']>>;
   try {
     result = await client.callTool({ name, arguments: args });
-  } catch {
-    throw new AssistantMcpToolFailure('client_call_failed', 'client_call');
+  } catch (error) {
+    throw new AssistantMcpToolFailure('client_call_failed', 'client_call', error);
   }
   if ('isError' in result && result.isError) {
     const content = 'content' in result && Array.isArray(result.content)

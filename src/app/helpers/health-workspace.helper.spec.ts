@@ -444,14 +444,32 @@ describe('Health workspace helpers', () => {
     expect(buildHealthOverviewCategories([], true)).toMatchObject([{ id: 'recovery', metrics: [{ id: 'sleep' }] }]);
   });
 
-  it('limits the overview to six available readings and fills gaps without inventing metrics', () => {
+  it('uses a stable recovery-first overview without filling gaps with other metrics', () => {
     const categories = buildHealthOverviewCategories(buildHealthMetricCatalogGroups(), true);
     expect(selectHealthOverviewMetrics(categories).map(metric => metric.id)).toEqual([
-      'body_weight', 'heart_rate_variability', 'resting_heart_rate', 'steps', 'vo2_max', 'sleep',
+      'sleep', 'heart_rate_variability', 'resting_heart_rate', 'vo2_max', 'body_weight', 'steps',
     ]);
     const sparse = buildHealthOverviewCategories(buildHealthMetricCatalogGroups(['body_fat', 'steps']), false);
-    expect(selectHealthOverviewMetrics(sparse).map(metric => metric.id)).toEqual(['steps', 'body_fat']);
+    expect(selectHealthOverviewMetrics(sparse).map(metric => metric.id)).toEqual(['steps']);
+    const secondaryOnly = buildHealthOverviewCategories(buildHealthMetricCatalogGroups([
+      'heart_rate', 'body_fat', 'fitness_age', 'active_energy', 'floors_climbed',
+    ]), false);
+    expect(selectHealthOverviewMetrics(secondaryOnly)).toEqual([]);
+    expect(secondaryOnly.flatMap(category => category.metrics)).toHaveLength(5);
     expect(selectHealthOverviewMetrics([])).toEqual([]);
+  });
+
+  it('keeps intensity durations in categories without using them to fill the landing overview', () => {
+    const intensityMetrics = [HEALTH_METRIC_IDS.ModerateIntensityDuration, HEALTH_METRIC_IDS.VigorousIntensityDuration];
+    const categories = buildHealthOverviewCategories(buildHealthMetricCatalogGroups([
+      ...intensityMetrics, HEALTH_METRIC_IDS.Steps, HEALTH_METRIC_IDS.FloorsClimbed,
+    ]), false);
+    expect(selectHealthOverviewMetrics(categories).map(metric => metric.id)).toEqual(['steps']);
+    expect(categories.find(category => category.id === 'movement')!.metrics.map(metric => metric.id))
+      .toEqual(expect.arrayContaining(intensityMetrics));
+    const intensityOnly = buildHealthOverviewCategories(buildHealthMetricCatalogGroups(intensityMetrics), false);
+    expect(selectHealthOverviewMetrics(intensityOnly)).toEqual([]);
+    expect(intensityOnly[0].metrics).toHaveLength(2);
   });
 
   it('keeps providers, accounts, semantics, native values, gaps, and conflicts isolated', () => {

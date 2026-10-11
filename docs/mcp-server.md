@@ -2566,7 +2566,9 @@ after validation, but no additional server deployment or registered-app rescan o
 
 First-party Training review failures report only allowlisted stages: preview validation, complete-review loading,
 and review validation. MCP-schema failures use the MCP Zod error class, distinct from Genkit's model-output schema.
-Do not log exception messages, issues, authored fields, proposal references or owner identity. These diagnostics and
+Do not log exception messages, raw issues, authored fields, proposal references or owner identity. Bounded cause
+classification and masked schema-path summaries are documented in [Assistant operations](assistant.md#operations-and-rollout);
+they do not expose rejected values or arbitrary keys. These diagnostics and
 authority fixes preserve the public MCP contract, consent, projections and app help; they require no catalog refresh.
 Training write authority treats omitted optional switches as off, so schedule-only consent does not require provider
 delivery consent. Rechecks still reject changed permissions/generations and propagate revocation without retry.

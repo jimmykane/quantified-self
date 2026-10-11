@@ -28,6 +28,7 @@ export class HealthCategoryOverviewComponent {
   readonly groups = input.required<readonly HealthMetricCatalogGroup[]>();
   readonly showSleep = input(false);
   readonly highlightedMetrics = input<readonly HealthWorkspaceMetricSelection[]>([]);
+  readonly vitalsHighlightedMetrics = input<readonly HealthWorkspaceMetricSelection[]>([]);
   readonly exampleOnly = input(false);
   readonly darkTheme = input(false);
   readonly referenceDate = input<string | null>(null);
@@ -39,29 +40,41 @@ export class HealthCategoryOverviewComponent {
   private readonly haptics = inject(AppHapticsService);
   private readonly category = signal<HealthOverviewCategoryId | 'all'>('all');
   private readonly sourceSettings = signal<Partial<Record<HealthWorkspaceMetricSelection, AppDashboardHealthMetricSettings>>>({});
+  private readonly observedAvailability = signal<Partial<Record<HealthWorkspaceMetricSelection, { scope: string; empty: boolean }>>>({});
+  private readonly availabilityScope = computed(() => JSON.stringify([
+    this.owner(), this.referenceDate(), [...this.providerFilter()].sort(),
+  ]));
   readonly categories = computed(() => buildHealthOverviewCategories(this.groups(), this.showSleep()));
   readonly selectedCategory = computed(() => this.categories().some(category => category.id === this.category()) ? this.category() : 'all');
   readonly hasOverviewHighlights = computed(() => this.selectedCategory() === 'all' && this.highlightedMetrics().length > 0);
+  readonly hasVitalsHighlights = computed(() => this.selectedCategory() === 'vitals' && this.vitalsHighlightedMetrics().length > 0);
   readonly cards = computed(() => {
     const categories = this.categories();
-    // Highlights already cover these metrics on All. Explicit categories still
-    // expose their full catalog, including history outside the highlight window.
+    // Each visible highlight owns its metric's presentation and history action.
+    // Other categories retain their full catalog, including historical readings.
     const highlighted = new Set(this.highlightedMetrics());
     const metrics = this.selectedCategory() === 'all' ? selectHealthOverviewMetrics(categories.map(category => ({
       ...category, metrics: category.metrics.filter(metric => !highlighted.has(metric.id)),
     })))
-      : categories.find(category => category.id === this.selectedCategory())!.metrics;
+      : categories.find(category => category.id === this.selectedCategory())!.metrics
+        .filter(metric => !this.hasVitalsHighlights() || !this.vitalsHighlightedMetrics().includes(metric.id));
     const settings = this.sourceSettings();
+    const availability = this.observedAvailability();
+    const scope = this.availabilityScope();
     return metrics.map(metric => ({ ...metric, icon: healthMetricIcon(metric.id),
       settings: settings[metric.id] || { metric: metric.id, range: '30d' as const },
+      hidden: this.selectedCategory() === 'all' && !this.exampleOnly()
+        && availability[metric.id]?.scope === scope && availability[metric.id].empty,
     }));
   });
+  readonly hasVisibleCards = computed(() => this.cards().some(card => !card.hidden));
 
   constructor() {
     // Source and category choices belong only to this open account workspace.
     effect(() => {
       this.owner();
       this.sourceSettings.set({});
+      this.observedAvailability.set({});
       this.category.set('all');
     });
   }
@@ -77,7 +90,21 @@ export class HealthCategoryOverviewComponent {
     this.sourceSettings.update(current => ({ ...current, [settings.metric]: settings }));
   }
 
+  observeReadFailure(metric: HealthWorkspaceMetricSelection): void {
+    this.observedAvailability.update(current => ({ ...current, [metric]: {
+      scope: this.availabilityScope(), empty: false,
+    } }));
+  }
+
   observeSources(context: DashboardHealthContext): void {
     this.providersObserved.emit({ uid: this.owner(), providers: [...new Set(context.sources.map(source => source.provider))] });
+    if (context.window.range !== '30d' || this.referenceDate() && context.window.endDate !== this.referenceDate()) return;
+    // Keep readers mounted so a refresh can reveal new data. Category browsing,
+    // failed/partial loads and a missing chosen source retain their existing states.
+    this.observedAvailability.update(current => ({ ...current, [context.window.metric]: {
+      scope: this.availabilityScope(),
+      empty: context.availability.state === 'no-data' && context.sources.length === 0
+        && !context.missingSource && !context.sampleOnly,
+    } }));
   }
 }

@@ -99,15 +99,17 @@ describe('WorkoutProfileComponent', () => {
     expect(fixture.nativeElement.textContent).toContain('Enter valid workout step details');
   });
 
-  it('preserves the first tap tooltip across selection but dismisses it when target content changes', async () => {
+  it('shows selected details inline without floating tooltips, including after changing the target view', async () => {
     const fixture = await render();
-    const hiddenCount = () => chart.dispatchAction.mock.calls.filter(call => call[0]?.type === 'hideTip').length;
-    const initial = hiddenCount();
     fixture.componentInstance.selectStep(fixture.componentInstance.steps()[0]);
     fixture.detectChanges(); await fixture.whenStable();
-    expect(hiddenCount()).toBe(initial);
+    expect(fixture.nativeElement.querySelector('.profile-selection').textContent).toContain('Step 1');
+    expect(fixture.nativeElement.querySelector('.profile-selection').textContent).toContain('<script>not HTML</script>');
     fixture.componentInstance.selectMetric('power'); fixture.detectChanges(); await fixture.whenStable();
-    expect(hiddenCount()).toBeGreaterThan(initial);
+    expect(fixture.componentInstance.selected()?.stepId).toBe('warmup');
+    for (const [, option] of loader.setOption.mock.calls) {
+      expect(option.tooltip).toEqual({ show: false, showContent: false, triggerOn: 'none' });
+    }
   });
 
   it('uses canonical occurrence identity for delayed chart events after reordering and ignores removed steps', async () => {
@@ -121,7 +123,7 @@ describe('WorkoutProfileComponent', () => {
     expect(haptics.selection).toHaveBeenCalledTimes(1);
   });
 
-  it('escapes notes in text and tooltips, marks changed canonical IDs and renders equal targets as rectangles', async () => {
+  it('escapes notes in inline details, marks changed canonical IDs and renders equal targets as rectangles', async () => {
     const fixture = await render();
     fixture.componentInstance.selectMetric('power');
     fixture.componentRef.setInput('changedStepIds', ['set']); fixture.detectChanges(); await fixture.whenStable();
@@ -133,8 +135,7 @@ describe('WorkoutProfileComponent', () => {
     expect(option.series[0].data[0].value).toEqual([0, 200, 200]);
     const item = option.series[0].renderItem({}, { value: (i: number) => [0, 200, 200][i], coord: () => [50, 50], size: () => [40, 0] });
     expect(item.type).toBe('rect'); expect(item.shape.height).toBe(4);
-    const tooltip = option.tooltip.formatter({ value: [0] });
-    expect(tooltip).toContain('&lt;script&gt;'); expect(tooltip).not.toContain('<script>');
+    expect(option.tooltip.show).toBe(false);
   });
 
   it('drills through the last pass of a large repeat without changing the recipe or losing step identity', async () => {
@@ -206,9 +207,8 @@ describe('WorkoutProfileComponent', () => {
     if (smaller.nodes[0].kind === 'repeat') smaller.nodes[0].count = 70;
     fixture.componentRef.setInput('structure', smaller); fixture.detectChanges(); await fixture.whenStable();
     expect(component.selected()).toBeNull();
-    const hidden = chart.dispatchAction.mock.calls.filter(call => call[0]?.type === 'hideTip').length;
     component.selectStep(component.steps()[0]); fixture.detectChanges(); await fixture.whenStable();
-    expect(chart.dispatchAction.mock.calls.filter(call => call[0]?.type === 'hideTip')).toHaveLength(hidden);
+    expect(component.selected()).toMatchObject({ occurrenceKey: 'set/1/warmup' });
     fixture.componentRef.setInput('structure', large); fixture.detectChanges(); await fixture.whenStable();
     expect(component.selected()).toMatchObject({ occurrenceKey: 'set/1/warmup' });
     expect(component.model().repeats[0].iteration).toBe(1);

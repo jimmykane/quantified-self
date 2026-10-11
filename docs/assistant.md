@@ -661,6 +661,16 @@ Operational logs should contain only safe error classes and lifecycle outcomes. 
 tool/schema drift, model latency, and abandoned turn locks. The generation callable caps both instances and per-instance
 concurrency; preserve an explicit platform-level cost bound when changing its runtime options.
 
+Grounded-response retry warnings and final errors retain the tool name, fixed failure code and stage. Tool failures
+also include `causeErrorType` (a fixed built-in category, never the exception's arbitrary name) and `causeErrorCode`
+(allowlisted network/service codes or bounded gRPC/JSON-RPC codes; otherwise `unknown`). MCP Zod failures include at
+most five `causeSchemaIssues`, each containing only a fixed validation code and schema-label path. Paths stop after
+eight components, mask indexes as `*` and unknown/dynamic keys as `<field>`. Rejected values, messages, raw issues,
+unknown keys, union contents, stacks and nested causes are never logged. SDK client exceptions retain only this sanitized
+snapshot, not the original exception. These are diagnostics only: severity, retry behavior, Training/content authority,
+grounding, public MCP schemas and app review/Apply remain unchanged. No registered-app refresh, plugin sync or Help
+change is required; deployment of `assistantChat` still needs separate approval.
+
 TTL policy deployment is an explicit infrastructure step. The local helper includes `assistantConversations`, but code
 deployment alone does not enable or update the production TTL policy.
 
