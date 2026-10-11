@@ -185,7 +185,10 @@ LES MILLS RPM / SPRINT / THE TRIP use `ROAD_CYCLING`; Obstacle Racing uses `RUNN
 `TRAIL_RUNNING`. Enduro MTB and E-Enduro MTB retain `MOUNTAIN_BIKING`. These are course metadata aliases, separate
 from Training Workout mappings. QS retains each source route sport and original file. Course Import permission,
 account/revision guards, route identity, retry and lifecycle rules stay unchanged. The existing Garmin route delivery
-worker/outcome labels cover these sends, so monitoring coverage is unchanged.
+worker/outcome labels cover these sends, so monitoring coverage is unchanged. Exact overrides run before substring
+checks: Motorcycling, Motorcycle Enduro, Hard Enduro, Ski Mountaineering, Offroad Duathlon and Offroad Triathlon
+use `OTHER`; Mountaineering uses `HIKING`. Enduro MTB and E-Enduro MTB keep `MOUNTAIN_BIKING`. No provider
+profile is inferred from the cycling, enduro, mountain or road fragments in those unrelated canonical names.
 
 ## Training-planning proof boundary
 

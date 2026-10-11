@@ -241,6 +241,13 @@ describe('Wahoo route uploads', () => {
     ['E-Enduro MTB', '0'],
     ['Obstacle Racing', '1'],
     ['Vertical Running', '1'],
+    ['Offroad Duathlon', '31'],
+    ['Offroad Triathlon', '31'],
+    ['  OFFROAD TRIATHLON  ', '31'],
+    ['Motorcycling', '0'],
+    ['Motorcycle Enduro', '0'],
+    ['Mountaineering', '9'],
+    ['Ski Mountaineering', '4'],
     ['Unknown profile', '31'],
   ])('sends %s through the approved Wahoo route family %s', async (sport, familyId) => {
     const file = routeFile({ getRoutes: () => [{

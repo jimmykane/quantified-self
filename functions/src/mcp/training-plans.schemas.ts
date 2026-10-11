@@ -1,7 +1,7 @@
 import { z } from 'zod';
 import { WORKOUT_PRESCRIPTION_ANALYSIS_SCHEMA } from './workout-prescription-analysis.schemas';
 import { ActivityTypesHelper } from '@sports-alliance/sports-lib';
-import { CompatibleTrainingActivityTypes } from '../../../shared/activity-type-compatibility';
+import { RefinedTrainingActivityTypes } from '../../../shared/activity-type-compatibility';
 import {
   WORKOUT_STEP_PURPOSES,
   WORKOUT_STRUCTURE_MAX_NODES,
@@ -196,10 +196,11 @@ const step = z.strictObject({ kind: z.literal('step'), id: nodeId, purpose: z.en
 /** Explicit public contract. New stored fields must never appear here implicitly. */
 // These tools are additive pending contracts. Keep every published canonical
 // value and the explicitly approved bridge names; never accept arbitrary labels.
+// Recorded-only analysis approvals must not widen this pending recipe contract.
 // The catalog's unknown placeholder is already rejected by recipe validation.
 const recipeSport = z.enum([...new Set([
   ...ActivityTypesHelper.getActivityTypesAsUniqueArray(),
-  ...Object.values(CompatibleTrainingActivityTypes),
+  ...Object.values(RefinedTrainingActivityTypes),
 ])].filter(sport => sport !== 'Unknown Sport'));
 const recipeFields = { version: z.literal(WORKOUT_STRUCTURE_VERSION), sport: recipeSport,
   nodes: z.array(z.union([step, z.strictObject({ kind: z.literal('repeat'), id: nodeId,

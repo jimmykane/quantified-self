@@ -1,8 +1,8 @@
 import { ActivityTypes } from '@sports-alliance/sports-lib';
-import { RefinedTrainingActivityTypes, resolveCompatibleActivityType } from '../../../shared/activity-type-compatibility';
+import { RefinedTrainingActivityTypes, RefinedRecordedActivityTypes, resolveCompatibleActivityType } from '../../../shared/activity-type-compatibility';
 
 describe('approved canonical sport compatibility', () => {
-  it.each(Object.values(RefinedTrainingActivityTypes))('preserves %s and its trimmed case-insensitive form', sport => {
+  it.each([...Object.values(RefinedTrainingActivityTypes), ...Object.values(RefinedRecordedActivityTypes)])('preserves %s and its trimmed case-insensitive form', sport => {
     expect(resolveCompatibleActivityType(sport)).toBe(sport);
     expect(resolveCompatibleActivityType(` ${sport.toLowerCase()} `)).toBe(sport);
   });

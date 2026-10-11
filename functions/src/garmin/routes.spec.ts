@@ -235,6 +235,15 @@ describe('garmin route sending', () => {
     ['Enduro MTB', 'MOUNTAIN_BIKING'],
     ['E-Enduro MTB', 'MOUNTAIN_BIKING'],
     ['Gravel Cycling', 'GRAVEL_CYCLING'],
+    ['Motorcycling', 'OTHER'],
+    ['Motorcycle Enduro', 'OTHER'],
+    ['Hard Enduro', 'OTHER'],
+    ['Mountaineering', 'HIKING'],
+    ['Ski Mountaineering', 'OTHER'],
+    ['Offroad Duathlon', 'OTHER'],
+    ['Offroad Triathlon', 'OTHER'],
+    ['  MOTORCYCLE ENDURO  ', 'OTHER'],
+    ['  MOUNTAINEERING  ', 'HIKING'],
     ['Unknown profile', 'OTHER'],
   ])('sends %s through the approved Garmin course profile %s', async (sport, activityType) => {
     garminTokenDocsByUser.set('garminAPITokens:user-1', [

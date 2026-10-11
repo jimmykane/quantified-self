@@ -1,4 +1,5 @@
 import { ActivityTypes } from '@sports-alliance/sports-lib';
+import { MANUAL_WORKOUT_EDITOR_SPORTS_V1 } from '@shared/planned-workout';
 import {
   createTrainingSportRecord,
   getTrainingSportDefinition,
@@ -69,10 +70,29 @@ describe('shared Training sport registry', () => {
     ['EMOM', 'fitness-gym', 'conditioning'],
     ['Tabata', 'fitness-gym', 'conditioning'],
     ['LES MILLS BODYPUMP', 'strength', 'strength'],
+    ['Classic Roller Skiing', 'nordic-skiing', 'roller-skiing'],
+    ['Skate Roller Skiing', 'nordic-skiing', 'roller-skiing'],
+    ['Virtual Rowing', 'rowing', 'indoor-rowing'],
+    ['Whitewater Kayaking', 'paddling', 'kayaking'],
   ])('includes %s in the approved family/context without changing its name', (name, sport, context) => {
     expect(resolveTrainingSportContextFromActivityType(name)).toMatchObject({ sport, context });
     expect(resolveTrainingSportContextFromActivityType(`  ${name.toLowerCase()}  `))
       .toMatchObject({ sport, context });
+  });
+
+  it.each([
+    ['Classic Roller Skiing', ActivityTypes.RollerSki],
+    ['Skate Roller Skiing', ActivityTypes.RollerSki],
+    ['Virtual Rowing', ActivityTypes.IndoorRowing],
+    ['Whitewater Kayaking', ActivityTypes.Kayaking],
+  ])('gives %s the existing %s analysis policies without widening planning support', (sport, baseSport) => {
+    expect(resolveTrainingSportContextFromActivityType(sport))
+      .toEqual(resolveTrainingSportContextFromActivityType(baseSport));
+    expect(resolveTrainingSportContextFromActivityType(sport)).toMatchObject({
+      intensityPolicy: 'zones', loadPolicy: 'recorded', durabilityPolicy: 'omit',
+    });
+    expect(resolveTrainingPowerSystemsModelActivityType(sport)).toBe(sport);
+    expect(MANUAL_WORKOUT_EDITOR_SPORTS_V1 as readonly string[]).not.toContain(sport);
   });
 
   it('keeps saved TSS available for every Training context independently of specialist policies', () => {
@@ -219,7 +239,8 @@ describe('shared Training sport registry', () => {
       loadPolicy: 'recorded',
       distancePolicy: 'omit',
     }));
-    [ActivityTypes.Triathlon, ActivityTypes.Multisport, ActivityTypes.Transition, ActivityTypes.Route]
+    [ActivityTypes.Triathlon, ActivityTypes.Multisport, ActivityTypes.Transition, ActivityTypes.Route,
+      'Brick Training', 'Pool Triathlon', 'Offroad Triathlon', 'Offroad Duathlon']
       .forEach(activityType => expect(resolveTrainingDisciplineFromActivityType(activityType)).toBeNull());
     expect(resolveTrainingDisciplineFromActivityType('not-a-sport')).toBeNull();
     expect(resolveTrainingDisciplineFromActivityType('__proto__')).toBeNull();

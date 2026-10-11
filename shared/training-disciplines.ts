@@ -419,7 +419,7 @@ export const TRAINING_SPORT_DEFINITIONS = [
       {
         id: 'indoor-rowing',
         label: 'Indoor rowing',
-        activityTypes: [ActivityTypes.IndoorRowing],
+        activityTypes: [ActivityTypes.IndoorRowing, RefinedTypes.VirtualRowing],
         profile: 'rowing',
         intensityPolicy: 'zones',
         loadPolicy: 'recorded',
@@ -502,7 +502,7 @@ export const TRAINING_SPORT_DEFINITIONS = [
       {
         id: 'roller-skiing',
         label: 'Roller skiing',
-        activityTypes: [ActivityTypes.RollerSki],
+        activityTypes: [ActivityTypes.RollerSki, RefinedTypes.ClassicRollerSkiing, RefinedTypes.SkateRollerSkiing],
         profile: 'vertical-endurance',
         intensityPolicy: 'zones',
         loadPolicy: 'recorded',
@@ -628,7 +628,7 @@ export const TRAINING_SPORT_DEFINITIONS = [
       {
         id: 'kayaking',
         label: 'Kayaking',
-        activityTypes: [ActivityTypes.Kayaking],
+        activityTypes: [ActivityTypes.Kayaking, RefinedTypes.WhitewaterKayaking],
         profile: 'paddling',
         intensityPolicy: 'zones',
         loadPolicy: 'recorded',
@@ -774,6 +774,10 @@ const aggregateActivityTypes = new Set<ActivityType>([
   ActivityTypes.Triathlon,
   ActivityTypes.Transition,
   ActivityTypes.Route,
+  RefinedTypes.BrickTraining,
+  RefinedTypes.PoolTriathlon,
+  RefinedTypes.OffroadTriathlon,
+  RefinedTypes.OffroadDuathlon,
 ]);
 
 TRAINING_SPORT_DEFINITIONS.forEach((sport) => {

@@ -15,7 +15,7 @@ import {
 } from '@sports-alliance/sports-lib';
 
 import { FUNCTIONS_MANIFEST } from '../../../shared/functions-manifest';
-import { resolveProviderRouteSportAlias } from '../../../shared/route-sport-aliases';
+import { resolveProviderRouteSportAlias, resolveWahooRouteWorkoutFamilyOverride } from '../../../shared/route-sport-aliases';
 import { getRouteParsingFailureMessage, parseRoutePayload, RouteProcessingHttpStatusError } from '../routes/route-processing';
 import {
   decodeManualRouteUpload,
@@ -247,6 +247,8 @@ function getWorkoutTypeFamilyId(routeFile: RouteFileInterface): number {
     .map((route) => `${route.activityType || ''}`.trim().toLowerCase())
     .filter(Boolean);
   const originalActivityType = activityTypes[0] || '';
+  const override = resolveWahooRouteWorkoutFamilyOverride(originalActivityType);
+  if (override !== null) return override;
   const activityType = resolveProviderRouteSportAlias(originalActivityType)?.toLowerCase() || originalActivityType;
 
   if (activityType.includes('run')) return 1;

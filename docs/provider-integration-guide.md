@@ -23,7 +23,7 @@ scalar summary policy as activities. These corrections retain the existing provi
 ### Refined sport names at recorded-activity and route boundaries
 
 QS keeps the source sport name. Recorded-activity correction and route delivery have their own explicit approvals,
-separate from planned-workout aliases. `shared/wahoo-activity-types.ts` adds 28 approved recorded-activity aliases to
+separate from planned-workout aliases. `shared/wahoo-activity-types.ts` adds 32 approved recorded-activity aliases to
 existing Wahoo Workout types. The complete table is in [Wahoo recorded-activity profiles](wahoo-integration.md#recorded-activity-sport-profiles).
 Unmapped types keep Wahoo inference; native Nordic Walking, virtual and other existing mappings retain their IDs.
 A queued upload persists its chosen type before provider I/O and reuses it on resume; a new table does not rewrite
@@ -37,6 +37,14 @@ already accepted uploads or authorize a historical correction job.
 | Obstacle Racing | Running | Running | Running |
 | Vertical Running | Trail Running | Running | Running |
 | Enduro MTB; E-Enduro MTB | Mountain Biking | Bike | Cycling |
+
+Exact provider-specific route overrides also precede legacy keyword heuristics. Garmin sends Motorcycling,
+Motorcycle Enduro, Hard Enduro, Ski Mountaineering, Offroad Duathlon and Offroad Triathlon as `OTHER`, and
+Mountaineering as `HIKING`. Wahoo sends Offroad Duathlon and Offroad Triathlon as Other family `31`. These choices
+prevent unrelated names containing cycling, enduro, mountain or road from selecting a cycling profile. Wahoo
+Motorcycling keeps the documented Biking family; COROS route fallbacks are unchanged. Brick Training, Pool Triathlon,
+Offroad Triathlon and Offroad Duathlon use the existing Wahoo recorded-activity Multisport type `62`, independently
+of route families and planned workouts.
 
 These aliases select metadata only at the destination boundary. Original files, QS sport names, provider identity,
 echo receipts, permissions, account guards, revisions, leases, retries and queue terminal states retain their existing

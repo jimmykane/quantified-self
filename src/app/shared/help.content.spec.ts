@@ -228,10 +228,23 @@ describe('help.content', () => {
     expect(uploads).toContain('BMX and LES MILLS RPM / SPRINT / THE TRIP use Garmin Road Cycling, COROS Bike, and Wahoo Cycling');
     expect(uploads).toContain('Vertical Running uses Garmin Trail Running');
     expect(uploads).toContain('Your saved route keeps its original sport name');
+    expect(uploads).toContain('Garmin uses Hiking for Mountaineering');
+    expect(uploads).toContain('Wahoo uses Other for Offroad Triathlon and Offroad Duathlon');
     expect(services).toContain('Road Cycling and BMX use Cycling');
     expect(services).toContain('AMRAP, EMOM and Tabata use Cardio Class');
+    expect(services).toContain('Brick Training, Pool Triathlon, Offroad Triathlon and Offroad Duathlon use Multisport');
     expect(services).toContain('Your QS activity keeps its original sport name');
     expect(services).toContain('separate from route profiles and planned workouts');
+  });
+
+  it('explains refined endurance contexts and unsplit combined-sport load', () => {
+    const training = HELP_SECTIONS.find(section => section.id === 'training-analysis')!.content;
+    expect(training).toContain('Classic Roller Skiing and Skate Roller Skiing use **Nordic Skiing → Roller skiing**');
+    expect(training).toContain('Virtual Rowing uses **Rowing → Indoor rowing**');
+    expect(training).toContain('Whitewater Kayaking uses **Paddling → Kayaking**');
+    expect(training).toContain('An unsplit combined recording keeps its saved event TSS in global load');
+    expect(training).toContain('contributes no standalone sport workout');
+    expect(training).toContain('QS does not invent legs from the sport name');
   });
 
   it('points users to the Privacy section and explains saving analytics and email opt-outs', () => {

@@ -2,6 +2,7 @@ import { ActivityTypesHelper, type ActivityTypes } from '@sports-alliance/sports
 
 // Exact canonical names approved for the forthcoming Sports Lib catalog. Keep
 // this bridge narrow while QS still builds against the current published enum.
+// This original list also defines the previously approved public recipe names.
 export const RefinedTrainingActivityTypes = {
   RoadRunning: 'Road Running',
   IndoorTrackRunning: 'Indoor Track Running',
@@ -34,10 +35,24 @@ export const RefinedTrainingActivityTypes = {
   LesMillsBODYPUMP: 'LES MILLS BODYPUMP',
 } as const;
 
+// Recorded-analysis approvals do not add unpublished names to public recipes.
+export const RefinedRecordedActivityTypes = {
+  ClassicRollerSkiing: 'Classic Roller Skiing',
+  SkateRollerSkiing: 'Skate Roller Skiing',
+  VirtualRowing: 'Virtual Rowing',
+  WhitewaterKayaking: 'Whitewater Kayaking',
+  BrickTraining: 'Brick Training',
+  PoolTriathlon: 'Pool Triathlon',
+  OffroadTriathlon: 'Offroad Triathlon',
+  OffroadDuathlon: 'Offroad Duathlon',
+} as const;
+
+const refinedActivityTypes = { ...RefinedTrainingActivityTypes, ...RefinedRecordedActivityTypes } as const;
+
 // The enum assertion is confined to this compatibility boundary, not persisted
 // payloads or provider decoding. These are canonical strings in the new catalog.
-export const CompatibleTrainingActivityTypes = RefinedTrainingActivityTypes as unknown as {
-  readonly [K in keyof typeof RefinedTrainingActivityTypes]:
+export const CompatibleTrainingActivityTypes = refinedActivityTypes as unknown as {
+  readonly [K in keyof typeof refinedActivityTypes]:
     ActivityTypes;
 };
 

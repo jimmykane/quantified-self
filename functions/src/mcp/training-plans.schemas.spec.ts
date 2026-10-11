@@ -4,7 +4,7 @@ import { z } from 'zod';
 import Ajv2020 from 'ajv/dist/2020';
 import addFormats from 'ajv-formats';
 import { ActivityTypes, ActivityTypesHelper } from '@sports-alliance/sports-lib';
-import { CompatibleTrainingActivityTypes } from '../../../shared/activity-type-compatibility';
+import { RefinedTrainingActivityTypes } from '../../../shared/activity-type-compatibility';
 import {
   WORKOUT_ENDING_KINDS,
   WORKOUT_STEP_PURPOSES,
@@ -549,9 +549,21 @@ describe('strict additive workout prescription analysis', () => {
 
 
 describe('canonical sport compatibility for pending Training recipes', () => {
+  it.each(['Classic Roller Skiing', 'Skate Roller Skiing', 'Virtual Rowing', 'Whitewater Kayaking',
+    'Brick Training', 'Pool Triathlon', 'Offroad Triathlon', 'Offroad Duathlon'])(
+    'keeps recorded-only %s outside future recipe enums until catalog adoption', sport => {
+      const installed = ActivityTypesHelper.getActivityTypesAsUniqueArray().includes(sport);
+      const structure = { ...recipe({ kind: 'time', seconds: 60 }), sport };
+      for (const schema of [TRAINING_RECIPE_SCHEMA, TRAINING_RECIPE_WITH_POOL_SCHEMA, TRAINING_RECIPE_WITH_EARLY_LAP_SCHEMA]) {
+        expect(schema.safeParse(structure).success).toBe(installed);
+        const advertised = z.toJSONSchema(schema, { target: 'draft-2020-12', io: 'input' });
+        expect(advertised.properties?.sport?.enum?.includes(sport)).toBe(installed);
+      }
+    });
+
   const canonicalSports = [...new Set([
     ...ActivityTypesHelper.getActivityTypesAsUniqueArray(),
-    ...Object.values(CompatibleTrainingActivityTypes),
+    ...Object.values(RefinedTrainingActivityTypes),
   ])].filter(sport => sport !== 'Unknown Sport');
 
   it('advertises a reused exact finite sport enum accepted by JSON Schema clients', () => {

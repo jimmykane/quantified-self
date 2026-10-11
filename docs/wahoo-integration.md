@@ -33,6 +33,7 @@ The expanded Sports Lib names reuse these approved, existing Workout types:
 | Speed Walking; Indoor Walking | Walking (`6`) |
 | Classic Crosscountry Skiing; Skate Skiing | Crosscountry Skiing (`30`) |
 | AMRAP; EMOM; Tabata | Cardio Class (`43`) |
+| Brick Training; Pool Triathlon; Offroad Triathlon; Offroad Duathlon | Multisport (`62`) |
 
 QS retains the source sport. Nordic Walking still uses native type `8`; virtual profiles and all other existing
 mappings retain their IDs. Unmapped sports, including LES MILLS BODYPUMP, retain Wahoo inference. Multiple distinct
@@ -42,7 +43,10 @@ historical provider copies.
 
 Route delivery has a separate family field: BMX, LES MILLS RPM / SPRINT / THE TRIP, Enduro MTB and E-Enduro MTB use
 Cycling (`0`); Obstacle Racing uses Running (`1`). Vertical Running retains Running (`1`). These are family mappings,
-not recorded Workout IDs or planned-workout profiles. QS route sport names and retained files remain intact.
+not recorded Workout IDs or planned-workout profiles. Offroad Triathlon and Offroad Duathlon explicitly use Other
+(`31`) before keyword matching, preventing the road substring from selecting Cycling. Motorcycling retains Biking
+(`0`), matching its [documented Wahoo family](https://cloud-api.wahooligan.com/#workout-types). QS route sport names
+and retained files remain intact.
 
 Monitoring coverage is **unchanged**. Existing Wahoo recorded-activity and route worker/outcome labels cover these
 metadata aliases; no queue, retry, lease, lifecycle, telemetry dimension or alert threshold changes.

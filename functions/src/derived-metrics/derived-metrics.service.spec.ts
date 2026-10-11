@@ -3664,6 +3664,49 @@ describe('buildTrainingSummaryMetricPayload', () => {
         ]));
     });
 
+    it.each([
+        ['Classic Roller Skiing', ActivityTypes.RollerSki, 'nordic-skiing', 'roller-skiing'],
+        ['Skate Roller Skiing', ActivityTypes.RollerSki, 'nordic-skiing', 'roller-skiing'],
+        ['Virtual Rowing', ActivityTypes.IndoorRowing, 'rowing', 'indoor-rowing'],
+        ['Whitewater Kayaking', ActivityTypes.Kayaking, 'paddling', 'kayaking'],
+    ])('combines %s with %s while counting saved TSS and recorded zones', async (sport, baseSport, discipline, context) => {
+        const { buildTrainingSummaryMetricPayload, buildTrainingBuildComparisonMetricPayload } = await import('./derived-metrics.service');
+        const currentDay = Date.UTC(2026, 6, 8);
+        const activities = buildTrainingActivitySources([currentDay, Date.UTC(2026, 3, 1)].flatMap(day => [
+            createEvent(day, sport, 'Garmin', {
+                [DataDistance.type]: 2_000, 'Training Stress Score': 71.25, [DataStrokeRateAvg.type]: 42,
+            }),
+            createEvent(day, baseSport, 'Polar', {
+                [DataDistance.type]: 3_000, 'Training Stress Score': 0, [DataStrokeRateAvg.type]: 38,
+            }),
+        ]));
+        const result = buildTrainingSummaryMetricPayload(activities, nowMs);
+        const current = result.payload.disciplines.find(item => item.discipline === discipline)?.current28d;
+        expect(result.sourceEventCount).toBe(4);
+        expect(current).toMatchObject({
+            activityCount: 2, durationSeconds: 7_200,
+            easySeconds: 2_400, moderateSeconds: 2_400, hardSeconds: 1_200,
+        });
+        expect(current?.contexts).toEqual([expect.objectContaining({
+            context, activityCount: 2,
+            metrics: expect.arrayContaining([{ metric: 'distance', value: 5_000, sourceActivityCount: 2 }]),
+        })]);
+        if (discipline !== 'nordic-skiing') {
+            expect(current?.contexts[0].metrics).toContainEqual({ metric: 'stroke-rate', value: 40, sourceActivityCount: 2 });
+        }
+        expect(result.payload.disciplines.find(item => item.discipline === 'other-training')?.current28d.activityCount).toBe(0);
+        expect(activities.map(activity => activity.activityData.type)).toEqual([sport, baseSport, sport, baseSport]);
+        const build = buildTrainingBuildComparisonMetricPayload(activities, {
+            trainingSettings: { buildBenchmarks: {
+                [discipline]: { mode: 'period', durationWeeks: 8, endDayMs: Date.UTC(2026, 3, 30) },
+            } },
+        }, nowMs).payload.disciplines.find(item => item.discipline === discipline);
+        expect(build?.status).toBe('ready');
+        for (const window of [build?.current, build?.benchmark]) {
+            expect(window).toMatchObject({ activityCount: 2, trainingStressScore: 71.25, trainingStressScoreEventCount: 2 });
+        }
+    });
+
     it('keeps generic fitness and known unmodeled sports visible as volume-only training', async () => {
         const { buildTrainingSummaryMetricPayload } = await import('./derived-metrics.service');
         const currentDay = Date.UTC(2026, 6, 8);
@@ -4326,7 +4369,26 @@ describe('activity-level Training sources and swimming performance', () => {
     });
     const eventDoc = (id: string, data: Record<string, unknown>) => ({ id, data: () => data });
 
-    it('splits multisport activity legs, includes MTB in Cycling, and excludes missing or merged parents', async () => {
+    it.each(['Brick Training', 'Pool Triathlon', 'Offroad Triathlon', 'Offroad Duathlon'])(
+        'retains unsplit %s saved load while excluding standalone Training workout counts', async (sport) => {
+            const { joinTrainingActivitySources, buildTrainingSummaryMetricPayload, buildTrainingExplanationMetricPayload } = await import('./derived-metrics.service');
+            const startDate = Date.UTC(2026, 6, 8);
+            const nowMs = Date.UTC(2026, 6, 10, 12);
+            const events = [eventDoc('combined', { startDate, stats: { 'Training Stress Score': 90 } })];
+            const docs = [activityDoc('whole-recording', 'combined', {
+                startDate, type: sport, stats: { [DataDuration.type]: 6_000, 'Training Stress Score': 90 },
+            })];
+            const activities = joinTrainingActivitySources(docs as never, events as never);
+            const summary = buildTrainingSummaryMetricPayload(activities, nowMs);
+            expect(summary.sourceEventCount).toBe(0);
+            expect(summary.payload.disciplines.every(item => item.current28d.activityCount === 0)).toBe(true);
+            expect(buildTrainingExplanationMetricPayload(events as never, activities, nowMs).payload.current)
+                .toMatchObject({ parentTrainingStressScore: 90, childTrainingStressScore: 90 });
+            expect(activities[0].activityData).toMatchObject({ type: sport, stats: { 'Training Stress Score': 90 } });
+        });
+
+    it.each(['Triathlon', 'Brick Training', 'Pool Triathlon', 'Offroad Triathlon', 'Offroad Duathlon'])(
+        'counts %s individual legs while excluding its aggregate, missing and merged parents', async (aggregateType) => {
         const {
             aggregatePersistedTrainingDurability,
             buildTrainingBuildComparisonMetricPayload,
@@ -4343,7 +4405,7 @@ describe('activity-level Training sources and swimming performance', () => {
             activityDoc('swim-leg', 'triathlon', { startDate, type: ActivityTypes.Swimming, stats: { [DataDuration.type]: 1_000 } }),
             activityDoc('bike-leg', 'triathlon', { startDate, type: ActivityTypes.MountainBiking, stats: { [DataDuration.type]: 2_000 } }),
             activityDoc('run-leg', 'triathlon', { startDate, type: ActivityTypes.TrailRunning, stats: { [DataDuration.type]: 3_000 } }),
-            activityDoc('aggregate', 'triathlon', { startDate, type: ActivityTypes.Triathlon, stats: { [DataDuration.type]: 6_000 } }),
+            activityDoc('aggregate', 'triathlon', { startDate, type: aggregateType, stats: { [DataDuration.type]: 6_000 } }),
             activityDoc('missing-parent', 'missing', { startDate, type: ActivityTypes.Running, stats: {} }),
             activityDoc('merged-child', 'merged', { startDate, type: ActivityTypes.Cycling, stats: {} }),
         ];
