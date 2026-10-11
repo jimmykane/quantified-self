@@ -5302,6 +5302,20 @@ threshold HR < maximum HR`. Session-matched FIT `time_in_zone` settings take pri
 setting. Observed peak HR, guessed threshold ratios and weighted HR zones are ineligible. QS supplies no athlete
 settings. The synthetic one-hour recovery walk with calibration 190/55/165 produces approximately 7.6 HR TSS.
 
+Sports Lib 21.6.6 removes explicit timer pauses from HR integration across eligible sports, including gaps spanning
+a pause, and excludes HR readings inside pauses. A reading exactly at a stop may close the preceding active interval.
+Forty active minutes at threshold plus twenty paused minutes yield 66.7 HR TSS. With no explicit timer events,
+elapsed-time integration remains unchanged; aggregate timer/moving duration does not identify pause positions.
+HR readings entirely inside a pause leave HR unavailable and allow the existing fallback order.
+
+Power TSS and IF require independent FIT FTP or an explicit library override; QS supplies no athlete overrides.
+The same-ride FTP estimate remains a statistic but is ineligible calibration. Calculated NP uses overlapping complete
+30-second windows, includes recorded zeros, and restarts at gaps, invalid samples and timer boundaries; stopped
+samples are excluded, including FIT stop-disable variants. Device NP is retained on normal import. Power TSS uses
+the full eligible duration. Cycling, MTB, downhill and enduro use biking-specific maximum HR with general fallback.
+Inconsistent percent-max HR settings whose threshold is below the first valid zone boundary are rejected; no zone
+weights or replacement calibration are inferred. Imported TSS retains priority throughout.
+
 A complete, unique session-matched FIT calibration that satisfies the same HR ordering may ignore zero placeholders
 in lower-priority `zones_target` or profile settings. This exception does not fill missing session settings or accept
 invalid session calibration. Ambiguous session references, conflicting repeated settings, nonnumeric values and
@@ -5412,7 +5426,8 @@ energy, body mass, gender and maximum-HR setting before regenerating derived sta
 new original-file parse, never the stored activity or current athlete settings. File HR calibration and intensity zones
 remain attached to the same activity. Keeping inputs available prevents an imported FTP from being replaced by a
 20-minute estimate and paused timer time from being replaced by wall-clock duration. Normalized power and intensity
-factor still regenerate from the streams and protected inputs; the existing missing-FTP estimation policy is unchanged.
+factor still regenerate from the streams and protected inputs. The missing-FTP estimate remains available as a
+statistic but cannot supply power TSS or IF; private original-file calibration remains attached to the parsed instance.
 
 After restoring any other missing parsed statistics, regeneration refreshes all TSS evaluations. By default (or with
 `preserveImportedTss: true`) it restores the parsed score and method together, preserving imported scores including zero
@@ -5526,9 +5541,15 @@ history. No derived schema bump or route reparse is required for this calculatio
 Editor tests load these additive diagnostics through the metadata reader, so a newer server diagnostic remains
 compatible with the older Sports Lib version used to build an existing frontend.
 
-The published [Sports Lib 21.6.3](https://github.com/sports-alliance/sports-lib/releases/tag/v21.6.3) artifact is pinned
-in both root and Functions, with FIT Parser 6.2.1. Both lockfiles match its npm integrity, and all 1,328 package files
-match the candidate used for the 100-file swimming replay and integration checks.
+The published [Sports Lib 21.6.6](https://github.com/sports-alliance/sports-lib/releases/tag/v21.6.6) artifact is pinned
+in both root and Functions, with FIT Parser 6.2.1. Both lockfiles match its npm integrity. The release incorporates
+the swimming, cycling calibration/NP and explicit HR-pause corrections. A read-only replay of 300 original files
+(313 legs) passed 4,478 checks, preserving all 113 imported scores and changing only the three identified HR-pause
+scores relative to 21.6.5. Private originals and detailed audit results remain outside Git.
+MCP review: this update adds no metric token, unit, output field, reason code, scope, mutation, planning capability or
+plugin change. Recorded queries consume saved statistics; Training impact consumes the existing modeled-load resolver.
+Corrected historical load needs original-file reparse and the normal derived-summary refresh. Existing controls and
+dated policy snapshots remain protected. No new database operation, provider request, queue or saved-route reparse is needed.
 Release Functions/Rules/frontend together after separate approval. Deployment and production reparse remain separate
 explicit approvals; no historical values are rewritten merely by deploying this change.
 

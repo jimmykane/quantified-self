@@ -39,8 +39,16 @@ this task does not adopt a package, deploy, enable scanners, start reparsing or 
 
 ### Sports Lib 21.6.1 file-calibrated Training load
 
-Sports Lib 21.6.2 is published and pinned in root and Functions, with FIT Parser 6.2.1. It retains the file-calibrated
-load rules introduced in 21.6.1. Deployment and production reparse each require separate approval.
+Sports Lib 21.6.6 is published and pinned in root and Functions, with FIT Parser 6.2.1. It retains the file-calibrated
+load rules introduced in 21.6.1 and adds the swimming threshold, independent cycling FTP, rolling NP and explicit
+HR-pause corrections. Deployment and production reparse each require separate approval.
+
+New source-file imports use the corrected calculations. Historical calculated power scores without independent FTP
+may fall back or become unavailable; calculated HR scores exclude explicit timer pauses, including gaps spanning a
+pause. Regenerate mode retains file calibration and timer events through repeated calculation. Imported scores remain
+authoritative by default. Correct historical values only through the existing original-file reparse lifecycle, then
+refresh derived Training summaries. Saved routes and schemas need no migration. The target continues to follow the
+installed runtime version; this dependency update does not enable either automatic scanner or launch a campaign.
 
 New provider imports and manual uploads cache Automatic/HR/MET evaluations in owner-only event metadata. Walking,
 Nordic Walking, Hiking and Trekking skip calculated pace and power. HR requires file-supplied resting, threshold and

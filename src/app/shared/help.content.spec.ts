@@ -55,6 +55,15 @@ describe('help.content', () => {
       'saved tag remains available', '**Refresh tags and activities**', 'Generated timestamp names are hidden',
       'the sport stays visible and opens the activity', 'Custom names remain visible']) expect(copy).toContain(phrase);
   });
+  it('explains HR pauses and independent power calibration without promising historical rewrites', () => {
+    const copy = HELP_SECTIONS.find(section => section.content.includes('### Form tile (CTL / ATL / TSB)'))!.content;
+    expect(copy).toContain('Calculated HR TSS excludes explicit timer pauses');
+    expect(copy).toContain('Without recorded start/stop events, pauses cannot be located from total duration alone');
+    expect(copy).toContain('Power-based TSS needs independent FTP recorded in the file');
+    expect(copy).toContain('another eligible method is used or load stays unavailable');
+    expect(copy).toContain('File-imported scores remain unchanged');
+    expect(copy).toContain('Older activities retain recorded values until **Reimport activity from file**');
+  });
   it('explains swimming threshold requirements, file-only fallbacks and imported-score preservation', () => {
     const copy = HELP_SECTIONS.find(section => section.content.includes('### Form tile (CTL / ATL / TSB)'))!.content;
     expect(copy).toContain('Pool and open-water swimming need a usable swim threshold for pace-based TSS');

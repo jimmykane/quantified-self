@@ -2509,6 +2509,59 @@ describe('sports-lib-reparse.service', () => {
         }
     });
 
+    it.each([
+        { recordDuringPause: true, imported: undefined },
+        { recordDuringPause: false, imported: undefined },
+        { recordDuringPause: true, imported: 0 },
+    ])('keeps timer-aware HR TSS through repeated regeneration: %j', async ({ recordDuringPause, imported }) => {
+        const sports = await vi.importActual<typeof import('@sports-alliance/sports-lib')>('@sports-alliance/sports-lib');
+        const { FitEncoder, FitBaseType } = await import('fit-file-parser/encoder');
+        const field = (number: number, value: number, baseType = FitBaseType.Uint8) => ({ number, value, baseType,
+            size: baseType === FitBaseType.Uint32 ? 4 : baseType === FitBaseType.Uint16 ? 2 : 1 });
+        const encoder = new FitEncoder();
+        const start = FitEncoder.toFitTimestamp(new Date('2026-01-01T10:00:00Z'));
+        encoder.writeMessage(0, [field(0, 4, FitBaseType.Enum), field(1, 1, FitBaseType.Uint16)]);
+        // Synthetic hour: forty active minutes at threshold, twenty paused minutes.
+        for (let second = 0; second <= 3600; second++) {
+            const paused = second > 1200 && second < 2400;
+            if (paused && !recordDuringPause) continue;
+            encoder.writeMessage(20, [field(253, start + second, FitBaseType.Uint32), field(3, paused ? 190 : 165)], 1);
+        }
+        for (const [second, type] of [[0, 0], [1200, 4], [2400, 0], [3600, 4]]) {
+            encoder.writeMessage(21, [field(253, start + second, FitBaseType.Uint32),
+                field(0, 0, FitBaseType.Enum), field(1, type, FitBaseType.Enum)], 2);
+        }
+        encoder.writeMessage(18, [field(254, 0, FitBaseType.Uint16), field(253, start + 3600, FitBaseType.Uint32),
+            field(2, start, FitBaseType.Uint32), field(5, 2, FitBaseType.Enum),
+            field(7, 3600000, FitBaseType.Uint32), field(8, 2400000, FitBaseType.Uint32),
+            ...(imported === undefined ? [] : [field(35, imported * 10, FitBaseType.Uint16)])], 3);
+        encoder.writeMessage(216, [field(0, 18, FitBaseType.Uint16), field(1, 0, FitBaseType.Uint16),
+            field(11, 190), field(12, 55), field(13, 165)], 4);
+        const bytes = encoder.close();
+        const parsedEvent = await sports.EventImporterFIT.getFromArrayBuffer(
+            bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength) as ArrayBuffer,
+            new sports.ActivityParsingOptions({ generateUnitStreams: false }));
+        const activity = parsedEvent.getFirstActivity();
+        const expected = sports.ActivityUtilities.getTrainingStressScoreEvaluations(activity);
+        const score = imported ?? 66.7;
+        const method = imported === undefined ? 'HR' : 'IMPORTED';
+        expect(expected.automatic).toMatchObject({ method, score });
+        hoisted.fitImporter.getFromArrayBuffer.mockResolvedValue(parsedEvent);
+        hoisted.generateMissingStreamsAndStatsForActivity.mockImplementation(
+            item => sports.ActivityUtilities.generateMissingStreamsAndStatsForActivity(item));
+        hoisted.evaluateTrainingStressScore.mockImplementation(
+            item => sports.ActivityUtilities.evaluateTrainingStressScore(item));
+        for (let pass = 0; pass < 2; pass++) {
+            await reparseEventFromOriginalFiles('u1', 'e1', { mode: 'regenerate',
+                eventData: { originalFile: { path: 'users/u1/events/e1/original.fit' } },
+                activityDocs: [], targetSportsLibVersion: TARGET_SPORTS_LIB_VERSION });
+            expect(activity.getStat(sports.DataTimerTime.type)?.getValue()).toBe(2400);
+            expect(activity.getStat(sports.DataTrainingStressScore.type)?.getValue()).toBe(score);
+            expect(activity.getStat(sports.DataTrainingStressScoreMethod.type)?.getValue()).toBe(method);
+            expect(sports.ActivityUtilities.getTrainingStressScoreEvaluations(activity)).toEqual(expected);
+        }
+    });
+
     it('reparseEventFromOriginalFiles should skip activity-level regeneration in reimport mode', async () => {
         const parsedEvent = makeEvent();
         hoisted.fitImporter.getFromArrayBuffer.mockResolvedValue(parsedEvent);
