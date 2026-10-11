@@ -19,7 +19,9 @@ const draft = {
   filters: { plans: ['free'], signupFrom: null, signupTo: null },
 };
 
-describe.skipIf(!enabled)('marketing campaign durability (emulators)', () => {
+// Real Auth/Firestore I/O and competing dispatch transactions can exceed the
+// unit-test default while the emulator resolves contention and the SDK backs off.
+describe.skipIf(!enabled)('marketing campaign durability (emulators)', { timeout: 30_000 }, () => {
   let db: admin.firestore.Firestore;
   beforeAll(() => {
     if (!/^(127\.0\.0\.1|localhost):\d+$/.test(process.env.FIRESTORE_EMULATOR_HOST || '') ||

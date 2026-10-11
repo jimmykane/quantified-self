@@ -271,6 +271,11 @@ reported assertion count must equal the total test count. Missing or inconsisten
 Missing emulator environment variables cannot silently turn a mandatory suite green.
 Vitest failures, unhandled errors, setup/teardown failures and a missing report remain failures.
 
+Marketing durability tests use a bounded 30-second per-test timeout, matching other transaction-heavy emulator
+suites. These tests include real Auth/Firestore calls and concurrent dispatch transactions whose lock contention
+and SDK backoff can exceed Vitest's five-second unit-test default. This does not change ordinary unit-test
+timeouts, add test retries, or reduce assertions; every marketing test remains mandatory in `mcp-data`.
+
 ### Automatically balanced delivery shards
 
 Delivery became the longest job in [run 37891665905](https://github.com/jimmykane/quantified-self/actions/runs/37891665905):
