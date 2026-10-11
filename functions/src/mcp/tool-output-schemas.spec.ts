@@ -2505,6 +2505,29 @@ describe.each<FixtureTransport>(['in-memory', 'legacy-http', 'modern-http'])('MC
     }
   });
 
+  it('accepts private field names within opaque Training status references on every transport', async () => {
+    const proposalRef = 'opaque-uid-accessGeneration-destinationKey-scheduleRequests-leaseUntilMs';
+    const service = createFixtureDataService();
+    const fixture = { proposalRef, state: 'applied' as const, recordedChangeCount: 1, recordedProviderCount: 0,
+      retryAfterSeconds: null, result: { ...trainingApplyFixture, proposalRef,
+        changes: [{ ...trainingApplyFixture.changes[0], kind: 'create-workout', message: 'Created a workout.' }],
+        createdReferences: [{ localKey: 'workout', kind: 'workout' as const, reference: proposalRef }] } };
+    service.getTrainingChangeStatus = vi.fn().mockResolvedValue(fixture);
+    const connection = await connectFixtureServer(service, [MCP_OAUTH_SCOPES.TrainingPlansRead,
+      MCP_OAUTH_SCOPES.TrainingPlansWrite]);
+    connections.push(connection);
+
+    const result = await connection.client.callTool({ name: 'get_training_change_status', arguments: {
+      ...successfulToolArguments.get_training_change_status, proposalRef } });
+
+    expect(result.isError).not.toBe(true);
+    expect(result.structuredContent).toEqual(fixture);
+    expect(JSON.parse((result.content[0] as { text: string }).text)).toEqual(fixture);
+    expect(createMcpOutputSchemaRegistry({ activityLocation: false, routeLocation: false })
+      .get_training_change_status.parse(fixture)).toEqual(fixture);
+    expect(service.applyTrainingChanges).not.toHaveBeenCalled();
+  });
+
   it('keeps Training status recovery read-only, originally scoped and recursively private on every transport', async () => {
     const service = createFixtureDataService();
     const readOnly = await connectFixtureServer(service, [MCP_OAUTH_SCOPES.TrainingPlansRead]);
@@ -2516,16 +2539,25 @@ describe.each<FixtureTransport>(['in-memory', 'legacy-http', 'modern-http'])('MC
     const args = successfulToolArguments.get_training_change_status;
     const fixture = await service.getTrainingChangeStatus({ uid: 'user-1', connectionId: 'connection-1',
       scopes: [], arguments: args });
+    const schema = createMcpOutputSchemaRegistry({ activityLocation: false, routeLocation: false })
+      .get_training_change_status;
     vi.mocked(service.getTrainingChangeStatus).mockClear();
     for (const injected of [{ uid: 'attacker' }, { connectionId: 'attacker' }, { scopes: [] }, { resume: true }]) {
       const result = await connection.client.callTool({ name: 'get_training_change_status', arguments: { ...args, ...injected } });
       expect(result.isError).toBe(true);
       expect(service.getTrainingChangeStatus).not.toHaveBeenCalled();
     }
-    for (const field of ['uid', 'scheduleRequests', 'accessGeneration', 'approvalDigest', 'remoteWorkoutId', 'leaseUntilMs']) {
+    for (const field of ['uid', 'scheduleRequests', 'accessGeneration', 'destinationKey', 'approvalDigest', 'remoteWorkoutId', 'leaseUntilMs']) {
       for (const projection of [{ ...fixture, [field]: 'PRIVATE-RECOVERY-CANARY' },
         { ...fixture, result: { ...fixture.result, [field]: 'PRIVATE-RECOVERY-CANARY' } },
-        { ...fixture, result: { ...fixture.result, changes: [{ ...fixture.result!.changes[0], [field]: 'PRIVATE-RECOVERY-CANARY' }] } }]) {
+        { ...fixture, result: { ...fixture.result, changes: [{ ...fixture.result!.changes[0], [field]: 'PRIVATE-RECOVERY-CANARY' }] } },
+        { ...fixture, recordedProviderCount: 1, result: { ...fixture.result, providers: [{ index: 0, provider: 'wahoo', status: 'applied',
+          message: 'Delivery was queued.', [field]: 'PRIVATE-RECOVERY-CANARY' }] } },
+        { ...fixture, result: { ...fixture.result, createdReferences: [{ localKey: 'workout', kind: 'workout',
+          reference: 'opaque-workout-reference', [field]: 'PRIVATE-RECOVERY-CANARY' }] } }]) {
+        const withoutPrivateField = JSON.parse(JSON.stringify(projection),
+          (key: string, value: unknown) => key === field ? undefined : value);
+        expect(schema.safeParse(withoutPrivateField).success, field).toBe(true);
         service.getTrainingChangeStatus = vi.fn().mockResolvedValue(projection);
         const result = await connection.client.callTool({ name: 'get_training_change_status', arguments: args });
         expect(result.isError, field).toBe(true);

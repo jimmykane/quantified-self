@@ -17,6 +17,9 @@ See [CI test coverage](../../docs/ci-testing.md#functions-emulator-matrix) for c
   implicitly through inherited environment variables or broad filename exclusions. Keep emulator files wholly
   emulator-gated and split mixed unit cases into ordinary specs before registering them. The coverage guard checks
   both configurations, hidden/future unit discovery and mixed registrations; preserve complete, non-overlapping coverage.
+- For private-field exclusion checks, validate the existing strict public output schema or inspect property names
+  recursively. Do not scan the entire serialized payload for bare field names: random opaque references can contain
+  substrings such as `uid`. Keep explicit private-value canaries and negative nested-field fixtures as well.
 - Generate one delivery plan from the current registry and tested commit, shared by both runners. Timing history
   is optional scheduling data; corrupt/missing history or a newly registered file must never drop or skip tests.
   Preserve exact registry/discovery checks and reject stale, missing or duplicate selections.
