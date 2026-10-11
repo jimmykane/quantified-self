@@ -55,6 +55,23 @@ describe('help.content', () => {
       'saved tag remains available', '**Refresh tags and activities**', 'Generated timestamp names are hidden',
       'the sport stays visible and opens the activity', 'Custom names remain visible']) expect(copy).toContain(phrase);
   });
+  it('explains single-lap pool imports and retained boundary rests', () => {
+    const copy = HELP_SECTIONS.find(section => section.content.includes('### Form tile (CTL / ATL / TSB)'))!.content;
+    expect(copy).toContain('Pool imports support swims recorded as one lap');
+    expect(copy).toContain('Rest lengths add no generated distance');
+    expect(copy).toContain('ambiguous length ownership is not guessed');
+  });
+  it('explains source distance preservation during reimport', () => {
+    const copy = HELP_SECTIONS.find(section => section.content.includes('### Form tile (CTL / ATL / TSB)'))!.content;
+    expect(copy).toContain('Reimport keeps a positive file distance summary');
+    expect(copy).toContain('Missing readings or a constant zero counter do not erase that distance');
+    expect(copy).toContain('usable measurements still rebuild it normally');
+  });
+  it('distinguishes measured zero power from missing sensor evidence', () => {
+    const copy = HELP_SECTIONS.find(section => section.content.includes('### Form tile (CTL / ATL / TSB)'))!.content;
+    expect(copy).toContain('Valid recorded zero-power windows can produce zero power-based TSS');
+    expect(copy).toContain('A zero summary or missing sensor readings alone cannot establish zero load');
+  });
   it('explains running pace coverage, recorded pool HR and confirmed multisport pauses', () => {
     const copy = HELP_SECTIONS.find(section => section.content.includes('### Form tile (CTL / ATL / TSB)'))!.content;
     expect(copy).toContain('Running pace TSS uses the energy cost of hills, recorded zero speed and complete 30-second windows');

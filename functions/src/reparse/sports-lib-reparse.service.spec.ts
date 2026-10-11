@@ -161,7 +161,10 @@ vi.mock('@sports-alliance/sports-lib', async (importOriginal) => {
         ActivityParsingOptions: class ActivityParsingOptions {
             constructor(public opts: unknown) { }
         },
-        DataDistance: { type: 'distance' },
+        DataDistance: actual.DataDistance,
+        DataLatitudeDegrees: actual.DataLatitudeDegrees,
+        DataLongitudeDegrees: actual.DataLongitudeDegrees,
+        GeoLibAdapter: actual.GeoLibAdapter,
         DataDuration: actual.DataDuration,
         DataElapsedTime: actual.DataElapsedTime,
         DataEnergy: actual.DataEnergy,
@@ -761,7 +764,7 @@ describe('sports-lib-reparse.service', () => {
                 if (statType === 'duration') {
                     return { getValue: () => input.duration };
                 }
-                if (statType === 'distance') {
+                if (statType === 'Distance') {
                     return { getValue: () => input.distance };
                 }
                 return null;
@@ -827,7 +830,7 @@ describe('sports-lib-reparse.service', () => {
                 if (statType === 'duration') {
                     return { getValue: () => 1800 };
                 }
-                if (statType === 'distance') {
+                if (statType === 'Distance') {
                     return { getValue: () => 5000 };
                 }
                 return null;
@@ -1096,7 +1099,7 @@ describe('sports-lib-reparse.service', () => {
                 if (type === 'duration') {
                     return { getValue: () => 100 };
                 }
-                if (type === 'distance') {
+                if (type === 'Distance') {
                     return { getValue: () => 1000 };
                 }
                 return null;
@@ -1111,7 +1114,7 @@ describe('sports-lib-reparse.service', () => {
                 if (type === 'duration') {
                     return { getValue: () => 200 };
                 }
-                if (type === 'distance') {
+                if (type === 'Distance') {
                     return { getValue: () => 2000 };
                 }
                 return null;
@@ -1132,7 +1135,7 @@ describe('sports-lib-reparse.service', () => {
                     type: 'Run',
                     stats: {
                         duration: { _value: 100 },
-                        distance: { _value: 1000 },
+                        Distance: { _value: 1000 },
                     },
                 }),
             } as any,
@@ -1145,7 +1148,7 @@ describe('sports-lib-reparse.service', () => {
                     type: 'Run',
                     stats: {
                         duration: { _value: 200 },
-                        distance: { _value: 2000 },
+                        Distance: { _value: 2000 },
                     },
                 }),
             } as any,
@@ -2221,7 +2224,7 @@ describe('sports-lib-reparse.service', () => {
                 if (statType === 'duration') {
                     return { getValue: () => 1800 };
                 }
-                if (statType === 'distance') {
+                if (statType === 'Distance') {
                     return { getValue: () => 5000 };
                 }
                 return null;
@@ -2249,7 +2252,7 @@ describe('sports-lib-reparse.service', () => {
                             type: 'Run',
                             stats: {
                                 duration: { _value: 1800 },
-                                distance: { _value: 5000 },
+                                Distance: { _value: 5000 },
                             },
                         }),
                     } as any,
@@ -2263,7 +2266,7 @@ describe('sports-lib-reparse.service', () => {
                             type: 'Run',
                             stats: {
                                 duration: { _value: 1800 },
-                                distance: { _value: 5000 },
+                                Distance: { _value: 5000 },
                             },
                         }),
                     } as any,
@@ -2644,6 +2647,86 @@ describe('sports-lib-reparse.service', () => {
                 if (kind === 'multisport') expect(activities[1].getAllEvents()).toEqual(expect.arrayContaining([
                     expect.objectContaining({ timestamp: 0 }),
                 ]));
+            }
+        });
+
+    it.each(['summary-only', 'single-zero', 'constant-counter', 'reset-counter', 'moving-counter', 'moving-gps', 'recorded-zero', 'missing-summary', 'tcx-single-zero'] as const)(
+        'regenerate protects source distance only when measurements cannot replace it: %s', async kind => {
+            const sports = await vi.importActual<typeof import('@sports-alliance/sports-lib')>('@sports-alliance/sports-lib');
+            let parsedEvent: Awaited<ReturnType<typeof sports.EventImporterFIT.getFromArrayBuffer>>;
+            let payload: Buffer;
+            const extension = kind === 'tcx-single-zero' ? 'tcx' : 'fit';
+            const origin = new Date('2026-01-01T10:00:00Z');
+            if (kind === 'tcx-single-zero') {
+                const { DOMParser } = await import('xmldom');
+                // Only the first recorded point has distance. Import backfill expands
+                // that zero across HR timestamps; it is not evidence of no travel.
+                const xml = `<TrainingCenterDatabase xmlns="http://www.garmin.com/xmlschemas/TrainingCenterDatabase/v2">
+                    <Activities><Activity Sport="Other"><Id>${origin.toISOString()}</Id><Lap StartTime="${origin.toISOString()}">
+                    <TotalTimeSeconds>60</TotalTimeSeconds><DistanceMeters>1000</DistanceMeters><Calories>7</Calories>
+                    <Intensity>Active</Intensity><TriggerMethod>Manual</TriggerMethod><Track>${[0, 30, 60].map(second =>
+                        `<Trackpoint><Time>${new Date(+origin + second * 1000).toISOString()}</Time>${second === 0 ? '<DistanceMeters>0</DistanceMeters>' : ''}
+                        <HeartRateBpm><Value>90</Value></HeartRateBpm></Trackpoint>`).join('')}</Track></Lap></Activity></Activities>
+                    </TrainingCenterDatabase>`;
+                payload = Buffer.from(xml);
+                parsedEvent = await sports.EventImporterTCX.getFromXML(new DOMParser().parseFromString(xml, 'application/xml'),
+                    new sports.ActivityParsingOptions({ generateUnitStreams: false }));
+                hoisted.tcxImporter.getFromXML.mockResolvedValue(parsedEvent);
+            } else {
+                const { FitEncoder, FitBaseType } = await import('fit-file-parser/encoder');
+                const encoder = new FitEncoder();
+                const start = FitEncoder.toFitTimestamp(origin);
+                const field = (number: number, value: number, baseType = FitBaseType.Uint8) => ({
+                    number, value, baseType,
+                    size: baseType === FitBaseType.Uint32 || baseType === FitBaseType.Sint32 ? 4 : baseType === FitBaseType.Uint16 ? 2 : 1,
+                });
+                encoder.writeMessage(0, [field(0, 4, FitBaseType.Enum), field(1, 1, FitBaseType.Uint16)]);
+                encoder.writeMessage(3, [field(4, 700, FitBaseType.Uint16)], 1);
+                for (const [index, second] of [0, 30, 60].entries()) {
+                    const counter = kind === 'single-zero' ? second === 0 ? 0 : undefined
+                        : kind === 'constant-counter' ? 12 : kind === 'reset-counter' ? [0, 100, 0][index]
+                            : kind === 'moving-counter' ? [10, 60, 110][index] : undefined;
+                    encoder.writeMessage(20, [field(253, start + second, FitBaseType.Uint32), field(3, 90),
+                        ...(counter === undefined ? [] : [field(5, counter * 100, FitBaseType.Uint32)]),
+                        ...(kind === 'moving-gps' ? [field(0, Math.round((60 + index * 0.001) * 2 ** 31 / 180), FitBaseType.Sint32),
+                            field(1, Math.round(24 * 2 ** 31 / 180), FitBaseType.Sint32)] : [])], 2);
+                }
+                encoder.writeMessage(18, [field(254, 0, FitBaseType.Uint16), field(253, start + 60, FitBaseType.Uint32),
+                    field(2, start, FitBaseType.Uint32), field(5, 11, FitBaseType.Enum),
+                    field(7, 60000, FitBaseType.Uint32), field(8, 60000, FitBaseType.Uint32),
+                    ...(kind === 'missing-summary' ? [] : [field(9, kind === 'recorded-zero' ? 0 : 100000, FitBaseType.Uint32)]),
+                    field(11, 7, FitBaseType.Uint16), field(35, 0, FitBaseType.Uint16)], 3);
+                const bytes = encoder.close();
+                payload = Buffer.from(bytes);
+                parsedEvent = await sports.EventImporterFIT.getFromArrayBuffer(
+                    bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength) as ArrayBuffer,
+                    new sports.ActivityParsingOptions({ generateUnitStreams: false }));
+                hoisted.fitImporter.getFromArrayBuffer.mockResolvedValue(parsedEvent);
+            }
+            hoisted.mockDownload.mockResolvedValue([payload]);
+            const activity = parsedEvent.getFirstActivity();
+            const expectedEvaluations = sports.ActivityUtilities.getTrainingStressScoreEvaluations(activity);
+            const expectedDistance = kind === 'moving-counter' ? 100
+                : kind === 'moving-gps' ? sports.ActivityUtilities.calculateTotalDistanceForActivity(activity)
+                    : kind === 'recorded-zero' || kind === 'missing-summary' ? 0 : 1000;
+            if (kind === 'moving-gps') expect(expectedDistance).toBeGreaterThan(0);
+            expect(activity.getStat(sports.DataDistance.type)?.getValue()).toBe(
+                kind === 'recorded-zero' || kind === 'missing-summary' ? 0 : 1000);
+            hoisted.generateMissingStreamsAndStatsForActivity.mockImplementation(
+                item => sports.ActivityUtilities.generateMissingStreamsAndStatsForActivity(item));
+            hoisted.evaluateTrainingStressScore.mockImplementation(item => sports.ActivityUtilities.evaluateTrainingStressScore(item));
+            for (let pass = 0; pass < 2; pass++) {
+                const result = await reparseEventFromOriginalFiles('u1', 'e1', { mode: 'regenerate',
+                    eventData: { originalFile: { path: `users/u1/events/e1/synthetic.${extension}` } },
+                    activityDocs: [], targetSportsLibVersion: TARGET_SPORTS_LIB_VERSION });
+                expect(result.status).toBe('completed');
+                expect(activity.getStat(sports.DataDistance.type)?.getValue()).toBeCloseTo(expectedDistance, 1);
+                expect(sports.ActivityUtilities.getTrainingStressScoreEvaluations(activity)).toEqual(expectedEvaluations);
+                expect(activity.getStat(sports.DataDuration.type)?.getValue()).toBe(60);
+                if (extension === 'fit') {
+                    expect(activity.getStat(sports.DataTrainingStressScore.type)?.getValue()).toBe(0);
+                    expect(activity.getStat(sports.DataTrainingStressScoreMethod.type)?.getValue()).toBe('IMPORTED');
+                }
             }
         });
 

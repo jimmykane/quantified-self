@@ -39,9 +39,9 @@ this task does not adopt a package, deploy, enable scanners, start reparsing or 
 
 ### Sports Lib 21.6.1 file-calibrated Training load
 
-Sports Lib 21.6.7 is published and pinned in root and Functions, with FIT Parser 6.2.1. It retains the file-calibrated
+Sports Lib 21.6.8 is published and pinned in root and Functions, with FIT Parser 6.2.1. It retains the file-calibrated
 load rules introduced in 21.6.1 and includes the swimming threshold, independent cycling FTP, rolling NP, explicit
-HR-pause, running pace, recorded pool-HR and multisport timer corrections. Deployment and production reparse each
+HR-pause, running pace, pool-length/recorded-stream, measured-zero power and multisport timer corrections. Deployment and production reparse each
 require separate approval.
 
 New source-file imports use the corrected calculations. Historical calculated power scores without independent FTP
@@ -55,6 +55,21 @@ Running pace corrections require original-file reparse to apply grade cost, zero
 window semantics. Pool HR preservation and unambiguous multisport initial timer-state recovery likewise require the
 original source file. Regeneration keeps the same parsed instance so private recorded-HR gap provenance and source
 calibration remain available. Existing recorded values are not rewritten by a dependency update alone.
+
+Complete eligible recorded zero-power windows can establish POWER TSS 0 with independent FTP and duration. A zero NP
+summary or zeros inserted for missing FIT/TCX/GPX power fields do not establish this. Private source evidence stays attached
+to the same parsed instance through regeneration; ordinary JSON cannot restore it.
+
+Pool FIT imports retain final boundary/rest lengths, support generated streams from one lap while preserving its
+recorded streams, and repair invalid summary end times from valid file durations before assigning lengths. Rest
+lengths do not add distance/speed; ambiguous ownership cannot supply a complete generated distance total. Source-backed
+date corrections follow existing strict leg reconciliation, preserving unmatched controls for owner review.
+
+Regenerate mode retains a finite positive distance from the fresh source parse when its counter or aligned GPS data
+cannot support positive recalculation. This covers summary-only files and constant/backfilled zero counters. Usable
+measurements still rebuild distance; old stored statistics never supply this fallback. Derived speed/pace and event
+volume use the preserved summary. Apply historical corrections through original-file reparse and the existing derived
+refresh lifecycle. This adds no database operations, provider requests, public MCP fields or mutation capabilities.
 
 New provider imports and manual uploads cache Automatic/HR/MET evaluations in owner-only event metadata. Walking,
 Nordic Walking, Hiking and Trekking skip calculated pace and power. HR requires file-supplied resting, threshold and

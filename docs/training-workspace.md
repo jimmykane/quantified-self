@@ -5316,6 +5316,12 @@ the full eligible duration. Cycling, MTB, downhill and enduro use biking-specifi
 Inconsistent percent-max HR settings whose threshold is below the first valid zone boundary are rejected; no zone
 weights or replacement calibration are inferred. Imported TSS retains priority throughout.
 
+Sports Lib 21.6.8 accepts NP 0 and POWER TSS 0 when complete eligible recorded zero-power windows establish it,
+with valid independent FTP and duration. A zero NP summary alone is insufficient. Missing FIT/TCX/GPX power fields padded
+with zeros are excluded from that evidence; short, gappy and paused-only records cannot manufacture a window.
+Private recorded-zero provenance survives same-instance regeneration and is absent from ordinary Activity JSON.
+This does not change positive device-NP precedence, HR gap integration, calorie MET, or imported-score priority.
+
 A complete, unique session-matched FIT calibration that satisfies the same HR ordering may ignore zero placeholders
 in lower-priority `zones_target` or profile settings. This exception does not fill missing session settings or accept
 invalid session calibration. Ambiguous session references, conflicting repeated settings, nonnumeric values and
@@ -5337,8 +5343,16 @@ can produce valid zero TSS. No threshold, body mass or pause position is inferre
 
 FIT pool imports preserve real recorded HR instead of replacing it with lap/length averages. On the parsed activity
 instance, gaps remain gaps through repeated stream/statistic regeneration; private source evidence is not serialized
-into Activity JSON. Length/lap HR is used only when valid recorded HR is wholly absent. Existing length-derived swim
-speed, distance and stroke streams keep their behavior. FIT multisport imports retain a pre-leg stopped timer state
+into Activity JSON. Length/lap HR is used only when valid recorded HR is wholly absent. A single length-bearing lap
+can generate missing streams while retaining its existing recorded streams. Invalid/nonincreasing pool summary ends
+are repaired from valid positive file durations before assigning lengths, retaining associated recorded readings within
+the next-session and maximum-duration bounds. Unambiguous start-time windows and compatible explicit length indexes
+retain boundary lengths and final rests without borrowing across sessions. Generated rest
+lengths add no distance or speed; incomplete/ambiguous ownership cannot establish a complete generated distance total.
+When lagging lap timestamps leave positive lap distance without an active length, an available recorded distance
+stream supplies the counter instead of an incomplete generated total.
+These source-backed timing corrections use the existing strict leg reconciliation and owner-review path on reparse.
+FIT multisport imports retain a pre-leg stopped timer state
 only when original session timing unambiguously corroborates it. Full-duration sessions retain implicit restarts,
 while missing or conflicting timing does not invent pauses. These in-memory corrections add no database operations.
 
@@ -5441,6 +5455,14 @@ remain attached to the same activity. Keeping inputs available prevents an impor
 20-minute estimate and paused timer time from being replaced by wall-clock duration. Normalized power and intensity
 factor still regenerate from the streams and protected inputs. The missing-FTP estimate remains available as a
 statistic but cannot supply power TSS or IF; private original-file calibration remains attached to the parsed instance.
+
+Regeneration also preserves a finite positive freshly parsed distance summary when the file's streams cannot support
+a positive recalculation. A missing, constant, invalid or reset distance counter cannot replace that summary with zero;
+this includes a single zero TCX point expanded by import backfill. Existing counter precedence over GPS is retained.
+Without a counter, valid aligned GPS positions must support a positive distance using the library's distance calculation.
+Usable counter/GPS measurements still regenerate distance normally. This guard does not copy old stored distances,
+invent a missing distance, or replace a valid zero summary with a positive default. Seeding the source summary before
+generation also protects its dependent speed/pace statistics and the event's summed volume.
 
 After restoring any other missing parsed statistics, regeneration refreshes all TSS evaluations. By default (or with
 `preserveImportedTss: true`) it restores the parsed score and method together, preserving imported scores including zero
@@ -5554,13 +5576,13 @@ history. No derived schema bump or route reparse is required for this calculatio
 Editor tests load these additive diagnostics through the metadata reader, so a newer server diagnostic remains
 compatible with the older Sports Lib version used to build an existing frontend.
 
-The published [Sports Lib 21.6.7](https://github.com/sports-alliance/sports-lib/releases/tag/v21.6.7) artifact is pinned
+The published [Sports Lib 21.6.8](https://github.com/sports-alliance/sports-lib/releases/tag/v21.6.8) artifact is pinned
 in both root and Functions, with FIT Parser 6.2.1. Both lockfiles match its npm integrity. The release incorporates
-the swimming, cycling calibration/NP, explicit HR-pause, running pace, recorded pool-HR and multisport timer
-corrections. A read-only replay of 540 original files (578 legs) passed 9,854 checks, preserving all 181 imported
-scores. Relative to 21.6.6, one calculated trail-running score changed; recorded HR was corrected in 30 pool legs and
-four initial pauses were recovered across multisport boundaries. All differences were validated against the source
-inputs. Private originals and detailed audit results remain outside Git.
+the earlier file-calibrated load corrections plus pool-length ownership, recorded-stream preservation and measured-zero
+power eligibility. A read-only replay of 780 unique original files (834 legs) passed 14,209 checks, preserving all 245
+imported scores. Automatic/HR/MET evaluations were unchanged relative to 21.6.7; regeneration avoided 47 zeroed
+distances. Other swim-distance reductions correct duplicated overlapping-lap totals. All differences were validated
+against source inputs. Private originals and detailed audit results remain outside Git.
 MCP review: this update adds no metric token, unit, output field, reason code, scope, mutation, planning capability or
 plugin change. Recorded queries consume saved statistics; Training impact consumes the existing modeled-load resolver.
 Corrected historical load needs original-file reparse and the normal derived-summary refresh. Existing controls and

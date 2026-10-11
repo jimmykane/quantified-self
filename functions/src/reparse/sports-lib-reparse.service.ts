@@ -57,6 +57,7 @@ import {
 } from '../shared/activity-identity-matcher';
 import { getActivityCreatorNameCarryover } from '../../../shared/activity-creator-name';
 import { sanitizeEventFirestoreWritePayload } from '../../../shared/firestore-write-sanitizer';
+import { shouldPreserveParsedDistance } from './regeneration-distance';
 
 export const SPORTS_LIB_REPARSE_JOBS_COLLECTION = 'sportsLibReparseJobs';
 export const SPORTS_LIB_REPARSE_STATUS_DOC_ID = 'reparseStatus';
@@ -2003,6 +2004,8 @@ export async function reparseEventFromOriginalFiles(
                 }
 
                 const previousStats = new Map(activityAny.getStats());
+                const parsedDistance = activityAny.getStat(DataDistance.type);
+                const preserveParsedDistance = shouldPreserveParsedDistance(activityAny, parsedDistance?.getValue());
                 activityAny.clearStats();
                 // These freshly parsed inputs must be present before generation: otherwise
                 // sports-lib can estimate a different FTP or substitute wall-clock duration.
@@ -2013,6 +2016,9 @@ export async function reparseEventFromOriginalFiles(
                     const parsedStat = previousStats.get(type);
                     if (parsedStat) activityAny.addStat(parsedStat);
                 }
+                // Seed before derived statistics so a source summary with no usable
+                // counter/GPS survives, including its dependent pace/speed statistics.
+                if (preserveParsedDistance) activityAny.addStat(parsedDistance);
                 ActivityUtilities.generateMissingStreamsAndStatsForActivity(activity as any);
                 previousStats.forEach((stat, type) => {
                     if (type === DataTrainingStressScore.type || type === DataTrainingStressScoreMethod.type) return;

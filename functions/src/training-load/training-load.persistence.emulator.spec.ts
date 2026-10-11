@@ -5,7 +5,7 @@ vi.unmock('firebase-admin');
 vi.unmock('@sports-alliance/sports-lib');
 import * as admin from 'firebase-admin';
 import { Timestamp } from 'firebase-admin/firestore';
-import { ActivityTypes, ActivityUtilities, EventImporterJSON, type EventInterface } from '@sports-alliance/sports-lib';
+import { ActivityParsingOptions, ActivityTypes, ActivityUtilities, EventImporterJSON, type EventInterface } from '@sports-alliance/sports-lib';
 import { persistTrainingLoadMetadata, prepareTrainingLoadMetadata } from './training-load-metadata';
 import { completeTrainingLoadCacheWarmup, prepareTrainingLoadCacheWrite, readTrainingLoadSummaries, refreshTrainingLoadSummary, splitTrainingLoadBucket, summarizeTrainingLoad, trainingLoadCacheKey } from './training-load-cache';
 import { attachEventTrainingLoads } from './training-load-reader';
@@ -372,25 +372,37 @@ describe.skipIf(!enabled)('Training load persistence in Firestore', { timeout: 3
     expect(result.legs!.leg.policy).toMatchObject({ revision: 1, method: 'MET' });
     expect(resolveEffectiveTrainingLoad({}, result)).toMatchObject({ score: 0, status: 'available' });
   });
-  it('evaluates uncached JSON power inputs before saving source statistics', async () => {
+  it.each([
+    { calibration: 'JSON statistics only', calibrated: false, method: 'MET', score: 9 },
+    { calibration: 'explicit library override', calibrated: true, method: 'POWER', score: 100 },
+  ])('evaluates uncached power inputs before saving source statistics: $calibration', async ({ calibrated, method, score }) => {
     const uid = setup(); await db.doc(`users/${uid}`).set({ test: true });
     const start = Date.UTC(2026, 0, 2);
     const event = EventImporterJSON.getEventFromJSON({ name: 'Ride', startDate: start, endDate: start + 3600000,
       activities: [{ startDate: start, endDate: start + 3600000, type: ActivityTypes.Cycling,
         creator: { name: 'Test' }, laps: [], intensityZones: [], streams: [],
-        stats: { FTP: 200, 'Power Normalized': 200, Duration: 3600 } }] } as any);
+        stats: { FTP: 200, 'Power Normalized': 200, Duration: 3600, Energy: 210, Weight: 70 } }] } as any);
     event.setID('workout'); event.getActivities()[0].setID('leg');
+    if (calibrated) {
+      // Exercise the library's compatible explicit override path; QS ingestion
+      // supplies no athlete overrides and cannot trust a restored FTP statistic.
+      event.getActivities()[0].parseOptions = new ActivityParsingOptions({
+        tss: { overrides: { functionalThresholdPower: 200 } },
+      });
+    }
     // JSON imports do not run the stream/stat generator used by FIT importers.
     // Evaluating their power candidate also derives Power Intensity Factor.
     expect(event.getActivities()[0].getStat('Power Intensity Factor')).toBeUndefined();
     const finish = await prepareTrainingLoadMetadata(uid, event);
     await source(uid, event);
     await finish();
-    expect((await db.doc(`users/${uid}/activities/leg`).get()).data()?.stats['Power Intensity Factor']).toBe(1);
+    expect((await db.doc(`users/${uid}/activities/leg`).get()).data()?.stats['Power Intensity Factor'])
+      .toBe(calibrated ? 1 : undefined);
     const result = (await db.doc(metadataPath(uid)).get()).data() as TrainingLoadMetadata;
-    expect(result.legs!.leg.evaluations?.automatic).toMatchObject({ method: 'POWER', score: 99.2 });
+    expect(result.legs!.leg.evaluations?.automatic).toMatchObject({ method, score });
+    if (!calibrated) expect(result.legs!.leg.evaluations?.automatic.reasons).toContain('missing-power-inputs');
     const docs = await attachEventTrainingLoads(uid, [(await db.doc(`users/${uid}/events/workout`).get())]);
-    expect(attachedEffectiveTrainingLoad(docs[0].data()!)).toMatchObject({ score: 99.2, status: 'available' });
+    expect(attachedEffectiveTrainingLoad(docs[0].data()!)).toMatchObject({ score, status: 'available' });
   });
   it('retains a legacy control with missing source evidence as an unmatched record for owner review', async () => {
     const uid = setup(); const event = workout(); await source(uid, event);
