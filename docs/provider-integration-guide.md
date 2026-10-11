@@ -1039,8 +1039,13 @@ The callable also accepts a version 2 `preview` or `send` request with destinati
 The historical-send dialog uses the app's Dayjs datepicker values throughout validation, preview identity and
 request creation. Validate calendar dates rather than native `Date` instances or time-of-day ordering; missing,
 invalid, reversed and future ranges remain blocked with field errors. Serialize the selected local dates as inclusive
-start/end-of-day ISO instants, including DST transitions. Any changed date or source requires a new eligible preview
-before Send. Regression tests must enter dates through the real Material controls, not only constructor defaults.
+start/end-of-day ISO instants, including DST transitions. Date input clears the previous preview immediately, without
+waiting for blur. Any changed date or source, lost destination connection or lost Pro access requires a new eligible
+preview before Send. Starting a repeat preview also clears the old result so pending or failed previews cannot enable
+Send. Typing stays silent; a changed, valid calendar selection receives one haptic when the picker closes.
+The shared date adapter parses localized calendar dates strictly, rejecting impossible dates instead of rolling them
+into another month; it also accepts single-digit day/month input. Regression tests must enter dates through the real
+Material controls, not only constructor defaults.
 The datepicker audit also covers activity search, history import, Timeline notes and Training workout dates; those
 already handle Dayjs. Admin changelog uses its explicit native adapter and normalizes saved values.
 

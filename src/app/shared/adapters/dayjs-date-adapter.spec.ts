@@ -52,6 +52,30 @@ describe('DayjsDateAdapter', () => {
         expect(date?.date()).toBe(1);
     });
 
+    it.each(['31/09/2025', '29/02/2025', '01/13/2025', '00/01/2025', '01/00/2025'])(
+        'rejects an impossible typed calendar date %s instead of normalizing it', value => {
+            adapter.setLocale('en-GB');
+            expect(adapter.parse(value, 'L')?.isValid()).toBe(false);
+        },
+    );
+
+    it.each([
+        ['en-GB', '29/02/2024', '2024-02-29'],
+        ['en-US', '02/29/2024', '2024-02-29'],
+        ['en-GB', '1/9/2025', '2025-09-01'],
+        ['en-US', '9/1/2025', '2025-09-01'],
+        ['en-GB', ' 01/09/2025 ', '2025-09-01'],
+    ])('parses a valid local date in %s: %s', (locale, value, expected) => {
+        adapter.setLocale(locale);
+        expect(adapter.parse(value, 'L')?.format('YYYY-MM-DD')).toBe(expected);
+    });
+
+    it('validates each explicit format without accepting overflow or trailing text', () => {
+        expect(adapter.parse('2024-02-29', ['YYYY-MM-DD', 'L'])?.format('YYYY-MM-DD')).toBe('2024-02-29');
+        expect(adapter.parse('2025-02-29', 'YYYY-MM-DD')?.isValid()).toBe(false);
+        expect(adapter.parse('01/01/2025 extra', 'L')?.isValid()).toBe(false);
+    });
+
     it('should format date correctly', () => {
         const date = dayjs('2023-01-01');
         const formatted = adapter.format(date, 'YYYY-MM-DD');

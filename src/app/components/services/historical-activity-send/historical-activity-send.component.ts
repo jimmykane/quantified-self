@@ -34,6 +34,7 @@ export class HistoricalActivitySendComponent implements OnChanges, OnDestroy {
   private readonly haptics = inject(AppHapticsService);
   private destroyed = false;
   private revision = 0;
+  private pickerDateSignature: string | null = null;
 
   // Material's app-wide adapter emits Dayjs values for both typing and calendar selection.
   readonly today = dayjs().startOf('day');
@@ -57,7 +58,8 @@ export class HistoricalActivitySendComponent implements OnChanges, OnDestroy {
         }));
       this.sourceOptions.push({ id: 'manualUpload', label: 'Manual uploads', selected: false });
     }
-    if (changes['destinationServiceName'] || changes['user']) this.invalidate();
+    if (changes['destinationServiceName'] || changes['user']
+      || changes['destinationConnected'] || changes['hasProAccess']) this.invalidate();
   }
 
   ngOnDestroy(): void {
@@ -96,9 +98,20 @@ export class HistoricalActivitySendComponent implements OnChanges, OnDestroy {
     this.invalidate();
   }
 
-  onDateChange(): void {
+  onDateInput(): void {
     this.invalidate();
-    if (!this.dateRangeInvalid) this.haptics.selection();
+  }
+
+  onDatePickerOpened(): void {
+    this.pickerDateSignature = this.dateSignature();
+  }
+
+  onDatePickerClosed(): void {
+    const previous = this.pickerDateSignature;
+    this.pickerDateSignature = null;
+    if (previous !== null && previous !== this.dateSignature() && !this.dateRangeInvalid) {
+      this.haptics.selection();
+    }
   }
 
   async runPreview(): Promise<void> {
@@ -126,8 +139,12 @@ export class HistoricalActivitySendComponent implements OnChanges, OnDestroy {
     return JSON.stringify([
       this.user?.uid, this.destinationServiceName,
       this.sourceOptions.filter(option => option.selected).map(option => option.id),
-      this.startDate?.format('YYYY-MM-DD'), this.endDate?.format('YYYY-MM-DD'),
+      this.dateSignature(),
     ]);
+  }
+
+  private dateSignature(): string {
+    return JSON.stringify([this.startDate?.format('YYYY-MM-DD'), this.endDate?.format('YYYY-MM-DD')]);
   }
 
   private request(action: 'preview' | 'send'): HistoricalSendRequest {
@@ -148,6 +165,11 @@ export class HistoricalActivitySendComponent implements OnChanges, OnDestroy {
     const signature = this.signature();
     const request = this.request(action);
     const summary: SendSummary = { scanned: 0, eligibleBySource: {}, skippedBySource: {}, queued: 0, skippedByReason: {}, failedCount: 0 };
+    if (action === 'preview') {
+      this.preview = null;
+      this.previewSignature = null;
+      this.sendResult = null;
+    }
     this.busy = action;
     this.error = null;
     try {

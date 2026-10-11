@@ -124,7 +124,7 @@ describe('HistoricalActivitySendComponent', () => {
       if (invalid === 'reversed') component.startDate = component.today.add(1, 'day');
       if (invalid === 'future') component.endDate = component.today.add(1, 'day');
       haptics.selection.mockClear();
-      component.onDateChange();
+      component.onDateInput();
       await component.runPreview();
       await component.runSend();
       expect(component.canPreview).toBe(false);
@@ -142,7 +142,7 @@ describe('HistoricalActivitySendComponent', () => {
     expect(component.canSend).toBe(true);
     component.endDate = component.today.subtract(1, 'day');
     expect(component.canSend).toBe(false);
-    component.onDateChange();
+    component.onDateInput();
     expect(component.preview).toBeNull();
     expect(component.previewSignature).toBeNull();
     await component.runSend();
@@ -151,26 +151,112 @@ describe('HistoricalActivitySendComponent', () => {
     expect(component.canSend).toBe(true);
   });
 
-  it('shows a field error for invalid typed dates without requesting a preview', async () => {
+  it('clears the preview immediately while typing, even if the original date is typed again', async () => {
     fixture = TestBed.createComponent(HistoricalActivitySendComponent);
     component = fixture.componentInstance;
     configureComponent();
     component.onSourceChange(component.sourceOptions[3], true);
     fixture.detectChanges();
     await fixture.whenStable();
-    const input: HTMLInputElement = fixture.nativeElement.querySelector('input');
-    haptics.selection.mockClear();
-    input.value = 'not a date';
-    for (const type of ['input', 'change', 'blur']) input.dispatchEvent(new Event(type, { bubbles: true }));
-    fixture.detectChanges();
-    await fixture.whenStable();
-    expect(component.startDate).toBeNull();
-    expect(fixture.nativeElement.querySelector('mat-error')?.textContent).toContain('Choose a valid start date');
-    expect(component.canPreview).toBe(false);
+    userService.historicalSendActivityPage.mockResolvedValueOnce({ scanned: 1, eligibleBySource: { manualUpload: 1 },
+      skippedBySource: {}, queued: 0, skippedByReason: {}, failedCount: 0, nextCursor: null });
     await component.runPreview();
-    expect(userService.historicalSendActivityPage).not.toHaveBeenCalled();
+    fixture.detectChanges();
+    expect(component.canSend).toBe(true);
+    haptics.selection.mockClear();
+    const input: HTMLInputElement = fixture.nativeElement.querySelector('input');
+    const original = input.value;
+    for (const value of ['not a date', original]) {
+      input.value = value;
+      input.dispatchEvent(new Event('input', { bubbles: true }));
+      fixture.detectChanges();
+      await fixture.whenStable();
+      expect(component.preview).toBeNull();
+      expect(component.canSend).toBe(false);
+    }
     expect(haptics.selection).not.toHaveBeenCalled();
   });
+
+  it('requires a new eligible result after a repeat preview fails', async () => {
+    component.onSourceChange(component.sourceOptions[3], true);
+    userService.historicalSendActivityPage.mockResolvedValueOnce({ scanned: 1, eligibleBySource: { manualUpload: 1 },
+      skippedBySource: {}, queued: 0, skippedByReason: {}, failedCount: 0, nextCursor: null });
+    await component.runPreview();
+    expect(component.canSend).toBe(true);
+    userService.historicalSendActivityPage.mockRejectedValueOnce(new Error('temporary failure'));
+    await component.runPreview();
+    expect(component.error).toBe('Could not preview past activities.');
+    expect(component.preview).toBeNull();
+    expect(component.previewSignature).toBeNull();
+    expect(component.canSend).toBe(false);
+    await component.runSend();
+    expect(userService.historicalSendActivityPage).toHaveBeenCalledTimes(2);
+  });
+
+  it.each(['not a date', '31/09/2025', '29/02/2025'])(
+    'shows a field error for invalid typed date %s without requesting a preview', async value => {
+      fixture = TestBed.createComponent(HistoricalActivitySendComponent);
+      component = fixture.componentInstance;
+      configureComponent();
+      component.onSourceChange(component.sourceOptions[3], true);
+      fixture.detectChanges();
+      await fixture.whenStable();
+      const input: HTMLInputElement = fixture.nativeElement.querySelector('input');
+      haptics.selection.mockClear();
+      input.value = value;
+      for (const type of ['input', 'change', 'blur']) input.dispatchEvent(new Event(type, { bubbles: true }));
+      fixture.detectChanges();
+      await fixture.whenStable();
+      expect(component.startDate).toBeNull();
+      expect(fixture.nativeElement.querySelector('mat-error')?.textContent).toContain('Choose a valid start date');
+      expect(component.canPreview).toBe(false);
+      await component.runPreview();
+      expect(userService.historicalSendActivityPage).not.toHaveBeenCalled();
+      expect(haptics.selection).not.toHaveBeenCalled();
+    },
+  );
+
+  it('only gives date-selection feedback after the calendar closes with a changed valid date', () => {
+    component.onDatePickerOpened();
+    component.onDatePickerClosed();
+    expect(haptics.selection).not.toHaveBeenCalled();
+    component.onDatePickerOpened();
+    component.endDate = component.today.subtract(1, 'day');
+    component.onDateInput();
+    expect(haptics.selection).not.toHaveBeenCalled();
+    component.onDatePickerClosed();
+    expect(haptics.selection).toHaveBeenCalledOnce();
+    component.onDatePickerClosed();
+    expect(haptics.selection).toHaveBeenCalledOnce();
+    component.onDatePickerOpened();
+    component.endDate = null;
+    component.onDateInput();
+    component.onDatePickerClosed();
+    expect(haptics.selection).toHaveBeenCalledOnce();
+  });
+
+  it.each(['destinationConnected', 'hasProAccess'] as const)(
+    'discards an in-flight preview when %s is lost and does not reuse it after restoration', async field => {
+      component.onSourceChange(component.sourceOptions[3], true);
+      let resolvePage!: (value: unknown) => void;
+      userService.historicalSendActivityPage.mockReturnValueOnce(new Promise(resolve => { resolvePage = resolve; }));
+      const pending = component.runPreview();
+      expect(component.busy).toBe('preview');
+      component[field] = false;
+      component.ngOnChanges({ [field]: {} as never });
+      resolvePage({ scanned: 1, eligibleBySource: { manualUpload: 1 }, skippedBySource: {}, queued: 0,
+        skippedByReason: {}, failedCount: 0, nextCursor: null });
+      await pending;
+      component[field] = true;
+      component.ngOnChanges({ [field]: {} as never });
+      expect(component.preview).toBeNull();
+      expect(component.canPreview).toBe(true);
+      expect(component.canSend).toBe(false);
+      expect(haptics.success).not.toHaveBeenCalled();
+      await component.runSend();
+      expect(userService.historicalSendActivityPage).toHaveBeenCalledTimes(1);
+    },
+  );
 
   it('starts with no source selected and keeps manual uploads separate from provider imports', () => {
     expect(component.sourceOptions.map(option => option.id)).toEqual([
