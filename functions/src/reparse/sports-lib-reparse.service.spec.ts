@@ -2378,7 +2378,9 @@ describe('sports-lib-reparse.service', () => {
         { preserveImportedTss: true, ftp: 250 },
         { preserveImportedTss: false, ftp: 250 },
         { preserveImportedTss: false, ftp: undefined },
-    ])('regenerate preserves parsed inputs and existing FTP fallback with %j', async ({ preserveImportedTss, ftp }) => {
+        { preserveImportedTss: false, ftp: undefined, ftpOverride: 250 },
+        { preserveImportedTss: true, ftp: undefined, ftpOverride: 250 },
+    ])('regenerate preserves parsed inputs and library-owned load evaluation with %j', async ({ preserveImportedTss, ftp, ftpOverride }) => {
         const sports = await vi.importActual<typeof import('@sports-alliance/sports-lib')>('@sports-alliance/sports-lib');
         const inputs = {
             ...(ftp === undefined ? {} : { [sports.DataFTP.type]: ftp }),
@@ -2392,7 +2394,7 @@ describe('sports-lib-reparse.service', () => {
             [sports.DataGender.type]: 'female',
             [sports.DataMaxHRSetting.type]: 190,
         };
-        const parsedEvent = sports.EventImporterJSON.getEventFromJSON({
+        const source = {
             name: 'Synthetic paused ride', startDate: 0, endDate: 3600000,
             activities: [{ startDate: 0, endDate: 3600000, type: sports.ActivityTypes.Cycling,
                 creator: { name: 'Test' }, laps: [], intensityZones: [], streams: [],
@@ -2402,12 +2404,31 @@ describe('sports-lib-reparse.service', () => {
                     [sports.DataTrainingStressScore.type]: 42,
                     [sports.DataTrainingStressScoreMethod.type]: 'IMPORTED',
                 } }],
-        } as any);
+        } as any;
+        const makeParsedEvent = () => {
+            const event = sports.EventImporterJSON.getEventFromJSON(source);
+            const item = event.getFirstActivity();
+            item.parseOptions = new sports.ActivityParsingOptions({ tss: { preserveImportedTss,
+                overrides: ftpOverride === undefined ? undefined : { functionalThresholdPower: ftpOverride } } });
+            const power = item.createStream(sports.DataPower.type);
+            power.setData(Array.from({ length: 3601 }, () => 200));
+            item.addStream(power);
+            return event;
+        };
+        // The library owns FTP eligibility and the power formula. Compare QS regeneration
+        // with a fresh library calculation, independently of the reparse implementation.
+        // Bare JSON FTP deliberately has no source-file provenance; explicit overrides do.
+        const reference = makeParsedEvent().getFirstActivity();
+        reference.removeStat(sports.DataPowerNormalized.type);
+        reference.removeStat(sports.DataPowerIntensityFactor.type);
+        if (preserveImportedTss === false) {
+            reference.removeStat(sports.DataTrainingStressScore.type);
+            reference.removeStat(sports.DataTrainingStressScoreMethod.type);
+        }
+        sports.ActivityUtilities.generateMissingStreamsAndStatsForActivity(reference);
+        const expectedEvaluations = sports.ActivityUtilities.getTrainingStressScoreEvaluations(reference);
+        const parsedEvent = makeParsedEvent();
         const activity = parsedEvent.getFirstActivity();
-        activity.parseOptions = new sports.ActivityParsingOptions({ tss: { preserveImportedTss } });
-        const power = activity.createStream(sports.DataPower.type);
-        power.setData(Array.from({ length: 3601 }, () => 200));
-        activity.addStream(power);
         hoisted.fitImporter.getFromArrayBuffer.mockResolvedValue(parsedEvent);
         hoisted.generateMissingStreamsAndStatsForActivity.mockImplementation(
             item => sports.ActivityUtilities.generateMissingStreamsAndStatsForActivity(item));
@@ -2424,19 +2445,67 @@ describe('sports-lib-reparse.service', () => {
                 expect(activity.getStat(type)?.getValue(), type).toBe(value);
             }
             expect(activity.getStat(sports.DataPowerNormalized.type)?.getValue()).toBeCloseTo(200);
-            expect(activity.getStat(sports.DataFTP.type)?.getValue()).toBe(ftp ?? 190);
-            expect(activity.getStat(sports.DataPowerIntensityFactor.type)?.getValue()).toBe(ftp === undefined ? 1.053 : 0.8);
+            expect(activity.getStat(sports.DataFTP.type)?.getValue()).toBe(ftp ?? ftpOverride ?? 190);
+            expect(activity.getStat(sports.DataPowerIntensityFactor.type)?.getValue()).toBe(
+                reference.getStat(sports.DataPowerIntensityFactor.type)?.getValue()
+                ?? source.activities[0].stats[sports.DataPowerIntensityFactor.type]);
             const evaluations = sports.ActivityUtilities.getTrainingStressScoreEvaluations(activity);
-            const expected = preserveImportedTss === false
-                ? { score: ftp === undefined ? 100.7 : 58.2, method: 'POWER', provenance: 'calculated' }
-                : { score: 42, method: 'IMPORTED', provenance: 'imported' };
-            expect(evaluations.automatic).toMatchObject(expected);
-            expect(evaluations.hr).toMatchObject(expected);
+            expect(evaluations).toEqual(expectedEvaluations);
+            const expected = expectedEvaluations.automatic;
+            if (preserveImportedTss !== false) {
+                expect(expected).toMatchObject({ score: 42, method: 'IMPORTED', provenance: 'imported' });
+            } else if (ftpOverride !== undefined) {
+                expect(expected).toMatchObject({ method: 'POWER', provenance: 'calculated', estimated: false });
+            }
             expect(evaluations.met).toMatchObject(preserveImportedTss === false
                 ? { score: 9.8, method: 'MET', provenance: 'calculated', estimated: true }
-                : expected);
+                : { score: 42, method: 'IMPORTED', provenance: 'imported' });
             expect(activity.getStat(sports.DataTrainingStressScore.type)?.getValue()).toBe(expected.score);
             expect(activity.getStat(sports.DataTrainingStressScoreMethod.type)?.getValue()).toBe(expected.method);
+        }
+    });
+
+    it('retains independent FIT FTP calibration through repeated regeneration', async () => {
+        const sports = await vi.importActual<typeof import('@sports-alliance/sports-lib')>('@sports-alliance/sports-lib');
+        const { FitEncoder, FitBaseType } = await import('fit-file-parser/encoder');
+        const field = (number: number, value: number, baseType = FitBaseType.Uint8) => ({
+            number, value, baseType,
+            size: baseType === FitBaseType.Uint32 ? 4 : baseType === FitBaseType.Uint16 ? 2 : 1,
+        });
+        const encoder = new FitEncoder();
+        const start = FitEncoder.toFitTimestamp(new Date('2026-01-01T10:00:00Z'));
+        encoder.writeMessage(0, [field(0, 4, FitBaseType.Enum), field(1, 1, FitBaseType.Uint16)]);
+        for (let second = 0; second < 60; second++) {
+            encoder.writeMessage(20, [field(253, start + second, FitBaseType.Uint32),
+                field(7, 100, FitBaseType.Uint16)], 1);
+        }
+        encoder.writeMessage(18, [field(253, start + 60, FitBaseType.Uint32), field(2, start, FitBaseType.Uint32),
+            field(5, 2, FitBaseType.Enum), field(7, 60000, FitBaseType.Uint32), field(8, 60000, FitBaseType.Uint32),
+            field(45, 250, FitBaseType.Uint16)], 2);
+        const bytes = encoder.close();
+        const parsedEvent = await sports.EventImporterFIT.getFromArrayBuffer(
+            bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength) as ArrayBuffer,
+            new sports.ActivityParsingOptions({ generateUnitStreams: false }));
+        const activity = parsedEvent.getFirstActivity();
+        const expected = sports.ActivityUtilities.getTrainingStressScoreEvaluations(activity);
+        expect(expected.automatic).toMatchObject({ method: 'POWER', provenance: 'calculated', estimated: false });
+        expect(expected.automatic.score).toBeGreaterThan(0);
+        hoisted.fitImporter.getFromArrayBuffer.mockResolvedValue(parsedEvent);
+        hoisted.generateMissingStreamsAndStatsForActivity.mockImplementation(
+            item => sports.ActivityUtilities.generateMissingStreamsAndStatsForActivity(item));
+        hoisted.evaluateTrainingStressScore.mockImplementation(
+            item => sports.ActivityUtilities.evaluateTrainingStressScore(item));
+
+        for (let pass = 0; pass < 2; pass++) {
+            await reparseEventFromOriginalFiles('u1', 'e1', { mode: 'regenerate',
+                eventData: { originalFile: { path: 'users/u1/events/e1/original.fit' } },
+                activityDocs: [], targetSportsLibVersion: TARGET_SPORTS_LIB_VERSION });
+            expect(activity.getStat(sports.DataFTP.type)?.getValue()).toBe(250);
+            expect(activity.getStat(sports.DataPowerNormalized.type)?.getValue()).toBe(100);
+            expect(activity.getStat(sports.DataPowerIntensityFactor.type)?.getValue()).toBe(0.4);
+            expect(sports.ActivityUtilities.getTrainingStressScoreEvaluations(activity)).toEqual(expected);
+            expect(activity.getStat(sports.DataTrainingStressScore.type)?.getValue()).toBe(expected.automatic.score);
+            expect(activity.getStat(sports.DataTrainingStressScoreMethod.type)?.getValue()).toBe('POWER');
         }
     });
 
