@@ -1,0 +1,459 @@
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@400;500&family=Inter:wght@400;500&display=swap');
+#qs-tags-designs .qs-design {
+  --qs-bg: light-dark(#fafafa, #1e1e1e);
+  --qs-surface: light-dark(#ffffff, #121212);
+  --qs-soft: light-dark(#f4f4f4, #232323);
+  --qs-text: light-dark(#212121, #eeeeee);
+  --qs-muted: light-dark(#646464, #b0b0b0);
+  --qs-line: light-dark(#e4e4e4, #383838);
+  --qs-primary: light-dark(#1976d2, #9ab6c4);
+  --qs-selected: light-dark(#e7f2fc, #26343b);
+  --qs-running: light-dark(#946100, #fdd300);
+  --qs-cycling: light-dark(#bf481b, #ff9564);
+  --qs-swimming: light-dark(#0076a3, #40c4ff);
+  --qs-trail: light-dark(#568020, #b1d971);
+  --qs-walking: light-dark(#277c42, #55d781);
+  color: var(--qs-text); background: var(--qs-bg); font: 400 13px/1.5 Inter, sans-serif;
+  min-height: 1080px; display: grid; grid-template-columns: 184px minmax(0, 1fr);
+  border: 1px solid var(--qs-line); border-radius: 12px;
+  text-align: left; isolation: isolate;
+}
+#qs-tags-designs .qs-design *, #qs-tags-designs .qs-design *::before, #qs-tags-designs .qs-design *::after { box-sizing: border-box; }
+#qs-tags-designs .qs-design [hidden] { display: none !important; }
+#qs-tags-designs .qs-design button, #qs-tags-designs .qs-design input, #qs-tags-designs .qs-design select { font: inherit; }
+#qs-tags-designs .qs-design button { color: inherit; }
+#qs-tags-designs .qs-design button:disabled { opacity: .4; }
+#qs-tags-designs .qs-design svg { flex: none; width: 18px; height: 18px; }
+#qs-tags-designs .qs-design h1, #qs-tags-designs .qs-design h2, #qs-tags-designs .qs-design h3, #qs-tags-designs .qs-design p { margin: 0; }
+#qs-tags-designs .qs-design h1 { font-size: 26px; line-height: 1.25; font-weight: 500; letter-spacing: -.7px; }
+#qs-tags-designs .qs-design h2 { font-size: 19px; font-weight: 500; letter-spacing: -.3px; }
+#qs-tags-designs .qs-design .qs-muted { color: var(--qs-muted); font-size: 12px; }
+#qs-tags-designs .qs-design .qs-number { font-family: 'Barlow Condensed', sans-serif; font-size: 18px; font-variant-numeric: tabular-nums; }
+#qs-tags-designs .qs-sidenav { background: var(--qs-surface); border-right: 1px solid var(--qs-line); border-radius: 12px 0 0 12px; padding: 16px 10px; }
+#qs-tags-designs .qs-brand { display: flex; align-items: center; gap: 9px; padding: 0 2px 20px; font-size: 13px; font-weight: 500; }
+#qs-tags-designs .qs-brand-mark { background: var(--qs-selected); color: var(--qs-primary); width: 31px; height: 31px; border-radius: 9px; display: grid; place-items: center; font-family: 'Barlow Condensed', sans-serif; font-size: 20px; }
+#qs-tags-designs .qs-profile { display: flex; gap: 10px; align-items: center; padding: 12px 8px; border: 1px solid var(--qs-line); border-radius: 12px; margin: 0 0 16px; background: var(--qs-soft); }
+#qs-tags-designs .qs-avatar { width: 32px; height: 32px; background: var(--qs-selected); color: var(--qs-primary); border-radius: 50%; display: grid; place-items: center; font-size: 11px; }
+#qs-tags-designs .qs-profile strong { font-weight: 500; font-size: 12px; }
+#qs-tags-designs .qs-profile small { display: block; color: var(--qs-muted); font-size: 11px; }
+#qs-tags-designs .qs-nav-item { display: flex; align-items: center; gap: 11px; min-height: 39px; padding: 8px 12px; color: var(--qs-muted); width: 100%; border: 0; border-radius: 22px; background: transparent; text-align: left; margin: 2px 0; }
+#qs-tags-designs .qs-nav-item[aria-current] { background: var(--qs-selected); color: var(--qs-primary); font-weight: 500; }
+#qs-tags-designs .qs-nav-group { color: var(--qs-muted); font-size: 11px; padding: 18px 12px 4px; }
+#qs-tags-designs .qs-main { min-width: 0; }
+#qs-tags-designs .qs-appbar { min-height: 56px; padding: 12px 22px; border-bottom: 1px solid var(--qs-line); display: flex; align-items: center; gap: 10px; background: var(--qs-surface); border-radius: 0 12px 0 0; }
+#qs-tags-designs .qs-appbar .qs-muted { margin-left: auto; margin-right: 82px; font-size: 11px; }
+#qs-tags-designs .qs-design .qs-mobile-menu { display: none; }
+#qs-tags-designs .qs-page { padding: 26px 22px; min-width: 0; }
+#qs-tags-designs .qs-page-heading { margin-bottom: 24px; display: flex; gap: 12px; align-items: center; }
+#qs-tags-designs .qs-page-heading .qs-heading-icon { color: var(--qs-primary); width: 37px; height: 37px; border-radius: 11px; display: grid; place-items: center; background: var(--qs-selected); }
+#qs-tags-designs .qs-page-heading p { color: var(--qs-muted); margin-top: 5px; font-size: 12px; }
+#qs-tags-designs .qs-split { display: grid; grid-template-columns: 162px minmax(0, 1fr); gap: 18px; }
+#qs-tags-designs .qs-tag-rail { min-width: 0; border-right: 1px solid var(--qs-line); padding-right: 14px; }
+#qs-tags-designs .qs-rail-heading { display: flex; align-items: center; justify-content: space-between; margin: 12px 6px 10px; color: var(--qs-muted); font-size: 11px; font-weight: 500; }
+#qs-tags-designs .qs-search { display: flex; align-items: center; gap: 8px; padding: 0 12px; min-height: 43px; background: var(--qs-surface); border: 1px solid var(--qs-line); border-radius: 8px; color: var(--qs-muted); min-width: 0; }
+#qs-tags-designs .qs-search input { border: 0; background: transparent; color: var(--qs-text); min-width: 0; width: 100%; padding: 10px 0; }
+#qs-tags-designs .qs-search:focus-within { outline: 2px solid var(--qs-primary); outline-offset: 2px; }
+#qs-tags-designs .qs-search input:focus { outline: 0; }
+#qs-tags-designs .qs-tag-rail .qs-search { padding: 0 9px; }
+#qs-tags-designs .qs-tag-rail .qs-search svg { width: 15px; height: 15px; }
+#qs-tags-designs .qs-tag-rail input { font-size: 12px; }
+#qs-tags-designs .qs-tag-button { display: flex; align-items: center; gap: 8px; border: 0; width: 100%; padding: 11px 10px; margin: 3px 0; border-radius: 8px; text-align: left; background: transparent; min-height: 42px; }
+#qs-tags-designs .qs-tag-button svg { width: 15px; height: 15px; color: var(--qs-muted); }
+#qs-tags-designs .qs-tag-button .qs-tag-count { margin-left: auto; color: var(--qs-muted); font-variant-numeric: tabular-nums; font-size: 12px; }
+#qs-tags-designs .qs-tag-button[aria-pressed='true'] { background: var(--qs-selected); color: var(--qs-primary); font-weight: 500; }
+#qs-tags-designs .qs-tag-button[aria-pressed='true'] svg, #qs-tags-designs .qs-tag-button[aria-pressed='true'] .qs-tag-count { color: var(--qs-primary); }
+#qs-tags-designs .qs-tag-button:hover, #qs-tags-designs .qs-icon-button:hover, #qs-tags-designs .qs-text-button:hover { background: var(--qs-soft); }
+#qs-tags-designs .qs-tag-button[aria-pressed='true']:hover { background: var(--qs-selected); }
+#qs-tags-designs .qs-icon-button { display: inline-grid; place-items: center; border: 0; background: transparent; width: 36px; height: 36px; border-radius: 50%; flex: none; }
+#qs-tags-designs .qs-text-button { display: inline-flex; align-items: center; gap: 6px; color: var(--qs-primary) !important; background: transparent; border: 0; min-height: 38px; padding: 7px 10px; border-radius: 20px; }
+#qs-tags-designs .qs-result-heading { display: flex; align-items: center; gap: 10px; margin: 0 0 16px; }
+#qs-tags-designs .qs-result-heading .qs-muted { margin-left: auto; }
+#qs-tags-designs .qs-result-heading .qs-selected-icon { color: var(--qs-primary); }
+#qs-tags-designs .qs-events { border: 1px solid var(--qs-line); background: var(--qs-surface); border-radius: 12px; min-width: 0; }
+#qs-tags-designs .qs-table-toolbar { background: var(--qs-soft); padding: 12px; border-radius: 12px 12px 0 0; display: flex; align-items: center; gap: 10px; border-bottom: 1px solid var(--qs-line); }
+#qs-tags-designs .qs-table-toolbar .qs-search { flex: 1; }
+#qs-tags-designs .qs-column-menu { display: flex; gap: 14px; flex-wrap: wrap; padding: 12px 16px; border-bottom: 1px solid var(--qs-line); background: var(--qs-soft); }
+#qs-tags-designs .qs-column-menu label { display: flex; gap: 7px; align-items: center; min-height: 30px; }
+#qs-tags-designs .qs-selection-bar { display: flex; align-items: center; justify-content: space-between; padding: 5px 12px; background: var(--qs-selected); color: var(--qs-primary); }
+#qs-tags-designs .qs-table-scroll { overflow-x: auto; max-width: 100%; scrollbar-width: thin; scrollbar-color: color-mix(in srgb, var(--qs-text) 36%, transparent) transparent; }
+#qs-tags-designs .qs-table-scroll::-webkit-scrollbar { height: 10px; }
+#qs-tags-designs .qs-table-scroll::-webkit-scrollbar-track { background: transparent; border-radius: 999px; }
+#qs-tags-designs .qs-table-scroll::-webkit-scrollbar-thumb { background: color-mix(in srgb, var(--qs-text) 30%, transparent); border-radius: 999px; border: 2px solid transparent; background-clip: content-box; }
+#qs-tags-designs .qs-event-table { border-collapse: collapse; width: 100%; min-width: 560px; font-size: 12px; }
+#qs-tags-designs .qs-event-table th { height: 44px; color: var(--qs-muted); font-weight: 400; text-align: left; background: var(--qs-surface); border-bottom: 1px solid var(--qs-line); padding: 8px 10px; white-space: nowrap; }
+#qs-tags-designs .qs-event-table th button { display: flex; gap: 5px; align-items: center; padding: 4px 0; background: transparent; border: 0; }
+#qs-tags-designs .qs-event-table th button svg { width: 13px; height: 13px; }
+#qs-tags-designs .qs-event-table td { height: 66px; border-bottom: 1px solid var(--qs-line); padding: 10px; vertical-align: middle; }
+#qs-tags-designs .qs-event-table td:first-child, #qs-tags-designs .qs-event-table th:first-child { padding-left: 14px; width: 34px; }
+#qs-tags-designs .qs-design input[type='checkbox'] { accent-color: var(--qs-primary); width: 15px; height: 15px; margin: 0; }
+#qs-tags-designs .qs-event-table tr:last-child td { border-bottom: 0; }
+#qs-tags-designs .qs-event-table .qs-date { display: block; white-space: nowrap; }
+#qs-tags-designs .qs-activity-name { background: transparent; border: 0; padding: 0; font: 500 12px/1.5 Inter, sans-serif !important; text-align: left; color: var(--qs-text); }
+#qs-tags-designs .qs-activity-name:hover { color: var(--qs-primary); text-decoration: underline; }
+#qs-tags-designs .qs-sport { display: flex; align-items: center; gap: 4px; font-size: 11px; color: var(--qs-muted); margin-top: 4px; white-space: nowrap; }
+#qs-tags-designs .qs-sport svg { width: 14px; height: 14px; color: var(--sport-color); }
+#qs-tags-designs .qs-event-table .qs-metric { white-space: nowrap; font-size: 16px; }
+#qs-tags-designs .qs-event-table .qs-unit { color: var(--qs-muted); font-size: 11px; font-family: Inter, sans-serif; padding-left: 3px; }
+#qs-tags-designs .qs-cell-tags { display: flex; flex-wrap: wrap; gap: 4px; max-width: 130px; }
+#qs-tags-designs .qs-cell-tag { background: var(--qs-soft); border: 1px solid var(--qs-line); border-radius: 6px; padding: 3px 7px; font-size: 11px; white-space: nowrap; }
+#qs-tags-designs .qs-cell-tag.is-active { background: var(--qs-selected); color: var(--qs-primary); border-color: transparent; }
+#qs-tags-designs .qs-pagination { min-height: 57px; border-top: 1px solid var(--qs-line); display: flex; justify-content: flex-end; align-items: center; gap: 8px; padding: 8px 10px; font-size: 11px; color: var(--qs-muted); flex-wrap: wrap; }
+#qs-tags-designs .qs-pagination select { padding: 3px 5px; border: 0; background: transparent; color: var(--qs-text); }
+#qs-tags-designs .qs-page-count { margin: 0 8px; font-variant-numeric: tabular-nums; }
+#qs-tags-designs .qs-empty { min-height: 260px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 9px; padding: 30px 20px; text-align: center; }
+#qs-tags-designs .qs-empty > svg { width: 30px; height: 30px; color: var(--qs-muted); margin-bottom: 4px; }
+#qs-tags-designs .qs-empty strong { font-weight: 500; }
+#qs-tags-designs .qs-empty p { max-width: 260px; font-size: 12px; color: var(--qs-muted); }
+#qs-tags-designs .qs-selector { margin-bottom: 24px; }
+#qs-tags-designs .qs-tabs { display: flex; flex-wrap: wrap; border-bottom: 1px solid var(--qs-line); gap: 0; }
+#qs-tags-designs .qs-tabs .qs-tag-button { width: auto; min-height: 50px; margin: 0; padding: 13px 13px; border-radius: 0; border-bottom: 3px solid transparent; }
+#qs-tags-designs .qs-tabs .qs-tag-button[aria-pressed='true'] { background: transparent; border-bottom-color: var(--qs-primary); }
+#qs-tags-designs .qs-tabs .qs-tag-button svg { display: none; }
+#qs-tags-designs .qs-tabs .qs-tag-count { font-size: 11px; padding: 1px 5px; border-radius: 4px; background: var(--qs-soft); }
+#qs-tags-designs .qs-chip-list { display: flex; flex-wrap: wrap; gap: 8px; }
+#qs-tags-designs .qs-chip-list .qs-tag-button { width: auto; border: 1px solid var(--qs-line); border-radius: 9px; margin: 0; padding: 9px 13px; background: var(--qs-surface); min-height: 40px; }
+#qs-tags-designs .qs-chip-list .qs-tag-button[aria-pressed='true'] { border-color: var(--qs-primary); background: var(--qs-selected); }
+#qs-tags-designs .qs-chip-list .qs-tag-count { border-left: 1px solid var(--qs-line); padding-left: 8px; }
+#qs-tags-designs .qs-gallery { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px; }
+#qs-tags-designs .qs-gallery .qs-tag-button { background: var(--qs-surface); border: 1px solid var(--qs-line); padding: 15px 13px; margin: 0; min-height: 104px; align-items: flex-start; display: flex; flex-direction: column; gap: 7px; }
+#qs-tags-designs .qs-gallery .qs-tag-button svg { color: var(--qs-primary); }
+#qs-tags-designs .qs-gallery .qs-tag-button[aria-pressed='true'] { background: var(--qs-selected); border-color: var(--qs-primary); }
+#qs-tags-designs .qs-gallery .qs-tag-count { margin: 0; font-weight: 400; }
+#qs-tags-designs .qs-selector-tools { display: flex; justify-content: space-between; gap: 12px; align-items: center; margin-bottom: 12px; }
+#qs-tags-designs .qs-selector-tools .qs-search { max-width: 300px; }
+#qs-tags-designs .qs-focus-picker { background: var(--qs-surface); border: 1px solid var(--qs-line); border-radius: 12px; padding: 22px; display: flex; align-items: center; gap: 20px; }
+#qs-tags-designs .qs-focus-picker label { min-width: 0; flex: 1; }
+#qs-tags-designs .qs-focus-picker label > span { display: block; font-size: 11px; color: var(--qs-muted); margin-bottom: 6px; }
+#qs-tags-designs .qs-focus-picker select { width: 100%; background: var(--qs-soft); color: var(--qs-text); border: 1px solid var(--qs-line); border-radius: 8px; padding: 12px; font-size: 18px; font-weight: 500; }
+#qs-tags-designs .qs-focus-summary { display: flex; flex-direction: column; gap: 3px; text-align: right; }
+#qs-tags-designs .qs-focus-summary .qs-number { font-size: 34px; line-height: 1; }
+#qs-tags-designs .qs-directory { background: var(--qs-surface); border: 1px solid var(--qs-line); border-radius: 12px; padding: 4px 16px; }
+#qs-tags-designs .qs-directory .qs-tag-button { padding: 14px 2px; border-radius: 0; min-height: 60px; margin: 0; border-bottom: 1px solid var(--qs-line); }
+#qs-tags-designs .qs-directory .qs-tag-button:last-child { border: 0; }
+#qs-tags-designs .qs-directory .qs-tag-button svg:last-child { margin-left: 12px; }
+#qs-tags-designs .qs-directory-letter { margin-right: 12px; width: 30px; height: 30px; display: grid; place-items: center; border-radius: 7px; color: var(--qs-primary); background: var(--qs-selected); font-size: 14px; font-weight: 500; }
+#qs-tags-designs .qs-back { margin: 0 0 18px -10px; }
+#qs-tags-designs .qs-tag-no-results { padding: 15px 5px; color: var(--qs-muted); font-size: 12px; }
+#qs-tags-designs .qs-detail-overlay { position: absolute; inset: 0; z-index: 5; background: light-dark(#00000055, #00000099); display: flex; justify-content: center; align-items: flex-start; padding: 110px 20px 30px; border-radius: 12px; }
+#qs-tags-designs .qs-design { position: relative; }
+#qs-tags-designs .qs-detail-dialog { background: var(--qs-surface); color: var(--qs-text); border-radius: 18px; padding: 24px; width: min(100%, 420px); box-shadow: 0 12px 32px #00000026; }
+#qs-tags-designs .qs-dialog-heading { display: flex; justify-content: space-between; align-items: center; gap: 8px; margin-bottom: 8px; }
+#qs-tags-designs .qs-detail-metrics { display: flex; gap: 24px; margin: 24px 0; flex-wrap: wrap; }
+#qs-tags-designs .qs-detail-metrics .qs-number { font-size: 27px; }
+#qs-tags-designs .qs-detail-metrics small { display: block; font-size: 11px; color: var(--qs-muted); }
+#qs-tags-designs .qs-design.is-comfortable .qs-event-table td { height: 78px; }
+@media (max-width: 850px) {
+  #qs-tags-designs .qs-design { grid-template-columns: 150px minmax(0, 1fr); }
+  #qs-tags-designs .qs-brand { font-size: 11px; }
+  #qs-tags-designs .qs-page { padding: 22px 16px; }
+  #qs-tags-designs .qs-split { grid-template-columns: 130px minmax(0, 1fr); gap: 12px; }
+  #qs-tags-designs .qs-tag-rail { padding-right: 9px; }
+  #qs-tags-designs .qs-tag-button { padding: 10px 8px; font-size: 12px; }
+  #qs-tags-designs .qs-gallery { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+}
+@media (max-width: 680px) {
+  #qs-tags-designs .qs-design { display: block; min-height: 1380px; }
+  #qs-tags-designs .qs-sidenav { display: none; border-right: 0; }
+  #qs-tags-designs .qs-design.is-nav-open .qs-sidenav { display: block; border-bottom: 1px solid var(--qs-line); border-radius: 12px 12px 0 0; }
+  #qs-tags-designs .qs-design .qs-mobile-menu { display: inline-grid; }
+  #qs-tags-designs .qs-appbar { padding: 10px 12px; border-radius: 12px 12px 0 0; }
+  #qs-tags-designs .qs-appbar .qs-muted { margin-right: 72px; }
+  #qs-tags-designs .qs-page { padding: 22px 16px; }
+  #qs-tags-designs .qs-split { display: block; }
+  #qs-tags-designs .qs-tag-rail { padding: 0; border: 0; margin-bottom: 24px; }
+  #qs-tags-designs .qs-tag-rail .qs-tag-list { display: flex; flex-wrap: wrap; gap: 6px; }
+  #qs-tags-designs .qs-tag-rail .qs-tag-button { width: auto; margin: 0; border: 1px solid var(--qs-line); padding: 8px 10px; }
+  #qs-tags-designs .qs-tag-rail .qs-search { max-width: 100%; }
+  #qs-tags-designs .qs-tag-rail .qs-tag-count { margin-left: 3px; }
+  #qs-tags-designs .qs-tabs .qs-tag-button { padding: 10px; min-height: 44px; }
+  #qs-tags-designs .qs-gallery { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  #qs-tags-designs .qs-gallery .qs-tag-button { min-height: 100px; }
+  #qs-tags-designs .qs-result-heading h2 { font-size: 18px; }
+  #qs-tags-designs .qs-selector-tools { align-items: stretch; flex-direction: column; }
+  #qs-tags-designs .qs-selector-tools .qs-search { max-width: 100%; }
+  #qs-tags-designs .qs-focus-picker { padding: 16px; gap: 12px; }
+  #qs-tags-designs .qs-focus-picker select { font-size: 16px; }
+  #qs-tags-designs .qs-icon-button { width: 44px; height: 44px; }
+  #qs-tags-designs .qs-pagination { gap: 2px; padding: 7px; }
+  #qs-tags-designs .qs-pagination .qs-icon-button { width: 34px; }
+  #qs-tags-designs .qs-table-toolbar { padding: 10px; gap: 4px; }
+  #qs-tags-designs .qs-search input { font-size: 16px; }
+  #qs-tags-designs .qs-tag-button { min-height: 44px; }
+  #qs-tags-designs .qs-column-menu label { min-height: 44px; }
+  #qs-tags-designs .qs-detail-overlay { padding: 80px 12px 20px; }
+}
+</style>
+
+<div id="qs-tags-designs" class="viz-carousel" aria-label="Tags route designs">
+  <section data-variant="Tag library" aria-label="Tag library design"><div class="qs-design" data-layout="library" aria-label="Tag library"></div></section>
+  <section data-variant="Top tabs" aria-label="Top tabs design" hidden><div class="qs-design" data-layout="tabs" aria-label="Top tabs"></div></section>
+  <section data-variant="Chip bar" aria-label="Chip bar design" hidden><div class="qs-design" data-layout="chips" aria-label="Chip bar"></div></section>
+  <section data-variant="Tag gallery" aria-label="Tag gallery design" hidden><div class="qs-design" data-layout="gallery" aria-label="Tag gallery"></div></section>
+  <section data-variant="Focus picker" aria-label="Focus picker design" hidden><div class="qs-design" data-layout="picker" aria-label="Focus picker"></div></section>
+  <section data-variant="Tag directory" aria-label="Tag directory design" hidden><div class="qs-design" data-layout="directory" aria-label="Tag directory"></div></section>
+</div>
+
+<template id="qs-tags-shell">
+  <aside class="qs-sidenav" aria-label="Main navigation">
+    <div class="qs-brand"><span class="qs-brand-mark">QS</span><span>Quantified Self</span></div>
+    <div class="qs-profile"><span class="qs-avatar">DA</span><div><strong>Demo athlete</strong><small>Sample account</small></div></div>
+    <div class="qs-nav-item"><i data-lucide="layout-dashboard" aria-hidden="true"></i>Dashboard</div>
+    <div class="qs-nav-item"><i data-lucide="calendar-days" aria-hidden="true"></i>Calendar</div>
+    <div class="qs-nav-item"><i data-lucide="activity" aria-hidden="true"></i>Training</div>
+    <div class="qs-nav-item"><i data-lucide="heart-pulse" aria-hidden="true"></i>Health</div>
+    <button type="button" class="qs-nav-item cursor-interaction" data-action="tags-nav" aria-current="page"><i data-lucide="tag" aria-hidden="true"></i>Tags</button>
+    <div class="qs-nav-item"><i data-lucide="route" aria-hidden="true"></i>Routes</div>
+    <div class="qs-nav-item"><i data-lucide="layers" aria-hidden="true"></i>My Tracks</div>
+    <div class="qs-nav-item"><i data-lucide="git-compare-arrows" aria-hidden="true"></i>Compare Files</div>
+    <div class="qs-nav-item"><i data-lucide="sparkles" aria-hidden="true"></i>Assistant</div>
+    <div class="qs-nav-group">Account</div>
+    <div class="qs-nav-item"><i data-lucide="refresh-cw" aria-hidden="true"></i>Connectivity</div>
+    <div class="qs-nav-item"><i data-lucide="settings" aria-hidden="true"></i>Settings</div>
+    <div class="qs-nav-item"><i data-lucide="circle-help" aria-hidden="true"></i>Help &amp; Support</div>
+  </aside>
+  <div class="qs-main">
+    <header class="qs-appbar"><button type="button" class="qs-icon-button qs-mobile-menu cursor-interaction" data-action="menu" aria-label="Toggle navigation" aria-expanded="false"><i data-lucide="menu" aria-hidden="true"></i></button><i data-lucide="tag" aria-hidden="true"></i><span>Tags</span><span class="qs-muted">Sample activities</span></header>
+    <main class="qs-page qs-workspace-page">
+      <div class="qs-page-heading"><span class="qs-heading-icon"><i data-lucide="tag" aria-hidden="true"></i></span><div><h1>Tags</h1><p>Explore your activities by tag.</p></div></div>
+      <div class="qs-content"></div>
+    </main>
+  </div>
+  <div class="qs-detail-overlay" hidden><div class="qs-detail-dialog" role="dialog" aria-modal="true" aria-label="Sample activity details"><div class="qs-dialog-heading"><h2 class="qs-detail-name"></h2><button type="button" class="qs-icon-button cursor-interaction" data-action="close-detail" aria-label="Close activity details"><i data-lucide="x" aria-hidden="true"></i></button></div><p class="qs-detail-date qs-muted"></p><div class="qs-detail-metrics"></div><div class="qs-detail-tags qs-cell-tags"></div></div></div>
+</template>
+
+<template id="qs-tags-events">
+  <div class="qs-result-heading"><i class="qs-selected-icon" data-lucide="tag" aria-hidden="true"></i><h2 class="qs-result-title">Endurance</h2><span class="qs-result-count qs-muted" aria-live="polite"></span></div>
+  <div class="qs-events">
+    <div class="qs-table-toolbar"><label class="qs-search"><i data-lucide="search" aria-hidden="true"></i><input type="search" class="qs-activity-search" aria-label="Search activities" placeholder="Search activities" autocomplete="off"></label><button type="button" class="qs-icon-button cursor-interaction" data-action="columns" aria-label="Configure table columns" aria-expanded="false"><i data-lucide="sliders-horizontal" aria-hidden="true"></i></button></div>
+    <div class="qs-column-menu" hidden><label><input type="checkbox" data-column="distance" checked>Distance</label><label><input type="checkbox" data-column="duration" checked>Duration</label><label><input type="checkbox" data-column="tags" checked>Tags</label></div>
+    <div class="qs-selection-bar" hidden><span class="qs-selection-count" aria-live="polite"></span><button type="button" class="qs-text-button cursor-interaction" data-action="clear-selection">Clear selection</button></div>
+    <div class="qs-table-scroll qs-scrollbar"><table class="qs-event-table" aria-label="Tagged activities"><thead><tr><th><input type="checkbox" class="qs-select-all" aria-label="Select activities on this page"></th><th><button type="button" class="cursor-interaction" data-sort="date">Date<i data-lucide="arrow-down" aria-hidden="true"></i></button></th><th>Activity</th><th data-column-cell="distance"><button type="button" class="cursor-interaction" data-sort="distance">Distance<i data-lucide="arrow-down-up" aria-hidden="true"></i></button></th><th data-column-cell="duration">Duration</th><th data-column-cell="tags">Tags</th></tr></thead><tbody></tbody></table></div>
+    <div class="qs-empty" hidden><i data-lucide="tag" aria-hidden="true"></i><strong class="qs-empty-title"></strong><p class="qs-empty-hint"></p><button type="button" class="qs-text-button cursor-interaction" data-action="clear-search" hidden>Clear search</button></div>
+    <div class="qs-pagination"><label>Rows per page: <select class="qs-page-size" aria-label="Rows per page"><option value="5">5</option><option value="10">10</option></select></label><span class="qs-page-count" aria-live="polite"></span><button type="button" class="qs-icon-button cursor-interaction" data-action="previous" aria-label="Previous page"><i data-lucide="chevron-left" aria-hidden="true"></i></button><button type="button" class="qs-icon-button cursor-interaction" data-action="next" aria-label="Next page"><i data-lucide="chevron-right" aria-hidden="true"></i></button></div>
+  </div>
+</template>
+
+<script id="qs-tags-fixture-data" type="application/json">{"savedTags":["Commute","Endurance","Indoor","Intervals","Outdoors","Race day","Recovery"],"activities":[{"id":"a1","name":"Sunday long run","date":"2026-10-11","time":"08:15","sport":"Running","distance":18420,"duration":5708,"tags":["Endurance","Outdoors"],"display":{"Metric":{"distance":{"type":"Distance","value":"18.42","unit":"Km","text":"18.42 Km"},"duration":{"type":"Duration","value":"01h 35m 08s","unit":"","text":"01h 35m 08s"}},"Imperial":{"distance":{"type":"Distance in miles","value":"11.45","unit":"mi","text":"11.45 mi"},"duration":{"type":"Duration","value":"01h 35m 08s","unit":"","text":"01h 35m 08s"}}}},{"id":"a2","name":"Coastal endurance ride","date":"2026-10-10","time":"09:30","sport":"Cycling","distance":64200,"duration":8362,"tags":["Endurance","Outdoors"],"display":{"Metric":{"distance":{"type":"Distance","value":"64.20","unit":"Km","text":"64.20 Km"},"duration":{"type":"Duration","value":"02h 19m 22s","unit":"","text":"02h 19m 22s"}},"Imperial":{"distance":{"type":"Distance in miles","value":"39.90","unit":"mi","text":"39.90 mi"},"duration":{"type":"Duration","value":"02h 19m 22s","unit":"","text":"02h 19m 22s"}}}},{"id":"a3","name":"Easy pool session","date":"2026-10-09","time":"07:10","sport":"Swimming","distance":1800,"duration":2436,"tags":["Recovery"],"display":{"Metric":{"distance":{"type":"Distance","value":"1.80","unit":"Km","text":"1.80 Km"},"duration":{"type":"Duration","value":"40m 36s","unit":"","text":"40m 36s"}},"Imperial":{"distance":{"type":"Distance in miles","value":"1.12","unit":"mi","text":"1.12 mi"},"duration":{"type":"Duration","value":"40m 36s","unit":"","text":"40m 36s"}}}},{"id":"a4","name":"Aerobic evening run","date":"2026-10-08","time":"18:25","sport":"Running","distance":10250,"duration":3162,"tags":["Endurance","Commute"],"display":{"Metric":{"distance":{"type":"Distance","value":"10.25","unit":"Km","text":"10.25 Km"},"duration":{"type":"Duration","value":"52m 42s","unit":"","text":"52m 42s"}},"Imperial":{"distance":{"type":"Distance in miles","value":"6.37","unit":"mi","text":"6.37 mi"},"duration":{"type":"Duration","value":"52m 42s","unit":"","text":"52m 42s"}}}},{"id":"a5","name":"Six hill repeats","date":"2026-10-07","time":"17:45","sport":"Running","distance":8640,"duration":2794,"tags":["Intervals","Outdoors"],"display":{"Metric":{"distance":{"type":"Distance","value":"8.64","unit":"Km","text":"8.64 Km"},"duration":{"type":"Duration","value":"46m 34s","unit":"","text":"46m 34s"}},"Imperial":{"distance":{"type":"Distance in miles","value":"5.37","unit":"mi","text":"5.37 mi"},"duration":{"type":"Duration","value":"46m 34s","unit":"","text":"46m 34s"}}}},{"id":"a6","name":"Recovery spin","date":"2026-10-06","time":"16:30","sport":"Cycling","distance":22100,"duration":3006,"tags":["Recovery","Indoor"],"display":{"Metric":{"distance":{"type":"Distance","value":"22.10","unit":"Km","text":"22.10 Km"},"duration":{"type":"Duration","value":"50m 06s","unit":"","text":"50m 06s"}},"Imperial":{"distance":{"type":"Distance in miles","value":"13.74","unit":"mi","text":"13.74 mi"},"duration":{"type":"Duration","value":"50m 06s","unit":"","text":"50m 06s"}}}},{"id":"a7","name":"Forest loop","date":"2026-10-05","time":"08:40","sport":"Trail Running","distance":14350,"duration":5035,"tags":["Endurance","Outdoors"],"display":{"Metric":{"distance":{"type":"Distance","value":"14.35","unit":"Km","text":"14.35 Km"},"duration":{"type":"Duration","value":"01h 23m 55s","unit":"","text":"01h 23m 55s"}},"Imperial":{"distance":{"type":"Distance in miles","value":"8.92","unit":"mi","text":"8.92 mi"},"duration":{"type":"Duration","value":"01h 23m 55s","unit":"","text":"01h 23m 55s"}}}},{"id":"a8","name":"Ride to work","date":"2026-10-04","time":"08:00","sport":"Cycling","distance":9700,"duration":1871,"tags":["Commute"],"display":{"Metric":{"distance":{"type":"Distance","value":"9.70","unit":"Km","text":"9.70 Km"},"duration":{"type":"Duration","value":"31m 11s","unit":"","text":"31m 11s"}},"Imperial":{"distance":{"type":"Distance in miles","value":"6.03","unit":"mi","text":"6.03 mi"},"duration":{"type":"Duration","value":"31m 11s","unit":"","text":"31m 11s"}}}},{"id":"a9","name":"Steady indoor ride","date":"2026-10-03","time":"10:20","sport":"Cycling","distance":36800,"duration":4215,"tags":["Endurance","Indoor"],"display":{"Metric":{"distance":{"type":"Distance","value":"36.80","unit":"Km","text":"36.80 Km"},"duration":{"type":"Duration","value":"01h 10m 15s","unit":"","text":"01h 10m 15s"}},"Imperial":{"distance":{"type":"Distance in miles","value":"22.87","unit":"mi","text":"22.87 mi"},"duration":{"type":"Duration","value":"01h 10m 15s","unit":"","text":"01h 10m 15s"}}}},{"id":"a10","name":"Evening walk","date":"2026-10-02","time":"19:15","sport":"Walking","distance":4260,"duration":3020,"tags":[],"display":{"Metric":{"distance":{"type":"Distance","value":"4.26","unit":"Km","text":"4.26 Km"},"duration":{"type":"Duration","value":"50m 20s","unit":"","text":"50m 20s"}},"Imperial":{"distance":{"type":"Distance in miles","value":"2.65","unit":"mi","text":"2.65 mi"},"duration":{"type":"Duration","value":"50m 20s","unit":"","text":"50m 20s"}}}},{"id":"a11","name":"Track session","date":"2026-09-30","time":"18:00","sport":"Running","distance":7900,"duration":2674,"tags":["Intervals"],"display":{"Metric":{"distance":{"type":"Distance","value":"7.90","unit":"Km","text":"7.90 Km"},"duration":{"type":"Duration","value":"44m 34s","unit":"","text":"44m 34s"}},"Imperial":{"distance":{"type":"Distance in miles","value":"4.91","unit":"mi","text":"4.91 mi"},"duration":{"type":"Duration","value":"44m 34s","unit":"","text":"44m 34s"}}}},{"id":"a12","name":"Long easy ride","date":"2026-09-27","time":"09:00","sport":"Cycling","distance":78100,"duration":9805,"tags":["Endurance","Outdoors"],"display":{"Metric":{"distance":{"type":"Distance","value":"78.10","unit":"Km","text":"78.10 Km"},"duration":{"type":"Duration","value":"02h 43m 25s","unit":"","text":"02h 43m 25s"}},"Imperial":{"distance":{"type":"Distance in miles","value":"48.54","unit":"mi","text":"48.54 mi"},"duration":{"type":"Duration","value":"02h 43m 25s","unit":"","text":"02h 43m 25s"}}}}]}</script>
+<script>
+(() => {
+  const root = document.getElementById('qs-tags-designs');
+  const fixtures = JSON.parse(document.getElementById('qs-tags-fixture-data').textContent);
+  const { savedTags, activities } = fixtures;
+  const allTag = 'All activities';
+  const dateFormatter = new Intl.DateTimeFormat('en-GB', { day: 'numeric', month: 'short' });
+  const icon = name => `<i data-lucide="${name}" aria-hidden="true"></i>`;
+  const escape = value => String(value).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
+  const countFor = tag => tag === allTag ? activities.length : activities.filter(activity => activity.tags.some(value => value.toLowerCase() === tag.toLowerCase())).length;
+  const sportInfo = { Running: ['footprints', 'running'], Cycling: ['bike', 'cycling'], Swimming: ['waves', 'swimming'], 'Trail Running': ['mountain', 'trail'], Walking: ['footprints', 'walking'] };
+  const designs = [];
+  const savedState = window.openai?.widgetState?.privateContent?.tagsDesigns || {};
+  const initializeIcons = () => { if (globalThis.lucide) globalThis.lucide.createIcons({ attrs: { width: 18, height: 18 } }); };
+  const persist = () => {
+    const tagsDesigns = Object.fromEntries(designs.map(design => [design.layout, { tag: design.state.tag, search: design.state.search, directoryOpen: design.state.directoryOpen }]));
+    if (window.openai?.setWidgetState) window.openai.setWidgetState({ modelContent: { purpose: 'Tags route design review', selectedTags: Object.fromEntries(designs.map(design => [design.layout, design.state.tag])) }, privateContent: { tagsDesigns } }).catch(() => {});
+  };
+
+  root.querySelectorAll('.qs-design').forEach((stage, index) => {
+    const layout = stage.dataset.layout;
+    stage.append(document.getElementById('qs-tags-shell').content.cloneNode(true));
+    const state = { tag: 'Endurance', search: '', tagSearch: '', page: 0, pageSize: 5, sort: 'date', direction: -1, selected: new Set(), directoryOpen: false, unit: 'Metric', comfortable: false, columns: { distance: true, duration: true, tags: true } };
+    const restored = savedState[layout];
+    if (restored && [allTag, ...savedTags].includes(restored.tag)) state.tag = restored.tag;
+    if (typeof restored?.search === 'string') state.search = restored.search;
+    if (typeof restored?.directoryOpen === 'boolean') state.directoryOpen = restored.directoryOpen;
+    const content = stage.querySelector('.qs-content');
+    const tagSearch = `<label class="qs-search">${icon('search')}<input type="search" class="qs-tag-search" placeholder="Find a tag" aria-label="Find a tag" autocomplete="off"></label>`;
+    const selector = document.createElement('div');
+    selector.className = 'qs-selector';
+    const result = document.createElement('section');
+    result.className = 'qs-results';
+    result.setAttribute('aria-label', 'Activities for selected tag');
+    result.append(document.getElementById('qs-tags-events').content.cloneNode(true));
+    if (layout === 'library') {
+      content.className = 'qs-content qs-split';
+      selector.className = 'qs-tag-rail';
+      selector.innerHTML = `${tagSearch}<div class="qs-rail-heading"><span>SAVED TAGS</span><span>${savedTags.length}</span></div><div class="qs-tag-list"></div>`;
+    } else if (layout === 'tabs') {
+      selector.innerHTML = '<div class="qs-tag-list qs-tabs" aria-label="Select a tag"></div>';
+    } else if (layout === 'chips') {
+      selector.innerHTML = '<div class="qs-rail-heading"><span>SELECT A TAG</span></div><div class="qs-tag-list qs-chip-list" aria-label="Select a tag"></div>';
+    } else if (layout === 'gallery') {
+      selector.innerHTML = `<div class="qs-selector-tools"><span class="qs-muted">${savedTags.length} saved tags</span>${tagSearch}</div><div class="qs-tag-list qs-gallery" aria-label="Saved tags"></div>`;
+    } else if (layout === 'picker') {
+      selector.innerHTML = `<div class="qs-focus-picker"><label><span>Activity tag</span><select class="qs-tag-select" aria-label="Select an activity tag">${[allTag, ...savedTags].map(tag => `<option value="${escape(tag)}">${escape(tag)}</option>`).join('')}</select></label><div class="qs-focus-summary"><span class="qs-number qs-picker-count"></span><span class="qs-muted">activities</span></div></div>`;
+      result.querySelector('.qs-result-heading').hidden = true;
+    } else {
+      selector.innerHTML = `<div class="qs-selector-tools"><span class="qs-muted">${savedTags.length} saved tags · A–Z</span>${tagSearch}</div><div class="qs-tag-list qs-directory" aria-label="Tag directory"></div>`;
+      const back = document.createElement('button');
+      back.type = 'button';
+      back.className = 'qs-text-button qs-back cursor-interaction';
+      back.dataset.action = 'back';
+      back.innerHTML = `${icon('arrow-left')}All tags`;
+      result.prepend(back);
+    }
+    content.append(selector, result);
+    const toolbarButton = result.querySelector('[data-action="columns"]');
+    const columnMenu = result.querySelector('.qs-column-menu');
+    columnMenu.id = `qs-columns-${index}`;
+    toolbarButton.setAttribute('aria-controls', columnMenu.id);
+    const detail = stage.querySelector('.qs-detail-dialog');
+    const detailName = stage.querySelector('.qs-detail-name');
+    detailName.id = `qs-detail-title-${index}`;
+    detail.setAttribute('aria-labelledby', detailName.id);
+    const navigation = stage.querySelector('.qs-sidenav');
+    navigation.id = `qs-tags-navigation-${index}`;
+    stage.querySelector('[data-action="menu"]').setAttribute('aria-controls', navigation.id);
+    let detailReturnFocus = null;
+
+    const setTag = tag => {
+      if (![allTag, ...savedTags].includes(tag)) return;
+      state.tag = tag; state.page = 0; state.search = ''; state.selected.clear();
+      if (layout === 'directory') state.directoryOpen = true;
+      render(); persist();
+      if (layout === 'directory') result.querySelector('[data-action="back"]').focus();
+      else if (layout === 'picker') selector.querySelector('.qs-tag-select').focus();
+      else [...selector.querySelectorAll('[data-tag]')].find(button => button.dataset.tag === tag)?.focus();
+    };
+    function renderTags() {
+      const list = selector.querySelector('.qs-tag-list');
+      if (list) {
+        let tags = layout === 'gallery' || layout === 'directory' ? savedTags : [allTag, ...savedTags];
+        tags = tags.filter(tag => tag.toLowerCase().includes(state.tagSearch.toLowerCase()));
+        list.innerHTML = tags.map(tag => {
+          const count = countFor(tag);
+          const start = layout === 'directory' ? `<span class="qs-directory-letter">${escape(tag.charAt(0))}</span>` : icon(tag === allTag ? 'layers' : 'tag');
+          const suffix = layout === 'gallery' || layout === 'directory' ? `${count} ${count === 1 ? 'activity' : 'activities'}` : count;
+          return `<button type="button" class="qs-tag-button cursor-interaction" data-tag="${escape(tag)}" aria-pressed="${tag === state.tag}" aria-label="${escape(tag)}, ${count} ${count === 1 ? 'activity' : 'activities'}">${start}<span>${escape(tag)}</span><span class="qs-tag-count">${suffix}</span>${layout === 'directory' ? icon('chevron-right') : ''}</button>`;
+        }).join('');
+        if (!tags.length) list.innerHTML = '<p class="qs-tag-no-results">No saved tags match.</p>';
+      }
+      const select = selector.querySelector('.qs-tag-select');
+      if (select) select.value = state.tag;
+      const pickerCount = selector.querySelector('.qs-picker-count');
+      if (pickerCount) pickerCount.textContent = countFor(state.tag);
+    }
+    const metricMarkup = display => `<span class="qs-number qs-metric">${escape(display.value)}${display.unit ? ' ' : ''}<span class="qs-unit">${escape(display.unit)}</span></span>`;
+    const tagsMarkup = activity => activity.tags.length ? activity.tags.map(tag => `<span class="qs-cell-tag ${tag === state.tag ? 'is-active' : ''}">${escape(tag)}</span>`).join('') : '<span class="qs-muted">—</span>';
+    function render() {
+      renderTags();
+      selector.hidden = layout === 'directory' && state.directoryOpen;
+      result.hidden = layout === 'directory' && !state.directoryOpen;
+      stage.classList.toggle('is-comfortable', state.comfortable);
+      const membership = activities.filter(activity => state.tag === allTag || activity.tags.some(tag => tag.toLowerCase() === state.tag.toLowerCase()));
+      const term = state.search.trim().toLowerCase();
+      const matches = membership.filter(activity => `${activity.name} ${activity.sport} ${activity.tags.join(' ')}`.toLowerCase().includes(term));
+      matches.sort((a, b) => state.direction * (state.sort === 'distance' ? a.distance - b.distance : a.date.localeCompare(b.date)));
+      state.page = Math.min(state.page, Math.max(0, Math.ceil(matches.length / state.pageSize) - 1));
+      const rows = matches.slice(state.page * state.pageSize, (state.page + 1) * state.pageSize);
+      result.querySelector('.qs-result-title').textContent = state.tag;
+      result.querySelector('.qs-result-count').textContent = `${matches.length} ${matches.length === 1 ? 'activity' : 'activities'}`;
+      result.querySelector('.qs-activity-search').value = state.search;
+      result.querySelector('tbody').innerHTML = rows.map(activity => {
+        const [sportIcon, sportColor] = sportInfo[activity.sport];
+        const formattedDate = dateFormatter.format(new Date(`${activity.date}T12:00:00Z`));
+        const display = activity.display[state.unit];
+        return `<tr data-event-id="${activity.id}"><td><input type="checkbox" data-select-id="${activity.id}" aria-label="Select ${escape(activity.name)}" ${state.selected.has(activity.id) ? 'checked' : ''}></td><td><span class="qs-date">${escape(formattedDate)}</span><span class="qs-muted">${activity.time}</span></td><td><button type="button" class="qs-activity-name cursor-interaction" data-event="${activity.id}">${escape(activity.name)}</button><span class="qs-sport" style="--sport-color:var(--qs-${sportColor})">${icon(sportIcon)}${escape(activity.sport)}</span></td><td data-column-cell="distance" ${state.columns.distance ? '' : 'hidden'}>${metricMarkup(display.distance)}</td><td data-column-cell="duration" ${state.columns.duration ? '' : 'hidden'}>${metricMarkup(display.duration)}</td><td data-column-cell="tags" ${state.columns.tags ? '' : 'hidden'}><span class="qs-cell-tags">${tagsMarkup(activity)}</span></td></tr>`;
+      }).join('');
+      result.querySelectorAll('[data-column-cell]').forEach(cell => cell.hidden = !state.columns[cell.dataset.columnCell]);
+      result.querySelectorAll('[data-column]').forEach(input => input.checked = state.columns[input.dataset.column]);
+      const selectAll = result.querySelector('.qs-select-all');
+      const selectedOnPage = rows.filter(activity => state.selected.has(activity.id)).length;
+      selectAll.checked = rows.length > 0 && selectedOnPage === rows.length;
+      selectAll.indeterminate = selectedOnPage > 0 && selectedOnPage < rows.length;
+      selectAll.disabled = rows.length === 0;
+      result.querySelector('.qs-selection-bar').hidden = !state.selected.size;
+      result.querySelector('.qs-selection-count').textContent = `${state.selected.size} selected`;
+      const empty = result.querySelector('.qs-empty');
+      empty.hidden = matches.length > 0;
+      result.querySelector('.qs-table-scroll').hidden = matches.length === 0;
+      result.querySelector('.qs-empty-title').textContent = term ? 'No matching activities' : `No activities tagged ${state.tag}`;
+      result.querySelector('.qs-empty-hint').textContent = term ? 'Try a different activity name or clear your search.' : 'This tag is saved. Add it to an activity to see it here.';
+      result.querySelector('[data-action="clear-search"]').hidden = !term;
+      result.querySelector('.qs-page-size').value = state.pageSize;
+      result.querySelector('.qs-page-count').textContent = matches.length ? `${state.page * state.pageSize + 1}–${Math.min((state.page + 1) * state.pageSize, matches.length)} of ${matches.length}` : '0 of 0';
+      result.querySelector('[data-action="previous"]').disabled = state.page === 0;
+      result.querySelector('[data-action="next"]').disabled = (state.page + 1) * state.pageSize >= matches.length;
+      result.querySelectorAll('[data-sort]').forEach(button => {
+        button.parentElement.setAttribute('aria-sort', state.sort === button.dataset.sort ? state.direction === 1 ? 'ascending' : 'descending' : 'none');
+      });
+      initializeIcons();
+    }
+    function closeDetail() {
+      stage.querySelector('.qs-detail-overlay').hidden = true;
+      stage.querySelector('.qs-main').inert = false;
+      navigation.inert = false;
+      detailReturnFocus?.focus();
+    }
+    stage.addEventListener('click', event => {
+      const button = event.target.closest('button');
+      if (!button || button.disabled) return;
+      if (button.dataset.tag) { setTag(button.dataset.tag); return; }
+      if (button.dataset.sort) { state.direction = state.sort === button.dataset.sort ? -state.direction : -1; state.sort = button.dataset.sort; state.page = 0; render(); return; }
+      if (button.dataset.event) {
+        const activity = activities.find(value => value.id === button.dataset.event);
+        detailName.textContent = activity.name;
+        stage.querySelector('.qs-detail-date').textContent = `${activity.sport} · ${activity.date} · ${activity.time}`;
+        const display = activity.display[state.unit];
+        stage.querySelector('.qs-detail-metrics').innerHTML = `<div><small>Distance</small><span class="qs-number">${escape(display.distance.text)}</span></div><div><small>Duration</small><span class="qs-number">${escape(display.duration.text)}</span></div>`;
+        stage.querySelector('.qs-detail-tags').innerHTML = tagsMarkup(activity);
+        detailReturnFocus = button;
+        stage.querySelector('.qs-detail-overlay').hidden = false;
+        stage.querySelector('.qs-main').inert = true;
+        navigation.inert = true;
+        stage.querySelector('[data-action="close-detail"]').focus();
+        return;
+      }
+      const action = button.dataset.action;
+      if (action === 'menu') { const expanded = stage.classList.toggle('is-nav-open'); button.setAttribute('aria-expanded', expanded); return; }
+      if (action === 'columns') { columnMenu.hidden = !columnMenu.hidden; button.setAttribute('aria-expanded', !columnMenu.hidden); return; }
+      if (action === 'close-detail') { closeDetail(); return; }
+      if (action === 'back') { state.directoryOpen = false; render(); persist(); return; }
+      if (action === 'tags-nav') { stage.classList.remove('is-nav-open'); stage.querySelector('[data-action="menu"]').setAttribute('aria-expanded', 'false'); state.directoryOpen = false; render(); persist(); return; }
+      if (action === 'previous') state.page -= 1;
+      if (action === 'next') state.page += 1;
+      if (action === 'clear-selection') state.selected.clear();
+      if (action === 'clear-search') { state.search = ''; state.page = 0; }
+      render(); persist();
+    });
+    stage.addEventListener('input', event => {
+      if (event.target.classList.contains('qs-activity-search')) { state.search = event.target.value; state.page = 0; render(); persist(); }
+      if (event.target.classList.contains('qs-tag-search')) { state.tagSearch = event.target.value; renderTags(); initializeIcons(); }
+    });
+    stage.addEventListener('change', event => {
+      const input = event.target;
+      if (input.classList.contains('qs-tag-select')) { setTag(input.value); return; }
+      if (input.classList.contains('qs-page-size')) { state.pageSize = Number(input.value); state.page = 0; }
+      if (input.dataset.column) state.columns[input.dataset.column] = input.checked;
+      if (input.dataset.selectId) { if (input.checked) state.selected.add(input.dataset.selectId); else state.selected.delete(input.dataset.selectId); }
+      if (input.classList.contains('qs-select-all')) result.querySelectorAll('[data-select-id]').forEach(checkbox => { if (input.checked) state.selected.add(checkbox.dataset.selectId); else state.selected.delete(checkbox.dataset.selectId); });
+      render();
+      if (input.dataset.selectId) result.querySelector(`[data-select-id="${input.dataset.selectId}"]`).focus();
+    });
+    stage.addEventListener('keydown', event => {
+      if (stage.querySelector('.qs-detail-overlay').hidden) return;
+      if (event.key === 'Escape') { event.preventDefault(); closeDetail(); }
+      if (event.key === 'Tab') { event.preventDefault(); stage.querySelector('[data-action="close-detail"]').focus(); }
+    });
+    render();
+    designs.push({ layout, state, render });
+    if (globalThis.Tweak) {
+      const tweaks = new Tweak({ container: stage, onChange: render });
+      tweaks.addSelect(state, 'unit', { label: 'Distance units', options: ['Metric', 'Imperial'] });
+      tweaks.addToggle(state, 'comfortable', { label: 'Comfortable table rows' });
+    }
+  });
+  window.addEventListener('openai:set_globals', event => {
+    const incoming = event.detail?.globals?.widgetState?.privateContent?.tagsDesigns;
+    if (!incoming) return;
+    designs.forEach(({ layout, state, render }) => {
+      const saved = incoming[layout];
+      if (!saved) return;
+      if ([allTag, ...savedTags].includes(saved.tag)) state.tag = saved.tag;
+      if (typeof saved.search === 'string') state.search = saved.search;
+      if (typeof saved.directoryOpen === 'boolean') state.directoryOpen = saved.directoryOpen;
+      state.selected.clear(); state.page = 0; render();
+    });
+  });
+})();
+</script>
