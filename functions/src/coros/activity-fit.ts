@@ -2,6 +2,7 @@ import { FitEncoder } from 'fit-file-parser/encoder';
 import { FitMessageReaderError, getFitBaseTypeId, readFitMessages, readFitUnsignedField } from 'fit-file-parser/raw';
 import * as logger from 'firebase-functions/logger';
 import { MAX_ACTIVITY_CALLABLE_UPLOAD_BYTES } from '../shared/activity-processing-config';
+import { FitActivitySessionRepair } from '../shared/fit-activity-session-repair';
 
 // Fixed mappings verified through controlled COROS imports and owner app checks (#600).
 const SNORKELING = 82;
@@ -43,7 +44,7 @@ export function createCOROSSailingFIT(input: Buffer, requireGPS = false): Buffer
 }
 
 /**
- * Repair only the reproduced empty native definitions, then adapt the two
+ * Recover an evidenced missing Session, repair reproduced empty definitions, then adapt the two
  * verified mappings. Snorkeling needs no GPS; sailing retains its GPS requirement.
  * No original is mutated or retained. Fingerprint and send the returned buffer.
  */
@@ -54,17 +55,25 @@ export function prepareCOROSActivityFITUpload(input: Buffer): Buffer {
   try {
     let parsed;
     try {
-      parsed = readFitMessages(input, { messageNumbers: [18], maxInputBytes: MAX_BYTES });
+      parsed = readFitMessages(prepared, { messageNumbers: [18], maxInputBytes: MAX_BYTES });
     } catch (error) {
       // The strict reader checks the original header, length and CRCs before
       // walking definitions. Never repair a corrupt or oversized source file.
       if (!(error instanceof FitMessageReaderError) || error.code !== 'invalid_structure') return input;
-      const repaired = removeCOROSEmptyFieldDefinitions(input);
+      const repaired = removeCOROSEmptyFieldDefinitions(prepared);
       prepared = repaired.output;
       logger.info('[COROS] Removed empty activity FIT field definitions.', {
         removedFieldDefinitions: repaired.removedFieldDefinitions,
       });
       parsed = readFitMessages(prepared, { messageNumbers: [18], maxInputBytes: MAX_BYTES });
+    }
+    if (parsed.messages.length === 0) {
+      const repaired = FitActivitySessionRepair.createCopy(prepared);
+      if (repaired !== prepared) {
+        prepared = repaired;
+        logger.info('[COROS] Restored missing activity FIT Session summary.', { restoredSessions: 1 });
+        parsed = readFitMessages(prepared, { messageNumbers: [18], maxInputBytes: MAX_BYTES });
+      }
     }
     if (parsed.messages.length !== 1) return prepared;
     const session = parsed.messages[0];

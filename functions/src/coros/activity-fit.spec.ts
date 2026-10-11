@@ -7,6 +7,7 @@ import { createParsingOptions } from '../../../shared/parsing-options';
 import { buildActivitySyncOutboundFingerprintIds } from '../activity-sync/outbound-fingerprint';
 import { createCOROSSailingFIT, createCOROSSnorkelingFIT, prepareCOROSActivityFITUpload } from './activity-fit';
 import { createCOROSActivityFITFixture as fixture } from '../../test-utils/coros-activity-fit';
+import { sessionlessFixture } from '../../test-utils/fit-activity-session';
 
 function repairCRC(file: Buffer): Buffer {
   if (file[0] === 14) file.writeUInt16LE(FitEncoder.calculateCRC(file.subarray(0, 12)), 12);
@@ -170,6 +171,29 @@ describe('COROS sailing FIT copy', () => {
 });
 
 describe('COROS production FIT preparation', () => {
+  it('restores a missing summary without changing the semantic echo identity', async () => {
+    const input = sessionlessFixture({ bigEndian: true, developer: true });
+    const original = Buffer.from(input), output = prepareCOROSActivityFITUpload(input);
+    expect(output).not.toBe(input);
+    expect(input).toEqual(original);
+    const sessions = readFitMessages(output).messages.filter(m => m.globalMessageNumber === 18);
+    expect(sessions).toHaveLength(1);
+    const [before, after] = await Promise.all([input, output].map(buildActivitySyncOutboundFingerprintIds));
+    expect(before.fingerprintIds).toHaveLength(2);
+    expect(after.fingerprintIds).toHaveLength(2);
+    expect(after.exactFingerprintId).not.toBe(before.exactFingerprintId);
+    expect(after.fingerprintIds[1]).toBe(before.fingerprintIds[1]);
+    expect(prepareCOROSActivityFITUpload(output)).toBe(output);
+  });
+
+  it('applies the existing snorkeling mapping after shared Session recovery', () => {
+    const input = sessionlessFixture({ sport: 82 });
+    const output = prepareCOROSActivityFITUpload(input);
+    const session = readFitMessages(output).messages.find(m => m.globalMessageNumber === 18)!;
+    expect(session.fields.find(f => f.fieldNumber === 5)!.bytes[0]).toBe(5);
+    expect(session.fields.find(f => f.fieldNumber === 6)!.bytes[0]).toBe(18);
+  });
+
   it.each([[82, ActivityTypes.OpenWaterSwimming, true], [82, ActivityTypes.OpenWaterSwimming, false],
     [32, ActivityTypes.Generic, true]] as const)(
     'sport %i parses as %s with original metrics (GPS=%s)', async (sport, expectedType, withGPS) => {

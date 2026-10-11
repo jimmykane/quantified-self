@@ -66,6 +66,14 @@ the same **covered/unchanged** monitoring scope. Its count-only INFO log describ
 file preparation, not delivery. Existing COROS failure, pending, DLQ and committed
 success observations remain authoritative; no new labels or thresholds are added.
 
+The shared missing-Session upload-copy repair has the same **covered/unchanged**
+scope: only COROS's existing direct and fresh/restarted sends opt in, before the
+existing fingerprint/transport boundary. Its count-only preparation INFO is not
+delivery. Accepted uploads still poll their retained ID; worker, scheduler, retry,
+DLQ, metrics, dashboard and policy contracts are unchanged. Confirm final provider
+status and guarded queue success separately; an operator's own-account test does
+not complete another user's queued job.
+
 Telemetry is best-effort after existing commits, not an audit ledger or an exactly-once
 counter: logging can fail, and a committed write followed by container loss can omit
 an observation. Logging failures never change delivery/acknowledgement behavior.
