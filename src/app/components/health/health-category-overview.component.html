@@ -32,7 +32,7 @@
       </mat-card>
     } @empty {
       @if (!hasOverviewHighlights()) {
-        <p class="health-overview-empty" role="status">No recorded Health metrics yet. Add a measurement or connect a service to get started.</p>
+        <p class="health-overview-empty" role="status">{{ categories().length ? 'Choose a category to explore your recorded Health metrics.' : 'No recorded Health metrics yet. Add a measurement or connect a service to get started.' }}</p>
       }
     }
   </div>

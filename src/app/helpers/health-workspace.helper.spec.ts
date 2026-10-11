@@ -454,6 +454,19 @@ describe('Health workspace helpers', () => {
     expect(selectHealthOverviewMetrics([])).toEqual([]);
   });
 
+  it('keeps intensity durations in categories without using them to fill the landing overview', () => {
+    const intensityMetrics = [HEALTH_METRIC_IDS.ModerateIntensityDuration, HEALTH_METRIC_IDS.VigorousIntensityDuration];
+    const categories = buildHealthOverviewCategories(buildHealthMetricCatalogGroups([
+      ...intensityMetrics, HEALTH_METRIC_IDS.Steps, HEALTH_METRIC_IDS.FloorsClimbed,
+    ]), false);
+    expect(selectHealthOverviewMetrics(categories).map(metric => metric.id)).toEqual(['steps', 'floors_climbed']);
+    expect(categories.find(category => category.id === 'movement')!.metrics.map(metric => metric.id))
+      .toEqual(expect.arrayContaining(intensityMetrics));
+    const intensityOnly = buildHealthOverviewCategories(buildHealthMetricCatalogGroups(intensityMetrics), false);
+    expect(selectHealthOverviewMetrics(intensityOnly)).toEqual([]);
+    expect(intensityOnly[0].metrics).toHaveLength(2);
+  });
+
   it('keeps providers, accounts, semantics, native values, gaps, and conflicts isolated', () => {
     const records = [
       sourceRecord({ id: 'garmin-one', provider: HEALTH_PROVIDERS.GarminAPI, accountKey: 'secret-account-a' }),

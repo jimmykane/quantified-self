@@ -490,7 +490,11 @@ export function buildHealthOverviewCategories(
 
 /** A bounded landing selection; category filters reveal every available catalog entry. */
 export function selectHealthOverviewMetrics(categories: readonly HealthOverviewCategory[]): HealthOverviewMetric[] {
-  const available = new Map(categories.flatMap(category => category.metrics).map(metric => [metric.id, metric]));
+  // Intensity durations remain in Movement & energy, but never fill landing cards.
+  const available = new Map(categories.flatMap(category => category.metrics)
+    .filter(metric => metric.id !== HEALTH_METRIC_IDS.ModerateIntensityDuration
+      && metric.id !== HEALTH_METRIC_IDS.VigorousIntensityDuration)
+    .map(metric => [metric.id, metric]));
   const preferred: readonly HealthWorkspaceMetricSelection[] = [
     HEALTH_METRIC_IDS.BodyWeight, HEALTH_METRIC_IDS.HeartRateVariability,
     HEALTH_METRIC_IDS.RestingHeartRate, HEALTH_METRIC_IDS.Steps, HEALTH_METRIC_IDS.Vo2Max, 'sleep',

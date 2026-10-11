@@ -420,6 +420,7 @@ describe('help.content', () => {
       'only manual rows can be edited or deleted', 'not training targets']) expect(health).toContain(phrase);
     expect(health).toContain('**All** starts with **Your recent Health** highlights');
     expect(health).toContain('not repeated as cards on All');
+    expect(health).toContain('Moderate and vigorous intensity durations appear in **Movement & energy**, and are not shown by default on **All**');
     expect(health).toContain('category views do not repeat the highlights above their cards');
     expect(health).toContain('Recent-health highlights stay on the overview, not above the selected metric');
     expect(health).toContain('previous scroll position');

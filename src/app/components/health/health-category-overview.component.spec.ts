@@ -96,6 +96,36 @@ describe('Health category overview', () => {
     fixture.componentInstance.selectCategory('recovery'); fixture.detectChanges();
     expect(fixture.componentInstance.cards().map(card => card.id)).toEqual(['sleep']);
   });
+  it('omits intensity durations on All after highlight deduplication but opens their category history', () => {
+    const fixture = create(), component = fixture.componentInstance, selected = vi.fn();
+    fixture.componentRef.setInput('groups', buildHealthMetricCatalogGroups([
+      'steps', 'moderate_intensity_duration', 'vigorous_intensity_duration',
+    ]));
+    fixture.componentRef.setInput('highlightedMetrics', ['sleep', 'heart_rate_variability', 'heart_rate']);
+    fixture.detectChanges();
+    expect(component.cards().map(card => card.id)).toEqual(['steps']);
+    component.selectCategory('movement'); fixture.detectChanges();
+    expect(component.cards().map(card => card.id)).toEqual(expect.arrayContaining([
+      'steps', 'moderate_intensity_duration', 'vigorous_intensity_duration',
+    ]));
+    component.metricSelected.subscribe(selected);
+    fixture.nativeElement.querySelector('button[aria-label="View Moderate intensity duration history"]').click();
+    expect(selected).toHaveBeenCalledExactlyOnceWith('moderate_intensity_duration');
+    component.selectCategory('all'); fixture.detectChanges();
+    expect(component.cards().map(card => card.id)).toEqual(['steps']);
+  });
+  it('offers category browsing when only intensity durations are recorded', () => {
+    const fixture = create(), component = fixture.componentInstance;
+    fixture.componentRef.setInput('groups', buildHealthMetricCatalogGroups([
+      'moderate_intensity_duration', 'vigorous_intensity_duration',
+    ]));
+    fixture.componentRef.setInput('showSleep', false); fixture.detectChanges();
+    expect(component.cards()).toEqual([]);
+    expect(fixture.nativeElement.textContent).toContain('Choose a category to explore your recorded Health metrics');
+    expect(fixture.nativeElement.textContent).not.toContain('No recorded Health metrics yet');
+    component.selectCategory('movement'); fixture.detectChanges();
+    expect(component.cards().map(card => card.id)).toEqual(['moderate_intensity_duration', 'vigorous_intensity_duration']);
+  });
   it('filters by category using Material semantic selection and keeps unchanged actions silent', () => {
     const fixture = create(), component = fixture.componentInstance;
     const chips = fixture.nativeElement.querySelectorAll('mat-chip-option button');
