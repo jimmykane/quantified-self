@@ -22,11 +22,16 @@ import {
   DataEVPEMin,
   DataHeartRateAvg,
   DataHeartRateMax,
+  DataHeartRateMin,
   DataInterface,
   DataGNSSDistance,
   DataGradeAdjustedPaceAvg,
   DataGradeAdjustedSpeedAvg,
   DataMovingTime,
+  DataMetabolicCalories,
+  DataAvgRespirationRate,
+  DataMinRespirationRate,
+  DataMaxRespirationRate,
   DataNumberOfSatellites,
   DataNumberOfSatellitesAvg,
   DataNumberOfSatellitesMax,
@@ -45,7 +50,12 @@ import {
   DataSpeedMin,
   DataStrydDistance,
   DataStrokeRateAvg,
+  DataStrokeRateMin,
+  DataStrokeRateMax,
   DataSwimPaceAvg,
+  DataTemperatureAvg,
+  DataTemperatureMin,
+  DataTemperatureMax,
   DataTotalGrit,
   DataTotalCycles,
   DynamicDataLoader,
@@ -66,6 +76,7 @@ import {
   DataNormalizedSwolf, EVENT_LAP_STROKES_COLUMN, EVENT_LAP_SWOLF_COLUMN,
   getSwimLapAnalytics, getSwimLapDisplayMetric, isRestSwimLap, SwimLapAnalytics,
 } from './event-swim-analytics.helper';
+import { getSwimLapStrokeLabels } from './event-swim-length.helper';
 
 export interface EventLapMetricOption {
   type: string;
@@ -77,6 +88,40 @@ export interface EventLapMetricOptionGroup {
   label: string;
   metrics: EventLapMetricOption[];
 }
+
+/** Picker ordering is independent of catalog grouping and current data availability. */
+export const getEventLapColumnPickerOptions = (
+  metricGroups: readonly EventLapMetricOptionGroup[],
+  selectedMetricTypes: readonly string[],
+): { selectedMetrics: EventLapMetricOption[]; availableMetricGroups: EventLapMetricOptionGroup[] } => {
+  const options = new Map(metricGroups.flatMap(group => group.metrics.map(metric => [metric.type, metric] as const)));
+  const selected = new Set(selectedMetricTypes);
+  return {
+    selectedMetrics: selectedMetricTypes.map(type => {
+      const option = options.get(type);
+      return { type, label: !option || ['Average', 'Maximum', 'Minimum'].includes(option.label) ? type : option.label };
+    }),
+    availableMetricGroups: metricGroups.map(group => ({
+      ...group,
+      metrics: group.metrics.filter(metric => !selected.has(metric.type)),
+    })).filter(group => group.metrics.length > 0),
+  };
+};
+
+export const moveEventLapMetricType = (
+  metricTypes: readonly string[],
+  metricType: string,
+  direction: -1 | 1,
+): string[] => {
+  const next = [...metricTypes];
+  const index = next.indexOf(metricType);
+  const destination = index + direction;
+  if ((direction !== -1 && direction !== 1) || index < 0 || destination < 0 || destination >= next.length) {
+    return next;
+  }
+  [next[index], next[destination]] = [next[destination], next[index]];
+  return next;
+};
 
 export interface EventLapSportFamilyPresentation {
   family: AppEventLapSportFamily;
@@ -147,6 +192,17 @@ const EVENT_LAP_METRIC_TYPES = new Set<string>();
 /** Recorded categorical metadata, derived from the lap's swim lengths. */
 export const EVENT_LAP_STROKE_COLUMN = 'Stroke';
 const SWIM_ONLY_LAP_METRIC_TYPES = new Set([EVENT_LAP_STROKE_COLUMN, EVENT_LAP_STROKES_COLUMN, EVENT_LAP_SWOLF_COLUMN]);
+// Presentation policy only: keep the full catalog authoritative for saved layouts.
+const SWIMMING_LAP_METRIC_TYPES = new Set([
+  DataDuration.type, DataMovingTime.type, DataDistance.type, DataSwimPaceAvg.type,
+  ...SWIM_ONLY_LAP_METRIC_TYPES,
+  DataStrokeRateAvg.type, DataStrokeRateMin.type, DataStrokeRateMax.type,
+  DataHeartRateAvg.type, DataHeartRateMin.type, DataHeartRateMax.type,
+  DataSpeedAvg.type, DataSpeedMin.type, DataSpeedMax.type,
+  DataEnergy.type, DataMetabolicCalories.type,
+  DataTemperatureAvg.type, DataTemperatureMin.type, DataTemperatureMax.type,
+  DataAvgRespirationRate.type, DataMinRespirationRate.type, DataMaxRespirationRate.type,
+]);
 const EVENT_LAP_CATALOG_METRICS: EventLapCatalogMetric[] = [];
 
 const resolveEventLapMetricVariant = (type: string): EventLapMetricVariant | null => {
@@ -291,11 +347,22 @@ const DURATION_WEIGHTED_LAP_METRIC_TYPES = new Set([
 
 export const EVENT_LAP_TABLE_FIXED_COLUMN = '#';
 
-export const getEventLapMetricOptionGroups = (family?: AppEventLapSportFamily): EventLapMetricOptionGroup[] => (
+const filterEventLapMetricOptionGroups = (
+  include: (type: string) => boolean,
+): EventLapMetricOptionGroup[] => (
   EVENT_LAP_METRIC_OPTION_GROUPS.map((group) => ({
     ...group,
-    metrics: group.metrics.filter(metric => !family || family === 'swimming' || !SWIM_ONLY_LAP_METRIC_TYPES.has(metric.type)),
+    metrics: group.metrics.filter(metric => include(metric.type)),
   })).filter(group => group.metrics.length > 0)
+);
+
+export const getEventLapMetricOptionGroups = (family?: AppEventLapSportFamily): EventLapMetricOptionGroup[] => (
+  filterEventLapMetricOptionGroups(type => !family || (family === 'swimming'
+    ? SWIMMING_LAP_METRIC_TYPES.has(type) : !SWIM_ONLY_LAP_METRIC_TYPES.has(type)))
+);
+
+export const getEventLapAdditionalMetricOptionGroups = (family: AppEventLapSportFamily): EventLapMetricOptionGroup[] => (
+  family === 'swimming' ? filterEventLapMetricOptionGroups(type => !SWIMMING_LAP_METRIC_TYPES.has(type)) : []
 );
 
 export const getEventLapSportFamilyPresentation = (
@@ -332,17 +399,21 @@ export const resolveEventLapSportFamily = (activityType: unknown): AppEventLapSp
 export const getDefaultEventLapMetricTypes = (
   family: AppEventLapSportFamily,
 ): string[] => {
-  const effortType = family === 'swimming'
-    ? DataSwimPaceAvg.type
-    : resolvePreferredSpeedDerivedAverageTypeForActivity(
-      family === 'running' ? 'Running' : family === 'cycling' ? 'Cycling' : 'Other',
-    ) || DataSpeedAvg.type;
+  if (family === 'swimming') {
+    return [
+      DataDuration.type, DataDistance.type, DataSwimPaceAvg.type,
+      EVENT_LAP_STROKE_COLUMN, EVENT_LAP_STROKES_COLUMN, EVENT_LAP_SWOLF_COLUMN,
+      DataHeartRateAvg.type, DataHeartRateMax.type, DataStrokeRateAvg.type, DataEnergy.type,
+    ];
+  }
+  const effortType = resolvePreferredSpeedDerivedAverageTypeForActivity(
+    family === 'running' ? 'Running' : family === 'cycling' ? 'Cycling' : 'Other',
+  ) || DataSpeedAvg.type;
 
   return [
     DataDuration.type,
     DataDistance.type,
     effortType,
-    ...(family === 'swimming' ? [EVENT_LAP_STROKE_COLUMN, EVENT_LAP_STROKES_COLUMN, EVENT_LAP_SWOLF_COLUMN] : []),
     ...CORE_LAP_METRIC_TYPES.filter((type) => type !== DataDuration.type && type !== DataDistance.type),
   ].filter((type, index, values) => values.indexOf(type) === index);
 };
@@ -466,6 +537,32 @@ export const getEventLapMetricStat = (
   } catch {
     return null;
   }
+};
+
+/** Discover lap values independently of the user's selected columns. */
+export const getAvailableEventLapMetricTypes = (
+  activity: ActivityInterface,
+  laps: readonly LapInterface[],
+  metricTypes: readonly string[],
+  unitSettings: UserUnitSettingsInterface | null | undefined,
+): Set<string> => {
+  const swimming = resolveEventLapSportFamily(activity.type) === 'swimming';
+  const analytics = swimming ? getSwimLapAnalytics(activity, unitSettings) : new Map();
+  const strokeLabels = swimming && metricTypes.includes(EVENT_LAP_STROKE_COLUMN)
+    ? getSwimLapStrokeLabels(activity) : null;
+  return new Set(metricTypes.filter(type => EVENT_LAP_METRIC_TYPES.has(type)
+    && (swimming || !SWIM_ONLY_LAP_METRIC_TYPES.has(type))
+    && laps.some(lap => {
+      if (type === EVENT_LAP_STROKE_COLUMN) {
+        return !!strokeLabels?.get(lap);
+      }
+      const derived = getSwimLapDisplayMetric(analytics.get(lap), type);
+      const stat = derived === undefined ? getEventLapMetricStat(lap, type) : derived;
+      if (!stat || stat.isValueTypeValid?.(stat.getValue()) === false) {
+        return false;
+      }
+      return formatEventLapMetric(stat, type, unitSettings, activity.type).trim().length > 0;
+    })));
 };
 
 interface LapSummaryContext {

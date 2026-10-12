@@ -86,6 +86,7 @@
     "src/app/helpers/event-swim-analytics.helper.spec.ts",
     "src/app/helpers/event-swim-distance-display.helper.spec.ts",
     "src/app/helpers/event-swim-length.helper.spec.ts",
+    "src/app/helpers/event-swim-rest-block.helper.spec.ts",
     "src/app/helpers/event-tags.helper.spec.ts",
     "src/app/helpers/event-visibility.helper.spec.ts",
     "src/app/helpers/garmin-permissions.helper.spec.ts",

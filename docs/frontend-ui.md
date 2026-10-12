@@ -168,8 +168,23 @@ recorded SWOLF, and swim/rest/total timings remain available. Membership uses th
 No 25-yard splits are synthesized: a six- or ten-length rep expands into six or ten recorded rows only if present.
 Disclosure state and temporary selection survive unit/column refreshes; controls expose expanded state and region
 IDs and emit one selection haptic per accepted toggle. Rest rows have both a label and a theme-based shade, including
-opaque pinned cells. Explicit Active Lap takes priority, then recorded length types; zero distance plus zero recorded
-stroke rate is a fallback only without that metadata, preserving active zero-stroke drills.
+opaque pinned cells. Explicit active length messages or a positive integer Active Lengths stat take priority over
+an inferred inactive Active Lap flag, including when individual length details are missing or incomplete;
+otherwise the recorded flag takes priority, then idle/rest length types. Zero distance plus zero recorded stroke
+rate is a fallback only without that metadata, preserving active zero-stroke drills.
+
+The lap table groups consecutive confirmed zero-distance rests only when their chronological windows touch without
+overlap and their lap types match. Grouping uses the complete recorded lap sequence before table filtering;
+an intervening active/unknown lap, changed type, gap, invalid date or overlapping window prevents merging.
+Each display block retains its original laps and shows their table-number range. Its disclosure reuses the lap table
+for individually selectable original rows, with existing length disclosures beneath them. Block selection is derived
+from constituent selections, including an indeterminate state; selection coverage and Selected avg still count and
+average original laps. Keys include the original complete-list index so repeated lap IDs cannot collide.
+Block duration is the sum of recorded lap durations, never lap plus length time or a substituted wall-clock span.
+Average HR is an estimate weighted by each available original lap's duration; minimum/maximum HR use the extrema.
+Partial HR coverage is visible, and unsupported aggregate metrics remain blank while their original rows are available.
+This is a presentation-only projection: stored laps, source files, chart boundaries, Training and MCP read contracts
+remain unchanged. It requires no Sports Lib change, source reparse or historical-data transition.
 
 Swimming defaults add **Total strokes** and **Normalized SWOLF** to the existing per-sport catalog. Saved lists,
 including empty lists, retain precedence. The display-only `DataNormalizedSwolf` extends Sports Lib's numeric data
