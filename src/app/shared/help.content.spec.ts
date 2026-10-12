@@ -1308,6 +1308,8 @@ describe('help.content', () => {
     expect(gettingStartedSection?.content).toContain('including Garmin **Session end** laps and Suunto final partial laps');
     expect(gettingStartedSection?.content).toContain('**Laps -> Columns**');
     expect(gettingStartedSection?.content).toContain('typed metric search');
+    expect(gettingStartedSection?.content).toContain('**Tab** and **Shift+Tab**');
+    expect(gettingStartedSection?.content).toContain('returns focus to its trigger');
     expect(gettingStartedSection?.content).toContain('Running, Cycling, Swimming, or Other activities');
     expect(gettingStartedSection?.content).toContain('separate column list for each of those sport families');
     expect(gettingStartedSection?.content).toContain('Swimming choices focus on duration, distance, swim pace');

@@ -10,10 +10,12 @@
 </app-event-section-header>
 <mat-menu #lapColumnsMenu="matMenu" xPosition="before"
   class="qs-menu-panel qs-menu-panel-form qs-config-menu lap-column-menu-panel">
+  <ng-template matMenuContent>
     <!-- Embedded controls own navigation keys; Escape still closes the Material menu. -->
-    <div class="lap-column-menu-content" tabindex="-1" (keydown)="$event.key !== 'Escape' && $event.stopPropagation()">
+    <div class="lap-column-menu-content" cdkTrapFocus [cdkTrapFocusAutoCapture]="true" tabindex="-1" (keydown)="$event.key !== 'Escape' && $event.stopPropagation()">
       @if (activeLapColumnMenuGroup; as group) {
-      <div class="lap-column-menu-controls">
+      <div class="lap-column-menu-controls" role="group" [attr.aria-label]="group.label + ' lap column preferences'"
+        tabindex="-1" cdkFocusInitial>
       @if (lapColumnMenuGroups.length > 1) {
       <mat-form-field appearance="outline" class="lap-column-family-select" subscriptSizing="dynamic">
         <mat-label>Lap sport</mat-label>
@@ -82,6 +84,7 @@
       </div>
       }
     </div>
+  </ng-template>
 </mat-menu>
 @if (lapTableGroups.length === 1) {
 @if (lapTableGroups[0]; as lapTableGroup) {

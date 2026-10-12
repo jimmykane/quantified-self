@@ -1,4 +1,5 @@
 import { NgModule } from '@angular/core';
+import { A11yModule } from '@angular/cdk/a11y';
 import { MaterialModule } from './material.module';
 import { SharedModule } from './shared.module';
 import { CommonModule } from '@angular/common';
@@ -36,6 +37,7 @@ import { TrainingImpactComponent } from '../components/training-impact/training-
 @NgModule({
     imports: [
         CommonModule,
+        A11yModule,
         SharedModule,
         MaterialModule,
         BenchmarkModule,

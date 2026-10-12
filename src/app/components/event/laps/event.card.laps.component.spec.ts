@@ -1,5 +1,6 @@
 import { CommonModule } from '@angular/common';
-import { ChangeDetectorRef, NO_ERRORS_SCHEMA, signal } from '@angular/core';
+import { ChangeDetectorRef, DebugElement, getDebugNode, NO_ERRORS_SCHEMA, signal } from '@angular/core';
+import { A11yModule, CdkTrapFocus } from '@angular/cdk/a11y';
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { MatCheckboxModule } from '@angular/material/checkbox';
 import { MatMenuModule } from '@angular/material/menu';
@@ -100,7 +101,7 @@ describe('EventCardLapsComponent', () => {
         snackBar = { open: vi.fn() };
         haptics = { selection: vi.fn(), success: vi.fn(), error: vi.fn() };
         await TestBed.configureTestingModule({
-            imports: [CommonModule, MatCheckboxModule, MatMenuModule, MatTableModule, MatListModule, MatButtonModule, MatFormFieldModule, MatInputModule, MatSelectModule],
+            imports: [CommonModule, A11yModule, MatCheckboxModule, MatMenuModule, MatTableModule, MatListModule, MatButtonModule, MatFormFieldModule, MatInputModule, MatSelectModule],
             declarations: [EventCardLapsComponent, HapticTapDirective],
             providers: [
                 { provide: AppEventColorService, useValue: {} },
@@ -287,16 +288,27 @@ describe('EventCardLapsComponent', () => {
         expect(haptics.success).toHaveBeenCalledTimes(1);
     });
 
-    it('leaves search navigation keys to the input while Escape closes the picker', async () => {
+    it('captures focus only while open, preserves search on reopening and restores the trigger on Escape', async () => {
         component.canCustomize = true;
         component.selectedActivities = [{ ...createActivity([createRenderableLap(LapTypes.Manual)]), type: 'Swimming' } as ActivityInterface];
         component.ngOnChanges();
         fixture.detectChanges();
         const trigger = fixture.nativeElement.querySelector<HTMLButtonElement>('button[aria-label="Choose lap columns"]')!;
+        expect(document.querySelector('.lap-column-menu-content')).toBeNull();
+        expect(document.querySelector('.cdk-focus-trap-anchor')).toBeNull();
         trigger.click();
         await fixture.whenStable();
         fixture.detectChanges();
         const input = document.querySelector<HTMLInputElement>('input[aria-label="Search swimming lap metrics"]')!;
+        const picker = document.querySelector('.lap-column-menu-content')!;
+        const trap = (getDebugNode(picker) as DebugElement).injector.get(CdkTrapFocus);
+        expect(trap.enabled).toBe(true);
+        expect(trap.autoCapture).toBe(true);
+        expect(trap.focusTrap.hasAttached()).toBe(true);
+        // JSDOM has no painted geometry; browser coverage verifies actual initial focus.
+        const initialTarget = picker.querySelector<HTMLElement>('[cdkFocusInitial]')!;
+        expect(initialTarget.getAttribute('tabindex')).toBe('-1');
+        expect(initialTarget.matches('input, textarea, [contenteditable="true"]')).toBe(false);
         for (const [key, keyCode] of [['Home', 36], ['End', 35], ['ArrowLeft', 37], ['ArrowRight', 39], ['Tab', 9]] as const) {
             const event = new KeyboardEvent('keydown', { key, keyCode, bubbles: true, cancelable: true });
             input.dispatchEvent(event);
@@ -305,12 +317,32 @@ describe('EventCardLapsComponent', () => {
             expect(document.querySelector('.lap-column-menu-content'), key).toBeTruthy();
         }
         expect(haptics.selection).toHaveBeenCalledTimes(1);
+        input.value = 'swolf';
+        input.dispatchEvent(new Event('input', { bubbles: true }));
+        fixture.detectChanges();
         input.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', keyCode: 27, bubbles: true }));
         await fixture.whenStable();
         fixture.detectChanges();
         expect(document.querySelector('.lap-column-menu-content')).toBeNull();
         expect(trigger.getAttribute('aria-expanded')).toBe('false');
+        expect(document.querySelector('.cdk-focus-trap-anchor')).toBeNull();
+        expect(document.activeElement).toBe(trigger);
         expect(haptics.selection).toHaveBeenCalledTimes(1);
+        trigger.click();
+        await fixture.whenStable();
+        fixture.detectChanges();
+        const reopenedInput = document.querySelector<HTMLInputElement>('input[aria-label="Search swimming lap metrics"]')!;
+        const reopenedPicker = document.querySelector('.lap-column-menu-content')!;
+        const reopenedTrap = (getDebugNode(reopenedPicker) as DebugElement).injector.get(CdkTrapFocus);
+        expect(reopenedTrap).not.toBe(trap);
+        expect(reopenedTrap.focusTrap.hasAttached()).toBe(true);
+        expect(reopenedInput.value).toBe('swolf');
+        expect(haptics.selection).toHaveBeenCalledTimes(2);
+        reopenedInput.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', keyCode: 27, bubbles: true }));
+        await fixture.whenStable();
+        fixture.detectChanges();
+        expect(document.querySelector('.cdk-focus-trap-anchor')).toBeNull();
+        expect(document.activeElement).toBe(trigger);
     });
 
     it('keeps named sport choices and per-sport search state inside the open column menu', async () => {
