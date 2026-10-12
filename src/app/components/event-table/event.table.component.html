@@ -1,5 +1,5 @@
 <!-- Table Section -->
-<div class="qs-glass-card-panel table-container">
+<div class="qs-glass-card-panel table-container" [class.table-container--library]="isLibraryPresentation">
   @if (showToolbar) {
   <div class="table-toolbar">
     <div class="table-toolbar-main">
@@ -7,13 +7,19 @@
         <input matInput [value]="searchTerm" (input)="onSearchInput($event)" placeholder="Search activities"
           aria-label="Search activities"
           autocomplete="off">
-        <mat-icon matSuffix *ngIf="!searchTerm">search</mat-icon>
+        @if (isLibraryPresentation) { <mat-icon matPrefix>search</mat-icon> }
+        <mat-icon matSuffix *ngIf="!searchTerm && !isLibraryPresentation">search</mat-icon>
         <button mat-icon-button matSuffix *ngIf="searchTerm" (click)="clearSearch()" aria-label="Clear">
           <mat-icon>close</mat-icon>
         </button>
       </mat-form-field>
 
       <div class="table-toolbar-filters">
+        @if (isLibraryPresentation) {
+          <app-event-table-actions [selectedDataTypes]="selectedColumns" [dataTypes]="libraryAvailableColumns" icon="tune"
+            (selectedDataTypesChange)="selectedColumnsChange($event)"></app-event-table-actions>
+        }
+        @if (showTagFilter) {
         <mat-form-field appearance="outline" class="tag-filter-field" subscriptSizing="dynamic">
           <mat-label>Tags</mat-label>
           <mat-select [value]="tagFilter"
@@ -28,6 +34,7 @@
             }
           </mat-select>
         </mat-form-field>
+        }
         <ng-content select="[event-table-filters]"></ng-content>
       </div>
     </div>
@@ -119,7 +126,7 @@
 
   <app-loading-overlay class="activity-table-overlay" [isLoading]="isLoading"
     [hasError]="!isLoading && this.events && this.events.length === 0" [allowErrorPassthrough]="true"
-    [errorMessage]="'No activities yet'" [errorHint]="'Import an activity or change your filters'"
+    [errorMessage]="emptyMessage" [errorHint]="emptyHint"
     [errorIcon]="'directions_run'" [showSkeleton]="false" height="auto" minHeight="224px" borderRadius="12px">
     <div class="table-wrapper qs-scrollbar">
       <table mat-table [dataSource]="data" [trackBy]="trackByEventId" matSort [matSortActive]="tableSortActive"
@@ -129,13 +136,14 @@
           @if (isFirst && canManageEvents) {
           <th mat-header-cell *matHeaderCellDef>
             <mat-checkbox (change)="$event ? masterToggle() : null" [checked]="selection.hasValue() && isAllSelected()"
-              [indeterminate]="selection.hasValue() && !isAllSelected()">
+              [indeterminate]="isLibraryPresentation ? isSelectionIndeterminate : selection.hasValue() && !isAllSelected()"
+              [aria-label]="isLibraryPresentation ? 'Select activities on this page' : 'Select all matching activities'">
             </mat-checkbox>
           </th>
           }
           @if (isLast && showRowActions) {
-          <th mat-header-cell *matHeaderCellDef [attr.aria-label]="canManageEvents ? null : 'Activity actions'">
-            @if (canManageEvents) {
+          <th mat-header-cell *matHeaderCellDef [attr.aria-label]="isLibraryPresentation || !canManageEvents ? 'Activity actions' : null">
+            @if (canManageEvents && !isLibraryPresentation) {
             <app-event-table-actions [selectedDataTypes]="selectedColumns"
               (selectedDataTypesChange)="selectedColumnsChange($event)"></app-event-table-actions>
             }
@@ -143,13 +151,28 @@
           }
           @if ((!(isFirst && canManageEvents) && !(isLast && showRowActions))) {
           <th mat-header-cell *matHeaderCellDef mat-sort-header [disabled]="!isColumnHeaderSortable(column)">
-            <app-data-type-icon [dataType]="column"></app-data-type-icon>
+            @if (isLibraryPresentation) { <span class="library-column-label">{{ libraryColumnLabels[column] || column }}</span> }
+            @else { <app-data-type-icon [dataType]="column"></app-data-type-icon> }
           </th>
           }
-          <td mat-cell *matCellDef="let row" (click)="onCellClick($event, row, column)">
+          <td mat-cell *matCellDef="let row" (click)="onCellClick($event, row, column)"
+            [class.library-date-cell]="isLibraryPresentation && column === 'Start Date'"
+            [class.library-activity-cell]="isLibraryPresentation && column === 'Name'"
+            [class.library-tags-cell]="isLibraryPresentation && column === 'Tags'">
+            @if (isLibraryPresentation && column === 'Start Date') {
+              <span class="library-date">{{ row[column] }}</span><span class="library-time">{{ row['Start Time'] }}</span>
+            }
+            @if (isLibraryPresentation && column === 'Name') {
+              <a class="library-activity-name" [routerLink]="['/user', (targetUser && targetUser.uid) || user.uid, 'event', row.Event.getID()]"
+                (click)="$event.stopPropagation()" appHapticTap>{{ row.Name || row.Description || 'Untitled activity' }}</a>
+              <span class="library-activity-type">
+                <app-activity-type-icon [activityType]="row['Activity Types']" [event]="$any(row.Event)" size="14px" vAlign="middle"></app-activity-type-icon>
+                {{ row['Activity Types'] }}
+              </span>
+            }
             @if (column === 'Checkbox') {
             <mat-checkbox (click)="$event.stopPropagation()" (change)="$event ? checkBoxClick(row) : null"
-              [checked]="selection.isSelected(row)">
+              [checked]="selection.isSelected(row)" [aria-label]="'Select activity ' + (row.Name || row.Description || 'Untitled activity')">
             </mat-checkbox>
             }
             @if (column === 'Actions') {
@@ -199,7 +222,7 @@
                 <span>{{ row['Tag Values'].length }}</span>
               </span>
               <mat-chip-set class="event-tags-chip-set" aria-hidden="true">
-                @for (tag of row['Tag Values'].slice(0, 2); track tag) { <mat-chip>{{ tag }}</mat-chip> }
+                @for (tag of row['Tag Values'].slice(0, 2); track tag) { <mat-chip [highlighted]="isLibraryPresentation && tag.toLowerCase() === filterContext">{{ tag }}</mat-chip> }
                 @if (row['Tag Values'].length > 2) { <mat-chip>+{{ row['Tag Values'].length - 2 }}</mat-chip> }
               </mat-chip-set>
               } @else {
@@ -219,7 +242,7 @@
             </mat-chip-set>
             } @else { <span aria-label="No tags">-</span> }
             }
-            @if (column !== 'Checkbox' && column !== 'Actions' && column !== 'Activity Types' && column !== 'Shared' && column !== 'Tags' && column!=='Privacy') {
+            @if (column !== 'Checkbox' && column !== 'Actions' && column !== 'Activity Types' && column !== 'Shared' && column !== 'Tags' && column!=='Privacy' && !(isLibraryPresentation && (column === 'Name' || column === 'Start Date'))) {
             <span class="data-cell" [class.description-cell]="column === 'Description'" [class.device-names-cell]="column === 'Device Names'">
               @if (column === 'Description') {
               <span class="description-text">{{ row[column] }}</span>
@@ -273,5 +296,5 @@
 
   <mat-paginator (page)="pageChanges($event)" [length]="data ? data.data.length : 0"
     [pageSize]="tablePageSize" [hidePageSize]="isBrowsePresentation" [showFirstLastButtons]="true"
-    [pageSizeOptions]="[10, 25, 50, 100, 250]"></mat-paginator>
+    [pageSizeOptions]="isLibraryPresentation ? [5, 10, 25, 50, 100, 250] : [10, 25, 50, 100, 250]"></mat-paginator>
 </div>
