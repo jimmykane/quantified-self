@@ -8,10 +8,10 @@ const esbuild = require('esbuild');
 const htmlPath = path.join(__dirname, 'tags-route-designs.html');
 const html = fs.readFileSync(htmlPath, 'utf8');
 const layouts = ['library', 'tabs', 'chips', 'gallery', 'picker', 'directory'];
-function setup() {
+function setup(source = html) {
   const errors = [];
   const controls = [];
-  const dom = new JSDOM(html, { runScripts: 'dangerously', beforeParse(window) {
+  const dom = new JSDOM(source, { runScripts: 'dangerously', beforeParse(window) {
     window.addEventListener('error', event => errors.push(event.error));
     window.Tweak = class {
       constructor(options) { this.options = options; }
@@ -42,6 +42,26 @@ test('Six complete designs preserve the proposed sidenav entry and unique access
     const stage = root.querySelector(`[data-layout="${layout}"]`);
     assert.equal(stage.querySelector('[aria-current="page"]').textContent.trim(), 'Tags');
     assert.ok(stage.querySelector('table[aria-label="Tagged activities"]'));
+  }
+  dom.window.close();
+});
+
+test('Fixture IDs and times retain literal text instead of being interpreted as HTML', () => {
+  const fixturePattern = /(<script id="qs-tags-fixture-data" type="application\/json">)([\s\S]*?)(<\/script>)/;
+  const fixtures = JSON.parse(html.match(fixturePattern)[2]);
+  fixtures.activities[0].id = 'a1" data-injected="id';
+  fixtures.activities[0].time = '<strong data-injected="time">08:15</strong>';
+  const fixtureJSON = JSON.stringify(fixtures).replace(/</g, '\\u003c');
+  const source = html.replace(fixturePattern, (_match, opening, _json, closing) => opening + fixtureJSON + closing);
+  const { dom, root } = setup(source);
+  for (const layout of layouts) {
+    const stage = root.querySelector(`[data-layout="${layout}"]`);
+    const row = [...stage.querySelectorAll('tbody tr')].find(element => element.dataset.eventId === fixtures.activities[0].id);
+    assert.ok(row, `Literal event ID is retained in ${layout}`);
+    assert.equal(row.querySelector('input').dataset.selectId, fixtures.activities[0].id);
+    assert.equal(row.querySelector('[data-event]').dataset.event, fixtures.activities[0].id);
+    assert.equal(row.querySelector('.qs-date').nextElementSibling.textContent, fixtures.activities[0].time);
+    assert.equal(stage.querySelector('[data-injected]'), null);
   }
   dom.window.close();
 });
