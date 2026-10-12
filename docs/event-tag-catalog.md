@@ -1,5 +1,39 @@
 # Reusable event tag catalog
 
+## Tags workspace
+
+The authenticated, client-rendered `/tags` route uses a searchable tag library beside the existing events table.
+`?tag=<label>` restores the selected tag without initial haptic feedback. The route uses the shared workspace shell,
+Material controls, and the global scrollbar skin. The selector stacks above the table on phones. Table metrics continue
+to use the signed-in user's unit settings through the existing Sports Lib display path.
+
+History starts with the newest 250 event documents, ordered by `startDate` descending. **Load older activities** uses
+`AppEventService.getEventsPageOnceByWithMeta` and the last document snapshot cursor, including its implicit document-ID
+tie-breaker. Pages read one lookahead document and never display that lookahead until the next page. The Tags route
+requires server-only reads so an offline cache cannot be mistaken for the end of history. Reads add no indexes, stored
+fields, callable Functions, streams, or activity subcollection loads. Tags are matched locally, case-insensitively,
+through `getEventTags`, including its legacy fallback and canonical empty-array precedence. An exact Firestore
+`array-contains` query would miss differing capitalization and legacy labels, so this revision does not use one.
+
+Counts and table search/sorting/pagination describe only loaded activity history while more pages remain. A saved tag
+with zero loaded matches is explicitly provisional. A zero-membership empty state is conclusive only after the final
+server page. Read failures retain loaded rows and the previous cursor for retry. Refresh restarts from the newest page;
+this is a paginated browsing session, not a live history listener or an atomic snapshot across concurrent edits.
+The catalog is independent of the loaded history. Counts deduplicate normalized tag identity per event, and the catalog
+spelling is preferred. Locally observed and deep-linked labels remain selectable even if catalog loading fails.
+
+The table's optional `eventsChange` output reconciles successfully saved single/bulk tags and deleted rows with the
+library's owner-scoped history without removing unrelated tags' rows. Saved/observed labels remain in the current
+session after their last matching activity is removed. Existing transaction and deletion paths enforce writes;
+the page introduces no write API. Requests are fenced by the current Firebase owner object, an account/refresh
+generation, and component teardown so late results cannot replace a different account's data.
+
+MCP/Assistant impact: no public tools, stored event fields, metric semantics, scopes, consent, or mutation contracts
+change. The route reuses current tag reads and writes and does not extend Training planning or provider delivery.
+Queue/monitoring impact is unchanged: this is a browser read surface with no worker, queue, schedule, or provider change.
+
+## Catalog storage
+
 Event documents remain the source of truth for tag membership. The private
 `users/{uid}/eventTagCatalog/{key}` collection stores distinct labels used for
 filter choices and editor suggestions across date ranges. Each document has a

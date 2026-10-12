@@ -3,11 +3,13 @@ import {
   ChangeDetectionStrategy,
   ChangeDetectorRef,
   Component,
+  EventEmitter,
   Injectable,
   Input,
   OnChanges,
   OnDestroy,
   OnInit,
+  Output,
   SimpleChanges,
   ViewChild,
   inject
@@ -92,6 +94,11 @@ export class EventTableComponent extends DataTableAbstractDirective implements O
   @Input() targetUser!: User;
   @Input() showActions!: boolean;
   @Input() presentation: EventTablePresentation = 'dashboard';
+  @Input() showTagFilter = true;
+  @Input() filterContext = '';
+  @Input() emptyMessage = 'No activities yet';
+  @Input() emptyHint = 'Import an activity or change your filters';
+  @Output() eventsChange = new EventEmitter<EventInterface[]>();
   @ViewChild(MatSort, { static: true }) sort!: MatSort;
   @ViewChild(MatPaginator, { static: true }) paginator!: MatPaginator;
   @ViewChild(MatCard, { static: true }) table!: MatCard;
@@ -215,6 +222,18 @@ export class EventTableComponent extends DataTableAbstractDirective implements O
       }
       this.updateDisplayedColumns();
     }
+    if (simpleChanges.showTagFilter && !this.showTagFilter) {
+      this.tagFilter = '';
+      this.applyTableFilter();
+    }
+    if (simpleChanges.filterContext) {
+      this.searchTerm = '';
+      this.searchSubject.next('');
+      this.tagFilter = '';
+      this.selection.clear();
+      this.paginator?.firstPage();
+      this.applyTableFilter();
+    }
     if (simpleChanges.user || simpleChanges.targetUser || simpleChanges.presentation) {
       void this.loadAllHistoryTags();
     }
@@ -329,6 +348,7 @@ export class EventTableComponent extends DataTableAbstractDirective implements O
     }
     this.events = nextEvents;
     this.processChanges('after_delete_row');
+    this.eventsChange.emit([...this.events]);
   }
 
   private persistDashboardSettings(dashboardSettingsPatch: Record<string, unknown>): Promise<void> {
@@ -629,6 +649,7 @@ export class EventTableComponent extends DataTableAbstractDirective implements O
           const deletedIds = new Set(eventsToDelete.map(e => e.getID()));
           this.events = this.events.filter(e => !deletedIds.has(e.getID()));
           this.processChanges('after_delete_selection');
+          this.eventsChange.emit([...this.events]);
         }
 
         this.analyticsService.logEvent('delete_events');
@@ -993,6 +1014,7 @@ export class EventTableComponent extends DataTableAbstractDirective implements O
     }
 
     this.processChanges('event_tags_saved');
+    this.eventsChange.emit([...this.events]);
     void this.loadAllHistoryTags(true);
     this.snackBar.open('Tags saved.', undefined, { duration: 2000 });
   }
@@ -1052,6 +1074,7 @@ export class EventTableComponent extends DataTableAbstractDirective implements O
       return;
     }
     this.processChanges('bulk_event_tags_saved');
+    this.eventsChange.emit([...this.events]);
     void this.loadAllHistoryTags(true);
     this.snackBar.open(
       `Tags updated on ${selectedEvents.length} ${selectedEvents.length === 1 ? 'activity' : 'activities'}.`,

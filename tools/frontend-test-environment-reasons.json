@@ -18,5 +18,9 @@
   "src/app/components/shared/metric-history-chart/metric-history-chart.component.spec.ts": {
     "environment": "angular",
     "reason": "Creates the chart with TestBed to verify signal input changes, rendered accessibility text, chart host initialization, responsive tooltips, haptic ownership and fixture teardown."
+  },
+  "src/app/components/tags/tags-page.component.spec.ts": {
+    "environment": "angular",
+    "reason": "Compiles the Tags route with TestBed to verify Material selector and search bindings, the events-table input/output boundary, async owner changes, route query hydration, DestroyRef teardown and haptic ownership."
   }
 }

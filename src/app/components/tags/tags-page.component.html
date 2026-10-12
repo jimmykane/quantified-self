@@ -1,0 +1,73 @@
+<section class="qs-workspace-page tags-page">
+  <app-page-header title="Tags" leadingIcon="sell" subtitle="Explore your activities by tag.">
+    <button pageHeaderActions mat-icon-button aria-label="Refresh tags and activities" (click)="refresh()"
+      [disabled]="loading() || catalogLoading() || !user()">
+      <mat-icon>refresh</mat-icon>
+    </button>
+  </app-page-header>
+
+  @if (user(); as currentUser) {
+    <div class="tag-library-layout">
+      <aside class="tag-library-rail" aria-label="Activity tags">
+        <mat-form-field appearance="outline" subscriptSizing="dynamic" class="qs-search-field tag-search">
+          <input matInput type="search" placeholder="Find a tag" aria-label="Find a tag" [value]="tagSearch()"
+            (input)="onTagSearchInput($event)" autocomplete="off">
+          <mat-icon matSuffix>search</mat-icon>
+        </mat-form-field>
+        <div class="tag-library-heading"><h2>Saved tags</h2><span>{{ library().length }}</span></div>
+        <p class="tag-count-scope">{{ complete() ? 'Activity counts' : 'Counts for loaded activities' }}</p>
+        @if (catalogLoading()) { <mat-progress-bar mode="indeterminate" aria-label="Loading saved tags"></mat-progress-bar> }
+        @if (catalogError()) {
+          <div class="tag-library-error" role="alert">
+            <p>Saved tags could not be loaded. Tags from loaded activities are still available.</p>
+            <button mat-button (click)="retryCatalog()" [disabled]="catalogLoading()">Try again</button>
+          </div>
+        }
+        <mat-nav-list aria-label="Select an activity tag" class="tag-library-list">
+          <a mat-list-item href="?" [activated]="!selectedKey()" [attr.aria-current]="!selectedKey() ? 'page' : null" (click)="navigateToTag('', $event)">
+            <mat-icon matListItemIcon>layers</mat-icon><span matListItemTitle>All activities</span>
+            <span matListItemMeta class="tag-count">{{ events().length }}</span>
+          </a>
+          @for (tag of visibleTags(); track tag.key) {
+            <a mat-list-item [href]="tag.href" [activated]="tag.key === selectedKey()" [attr.aria-current]="tag.key === selectedKey() ? 'page' : null" [matTooltip]="tag.name" (click)="navigateToTag(tag.name, $event)">
+              <mat-icon matListItemIcon>sell</mat-icon><span matListItemTitle>{{ tag.name }}</span>
+              <span matListItemMeta class="tag-count">{{ tag.count }}</span>
+            </a>
+          } @empty {
+            @if (!catalogLoading()) { <p class="tag-list-empty">{{ tagSearch() ? 'No tags match your search.' : 'Add tags to an activity to save them here.' }}</p> }
+          }
+        </mat-nav-list>
+      </aside>
+
+      <div class="tag-library-results">
+        <div class="tag-results-heading"><h2>{{ selectedName() }}</h2>
+          <span aria-live="polite">{{ filteredEvents().length }} {{ complete() ? 'activities' : 'loaded activities' }}</span>
+        </div>
+        <div class="tag-history-status" aria-live="polite">
+          @if (loading()) {
+            <mat-progress-bar mode="indeterminate" aria-label="Loading activities"></mat-progress-bar>
+            <p>Loading {{ historyLoaded() ? 'older' : 'recent' }} activities…</p>
+          } @else if (historyError()) {
+            <p role="alert">Activities could not be loaded. Any activities already loaded remain available.</p>
+          } @else if (hasMore()) {
+            <p>Older history is available. Search, counts, and table pages cover the activities loaded so far.</p>
+          } @else {
+            <p>All activity history loaded. Refresh to include changes made elsewhere.</p>
+          }
+          @if (hasMore()) {
+            <button mat-button (click)="loadOlderActivities()" [disabled]="loading()">
+              {{ historyError() ? 'Try again' : 'Load older activities' }}
+            </button>
+          }
+        </div>
+        @for (tableUser of tableUsers(); track tableUser.uid) {
+          <app-event-table [user]="tableUser" [events]="filteredEvents()" [showActions]="true"
+            [isLoading]="loading() && !historyLoaded()" [showTagFilter]="false"
+            [filterContext]="selectedKey()"
+            [emptyMessage]="emptyMessage()" [emptyHint]="emptyHint()"
+            (eventsChange)="onEventsChange($event)"></app-event-table>
+        }
+      </div>
+    </div>
+  }
+</section>

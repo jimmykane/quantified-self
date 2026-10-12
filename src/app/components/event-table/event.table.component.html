@@ -14,6 +14,7 @@
       </mat-form-field>
 
       <div class="table-toolbar-filters">
+        @if (showTagFilter) {
         <mat-form-field appearance="outline" class="tag-filter-field" subscriptSizing="dynamic">
           <mat-label>Tags</mat-label>
           <mat-select [value]="tagFilter"
@@ -28,6 +29,7 @@
             }
           </mat-select>
         </mat-form-field>
+        }
         <ng-content select="[event-table-filters]"></ng-content>
       </div>
     </div>
@@ -119,7 +121,7 @@
 
   <app-loading-overlay class="activity-table-overlay" [isLoading]="isLoading"
     [hasError]="!isLoading && this.events && this.events.length === 0" [allowErrorPassthrough]="true"
-    [errorMessage]="'No activities yet'" [errorHint]="'Import an activity or change your filters'"
+    [errorMessage]="emptyMessage" [errorHint]="emptyHint"
     [errorIcon]="'directions_run'" [showSkeleton]="false" height="auto" minHeight="224px" borderRadius="12px">
     <div class="table-wrapper qs-scrollbar">
       <table mat-table [dataSource]="data" [trackBy]="trackByEventId" matSort [matSortActive]="tableSortActive"

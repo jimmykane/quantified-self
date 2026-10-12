@@ -2,7 +2,7 @@ import { inject, Injectable, OnDestroy } from '@angular/core';
 import { ActivityTypes, DataActivityTypes, EventInterface } from '@sports-alliance/sports-lib';
 import { EventImporterJSON } from '@sports-alliance/sports-lib';
 import { combineLatest, from, Observable, of, throwError, zip } from 'rxjs';
-import { Firestore, collection, query, orderBy, where, limit, startAfter, endBefore, collectionData, onSnapshot, doc, docData, getDoc, getDocs, getDocsFromCache, updateDoc, deleteDoc, writeBatch, DocumentSnapshot, QueryDocumentSnapshot, Query, QuerySnapshot, DocumentData, getCountFromServer, FieldPath } from 'app/firebase/firestore';
+import { Firestore, collection, query, orderBy, where, limit, startAfter, endBefore, collectionData, onSnapshot, doc, docData, getDoc, getDocs, getDocsFromServer, getDocsFromCache, updateDoc, deleteDoc, writeBatch, DocumentSnapshot, QueryDocumentSnapshot, Query, QuerySnapshot, DocumentData, getCountFromServer, FieldPath } from 'app/firebase/firestore';
 import { catchError, map, switchMap, take, distinctUntilChanged, tap } from 'rxjs/operators';
 import { EventJSONInterface } from '@sports-alliance/sports-lib';
 import { ActivityJSONInterface } from '@sports-alliance/sports-lib';
@@ -66,6 +66,8 @@ export type EventQueryCursor = QueryDocumentSnapshot<DocumentData>;
 
 export interface GetEventsPageOptions {
   startAfterCursor?: EventQueryCursor | null;
+  /** Completeness-sensitive readers must not treat an offline cache as the end of history. */
+  requireServer?: boolean;
 }
 
 export interface GetEventsPageResult {
@@ -738,7 +740,7 @@ export class AppEventService implements OnDestroy {
       hasStartAfterCursor: !!options.startAfterCursor,
     });
 
-    return from(this.fetchEventsPageOnceFromServer(q, user.uid, queryStart, normalizedPageSize));
+    return from(this.fetchEventsPageOnceFromServer(q, user.uid, queryStart, normalizedPageSize, options.requireServer === true));
   }
 
   /**
@@ -1646,8 +1648,9 @@ export class AppEventService implements OnDestroy {
     userID: string,
     queryStart: number,
     pageSize: number,
+    requireServer = false,
   ): Promise<GetEventsPageResult> {
-    const querySnapshot = await getDocs(q);
+    const querySnapshot = await (requireServer ? getDocsFromServer(q) : getDocs(q));
     const pageDocs = querySnapshot.docs.slice(0, pageSize);
     this.logger.info('[perf] app_event_service_get_events_page_once_get_docs', {
       durationMs: Number((performance.now() - queryStart).toFixed(2)),

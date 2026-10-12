@@ -369,6 +369,37 @@ describe('EventTableComponent', () => {
         expect(mainRow.contains(filtersRow)).toBe(true);
     });
 
+    it('allows a parent tag selector without leaving a hidden table tag filter active', () => {
+        component.tagFilter = 'Race';
+        component.showTagFilter = false;
+        component.ngOnChanges({ showTagFilter: new SimpleChange(true, false, false) });
+        fixture.detectChanges();
+        expect(component.tagFilter).toBe('');
+        expect(fixture.nativeElement.querySelector('.tag-filter-field')).toBeNull();
+        expect(fixture.nativeElement.querySelector('.qs-search-field')).toBeTruthy();
+    });
+
+    it('clears previous activity search, selection and pagination when the parent tag context changes', () => {
+        component.searchTerm = 'old search';
+        component.selection.select(component.data.data[0]);
+        const firstPage = vi.fn();
+        component.paginator.firstPage = firstPage;
+        component.ngOnChanges({ filterContext: new SimpleChange('endurance', 'recovery', false) });
+        expect(component.searchTerm).toBe('');
+        expect(component.selection.isEmpty()).toBe(true);
+        expect(firstPage).toHaveBeenCalledOnce();
+        expect(mockHapticsService.selection).not.toHaveBeenCalled();
+    });
+
+    it('does not restore a pending activity search after the parent switches tags', async () => {
+        component.paginator.firstPage = vi.fn();
+        component.onSearchInput({ target: { value: 'old search' } } as unknown as Event);
+        component.ngOnChanges({ filterContext: new SimpleChange('endurance', 'recovery', false) });
+        await new Promise(resolve => setTimeout(resolve, 300));
+        expect(component.searchTerm).toBe('');
+        expect(JSON.parse(component.data.filter).text).toBe('');
+    });
+
     it('renders row actions in browse presentation without bulk controls or persisted table changes', async () => {
         component.presentation = 'browse';
         component.showActions = true;
@@ -469,7 +500,9 @@ describe('EventTableComponent', () => {
         );
 
         expect(template).toContain('placeholder="Search activities"');
-        expect(template).toContain("[errorMessage]=\"'No activities yet'\"");
+        expect(template).toContain('[errorMessage]="emptyMessage"');
+        expect(component.emptyMessage).toBe('No activities yet');
+        expect(component.emptyHint).toBe('Import an activity or change your filters');
         expect(template).toContain('[allowErrorPassthrough]="true"');
         expect(template).toContain('activity-table-no-data-row--hidden');
         expect(template).not.toContain('No events found');
@@ -920,6 +953,8 @@ describe('EventTableComponent', () => {
     });
 
     it('should save tags from a row dialog without navigating the row', async () => {
+        const changes = vi.fn();
+        component.eventsChange.subscribe(changes);
         const event = component.events[0] as any;
         const domEvent = { preventDefault: vi.fn(), stopPropagation: vi.fn() } as any;
         component.showActions = true;
@@ -934,6 +969,8 @@ describe('EventTableComponent', () => {
         expect(domEvent.stopPropagation).toHaveBeenCalled();
         expect(mockEventTagService.saveTags).toHaveBeenCalledWith(mockUser, event, ['Race'], []);
         expect(event.tags).toEqual(['Race']);
+        expect(changes).toHaveBeenCalledOnce();
+        expect(changes).toHaveBeenCalledWith(component.events);
     });
 
     it('should apply saved row tags to a refreshed event instance with the same ID', async () => {
@@ -992,6 +1029,8 @@ describe('EventTableComponent', () => {
     });
 
     it('should apply bulk add/remove changes and update selected event rows', async () => {
+        const changes = vi.fn();
+        component.eventsChange.subscribe(changes);
         const selectedRows = component.data.data.slice(0, 2) as any[];
         component.selection.select(...selectedRows);
         mockEventTagService.applyBulkChanges.mockResolvedValue({
@@ -1013,6 +1052,8 @@ describe('EventTableComponent', () => {
         expect((component.events[0] as any).tags).toEqual(['Race']);
         expect((component.events[1] as any).tags).toEqual(['Recovery']);
         expect(component.selection.isEmpty()).toBe(true);
+        expect(changes).toHaveBeenCalledOnce();
+        expect(changes).toHaveBeenCalledWith(component.events);
     });
 
     it('should not overwrite a newer row refresh after a bulk tag save completes', async () => {
@@ -1283,6 +1324,8 @@ describe('EventTableComponent', () => {
 
     describe('deleteSelection', () => {
         it('removes a row deleted through its action menu', () => {
+            const changes = vi.fn();
+            component.eventsChange.subscribe(changes);
             const e1 = new MockEvent('event1');
             const e2 = new MockEvent('event2');
             component.events = [e1 as any, e2 as any];
@@ -1294,6 +1337,7 @@ describe('EventTableComponent', () => {
             expect(component.events.map((event: any) => event.getID())).toEqual(['event2']);
             expect(component.selection.selected).toEqual([]);
             expect(processChangesSpy).toHaveBeenCalledWith('after_delete_row');
+            expect(changes).toHaveBeenCalledWith(component.events);
         });
 
         it('should abort delete when confirmation dialog is cancelled', async () => {
