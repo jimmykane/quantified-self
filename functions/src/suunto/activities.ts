@@ -954,13 +954,16 @@ export async function uploadActivityFileToSuunto(
             ...suuntoInitializationDiagnostics(initializedUpload, initializationResponseMetadata, initializationRequestStartedAtMs),
             providerUserIdValid: !!providerUserIdForUpload,
           });
-        } catch { /* Diagnostics must preserve the original terminal failure. */ }
+        } catch { /* Diagnostics must preserve the original validation failure. */ }
+        // Initialization alone sends no FIT bytes. An unusable provider reply
+        // can therefore use the existing bounded restart policy, unlike a
+        // failure after blob delivery. Invalid local account identity stays terminal.
         throw new ProviderOperationError({
           serviceName: ServiceNames.SuuntoApp,
           operation: 'activity_upload_init',
-          disposition: 'permanent',
-          retryMode: 'none',
-          code: 'internal',
+          disposition: providerUserIdForUpload ? 'retryable' : 'permanent',
+          retryMode: providerUserIdForUpload ? 'restart' : 'none',
+          code: providerUserIdForUpload ? 'unavailable' : 'internal',
           message: 'Invalid response from Suunto initialization.',
           providerUserId,
           dlqContext: 'SUUNTO_ACTIVITY_UPLOAD_INVALID_RESPONSE',

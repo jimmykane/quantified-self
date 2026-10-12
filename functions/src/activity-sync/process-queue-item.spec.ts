@@ -2895,6 +2895,48 @@ describe('activity-sync/process-queue-item', () => {
     );
   });
 
+  it.each([
+    [0, QueueResult.RetryIncremented],
+    [MAX_RETRY_COUNT - 1, QueueResult.MovedToDLQ],
+  ])('handles malformed Suunto initialization within the existing retry budget (%i)', async (retryCount, expectedResult) => {
+    const queueItem: ActivitySyncQueueItemInterface = {
+      ...baseQueueItem,
+      retryCount,
+      ref: createMockActivitySyncQueueItemRef(),
+    };
+    const providerError = new ProviderOperationError({
+      serviceName: ServiceNames.SuuntoApp,
+      operation: 'activity_upload_init',
+      disposition: 'retryable',
+      retryMode: 'restart',
+      code: 'unavailable',
+      message: 'Invalid response from Suunto initialization.',
+      dlqContext: 'SUUNTO_ACTIVITY_UPLOAD_INVALID_RESPONSE',
+    });
+    mockUploadActivityFileToSuunto.mockRejectedValueOnce(providerError);
+    mockIncreaseRetryCountForQueueItem.mockResolvedValueOnce(expectedResult);
+
+    expect(await processActivitySyncQueueItem(queueItem)).toBe(expectedResult);
+    expect(mockUploadActivityFileToSuunto).toHaveBeenCalledOnce();
+    expect(mockIncreaseRetryCountIfCurrentParams).toHaveBeenCalledWith(expect.objectContaining({
+      queueItem,
+      error: providerError,
+      maxRetryDlqContext: 'SUUNTO_ACTIVITY_UPLOAD_INVALID_RESPONSE',
+    }));
+    expect(mockUpdateQueueItemIfUserActive).toHaveBeenCalledOnce();
+    expect(mockSetActivitySyncRetryingMetadata).toHaveBeenCalled();
+    expect(mockSetActivitySyncSuccessMetadata).not.toHaveBeenCalled();
+    expect(mockUpdateToProcessed).not.toHaveBeenCalled();
+    expect(mockMoveToDeadLetterQueue).not.toHaveBeenCalled();
+    if (expectedResult === QueueResult.MovedToDLQ) {
+      expect(mockSetActivitySyncFailedMetadata).toHaveBeenCalled();
+    } else {
+      expect(mockSetActivitySyncFailedMetadata).not.toHaveBeenCalled();
+      expect(queueItem.dispatchedToCloudTask).toBeNull();
+      expect(queueItem.providerOperationStartedAt).toBeNull();
+    }
+  });
+
   it('clears stale job metadata before restart even when upload identifiers are absent', async () => {
     const queueItem: ActivitySyncQueueItemInterface = {
       ...baseQueueItem,

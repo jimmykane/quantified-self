@@ -1404,27 +1404,72 @@ describe('importActivityToSuuntoApp', () => {
         expect(requestMocks.post).not.toHaveBeenCalled();
     });
 
-    it('should throw internal error if initialization response is missing url or id', async () => {
-        // Setup Mocks
+    it('returns a retryable callable error if initialization response is missing url or id', async () => {
         tokensMocks.getTokenData.mockResolvedValue({ accessToken: 'fake-access-token' });
-
-        // Mock init upload (POST) - MISSING URL/ID
-        requestMocks.post.mockResolvedValue({
-            // Missing url and id
-            headers: {}
+        requestMocks.post.mockImplementationOnce(async options => {
+            options.onResponseMetadata({ statusCode: 200, contentType: 'application/json' });
+            return { headers: {} };
         });
 
-        const fileContent = Buffer.from('data');
-        const base64File = fileContent.toString('base64');
-        const request = createMockRequest({ data: { file: base64File } });
+        await expect(importActivityToSuuntoApp(createMockRequest({
+            data: { file: Buffer.from('data').toString('base64') },
+        }) as any)).rejects.toMatchObject({
+            code: 'unavailable',
+            details: { retryMode: 'restart' },
+        });
+        expect(requestMocks.post).toHaveBeenCalledOnce();
+        expect(requestMocks.put).not.toHaveBeenCalled();
+        expect(requestMocks.get).not.toHaveBeenCalled();
+    });
 
-        try {
-            await importActivityToSuuntoApp(request as any);
-        } catch (e: any) {
-            expect(e.code).toBe('internal');
-            expect(e.message).toContain('Invalid response from Suunto initialization');
-        }
-        await expect(importActivityToSuuntoApp(request as any)).rejects.toThrow('Invalid response from Suunto initialization');
+    it('can recover from a malformed HTTP 200 initialization reply on a later attempt', async () => {
+        tokensMocks.getTokenData.mockResolvedValue({ accessToken: 'fake-access-token' });
+        requestMocks.post
+            .mockImplementationOnce(async options => {
+                options.onResponseMetadata({ statusCode: 200, contentType: 'application/json' });
+                return {};
+            })
+            .mockImplementationOnce(async options => {
+                options.onResponseMetadata({ statusCode: 200, contentType: 'application/json' });
+                return { id: 'recovered-id', url: 'https://storage.suunto.com/file', headers: {} };
+            });
+        requestMocks.put.mockResolvedValueOnce({});
+        requestMocks.get.mockResolvedValueOnce({ status: 'PROCESSED', workoutKey: 'workout-key' });
+        const persistUploadStateBeforeBlob = vi.fn().mockResolvedValue(true);
+        const options = { persistUploadStateBeforeBlob };
+        const fileBuffer = Buffer.from('synthetic-fit');
+
+        await expect(uploadActivityFileToSuunto('test-user-id', fileBuffer, options)).rejects.toMatchObject({
+            operation: 'activity_upload_init', disposition: 'retryable', retryMode: 'restart',
+            dlqContext: 'SUUNTO_ACTIVITY_UPLOAD_INVALID_RESPONSE',
+        });
+        expect(persistUploadStateBeforeBlob).not.toHaveBeenCalled();
+        expect(requestMocks.put).not.toHaveBeenCalled();
+        expect(requestMocks.post).toHaveBeenCalledOnce();
+
+        await expect(uploadActivityFileToSuunto('test-user-id', fileBuffer, options)).resolves.toMatchObject({
+            status: 'success', uploadId: 'recovered-id', workoutKey: 'workout-key',
+        });
+        expect(requestMocks.post).toHaveBeenCalledTimes(2);
+        expect(persistUploadStateBeforeBlob).toHaveBeenCalledOnce();
+        expect(persistUploadStateBeforeBlob).toHaveBeenCalledWith(expect.objectContaining({ uploadId: 'recovered-id' }));
+        expect(persistUploadStateBeforeBlob.mock.invocationCallOrder[0]).toBeLessThan(requestMocks.put.mock.invocationCallOrder[0]);
+        expect(requestMocks.put).toHaveBeenCalledOnce();
+        expect(requestMocks.get).toHaveBeenCalledOnce();
+    });
+
+    it('keeps an invalid local provider account identity terminal', async () => {
+        const admin = await import('firebase-admin');
+        const tokenGet = (admin.firestore() as any).collection('tokens').get;
+        tokenGet.mockResolvedValueOnce({ size: 1, empty: false, docs: [{ id: 'invalid/account' }] });
+        tokensMocks.getTokenData.mockResolvedValue({ accessToken: 'fake-access-token' });
+        requestMocks.post.mockResolvedValueOnce({ id: 'valid-id', url: 'https://storage.suunto.com/file', headers: {} });
+
+        await expect(uploadActivityFileToSuunto('test-user-id', Buffer.from('synthetic-fit'))).rejects.toMatchObject({
+            disposition: 'permanent', retryMode: 'none', code: 'internal',
+            dlqContext: 'SUUNTO_ACTIVITY_UPLOAD_INVALID_RESPONSE',
+        });
+        expect(requestMocks.put).not.toHaveBeenCalled();
     });
 
     it('should handle polling response missing status', async () => {
@@ -1495,7 +1540,7 @@ describe('importActivityToSuuntoApp', () => {
             return body;
         });
         await expect(uploadActivityFileToSuunto('test-user-id', Buffer.from('private-fit'))).rejects.toMatchObject({
-            disposition: 'permanent', retryMode: 'none', dlqContext: 'SUUNTO_ACTIVITY_UPLOAD_INVALID_RESPONSE',
+            disposition: 'retryable', retryMode: 'restart', code: 'unavailable', dlqContext: 'SUUNTO_ACTIVITY_UPLOAD_INVALID_RESPONSE',
         });
         const diagnostics = vi.mocked(logger.warn).mock.calls.find(([message]) => (
             message === '[SuuntoActivityUpload] Initialization response validation failed.'
@@ -1516,7 +1561,7 @@ describe('importActivityToSuuntoApp', () => {
         });
         vi.mocked(logger.warn).mockImplementationOnce(() => { throw new Error('Diagnostic failure'); });
         await expect(uploadActivityFileToSuunto('test-user-id', Buffer.from('private-fit'))).rejects.toMatchObject({
-            disposition: 'permanent', dlqContext: 'SUUNTO_ACTIVITY_UPLOAD_INVALID_RESPONSE',
+            disposition: 'retryable', retryMode: 'restart', dlqContext: 'SUUNTO_ACTIVITY_UPLOAD_INVALID_RESPONSE',
         });
         const diagnostics = vi.mocked(logger.warn).mock.calls.find(([message]) => (
             message === '[SuuntoActivityUpload] Initialization response validation failed.'

@@ -1109,10 +1109,15 @@ After scheduling, a deleted event, changed provenance or file generation, or mis
 Suunto upload initialization logs structural diagnostics on the existing success INFO and a validation-failure WARNING:
 HTTP status, fixed content-type category, response/ID/URL/header-field types, ID/URL validity and last-request elapsed
 milliseconds. Never log response values, arbitrary field names, headers, signed URLs or credentials. Correlate by the
-platform execution ID. The optional HTTP metadata observer cannot change request/error handling; malformed initialization
-still stops before FIT delivery with the existing permanent/manual-reconciliation policy. Monitoring is **unchanged**:
-the reviewed activity-delivery bundle continues using committed outcomes, not these diagnostic logs. Help and MCP have
-no impact. Deploy only `importActivityToSuuntoApp` and `processActivitySyncTask`; rollback restores their previous revisions.
+platform execution ID. The optional HTTP metadata observer cannot change request/error handling. A successful HTTP
+response missing a usable upload ID or URL stops before any FIT bytes are sent and produces a typed `retryable/restart`
+failure. The shared queue uses its existing ten-retry budget and Cloud Tasks backoff, retaining
+`SUUNTO_ACTIVITY_UPLOAD_INVALID_RESPONSE` at exhaustion; no immediate response-validation retry loop is added.
+Direct clients receive `unavailable` with `retryMode: restart` for an explicit Retry upload. Invalid local account
+identity remains permanent, and accepted uploads retain their existing guarded continuation/status-only handling.
+Monitoring is **covered/unchanged**: the reviewed activity-delivery bundle counts committed retries and exhausted DLQ
+outcomes, not HTTP 200 or diagnostic logs. Existing Help retry guidance stays accurate; MCP and Training have no impact.
+Deploy only `importActivityToSuuntoApp` and `processActivitySyncTask`; rollback restores their previous revisions.
 Any replay is a separate authorized operation and must prove the exact job has no accepted upload before clearing its blocker.
 
 Provider-upload progress jobs belong to the uploader's local monitoring lifecycle. Closing/clearing the view, changing
