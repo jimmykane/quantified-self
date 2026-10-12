@@ -511,6 +511,7 @@ mat-icon {
   .library-activity-cell { min-width: 150px; max-width: 240px; font: var(--mat-sys-body-small); }
   .library-activity-name { color: var(--mat-sys-on-surface); font-weight: 500; text-decoration: none; white-space: normal; }
   .library-activity-name:hover { color: var(--mat-sys-primary); text-decoration: underline; }
+  .library-activity-name--sport { display: inline-flex; align-items: center; gap: 4px; }
   .library-activity-type { display: flex; align-items: center; gap: 4px; margin-top: 4px; color: var(--mat-sys-on-surface-variant); }
   .data-cell { font-size: 16px; }
   .library-tags-cell { min-width: 130px !important; width: 145px !important; max-width: 145px !important; }

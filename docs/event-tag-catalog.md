@@ -10,6 +10,10 @@ The shared table's `tag-library` presentation matches the selected mockup: compa
 text column headings, activity name and sport grouped together, and split date/time cells. Its initial columns are
 Date, Activity, Distance, Duration, and Tags, with five rows per page. Column, sort, and page-size choices stay local
 to the Tags page instead of changing Dashboard preferences. Paging/completeness controls sit below the table.
+An ISO activity name equal to its recorded start time is treated as a generated timestamp name and hidden in Tags.
+Its sport becomes the activity link, with the sport and date identifying accessible controls. Custom names and the
+existing description/untitled fallbacks remain visible. Display-only labels do not modify stored names or descriptions;
+search still covers the original fields, and Activity sorting follows the visible name or sport. Dashboard is unchanged.
 
 History starts with the newest 250 event documents, ordered by `startDate` descending. **Load older activities** uses
 `AppEventService.getEventsPageOnceByWithMeta` and the last document snapshot cursor, including its implicit document-ID

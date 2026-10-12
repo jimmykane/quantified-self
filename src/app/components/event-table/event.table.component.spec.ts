@@ -417,6 +417,46 @@ describe('EventTableComponent', () => {
         expect(component.selectedColumns).toEqual(['Distance', 'Ascent']);
     });
 
+    it('uses sport and readable date labels for generated names in Tags without changing the event', () => {
+        const event = component.events[0];
+        event.startDate = new Date('2026-10-11T08:15:00');
+        event.name = event.startDate.toISOString();
+        component.presentation = 'tag-library';
+        component.ngOnChanges({ presentation: new SimpleChange('dashboard', 'tag-library', false) });
+        const row = component.data.data[0];
+        expect(row['Library Activity Name']).toBe('');
+        expect(row['Library Activity Label']).toBe('Run on 11 Oct 2026, 08:15');
+        expect(row['Tag Action Label']).toBe('Add activity tags for Run on 11 Oct 2026, 08:15');
+        expect(row['sort.Name']).toBe('Run');
+        expect(row.Name).toBe(event.startDate.toISOString());
+        expect(event.name).toBe(event.startDate.toISOString());
+        expect(mockEventService.updateEventProperties).not.toHaveBeenCalled();
+    });
+
+    it('restores a custom name immediately when a cached generated-name row is renamed', () => {
+        const event = component.events[0];
+        event.name = event.startDate.toISOString();
+        component.presentation = 'tag-library';
+        component.ngOnChanges({ presentation: new SimpleChange('dashboard', 'tag-library', false) });
+        expect(component.data.data[0]['Library Activity Name']).toBe('');
+        event.name = 'Spring race';
+        component.ngOnChanges({ events: new SimpleChange(component.events, [...component.events], false) });
+        expect(component.data.data[0]['Library Activity Name']).toBe('Spring race');
+        expect(component.data.data[0]['Library Activity Label']).toBe('Spring race');
+        expect(component.data.data[0]['sort.Name']).toBe('Spring race');
+    });
+
+    it('keeps timestamp names and existing accessible labels in Dashboard presentation', () => {
+        const event = component.events[0];
+        event.name = event.startDate.toISOString();
+        component.ngOnChanges({ events: new SimpleChange(component.events, [...component.events], false) });
+        const row = component.data.data[0];
+        expect(row['Library Activity Name']).toBeUndefined();
+        expect(row['Library Activity Label']).toBeUndefined();
+        expect(row['Tag Action Label']).toBe(`Add activity tags for ${event.name}`);
+        expect(row['sort.Name']).toBe(event.name);
+    });
+
     it('initializes library column choices before a synchronous loading render can create the Material menu', () => {
         component.presentation = 'tag-library';
         component.selectedColumns = ['Distance', 'Duration', 'Ascent'];

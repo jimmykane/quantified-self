@@ -18,7 +18,8 @@ describe('help.content', () => {
     const copy = HELP_SECTIONS.find(section => section.id === 'getting-started')!.content;
     for (const phrase of ['**Tags** opens your saved tag library', '**Find a tag**', '**Load older activities**',
       'cover only loaded activities', 'page-size choices on Tags stay local to the page', 'may still have older activities',
-      'saved tag remains available', '**Refresh tags and activities**']) expect(copy).toContain(phrase);
+      'saved tag remains available', '**Refresh tags and activities**', 'Generated timestamp names are hidden',
+      'the sport stays visible and opens the activity', 'Custom names remain visible']) expect(copy).toContain(phrase);
   });
   it('explains a busy activity-history request for all four providers without claiming success or failure', () => {
     const copy = HELP_SECTIONS.find(section => section.id === 'service-connections')!.content;

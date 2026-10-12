@@ -6,6 +6,13 @@ export interface EventTagLibraryEntry {
   count: number;
 }
 
+/** Hide the default ISO start-time name, preserving custom names and existing fallbacks. */
+export function getTagLibraryActivityName(event: { name?: string; description?: string; startDate?: Date }): string {
+  if (event.startDate instanceof Date && Number.isFinite(event.startDate.getTime())
+    && event.name === event.startDate.toISOString()) return '';
+  return event.name || event.description || 'Untitled activity';
+}
+
 export function buildEventTagLibrary(
   events: readonly EventTagsContainer[],
   catalog: readonly string[],

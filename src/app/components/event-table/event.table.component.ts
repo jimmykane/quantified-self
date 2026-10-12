@@ -60,6 +60,7 @@ import { EVENT_TAG_BULK_LIMIT, getEventTags, normalizeEventTagSuggestions } from
 import { EventTagsDialogComponent } from '../event-tags/event-tags-dialog.component';
 import { EventTagsBulkDialogComponent } from '../event-tags/event-tags-bulk-dialog.component';
 import { AppHapticsService } from '../../services/app.haptics.service';
+import { getTagLibraryActivityName } from '../../helpers/event-tag-library.helper';
 
 interface EventTableRowCacheEntry {
   event: EventInterface;
@@ -144,6 +145,8 @@ export class EventTableComponent extends DataTableAbstractDirective implements O
     'Tags Title',
     'Tag Action Label',
     'Tags Accessible Label',
+    'Library Activity Name',
+    'Library Activity Label',
   ]);
   private readonly duplicateSourceFilesMessage = 'Selected activities include identical source files. Deselect duplicates and try again.';
   readonly sharedEventTooltip = 'Public link enabled. Anyone with the link can view this activity, comparison data, and original files.';
@@ -1487,13 +1490,19 @@ export class EventTableComponent extends DataTableAbstractDirective implements O
     statRowElement['Start Date'] = startDate ? this.datePipe.transform(startDate, dateFormat) : 'None?';
     if (this.isLibraryPresentation) statRowElement['Start Time'] = startDate ? this.datePipe.transform(startDate, 'HH:mm') : '';
     statRowElement['Activity Types'] = event.getActivityTypesAsString();
+    if (this.isLibraryPresentation) {
+      const name = getTagLibraryActivityName(event);
+      const date = startDate ? this.datePipe.transform(startDate, 'd MMM y, HH:mm') : '';
+      statRowElement['Library Activity Name'] = name;
+      statRowElement['Library Activity Label'] = name || `${statRowElement['Activity Types'] || 'Activity'}${date ? ` on ${date}` : ''}`;
+    }
     statRowElement['Merged Event'] = event.isMerge;
     statRowElement['Description'] = event.description;
     const tags = getEventTags(event as AppEventInterface);
     statRowElement['Tags'] = tags.join(' ');
     statRowElement['Tag Values'] = tags;
     statRowElement['Tags Title'] = tags.join('\n');
-    const eventLabel = event.name || 'activity';
+    const eventLabel = statRowElement['Library Activity Label'] || event.name || 'activity';
     statRowElement['Tag Action Label'] = `${tags.length ? 'Edit' : 'Add'} activity tags for ${eventLabel}`;
     statRowElement['Tags Accessible Label'] = `Activity tags for ${eventLabel}: ${tags.join(', ')}`;
     statRowElement['Device Names'] = event.getDeviceNamesAsString();
@@ -1519,7 +1528,9 @@ export class EventTableComponent extends DataTableAbstractDirective implements O
     statRowElement['Has Benchmark'] = (event as any).benchmarkResult || ((event as any).benchmarkResults && Object.keys((event as any).benchmarkResults).length > 0);
 
     statRowElement['sort.Start Date'] = startDate ? startDate.getTime() : 0;
-    statRowElement['sort.Name'] = event.name || event.description || '';
+    statRowElement['sort.Name'] = this.isLibraryPresentation
+      ? statRowElement['Library Activity Name'] || statRowElement['Activity Types'] || ''
+      : event.name || event.description || '';
     statRowElement['sort.Activity Types'] = statRowElement['Activity Types'];
     statRowElement['sort.Description'] = statRowElement['Description'];
     statRowElement['sort.Device Names'] = statRowElement['Device Names'];

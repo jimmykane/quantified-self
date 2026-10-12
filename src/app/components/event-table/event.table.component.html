@@ -163,16 +163,25 @@
               <span class="library-date">{{ row[column] }}</span><span class="library-time">{{ row['Start Time'] }}</span>
             }
             @if (isLibraryPresentation && column === 'Name') {
-              <a class="library-activity-name" [routerLink]="['/user', (targetUser && targetUser.uid) || user.uid, 'event', row.Event.getID()]"
-                (click)="$event.stopPropagation()" appHapticTap>{{ row.Name || row.Description || 'Untitled activity' }}</a>
+              <a class="library-activity-name" [class.library-activity-name--sport]="!row['Library Activity Name']"
+                [routerLink]="['/user', (targetUser && targetUser.uid) || user.uid, 'event', row.Event.getID()]"
+                [attr.aria-label]="row['Library Activity Label']" (click)="$event.stopPropagation()" appHapticTap>
+                @if (row['Library Activity Name']) { {{ row['Library Activity Name'] }} }
+                @else {
+                  <app-activity-type-icon [activityType]="row['Activity Types']" [event]="$any(row.Event)" size="14px" vAlign="middle"></app-activity-type-icon>
+                  {{ row['Activity Types'] || 'Untitled activity' }}
+                }
+              </a>
+              @if (row['Library Activity Name']) {
               <span class="library-activity-type">
                 <app-activity-type-icon [activityType]="row['Activity Types']" [event]="$any(row.Event)" size="14px" vAlign="middle"></app-activity-type-icon>
                 {{ row['Activity Types'] }}
               </span>
+              }
             }
             @if (column === 'Checkbox') {
             <mat-checkbox (click)="$event.stopPropagation()" (change)="$event ? checkBoxClick(row) : null"
-              [checked]="selection.isSelected(row)" [aria-label]="'Select activity ' + (row.Name || row.Description || 'Untitled activity')">
+              [checked]="selection.isSelected(row)" [aria-label]="'Select activity ' + (row['Library Activity Label'] || row.Name || row.Description || 'Untitled activity')">
             </mat-checkbox>
             }
             @if (column === 'Actions') {
