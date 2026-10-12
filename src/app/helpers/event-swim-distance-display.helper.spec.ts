@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
-  ActivityInterface, DataActiveLap, DataDistance, DataDuration, SwimPaceUnits,
+  ActivityInterface, DataActiveLap, DataActiveLengths, DataDistance, DataDuration, SwimPaceUnits,
 } from '@sports-alliance/sports-lib';
 import { createSwimDistanceDisplayStat, getDefaultUserUnitSettings, resolveUnitAwareDisplayStat } from '@shared/unit-aware-display';
 import { getActivitySwimLengths } from './event-swim-length.helper';
@@ -149,6 +149,25 @@ describe('nominal yard-pool distance display evidence', () => {
     expect(getNominalSwimLengthsDisplayMeters(context, [{ ...lengths[0], distance: null }])).toBeUndefined();
     lap.getDistance = () => new DataDistance(120);
     expect(getNominalSwimDistanceDisplayContext(activity)?.lapMeters.size).toBe(0);
+  });
+
+  it.each([Number.NaN, Number.POSITIVE_INFINITY, Number.NEGATIVE_INFINITY, 3])('rejects a present invalid or conflicting lap count of %s', count => {
+    const { activity, lap } = fixture();
+    const recordedCount = new DataActiveLengths(count);
+    Object.assign(lap, { getStat: (type: string) => type === DataActiveLengths.type ? recordedCount : undefined });
+    const context = getNominalSwimDistanceDisplayContext(activity);
+    expect(context?.poolMeters).toBe(22.86);
+    expect(context?.lapMeters.size).toBe(0);
+    expect(display(activity)).toBe('100 yd');
+    expect(recordedCount.getValue()).toBe(count);
+  });
+
+  it('accepts a matching recorded lap count without changing it', () => {
+    const { activity, lap } = fixture();
+    const recordedCount = new DataActiveLengths(4);
+    Object.assign(lap, { getStat: (type: string) => type === DataActiveLengths.type ? recordedCount : undefined });
+    expect(getNominalSwimDistanceDisplayContext(activity)?.lapMeters.get(lap)).toBe(91.44);
+    expect(recordedCount.getValue()).toBe(4);
   });
 
   it('never cleans a lap explicitly recorded as rest, even with a contradictory positive distance', () => {

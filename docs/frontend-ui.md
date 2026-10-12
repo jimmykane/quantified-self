@@ -118,8 +118,9 @@ The returned Sports Lib swim-distance instance delegates only display value/unit
 `getUnit` and native JSON retain the original canonical amount. Meter preferences ignore the nominal amount.
 Pace, recorded/normalized SWOLF, accumulated source statistics, streams, TSS and Training calculations never consume it.
 Lap rows, selected lap distance summaries and chart tooltips opt in only for independently corroborated laps:
-ordered non-rest sets and positive-distance laps must form a complete pairing, native active counts (when present),
-centisecond timing and the summed speed/elapsed distance bounds must agree. Explicit rest laps never opt in.
+ordered non-rest sets and positive-distance laps must form a complete pairing. Any recorded active count must be
+finite and match its set; absent counts retain the independent timing/distance fallback. Centisecond timing and
+the summed speed/elapsed distance bounds must agree. Explicit rest laps never opt in.
 Selected distance averages may include recorded zero-distance laps alongside corroborated laps; their zeroes
 contribute unchanged. Missing or uncorroborated positive distances retain the existing selected-average display.
 Rounded `lapIndex` ownership is not used as proof and is not repaired by this change.

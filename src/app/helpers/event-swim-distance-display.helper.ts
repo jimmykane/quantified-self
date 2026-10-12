@@ -135,9 +135,10 @@ function corroboratedLapDistances(
     const timerTimes = lengthsInSet.map(length => numeric(length.timerTime));
     const lapDuration = numeric(lap.getDuration?.());
     const lapDistance = numeric(lap.getDistance?.());
-    const count = numeric(lap.getStat?.(DataActiveLengths.type));
+    const recordedCount = lap.getStat?.(DataActiveLengths.type);
+    const count = numeric(recordedCount);
     if (timerTimes.some(value => value === null || value <= 0) || lapDuration === null || lapDistance === null
-      || (count !== null && count !== lengthsInSet.length)
+      || (recordedCount && count !== lengthsInSet.length)
       || Math.abs(sumSwimValues(timerTimes) - lapDuration) > SUMMARY_HALF_QUANTUM + numericSlack(lapDuration)
       || !contains(totalBounds(lengthsInSet.map(length => byIndex.get(length.index))), lapDistance, SUMMARY_HALF_QUANTUM)) {
       return;
