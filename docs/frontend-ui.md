@@ -103,6 +103,35 @@ derived recomputation is required. MCP numeric metrics,
 `distanceMeters`/`poolLengthMeters`, scopes and strict schemas are unchanged; this does not alter planned-workout
 display or delivery. Existing Settings interaction/save behavior supplies the unit preference.
 
+`event-swim-distance-display.helper.ts` adds a conservative nominal-yard presentation for complete Suunto pool
+recordings. Every source length row must normalize successfully, so filtering malformed records cannot establish
+completeness. The activity's recorded Active Lengths count must match all active rows; every length must retain the
+same positive pool/distance, a unique ordered index/start, and numeric FIT speed/elapsed fields at their 1/1000
+resolution. The intersection of all speed-times-elapsed half-quantum bounds must support exactly one 25- or
+50-yard pool and exclude the recorded fractional pool. The native activity total must also agree with the summed
+bounds, allowing only FIT summary distance's 1/100 metre resolution. These source fields corroborate a display
+choice; they do not independently measure the physical pool. Missing, conflicting, partial, custom, zero-distance,
+unknown-length and open-water contexts keep the existing display.
+
+Length rows, rest-delimited splits and set headers pass nominal length counts to the shared display factory.
+The returned Sports Lib swim-distance instance delegates only display value/unit to a nominal amount; `getValue`,
+`getUnit` and native JSON retain the original canonical amount. Meter preferences ignore the nominal amount.
+Pace, recorded/normalized SWOLF, accumulated source statistics, streams, TSS and Training calculations never consume it.
+Lap rows, selected lap distance summaries and chart tooltips opt in only for independently corroborated laps:
+ordered non-rest sets and positive-distance laps must form a complete pairing. Any recorded active count must be
+finite and match its set; absent counts retain the independent timing/distance fallback. Centisecond timing and
+the summed speed/elapsed distance bounds must agree. Explicit rest laps never opt in.
+Selected distance averages may include recorded zero-distance laps alongside corroborated laps; their zeroes
+contribute unchanged. Missing or uncorroborated positive distances retain the existing selected-average display.
+Rounded `lapIndex` ownership is not used as proof and is not repaired by this change.
+
+This is a frontend presentation change with no persistence or MCP wire impact. The existing MCP activity-detail
+allowlist still returns recorded `distanceMeters` and `poolLengthMeters`; numeric metrics, registered schemas,
+scopes, consent, plugin guidance, provider integrations and planning/delivery capabilities remain unchanged.
+Existing eligible activity documents benefit without original files, source reparsing, a derived rebuild or a
+Sports Lib package change. Parser corrections in later library releases retain their separately authorized
+source-backed transition; this display rule does not repair stored canonical data.
+
 Event-level distance summaries classify all activities contributing to the total, even when only a swimming activity
 is selected. Summary display caches refresh when unit settings change. Merge and benchmark comparison helpers apply
 the same swim display preference to distance differences and their metric keys; the comparison grid refreshes these

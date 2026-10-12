@@ -8,6 +8,9 @@ import { MatTabsModule } from '@angular/material/tabs';
 import {
   ActivityInterface,
   DataSpeed,
+  DataActiveLengths,
+  DataDistance,
+  DataPoolLength,
   DataSwimPace,
   DataSwimDistance,
   DataSwimPaceMinutesPer100Yard,
@@ -449,6 +452,36 @@ describe('EventCardSwimLengthsComponent', () => {
     expect(component.swimLengthViews[0].groups[0].summaryRow.Distance).toBe('91.44 m');
     expect(component.swimLengthViews[0].groups[0].summaryRow.Duration).toBe(duration);
     expect(lengths[0].distance).toBe(22.86);
+  });
+
+  it('shows corroborated nominal yard lengths and long totals while preserving all calculation cells', () => {
+    const lengths = Array.from({ length: 80 }, (_, index) => createSwimLength({ index: index + 1,
+      distance: 22.896576, poolLength: 22.896576, avgSpeed: 0.762, elapsedTime: 30, timerTime: 30 }));
+    const activity = { ...createActivity(lengths), creator: { name: 'Suunto synthetic' },
+      getDistance: () => new DataDistance(1828.8), getStat: (type: string) => type === DataPoolLength.type
+        ? new DataPoolLength(22.896576) : type === DataActiveLengths.type ? new DataActiveLengths(80) : undefined,
+    } as unknown as ActivityInterface;
+    component.selectedActivities = [activity];
+    component.unitSettings = { swimPaceUnits: [SwimPaceUnits.MinutesPer100Yard] } as UserUnitSettingsInterface;
+    // Without complete corroboration, capture the existing canonical calculation cells.
+    const count = activity.getStat;
+    activity.getStat = () => undefined;
+    component.ngOnChanges();
+    const before = component.swimLengthViews[0].groups[0];
+    const pace = before.summaryRow['Swim Pace'];
+    const swolf = before.summaryRow['Normalized SWOLF'];
+    activity.getStat = count;
+    component.ngOnChanges();
+    const group = component.swimLengthViews[0].groups[0];
+    expect(group.rows.slice(0, 4).map(row => row.Split)).toEqual(['25 yd', '50 yd', '75 yd', '100 yd']);
+    expect(group.rows.map(row => row.Distance)).toEqual(Array(80).fill('25 yd'));
+    expect(group.summaryRow.Distance).toBe('2.000 yd');
+    expect(group.summaryRow['Swim Pace']).toBe(pace);
+    expect(group.summaryRow['Normalized SWOLF']).toBe(swolf);
+    expect(lengths[0].distance).toBe(22.896576);
+    component.unitSettings = { swimPaceUnits: [SwimPaceUnits.MinutesPer100Meter] } as UserUnitSettingsInterface;
+    component.ngOnChanges();
+    expect(component.swimLengthViews[0].groups[0].rows[0].Distance).toBe('22.9 m');
   });
 
   it('uses yard pool lengths for fallback splits and keeps long totals in yards', () => {
