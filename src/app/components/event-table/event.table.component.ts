@@ -119,8 +119,11 @@ export class EventTableComponent extends DataTableAbstractDirective implements O
   private suppressLibraryPageFeedback = false;
   private librarySort = { active: 'Start Date', direction: 'desc' as 'asc' | 'desc' };
   readonly libraryColumnLabels: Record<string, string> = { 'Start Date': 'Date', Name: 'Activity' };
-  readonly libraryAvailableColumns = AppUserUtilities.getDefaultSelectedTableColumns()
-    .filter(column => !['Start Date', 'Activity Types', 'Name', 'Description'].includes(column));
+  readonly libraryAvailableColumns = [
+    'Distance', 'Duration',
+    ...AppUserUtilities.getDefaultSelectedTableColumns()
+      .filter(column => !['Start Date', 'Activity Types', 'Name', 'Description', 'Distance', 'Duration'].includes(column)),
+  ];
   displayedColumns: string[] = [];
 
   public show = true
@@ -1244,7 +1247,8 @@ export class EventTableComponent extends DataTableAbstractDirective implements O
       return;
     }
     if (this.isLibraryPresentation) {
-      this.libraryColumns = event.filter(column => this.libraryAvailableColumns.includes(column));
+      // Material's selected-options order can change as choices are toggled.
+      this.libraryColumns = this.libraryAvailableColumns.filter(column => event.includes(column));
       this.selectedColumns = this.libraryColumns;
       this.updateDisplayedColumns();
       return;

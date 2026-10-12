@@ -427,6 +427,19 @@ describe('EventTableComponent', () => {
         expect(renderedChoices.every(choices => choices.join(',') === 'Distance,Duration')).toBe(true);
     });
 
+    it('keeps the Tag library metric order stable when the picker adds and restores columns', async () => {
+        component.showActions = true;
+        component.presentation = 'tag-library';
+        component.ngOnChanges({ presentation: new SimpleChange('dashboard', 'tag-library', false) });
+        await component.selectedColumnsChange(['Duration', 'Distance', 'Ascent']);
+        expect(component.displayedColumns).toEqual(['Checkbox', 'Start Date', 'Name', 'Distance', 'Duration', 'Ascent', 'Tags', 'Actions']);
+        await component.selectedColumnsChange(['Duration', 'Ascent']);
+        await component.selectedColumnsChange(['Duration', 'Ascent', 'Distance']);
+        expect(component.selectedColumns).toEqual(['Distance', 'Duration', 'Ascent']);
+        expect(component.libraryAvailableColumns.slice(0, 2)).toEqual(['Distance', 'Duration']);
+        expect(mockUserService.updateUserProperties).not.toHaveBeenCalled();
+    });
+
     it.each(['dashboard', 'tag-library'] as const)('keeps parent-owned history loading active in %s while rendering empty rows or rebuilding them', (presentation) => {
         component.presentation = presentation;
         component.events = [];
