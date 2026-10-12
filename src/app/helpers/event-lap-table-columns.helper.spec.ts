@@ -306,6 +306,18 @@ describe('event lap table columns helper', () => {
     expect(summaries.find(metric => metric.type === DataDuration.type)?.display).toBe('2:00.00');
   });
 
+  it('keeps a selected nominal swim distance consistent when zero-distance rest laps also contribute', () => {
+    const { activity, lap } = createNominalYardPoolFixture();
+    const rest = { ...lap, getDistance: () => new DataDistance(0) } as LapInterface;
+    activity.getLaps = () => [lap, rest];
+    const summaries = getSelectedEventLapSummaryMetrics([lap, rest], [DataDistance.type], unitSettings, 'Swimming', activity);
+    expect(summaries[0]).toEqual({ type: DataDistance.type, display: '50 yd', availableCount: 2, selectedCount: 2 });
+    const meters = { ...unitSettings, swimPaceUnits: [SwimPaceUnits.MinutesPer100Meter] };
+    expect(getSelectedEventLapSummaryMetrics([lap, rest], [DataDistance.type], meters, 'Swimming', activity)[0].display).toBe('45.7 m');
+    expect(lap.getDistance().getValue()).toBe(91.4);
+    expect(rest.getDistance().getValue()).toBe(0);
+  });
+
   it('formats averages with saved units while excluding accumulated lap totals', () => {
     const laps = [
       { duration: 120, distance: 1000, energy: 300, pace: 300 },

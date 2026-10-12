@@ -580,7 +580,8 @@ const createSummaryContext = (
 };
 
 const getNominalSelectionDistanceDisplay = (laps: readonly LapInterface[], context: LapSummaryContext): number | undefined => {
-  const values = laps.map(lap => context.nominalDistanceDisplay?.lapMeters.get(lap));
+  const values = laps.map(lap => context.nominalDistanceDisplay?.lapMeters.get(lap)
+    ?? (getFiniteEventLapMetricValue(lap, DataDistance.type, context) === 0 ? 0 : undefined));
   return values.length && values.every(value => value !== undefined)
     ? values.reduce((total, value) => total + value, 0) / values.length : undefined;
 };

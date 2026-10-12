@@ -75,9 +75,11 @@ export function getNominalSwimDistanceDisplayContext(
   const recordedPool = numeric(activity.getStat?.(DataPoolLength.type));
   const recordedCount = numeric(activity.getStat?.(DataActiveLengths.type));
   const recordedTotal = numeric(activity.getDistance?.());
+  const rawLengths = typeof activity.getSwimLengths === 'function' ? activity.getSwimLengths() : null;
   const lengths = getActivitySwimLengths(activity);
   const active = lengths.filter(length => length.type.trim().toLowerCase() === 'active');
-  if (recordedPool === null || recordedPool <= 0 || recordedTotal === null || recordedTotal <= 0
+  if (!Array.isArray(rawLengths) || rawLengths.length !== lengths.length
+    || recordedPool === null || recordedPool <= 0 || recordedTotal === null || recordedTotal <= 0
     || !Number.isInteger(recordedCount) || recordedCount !== active.length || active.length < 2
     || lengths.some((length, index) => length.index !== index + 1
       || (length.type.trim().toLowerCase() !== 'active' && !isRestSwimLength(length))

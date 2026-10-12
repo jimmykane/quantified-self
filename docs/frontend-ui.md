@@ -104,7 +104,8 @@ derived recomputation is required. MCP numeric metrics,
 display or delivery. Existing Settings interaction/save behavior supplies the unit preference.
 
 `event-swim-distance-display.helper.ts` adds a conservative nominal-yard presentation for complete Suunto pool
-recordings. The activity's recorded Active Lengths count must match all active rows; every length must retain the
+recordings. Every source length row must normalize successfully, so filtering malformed records cannot establish
+completeness. The activity's recorded Active Lengths count must match all active rows; every length must retain the
 same positive pool/distance, a unique ordered index/start, and numeric FIT speed/elapsed fields at their 1/1000
 resolution. The intersection of all speed-times-elapsed half-quantum bounds must support exactly one 25- or
 50-yard pool and exclude the recorded fractional pool. The native activity total must also agree with the summed
@@ -119,6 +120,8 @@ Pace, recorded/normalized SWOLF, accumulated source statistics, streams, TSS and
 Lap rows, selected lap distance summaries and chart tooltips opt in only for independently corroborated laps:
 ordered non-rest sets and positive-distance laps must form a complete pairing, native active counts (when present),
 centisecond timing and the summed speed/elapsed distance bounds must agree. Explicit rest laps never opt in.
+Selected distance averages may include recorded zero-distance laps alongside corroborated laps; their zeroes
+contribute unchanged. Missing or uncorroborated positive distances retain the existing selected-average display.
 Rounded `lapIndex` ownership is not used as proof and is not repaired by this change.
 
 This is a frontend presentation change with no persistence or MCP wire impact. The existing MCP activity-detail

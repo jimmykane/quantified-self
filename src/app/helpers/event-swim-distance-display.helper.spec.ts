@@ -112,6 +112,14 @@ describe('nominal yard-pool distance display evidence', () => {
     expect(getNominalSwimDistanceDisplayContext(activity)).toBeNull();
   });
 
+  it.each(['type', 'startDate', 'endDate'])('declines a partial recording when normalization drops a length with missing %s', field => {
+    const { activity, rawLengths } = fixture();
+    rawLengths.push(Object.assign({ ...rawLengths[0], index: 5, startDate: 120000, endDate: 150000 }, { [field]: null }));
+    expect(getActivitySwimLengths(activity)).toHaveLength(4);
+    expect(getNominalSwimDistanceDisplayContext(activity)).toBeNull();
+    expect(display(activity)).toBe('100.16 yd');
+  });
+
   it('does not borrow nominal counts from malformed or mismatched lap ownership', () => {
     const { activity, lap, rawLengths } = fixture();
     rawLengths.forEach(length => length.lapIndex = 999);
