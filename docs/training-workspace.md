@@ -5597,17 +5597,13 @@ remain attached to the same activity. Keeping inputs available prevents an impor
 factor still regenerate from the streams and protected inputs. The missing-FTP estimate remains available as a
 statistic but cannot supply power TSS or IF; private original-file calibration remains attached to the parsed instance.
 
-Regeneration also preserves a finite positive freshly parsed distance summary when the file's streams cannot support
-a reliable positive recalculation. Any decrease between successive numeric distance readings makes final-minus-first
-subtraction unsupported, even when the last reading exceeds the first. Keep the freshly parsed source total in that
-case instead of retaining only the final segment. This is a conservative fallback for conflicting evidence, not
-independent validation of the source total; it neither sums positive increments nor guesses reset boundaries.
-A missing, constant or invalid counter likewise cannot replace that summary with zero; this includes a single zero
-TCX point expanded by import backfill. Existing counter precedence over GPS is retained.
-Without a counter, valid aligned GPS positions must support a positive distance using the library's distance calculation.
-Usable counter/GPS measurements still regenerate distance normally. This guard does not copy old stored distances,
-invent a missing distance, or replace a valid zero summary with a positive default. Seeding the source summary before
-generation also protects its dependent speed/pace statistics and the event's summed volume.
+Regeneration preserves every finite positive canonical distance selected by the fresh source-file parse before
+rebuilding derived statistics. A monotonic counter or moving GPS does not establish complete recording coverage:
+a counter can stop advancing early, begin late, reset or disagree with the source total. QS therefore does not replace
+the parsed total with final-minus-first or choose the larger value. Sports Lib owns source interpretation and any
+independently corroborated correction. Missing or zero parsed distance still follows the existing library generation
+path. This does not copy old stored values, validate a source total independently, or guess reset boundaries.
+Recorded streams remain intact; derived speed/pace and event volume use each preserved leg total once.
 
 The separately prepared, unreleased Sports Lib chronology correction is not yet adopted by the root or Functions
 21.6.14 dependencies. It can retain the complete explicit time span of a single-session FIT recording only when
@@ -5619,21 +5615,23 @@ both consumers. Historical lost records require original-file reparse and normal
 or saved Activity JSON alone cannot restore them. Release, deployment and production reparse remain on hold pending
 separate approval; neither correction enables a scanner or changes a public schema, write path or queue lifecycle.
 
-Pool swimming has an additional source-evidence check: a recorded cumulative counter can stop early or first appear
-after a completed length. Regeneration keeps the freshly parsed positive distance when every lap's distance agrees
-with its uniquely assigned active lengths, and the lap totals agree with the activity summary. Active lengths must
-have unique identities and nonduplicate, finite positive time intervals, one consistent positive pool length, and
-distance equal to that pool length. Recorded timers bound each active exposure, so a later message timestamp cannot
-turn following rest into overlapping swimming. Conflicting active exposures are rejected; a fractional timer endpoint
-may overlap the next whole-second start only within that same encoded FIT second. A zero timer, repeated start or
-explicit fractional-start overlap cannot corroborate a completed length. Idle lengths cannot contribute distance;
-unknown types, incomplete ownership, missing or contradictory totals fail this check. Equality allows floating-point
-summation error only, with no distance or percentage cutoff. Recorded streams and generic counter/GPS calculations remain unchanged. This protects volume
-and dependent pace without treating a summary alone as evidence or changing imported TSS. Historical corrections
-require original-file **Regenerate statistics** and its existing derived refresh; a Training rebuild alone cannot
-recover this source evidence. This in-memory check adds no storage operations or public fields. Existing MCP reads
-continue to expose the corrected canonical Distance; schemas, scopes, consent, mutations and Training planning
-contracts are unchanged.
+Pool swims use that same parsed-total rule. The former QS-only length/lap corroboration gate is unnecessary:
+Sports Lib already owns FIT pool counter/length/session precedence. QS does not reinterpret those inputs during
+regeneration. Historical distance corrections require original-file **Regenerate statistics** and normal derived
+refresh. This in-memory change adds no database operations, public fields, scopes or planning/delivery capabilities.
+
+The separately prepared Suunto JSON/SML timing correction also remains unreleased and unadopted. Windows without
+`PauseDuration` contain active time; elapsed time comes from their owning interval. Explicit elapsed/pause pairs keep
+their semantics. Contradictory active duration requires independent non-conflicting pause-state evidence, or a single-leg
+header whose start, float32 active precision and recorded sample envelope agree. Window-count/sport conflicts cannot
+donate another leg's timing. Without recovery evidence, active/timer/pause statistics, duration-dependent load
+candidates (including HR) and newly calculated or cached durability evidence remain unavailable; valid imported TSS
+remains eligible, including zero. HR calibration alone cannot establish active duration. Parent active/pause
+totals require all legs. This does not extend Suunto dates or recover later records from contradictory chronology.
+Original-file parsing retains the private evidence through regeneration and metadata finalization; ordinary JSON
+preserves resulting values/absence but cannot recover that evidence. Adoption requires aligned root/Functions versions
+and the existing sanitized source-backed lifecycle, strict identity review and derived refresh. No bulk rewrite,
+release, deployment, scanner activation, provider call, metric token or MCP contract change is included.
 
 After restoring any other missing parsed statistics, regeneration refreshes all TSS evaluations. By default (or with
 `preserveImportedTss: true`) it restores the parsed score and method together, preserving imported scores including zero

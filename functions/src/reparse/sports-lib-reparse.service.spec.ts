@@ -2789,8 +2789,8 @@ describe('sports-lib-reparse.service', () => {
             }
         });
 
-    it.each(['summary-only', 'single-zero', 'constant-counter', 'reset-counter', 'interior-reset', 'nonzero-resets', 'moving-counter', 'moving-gps', 'recorded-zero', 'missing-summary', 'tcx-single-zero'] as const)(
-        'regenerate protects source distance only when measurements cannot replace it: %s', async kind => {
+    it.each(['summary-only', 'single-zero', 'constant-counter', 'reset-counter', 'interior-reset', 'nonzero-resets', 'moving-counter', 'stalled-counter', 'larger-counter', 'moving-gps', 'recorded-zero', 'missing-summary', 'missing-summary-moving-counter', 'zero-summary-moving-counter', 'tcx-single-zero'] as const)(
+        'regenerate preserves the freshly parsed total independently of stream coverage: %s', async kind => {
             const sports = await vi.importActual<typeof import('@sports-alliance/sports-lib')>('@sports-alliance/sports-lib');
             let parsedEvent: Awaited<ReturnType<typeof sports.EventImporterFIT.getFromArrayBuffer>>;
             let payload: Buffer;
@@ -2827,7 +2827,10 @@ describe('sports-lib-reparse.service', () => {
                 for (const [index, second] of seconds.entries()) {
                     const counter = counters ? counters[index] : kind === 'single-zero' ? second === 0 ? 0 : undefined
                         : kind === 'constant-counter' ? 12 : kind === 'reset-counter' ? [0, 100, 0][index]
-                            : kind === 'moving-counter' ? [10, 60, 110][index] : undefined;
+                            : kind === 'moving-counter' ? [10, 60, 110][index]
+                                : kind === 'stalled-counter' ? [0, 90, 90][index]
+                                    : kind === 'larger-counter' ? [0, 1000, 2000][index]
+                                        : kind.endsWith('-moving-counter') ? [0, 50, 100][index] : undefined;
                     encoder.writeMessage(20, [field(253, start + second, FitBaseType.Uint32), field(3, 90),
                         ...(counter === undefined ? [] : [field(5, counter * 100, FitBaseType.Uint32)]),
                         ...(kind === 'moving-gps' ? [field(0, Math.round((60 + index * 0.001) * 2 ** 31 / 180), FitBaseType.Sint32),
@@ -2850,12 +2853,13 @@ describe('sports-lib-reparse.service', () => {
             const expectedEvaluations = sports.ActivityUtilities.getTrainingStressScoreEvaluations(activity);
             const recordedCounter = activity.hasStreamData(sports.DataDistance.type)
                 ? [...activity.getStreamData(sports.DataDistance.type)] : undefined;
-            const expectedDistance = kind === 'moving-counter' ? 100
-                : kind === 'moving-gps' ? sports.ActivityUtilities.calculateTotalDistanceForActivity(activity)
-                    : kind === 'recorded-zero' || kind === 'missing-summary' ? 0 : 1000;
-            if (kind === 'moving-gps') expect(expectedDistance).toBeGreaterThan(0);
+            const derivesDistance = kind.endsWith('-moving-counter');
+            const expectedDistance = derivesDistance ? 100 : kind === 'recorded-zero' || kind === 'missing-summary' ? 0 : 1000;
             expect(activity.getStat(sports.DataDistance.type)?.getValue()).toBe(
                 kind === 'recorded-zero' || kind === 'missing-summary' ? 0 : 1000);
+            // Exercise the regeneration boundary even when a parser has no usable summary.
+            if (kind === 'missing-summary-moving-counter') activity.removeStat(sports.DataDistance.type);
+            if (kind === 'zero-summary-moving-counter') activity.addStat(new sports.DataDistance(0));
             hoisted.generateMissingStreamsAndStatsForActivity.mockImplementation(
                 item => {
                     if (kind === 'interior-reset' || kind === 'nonzero-resets') {
@@ -2883,7 +2887,7 @@ describe('sports-lib-reparse.service', () => {
         });
 
     it.each(['truncated', 'late-first-length', 'complete', 'incomplete-lengths', 'contradictory-lap', 'overlapping-lengths'] as const)(
-        'regenerate requires independent pool distance evidence: %s', async kind => {
+        'regenerate preserves parser-selected pool distance without reinterpreting source evidence: %s', async kind => {
             const sports = await vi.importActual<typeof import('@sports-alliance/sports-lib')>('@sports-alliance/sports-lib');
             const { FitEncoder, FitBaseType } = await import('fit-file-parser/encoder');
             const encoder = new FitEncoder();
@@ -2935,8 +2939,8 @@ describe('sports-lib-reparse.service', () => {
                     eventData: { originalFile: { path: 'users/u1/events/e1/synthetic-pool.fit' } },
                     activityDocs: [], targetSportsLibVersion: TARGET_SPORTS_LIB_VERSION });
                 expect(result.status).toBe('completed');
-                expect(activity.getStat(sports.DataDistance.type)?.getValue()).toBe(corroborated ? 250 : 100);
-                expect(parsed.getStat(sports.DataDistance.type)?.getValue()).toBe(corroborated ? 250 : 100);
+                expect(activity.getStat(sports.DataDistance.type)?.getValue()).toBe(250);
+                expect(parsed.getStat(sports.DataDistance.type)?.getValue()).toBe(250);
                 expect(activity.getStreamData(sports.DataDistance.type)).toEqual(counter);
                 expect(activity.getStat(sports.DataDuration.type)?.getValue()).toBe(300);
                 expect(activity.getStat(sports.DataTrainingStressScore.type)?.getValue()).toBe(tss);

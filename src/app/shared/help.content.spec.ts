@@ -89,14 +89,12 @@ describe('help.content', () => {
   });
   it('explains source distance preservation during reimport', () => {
     const copy = HELP_SECTIONS.find(section => section.content.includes('### Form tile (CTL / ATL / TSB)'))!.content;
-    expect(copy).toContain('Reimport keeps a positive file distance summary');
-    expect(copy).toContain('Missing readings or a constant zero counter do not erase that distance');
-    expect(copy).toContain('usable measurements still rebuild it normally');
-    expect(copy).toContain('If the distance counter decreases during the recording');
-    expect(copy).toContain('keeps the positive total from the original file rather than using only the final segment');
-    expect(copy).toContain('does not guess a new total by adding counter segments');
-    expect(copy).toContain("the original file's complete pool lengths and lap totals agree with its full distance");
-    expect(copy).toContain('distance readings stop early or begin after the first length');
+    expect(copy).toContain('keeps the positive distance selected when the original file is parsed');
+    expect(copy).toContain('Distance readings can stop early, begin late or reset');
+    expect(copy).toContain('Those readings do not replace the parsed total');
+    expect(copy).toContain('Missing or zero totals can still be calculated from available measurements');
+    expect(copy).toContain('This also applies to pool swims');
+    expect(copy).toContain('does not copy an older saved distance or guess totals by adding counter segments');
   });
   it('distinguishes measured zero power from missing sensor evidence', () => {
     const copy = HELP_SECTIONS.find(section => section.content.includes('### Form tile (CTL / ATL / TSB)'))!.content;

@@ -2017,9 +2017,9 @@ export async function reparseEventFromOriginalFiles(
                     const parsedStat = previousStats.get(type);
                     if (parsedStat) activityAny.addStat(parsedStat);
                 }
-                // Seed before derived statistics when counter/GPS cannot supply distance
-                // or complete pool lengths corroborate the total despite a partial counter.
-                // Dependent pace/speed statistics then use that same source distance.
+                // Keep the total selected by the fresh parse, including sports-lib's
+                // source-backed corrections. Even a monotonic counter can be partial
+                // or stalled. Seed this before dependent statistics are regenerated.
                 if (preserveParsedDistance) activityAny.addStat(parsedDistance);
                 ActivityUtilities.generateMissingStreamsAndStatsForActivity(activity as any);
                 previousStats.forEach((stat, type) => {

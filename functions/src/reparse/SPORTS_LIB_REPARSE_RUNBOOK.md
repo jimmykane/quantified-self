@@ -30,7 +30,7 @@ non-finite scalar summaries and omits non-finite summary exports, retaining fini
 gaps. It does not adopt the separate unreleased activity catalog described below.
 
 JSON reads need no original-file reparse. Apply historical parser and timing corrections only through the authorized
-original-file lifecycle and existing derived refresh, including QS's corroborated pool-distance guard described below.
+original-file lifecycle and existing derived refresh, including QS's parsed-distance preservation described below.
 No new fields, schemas, storage operations, MCP capabilities, saved-route reparse or automatic campaign are required.
 Package adoption does not deploy QS or authorize production rewrites.
 
@@ -180,14 +180,13 @@ recorded streams, and repair invalid summary end times from valid file durations
 lengths do not add distance/speed; ambiguous ownership cannot supply a complete generated distance total. Source-backed
 date corrections follow existing strict leg reconciliation, preserving unmatched controls for owner review.
 
-Regenerate mode retains a finite positive distance from the fresh source parse when its counter or aligned GPS data
-cannot support reliable positive recalculation. This includes any decrease between successive numeric counter
-readings: final-minus-first is unsupported even when positive. Preserve the source total rather than just its final
-segment, without claiming independent validation of that total or summing arbitrary positive increments. This also
-covers summary-only files and constant/backfilled zero counters. Monotonic counters and usable GPS retain existing
-recalculation behavior; old stored statistics never supply this fallback. Derived speed/pace and event
-volume use the preserved summary. Apply historical corrections through original-file reparse and the existing derived
-refresh lifecycle. This adds no database operations, provider requests, public MCP fields or mutation capabilities.
+Regenerate mode retains every finite positive canonical distance from the fresh source parse. Monotonic counters
+and moving GPS do not prove complete coverage and no longer overwrite that total. Stalled, truncated, late-starting,
+reset or conflicting counters remain recorded streams, not a second source-selection rule in QS. Sports Lib owns
+source corrections; QS neither chooses the larger distance nor sums counter segments. Missing/zero totals still use
+normal generation. Derived speed/pace and event volume use preserved leg totals once. Apply historical corrections
+through original-file regeneration and the existing derived refresh; old stored statistics never supply the value.
+This in-memory change adds no database operations, provider requests or public MCP capability.
 
 The accompanying Sports Lib multi-day chronology correction remains unreleased and unadopted; root and Functions
 still pin 21.6.14. It requires a single session, monotonic session-owned endpoint records and complete consistent
@@ -198,12 +197,16 @@ package adoption, historical lost records require the retained original and norm
 refresh. Existing strict leg matching, owner controls and deletion fences remain authoritative. No release, deployment,
 scanner activation or production reparse is authorized by preparing this correction.
 
-For pool swims, a positive recorded counter can also be incomplete or start after the first length. Regenerate mode
-preserves the freshly parsed total only when uniquely owned active lengths with valid, nonduplicate time intervals
-and consistent pool distance corroborate every lap and the activity total. Recorded timers bound active exposure;
-conflicting exposures are rejected, allowing only timer fractions within the same encoded FIT second as the next
-whole-second start. Idle lengths add no distance. Missing, ambiguous or contradictory evidence does not qualify; only floating-point summation noise is tolerated. Raw counters
-remain intact and generic counter/GPS behavior is unchanged. See `docs/training-workspace.md` for the complete contract.
+Pool swims follow the same parsed-total rule; the former QS-only lap/length gate has been removed. FIT evidence
+selection and corroborated corrections remain in Sports Lib. No saved-route reparse is needed.
+
+The additional unreleased Suunto JSON/SML correction separates window active time from elapsed time and rejects
+negative pauses. Independent timer/header evidence may recover contradictory duration; otherwise active/timer/pause
+and duration-dependent load/durability remain unavailable. Ambiguous leg windows cannot borrow whole-workout timing. Native JSON
+preserves missing values but not private source evidence. After coordinated package adoption, historical correction
+requires original-file reparse, the same parsed instances through candidate preparation, strict identity/control
+reconciliation and ordinary derived refresh. Root and Functions remain on 21.6.14 until separate release/adoption.
+Source evidence remains private; this introduces no metric/schema/MCP change or production campaign.
 
 New provider imports and manual uploads cache Automatic/HR/MET evaluations in owner-only event metadata. Walking,
 Nordic Walking, Hiking and Trekking skip calculated pace and power. HR requires file-supplied resting, threshold and
