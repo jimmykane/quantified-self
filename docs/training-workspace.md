@@ -5296,6 +5296,21 @@ their existing Automatic order with corrected HR eligibility. A preferred HR/MET
 eligible Automatic order. Valid nonnegative file-imported TSS wins regardless of preference; previous calculated
 TSS is never treated as imported on recalculation.
 
+Sports Lib 21.6.14 distinguishes absent/unusable required inputs from an eligible calculation that cannot return a
+valid score. POWER, running PACE, SWIM_PACE and MET keep method-specific missing-input reasons before calculation;
+a rejected result uses the existing `calculation-unavailable` token. Formulas, the calculated-score guard, imported
+priority, valid zero and Automatic/HR/MET fallback selection are unchanged. The private load editor explains either
+case without claiming that all unavailable calculations lack inputs. Existing saved evaluations need the normal
+source-file reparse lifecycle to refresh reasons when parsed inputs are no longer available.
+
+Native Activity JSON restores saved child names independently of parent event titles. Names present in stored JSON
+need no original-file reparse; names absent from stored JSON need source-backed reparse when the original contains a name. GPX activity and route importers keep
+the exporter name but no longer assign GPX schema version 1.0/1.1 as a device manufacturer or software version.
+Unknown, missing and blank TCX sports become canonical `Unknown Sport`; recognized types retain normal indoor
+classification. Correcting persisted GPX attribution or TCX classification needs targeted source-backed reparse and
+normal summary refresh. Existing strict identity matching protects policies/controls; ambiguous matches still require
+review. No bulk rewrite, automatic scan, new storage operation or provider request is introduced.
+
 HR uses continuous threshold-normalized TRIMP and requires explicit file calibration satisfying `0 < resting HR <
 threshold HR < maximum HR`. Session-matched FIT `time_in_zone` settings take priority over unambiguous
 `zones_target` and applicable profile settings. Walking uses general maximum HR, never the running-specific
@@ -5718,8 +5733,8 @@ history. No derived schema bump or route reparse is required for this calculatio
 Editor tests load these additive diagnostics through the metadata reader, so a newer server diagnostic remains
 compatible with the older Sports Lib version used to build an existing frontend.
 
-The published [Sports Lib 21.6.9](https://github.com/sports-alliance/sports-lib/releases/tag/v21.6.9) artifact is pinned
-in both root and Functions, with FIT Parser 6.2.1. Both lockfiles match its npm integrity. The release incorporates
+The coordinated root/Functions dependency target is Sports Lib 21.6.14 with FIT Parser 6.2.2; adoption verification
+must match the published npm integrity in both lockfiles. The earlier published Sports Lib 21.6.9 release incorporated
 the earlier file-calibrated load corrections plus FIT session-boundary/zone ownership, source-backed timer recovery,
 Suunto pause/resume events and complete recorded-power coverage. A read-only replay of 1,100 unique original files
 (1,176 legs) had no parse failures. All 3,528 Automatic/HR/MET evaluations retained their scores and methods relative
@@ -5734,6 +5749,19 @@ Corrected historical load needs original-file reparse and the normal derived-sum
 dated policy snapshots remain protected. No new database operation, provider request, queue or saved-route reparse is needed.
 Release Functions/Rules/frontend together after separate approval. Deployment and production reparse remain separate
 explicit approvals; no historical values are rewritten merely by deploying this change.
+
+The 21.6.14 release candidate passed 3,031 Sports Lib tests across 145 suites (five existing skips), ESM/CJS builds,
+documentation and package verification. QS passed 530 focused Functions tests in a clean serial run, 248 frontend
+checks, Functions and production app builds, and the unchanged MCP contract check. Concurrent test runs initially hit
+runner communication/time limits; the clean run passed without test or runner errors.
+A read-only local comparison covered 20,000 unique retained originals: 19,334 accepted activity sources, 166 unchanged
+non-workout rejections, and 500 routes. All 59,268 Automatic/HR/MET selections across 19,756 legs retained their scores,
+methods, provenance and estimate flags. Complete serialized outputs and streams matched after the expected creator/type
+corrections. Native JSON retained 318 nonempty child names; 429 GPX activities and all 500 routes lost only the incorrect
+schema-version manufacturer. One TCX source became canonical Unknown Sport; four preference diagnostics on two
+activities changed to calculation-unavailable, with no score changes. All 500 routes retained geometry and summaries.
+Authored cases cover range rejection, missing inputs, accepted boundaries, zero/imported priority and native JSON
+compatibility. Private originals and detailed results stay outside Git; verification performed no production reads or writes.
 
 Training load policy/helper tests use the frontend `helpers-node` project; editor/service tests remain in `angular`.
 The Settings disclosure regression explicitly renders its fixture, preserving the shared logic-only setup.
@@ -6934,8 +6962,9 @@ whether the scheduled event or route scanner can discover and enqueue new candid
 already queued work can dispatch. A `RUNNING` Cloud Tasks queue does not enable automatic reparse, and a disabled scanner
 does not pause Cloud Tasks. Keep these labels distinct in operational UI and diagnostics.
 
-Source-backed reparses preserve meaningful existing activity creator names so user device renames survive parser
-upgrades. Parser placeholders (`Unknown` and `Unknown Device`) yield only when the newly parsed activity contains a
+Activity child names, parent event titles, and creator/device names are distinct fields. Restoring a saved child name
+from native JSON does not rename the parent event or the device. Source-backed reparses preserve meaningful existing
+activity creator names so user device renames survive parser upgrades. Parser placeholders (`Unknown` and `Unknown Device`) yield only when the newly parsed activity contains a
 meaningful creator identity; when the new parse is also blank or a placeholder, the existing placeholder remains. Keep
 this rule aligned across the backend reparse worker and both frontend source-hydration paths so loading the same retained
 original cannot produce different creator metadata.
@@ -7237,10 +7266,11 @@ FIT. FIT Parser decoding work belongs to the separate agent; no parser changes a
 
 Follow-up review prevents a known provider profile from replacing an unrelated FIT parent through a general alias;
 compatible broad-parent refinements and explicit parent/profile composites retain their existing behavior. Shared Polar
-profile spellings retain all documented FIT contexts. Route and route-file JSON restoration and empty-summary fallback
-remain on the separate unreleased branch alongside the catalog changes. The shared serializer already omits non-finite
-scalar exports in 21.6.12. The pending route read correction skips legacy null/non-finite values and uses existing
-child-route aggregation when no valid file summaries remain. It needs no saved-route source reparse when adopted. Training formulas, the public MCP contract and the
+profile spellings retain all documented FIT contexts. The isolated route and route-file JSON correction is included in
+Sports Lib 21.6.14; the catalog/profile additions remain on the separate unreleased branch. Route serialization omits
+non-finite scalar exports, restoration skips legacy null/non-finite values, and existing child-route aggregation applies
+when no valid file summaries remain. Finite zero, partial-summary precedence and geometry validation remain intact.
+This JSON correction needs no saved-route source reparse; the separate GPX manufacturer correction does. Training formulas, the public MCP contract and the
 sanitized persistence boundary remain unchanged; no MCP deferral is needed.
 
 Verification after follow-up review: 4,164 Sports Lib tests pass across 41 suites; both package formats build and 13 documentation pages verify.

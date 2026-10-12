@@ -70,6 +70,16 @@ describe('help.content', () => {
     expect(copy).toContain('that distance is counted once');
     expect(copy).toContain('Missing or conflicting evidence is not used to guess a correction');
   });
+  it('distinguishes rejected calculations from missing inputs and explains importer metadata corrections', () => {
+    const copy = HELP_SECTIONS.find(section => section.content.includes('### Form tile (CTL / ATL / TSB)'))!.content;
+    expect(copy).toContain('have the required file inputs but still fail to produce a valid TSS');
+    expect(copy).toContain('distinguishes this from missing inputs');
+    expect(copy).toContain('does not change the scoring formulas or accepted score range');
+    expect(copy).toContain('Saved individual activity names are retained');
+    expect(copy).toContain('without treating the GPX format version as a device manufacturer');
+    expect(copy).toContain('An unrecognized TCX sport is shown as **Unknown Sport**');
+    expect(copy).toContain('requires reimporting the original file');
+  });
   it('explains single-lap pool imports and retained boundary rests', () => {
     const copy = HELP_SECTIONS.find(section => section.content.includes('### Form tile (CTL / ATL / TSB)'))!.content;
     expect(copy).toContain('Pool imports support swims recorded as one lap');

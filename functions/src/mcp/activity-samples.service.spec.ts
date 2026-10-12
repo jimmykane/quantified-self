@@ -20,7 +20,7 @@ function fixture(streams: Record<string, (number | null)[]> = { [DataHeartRate.t
     parseSource: vi.fn(async () => EventImporterJSON.getEventFromJSON({
       name: 'Private title', srcFileType: FileType.FIT, description: 'private description', privacy: Privacy.Private,
       isMerge: false, startDate: start, endDate: start + (length - 1) * 1000, stats: {}, activities: [{
-        name: 'Private device', startDate: start, endDate: start + (length - 1) * 1000, type: ActivityTypes.Running,
+        name: 'Private child activity', startDate: start, endDate: start + (length - 1) * 1000, type: ActivityTypes.Running,
         powerMeter: false, trainer: false, stats: {}, streams, laps: [],
         creator: {name: 'Private device', serialNumber: 'serial', devices: []}, intensityZones: [], events: [],
       }],
@@ -58,6 +58,10 @@ describe('activity samples', () => {
     expect(hearts).toEqual(hr); expect(watts).toEqual([...power, null, null]);
     expect(f.deps.loadSource).toHaveBeenCalledTimes(1); expect(f.deps.consumeParse).toHaveBeenCalledTimes(1);
     expect(f.deps.parseSource).toHaveBeenCalledTimes(1); expect(f.deps.context).toHaveBeenCalledTimes(12);
+    // The negative output check must cover names actually retained by JSON hydration.
+    const parsed = await vi.mocked(f.deps.parseSource).mock.results[0].value;
+    expect(parsed.getFirstActivity().name).toBe('Private child activity');
+    expect(parsed.getFirstActivity().creator.name).toBe('Private device');
   });
 
   it('uses inclusive start/exclusive end, deduplicates aliases, and pads absent metrics with null', async () => {

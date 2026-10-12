@@ -2713,3 +2713,13 @@ Production rollout is deliberately separate from implementation. Deploy Firestor
 and callable Functions, and Hosting rewrites only after reviewing the target Firebase project. Verify discovery metadata,
 OAuth login/consent, scope denial, token refresh/rotation, revocation, query limits, timezone/DST behavior, redaction, and
 account cleanup before enabling clients.
+
+### Sports Lib 21.6.14 consumer compatibility review
+
+Activity JSON name restoration, GPX creator attribution and unknown TCX sport fallback use the existing explicit
+read projections. Child names/notes and creator/device/provider metadata remain private; separately authorized parent
+event title/description reads are unchanged. TSS rejection diagnostics use the existing private
+`calculation-unavailable` token and do not add Training-impact reasons or fields. Recorded numeric queries and modeled
+load keep their existing meanings. There is no schema/digest, tool, scope, consent, mutation, plugin, Training planning
+or provider-delivery change; no contract promotion or MCP deferral is needed. Verify strict outputs and negative
+identity-leakage coverage when adopting the same published package in root and Functions.

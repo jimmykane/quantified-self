@@ -103,7 +103,7 @@ export class TrainingLoadDialogComponent implements OnInit {
     if (this.legModel.method === 'IMPORTED') return 'The file supplied this score. Imported TSS takes precedence over the selected calculation method.';
     if (this.legModel.method === 'MET') return 'Estimate from file calories, body mass and duration. HR requires explicit resting, threshold and maximum HR in the file.';
     if (this.legModel.score === null) return 'No eligible load calculation is available from this file. Use a numeric override or exclude the leg.';
-    return this.legModel.reasons.length ? 'The preferred calculation lacked the required file inputs. The next eligible Automatic method was used.' : 'Calculated from the available file inputs.';
+    return this.legModel.reasons.length ? 'An eligible calculation was unavailable. The next eligible Automatic method was used.' : 'Calculated from the available file inputs.';
   }
   get reasonText(): string {
     const messages: Record<string, string> = {
@@ -115,6 +115,7 @@ export class TrainingLoadDialogComponent implements OnInit {
       'missing-power-inputs': 'Power calculation inputs are unavailable.',
       'missing-swim-threshold': 'No usable swim threshold is available. The workout’s average pace is not used as its threshold.',
       'missing-pace-inputs': 'Pace calculation inputs are unavailable.',
+      'calculation-unavailable': 'A calculation could not produce a valid TSS from the available inputs.',
     };
     return [...new Set(this.legModel.reasons.map(reason => messages[reason]).filter(Boolean))].join(' ');
   }

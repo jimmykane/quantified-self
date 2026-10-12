@@ -67,7 +67,27 @@ Monitoring review: provider parse rejections retain existing import failure/DLQ 
 terminal job/per-event status, failure log and retry-suppression path; the recorded-import alert bundle explicitly does
 not cover Sports Lib reprocessing. No monitoring configuration is changed or applied by this update.
 
-### Unreleased provider-profile and JSON compatibility corrections
+### Sports Lib 21.6.14 names, creator attribution and fallback diagnostics
+
+Keep root and Functions on the same released version. Native Activity JSON restores saved child names independently
+of the parent event title and creator/device name. Stored names need no source reparse; discarded names require source
+evidence. GPX activity/route creators retain their exporter name without treating the schema version as a manufacturer
+or device software version. Unknown TCX sports resolve to `Unknown Sport` instead of undefined; recognized sport and
+indoor detection behavior remains intact. Persisted attribution/type corrections require the existing targeted original-
+file lifecycle and normal summaries; ambiguous leg matching keeps existing controls and requires review.
+
+TSS evaluation distinguishes missing required inputs from a calculation that cannot produce a valid result. The latter
+uses the existing private `calculation-unavailable` reason, preserving formulas, guards, imported scores, valid zero,
+method eligibility and fallback order. Refresh old reasons through authorized original-file reparse when parsed inputs
+are no longer available. No derived schema, numeric metric, MCP scope/field or planning/delivery capability changes.
+
+The isolated route JSON correction is also included: omit non-finite scalar exports, skip legacy null/non-finite
+summaries on restoration, and aggregate children only when no valid file summary remains. Valid zero, partial summary
+precedence and geometry validation remain intact. This read compatibility needs no original or route reparse. Correcting
+GPX creator provenance separately requires source evidence. Package adoption does not deploy QS, enable scanners,
+start a production campaign or authorize direct data edits.
+
+### Unreleased provider-profile and catalog corrections
 
 The local Sports Lib branch corrects Garmin Breathwork for Generic/Breathing and Training/Breathing with an explicit
 English `Breathwork` or French `Ex. respiration` profile. It adds 14 Polar FIT display aliases and honors explicit Polar
@@ -89,22 +109,20 @@ legacy null/non-finite scalar stats; finite zero/negative values, provider TSS a
 gaps remain intact. Summary exports omit non-finite scalar numbers while runtime zero-speed pace can remain infinite.
 This compatibility read does not require an original file or a reparse.
 Any explicitly requested persistence rewrite must still use the existing sanitized writer, never direct Firestore edits.
-Route and route-file JSON restoration and empty-summary fallback remain on the separate unreleased branch alongside
-the catalog changes. The shared serializer already omits non-finite scalar exports in 21.6.12. The pending route read
-correction skips legacy null/non-finite values and uses existing child-route aggregation when no valid file summaries
-remain; it requires no saved-route source reparse when adopted.
+The isolated route and route-file JSON correction is included in 21.6.14 as described above. Catalog/profile additions
+remain separate and unreleased; adopting the JSON subset does not adopt those classifications.
 Current sports-lib calculations preserve valid nonnegative imported TSS, including zero, regardless of method preference
 or the deprecated preservation flag. QS's explicit internal regeneration removal is documented separately below.
 
 There are no new numeric metric tokens/units, formulas, derived schemas, planning/delivery capabilities, registered
 MCP fields/scopes, queue lifecycle, write paths or monitoring changes. Dynamic activity discovery uses existing fields.
 Help remains accurate against the installed dynamic catalog. Both packages still use their installed 131-type catalog;
-the separate catalog/route correction remains unadopted. It does not deploy, enable scanners, start reparsing or change
+the separate catalog/profile correction remains unadopted. It does not deploy, enable scanners, start reparsing or change
 FIT Parser source.
 
 ### Sports Lib 21.6.1 file-calibrated Training load
 
-The coordinated root and Functions dependency target is Sports Lib 21.6.13, with FIT Parser 6.2.2. It retains the file-calibrated
+The coordinated root and Functions dependency target is Sports Lib 21.6.14, with FIT Parser 6.2.2. It retains the file-calibrated
 load rules introduced in 21.6.1 and includes the swimming threshold, independent cycling FTP, rolling NP, explicit
 HR-pause, running pace, pool-length/recorded-stream and measured-zero power corrections. This release also corrects
 FIT session-boundary and zone ownership, missing timer recovery, Suunto pause/resume events and positive recorded-power

@@ -214,6 +214,23 @@ describe('Training load editor', () => {
     expect(component.reasonText).toBe('Pace calculation inputs are unavailable.');
     expect(component.reasonText).not.toContain('threshold');
   });
+  it.each([TrainingStressScoreMethod.HR, TrainingStressScoreMethod.MET, null])(
+    'explains rejected calculations without claiming inputs are missing when the result is %s', method => {
+      const result = { preference: 'AUTOMATIC' as const, method, score: method ? 9 : null,
+        estimated: method === TrainingStressScoreMethod.MET, provenance: method ? 'calculated' as const : null,
+        reasons: ['calculation-unavailable' as const] };
+      component.metadata.set({ version: 1, revision: 1, excluded: false, controls: {}, legs: {
+        walk: { activityId: 'walk', identity: { startMs: 1000, endMs: 3601000, type: 'Walking', duration: 3600, distance: null },
+          policy: defaultAppliedTrainingLoadPolicy('Walking'), recordedTss: 87.3,
+          evaluations: { version: 1, automatic: result, hr: { ...result, preference: 'HR' }, met: { ...result, preference: 'MET' } } } } });
+      expect(component.legModel).toMatchObject({ score: method ? 9 : null, method });
+      expect(component.reasonText).toBe('A calculation could not produce a valid TSS from the available inputs.');
+      expect(component.explanation).not.toContain('lacked the required file inputs');
+      expect(component.reasonText).not.toContain('requires');
+      if (method === TrainingStressScoreMethod.HR) expect(component.explanation).toContain('next eligible Automatic method');
+      else if (method === TrainingStressScoreMethod.MET) expect(component.explanation).toContain('Estimate from file calories');
+      else expect(component.explanation).toContain('No eligible load calculation');
+    });
   it('accepts restored power-curve zeros as the same saved leg and allows its override', async () => {
     const parent = { name: 'Ride', startDate: 1000, endDate: 3601000, stats: { 'Training Stress Score': 9 } };
     const leg = { startDate: 1000, endDate: 3601000, type: ActivityTypes.Cycling,
