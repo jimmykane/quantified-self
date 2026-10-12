@@ -3,6 +3,7 @@ import { ChangeDetectorRef, NO_ERRORS_SCHEMA, signal } from '@angular/core';
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { MatCheckboxModule } from '@angular/material/checkbox';
 import { MatMenuModule } from '@angular/material/menu';
+import { MatDialogModule } from '@angular/material/dialog';
 import { MatTableModule } from '@angular/material/table';
 import { MatSelectionListChange } from '@angular/material/list';
 import {
@@ -18,6 +19,7 @@ import {
     DataSpeedAvg,
     DataSpeedMax,
     DataSpeedMin,
+    DataSwimPaceAvg,
     DataTotalCycles,
     DistanceUnits,
     EventImporterJSON,
@@ -117,13 +119,14 @@ describe('EventCardLapsComponent', () => {
     let snackBar: { open: ReturnType<typeof vi.fn> };
     let haptics: { selection: ReturnType<typeof vi.fn>; success: ReturnType<typeof vi.fn>; error: ReturnType<typeof vi.fn> };
 
+    describe('table state and rendering', () => {
     beforeEach(async () => {
         eventDetailsSettings = signal(normalizeEventDetailsSettings(null));
         updateLapTableColumns = vi.fn().mockResolvedValue(undefined);
         snackBar = { open: vi.fn() };
         haptics = { selection: vi.fn(), success: vi.fn(), error: vi.fn() };
         await TestBed.configureTestingModule({
-            imports: [CommonModule, MatCheckboxModule, MatMenuModule, MatTableModule],
+            imports: [CommonModule, MatCheckboxModule, MatMenuModule, MatDialogModule, MatTableModule],
             declarations: [EventCardLapsComponent, HapticTapDirective],
             providers: [
                 { provide: AppEventColorService, useValue: {} },
@@ -189,6 +192,136 @@ describe('EventCardLapsComponent', () => {
         expect(haptics.selection).toHaveBeenCalledTimes(3);
     });
 
+    it('puts the five swim metrics together in the chosen order and restores that order on reload', async () => {
+        const laps = [1, 2].map(() => ({
+            ...createRenderableLap(LapTypes.Manual),
+            getDistance: () => new DataDistance(22.86),
+        } as LapInterface));
+        const activity = { ...createActivity(laps), type: 'Swimming', getSwimLengths: () => [
+            { index: 1, lapIndex: 1, type: 'active', stroke: 'freestyle', startDate: 0, endDate: 30_000,
+                timerTime: 30, distance: 22.86, strokes: 10, avgCadence: 20 },
+            { index: 2, lapIndex: 2, type: 'active', stroke: 'freestyle', startDate: 30_000, endDate: 60_000,
+                timerTime: 30, distance: 22.86, strokes: 10, avgCadence: 20 },
+        ] } as unknown as ActivityInterface;
+        const initial = [DataDuration.type, DataDistance.type, DataHeartRateMax.type,
+            EVENT_LAP_STROKES_COLUMN, EVENT_LAP_SWOLF_COLUMN, DataSwimPaceAvg.type];
+        component.canCustomize = true;
+        component.selectedActivities = [activity];
+        eventDetailsSettings.set(normalizeEventDetailsSettings({ lapTableColumnsBySportFamily: { swimming: initial } }));
+        fixture.detectChanges();
+        component.ngOnChanges();
+        const table = component.lapTableGroups[0].tables[0];
+        component.toggleAllLapSelections(table);
+        component.toggleLapLengths(table.dataSource.data.find(row => row.hasLengths)!);
+        for (let i = 0; i < 3; i++) await component.moveLapColumn('swimming', DataSwimPaceAvg.type, -1);
+        for (let i = 0; i < 2; i++) await component.moveLapColumn('swimming', EVENT_LAP_SWOLF_COLUMN, -1);
+        await component.moveLapColumn('swimming', EVENT_LAP_STROKES_COLUMN, -1);
+        const ordered = [DataDuration.type, DataDistance.type, DataSwimPaceAvg.type,
+            EVENT_LAP_SWOLF_COLUMN, EVENT_LAP_STROKES_COLUMN, DataHeartRateMax.type];
+        expect(component.getColumnsToDisplay('Swimming')).toEqual(['#', ...ordered]);
+        expect(component.getColumns(activity, LapTypes.Manual)).toEqual(['selection', '#', 'lengths', ...ordered.slice(0, 5)]);
+        expect(updateLapTableColumns).toHaveBeenLastCalledWith('swimming', ordered);
+        expect(component.lapTableGroups[0].tables[0].selectedCount).toBe(2);
+        expect(component.lapTableGroups[0].tables[0].dataSource.data.find(row => row.hasLengths)?.lengthsExpanded).toBe(true);
+
+        eventDetailsSettings.set(normalizeEventDetailsSettings({ lapTableColumnsBySportFamily: { swimming: ordered } }));
+        fixture.destroy();
+        fixture = TestBed.createComponent(EventCardLapsComponent);
+        component = fixture.componentInstance;
+        fixture.componentRef.setInput('canCustomize', true);
+        fixture.componentRef.setInput('selectedActivities', [activity]);
+        fixture.detectChanges();
+        expect(component.getColumnsToDisplay('Swimming')).toEqual(['#', ...ordered]);
+        expect(component.activeLapColumnMenuGroup?.selectedMetrics.map(metric => metric.type)).toEqual(ordered);
+        expect(component.activeLapColumnMenuGroup?.selectedUnavailableMetricCount).toBe(1);
+    });
+
+    it('keeps reordering no-ops, non-owner actions and busy-family actions silent', async () => {
+        component.canCustomize = true;
+        component.selectedActivities = [createActivity([createRenderableLap(LapTypes.Manual)])];
+        eventDetailsSettings.set(normalizeEventDetailsSettings({ lapTableColumnsBySportFamily: { running: [DataDuration.type, DataPaceAvg.type] } }));
+        fixture.detectChanges();
+        component.ngOnChanges();
+        await component.moveLapColumn('running', DataDuration.type, -1);
+        await component.moveLapColumn('running', DataPaceAvg.type, 1);
+        await component.moveLapColumn('running', 'missing', -1);
+        await component.onLapColumnCheckedChange('running', DataDuration.type, true);
+        component.canCustomize = false;
+        await component.moveLapColumn('running', DataPaceAvg.type, -1);
+        expect(updateLapTableColumns).not.toHaveBeenCalled();
+        expect(haptics.selection).not.toHaveBeenCalled();
+        component.canCustomize = true;
+        let finishSave!: () => void;
+        updateLapTableColumns.mockImplementationOnce(() => new Promise<void>(resolve => { finishSave = resolve; }));
+        const saving = component.moveLapColumn('running', DataPaceAvg.type, -1);
+        await component.moveLapColumn('running', DataPaceAvg.type, 1);
+        await component.onLapColumnCheckedChange('running', DataDuration.type, false);
+        expect(updateLapTableColumns).toHaveBeenCalledTimes(1);
+        expect(haptics.selection).toHaveBeenCalledTimes(1);
+        expect(haptics.success).not.toHaveBeenCalled();
+        finishSave();
+        await saving;
+        expect(haptics.success).toHaveBeenCalledTimes(1);
+        expect(component.lapColumnAnnouncement()).toContain('position 1 of 2');
+    });
+
+    it('rolls back the exact failed order while preserving a parallel family reorder through a settings refresh', async () => {
+        const running = createActivity([createRenderableLap(LapTypes.Manual)]);
+        const swimming = { ...createActivity([createRenderableLap(LapTypes.Manual)]), type: 'Swimming', getID: () => 'swim' } as ActivityInterface;
+        const swimmingOrder = [DataDuration.type, DataDistance.type, DataSwimPaceAvg.type];
+        component.canCustomize = true;
+        component.selectedActivities = [running, swimming];
+        eventDetailsSettings.set(normalizeEventDetailsSettings({ lapTableColumnsBySportFamily: {
+            running: [DataDuration.type, DataPaceAvg.type], swimming: swimmingOrder,
+        } }));
+        fixture.detectChanges();
+        component.ngOnChanges();
+        let rejectSwimming!: (error: Error) => void;
+        let finishRunning!: () => void;
+        updateLapTableColumns
+            .mockImplementationOnce(() => new Promise<void>((_resolve, reject) => { rejectSwimming = reject; }))
+            .mockImplementationOnce(() => new Promise<void>(resolve => { finishRunning = resolve; }));
+        const swimSave = component.moveLapColumn('swimming', DataSwimPaceAvg.type, -1);
+        const runSave = component.moveLapColumn('running', DataPaceAvg.type, -1);
+        eventDetailsSettings.set(normalizeEventDetailsSettings({ lapTableColumnsBySportFamily: {
+            running: [DataPaceAvg.type, DataDuration.type], swimming: swimmingOrder, cycling: [],
+        } }));
+        fixture.detectChanges();
+        expect(component.getColumnsToDisplay('Swimming')).toEqual(['#', DataDuration.type, DataSwimPaceAvg.type, DataDistance.type]);
+        rejectSwimming(new Error('offline'));
+        await swimSave;
+        expect(component.savingLapColumnSportFamilies().has('running')).toBe(true);
+        expect(component.getColumnsToDisplay('Swimming')).toEqual(['#', ...swimmingOrder]);
+        expect(component.getColumnsToDisplay('Running')).toEqual(['#', DataPaceAvg.type, DataDuration.type]);
+        expect(component.getColumnsToDisplay('Cycling')).toEqual(['#']);
+        expect(component.activeLapColumnMenuGroup?.family).toBe('running');
+        expect(component.lapColumnAnnouncement()).toBe('');
+        finishRunning();
+        await runSave;
+        expect(component.savingLapColumnSportFamilies().size).toBe(0);
+        expect(haptics.error).toHaveBeenCalledTimes(1);
+        expect(haptics.success).toHaveBeenCalledTimes(1);
+    });
+
+    it('keeps the complete selected order visible above a filtered catalog and appends additions', async () => {
+        component.canCustomize = true;
+        component.selectedActivities = [createActivity([createRenderableLap(LapTypes.Manual)])];
+        const order = [DataHeartRateMax.type, DataPaceAvg.type, DataDuration.type];
+        eventDetailsSettings.set(normalizeEventDetailsSettings({ lapTableColumnsBySportFamily: { running: order } }));
+        fixture.detectChanges();
+        component.ngOnChanges();
+        const group = component.activeLapColumnMenuGroup!;
+        component.onLapColumnMetricSearchInput(group, { target: { value: 'min speed' } } as unknown as Event);
+        expect(group.selectedMetrics.map(metric => metric.type)).toEqual(order);
+        expect(group.selectedMetrics[0].label).toBe(DataHeartRateMax.type);
+        expect(group.filteredMetricGroups.flatMap(category => category.metrics.map(metric => metric.type))).toContain(DataSpeedMin.type);
+        await component.onLapColumnSelectionChange('running', createLapColumnSelectionChange([DataSpeedMin.type]));
+        expect(group.selectedMetricTypes).toEqual([...order, DataSpeedMin.type]);
+        expect(group.filteredMetricGroups.flatMap(category => category.metrics.map(metric => metric.type))).not.toContain(DataSpeedMin.type);
+        await component.onLapColumnCheckedChange('running', DataPaceAvg.type, false);
+        expect(group.selectedMetricTypes).toEqual([DataHeartRateMax.type, DataDuration.type, DataSpeedMin.type]);
+    });
+
     it('should create', () => {
         expect(component).toBeTruthy();
     });
@@ -239,6 +372,36 @@ describe('EventCardLapsComponent', () => {
         expect(table.selectedCount).toBe(0);
         expect(table.dataSource.data[0].isSelected).toBe(false);
         expect(haptics.selection).toHaveBeenCalledTimes(4);
+    });
+
+    it('preserves rest-block selection and nested length expansion when reordering columns', async () => {
+        const activity = createRestActivity([10, 30], [100, 140], true);
+        const order = [DataDuration.type, DataDistance.type, DataHeartRateAvg.type, DataHeartRateMax.type];
+        component.canCustomize = true;
+        component.selectedActivities = [activity];
+        eventDetailsSettings.set(normalizeEventDetailsSettings({ lapTableColumnsBySportFamily: { swimming: order } }));
+        component.ngOnChanges();
+        fixture.detectChanges();
+        const table = component.lapTableGroups[0].tables[0];
+        const block = table.dataSource.data.find(row => row.members)!;
+        component.toggleLapLengths(block);
+        component.toggleLapLengths(block.members![1]);
+        component.toggleLapSelection(table, block.members![0]);
+
+        await component.moveLapColumn('swimming', DataHeartRateMax.type, -1);
+        fixture.detectChanges();
+
+        const reordered = [DataDuration.type, DataDistance.type, DataHeartRateMax.type, DataHeartRateAvg.type];
+        const refreshed = component.lapTableGroups[0].tables[0];
+        const refreshedBlock = refreshed.dataSource.data.find(row => row.members)!;
+        expect(refreshed.columns).toEqual(['selection', '#', 'lengths', ...reordered]);
+        expect(updateLapTableColumns).toHaveBeenCalledWith('swimming', reordered);
+        expect(refreshed.selectedCount).toBe(1);
+        expect(refreshedBlock.isPartiallySelected).toBe(true);
+        expect(refreshedBlock.members?.map(row => row.isSelected)).toEqual([true, false]);
+        expect(refreshedBlock.lengthsExpanded).toBe(true);
+        expect(refreshedBlock.members![1].lengthsExpanded).toBe(true);
+        expect(fixture.nativeElement.querySelector('app-event-card-swim-lengths').lap).toBe(activity.getLaps()[1]);
     });
 
     it('preserves each original identity when lap IDs repeat, and sums fractional recorded time once', () => {
@@ -1010,7 +1173,7 @@ describe('EventCardLapsComponent', () => {
         component.clearLapColumnMetricSearch(cyclingGroup);
 
         expect(cyclingGroup.searchTerm).toBe('');
-        expect(cyclingGroup.filteredMetricGroups).toBe(cyclingGroup.metricGroups);
+        expect(cyclingGroup.filteredMetricGroups).toBe(cyclingGroup.availableMetricGroups);
     });
 
     it('restores the prior column layout when its profile save fails', async () => {
@@ -1264,10 +1427,11 @@ describe('EventCardLapsComponent', () => {
         expect(component.lapTableGroups[0]?.tables[0]?.selectedCount).toBe(0);
     });
 
+    });
 });
 
 describe('EventCardLapsComponent source contracts', () => {
-    it('should keep the metric search field within the lap column menu', () => {
+    it('should keep the metric search field within the lap column dialog', () => {
         const styles = readFileSync(
             resolve(process.cwd(), 'src/app/components/event/laps/event.card.laps.component.css'),
             'utf8',
@@ -1275,7 +1439,7 @@ describe('EventCardLapsComponent source contracts', () => {
 
         expect(styles).toContain('.lap-column-search-field');
         expect(styles).toContain('box-sizing: border-box;');
-        expect(styles).toContain('width: calc(100% - 32px) !important;');
+        expect(styles).toContain('width: 100%;');
         expect(styles).toContain('.lap-column-availability-summary');
         expect(styles).toContain(".lap-selected-summary-row .mat-mdc-footer-cell");
         expect(styles).toContain("font-family: 'Barlow Condensed', 'Inter', sans-serif;");
@@ -1299,10 +1463,13 @@ describe('EventCardLapsComponent source contracts', () => {
         expect(template).toContain('<app-data-type-icon [dataType]="column"></app-data-type-icon>');
         expect(template).toContain("[class.lap-index-cell]=\"column === '#'");
         expect(template).toContain("[class.lap-duration-cell]=\"column === 'Duration'");
-        expect(template).toContain('lapColumnsMenu');
-        expect(template).toContain('xPosition="before"');
-        expect(template).toContain('qs-menu-panel-form qs-config-menu lap-column-menu-panel');
-        expect(template).toContain('mat-button-toggle-group');
+        expect(template).toContain('lapColumnsDialog');
+        expect(template).toContain('mat-dialog-content');
+        expect(template).toContain('Selected columns · table order');
+        expect(template).toContain('moveLapColumn(group.family, metric.type, -1)');
+        expect(template).not.toContain('matMenuTriggerFor');
+        expect(template).toContain('mat-select');
+        expect(template).toContain('Lap sport family');
         expect(template).toContain('activeLapColumnMenuGroup');
         expect(template).toContain('Choose columns for {{ group.label.toLowerCase() }} laps');
         expect(template).toContain('Search metrics');
@@ -1311,7 +1478,6 @@ describe('EventCardLapsComponent source contracts', () => {
         expect(template).toContain('group.metricAvailability[metric.type]?.label');
         expect(template).toContain('unavailable in these laps and hidden from the table');
         expect(template).toContain('matListItemTitle');
-        expect(template).toContain('matListItemLine');
         expect(template).toContain('No matching metrics.');
         expect(template).toContain('row.isLapAverage');
         expect(template).toContain('lap-average-row');

@@ -36,12 +36,14 @@ import {
   formatEventLapMetric,
   getAverageEventLapMetrics,
   getDefaultEventLapMetricTypes,
+  getEventLapColumnPickerOptions,
   getEventLapMetricOptionGroups,
   getSelectedEventLapSummaryMetrics,
   getSelectedEventLapMetricTypes,
   isEventLapSportFamily,
   normalizeEventDetailsSettings,
   normalizeEventLapMetricTypes,
+  moveEventLapMetricType,
   resolveEventLapSportFamily,
 } from './event-lap-table-columns.helper';
 
@@ -52,6 +54,42 @@ const unitSettings: UserUnitSettingsInterface = {
 } as UserUnitSettingsInterface;
 
 describe('event lap table columns helper', () => {
+  it('presents selected columns in saved order with complete variant names and no duplicated options', () => {
+    const groups = getEventLapMetricOptionGroups('swimming');
+    const original = JSON.stringify(groups);
+    const selected = [DataHeartRateMax.type, DataDuration.type, DataSwimPaceAvg.type];
+    const picker = getEventLapColumnPickerOptions(groups, selected);
+    expect(picker.selectedMetrics).toEqual(selected.map(type => ({ type, label: type })));
+    const available = picker.availableMetricGroups.flatMap(group => group.metrics.map(metric => metric.type));
+    selected.forEach(type => expect(available).not.toContain(type));
+    expect(available).toContain(DataDistance.type);
+    expect(JSON.stringify(groups)).toBe(original);
+  });
+
+  it('preserves selected columns missing from a narrowed catalog and keeps customized labels', () => {
+    const picker = getEventLapColumnPickerOptions([
+      { id: 'swim', label: 'Swimming', metrics: [{ type: 'Normalized SWOLF', label: 'SWOLF (25 yd)' }] },
+    ], [DataDuration.type, 'Normalized SWOLF']);
+    expect(picker.selectedMetrics).toEqual([
+      { type: DataDuration.type, label: DataDuration.type },
+      { type: 'Normalized SWOLF', label: 'SWOLF (25 yd)' },
+    ]);
+    expect(picker.availableMetricGroups).toEqual([]);
+    expect(getEventLapColumnPickerOptions(getEventLapMetricOptionGroups(), []).selectedMetrics).toEqual([]);
+  });
+
+  it('moves a selected column without altering membership or the original saved layout', () => {
+    const saved = [DataDuration.type, DataDistance.type, DataHeartRateMax.type, DataSwimPaceAvg.type];
+    const moved = moveEventLapMetricType(saved, DataSwimPaceAvg.type, -1);
+    expect(moved).toEqual([DataDuration.type, DataDistance.type, DataSwimPaceAvg.type, DataHeartRateMax.type]);
+    expect(moveEventLapMetricType(moved, DataSwimPaceAvg.type, 1)).toEqual(saved);
+    expect(saved).toEqual([DataDuration.type, DataDistance.type, DataHeartRateMax.type, DataSwimPaceAvg.type]);
+    expect(moveEventLapMetricType(saved, DataDuration.type, -1)).toEqual(saved);
+    expect(moveEventLapMetricType(saved, DataSwimPaceAvg.type, 1)).toEqual(saved);
+    expect(moveEventLapMetricType(saved, 'missing', -1)).toEqual(saved);
+    expect(moveEventLapMetricType([], DataDuration.type, 1)).toEqual([]);
+  });
+
   it('resolves canonical and aliased activities into independent sport families', () => {
     expect(resolveEventLapSportFamily('Running')).toBe('running');
     expect(resolveEventLapSportFamily(' trail running ')).toBe('running');

@@ -1263,6 +1263,11 @@ describe('help.content', () => {
 
   it('should document event swim length tables', () => {
     const gettingStartedSection = HELP_SECTIONS.find(section => section.id === 'getting-started');
+    expect(gettingStartedSection?.content).toContain('**Selected columns** stay at the top in table order');
+    expect(gettingStartedSection?.content).toContain('**Move up** or **Move down**');
+    expect(gettingStartedSection?.content).toContain('with touch or keyboard');
+    expect(gettingStartedSection?.content).toContain('Search filters **Add columns** only');
+    expect(gettingStartedSection?.content).toContain('If a save fails, the previous selection and order return');
 
     expect(gettingStartedSection?.content).toContain('individual recorded FIT pool lengths');
     expect(gettingStartedSection?.content).toContain('**Total strokes**');

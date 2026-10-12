@@ -2,78 +2,107 @@
 <mat-divider></mat-divider>
 <app-event-section-header icon="linear_scale" title="Laps">
   @if (canCustomize && lapColumnMenuGroups.length > 0) {
-  <button mat-icon-button [matMenuTriggerFor]="lapColumnsMenu" matTooltip="Choose lap columns"
-    aria-label="Choose lap columns" appHapticTap>
+  <button mat-icon-button (click)="openLapColumnsDialog()" matTooltip="Choose lap columns"
+    aria-label="Choose lap columns">
     <mat-icon>view_column</mat-icon>
   </button>
   }
 </app-event-section-header>
-<mat-menu #lapColumnsMenu="matMenu" xPosition="before"
-  class="qs-menu-panel qs-menu-panel-form qs-config-menu lap-column-menu-panel">
-    <div class="lap-column-menu-content">
-      @if (lapColumnMenuGroups.length > 1) {
-      <mat-button-toggle-group class="lap-column-family-toggle"
-        [value]="activeLapColumnMenuGroup?.family"
-        aria-label="Lap sport family"
-        (change)="onLapColumnMenuSportFamilyChange($event.value)">
+<ng-template #lapColumnsDialog>
+  <h2 mat-dialog-title>Choose lap columns</h2>
+  <mat-dialog-content class="lap-column-dialog-content">
+    <div class="lap-column-dialog-body">
+    @if (lapColumnMenuGroups.length > 1) {
+    <mat-form-field appearance="outline" class="lap-column-family-field" subscriptSizing="dynamic">
+      <mat-label>Lap sport family</mat-label>
+      <mat-select [value]="activeLapColumnMenuGroup?.family" aria-label="Lap sport family"
+        (selectionChange)="onLapColumnMenuSportFamilyChange($event.value)">
         @for (familyGroup of lapColumnMenuGroups; track familyGroup.family) {
-        <mat-button-toggle [value]="familyGroup.family" (click)="$event.stopPropagation()">
-          <mat-icon>{{ familyGroup.icon }}</mat-icon>
-          <span>{{ familyGroup.label }}</span>
-        </mat-button-toggle>
+        <mat-option [value]="familyGroup.family">{{ familyGroup.label }}</mat-option>
         }
-      </mat-button-toggle-group>
-      }
-      @if (activeLapColumnMenuGroup; as group) {
-      <p class="lap-column-menu-copy">Choose columns for {{ group.label.toLowerCase() }} laps. Values use your saved units.</p>
-      @if (group.selectedUnavailableMetricCount > 0) {
-      <p class="lap-column-availability-summary" role="status">
-        {{ group.selectedUnavailableMetricCount }} selected {{ group.selectedUnavailableMetricCount === 1 ? 'column is' : 'columns are' }} unavailable in these laps and hidden from the table.
-      </p>
-      }
-      <mat-form-field appearance="outline" class="lap-column-search-field" subscriptSizing="dynamic">
-        <mat-label>Search metrics</mat-label>
-        <input matInput [value]="group.searchTerm" (click)="$event.stopPropagation()"
-          (input)="onLapColumnMetricSearchInput(group, $event)"
-          placeholder="Speed, heart rate, power..." [attr.aria-label]="'Search ' + group.label.toLowerCase() + ' lap metrics'"
-          autocomplete="off">
-        @if (group.searchTerm) {
-        <button mat-icon-button matSuffix type="button" (click)="$event.stopPropagation(); clearLapColumnMetricSearch(group)"
-          aria-label="Clear metric search">
-          <mat-icon>close</mat-icon>
-        </button>
-        } @else {
-        <mat-icon matSuffix>search</mat-icon>
-        }
-      </mat-form-field>
-      @if (savingLapColumnSportFamilies().has(group.family)) {
-      <div class="lap-column-menu-saving" aria-live="polite">
-        <mat-progress-spinner diameter="18" mode="indeterminate"></mat-progress-spinner>
-        <span>Saving columns</span>
-      </div>
-      }
-      <mat-selection-list [multiple]="true" [disabled]="savingLapColumnSportFamilies().has(group.family)"
-        (click)="$event.stopPropagation()"
-        [aria-label]="group.label + ' lap columns'" (selectionChange)="onLapColumnSelectionChange(group.family, $event)">
-        @for (metricGroup of group.filteredMetricGroups; track metricGroup.id) {
-        <div mat-subheader>{{ metricGroup.label }}</div>
-        @for (metric of metricGroup.metrics; track metric.type) {
-        <mat-list-option [selected]="group.selectedMetricTypes.includes(metric.type)" [value]="metric.type">
-          <app-data-type-icon matListItemIcon [dataType]="metric.type" size="18px"></app-data-type-icon>
-          <span matListItemTitle>{{ metric.label }}</span>
+      </mat-select>
+    </mat-form-field>
+    }
+    @if (activeLapColumnMenuGroup; as group) {
+    <p class="lap-column-menu-copy">Choose columns for {{ group.label.toLowerCase() }} laps. Values use your saved units. Changes save automatically.</p>
+    @if (group.selectedUnavailableMetricCount > 0) {
+    <p class="lap-column-availability-summary" role="status">
+      {{ group.selectedUnavailableMetricCount }} selected {{ group.selectedUnavailableMetricCount === 1 ? 'column is' : 'columns are' }} unavailable in these laps and hidden from the table.
+    </p>
+    }
+    <h3 class="lap-column-section-title">Selected columns · table order</h3>
+    <ol class="lap-column-selected-list" [attr.aria-label]="group.label + ' selected columns in table order'"
+      [attr.aria-busy]="savingLapColumnSportFamilies().has(group.family)">
+      @for (metric of group.selectedMetrics; track metric.type; let first = $first; let last = $last) {
+      <li class="lap-column-selected-row" [attr.data-lap-column]="metric.type">
+        <div class="lap-column-selected-metric">
+          <mat-checkbox [checked]="true" [disabled]="savingLapColumnSportFamilies().has(group.family)"
+            (change)="onLapColumnCheckedChange(group.family, metric.type, $event.checked)">
+            {{ metric.label }}
+          </mat-checkbox>
           @if (group.metricAvailability[metric.type]?.label; as availabilityLabel) {
-          <span matListItemLine>{{ availabilityLabel }}</span>
+          <p class="lap-column-metric-availability">{{ availabilityLabel }}</p>
           }
-        </mat-list-option>
-        }
-        }
-        @empty {
-        <p class="lap-column-menu-empty" role="status">No matching metrics.</p>
-        }
-      </mat-selection-list>
+        </div>
+        <div class="lap-column-order-actions">
+          <button mat-icon-button type="button" [disabled]="first || savingLapColumnSportFamilies().has(group.family)"
+            [attr.aria-label]="'Move ' + metric.label + ' up'" matTooltip="Move up"
+            (click)="moveLapColumn(group.family, metric.type, -1)">
+            <mat-icon>arrow_upward</mat-icon>
+          </button>
+          <button mat-icon-button type="button" [disabled]="last || savingLapColumnSportFamilies().has(group.family)"
+            [attr.aria-label]="'Move ' + metric.label + ' down'" matTooltip="Move down"
+            (click)="moveLapColumn(group.family, metric.type, 1)">
+            <mat-icon>arrow_downward</mat-icon>
+          </button>
+        </div>
+      </li>
+      } @empty {
+      <li class="lap-column-menu-empty">No columns selected.</li>
       }
+    </ol>
+    @if (savingLapColumnSportFamilies().has(group.family)) {
+    <div class="lap-column-menu-saving" role="status">
+      <mat-progress-spinner diameter="18" mode="indeterminate"></mat-progress-spinner>
+      <span>Saving columns</span>
     </div>
-</mat-menu>
+    }
+    <p class="cdk-visually-hidden" role="status" aria-live="polite">{{ lapColumnAnnouncement() }}</p>
+    <h3 class="lap-column-section-title">Add columns</h3>
+    <mat-form-field appearance="outline" class="lap-column-search-field" subscriptSizing="dynamic">
+      <mat-label>Search metrics</mat-label>
+      <input matInput data-lap-column-search [value]="group.searchTerm" (input)="onLapColumnMetricSearchInput(group, $event)"
+        placeholder="Speed, heart rate, power..." [attr.aria-label]="'Search ' + group.label.toLowerCase() + ' lap metrics'"
+        autocomplete="off">
+      @if (group.searchTerm) {
+      <button mat-icon-button matSuffix type="button" (click)="clearLapColumnMetricSearch(group)" aria-label="Clear metric search">
+        <mat-icon>close</mat-icon>
+      </button>
+      } @else {
+      <mat-icon matSuffix>search</mat-icon>
+      }
+    </mat-form-field>
+    <mat-selection-list [multiple]="true" [disabled]="savingLapColumnSportFamilies().has(group.family)"
+      [aria-label]="group.label + ' available lap columns'" (selectionChange)="onLapColumnSelectionChange(group.family, $event)">
+      @for (metricGroup of group.filteredMetricGroups; track metricGroup.id) {
+      <div mat-subheader>{{ metricGroup.label }}</div>
+      @for (metric of metricGroup.metrics; track metric.type) {
+      <mat-list-option [value]="metric.type" [attr.aria-label]="metric.type === swolfColumn ? metric.label : metric.type">
+        <app-data-type-icon matListItemIcon [dataType]="metric.type" size="18px"></app-data-type-icon>
+        <span matListItemTitle>{{ metric.label }}</span>
+      </mat-list-option>
+      }
+      } @empty {
+      <p class="lap-column-menu-empty" role="status">No matching metrics.</p>
+      }
+    </mat-selection-list>
+    }
+    </div>
+  </mat-dialog-content>
+  <mat-dialog-actions align="end">
+    <button mat-button mat-dialog-close type="button">Done</button>
+  </mat-dialog-actions>
+</ng-template>
 @if (lapTableGroups.length === 1) {
 @if (lapTableGroups[0]; as lapTableGroup) {
 <ng-container *ngTemplateOutlet="lapTableGroupTables; context: { $implicit: lapTableGroup }"></ng-container>
