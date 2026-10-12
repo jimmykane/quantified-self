@@ -119,7 +119,8 @@ test('all application and operator mail producers initialize pending metadata in
   for (const path of paths) assert.match(readFileSync(`functions/src/${path}`, 'utf8'), /\.\.\.newEmailDeliveryFields\(\)/, `${path} must use existing-mail metadata, never a second queue.`);
   assert.doesNotMatch(readFileSync('functions/src/email/monitoring-probe.ts', 'utf8'), /\.set\(|\.update\(|\.create\(|\.delete\(|runTransaction|\.collection\('email/);
   const docs = readFileSync('docs/email-lifecycle.md', 'utf8');
-  assert.match(docs, /## Cloud Monitoring \(#835\)/); assert.match(docs, /local, not yet activated/);
+  assert.match(docs, /## Cloud Monitoring \(#835\)/); assert.match(docs, /Future production deployments/);
+  assert.match(docs, /first five-minute slot of each UTC quarter-hour/);
   assert.match(docs, /MCP\/Assistant impact: \*\*none\*\*/); assert.match(docs, /no delivery state at all/);
   assert.match(docs, /No extra document write or Function invocation/);
 });

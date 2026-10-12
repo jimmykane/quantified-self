@@ -49,15 +49,26 @@ describe('email monitoring reuses existing handlers', () => {
   });
   afterEach(() => vi.unstubAllEnvs());
   const tick = (scheduleTime: string) => ({ scheduleTime } as Parameters<typeof dispatchMarketingCampaigns.run>[0]);
-  it('observes only UTC quarter-hour scheduler ticks, including idle/capped dispatches', async () => {
+  it('observes only the first five-minute slot in each UTC quarter-hour, including idle/capped dispatches', async () => {
     await dispatchMarketingCampaigns.run(tick('2026-10-12T08:05:00Z'));
     expect(observeEmailOutbox).not.toHaveBeenCalled();
     await dispatchMarketingCampaigns.run(tick('2026-10-12T08:15:00Z'));
     expect(observeEmailOutbox).toHaveBeenCalledTimes(1);
   });
+  it.each([0, 1, 2, 3, 4])('observes every fifteen minutes at scheduler minute phase %i, including midnight', async phase => {
+    const start = Date.UTC(2026, 9, 11, 23, 45 + phase);
+    for (let index = 0; index < 12; index++) {
+      await dispatchMarketingCampaigns.run(tick(new Date(start + index * 5 * 60_000).toISOString()));
+      expect(observeEmailOutbox).toHaveBeenCalledTimes(Math.floor(index / 3) + 1);
+    }
+  });
+  it('never samples an invalid scheduler timestamp', async () => {
+    await dispatchMarketingCampaigns.run(tick('invalid'));
+    expect(observeEmailOutbox).not.toHaveBeenCalled();
+  });
   it('still observes on a dispatcher failure while preserving its original exception', async () => {
     const error = new Error('synthetic failure'); vi.mocked(dispatchCampaigns).mockRejectedValueOnce(error);
-    await expect(dispatchMarketingCampaigns.run(tick('2026-10-12T08:30:00Z'))).rejects.toBe(error);
+    await expect(dispatchMarketingCampaigns.run(tick('2026-10-12T08:34:05Z'))).rejects.toBe(error);
     expect(observeEmailOutbox).toHaveBeenCalledTimes(1);
   });
   it('an unexpected monitoring/client failure cannot replace dispatch success or its original error', async () => {

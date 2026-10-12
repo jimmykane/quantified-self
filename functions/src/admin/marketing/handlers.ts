@@ -51,7 +51,9 @@ export const dispatchMarketingCampaigns = onSchedule({ schedule: 'every 5 minute
     logger.info('Marketing dispatch complete', { submitted });
   } finally {
     const tick = new Date(event.scheduleTime);
-    if (Number.isFinite(tick.getTime()) && tick.getUTCMinutes() % 15 === 0) {
+    // Interval jobs can run at :04/:09/:14, rather than exact clock boundaries.
+    // The first five-minute slot in each quarter-hour covers every job phase.
+    if (Number.isFinite(tick.getTime()) && tick.getUTCMinutes() % 15 < 5) {
       try { await observeEmailOutbox(admin.firestore()); }
       catch { recordEmailSample('transactional'); recordEmailSample('marketing'); }
     }

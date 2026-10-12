@@ -74,9 +74,11 @@ Rollout requires separate approval. Before deployment, an operator must provisio
 
 ## Cloud Monitoring (#835)
 
-This is the **local, not yet activated** email monitoring implementation. It uses the existing Firestore `mail`
-outbox and installed Trigger Email extension, not Cloud Tasks or another SMTP sender. Production deployment,
-monitoring apply/readback and any controlled email send require separate approval. See
+The email monitoring dashboard, twelve metrics and seven policies were activated on 12 October 2026 with explicit
+owner approval. Configuration readback and all chart/condition queries passed; live heartbeat verification remains
+tracked in #835 until the dispatcher timing correction is deployed and observed. It uses the existing Firestore `mail`
+outbox and installed Trigger Email extension, not Cloud Tasks or another SMTP sender. Future production deployments,
+monitoring changes and any controlled email send require separate approval. See
 [Firebase delivery states](https://firebase.google.com/docs/extensions/official/firestore-send-email/delivery-status).
 
 ### Lean storage and lifecycle
@@ -103,7 +105,8 @@ transition. Eventarc notifications are at-least-once; counters are observations,
 `dispatchCampaigns` emits completed/failed invocation categories and completed-run submission counts, including the
 existing Start/Resume path. A submission is not SMTP success. Normal daily caps, future schedules and consent/account
 suppression do not become failures. The existing scheduled dispatcher remains every five minutes, UTC, with its
-current resources/secrets. On UTC quarter-hour ticks it additionally runs `observeEmailOutbox` in `finally`, so idle,
+current resources/secrets. In the first five-minute slot of each UTC quarter-hour it additionally runs `observeEmailOutbox`
+in `finally`, so interval jobs with an offset minute phase still sample every fifteen minutes. Idle,
 capped and failed dispatches still produce observation heartbeats. Monitoring/client/logging failures cannot replace
 the dispatcher's result or original exception. No new Function, secret, scheduler, SMTP call or automatic retry exists.
 
@@ -157,7 +160,7 @@ runtime failures, bounded backlog/age and heartbeats; extension Gen 1/Gen 2 nati
 Do not treat empty native charts for the other generation as failed delivery.
 
 No extra document write or Function invocation is added to a mail producer; the existing trigger adds bounded logs.
-At the normal 96 quarter-hour ticks/day, the probe reads at most 2,016 mail documents (an empty query still incurs its
+At the normal 96 quarter-hour sampling slots/day, the probe reads at most 2,016 mail documents (an empty query still incurs its
 minimum read). Scheduler duplicates/retries can add invocations. Standard Firestore, Logging, custom-metric and alert
 charges apply; no cost-free claim is made. Metric labels have fixed, small cardinality. Existing SMTP pricing and mail
 retention are unchanged.
@@ -185,7 +188,7 @@ After separate approval:
    Verify that channel is the existing independent Alerts channel; do not create another sender/channel.
 4. Read back the owned dashboard/metrics/seven policies, validate every chart/condition query, then reapply serially
    and prove no duplicates or changes to unrelated configuration. Record both native extension generation and actual
-   post-creation heartbeat/count/age series from a natural quarter-hour tick. Native-only idle is not delivery proof.
+   post-creation heartbeat/count/age series from a natural first-slot tick in a UTC quarter-hour. Native-only idle is not delivery proof.
 5. Reuse #655's same-channel alert-email proof where valid. Any new controlled SMTP email, temporary test policy,
    deliberate fault or resource deletion requires separate exact-scope approval. Record representative real delivery
    state/dispatcher evidence and exclusions on #835 before operational completion.
