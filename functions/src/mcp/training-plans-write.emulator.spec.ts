@@ -27,7 +27,7 @@ import { processTrainingBulkShift, reconcileTrainingBulkShifts } from '../traini
 import { mutateTrainingScheduleForUser } from '../training-plans/persistence';
 import { BULK_SHIFT_LEASE_MS } from '../training-plans/staged-shift';
 import { applyTrainingChanges, getTrainingChangeStatus, previewCreatePlannedWorkout, previewTrainingChanges,
-  previewStrengthWorkoutChange, previewPlannedWorkoutV2Change, previewPlannedWorkoutV3Change, previewTrainingDeletion,
+  previewStrengthWorkoutChange, previewPlannedWorkoutV2Change, previewPlannedWorkoutV3Change, previewPlannedWorkoutV3Changes, previewTrainingDeletion,
   previewGarminWorkoutReplacement, loadAssistantTrainingWorkoutReviews,
   type TrainingWriteDependencies } from './training-plans-write.service';
 import { TRAINING_CHANGE_STATUS_OUTPUT, TRAINING_DELIVERY_WRITE_SCOPE, TRAINING_PLANS_SCOPE,
@@ -85,6 +85,132 @@ describe.skipIf(!process.env.FIRESTORE_EMULATOR_HOST)('Training MCP write propos
 
   const statusInput = (proposalRef: string) => ({ uid, connectionId: 'connection', scopes,
     arguments: { proposalRef, permissionMode: 'combined' } });
+
+  it.each(['external', 'assistant'])('retargets 18 complete quality runs through %s without losing early Lap or renewing Suunto consent', async client => {
+    const user = db.collection('users').doc(uid);
+    const suunto = new SuuntoHttpFixture();
+    deps.runtime.transport = provider => provider === 'suunto' ? new SuuntoGuideTransport(suunto.request, 'Quantified Self', deps.now) : null;
+    const setup = await previewTrainingChanges({ uid, connectionId: 'connection', scopes, arguments: {
+      expectedScheduleRevision: 1, changes: [
+        { kind: 'create-plan', localKey: 'plan', name: 'Synthetic quality plan', startDate: '2026-09-18', endDate: '2027-01-30', activate: true },
+        { kind: 'create-workout', localKey: 'untouched', plan: { localKey: 'plan' }, localDate: '2027-01-30', title: 'Easy run', structure },
+        { kind: 'provider-delivery', targetType: 'plan', target: { localKey: 'plan' }, providers: ['suunto'], action: 'enable', timeZone: 'America/New_York' },
+      ] } }, deps);
+    const setupResult = await applyTrainingChanges({ uid, connectionId: 'connection', scopes,
+      arguments: { proposalRef: setup.proposalRef, permissionMode: 'combined' } }, deps);
+    const untouched = (await user.collection('scheduledWorkouts').get()).docs[0];
+    const untouchedBefore = untouched.data();
+    const store = createAssistantConversationStore({ db: () => db, now: () => new Date(deps.now()), createId: () => 'bulk-review' });
+    const chat = client === 'assistant' ? await store.resetConversation(uid, 'coordinate_free', false, null, true, true, false) : null;
+    const input = { uid, connectionId: chat ? `first-party-assistant-v1:${chat.conversationId}` : 'connection',
+      scopes: [TRAINING_PLANS_SCOPE, TRAINING_PLANS_WRITE_SCOPE] };
+    const applyReviewed = async (preview: Awaited<ReturnType<typeof previewPlannedWorkoutV3Changes>>) => {
+      if (!chat) return applyTrainingChanges({ ...input, arguments: { proposalRef: preview.proposalRef, permissionMode: 'schedule' } }, deps);
+      const begun = await store.beginTurn(uid, chat.conversationId, undefined, undefined, 'coordinate_free', false, true, true, false);
+      if (begun.kind !== 'started') throw new Error('Expected an Assistant turn.');
+      const createdAt = new Date(deps.now()).toISOString();
+      const workoutReviews = await loadAssistantTrainingWorkoutReviews({ ...input, proposalRef: preview.proposalRef }, deps);
+      await store.completeTurn(uid, begun, { id: `question-${++sequence}`, role: 'user', createdAt, text: 'Review the complete fixture recipes.' },
+        { id: `answer-${++sequence}`, role: 'assistant', createdAt, text: 'Nothing changes before Apply.' }, { ...preview, workoutReviews });
+      const appApply = vi.fn(value => applyTrainingChanges(value, deps));
+      const confirmed = await runApplyAssistantTrainingProposal({ proposalRef: preview.proposalRef, permissionMode: 'schedule',
+        conversationId: chat.conversationId, confirm: true }, { auth: { uid }, app: { appId: 'synthetic-emulator-app' } }, store, appApply);
+      expect(confirmed.status).toBe('applied');
+      expect(appApply).toHaveBeenCalledTimes(1);
+      return appApply.mock.results[0].value;
+    };
+    // Read-reference bindings differ between the external connection and the
+    // Assistant conversation; project the same authoritative plan for each.
+    const plan = (await user.collection('trainingPlans').get()).docs[0];
+    const planRef = encodeOpaqueValue('training_read', { kind: 'plan', id: plan.id, createdAtMs: plan.get('createdAtMs') }, uid, input.connectionId);
+    const recipe = parseWorkoutStructureV1({ version: 1, sport: ActivityTypes.Running, nodes: [
+      { kind: 'step', id: 'warmup', purpose: 'warmup', ending: { kind: 'time', seconds: 1200, allowEarlyLap: true }, targets: [] },
+      { kind: 'repeat', id: 'quality', count: 5, steps: [
+        { kind: 'step', id: 'effort', purpose: 'work', ending: { kind: 'time', seconds: 180 },
+          targets: [{ kind: 'heart-rate', mode: 'absolute', minimumBpm: 148, maximumBpm: 156 }], note: 'Steady — controlled' },
+        { kind: 'step', id: 'recovery', purpose: 'recovery', ending: { kind: 'manual' }, targets: [] },
+      ] },
+    ] });
+    const creations = Array.from({ length: 18 }, (_, index) => ({ kind: 'create-workout', localKey: `quality-${index}`,
+      plan: { ref: planRef }, title: `Quality ${index + 1}`, structure: recipe,
+      localDate: new Date(Date.parse('2026-09-18T00:00:00Z') + index * 7 * 86400000).toISOString().slice(0, 10) }));
+    const createdPreview = await previewPlannedWorkoutV3Changes({ ...input,
+      arguments: { expectedScheduleRevision: setupResult.scheduleRevision, changes: creations } }, deps);
+    const created = await applyReviewed(createdPreview);
+    const drain = async () => { for (let page = 0; page < 25 && await reconcileTrainingDeliveryPage(deps.runtime, uid); page += 1) { /* bounded synthetic scan */ } };
+    await drain();
+    // Resolve the exact first fixture workout, not an arbitrary provider record.
+    const firstId = (decodeOpaqueValue('training_read', created.createdReferences[0].reference, uid, input.connectionId, 'Training reference') as { id: string }).id;
+    const firstLedger = (await user.collection('trainingDeliveryLedger').where('workoutId', '==', firstId).get()).docs[0];
+    expect(firstLedger).toBeDefined();
+    await processTrainingDelivery(deps.runtime, uid, firstLedger.id);
+    expect(suunto.guides.size).toBe(1);
+    const guideId = [...suunto.guides.keys()][0];
+    const settingsBefore = (await user.collection('trainingDeliverySettings').get()).docs.map(doc => [doc.id, doc.data()]);
+    const workoutsBefore = (await user.collection('scheduledWorkouts').get()).docs.map(doc => [doc.id, doc.data()]);
+    const editedRecipe = parseWorkoutStructureV1({ ...recipe, nodes: recipe.nodes.map(node => node.kind === 'repeat'
+      ? { ...node, steps: node.steps.map(step => step.id === 'effort' ? { ...step,
+        targets: [{ kind: 'heart-rate', mode: 'absolute', minimumBpm: 142, maximumBpm: 150 }] } : step) } : node) });
+    const updates = created.createdReferences.map((item, index) => ({ kind: 'update-workout', workout: { ref: item.reference },
+      plan: { ref: planRef }, localDate: creations[index].localDate, title: creations[index].title, structure: editedRecipe }));
+    const updateInput = { ...input, arguments: { expectedScheduleRevision: created.scheduleRevision, changes: updates } };
+    await expect(previewPlannedWorkoutV3Changes({ ...updateInput, scopes: [TRAINING_PLANS_SCOPE] }, deps)).rejects.toThrow();
+    await expect(previewPlannedWorkoutV3Changes({ ...updateInput, arguments: { ...updateInput.arguments, expectedScheduleRevision: 1 } }, deps)).rejects.toThrow('schedule changed');
+    await expect(previewTrainingChanges({ ...updateInput, arguments: { ...updateInput.arguments, changes: updates.map(change => ({ ...change,
+      structure: { ...editedRecipe, nodes: editedRecipe.nodes.map(node => node.kind === 'step'
+        ? { ...node, ending: { kind: 'time', seconds: 1200 } } : node) } })) } }, deps)).rejects.toThrow('early Lap');
+    const callCount = suunto.calls.length;
+    const updatePreview = await previewPlannedWorkoutV3Changes(updateInput, deps);
+    expect(updatePreview.permissionMode).toBe('schedule');
+    expect(updatePreview.providerPreviews).toEqual([]);
+    expect(updatePreview.changes).toHaveLength(18);
+    expect((await user.collection('scheduledWorkouts').get()).docs.map(doc => [doc.id, doc.data()])).toEqual(workoutsBefore);
+    expect(suunto.calls).toHaveLength(callCount);
+    if (client === 'assistant') {
+      const reviews = await loadAssistantTrainingWorkoutReviews({ ...input, proposalRef: updatePreview.proposalRef }, deps);
+      expect(reviews).toHaveLength(18);
+      for (const review of reviews) { expect(review.before!.structure).toEqual(recipe); expect(review.after!.structure).toEqual(editedRecipe); }
+    }
+    const result = await applyReviewed(updatePreview);
+    expect(result.status).toBe('applied');
+    expect(result.changes).toHaveLength(18);
+    if (chat) {
+      const replay = vi.fn(value => applyTrainingChanges(value, deps));
+      await expect(runApplyAssistantTrainingProposal({ proposalRef: updatePreview.proposalRef, permissionMode: 'schedule',
+        conversationId: chat.conversationId, confirm: true }, { auth: { uid }, app: { appId: 'synthetic-emulator-app' } }, store, replay))
+        .rejects.toThrow('Review the proposal again');
+      expect(replay).not.toHaveBeenCalled();
+    } else {
+      await expect(applyTrainingChanges({ ...input, arguments: { proposalRef: updatePreview.proposalRef, permissionMode: 'schedule' } }, deps)).resolves.toEqual(result);
+    }
+    for (const doc of (await user.collection('scheduledWorkouts').get()).docs) {
+      if (doc.id === untouched.id) { expect(doc.data()).toEqual(untouchedBefore); continue; }
+      expect(doc.get('structure')).toEqual(editedRecipe);
+      expect(doc.get('revision')).toBe(2);
+    }
+    const codec = {
+      encode: (value: Record<string, unknown>, owner: string, connection: string) => encodeOpaqueValue('training_read', value, owner, connection),
+      decode: (value: string, owner: string, connection: string) => decodeOpaqueValue('training_read', value, owner, connection, 'Training reference'),
+    };
+    const reads = createFirestoreTrainingReads(() => db);
+    for (const [index, item] of created.createdReferences.entries()) {
+      const saved = await readTrainingPlans({ ...input, tool: 'get_planned_workout_v3', arguments: { workoutRef: item.reference } }, reads, codec, deps.now());
+      expect(saved).toMatchObject({ scheduleRevision: result.scheduleRevision, workout: { structure: editedRecipe,
+        revision: 2, planRef: expect.any(String), localDate: creations[index].localDate, title: creations[index].title, lifecycle: 'planned' } });
+    }
+    expect((await user.collection('trainingDeliverySettings').get()).docs.map(doc => [doc.id, doc.data()])).toEqual(settingsBefore);
+    expect((await user.collection('trainingWorkoutCompletions').get()).empty).toBe(true);
+    await drain();
+    await processTrainingDelivery(deps.runtime, uid, firstLedger.id);
+    expect([...suunto.guides.keys()]).toEqual([guideId]);
+    expect(suunto.calls.filter(call => call.method === 'POST')).toHaveLength(1);
+    expect(suunto.calls.filter(call => call.method === 'PUT')).toHaveLength(1);
+    const uploadedTargets = suunto.guides.get(guideId)!.guide.steps.flatMap(step => step.type === 'repeat'
+      ? step.steps.flatMap(child => child.fields) : step.fields).filter(field => field.type === 'targetHeartRate');
+    expect(uploadedTargets.length).toBeGreaterThan(0);
+    for (const target of uploadedTargets) expect(target).toMatchObject({ min: 142, max: 150 });
+    expect((await user.collection('trainingDeliveryStatuses').doc(firstLedger.id).get()).data()).toMatchObject({ status: 'delivered', hasRemoteCopy: true });
+  }, 90_000);
 
   it.each(['external', 'assistant'])('rejects contradictory batches and reads back exact approved recipes through %s', async client => {
     let connectionId = 'connection';

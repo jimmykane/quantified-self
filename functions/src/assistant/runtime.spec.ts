@@ -3,6 +3,21 @@ import { TRAINING_PLAN_NEXT_STEPS_GUIDANCE, TRAINING_PRESCRIPTION_AUTHORING_GUID
 import type { AssistantWorkoutReview } from '../../../shared/assistant-workout-review';
 
 describe('Training phase preview routing', () => {
+  it.each([
+    'Update HR ranges across my plan, preserving warm-ups and early Lap.',
+    'Change heart rate zones for all quality runs on Wednesdays.',
+    'Edit two workouts and keep their early Lap warm-ups.',
+    'Edit 18 workouts and keep their early Lap warm-ups.',
+    'Add a 20 minute warm-up to every quality run.',
+    'Create three planned workouts with early Lap.',
+  ])('selects full-recipe bulk review for %s', prompt => {
+    expect(selectAssistantTrainingPreviewTool(prompt)).toBe('preview_planned_workout_v3_changes');
+  });
+  it.each(['Sync all workouts to Suunto.', 'Move two workouts to next week.',
+    'Copy my workout to every Wednesday.', 'Update my plan sync settings.',
+    'Activate my plan and sync to Suunto.'])('keeps other mutation kinds on the existing path: %s', prompt => {
+    expect(selectAssistantTrainingPreviewTool(prompt)).toBe('preview_training_changes');
+  });
   it.each(['Add a Base phase to my plan', 'Rename the recovery phase', 'Remove the taper phase from the plan',
     'Change my plan phases', "Edit my plan's phases", 'Move the taper phase a week later',
     'Extend the Base phase by two days'])('routes an explicit phase-only edit: %s', prompt => {
@@ -519,6 +534,23 @@ describe('Training preview model-tool selection', () => {
     expect(modelTools).toContain('preview_create_planned_workout');
     expect(modelTools.filter(name => name.startsWith('preview_'))).toEqual(['preview_create_planned_workout']);
     expect(session.tools.map(tool => tool.name)).toContain('preview_training_changes');
+  });
+
+  it.each([false, true])('selects only the complete bulk editor, with no lossy missing-catalog fallback (available=%s)', async available => {
+    const { session } = createSession();
+    session.tools.push({ name: 'preview_training_changes', title: 'Legacy preview', description: 'Legacy recipes', inputSchema: { type: 'object' } });
+    if (available) session.tools.push({ name: 'preview_planned_workout_v3_changes', title: 'Complete bulk preview', description: 'Full recipes', inputSchema: { type: 'object' } });
+    let previews: string[] = [];
+    const runtime = createAssistantRuntime({ createMcpSession: vi.fn().mockResolvedValue(session),
+      generateAnswer: async input => {
+        previews = input.tools.filter(tool => tool.name.startsWith('preview_')).map(tool => tool.name);
+        expect(input.tools.map(tool => tool.name)).not.toContain('apply_training_changes');
+        await input.tools.find(tool => tool.name === 'get_daily_report')!.execute({});
+        return { answer: available ? 'Review a small batch of complete recipes.' : 'The bulk capability needs a release/catalog refresh.', visualRequest: { chart: null, map: null } };
+      } });
+    await runtime.answer({ uid: 'owner', appBaseUrl: 'https://quantified-self.io', prompt: 'Update HR ranges across my plan and preserve early Lap.',
+      timeZone: 'Europe/Helsinki', history: [], trainingPlansEnabled: true, trainingPlanChangesEnabled: true });
+    expect(previews).toEqual(available ? ['preview_planned_workout_v3_changes'] : []);
   });
 
   it('offers only recipe editing when removing early Lap after a deletion clarification', async () => {

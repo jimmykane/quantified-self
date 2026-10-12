@@ -939,6 +939,7 @@ describe('MCP HTTP scope enforcement', () => {
       'preview_garmin_workout_replacement',
       'preview_planned_workout_v2_change',
       'preview_planned_workout_v3_change',
+      'preview_planned_workout_v3_changes',
       'preview_saved_workout_change',
       'preview_saved_workout_v2_change',
       'preview_strength_workout_change',
@@ -951,6 +952,9 @@ describe('MCP HTTP scope enforcement', () => {
   }, 15_000);
 
   it('advertises canonical workout authoring guidance only when Training writes are available', async () => {
+    expect(requiredScopesForRequest({ method: 'tools/call', params: {
+      name: 'preview_planned_workout_v3_changes', arguments: { expectedScheduleRevision: 1, changes: [] },
+    } })).toEqual([MCP_OAUTH_SCOPES.TrainingPlansRead, MCP_OAUTH_SCOPES.TrainingPlansWrite]);
     async function readInstructions(scopes: string[]): Promise<string> {
       const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
       const server = createMcpServer({

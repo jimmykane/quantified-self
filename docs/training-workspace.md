@@ -2617,6 +2617,31 @@ remain separate from local verification.
 
 ##### Optional early Lap on numeric endings (#784 Training 07)
 
+Full-recipe bulk editing uses additive `preview_planned_workout_v3_changes`: 1–25 complete non-strength creates or
+updates with the same latest strict recipe as the single editor, including pool length and absent/false/true Lap flags.
+It shares the existing owner/connection/grant/revision/expiry-bound preview, approval and idempotent Apply; legacy
+registered batch schemas remain frozen and cannot erase newer fields. The Assistant chooses this bulk recipe schema
+for multi-workout edits such as plan HR retargeting, presents complete before/after app reviews, and never exposes Apply
+to the model or substitutes a legacy writer when the tool is missing. Its six-call budget stays unchanged; use small
+reviews (normally up to three updates after discovery) with complete reads and truthful remaining-work disclosure.
+No plan action or new provider consent is included.
+Ask for explicit HR ranges, which prescriptions they replace, and affected sessions/date range. Read complete current
+recipes and preserve IDs, order, repeats, warm-ups, recovery, notes, dates, association and other targets. Changing profile
+zones does not recalculate stored absolute targets or relative reference snapshots. Larger selections need separately
+reviewed batches with fresh revisions and exact read-back coverage. Existing plan/standalone opt-in reconciles eligible
+edits normally; this is not a new Send, guaranteed acceptance, or watch receipt. Scheduling windows and past/completed
+protection remain unchanged. No Sports Lib/model/storage change, new callable/scope, migration or transport is needed.
+Release MCP/Assistant backend and refresh external catalogs separately; existing write grants need no reauthorization.
+Local regression uses synthetic 18-run plans through external and first-party preview/apply, preserving early-Lap
+warm-ups and every non-HR field, leaving another workout/settings/completion unchanged, then updating one retained
+Suunto Guide through fixture HTTP without another create. This is not a live ChatGPT/Claude or watch test.
+Verification: 532 focused Functions schema/transport/Assistant/loop-guard tests; the complete 17-file MCP-data emulator
+group passed 417 tests without skips. Help/hosting checks passed 106 tests, plugin tooling passed 30 tests, all seven
+bundled skills validated and fixture-ID plugin validation used an isolated profile. Functions and local frontend builds,
+70 endpoint secret bindings, diff checks and the digest-bound compatible MCP contract check passed. The existing
+developer-refresh advisory remains pending; no baseline promotion, real-profile install, push, deployment or customer
+data change was performed.
+
 `WorkoutTimeEndingV1` and `WorkoutDistanceEndingV1` optionally carry `allowEarlyLap?: boolean`.
 True means the unchanged seconds/metres limit **or** an athlete Lap press. Absent and false keep the numeric ending;
 `manual` remains indefinite until Lap and rejects the field, as do repetitions/kilojoules. The shared strict parser

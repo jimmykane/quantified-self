@@ -575,6 +575,25 @@ registered-client refresh is introduced; connecting a provider alone never creat
 
 ### Full recipes with optional early Lap
 
+The additive `preview_planned_workout_v3_changes` previews 1–25 complete non-strength creates/updates using that
+same current full recipe. It requires existing `training-plans:read` and `training-plans:write`, includes no plan,
+deletion or provider-consent actions, and reuses separately approved `apply_training_changes`. The registered legacy
+batch and focused schemas remain frozen and fail closed rather than erase pool length or an early-Lap flag.
+For plan-wide HR retargeting, read each current v3 recipe, obtain explicit new ranges and selected dates/sessions, and
+preserve all other canonical values, node IDs/order, repeats, recovery, notes, Lap settings and association. Profile
+zone changes do not automatically recalculate absolute targets or saved relative reference snapshots. Review and read
+back each changed recipe; over 25 requires fresh revisions and separately reviewed batches, not a claim of complete
+success from one sample. The Assistant selects the full bulk schema for multi-workout recipe edits, remains prepare-only,
+and does not fall back to a lossy legacy writer if the capability is missing. Its existing app review contains complete
+before/after recipes. The six-call Assistant budget is unchanged: normally at most three fully read updates after
+discovery fit one turn; explain and separately review remaining batches rather than fabricate recipes from a sample.
+Existing opt-ins reconcile eligible edits without a new Send; outside-window and past/completed
+protection still apply. An authored save is not provider acceptance or watch receipt.
+
+This is local implementation until a separately approved MCP/Assistant backend release and client catalog refresh.
+No new OAuth grant, callable, stored recipe field, migration, automatic zone linking or provider transport is added.
+Existing granted plan-change access suffices; missing access still needs the normal independent consent flow.
+
 The additive `get_planned_workout_v3` and `get_saved_workout_v2` return the entire strict recipe, including pool length
 and `allowEarlyLap` on time/distance endings. Absent, false and true are preserved; manual/repetition/kJ endings reject
 the field. Old full reads fail closed on field presence instead of projecting it away. Optional ending fields have an
