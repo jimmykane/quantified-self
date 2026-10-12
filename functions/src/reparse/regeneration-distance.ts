@@ -91,12 +91,15 @@ export function shouldPreserveParsedDistance(activity: DistanceSource, distance:
     if (typeof activity.hasStreamData !== 'function' || typeof activity.getStreamData !== 'function') return true;
 
     // sports-lib prioritizes an existing counter over GPS, including an empty or
-    // backfilled constant counter. Only a valid positive last-minus-first result
-    // can replace the source summary. A reset ending at/below its start cannot.
+    // backfilled constant counter. Endpoint subtraction is supported only by a
+    // nondecreasing counter. A reset can still finish above its starting value;
+    // that positive delta describes only part of the recording. Preserve the
+    // source summary instead of inventing a total by summing arbitrary drops.
     if (activity.hasStreamData(DataDistance.type)) {
         const values = activity.getStreamData(DataDistance.type).filter((value): value is number => typeof value === 'number');
         return values.length < 2
-            || values.some(value => !Number.isFinite(value) || value < 0)
+            || values.some((value, index) => !Number.isFinite(value) || value < 0
+                || (index > 0 && value < values[index - 1]))
             || values[values.length - 1] <= values[0];
     }
 

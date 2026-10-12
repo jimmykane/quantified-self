@@ -47,11 +47,14 @@ describe('shouldPreserveParsedDistance', () => {
     it.each([
         [], [null, null], [0], [0, 0, 0], [12, 12], [0, 100, 0], [100, 200, 50],
         [0, NaN, 100], [0, Infinity], [-10, 100],
+        [10, 100, 20], [0, 1000, 0, 1500], [20, 100, 10, 200],
+        [0, 100, null, 0, null, 200, 0, 300], [0, 1, 0.99, 2],
+        [0, 100, 50, 100, 50, 200],
     ].map(values => ({ values })))('preserves source distance when a counter cannot support recalculation: $values', ({ values }) => {
         expect(shouldPreserveParsedDistance(source({ [DataDistance.type]: values }), 1000)).toBe(true);
     });
 
-    it.each([[0, 100], [10, null, 110], [10, 100, 20]].map(values => ({ values })))('allows positive finite last-minus-first counter regeneration: $values', ({ values }) => {
+    it.each([[0, 100], [10, null, 110], [10, 10, 100, 100, 110]].map(values => ({ values })))('allows nondecreasing positive finite counter regeneration: $values', ({ values }) => {
         expect(shouldPreserveParsedDistance(source({ [DataDistance.type]: values }), 1000)).toBe(false);
     });
 

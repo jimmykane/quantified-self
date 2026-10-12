@@ -92,6 +92,9 @@ describe('help.content', () => {
     expect(copy).toContain('Reimport keeps a positive file distance summary');
     expect(copy).toContain('Missing readings or a constant zero counter do not erase that distance');
     expect(copy).toContain('usable measurements still rebuild it normally');
+    expect(copy).toContain('If the distance counter decreases during the recording');
+    expect(copy).toContain('keeps the positive total from the original file rather than using only the final segment');
+    expect(copy).toContain('does not guess a new total by adding counter segments');
     expect(copy).toContain("the original file's complete pool lengths and lap totals agree with its full distance");
     expect(copy).toContain('distance readings stop early or begin after the first length');
   });

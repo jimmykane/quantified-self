@@ -181,10 +181,22 @@ lengths do not add distance/speed; ambiguous ownership cannot supply a complete 
 date corrections follow existing strict leg reconciliation, preserving unmatched controls for owner review.
 
 Regenerate mode retains a finite positive distance from the fresh source parse when its counter or aligned GPS data
-cannot support positive recalculation. This covers summary-only files and constant/backfilled zero counters. Usable
-measurements still rebuild distance; old stored statistics never supply this fallback. Derived speed/pace and event
+cannot support reliable positive recalculation. This includes any decrease between successive numeric counter
+readings: final-minus-first is unsupported even when positive. Preserve the source total rather than just its final
+segment, without claiming independent validation of that total or summing arbitrary positive increments. This also
+covers summary-only files and constant/backfilled zero counters. Monotonic counters and usable GPS retain existing
+recalculation behavior; old stored statistics never supply this fallback. Derived speed/pace and event
 volume use the preserved summary. Apply historical corrections through original-file reparse and the existing derived
 refresh lifecycle. This adds no database operations, provider requests, public MCP fields or mutation capabilities.
+
+The accompanying Sports Lib multi-day chronology correction remains unreleased and unadopted; root and Functions
+still pin 21.6.14. It requires a single session, monotonic session-owned endpoint records and complete consistent
+timer events from one timer group whose active duration agrees with the recorded summary within FIT timestamp
+quantization. It preserves the full elapsed span and later records while retaining active timer duration and existing
+maximum-duration protection. Conflicting chronology keeps the existing corrupt-date handling. After coordinated
+package adoption, historical lost records require the retained original and normal source-backed reparse/derived
+refresh. Existing strict leg matching, owner controls and deletion fences remain authoritative. No release, deployment,
+scanner activation or production reparse is authorized by preparing this correction.
 
 For pool swims, a positive recorded counter can also be incomplete or start after the first length. Regenerate mode
 preserves the freshly parsed total only when uniquely owned active lengths with valid, nonduplicate time intervals

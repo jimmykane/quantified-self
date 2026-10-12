@@ -5598,12 +5598,26 @@ factor still regenerate from the streams and protected inputs. The missing-FTP e
 statistic but cannot supply power TSS or IF; private original-file calibration remains attached to the parsed instance.
 
 Regeneration also preserves a finite positive freshly parsed distance summary when the file's streams cannot support
-a positive recalculation. A missing, constant, invalid or reset distance counter cannot replace that summary with zero;
-this includes a single zero TCX point expanded by import backfill. Existing counter precedence over GPS is retained.
+a reliable positive recalculation. Any decrease between successive numeric distance readings makes final-minus-first
+subtraction unsupported, even when the last reading exceeds the first. Keep the freshly parsed source total in that
+case instead of retaining only the final segment. This is a conservative fallback for conflicting evidence, not
+independent validation of the source total; it neither sums positive increments nor guesses reset boundaries.
+A missing, constant or invalid counter likewise cannot replace that summary with zero; this includes a single zero
+TCX point expanded by import backfill. Existing counter precedence over GPS is retained.
 Without a counter, valid aligned GPS positions must support a positive distance using the library's distance calculation.
 Usable counter/GPS measurements still regenerate distance normally. This guard does not copy old stored distances,
 invent a missing distance, or replace a valid zero summary with a positive default. Seeding the source summary before
 generation also protects its dependent speed/pace statistics and the event's summed volume.
+
+The separately prepared, unreleased Sports Lib chronology correction is not yet adopted by the root or Functions
+21.6.14 dependencies. It can retain the complete explicit time span of a single-session FIT recording only when
+monotonic session-owned records anchor its endpoints and complete, non-conflicting timer events from one timer group
+corroborate the recorded active duration within FIT timestamp quantization. Elapsed time and pause duration then
+describe the full chronology; recorded active duration stays unchanged. Unsupported chronology retains the existing
+corrupt-date handling, and the maximum-duration limit still applies. Adoption requires the same released package in
+both consumers. Historical lost records require original-file reparse and normal derived refresh; a Training rebuild
+or saved Activity JSON alone cannot restore them. Release, deployment and production reparse remain on hold pending
+separate approval; neither correction enables a scanner or changes a public schema, write path or queue lifecycle.
 
 Pool swimming has an additional source-evidence check: a recorded cumulative counter can stop early or first appear
 after a completed length. Regeneration keeps the freshly parsed positive distance when every lap's distance agrees

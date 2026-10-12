@@ -158,6 +158,9 @@ vi.mock('firebase-admin/firestore', () => ({
 vi.mock('@sports-alliance/sports-lib', async (importOriginal) => {
     const actual = await importOriginal<typeof import('@sports-alliance/sports-lib')>();
     return {
+        // Shared policy helpers can resolve the same module as Functions when
+        // validating a locally packed library. Keep its metric catalog intact.
+        ...actual,
         ActivityTypes: actual.ActivityTypes,
         ActivityParsingOptions: class ActivityParsingOptions {
             constructor(public opts: unknown) { }
@@ -2786,7 +2789,7 @@ describe('sports-lib-reparse.service', () => {
             }
         });
 
-    it.each(['summary-only', 'single-zero', 'constant-counter', 'reset-counter', 'moving-counter', 'moving-gps', 'recorded-zero', 'missing-summary', 'tcx-single-zero'] as const)(
+    it.each(['summary-only', 'single-zero', 'constant-counter', 'reset-counter', 'interior-reset', 'nonzero-resets', 'moving-counter', 'moving-gps', 'recorded-zero', 'missing-summary', 'tcx-single-zero'] as const)(
         'regenerate protects source distance only when measurements cannot replace it: %s', async kind => {
             const sports = await vi.importActual<typeof import('@sports-alliance/sports-lib')>('@sports-alliance/sports-lib');
             let parsedEvent: Awaited<ReturnType<typeof sports.EventImporterFIT.getFromArrayBuffer>>;
@@ -2818,8 +2821,11 @@ describe('sports-lib-reparse.service', () => {
                 });
                 encoder.writeMessage(0, [field(0, 4, FitBaseType.Enum), field(1, 1, FitBaseType.Uint16)]);
                 encoder.writeMessage(3, [field(4, 700, FitBaseType.Uint16)], 1);
-                for (const [index, second] of [0, 30, 60].entries()) {
-                    const counter = kind === 'single-zero' ? second === 0 ? 0 : undefined
+                const counters = kind === 'interior-reset' ? [0, 400, 0, 600]
+                    : kind === 'nonzero-resets' ? [10, 400, 50, 600, 100, 700] : undefined;
+                const seconds = counters ? counters.map((_, index) => index * 60 / (counters.length - 1)) : [0, 30, 60];
+                for (const [index, second] of seconds.entries()) {
+                    const counter = counters ? counters[index] : kind === 'single-zero' ? second === 0 ? 0 : undefined
                         : kind === 'constant-counter' ? 12 : kind === 'reset-counter' ? [0, 100, 0][index]
                             : kind === 'moving-counter' ? [10, 60, 110][index] : undefined;
                     encoder.writeMessage(20, [field(253, start + second, FitBaseType.Uint32), field(3, 90),
@@ -2842,6 +2848,8 @@ describe('sports-lib-reparse.service', () => {
             hoisted.mockDownload.mockResolvedValue([payload]);
             const activity = parsedEvent.getFirstActivity();
             const expectedEvaluations = sports.ActivityUtilities.getTrainingStressScoreEvaluations(activity);
+            const recordedCounter = activity.hasStreamData(sports.DataDistance.type)
+                ? [...activity.getStreamData(sports.DataDistance.type)] : undefined;
             const expectedDistance = kind === 'moving-counter' ? 100
                 : kind === 'moving-gps' ? sports.ActivityUtilities.calculateTotalDistanceForActivity(activity)
                     : kind === 'recorded-zero' || kind === 'missing-summary' ? 0 : 1000;
@@ -2849,14 +2857,22 @@ describe('sports-lib-reparse.service', () => {
             expect(activity.getStat(sports.DataDistance.type)?.getValue()).toBe(
                 kind === 'recorded-zero' || kind === 'missing-summary' ? 0 : 1000);
             hoisted.generateMissingStreamsAndStatsForActivity.mockImplementation(
-                item => sports.ActivityUtilities.generateMissingStreamsAndStatsForActivity(item));
+                item => {
+                    if (kind === 'interior-reset' || kind === 'nonzero-resets') {
+                        expect(item.getStat(sports.DataDistance.type)?.getValue()).toBe(expectedDistance);
+                    }
+                    sports.ActivityUtilities.generateMissingStreamsAndStatsForActivity(item);
+                });
             hoisted.evaluateTrainingStressScore.mockImplementation(item => sports.ActivityUtilities.evaluateTrainingStressScore(item));
             for (let pass = 0; pass < 2; pass++) {
+                hoisted.reGenerateStatsForEvent.mockImplementationOnce(event => sports.EventUtilities.reGenerateStatsForEvent(event));
                 const result = await reparseEventFromOriginalFiles('u1', 'e1', { mode: 'regenerate',
                     eventData: { originalFile: { path: `users/u1/events/e1/synthetic.${extension}` } },
                     activityDocs: [], targetSportsLibVersion: TARGET_SPORTS_LIB_VERSION });
                 expect(result.status).toBe('completed');
                 expect(activity.getStat(sports.DataDistance.type)?.getValue()).toBeCloseTo(expectedDistance, 1);
+                expect(parsedEvent.getStat(sports.DataDistance.type)?.getValue()).toBeCloseTo(expectedDistance, 1);
+                if (recordedCounter) expect(activity.getStreamData(sports.DataDistance.type)).toEqual(recordedCounter);
                 expect(sports.ActivityUtilities.getTrainingStressScoreEvaluations(activity)).toEqual(expectedEvaluations);
                 expect(activity.getStat(sports.DataDuration.type)?.getValue()).toBe(60);
                 if (extension === 'fit') {

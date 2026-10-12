@@ -2134,6 +2134,15 @@ source evidence, calibration and saved controls stay excluded. No metric token, 
 consent, plan/workout read, mutation or provider-delivery contract changes; no registered-contract promotion,
 catalog rescan or bundled-plugin sync is required for these parser corrections.
 
+Distance regeneration keeps a positive freshly parsed source total when an interior counter decrease makes endpoint
+subtraction unsupported, even if that subtraction is positive. The separately prepared single-session FIT chronology
+correction remains pending a coordinated Sports Lib release/adoption; it preserves corroborated elapsed chronology
+without replacing recorded active duration. Existing persisted metric reads change only after authorized source-backed
+persistence and normal derived refresh. Source chart/sample reads remain transient, and their 250,000 materialized-sample
+limit still rejects oversized recordings rather than silently clipping them. These corrections add no metric token,
+unit, public field/reason, schema, scope, consent, mutation or Training planning/delivery capability. Source evidence,
+calibration, policies and controls remain private; no contract promotion, registered-app refresh or plugin sync is needed.
+
 Stats-only event-table merges preserve recorded per-leg TSS/method and transfer saved load evaluations, policies and
 controls through private transactional metadata. Training impact resolves the resulting included-leg total without
 adding the parent score; source workout exclusion becomes exclusion of its copied legs. Originals remain unchanged.
