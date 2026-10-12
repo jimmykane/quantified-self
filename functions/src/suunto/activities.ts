@@ -124,6 +124,34 @@ function normalizeSuuntoBlobUploadUrl(value: unknown): string | null {
   }
 }
 
+function responseValueType(value: unknown): string {
+  return value === null ? 'null' : Array.isArray(value) ? 'array' : typeof value;
+}
+
+function suuntoInitializationDiagnostics(
+  response: unknown,
+  metadata: requestPromise.ResponseMetadata | null,
+  requestStartedAtMs: number,
+) {
+  const fields = response && typeof response === 'object' && !Array.isArray(response)
+    ? response as Record<string, unknown> : {};
+  const mediaType = metadata?.contentType?.split(';', 1)[0].trim().toLowerCase();
+  const contentTypeCategory = !mediaType ? 'missing'
+    : ['application/json', 'application/problem+json', 'text/html', 'text/plain'].includes(mediaType)
+      ? mediaType : 'other';
+  return {
+    statusCode: metadata?.statusCode ?? null,
+    contentTypeCategory,
+    responseType: responseValueType(response),
+    uploadIdType: responseValueType(fields.id),
+    uploadUrlType: responseValueType(fields.url),
+    uploadHeadersType: responseValueType(fields.headers),
+    uploadIdValid: !!normalizeSuuntoUploadId(fields.id),
+    uploadUrlValid: !!normalizeSuuntoBlobUploadUrl(fields.url),
+    requestElapsedMs: Math.max(0, Date.now() - requestStartedAtMs),
+  };
+}
+
 function normalizeSuuntoBlobHeaders(value: unknown): Record<string, string> {
   if (!value || typeof value !== 'object' || Array.isArray(value)) {
     return {};
@@ -870,6 +898,8 @@ export async function uploadActivityFileToSuunto(
 
   for (const tokenQueryDocumentSnapshot of tokenQuerySnapshots.docs) {
     const providerUserId = tokenQueryDocumentSnapshot.id;
+    let initializationResponseMetadata: requestPromise.ResponseMetadata | null = null;
+    let initializationRequestStartedAtMs = Date.now();
     try {
       const initializedUpload = await executeWithTokenRetry(
         tokenQueryDocumentSnapshot,
@@ -882,18 +912,25 @@ export async function uploadActivityFileToSuunto(
           try {
             return await withSuuntoTransientRetry(
               `Init activity upload for token ${tokenQueryDocumentSnapshot.id} for user ${userID}`,
-              async () => requestPromise.post({
-                headers: {
-                  'Authorization': toSuuntoAuthorizationHeader(accessToken),
-                  'Content-Type': 'application/json',
-                  'Ocp-Apim-Subscription-Key': config.suuntoapp.subscription_key,
-                },
-                json: true,
-                body: {
-                  notifyUser: true,
-                },
-                url: 'https://cloudapi.suunto.com/v2/upload',
-              }),
+              async () => {
+                initializationRequestStartedAtMs = Date.now();
+                initializationResponseMetadata = null;
+                return requestPromise.post({
+                  onResponseMetadata: (metadata: requestPromise.ResponseMetadata) => {
+                    initializationResponseMetadata = metadata;
+                  },
+                  headers: {
+                    'Authorization': toSuuntoAuthorizationHeader(accessToken),
+                    'Content-Type': 'application/json',
+                    'Ocp-Apim-Subscription-Key': config.suuntoapp.subscription_key,
+                  },
+                  json: true,
+                  body: {
+                    notifyUser: true,
+                  },
+                  url: 'https://cloudapi.suunto.com/v2/upload',
+                });
+              },
               SUUNTO_MAX_TRANSIENT_RETRIES,
               true
             );
@@ -912,6 +949,12 @@ export async function uploadActivityFileToSuunto(
       const providerUserIdForUpload = normalizeSuuntoProviderUserId(providerUserId);
       const uploadUrl = normalizeSuuntoBlobUploadUrl(initializedUpload?.url);
       if (!uploadId || !providerUserIdForUpload || !uploadUrl) {
+        try {
+          logger.warn('[SuuntoActivityUpload] Initialization response validation failed.', {
+            ...suuntoInitializationDiagnostics(initializedUpload, initializationResponseMetadata, initializationRequestStartedAtMs),
+            providerUserIdValid: !!providerUserIdForUpload,
+          });
+        } catch { /* Diagnostics must preserve the original terminal failure. */ }
         throw new ProviderOperationError({
           serviceName: ServiceNames.SuuntoApp,
           operation: 'activity_upload_init',
@@ -936,6 +979,7 @@ export async function uploadActivityFileToSuunto(
         userID,
         providerUserId: providerUserIdForUpload,
         uploadId,
+        ...suuntoInitializationDiagnostics(initializedUpload, initializationResponseMetadata, initializationRequestStartedAtMs),
       });
 
       if (options.persistUploadStateBeforeBlob) {

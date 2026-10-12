@@ -1462,6 +1462,70 @@ describe('importActivityToSuuntoApp', () => {
         }
     });
 
+    it('adds safe response metadata to successful initialization without changing delivery', async () => {
+        tokensMocks.getTokenData.mockResolvedValue({ accessToken: 'private-access-token' });
+        requestMocks.post.mockImplementationOnce(async options => {
+            options.onResponseMetadata({ statusCode: 201, contentType: 'application/json' });
+            return { id: 'safe-upload-id', url: 'https://storage.suunto.com/file?sig=private-signature',
+                headers: { Authorization: 'private-header' } };
+        });
+        requestMocks.put.mockResolvedValueOnce({});
+        requestMocks.get.mockResolvedValueOnce({ status: 'PROCESSED', workoutKey: 'safe-workout-key' });
+        await expect(uploadActivityFileToSuunto('test-user-id', Buffer.from('private-fit'))).resolves.toMatchObject({ status: 'success' });
+        const diagnostics = vi.mocked(logger.info).mock.calls.find(([message]) => message === 'Suunto activity upload initialized.')?.[1];
+        expect(diagnostics).toMatchObject({ statusCode: 201, contentTypeCategory: 'application/json',
+            responseType: 'object', uploadIdType: 'string', uploadUrlType: 'string', uploadHeadersType: 'object',
+            uploadIdValid: true, uploadUrlValid: true });
+        expect(JSON.stringify(diagnostics)).not.toContain('private');
+        expect(requestMocks.post).toHaveBeenCalledOnce();
+        expect(requestMocks.put).toHaveBeenCalledOnce();
+    });
+
+    it.each([
+        [null, 'null', 'undefined', 'undefined', false, false],
+        ['private response', 'string', 'undefined', 'undefined', false, false],
+        [[], 'array', 'undefined', 'undefined', false, false],
+        [{ id: 'safe-id', url: null }, 'object', 'string', 'null', true, false],
+        [{ id: 'private/id', url: 'https://storage.suunto.com/file?sig=private-signature' }, 'object', 'string', 'string', false, true],
+        [{ id: 'safe-id', url: 'http://storage.suunto.com/file?sig=private-signature' }, 'object', 'string', 'string', true, false],
+    ])('logs structural initialization diagnostics for %j without sending the FIT', async (body, responseType, uploadIdType, uploadUrlType, uploadIdValid, uploadUrlValid) => {
+        tokensMocks.getTokenData.mockResolvedValue({ accessToken: 'private-access-token' });
+        requestMocks.post.mockImplementationOnce(async options => {
+            options.onResponseMetadata({ statusCode: 200, contentType: 'application/json; charset=utf-8' });
+            return body;
+        });
+        await expect(uploadActivityFileToSuunto('test-user-id', Buffer.from('private-fit'))).rejects.toMatchObject({
+            disposition: 'permanent', retryMode: 'none', dlqContext: 'SUUNTO_ACTIVITY_UPLOAD_INVALID_RESPONSE',
+        });
+        const diagnostics = vi.mocked(logger.warn).mock.calls.find(([message]) => (
+            message === '[SuuntoActivityUpload] Initialization response validation failed.'
+        ))?.[1];
+        expect(diagnostics).toEqual({ statusCode: 200, contentTypeCategory: 'application/json', responseType,
+            uploadIdType, uploadUrlType, uploadHeadersType: 'undefined', uploadIdValid, uploadUrlValid,
+            providerUserIdValid: true, requestElapsedMs: expect.any(Number) });
+        expect(JSON.stringify(diagnostics)).not.toMatch(/private|safe-id|https?:|test-user-id/);
+        expect(requestMocks.put).not.toHaveBeenCalled();
+        expect(requestMocks.get).not.toHaveBeenCalled();
+    });
+
+    it('withholds arbitrary content types and preserves the failure when diagnostic logging throws', async () => {
+        tokensMocks.getTokenData.mockResolvedValue({ accessToken: 'private-access-token' });
+        requestMocks.post.mockImplementationOnce(async options => {
+            options.onResponseMetadata({ statusCode: 200, contentType: 'private-content-type' });
+            return { headers: { Authorization: 'private-credential' }, arbitrary: 'private-content' };
+        });
+        vi.mocked(logger.warn).mockImplementationOnce(() => { throw new Error('Diagnostic failure'); });
+        await expect(uploadActivityFileToSuunto('test-user-id', Buffer.from('private-fit'))).rejects.toMatchObject({
+            disposition: 'permanent', dlqContext: 'SUUNTO_ACTIVITY_UPLOAD_INVALID_RESPONSE',
+        });
+        const diagnostics = vi.mocked(logger.warn).mock.calls.find(([message]) => (
+            message === '[SuuntoActivityUpload] Initialization response validation failed.'
+        ))?.[1];
+        expect(diagnostics).toMatchObject({ contentTypeCategory: 'other', uploadHeadersType: 'object' });
+        expect(JSON.stringify(diagnostics)).not.toContain('private');
+        expect(requestMocks.put).not.toHaveBeenCalled();
+    });
+
     it('returns a callable-safe pending-disconnect error before starting an upload', async () => {
         disconnectPendingMocks.isServiceDisconnectPendingForUser.mockResolvedValue(true);
 

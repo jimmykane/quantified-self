@@ -125,6 +125,25 @@ describe('request-helper', () => {
         }
     });
 
+    it.each([200, 503])('reports only response status/content type without changing HTTP %s handling', async status => {
+        vi.mocked(fetch).mockResolvedValue(new Response('{"result":true}', {
+            status, headers: { 'content-type': 'application/json', 'set-cookie': 'private=value' },
+        }));
+        const onResponseMetadata = vi.fn();
+        const operation = requestHelper.post('https://example.com', { json: true, onResponseMetadata });
+        if (status === 200) await expect(operation).resolves.toEqual({ result: true });
+        else await expect(operation).rejects.toMatchObject({ statusCode: 503, error: { result: true } });
+        expect(onResponseMetadata).toHaveBeenCalledExactlyOnceWith({ statusCode: status, contentType: 'application/json' });
+    });
+
+    it('keeps JSON decoding and diagnostic callback failures independent', async () => {
+        vi.mocked(fetch).mockResolvedValue(new Response('{"result":true}', { headers: { 'content-type': 'application/json' } }));
+        const onResponseMetadata = vi.fn(() => { throw new Error('Diagnostic failure'); });
+        await expect(requestHelper.post('https://example.com', { json: true, onResponseMetadata })).resolves.toEqual({ result: true });
+        vi.mocked(fetch).mockResolvedValue(new Response('not JSON', { headers: { 'content-type': 'text/html' } }));
+        await expect(requestHelper.post('https://example.com', { json: true, onResponseMetadata })).rejects.toBeInstanceOf(SyntaxError);
+    });
+
     it.each(['7200', 'Mon, 14 Sep 2026 15:00:00 GMT'])('preserves Retry-After %s for the queue retry policy', async retryAfter => {
         vi.mocked(fetch).mockResolvedValue(new Response('Busy', { status: 429, headers: { 'retry-after': retryAfter } }));
         await expect(requestHelper.get('https://example.com')).rejects.toMatchObject({
