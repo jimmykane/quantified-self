@@ -3,12 +3,19 @@ import {
   ChangeDetectorRef,
   Component,
   Input,
+  Injector,
   OnChanges,
+  OnDestroy,
+  TemplateRef,
+  ViewChild,
+  afterNextRender,
   effect,
   inject,
   signal,
 } from '@angular/core';
 import { MatSelectionListChange } from '@angular/material/list';
+import { DOCUMENT } from '@angular/common';
+import { MatDialog, MatDialogRef } from '@angular/material/dialog';
 import { MatTableDataSource } from '@angular/material/table';
 import { SelectionModel } from '@angular/cdk/collections';
 import {
@@ -23,16 +30,19 @@ import { MatSnackBar } from '@angular/material/snack-bar';
 import { AppUserSettingsQueryService } from '../../../services/app.user-settings-query.service';
 import { getVisibleEventLaps } from '../../../helpers/event-lap-type.helper';
 import {
+  EventLapMetricOption,
   EventLapMetricOptionGroup,
   EVENT_LAP_STROKE_COLUMN,
   formatEventLapMetric,
   getAverageEventLapMetrics,
   getEventLapMetricOptionGroups,
+  getEventLapColumnPickerOptions,
   getEventLapSportFamilyPresentation,
   getEventLapMetricStat,
   getSelectedEventLapSummaryMetrics,
   getSelectedEventLapMetricTypes,
   normalizeEventDetailsSettings,
+  moveEventLapMetricType,
   resolveEventLapSportFamily,
 } from '../../../helpers/event-lap-table-columns.helper';
 import {
@@ -60,9 +70,11 @@ interface LapColumnMenuGroup {
   label: string;
   icon: string;
   selectedMetricTypes: string[];
+  selectedMetrics: EventLapMetricOption[];
   metricAvailability: Record<string, LapMetricAvailability>;
   selectedUnavailableMetricCount: number;
   metricGroups: EventLapMetricOptionGroup[];
+  availableMetricGroups: EventLapMetricOptionGroup[];
   filteredMetricGroups: EventLapMetricOptionGroup[];
   searchTerm: string;
 }
@@ -128,7 +140,7 @@ function filterLapMetricGroups(
   standalone: false
 })
 
-export class EventCardLapsComponent extends DataTableAbstractDirective implements OnChanges {
+export class EventCardLapsComponent extends DataTableAbstractDirective implements OnChanges, OnDestroy {
   @Input() event: EventInterface;
   @Input() selectedActivities: ActivityInterface[];
   @Input() unitSettings: UserUnitSettingsInterface;
@@ -147,11 +159,18 @@ export class EventCardLapsComponent extends DataTableAbstractDirective implement
   public activeLapColumnMenuGroup: LapColumnMenuGroup | null = null;
   public hasMultipleEventActivities = false;
   public savingLapColumnSportFamilies = signal(new Set<AppEventLapSportFamily>());
+  public lapColumnAnnouncement = signal('');
+  @ViewChild('lapColumnsDialog') private lapColumnsDialog?: TemplateRef<unknown>;
+  private lapColumnsDialogRef: MatDialogRef<unknown> | null = null;
+  private destroyed = false;
   private readonly pendingLapColumnMetricTypes = new Map<AppEventLapSportFamily, string[]>();
   private eventDetailsSettings: AppEventDetailsSettingsInterface = normalizeEventDetailsSettings(null);
   private readonly userSettingsQuery = inject(AppUserSettingsQueryService);
   private readonly snackBar = inject(MatSnackBar);
   private readonly hapticsService = inject(AppHapticsService);
+  private readonly dialog = inject(MatDialog);
+  private readonly injector = inject(Injector);
+  private readonly document = inject(DOCUMENT);
 
   constructor(protected changeDetectorRef: ChangeDetectorRef) {
     super(changeDetectorRef);
@@ -171,6 +190,33 @@ export class EventCardLapsComponent extends DataTableAbstractDirective implement
     this.hasMultipleEventActivities = (this.event?.getActivities?.() || []).length > 1;
     this.updateAvailableLapTypes();
     this.updateData();
+  }
+
+  ngOnDestroy(): void {
+    this.destroyed = true;
+    this.lapColumnsDialogRef?.close();
+  }
+
+  public openLapColumnsDialog(): void {
+    if (!this.canCustomize || !this.lapColumnsDialog || this.lapColumnsDialogRef || !this.lapColumnMenuGroups.length) {
+      return;
+    }
+    this.lapColumnAnnouncement.set('');
+    const dialogRef = this.dialog.open(this.lapColumnsDialog, {
+      ariaLabel: 'Choose lap columns',
+      width: '520px',
+      maxWidth: 'calc(100vw - 24px)',
+      autoFocus: 'first-header',
+      restoreFocus: true,
+    });
+    this.lapColumnsDialogRef = dialogRef;
+    this.hapticsService.selection();
+    dialogRef.afterClosed().subscribe(() => {
+      if (this.lapColumnsDialogRef === dialogRef) {
+        this.lapColumnsDialogRef = null;
+      }
+      if (!this.destroyed) this.hapticsService.selection();
+    });
   }
 
   private updateAvailableLapTypes() {
@@ -422,7 +468,68 @@ export class EventCardLapsComponent extends DataTableAbstractDirective implement
         selectedMetricTypes.delete(option.value);
       }
     });
-    const nextSelectedMetricTypes = Array.from(selectedMetricTypes);
+    const focused = this.getLapColumnPickerFocus();
+    await this.saveLapColumnMetricTypes(sportFamily, Array.from(selectedMetricTypes));
+    this.restoreLapColumnPickerFocus(sportFamily, focused, event.options.find(option => option.selected)?.value);
+  }
+
+  public async onLapColumnCheckedChange(
+    sportFamily: AppEventLapSportFamily, metricType: string, checked: boolean,
+  ): Promise<void> {
+    const current = getSelectedEventLapMetricTypes(this.eventDetailsSettings, sportFamily);
+    const focused = this.getLapColumnPickerFocus();
+    await this.saveLapColumnMetricTypes(sportFamily, checked
+      ? [...current, metricType] : current.filter(type => type !== metricType));
+    this.restoreLapColumnPickerFocus(sportFamily, focused, metricType);
+  }
+
+  public async moveLapColumn(
+    sportFamily: AppEventLapSportFamily, metricType: string, direction: -1 | 1,
+  ): Promise<void> {
+    const focused = this.getLapColumnPickerFocus();
+    const current = getSelectedEventLapMetricTypes(this.eventDetailsSettings, sportFamily);
+    const next = moveEventLapMetricType(current, metricType, direction);
+    const saved = await this.saveLapColumnMetricTypes(sportFamily, next);
+    if (this.destroyed) return;
+    if (saved && this.activeLapColumnMenuGroup?.family === sportFamily) {
+      const label = this.lapColumnMenuGroups.find(group => group.family === sportFamily)
+        ?.selectedMetrics.find(metric => metric.type === metricType)?.label || metricType;
+      this.lapColumnAnnouncement.set(`${label} moved to position ${next.indexOf(metricType) + 1} of ${next.length}.`);
+    }
+    this.restoreLapColumnPickerFocus(sportFamily, focused, metricType);
+  }
+
+  private getLapColumnPickerFocus(): HTMLElement | null {
+    const active = this.document.activeElement;
+    const dialog = this.lapColumnsDialogRef && this.document.getElementById(this.lapColumnsDialogRef.id);
+    return active instanceof HTMLElement && dialog?.contains(active) ? active : null;
+  }
+
+  private restoreLapColumnPickerFocus(
+    family: AppEventLapSportFamily, previous: HTMLElement | null, metricType?: string,
+  ): void {
+    const dialogId = this.lapColumnsDialogRef?.id;
+    if (!previous || !dialogId || this.destroyed) return;
+    afterNextRender(() => {
+      if (this.destroyed || this.lapColumnsDialogRef?.id !== dialogId || this.activeLapColumnMenuGroup?.family !== family) return;
+      const active = this.document.activeElement;
+      if (active !== previous && active !== this.document.body) return;
+      const dialog = this.document.getElementById(dialogId);
+      const row = Array.from(dialog?.querySelectorAll<HTMLElement>('.lap-column-selected-row') || [])
+        .find(element => element.dataset.lapColumn === metricType);
+      // Selection moves options between lists; boundary moves can disable the focused button.
+      const target = previous.isConnected && !previous.matches(':disabled') ? previous
+        : row?.querySelector<HTMLInputElement>('input[type="checkbox"]')
+          || dialog?.querySelector<HTMLElement>('.lap-column-selected-row input, [data-lap-column-search]');
+      target?.focus();
+    }, { injector: this.injector });
+  }
+
+  private async saveLapColumnMetricTypes(
+    sportFamily: AppEventLapSportFamily, nextSelectedMetricTypes: string[],
+  ): Promise<boolean> {
+    if (!this.canCustomize || this.savingLapColumnSportFamilies().has(sportFamily)) return false;
+    const currentMetricTypes = getSelectedEventLapMetricTypes(this.eventDetailsSettings, sportFamily);
     const previousSettings = this.eventDetailsSettings;
     const nextSettings = normalizeEventDetailsSettings({
       lapTableColumnsBySportFamily: {
@@ -433,9 +540,10 @@ export class EventCardLapsComponent extends DataTableAbstractDirective implement
     const normalizedMetricTypes = getSelectedEventLapMetricTypes(nextSettings, sportFamily);
     if (normalizedMetricTypes.length === currentMetricTypes.length
       && normalizedMetricTypes.every((type, index) => type === currentMetricTypes[index])) {
-      return;
+      return false;
     }
     this.pendingLapColumnMetricTypes.set(sportFamily, normalizedMetricTypes);
+    this.lapColumnAnnouncement.set('');
     this.hapticsService.selection();
     this.eventDetailsSettings = nextSettings;
     this.updateData();
@@ -443,7 +551,8 @@ export class EventCardLapsComponent extends DataTableAbstractDirective implement
 
     try {
       await this.userSettingsQuery.updateLapTableColumns(sportFamily, normalizedMetricTypes);
-      this.hapticsService.success();
+      if (!this.destroyed) this.hapticsService.success();
+      return true;
     } catch {
       // Another sport's layout may have changed while this save was pending.
       this.eventDetailsSettings = normalizeEventDetailsSettings({
@@ -453,8 +562,12 @@ export class EventCardLapsComponent extends DataTableAbstractDirective implement
         },
       });
       this.updateData();
-      this.snackBar.open('Could not save lap columns. Please try again.', 'Close');
-      this.hapticsService.error();
+      if (!this.destroyed) {
+        this.snackBar.open('Could not save lap columns. Please try again.', 'Close');
+        this.hapticsService.error();
+      }
+      this.lapColumnAnnouncement.set('Could not save lap columns. Your previous columns have been restored.');
+      return false;
     } finally {
       this.pendingLapColumnMetricTypes.delete(sportFamily);
       this.setSportFamilySaving(sportFamily, false);
@@ -480,6 +593,7 @@ export class EventCardLapsComponent extends DataTableAbstractDirective implement
       return;
     }
     this.activeLapColumnMenuGroup = nextGroup;
+    this.lapColumnAnnouncement.set('');
     this.hapticsService.selection();
     this.changeDetectorRef.markForCheck();
   }
@@ -507,6 +621,7 @@ export class EventCardLapsComponent extends DataTableAbstractDirective implement
         this.eventDetailsSettings,
         family,
       );
+      const picker = getEventLapColumnPickerOptions(metricGroups, selectedMetricTypes);
       const metricAvailability = this.getLapMetricAvailability(
         family,
         metricGroups,
@@ -519,11 +634,13 @@ export class EventCardLapsComponent extends DataTableAbstractDirective implement
         existingGroup.label = presentation.label;
         existingGroup.icon = presentation.icon;
         existingGroup.selectedMetricTypes = selectedMetricTypes;
+        existingGroup.selectedMetrics = picker.selectedMetrics;
         existingGroup.metricAvailability = metricAvailability;
         existingGroup.selectedUnavailableMetricCount = selectedUnavailableMetricCount;
         existingGroup.metricGroups = metricGroups;
+        existingGroup.availableMetricGroups = picker.availableMetricGroups;
         existingGroup.filteredMetricGroups = filterLapMetricGroups(
-          metricGroups,
+          picker.availableMetricGroups,
           existingGroup.searchTerm,
         );
         return existingGroup;
@@ -534,10 +651,12 @@ export class EventCardLapsComponent extends DataTableAbstractDirective implement
         label: presentation.label,
         icon: presentation.icon,
         selectedMetricTypes,
+        selectedMetrics: picker.selectedMetrics,
         metricAvailability,
         selectedUnavailableMetricCount,
         metricGroups,
-        filteredMetricGroups: metricGroups,
+        availableMetricGroups: picker.availableMetricGroups,
+        filteredMetricGroups: picker.availableMetricGroups,
         searchTerm: '',
       };
     });
@@ -618,7 +737,7 @@ export class EventCardLapsComponent extends DataTableAbstractDirective implement
 
   private setLapColumnMetricSearchTerm(group: LapColumnMenuGroup, searchTerm: string): void {
     group.searchTerm = searchTerm;
-    group.filteredMetricGroups = filterLapMetricGroups(group.metricGroups, searchTerm);
+    group.filteredMetricGroups = filterLapMetricGroups(group.availableMetricGroups, searchTerm);
     this.changeDetectorRef.markForCheck();
   }
 
