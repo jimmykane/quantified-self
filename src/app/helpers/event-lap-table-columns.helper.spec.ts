@@ -24,6 +24,7 @@ import {
   SwimPaceUnits,
   type UserUnitSettingsInterface,
 } from '@sports-alliance/sports-lib';
+import { createNominalYardPoolFixture } from './event-swim-distance-display.test-fixtures';
 import {
   DataDuration,
   DataEffortPaceAvg,
@@ -169,6 +170,15 @@ describe('event lap table columns helper', () => {
   it('formats swimming lap distance in yards while retaining running distance preferences', () => {
     expect(formatEventLapMetric(new DataDistance(91.44), DataDistance.type, unitSettings, 'Swimming')).toBe('100 yd');
     expect(formatEventLapMetric(new DataDistance(1609.344), DataDistance.type, unitSettings, 'Running')).toBe('1.61 Km');
+  });
+
+  it('uses corroborated nominal lap distance only for display and selected distance summaries', () => {
+    const { activity, lap } = createNominalYardPoolFixture();
+    expect(formatEventLapMetric(lap.getDistance(), DataDistance.type, unitSettings, 'Swimming', 91.44)).toBe('100 yd');
+    expect(lap.getDistance().getValue()).toBe(91.4);
+    const summaries = getSelectedEventLapSummaryMetrics([lap], [DataDistance.type, DataDuration.type], unitSettings, 'Swimming', activity);
+    expect(summaries.find(metric => metric.type === DataDistance.type)?.display).toBe('100 yd');
+    expect(summaries.find(metric => metric.type === DataDuration.type)?.display).toBe('2:00.00');
   });
 
   it('formats averages with saved units while excluding accumulated lap totals', () => {

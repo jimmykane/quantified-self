@@ -1286,6 +1286,9 @@ describe('help.content', () => {
     expect(gettingStartedSection?.content).toContain('**Settings -> Units & formatting -> Customize units -> Swim pace**');
     expect(gettingStartedSection?.content).toContain('25 yd, 50 yd, 75 yd, and 100 yd splits before the rest row');
     expect(gettingStartedSection?.content).toContain('Stored distances remain in meters');
+    expect(gettingStartedSection?.content).toContain('complete length data can confirm a nominal 25- or 50-yard pool');
+    expect(gettingStartedSection?.content).toContain('Custom pools and recordings with missing or conflicting evidence keep recorded precision');
+    expect(gettingStartedSection?.content).toContain('recorded distances, pace, SWOLF and Training load stay unchanged');
     expect(gettingStartedSection?.content).toContain('**Swim** time (excluding idle/rest lengths)');
     expect(gettingStartedSection?.content).toContain('**Total** keeps the combined time');
     expect(gettingStartedSection?.content).toContain('Set swim pace, stroke totals, average stroke rate, and efficiency exclude rest too');

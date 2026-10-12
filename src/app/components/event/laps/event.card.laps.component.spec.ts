@@ -40,6 +40,7 @@ import { getDefaultUserUnitSettings } from '../../../../../shared/unit-aware-dis
 import { AppHapticsService } from '../../../services/app.haptics.service';
 import { HapticTapDirective } from '../../../directives/haptic-tap.directive';
 import { EVENT_LAP_STROKES_COLUMN, EVENT_LAP_SWOLF_COLUMN } from '../../../helpers/event-swim-analytics.helper';
+import { createNominalYardPoolFixture } from '../../../helpers/event-swim-distance-display.test-fixtures';
 
 function createActivity(laps: LapInterface[]): ActivityInterface {
     return {
@@ -157,6 +158,21 @@ describe('EventCardLapsComponent', () => {
         expect(haptics.selection).toHaveBeenCalledTimes(3);
         component.toggleLapLengths({ '#': 'Avg', isLapAverage: true });
         expect(haptics.selection).toHaveBeenCalledTimes(3);
+    });
+
+    it('renders a corroborated nominal lap distance and retains metric precision when units change', () => {
+        const { activity, lap } = createNominalYardPoolFixture();
+        component.selectedActivities = [activity];
+        component.unitSettings = { ...getDefaultUserUnitSettings(), swimPaceUnits: [SwimPaceUnits.MinutesPer100Yard] };
+        component.ngOnChanges();
+        fixture.detectChanges();
+        const row = component.lapTableGroups[0].tables[0].dataSource.data.find(row => row.lap === lap)!;
+        expect(row.Distance).toBe('100 yd');
+        expect(fixture.nativeElement.querySelector('.table-container table').textContent).toContain('100 yd');
+        expect(lap.getDistance().getValue()).toBe(91.4);
+        component.unitSettings = getDefaultUserUnitSettings();
+        component.ngOnChanges();
+        expect(component.lapTableGroups[0].tables[0].dataSource.data.find(row => row.lap === lap)?.Distance).toBe('91.4 m');
     });
 
     it('should create', () => {

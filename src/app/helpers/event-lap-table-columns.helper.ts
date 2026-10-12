@@ -53,6 +53,8 @@ import {
   type UserUnitSettingsInterface,
 } from '@sports-alliance/sports-lib';
 import { resolvePrimaryUnitAwareDisplayStat } from './summary-display.helper';
+import { createSwimDistanceDisplayStat, resolveUnitAwareDisplayStat } from '@shared/unit-aware-display';
+import { getNominalSwimDistanceDisplayContext, NominalSwimDistanceDisplayContext } from './event-swim-distance-display.helper';
 import { resolvePreferredSpeedDerivedAverageTypeForActivity } from './summary-stats.helper';
 import { EVENT_SUMMARY_METRIC_GROUPS } from '../constants/event-summary-metric-groups';
 import {
@@ -407,6 +409,7 @@ export const formatEventLapMetric = (
   metricType: string,
   unitSettings: UserUnitSettingsInterface | null | undefined,
   activityType: unknown,
+  nominalDistanceDisplayMeters?: number,
 ): string => {
   if (!stat) {
     return '';
@@ -415,6 +418,11 @@ export const formatEventLapMetric = (
   const rawValue = stat.getValue?.();
   if (typeof rawValue === 'number' && !Number.isFinite(rawValue)) {
     return '';
+  }
+
+  if (metricType === DataDistance.type && typeof rawValue === 'number'
+    && nominalDistanceDisplayMeters !== undefined && resolveEventLapSportFamily(activityType) === 'swimming') {
+    return resolveUnitAwareDisplayStat(createSwimDistanceDisplayStat(rawValue, unitSettings, nominalDistanceDisplayMeters), unitSettings)?.text || '';
   }
 
   if (metricType === DataDuration.type) {
@@ -463,13 +471,21 @@ export const getEventLapMetricStat = (
 interface LapSummaryContext {
   swimming: boolean;
   analytics: Map<LapInterface, SwimLapAnalytics>;
+  nominalDistanceDisplay: NominalSwimDistanceDisplayContext | null;
 }
 
 const createSummaryContext = (
   activityType: unknown, activity: ActivityInterface | undefined, units: UserUnitSettingsInterface | null | undefined,
 ): LapSummaryContext => {
   const swimming = resolveEventLapSportFamily(activityType) === 'swimming';
-  return { swimming, analytics: swimming && activity ? getSwimLapAnalytics(activity, units) : new Map() };
+  return { swimming, analytics: swimming && activity ? getSwimLapAnalytics(activity, units) : new Map(),
+    nominalDistanceDisplay: swimming ? getNominalSwimDistanceDisplayContext(activity) : null };
+};
+
+const getNominalSelectionDistanceDisplay = (laps: readonly LapInterface[], context: LapSummaryContext): number | undefined => {
+  const values = laps.map(lap => context.nominalDistanceDisplay?.lapMeters.get(lap));
+  return values.length && values.every(value => value !== undefined)
+    ? values.reduce((total, value) => total + value, 0) / values.length : undefined;
 };
 
 const getFiniteEventLapMetricValue = (
@@ -571,7 +587,8 @@ export const getSelectedEventLapSummaryMetrics = (
         metricType,
         summaryValue.value,
       );
-      const display = formatEventLapMetric(summaryStat, metricType, unitSettings, activityType);
+      const display = formatEventLapMetric(summaryStat, metricType, unitSettings, activityType,
+        metricType === DataDistance.type ? getNominalSelectionDistanceDisplay(laps, context) : undefined);
       if (display) {
         summaries.push({
           type: metricType,

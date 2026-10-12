@@ -218,12 +218,34 @@ export interface ResolveUnitAwareDisplayOptions {
 export function createSwimDistanceDisplayStat(
   meters: number,
   unitSettings?: UserUnitSettingsInterface | null,
+  nominalDisplayMeters?: number | null,
 ): DataSwimDistance {
   const settings = normalizeUserUnitSettings(unitSettings);
   const units = settings.swimPaceUnits[0] === SwimPaceUnits.MinutesPer100Yard
     ? SwimDistanceUnits.Yards
     : SwimDistanceUnits.Meters;
-  return new DataSwimDistance(meters, units);
+  return units === SwimDistanceUnits.Yards && Number.isFinite(meters) && meters > 0
+    && typeof nominalDisplayMeters === 'number' && Number.isFinite(nominalDisplayMeters) && nominalDisplayMeters > 0
+    ? new NominalDisplaySwimDistance(meters, units, nominalDisplayMeters)
+    : new DataSwimDistance(meters, units);
+}
+
+/** Only the Sports Lib display delegate sees the corroborated nominal amount. */
+class NominalDisplaySwimDistance extends DataSwimDistance {
+  private readonly displayStat: DataSwimDistance;
+
+  constructor(meters: number, units: SwimDistanceUnits, nominalDisplayMeters: number) {
+    super(meters, units);
+    this.displayStat = new DataSwimDistance(nominalDisplayMeters, units);
+  }
+
+  override getDisplayValue(): string {
+    return this.displayStat.getDisplayValue();
+  }
+
+  override getDisplayUnit(): string {
+    return this.displayStat.getDisplayUnit();
+  }
 }
 
 function resolveAscentDescentDisplayValue(

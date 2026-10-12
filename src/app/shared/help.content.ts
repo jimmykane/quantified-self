@@ -648,6 +648,7 @@ HRV and Sleep each have their own date range and older/newer navigation. While a
 - In **Settings -> Units & formatting -> Customize units -> Swim pace**, put your preferred pace unit first: **per 100 meters** shows recorded swim distances in meters, and **per 100 yards** shows them in yards. This applies to swim lengths, split progress, set totals, swimming summaries, lap tables, detailed statistics, and swim/lap chart tooltips. The general kilometers/miles preference does not override it.
 - Swim comparison differences use the same meter/yard preference as their distance values. Totals combining swimming with other sports use your general distance units.
 - A 25-yard pool with a 100-yard set shows 25 yd, 50 yd, 75 yd, and 100 yd splits before the rest row. Set headers show the total distance, swim time, rest time, and combined total; expand them for individual lengths. Open sets stay open when unit preferences change. Stored distances remain in meters, so changing the preference does not change your activity data.
+- For some Suunto swims, complete length data can confirm a nominal 25- or 50-yard pool. QS then shows clean distances in lengths, split progress and set totals; lap distances and chart tooltips use the same display only when the lap data agrees. Custom pools and recordings with missing or conflicting evidence keep recorded precision. This changes display only: recorded distances, pace, SWOLF and Training load stay unchanged.
 - Swim pace and energy values follow your preferred units from **Settings**.
 
 ### Event stamina metrics
