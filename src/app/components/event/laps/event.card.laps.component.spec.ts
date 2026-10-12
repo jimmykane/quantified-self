@@ -1,28 +1,27 @@
 import { CommonModule } from '@angular/common';
-import { ChangeDetectorRef, DebugElement, getDebugNode, NO_ERRORS_SCHEMA, signal } from '@angular/core';
-import { A11yModule, CdkTrapFocus } from '@angular/cdk/a11y';
+import { ChangeDetectorRef, NO_ERRORS_SCHEMA, signal } from '@angular/core';
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { MatCheckboxModule } from '@angular/material/checkbox';
 import { MatMenuModule } from '@angular/material/menu';
-import { MatListModule } from '@angular/material/list';
-import { MatButtonModule } from '@angular/material/button';
-import { MatFormFieldModule } from '@angular/material/form-field';
-import { MatInputModule } from '@angular/material/input';
-import { MatSelectModule } from '@angular/material/select';
+import { MatDialogModule } from '@angular/material/dialog';
 import { MatTableModule } from '@angular/material/table';
 import { MatSelectionListChange } from '@angular/material/list';
 import {
     ActivityInterface,
     ActivityTypes,
     DataDistance,
+    DataActiveLap,
+    DataActiveLengths,
     DataDuration,
     DataHeartRateMax,
     DataPowerAvg,
     DataJumpHangTimeMax,
+    DataHeartRateAvg,
     DataPaceAvg,
     DataSpeedAvg,
     DataSpeedMax,
     DataSpeedMin,
+    DataSwimPaceAvg,
     DataTotalCycles,
     DistanceUnits,
     EventImporterJSON,
@@ -87,6 +86,33 @@ function createLapColumnSelectionChange(
     } as unknown as MatSelectionListChange;
 }
 
+function createRestActivity(durations: number[], heartRates: (number | undefined)[] = [], withLengths = false): ActivityInterface {
+    let startDate = 0;
+    const laps = durations.map((duration, index) => {
+        const endDate = startDate + Math.round(duration * 1000);
+        const row = { lapId: index + 1, startDate, endDate, startIndex: 0, endIndex: 0, type: LapTypes.Manual,
+            stats: { [DataDuration.type]: duration, [DataDistance.type]: 0, [DataActiveLap.type]: false,
+                ...(heartRates[index] === undefined ? {} : { [DataHeartRateAvg.type]: heartRates[index] }),
+                [DataHeartRateMax.type]: 150 + index } };
+        startDate = endDate;
+        return row;
+    });
+    const activity = EventImporterJSON.getActivityFromJSON({
+        name: null, startDate: 0, endDate: startDate, type: ActivityTypes.Swimming,
+        powerMeter: false, trainer: false, creator: { name: 'Test', devices: [] },
+        stats: { [DataDuration.type]: durations.reduce((a, b) => a + b, 0), [DataDistance.type]: 0 },
+        laps, streams: [], intensityZones: [], events: [],
+        swimLengths: withLengths ? laps.map((lap, index) => ({
+            index: index + 1, lapIndex: index + 1, startDate: lap.startDate, endDate: lap.endDate,
+            type: 'idle', stroke: null, strokes: 0, elapsedTime: durations[index], timerTime: durations[index],
+            distance: 0, poolLength: 25, avgSpeed: 0, avgCadence: 0, avgHeartRate: null, maxHeartRate: null,
+            swolf: null, calories: null,
+        })) : [],
+    });
+    activity.setID('rest-activity');
+    return activity;
+}
+
 describe('EventCardLapsComponent', () => {
     let component: EventCardLapsComponent;
     let fixture: ComponentFixture<EventCardLapsComponent>;
@@ -95,13 +121,14 @@ describe('EventCardLapsComponent', () => {
     let snackBar: { open: ReturnType<typeof vi.fn> };
     let haptics: { selection: ReturnType<typeof vi.fn>; success: ReturnType<typeof vi.fn>; error: ReturnType<typeof vi.fn> };
 
+    describe('table state and rendering', () => {
     beforeEach(async () => {
         eventDetailsSettings = signal(normalizeEventDetailsSettings(null));
         updateLapTableColumns = vi.fn().mockResolvedValue(undefined);
         snackBar = { open: vi.fn() };
         haptics = { selection: vi.fn(), success: vi.fn(), error: vi.fn() };
         await TestBed.configureTestingModule({
-            imports: [CommonModule, A11yModule, MatCheckboxModule, MatMenuModule, MatTableModule, MatListModule, MatButtonModule, MatFormFieldModule, MatInputModule, MatSelectModule],
+            imports: [CommonModule, MatCheckboxModule, MatMenuModule, MatDialogModule, MatTableModule],
             declarations: [EventCardLapsComponent, HapticTapDirective],
             providers: [
                 { provide: AppEventColorService, useValue: {} },
@@ -167,8 +194,134 @@ describe('EventCardLapsComponent', () => {
         expect(haptics.selection).toHaveBeenCalledTimes(3);
     });
 
-    it('should create', () => {
-        expect(component).toBeTruthy();
+    it('puts the five swim metrics together in the chosen order and restores that order on reload', async () => {
+        const laps = [1, 2].map(() => ({
+            ...createRenderableLap(LapTypes.Manual),
+            getDistance: () => new DataDistance(22.86),
+        } as LapInterface));
+        const activity = { ...createActivity(laps), type: 'Swimming', getSwimLengths: () => [
+            { index: 1, lapIndex: 1, type: 'active', stroke: 'freestyle', startDate: 0, endDate: 30_000,
+                timerTime: 30, distance: 22.86, strokes: 10, avgCadence: 20 },
+            { index: 2, lapIndex: 2, type: 'active', stroke: 'freestyle', startDate: 30_000, endDate: 60_000,
+                timerTime: 30, distance: 22.86, strokes: 10, avgCadence: 20 },
+        ] } as unknown as ActivityInterface;
+        const initial = [DataDuration.type, DataDistance.type, DataHeartRateMax.type,
+            EVENT_LAP_STROKES_COLUMN, EVENT_LAP_SWOLF_COLUMN, DataSwimPaceAvg.type];
+        component.canCustomize = true;
+        component.selectedActivities = [activity];
+        eventDetailsSettings.set(normalizeEventDetailsSettings({ lapTableColumnsBySportFamily: { swimming: initial } }));
+        fixture.detectChanges();
+        component.ngOnChanges();
+        const table = component.lapTableGroups[0].tables[0];
+        component.toggleAllLapSelections(table);
+        component.toggleLapLengths(table.dataSource.data.find(row => row.hasLengths)!);
+        for (let i = 0; i < 3; i++) await component.moveLapColumn('swimming', DataSwimPaceAvg.type, -1);
+        for (let i = 0; i < 2; i++) await component.moveLapColumn('swimming', EVENT_LAP_SWOLF_COLUMN, -1);
+        await component.moveLapColumn('swimming', EVENT_LAP_STROKES_COLUMN, -1);
+        const ordered = [DataDuration.type, DataDistance.type, DataSwimPaceAvg.type,
+            EVENT_LAP_SWOLF_COLUMN, EVENT_LAP_STROKES_COLUMN, DataHeartRateMax.type];
+        expect(component.getColumnsToDisplay('Swimming')).toEqual(['#', ...ordered]);
+        expect(component.getColumns(activity, LapTypes.Manual)).toEqual(['selection', '#', 'lengths', ...ordered.slice(0, 5)]);
+        expect(updateLapTableColumns).toHaveBeenLastCalledWith('swimming', ordered);
+        expect(component.lapTableGroups[0].tables[0].selectedCount).toBe(2);
+        expect(component.lapTableGroups[0].tables[0].dataSource.data.find(row => row.hasLengths)?.lengthsExpanded).toBe(true);
+
+        eventDetailsSettings.set(normalizeEventDetailsSettings({ lapTableColumnsBySportFamily: { swimming: ordered } }));
+        fixture.destroy();
+        fixture = TestBed.createComponent(EventCardLapsComponent);
+        component = fixture.componentInstance;
+        fixture.componentRef.setInput('canCustomize', true);
+        fixture.componentRef.setInput('selectedActivities', [activity]);
+        fixture.detectChanges();
+        expect(component.getColumnsToDisplay('Swimming')).toEqual(['#', ...ordered]);
+        expect(component.activeLapColumnMenuGroup?.selectedMetrics.map(metric => metric.type)).toEqual(ordered);
+        expect(component.activeLapColumnMenuGroup?.selectedUnavailableMetricCount).toBe(1);
+    });
+
+    it('keeps reordering no-ops, non-owner actions and busy-family actions silent', async () => {
+        component.canCustomize = true;
+        component.selectedActivities = [createActivity([createRenderableLap(LapTypes.Manual)])];
+        eventDetailsSettings.set(normalizeEventDetailsSettings({ lapTableColumnsBySportFamily: { running: [DataDuration.type, DataPaceAvg.type] } }));
+        fixture.detectChanges();
+        component.ngOnChanges();
+        await component.moveLapColumn('running', DataDuration.type, -1);
+        await component.moveLapColumn('running', DataPaceAvg.type, 1);
+        await component.moveLapColumn('running', 'missing', -1);
+        await component.onLapColumnCheckedChange('running', DataDuration.type, true);
+        component.canCustomize = false;
+        await component.moveLapColumn('running', DataPaceAvg.type, -1);
+        expect(updateLapTableColumns).not.toHaveBeenCalled();
+        expect(haptics.selection).not.toHaveBeenCalled();
+        component.canCustomize = true;
+        let finishSave!: () => void;
+        updateLapTableColumns.mockImplementationOnce(() => new Promise<void>(resolve => { finishSave = resolve; }));
+        const saving = component.moveLapColumn('running', DataPaceAvg.type, -1);
+        await component.moveLapColumn('running', DataPaceAvg.type, 1);
+        await component.onLapColumnCheckedChange('running', DataDuration.type, false);
+        expect(updateLapTableColumns).toHaveBeenCalledTimes(1);
+        expect(haptics.selection).toHaveBeenCalledTimes(1);
+        expect(haptics.success).not.toHaveBeenCalled();
+        finishSave();
+        await saving;
+        expect(haptics.success).toHaveBeenCalledTimes(1);
+        expect(component.lapColumnAnnouncement()).toContain('position 1 of 2');
+    });
+
+    it('rolls back the exact failed order while preserving a parallel family reorder through a settings refresh', async () => {
+        const running = createActivity([createRenderableLap(LapTypes.Manual)]);
+        const swimming = { ...createActivity([createRenderableLap(LapTypes.Manual)]), type: 'Swimming', getID: () => 'swim' } as ActivityInterface;
+        const swimmingOrder = [DataDuration.type, DataDistance.type, DataSwimPaceAvg.type];
+        component.canCustomize = true;
+        component.selectedActivities = [running, swimming];
+        eventDetailsSettings.set(normalizeEventDetailsSettings({ lapTableColumnsBySportFamily: {
+            running: [DataDuration.type, DataPaceAvg.type], swimming: swimmingOrder,
+        } }));
+        fixture.detectChanges();
+        component.ngOnChanges();
+        let rejectSwimming!: (error: Error) => void;
+        let finishRunning!: () => void;
+        updateLapTableColumns
+            .mockImplementationOnce(() => new Promise<void>((_resolve, reject) => { rejectSwimming = reject; }))
+            .mockImplementationOnce(() => new Promise<void>(resolve => { finishRunning = resolve; }));
+        const swimSave = component.moveLapColumn('swimming', DataSwimPaceAvg.type, -1);
+        const runSave = component.moveLapColumn('running', DataPaceAvg.type, -1);
+        eventDetailsSettings.set(normalizeEventDetailsSettings({ lapTableColumnsBySportFamily: {
+            running: [DataPaceAvg.type, DataDuration.type], swimming: swimmingOrder, cycling: [],
+        } }));
+        fixture.detectChanges();
+        expect(component.getColumnsToDisplay('Swimming')).toEqual(['#', DataDuration.type, DataSwimPaceAvg.type, DataDistance.type]);
+        rejectSwimming(new Error('offline'));
+        await swimSave;
+        expect(component.savingLapColumnSportFamilies().has('running')).toBe(true);
+        expect(component.getColumnsToDisplay('Swimming')).toEqual(['#', ...swimmingOrder]);
+        expect(component.getColumnsToDisplay('Running')).toEqual(['#', DataPaceAvg.type, DataDuration.type]);
+        expect(component.getColumnsToDisplay('Cycling')).toEqual(['#']);
+        expect(component.activeLapColumnMenuGroup?.family).toBe('running');
+        expect(component.lapColumnAnnouncement()).toBe('');
+        finishRunning();
+        await runSave;
+        expect(component.savingLapColumnSportFamilies().size).toBe(0);
+        expect(haptics.error).toHaveBeenCalledTimes(1);
+        expect(haptics.success).toHaveBeenCalledTimes(1);
+    });
+
+    it('keeps the complete selected order visible above a filtered catalog and appends additions', async () => {
+        component.canCustomize = true;
+        component.selectedActivities = [createActivity([createRenderableLap(LapTypes.Manual)])];
+        const order = [DataHeartRateMax.type, DataPaceAvg.type, DataDuration.type];
+        eventDetailsSettings.set(normalizeEventDetailsSettings({ lapTableColumnsBySportFamily: { running: order } }));
+        fixture.detectChanges();
+        component.ngOnChanges();
+        const group = component.activeLapColumnMenuGroup!;
+        component.onLapColumnMetricSearchInput(group, { target: { value: 'min speed' } } as unknown as Event);
+        expect(group.selectedMetrics.map(metric => metric.type)).toEqual(order);
+        expect(group.selectedMetrics[0].label).toBe(DataHeartRateMax.type);
+        expect(group.filteredMetricGroups.flatMap(category => category.metrics.map(metric => metric.type))).toContain(DataSpeedMin.type);
+        await component.onLapColumnSelectionChange('running', createLapColumnSelectionChange([DataSpeedMin.type]));
+        expect(group.selectedMetricTypes).toEqual([...order, DataSpeedMin.type]);
+        expect(group.filteredMetricGroups.flatMap(category => category.metrics.map(metric => metric.type))).not.toContain(DataSpeedMin.type);
+        await component.onLapColumnCheckedChange('running', DataPaceAvg.type, false);
+        expect(group.selectedMetricTypes).toEqual([DataHeartRateMax.type, DataDuration.type, DataSpeedMin.type]);
     });
 
     it('discovers unselected unusual swim metrics from laps and reports their coverage across tables', () => {
@@ -210,7 +363,7 @@ describe('EventCardLapsComponent', () => {
         expect(group.selectedUnavailableMetricCount).toBe(2);
         component.onLapColumnMetricSearchInput(group, { target: { value: 'average power' } } as unknown as Event);
         expect(group.filteredMetricGroups).toEqual([]);
-        expect(group.filteredAdditionalMetricGroups.flatMap(item => item.metrics.map(metric => metric.type))).toContain(DataPowerAvg.type);
+        expect(group.filteredAdditionalMetricGroups.flatMap(item => item.metrics.map(metric => metric.type))).not.toContain(DataPowerAvg.type);
         component.toggleLapAdditionalMetrics(group);
         await component.onLapColumnSelectionChange('swimming', createLapColumnSelectionChange([DataHeartRateMax.type]));
         expect(updateLapTableColumns).toHaveBeenLastCalledWith('swimming', [...saved, DataHeartRateMax.type]);
@@ -230,165 +383,168 @@ describe('EventCardLapsComponent', () => {
         expect(group.selectedMetricTypes).toEqual([DataJumpHangTimeMax.type, DataDuration.type, DataHeartRateMax.type, DataPowerAvg.type]);
     });
 
-    it('renders an accessible other-metrics disclosure and saves a choice from its searched Material list', async () => {
+    it('should create', () => {
+        expect(component).toBeTruthy();
+    });
+
+    it('discovers unselected swim metrics inside collapsed rest-block members', () => {
+        const activity = createRestActivity([10, 30], [100, 140]);
+        activity.getLaps()[1].addStat(new DataPowerAvg(0));
         component.canCustomize = true;
-        component.selectedActivities = [{ ...createActivity([createRenderableLap(LapTypes.Manual)]), type: 'Swimming' } as ActivityInterface];
+        component.selectedActivities = [activity];
         eventDetailsSettings.set(normalizeEventDetailsSettings({ lapTableColumnsBySportFamily: { swimming: [DataDuration.type] } }));
         fixture.detectChanges();
         component.ngOnChanges();
-        fixture.detectChanges();
-        expect(haptics.selection).not.toHaveBeenCalled();
-        fixture.nativeElement.querySelector('button[aria-label="Choose lap columns"]').click();
-        await fixture.whenStable();
-        fixture.detectChanges();
-        const toggle = document.querySelector<HTMLButtonElement>('button[aria-controls="lap-other-metrics-swimming"]')!;
-        const additional = document.getElementById('lap-other-metrics-swimming')!;
-        expect(toggle.getAttribute('aria-expanded')).toBe('false');
-        expect(additional.hidden).toBe(true);
-        expect(additional.querySelectorAll('mat-list-option')).toHaveLength(0);
-        const input = document.querySelector<HTMLInputElement>('input[aria-label="Search swimming lap metrics"]')!;
-        expect(input.placeholder).toContain('SWOLF');
-        input.value = 'maximum jump hang time';
-        input.dispatchEvent(new Event('input', { bubbles: true }));
-        fixture.detectChanges();
-        expect(haptics.selection).toHaveBeenCalledTimes(1);
-        expect(component.activeLapColumnMenuGroup!.additionalSearchMatchCount).toBe(1);
-        expect(document.querySelector('.lap-column-menu-empty')?.textContent).toContain('1 match is available under Show other metrics');
-        expect(document.querySelector('.lap-column-menu-content')?.textContent).not.toContain('No matching metrics.');
-        toggle.click();
-        fixture.detectChanges();
-        expect(toggle.getAttribute('aria-expanded')).toBe('true');
-        expect(additional.hidden).toBe(false);
-        const option = additional.querySelector<HTMLElement>('mat-list-option')!;
-        expect(additional.querySelectorAll('mat-list-option')).toHaveLength(1);
-        expect(document.querySelector('.lap-column-menu-empty')).toBeNull();
-        expect(option.getAttribute('aria-label')).toBe('Maximum Jump Hang Time');
-        option.click();
-        await fixture.whenStable();
-        fixture.detectChanges();
-        expect(updateLapTableColumns).toHaveBeenCalledWith('swimming', [DataDuration.type, DataJumpHangTimeMax.type]);
-        expect(option.getAttribute('aria-selected')).toBe('true');
-        expect(option.getAttribute('aria-label')).toBe('Maximum Jump Hang Time. No data in current laps — hidden from the table');
-        toggle.click();
-        fixture.detectChanges();
-        expect(additional.hidden).toBe(true);
-        expect(additional.querySelectorAll('mat-list-option')).toHaveLength(0);
-        input.value = 'no such metric exists';
-        input.dispatchEvent(new Event('input', { bubbles: true }));
-        fixture.detectChanges();
-        expect(component.activeLapColumnMenuGroup!.additionalSearchMatchCount).toBe(0);
-        expect(document.querySelectorAll('.lap-column-menu-empty')).toHaveLength(1);
-        expect(document.querySelector('.lap-column-menu-empty')?.textContent?.trim()).toBe('No matching metrics.');
-        input.value = '  ';
-        input.dispatchEvent(new Event('input', { bubbles: true }));
-        fixture.detectChanges();
-        expect(component.activeLapColumnMenuGroup!.additionalSearchMatchCount).toBeNull();
-        expect(document.querySelector('.lap-column-menu-empty')).toBeNull();
-        expect(haptics.selection).toHaveBeenCalledTimes(4);
-        expect(haptics.success).toHaveBeenCalledTimes(1);
-    });
-
-    it('captures focus only while open, preserves search on reopening and restores the trigger on Escape', async () => {
-        component.canCustomize = true;
-        component.selectedActivities = [{ ...createActivity([createRenderableLap(LapTypes.Manual)]), type: 'Swimming' } as ActivityInterface];
-        component.ngOnChanges();
-        fixture.detectChanges();
-        const trigger = fixture.nativeElement.querySelector<HTMLButtonElement>('button[aria-label="Choose lap columns"]')!;
-        expect(document.querySelector('.lap-column-menu-content')).toBeNull();
-        expect(document.querySelector('.cdk-focus-trap-anchor')).toBeNull();
-        trigger.click();
-        await fixture.whenStable();
-        fixture.detectChanges();
-        const input = document.querySelector<HTMLInputElement>('input[aria-label="Search swimming lap metrics"]')!;
-        const picker = document.querySelector('.lap-column-menu-content')!;
-        const trap = (getDebugNode(picker) as DebugElement).injector.get(CdkTrapFocus);
-        expect(trap.enabled).toBe(true);
-        expect(trap.autoCapture).toBe(true);
-        expect(trap.focusTrap.hasAttached()).toBe(true);
-        // JSDOM has no painted geometry; browser coverage verifies actual initial focus.
-        const initialTarget = picker.querySelector<HTMLElement>('[cdkFocusInitial]')!;
-        expect(initialTarget.getAttribute('tabindex')).toBe('-1');
-        expect(initialTarget.matches('input, textarea, [contenteditable="true"]')).toBe(false);
-        for (const [key, keyCode] of [['Home', 36], ['End', 35], ['ArrowLeft', 37], ['ArrowRight', 39], ['Tab', 9]] as const) {
-            const event = new KeyboardEvent('keydown', { key, keyCode, bubbles: true, cancelable: true });
-            input.dispatchEvent(event);
-            fixture.detectChanges();
-            expect(event.defaultPrevented, key).toBe(false);
-            expect(document.querySelector('.lap-column-menu-content'), key).toBeTruthy();
-        }
-        expect(haptics.selection).toHaveBeenCalledTimes(1);
-        input.value = 'swolf';
-        input.dispatchEvent(new Event('input', { bubbles: true }));
-        fixture.detectChanges();
-        input.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', keyCode: 27, bubbles: true }));
-        await fixture.whenStable();
-        fixture.detectChanges();
-        expect(document.querySelector('.lap-column-menu-content')).toBeNull();
-        expect(trigger.getAttribute('aria-expanded')).toBe('false');
-        expect(document.querySelector('.cdk-focus-trap-anchor')).toBeNull();
-        expect(document.activeElement).toBe(trigger);
-        expect(haptics.selection).toHaveBeenCalledTimes(1);
-        trigger.click();
-        await fixture.whenStable();
-        fixture.detectChanges();
-        const reopenedInput = document.querySelector<HTMLInputElement>('input[aria-label="Search swimming lap metrics"]')!;
-        const reopenedPicker = document.querySelector('.lap-column-menu-content')!;
-        const reopenedTrap = (getDebugNode(reopenedPicker) as DebugElement).injector.get(CdkTrapFocus);
-        expect(reopenedTrap).not.toBe(trap);
-        expect(reopenedTrap.focusTrap.hasAttached()).toBe(true);
-        expect(reopenedInput.value).toBe('swolf');
-        expect(haptics.selection).toHaveBeenCalledTimes(2);
-        reopenedInput.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', keyCode: 27, bubbles: true }));
-        await fixture.whenStable();
-        fixture.detectChanges();
-        expect(document.querySelector('.cdk-focus-trap-anchor')).toBeNull();
-        expect(document.activeElement).toBe(trigger);
-    });
-
-    it('keeps named sport choices and per-sport search state inside the open column menu', async () => {
-        component.canCustomize = true;
-        component.selectedActivities = [
-            { ...createActivity([createRenderableLap(LapTypes.Manual)]), type: 'Swimming', getID: () => 'swim' } as ActivityInterface,
-            { ...createActivity([createRenderableLap(LapTypes.Manual)]), type: 'Cycling', getID: () => 'bike' } as ActivityInterface,
-        ];
-        component.ngOnChanges();
-        fixture.detectChanges();
-        const swimming = component.activeLapColumnMenuGroup!;
-        component.onLapColumnMetricSearchInput(swimming, { target: { value: 'average power' } } as unknown as Event);
-        component.toggleLapAdditionalMetrics(swimming);
-        haptics.selection.mockClear();
-        fixture.nativeElement.querySelector('button[aria-label="Choose lap columns"]').click();
-        await fixture.whenStable();
-        fixture.detectChanges();
-        const select = document.querySelector<HTMLElement>('mat-select[aria-label="Lap sport family"]')!;
-        select.querySelector<HTMLElement>('.mat-mdc-select-trigger')!.click();
-        await fixture.whenStable();
-        fixture.detectChanges();
-        const choices = Array.from(document.querySelectorAll<HTMLElement>('mat-option'));
-        expect(choices.map(option => option.textContent?.trim())).toEqual(['Swimming', 'Cycling']);
-        expect(haptics.selection).toHaveBeenCalledTimes(2);
-        choices.find(option => option.textContent?.trim() === 'Cycling')!.click();
-        await fixture.whenStable();
-        fixture.detectChanges();
-        expect(component.activeLapColumnMenuGroup!.family).toBe('cycling');
-        expect(document.querySelector('.lap-column-menu-content')).toBeTruthy();
-        expect(document.querySelector('input[aria-label="Search cycling lap metrics"]')).toBeTruthy();
-        expect(haptics.selection).toHaveBeenCalledTimes(3);
-        select.querySelector<HTMLElement>('.mat-mdc-select-trigger')!.click();
-        await fixture.whenStable();
-        fixture.detectChanges();
-        Array.from(document.querySelectorAll<HTMLElement>('mat-option'))
-            .find(option => option.textContent?.trim() === 'Swimming')!.click();
-        await fixture.whenStable();
-        fixture.detectChanges();
-        expect(component.activeLapColumnMenuGroup).toBe(swimming);
-        expect(swimming.searchTerm).toBe('average power');
-        expect(swimming.showAdditionalMetrics).toBe(true);
-        expect(swimming.additionalSearchMatchCount).toBe(2);
-        expect(document.querySelector<HTMLInputElement>('input[aria-label="Search swimming lap metrics"]')!.value).toBe('average power');
-        expect(haptics.selection).toHaveBeenCalledTimes(5);
-        expect(haptics.success).not.toHaveBeenCalled();
+        const table = component.lapTableGroups[0].tables[0];
+        expect(table.dataSource.data.filter(row => !row.isLapAverage)).toHaveLength(1);
+        expect(table.dataSource.data.find(row => row.members)?.members).toHaveLength(2);
+        const group = component.activeLapColumnMenuGroup!;
+        expect(group.selectedMetricTypes).not.toContain(DataPowerAvg.type);
+        expect(group.recordedAdditionalMetricCount).toBe(1);
+        expect(group.metricAvailability[DataPowerAvg.type].availableTableCount).toBe(1);
+        expect(group.metricAvailability[DataHeartRateAvg.type].availableTableCount).toBe(1);
         expect(updateLapTableColumns).not.toHaveBeenCalled();
+    });
+
+    it('renders a rest block with total time, weighted HR, original lap expansion and partial selection', () => {
+        const activity = createRestActivity([10, 30], [100, 140]);
+        component.selectedActivities = [activity];
+        component.ngOnChanges();
+        fixture.detectChanges();
+        let table = component.lapTableGroups[0].tables[0];
+        const block = table.dataSource.data[0];
+        expect(table.dataSource.data).toHaveLength(1);
+        expect(block).toMatchObject({ '#': '1–2', Duration: '0:40.00', Distance: '0 m',
+            [DataHeartRateAvg.type]: '130 bpm', [DataHeartRateMax.type]: '151 bpm' });
+        expect(block.members?.map(row => row.lap)).toEqual(activity.getLaps());
+        expect(block.metricNotes?.[DataHeartRateAvg.type]).toContain('Estimate');
+        expect(haptics.selection).not.toHaveBeenCalled();
+        const button = fixture.nativeElement.querySelector('button[aria-label="Show recorded laps 1–2"]');
+        button.click();
+        fixture.detectChanges();
+        expect(button.getAttribute('aria-expanded')).toBe('true');
+        expect(fixture.nativeElement.querySelectorAll('table')).toHaveLength(2);
+        expect(fixture.nativeElement.querySelector('[aria-label="Recorded laps 1–2"]').textContent).toContain('0:10.00');
+        expect(fixture.nativeElement.querySelector('[aria-label="Recorded laps 1–2"]').textContent).toContain('0:30.00');
+        fixture.nativeElement.querySelector('input[aria-label="Select lap 1"]').click();
+        fixture.detectChanges();
+        expect(block.isPartiallySelected).toBe(true);
+        expect(table.someLapRowsSelected).toBe(true);
+        expect(table.selectedCount).toBe(1);
+        const blockCheckbox = fixture.nativeElement.querySelector('input[aria-label="Select laps 1–2"]');
+        expect(blockCheckbox.indeterminate).toBe(true);
+        blockCheckbox.click();
+        fixture.detectChanges();
+        expect(table.selectedCount).toBe(2);
+        expect(table.allLapRowsSelected).toBe(true);
+        expect(table.selectedSummary.Duration).toBe('0:20.00 · 2/2');
+        expect(block.isPartiallySelected).toBe(false);
+        component.unitSettings = { ...getDefaultUserUnitSettings(), swimPaceUnits: [SwimPaceUnits.MinutesPer100Yard] };
+        component.ngOnChanges();
+        fixture.detectChanges();
+        table = component.lapTableGroups[0].tables[0];
+        expect(table.selectedCount).toBe(2);
+        expect(table.allLapRowsSelected).toBe(true);
+        expect(table.dataSource.data[0].lengthsExpanded).toBe(true);
+        expect(table.dataSource.data[0].Distance).toBe('0 yd');
+        fixture.nativeElement.querySelector('input[aria-label="Select all laps in this table"]').click();
+        fixture.detectChanges();
+        expect(table.selectedCount).toBe(0);
+        expect(table.dataSource.data[0].isSelected).toBe(false);
+        expect(haptics.selection).toHaveBeenCalledTimes(4);
+    });
+
+    it('preserves rest-block selection and nested length expansion when reordering columns', async () => {
+        const activity = createRestActivity([10, 30], [100, 140], true);
+        const order = [DataDuration.type, DataDistance.type, DataHeartRateAvg.type, DataHeartRateMax.type];
+        component.canCustomize = true;
+        component.selectedActivities = [activity];
+        eventDetailsSettings.set(normalizeEventDetailsSettings({ lapTableColumnsBySportFamily: { swimming: order } }));
+        component.ngOnChanges();
+        fixture.detectChanges();
+        const table = component.lapTableGroups[0].tables[0];
+        const block = table.dataSource.data.find(row => row.members)!;
+        component.toggleLapLengths(block);
+        component.toggleLapLengths(block.members![1]);
+        component.toggleLapSelection(table, block.members![0]);
+
+        await component.moveLapColumn('swimming', DataHeartRateMax.type, -1);
+        fixture.detectChanges();
+
+        const reordered = [DataDuration.type, DataDistance.type, DataHeartRateMax.type, DataHeartRateAvg.type];
+        const refreshed = component.lapTableGroups[0].tables[0];
+        const refreshedBlock = refreshed.dataSource.data.find(row => row.members)!;
+        expect(refreshed.columns).toEqual(['selection', '#', 'lengths', ...reordered]);
+        expect(updateLapTableColumns).toHaveBeenCalledWith('swimming', reordered);
+        expect(refreshed.selectedCount).toBe(1);
+        expect(refreshedBlock.isPartiallySelected).toBe(true);
+        expect(refreshedBlock.members?.map(row => row.isSelected)).toEqual([true, false]);
+        expect(refreshedBlock.lengthsExpanded).toBe(true);
+        expect(refreshedBlock.members![1].lengthsExpanded).toBe(true);
+        expect(fixture.nativeElement.querySelector('app-event-card-swim-lengths').lap).toBe(activity.getLaps()[1]);
+    });
+
+    it('preserves each original identity when lap IDs repeat, and sums fractional recorded time once', () => {
+        const activity = createRestActivity([33.76, .51, 69.91, 8.14, 21.51]);
+        activity.getLaps().forEach(lap => lap.lapId = 1);
+        component.selectedActivities = [activity];
+        component.ngOnChanges();
+        const table = component.lapTableGroups[0].tables[0];
+        const block = table.dataSource.data[0];
+        expect(block.Duration).toBe('2:13.83');
+        expect(new Set(block.members!.map(row => row.selectionKey)).size).toBe(5);
+        component.toggleLapSelection(table, block);
+        expect(table.selectedCount).toBe(5);
+        expect(table.allLapRowsSelected).toBe(true);
+        component.ngOnChanges();
+        expect(component.lapTableGroups[0].tables[0].selectedCount).toBe(5);
+    });
+
+    it('shows partial HR coverage and keeps rest blocks isolated by activity', () => {
+        const first = createRestActivity([10, 30], [100]);
+        const second = createRestActivity([10, 30], [120, 140]);
+        second.setID('second-rest-activity');
+        component.selectedActivities = [first, second];
+        component.ngOnChanges();
+        expect(component.lapTableGroups[0].tables).toHaveLength(2);
+        const [a, b] = component.lapTableGroups[0].tables;
+        expect(a.dataSource.data[0][DataHeartRateAvg.type]).toBe('100 bpm · 1/2 laps');
+        component.toggleLapSelection(a, a.dataSource.data[0]);
+        expect(a.selectedCount).toBe(2);
+        expect(b.selectedCount).toBe(0);
+    });
+
+    it('keeps a drill with a recorded active-length count separate when length details are missing', () => {
+        const activity = createRestActivity([10, 30, 10]);
+        activity.getLaps()[1].addStat(new DataActiveLengths(1));
+        component.selectedActivities = [activity];
+        component.ngOnChanges();
+        fixture.detectChanges();
+        const rows = component.lapTableGroups[0].tables[0].dataSource.data.filter(row => row.lap);
+        expect(rows).toHaveLength(3);
+        expect(rows.map(row => row.isRest)).toEqual([true, false, true]);
+        expect(rows.every(row => !row.members)).toBe(true);
+        expect(fixture.nativeElement.querySelectorAll('.lap-rest-row')).toHaveLength(2);
+    });
+
+    it('retains original recorded-length disclosures inside a rest block across refreshes', () => {
+        const activity = createRestActivity([10, 30], [], true);
+        component.selectedActivities = [activity];
+        component.ngOnChanges();
+        let block = component.lapTableGroups[0].tables[0].dataSource.data[0];
+        expect(block.members?.map(row => row.hasLengths)).toEqual([true, true]);
+        component.toggleLapLengths(block);
+        component.toggleLapLengths(block.members![1]);
+        fixture.detectChanges();
+        expect(fixture.nativeElement.querySelector('app-event-card-swim-lengths').lap).toBe(activity.getLaps()[1]);
+        component.unitSettings = { ...getDefaultUserUnitSettings(), swimPaceUnits: [SwimPaceUnits.MinutesPer100Yard] };
+        component.ngOnChanges();
+        fixture.detectChanges();
+        block = component.lapTableGroups[0].tables[0].dataSource.data[0];
+        expect(block.lengthsExpanded).toBe(true);
+        expect(block.members![1].lengthsExpanded).toBe(true);
+        expect(fixture.nativeElement.querySelector('app-event-card-swim-lengths').lap).toBe(activity.getLaps()[1]);
+        expect(haptics.selection).toHaveBeenCalledTimes(2);
     });
 
     it('shows stroke in swimming defaults and preserves per-lap metadata across filtered lap types', () => {
@@ -575,7 +731,6 @@ describe('EventCardLapsComponent', () => {
         component.ngOnChanges();
         fixture.detectChanges();
         const group = component.activeLapColumnMenuGroup!;
-        component.onLapColumnSportSelectOpened(false);
         component.onLapColumnMenuSportFamilyChange('running');
         component.onLapColumnMetricSearchInput(group, { target: { value: 'stroke' } } as unknown as Event);
         expect(haptics.selection).not.toHaveBeenCalled();
@@ -1098,7 +1253,7 @@ describe('EventCardLapsComponent', () => {
         component.clearLapColumnMetricSearch(cyclingGroup);
 
         expect(cyclingGroup.searchTerm).toBe('');
-        expect(cyclingGroup.filteredMetricGroups).toBe(cyclingGroup.metricGroups);
+        expect(cyclingGroup.filteredMetricGroups).toBe(cyclingGroup.availableMetricGroups);
     });
 
     it('restores the prior column layout when its profile save fails', async () => {
@@ -1352,10 +1507,11 @@ describe('EventCardLapsComponent', () => {
         expect(component.lapTableGroups[0]?.tables[0]?.selectedCount).toBe(0);
     });
 
+    });
 });
 
 describe('EventCardLapsComponent source contracts', () => {
-    it('should keep the metric search field within the lap column menu', () => {
+    it('should keep the metric search field within the lap column dialog', () => {
         const styles = readFileSync(
             resolve(process.cwd(), 'src/app/components/event/laps/event.card.laps.component.css'),
             'utf8',
@@ -1363,7 +1519,7 @@ describe('EventCardLapsComponent source contracts', () => {
 
         expect(styles).toContain('.lap-column-search-field');
         expect(styles).toContain('box-sizing: border-box;');
-        expect(styles).toContain('width: calc(100% - 32px) !important;');
+        expect(styles).toContain('width: 100%;');
         expect(styles).toContain('.lap-column-availability-summary');
         expect(styles).toContain(".lap-selected-summary-row .mat-mdc-footer-cell");
         expect(styles).toContain("font-family: 'Barlow Condensed', 'Inter', sans-serif;");
@@ -1377,7 +1533,7 @@ describe('EventCardLapsComponent source contracts', () => {
 
         expect(template).toContain("column === 'selection' || column === '#'");
         expect(template).toContain('Select all laps in this table');
-        expect(template).toContain("[attr.aria-label]=\"'Select lap ' + row['#']\"");
+        expect(template).toContain("[aria-label]=\"(row.members ? 'Select laps ' : 'Select lap ') + row['#']\"");
         expect(template).toContain("column === 'selection' && !row.isLapAverage");
         expect(template).toContain('toggleAllLapSelections(lapTable)');
         expect(template).toContain('toggleLapSelection(lapTable, row)');
@@ -1387,19 +1543,21 @@ describe('EventCardLapsComponent source contracts', () => {
         expect(template).toContain('<app-data-type-icon [dataType]="column"></app-data-type-icon>');
         expect(template).toContain("[class.lap-index-cell]=\"column === '#'");
         expect(template).toContain("[class.lap-duration-cell]=\"column === 'Duration'");
-        expect(template).toContain('lapColumnsMenu');
-        expect(template).toContain('xPosition="before"');
-        expect(template).toContain('qs-menu-panel-form qs-config-menu lap-column-menu-panel');
+        expect(template).toContain('lapColumnsDialog');
+        expect(template).toContain('mat-dialog-content');
+        expect(template).toContain('Selected columns · table order');
+        expect(template).toContain('moveLapColumn(group.family, metric.type, -1)');
+        expect(template).not.toContain('matMenuTriggerFor');
         expect(template).toContain('mat-select');
+        expect(template).toContain('Lap sport family');
         expect(template).toContain('activeLapColumnMenuGroup');
-        expect(template).toContain('{{ group.label }} lap columns · saved units');
+        expect(template).toContain('Choose columns for {{ group.label.toLowerCase() }} laps');
         expect(template).toContain('Search metrics');
         expect(template).toContain('group.filteredMetricGroups');
         expect(template).toContain('group.selectedUnavailableMetricCount');
         expect(template).toContain('group.metricAvailability[metric.type]?.label');
         expect(template).toContain('unavailable in these laps and hidden from the table');
         expect(template).toContain('matListItemTitle');
-        expect(template).toContain('matListItemLine');
         expect(template).toContain('No matching metrics.');
         expect(template).toContain('row.isLapAverage');
         expect(template).toContain('lap-average-row');

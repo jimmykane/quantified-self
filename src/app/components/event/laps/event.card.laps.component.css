@@ -93,111 +93,49 @@
   max-width: 104px;
 }
 
-.lap-column-menu-content {
-  box-sizing: border-box;
-  inline-size: min(380px, calc(100vw - 24px));
-  max-inline-size: 100%;
-  max-block-size: min(640px, calc(100dvh - 72px));
+.lap-column-dialog-content {
   min-inline-size: 0;
-  display: flex;
-  flex-direction: column;
-}
-
-.lap-column-menu-controls {
-  flex: 0 0 auto;
-  min-inline-size: 0;
-}
-
-.lap-column-menu-results {
-  flex: 1 1 auto;
-  min-block-size: 0;
-  min-inline-size: 0;
-  overflow-y: auto;
   overscroll-behavior: contain;
-  -webkit-overflow-scrolling: touch;
 }
 
-.lap-column-family-select {
-  margin: 12px 16px 0;
-  width: calc(100% - 32px) !important;
+.lap-column-dialog-body {
+  /* Floating labels need space above the first field inside the scroll viewport. */
+  padding-block-start: 8px;
+}
+
+.lap-column-family-field {
+  display: block;
+  width: 100%;
+  min-width: 0;
+  margin-block-end: 12px;
 }
 
 .lap-column-menu-copy {
   color: var(--mat-sys-on-surface-variant);
   font: var(--mat-sys-body-small);
   margin: 0;
-  padding: 12px 16px 4px;
+  margin-block: 8px;
 }
 
 .lap-column-availability-summary {
   color: var(--mat-sys-on-surface-variant);
   font: var(--mat-sys-label-medium);
   margin: 0;
-  padding: 4px 16px 0;
+  margin-block: 8px;
 }
 
 .lap-column-search-field {
   box-sizing: border-box;
   display: block;
-  margin: 12px 16px 0;
-  width: calc(100% - 32px) !important;
+  width: 100%;
+  min-width: 0;
 }
 
 .lap-column-menu-empty {
   color: var(--mat-sys-on-surface-variant);
   font: var(--mat-sys-body-medium);
   margin: 0;
-  padding: 12px 16px;
-}
-
-.lap-column-other-toggle {
-  margin: 4px 16px 0;
-}
-
-.lap-column-other-summary {
-  margin: 0;
-  padding: 0 16px 8px;
-  color: var(--mat-sys-on-surface-variant);
-  font: var(--mat-sys-body-small);
-}
-
-.lap-column-results-heading {
-  margin: 0;
-  padding: 12px 16px 0;
-  font: var(--mat-sys-title-small);
-}
-
-.lap-column-menu-results .lap-column-option-title,
-.lap-column-menu-results .lap-column-option-status {
-  /* Material's single-line title/line rules otherwise truncate these explanations. */
-  white-space: normal !important;
-  overflow-wrap: anywhere;
-}
-
-.lap-column-menu-results .lap-column-metric-option {
-  /* Material's fixed line-count heights cannot contain wrapped titles and status
-     text at phone widths. Grow these rows with their public list-item content. */
-  height: auto !important;
-  min-height: 48px;
-  padding-block: 8px;
-}
-
-@media (max-height: 480px) {
-  /* On landscape phones or with a keyboard open, fixed controls leave too little
-     room for a usable results list. Keep the entire picker reachable in one scroll. */
-  .lap-column-menu-content {
-    display: block;
-    overflow-y: auto;
-    overscroll-behavior: contain;
-  }
-
-  .lap-column-menu-results {
-    overflow: visible;
-  }
-}
-
-.lap-column-additional[hidden] {
-  display: none;
+  padding-block: 12px;
 }
 
 .lap-column-menu-saving {
@@ -206,7 +144,44 @@
   display: flex;
   font: var(--mat-sys-label-medium);
   gap: 8px;
-  padding: 8px 16px 0;
+  padding-block: 8px;
+}
+
+.lap-column-section-title {
+  font: var(--mat-sys-title-small);
+  margin-block: 16px 8px;
+}
+
+.lap-column-selected-list {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+}
+
+.lap-column-selected-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  padding-block: 4px;
+}
+
+.lap-column-selected-metric {
+  flex: 1;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.lap-column-metric-availability {
+  font: var(--mat-sys-body-small);
+  color: var(--mat-sys-on-surface-variant);
+  margin: 0 0 4px 8px;
+}
+
+.lap-column-order-actions {
+  display: flex;
+  flex: 0 0 auto;
+  gap: 8px;
 }
 
 .lap-tab-label {
@@ -273,4 +248,22 @@
   .lap-tab-text {
     display: none;
   }
+}
+
+.lap-column-additional-controls {
+  margin-block: 8px;
+}
+
+.lap-column-dialog-content .lap-column-metric-option {
+  height: auto;
+  min-height: 64px;
+  padding-block: 8px;
+}
+
+.lap-column-dialog-content .lap-column-metric-option .lap-column-metric-title,
+.lap-column-dialog-content .lap-column-metric-option .lap-column-metric-status {
+  white-space: normal;
+  overflow-wrap: anywhere;
+  overflow: visible;
+  text-overflow: clip;
 }

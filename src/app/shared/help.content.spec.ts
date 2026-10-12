@@ -1263,12 +1263,22 @@ describe('help.content', () => {
 
   it('should document event swim length tables', () => {
     const gettingStartedSection = HELP_SECTIONS.find(section => section.id === 'getting-started');
+    expect(gettingStartedSection?.content).toContain('**Selected columns** stay at the top in table order');
+    expect(gettingStartedSection?.content).toContain('**Move up** or **Move down**');
+    expect(gettingStartedSection?.content).toContain('with touch or keyboard');
+    expect(gettingStartedSection?.content).toContain('Search filters **Add columns** only');
+    expect(gettingStartedSection?.content).toContain('If a save fails, the previous selection and order return');
 
     expect(gettingStartedSection?.content).toContain('individual recorded FIT pool lengths');
     expect(gettingStartedSection?.content).toContain('**Total strokes**');
     expect(gettingStartedSection?.content).toContain('**SWOLF (25 yd)**');
     expect(gettingStartedSection?.content).toContain('Stroke, total strokes and normalized SWOLF columns are available only for swimming');
     expect(gettingStartedSection?.content).toContain('Swimming **Avg** values exclude rest');
+    expect(gettingStartedSection?.content).toContain('touching, non-overlapping recorded times');
+    expect(gettingStartedSection?.content).toContain('positive recorded active-length count');
+    expect(gettingStartedSection?.content).toContain('sums its original lap durations once');
+    expect(gettingStartedSection?.content).toContain('estimate weighted by recorded lap duration');
+    expect(gettingStartedSection?.content).toContain('**Selected avg** still averages the original selected laps');
     expect(gettingStartedSection?.content).toContain('not divided into invented splits');
     expect(gettingStartedSection?.content).toContain('Incomplete length details can use valid native interval metrics');
     expect(gettingStartedSection?.content).toContain('recorded active-length count differs');
@@ -1314,11 +1324,11 @@ describe('help.content', () => {
     expect(gettingStartedSection?.content).toContain('separate column list for each of those sport families');
     expect(gettingStartedSection?.content).toContain('Swimming choices focus on duration, distance, swim pace');
     expect(gettingStartedSection?.content).toContain('**Show other metrics**');
-    expect(gettingStartedSection?.content).toContain('**Lap sport** selector when more than one sport is present');
-    expect(gettingStartedSection?.content).toContain('stay above the scrolling results');
+    expect(gettingStartedSection?.content).toContain('**Lap sport family** selector when more than one sport is present');
+    expect(gettingStartedSection?.content).toContain('stay visible while its contents scroll');
     expect(gettingStartedSection?.content).toContain('the picker shows their match count');
     expect(gettingStartedSection?.content).toContain('metrics recorded in the current laps, even before you select them');
-    expect(gettingStartedSection?.content).toContain('search, remove or restore older choices');
+    expect(gettingStartedSection?.content).toContain('search or restore older choices');
     expect(gettingStartedSection?.content).toContain('Existing saved selections and their order stay unchanged');
     expect(gettingStartedSection?.content).toContain('Running and trail-running laps use pace');
     expect(gettingStartedSection?.content).toContain('Each lap table includes a persistent **Avg** row directly below its headers');

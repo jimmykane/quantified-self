@@ -92,12 +92,16 @@ export function getNormalizedSwolf(
 
 /** Never classify a recorded active drill as rest just because its stroke rate is zero. */
 export function isRestSwimLap(lap: LapInterface, lengths: readonly AppSwimLength[] = []): boolean {
+  // FIT's inactive flag can be inferred from missing distance/speed. A recorded
+  // active-length count remains evidence even when individual lengths are unavailable.
+  const activeLengthCount = finite(lap.getStat?.(DataActiveLengths.type));
+  if ((Number.isInteger(activeLengthCount) && activeLengthCount > 0)
+    || lengths.some(length => length.type.trim().toLowerCase() === 'active')) {
+    return false;
+  }
   const active = getRecordedLapActive(lap);
   if (active !== null) {
     return !active;
-  }
-  if (lengths.some(length => length.type.trim().toLowerCase() === 'active')) {
-    return false;
   }
   if (lengths.length && lengths.every(isRestSwimLength)) {
     return true;

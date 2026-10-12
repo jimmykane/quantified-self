@@ -87,6 +87,40 @@ export interface EventLapMetricOptionGroup {
   metrics: EventLapMetricOption[];
 }
 
+/** Picker ordering is independent of catalog grouping and current data availability. */
+export const getEventLapColumnPickerOptions = (
+  metricGroups: readonly EventLapMetricOptionGroup[],
+  selectedMetricTypes: readonly string[],
+): { selectedMetrics: EventLapMetricOption[]; availableMetricGroups: EventLapMetricOptionGroup[] } => {
+  const options = new Map(metricGroups.flatMap(group => group.metrics.map(metric => [metric.type, metric] as const)));
+  const selected = new Set(selectedMetricTypes);
+  return {
+    selectedMetrics: selectedMetricTypes.map(type => {
+      const option = options.get(type);
+      return { type, label: !option || ['Average', 'Maximum', 'Minimum'].includes(option.label) ? type : option.label };
+    }),
+    availableMetricGroups: metricGroups.map(group => ({
+      ...group,
+      metrics: group.metrics.filter(metric => !selected.has(metric.type)),
+    })).filter(group => group.metrics.length > 0),
+  };
+};
+
+export const moveEventLapMetricType = (
+  metricTypes: readonly string[],
+  metricType: string,
+  direction: -1 | 1,
+): string[] => {
+  const next = [...metricTypes];
+  const index = next.indexOf(metricType);
+  const destination = index + direction;
+  if ((direction !== -1 && direction !== 1) || index < 0 || destination < 0 || destination >= next.length) {
+    return next;
+  }
+  [next[index], next[destination]] = [next[destination], next[index]];
+  return next;
+};
+
 export interface EventLapSportFamilyPresentation {
   family: AppEventLapSportFamily;
   label: string;
