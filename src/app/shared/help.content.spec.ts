@@ -1310,6 +1310,11 @@ describe('help.content', () => {
     expect(gettingStartedSection?.content).toContain('typed metric search');
     expect(gettingStartedSection?.content).toContain('Running, Cycling, Swimming, or Other activities');
     expect(gettingStartedSection?.content).toContain('separate column list for each of those sport families');
+    expect(gettingStartedSection?.content).toContain('Swimming choices focus on duration, distance, swim pace');
+    expect(gettingStartedSection?.content).toContain('**Show other metrics**');
+    expect(gettingStartedSection?.content).toContain('metrics recorded in the current laps, even before you select them');
+    expect(gettingStartedSection?.content).toContain('search, remove or restore older choices');
+    expect(gettingStartedSection?.content).toContain('Existing saved selections and their order stay unchanged');
     expect(gettingStartedSection?.content).toContain('Running and trail-running laps use pace');
     expect(gettingStartedSection?.content).toContain('Each lap table includes a persistent **Avg** row directly below its headers');
     expect(gettingStartedSection?.content).toContain('Accumulated totals, such as duration, distance, elevation, energy, and work, are not averaged');

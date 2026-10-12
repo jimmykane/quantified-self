@@ -114,6 +114,16 @@
   min-width: 0;
 }
 
+.lap-column-many-families .lap-column-family-label {
+  display: none;
+}
+
+@media (max-width: 600px) {
+  .lap-column-family-label {
+    display: none;
+  }
+}
+
 .lap-column-menu-copy {
   color: var(--mat-sys-on-surface-variant);
   font: var(--mat-sys-body-small);
@@ -140,6 +150,14 @@
   font: var(--mat-sys-body-medium);
   margin: 0;
   padding: 12px 16px;
+}
+
+.lap-column-other-toggle {
+  margin: 4px 16px 0;
+}
+
+.lap-column-additional[hidden] {
+  display: none;
 }
 
 .lap-column-menu-saving {

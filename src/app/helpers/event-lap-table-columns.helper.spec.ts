@@ -1,4 +1,5 @@
 import {
+  ActivityInterface,
   DataDistance,
   DataDepthAvg,
   DataDiveNumber,
@@ -11,6 +12,15 @@ import {
   DataHeartRateAvg,
   DataHeartRateMax,
   DataHeartRateMin,
+  DataJumpHangTimeMax,
+  DataPowerAvg,
+  DataPowerMax,
+  DataCadenceAvg,
+  DataAscent,
+  DataMovingTime,
+  DataTemperatureAvg,
+  DataAvgRespirationRate,
+  DataStrokeRateMax,
   DataNumberOfSatellites,
   DataSatellite5BestSNR,
   DataSpeedAvg,
@@ -35,8 +45,10 @@ import {
   EVENT_LAP_STROKE_COLUMN,
   formatEventLapMetric,
   getAverageEventLapMetrics,
+  getAvailableEventLapMetricTypes,
   getDefaultEventLapMetricTypes,
   getEventLapMetricOptionGroups,
+  getEventLapAdditionalMetricOptionGroups,
   getSelectedEventLapSummaryMetrics,
   getSelectedEventLapMetricTypes,
   isEventLapSportFamily,
@@ -44,6 +56,7 @@ import {
   normalizeEventLapMetricTypes,
   resolveEventLapSportFamily,
 } from './event-lap-table-columns.helper';
+import { EVENT_LAP_STROKES_COLUMN, EVENT_LAP_SWOLF_COLUMN } from './event-swim-analytics.helper';
 
 const unitSettings: UserUnitSettingsInterface = {
   paceUnits: [PaceUnits.MinutesPerMile],
@@ -52,6 +65,80 @@ const unitSettings: UserUnitSettingsInterface = {
 } as UserUnitSettingsInterface;
 
 describe('event lap table columns helper', () => {
+  it('focuses swimming choices while keeping the full catalog recoverable and other sports unchanged', () => {
+    const normal = getEventLapMetricOptionGroups('swimming').flatMap(group => group.metrics.map(metric => metric.type));
+    const additional = getEventLapAdditionalMetricOptionGroups('swimming').flatMap(group => group.metrics.map(metric => metric.type));
+    const full = getEventLapMetricOptionGroups().flatMap(group => group.metrics.map(metric => metric.type));
+    expect(normal).toEqual(expect.arrayContaining([
+      DataDuration.type, DataDistance.type, DataMovingTime.type, DataSwimPaceAvg.type,
+      EVENT_LAP_STROKE_COLUMN, EVENT_LAP_STROKES_COLUMN, EVENT_LAP_SWOLF_COLUMN,
+      DataStrokeRateAvg.type, DataStrokeRateMax.type, DataHeartRateMin.type,
+      DataEnergy.type, DataSpeedAvg.type, DataTemperatureAvg.type, DataAvgRespirationRate.type,
+    ]));
+    for (const type of [DataPowerAvg.type, DataJumpHangTimeMax.type, DataPaceAvg.type, DataAscent.type, DataCadenceAvg.type, DataDepthAvg.type]) {
+      expect(normal).not.toContain(type);
+      expect(additional).toContain(type);
+    }
+    expect(new Set([...normal, ...additional]).size).toBe(full.length);
+    expect([...normal, ...additional].sort()).toEqual([...full].sort());
+    for (const family of ['running', 'cycling', 'other'] as const) {
+      expect(getEventLapAdditionalMetricOptionGroups(family)).toEqual([]);
+      expect(getEventLapMetricOptionGroups(family).flatMap(group => group.metrics.map(metric => metric.type)))
+        .toEqual(full.filter(type => ![EVENT_LAP_STROKE_COLUMN, EVENT_LAP_STROKES_COLUMN, EVENT_LAP_SWOLF_COLUMN].includes(type)));
+    }
+  });
+
+  it('uses focused swimming defaults without rewriting saved additional choices or their order', () => {
+    const defaults = getDefaultEventLapMetricTypes('swimming');
+    const normal = getEventLapMetricOptionGroups('swimming').flatMap(group => group.metrics.map(metric => metric.type));
+    expect(defaults.every(type => normal.includes(type))).toBe(true);
+    expect(defaults).not.toContain(DataCadenceAvg.type);
+    expect(defaults).not.toContain(DataPowerAvg.type);
+    expect(defaults).not.toContain(DataAscent.type);
+    const saved = [DataJumpHangTimeMax.type, DataDuration.type, DataPowerAvg.type];
+    expect(getSelectedEventLapMetricTypes({ lapTableColumnsBySportFamily: { swimming: saved } }, 'swimming')).toEqual(saved);
+    expect(normalizeEventLapMetricTypes(saved)).toEqual(saved);
+  });
+
+  it('discovers unselected valid lap metrics including zero without using activity summary values', () => {
+    const lap = {
+      getDuration: () => new DataDuration(30),
+      getDistance: () => new DataDistance(25),
+      getStat: (type: string) => type === DataPowerAvg.type ? new DataPowerAvg(0)
+        : type === DataPowerMax.type ? new DataPowerMax(Number.NaN) : undefined,
+    } as unknown as LapInterface;
+    const activity = {
+      type: 'Swimming', getLaps: () => [lap],
+      getStat: () => new DataJumpHangTimeMax(2),
+    } as unknown as ActivityInterface;
+    const types = [DataDuration.type, DataDistance.type, DataPowerAvg.type, DataPowerMax.type, DataJumpHangTimeMax.type, 'unknown metric', DataEHPE.type];
+    for (const units of [undefined, unitSettings]) {
+      expect(getAvailableEventLapMetricTypes(activity, [lap], types, units))
+        .toEqual(new Set([DataDuration.type, DataDistance.type, DataPowerAvg.type]));
+    }
+    expect(getAvailableEventLapMetricTypes(activity, [], types, unitSettings)).toEqual(new Set());
+  });
+
+  it('discovers calculated swim columns from active lengths and leaves rest-only performance unavailable', () => {
+    const active = {
+      lapId: 1, getDuration: () => new DataDuration(30), getDistance: () => new DataDistance(25), getStat: () => undefined,
+    } as unknown as LapInterface;
+    const rest = {
+      lapId: 2, getDuration: () => new DataDuration(30), getDistance: () => new DataDistance(0), getStat: () => undefined,
+    } as unknown as LapInterface;
+    const activity = {
+      type: 'Swimming', getLaps: () => [active, rest], getSwimLengths: () => [
+        { index: 1, lapIndex: 1, type: 'active', stroke: 'freestyle', startDate: 0, endDate: 30_000, timerTime: 30, distance: 25, strokes: 12 },
+        { index: 2, lapIndex: 2, type: 'idle', startDate: 30_000, endDate: 60_000, timerTime: 30, distance: 0 },
+      ],
+    } as unknown as ActivityInterface;
+    const types = [EVENT_LAP_STROKE_COLUMN, EVENT_LAP_STROKES_COLUMN, EVENT_LAP_SWOLF_COLUMN, DataStrokeRateAvg.type, DataSwimPaceAvg.type];
+    for (const units of [undefined, unitSettings]) {
+      expect(getAvailableEventLapMetricTypes(activity, [active], types, units)).toEqual(new Set(types));
+      expect(getAvailableEventLapMetricTypes(activity, [rest], types, units)).toEqual(new Set());
+    }
+  });
+
   it('resolves canonical and aliased activities into independent sport families', () => {
     expect(resolveEventLapSportFamily('Running')).toBe('running');
     expect(resolveEventLapSportFamily(' trail running ')).toBe('running');

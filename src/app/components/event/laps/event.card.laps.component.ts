@@ -27,7 +27,9 @@ import {
   EVENT_LAP_STROKE_COLUMN,
   formatEventLapMetric,
   getAverageEventLapMetrics,
+  getAvailableEventLapMetricTypes,
   getEventLapMetricOptionGroups,
+  getEventLapAdditionalMetricOptionGroups,
   getEventLapSportFamilyPresentation,
   getEventLapMetricStat,
   getSelectedEventLapSummaryMetrics,
@@ -64,6 +66,11 @@ interface LapColumnMenuGroup {
   selectedUnavailableMetricCount: number;
   metricGroups: EventLapMetricOptionGroup[];
   filteredMetricGroups: EventLapMetricOptionGroup[];
+  additionalMetricGroups: EventLapMetricOptionGroup[];
+  filteredAdditionalMetricGroups: EventLapMetricOptionGroup[];
+  showAdditionalMetrics: boolean;
+  selectedAdditionalMetricCount: number;
+  recordedAdditionalMetricCount: number;
   searchTerm: string;
 }
 
@@ -484,6 +491,15 @@ export class EventCardLapsComponent extends DataTableAbstractDirective implement
     this.changeDetectorRef.markForCheck();
   }
 
+  public toggleLapAdditionalMetrics(group: LapColumnMenuGroup): void {
+    if (group.additionalMetricGroups.length === 0) {
+      return;
+    }
+    group.showAdditionalMetrics = !group.showAdditionalMetrics;
+    this.hapticsService.selection();
+    this.changeDetectorRef.markForCheck();
+  }
+
   private updateLapColumnMenuGroups(): void {
     const sportFamilies = new Set<AppEventLapSportFamily>();
     this.selectedActivities.forEach((activity) => {
@@ -501,6 +517,7 @@ export class EventCardLapsComponent extends DataTableAbstractDirective implement
         ...group, metrics: group.metrics.map(metric => metric.type === EVENT_LAP_SWOLF_COLUMN
           ? { ...metric, label: this.swolfColumnLabel } : metric),
       }));
+      const additionalMetricGroups = getEventLapAdditionalMetricOptionGroups(family);
       const presentation = getEventLapSportFamilyPresentation(family);
       const existingGroup = existingGroupsByFamily.get(family);
       const selectedMetricTypes = getSelectedEventLapMetricTypes(
@@ -509,12 +526,15 @@ export class EventCardLapsComponent extends DataTableAbstractDirective implement
       );
       const metricAvailability = this.getLapMetricAvailability(
         family,
-        metricGroups,
+        [...metricGroups, ...additionalMetricGroups],
         new Set(selectedMetricTypes),
       );
       const selectedUnavailableMetricCount = selectedMetricTypes.filter((metricType) => (
         metricAvailability[metricType]?.availableTableCount === 0
       )).length;
+      const additionalMetricTypes = additionalMetricGroups.flatMap(group => group.metrics.map(metric => metric.type));
+      const selectedAdditionalMetricCount = additionalMetricTypes.filter(type => selectedMetricTypes.includes(type)).length;
+      const recordedAdditionalMetricCount = additionalMetricTypes.filter(type => metricAvailability[type]?.availableTableCount > 0).length;
       if (existingGroup) {
         existingGroup.label = presentation.label;
         existingGroup.icon = presentation.icon;
@@ -522,6 +542,10 @@ export class EventCardLapsComponent extends DataTableAbstractDirective implement
         existingGroup.metricAvailability = metricAvailability;
         existingGroup.selectedUnavailableMetricCount = selectedUnavailableMetricCount;
         existingGroup.metricGroups = metricGroups;
+        existingGroup.additionalMetricGroups = additionalMetricGroups;
+        existingGroup.selectedAdditionalMetricCount = selectedAdditionalMetricCount;
+        existingGroup.recordedAdditionalMetricCount = recordedAdditionalMetricCount;
+        existingGroup.filteredAdditionalMetricGroups = filterLapMetricGroups(additionalMetricGroups, existingGroup.searchTerm);
         existingGroup.filteredMetricGroups = filterLapMetricGroups(
           metricGroups,
           existingGroup.searchTerm,
@@ -538,6 +562,11 @@ export class EventCardLapsComponent extends DataTableAbstractDirective implement
         selectedUnavailableMetricCount,
         metricGroups,
         filteredMetricGroups: metricGroups,
+        additionalMetricGroups,
+        filteredAdditionalMetricGroups: additionalMetricGroups,
+        showAdditionalMetrics: false,
+        selectedAdditionalMetricCount,
+        recordedAdditionalMetricCount,
         searchTerm: '',
       };
     });
@@ -555,13 +584,23 @@ export class EventCardLapsComponent extends DataTableAbstractDirective implement
       .flatMap((lapTableGroup) => lapTableGroup.tables)
       .filter((table) => resolveEventLapSportFamily(table.activity.type) === family);
     const tableCount = tables.length;
+    const metricTypes = metricGroups.flatMap(group => group.metrics.map(metric => metric.type));
+    const availableMetricTypesByTable = tables.map(table => family === 'swimming' ? getAvailableEventLapMetricTypes(
+      table.activity,
+      table.dataSource.data.flatMap(row => !row.isLapAverage && row.lap ? [row.lap] : []),
+      metricTypes,
+      this.unitSettings,
+    ) : new Set(table.columns));
 
     return Object.fromEntries(metricGroups
       .flatMap((metricGroup) => metricGroup.metrics)
       .map(({ type }) => {
-        const availableTableCount = tables.filter((table) => table.columns.includes(type)).length;
+        const availableTableCount = availableMetricTypesByTable.filter(types => types.has(type)).length;
         const label = !selectedMetricTypes.has(type)
-          ? null
+          ? family === 'swimming' && availableTableCount > 0
+            ? availableTableCount === tableCount ? 'Recorded in current laps'
+              : `Recorded in ${availableTableCount} of ${tableCount} lap tables`
+            : null
           : availableTableCount === 0
           ? 'No data in current laps — hidden from the table'
           : availableTableCount < tableCount
@@ -619,6 +658,7 @@ export class EventCardLapsComponent extends DataTableAbstractDirective implement
   private setLapColumnMetricSearchTerm(group: LapColumnMenuGroup, searchTerm: string): void {
     group.searchTerm = searchTerm;
     group.filteredMetricGroups = filterLapMetricGroups(group.metricGroups, searchTerm);
+    group.filteredAdditionalMetricGroups = filterLapMetricGroups(group.additionalMetricGroups, searchTerm);
     this.changeDetectorRef.markForCheck();
   }
 

@@ -3,6 +3,10 @@ import { ChangeDetectorRef, NO_ERRORS_SCHEMA, signal } from '@angular/core';
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { MatCheckboxModule } from '@angular/material/checkbox';
 import { MatMenuModule } from '@angular/material/menu';
+import { MatListModule } from '@angular/material/list';
+import { MatButtonModule } from '@angular/material/button';
+import { MatFormFieldModule } from '@angular/material/form-field';
+import { MatInputModule } from '@angular/material/input';
 import { MatTableModule } from '@angular/material/table';
 import { MatSelectionListChange } from '@angular/material/list';
 import {
@@ -11,6 +15,8 @@ import {
     DataDistance,
     DataDuration,
     DataHeartRateMax,
+  DataPowerAvg,
+  DataJumpHangTimeMax,
     DataPaceAvg,
     DataSpeedAvg,
     DataSpeedMax,
@@ -93,7 +99,7 @@ describe('EventCardLapsComponent', () => {
         snackBar = { open: vi.fn() };
         haptics = { selection: vi.fn(), success: vi.fn(), error: vi.fn() };
         await TestBed.configureTestingModule({
-            imports: [CommonModule, MatCheckboxModule, MatMenuModule, MatTableModule],
+            imports: [CommonModule, MatCheckboxModule, MatMenuModule, MatTableModule, MatListModule, MatButtonModule, MatFormFieldModule, MatInputModule],
             declarations: [EventCardLapsComponent, HapticTapDirective],
             providers: [
                 { provide: AppEventColorService, useValue: {} },
@@ -161,6 +167,104 @@ describe('EventCardLapsComponent', () => {
 
     it('should create', () => {
         expect(component).toBeTruthy();
+    });
+
+    it('discovers unselected unusual swim metrics from laps and reports their coverage across tables', () => {
+        const recordedLap = {
+            ...createRenderableLap(LapTypes.Manual),
+            getStat: (type: string) => type === DataPowerAvg.type ? new DataPowerAvg(0)
+                : type === DataJumpHangTimeMax.type ? new DataJumpHangTimeMax(Number.NaN) : undefined,
+        } as LapInterface;
+        const swimming = { ...createActivity([recordedLap]), type: 'Swimming' } as ActivityInterface;
+        const openWater = {
+            ...createActivity([createRenderableLap(LapTypes.Manual)]),
+            type: 'Open Water Swimming', getID: () => 'open-water',
+            getStat: () => new DataJumpHangTimeMax(2),
+        } as ActivityInterface;
+        component.canCustomize = true;
+        component.selectedActivities = [swimming, openWater];
+        component.ngOnChanges();
+        const group = component.activeLapColumnMenuGroup!;
+        expect(group.metricGroups.flatMap(item => item.metrics.map(metric => metric.type))).not.toContain(DataPowerAvg.type);
+        expect(group.selectedMetricTypes).not.toContain(DataPowerAvg.type);
+        expect(group.recordedAdditionalMetricCount).toBe(1);
+        expect(group.metricAvailability[DataPowerAvg.type]).toEqual({
+            availableTableCount: 1, tableCount: 2, label: 'Recorded in 1 of 2 lap tables',
+        });
+        expect(group.metricAvailability[DataJumpHangTimeMax.type].availableTableCount).toBe(0);
+        expect(haptics.selection).not.toHaveBeenCalled();
+    });
+
+    it('preserves legacy additional selections and order through focused search, removal, restoration and failed saves', async () => {
+        const saved = [DataJumpHangTimeMax.type, DataDuration.type, DataPowerAvg.type];
+        component.canCustomize = true;
+        component.selectedActivities = [{ ...createActivity([createRenderableLap(LapTypes.Manual)]), type: 'Swimming' } as ActivityInterface];
+        eventDetailsSettings.set(normalizeEventDetailsSettings({ lapTableColumnsBySportFamily: { swimming: saved, cycling: [DataSpeedAvg.type] } }));
+        fixture.detectChanges();
+        component.ngOnChanges();
+        const group = component.activeLapColumnMenuGroup!;
+        expect(group.selectedMetricTypes).toEqual(saved);
+        expect(group.selectedAdditionalMetricCount).toBe(2);
+        expect(group.selectedUnavailableMetricCount).toBe(2);
+        component.onLapColumnMetricSearchInput(group, { target: { value: 'average power' } } as unknown as Event);
+        expect(group.filteredMetricGroups).toEqual([]);
+        expect(group.filteredAdditionalMetricGroups.flatMap(item => item.metrics.map(metric => metric.type))).toContain(DataPowerAvg.type);
+        component.toggleLapAdditionalMetrics(group);
+        await component.onLapColumnSelectionChange('swimming', createLapColumnSelectionChange([DataHeartRateMax.type]));
+        expect(updateLapTableColumns).toHaveBeenLastCalledWith('swimming', [...saved, DataHeartRateMax.type]);
+        expect(component.activeLapColumnMenuGroup).toBe(group);
+        expect(group.showAdditionalMetrics).toBe(true);
+        expect(group.searchTerm).toBe('average power');
+        expect(component.getColumnsToDisplay('Cycling')).toEqual(['#', DataSpeedAvg.type]);
+        updateLapTableColumns.mockRejectedValueOnce(new Error('save failed'));
+        await component.onLapColumnSelectionChange('swimming', createLapColumnSelectionChange([DataPowerAvg.type], false));
+        expect(group.selectedMetricTypes).toEqual([...saved, DataHeartRateMax.type]);
+        expect(group.showAdditionalMetrics).toBe(true);
+        expect(haptics.error).toHaveBeenCalledTimes(1);
+        await component.onLapColumnSelectionChange('swimming', createLapColumnSelectionChange([DataPowerAvg.type], false));
+        expect(group.selectedAdditionalMetricCount).toBe(1);
+        expect(group.filteredAdditionalMetricGroups.flatMap(item => item.metrics.map(metric => metric.type))).toContain(DataPowerAvg.type);
+        await component.onLapColumnSelectionChange('swimming', createLapColumnSelectionChange([DataPowerAvg.type]));
+        expect(group.selectedMetricTypes).toEqual([DataJumpHangTimeMax.type, DataDuration.type, DataHeartRateMax.type, DataPowerAvg.type]);
+    });
+
+    it('renders an accessible other-metrics disclosure and saves a choice from its searched Material list', async () => {
+        component.canCustomize = true;
+        component.selectedActivities = [{ ...createActivity([createRenderableLap(LapTypes.Manual)]), type: 'Swimming' } as ActivityInterface];
+        eventDetailsSettings.set(normalizeEventDetailsSettings({ lapTableColumnsBySportFamily: { swimming: [DataDuration.type] } }));
+        fixture.detectChanges();
+        component.ngOnChanges();
+        fixture.detectChanges();
+        expect(haptics.selection).not.toHaveBeenCalled();
+        fixture.nativeElement.querySelector('button[aria-label="Choose lap columns"]').click();
+        await fixture.whenStable();
+        fixture.detectChanges();
+        const toggle = document.querySelector<HTMLButtonElement>('button[aria-controls="lap-other-metrics-swimming"]')!;
+        const additional = document.getElementById('lap-other-metrics-swimming')!;
+        expect(toggle.getAttribute('aria-expanded')).toBe('false');
+        expect(additional.hidden).toBe(true);
+        const input = document.querySelector<HTMLInputElement>('input[aria-label="Search swimming lap metrics"]')!;
+        expect(input.placeholder).toContain('SWOLF');
+        input.value = 'maximum jump hang time';
+        input.dispatchEvent(new Event('input', { bubbles: true }));
+        fixture.detectChanges();
+        expect(haptics.selection).toHaveBeenCalledTimes(1);
+        toggle.click();
+        fixture.detectChanges();
+        expect(toggle.getAttribute('aria-expanded')).toBe('true');
+        expect(additional.hidden).toBe(false);
+        const option = additional.querySelector<HTMLElement>('mat-list-option')!;
+        expect(additional.querySelectorAll('mat-list-option')).toHaveLength(1);
+        option.click();
+        await fixture.whenStable();
+        fixture.detectChanges();
+        expect(updateLapTableColumns).toHaveBeenCalledWith('swimming', [DataDuration.type, DataJumpHangTimeMax.type]);
+        expect(option.getAttribute('aria-selected')).toBe('true');
+        toggle.click();
+        fixture.detectChanges();
+        expect(additional.hidden).toBe(true);
+        expect(haptics.selection).toHaveBeenCalledTimes(4);
+        expect(haptics.success).toHaveBeenCalledTimes(1);
     });
 
     it('shows stroke in swimming defaults and preserves per-lap metadata across filtered lap types', () => {
