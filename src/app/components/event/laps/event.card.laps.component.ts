@@ -21,6 +21,7 @@ import { SelectionModel } from '@angular/cdk/collections';
 import {
   ActivityInterface,
   EventInterface,
+  DataHeartRateAvg,
   LapInterface,
   LapTypes,
   UserUnitSettingsInterface,
@@ -49,14 +50,18 @@ import {
   AppEventDetailsSettingsInterface,
   AppEventLapSportFamily,
 } from '../../../models/app-user.interface';
-import { getSwimLapStrokeLabels } from '../../../helpers/event-swim-length.helper';
+import { getSwimLapLengths, getSwimLapStrokeLabels } from '../../../helpers/event-swim-length.helper';
+import { getSwimRestBlockMetric, groupSwimRestLaps } from '../../../helpers/event-swim-rest-block.helper';
 import { EVENT_LAP_SWOLF_COLUMN, getSwimLapAnalytics, getSwimLapDisplayMetric, getSwolfColumnLabel } from '../../../helpers/event-swim-analytics.helper';
 import { AppHapticsService } from '../../../services/app.haptics.service';
 
-interface LapTableRow extends Record<string, string | number | boolean | LapInterface | undefined> {
+interface LapTableRow extends Record<string, unknown> {
   '#': string | number;
   isLapAverage?: boolean;
   isSelected?: boolean;
+  isPartiallySelected?: boolean;
+  members?: LapTableRow[];
+  metricNotes?: Record<string, string>;
   isRest?: boolean;
   hasLengths?: boolean;
   lengthsExpanded?: boolean;
@@ -147,7 +152,7 @@ export class EventCardLapsComponent extends DataTableAbstractDirective implement
   @Input() canCustomize = false;
 
   public readonly swolfColumn = EVENT_LAP_SWOLF_COLUMN;
-  public readonly hasRecordedLengths = (_index: number, row: LapTableRow): boolean => !!row.hasLengths;
+  public readonly hasRecordedLengths = (_index: number, row: LapTableRow): boolean => !!row.hasLengths || !!row.members?.length;
   public swolfColumnLabel = '';
   private readonly expandedLapKeys = new Set<string>();
   public availableLapTypes: LapTypes[] = [];
@@ -263,7 +268,7 @@ export class EventCardLapsComponent extends DataTableAbstractDirective implement
           this.columnsMap.set(key, columns);
           const selection = new SelectionModel<LapTableRow>(true);
           const selectedLapKeys = selectedLapKeysByTable.get(key);
-          const selectableRows = data.filter((row) => !row.isLapAverage);
+          const selectableRows = this.getSelectableRows(data);
           if (selectedLapKeys) {
             selection.select(...selectableRows.filter((row) => selectedLapKeys.has(row.selectionKey || '')));
           }
@@ -302,7 +307,7 @@ export class EventCardLapsComponent extends DataTableAbstractDirective implement
     })).filter((group) => group.tables.length > 0);
     this.updateLapColumnMenuGroups();
     const currentLapKeys = new Set(this.lapTableGroups.flatMap(group => group.tables)
-      .flatMap(table => table.dataSource.data).map(row => row.selectionKey));
+      .flatMap(table => table.dataSource.data.flatMap(row => [row, ...(row.members || [])])).map(row => row.selectionKey));
     this.expandedLapKeys.forEach(key => {
       if (!currentLapKeys.has(key)) {
         this.expandedLapKeys.delete(key);
@@ -319,20 +324,22 @@ export class EventCardLapsComponent extends DataTableAbstractDirective implement
     const laps = getVisibleEventLaps(activity).filter(lap => lap.type === lapType);
     const metricTypes = this.getColumnsToDisplay(activity.type).filter((column) => column !== '#');
     const swimming = resolveEventLapSportFamily(activity.type) === 'swimming';
+    const sourceIndexes = new Map((activity.getLaps?.() || []).map((lap, index) => [lap, index]));
     const analytics = swimming ? getSwimLapAnalytics(activity, this.unitSettings) : new Map();
     const lapStrokeLabels = metricTypes.includes(EVENT_LAP_STROKE_COLUMN) ? getSwimLapStrokeLabels(activity) : null;
     const lapRows = laps.reduce<LapTableRow[]>((lapDataArray, lap, index) => {
       const row: LapTableRow = {
         '#': index + 1,
       };
-      const lapIdentity = Number.isFinite(lap.lapId) ? lap.lapId : index;
+      const sourceIndex = sourceIndexes.get(lap) ?? index;
+      const lapIdentity = `${Number.isFinite(lap.lapId) ? lap.lapId : 'index'}-${sourceIndex}`;
       const selectionKey = `${this.getKey(activity, lapType)}-${lapIdentity}`;
       const swim = analytics.get(lap);
       Object.defineProperties(row, {
         isRest: { value: swim?.isRest || false, enumerable: false },
         hasLengths: { value: !!swim?.lengths.length, enumerable: false },
         lengthsExpanded: { value: this.expandedLapKeys.has(selectionKey), writable: true, enumerable: false },
-        detailId: { value: `lap-lengths-${selectionKey}`, enumerable: false },
+        detailId: { value: `lap-lengths-${encodeURIComponent(selectionKey)}`, enumerable: false },
         isSelected: { value: false, writable: true, enumerable: false },
         lap: { value: lap, enumerable: false },
         selectionKey: {
@@ -355,9 +362,10 @@ export class EventCardLapsComponent extends DataTableAbstractDirective implement
       return lapDataArray;
     }, []);
 
+    const displayRows = swimming ? this.groupRestRows(activity, lapRows, metricTypes) : lapRows;
     const averageMetrics = getAverageEventLapMetrics(laps, metricTypes, this.unitSettings, activity.type, activity);
     if (averageMetrics.length === 0) {
-      return lapRows;
+      return displayRows;
     }
 
     const averageRow: LapTableRow = {
@@ -367,17 +375,52 @@ export class EventCardLapsComponent extends DataTableAbstractDirective implement
     averageMetrics.forEach(({ type, display }) => {
       averageRow[type] = display;
     });
-    return [averageRow, ...lapRows];
+    return [averageRow, ...displayRows];
+  }
+
+  private groupRestRows(activity: ActivityInterface, rows: LapTableRow[], metricTypes: string[]): LapTableRow[] {
+    const rowsByLap = new Map(rows.map(row => [row.lap, row]));
+    return groupSwimRestLaps(activity.getLaps?.() || [], getSwimLapLengths(activity)).flatMap(laps => {
+      const members = laps.map(lap => rowsByLap.get(lap)).filter((row): row is LapTableRow => !!row);
+      if (members.length < 2) return members;
+      const selectionKey = `rest-${members.map(row => row.selectionKey).join('_')}`;
+      const row: LapTableRow = { '#': `${members[0]['#']}–${members[members.length - 1]['#']}` };
+      const metricNotes: Record<string, string> = {};
+      Object.defineProperties(row, {
+        members: { value: members, enumerable: false },
+        isRest: { value: true, enumerable: false },
+        isSelected: { value: false, writable: true, enumerable: false },
+        isPartiallySelected: { value: false, writable: true, enumerable: false },
+        lengthsExpanded: { value: this.expandedLapKeys.has(selectionKey), writable: true, enumerable: false },
+        detailId: { value: `lap-lengths-${encodeURIComponent(selectionKey)}`, enumerable: false },
+        selectionKey: { value: selectionKey, enumerable: false },
+        metricNotes: { value: metricNotes, enumerable: false },
+      });
+      metricTypes.forEach(type => {
+        const metric = getSwimRestBlockMetric(laps, type);
+        const display = formatEventLapMetric(metric?.stat, type, this.unitSettings, activity.type);
+        row[type] = display && metric.availableCount < laps.length
+          ? `${display} · ${metric.availableCount}/${laps.length} laps` : display;
+        if (type === DataHeartRateAvg.type && metric) {
+          metricNotes[type] = 'Estimate weighted by the recorded duration of each lap with heart-rate data.';
+        }
+      });
+      return [row];
+    });
+  }
+
+  private getSelectableRows(rows: readonly LapTableRow[]): LapTableRow[] {
+    return rows.filter(row => !row.isLapAverage).flatMap(row => row.members || [row]);
   }
 
   private calculateColumns(dataSource: MatTableDataSource<LapTableRow>, activityType: unknown): string[] {
     return [LAP_TABLE_SELECTION_COLUMN, '#',
-      ...(dataSource.data.some(row => row.hasLengths) ? ['lengths'] : []),
+      ...(dataSource.data.some(row => row.hasLengths || row.members?.length) ? ['lengths'] : []),
       ...this.getColumnsToDisplay(activityType).filter(column => column !== '#')].filter(column => {
       if (column === LAP_TABLE_SELECTION_COLUMN || column === '#' || column === 'lengths') {
         return true;
       }
-      return dataSource.data.some(row => {
+      return dataSource.data.flatMap(row => [row, ...(row.members || [])]).some(row => {
         const cellValue = row[column as keyof LapTableRow];
         return (typeof cellValue === 'number' && Number.isFinite(cellValue))
           || (typeof cellValue === 'string' && cellValue.trim().length > 0);
@@ -413,7 +456,7 @@ export class EventCardLapsComponent extends DataTableAbstractDirective implement
   }
 
   public toggleLapLengths(row: LapTableRow): void {
-    if (!row.hasLengths || !row.selectionKey) {
+    if ((!row.hasLengths && !row.members?.length) || !row.selectionKey) {
       return;
     }
     row.lengthsExpanded = !row.lengthsExpanded;
@@ -430,14 +473,19 @@ export class EventCardLapsComponent extends DataTableAbstractDirective implement
     if (row.isLapAverage) {
       return;
     }
-    table.selection.toggle(row);
+    const members = row.members || [row];
+    if (members.every(member => table.selection.isSelected(member))) {
+      table.selection.deselect(...members);
+    } else {
+      table.selection.select(...members);
+    }
     this.hapticsService.selection();
     this.refreshSelectedSummary(table);
     this.changeDetectorRef.markForCheck();
   }
 
   public toggleAllLapSelections(table: LapTableView): void {
-    const selectableRows = table.dataSource.data.filter((row) => !row.isLapAverage);
+    const selectableRows = this.getSelectableRows(table.dataSource.data);
     if (selectableRows.length === 0) {
       return;
     }
@@ -713,9 +761,14 @@ export class EventCardLapsComponent extends DataTableAbstractDirective implement
   }
 
   private refreshSelectedSummary(table: LapTableView): void {
-    const selectableRows = table.dataSource.data.filter((row) => !row.isLapAverage);
+    const selectableRows = this.getSelectableRows(table.dataSource.data);
     selectableRows.forEach((row) => {
       row.isSelected = table.selection.isSelected(row);
+    });
+    table.dataSource.data.filter(row => row.members).forEach(row => {
+      const selected = row.members.filter(member => member.isSelected).length;
+      row.isSelected = selected === row.members.length;
+      row.isPartiallySelected = selected > 0 && !row.isSelected;
     });
     const selectedRows = selectableRows.filter((row) => row.isSelected && row.lap);
     const selectedLaps = selectedRows

@@ -1274,6 +1274,11 @@ describe('help.content', () => {
     expect(gettingStartedSection?.content).toContain('**SWOLF (25 yd)**');
     expect(gettingStartedSection?.content).toContain('Stroke, total strokes and normalized SWOLF columns are available only for swimming');
     expect(gettingStartedSection?.content).toContain('Swimming **Avg** values exclude rest');
+    expect(gettingStartedSection?.content).toContain('touching, non-overlapping recorded times');
+    expect(gettingStartedSection?.content).toContain('positive recorded active-length count');
+    expect(gettingStartedSection?.content).toContain('sums its original lap durations once');
+    expect(gettingStartedSection?.content).toContain('estimate weighted by recorded lap duration');
+    expect(gettingStartedSection?.content).toContain('**Selected avg** still averages the original selected laps');
     expect(gettingStartedSection?.content).toContain('not divided into invented splits');
     expect(gettingStartedSection?.content).toContain('Incomplete length details can use valid native interval metrics');
     expect(gettingStartedSection?.content).toContain('recorded active-length count differs');
