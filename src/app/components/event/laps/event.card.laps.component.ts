@@ -190,6 +190,9 @@ export class EventCardLapsComponent extends DataTableAbstractDirective implement
     this.hasMultipleEventActivities = (this.event?.getActivities?.() || []).length > 1;
     this.updateAvailableLapTypes();
     this.updateData();
+    if (!this.canCustomize || this.lapColumnMenuGroups.length === 0) {
+      this.lapColumnsDialogRef?.close('context-changed');
+    }
   }
 
   ngOnDestroy(): void {
@@ -211,11 +214,11 @@ export class EventCardLapsComponent extends DataTableAbstractDirective implement
     });
     this.lapColumnsDialogRef = dialogRef;
     this.hapticsService.selection();
-    dialogRef.afterClosed().subscribe(() => {
+    dialogRef.afterClosed().subscribe(result => {
       if (this.lapColumnsDialogRef === dialogRef) {
         this.lapColumnsDialogRef = null;
       }
-      if (!this.destroyed) this.hapticsService.selection();
+      if (!this.destroyed && result !== 'context-changed') this.hapticsService.selection();
     });
   }
 

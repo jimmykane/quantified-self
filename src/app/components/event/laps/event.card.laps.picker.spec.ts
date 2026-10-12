@@ -100,6 +100,7 @@ describe('lap column picker Material interactions', () => {
     expect(picker.haptics.selection).toHaveBeenCalledTimes(1);
     const option = Array.from(picker.dialog.querySelectorAll<HTMLElement>('mat-list-option'))
       .find(element => element.textContent?.trim() === 'Minimum')!;
+    expect(option.getAttribute('aria-label')).toBe(DataSpeedMin.type);
     option.focus();
     option.dispatchEvent(new KeyboardEvent('keydown', { key: ' ', code: 'Space', keyCode: 32, bubbles: true }));
     await picker.settle();
@@ -214,5 +215,17 @@ describe('lap column picker Material interactions', () => {
     expect(document.querySelector('[role="dialog"]')).toBeNull();
     expect(document.activeElement).toBe(picker.trigger);
     expect(picker.component.getColumnsToDisplay('Running')).toEqual(['#', DataPaceAvg.type, DataDuration.type]);
+  });
+
+  it.each(['permission', 'laps'])('closes silently when its %s context disappears', async context => {
+    const picker = await setupPicker();
+    picker.fixture.componentRef.setInput(context === 'permission' ? 'canCustomize' : 'selectedActivities',
+      context === 'permission' ? false : []);
+    await picker.settle();
+    expect(document.querySelector('[role="dialog"]')).toBeNull();
+    expect(picker.save).not.toHaveBeenCalled();
+    expect(picker.haptics.selection).toHaveBeenCalledTimes(1);
+    expect(picker.haptics.success).not.toHaveBeenCalled();
+    expect(picker.haptics.error).not.toHaveBeenCalled();
   });
 });

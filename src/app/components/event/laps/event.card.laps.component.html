@@ -87,7 +87,7 @@
       @for (metricGroup of group.filteredMetricGroups; track metricGroup.id) {
       <div mat-subheader>{{ metricGroup.label }}</div>
       @for (metric of metricGroup.metrics; track metric.type) {
-      <mat-list-option [value]="metric.type">
+      <mat-list-option [value]="metric.type" [attr.aria-label]="metric.type === swolfColumn ? metric.label : metric.type">
         <app-data-type-icon matListItemIcon [dataType]="metric.type" size="18px"></app-data-type-icon>
         <span matListItemTitle>{{ metric.label }}</span>
       </mat-list-option>
