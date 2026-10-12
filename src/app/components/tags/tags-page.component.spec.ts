@@ -248,6 +248,43 @@ describe('TagsPageComponent', () => {
     expect(context.haptics.selection).not.toHaveBeenCalled();
   });
 
+  it.each([
+    { label: 'replaced tags', savedTags: ['New tag'] },
+    { label: 'cleared tags', savedTags: [] },
+  ])('does not replay a stale refresh snapshot over confirmed edits or deletions ($label)', async ({ savedTags }) => {
+    const context = await setup('Endurance');
+    await render(context);
+    const pending = new Subject<GetEventsPageResult>();
+    context.events.getEventsPageOnceByWithMeta.mockReturnValueOnce(pending);
+    context.component.refresh();
+    const table = context.fixture.debugElement.query(By.directive(EventTableStub)).componentInstance as EventTableStub;
+    table.eventsChange.emit({ userID: 'owner', updatedTags: { b: savedTags }, deletedEventIDs: ['a'] });
+    const refreshed = { ...event('b', ['ENDURANCE'], true), name: 'Fresh server name' };
+    pending.next(page([event('a', ['Endurance']), refreshed, event('c', ['Recovery'])], true));
+    pending.complete();
+    await render(context);
+    expect(context.component.events().map(value => value.getID())).toEqual(['b', 'c']);
+    expect(context.component.events()[0].tags).toEqual(savedTags);
+    expect(context.component.events()[0].benchmarkReviewTags).toBeUndefined();
+    expect(context.component.events()[0].name).toBe('Fresh server name');
+    expect(context.component.filteredEvents()).toHaveLength(0);
+    expect(context.component.library().find(tag => tag.name === 'Endurance')?.count).toBe(0);
+    if (savedTags.length) expect(context.component.library().find(tag => tag.name === 'New tag')?.count).toBe(1);
+    // A later read starts after the confirmed write and can supply newer tags.
+    context.events.getEventsPageOnceByWithMeta.mockReturnValueOnce(of(page([event('b', ['Outdoors'])], false)));
+    await context.component.loadOlderActivities();
+    expect(context.component.events()[0].tags).toEqual(['Outdoors']);
+  });
+
+  it('keeps newly saved labels visible when their edited activity is outside the currently loaded history', async () => {
+    const context = await setup();
+    await render(context);
+    context.component.onEventsChange({ userID: 'owner', updatedTags: { 'not-loaded': ['New saved label'] }, deletedEventIDs: [] });
+    expect(context.component.events().map(value => value.getID())).toEqual(['a', 'b', 'c']);
+    expect(context.component.library().find(tag => tag.name === 'New saved label')?.count).toBe(0);
+    expect(context.haptics.selection).not.toHaveBeenCalled();
+  });
+
   it('reconciles a late mutation after changing tags without inferring deletion from the new visible subset', async () => {
     const context = await setup('Endurance');
     await render(context);

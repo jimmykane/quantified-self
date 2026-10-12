@@ -17,6 +17,11 @@ import { EventTagCatalogService } from '../../services/event-tag-catalog.service
 import { AppHapticsService } from '../../services/app.haptics.service';
 import { LoggerService } from '../../services/logger.service';
 
+interface PendingPageChanges {
+  updatedTags: Map<string, string[]>;
+  deletedIDs: Set<string>;
+}
+
 @Component({
   selector: 'app-tags-page',
   standalone: true,
@@ -38,6 +43,7 @@ export class TagsPageComponent implements OnInit {
   private owner: FirebaseUserType | null = null;
   private generation = 0;
   private cursor: EventQueryCursor | null = null;
+  private pendingPageChanges: PendingPageChanges | null = null;
   readonly user = signal<AppUserInterface | null>(null);
   readonly tableUsers = computed(() => { const user = this.user(); return user ? [user] : []; });
   readonly events = signal<AppEventInterface[]>([]);
@@ -68,7 +74,7 @@ export class TagsPageComponent implements OnInit {
     : 'Load older activities to look further back in your history.');
 
   ngOnInit(): void {
-    this.destroyRef.onDestroy(() => { this.generation += 1; });
+    this.destroyRef.onDestroy(() => { this.generation += 1; this.pendingPageChanges = null; });
     this.route.queryParamMap.pipe(takeUntilDestroyed(this.destroyRef)).subscribe(params => {
       this.selectedTag.set(normalizeEventTagSuggestions([params.get('tag')])[0] || '');
     });
@@ -131,23 +137,32 @@ export class TagsPageComponent implements OnInit {
     if (changes.userID !== this.user()?.uid || this.owner !== this.auth.currentUser) return;
     const knownTags = this.library().map(tag => tag.name);
     const deletedIDs = new Set(changes.deletedEventIDs);
-    const updatedTags = new Map(Object.entries(changes.updatedTags));
+    const updatedTags = new Map<string, string[]>(Object.entries(changes.updatedTags)
+      .map(([eventID, tags]) => [eventID, normalizeEventTags(tags)]));
+    // Protect only the read already in flight, without masking later server reads.
+    if (this.pendingPageChanges) {
+      deletedIDs.forEach(eventID => this.pendingPageChanges.deletedIDs.add(eventID));
+      updatedTags.forEach((tags, eventID) => this.pendingPageChanges.updatedTags.set(eventID, tags));
+    }
     const events = this.events().filter(event => !deletedIDs.has(event.getID()));
     for (const event of events) {
       const tags = updatedTags.get(event.getID());
       if (!tags) continue;
       // Keep Sports Lib instances and newer metadata; only the confirmed fields changed.
-      event.tags = normalizeEventTags(tags);
+      event.tags = [...tags];
       delete event.benchmarkReviewTags;
     }
     this.events.set(events);
     // Keep a newly created label visible after its last matching row leaves the table.
-    this.catalogTags.set(normalizeEventTagSuggestions([...this.catalogTags(), ...knownTags, ...this.library().map(tag => tag.name)]));
+    this.catalogTags.set(normalizeEventTagSuggestions([
+      ...this.catalogTags(), ...knownTags, ...this.library().map(tag => tag.name), ...[...updatedTags.values()].flat(),
+    ]));
   }
 
   private resetHistory(): void {
     this.generation += 1;
     this.cursor = null;
+    this.pendingPageChanges = null;
     this.events.set([]);
     this.catalogTags.set([]);
     this.tagSearch.set('');
@@ -188,6 +203,8 @@ export class TagsPageComponent implements OnInit {
     const user = this.user();
     if (!user || this.loading() || !this.hasMore()) return;
     const generation = this.generation;
+    const pendingChanges: PendingPageChanges = { updatedTags: new Map(), deletedIDs: new Set() };
+    this.pendingPageChanges = pendingChanges;
     this.loading.set(true);
     this.historyError.set(false);
     try {
@@ -197,7 +214,16 @@ export class TagsPageComponent implements OnInit {
       if (!this.isCurrent(generation, user.uid)) return;
       if ('error' in page) throw page.error;
       const eventsByID = new Map(this.events().map(event => [event.getID(), event]));
-      page.events.forEach(event => eventsByID.set(event.getID(), event));
+      page.events.forEach(event => {
+        const eventID = event.getID();
+        if (pendingChanges.deletedIDs.has(eventID)) return;
+        const savedTags = pendingChanges.updatedTags.get(eventID);
+        if (savedTags) {
+          event.tags = [...savedTags];
+          delete event.benchmarkReviewTags;
+        }
+        eventsByID.set(eventID, event);
+      });
       this.events.set([...eventsByID.values()]);
       this.cursor = page.lastCursor;
       this.hasMore.set(page.hasMore);
@@ -208,7 +234,10 @@ export class TagsPageComponent implements OnInit {
       this.logger.warn('[TagsPage] Could not load activities', error);
       if (feedback) this.haptics.error();
     } finally {
-      if (this.isCurrent(generation, user.uid)) this.loading.set(false);
+      if (this.isCurrent(generation, user.uid)) {
+        this.pendingPageChanges = null;
+        this.loading.set(false);
+      }
     }
   }
 }

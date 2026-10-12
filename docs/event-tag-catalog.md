@@ -37,6 +37,9 @@ successful IDs even when another deletion in the batch fails. The confirmed owne
 the confirmation dialog; bulk deletion keeps table search and sort subscriptions alive. Saved/observed labels remain in the current
 session after their last matching activity is removed. Existing transaction and deletion paths enforce writes;
 the page introduces no write API.
+Confirmed tag patches and deletions are also applied to any history read already in flight, so that response cannot
+restore a deleted activity or overwrite its confirmed tags. This protection ends with that read; later reads can show
+newer server values. Newly saved labels enter the library even when their edited activity is outside loaded history.
 The shared table also checks the captured owner UID and component lifetime before applying tag-save/deletion results,
 emitting changes, or showing completion feedback. An already-started write still belongs to its captured owner.
 Requests are fenced by the current Firebase owner object, an account/refresh
