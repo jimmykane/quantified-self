@@ -1,4 +1,8 @@
 {
+  "src/app/components/event/laps/event.card.laps.picker.spec.ts": {
+    "environment": "angular",
+    "reason": "Compiles the lap column picker with real Material dialogs, selection lists, checkboxes and buttons to verify keyboard selection, focus restoration, save outcomes and haptic ownership."
+  },
   "src/app/components/health/health-category-overview.component.spec.ts": {
     "environment": "angular",
     "reason": "Compiles the Health overview with TestBed to verify signal inputs, child chart bindings, Material category controls, account-scoped source choices and haptic feedback."

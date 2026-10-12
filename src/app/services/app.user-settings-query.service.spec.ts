@@ -222,6 +222,28 @@ describe('AppUserSettingsQueryService', () => {
     });
 
     describe('eventDetailsSettings', () => {
+        it('persists an order-only change as a sparse family write and hydrates the exact order', async () => {
+            const initial = [DataDuration.type, DataPaceAvg.type];
+            const reordered = [DataPaceAvg.type, DataDuration.type];
+            const user = createMockUser({ settings: { eventDetailsSettings: {
+                lapTableColumnsBySportFamily: { running: initial, cycling: [] },
+            } } });
+            mockUserSubject.next(user);
+            TestBed.flushEffects();
+            await service.updateLapTableColumns('running', reordered);
+            expect(mockUserService.updateUserProperties).toHaveBeenCalledWith(user, {
+                settings: { eventDetailsSettings: { lapTableColumnsBySportFamily: { running: reordered } } },
+            });
+            mockUserSubject.next(createMockUser({ settings: { eventDetailsSettings: {
+                lapTableColumnsBySportFamily: { running: reordered, cycling: [] },
+            } } }));
+            TestBed.flushEffects();
+            expect(service.eventDetailsSettings().lapTableColumnsBySportFamily?.running).toEqual(reordered);
+            mockUserService.updateUserProperties.mockClear();
+            await service.updateLapTableColumns('running', reordered);
+            expect(mockUserService.updateUserProperties).not.toHaveBeenCalled();
+        });
+
         it('normalizes saved lap columns and persists an independent sport family choice', async () => {
             const user = createMockUser({
                 settings: {
