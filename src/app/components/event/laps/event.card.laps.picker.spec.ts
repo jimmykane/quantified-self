@@ -128,6 +128,43 @@ describe('lap column picker Material interactions', () => {
     expect(picker.haptics.selection).toHaveBeenCalledTimes(3);
   });
 
+  it('keeps keyboard focus inside the dialog while an added option is saving', async () => {
+    const picker = await setupPicker();
+    let finish!: () => void;
+    picker.save.mockImplementationOnce(() => new Promise<void>(resolve => { finish = resolve; }));
+    const search = picker.dialog.querySelector<HTMLInputElement>('[data-lap-column-search]')!;
+    search.value = 'min speed';
+    search.dispatchEvent(new Event('input', { bubbles: true }));
+    await picker.settle();
+    const option = picker.dialog.querySelector<HTMLElement>('mat-list-option')!;
+    option.focus();
+    option.dispatchEvent(new KeyboardEvent('keydown', { key: ' ', code: 'Space', keyCode: 32, bubbles: true }));
+    await picker.settle();
+    expect(picker.dialog.textContent).toContain('Saving columns');
+    expect(picker.dialog.contains(document.activeElement)).toBe(true);
+    expect(document.activeElement).toBe(search);
+    finish();
+    await picker.settle();
+    expect(document.activeElement).toBe(search);
+    expect(picker.haptics.success).toHaveBeenCalledTimes(1);
+  });
+
+  it('returns keyboard focus to search when its clear button disappears', async () => {
+    const picker = await setupPicker();
+    const search = picker.dialog.querySelector<HTMLInputElement>('[data-lap-column-search]')!;
+    search.value = 'speed';
+    search.dispatchEvent(new Event('input', { bubbles: true }));
+    await picker.settle();
+    const clear = picker.dialog.querySelector<HTMLButtonElement>('button[aria-label="Clear metric search"]')!;
+    clear.focus();
+    clear.click();
+    await picker.settle();
+    expect(search.value).toBe('');
+    expect(document.activeElement).toBe(search);
+    expect(picker.save).not.toHaveBeenCalled();
+    expect(picker.haptics.selection).toHaveBeenCalledTimes(2);
+  });
+
   it('disables pending changes and rolls the selected list back after a failed move', async () => {
     const picker = await setupPicker([DataDuration.type, DataPaceAvg.type]);
     let reject!: (error: Error) => void;

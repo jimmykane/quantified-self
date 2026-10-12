@@ -264,6 +264,8 @@ describe('EventCardLapsComponent', () => {
         expect(component.getColumnsToDisplay('Swimming')).toEqual(['#', ...swimmingOrder]);
         expect(component.getColumnsToDisplay('Running')).toEqual(['#', DataPaceAvg.type, DataDuration.type]);
         expect(component.getColumnsToDisplay('Cycling')).toEqual(['#']);
+        expect(component.activeLapColumnMenuGroup?.family).toBe('running');
+        expect(component.lapColumnAnnouncement()).toBe('');
         finishRunning();
         await runSave;
         expect(component.savingLapColumnSportFamilies().size).toBe(0);

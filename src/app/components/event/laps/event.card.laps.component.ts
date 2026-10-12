@@ -469,8 +469,11 @@ export class EventCardLapsComponent extends DataTableAbstractDirective implement
       }
     });
     const focused = this.getLapColumnPickerFocus();
-    await this.saveLapColumnMetricTypes(sportFamily, Array.from(selectedMetricTypes));
-    this.restoreLapColumnPickerFocus(sportFamily, focused, event.options.find(option => option.selected)?.value);
+    const metricType = event.options.find(option => option.selected)?.value;
+    const save = this.saveLapColumnMetricTypes(sportFamily, Array.from(selectedMetricTypes));
+    this.restoreLapColumnPickerFocus(sportFamily, focused, metricType);
+    await save;
+    this.restoreLapColumnPickerFocus(sportFamily, focused, metricType);
   }
 
   public async onLapColumnCheckedChange(
@@ -478,8 +481,10 @@ export class EventCardLapsComponent extends DataTableAbstractDirective implement
   ): Promise<void> {
     const current = getSelectedEventLapMetricTypes(this.eventDetailsSettings, sportFamily);
     const focused = this.getLapColumnPickerFocus();
-    await this.saveLapColumnMetricTypes(sportFamily, checked
+    const save = this.saveLapColumnMetricTypes(sportFamily, checked
       ? [...current, metricType] : current.filter(type => type !== metricType));
+    this.restoreLapColumnPickerFocus(sportFamily, focused, metricType);
+    await save;
     this.restoreLapColumnPickerFocus(sportFamily, focused, metricType);
   }
 
@@ -489,7 +494,9 @@ export class EventCardLapsComponent extends DataTableAbstractDirective implement
     const focused = this.getLapColumnPickerFocus();
     const current = getSelectedEventLapMetricTypes(this.eventDetailsSettings, sportFamily);
     const next = moveEventLapMetricType(current, metricType, direction);
-    const saved = await this.saveLapColumnMetricTypes(sportFamily, next);
+    const save = this.saveLapColumnMetricTypes(sportFamily, next);
+    this.restoreLapColumnPickerFocus(sportFamily, focused, metricType);
+    const saved = await save;
     if (this.destroyed) return;
     if (saved && this.activeLapColumnMenuGroup?.family === sportFamily) {
       const label = this.lapColumnMenuGroups.find(group => group.family === sportFamily)
@@ -517,10 +524,11 @@ export class EventCardLapsComponent extends DataTableAbstractDirective implement
       const dialog = this.document.getElementById(dialogId);
       const row = Array.from(dialog?.querySelectorAll<HTMLElement>('.lap-column-selected-row') || [])
         .find(element => element.dataset.lapColumn === metricType);
-      // Selection moves options between lists; boundary moves can disable the focused button.
+      // Keep focus in the dialog as optimistic rendering removes or disables controls,
+      // without taking it back from a control the user chose while the save was pending.
       const target = previous.isConnected && !previous.matches(':disabled') ? previous
-        : row?.querySelector<HTMLInputElement>('input[type="checkbox"]')
-          || dialog?.querySelector<HTMLElement>('.lap-column-selected-row input, [data-lap-column-search]');
+        : row?.querySelector<HTMLInputElement>('input[type="checkbox"]:not(:disabled)')
+          || dialog?.querySelector<HTMLElement>('.lap-column-selected-row input:not(:disabled), [data-lap-column-search]');
       target?.focus();
     }, { injector: this.injector });
   }
@@ -566,7 +574,9 @@ export class EventCardLapsComponent extends DataTableAbstractDirective implement
         this.snackBar.open('Could not save lap columns. Please try again.', 'Close');
         this.hapticsService.error();
       }
-      this.lapColumnAnnouncement.set('Could not save lap columns. Your previous columns have been restored.');
+      if (this.activeLapColumnMenuGroup?.family === sportFamily) {
+        this.lapColumnAnnouncement.set('Could not save lap columns. Your previous columns have been restored.');
+      }
       return false;
     } finally {
       this.pendingLapColumnMetricTypes.delete(sportFamily);
