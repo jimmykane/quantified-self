@@ -2149,12 +2149,17 @@ it('explains separately approved activity description access and event semantics
 
   it('explains early Lap separately from indefinite Lap and gates unsupported delivery', () => {
     const content = JSON.stringify(HELP_SECTIONS);
-    expect(content).toContain('Allow early Lap');
+    expect(content).toContain('**Also finish this step with Lap**');
+    expect(content).not.toContain('**Allow early Lap**');
+    expect(content).toContain('when off, the Suunto Guide waits for the numeric limit and Lap does not start the next step');
+    expect(content).toContain('Work ends at 100 m **or** when you press Lap');
+    expect(content).toContain('Leave each Rest at **Time -> 15 seconds**, with the option unchecked');
+    expect(content).toContain('Lap finishes the current Work step and starts Rest; it is not needed to start swimming');
     expect(content).toContain('no numeric limit');
     expect(content).toContain('Suunto delivery supports the early-Lap option');
     expect(content).toContain('Garmin, COROS and Wahoo');
     expect(content).toContain('explicitly review enabling or removing');
-    expect(content).toContain('With **Allow early Lap** off, pressing Lap');
+    expect(content).toContain('With **Also finish this step with Lap** off, pressing Lap');
     expect(content).toContain('With it enabled, Lap ends that step early');
     expect(content).toContain('generated time/distance alerts also mention Lap');
   });

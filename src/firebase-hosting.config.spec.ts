@@ -365,7 +365,7 @@ describe('Firebase Hosting configuration', () => {
     expect(sitemapLastmodForUrl(`${siteOrigin}/features/fit-gpx-tcx-file-analyzer`)).toBe('2026-09-02');
     expect(sitemapXml).not.toContain(`${siteOrigin}/features/workout-file-comparison`);
     expect(sitemapXml).not.toContain(`${siteOrigin}/features/sports-watch-benchmark`);
-    // Tags name display, focused swim choices, lap ordering, rest blocks, and nominal yard display update Help.
+    // Tags, swim choices, lap ordering/ending guidance, rest blocks, and nominal yard display update Help.
     expect(sitemapLastmodForUrl(`${siteOrigin}/help`)).toBe('2026-10-12');
     expect(sitemapLastmodForUrl(`${siteOrigin}/policies`)).toBe('2026-10-07');
     expect(sitemapLastmodForUrl(`${siteOrigin}/privacy`)).toBe('2026-10-07');

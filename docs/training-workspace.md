@@ -2625,10 +2625,23 @@ change or FIT SDK dependency is needed. A device's own skip behavior is separate
 step transitions never establish workout completion.
 
 The Material checkbox is initially unchecked, appears only for numeric endings, and works for top-level/repeat steps
-and saved-recipe editing. Untouched old recipes retain absence; explicit false survives save/read/copy/history/library
+and saved-recipe editing. Its label is **Also finish this step with Lap**. The associated accessible hint states
+whether the current Suunto step ends only at its time/distance limit or at that limit **or** a Lap press. With the
+option off, Lap does not advance the Guide; it can still create a recorded lap/reset a lap-average reading.
+The manual-ending hint says to press Lap to **finish this step**, not start it. For a semi-automatic pool set,
+enable the option on each 100 m Work step and leave each 15-second Rest timed without it; Lap-only Work instead
+uses **End by -> Lap button press**. These are explicit athlete choices, never inferred swim defaults.
+Untouched old recipes retain absence; explicit false survives save/read/copy/history/library
 placement. Changing the draft to manual omits the flag from that ending; returning to a numeric ending before saving
 retains the draft choice. Exact canonical seconds/metres, targets, notes, pool length and repeat counts stay intact.
 Accepted checkbox changes have one selection haptic; initialization, no-ops and disabled actions are silent.
+
+This editor/Help wording change has no MCP impact: canonical ending values and `allowEarlyLap`, complete scheduled/
+saved-recipe reads and previews, mapping behavior, consent and confirmation contracts are unchanged. It adds no
+tool, schema, scope, provider action, plugin guidance or deployment requirement beyond the frontend release.
+Focused UI regressions cover checked/unchecked hints, numeric Work with timed Rest, repeat children, accessible
+hint associations, save/library-copy fidelity and unchanged haptics; no Training data migration or provider requeue
+is performed.
 
 Suunto mapping `suunto-guides-v6` implements documented OR conditions. A true ending keeps the native time/distance
 countdown and uses `or(stepDuration|stepDistance, manualLap)`. Generated notes mention Lap without overwriting authored
