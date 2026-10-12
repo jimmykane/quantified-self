@@ -17,7 +17,7 @@ describe('help.content', () => {
   it('explains tag-library selection, partial history, saved empty tags and refresh', () => {
     const copy = HELP_SECTIONS.find(section => section.id === 'getting-started')!.content;
     for (const phrase of ['**Tags** opens your saved tag library', '**Find a tag**', '**Load older activities**',
-      'cover only loaded activities', '**All activity history loaded**', 'may still have older activities',
+      'cover only loaded activities', 'page-size choices on Tags stay local to the page', 'may still have older activities',
       'saved tag remains available', '**Refresh tags and activities**']) expect(copy).toContain(phrase);
   });
   it('explains a busy activity-history request for all four providers without claiming success or failure', () => {

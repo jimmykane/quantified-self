@@ -1,6 +1,14 @@
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { SimpleChange } from '@angular/core';
 import { EventTableComponent, MatPaginatorIntlFireStore } from './event.table.component';
+import { EventTableActionsComponent } from './actions/event.table.actions.component';
+import { MatListModule, type MatSelectionListChange } from '@angular/material/list';
+import { MatMenuModule, MatMenuTrigger } from '@angular/material/menu';
+import { MatButtonModule } from '@angular/material/button';
+import { MatIconModule } from '@angular/material/icon';
+import { OverlayContainer } from '@angular/cdk/overlay';
+import { By } from '@angular/platform-browser';
+import { HapticTapDirective } from '../../directives/haptic-tap.directive';
 import { AppEventService } from '../../services/app.event.service';
 import { AppEventMergeService } from '../../services/app.event-merge.service';
 import { AppUserService } from '../../services/app.user.service';
@@ -27,11 +35,8 @@ import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 
 // Mock MatTableDataSource without hiding MatTableModule from shared Material imports.
-vi.mock('@angular/material/table', async (importOriginal) => {
-    const actual = await importOriginal<typeof import('@angular/material/table')>();
-    const { of: observableOf } = await import('rxjs');
-    return {
-        ...actual,
+vi.mock('@angular/material/table', (importOriginal) => importOriginal<typeof import('@angular/material/table')>()
+    .then(actual => import('rxjs').then(({ of: observableOf }) => Object.assign({}, actual, {
         MatTableDataSource: class {
             data = [];
             paginator = null;
@@ -41,8 +46,7 @@ vi.mock('@angular/material/table', async (importOriginal) => {
             connect() { return observableOf([]); }
             disconnect() { }
         }
-    };
-});
+    }))));
 // Mock Analytics module
 vi.mock('app/firebase/analytics', () => ({
     Analytics: class { },
@@ -379,6 +383,123 @@ describe('EventTableComponent', () => {
         expect(fixture.nativeElement.querySelector('.qs-search-field')).toBeTruthy();
     });
 
+    it('presents the Tag library with grouped activity names, compact dates, and the chosen default columns', () => {
+        component.showActions = true;
+        component.events[0].startDate = new Date('2026-10-11T08:15:00');
+        component.presentation = 'tag-library';
+        component.ngOnChanges({ presentation: new SimpleChange('dashboard', 'tag-library', false) });
+        expect(component.displayedColumns).toEqual(['Checkbox', 'Start Date', 'Name', 'Distance', 'Duration', 'Tags', 'Actions']);
+        expect(component.tablePageSize).toBe(5);
+        expect(component.tableSortActive).toBe('Start Date');
+        expect(component.tableSortDirection).toBe('desc');
+        expect(component.isColumnHeaderSortable('Name')).toBe(true);
+        expect(component.data.data[0]['Name']).toBe('Test Run');
+        expect(component.data.data[0]['Activity Types']).toBe('Run');
+        expect(component.data.data[0]['Start Date']).toBe('11 Oct');
+        expect(component.data.data[0]['Start Time']).toBe('08:15');
+    });
+
+    it('keeps Tag library columns, sorting, and pagination local without changing Dashboard preferences', async () => {
+        const previousSettings = JSON.stringify(mockUser.settings.dashboardSettings);
+        component.presentation = 'tag-library';
+        component.ngOnChanges({ presentation: new SimpleChange('dashboard', 'tag-library', false) });
+        await component.selectedColumnsChange(['Distance', 'Ascent', 'Activity Types']);
+        await component.pageChanges({ pageSize: 10 } as any);
+        component.sort.sortChange.next({ active: 'Name', direction: 'asc' });
+        expect(component.selectedColumns).toEqual(['Distance', 'Ascent']);
+        expect(component.displayedColumns).toContain('Name');
+        expect(component.tablePageSize).toBe(10);
+        expect(component.tableSortActive).toBe('Name');
+        expect(component.tableSortDirection).toBe('asc');
+        expect(JSON.stringify(mockUser.settings.dashboardSettings)).toBe(previousSettings);
+        expect(mockUserService.updateUserProperties).not.toHaveBeenCalled();
+        component.ngOnChanges({ user: new SimpleChange(mockUser, mockUser, false) });
+        expect(component.selectedColumns).toEqual(['Distance', 'Ascent']);
+    });
+
+    it('initializes library column choices before a synchronous loading render can create the Material menu', () => {
+        component.presentation = 'tag-library';
+        component.selectedColumns = ['Distance', 'Duration', 'Ascent'];
+        const renderedChoices: string[][] = [];
+        vi.spyOn(component, 'loaded').mockImplementation(() => { renderedChoices.push([...component.selectedColumns]); });
+        component.ngOnChanges({ presentation: new SimpleChange('dashboard', 'tag-library', true) });
+        expect(renderedChoices.length).toBeGreaterThan(0);
+        expect(renderedChoices.every(choices => choices.join(',') === 'Distance,Duration')).toBe(true);
+    });
+
+    it('restores Dashboard presentation when leaving the Tag library mode', () => {
+        component.presentation = 'tag-library';
+        component.ngOnChanges({ presentation: new SimpleChange('dashboard', 'tag-library', false) });
+        component.presentation = 'dashboard';
+        component.ngOnChanges({ presentation: new SimpleChange('tag-library', 'dashboard', false) });
+        expect(component.selectedColumns).toEqual(mockUser.settings.dashboardSettings.tableSettings.selectedColumns);
+        expect(component.displayedColumns).toContain('Description');
+        expect(component.displayedColumns).not.toContain('Name');
+        expect(component.tablePageSize).toBe(10);
+    });
+
+    it('selects only the current sorted page in the Tag library and preserves selection on other pages', async () => {
+        const { MatTableDataSource } = await vi.importActual<typeof import('@angular/material/table')>('@angular/material/table');
+        const materialData = new MatTableDataSource();
+        materialData.sortingDataAccessor = component.data.sortingDataAccessor;
+        component.data.sortData = materialData.sortData.bind(materialData);
+        component.presentation = 'tag-library';
+        component.events = Array.from({ length: 6 }, (_value, index) => {
+            const event = new MockEvent(`page-${index}`);
+            event.startDate = new Date(2026, 9, 1 + index);
+            return event as any;
+        });
+        component.paginator.pageSize = 5;
+        component.paginator.pageIndex = 0;
+        component.sort.active = 'Start Date';
+        component.sort.direction = 'desc';
+        component.ngOnChanges({ events: new SimpleChange([], component.events, false) });
+        component.masterToggle();
+        expect(component.selection.selected.map(row => row.Event.getID())).toEqual(['page-5', 'page-4', 'page-3', 'page-2', 'page-1']);
+        component.paginator.pageIndex = 1;
+        expect(component.isSelectionIndeterminate).toBe(false);
+        expect(component.isAllSelected()).toBe(false);
+        component.masterToggle();
+        expect(component.selection.selected).toHaveLength(6);
+        component.masterToggle();
+        expect(component.selection.selected).toHaveLength(5);
+        materialData.disconnect();
+    });
+
+    it('gives column selection feedback once and stays silent when the selection is unchanged', () => {
+        const actions = TestBed.runInInjectionContext(() => new EventTableActionsComponent());
+        actions.selectedDataTypes = ['Distance'];
+        const change = { source: { selectedOptions: { selected: [{ value: 'Distance' }, { value: 'Duration' }] } } } as unknown as MatSelectionListChange;
+        actions.selectionChange(change);
+        actions.selectionChange(change);
+        expect(actions.selectedDataTypes).toEqual(['Distance', 'Duration']);
+        expect(mockHapticsService.selection).toHaveBeenCalledOnce();
+    });
+
+    it('gives library sorting and pagination feedback for changes while keeping hydration and parent resets silent', async () => {
+        component.presentation = 'tag-library';
+        component.ngOnChanges({ presentation: new SimpleChange('dashboard', 'tag-library', false) });
+        expect(mockHapticsService.selection).not.toHaveBeenCalled();
+        component.sort.sortChange.next({ active: 'Distance', direction: 'asc' });
+        component.sort.sortChange.next({ active: 'Distance', direction: 'asc' });
+        await component.pageChanges({ pageIndex: 1, pageSize: 5 } as any);
+        await component.pageChanges({ pageIndex: 1, pageSize: 5 } as any);
+        expect(mockHapticsService.selection).toHaveBeenCalledTimes(2);
+        component.paginator.firstPage = () => { void component.pageChanges({ pageIndex: 0, pageSize: 5 } as any); };
+        component.ngOnChanges({ filterContext: new SimpleChange('endurance', 'recovery', false) });
+        expect(mockHapticsService.selection).toHaveBeenCalledTimes(2);
+    });
+
+    it('does not restore pending activity search after the user clears it and gives one feedback', async () => {
+        component.onSearchInput({ target: { value: 'old search' } } as unknown as Event);
+        component.clearSearch();
+        component.clearSearch();
+        await new Promise(resolve => setTimeout(resolve, 300));
+        expect(component.searchTerm).toBe('');
+        expect(JSON.parse(component.data.filter).text).toBe('');
+        expect(mockHapticsService.selection).toHaveBeenCalledOnce();
+    });
+
     it('clears previous activity search, selection and pagination when the parent tag context changes', () => {
         component.searchTerm = 'old search';
         component.selection.select(component.data.data[0]);
@@ -418,7 +539,7 @@ describe('EventTableComponent', () => {
             join(process.cwd(), 'src/app/components/event-table/event.table.component.html'),
             'utf8'
         );
-        expect(template).toContain("[attr.aria-label]=\"canManageEvents ? null : 'Activity actions'\"");
+        expect(template).toContain("[attr.aria-label]=\"isLibraryPresentation || !canManageEvents ? 'Activity actions' : null\"");
         expect(fixture.nativeElement.querySelector('app-event-table-actions')).toBeNull();
         expect(component.showRowActions).toBe(true);
 
@@ -1925,5 +2046,38 @@ describe('EventTableComponent', () => {
         expect(intl.itemsPerPageLabel).toBe('Items');
         expect(intl.nextPageLabel).toBe('Next');
         expect(intl.previousPageLabel).toBe('Previous');
+    });
+});
+
+describe('EventTableActionsComponent Material menu', () => {
+    it('initializes only the visible metric columns as selected and applies an accepted change', async () => {
+        const haptics = { selection: vi.fn() };
+        await TestBed.configureTestingModule({
+            declarations: [EventTableActionsComponent, HapticTapDirective],
+            imports: [MatListModule, MatMenuModule, MatButtonModule, MatIconModule, NoopAnimationsModule],
+            providers: [{ provide: AppHapticsService, useValue: haptics }],
+        }).compileComponents();
+        const menuFixture = TestBed.createComponent(EventTableActionsComponent);
+        menuFixture.componentRef.setInput('selectedDataTypes', ['Distance', 'Duration']);
+        menuFixture.componentRef.setInput('dataTypes', ['Duration', 'Distance', 'Ascent']);
+        menuFixture.detectChanges();
+        const changes = vi.fn();
+        menuFixture.componentInstance.selectedDataTypesChange.subscribe(changes);
+        const trigger = menuFixture.debugElement.query(By.directive(MatMenuTrigger)).injector.get(MatMenuTrigger);
+        trigger.openMenu();
+        menuFixture.detectChanges();
+        await menuFixture.whenStable();
+        const overlay = TestBed.inject(OverlayContainer).getContainerElement();
+        const options = [...overlay.querySelectorAll<HTMLElement>('[role="option"]')];
+        expect(options.map(option => [option.textContent.trim(), option.getAttribute('aria-selected')])).toEqual([
+            ['Duration', 'true'], ['Distance', 'true'], ['Ascent', 'false'],
+        ]);
+        expect(haptics.selection).not.toHaveBeenCalled();
+        options[2].click();
+        menuFixture.detectChanges();
+        expect(haptics.selection).toHaveBeenCalledOnce();
+        trigger.closeMenu();
+        await menuFixture.whenStable();
+        expect(changes).toHaveBeenCalledWith(['Duration', 'Distance', 'Ascent']);
     });
 });

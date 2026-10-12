@@ -1,6 +1,6 @@
 <section class="qs-workspace-page tags-page">
   <app-page-header title="Tags" leadingIcon="sell" subtitle="Explore your activities by tag.">
-    <button pageHeaderActions mat-icon-button aria-label="Refresh tags and activities" (click)="refresh()"
+    <button pageHeaderTitleActions mat-icon-button aria-label="Refresh tags and activities" (click)="refresh()"
       [disabled]="loading() || catalogLoading() || !user()">
       <mat-icon>refresh</mat-icon>
     </button>
@@ -12,10 +12,10 @@
         <mat-form-field appearance="outline" subscriptSizing="dynamic" class="qs-search-field tag-search">
           <input matInput type="search" placeholder="Find a tag" aria-label="Find a tag" [value]="tagSearch()"
             (input)="onTagSearchInput($event)" autocomplete="off">
-          <mat-icon matSuffix>search</mat-icon>
+          <mat-icon matPrefix>search</mat-icon>
         </mat-form-field>
         <div class="tag-library-heading"><h2>Saved tags</h2><span>{{ library().length }}</span></div>
-        <p class="tag-count-scope">{{ complete() ? 'Activity counts' : 'Counts for loaded activities' }}</p>
+        @if (!complete()) { <p class="tag-count-scope">Counts for loaded activities</p> }
         @if (catalogLoading()) { <mat-progress-bar mode="indeterminate" aria-label="Loading saved tags"></mat-progress-bar> }
         @if (catalogError()) {
           <div class="tag-library-error" role="alert">
@@ -24,14 +24,12 @@
           </div>
         }
         <mat-nav-list aria-label="Select an activity tag" class="tag-library-list">
-          <a mat-list-item [href]="allActivitiesHref" [activated]="!selectedKey()" [attr.aria-current]="!selectedKey() ? 'page' : null" (click)="navigateToTag('', $event)">
-            <mat-icon matListItemIcon>layers</mat-icon><span matListItemTitle>All activities</span>
-            <span matListItemMeta class="tag-count">{{ events().length }}</span>
+          <a mat-list-item class="tag-library-link" [href]="allActivitiesHref" [activated]="!selectedKey()" [attr.aria-current]="!selectedKey() ? 'page' : null" (click)="navigateToTag('', $event)">
+            <mat-icon matListItemIcon>layers</mat-icon><span matListItemTitle class="tag-library-label"><span>All activities</span><span class="tag-count">{{ events().length }}</span></span>
           </a>
           @for (tag of visibleTags(); track tag.key) {
-            <a mat-list-item [href]="tag.href" [activated]="tag.key === selectedKey()" [attr.aria-current]="tag.key === selectedKey() ? 'page' : null" [matTooltip]="tag.name" (click)="navigateToTag(tag.name, $event)">
-              <mat-icon matListItemIcon>sell</mat-icon><span matListItemTitle>{{ tag.name }}</span>
-              <span matListItemMeta class="tag-count">{{ tag.count }}</span>
+            <a mat-list-item class="tag-library-link" [href]="tag.href" [activated]="tag.key === selectedKey()" [attr.aria-current]="tag.key === selectedKey() ? 'page' : null" [matTooltip]="tag.name" (click)="navigateToTag(tag.name, $event)">
+              <mat-icon matListItemIcon>sell</mat-icon><span matListItemTitle class="tag-library-label"><span>{{ tag.name }}</span><span class="tag-count">{{ tag.count }}</span></span>
             </a>
           } @empty {
             @if (!catalogLoading()) { <p class="tag-list-empty">{{ tagSearch() ? 'No tags match your search.' : 'Add tags to an activity to save them here.' }}</p> }
@@ -40,9 +38,18 @@
       </aside>
 
       <div class="tag-library-results">
-        <div class="tag-results-heading"><h2>{{ selectedName() }}</h2>
+        <div class="tag-results-heading"><div class="tag-results-context"><mat-icon aria-hidden="true">{{ selectedTag() ? 'sell' : 'layers' }}</mat-icon><h2>{{ selectedName() }}</h2></div>
           <span aria-live="polite">{{ filteredEvents().length }} {{ complete() ? 'activities' : 'loaded activities' }}</span>
         </div>
+        @for (tableUser of tableUsers(); track tableUser.uid) {
+          <app-event-table [user]="tableUser" [events]="filteredEvents()" [showActions]="true" presentation="tag-library"
+            [isLoading]="loading() && !historyLoaded()" [showTagFilter]="false"
+            [filterContext]="selectedKey()"
+            [emptyMessage]="emptyMessage()" [emptyHint]="emptyHint()"
+            (eventsChange)="onEventsChange($event)"></app-event-table>
+        }
+        @if (complete()) { <span class="cdk-visually-hidden">All activity history loaded.</span> }
+        @else {
         <div class="tag-history-status" aria-live="polite">
           @if (loading()) {
             <mat-progress-bar mode="indeterminate" aria-label="Loading activities"></mat-progress-bar>
@@ -51,8 +58,6 @@
             <p role="alert">Activities could not be loaded. Any activities already loaded remain available.</p>
           } @else if (hasMore()) {
             <p>Older history is available. Search, counts, and table pages cover the activities loaded so far.</p>
-          } @else {
-            <p>All activity history loaded. Refresh to include changes made elsewhere.</p>
           }
           @if (hasMore()) {
             <button mat-button (click)="loadOlderActivities()" [disabled]="loading()">
@@ -60,12 +65,6 @@
             </button>
           }
         </div>
-        @for (tableUser of tableUsers(); track tableUser.uid) {
-          <app-event-table [user]="tableUser" [events]="filteredEvents()" [showActions]="true"
-            [isLoading]="loading() && !historyLoaded()" [showTagFilter]="false"
-            [filterContext]="selectedKey()"
-            [emptyMessage]="emptyMessage()" [emptyHint]="emptyHint()"
-            (eventsChange)="onEventsChange($event)"></app-event-table>
         }
       </div>
     </div>

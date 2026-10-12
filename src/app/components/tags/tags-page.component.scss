@@ -1,18 +1,23 @@
+@use '@angular/material' as mat;
 @use '../../../styles/breakpoints' as bp;
+
+.tags-page > app-page-header { margin-bottom: 24px; }
 
 .tag-library-layout {
   display: grid;
-  grid-template-columns: minmax(200px, 250px) minmax(0, 1fr);
-  gap: 24px;
+  grid-template-columns: 200px minmax(0, 1fr);
+  gap: 18px;
 }
 
 .tag-library-rail {
   min-width: 0;
   border-inline-end: 1px solid var(--mat-sys-outline-variant);
-  padding-inline-end: 20px;
+  padding-inline-end: 14px;
+  @include mat.form-field-density(-3);
+  @include mat.form-field-overrides((outlined-container-shape: 8px, outlined-outline-color: var(--mat-sys-outline-variant)));
 }
 
-.tag-search { width: 100%; }
+.tag-search { width: 100%; max-width: none; }
 
 .tag-library-heading, .tag-results-heading {
   display: flex;
@@ -21,10 +26,12 @@
   gap: 12px;
 }
 
-.tag-library-heading { margin-top: 20px; }
-.tag-library-heading h2 { font: var(--mat-sys-title-small); margin: 0; }
+.tag-library-heading { margin: 12px 6px 10px; color: var(--mat-sys-on-surface-variant); }
+.tag-library-heading h2 { font: var(--mat-sys-label-small); text-transform: uppercase; margin: 0; }
 .tag-results-heading h2 { font: var(--mat-sys-title-large); margin: 0; overflow-wrap: anywhere; }
-.tag-results-heading { margin-bottom: 12px; }
+.tag-results-heading { margin-bottom: 16px; }
+.tag-results-context { display: flex; align-items: center; gap: 10px; min-width: 0; }
+.tag-results-context mat-icon { color: var(--mat-sys-primary); width: 18px; height: 18px; font-size: 18px; flex: 0 0 auto; }
 .tag-results-heading span { font: var(--mat-sys-body-small); color: var(--mat-sys-on-surface-variant); }
 .tag-library-heading > span, .tag-count { font-family: 'Barlow Condensed', sans-serif; font-variant-numeric: tabular-nums; }
 .tag-count-scope, .tag-list-empty, .tag-library-error, .tag-history-status {
@@ -34,19 +41,40 @@
 .tag-count-scope { margin: 4px 0 12px; }
 .tag-list-empty { padding: 12px; }
 .tag-library-error p { margin-bottom: 0; }
-.tag-library-list { max-height: 70vh; overflow-y: auto; }
+.tag-library-list {
+  @include mat.list-overrides((
+    active-indicator-shape: 8px,
+    active-indicator-color: color-mix(in srgb, var(--mat-sys-primary) 12%, transparent),
+    list-item-container-shape: 8px,
+    list-item-one-line-container-height: 44px,
+    list-item-leading-icon-size: 15px,
+    list-item-leading-icon-start-space: 10px,
+    list-item-leading-icon-end-space: 8px,
+    list-item-label-text-size: 13px,
+    list-item-trailing-supporting-text-size: var(--mat-sys-body-small-size),
+  ));
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  padding: 0;
+  max-height: 70vh;
+  overflow-y: auto;
+}
+.tag-library-link { flex: 0 0 auto; }
+.tag-library-label { display: flex; align-items: center; gap: 8px; }
+.tag-library-label > span:first-child { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+.tag-count { margin-inline-start: auto; }
 .tag-library-results { min-width: 0; }
-.tag-history-status { margin-bottom: 16px; }
+.tag-history-status { margin-top: 16px; }
 .tag-history-status p { margin: 8px 0; }
 
-@include bp.small {
-  .tag-library-layout { grid-template-columns: minmax(180px, 210px) minmax(0, 1fr); gap: 16px; }
-  .tag-library-rail { padding-inline-end: 12px; }
-}
-
-@include bp.xsmall {
+@include bp.max-768 {
   .tag-library-layout { display: flex; flex-direction: column; gap: 20px; }
   .tag-library-rail { border-inline-end: 0; padding-inline-end: 0; }
-  .tag-library-list { max-height: 240px; }
+  .tag-library-list { flex-direction: row; flex-wrap: wrap; gap: 6px; max-height: 240px; }
+  // The chosen mockup has outlined compact links on phones. MatNavList exposes
+  // shape/color/density tokens but no outline token, so only this app-owned link
+  // gets the border; Material still owns its focus, ripple, and selected state.
+  .tag-library-link { width: auto; max-width: 100%; border: 1px solid var(--mat-sys-outline-variant); border-radius: 8px; }
   .tag-results-heading { flex-wrap: wrap; }
 }

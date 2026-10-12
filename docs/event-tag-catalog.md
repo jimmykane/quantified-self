@@ -6,6 +6,10 @@ The authenticated, client-rendered `/tags` route uses a searchable tag library b
 `?tag=<label>` restores the selected tag without initial haptic feedback. The route uses the shared workspace shell,
 Material controls, and the global scrollbar skin. The selector stacks above the table on phones. Table metrics continue
 to use the signed-in user's unit settings through the existing Sports Lib display path.
+The shared table's `tag-library` presentation matches the selected mockup: compact tag links that wrap on phones,
+text column headings, activity name and sport grouped together, and split date/time cells. Its initial columns are
+Date, Activity, Distance, Duration, and Tags, with five rows per page. Column, sort, and page-size choices stay local
+to the Tags page instead of changing Dashboard preferences. Paging/completeness controls sit below the table.
 
 History starts with the newest 250 event documents, ordered by `startDate` descending. **Load older activities** uses
 `AppEventService.getEventsPageOnceByWithMeta` and the last document snapshot cursor, including its implicit document-ID

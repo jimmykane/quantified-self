@@ -74,7 +74,7 @@ interface DeviceNameDisplayItem {
   trackKey: string;
 }
 
-export type EventTablePresentation = 'dashboard' | 'browse';
+export type EventTablePresentation = 'dashboard' | 'browse' | 'tag-library';
 
 export interface EventTableEventsChange {
   userID: string;
@@ -113,6 +113,14 @@ export class EventTableComponent extends DataTableAbstractDirective implements O
   selection = new SelectionModel(true, []);
 
   selectedColumns = AppUserUtilities.getDefaultSelectedTableColumns();
+  private libraryColumns = ['Distance', 'Duration'];
+  private libraryPageSize = 5;
+  private libraryPageIndex = 0;
+  private suppressLibraryPageFeedback = false;
+  private librarySort = { active: 'Start Date', direction: 'desc' as 'asc' | 'desc' };
+  readonly libraryColumnLabels: Record<string, string> = { 'Start Date': 'Date', Name: 'Activity' };
+  readonly libraryAvailableColumns = AppUserUtilities.getDefaultSelectedTableColumns()
+    .filter(column => !['Start Date', 'Activity Types', 'Name', 'Description'].includes(column));
   displayedColumns: string[] = [];
 
   public show = true
@@ -175,6 +183,10 @@ export class EventTableComponent extends DataTableAbstractDirective implements O
     return this.presentation === 'browse';
   }
 
+  get isLibraryPresentation(): boolean {
+    return this.presentation === 'tag-library';
+  }
+
   get showToolbar(): boolean {
     return !this.isBrowsePresentation;
   }
@@ -188,33 +200,42 @@ export class EventTableComponent extends DataTableAbstractDirective implements O
   }
 
   get tableSortActive(): string {
+    if (this.isLibraryPresentation) return this.librarySort.active;
     return this.user?.settings?.dashboardSettings?.tableSettings?.active || 'Start Date';
   }
 
   get tableSortDirection(): 'asc' | 'desc' {
+    if (this.isLibraryPresentation) return this.librarySort.direction;
     return this.user?.settings?.dashboardSettings?.tableSettings?.direction === 'asc' ? 'asc' : 'desc';
   }
 
   get tablePageSize(): number {
+    if (this.isLibraryPresentation) return this.libraryPageSize;
     const pageSize = this.user?.settings?.dashboardSettings?.tableSettings?.eventsPerPage;
     return Number.isFinite(pageSize) && pageSize > 0 ? pageSize : 10;
   }
 
 
   ngOnChanges(simpleChanges: SimpleChanges): void {
+    const preferencesChanged = this.user && (simpleChanges.user || simpleChanges.presentation);
+    if (preferencesChanged) {
+      // The loading base renders synchronously. Initialize the picker first so
+      // Material does not retain options created with Dashboard defaults.
+      this.selectedColumns = this.isLibraryPresentation ? this.libraryColumns
+        : this.user.settings?.dashboardSettings?.tableSettings?.selectedColumns || AppUserUtilities.getDefaultSelectedTableColumns();
+    }
     this.isLoading ? this.loading() : this.loaded();
     if (!this.events) {
       this.rowCache.clear();
       this.loading();
       return;
     }
-    if (this.events && simpleChanges.events && this.data.paginator && this.data.sort) { // If there is no paginator and sort then the compoenent is not initialized on view
-      this.processChanges('on_changes_events', true);
+    if (this.events && (simpleChanges.events || simpleChanges.presentation) && this.data.paginator && this.data.sort) { // If there is no paginator and sort then the compoenent is not initialized on view
+      this.processChanges(simpleChanges.presentation ? 'on_changes_presentation' : 'on_changes_events', true);
     }
-    if (this.user && simpleChanges.user) {
-      this.selectedColumns = this.user.settings?.dashboardSettings?.tableSettings?.selectedColumns || AppUserUtilities.getDefaultSelectedTableColumns();
-      const nextPageSize = this.user.settings?.dashboardSettings?.tableSettings?.eventsPerPage || 10;
-      if (this.paginator && this.paginator.pageSize !== nextPageSize) {
+    if (preferencesChanged) {
+      const nextPageSize = this.tablePageSize;
+      if (!this.isLibraryPresentation && this.paginator && this.paginator.pageSize !== nextPageSize) {
         this.paginator._changePageSize(nextPageSize);
       }
       this.updateDisplayedColumns();
@@ -237,7 +258,10 @@ export class EventTableComponent extends DataTableAbstractDirective implements O
       this.searchSubject.next('');
       this.tagFilter = '';
       this.selection.clear();
+      this.suppressLibraryPageFeedback = true;
       this.paginator?.firstPage();
+      this.suppressLibraryPageFeedback = false;
+      this.libraryPageIndex = 0;
       this.applyTableFilter();
     }
     if (simpleChanges.user || simpleChanges.targetUser || simpleChanges.presentation) {
@@ -307,6 +331,12 @@ export class EventTableComponent extends DataTableAbstractDirective implements O
     };
     this.sortSubscription = this.sort.sortChange.subscribe(async (sort) => {
       if (this.isBrowsePresentation) {
+        return;
+      }
+      if (this.isLibraryPresentation) {
+        const direction = sort.direction === 'asc' ? 'asc' : 'desc';
+        if (sort.active !== this.librarySort.active || direction !== this.librarySort.direction) this.hapticsService.selection();
+        this.librarySort = { active: sort.active, direction };
         return;
       }
       const tableSettings = this.user?.settings?.dashboardSettings?.tableSettings;
@@ -462,7 +492,18 @@ export class EventTableComponent extends DataTableAbstractDirective implements O
   }
 
   private getSelectableRows(): any[] {
-    return Array.isArray(this.data.filteredData) ? this.data.filteredData : this.data.data;
+    const rows = Array.isArray(this.data.filteredData) ? this.data.filteredData : this.data.data;
+    if (!this.isLibraryPresentation) return rows;
+    const sortedRows = this.data.sort ? this.data.sortData([...rows], this.data.sort) : rows;
+    const pageSize = this.paginator?.pageSize || this.tablePageSize;
+    const pageIndex = this.paginator?.pageIndex || 0;
+    return sortedRows.slice(pageIndex * pageSize, (pageIndex + 1) * pageSize);
+  }
+
+  get isSelectionIndeterminate(): boolean {
+    const rows = this.getSelectableRows();
+    const selectedCount = rows.filter(row => this.selection.isSelected(row)).length;
+    return selectedCount > 0 && selectedCount < rows.length;
   }
 
   isAllSelected() {
@@ -893,10 +934,18 @@ export class EventTableComponent extends DataTableAbstractDirective implements O
   }
 
   override isColumnHeaderSortable(columnName: string): boolean {
+    if (columnName === 'Name' && this.isLibraryPresentation) return true;
     return columnName === 'Shared' || super.isColumnHeaderSortable(columnName);
   }
 
   private updateDisplayedColumns() {
+    if (this.isLibraryPresentation) {
+      this.displayedColumns = [
+        ...(this.canManageEvents ? ['Checkbox'] : []), 'Start Date', 'Name',
+        ...this.libraryColumns, 'Tags', ...(this.showRowActions ? ['Actions'] : []),
+      ];
+      return;
+    }
     const sortedSelectedColumns = (this.selectedColumns || [])
       .filter(column => column !== 'Description' && column !== 'Shared' && column !== 'Tags')
       .sort((a, b) => this.defaultSelectedColumns.indexOf(a) - this.defaultSelectedColumns.indexOf(b));
@@ -954,6 +1003,13 @@ export class EventTableComponent extends DataTableAbstractDirective implements O
 
   // Noop due to bugs
   async pageChanges(pageEvent: PageEvent) {
+    if (this.isLibraryPresentation) {
+      const pageIndex = pageEvent.pageIndex ?? this.paginator?.pageIndex ?? 0;
+      if (!this.suppressLibraryPageFeedback && (pageIndex !== this.libraryPageIndex || pageEvent.pageSize !== this.libraryPageSize)) this.hapticsService.selection();
+      this.libraryPageIndex = pageIndex;
+      this.libraryPageSize = pageEvent.pageSize;
+      return;
+    }
     if (this.isBrowsePresentation) {
       return;
     }
@@ -1141,8 +1197,11 @@ export class EventTableComponent extends DataTableAbstractDirective implements O
   }
 
   clearSearch() {
+    if (!this.searchTerm) return;
     this.searchTerm = '';
+    this.searchSubject.next('');
     this.search('');
+    this.hapticsService.selection();
   }
 
   private applyTableFilter(): void {
@@ -1171,6 +1230,12 @@ export class EventTableComponent extends DataTableAbstractDirective implements O
 
   async selectedColumnsChange(event: string[]) {
     if (this.isBrowsePresentation) {
+      return;
+    }
+    if (this.isLibraryPresentation) {
+      this.libraryColumns = event.filter(column => this.libraryAvailableColumns.includes(column));
+      this.selectedColumns = this.libraryColumns;
+      this.updateDisplayedColumns();
       return;
     }
     this.selectedColumns = event
@@ -1269,7 +1334,7 @@ export class EventTableComponent extends DataTableAbstractDirective implements O
       return;
     }
     const processStart = performance.now();
-    const dateFormat = this.isHandset ? 'd MMM yy' : 'EEEEEE d MMM yy HH:mm';
+    const dateFormat = this.isLibraryPresentation ? 'd MMM' : this.isHandset ? 'd MMM yy' : 'EEEEEE d MMM yy HH:mm';
     const removedAscentTypes = new Set((this.user.settings.summariesSettings?.removeAscentForEventTypes || []) as ActivityTypes[]);
     const removedDescentTypes = new Set((((this.user.settings.summariesSettings as any)?.removeDescentForEventTypes || [])) as ActivityTypes[]);
     const renderContextKey = this.buildRowRenderContextKey(dateFormat);
@@ -1403,6 +1468,7 @@ export class EventTableComponent extends DataTableAbstractDirective implements O
     statRowElement['Shared Title'] = isShared ? this.sharedEventTooltip : '';
     statRowElement['Name'] = event.name;
     statRowElement['Start Date'] = startDate ? this.datePipe.transform(startDate, dateFormat) : 'None?';
+    if (this.isLibraryPresentation) statRowElement['Start Time'] = startDate ? this.datePipe.transform(startDate, 'HH:mm') : '';
     statRowElement['Activity Types'] = event.getActivityTypesAsString();
     statRowElement['Merged Event'] = event.isMerge;
     statRowElement['Description'] = event.description;
@@ -1436,6 +1502,7 @@ export class EventTableComponent extends DataTableAbstractDirective implements O
     statRowElement['Has Benchmark'] = (event as any).benchmarkResult || ((event as any).benchmarkResults && Object.keys((event as any).benchmarkResults).length > 0);
 
     statRowElement['sort.Start Date'] = startDate ? startDate.getTime() : 0;
+    statRowElement['sort.Name'] = event.name || event.description || '';
     statRowElement['sort.Activity Types'] = statRowElement['Activity Types'];
     statRowElement['sort.Description'] = statRowElement['Description'];
     statRowElement['sort.Device Names'] = statRowElement['Device Names'];

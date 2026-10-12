@@ -24,6 +24,7 @@ class EventTableStub {
   @Input() user: User;
   @Input() events: EventInterface[];
   @Input() showActions: boolean;
+  @Input() presentation: string;
   @Input() isLoading: boolean;
   @Input() showTagFilter: boolean;
   @Input() filterContext: string;
@@ -82,6 +83,7 @@ describe('TagsPageComponent', () => {
     expect(table.events).toEqual(records);
     expect(table.showTagFilter).toBe(false);
     expect(table.showActions).toBe(true);
+    expect(table.presentation).toBe('tag-library');
     expect(context.haptics.selection).not.toHaveBeenCalled();
   });
 
