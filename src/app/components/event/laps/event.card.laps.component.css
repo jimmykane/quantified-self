@@ -98,14 +98,16 @@
   overscroll-behavior: contain;
 }
 
-.lap-column-family-toggle {
-  display: flex;
-  margin-block-end: 12px;
+.lap-column-dialog-body {
+  /* Floating labels need space above the first field inside the scroll viewport. */
+  padding-block-start: 8px;
 }
 
-.lap-column-family-toggle mat-button-toggle {
-  flex: 1 1 0;
+.lap-column-family-field {
+  display: block;
+  width: 100%;
   min-width: 0;
+  margin-block-end: 12px;
 }
 
 .lap-column-menu-copy {
@@ -179,6 +181,7 @@
 .lap-column-order-actions {
   display: flex;
   flex: 0 0 auto;
+  gap: 8px;
 }
 
 .lap-tab-label {
@@ -228,10 +231,6 @@
 }
 
 @media (max-width: 599.98px) {
-  .lap-column-family-toggle span {
-    display: none;
-  }
-
   .lap-duration-cell {
     flex-basis: 88px;
     width: 88px;

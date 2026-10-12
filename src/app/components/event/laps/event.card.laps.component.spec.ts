@@ -1293,7 +1293,8 @@ describe('EventCardLapsComponent', () => {
         expect(template).toContain('Selected columns · table order');
         expect(template).toContain('moveLapColumn(group.family, metric.type, -1)');
         expect(template).not.toContain('matMenuTriggerFor');
-        expect(template).toContain('mat-button-toggle-group');
+        expect(template).toContain('mat-select');
+        expect(template).toContain('Lap sport family');
         expect(template).toContain('activeLapColumnMenuGroup');
         expect(template).toContain('Choose columns for {{ group.label.toLowerCase() }} laps');
         expect(template).toContain('Search metrics');

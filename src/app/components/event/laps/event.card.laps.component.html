@@ -11,17 +11,17 @@
 <ng-template #lapColumnsDialog>
   <h2 mat-dialog-title>Choose lap columns</h2>
   <mat-dialog-content class="lap-column-dialog-content">
+    <div class="lap-column-dialog-body">
     @if (lapColumnMenuGroups.length > 1) {
-    <mat-button-toggle-group class="lap-column-family-toggle"
-      [value]="activeLapColumnMenuGroup?.family" aria-label="Lap sport family"
-      (change)="onLapColumnMenuSportFamilyChange($event.value)">
-      @for (familyGroup of lapColumnMenuGroups; track familyGroup.family) {
-      <mat-button-toggle [value]="familyGroup.family" [aria-label]="familyGroup.label" [matTooltip]="familyGroup.label">
-        <mat-icon>{{ familyGroup.icon }}</mat-icon>
-        <span>{{ familyGroup.label }}</span>
-      </mat-button-toggle>
-      }
-    </mat-button-toggle-group>
+    <mat-form-field appearance="outline" class="lap-column-family-field" subscriptSizing="dynamic">
+      <mat-label>Lap sport family</mat-label>
+      <mat-select [value]="activeLapColumnMenuGroup?.family" aria-label="Lap sport family"
+        (selectionChange)="onLapColumnMenuSportFamilyChange($event.value)">
+        @for (familyGroup of lapColumnMenuGroups; track familyGroup.family) {
+        <mat-option [value]="familyGroup.family">{{ familyGroup.label }}</mat-option>
+        }
+      </mat-select>
+    </mat-form-field>
     }
     @if (activeLapColumnMenuGroup; as group) {
     <p class="lap-column-menu-copy">Choose columns for {{ group.label.toLowerCase() }} laps. Values use your saved units. Changes save automatically.</p>
@@ -97,6 +97,7 @@
       }
     </mat-selection-list>
     }
+    </div>
   </mat-dialog-content>
   <mat-dialog-actions align="end">
     <button mat-button mat-dialog-close type="button">Done</button>

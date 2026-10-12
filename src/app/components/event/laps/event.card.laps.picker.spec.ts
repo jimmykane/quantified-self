@@ -6,7 +6,8 @@ import { MatButtonModule } from '@angular/material/button';
 import { MatCheckboxModule } from '@angular/material/checkbox';
 import { MatDialogModule } from '@angular/material/dialog';
 import { MatFormFieldModule } from '@angular/material/form-field';
-import { MatIconModule } from '@angular/material/icon';
+import { MAT_ICON_DEFAULT_OPTIONS, MatIconModule } from '@angular/material/icon';
+import { MatSelectModule } from '@angular/material/select';
 import { MatInputModule } from '@angular/material/input';
 import { MatListModule } from '@angular/material/list';
 import { MatTableModule } from '@angular/material/table';
@@ -19,15 +20,16 @@ import { AppEventColorService } from '../../../services/color/app.event.color.se
 import { AppHapticsService } from '../../../services/app.haptics.service';
 import { normalizeEventDetailsSettings } from '../../../helpers/event-lap-table-columns.helper';
 
-async function setupPicker(order = [DataDuration.type, DataDistance.type, DataPaceAvg.type]) {
+async function setupPicker(order = [DataDuration.type, DataDistance.type, DataPaceAvg.type], multisport = false) {
   const settings = signal(normalizeEventDetailsSettings({ lapTableColumnsBySportFamily: { running: order } }));
   const save = vi.fn().mockResolvedValue(undefined);
   const haptics = { selection: vi.fn(), success: vi.fn(), error: vi.fn() };
   await TestBed.configureTestingModule({
     imports: [CommonModule, NoopAnimationsModule, MatButtonModule, MatCheckboxModule, MatDialogModule,
-      MatFormFieldModule, MatIconModule, MatInputModule, MatListModule, MatTableModule],
+      MatFormFieldModule, MatIconModule, MatInputModule, MatListModule, MatSelectModule, MatTableModule],
     declarations: [EventCardLapsComponent],
     providers: [
+      { provide: MAT_ICON_DEFAULT_OPTIONS, useValue: { fontSet: 'material-symbols-rounded' } },
       { provide: AppUserSettingsQueryService, useValue: { eventDetailsSettings: settings, updateLapTableColumns: save } },
       { provide: AppHapticsService, useValue: haptics },
       { provide: AppEventColorService, useValue: {} },
@@ -41,7 +43,9 @@ async function setupPicker(order = [DataDuration.type, DataDistance.type, DataPa
     getLaps: () => [{ type: LapTypes.Manual, getDuration: () => new DataDuration(60),
       getDistance: () => new DataDistance(250), getStat: () => undefined } as unknown as LapInterface],
   } as ActivityInterface;
-  fixture.componentRef.setInput('selectedActivities', [activity]);
+  fixture.componentRef.setInput('selectedActivities', multisport
+    ? [activity, ...['Cycling', 'Swimming', 'Hiking'].map(type => ({ ...activity, type, getID: () => type } as ActivityInterface))]
+    : [activity]);
   fixture.componentRef.setInput('canCustomize', true);
   fixture.detectChanges();
   const settle = async () => {
@@ -59,6 +63,22 @@ async function setupPicker(order = [DataDuration.type, DataDistance.type, DataPa
 }
 
 describe('lap column picker Material interactions', () => {
+  it('switches among four sport families through the real Material select without saving a layout', async () => {
+    const picker = await setupPicker(undefined, true);
+    const select = picker.dialog.querySelector<HTMLElement>('mat-select[aria-label="Lap sport family"]')!;
+    select.click();
+    await picker.settle();
+    const other = Array.from(document.querySelectorAll<HTMLElement>('mat-option'))
+      .find(option => option.textContent?.trim() === 'Other activities')!;
+    other.click();
+    await picker.settle();
+    expect(select.textContent).toContain('Other activities');
+    expect(picker.component.activeLapColumnMenuGroup?.family).toBe('other');
+    expect(picker.dialog.textContent).toContain('Choose columns for other activities laps');
+    expect(picker.save).not.toHaveBeenCalled();
+    expect(picker.haptics.selection).toHaveBeenCalledTimes(2);
+  });
+
   it('shows the exact saved selection first, including unavailable metrics, without writes on open', async () => {
     const picker = await setupPicker([DataPaceAvg.type, DataDuration.type, DataDistance.type]);
     expect(picker.dialog.getAttribute('aria-label')).toBe('Choose lap columns');
