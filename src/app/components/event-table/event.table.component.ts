@@ -145,6 +145,7 @@ export class EventTableComponent extends DataTableAbstractDirective implements O
   private readonly duplicateSourceFilesMessage = 'Selected activities include identical source files. Deselect duplicates and try again.';
   readonly sharedEventTooltip = 'Public link enabled. Anyone with the link can view this activity, comparison data, and original files.';
   private rowCache = new Map<string, EventTableRowCacheEntry>();
+  private destroyed = false;
 
 
   private searchSubject: Subject<string> = new Subject();
@@ -683,15 +684,15 @@ export class EventTableComponent extends DataTableAbstractDirective implements O
       }
     });
     this.deleteConfirmationSubscription = dialogRef.afterClosed().subscribe(async (result) => {
-      if (!result || this.user?.uid !== user.uid) {
-        this.loaded();
+      if (!result || !this.isCurrentMutationOwner(user)) {
+        if (this.isCurrentMutationOwner(user)) this.loaded();
         return;
       }
       try {
         this.selection.clear();
         const outcomes = await Promise.allSettled(eventIDs.map(eventID =>
           this.eventService.deleteAllEventData(user, eventID)));
-        if (this.user?.uid !== user.uid) return;
+        if (!this.isCurrentMutationOwner(user)) return;
         const deletedIds = new Set(eventIDs.filter((_eventID, index) => outcomes[index].status === 'fulfilled'));
 
         // Reconcile each confirmed result even when another deletion failed.
@@ -711,13 +712,14 @@ export class EventTableComponent extends DataTableAbstractDirective implements O
         });
         this.hapticsService.success();
       } catch (error) {
+        if (!this.isCurrentMutationOwner(user)) return;
         this.logger.error('[EventTableComponent] Failed to delete selected events', error);
         this.snackBar.open('Could not delete selected activities', undefined, {
           duration: 3000,
         });
         this.hapticsService.error();
       } finally {
-        this.loaded();
+        if (this.isCurrentMutationOwner(user)) this.loaded();
       }
     });
   }
@@ -1005,7 +1007,8 @@ export class EventTableComponent extends DataTableAbstractDirective implements O
   async pageChanges(pageEvent: PageEvent) {
     if (this.isLibraryPresentation) {
       const pageIndex = pageEvent.pageIndex ?? this.paginator?.pageIndex ?? 0;
-      if (!this.suppressLibraryPageFeedback && (pageIndex !== this.libraryPageIndex || pageEvent.pageSize !== this.libraryPageSize)) this.hapticsService.selection();
+      const previousPageIndex = pageEvent.previousPageIndex ?? this.libraryPageIndex;
+      if (!this.suppressLibraryPageFeedback && (pageIndex !== previousPageIndex || pageEvent.pageSize !== this.libraryPageSize)) this.hapticsService.selection();
       this.libraryPageIndex = pageIndex;
       this.libraryPageSize = pageEvent.pageSize;
       return;
@@ -1072,14 +1075,16 @@ export class EventTableComponent extends DataTableAbstractDirective implements O
         suggestions: this.tagFilterOptions,
         save: async (tags: string[]) => {
           const savedTags = await this.eventTagService.saveTags(user, event, tags, originalTags);
-          this.applySavedTagsToLoadedEvent(event.getID(), savedTags, event);
-          this.eventsChange.emit({ userID: user.uid, updatedTags: { [event.getID()]: savedTags }, deletedEventIDs: [] });
+          if (this.isCurrentMutationOwner(user)) {
+            this.applySavedTagsToLoadedEvent(event.getID(), savedTags, event);
+            this.eventsChange.emit({ userID: user.uid, updatedTags: { [event.getID()]: savedTags }, deletedEventIDs: [] });
+          }
           return savedTags;
         },
       },
     });
     const savedTags = await firstValueFrom(dialogRef.afterClosed());
-    if (!Array.isArray(savedTags)) {
+    if (!Array.isArray(savedTags) || !this.isCurrentMutationOwner(user)) {
       return;
     }
 
@@ -1127,11 +1132,13 @@ export class EventTableComponent extends DataTableAbstractDirective implements O
           this.isBulkTagSaving = true;
           try {
             savedResults = await this.eventTagService.applyBulkChanges(user, selectedEventIDs, changes);
-            selectedEvents.forEach((event) => {
-              const eventID = event.getID();
-              this.applySavedTagsToLoadedEvent(eventID, savedResults?.[eventID] || getEventTags(event), event);
-            });
-            this.eventsChange.emit({ userID: user.uid, updatedTags: savedResults, deletedEventIDs: [] });
+            if (this.isCurrentMutationOwner(user)) {
+              selectedEvents.forEach((event) => {
+                const eventID = event.getID();
+                this.applySavedTagsToLoadedEvent(eventID, savedResults?.[eventID] || getEventTags(event), event);
+              });
+              this.eventsChange.emit({ userID: user.uid, updatedTags: savedResults, deletedEventIDs: [] });
+            }
             return savedResults;
           } finally {
             this.isBulkTagSaving = false;
@@ -1141,7 +1148,7 @@ export class EventTableComponent extends DataTableAbstractDirective implements O
     });
 
     const didSave = await firstValueFrom(dialogRef.afterClosed());
-    if (!didSave || !savedResults) {
+    if (!didSave || !savedResults || !this.isCurrentMutationOwner(user)) {
       return;
     }
     this.processChanges('bulk_event_tags_saved');
@@ -1151,6 +1158,10 @@ export class EventTableComponent extends DataTableAbstractDirective implements O
       undefined,
       { duration: 2500 },
     );
+  }
+
+  private isCurrentMutationOwner(user: User): boolean {
+    return !this.destroyed && this.user?.uid === user.uid;
   }
 
   private applySavedTagsToLoadedEvent(
@@ -1249,6 +1260,7 @@ export class EventTableComponent extends DataTableAbstractDirective implements O
   }
 
   ngOnDestroy() {
+    this.destroyed = true;
     this.tagCatalogRequestVersion += 1;
     this.unsubscribeFromAll();
     if (this.breakpointSubscription) {
@@ -1437,7 +1449,8 @@ export class EventTableComponent extends DataTableAbstractDirective implements O
       isHandset: this.isHandset,
       pageSize: this.paginator?.pageSize || this.user.settings?.dashboardSettings?.tableSettings?.eventsPerPage || 0,
     });
-    this.loaded();
+    // Rebuilding display rows must not complete the parent's history request.
+    this.changeDetector.detectChanges();
 
   }
 

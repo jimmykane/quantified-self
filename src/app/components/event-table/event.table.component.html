@@ -172,7 +172,7 @@
             }
             @if (column === 'Checkbox') {
             <mat-checkbox (click)="$event.stopPropagation()" (change)="$event ? checkBoxClick(row) : null"
-              [checked]="selection.isSelected(row)">
+              [checked]="selection.isSelected(row)" [aria-label]="'Select activity ' + (row.Name || row.Description || 'Untitled activity')">
             </mat-checkbox>
             }
             @if (column === 'Actions') {

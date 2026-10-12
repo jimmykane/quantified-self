@@ -171,7 +171,10 @@ export class TagsPageComponent implements OnInit {
     this.catalogError.set(false);
     try {
       const tags = await this.catalog.listAllTags(user.uid, refresh);
-      if (this.isCurrent(generation, user.uid)) this.catalogTags.set(tags);
+      if (this.isCurrent(generation, user.uid)) {
+        // A tag edit can retain an observed label while this read is in flight.
+        this.catalogTags.set(normalizeEventTagSuggestions([...tags, ...this.catalogTags()]));
+      }
     } catch (error) {
       if (!this.isCurrent(generation, user.uid)) return;
       this.catalogError.set(true);

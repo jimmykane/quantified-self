@@ -427,6 +427,20 @@ describe('EventTableComponent', () => {
         expect(renderedChoices.every(choices => choices.join(',') === 'Distance,Duration')).toBe(true);
     });
 
+    it.each(['dashboard', 'tag-library'] as const)('keeps parent-owned history loading active in %s while rendering empty rows or rebuilding them', (presentation) => {
+        component.presentation = presentation;
+        component.events = [];
+        component.isLoading = true;
+        component.ngOnChanges({ events: new SimpleChange(component.events, [], false) });
+        expect(component.isLoading).toBe(true);
+        component.events = [new MockEvent('loaded') as any];
+        component.ngOnChanges({ events: new SimpleChange([], component.events, false) });
+        expect(component.isLoading).toBe(true);
+        component.isLoading = false;
+        component.ngOnChanges({ isLoading: new SimpleChange(true, false, false) });
+        expect(component.isLoading).toBe(false);
+    });
+
     it('restores Dashboard presentation when leaving the Tag library mode', () => {
         component.presentation = 'tag-library';
         component.ngOnChanges({ presentation: new SimpleChange('dashboard', 'tag-library', false) });
@@ -488,6 +502,16 @@ describe('EventTableComponent', () => {
         component.paginator.firstPage = () => { void component.pageChanges({ pageIndex: 0, pageSize: 5 } as any); };
         component.ngOnChanges({ filterContext: new SimpleChange('endurance', 'recovery', false) });
         expect(mockHapticsService.selection).toHaveBeenCalledTimes(2);
+    });
+
+    it('gives page feedback after the data source silently clamps a filtered page back to the first page', async () => {
+        component.presentation = 'tag-library';
+        await component.pageChanges({ pageIndex: 1, previousPageIndex: 0, pageSize: 5 } as any);
+        mockHapticsService.selection.mockClear();
+        // Material can clamp pageIndex without emitting a page event after filtering.
+        component.paginator.pageIndex = 0;
+        await component.pageChanges({ pageIndex: 1, previousPageIndex: 0, pageSize: 5 } as any);
+        expect(mockHapticsService.selection).toHaveBeenCalledOnce();
     });
 
     it('does not restore pending activity search after the user clears it and gives one feedback', async () => {
@@ -1153,6 +1177,41 @@ describe('EventTableComponent', () => {
         expect(changes).toHaveBeenCalledOnce();
     });
 
+    it.each(['account change', 'component teardown'])('ignores a completed tag save and its closing notification after %s', async (contextChange) => {
+        const originalEvent = component.events[0] as any;
+        const otherEvent = new MockEvent(originalEvent.getID()) as any;
+        otherEvent.tags = ['Other owner'];
+        const closed = new Subject<string[] | null>();
+        let dialogData: any;
+        let resolveSave: (tags: string[]) => void;
+        mockEventTagService.saveTags.mockReturnValue(new Promise<string[]>(resolve => { resolveSave = resolve; }));
+        component.showActions = true;
+        mockDialog.open.mockImplementation((_component: unknown, config: any) => {
+            dialogData = config.data;
+            return { afterClosed: () => closed.asObservable() };
+        });
+        const open = component.openEventTagsDialog({ preventDefault: vi.fn(), stopPropagation: vi.fn() } as any, originalEvent);
+        const save = dialogData.save(['Old owner edit']);
+        component.events = [otherEvent];
+        if (contextChange === 'account change') {
+            component.user = new User('other-owner');
+            component.user.settings = mockUser.settings;
+        } else {
+            fixture.destroy();
+        }
+        const changes = vi.fn();
+        component.eventsChange.subscribe(changes);
+        resolveSave(['Old owner edit']);
+        const savedTags = await save;
+        closed.next(savedTags);
+        closed.complete();
+        await open;
+        expect(mockEventTagService.saveTags).toHaveBeenCalledWith(mockUser, originalEvent, ['Old owner edit'], []);
+        expect(otherEvent.tags).toEqual(['Other owner']);
+        expect(changes).not.toHaveBeenCalled();
+        expect(mockSnackBar.open).not.toHaveBeenCalled();
+    });
+
     it('should apply bulk add/remove changes and update selected event rows', async () => {
         const changes = vi.fn();
         component.eventsChange.subscribe(changes);
@@ -1213,6 +1272,41 @@ describe('EventTableComponent', () => {
         expect(refreshedEvent.tags).toEqual(['Concurrent']);
         expect((component.data.data[0] as any)['Tag Values']).toEqual(['Concurrent']);
         expect(changes).toHaveBeenCalledOnce();
+    });
+
+    it.each(['account change', 'component teardown'])('ignores completed bulk tag saves and their closing notification after %s', async (contextChange) => {
+        const selectedRow = component.data.data[0] as any;
+        const otherEvent = new MockEvent(selectedRow.Event.getID()) as any;
+        otherEvent.tags = ['Other owner'];
+        const closed = new Subject<boolean>();
+        let dialogData: any;
+        let resolveSave: (tags: Record<string, string[]>) => void;
+        mockEventTagService.applyBulkChanges.mockReturnValue(new Promise<Record<string, string[]>>(resolve => { resolveSave = resolve; }));
+        component.selection.select(selectedRow);
+        mockDialog.open.mockImplementation((_component: unknown, config: any) => {
+            dialogData = config.data;
+            return { afterClosed: () => closed.asObservable() };
+        });
+        const open = component.openBulkEventTagsDialog({ preventDefault: vi.fn(), stopPropagation: vi.fn() } as any);
+        const save = dialogData.save({ add: ['Old owner edit'], remove: [] });
+        component.events = [otherEvent];
+        if (contextChange === 'account change') {
+            component.user = new User('other-owner');
+            component.user.settings = mockUser.settings;
+        } else {
+            fixture.destroy();
+        }
+        const changes = vi.fn();
+        component.eventsChange.subscribe(changes);
+        resolveSave({ [selectedRow.Event.getID()]: ['Old owner edit'] });
+        await save;
+        closed.next(true);
+        closed.complete();
+        await open;
+        expect(mockEventTagService.applyBulkChanges).toHaveBeenCalledWith(mockUser, [selectedRow.Event.getID()], { add: ['Old owner edit'], remove: [] });
+        expect(otherEvent.tags).toEqual(['Other owner']);
+        expect(changes).not.toHaveBeenCalled();
+        expect(mockSnackBar.open).not.toHaveBeenCalled();
     });
 
     it('should reject oversized bulk tag selections before opening the dialog', async () => {
@@ -1513,6 +1607,7 @@ describe('EventTableComponent', () => {
             expect(processChangesSpy).toHaveBeenCalledWith('after_delete_selection');
             expect(mockAnalyticsService.logEvent).toHaveBeenCalledWith('delete_events');
             expect(mockSnackBar.open).toHaveBeenCalledWith('Activities deleted', undefined, { duration: 2000 });
+            expect(component.isLoading).toBe(false);
         });
 
         it('reconciles confirmed deletions even when another selected activity fails to delete', async () => {
@@ -1533,6 +1628,7 @@ describe('EventTableComponent', () => {
             expect(changes).toHaveBeenCalledWith({ userID: mockUser.uid, updatedTags: {}, deletedEventIDs: ['event1'] });
             expect(mockHapticsService.error).toHaveBeenCalledOnce();
             expect(mockHapticsService.success).not.toHaveBeenCalled();
+            expect(component.isLoading).toBe(false);
         });
 
         it('keeps activity search and sort persistence active after bulk deletion', async () => {
@@ -1584,6 +1680,32 @@ describe('EventTableComponent', () => {
             closed.complete();
             await new Promise(resolve => setTimeout(resolve, 0));
             expect(mockEventService.deleteAllEventData).not.toHaveBeenCalled();
+            expect(mockHapticsService.success).not.toHaveBeenCalled();
+            expect(mockHapticsService.error).not.toHaveBeenCalled();
+        });
+
+        it.each(['account change', 'component teardown'])('keeps completed bulk deletion callbacks silent after %s', async (contextChange) => {
+            const originalEvent = component.events[0];
+            component.selection.select({ Event: originalEvent } as any);
+            let resolveDelete: (value: boolean) => void;
+            mockEventService.deleteAllEventData.mockReturnValueOnce(new Promise<boolean>(resolve => { resolveDelete = resolve; }));
+            mockDialog.open.mockReturnValueOnce({ afterClosed: () => of(true) });
+            const changes = vi.fn();
+            component.eventsChange.subscribe(changes);
+            await component.deleteSelection();
+            if (contextChange === 'account change') {
+                component.user = new User('other-owner');
+                component.user.settings = mockUser.settings;
+            } else {
+                fixture.destroy();
+            }
+            const loaded = vi.spyOn(component, 'loaded');
+            resolveDelete(true);
+            await new Promise(resolve => setTimeout(resolve, 0));
+            expect(mockEventService.deleteAllEventData).toHaveBeenCalledWith(mockUser, originalEvent.getID());
+            expect(changes).not.toHaveBeenCalled();
+            expect(loaded).not.toHaveBeenCalled();
+            expect(mockSnackBar.open).not.toHaveBeenCalled();
             expect(mockHapticsService.success).not.toHaveBeenCalled();
             expect(mockHapticsService.error).not.toHaveBeenCalled();
         });

@@ -232,6 +232,22 @@ describe('TagsPageComponent', () => {
     expect(context.haptics.selection).not.toHaveBeenCalled();
   });
 
+  it('retains observed zero-count labels when an earlier catalog read finishes after a tag edit', async () => {
+    const context = await setup();
+    let resolveTags: (value: string[]) => void;
+    context.catalog.listAllTags.mockReturnValueOnce(new Promise<string[]>(resolve => { resolveTags = resolve; }));
+    context.events.getEventsPageOnceByWithMeta.mockReturnValueOnce(of(page([event('legacy', ['Legacy label'], true)], false)));
+    context.fixture.detectChanges();
+    await Promise.resolve();
+    context.component.onEventsChange({ userID: 'owner', updatedTags: { legacy: [] }, deletedEventIDs: [] });
+    expect(context.component.library().find(tag => tag.name === 'Legacy label')?.count).toBe(0);
+    resolveTags(['Race day']);
+    await render(context);
+    expect(context.component.library().find(tag => tag.name === 'Legacy label')?.count).toBe(0);
+    expect(context.component.library().find(tag => tag.name === 'Race day')?.count).toBe(0);
+    expect(context.haptics.selection).not.toHaveBeenCalled();
+  });
+
   it('reconciles a late mutation after changing tags without inferring deletion from the new visible subset', async () => {
     const context = await setup('Endurance');
     await render(context);

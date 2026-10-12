@@ -25,6 +25,8 @@ server page. Read failures retain loaded rows and the previous cursor for retry.
 this is a paginated browsing session, not a live history listener or an atomic snapshot across concurrent edits.
 The catalog is independent of the loaded history. Counts deduplicate normalized tag identity per event, and the catalog
 spelling is preferred. Locally observed and deep-linked labels remain selectable even if catalog loading fails.
+Catalog responses merge with labels retained during an in-flight edit, so a late read cannot drop an observed label
+after its last loaded activity loses the tag. Display-row rebuilds preserve the caller's history-loading state.
 
 The table's optional `eventsChange` output reconciles successfully saved single/bulk tags and deleted rows with the
 library's owner-scoped history using explicit tag patches, deleted IDs, and the operation's captured owner UID.
@@ -34,7 +36,10 @@ Tag patches are emitted when a save succeeds rather than replayed when its dialo
 successful IDs even when another deletion in the batch fails. The confirmed owner and IDs are captured before opening
 the confirmation dialog; bulk deletion keeps table search and sort subscriptions alive. Saved/observed labels remain in the current
 session after their last matching activity is removed. Existing transaction and deletion paths enforce writes;
-the page introduces no write API. Requests are fenced by the current Firebase owner object, an account/refresh
+the page introduces no write API.
+The shared table also checks the captured owner UID and component lifetime before applying tag-save/deletion results,
+emitting changes, or showing completion feedback. An already-started write still belongs to its captured owner.
+Requests are fenced by the current Firebase owner object, an account/refresh
 generation, and component teardown so late results cannot replace a different account's data.
 
 MCP/Assistant impact: no public tools, stored event fields, metric semantics, scopes, consent, or mutation contracts
