@@ -10,6 +10,7 @@ import {
     ActivityTypes,
     DataDistance,
     DataActiveLap,
+    DataActiveLengths,
     DataDuration,
     DataHeartRateMax,
     DataHeartRateAvg,
@@ -268,6 +269,19 @@ describe('EventCardLapsComponent', () => {
         component.toggleLapSelection(a, a.dataSource.data[0]);
         expect(a.selectedCount).toBe(2);
         expect(b.selectedCount).toBe(0);
+    });
+
+    it('keeps a drill with a recorded active-length count separate when length details are missing', () => {
+        const activity = createRestActivity([10, 30, 10]);
+        activity.getLaps()[1].addStat(new DataActiveLengths(1));
+        component.selectedActivities = [activity];
+        component.ngOnChanges();
+        fixture.detectChanges();
+        const rows = component.lapTableGroups[0].tables[0].dataSource.data.filter(row => row.lap);
+        expect(rows).toHaveLength(3);
+        expect(rows.map(row => row.isRest)).toEqual([true, false, true]);
+        expect(rows.every(row => !row.members)).toBe(true);
+        expect(fixture.nativeElement.querySelectorAll('.lap-rest-row')).toHaveLength(2);
     });
 
     it('retains original recorded-length disclosures inside a rest block across refreshes', () => {

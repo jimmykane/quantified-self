@@ -143,7 +143,8 @@ recorded SWOLF, and swim/rest/total timings remain available. Membership uses th
 No 25-yard splits are synthesized: a six- or ten-length rep expands into six or ten recorded rows only if present.
 Disclosure state and temporary selection survive unit/column refreshes; controls expose expanded state and region
 IDs and emit one selection haptic per accepted toggle. Rest rows have both a label and a theme-based shade, including
-opaque pinned cells. Explicit active length messages take priority over an inferred inactive Active Lap flag;
+opaque pinned cells. Explicit active length messages or a positive integer Active Lengths stat take priority over
+an inferred inactive Active Lap flag, including when individual length details are missing or incomplete;
 otherwise the recorded flag takes priority, then idle/rest length types. Zero distance plus zero recorded stroke
 rate is a fallback only without that metadata, preserving active zero-stroke drills.
 

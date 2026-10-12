@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
-  DataActiveLap, DataDistance, DataDuration, DataHeartRateAvg, DataHeartRateMax,
+  DataActiveLap, DataActiveLengths, DataDistance, DataDuration, DataHeartRateAvg, DataHeartRateMax,
   DataInterface, DataSpeedAvg, LapInterface, LapTypes,
 } from '@sports-alliance/sports-lib';
 import { groupSwimRestLaps, getSwimRestBlockMetric } from './event-swim-rest-block.helper';
@@ -8,10 +8,11 @@ import { normalizeSwimLength } from './event-swim-length.helper';
 import { isRestSwimLap } from './event-swim-analytics.helper';
 
 function lap(start: number, duration: number, options: {
-  active?: boolean; distance?: number; type?: LapTypes; hr?: number; maxHr?: number; end?: number;
+  active?: boolean; activeLengths?: number; distance?: number; type?: LapTypes; hr?: number; maxHr?: number; end?: number;
 } = {}): LapInterface {
   const stats: Record<string, DataInterface> = {};
   if (options.active !== undefined) stats[DataActiveLap.type] = new DataActiveLap(options.active);
+  if (options.activeLengths !== undefined) stats[DataActiveLengths.type] = new DataActiveLengths(options.activeLengths);
   if (options.hr !== undefined) stats[DataHeartRateAvg.type] = new DataHeartRateAvg(options.hr);
   if (options.maxHr !== undefined) stats[DataHeartRateMax.type] = new DataHeartRateMax(options.maxHr);
   return { startDate: new Date(start * 1000), endDate: new Date((options.end ?? start + duration) * 1000),
@@ -50,6 +51,17 @@ describe('swim rest display blocks', () => {
     const first = rest(0, 10);
     expect(isRestSwimLap(drill, [length])).toBe(false);
     expect(groupSwimRestLaps([first, drill], new Map([[drill, [length]]]))).toEqual([[first], [drill]]);
+  });
+  it.each([false, true])('keeps recorded active-length counts out of rest blocks with partial idle details: %s', partialIdle => {
+    const rows = [rest(0, 10), rest(10, 10, { activeLengths: 1 }), rest(20, 10)];
+    const idle = normalizeSwimLength({ index: 1, lapIndex: 2, startDate: 10000, endDate: 20000, type: 'idle' })!;
+    const lengths = partialIdle ? [idle] : [];
+    expect(isRestSwimLap(rows[1], lengths)).toBe(false);
+    expect(groupSwimRestLaps(rows, new Map([[rows[1], lengths]]))).toEqual(rows.map(row => [row]));
+  });
+  it.each([0, -1, 1.5, NaN, Infinity])('does not infer active swimming from invalid or zero length count %s', activeLengths => {
+    const rows = [rest(0, 10), rest(10, 10, { activeLengths })];
+    expect(groupSwimRestLaps(rows, new Map())).toEqual([rows]);
   });
   it('uses duration-weighted HR and the largest maximum rather than averaging maxima', () => {
     const rows = [rest(0, 10, { hr: 100, maxHr: 110 }), rest(10, 30, { hr: 140, maxHr: 150 })];
