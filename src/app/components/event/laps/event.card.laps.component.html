@@ -10,25 +10,23 @@
 </app-event-section-header>
 <mat-menu #lapColumnsMenu="matMenu" xPosition="before"
   class="qs-menu-panel qs-menu-panel-form qs-config-menu lap-column-menu-panel">
-    <div class="lap-column-menu-content">
-      @if (lapColumnMenuGroups.length > 1) {
-      <mat-button-toggle-group class="lap-column-family-toggle"
-        [class.lap-column-many-families]="lapColumnMenuGroups.length > 2"
-        [hideSingleSelectionIndicator]="true"
-        [value]="activeLapColumnMenuGroup?.family"
-        aria-label="Lap sport family"
-        (change)="onLapColumnMenuSportFamilyChange($event.value)">
-        @for (familyGroup of lapColumnMenuGroups; track familyGroup.family) {
-        <mat-button-toggle [value]="familyGroup.family" [aria-label]="familyGroup.label"
-          [matTooltip]="familyGroup.label" (click)="$event.stopPropagation()">
-          <mat-icon>{{ familyGroup.icon }}</mat-icon>
-          <span class="lap-column-family-label">{{ familyGroup.label }}</span>
-        </mat-button-toggle>
-        }
-      </mat-button-toggle-group>
-      }
+    <!-- Embedded controls own navigation keys; Escape still closes the Material menu. -->
+    <div class="lap-column-menu-content" tabindex="-1" (keydown)="$event.key !== 'Escape' && $event.stopPropagation()">
       @if (activeLapColumnMenuGroup; as group) {
-      <p class="lap-column-menu-copy">Choose columns for {{ group.label.toLowerCase() }} laps. Values use your saved units.</p>
+      <div class="lap-column-menu-controls">
+      @if (lapColumnMenuGroups.length > 1) {
+      <mat-form-field appearance="outline" class="lap-column-family-select" subscriptSizing="dynamic">
+        <mat-label>Lap sport</mat-label>
+        <mat-select [value]="group.family" aria-label="Lap sport family"
+          (click)="$event.stopPropagation()" (openedChange)="onLapColumnSportSelectOpened($event)"
+          (selectionChange)="onLapColumnMenuSportFamilyChange($event.value)">
+          @for (familyGroup of lapColumnMenuGroups; track familyGroup.family) {
+          <mat-option [value]="familyGroup.family">{{ familyGroup.label }}</mat-option>
+          }
+        </mat-select>
+      </mat-form-field>
+      }
+      <p class="lap-column-menu-copy">{{ group.label }} lap columns · saved units</p>
       @if (group.selectedUnavailableMetricCount > 0) {
       <p class="lap-column-availability-summary" role="status">
         {{ group.selectedUnavailableMetricCount }} selected {{ group.selectedUnavailableMetricCount === 1 ? 'column is' : 'columns are' }} unavailable in these laps and hidden from the table.
@@ -56,7 +54,6 @@
         <span>Saving columns</span>
       </div>
       }
-      <ng-container *ngTemplateOutlet="lapMetricOptions; context: { $implicit: group, metricGroups: group.filteredMetricGroups, additional: false }"></ng-container>
       @if (group.additionalMetricGroups.length > 0) {
       <button mat-button type="button" class="lap-column-other-toggle"
         [attr.aria-expanded]="group.showAdditionalMetrics"
@@ -64,11 +61,25 @@
         (click)="$event.stopPropagation(); toggleLapAdditionalMetrics(group)">
         {{ group.showAdditionalMetrics ? 'Hide' : 'Show' }} other metrics
       </button>
-      <p class="lap-column-menu-copy">{{ group.selectedAdditionalMetricCount }} selected · {{ group.recordedAdditionalMetricCount }} recorded in these laps. Search other metrics here to restore older choices.</p>
+      <p class="lap-column-other-summary">
+        {{ group.selectedAdditionalMetricCount }} selected · {{ group.recordedAdditionalMetricCount }} recorded
+        @if (group.additionalSearchMatchCount !== null) {
+        · {{ group.additionalSearchMatchCount }} {{ group.additionalSearchMatchCount === 1 ? 'search match' : 'search matches' }}
+        }
+      </p>
+      }
+      </div>
+      <div class="lap-column-menu-results" role="region" [attr.aria-label]="group.label + ' metric results'">
+      <ng-container *ngTemplateOutlet="lapMetricOptions; context: { $implicit: group, metricGroups: group.filteredMetricGroups, additional: false }"></ng-container>
+      @if (group.additionalMetricGroups.length > 0) {
       <div class="lap-column-additional" [id]="'lap-other-metrics-' + group.family" [hidden]="!group.showAdditionalMetrics">
+        @if (group.showAdditionalMetrics && group.filteredAdditionalMetricGroups.length > 0) {
+        <p class="lap-column-results-heading">Other metrics</p>
         <ng-container *ngTemplateOutlet="lapMetricOptions; context: { $implicit: group, metricGroups: group.filteredAdditionalMetricGroups, additional: true }"></ng-container>
+        }
       </div>
       }
+      </div>
       }
     </div>
 </mat-menu>
@@ -94,6 +105,7 @@
 }
 
 <ng-template #lapMetricOptions let-group let-metricGroups="metricGroups" let-additional="additional">
+  @if (metricGroups.length > 0) {
   <mat-selection-list [multiple]="true" [disabled]="savingLapColumnSportFamilies().has(group.family)"
     (click)="$event.stopPropagation()"
     [aria-label]="group.label + (additional ? ' other lap columns' : ' lap columns')"
@@ -101,19 +113,27 @@
     @for (metricGroup of metricGroups; track metricGroup.id) {
     <div mat-subheader>{{ metricGroup.label }}</div>
     @for (metric of metricGroup.metrics; track metric.type) {
-    <mat-list-option [selected]="group.selectedMetricTypes.includes(metric.type)" [value]="metric.type">
+    <mat-list-option class="lap-column-metric-option" [selected]="group.selectedMetricTypes.includes(metric.type)" [value]="metric.type"
+      [lines]="group.metricAvailability[metric.type]?.label ? 3 : (metric.label.length > 16 ? 2 : 1)"
+      [attr.aria-label]="(metric.type === swolfColumn ? metric.label : metric.type) + (group.metricAvailability[metric.type]?.label ? '. ' + group.metricAvailability[metric.type].label : '')">
       <app-data-type-icon matListItemIcon [dataType]="metric.type" size="18px"></app-data-type-icon>
-      <span matListItemTitle>{{ metric.label }}</span>
+      <span matListItemTitle class="lap-column-option-title">{{ metric.label }}</span>
       @if (group.metricAvailability[metric.type]?.label; as availabilityLabel) {
-      <span matListItemLine>{{ availabilityLabel }}</span>
+      <span matListItemLine class="lap-column-option-status">{{ availabilityLabel }}</span>
       }
     </mat-list-option>
     }
     }
-    @empty {
-    <p class="lap-column-menu-empty" role="status">No matching metrics.</p>
-    }
   </mat-selection-list>
+  } @else if (!additional && (!group.showAdditionalMetrics || group.filteredAdditionalMetricGroups.length === 0)) {
+  <p class="lap-column-menu-empty" role="status">
+    @if (!group.showAdditionalMetrics && group.additionalSearchMatchCount > 0) {
+    {{ group.additionalSearchMatchCount }} {{ group.additionalSearchMatchCount === 1 ? 'match is' : 'matches are' }} available under Show other metrics.
+    } @else {
+    No matching metrics.
+    }
+  </p>
+  }
 </ng-template>
 
 <ng-template #lapTableGroupTables let-lapTableGroup>

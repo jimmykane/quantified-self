@@ -7,6 +7,7 @@ import { MatListModule } from '@angular/material/list';
 import { MatButtonModule } from '@angular/material/button';
 import { MatFormFieldModule } from '@angular/material/form-field';
 import { MatInputModule } from '@angular/material/input';
+import { MatSelectModule } from '@angular/material/select';
 import { MatTableModule } from '@angular/material/table';
 import { MatSelectionListChange } from '@angular/material/list';
 import {
@@ -15,8 +16,8 @@ import {
     DataDistance,
     DataDuration,
     DataHeartRateMax,
-  DataPowerAvg,
-  DataJumpHangTimeMax,
+    DataPowerAvg,
+    DataJumpHangTimeMax,
     DataPaceAvg,
     DataSpeedAvg,
     DataSpeedMax,
@@ -99,7 +100,7 @@ describe('EventCardLapsComponent', () => {
         snackBar = { open: vi.fn() };
         haptics = { selection: vi.fn(), success: vi.fn(), error: vi.fn() };
         await TestBed.configureTestingModule({
-            imports: [CommonModule, MatCheckboxModule, MatMenuModule, MatTableModule, MatListModule, MatButtonModule, MatFormFieldModule, MatInputModule],
+            imports: [CommonModule, MatCheckboxModule, MatMenuModule, MatTableModule, MatListModule, MatButtonModule, MatFormFieldModule, MatInputModule, MatSelectModule],
             declarations: [EventCardLapsComponent, HapticTapDirective],
             providers: [
                 { provide: AppEventColorService, useValue: {} },
@@ -243,28 +244,119 @@ describe('EventCardLapsComponent', () => {
         const additional = document.getElementById('lap-other-metrics-swimming')!;
         expect(toggle.getAttribute('aria-expanded')).toBe('false');
         expect(additional.hidden).toBe(true);
+        expect(additional.querySelectorAll('mat-list-option')).toHaveLength(0);
         const input = document.querySelector<HTMLInputElement>('input[aria-label="Search swimming lap metrics"]')!;
         expect(input.placeholder).toContain('SWOLF');
         input.value = 'maximum jump hang time';
         input.dispatchEvent(new Event('input', { bubbles: true }));
         fixture.detectChanges();
         expect(haptics.selection).toHaveBeenCalledTimes(1);
+        expect(component.activeLapColumnMenuGroup!.additionalSearchMatchCount).toBe(1);
+        expect(document.querySelector('.lap-column-menu-empty')?.textContent).toContain('1 match is available under Show other metrics');
+        expect(document.querySelector('.lap-column-menu-content')?.textContent).not.toContain('No matching metrics.');
         toggle.click();
         fixture.detectChanges();
         expect(toggle.getAttribute('aria-expanded')).toBe('true');
         expect(additional.hidden).toBe(false);
         const option = additional.querySelector<HTMLElement>('mat-list-option')!;
         expect(additional.querySelectorAll('mat-list-option')).toHaveLength(1);
+        expect(document.querySelector('.lap-column-menu-empty')).toBeNull();
+        expect(option.getAttribute('aria-label')).toBe('Maximum Jump Hang Time');
         option.click();
         await fixture.whenStable();
         fixture.detectChanges();
         expect(updateLapTableColumns).toHaveBeenCalledWith('swimming', [DataDuration.type, DataJumpHangTimeMax.type]);
         expect(option.getAttribute('aria-selected')).toBe('true');
+        expect(option.getAttribute('aria-label')).toBe('Maximum Jump Hang Time. No data in current laps — hidden from the table');
         toggle.click();
         fixture.detectChanges();
         expect(additional.hidden).toBe(true);
+        expect(additional.querySelectorAll('mat-list-option')).toHaveLength(0);
+        input.value = 'no such metric exists';
+        input.dispatchEvent(new Event('input', { bubbles: true }));
+        fixture.detectChanges();
+        expect(component.activeLapColumnMenuGroup!.additionalSearchMatchCount).toBe(0);
+        expect(document.querySelectorAll('.lap-column-menu-empty')).toHaveLength(1);
+        expect(document.querySelector('.lap-column-menu-empty')?.textContent?.trim()).toBe('No matching metrics.');
+        input.value = '  ';
+        input.dispatchEvent(new Event('input', { bubbles: true }));
+        fixture.detectChanges();
+        expect(component.activeLapColumnMenuGroup!.additionalSearchMatchCount).toBeNull();
+        expect(document.querySelector('.lap-column-menu-empty')).toBeNull();
         expect(haptics.selection).toHaveBeenCalledTimes(4);
         expect(haptics.success).toHaveBeenCalledTimes(1);
+    });
+
+    it('leaves search navigation keys to the input while Escape closes the picker', async () => {
+        component.canCustomize = true;
+        component.selectedActivities = [{ ...createActivity([createRenderableLap(LapTypes.Manual)]), type: 'Swimming' } as ActivityInterface];
+        component.ngOnChanges();
+        fixture.detectChanges();
+        const trigger = fixture.nativeElement.querySelector<HTMLButtonElement>('button[aria-label="Choose lap columns"]')!;
+        trigger.click();
+        await fixture.whenStable();
+        fixture.detectChanges();
+        const input = document.querySelector<HTMLInputElement>('input[aria-label="Search swimming lap metrics"]')!;
+        for (const [key, keyCode] of [['Home', 36], ['End', 35], ['ArrowLeft', 37], ['ArrowRight', 39], ['Tab', 9]] as const) {
+            const event = new KeyboardEvent('keydown', { key, keyCode, bubbles: true, cancelable: true });
+            input.dispatchEvent(event);
+            fixture.detectChanges();
+            expect(event.defaultPrevented, key).toBe(false);
+            expect(document.querySelector('.lap-column-menu-content'), key).toBeTruthy();
+        }
+        expect(haptics.selection).toHaveBeenCalledTimes(1);
+        input.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', keyCode: 27, bubbles: true }));
+        await fixture.whenStable();
+        fixture.detectChanges();
+        expect(document.querySelector('.lap-column-menu-content')).toBeNull();
+        expect(trigger.getAttribute('aria-expanded')).toBe('false');
+        expect(haptics.selection).toHaveBeenCalledTimes(1);
+    });
+
+    it('keeps named sport choices and per-sport search state inside the open column menu', async () => {
+        component.canCustomize = true;
+        component.selectedActivities = [
+            { ...createActivity([createRenderableLap(LapTypes.Manual)]), type: 'Swimming', getID: () => 'swim' } as ActivityInterface,
+            { ...createActivity([createRenderableLap(LapTypes.Manual)]), type: 'Cycling', getID: () => 'bike' } as ActivityInterface,
+        ];
+        component.ngOnChanges();
+        fixture.detectChanges();
+        const swimming = component.activeLapColumnMenuGroup!;
+        component.onLapColumnMetricSearchInput(swimming, { target: { value: 'average power' } } as unknown as Event);
+        component.toggleLapAdditionalMetrics(swimming);
+        haptics.selection.mockClear();
+        fixture.nativeElement.querySelector('button[aria-label="Choose lap columns"]').click();
+        await fixture.whenStable();
+        fixture.detectChanges();
+        const select = document.querySelector<HTMLElement>('mat-select[aria-label="Lap sport family"]')!;
+        select.querySelector<HTMLElement>('.mat-mdc-select-trigger')!.click();
+        await fixture.whenStable();
+        fixture.detectChanges();
+        const choices = Array.from(document.querySelectorAll<HTMLElement>('mat-option'));
+        expect(choices.map(option => option.textContent?.trim())).toEqual(['Swimming', 'Cycling']);
+        expect(haptics.selection).toHaveBeenCalledTimes(2);
+        choices.find(option => option.textContent?.trim() === 'Cycling')!.click();
+        await fixture.whenStable();
+        fixture.detectChanges();
+        expect(component.activeLapColumnMenuGroup!.family).toBe('cycling');
+        expect(document.querySelector('.lap-column-menu-content')).toBeTruthy();
+        expect(document.querySelector('input[aria-label="Search cycling lap metrics"]')).toBeTruthy();
+        expect(haptics.selection).toHaveBeenCalledTimes(3);
+        select.querySelector<HTMLElement>('.mat-mdc-select-trigger')!.click();
+        await fixture.whenStable();
+        fixture.detectChanges();
+        Array.from(document.querySelectorAll<HTMLElement>('mat-option'))
+            .find(option => option.textContent?.trim() === 'Swimming')!.click();
+        await fixture.whenStable();
+        fixture.detectChanges();
+        expect(component.activeLapColumnMenuGroup).toBe(swimming);
+        expect(swimming.searchTerm).toBe('average power');
+        expect(swimming.showAdditionalMetrics).toBe(true);
+        expect(swimming.additionalSearchMatchCount).toBe(2);
+        expect(document.querySelector<HTMLInputElement>('input[aria-label="Search swimming lap metrics"]')!.value).toBe('average power');
+        expect(haptics.selection).toHaveBeenCalledTimes(5);
+        expect(haptics.success).not.toHaveBeenCalled();
+        expect(updateLapTableColumns).not.toHaveBeenCalled();
     });
 
     it('shows stroke in swimming defaults and preserves per-lap metadata across filtered lap types', () => {
@@ -451,6 +543,7 @@ describe('EventCardLapsComponent', () => {
         component.ngOnChanges();
         fixture.detectChanges();
         const group = component.activeLapColumnMenuGroup!;
+        component.onLapColumnSportSelectOpened(false);
         component.onLapColumnMenuSportFamilyChange('running');
         component.onLapColumnMetricSearchInput(group, { target: { value: 'stroke' } } as unknown as Event);
         expect(haptics.selection).not.toHaveBeenCalled();
@@ -1227,6 +1320,9 @@ describe('EventCardLapsComponent', () => {
         expect(component.lapTableGroups[0]?.tables[0]?.selectedCount).toBe(0);
     });
 
+});
+
+describe('EventCardLapsComponent source contracts', () => {
     it('should keep the metric search field within the lap column menu', () => {
         const styles = readFileSync(
             resolve(process.cwd(), 'src/app/components/event/laps/event.card.laps.component.css'),
@@ -1262,9 +1358,9 @@ describe('EventCardLapsComponent', () => {
         expect(template).toContain('lapColumnsMenu');
         expect(template).toContain('xPosition="before"');
         expect(template).toContain('qs-menu-panel-form qs-config-menu lap-column-menu-panel');
-        expect(template).toContain('mat-button-toggle-group');
+        expect(template).toContain('mat-select');
         expect(template).toContain('activeLapColumnMenuGroup');
-        expect(template).toContain('Choose columns for {{ group.label.toLowerCase() }} laps');
+        expect(template).toContain('{{ group.label }} lap columns · saved units');
         expect(template).toContain('Search metrics');
         expect(template).toContain('group.filteredMetricGroups');
         expect(template).toContain('group.selectedUnavailableMetricCount');

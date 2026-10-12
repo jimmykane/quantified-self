@@ -1312,6 +1312,9 @@ describe('help.content', () => {
     expect(gettingStartedSection?.content).toContain('separate column list for each of those sport families');
     expect(gettingStartedSection?.content).toContain('Swimming choices focus on duration, distance, swim pace');
     expect(gettingStartedSection?.content).toContain('**Show other metrics**');
+    expect(gettingStartedSection?.content).toContain('**Lap sport** selector when more than one sport is present');
+    expect(gettingStartedSection?.content).toContain('stay above the scrolling results');
+    expect(gettingStartedSection?.content).toContain('the picker shows their match count');
     expect(gettingStartedSection?.content).toContain('metrics recorded in the current laps, even before you select them');
     expect(gettingStartedSection?.content).toContain('search, remove or restore older choices');
     expect(gettingStartedSection?.content).toContain('Existing saved selections and their order stay unchanged');

@@ -60,7 +60,6 @@ interface LapTableRow extends Record<string, string | number | boolean | LapInte
 interface LapColumnMenuGroup {
   family: AppEventLapSportFamily;
   label: string;
-  icon: string;
   selectedMetricTypes: string[];
   metricAvailability: Record<string, LapMetricAvailability>;
   selectedUnavailableMetricCount: number;
@@ -71,6 +70,7 @@ interface LapColumnMenuGroup {
   showAdditionalMetrics: boolean;
   selectedAdditionalMetricCount: number;
   recordedAdditionalMetricCount: number;
+  additionalSearchMatchCount: number | null;
   searchTerm: string;
 }
 
@@ -481,6 +481,12 @@ export class EventCardLapsComponent extends DataTableAbstractDirective implement
     this.hapticsService.selection();
   }
 
+  public onLapColumnSportSelectOpened(opened: boolean): void {
+    if (opened) {
+      this.hapticsService.selection();
+    }
+  }
+
   public onLapColumnMenuSportFamilyChange(family: string): void {
     const nextGroup = this.lapColumnMenuGroups.find((group) => group.family === family);
     if (!nextGroup || nextGroup === this.activeLapColumnMenuGroup) {
@@ -537,7 +543,6 @@ export class EventCardLapsComponent extends DataTableAbstractDirective implement
       const recordedAdditionalMetricCount = additionalMetricTypes.filter(type => metricAvailability[type]?.availableTableCount > 0).length;
       if (existingGroup) {
         existingGroup.label = presentation.label;
-        existingGroup.icon = presentation.icon;
         existingGroup.selectedMetricTypes = selectedMetricTypes;
         existingGroup.metricAvailability = metricAvailability;
         existingGroup.selectedUnavailableMetricCount = selectedUnavailableMetricCount;
@@ -546,6 +551,8 @@ export class EventCardLapsComponent extends DataTableAbstractDirective implement
         existingGroup.selectedAdditionalMetricCount = selectedAdditionalMetricCount;
         existingGroup.recordedAdditionalMetricCount = recordedAdditionalMetricCount;
         existingGroup.filteredAdditionalMetricGroups = filterLapMetricGroups(additionalMetricGroups, existingGroup.searchTerm);
+        existingGroup.additionalSearchMatchCount = existingGroup.searchTerm.trim()
+          ? existingGroup.filteredAdditionalMetricGroups.reduce((count, group) => count + group.metrics.length, 0) : null;
         existingGroup.filteredMetricGroups = filterLapMetricGroups(
           metricGroups,
           existingGroup.searchTerm,
@@ -556,7 +563,6 @@ export class EventCardLapsComponent extends DataTableAbstractDirective implement
       return {
         family,
         label: presentation.label,
-        icon: presentation.icon,
         selectedMetricTypes,
         metricAvailability,
         selectedUnavailableMetricCount,
@@ -567,6 +573,7 @@ export class EventCardLapsComponent extends DataTableAbstractDirective implement
         showAdditionalMetrics: false,
         selectedAdditionalMetricCount,
         recordedAdditionalMetricCount,
+        additionalSearchMatchCount: null,
         searchTerm: '',
       };
     });
@@ -659,6 +666,8 @@ export class EventCardLapsComponent extends DataTableAbstractDirective implement
     group.searchTerm = searchTerm;
     group.filteredMetricGroups = filterLapMetricGroups(group.metricGroups, searchTerm);
     group.filteredAdditionalMetricGroups = filterLapMetricGroups(group.additionalMetricGroups, searchTerm);
+    group.additionalSearchMatchCount = searchTerm.trim()
+      ? group.filteredAdditionalMetricGroups.reduce((count, group) => count + group.metrics.length, 0) : null;
     this.changeDetectorRef.markForCheck();
   }
 
