@@ -249,3 +249,21 @@
     display: none;
   }
 }
+
+.lap-column-additional-controls {
+  margin-block: 8px;
+}
+
+.lap-column-dialog-content .lap-column-metric-option {
+  height: auto;
+  min-height: 64px;
+  padding-block: 8px;
+}
+
+.lap-column-dialog-content .lap-column-metric-option .lap-column-metric-title,
+.lap-column-dialog-content .lap-column-metric-option .lap-column-metric-status {
+  white-space: normal;
+  overflow-wrap: anywhere;
+  overflow: visible;
+  text-overflow: clip;
+}

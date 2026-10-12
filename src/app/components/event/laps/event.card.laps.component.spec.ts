@@ -14,6 +14,8 @@ import {
     DataActiveLengths,
     DataDuration,
     DataHeartRateMax,
+    DataPowerAvg,
+    DataJumpHangTimeMax,
     DataHeartRateAvg,
     DataPaceAvg,
     DataSpeedAvg,
@@ -322,8 +324,86 @@ describe('EventCardLapsComponent', () => {
         expect(group.selectedMetricTypes).toEqual([DataHeartRateMax.type, DataDuration.type, DataSpeedMin.type]);
     });
 
+    it('discovers unselected unusual swim metrics from laps and reports their coverage across tables', () => {
+        const recordedLap = {
+            ...createRenderableLap(LapTypes.Manual),
+            getStat: (type: string) => type === DataPowerAvg.type ? new DataPowerAvg(0)
+                : type === DataJumpHangTimeMax.type ? new DataJumpHangTimeMax(Number.NaN) : undefined,
+        } as LapInterface;
+        const swimming = { ...createActivity([recordedLap]), type: 'Swimming' } as ActivityInterface;
+        const openWater = {
+            ...createActivity([createRenderableLap(LapTypes.Manual)]),
+            type: 'Open Water Swimming', getID: () => 'open-water',
+            getStat: () => new DataJumpHangTimeMax(2),
+        } as ActivityInterface;
+        component.canCustomize = true;
+        component.selectedActivities = [swimming, openWater];
+        component.ngOnChanges();
+        const group = component.activeLapColumnMenuGroup!;
+        expect(group.metricGroups.flatMap(item => item.metrics.map(metric => metric.type))).not.toContain(DataPowerAvg.type);
+        expect(group.selectedMetricTypes).not.toContain(DataPowerAvg.type);
+        expect(group.recordedAdditionalMetricCount).toBe(1);
+        expect(group.metricAvailability[DataPowerAvg.type]).toEqual({
+            availableTableCount: 1, tableCount: 2, label: 'Recorded in 1 of 2 lap tables',
+        });
+        expect(group.metricAvailability[DataJumpHangTimeMax.type].availableTableCount).toBe(0);
+        expect(haptics.selection).not.toHaveBeenCalled();
+    });
+
+    it('preserves legacy additional selections and order through focused search, removal, restoration and failed saves', async () => {
+        const saved = [DataJumpHangTimeMax.type, DataDuration.type, DataPowerAvg.type];
+        component.canCustomize = true;
+        component.selectedActivities = [{ ...createActivity([createRenderableLap(LapTypes.Manual)]), type: 'Swimming' } as ActivityInterface];
+        eventDetailsSettings.set(normalizeEventDetailsSettings({ lapTableColumnsBySportFamily: { swimming: saved, cycling: [DataSpeedAvg.type] } }));
+        fixture.detectChanges();
+        component.ngOnChanges();
+        const group = component.activeLapColumnMenuGroup!;
+        expect(group.selectedMetricTypes).toEqual(saved);
+        expect(group.selectedAdditionalMetricCount).toBe(2);
+        expect(group.selectedUnavailableMetricCount).toBe(2);
+        component.onLapColumnMetricSearchInput(group, { target: { value: 'average power' } } as unknown as Event);
+        expect(group.filteredMetricGroups).toEqual([]);
+        expect(group.filteredAdditionalMetricGroups.flatMap(item => item.metrics.map(metric => metric.type))).not.toContain(DataPowerAvg.type);
+        component.toggleLapAdditionalMetrics(group);
+        await component.onLapColumnSelectionChange('swimming', createLapColumnSelectionChange([DataHeartRateMax.type]));
+        expect(updateLapTableColumns).toHaveBeenLastCalledWith('swimming', [...saved, DataHeartRateMax.type]);
+        expect(component.activeLapColumnMenuGroup).toBe(group);
+        expect(group.showAdditionalMetrics).toBe(true);
+        expect(group.searchTerm).toBe('average power');
+        expect(component.getColumnsToDisplay('Cycling')).toEqual(['#', DataSpeedAvg.type]);
+        updateLapTableColumns.mockRejectedValueOnce(new Error('save failed'));
+        await component.onLapColumnSelectionChange('swimming', createLapColumnSelectionChange([DataPowerAvg.type], false));
+        expect(group.selectedMetricTypes).toEqual([...saved, DataHeartRateMax.type]);
+        expect(group.showAdditionalMetrics).toBe(true);
+        expect(haptics.error).toHaveBeenCalledTimes(1);
+        await component.onLapColumnSelectionChange('swimming', createLapColumnSelectionChange([DataPowerAvg.type], false));
+        expect(group.selectedAdditionalMetricCount).toBe(1);
+        expect(group.filteredAdditionalMetricGroups.flatMap(item => item.metrics.map(metric => metric.type))).toContain(DataPowerAvg.type);
+        await component.onLapColumnSelectionChange('swimming', createLapColumnSelectionChange([DataPowerAvg.type]));
+        expect(group.selectedMetricTypes).toEqual([DataJumpHangTimeMax.type, DataDuration.type, DataHeartRateMax.type, DataPowerAvg.type]);
+    });
+
     it('should create', () => {
         expect(component).toBeTruthy();
+    });
+
+    it('discovers unselected swim metrics inside collapsed rest-block members', () => {
+        const activity = createRestActivity([10, 30], [100, 140]);
+        activity.getLaps()[1].addStat(new DataPowerAvg(0));
+        component.canCustomize = true;
+        component.selectedActivities = [activity];
+        eventDetailsSettings.set(normalizeEventDetailsSettings({ lapTableColumnsBySportFamily: { swimming: [DataDuration.type] } }));
+        fixture.detectChanges();
+        component.ngOnChanges();
+        const table = component.lapTableGroups[0].tables[0];
+        expect(table.dataSource.data.filter(row => !row.isLapAverage)).toHaveLength(1);
+        expect(table.dataSource.data.find(row => row.members)?.members).toHaveLength(2);
+        const group = component.activeLapColumnMenuGroup!;
+        expect(group.selectedMetricTypes).not.toContain(DataPowerAvg.type);
+        expect(group.recordedAdditionalMetricCount).toBe(1);
+        expect(group.metricAvailability[DataPowerAvg.type].availableTableCount).toBe(1);
+        expect(group.metricAvailability[DataHeartRateAvg.type].availableTableCount).toBe(1);
+        expect(updateLapTableColumns).not.toHaveBeenCalled();
     });
 
     it('renders a rest block with total time, weighted HR, original lap expansion and partial selection', () => {

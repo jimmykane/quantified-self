@@ -36,7 +36,9 @@ import {
   EVENT_LAP_STROKE_COLUMN,
   formatEventLapMetric,
   getAverageEventLapMetrics,
+  getAvailableEventLapMetricTypes,
   getEventLapMetricOptionGroups,
+  getEventLapAdditionalMetricOptionGroups,
   getEventLapColumnPickerOptions,
   getEventLapSportFamilyPresentation,
   getEventLapMetricStat,
@@ -73,7 +75,6 @@ interface LapTableRow extends Record<string, unknown> {
 interface LapColumnMenuGroup {
   family: AppEventLapSportFamily;
   label: string;
-  icon: string;
   selectedMetricTypes: string[];
   selectedMetrics: EventLapMetricOption[];
   metricAvailability: Record<string, LapMetricAvailability>;
@@ -81,6 +82,13 @@ interface LapColumnMenuGroup {
   metricGroups: EventLapMetricOptionGroup[];
   availableMetricGroups: EventLapMetricOptionGroup[];
   filteredMetricGroups: EventLapMetricOptionGroup[];
+  additionalMetricGroups: EventLapMetricOptionGroup[];
+  availableAdditionalMetricGroups: EventLapMetricOptionGroup[];
+  filteredAdditionalMetricGroups: EventLapMetricOptionGroup[];
+  showAdditionalMetrics: boolean;
+  selectedAdditionalMetricCount: number;
+  recordedAdditionalMetricCount: number;
+  additionalSearchMatchCount: number | null;
   searchTerm: string;
 }
 
@@ -214,7 +222,8 @@ export class EventCardLapsComponent extends DataTableAbstractDirective implement
       ariaLabel: 'Choose lap columns',
       width: '520px',
       maxWidth: 'calc(100vw - 24px)',
-      autoFocus: 'first-header',
+      maxHeight: 'calc(100dvh - 24px)',
+      autoFocus: 'first-heading',
       restoreFocus: true,
     });
     this.lapColumnsDialogRef = dialogRef;
@@ -648,6 +657,12 @@ export class EventCardLapsComponent extends DataTableAbstractDirective implement
     this.hapticsService.selection();
   }
 
+  public onLapColumnSportSelectOpened(opened: boolean): void {
+    if (opened) {
+      this.hapticsService.selection();
+    }
+  }
+
   public onLapColumnMenuSportFamilyChange(family: string): void {
     const nextGroup = this.lapColumnMenuGroups.find((group) => group.family === family);
     if (!nextGroup || nextGroup === this.activeLapColumnMenuGroup) {
@@ -655,6 +670,15 @@ export class EventCardLapsComponent extends DataTableAbstractDirective implement
     }
     this.activeLapColumnMenuGroup = nextGroup;
     this.lapColumnAnnouncement.set('');
+    this.hapticsService.selection();
+    this.changeDetectorRef.markForCheck();
+  }
+
+  public toggleLapAdditionalMetrics(group: LapColumnMenuGroup): void {
+    if (group.additionalMetricGroups.length === 0) {
+      return;
+    }
+    group.showAdditionalMetrics = !group.showAdditionalMetrics;
     this.hapticsService.selection();
     this.changeDetectorRef.markForCheck();
   }
@@ -676,32 +700,44 @@ export class EventCardLapsComponent extends DataTableAbstractDirective implement
         ...group, metrics: group.metrics.map(metric => metric.type === EVENT_LAP_SWOLF_COLUMN
           ? { ...metric, label: this.swolfColumnLabel } : metric),
       }));
+      const additionalMetricGroups = getEventLapAdditionalMetricOptionGroups(family);
       const presentation = getEventLapSportFamilyPresentation(family);
       const existingGroup = existingGroupsByFamily.get(family);
       const selectedMetricTypes = getSelectedEventLapMetricTypes(
         this.eventDetailsSettings,
         family,
       );
-      const picker = getEventLapColumnPickerOptions(metricGroups, selectedMetricTypes);
+      const picker = getEventLapColumnPickerOptions([...metricGroups, ...additionalMetricGroups], selectedMetricTypes);
+      const availableMetricGroups = getEventLapColumnPickerOptions(metricGroups, selectedMetricTypes).availableMetricGroups;
+      const availableAdditionalMetricGroups = getEventLapColumnPickerOptions(additionalMetricGroups, selectedMetricTypes).availableMetricGroups;
       const metricAvailability = this.getLapMetricAvailability(
         family,
-        metricGroups,
+        [...metricGroups, ...additionalMetricGroups],
         new Set(selectedMetricTypes),
       );
       const selectedUnavailableMetricCount = selectedMetricTypes.filter((metricType) => (
         metricAvailability[metricType]?.availableTableCount === 0
       )).length;
+      const additionalMetricTypes = additionalMetricGroups.flatMap(group => group.metrics.map(metric => metric.type));
+      const selectedAdditionalMetricCount = additionalMetricTypes.filter(type => selectedMetricTypes.includes(type)).length;
+      const recordedAdditionalMetricCount = additionalMetricTypes.filter(type => metricAvailability[type]?.availableTableCount > 0).length;
       if (existingGroup) {
         existingGroup.label = presentation.label;
-        existingGroup.icon = presentation.icon;
         existingGroup.selectedMetricTypes = selectedMetricTypes;
         existingGroup.selectedMetrics = picker.selectedMetrics;
         existingGroup.metricAvailability = metricAvailability;
         existingGroup.selectedUnavailableMetricCount = selectedUnavailableMetricCount;
         existingGroup.metricGroups = metricGroups;
-        existingGroup.availableMetricGroups = picker.availableMetricGroups;
+        existingGroup.additionalMetricGroups = additionalMetricGroups;
+        existingGroup.selectedAdditionalMetricCount = selectedAdditionalMetricCount;
+        existingGroup.recordedAdditionalMetricCount = recordedAdditionalMetricCount;
+        existingGroup.availableAdditionalMetricGroups = availableAdditionalMetricGroups;
+        existingGroup.filteredAdditionalMetricGroups = filterLapMetricGroups(availableAdditionalMetricGroups, existingGroup.searchTerm);
+        existingGroup.additionalSearchMatchCount = existingGroup.searchTerm.trim()
+          ? existingGroup.filteredAdditionalMetricGroups.reduce((count, group) => count + group.metrics.length, 0) : null;
+        existingGroup.availableMetricGroups = availableMetricGroups;
         existingGroup.filteredMetricGroups = filterLapMetricGroups(
-          picker.availableMetricGroups,
+          availableMetricGroups,
           existingGroup.searchTerm,
         );
         return existingGroup;
@@ -710,14 +746,20 @@ export class EventCardLapsComponent extends DataTableAbstractDirective implement
       return {
         family,
         label: presentation.label,
-        icon: presentation.icon,
         selectedMetricTypes,
         selectedMetrics: picker.selectedMetrics,
         metricAvailability,
         selectedUnavailableMetricCount,
         metricGroups,
-        availableMetricGroups: picker.availableMetricGroups,
-        filteredMetricGroups: picker.availableMetricGroups,
+        additionalMetricGroups,
+        availableAdditionalMetricGroups,
+        filteredAdditionalMetricGroups: availableAdditionalMetricGroups,
+        showAdditionalMetrics: false,
+        selectedAdditionalMetricCount,
+        recordedAdditionalMetricCount,
+        additionalSearchMatchCount: null,
+        availableMetricGroups,
+        filteredMetricGroups: availableMetricGroups,
         searchTerm: '',
       };
     });
@@ -735,13 +777,23 @@ export class EventCardLapsComponent extends DataTableAbstractDirective implement
       .flatMap((lapTableGroup) => lapTableGroup.tables)
       .filter((table) => resolveEventLapSportFamily(table.activity.type) === family);
     const tableCount = tables.length;
+    const metricTypes = metricGroups.flatMap(group => group.metrics.map(metric => metric.type));
+    const availableMetricTypesByTable = tables.map(table => family === 'swimming' ? getAvailableEventLapMetricTypes(
+      table.activity,
+      this.getSelectableRows(table.dataSource.data).flatMap(row => row.lap ? [row.lap] : []),
+      metricTypes,
+      this.unitSettings,
+    ) : new Set(table.columns));
 
     return Object.fromEntries(metricGroups
       .flatMap((metricGroup) => metricGroup.metrics)
       .map(({ type }) => {
-        const availableTableCount = tables.filter((table) => table.columns.includes(type)).length;
+        const availableTableCount = availableMetricTypesByTable.filter(types => types.has(type)).length;
         const label = !selectedMetricTypes.has(type)
-          ? null
+          ? family === 'swimming' && availableTableCount > 0
+            ? availableTableCount === tableCount ? 'Recorded in current laps'
+              : `Recorded in ${availableTableCount} of ${tableCount} lap tables`
+            : null
           : availableTableCount === 0
           ? 'No data in current laps — hidden from the table'
           : availableTableCount < tableCount
@@ -803,6 +855,9 @@ export class EventCardLapsComponent extends DataTableAbstractDirective implement
 
   private setLapColumnMetricSearchTerm(group: LapColumnMenuGroup, searchTerm: string): void {
     group.searchTerm = searchTerm;
+    group.filteredAdditionalMetricGroups = filterLapMetricGroups(group.availableAdditionalMetricGroups, searchTerm);
+    group.additionalSearchMatchCount = searchTerm.trim()
+      ? group.filteredAdditionalMetricGroups.reduce((count, group) => count + group.metrics.length, 0) : null;
     group.filteredMetricGroups = filterLapMetricGroups(group.availableMetricGroups, searchTerm);
     this.changeDetectorRef.markForCheck();
   }

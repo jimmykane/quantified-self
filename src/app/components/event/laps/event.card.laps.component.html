@@ -16,6 +16,7 @@
     <mat-form-field appearance="outline" class="lap-column-family-field" subscriptSizing="dynamic">
       <mat-label>Lap sport family</mat-label>
       <mat-select [value]="activeLapColumnMenuGroup?.family" aria-label="Lap sport family"
+        (openedChange)="onLapColumnSportSelectOpened($event)"
         (selectionChange)="onLapColumnMenuSportFamilyChange($event.value)">
         @for (familyGroup of lapColumnMenuGroups; track familyGroup.family) {
         <mat-option [value]="familyGroup.family">{{ familyGroup.label }}</mat-option>
@@ -72,7 +73,7 @@
     <mat-form-field appearance="outline" class="lap-column-search-field" subscriptSizing="dynamic">
       <mat-label>Search metrics</mat-label>
       <input matInput data-lap-column-search [value]="group.searchTerm" (input)="onLapColumnMetricSearchInput(group, $event)"
-        placeholder="Speed, heart rate, power..." [attr.aria-label]="'Search ' + group.label.toLowerCase() + ' lap metrics'"
+        [placeholder]="group.family === 'swimming' ? 'Swim pace, stroke, SWOLF...' : 'Speed, heart rate, power...'" [attr.aria-label]="'Search ' + group.label.toLowerCase() + ' lap metrics'"
         autocomplete="off">
       @if (group.searchTerm) {
       <button mat-icon-button matSuffix type="button" (click)="clearLapColumnMetricSearch(group)" aria-label="Clear metric search">
@@ -82,20 +83,60 @@
       <mat-icon matSuffix>search</mat-icon>
       }
     </mat-form-field>
+    @if (group.additionalMetricGroups.length > 0) {
+    <div class="lap-column-additional-controls">
+      <button mat-button type="button" (click)="toggleLapAdditionalMetrics(group)"
+        [attr.aria-expanded]="group.showAdditionalMetrics" [attr.aria-controls]="'lap-other-metrics-' + group.family">
+        {{ group.showAdditionalMetrics ? 'Hide other metrics' : 'Show other metrics' }}
+      </button>
+      <p class="lap-column-menu-copy">{{ group.selectedAdditionalMetricCount }} selected · {{ group.recordedAdditionalMetricCount }} recorded in current laps</p>
+      @if (!group.showAdditionalMetrics && group.additionalSearchMatchCount && group.filteredMetricGroups.length > 0) {
+      <p class="lap-column-menu-copy" role="status">{{ group.additionalSearchMatchCount }} more {{ group.additionalSearchMatchCount === 1 ? 'match' : 'matches' }} under Show other metrics.</p>
+      }
+    </div>
+    }
     <mat-selection-list [multiple]="true" [disabled]="savingLapColumnSportFamilies().has(group.family)"
       [aria-label]="group.label + ' available lap columns'" (selectionChange)="onLapColumnSelectionChange(group.family, $event)">
       @for (metricGroup of group.filteredMetricGroups; track metricGroup.id) {
       <div mat-subheader>{{ metricGroup.label }}</div>
       @for (metric of metricGroup.metrics; track metric.type) {
-      <mat-list-option [value]="metric.type" [attr.aria-label]="metric.type === swolfColumn ? metric.label : metric.type">
+      <mat-list-option class="lap-column-metric-option" [lines]="group.metricAvailability[metric.type]?.label ? 3 : 2" [value]="metric.type" [attr.aria-label]="metric.type === swolfColumn ? metric.label : metric.type">
         <app-data-type-icon matListItemIcon [dataType]="metric.type" size="18px"></app-data-type-icon>
-        <span matListItemTitle>{{ metric.label }}</span>
+        <span matListItemTitle class="lap-column-metric-title">{{ metric.label }}</span>
+        @if (group.metricAvailability[metric.type]?.label; as availabilityLabel) {
+        <span matListItemLine class="lap-column-metric-status">{{ availabilityLabel }}</span>
+        }
       </mat-list-option>
       }
       } @empty {
-      <p class="lap-column-menu-empty" role="status">No matching metrics.</p>
+      @if (!group.showAdditionalMetrics && group.additionalSearchMatchCount) {
+      <p class="lap-column-menu-empty" role="status">{{ group.additionalSearchMatchCount }} {{ group.additionalSearchMatchCount === 1 ? 'match is' : 'matches are' }} available under Show other metrics.</p>
+      } @else if (!group.showAdditionalMetrics || group.filteredAdditionalMetricGroups.length === 0) {
+      <p class="lap-column-menu-empty" role="status">{{ group.searchTerm.trim() ? 'No matching metrics.' : 'All these columns are selected.' }}</p>
+      }
       }
     </mat-selection-list>
+    @if (group.additionalMetricGroups.length > 0) {
+    <div [id]="'lap-other-metrics-' + group.family" [hidden]="!group.showAdditionalMetrics">
+      @if (group.showAdditionalMetrics) {
+    <mat-selection-list [multiple]="true" [disabled]="savingLapColumnSportFamilies().has(group.family)"
+      [aria-label]="group.label + ' other available lap columns'" (selectionChange)="onLapColumnSelectionChange(group.family, $event)">
+      @for (metricGroup of group.filteredAdditionalMetricGroups; track metricGroup.id) {
+      <div mat-subheader>{{ metricGroup.label }}</div>
+      @for (metric of metricGroup.metrics; track metric.type) {
+      <mat-list-option class="lap-column-metric-option" [lines]="group.metricAvailability[metric.type]?.label ? 3 : 2" [value]="metric.type" [attr.aria-label]="metric.type === swolfColumn ? metric.label : metric.type">
+        <app-data-type-icon matListItemIcon [dataType]="metric.type" size="18px"></app-data-type-icon>
+        <span matListItemTitle class="lap-column-metric-title">{{ metric.label }}</span>
+        @if (group.metricAvailability[metric.type]?.label; as availabilityLabel) {
+        <span matListItemLine class="lap-column-metric-status">{{ availabilityLabel }}</span>
+        }
+      </mat-list-option>
+      }
+      }
+    </mat-selection-list>
+      }
+    </div>
+    }
     }
     </div>
   </mat-dialog-content>

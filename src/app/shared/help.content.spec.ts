@@ -1318,8 +1318,18 @@ describe('help.content', () => {
     expect(gettingStartedSection?.content).toContain('including Garmin **Session end** laps and Suunto final partial laps');
     expect(gettingStartedSection?.content).toContain('**Laps -> Columns**');
     expect(gettingStartedSection?.content).toContain('typed metric search');
+    expect(gettingStartedSection?.content).toContain('**Tab** and **Shift+Tab**');
+    expect(gettingStartedSection?.content).toContain('returns focus to its trigger');
     expect(gettingStartedSection?.content).toContain('Running, Cycling, Swimming, or Other activities');
     expect(gettingStartedSection?.content).toContain('separate column list for each of those sport families');
+    expect(gettingStartedSection?.content).toContain('Swimming choices focus on duration, distance, swim pace');
+    expect(gettingStartedSection?.content).toContain('**Show other metrics**');
+    expect(gettingStartedSection?.content).toContain('**Lap sport family** selector when more than one sport is present');
+    expect(gettingStartedSection?.content).toContain('stay visible while its contents scroll');
+    expect(gettingStartedSection?.content).toContain('the picker shows their match count');
+    expect(gettingStartedSection?.content).toContain('metrics recorded in the current laps, even before you select them');
+    expect(gettingStartedSection?.content).toContain('search or restore older choices');
+    expect(gettingStartedSection?.content).toContain('Existing saved selections and their order stay unchanged');
     expect(gettingStartedSection?.content).toContain('Running and trail-running laps use pace');
     expect(gettingStartedSection?.content).toContain('Each lap table includes a persistent **Avg** row directly below its headers');
     expect(gettingStartedSection?.content).toContain('Accumulated totals, such as duration, distance, elevation, energy, and work, are not averaged');

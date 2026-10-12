@@ -12,7 +12,7 @@ import { MatInputModule } from '@angular/material/input';
 import { MatListModule } from '@angular/material/list';
 import { MatTableModule } from '@angular/material/table';
 import { MatSnackBar } from '@angular/material/snack-bar';
-import { DataDuration, DataDistance, DataPaceAvg, DataSpeedMin, LapTypes, type ActivityInterface, type LapInterface } from '@sports-alliance/sports-lib';
+import { DataDuration, DataDistance, DataPaceAvg, DataSpeedMin, DataPowerAvg, DataJumpHangTimeMax, LapTypes, type ActivityInterface, type LapInterface } from '@sports-alliance/sports-lib';
 import { describe, expect, it, vi } from 'vitest';
 import { EventCardLapsComponent } from './event.card.laps.component';
 import { AppUserSettingsQueryService } from '../../../services/app.user-settings-query.service';
@@ -20,8 +20,8 @@ import { AppEventColorService } from '../../../services/color/app.event.color.se
 import { AppHapticsService } from '../../../services/app.haptics.service';
 import { normalizeEventDetailsSettings } from '../../../helpers/event-lap-table-columns.helper';
 
-async function setupPicker(order = [DataDuration.type, DataDistance.type, DataPaceAvg.type], multisport = false) {
-  const settings = signal(normalizeEventDetailsSettings({ lapTableColumnsBySportFamily: { running: order } }));
+async function setupPicker(order = [DataDuration.type, DataDistance.type, DataPaceAvg.type], multisport = false, family: 'running' | 'swimming' = 'running') {
+  const settings = signal(normalizeEventDetailsSettings({ lapTableColumnsBySportFamily: { [family]: order } }));
   const save = vi.fn().mockResolvedValue(undefined);
   const haptics = { selection: vi.fn(), success: vi.fn(), error: vi.fn() };
   await TestBed.configureTestingModule({
@@ -38,10 +38,11 @@ async function setupPicker(order = [DataDuration.type, DataDistance.type, DataPa
     schemas: [NO_ERRORS_SCHEMA],
   }).compileComponents();
   const fixture = TestBed.createComponent(EventCardLapsComponent);
+  const laps = [{ type: LapTypes.Manual, getDuration: () => new DataDuration(60),
+    getDistance: () => new DataDistance(250), getStat: (type: string) => family === 'swimming' && type === DataPowerAvg.type ? new DataPowerAvg(0) : undefined } as unknown as LapInterface];
   const activity = {
-    type: 'Running', getID: () => 'running',
-    getLaps: () => [{ type: LapTypes.Manual, getDuration: () => new DataDuration(60),
-      getDistance: () => new DataDistance(250), getStat: () => undefined } as unknown as LapInterface],
+    type: family === 'swimming' ? 'Swimming' : 'Running', getID: () => family,
+    getLaps: () => laps,
   } as ActivityInterface;
   fixture.componentRef.setInput('selectedActivities', multisport
     ? [activity, ...['Cycling', 'Swimming', 'Hiking'].map(type => ({ ...activity, type, getID: () => type } as ActivityInterface))]
@@ -76,12 +77,79 @@ describe('lap column picker Material interactions', () => {
     expect(picker.component.activeLapColumnMenuGroup?.family).toBe('other');
     expect(picker.dialog.textContent).toContain('Choose columns for other activities laps');
     expect(picker.save).not.toHaveBeenCalled();
-    expect(picker.haptics.selection).toHaveBeenCalledTimes(2);
+    expect(picker.haptics.selection).toHaveBeenCalledTimes(3);
+  });
+
+  it('keeps older swim columns selected and ordered while searching only unselected choices', async () => {
+    const saved = [DataJumpHangTimeMax.type, DataDuration.type, DataPowerAvg.type];
+    const picker = await setupPicker(saved, false, 'swimming');
+    const other = picker.dialog.querySelector<HTMLButtonElement>('button[aria-controls="lap-other-metrics-swimming"]')!;
+    const additional = picker.dialog.querySelector<HTMLElement>('#lap-other-metrics-swimming')!;
+    expect(picker.selected()).toEqual(saved);
+    expect(other.getAttribute('aria-expanded')).toBe('false');
+    expect(additional.hidden).toBe(true);
+    expect(additional.querySelectorAll('mat-list-option')).toHaveLength(0);
+    expect(picker.dialog.textContent).toContain('2 selected · 1 recorded in current laps');
+    expect(picker.save).not.toHaveBeenCalled();
+    const search = picker.dialog.querySelector<HTMLInputElement>('[data-lap-column-search]')!;
+    search.value = 'maximum jump hang time';
+    search.dispatchEvent(new Event('input', { bubbles: true }));
+    await picker.settle();
+    expect(picker.selected()).toEqual(saved);
+    expect(picker.component.activeLapColumnMenuGroup!.additionalSearchMatchCount).toBe(0);
+    expect(picker.dialog.textContent).toContain('No matching metrics.');
+    const remove = picker.dialog.querySelector<HTMLInputElement>(`[data-lap-column="${DataJumpHangTimeMax.type}"] input`)!;
+    remove.focus();
+    remove.click();
+    await picker.settle();
+    expect(picker.selected()).toEqual([DataDuration.type, DataPowerAvg.type]);
+    expect(picker.dialog.textContent).toContain('1 match is available under Show other metrics.');
+    expect(picker.dialog.textContent).not.toContain('No matching metrics.');
+    other.click();
+    await picker.settle();
+    expect(additional.hidden).toBe(false);
+    const option = additional.querySelector<HTMLElement>('mat-list-option')!;
+    expect(option.getAttribute('aria-label')).toBe(DataJumpHangTimeMax.type);
+    option.focus();
+    option.dispatchEvent(new KeyboardEvent('keydown', { key: ' ', code: 'Space', keyCode: 32, bubbles: true }));
+    await picker.settle();
+    expect(picker.save).toHaveBeenLastCalledWith('swimming', [DataDuration.type, DataPowerAvg.type, DataJumpHangTimeMax.type]);
+    expect(picker.selected()).toEqual([DataDuration.type, DataPowerAvg.type, DataJumpHangTimeMax.type]);
+    expect(additional.querySelectorAll('mat-list-option')).toHaveLength(0);
+    expect(document.activeElement?.closest('[data-lap-column]')?.getAttribute('data-lap-column')).toBe(DataJumpHangTimeMax.type);
+  });
+
+  it('discovers recorded zero-valued swim metrics before selection and restores the searched option on failed save', async () => {
+    const picker = await setupPicker([DataDuration.type], false, 'swimming');
+    const search = picker.dialog.querySelector<HTMLInputElement>('[data-lap-column-search]')!;
+    const other = picker.dialog.querySelector<HTMLButtonElement>('button[aria-controls="lap-other-metrics-swimming"]')!;
+    expect(picker.dialog.textContent).toContain('0 selected · 1 recorded in current laps');
+    search.value = 'average power';
+    search.dispatchEvent(new Event('input', { bubbles: true }));
+    await picker.settle();
+    expect(picker.component.activeLapColumnMenuGroup!.additionalSearchMatchCount).toBe(2);
+    expect(picker.dialog.textContent).toContain('2 matches are available under Show other metrics.');
+    other.click();
+    await picker.settle();
+    const option = picker.dialog.querySelector<HTMLElement>(`mat-list-option[aria-label="${DataPowerAvg.type}"]`)!;
+    expect(option.textContent).toContain('Recorded in current laps');
+    picker.save.mockRejectedValueOnce(new Error('save failed'));
+    option.focus();
+    option.dispatchEvent(new KeyboardEvent('keydown', { key: ' ', code: 'Space', keyCode: 32, bubbles: true }));
+    await picker.settle();
+    expect(picker.selected()).toEqual([DataDuration.type]);
+    expect(picker.dialog.querySelector(`mat-list-option[aria-label="${DataPowerAvg.type}"]`)).toBeTruthy();
+    expect(picker.component.activeLapColumnMenuGroup!.showAdditionalMetrics).toBe(true);
+    expect(search.value).toBe('average power');
+    expect(picker.haptics.error).toHaveBeenCalledTimes(1);
+    expect(picker.haptics.success).not.toHaveBeenCalled();
+    expect(picker.dialog.contains(document.activeElement)).toBe(true);
   });
 
   it('shows the exact saved selection first, including unavailable metrics, without writes on open', async () => {
     const picker = await setupPicker([DataPaceAvg.type, DataDuration.type, DataDistance.type]);
     expect(picker.dialog.getAttribute('aria-label')).toBe('Choose lap columns');
+    expect(document.activeElement).toBe(picker.dialog.querySelector('h2[mat-dialog-title]'));
     expect(picker.selected()).toEqual([DataPaceAvg.type, DataDuration.type, DataDistance.type]);
     expect(picker.dialog.textContent).toContain('No data in current laps');
     expect(picker.dialog.querySelector('button[aria-label="Move Average Pace up"]')?.hasAttribute('disabled')).toBe(true);
