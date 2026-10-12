@@ -89,16 +89,12 @@ describe('SideNavComponent', () => {
         expect(component).toBeTruthy();
     });
 
-    it('shows Tags to signed-in users and closes the nav with one selection haptic', () => {
+    it('keeps Tags hidden from the sidenav for guests and signed-in users', () => {
         fixture.detectChanges();
         expect(fixture.debugElement.queryAll(By.directive(RouterLink)).some(link => link.injector.get(RouterLink).urlTree?.toString() === '/tags')).toBe(false);
         mockUserService.user.mockReturnValue(new User('tags-owner'));
         fixture.detectChanges();
-        const tagLink = fixture.debugElement.queryAll(By.directive(RouterLink)).find(link => link.injector.get(RouterLink).urlTree?.toString() === '/tags');
-        expect(tagLink?.nativeElement.textContent).toContain('Tags');
-        tagLink?.triggerEventHandler('click', new MouseEvent('click'));
-        expect(mockHapticsService.selection).toHaveBeenCalledOnce();
-        expect(mockSideNavService.close).toHaveBeenCalledOnce();
+        expect(fixture.debugElement.queryAll(By.directive(RouterLink)).some(link => link.injector.get(RouterLink).urlTree?.toString() === '/tags')).toBe(false);
     });
 
     it('does not render a navigation section heading', () => {
@@ -299,8 +295,8 @@ describe('SideNavComponent', () => {
         expect(healthItem?.nativeElement.getAttribute('routerlink')).toBe('/health');
         expect(healthItem?.nativeElement.textContent).not.toContain('BETA');
         expect(healthItem?.nativeElement.querySelector('.pro-badge')).toBeNull();
-        expect(navigationItems.slice(0, 8).map(item => item.nativeElement.getAttribute('routerlink')))
-            .toEqual(['/dashboard', '/calendar', '/training', '/training/plans', '/health', '/tags', '/routes', '/mytracks']);
+        expect(navigationItems.slice(0, 7).map(item => item.nativeElement.getAttribute('routerlink')))
+            .toEqual(['/dashboard', '/calendar', '/training', '/training/plans', '/health', '/routes', '/mytracks']);
         healthItem!.triggerEventHandler('click', new MouseEvent('click'));
         expect(mockSideNavService.close).toHaveBeenCalledOnce();
         expect(mockHapticsService.selection).toHaveBeenCalledOnce();
@@ -444,7 +440,7 @@ describe('SideNavComponent', () => {
         expect(plansItem).toBeTruthy();
         expect(trainingItem).toBeTruthy();
         expect(routesItem).toBeTruthy();
-        expect(tagsItem).toBeTruthy();
+        expect(tagsItem).toBeUndefined();
         expect(myTracksItem).toBeTruthy();
         expect(assistantItem).toBeTruthy();
         expect(compareFilesItem).toBeTruthy();
@@ -455,7 +451,6 @@ describe('SideNavComponent', () => {
             navigationItems.indexOf(trainingItem!),
             navigationItems.indexOf(plansItem!),
             navigationItems.indexOf(healthItem!),
-            navigationItems.indexOf(tagsItem!),
             navigationItems.indexOf(routesItem!),
             navigationItems.indexOf(myTracksItem!),
             navigationItems.indexOf(compareFilesItem!),
@@ -470,7 +465,6 @@ describe('SideNavComponent', () => {
             dashboardIndex + 6,
             dashboardIndex + 7,
             dashboardIndex + 8,
-            dashboardIndex + 9,
         ]);
         expect(assistantItem?.nativeElement.textContent).toContain('Assistant');
         expect(assistantItem?.nativeElement.textContent).not.toContain('Going away');

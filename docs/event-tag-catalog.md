@@ -3,6 +3,7 @@
 ## Tags workspace
 
 The authenticated, client-rendered `/tags` route uses a searchable tag library beside the existing events table.
+Its sidenav entry is temporarily hidden; the route remains available by URL.
 `?tag=<label>` restores the selected tag without initial haptic feedback. The route uses the shared workspace shell,
 Material controls, and the global scrollbar skin. The selector stacks above the table on phones. Table metrics continue
 to use the signed-in user's unit settings through the existing Sports Lib display path.
