@@ -391,9 +391,10 @@ describe('MCP Function protocol compatibility', () => {
     expect(info).not.toHaveBeenCalled();
   });
 
-  it('completes repeated malformed Training previews as bounded tool errors', async () => {
+  it.each(['preview_training_changes', 'preview_planned_workout_v3_changes'])(
+    'completes repeated malformed %s calls as bounded tool errors', async toolName => {
     const malformed = modernRequest('tools/call', {
-      name: 'preview_training_changes',
+      name: toolName,
       arguments: { expectedScheduleRevision: 1, changes: [{ kind: 'invented-operation' }] },
     });
     for (let attempt = 0; attempt < 3; attempt += 1) {
@@ -425,8 +426,10 @@ describe('MCP Function protocol compatibility', () => {
       ]),
     });
     expect(JSON.stringify(blockedBody)).not.toContain('invented-operation');
+    expect(blockedText.message).toContain('Do not turn an edit into a create');
+    expect(blockedText.message).not.toContain('preview_create_planned_workout');
     expect(warn).toHaveBeenCalledWith('[MCP] Repeated invalid Training preview blocked', {
-      toolName: 'preview_training_changes',
+      toolName,
       validationIssues: expect.arrayContaining([
         expect.objectContaining({ path: ['changes', 0, 'kind'] }),
       ]),

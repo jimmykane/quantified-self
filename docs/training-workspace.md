@@ -2625,6 +2625,13 @@ for multi-workout edits such as plan HR retargeting, presents complete before/af
 to the model or substitutes a legacy writer when the tool is missing. Its six-call budget stays unchanged; use small
 reviews (normally up to three updates after discovery) with complete reads and truthful remaining-work disclosure.
 No plan action or new provider consent is included.
+Follow-up review covers adjust/retarget phrasing and bulk target removal/step reordering, distinguishing those fields
+from deleting/moving whole workouts. Numeric answers to an immediately preceding HR clarification keep the original
+full single/bulk preview; cancellations, new actions and unrelated context do not. This changes private routing, not
+mutation authority, values, call budgets, consent or app confirmation. The MCP malformed-call guard derives every
+preview name/schema from the same authoritative catalog, and its existing bounded error no longer steers edits toward
+new-workout creation. No new tool, scope, persisted field, provider action, registered-schema change or additional
+client refresh is introduced by these review fixes. Existing Help and bundled full-recipe/approval guidance remain valid.
 Ask for explicit HR ranges, which prescriptions they replace, and affected sessions/date range. Read complete current
 recipes and preserve IDs, order, repeats, warm-ups, recovery, notes, dates, association and other targets. Changing profile
 zones does not recalculate stored absolute targets or relative reference snapshots. Larger selections need separately
@@ -2635,12 +2642,16 @@ Release MCP/Assistant backend and refresh external catalogs separately; existing
 Local regression uses synthetic 18-run plans through external and first-party preview/apply, preserving early-Lap
 warm-ups and every non-HR field, leaving another workout/settings/completion unchanged, then updating one retained
 Suunto Guide through fixture HTTP without another create. This is not a live ChatGPT/Claude or watch test.
-Verification: 532 focused Functions schema/transport/Assistant/loop-guard tests; the complete 17-file MCP-data emulator
+Initial implementation verification: 532 focused Functions schema/transport/Assistant/loop-guard tests; the complete 17-file MCP-data emulator
 group passed 417 tests without skips. Help/hosting checks passed 106 tests, plugin tooling passed 30 tests, all seven
 bundled skills validated and fixture-ID plugin validation used an isolated profile. Functions and local frontend builds,
 70 endpoint secret bindings, diff checks and the digest-bound compatible MCP contract check passed. The existing
 developer-refresh advisory remains pending; no baseline promotion, real-profile install, push, deployment or customer
 data change was performed.
+Follow-up review verification: 596 focused Functions tests passed on an isolated rerun after a concurrent run reported
+a test-runner RPC timeout; 30 plugin tests and all seven bundled-skill validators passed. Functions build, focused lint,
+diff and contract checks passed with the candidate digest unchanged. These private routing/guard fixes require no new
+Rules or frontend access change and make no live-client, customer-data or provider-delivery verification claim.
 
 `WorkoutTimeEndingV1` and `WorkoutDistanceEndingV1` optionally carry `allowEarlyLap?: boolean`.
 True means the unchanged seconds/metres limit **or** an athlete Lap press. Absent and false keep the numeric ending;

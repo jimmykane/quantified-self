@@ -3069,7 +3069,7 @@ export const mcpApi = onRequest(MCP_API_RUNTIME_OPTIONS, async (request, respons
               type: 'text',
               text: JSON.stringify({
                 error: 'invalid_arguments',
-                message: 'This Training preview does not match the advertised schema. Do not retry it unchanged. Correct the listed fields and make one fresh preview. For one new workout, use preview_create_planned_workout.',
+                message: 'This Training preview does not match the advertised schema. Do not retry it unchanged. Correct the listed fields and make one fresh preview using the advertised schema for the requested action. Do not turn an edit into a create or omit recipe fields to fit an older tool. If the required capability is unavailable, stop and explain the catalog limitation.',
                 validationIssues: invalidTrainingPreview.validationIssues,
               }),
             }],

@@ -315,6 +315,10 @@ is six and further malformed calls enter a ten-minute invalid-call cooldown. Cor
 immediately. The counter contains no authored request content and expires, and only the first transition into a cooldown
 is logged. This guard prevents a client tool-selection failure from producing an unbounded validation loop; it never
 repairs, applies, or silently degrades input.
+Coverage derives from the same reviewed `TRAINING_PREVIEW_TOOLS` catalog and each advertised strict input schema,
+including full-recipe bulk, latest single/library, phase and replacement previews. No independent name list can omit
+an additive editor. Correct early-Lap recipes do not consume malformed-call attempts. Recovery copy preserves the
+requested action: it never suggests replacing an edit with a create or dropping fields to fit an older tool.
 
 The manually mirrored public recipe schema has an exhaustive compile-time coverage map for the version, node/ending
 kinds, step purposes, target modes and kind/mode pairs, relative-target references and speed presentation. Focused
@@ -587,6 +591,10 @@ success from one sample. The Assistant selects the full bulk schema for multi-wo
 and does not fall back to a lossy legacy writer if the capability is missing. Its existing app review contains complete
 before/after recipes. The six-call Assistant budget is unchanged: normally at most three fully read updates after
 discovery fit one turn; explain and separately review remaining batches rather than fabricate recipes from a sample.
+Internal routing recognizes adjust/retarget and recipe-field removal/reordering across workouts. A bounded numeric
+reply to the immediately preceding HR clarification retains its original full single/bulk editor, not a legacy writer;
+cancellation, a new explicit action or intervening unrelated context cannot revive that selection. This is only a
+tool-schema hint, never inferred HR data, provider consent or Apply approval. Tool schemas and grants are unchanged.
 Existing opt-ins reconcile eligible edits without a new Send; outside-window and past/completed
 protection still apply. An authored save is not provider acceptance or watch receipt.
 

@@ -354,7 +354,7 @@ function canBeTrainingDeletionReply(prompt: string): boolean {
     && !/\?|^\s*(?:please\s+)?(?:what|how|why|when|where|who|can|could|would|should|show|list|tell|check|review|read|explain|compare|analy[sz]e|recommend)\b/iu.test(prompt)
     && !/\b(?:cancel|stop|forget|never\s*mind)\b/iu.test(prompt)
     && !/\b(?:don't|don’t|do not|never)\s+(?:delete|remove)\b[^.!?;\n]{0,60}\b(?:plans?|workouts?|sessions?)\b(?!\s+copies\b)/iu.test(prompt)
-    && !/\b(?:create|add|build|make|draft|propose|suggest|schedule|edit|update|modify|change|move|copy|duplicate|shift|send|sync|archive|pause|activate|rename|restore|enable|disable|resume|retry|library|templates?)\b/iu.test(prompt)
+    && !/\b(?:create|add|build|make|draft|propose|suggest|schedule|edit|update|modify|change|adjust|retarget|apply|move|copy|duplicate|shift|send|sync|archive|pause|activate|rename|restore|enable|disable|resume|retry|library|templates?)\b/iu.test(prompt)
     && !removesWorkoutFromPlan(prompt)
     && !removesEarlyLapPermission(prompt);
 }
@@ -362,6 +362,18 @@ function canBeTrainingDeletionReply(prompt: string): boolean {
 export function selectAssistantTrainingPreviewTool(prompt: string,
   history: readonly Pick<AssistantMessage, 'role' | 'text'>[] = []): typeof TRAINING_PREVIEW_TOOLS[number] {
   if (assistantRecoveryDurationSeconds(prompt) !== null) return 'preview_planned_workout_v3_change';
+  // A numeric answer to a direct HR clarification retains only the requested
+  // recipe schema. It supplies no mutation, inferred target or Apply authority.
+  if (prompt.length <= 500 && /\b\d{2,3}\s*(?:[-–—]|to)\s*\d{2,3}\b/iu.test(prompt)
+    && !/[?]|\b(?:cancel|stop|never|don't|don’t|do not|what|how|why|show|read|compare|create|add|edit|update|modify|change|adjust|retarget|apply|delete|remove|move|copy|send|sync|activate|pause|archive|library)\b/iu.test(prompt)) {
+    const clarification = history[history.length - 1], request = history[history.length - 2];
+    if (clarification?.role === 'assistant' && request?.role === 'user'
+      && /\b(?:which|what|provide|give|specify)\b[^.!?\n]{0,100}\b(?:hr|heart[-\s]?rate|bpm|zones?|ranges?)\b/iu.test(clarification.text)
+      && /\b(?:hr|heart[-\s]?rate|zones?)\b/iu.test(request.text)) {
+      const previous = selectAssistantTrainingPreviewTool(request.text);
+      if (previous === 'preview_planned_workout_v3_changes' || previous === 'preview_planned_workout_v3_change') return previous;
+    }
+  }
   // A reply to the explicit cleanup question must retain the focused deletion
   // schema only through an uninterrupted clarification chain, not an older
   // unrelated request. This routing never supplies Apply approval.
@@ -388,7 +400,7 @@ export function selectAssistantTrainingPreviewTool(prompt: string,
     /\b(?:don't|don’t|do not|doesn't|doesn’t|does not|never|without)\s+(?:(?:also|any|other|existing)\s+){0,3}(?:edit|update|move|copy|duplicate|delete|remove|skip|archive|rename|change|modify)\b/gu,
     '',
   );
-  const editsRecipeFields = /\b(?:remove|delete|insert|add|reorder|move|swap|set|change)\s+(?:(?:the|all|my|this|that|a|an|first|second|last|heart[-\s]?rate|power|speed|pace|cadence|warm[-\s]?up|cool[-\s]?down|recovery|work|rest)\s+){0,4}(?:steps?|intervals?|targets?|repeats?|notes?)\b/iu.test(question);
+  const editsRecipeFields = /\b(?:remove|delete|insert|add|reorder|move|swap|set|change)\s+(?:(?:the|all|my|this|that|a|an|first|second|last|hr|heart[-\s]?rate|power|speed|pace|cadence|warm[-\s]?up|cool[-\s]?down|recovery|work|rest)\s+){0,4}(?:steps?|intervals?|targets?|repeats?|notes?)\b(?!\s+(?:planned\s+)?(?:workouts?|sessions?))/iu.test(question);
   if (requestsGarminReplacement(question)) {
     return 'preview_garmin_workout_replacement';
   }
@@ -419,7 +431,8 @@ export function selectAssistantTrainingPreviewTool(prompt: string,
   const authorsEarlyLap = /\b(?:early[-\s]*lap|allow[\s\S]{0,30}lap|lap[\s\S]{0,30}(?:early|button))\b/u.test(question);
   const authorsWorkout = editsRecipeFields || removesEarlyLapPermission(question)
     || (authorsEarlyLap && /\b(?:allow|enable|disable|turn|set)\b/u.test(question))
-    || /\b(create|add|schedule|make|build|draft|propose|suggest|edit|update|modify|change)\b/u.test(question);
+    || /\b(create|add|schedule|make|build|draft|propose|suggest|edit|update|modify|change|adjust|retarget)\b/u.test(question)
+    || (/\bapply\b/u.test(question) && /\b(?:hr|heart[-\s]?rate|zones?)\b/u.test(question));
   const deliveryOnly = /\b(send|sync|enable|stop|retry|approve)\b/u.test(question) && !authorsWorkout;
   const changesDeliverySettings = /\b(change|edit|update|modify)\s+(?:(?:the|my|existing)\s+)?(?:sync|delivery|provider)\b/u.test(question);
   if (deliveryOnly || changesDeliverySettings) return 'preview_training_changes';
@@ -430,8 +443,9 @@ export function selectAssistantTrainingPreviewTool(prompt: string,
     || /\b(?:every|each)\s+(?:(?:future|planned|quality|easy)\s+){0,3}(?:workout|run|ride|session)\b/u.test(question)
     || (/\b(?:plan|quality runs|wednesdays|workouts|sessions)\b/u.test(question)
       && /\b(?:hr|heart[-\s]?rate)\b/u.test(question) && /\b(?:zones?|targets?|ranges?)\b/u.test(question));
+  const changesWorkoutRecords = /\b(?:move|copy|duplicate|delete|skip|archive|rename|shift)\s+(?:(?:my|the|this|that|all|every|each|one|two|three|four|first|last|existing|old|planned|standalone|quality|easy|future|\d+)\s+){0,4}(?:workouts?|runs?|rides?|sessions?|plans?)\b/u.test(question);
   if (authorsWorkout && recipeBatch && !/\b(?:strength|gym|resistance)\b/u.test(question)
-    && !/\b(?:move|copy|duplicate|delete|skip|archive|rename|shift)\b/u.test(question)) {
+    && !changesWorkoutRecords) {
     return 'preview_planned_workout_v3_changes';
   }
   if (multipleWorkouts) return 'preview_training_changes';
@@ -451,7 +465,7 @@ export function selectAssistantTrainingPreviewTool(prompt: string,
     && /\b(?:and|also|then)\b[\s\S]{0,25}\b(?:edit|update|modify|change|move|copy|delete)\b[\s\S]{0,30}\b(?:workout|session|plan|step)\b/u.test(question)) return 'preview_training_changes';
   if (editsRecipeFields) return 'preview_planned_workout_v3_change';
   if (authorsWorkout && (authorsEarlyLap
-    || /\b(?:edit|update|modify|change)\b[\s\S]{0,45}\b(?:workout|session|ride|run|step|interval|ending|target|pace)\b/u.test(question))) {
+    || /\b(?:edit|update|modify|change|adjust|retarget)\b[\s\S]{0,45}\b(?:workout|session|ride|run|step|interval|ending|target|pace|hr|heart[-\s]?rate|zones?)\b/u.test(question))) {
     return 'preview_planned_workout_v3_change';
   }
   const changesExisting = /\b(edit|update|move|copy|duplicate|delete|skip|archive|rename)\b/u.test(question);
