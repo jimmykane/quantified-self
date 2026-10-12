@@ -1128,6 +1128,7 @@ From **Route actions → Send to** on Route Details, Pro members can send the cu
 
 - You can export dashboard activity tables to CSV.
 - CSV activity dates use the local calendar date in **YYYY-MM-DD** format so spreadsheets do not reinterpret the day and month order.
+- CSV duration cells are blank when active duration is unavailable. Recorded zero remains zero, and multi-day durations include days.
 - From selected dashboard rows, CSV export, GPX export, and original-file download actions support your current multi-selection.
 - If an activity has positional data, you can download **GPX** from its action menu or export selected dashboard rows to GPX; multi-selected GPX exports download as a ZIP.
 - If original source files are stored for an activity, you can download the original file or files.

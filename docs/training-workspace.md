@@ -5628,6 +5628,8 @@ donate another leg's timing. Without recovery evidence, active/timer/pause stati
 candidates (including HR) and newly calculated or cached durability evidence remain unavailable; valid imported TSS
 remains eligible, including zero. HR calibration alone cannot establish active duration. Parent active/pause
 totals require all legs. This does not extend Suunto dates or recover later records from contradictory chronology.
+CSV duration export uses the shared canonical display and leaves unavailable active duration blank; a valid zero
+remains a formatted zero. Multi-day values use the same day-aware display as other canonical duration surfaces.
 Original-file parsing retains the private evidence through regeneration and metadata finalization; ordinary JSON
 preserves resulting values/absence but cannot recover that evidence. Adoption requires aligned root/Functions versions
 and the existing sanitized source-backed lifecycle, strict identity review and derived refresh. No bulk rewrite,
