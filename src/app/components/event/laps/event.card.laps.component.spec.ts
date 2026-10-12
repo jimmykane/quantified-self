@@ -9,8 +9,11 @@ import {
     ActivityInterface,
     ActivityTypes,
     DataDistance,
+    DataActiveLap,
+    DataActiveLengths,
     DataDuration,
     DataHeartRateMax,
+    DataHeartRateAvg,
     DataPaceAvg,
     DataSpeedAvg,
     DataSpeedMax,
@@ -77,6 +80,33 @@ function createLapColumnSelectionChange(
     return {
         options: metricTypes.map((value) => ({ value, selected })),
     } as unknown as MatSelectionListChange;
+}
+
+function createRestActivity(durations: number[], heartRates: (number | undefined)[] = [], withLengths = false): ActivityInterface {
+    let startDate = 0;
+    const laps = durations.map((duration, index) => {
+        const endDate = startDate + Math.round(duration * 1000);
+        const row = { lapId: index + 1, startDate, endDate, startIndex: 0, endIndex: 0, type: LapTypes.Manual,
+            stats: { [DataDuration.type]: duration, [DataDistance.type]: 0, [DataActiveLap.type]: false,
+                ...(heartRates[index] === undefined ? {} : { [DataHeartRateAvg.type]: heartRates[index] }),
+                [DataHeartRateMax.type]: 150 + index } };
+        startDate = endDate;
+        return row;
+    });
+    const activity = EventImporterJSON.getActivityFromJSON({
+        name: null, startDate: 0, endDate: startDate, type: ActivityTypes.Swimming,
+        powerMeter: false, trainer: false, creator: { name: 'Test', devices: [] },
+        stats: { [DataDuration.type]: durations.reduce((a, b) => a + b, 0), [DataDistance.type]: 0 },
+        laps, streams: [], intensityZones: [], events: [],
+        swimLengths: withLengths ? laps.map((lap, index) => ({
+            index: index + 1, lapIndex: index + 1, startDate: lap.startDate, endDate: lap.endDate,
+            type: 'idle', stroke: null, strokes: 0, elapsedTime: durations[index], timerTime: durations[index],
+            distance: 0, poolLength: 25, avgSpeed: 0, avgCadence: 0, avgHeartRate: null, maxHeartRate: null,
+            swolf: null, calories: null,
+        })) : [],
+    });
+    activity.setID('rest-activity');
+    return activity;
 }
 
 describe('EventCardLapsComponent', () => {
@@ -161,6 +191,117 @@ describe('EventCardLapsComponent', () => {
 
     it('should create', () => {
         expect(component).toBeTruthy();
+    });
+
+    it('renders a rest block with total time, weighted HR, original lap expansion and partial selection', () => {
+        const activity = createRestActivity([10, 30], [100, 140]);
+        component.selectedActivities = [activity];
+        component.ngOnChanges();
+        fixture.detectChanges();
+        let table = component.lapTableGroups[0].tables[0];
+        const block = table.dataSource.data[0];
+        expect(table.dataSource.data).toHaveLength(1);
+        expect(block).toMatchObject({ '#': '1–2', Duration: '0:40.00', Distance: '0 m',
+            [DataHeartRateAvg.type]: '130 bpm', [DataHeartRateMax.type]: '151 bpm' });
+        expect(block.members?.map(row => row.lap)).toEqual(activity.getLaps());
+        expect(block.metricNotes?.[DataHeartRateAvg.type]).toContain('Estimate');
+        expect(haptics.selection).not.toHaveBeenCalled();
+        const button = fixture.nativeElement.querySelector('button[aria-label="Show recorded laps 1–2"]');
+        button.click();
+        fixture.detectChanges();
+        expect(button.getAttribute('aria-expanded')).toBe('true');
+        expect(fixture.nativeElement.querySelectorAll('table')).toHaveLength(2);
+        expect(fixture.nativeElement.querySelector('[aria-label="Recorded laps 1–2"]').textContent).toContain('0:10.00');
+        expect(fixture.nativeElement.querySelector('[aria-label="Recorded laps 1–2"]').textContent).toContain('0:30.00');
+        fixture.nativeElement.querySelector('input[aria-label="Select lap 1"]').click();
+        fixture.detectChanges();
+        expect(block.isPartiallySelected).toBe(true);
+        expect(table.someLapRowsSelected).toBe(true);
+        expect(table.selectedCount).toBe(1);
+        const blockCheckbox = fixture.nativeElement.querySelector('input[aria-label="Select laps 1–2"]');
+        expect(blockCheckbox.indeterminate).toBe(true);
+        blockCheckbox.click();
+        fixture.detectChanges();
+        expect(table.selectedCount).toBe(2);
+        expect(table.allLapRowsSelected).toBe(true);
+        expect(table.selectedSummary.Duration).toBe('0:20.00 · 2/2');
+        expect(block.isPartiallySelected).toBe(false);
+        component.unitSettings = { ...getDefaultUserUnitSettings(), swimPaceUnits: [SwimPaceUnits.MinutesPer100Yard] };
+        component.ngOnChanges();
+        fixture.detectChanges();
+        table = component.lapTableGroups[0].tables[0];
+        expect(table.selectedCount).toBe(2);
+        expect(table.allLapRowsSelected).toBe(true);
+        expect(table.dataSource.data[0].lengthsExpanded).toBe(true);
+        expect(table.dataSource.data[0].Distance).toBe('0 yd');
+        fixture.nativeElement.querySelector('input[aria-label="Select all laps in this table"]').click();
+        fixture.detectChanges();
+        expect(table.selectedCount).toBe(0);
+        expect(table.dataSource.data[0].isSelected).toBe(false);
+        expect(haptics.selection).toHaveBeenCalledTimes(4);
+    });
+
+    it('preserves each original identity when lap IDs repeat, and sums fractional recorded time once', () => {
+        const activity = createRestActivity([33.76, .51, 69.91, 8.14, 21.51]);
+        activity.getLaps().forEach(lap => lap.lapId = 1);
+        component.selectedActivities = [activity];
+        component.ngOnChanges();
+        const table = component.lapTableGroups[0].tables[0];
+        const block = table.dataSource.data[0];
+        expect(block.Duration).toBe('2:13.83');
+        expect(new Set(block.members!.map(row => row.selectionKey)).size).toBe(5);
+        component.toggleLapSelection(table, block);
+        expect(table.selectedCount).toBe(5);
+        expect(table.allLapRowsSelected).toBe(true);
+        component.ngOnChanges();
+        expect(component.lapTableGroups[0].tables[0].selectedCount).toBe(5);
+    });
+
+    it('shows partial HR coverage and keeps rest blocks isolated by activity', () => {
+        const first = createRestActivity([10, 30], [100]);
+        const second = createRestActivity([10, 30], [120, 140]);
+        second.setID('second-rest-activity');
+        component.selectedActivities = [first, second];
+        component.ngOnChanges();
+        expect(component.lapTableGroups[0].tables).toHaveLength(2);
+        const [a, b] = component.lapTableGroups[0].tables;
+        expect(a.dataSource.data[0][DataHeartRateAvg.type]).toBe('100 bpm · 1/2 laps');
+        component.toggleLapSelection(a, a.dataSource.data[0]);
+        expect(a.selectedCount).toBe(2);
+        expect(b.selectedCount).toBe(0);
+    });
+
+    it('keeps a drill with a recorded active-length count separate when length details are missing', () => {
+        const activity = createRestActivity([10, 30, 10]);
+        activity.getLaps()[1].addStat(new DataActiveLengths(1));
+        component.selectedActivities = [activity];
+        component.ngOnChanges();
+        fixture.detectChanges();
+        const rows = component.lapTableGroups[0].tables[0].dataSource.data.filter(row => row.lap);
+        expect(rows).toHaveLength(3);
+        expect(rows.map(row => row.isRest)).toEqual([true, false, true]);
+        expect(rows.every(row => !row.members)).toBe(true);
+        expect(fixture.nativeElement.querySelectorAll('.lap-rest-row')).toHaveLength(2);
+    });
+
+    it('retains original recorded-length disclosures inside a rest block across refreshes', () => {
+        const activity = createRestActivity([10, 30], [], true);
+        component.selectedActivities = [activity];
+        component.ngOnChanges();
+        let block = component.lapTableGroups[0].tables[0].dataSource.data[0];
+        expect(block.members?.map(row => row.hasLengths)).toEqual([true, true]);
+        component.toggleLapLengths(block);
+        component.toggleLapLengths(block.members![1]);
+        fixture.detectChanges();
+        expect(fixture.nativeElement.querySelector('app-event-card-swim-lengths').lap).toBe(activity.getLaps()[1]);
+        component.unitSettings = { ...getDefaultUserUnitSettings(), swimPaceUnits: [SwimPaceUnits.MinutesPer100Yard] };
+        component.ngOnChanges();
+        fixture.detectChanges();
+        block = component.lapTableGroups[0].tables[0].dataSource.data[0];
+        expect(block.lengthsExpanded).toBe(true);
+        expect(block.members![1].lengthsExpanded).toBe(true);
+        expect(fixture.nativeElement.querySelector('app-event-card-swim-lengths').lap).toBe(activity.getLaps()[1]);
+        expect(haptics.selection).toHaveBeenCalledTimes(2);
     });
 
     it('shows stroke in swimming defaults and preserves per-lap metadata across filtered lap types', () => {
@@ -1123,6 +1264,9 @@ describe('EventCardLapsComponent', () => {
         expect(component.lapTableGroups[0]?.tables[0]?.selectedCount).toBe(0);
     });
 
+});
+
+describe('EventCardLapsComponent source contracts', () => {
     it('should keep the metric search field within the lap column menu', () => {
         const styles = readFileSync(
             resolve(process.cwd(), 'src/app/components/event/laps/event.card.laps.component.css'),
@@ -1145,7 +1289,7 @@ describe('EventCardLapsComponent', () => {
 
         expect(template).toContain("column === 'selection' || column === '#'");
         expect(template).toContain('Select all laps in this table');
-        expect(template).toContain("[attr.aria-label]=\"'Select lap ' + row['#']\"");
+        expect(template).toContain("[aria-label]=\"(row.members ? 'Select laps ' : 'Select lap ') + row['#']\"");
         expect(template).toContain("column === 'selection' && !row.isLapAverage");
         expect(template).toContain('toggleAllLapSelections(lapTable)');
         expect(template).toContain('toggleLapSelection(lapTable, row)');
