@@ -31,6 +31,7 @@ vi.mock('firebase-admin', () => ({
 }));
 
 vi.mock('firebase-admin/firestore', () => ({
+    FieldValue: { serverTimestamp: () => 'SERVER_TIMESTAMP' },
     Timestamp: {
         fromDate: (date: Date) => ({
             toDate: () => date,

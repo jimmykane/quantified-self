@@ -1355,6 +1355,16 @@ Use `app-service-source-icon` and the shared presentation helpers. Imported acti
 
 ## 10. Admin and operational coverage
 
+Email/marketing monitoring (#835) is implemented locally through the existing Firestore `mail` outbox and Trigger Email
+extension, separately from fitness-provider queues. New mail initializes supported PENDING metadata in its original
+write, without another collection, observer Function, scheduler, send or retry. The existing marketing dispatcher
+adds a bounded masked read-only sample every 15 minutes; existing delivery tracking emits fixed state categories.
+Its independently owned dashboard/twelve metrics/seven policies reuse the direct Alerts channel and shared provisioner,
+with separate deployment/apply/readback approval still required. SMTP acceptance is not inbox delivery or reading;
+caps, schedules, pauses, suppression and empty campaigns are excluded from failure/stall pages. No MCP/Assistant,
+provider availability, consent, TTL, Help or fitness queue behavior changes. See the single detailed
+[email lifecycle and activation runbook](email-lifecycle.md#cloud-monitoring-835).
+
 The four recorded-activity source dispatchers (`parseGarminAPIActivityQueue`, `parseSuuntoAppActivityQueue`,
 `parseCOROSAPIWorkoutQueue`, `parseWahooAPIWorkoutQueue`) use direct `queue` owner-module loading instead of the full
 entrypoint. They retain Gen 1, `europe-west2`, maximum one instance, their existing memory/timeouts, no secrets and

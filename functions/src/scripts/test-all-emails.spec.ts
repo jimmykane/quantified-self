@@ -1,4 +1,5 @@
 import * as path from 'path';
+import { newEmailDeliveryFields } from '../email/queue-metadata';
 import {
     FOUNDER_EMAIL_FROM,
     FOUNDER_EMAIL_REPLY_TO,
@@ -87,12 +88,13 @@ describe('test-all-emails', () => {
         expect(options).not.toHaveProperty('credential');
     });
 
-    it('keeps the original Firestore-template queue format by default', () => {
+    it('keeps template content and initializes pending metadata in the same mail write', () => {
         const template = REFRESHED_EMAIL_TEMPLATE_CATALOG.find(entry => entry.id === 'welcome_email')!;
         const preview = template.previewCases.find(entry => entry.name === 'free')!;
         const document = buildTestMailDocument(TARGET_EMAIL, template, preview, false, renderer);
 
         expect(document).toEqual({
+            ...newEmailDeliveryFields(),
             to: TARGET_EMAIL,
             from: TRANSACTIONAL_EMAIL_FROM,
             replyTo: TRANSACTIONAL_EMAIL_REPLY_TO,

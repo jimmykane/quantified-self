@@ -3,6 +3,9 @@ import type { Request, Response } from 'express';
 import { onSchedule } from 'firebase-functions/v2/scheduler';
 import { onDocumentUpdated } from 'firebase-functions/v2/firestore';
 import * as logger from 'firebase-functions/logger';
+import * as admin from 'firebase-admin';
+import { observeEmailOutbox } from '../../email/monitoring-probe';
+import { recordEmailOperation, recordEmailSample, recordEmailTransition } from '../../email/monitoring';
 import { onAdminCall } from '../../shared/auth';
 import { FUNCTIONS_MANIFEST } from '../../../../shared/functions-manifest';
 import { SECRET_PARAMS } from '../../secrets';
@@ -42,15 +45,25 @@ export const changeMarketingCampaignStatus = onAdminCall<Record<string, unknown>
   return getCampaign(request.data?.id);
 });
 export const dispatchMarketingCampaigns = onSchedule({ schedule: 'every 5 minutes', timeZone: 'UTC', region,
-  memory: '512MiB', timeoutSeconds: 540, secrets: [secret] }, async () => {
-  const submitted = await dispatchCampaigns(signingKey());
-  logger.info('Marketing dispatch complete', { submitted });
+  memory: '512MiB', timeoutSeconds: 540, secrets: [secret] }, async event => {
+  try {
+    const submitted = await dispatchCampaigns(signingKey());
+    logger.info('Marketing dispatch complete', { submitted });
+  } finally {
+    const tick = new Date(event.scheduleTime);
+    if (Number.isFinite(tick.getTime()) && tick.getUTCMinutes() % 15 === 0) {
+      try { await observeEmailOutbox(admin.firestore()); }
+      catch { recordEmailSample('transactional'); recordEmailSample('marketing'); }
+    }
+  }
 });
 export const trackMarketingDelivery = onDocumentUpdated({ document: 'mail/{mailId}', region, memory: '256MiB' }, async event => {
   const before = event.data?.before.data();
   const after = event.data?.after.data();
   if (!before || !after) return;
-  await recordMailDelivery(event.params.mailId, before, after);
+  recordEmailTransition(before, after);
+  try { await recordMailDelivery(event.params.mailId, before, after); recordEmailOperation('tracking', 'completed'); }
+  catch (error) { recordEmailOperation('tracking', 'failed'); throw error; }
 });
 
 function confirmationPage(message: string, token?: string): string {

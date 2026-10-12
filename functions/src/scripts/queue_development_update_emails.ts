@@ -1,4 +1,5 @@
 import * as admin from 'firebase-admin';
+import { newEmailDeliveryFields } from '../email/queue-metadata';
 import * as fs from 'fs';
 import * as path from 'path';
 import pLimit from 'p-limit';
@@ -136,6 +137,7 @@ async function queueSingleEmail(
         }
 
         transaction.set(mailRef, {
+            ...newEmailDeliveryFields(),
             to: user.email,
             template: {
                 name: TEMPLATE_NAME,

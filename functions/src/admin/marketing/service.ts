@@ -16,6 +16,8 @@ import { MANUAL_CAMPAIGN_EMAIL_TEMPLATE_CATALOG } from '../../email/template-cat
 import { hasSameMarketingEmail, renderMarketingContent, validateMarketingDraft, validateMarketingSenderName } from '../../email/marketing-content';
 import { blankStats, DEFAULT_MARKETING_DAILY_CAP, remainingToday, selectedPlan, signupInRange, transitionStats, utcDay, validDailyCap } from './core';
 import { armMarketingSchedule, marketingScheduleGate, validateMarketingSchedule } from '../../../../shared/marketing-schedule';
+import { recordEmailOperation, recordMarketingDeferral } from '../../email/monitoring';
+import { newEmailDeliveryFields } from '../../email/queue-metadata';
 
 const db = () => admin.firestore();
 const campaigns = () => db().collection('marketingCampaigns');
@@ -132,6 +134,7 @@ function mailPayload(draft: MarketingCampaignDraft, email: string, firstName: st
   campaignId: string | null, attempt: number, unsubscribeOverride?: string) {
   const { rendered, unsubscribeUrl } = renderMessage(draft, firstName, uid, secret, unsubscribeOverride);
   return {
+    ...newEmailDeliveryFields(),
     to: email, from: marketingFrom(draft.senderName), replyTo: MARKETING_EMAIL_REPLY_TO,
     headers: { 'List-Unsubscribe': `<${unsubscribeUrl}>`, 'List-Unsubscribe-Post': 'List-Unsubscribe=One-Click' },
     message: unsubscribeOverride ? { ...rendered, subject: `[TEST] ${rendered.subject}` } : rendered,
@@ -472,13 +475,24 @@ export async function completeCampaignIfDrained(campaignRef: FirebaseFirestore.D
 }
 
 export async function dispatchCampaigns(secret: string, nowProvider: () => Date = () => new Date()): Promise<number> {
+  try {
+    const submitted = await dispatchCampaignsInternal(secret, nowProvider);
+    recordEmailOperation('dispatch', 'completed', submitted);
+    return submitted;
+  } catch (error) {
+    recordEmailOperation('dispatch', 'failed');
+    throw error;
+  }
+}
+
+async function dispatchCampaignsInternal(secret: string, nowProvider: () => Date): Promise<number> {
   const today = utcDay(nowProvider());
   const [capDoc, usedDoc] = await Promise.all([control().get(), dayRef(today).get()]);
   const cap = capDoc.exists ? validDailyCap(capDoc.get('dailyCap')) : DEFAULT_MARKETING_DAILY_CAP;
   // Bound each invocation; the schedule resumes remaining work without holding
   // an admin callable open for a large configured daily cap.
   let available = Math.min(25, remainingToday(cap, usedDoc.get('used') || 0));
-  if (!available) return 0;
+  if (!available) { recordMarketingDeferral('daily_cap'); return 0; }
   let submitted = 0;
   let lastCampaign: FirebaseFirestore.QueryDocumentSnapshot | undefined;
   while (available) {
@@ -490,6 +504,7 @@ export async function dispatchCampaigns(secret: string, nowProvider: () => Date 
       if (!available) break;
       const campaignRef = campaignDoc.ref;
       if (!marketingScheduleGate(validateMarketingSchedule(campaignDoc.get('schedule')), campaignDoc.data(), nowProvider()).due) {
+        recordMarketingDeferral('schedule');
         await completeCampaignIfDrained(campaignRef);
         continue;
       }
@@ -559,9 +574,10 @@ export async function dispatchCampaigns(secret: string, nowProvider: () => Date 
             tx.update(campaignRef, { stats: transitionStats(campaign.get('stats') as MarketingCampaignStats, 'pending', 'queued'), ...scheduleGate.state });
             return 'submitted';
           });
-          if (submittedMail === 'capped') return submitted;
+          if (submittedMail === 'capped') { recordMarketingDeferral('daily_cap'); return submitted; }
           if (submittedMail === 'waiting') { waiting = true; break; }
           if (submittedMail === 'submitted') { submitted++; available--; }
+          if (submittedMail === 'skipped') recordMarketingDeferral('suppression');
         }
         lastRecipient = recipientDocs.docs[recipientDocs.docs.length - 1];
         if (recipientDocs.size < pageSize) break;

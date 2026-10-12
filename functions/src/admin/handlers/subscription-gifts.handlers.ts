@@ -1,5 +1,6 @@
 import { createHash, randomUUID } from 'crypto';
 import * as admin from 'firebase-admin';
+import { newEmailDeliveryFields } from '../../email/queue-metadata';
 import { FieldValue, Timestamp } from 'firebase-admin/firestore';
 import * as logger from 'firebase-functions/logger';
 import { HttpsError } from 'firebase-functions/v2/https';
@@ -1055,6 +1056,7 @@ async function runGiftNotificationTransaction(
         const nextMail = nextAttempt === currentAttempt ? currentMail : await transaction.get(nextMailRef);
         if (!nextMail.exists) {
             transaction.create(nextMailRef, {
+                ...newEmailDeliveryFields(),
                 to: resolution.recipient,
                 toUids: [uid],
                 from: TRANSACTIONAL_EMAIL_FROM,

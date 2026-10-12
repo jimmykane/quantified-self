@@ -1,4 +1,5 @@
 import * as admin from 'firebase-admin';
+import { newEmailDeliveryFields } from '../email/queue-metadata';
 import * as logger from 'firebase-functions/logger';
 import { resolve } from 'path';
 import {
@@ -29,7 +30,7 @@ export interface TestEmailArguments {
     templateIds?: string[];
 }
 
-export interface TestMailDocument {
+export interface TestMailDocument extends ReturnType<typeof newEmailDeliveryFields> {
     to: string;
     from: string;
     replyTo: string;
@@ -86,6 +87,7 @@ export function buildTestMailDocument(
 ): TestMailDocument {
     const isFounderNote = template.id === 'registration_welcome';
     const baseDocument = {
+        ...newEmailDeliveryFields(),
         to: targetEmail,
         from: isFounderNote ? FOUNDER_EMAIL_FROM : TRANSACTIONAL_EMAIL_FROM,
         replyTo: isFounderNote ? FOUNDER_EMAIL_REPLY_TO : TRANSACTIONAL_EMAIL_REPLY_TO,
