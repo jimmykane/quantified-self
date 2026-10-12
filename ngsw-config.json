@@ -54,6 +54,7 @@
     "/services",
     "/dashboard",
     "/health",
+    "/tags",
     "/calendar",
     "/calendar/day/*",
     "/training/plans/workout/*",

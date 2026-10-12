@@ -17,7 +17,7 @@ import { provideRouter, Router, RouterLink, RouterLinkActive } from '@angular/ro
 
 import { AppWhatsNewService } from '../../services/app.whats-new.service';
 import { signal } from '@angular/core';
-import { AppThemes } from '@sports-alliance/sports-lib';
+import { AppThemes, User } from '@sports-alliance/sports-lib';
 import { SYSTEM_THEME_PREFERENCE } from '../../models/app-theme-preference.type';
 const TRAINING_PLANNING_NAVIGATION_ALLOWED_UID = 'planning-user';
 
@@ -87,6 +87,18 @@ describe('SideNavComponent', () => {
 
     it('should create', () => {
         expect(component).toBeTruthy();
+    });
+
+    it('shows Tags to signed-in users and closes the nav with one selection haptic', () => {
+        fixture.detectChanges();
+        expect(fixture.debugElement.queryAll(By.directive(RouterLink)).some(link => link.injector.get(RouterLink).urlTree?.toString() === '/tags')).toBe(false);
+        mockUserService.user.mockReturnValue(new User('tags-owner'));
+        fixture.detectChanges();
+        const tagLink = fixture.debugElement.queryAll(By.directive(RouterLink)).find(link => link.injector.get(RouterLink).urlTree?.toString() === '/tags');
+        expect(tagLink?.nativeElement.textContent).toContain('Tags');
+        tagLink?.triggerEventHandler('click', new MouseEvent('click'));
+        expect(mockHapticsService.selection).toHaveBeenCalledOnce();
+        expect(mockSideNavService.close).toHaveBeenCalledOnce();
     });
 
     it('does not render a navigation section heading', () => {
@@ -287,8 +299,8 @@ describe('SideNavComponent', () => {
         expect(healthItem?.nativeElement.getAttribute('routerlink')).toBe('/health');
         expect(healthItem?.nativeElement.textContent).not.toContain('BETA');
         expect(healthItem?.nativeElement.querySelector('.pro-badge')).toBeNull();
-        expect(navigationItems.slice(0, 7).map(item => item.nativeElement.getAttribute('routerlink')))
-            .toEqual(['/dashboard', '/calendar', '/training', '/training/plans', '/health', '/routes', '/mytracks']);
+        expect(navigationItems.slice(0, 8).map(item => item.nativeElement.getAttribute('routerlink')))
+            .toEqual(['/dashboard', '/calendar', '/training', '/training/plans', '/health', '/tags', '/routes', '/mytracks']);
         healthItem!.triggerEventHandler('click', new MouseEvent('click'));
         expect(mockSideNavService.close).toHaveBeenCalledOnce();
         expect(mockHapticsService.selection).toHaveBeenCalledOnce();
@@ -421,6 +433,7 @@ describe('SideNavComponent', () => {
         const plansItem = navigationItems.find(item => item.nativeElement.textContent.includes('Plans'));
         const trainingItem = navigationItems.find(item => item.nativeElement.textContent.includes('Training'));
         const routesItem = navigationItems.find(item => item.nativeElement.textContent.includes('Routes'));
+        const tagsItem = navigationItems.find(item => item.nativeElement.textContent.includes('Tags'));
         const myTracksItem = navigationItems.find(item => item.nativeElement.textContent.includes('My Tracks'));
         const assistantItem = navigationItems.find(item => item.nativeElement.textContent.includes('Assistant'));
         const compareFilesItem = navigationItems.find(item => item.nativeElement.textContent.includes('Compare Files'));
@@ -431,6 +444,7 @@ describe('SideNavComponent', () => {
         expect(plansItem).toBeTruthy();
         expect(trainingItem).toBeTruthy();
         expect(routesItem).toBeTruthy();
+        expect(tagsItem).toBeTruthy();
         expect(myTracksItem).toBeTruthy();
         expect(assistantItem).toBeTruthy();
         expect(compareFilesItem).toBeTruthy();
@@ -441,6 +455,7 @@ describe('SideNavComponent', () => {
             navigationItems.indexOf(trainingItem!),
             navigationItems.indexOf(plansItem!),
             navigationItems.indexOf(healthItem!),
+            navigationItems.indexOf(tagsItem!),
             navigationItems.indexOf(routesItem!),
             navigationItems.indexOf(myTracksItem!),
             navigationItems.indexOf(compareFilesItem!),
@@ -455,6 +470,7 @@ describe('SideNavComponent', () => {
             dashboardIndex + 6,
             dashboardIndex + 7,
             dashboardIndex + 8,
+            dashboardIndex + 9,
         ]);
         expect(assistantItem?.nativeElement.textContent).toContain('Assistant');
         expect(assistantItem?.nativeElement.textContent).not.toContain('Going away');

@@ -20,12 +20,14 @@ import { MatTableDataSource } from '@angular/material/table';
 import { SelectionModel } from '@angular/cdk/collections';
 import {
   ActivityInterface,
+  DataDistance,
   EventInterface,
   DataHeartRateAvg,
   LapInterface,
   LapTypes,
   UserUnitSettingsInterface,
 } from '@sports-alliance/sports-lib';
+import { getNominalSwimDistanceDisplayContext } from '../../../helpers/event-swim-distance-display.helper';
 import { DataTableAbstractDirective } from '../../data-table/data-table-abstract.directive';
 import { MatSnackBar } from '@angular/material/snack-bar';
 import { AppUserSettingsQueryService } from '../../../services/app.user-settings-query.service';
@@ -335,6 +337,7 @@ export class EventCardLapsComponent extends DataTableAbstractDirective implement
     const swimming = resolveEventLapSportFamily(activity.type) === 'swimming';
     const sourceIndexes = new Map((activity.getLaps?.() || []).map((lap, index) => [lap, index]));
     const analytics = swimming ? getSwimLapAnalytics(activity, this.unitSettings) : new Map();
+    const nominalDistanceDisplay = swimming ? getNominalSwimDistanceDisplayContext(activity) : null;
     const lapStrokeLabels = metricTypes.includes(EVENT_LAP_STROKE_COLUMN) ? getSwimLapStrokeLabels(activity) : null;
     const lapRows = laps.reduce<LapTableRow[]>((lapDataArray, lap, index) => {
       const row: LapTableRow = {
@@ -364,6 +367,7 @@ export class EventCardLapsComponent extends DataTableAbstractDirective implement
           metricType,
           this.unitSettings,
           activity.type,
+          metricType === DataDistance.type ? nominalDistanceDisplay?.lapMeters.get(lap) : undefined,
         );
       });
 

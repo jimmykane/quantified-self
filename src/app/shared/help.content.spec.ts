@@ -14,6 +14,12 @@ import {
 } from './policies.content';
 
 describe('help.content', () => {
+  it('explains tag-library selection, partial history, saved empty tags and refresh', () => {
+    const copy = HELP_SECTIONS.find(section => section.id === 'getting-started')!.content;
+    for (const phrase of ['**Tags** opens your saved tag library', '**Find a tag**', '**Load older activities**',
+      'cover only loaded activities', 'page-size choices on Tags stay local to the page', 'may still have older activities',
+      'saved tag remains available', '**Refresh tags and activities**']) expect(copy).toContain(phrase);
+  });
   it('explains a busy activity-history request for all four providers without claiming success or failure', () => {
     const copy = HELP_SECTIONS.find(section => section.id === 'service-connections')!.content;
     expect(copy).toContain('For Garmin, Suunto, COROS, and Wahoo, **Import already running**');
@@ -1296,6 +1302,9 @@ describe('help.content', () => {
     expect(gettingStartedSection?.content).toContain('**Settings -> Units & formatting -> Customize units -> Swim pace**');
     expect(gettingStartedSection?.content).toContain('25 yd, 50 yd, 75 yd, and 100 yd splits before the rest row');
     expect(gettingStartedSection?.content).toContain('Stored distances remain in meters');
+    expect(gettingStartedSection?.content).toContain('complete length data can confirm a nominal 25- or 50-yard pool');
+    expect(gettingStartedSection?.content).toContain('Custom pools and recordings with missing or conflicting evidence keep recorded precision');
+    expect(gettingStartedSection?.content).toContain('recorded distances, pace, SWOLF and Training load stay unchanged');
     expect(gettingStartedSection?.content).toContain('**Swim** time (excluding idle/rest lengths)');
     expect(gettingStartedSection?.content).toContain('**Total** keeps the combined time');
     expect(gettingStartedSection?.content).toContain('Set swim pace, stroke totals, average stroke rate, and efficiency exclude rest too');

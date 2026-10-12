@@ -591,6 +591,16 @@ const topLevelRoutes: Routes = [
     canMatch: [authGuard, onboardingGuard]
   },
   {
+    path: 'tags',
+    loadComponent: () => import('./components/tags/tags-page.component').then(module => module.TagsPageComponent),
+    data: {
+      title: 'Tags', animation: 'Tags', preload: true,
+      description: 'Browse saved activity tags and find their activities across your history.',
+      robots: 'noindex, follow',
+    },
+    canMatch: [authGuard, onboardingGuard],
+  },
+  {
     path: 'calendar/day/:date',
     loadComponent: () => import('./components/calendar/calendar-page/calendar-page.component')
       .then(module => module.CalendarPageComponent),

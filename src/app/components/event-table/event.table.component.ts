@@ -3,11 +3,13 @@ import {
   ChangeDetectionStrategy,
   ChangeDetectorRef,
   Component,
+  EventEmitter,
   Injectable,
   Input,
   OnChanges,
   OnDestroy,
   OnInit,
+  Output,
   SimpleChanges,
   ViewChild,
   inject
@@ -72,7 +74,13 @@ interface DeviceNameDisplayItem {
   trackKey: string;
 }
 
-export type EventTablePresentation = 'dashboard' | 'browse';
+export type EventTablePresentation = 'dashboard' | 'browse' | 'tag-library';
+
+export interface EventTableEventsChange {
+  userID: string;
+  updatedTags: Record<string, string[]>;
+  deletedEventIDs: string[];
+}
 
 @Component({
   selector: 'app-event-table',
@@ -92,6 +100,11 @@ export class EventTableComponent extends DataTableAbstractDirective implements O
   @Input() targetUser!: User;
   @Input() showActions!: boolean;
   @Input() presentation: EventTablePresentation = 'dashboard';
+  @Input() showTagFilter = true;
+  @Input() filterContext = '';
+  @Input() emptyMessage = 'No activities yet';
+  @Input() emptyHint = 'Import an activity or change your filters';
+  @Output() eventsChange = new EventEmitter<EventTableEventsChange>();
   @ViewChild(MatSort, { static: true }) sort!: MatSort;
   @ViewChild(MatPaginator, { static: true }) paginator!: MatPaginator;
   @ViewChild(MatCard, { static: true }) table!: MatCard;
@@ -100,6 +113,17 @@ export class EventTableComponent extends DataTableAbstractDirective implements O
   selection = new SelectionModel(true, []);
 
   selectedColumns = AppUserUtilities.getDefaultSelectedTableColumns();
+  private libraryColumns = ['Distance', 'Duration'];
+  private libraryPageSize = 5;
+  private libraryPageIndex = 0;
+  private suppressLibraryPageFeedback = false;
+  private librarySort = { active: 'Start Date', direction: 'desc' as 'asc' | 'desc' };
+  readonly libraryColumnLabels: Record<string, string> = { 'Start Date': 'Date', Name: 'Activity' };
+  readonly libraryAvailableColumns = [
+    'Distance', 'Duration',
+    ...AppUserUtilities.getDefaultSelectedTableColumns()
+      .filter(column => !['Start Date', 'Activity Types', 'Name', 'Description', 'Distance', 'Duration'].includes(column)),
+  ];
   displayedColumns: string[] = [];
 
   public show = true
@@ -124,6 +148,7 @@ export class EventTableComponent extends DataTableAbstractDirective implements O
   private readonly duplicateSourceFilesMessage = 'Selected activities include identical source files. Deselect duplicates and try again.';
   readonly sharedEventTooltip = 'Public link enabled. Anyone with the link can view this activity, comparison data, and original files.';
   private rowCache = new Map<string, EventTableRowCacheEntry>();
+  private destroyed = false;
 
 
   private searchSubject: Subject<string> = new Subject();
@@ -162,6 +187,10 @@ export class EventTableComponent extends DataTableAbstractDirective implements O
     return this.presentation === 'browse';
   }
 
+  get isLibraryPresentation(): boolean {
+    return this.presentation === 'tag-library';
+  }
+
   get showToolbar(): boolean {
     return !this.isBrowsePresentation;
   }
@@ -175,33 +204,42 @@ export class EventTableComponent extends DataTableAbstractDirective implements O
   }
 
   get tableSortActive(): string {
+    if (this.isLibraryPresentation) return this.librarySort.active;
     return this.user?.settings?.dashboardSettings?.tableSettings?.active || 'Start Date';
   }
 
   get tableSortDirection(): 'asc' | 'desc' {
+    if (this.isLibraryPresentation) return this.librarySort.direction;
     return this.user?.settings?.dashboardSettings?.tableSettings?.direction === 'asc' ? 'asc' : 'desc';
   }
 
   get tablePageSize(): number {
+    if (this.isLibraryPresentation) return this.libraryPageSize;
     const pageSize = this.user?.settings?.dashboardSettings?.tableSettings?.eventsPerPage;
     return Number.isFinite(pageSize) && pageSize > 0 ? pageSize : 10;
   }
 
 
   ngOnChanges(simpleChanges: SimpleChanges): void {
+    const preferencesChanged = this.user && (simpleChanges.user || simpleChanges.presentation);
+    if (preferencesChanged) {
+      // The loading base renders synchronously. Initialize the picker first so
+      // Material does not retain options created with Dashboard defaults.
+      this.selectedColumns = this.isLibraryPresentation ? this.libraryColumns
+        : this.user.settings?.dashboardSettings?.tableSettings?.selectedColumns || AppUserUtilities.getDefaultSelectedTableColumns();
+    }
     this.isLoading ? this.loading() : this.loaded();
     if (!this.events) {
       this.rowCache.clear();
       this.loading();
       return;
     }
-    if (this.events && simpleChanges.events && this.data.paginator && this.data.sort) { // If there is no paginator and sort then the compoenent is not initialized on view
-      this.processChanges('on_changes_events', true);
+    if (this.events && (simpleChanges.events || simpleChanges.presentation) && this.data.paginator && this.data.sort) { // If there is no paginator and sort then the compoenent is not initialized on view
+      this.processChanges(simpleChanges.presentation ? 'on_changes_presentation' : 'on_changes_events', true);
     }
-    if (this.user && simpleChanges.user) {
-      this.selectedColumns = this.user.settings?.dashboardSettings?.tableSettings?.selectedColumns || AppUserUtilities.getDefaultSelectedTableColumns();
-      const nextPageSize = this.user.settings?.dashboardSettings?.tableSettings?.eventsPerPage || 10;
-      if (this.paginator && this.paginator.pageSize !== nextPageSize) {
+    if (preferencesChanged) {
+      const nextPageSize = this.tablePageSize;
+      if (!this.isLibraryPresentation && this.paginator && this.paginator.pageSize !== nextPageSize) {
         this.paginator._changePageSize(nextPageSize);
       }
       this.updateDisplayedColumns();
@@ -214,6 +252,21 @@ export class EventTableComponent extends DataTableAbstractDirective implements O
         this.applyTableFilter();
       }
       this.updateDisplayedColumns();
+    }
+    if (simpleChanges.showTagFilter && !this.showTagFilter) {
+      this.tagFilter = '';
+      this.applyTableFilter();
+    }
+    if (simpleChanges.filterContext) {
+      this.searchTerm = '';
+      this.searchSubject.next('');
+      this.tagFilter = '';
+      this.selection.clear();
+      this.suppressLibraryPageFeedback = true;
+      this.paginator?.firstPage();
+      this.suppressLibraryPageFeedback = false;
+      this.libraryPageIndex = 0;
+      this.applyTableFilter();
     }
     if (simpleChanges.user || simpleChanges.targetUser || simpleChanges.presentation) {
       void this.loadAllHistoryTags();
@@ -284,6 +337,12 @@ export class EventTableComponent extends DataTableAbstractDirective implements O
       if (this.isBrowsePresentation) {
         return;
       }
+      if (this.isLibraryPresentation) {
+        const direction = sort.direction === 'asc' ? 'asc' : 'desc';
+        if (sort.active !== this.librarySort.active || direction !== this.librarySort.direction) this.hapticsService.selection();
+        this.librarySort = { active: sort.active, direction };
+        return;
+      }
       const tableSettings = this.user?.settings?.dashboardSettings?.tableSettings;
       if (!tableSettings) {
         return;
@@ -320,15 +379,15 @@ export class EventTableComponent extends DataTableAbstractDirective implements O
   }
 
   public removeDeletedEvent(eventID: string): void {
-    if (!eventID || !this.events) {
+    if (!eventID || !this.events || !this.user) {
       return;
     }
     const nextEvents = this.events.filter(event => event?.getID() !== eventID);
-    if (nextEvents.length === this.events.length) {
-      return;
+    if (nextEvents.length !== this.events.length) {
+      this.events = nextEvents;
+      this.processChanges('after_delete_row');
     }
-    this.events = nextEvents;
-    this.processChanges('after_delete_row');
+    this.eventsChange.emit({ userID: this.user.uid, updatedTags: {}, deletedEventIDs: [eventID] });
   }
 
   private persistDashboardSettings(dashboardSettingsPatch: Record<string, unknown>): Promise<void> {
@@ -437,7 +496,18 @@ export class EventTableComponent extends DataTableAbstractDirective implements O
   }
 
   private getSelectableRows(): any[] {
-    return Array.isArray(this.data.filteredData) ? this.data.filteredData : this.data.data;
+    const rows = Array.isArray(this.data.filteredData) ? this.data.filteredData : this.data.data;
+    if (!this.isLibraryPresentation) return rows;
+    const sortedRows = this.data.sort ? this.data.sortData([...rows], this.data.sort) : rows;
+    const pageSize = this.paginator?.pageSize || this.tablePageSize;
+    const pageIndex = this.paginator?.pageIndex || 0;
+    return sortedRows.slice(pageIndex * pageSize, (pageIndex + 1) * pageSize);
+  }
+
+  get isSelectionIndeterminate(): boolean {
+    const rows = this.getSelectableRows();
+    const selectedCount = rows.filter(row => this.selection.isSelected(row)).length;
+    return selectedCount > 0 && selectedCount < rows.length;
   }
 
   isAllSelected() {
@@ -601,6 +671,11 @@ export class EventTableComponent extends DataTableAbstractDirective implements O
   }
 
   async deleteSelection() {
+    const user = this.user;
+    const eventIDs = [...new Set(this.selection.selected
+      .map(selected => selected.Event?.getID())
+      .filter((eventID): eventID is string => !!eventID))];
+    if (!user || !eventIDs.length) return;
     this.loading();
     const dialogRef = this.dialog.open(ConfirmationDialogComponent, {
       data: {
@@ -612,24 +687,27 @@ export class EventTableComponent extends DataTableAbstractDirective implements O
       }
     });
     this.deleteConfirmationSubscription = dialogRef.afterClosed().subscribe(async (result) => {
-      if (!result) {
-        this.loaded();
+      if (!result || !this.isCurrentMutationOwner(user)) {
+        if (this.isCurrentMutationOwner(user)) this.loaded();
         return;
       }
       try {
-        this.unsubscribeFromAll();
-        const deletePromises = [];
-        const eventsToDelete = this.selection.selected.map(selected => selected.Event);
-        eventsToDelete.forEach((event) => deletePromises.push(this.eventService.deleteAllEventData(this.user, event.getID())));
         this.selection.clear();
-        await Promise.all(deletePromises);
+        const outcomes = await Promise.allSettled(eventIDs.map(eventID =>
+          this.eventService.deleteAllEventData(user, eventID)));
+        if (!this.isCurrentMutationOwner(user)) return;
+        const deletedIds = new Set(eventIDs.filter((_eventID, index) => outcomes[index].status === 'fulfilled'));
 
-        // Update local view
-        if (this.events) {
-          const deletedIds = new Set(eventsToDelete.map(e => e.getID()));
-          this.events = this.events.filter(e => !deletedIds.has(e.getID()));
-          this.processChanges('after_delete_selection');
+        // Reconcile each confirmed result even when another deletion failed.
+        if (deletedIds.size > 0) {
+          if (this.events) {
+            this.events = this.events.filter(e => !deletedIds.has(e.getID()));
+            this.processChanges('after_delete_selection');
+          }
+          this.eventsChange.emit({ userID: user.uid, updatedTags: {}, deletedEventIDs: [...deletedIds] });
         }
+        const failure = outcomes.find(outcome => outcome.status === 'rejected');
+        if (failure?.status === 'rejected') throw failure.reason;
 
         this.analyticsService.logEvent('delete_events');
         this.snackBar.open('Activities deleted', undefined, {
@@ -637,13 +715,14 @@ export class EventTableComponent extends DataTableAbstractDirective implements O
         });
         this.hapticsService.success();
       } catch (error) {
+        if (!this.isCurrentMutationOwner(user)) return;
         this.logger.error('[EventTableComponent] Failed to delete selected events', error);
         this.snackBar.open('Could not delete selected activities', undefined, {
           duration: 3000,
         });
         this.hapticsService.error();
       } finally {
-        this.loaded();
+        if (this.isCurrentMutationOwner(user)) this.loaded();
       }
     });
   }
@@ -860,10 +939,18 @@ export class EventTableComponent extends DataTableAbstractDirective implements O
   }
 
   override isColumnHeaderSortable(columnName: string): boolean {
+    if (columnName === 'Name' && this.isLibraryPresentation) return true;
     return columnName === 'Shared' || super.isColumnHeaderSortable(columnName);
   }
 
   private updateDisplayedColumns() {
+    if (this.isLibraryPresentation) {
+      this.displayedColumns = [
+        ...(this.canManageEvents ? ['Checkbox'] : []), 'Start Date', 'Name',
+        ...this.libraryColumns, 'Tags', ...(this.showRowActions ? ['Actions'] : []),
+      ];
+      return;
+    }
     const sortedSelectedColumns = (this.selectedColumns || [])
       .filter(column => column !== 'Description' && column !== 'Shared' && column !== 'Tags')
       .sort((a, b) => this.defaultSelectedColumns.indexOf(a) - this.defaultSelectedColumns.indexOf(b));
@@ -921,6 +1008,14 @@ export class EventTableComponent extends DataTableAbstractDirective implements O
 
   // Noop due to bugs
   async pageChanges(pageEvent: PageEvent) {
+    if (this.isLibraryPresentation) {
+      const pageIndex = pageEvent.pageIndex ?? this.paginator?.pageIndex ?? 0;
+      const previousPageIndex = pageEvent.previousPageIndex ?? this.libraryPageIndex;
+      if (!this.suppressLibraryPageFeedback && (pageIndex !== previousPageIndex || pageEvent.pageSize !== this.libraryPageSize)) this.hapticsService.selection();
+      this.libraryPageIndex = pageIndex;
+      this.libraryPageSize = pageEvent.pageSize;
+      return;
+    }
     if (this.isBrowsePresentation) {
       return;
     }
@@ -970,6 +1065,7 @@ export class EventTableComponent extends DataTableAbstractDirective implements O
     if (!this.showActions || !this.user || !event?.getID?.()) {
       return;
     }
+    const user = this.user;
     this.hapticsService.selection();
     const originalTags = this.eventTagService.getTags(event);
 
@@ -981,14 +1077,17 @@ export class EventTableComponent extends DataTableAbstractDirective implements O
         tags: originalTags,
         suggestions: this.tagFilterOptions,
         save: async (tags: string[]) => {
-          const savedTags = await this.eventTagService.saveTags(this.user, event, tags, originalTags);
-          this.applySavedTagsToLoadedEvent(event.getID(), savedTags, event);
+          const savedTags = await this.eventTagService.saveTags(user, event, tags, originalTags);
+          if (this.isCurrentMutationOwner(user)) {
+            this.applySavedTagsToLoadedEvent(event.getID(), savedTags, event);
+            this.eventsChange.emit({ userID: user.uid, updatedTags: { [event.getID()]: savedTags }, deletedEventIDs: [] });
+          }
           return savedTags;
         },
       },
     });
     const savedTags = await firstValueFrom(dialogRef.afterClosed());
-    if (!Array.isArray(savedTags)) {
+    if (!Array.isArray(savedTags) || !this.isCurrentMutationOwner(user)) {
       return;
     }
 
@@ -1003,6 +1102,7 @@ export class EventTableComponent extends DataTableAbstractDirective implements O
     if (this.isBulkTagSaving || !this.user || !this.selection.selected.length) {
       return;
     }
+    const user = this.user;
     if (this.selection.selected.length > EVENT_TAG_BULK_LIMIT) {
       this.snackBar.open(
         `Select up to ${EVENT_TAG_BULK_LIMIT} activities to update tags.`,
@@ -1034,11 +1134,14 @@ export class EventTableComponent extends DataTableAbstractDirective implements O
         save: async (changes: { add: string[]; remove: string[] }) => {
           this.isBulkTagSaving = true;
           try {
-            savedResults = await this.eventTagService.applyBulkChanges(this.user, selectedEventIDs, changes);
-            selectedEvents.forEach((event) => {
-              const eventID = event.getID();
-              this.applySavedTagsToLoadedEvent(eventID, savedResults?.[eventID] || getEventTags(event), event);
-            });
+            savedResults = await this.eventTagService.applyBulkChanges(user, selectedEventIDs, changes);
+            if (this.isCurrentMutationOwner(user)) {
+              selectedEvents.forEach((event) => {
+                const eventID = event.getID();
+                this.applySavedTagsToLoadedEvent(eventID, savedResults?.[eventID] || getEventTags(event), event);
+              });
+              this.eventsChange.emit({ userID: user.uid, updatedTags: savedResults, deletedEventIDs: [] });
+            }
             return savedResults;
           } finally {
             this.isBulkTagSaving = false;
@@ -1048,7 +1151,7 @@ export class EventTableComponent extends DataTableAbstractDirective implements O
     });
 
     const didSave = await firstValueFrom(dialogRef.afterClosed());
-    if (!didSave || !savedResults) {
+    if (!didSave || !savedResults || !this.isCurrentMutationOwner(user)) {
       return;
     }
     this.processChanges('bulk_event_tags_saved');
@@ -1058,6 +1161,10 @@ export class EventTableComponent extends DataTableAbstractDirective implements O
       undefined,
       { duration: 2500 },
     );
+  }
+
+  private isCurrentMutationOwner(user: User): boolean {
+    return !this.destroyed && this.user?.uid === user.uid;
   }
 
   private applySavedTagsToLoadedEvent(
@@ -1104,8 +1211,11 @@ export class EventTableComponent extends DataTableAbstractDirective implements O
   }
 
   clearSearch() {
+    if (!this.searchTerm) return;
     this.searchTerm = '';
+    this.searchSubject.next('');
     this.search('');
+    this.hapticsService.selection();
   }
 
   private applyTableFilter(): void {
@@ -1136,6 +1246,13 @@ export class EventTableComponent extends DataTableAbstractDirective implements O
     if (this.isBrowsePresentation) {
       return;
     }
+    if (this.isLibraryPresentation) {
+      // Material's selected-options order can change as choices are toggled.
+      this.libraryColumns = this.libraryAvailableColumns.filter(column => event.includes(column));
+      this.selectedColumns = this.libraryColumns;
+      this.updateDisplayedColumns();
+      return;
+    }
     this.selectedColumns = event
     this.updateDisplayedColumns();
     this.user.settings.dashboardSettings.tableSettings.selectedColumns = this.selectedColumns
@@ -1147,6 +1264,7 @@ export class EventTableComponent extends DataTableAbstractDirective implements O
   }
 
   ngOnDestroy() {
+    this.destroyed = true;
     this.tagCatalogRequestVersion += 1;
     this.unsubscribeFromAll();
     if (this.breakpointSubscription) {
@@ -1232,7 +1350,7 @@ export class EventTableComponent extends DataTableAbstractDirective implements O
       return;
     }
     const processStart = performance.now();
-    const dateFormat = this.isHandset ? 'd MMM yy' : 'EEEEEE d MMM yy HH:mm';
+    const dateFormat = this.isLibraryPresentation ? 'd MMM' : this.isHandset ? 'd MMM yy' : 'EEEEEE d MMM yy HH:mm';
     const removedAscentTypes = new Set((this.user.settings.summariesSettings?.removeAscentForEventTypes || []) as ActivityTypes[]);
     const removedDescentTypes = new Set((((this.user.settings.summariesSettings as any)?.removeDescentForEventTypes || [])) as ActivityTypes[]);
     const renderContextKey = this.buildRowRenderContextKey(dateFormat);
@@ -1335,7 +1453,8 @@ export class EventTableComponent extends DataTableAbstractDirective implements O
       isHandset: this.isHandset,
       pageSize: this.paginator?.pageSize || this.user.settings?.dashboardSettings?.tableSettings?.eventsPerPage || 0,
     });
-    this.loaded();
+    // Rebuilding display rows must not complete the parent's history request.
+    this.changeDetector.detectChanges();
 
   }
 
@@ -1366,6 +1485,7 @@ export class EventTableComponent extends DataTableAbstractDirective implements O
     statRowElement['Shared Title'] = isShared ? this.sharedEventTooltip : '';
     statRowElement['Name'] = event.name;
     statRowElement['Start Date'] = startDate ? this.datePipe.transform(startDate, dateFormat) : 'None?';
+    if (this.isLibraryPresentation) statRowElement['Start Time'] = startDate ? this.datePipe.transform(startDate, 'HH:mm') : '';
     statRowElement['Activity Types'] = event.getActivityTypesAsString();
     statRowElement['Merged Event'] = event.isMerge;
     statRowElement['Description'] = event.description;
@@ -1399,6 +1519,7 @@ export class EventTableComponent extends DataTableAbstractDirective implements O
     statRowElement['Has Benchmark'] = (event as any).benchmarkResult || ((event as any).benchmarkResults && Object.keys((event as any).benchmarkResults).length > 0);
 
     statRowElement['sort.Start Date'] = startDate ? startDate.getTime() : 0;
+    statRowElement['sort.Name'] = event.name || event.description || '';
     statRowElement['sort.Activity Types'] = statRowElement['Activity Types'];
     statRowElement['sort.Description'] = statRowElement['Description'];
     statRowElement['sort.Device Names'] = statRowElement['Device Names'];

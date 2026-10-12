@@ -26,6 +26,7 @@ import {
   SwimPaceUnits,
   XAxisTypes
 } from '@sports-alliance/sports-lib';
+import { createNominalYardPoolFixture } from './event-swim-distance-display.test-fixtures';
 import {
   buildEventChartPanels,
   hasEventChartableData,
@@ -2001,6 +2002,30 @@ describe('event-echarts-data.helper', () => {
     expect(markers[0].xValue).toBe(25);
     expect(markers[0].tooltipDetails).toContainEqual({ label: 'Distance', value: '100 yd' });
     expect(distance.getValue()).toBe(91.44);
+  });
+
+  it('cleans corroborated length and lap tooltip distances without moving markers or changing pace', () => {
+    const { activity, lap } = createNominalYardPoolFixture();
+    activity.getLaps = () => [lap, { ...lap, type: LapTypes.session_end, getDistance: () => new DataDistance(0) }];
+    const baseInput = { selectedActivities: [activity], allActivities: [activity], xAxisType: XAxisTypes.Duration,
+      userUnitSettings: { swimPaceUnits: [SwimPaceUnits.MinutesPer100Yard] } as any,
+      eventColorService: { getActivityColor: () => '#00aaff' } as any };
+    const getStat = activity.getStat;
+    activity.getStat = () => undefined;
+    const before = buildEventSwimLengthMarkers(baseInput);
+    activity.getStat = getStat;
+    const markers = buildEventSwimLengthMarkers(baseInput);
+    expect(markers[0].tooltipDetails).toContainEqual({ label: 'Distance', value: '25 yd' });
+    expect(markers.map(marker => marker.xValue)).toEqual(before.map(marker => marker.xValue));
+    expect(markers[0].tooltipDetails.filter(detail => detail.label !== 'Distance'))
+      .toEqual(before[0].tooltipDetails.filter(detail => detail.label !== 'Distance'));
+    const laps = buildEventLapMarkers({ ...baseInput, lapTypes: [LapTypes.Manual] });
+    expect(laps[0].tooltipDetails).toContainEqual({ label: 'Distance', value: '100 yd' });
+    expect(laps[0].xValue).toBe(120);
+    expect(lap.getDistance().getValue()).toBe(91.4);
+    const metricMarkers = buildEventSwimLengthMarkers({ ...baseInput,
+      userUnitSettings: { swimPaceUnits: [SwimPaceUnits.MinutesPer100Meter] } as any });
+    expect(metricMarkers[0].tooltipDetails).toContainEqual({ label: 'Distance', value: '22.9 m' });
   });
 
   it('builds swim length chart markers for active and idle lengths including the final row', () => {

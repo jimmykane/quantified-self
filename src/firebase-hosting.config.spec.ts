@@ -275,6 +275,7 @@ describe('Firebase Hosting configuration', () => {
     expect(matchesAnyHostingSource(sources, '/training/plans/library/new')).toBe(true);
     expect(matchesAnyHostingSource(sources, '/training/plans/library/saved-workout-1')).toBe(true);
     expect(matchesAnyHostingSource(sources, '/routes')).toBe(true);
+    expect(matchesAnyHostingSource(sources, '/tags')).toBe(true);
     expect(matchesAnyHostingSource(sources, '/admin/queues/workout')).toBe(true);
     expect(matchesAnyHostingSource(sources, '/admin/queues/route-reparse')).toBe(true);
     expect(matchesAnyHostingSource(sources, '/user/user-1/event/event-1')).toBe(true);
@@ -364,7 +365,7 @@ describe('Firebase Hosting configuration', () => {
     expect(sitemapLastmodForUrl(`${siteOrigin}/features/fit-gpx-tcx-file-analyzer`)).toBe('2026-09-02');
     expect(sitemapXml).not.toContain(`${siteOrigin}/features/workout-file-comparison`);
     expect(sitemapXml).not.toContain(`${siteOrigin}/features/sports-watch-benchmark`);
-    // Focused swim choices, lap column ordering, and swim rest blocks update Help.
+    // Tags, focused swim choices, lap column ordering, rest blocks, and nominal yard display update Help.
     expect(sitemapLastmodForUrl(`${siteOrigin}/help`)).toBe('2026-10-12');
     expect(sitemapLastmodForUrl(`${siteOrigin}/policies`)).toBe('2026-10-07');
     expect(sitemapLastmodForUrl(`${siteOrigin}/privacy`)).toBe('2026-10-07');
@@ -380,6 +381,7 @@ describe('Firebase Hosting configuration', () => {
     expect(sitemapXml).not.toContain('<loc>https://quantified-self.io/training/plans</loc>');
     expect(sitemapXml).not.toContain('<loc>https://quantified-self.io/training</loc>');
     expect(sitemapXml).not.toContain('<loc>https://quantified-self.io/health</loc>');
+    expect(sitemapXml).not.toContain('<loc>https://quantified-self.io/tags</loc>');
     expect(sitemapXml).not.toContain('<loc>https://quantified-self.io/mcp</loc>');
     expect(sitemapXml).not.toContain('<loc>https://quantified-self.io/mcp/authorize</loc>');
     expect(sitemapXml).not.toContain('<loc>https://quantified-self.io/login</loc>');

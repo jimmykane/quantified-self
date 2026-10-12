@@ -54,6 +54,7 @@ import { normalizeUnitDerivedTypeLabel } from './stat-label.helper';
 import { createSwimDistanceDisplayStat, resolveUnitAwareDisplayStat } from '@shared/unit-aware-display';
 import { resolveSummaryDisplayStat } from './summary-display.helper';
 import { AppSwimLength, getActivitySwimLengths } from './event-swim-length.helper';
+import { getNominalSwimDistanceDisplayContext, getNominalSwimLengthsDisplayMeters } from './event-swim-distance-display.helper';
 import { getAppCanonicalChartDataTypes } from './app-chart-data-types.helper';
 import type {
   TrackChartPanelModel,
@@ -1015,6 +1016,7 @@ export function buildEventLapMarkers(input: {
   const markers: EventChartLapMarker[] = [];
 
   input.selectedActivities.forEach((activity) => {
+    const nominalDistanceDisplay = getNominalSwimDistanceDisplayContext(activity);
     const activityCache = createActivityNumericCache(activity);
     const lapDistanceLookup = input.xAxisType === XAxisTypes.Distance
       ? createLapDistanceLookup(activity, activityCache)
@@ -1049,7 +1051,7 @@ export function buildEventLapMarkers(input: {
         activityID: activity.getID() || '',
         activityName: activity.creator?.name || 'Activity',
         tooltipTitle: `Lap ${index + 1}`,
-        tooltipDetails: buildLapTooltipDetails(lap, input.userUnitSettings, activity.type),
+        tooltipDetails: buildLapTooltipDetails(lap, input.userUnitSettings, activity.type, nominalDistanceDisplay?.lapMeters.get(lap)),
       });
     });
   });
@@ -1068,6 +1070,7 @@ export function buildEventSwimLengthMarkers(input: {
 
   input.selectedActivities.forEach((activity) => {
     const swimLengths = getActivitySwimLengths(activity);
+    const nominalDistanceDisplay = getNominalSwimDistanceDisplayContext(activity);
     if (!swimLengths.length) {
       return;
     }
@@ -1097,7 +1100,8 @@ export function buildEventSwimLengthMarkers(input: {
         activityID: activity.getID() || '',
         activityName: activity.creator?.name || 'Activity',
         tooltipTitle: typeLabel ? `${label} (${typeLabel})` : label,
-        tooltipDetails: buildSwimLengthTooltipDetails(swimLength, input.userUnitSettings),
+        tooltipDetails: buildSwimLengthTooltipDetails(swimLength, input.userUnitSettings,
+          getNominalSwimLengthsDisplayMeters(nominalDistanceDisplay, [swimLength])),
       });
     });
   });
@@ -1800,6 +1804,7 @@ function buildLapTooltipDetails(
   lap: LapInterface,
   unitSettings?: UserUnitSettingsInterface | null,
   activityType?: unknown,
+  nominalDistanceDisplayMeters?: number,
 ): EventChartMarkerTooltipDetail[] {
   const details: EventChartMarkerTooltipDetail[] = [];
 
@@ -1809,7 +1814,10 @@ function buildLapTooltipDetails(
     details.push({ label: 'Duration', value: durationValue });
   }
 
-  const distanceStat = resolveSummaryDisplayStat(lap.getDistance?.(), DataDistance.type, [activityType], unitSettings);
+  const rawDistance = lap.getDistance?.();
+  const distanceStat = nominalDistanceDisplayMeters !== undefined && rawDistance
+    ? createSwimDistanceDisplayStat(Number(rawDistance.getValue()), unitSettings, nominalDistanceDisplayMeters)
+    : resolveSummaryDisplayStat(rawDistance, DataDistance.type, [activityType], unitSettings);
   const distanceValue = formatLapDataValue(distanceStat, undefined, unitSettings);
   if (distanceValue) {
     details.push({ label: 'Distance', value: distanceValue });
@@ -1840,13 +1848,14 @@ function buildLapTooltipDetails(
 
 function buildSwimLengthTooltipDetails(
   swimLength: AppSwimLength,
-  unitSettings?: UserUnitSettingsInterface | null
+  unitSettings?: UserUnitSettingsInterface | null,
+  nominalDistanceDisplayMeters?: number,
 ): EventChartMarkerTooltipDetail[] {
   const details: EventChartMarkerTooltipDetail[] = [];
 
   appendTextDetail(details, 'Lap', formatNullableInteger(swimLength.lapIndex));
   appendLapDetail(details, 'Duration', swimLength.timerTime ?? swimLength.elapsedTime, unitSettings, { compactDuration: true });
-  appendLapDetail(details, 'Distance', getSwimLengthDistance(swimLength, unitSettings), unitSettings);
+  appendLapDetail(details, 'Distance', getSwimLengthDistance(swimLength, unitSettings, nominalDistanceDisplayMeters), unitSettings);
   appendTextDetail(details, 'Type', formatSwimLengthLabel(swimLength.type));
   appendTextDetail(details, 'Stroke', formatSwimLengthLabel(swimLength.stroke));
   appendTextDetail(details, 'Strokes', formatNullableInteger(swimLength.strokes));
@@ -1944,13 +1953,15 @@ function getSwimLengthPace(swimLength: AppSwimLength): DataSwimPace | null {
   return new DataSwimPace(convertSpeedToSwimPace(speedValue));
 }
 
-function getSwimLengthDistance(swimLength: AppSwimLength, unitSettings?: UserUnitSettingsInterface | null): DataSwimDistance | null {
+function getSwimLengthDistance(
+  swimLength: AppSwimLength, unitSettings?: UserUnitSettingsInterface | null, nominalDistanceDisplayMeters?: number,
+): DataSwimDistance | null {
   const distanceValue = swimLength.distance?.getValue?.();
   if (typeof distanceValue !== 'number' || !Number.isFinite(distanceValue)) {
     return null;
   }
 
-  return createSwimDistanceDisplayStat(distanceValue, unitSettings);
+  return createSwimDistanceDisplayStat(distanceValue, unitSettings, nominalDistanceDisplayMeters);
 }
 
 function formatNullableInteger(value: number | null | undefined): string {
