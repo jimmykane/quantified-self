@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { buildEventTagLibrary, filterEventsByTag, reconcileTagLibraryEvents } from './event-tag-library.helper';
+import { buildEventTagLibrary, filterEventsByTag } from './event-tag-library.helper';
 
 describe('Event tag library', () => {
   const events = [
@@ -21,11 +21,5 @@ describe('Event tag library', () => {
     expect(filterEventsByTag(events, ' ENDURANCE ')).toEqual(events.slice(0, 2));
     expect(filterEventsByTag(events, '')).toEqual(events);
     expect(filterEventsByTag(events, 'Race day')).toEqual([]);
-  });
-  it('reconciles deletions and replacements without removing events outside the selected tag', () => {
-    const replacement = { ...events[0], tags: ['Recovery'] };
-    const next = reconcileTagLibraryEvents(events, events.slice(0, 2), [replacement]);
-    expect(next).toEqual([replacement, events[2]]);
-    expect(events).toHaveLength(3);
   });
 });

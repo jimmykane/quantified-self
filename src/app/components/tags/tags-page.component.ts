@@ -1,14 +1,15 @@
 import { ChangeDetectionStrategy, Component, DestroyRef, OnInit, computed, inject, signal } from '@angular/core';
+import { Location } from '@angular/common';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { ActivatedRoute, Router } from '@angular/router';
 import { catchError, combineLatest, firstValueFrom, of } from 'rxjs';
-import type { EventInterface } from '@sports-alliance/sports-lib';
-import { normalizeEventTagSuggestions } from '@shared/event-tags';
+import { normalizeEventTags, normalizeEventTagSuggestions } from '@shared/event-tags';
 import type { AppEventInterface } from '@shared/app-event.interface';
 import { AppAuthService } from '../../authentication/app.auth.service';
 import type { AppUserInterface } from '../../models/app-user.interface';
 import type { FirebaseUserType } from '../../firebase/auth';
-import { buildEventTagLibrary, filterEventsByTag, reconcileTagLibraryEvents } from '../../helpers/event-tag-library.helper';
+import { buildEventTagLibrary, filterEventsByTag } from '../../helpers/event-tag-library.helper';
+import type { EventTableEventsChange } from '../event-table/event.table.component';
 import { EventTableModule } from '../../modules/event-table.module';
 import { SharedModule } from '../../modules/shared.module';
 import { AppEventService, type EventQueryCursor } from '../../services/app.event.service';
@@ -32,6 +33,7 @@ export class TagsPageComponent implements OnInit {
   private readonly logger = inject(LoggerService);
   private readonly route = inject(ActivatedRoute);
   private readonly router = inject(Router);
+  private readonly location = inject(Location);
   private readonly destroyRef = inject(DestroyRef);
   private owner: FirebaseUserType | null = null;
   private generation = 0;
@@ -49,9 +51,10 @@ export class TagsPageComponent implements OnInit {
   readonly historyError = signal(false);
   readonly catalogError = signal(false);
   readonly library = computed(() => buildEventTagLibrary(this.events(), this.catalogTags(), this.selectedTag()));
+  readonly allActivitiesHref = this.location.prepareExternalUrl('/tags');
   readonly visibleTags = computed(() => this.library()
     .filter(tag => tag.key.includes(this.tagSearch().trim().toLowerCase()))
-    .map(tag => ({ ...tag, href: `?tag=${encodeURIComponent(tag.name)}` })));
+    .map(tag => ({ ...tag, href: this.location.prepareExternalUrl(`/tags?tag=${encodeURIComponent(tag.name)}`) })));
   readonly selectedKey = computed(() => this.selectedTag().toLowerCase());
   readonly selectedName = computed(() => this.library().find(tag => tag.key === this.selectedKey())?.name || this.selectedTag() || 'All activities');
   // A fresh owner input also refreshes the shared table's unit-aware row cache.
@@ -124,9 +127,20 @@ export class TagsPageComponent implements OnInit {
     void this.loadCatalog(true);
   }
 
-  onEventsChange(updated: EventInterface[]): void {
+  onEventsChange(changes: EventTableEventsChange): void {
+    if (changes.userID !== this.user()?.uid || this.owner !== this.auth.currentUser) return;
     const knownTags = this.library().map(tag => tag.name);
-    this.events.set(reconcileTagLibraryEvents(this.events(), this.filteredEvents(), updated as AppEventInterface[]));
+    const deletedIDs = new Set(changes.deletedEventIDs);
+    const updatedTags = new Map(Object.entries(changes.updatedTags));
+    const events = this.events().filter(event => !deletedIDs.has(event.getID()));
+    for (const event of events) {
+      const tags = updatedTags.get(event.getID());
+      if (!tags) continue;
+      // Keep Sports Lib instances and newer metadata; only the confirmed fields changed.
+      event.tags = normalizeEventTags(tags);
+      delete event.benchmarkReviewTags;
+    }
+    this.events.set(events);
     // Keep a newly created label visible after its last matching row leaves the table.
     this.catalogTags.set(normalizeEventTagSuggestions([...this.catalogTags(), ...knownTags, ...this.library().map(tag => tag.name)]));
   }

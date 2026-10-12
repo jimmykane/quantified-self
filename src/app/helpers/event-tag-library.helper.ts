@@ -28,15 +28,3 @@ export function filterEventsByTag<T extends EventTagsContainer>(events: readonly
   if (!normalized) return [...events];
   return events.filter(event => getEventTags(event).some(value => value.toLowerCase() === normalized.toLowerCase()));
 }
-
-/** A table edits only its visible subset; retain records belonging to other tags. */
-export function reconcileTagLibraryEvents<T extends { getID(): string }>(
-  events: readonly T[],
-  previousVisible: readonly T[],
-  updated: readonly T[],
-): T[] {
-  const visibleIDs = new Set(previousVisible.map(event => event.getID()));
-  const updatedByID = new Map(updated.map(event => [event.getID(), event]));
-  return events.filter(event => !visibleIDs.has(event.getID()) || updatedByID.has(event.getID()))
-    .map(event => updatedByID.get(event.getID()) || event);
-}

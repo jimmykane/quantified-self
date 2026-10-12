@@ -76,6 +76,12 @@ interface DeviceNameDisplayItem {
 
 export type EventTablePresentation = 'dashboard' | 'browse';
 
+export interface EventTableEventsChange {
+  userID: string;
+  updatedTags: Record<string, string[]>;
+  deletedEventIDs: string[];
+}
+
 @Component({
   selector: 'app-event-table',
   templateUrl: './event.table.component.html',
@@ -98,7 +104,7 @@ export class EventTableComponent extends DataTableAbstractDirective implements O
   @Input() filterContext = '';
   @Input() emptyMessage = 'No activities yet';
   @Input() emptyHint = 'Import an activity or change your filters';
-  @Output() eventsChange = new EventEmitter<EventInterface[]>();
+  @Output() eventsChange = new EventEmitter<EventTableEventsChange>();
   @ViewChild(MatSort, { static: true }) sort!: MatSort;
   @ViewChild(MatPaginator, { static: true }) paginator!: MatPaginator;
   @ViewChild(MatCard, { static: true }) table!: MatCard;
@@ -339,16 +345,15 @@ export class EventTableComponent extends DataTableAbstractDirective implements O
   }
 
   public removeDeletedEvent(eventID: string): void {
-    if (!eventID || !this.events) {
+    if (!eventID || !this.events || !this.user) {
       return;
     }
     const nextEvents = this.events.filter(event => event?.getID() !== eventID);
-    if (nextEvents.length === this.events.length) {
-      return;
+    if (nextEvents.length !== this.events.length) {
+      this.events = nextEvents;
+      this.processChanges('after_delete_row');
     }
-    this.events = nextEvents;
-    this.processChanges('after_delete_row');
-    this.eventsChange.emit([...this.events]);
+    this.eventsChange.emit({ userID: this.user.uid, updatedTags: {}, deletedEventIDs: [eventID] });
   }
 
   private persistDashboardSettings(dashboardSettingsPatch: Record<string, unknown>): Promise<void> {
@@ -621,6 +626,11 @@ export class EventTableComponent extends DataTableAbstractDirective implements O
   }
 
   async deleteSelection() {
+    const user = this.user;
+    const eventIDs = [...new Set(this.selection.selected
+      .map(selected => selected.Event?.getID())
+      .filter((eventID): eventID is string => !!eventID))];
+    if (!user || !eventIDs.length) return;
     this.loading();
     const dialogRef = this.dialog.open(ConfirmationDialogComponent, {
       data: {
@@ -632,25 +642,27 @@ export class EventTableComponent extends DataTableAbstractDirective implements O
       }
     });
     this.deleteConfirmationSubscription = dialogRef.afterClosed().subscribe(async (result) => {
-      if (!result) {
+      if (!result || this.user?.uid !== user.uid) {
         this.loaded();
         return;
       }
       try {
-        this.unsubscribeFromAll();
-        const deletePromises = [];
-        const eventsToDelete = this.selection.selected.map(selected => selected.Event);
-        eventsToDelete.forEach((event) => deletePromises.push(this.eventService.deleteAllEventData(this.user, event.getID())));
         this.selection.clear();
-        await Promise.all(deletePromises);
+        const outcomes = await Promise.allSettled(eventIDs.map(eventID =>
+          this.eventService.deleteAllEventData(user, eventID)));
+        if (this.user?.uid !== user.uid) return;
+        const deletedIds = new Set(eventIDs.filter((_eventID, index) => outcomes[index].status === 'fulfilled'));
 
-        // Update local view
-        if (this.events) {
-          const deletedIds = new Set(eventsToDelete.map(e => e.getID()));
-          this.events = this.events.filter(e => !deletedIds.has(e.getID()));
-          this.processChanges('after_delete_selection');
-          this.eventsChange.emit([...this.events]);
+        // Reconcile each confirmed result even when another deletion failed.
+        if (deletedIds.size > 0) {
+          if (this.events) {
+            this.events = this.events.filter(e => !deletedIds.has(e.getID()));
+            this.processChanges('after_delete_selection');
+          }
+          this.eventsChange.emit({ userID: user.uid, updatedTags: {}, deletedEventIDs: [...deletedIds] });
         }
+        const failure = outcomes.find(outcome => outcome.status === 'rejected');
+        if (failure?.status === 'rejected') throw failure.reason;
 
         this.analyticsService.logEvent('delete_events');
         this.snackBar.open('Activities deleted', undefined, {
@@ -991,6 +1003,7 @@ export class EventTableComponent extends DataTableAbstractDirective implements O
     if (!this.showActions || !this.user || !event?.getID?.()) {
       return;
     }
+    const user = this.user;
     this.hapticsService.selection();
     const originalTags = this.eventTagService.getTags(event);
 
@@ -1002,8 +1015,9 @@ export class EventTableComponent extends DataTableAbstractDirective implements O
         tags: originalTags,
         suggestions: this.tagFilterOptions,
         save: async (tags: string[]) => {
-          const savedTags = await this.eventTagService.saveTags(this.user, event, tags, originalTags);
+          const savedTags = await this.eventTagService.saveTags(user, event, tags, originalTags);
           this.applySavedTagsToLoadedEvent(event.getID(), savedTags, event);
+          this.eventsChange.emit({ userID: user.uid, updatedTags: { [event.getID()]: savedTags }, deletedEventIDs: [] });
           return savedTags;
         },
       },
@@ -1014,7 +1028,6 @@ export class EventTableComponent extends DataTableAbstractDirective implements O
     }
 
     this.processChanges('event_tags_saved');
-    this.eventsChange.emit([...this.events]);
     void this.loadAllHistoryTags(true);
     this.snackBar.open('Tags saved.', undefined, { duration: 2000 });
   }
@@ -1025,6 +1038,7 @@ export class EventTableComponent extends DataTableAbstractDirective implements O
     if (this.isBulkTagSaving || !this.user || !this.selection.selected.length) {
       return;
     }
+    const user = this.user;
     if (this.selection.selected.length > EVENT_TAG_BULK_LIMIT) {
       this.snackBar.open(
         `Select up to ${EVENT_TAG_BULK_LIMIT} activities to update tags.`,
@@ -1056,11 +1070,12 @@ export class EventTableComponent extends DataTableAbstractDirective implements O
         save: async (changes: { add: string[]; remove: string[] }) => {
           this.isBulkTagSaving = true;
           try {
-            savedResults = await this.eventTagService.applyBulkChanges(this.user, selectedEventIDs, changes);
+            savedResults = await this.eventTagService.applyBulkChanges(user, selectedEventIDs, changes);
             selectedEvents.forEach((event) => {
               const eventID = event.getID();
               this.applySavedTagsToLoadedEvent(eventID, savedResults?.[eventID] || getEventTags(event), event);
             });
+            this.eventsChange.emit({ userID: user.uid, updatedTags: savedResults, deletedEventIDs: [] });
             return savedResults;
           } finally {
             this.isBulkTagSaving = false;
@@ -1074,7 +1089,6 @@ export class EventTableComponent extends DataTableAbstractDirective implements O
       return;
     }
     this.processChanges('bulk_event_tags_saved');
-    this.eventsChange.emit([...this.events]);
     void this.loadAllHistoryTags(true);
     this.snackBar.open(
       `Tags updated on ${selectedEvents.length} ${selectedEvents.length === 1 ? 'activity' : 'activities'}.`,

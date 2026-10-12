@@ -970,7 +970,7 @@ describe('EventTableComponent', () => {
         expect(mockEventTagService.saveTags).toHaveBeenCalledWith(mockUser, event, ['Race'], []);
         expect(event.tags).toEqual(['Race']);
         expect(changes).toHaveBeenCalledOnce();
-        expect(changes).toHaveBeenCalledWith(component.events);
+        expect(changes).toHaveBeenCalledWith({ userID: mockUser.uid, updatedTags: { [event.getID()]: ['Race'] }, deletedEventIDs: [] });
     });
 
     it('should apply saved row tags to a refreshed event instance with the same ID', async () => {
@@ -1002,6 +1002,8 @@ describe('EventTableComponent', () => {
     });
 
     it('should not overwrite a newer row refresh that arrives after the tag save completes', async () => {
+        const changes = vi.fn();
+        component.eventsChange.subscribe(changes);
         const originalEvent = component.events[0] as any;
         const refreshedEvent = new MockEvent(originalEvent.getID()) as any;
         refreshedEvent.tags = ['Concurrent'];
@@ -1018,6 +1020,7 @@ describe('EventTableComponent', () => {
             originalEvent,
         );
         const savedTags = await dialogData.save(['Race']);
+        expect(changes).toHaveBeenCalledWith({ userID: mockUser.uid, updatedTags: { [originalEvent.getID()]: ['Race'] }, deletedEventIDs: [] });
         component.events = [refreshedEvent, ...component.events.slice(1)];
         closed.next(savedTags);
         closed.complete();
@@ -1026,6 +1029,7 @@ describe('EventTableComponent', () => {
         expect(originalEvent.tags).toEqual(['Race']);
         expect(refreshedEvent.tags).toEqual(['Concurrent']);
         expect((component.data.data[0] as any)['Tag Values']).toEqual(['Concurrent']);
+        expect(changes).toHaveBeenCalledOnce();
     });
 
     it('should apply bulk add/remove changes and update selected event rows', async () => {
@@ -1053,10 +1057,12 @@ describe('EventTableComponent', () => {
         expect((component.events[1] as any).tags).toEqual(['Recovery']);
         expect(component.selection.isEmpty()).toBe(true);
         expect(changes).toHaveBeenCalledOnce();
-        expect(changes).toHaveBeenCalledWith(component.events);
+        expect(changes).toHaveBeenCalledWith({ userID: mockUser.uid, updatedTags: { event1: ['Race'], event2: ['Recovery'] }, deletedEventIDs: [] });
     });
 
     it('should not overwrite a newer row refresh after a bulk tag save completes', async () => {
+        const changes = vi.fn();
+        component.eventsChange.subscribe(changes);
         const selectedRow = component.data.data[0] as any;
         const selectedEvent = selectedRow.Event as any;
         const refreshedEvent = new MockEvent(selectedEvent.getID()) as any;
@@ -1076,6 +1082,7 @@ describe('EventTableComponent', () => {
             { preventDefault: vi.fn(), stopPropagation: vi.fn() } as any,
         );
         await dialogData.save({ add: ['Race'], remove: [] });
+        expect(changes).toHaveBeenCalledWith({ userID: mockUser.uid, updatedTags: { [selectedEvent.getID()]: ['Race'] }, deletedEventIDs: [] });
         component.events = [refreshedEvent, ...component.events.slice(1)];
         closed.next(true);
         closed.complete();
@@ -1084,6 +1091,7 @@ describe('EventTableComponent', () => {
         expect(selectedEvent.tags).toEqual(['Race']);
         expect(refreshedEvent.tags).toEqual(['Concurrent']);
         expect((component.data.data[0] as any)['Tag Values']).toEqual(['Concurrent']);
+        expect(changes).toHaveBeenCalledOnce();
     });
 
     it('should reject oversized bulk tag selections before opening the dialog', async () => {
@@ -1337,7 +1345,16 @@ describe('EventTableComponent', () => {
             expect(component.events.map((event: any) => event.getID())).toEqual(['event2']);
             expect(component.selection.selected).toEqual([]);
             expect(processChangesSpy).toHaveBeenCalledWith('after_delete_row');
-            expect(changes).toHaveBeenCalledWith(component.events);
+            expect(changes).toHaveBeenCalledWith({ userID: mockUser.uid, updatedTags: {}, deletedEventIDs: ['event1'] });
+        });
+
+        it('reports a confirmed deletion even after a parent filter removed the row from this table', () => {
+            const changes = vi.fn();
+            component.eventsChange.subscribe(changes);
+            component.events = [new MockEvent('event2') as any];
+            component.removeDeletedEvent('event1');
+            expect(component.events.map(event => event.getID())).toEqual(['event2']);
+            expect(changes).toHaveBeenCalledWith({ userID: mockUser.uid, updatedTags: {}, deletedEventIDs: ['event1'] });
         });
 
         it('should abort delete when confirmation dialog is cancelled', async () => {
@@ -1375,6 +1392,79 @@ describe('EventTableComponent', () => {
             expect(processChangesSpy).toHaveBeenCalledWith('after_delete_selection');
             expect(mockAnalyticsService.logEvent).toHaveBeenCalledWith('delete_events');
             expect(mockSnackBar.open).toHaveBeenCalledWith('Activities deleted', undefined, { duration: 2000 });
+        });
+
+        it('reconciles confirmed deletions even when another selected activity fails to delete', async () => {
+            const changes = vi.fn();
+            component.eventsChange.subscribe(changes);
+            const e1 = new MockEvent('event1');
+            const e2 = new MockEvent('event2');
+            component.events = [e1 as any, e2 as any, new MockEvent('event3') as any];
+            component.selection.select({ Event: e1 } as any, { Event: e2 } as any);
+            mockEventService.deleteAllEventData.mockResolvedValueOnce(true).mockRejectedValueOnce(new Error('failed'));
+            mockDialog.open.mockReturnValueOnce({ afterClosed: () => of(true) });
+
+            await component.deleteSelection();
+            await new Promise(resolve => setTimeout(resolve, 0));
+
+            expect(component.events.map(event => event.getID())).toEqual(['event2', 'event3']);
+            expect(changes).toHaveBeenCalledOnce();
+            expect(changes).toHaveBeenCalledWith({ userID: mockUser.uid, updatedTags: {}, deletedEventIDs: ['event1'] });
+            expect(mockHapticsService.error).toHaveBeenCalledOnce();
+            expect(mockHapticsService.success).not.toHaveBeenCalled();
+        });
+
+        it('keeps activity search and sort persistence active after bulk deletion', async () => {
+            component.events = [new MockEvent('event1') as any, new MockEvent('event2') as any];
+            component.selection.select({ Event: component.events[0] } as any);
+            mockDialog.open.mockReturnValueOnce({ afterClosed: () => of(true) });
+            await component.deleteSelection();
+            await new Promise(resolve => setTimeout(resolve, 0));
+
+            component.onSearchInput({ target: { value: 'test run' } } as unknown as Event);
+            await new Promise(resolve => setTimeout(resolve, 300));
+            expect(component.searchTerm).toBe('test run');
+            expect(JSON.parse(component.data.filter).text).toBe('test run');
+            component.sort.sortChange.next({ active: 'Distance', direction: 'asc' });
+            expect(mockUserService.updateUserProperties).toHaveBeenCalledWith(mockUser, {
+                settings: { dashboardSettings: { tableSettings: { active: 'Distance', direction: 'asc' } } },
+            });
+        });
+
+        it('deletes the confirmed IDs when the tag context changes while confirmation is open', async () => {
+            const original = new MockEvent('event1');
+            component.events = [original as any, new MockEvent('event2') as any];
+            component.selection.select({ Event: original } as any);
+            const closed = new Subject<boolean>();
+            mockDialog.open.mockReturnValueOnce({ afterClosed: () => closed.asObservable() });
+            const changes = vi.fn();
+            component.eventsChange.subscribe(changes);
+            await component.deleteSelection();
+
+            component.events = [new MockEvent('event2') as any];
+            component.paginator.firstPage = vi.fn();
+            component.ngOnChanges({ filterContext: new SimpleChange('Endurance', 'Recovery', false) });
+            closed.next(true);
+            closed.complete();
+            await new Promise(resolve => setTimeout(resolve, 0));
+
+            expect(mockEventService.deleteAllEventData).toHaveBeenCalledWith(mockUser, 'event1');
+            expect(changes).toHaveBeenCalledWith({ userID: mockUser.uid, updatedTags: {}, deletedEventIDs: ['event1'] });
+            expect(component.events.map(event => event.getID())).toEqual(['event2']);
+        });
+
+        it('abandons a pending delete confirmation when the account changes', async () => {
+            component.selection.select({ Event: component.events[0] } as any);
+            const closed = new Subject<boolean>();
+            mockDialog.open.mockReturnValueOnce({ afterClosed: () => closed.asObservable() });
+            await component.deleteSelection();
+            component.user = new User('other');
+            closed.next(true);
+            closed.complete();
+            await new Promise(resolve => setTimeout(resolve, 0));
+            expect(mockEventService.deleteAllEventData).not.toHaveBeenCalled();
+            expect(mockHapticsService.success).not.toHaveBeenCalled();
+            expect(mockHapticsService.error).not.toHaveBeenCalled();
         });
     });
 

@@ -1,4 +1,5 @@
 import { Component, EventEmitter, Input, Output } from '@angular/core';
+import { APP_BASE_HREF } from '@angular/common';
 import { TestBed } from '@angular/core/testing';
 import { NoopAnimationsModule } from '@angular/platform-browser/animations';
 import { ActivatedRoute, Router, convertToParamMap } from '@angular/router';
@@ -15,6 +16,7 @@ import { EventTagCatalogService } from '../../services/event-tag-catalog.service
 import { AppHapticsService } from '../../services/app.haptics.service';
 import { LoggerService } from '../../services/logger.service';
 import { EventTableModule } from '../../modules/event-table.module';
+import type { EventTableEventsChange } from '../event-table/event.table.component';
 import { TagsPageComponent } from './tags-page.component';
 
 @Component({ selector: 'app-event-table', standalone: true, template: '' })
@@ -27,7 +29,7 @@ class EventTableStub {
   @Input() filterContext: string;
   @Input() emptyMessage: string;
   @Input() emptyHint: string;
-  @Output() eventsChange = new EventEmitter<EventInterface[]>();
+  @Output() eventsChange = new EventEmitter<EventTableEventsChange>();
 }
 
 function event(id: string, tags: string[], legacy = false): AppEventInterface {
@@ -35,9 +37,9 @@ function event(id: string, tags: string[], legacy = false): AppEventInterface {
 }
 const records = [event('a', ['endurance']), event('b', ['ENDURANCE'], true), event('c', ['Recovery'])];
 const cursor = { id: 'last-page-doc' } as EventQueryCursor;
-const page = (events = records, hasMore = true): GetEventsPageResult => ({ events, hasMore, source: 'server', firstCursor: cursor, lastCursor: cursor });
+const page = (events = records.map(record => ({ ...record })), hasMore = true): GetEventsPageResult => ({ events, hasMore, source: 'server', firstCursor: cursor, lastCursor: cursor });
 
-async function setup(tag = '') {
+async function setup(tag = '', baseHref = '/') {
   const owner = { uid: 'owner' };
   const user$ = new BehaviorSubject(new User('owner') as AppUserInterface);
   const authState$ = new BehaviorSubject(owner);
@@ -50,6 +52,7 @@ async function setup(tag = '') {
   await TestBed.configureTestingModule({
     imports: [TagsPageComponent, NoopAnimationsModule],
     providers: [
+      { provide: APP_BASE_HREF, useValue: baseHref },
       { provide: AppAuthService, useValue: auth },
       { provide: AppEventService, useValue: events },
       { provide: EventTagCatalogService, useValue: catalog },
@@ -126,7 +129,7 @@ describe('TagsPageComponent', () => {
     expect(context.component.visibleTags().map(tag => tag.name)).toEqual(['Race day']);
     expect(context.haptics.selection).not.toHaveBeenCalled();
     const link = [...context.fixture.nativeElement.querySelectorAll('.tag-library-list a')].find((element: HTMLAnchorElement) => element.textContent.includes('Race day')) as HTMLAnchorElement;
-    expect(link.getAttribute('href')).toBe('?tag=Race%20day');
+    expect(link.getAttribute('href')).toBe('/tags?tag=Race%20day');
     link.click();
     context.fixture.detectChanges();
     expect(context.haptics.selection).toHaveBeenCalledOnce();
@@ -141,6 +144,18 @@ describe('TagsPageComponent', () => {
     expect(click.defaultPrevented).toBe(false);
     expect(context.haptics.selection).not.toHaveBeenCalled();
     expect(context.router.navigate).not.toHaveBeenCalled();
+  });
+
+  it('links directly to the Tags route under the deployment base path for native browser navigation', async () => {
+    const context = await setup('Race / day & test', '/qs/');
+    await render(context);
+    const links = [...context.fixture.nativeElement.querySelectorAll('.tag-library-list a')] as HTMLAnchorElement[];
+    const tagLink = links.find(link => link.textContent.includes('Race / day & test'))!;
+    const url = new URL(tagLink.href);
+    expect(url.pathname).toBe('/qs/tags');
+    expect(url.searchParams.get('tag')).toBe('Race / day & test');
+    expect(new URL(links[0].href).pathname).toBe('/qs/tags');
+    expect(new URL(links[0].href).search).toBe('');
   });
 
   it('appends older pages, de-duplicates records, and only then reports complete empty membership', async () => {
@@ -205,15 +220,58 @@ describe('TagsPageComponent', () => {
   it('reconciles tag edits and row deletion while preserving unrelated activities', async () => {
     const context = await setup('Endurance');
     await render(context);
-    const updated = event('a', ['New tag']);
     const table = context.fixture.debugElement.query(By.directive(EventTableStub)).componentInstance as EventTableStub;
-    table.eventsChange.emit([updated]);
+    table.eventsChange.emit({ userID: 'owner', updatedTags: { a: ['New tag'] }, deletedEventIDs: ['b'] });
     context.fixture.detectChanges();
     expect(context.component.events().map(value => value.getID())).toEqual(['a', 'c']);
     expect(context.component.filteredEvents()).toHaveLength(0);
     expect(context.component.library().find(tag => tag.name === 'New tag')?.count).toBe(1);
     expect(context.component.library().find(tag => tag.name === 'Endurance')?.count).toBe(0);
     expect(context.haptics.selection).not.toHaveBeenCalled();
+  });
+
+  it('reconciles a late mutation after changing tags without inferring deletion from the new visible subset', async () => {
+    const context = await setup('Endurance');
+    await render(context);
+    const table = context.fixture.debugElement.query(By.directive(EventTableStub)).componentInstance as EventTableStub;
+    context.component.selectTag('Recovery');
+    // The old table input can still be present until Angular renders the route change.
+    table.eventsChange.emit({ userID: 'owner', updatedTags: { a: ['New tag'] }, deletedEventIDs: ['b'] });
+    context.fixture.detectChanges();
+    expect(context.component.events().map(value => value.getID())).toEqual(['a', 'c']);
+    expect(context.component.filteredEvents().map(value => value.getID())).toEqual(['c']);
+    context.component.selectTag('New tag');
+    expect(context.component.filteredEvents().map(value => value.getID())).toEqual(['a']);
+  });
+
+  it('applies only confirmed tag fields to a fresh event instance and retains its newer metadata', async () => {
+    const context = await setup('Endurance');
+    await render(context);
+    const refreshed = { ...event('a', ['endurance']), name: 'Newer name', benchmarkReviewTags: ['Legacy'] };
+    context.component.events.set([refreshed, ...context.component.events().slice(1)]);
+    const table = context.fixture.debugElement.query(By.directive(EventTableStub)).componentInstance as EventTableStub;
+    table.eventsChange.emit({ userID: 'owner', updatedTags: { a: ['Recovery'] }, deletedEventIDs: [] });
+    expect(context.component.events()[0]).toBe(refreshed);
+    expect(context.component.events()[0].name).toBe('Newer name');
+    expect(context.component.events()[0].tags).toEqual(['Recovery']);
+    expect(context.component.events()[0].benchmarkReviewTags).toBeUndefined();
+  });
+
+  it('ignores an old table callback before Angular tears it down after an account switch', async () => {
+    const context = await setup();
+    await render(context);
+    const oldTable = context.fixture.debugElement.query(By.directive(EventTableStub)).componentInstance as EventTableStub;
+    context.auth.currentUser = { uid: 'other' };
+    context.authState$.next(context.auth.currentUser);
+    context.user$.next(new User('other') as AppUserInterface);
+    await Promise.resolve();
+    // New owner data can be ready before the old table's output is detached.
+    expect(context.component.user().uid).toBe('other');
+    expect(context.component.events()).toHaveLength(3);
+    oldTable.eventsChange.emit({ userID: 'owner', updatedTags: { a: ['Private tag'] }, deletedEventIDs: ['b'] });
+    expect(context.component.events().map(value => value.getID())).toEqual(['a', 'b', 'c']);
+    expect(context.component.events()[0].tags).toEqual(['endurance']);
+    expect(context.component.library().map(tag => tag.name)).not.toContain('Private tag');
   });
 
   it('retries catalog errors and refreshes from the newest page without changing the selected tag', async () => {

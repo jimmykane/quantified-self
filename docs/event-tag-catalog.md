@@ -23,7 +23,12 @@ The catalog is independent of the loaded history. Counts deduplicate normalized 
 spelling is preferred. Locally observed and deep-linked labels remain selectable even if catalog loading fails.
 
 The table's optional `eventsChange` output reconciles successfully saved single/bulk tags and deleted rows with the
-library's owner-scoped history without removing unrelated tags' rows. Saved/observed labels remain in the current
+library's owner-scoped history using explicit tag patches, deleted IDs, and the operation's captured owner UID.
+Callbacks from another owner are ignored even before Angular detaches the previous table. It never infers deletion from a table
+snapshot or the currently selected tag, so late callbacks cannot remove unrelated rows or replace newer metadata.
+Tag patches are emitted when a save succeeds rather than replayed when its dialog closes. Bulk deletion reports
+successful IDs even when another deletion in the batch fails. The confirmed owner and IDs are captured before opening
+the confirmation dialog; bulk deletion keeps table search and sort subscriptions alive. Saved/observed labels remain in the current
 session after their last matching activity is removed. Existing transaction and deletion paths enforce writes;
 the page introduces no write API. Requests are fenced by the current Firebase owner object, an account/refresh
 generation, and component teardown so late results cannot replace a different account's data.

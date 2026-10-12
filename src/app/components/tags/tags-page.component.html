@@ -24,7 +24,7 @@
           </div>
         }
         <mat-nav-list aria-label="Select an activity tag" class="tag-library-list">
-          <a mat-list-item href="?" [activated]="!selectedKey()" [attr.aria-current]="!selectedKey() ? 'page' : null" (click)="navigateToTag('', $event)">
+          <a mat-list-item [href]="allActivitiesHref" [activated]="!selectedKey()" [attr.aria-current]="!selectedKey() ? 'page' : null" (click)="navigateToTag('', $event)">
             <mat-icon matListItemIcon>layers</mat-icon><span matListItemTitle>All activities</span>
             <span matListItemMeta class="tag-count">{{ events().length }}</span>
           </a>
