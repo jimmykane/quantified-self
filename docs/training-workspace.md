@@ -5733,8 +5733,8 @@ history. No derived schema bump or route reparse is required for this calculatio
 Editor tests load these additive diagnostics through the metadata reader, so a newer server diagnostic remains
 compatible with the older Sports Lib version used to build an existing frontend.
 
-The coordinated root/Functions dependency target is Sports Lib 21.6.14 with FIT Parser 6.2.2; adoption verification
-must match the published npm integrity in both lockfiles. The earlier published Sports Lib 21.6.9 release incorporated
+Root and Functions pin the published Sports Lib 21.6.14 with FIT Parser 6.2.2. Both lockfiles match npm's published
+integrity, and all 1,349 installed package files match the verified release candidate. The earlier published Sports Lib 21.6.9 release incorporated
 the earlier file-calibrated load corrections plus FIT session-boundary/zone ownership, source-backed timer recovery,
 Suunto pause/resume events and complete recorded-power coverage. A read-only replay of 1,100 unique original files
 (1,176 legs) had no parse failures. All 3,528 Automatic/HR/MET evaluations retained their scores and methods relative
@@ -5754,6 +5754,9 @@ The 21.6.14 release candidate passed 3,031 Sports Lib tests across 145 suites (f
 documentation and package verification. QS passed 530 focused Functions tests in a clean serial run, 248 frontend
 checks, Functions and production app builds, and the unchanged MCP contract check. Concurrent test runs initially hit
 runner communication/time limits; the clean run passed without test or runner errors.
+Adoption of the published package passed another 209 focused version, parser, reparse and private-output checks.
+Integration with develop at `d98763ce4` passed 186 frontend and 258 provider/queue checks, followed by Functions and
+production app builds, service-worker/public startup verification and the unchanged MCP contract check.
 A read-only local comparison covered 20,000 unique retained originals: 19,334 accepted activity sources, 166 unchanged
 non-workout rejections, and 500 routes. All 59,268 Automatic/HR/MET selections across 19,756 legs retained their scores,
 methods, provenance and estimate flags. Complete serialized outputs and streams matched after the expected creator/type

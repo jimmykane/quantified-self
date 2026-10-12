@@ -69,7 +69,9 @@ not cover Sports Lib reprocessing. No monitoring configuration is changed or app
 
 ### Sports Lib 21.6.14 names, creator attribution and fallback diagnostics
 
-Keep root and Functions on the same released version. Native Activity JSON restores saved child names independently
+Root and Functions pin published 21.6.14 with matching npm integrity. All 1,349 package files match the verified
+candidate, and 209 focused version, parser, reparse and private-output checks pass against the published installation.
+Native Activity JSON restores saved child names independently
 of the parent event title and creator/device name. Stored names need no source reparse; discarded names require source
 evidence. GPX activity/route creators retain their exporter name without treating the schema version as a manufacturer
 or device software version. Unknown TCX sports resolve to `Unknown Sport` instead of undefined; recognized sport and
@@ -122,7 +124,7 @@ FIT Parser source.
 
 ### Sports Lib 21.6.1 file-calibrated Training load
 
-The coordinated root and Functions dependency target is Sports Lib 21.6.14, with FIT Parser 6.2.2. It retains the file-calibrated
+The coordinated root and Functions dependency is published Sports Lib 21.6.14, with FIT Parser 6.2.2. It retains the file-calibrated
 load rules introduced in 21.6.1 and includes the swimming threshold, independent cycling FTP, rolling NP, explicit
 HR-pause, running pace, pool-length/recorded-stream and measured-zero power corrections. This release also corrects
 FIT session-boundary and zone ownership, missing timer recovery, Suunto pause/resume events and positive recorded-power
