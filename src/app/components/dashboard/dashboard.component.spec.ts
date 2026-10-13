@@ -10,7 +10,7 @@ import { MatDialog } from '@angular/material/dialog';
 import { MatSnackBar } from '@angular/material/snack-bar';
 import { NO_ERRORS_SCHEMA } from '@angular/core';
 import { NoopAnimationsModule } from '@angular/platform-browser/animations';
-import { of, Subject } from 'rxjs';
+import { of, Subject, throwError } from 'rxjs';
 import {
     ActivityTypes,
     DateRanges,
@@ -37,6 +37,15 @@ import { MaterialModule } from '../../modules/material.module';
 import { APP_STORAGE } from '../../services/storage/app.storage.token';
 import { MemoryStorage } from '../../services/storage/memory.storage';
 import { AppHapticsService } from '../../services/app.haptics.service';
+import type { ConnectionHistoryStatus, ConnectionHistoryStatusProjection, HistoryResource } from '@shared/connection-history';
+
+function historyStatus(status: ConnectionHistoryStatus, resources: HistoryResource[] = ['sleep']): ConnectionHistoryStatusProjection {
+    return {
+        runId: 'saved-history-run', rangePreset: '30_days', startMs: 1, endMs: 2, updatedAtMs: 2,
+        active: ['queued', 'requesting', 'retrying'].includes(status), canRetry: status === 'failed',
+        steps: [{ id: resources[0], resources, status, count: 0 }],
+    };
+}
 
 // Static source contracts run outside component fixture hooks.
 describe('DashboardComponent', () => {
@@ -384,6 +393,71 @@ describe('DashboardComponent', () => {
         expect(component.dashboardActionPrompts.some(prompt => prompt.id === 'connectActivityService')).toBe(false);
     });
 
+    it.each([ServiceNames.GarminAPI, ServiceNames.SuuntoApp, ServiceNames.COROSAPI, ServiceNames.WahooAPI])(
+        'does not offer connection setup on an empty dashboard with %s connected', async (serviceName) => {
+            mockActivatedRoute.snapshot.data.dashboardData.events = [];
+            mockEventService.getEventsBy.mockReturnValue(of([]));
+            mockEventService.hasAnyActivity.mockResolvedValue(false);
+            mockUser.stripeRole = 'pro';
+            mockUserService.watchActivityServiceConnectionState.mockReturnValue(of({ [serviceName]: true }));
+
+            fixture.detectChanges();
+            await fixture.whenStable();
+            fixture.detectChanges();
+
+            const emptyState = fixture.nativeElement.querySelector('.dashboard-no-activity');
+            expect(emptyState.textContent).toContain('No activities yet');
+            expect(emptyState.textContent).not.toContain('Connect service');
+            expect(emptyState.textContent).not.toContain('or connect Garmin');
+            expect(emptyState.querySelector('app-upload-activities')).toBeTruthy();
+            expect(mockHaptics.selection).not.toHaveBeenCalled();
+        },
+    );
+
+    it.each(['free', 'dismissed'])('checks connections for empty dashboards even when setup prompts are %s', async (state) => {
+        mockActivatedRoute.snapshot.data.dashboardData.events = [];
+        mockEventService.getEventsBy.mockReturnValue(of([]));
+        mockEventService.hasAnyActivity.mockResolvedValue(false);
+        mockUser.stripeRole = state === 'free' ? 'free' : 'pro';
+        mockUser.settings.appSettings = {
+            dashboardActionPrompts: {
+                connectActivityService: { state: 'dismissed' },
+                enableActivityAutoSync: { state: 'dismissed' },
+                backfillGarminSleep: { state: 'dismissed', source: 'garmin-sleep-backfill' },
+            },
+        };
+        mockUserService.watchActivityServiceConnectionState.mockReturnValue(of({ [ServiceNames.SuuntoApp]: true }));
+
+        fixture.detectChanges();
+        await fixture.whenStable();
+        fixture.detectChanges();
+
+        expect(mockUserService.watchActivityServiceConnectionState).toHaveBeenCalledWith(mockUser);
+        expect(fixture.nativeElement.querySelector('.dashboard-no-activity').textContent).not.toContain('Connect service');
+    });
+
+    it('waits for connection state before offering setup and reacts to a connection', async () => {
+        mockActivatedRoute.snapshot.data.dashboardData.events = [];
+        mockEventService.getEventsBy.mockReturnValue(of([]));
+        mockEventService.hasAnyActivity.mockResolvedValue(false);
+        mockUser.stripeRole = 'pro';
+        const connections$ = new Subject<Record<string, boolean>>();
+        mockUserService.watchActivityServiceConnectionState.mockReturnValue(connections$);
+
+        fixture.detectChanges();
+        await fixture.whenStable();
+        fixture.detectChanges();
+        expect(fixture.nativeElement.querySelector('.dashboard-no-activity').textContent).not.toContain('Connect service');
+
+        connections$.next({ [ServiceNames.SuuntoApp]: false });
+        fixture.detectChanges();
+        expect(fixture.nativeElement.querySelector('.dashboard-no-activity').textContent).toContain('Connect service');
+
+        connections$.next({ [ServiceNames.SuuntoApp]: true });
+        fixture.detectChanges();
+        expect(fixture.nativeElement.querySelector('.dashboard-no-activity').textContent).not.toContain('Connect service');
+    });
+
     it('does not show the no-activity dashboard state on another user dashboard', async () => {
         mockActivatedRoute.snapshot.data.dashboardData.user = mockUser;
         mockActivatedRoute.snapshot.data.dashboardData.targetUser = { uid: 'other-user' };
@@ -590,7 +664,9 @@ describe('DashboardComponent', () => {
         await fixture.whenStable();
 
         expect(component.dashboardActionPrompts.some(prompt => prompt.id === 'enableActivityAutoSync')).toBe(false);
-        expect(mockUserService.watchActivityServiceConnectionState).not.toHaveBeenCalled();
+        // Owner connection reads support the empty state; Pro-only sync actions stay unavailable.
+        expect(mockUserService.watchActivityServiceConnectionState).toHaveBeenCalledWith(mockUser);
+        expect(mockUserService.updateActivitySyncRouteSettings).not.toHaveBeenCalled();
     });
 
     it('does not show activity auto-sync prompt without a Suunto connection', async () => {
@@ -752,6 +828,57 @@ describe('DashboardComponent', () => {
         expect(prompt?.primaryAction?.id).toBe('backfillGarminSleep');
     });
 
+    it.each<ConnectionHistoryStatus>(['queued', 'requesting', 'retrying', 'requested', 'processed', 'failed', 'skipped'])(
+        'does not offer another Garmin history import after returning to a saved %s run', async (status) => {
+            mockUser.stripeRole = 'pro';
+            mockUserService.watchActivityServiceConnectionState.mockReturnValue(of({ [ServiceNames.GarminAPI]: true }));
+            mockUserService.getUserMetaForService.mockReturnValue(of({ connectionHistoryImport: historyStatus(status) }));
+            // Recreate the dashboard with persisted metadata and no legacy backfill marker.
+            fixture.destroy();
+            fixture = TestBed.createComponent(DashboardComponent);
+            component = fixture.componentInstance;
+            fixture.detectChanges();
+            await fixture.whenStable();
+
+            expect(mockUserService.getUserMetaForService).toHaveBeenCalledWith(mockUser, ServiceNames.GarminAPI);
+            expect(component.dashboardActionPrompts.some(prompt => prompt.id === 'backfillGarminSleep')).toBe(false);
+            expect(mockUserService.backfillGarminHealthForCurrentUser).not.toHaveBeenCalled();
+        },
+    );
+
+    it('waits for saved history metadata and responds when a connection import is accepted', async () => {
+        mockUser.stripeRole = 'pro';
+        mockUserService.watchActivityServiceConnectionState.mockReturnValue(of({ [ServiceNames.GarminAPI]: true }));
+        const metadata$ = new Subject<{ connectionHistoryImport?: ConnectionHistoryStatusProjection }>();
+        mockUserService.getUserMetaForService.mockReturnValue(metadata$);
+        fixture.detectChanges();
+        await fixture.whenStable();
+        expect(component.dashboardActionPrompts.some(prompt => prompt.id === 'backfillGarminSleep')).toBe(false);
+
+        metadata$.next({});
+        expect(component.dashboardActionPrompts.some(prompt => prompt.id === 'backfillGarminSleep')).toBe(true);
+        metadata$.next({ connectionHistoryImport: historyStatus('queued') });
+        expect(component.dashboardActionPrompts.some(prompt => prompt.id === 'backfillGarminSleep')).toBe(false);
+    });
+
+    it('does not offer a duplicate import when saved history metadata cannot be read', async () => {
+        mockUser.stripeRole = 'pro';
+        mockUserService.watchActivityServiceConnectionState.mockReturnValue(of({ [ServiceNames.GarminAPI]: true }));
+        mockUserService.getUserMetaForService.mockReturnValue(throwError(() => new Error('Unavailable')));
+        fixture.detectChanges();
+        await fixture.whenStable();
+        expect(component.dashboardActionPrompts.some(prompt => prompt.id === 'backfillGarminSleep')).toBe(false);
+    });
+
+    it('still offers Sleep and Health history when only activity history was imported', async () => {
+        mockUser.stripeRole = 'pro';
+        mockUserService.watchActivityServiceConnectionState.mockReturnValue(of({ [ServiceNames.GarminAPI]: true }));
+        mockUserService.getUserMetaForService.mockReturnValue(of({ connectionHistoryImport: historyStatus('processed', ['activities']) }));
+        fixture.detectChanges();
+        await fixture.whenStable();
+        expect(component.dashboardActionPrompts.some(prompt => prompt.id === 'backfillGarminSleep')).toBe(true);
+    });
+
     it('does not show Garmin sleep backfill prompt when required Garmin health permissions are missing', async () => {
         mockUser.stripeRole = 'pro';
         mockUser.settings.appSettings = {};
@@ -805,6 +932,7 @@ describe('DashboardComponent', () => {
         (component as any).garminSleepSyncStateLoaded = true;
         (component as any).garminSleepBackfillPermissionsLoaded = true;
         (component as any).hasGarminSleepBackfillPermissions = true;
+        (component as any).garminConnectionHistoryLoaded = true;
         (component as any).analyticsService.logEvent = vi.fn();
         (component as any).syncDashboardActionPromptState();
 
@@ -837,6 +965,7 @@ describe('DashboardComponent', () => {
         (component as any).garminSleepSyncStateLoaded = true;
         (component as any).garminSleepBackfillPermissionsLoaded = true;
         (component as any).hasGarminSleepBackfillPermissions = true;
+        (component as any).garminConnectionHistoryLoaded = true;
         (component as any).syncDashboardActionPromptState();
 
         await component.dismissGarminSleepBackfillPrompt();

@@ -10,6 +10,8 @@ import { SLEEP_SYNC_QUEUE_COLLECTION_NAME } from '../sleep/constants';
 
 /** Optional server-only execution context; never accepted from callable input. */
 export interface HistoryExecution {
+  userID: string;
+  serviceName: ConnectionHistoryRun['serviceName'];
   runId: string;
   cooldownStartedAtMs: number;
   garminHealthSummaryTypes?: ConnectionHistoryRun['garminHealthSummaryTypes'];
@@ -47,7 +49,7 @@ export function historyExecution(run: ConnectionHistoryRun, paths: string[], lea
       if (snapshot.data()?.leaseOwner !== lease.owner || snapshot.data()?.revision !== lease.revision || Number(snapshot.data()?.leaseExpiresAt) <= Date.now()) throw new HistoryLifecycleChangedError();
     }
   };
-  return { runId: run.id, cooldownStartedAtMs: run.dateCreated,
+  return { userID: run.userID, serviceName: run.serviceName, runId: run.id, cooldownStartedAtMs: run.dateCreated,
     garminHealthSummaryTypes: run.garminHealthSummaryTypes,
     requiredDocumentFieldValues: [
       { documentRef: admin.firestore().doc(run.rootPath), expectedFields: { [ACTIVE_OAUTH_CREDENTIAL_GENERATION_FIELD]: run.credentialGeneration } },
@@ -73,14 +75,16 @@ export function assertHistoryReservation(meta: Record<string, unknown> | undefin
   }
 }
 
-export async function withHistoryQueueExecution(item: QueueItemInterface & { userID?: string }, operation: () => Promise<QueueResult>): Promise<QueueResult> {
+export async function withHistoryQueueExecution(item: QueueItemInterface & { userID?: string; sourceServiceName?: string; providerUserId?: string }, operation: () => Promise<QueueResult>): Promise<QueueResult> {
   if (!item.connectionHistoryRunId) return operation();
   let started = false;
   try {
     if (!isConnectionHistoryRunId(item.connectionHistoryRunId)) throw new HistoryLifecycleChangedError();
     const snapshot = await admin.firestore().collection(CONNECTION_HISTORY_COLLECTION).doc(item.connectionHistoryRunId).get();
     const run = snapshot.data() as ConnectionHistoryRun | undefined;
-    if (!run || (item.firebaseUserID || item.userID) !== run.userID) throw new HistoryLifecycleChangedError();
+    if (!run || (item.firebaseUserID || item.userID) !== run.userID
+      || (item.sourceServiceName !== undefined && item.sourceServiceName !== run.serviceName)
+      || (item.providerUserId !== undefined && item.providerUserId !== run.providerUserId)) throw new HistoryLifecycleChangedError();
     const execution = historyExecution(run, []);
     await execution.beforeRequest();
     started = true;

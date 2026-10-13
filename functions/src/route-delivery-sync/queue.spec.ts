@@ -2,6 +2,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { ServiceNames } from '@sports-alliance/sports-lib';
 import { ROUTE_DELIVERY_SYNC_ROUTE_IDS } from '../../../shared/route-delivery-sync-routes';
 import * as logger from 'firebase-functions/logger';
+import { withHistoryExecution } from '../connection-history/context';
+import { HistoryLifecycleChangedError, type HistoryExecution } from '../connection-history/execution';
 vi.unmock('@sports-alliance/sports-lib');
 
 const {
@@ -142,6 +144,19 @@ describe('route-delivery-sync/queue', () => {
     });
     mockMarkQueueItemDeletedForUserCleanup.mockResolvedValue(true);
     mockRecheckSourceLifecycleInTransaction.mockResolvedValue({ status: 'active' });
+  });
+
+  it('does not enqueue or redispatch a delivery after its history authority changes in the transaction', async () => {
+    const guard = vi.fn().mockRejectedValue(new HistoryLifecycleChangedError());
+    const execution = { inTransaction: guard } as unknown as HistoryExecution;
+    await expect(withHistoryExecution(execution, () => enqueueRouteDeliverySyncQueueItem({
+      routeId: ROUTE_DELIVERY_SYNC_ROUTE_IDS.SuuntoApp_to_GarminAPI,
+      sourceServiceName: ServiceNames.SuuntoApp, destinationServiceName: ServiceNames.GarminAPI,
+      userID: 'user-1', savedRouteID: 'route-1', sourceRevisionKey: 'rev-1', manual: false,
+    }))).rejects.toThrow('earlier connection');
+    expect(guard).toHaveBeenCalledTimes(1);
+    expect(mockTransactionSet).not.toHaveBeenCalled();
+    expect(mockEnqueueRouteDeliverySyncTask).not.toHaveBeenCalled();
   });
 
   it('builds deterministic queue item IDs with the source revision key', async () => {

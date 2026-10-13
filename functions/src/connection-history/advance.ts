@@ -1,9 +1,11 @@
 import { getCloudTaskRetryBackoffSeconds, MAX_RETRY_COUNT } from '../shared/queue-config';
 import type { ConnectionHistoryRun, HistoryStep } from './model';
 
+export type HistoryChildObservation = 'pending' | 'processed' | 'unavailable' | 'failed' | 'skipped' | 'authorization' | 'mixed';
+
 export interface HistoryAdvanceDependencies {
-  execute(step: HistoryStep): Promise<{ count: number; nextStartMs: number; nextPage: number; childPaths: string[] }>;
-  observe(paths: string[]): Promise<'pending' | 'processed' | 'failed' | 'skipped' | 'authorization' | 'mixed'>;
+  execute(step: HistoryStep): Promise<{ count: number; nextStartMs: number; nextPage: number; routeAfterId?: string; childPaths: string[] }>;
+  observe(paths: string[]): Promise<HistoryChildObservation>;
   classify(error: unknown): { kind: 'split' | 'skip' | 'retry' | 'wait'; message: string; nextAllowedAtMs?: number; retryAt?: number };
 }
 /** One bounded unit, independently testable from Firebase and provider adapters. */
@@ -14,6 +16,7 @@ export async function advanceHistoryRun(run: ConnectionHistoryRun, deps: History
     if (step.childPaths.length) {
       const observed = await deps.observe(step.childPaths);
       if (observed === 'pending') { run.nextAttemptAt = now + 60_000; return; }
+      if (observed === 'unavailable' && step.resources.includes('routes')) step.hadUnavailableRoutes = true;
       if (observed === 'failed' || observed === 'mixed') {
         // Child workers already exhausted their retry policy. Offer the owner a
         // retry immediately instead of spending another full parent retry cycle.
@@ -38,6 +41,7 @@ export async function advanceHistoryRun(run: ConnectionHistoryRun, deps: History
       step.status = 'requesting';
       const result = await deps.execute(step);
       step.count += result.count; step.nextStartMs = result.nextStartMs; step.page = result.nextPage;
+      if (result.routeAfterId !== undefined) step.routeAfterId = result.routeAfterId;
       step.retryCount = 0; delete step.message;
       step.childPaths = result.childPaths;
       if (step.nextStartMs > run.endMs && !step.childPaths.length) {
@@ -63,6 +67,9 @@ export async function advanceHistoryRun(run: ConnectionHistoryRun, deps: History
       step.status = step.done ? 'failed' : 'retrying';
       run.nextAttemptAt = step.done ? now + 2_000 : Math.max(failure.retryAt || 0, now + getCloudTaskRetryBackoffSeconds(step.retryCount) * 1000);
     }
+  }
+  if (step.hadUnavailableRoutes && (step.status === 'queued' && !step.message || step.status === 'processed')) {
+    step.message = 'Some routes were no longer available and were skipped.';
   }
   run.processed = run.steps.every(x => x.done);
   run.updatedAtMs = now;

@@ -2861,6 +2861,7 @@ describe('AppUserService', () => {
 
                 expect(mockFunctionsService.call).toHaveBeenCalledWith('getSuuntoAPIAuthRequestTokenRedirectURI', {
                     redirectUri: 'http://localhost/services?serviceName=Suunto%20app&connect=1',
+                    importRouteHistory: false,
                     importRecentHistory: false,
                     importHistoryRange: '30_days',
                 }, { canExecute: expect.any(Function) });
@@ -2897,6 +2898,13 @@ describe('AppUserService', () => {
                 currentView = true;
                 mockAuth.currentUser = { ...mockAuth.currentUser };
                 expect(canExecute()).toBe(false);
+            });
+
+            it('includes routes only with the Suunto history option selected', async () => {
+                await service.getCurrentUserServiceTokenAndRedirectURI(ServiceNames.SuuntoApp, true, '30_days');
+                expect(mockFunctionsService.call).toHaveBeenCalledWith('getSuuntoAPIAuthRequestTokenRedirectURI',
+                    expect.objectContaining({ importRecentHistory: true, importRouteHistory: true }),
+                    { canExecute: expect.any(Function) });
             });
 
             it('forwards the selected provider-valid history range', async () => {

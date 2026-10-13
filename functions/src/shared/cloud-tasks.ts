@@ -512,7 +512,12 @@ export async function enqueueRouteSyncTask(
     queueItemId: string,
     dateCreated: number,
     scheduleDelaySeconds?: number,
+    identity?: RevisionBoundQueueTaskIdentity,
 ): Promise<boolean> {
+    if (normalizeQueueRevision(identity?.queueRevision)) {
+        return enqueueRevisionBoundQueueTask(queueItemId, dateCreated, config.cloudtasks.routeSyncQueue,
+            'route-sync', 'RouteSyncDispatcher', scheduleDelaySeconds, identity);
+    }
     const { projectId, location, routeSyncQueue } = config.cloudtasks;
 
     if (!projectId) {
@@ -590,6 +595,7 @@ interface RevisionBoundQueueTaskIdentity {
     queueRevision?: string;
     queueDateCreated?: number;
     recoveryTaskKey?: string | number;
+    recoveryScheduleDelaySeconds?: number;
 }
 
 async function enqueueRevisionBoundQueueTask(
@@ -651,7 +657,7 @@ async function enqueueRevisionBoundQueueTask(
         functionName,
         taskId: recoveryTaskId,
         payload,
-        scheduleDelaySeconds,
+        scheduleDelaySeconds: identity?.recoveryScheduleDelaySeconds ?? scheduleDelaySeconds,
         dispatchDeadlineSeconds,
         alreadyExistsLogMessage: `[${logPrefix}] Recovery task already exists for queue item ${queueItemId}, skipping`,
         failedLogPrefix: `[${logPrefix}] Failed to enqueue recovery task for ${queueItemId}:`,

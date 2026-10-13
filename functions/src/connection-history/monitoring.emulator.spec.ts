@@ -70,6 +70,34 @@ describe.skipIf(!process.env.FIRESTORE_EMULATOR_HOST)('connection history bounde
     expect(logs().some(([, fields]) => fields.dueSample > 0)).toBe(false);
     expect(logger.warn).not.toHaveBeenCalled();
   });
+  it('observes route-library work independently of Sleep rollout and cooldown state', async () => {
+    const { ref, run } = await seed(ServiceNames.SuuntoApp);
+    const routes = { ...run.steps[0], id: 'routes', resources: ['routes' as const],
+      capability: { id: 'routes', version: 1, resources: ['routes' as const], cooldownGroup: 'routes' as const, completion: 'queued' as const } };
+    run.steps = [routes]; await ref.update({ steps: run.steps });
+    await db.doc('users/PRIVATE_OWNER/sleepSyncState/suunto').set({ nextBackfillAllowedAtMs: Date.now() + 86400000 });
+    await observe(); expect(sample('suunto')).toMatchObject({ dueSample: 1, unknownSample: 0 });
+  });
+  it.each(['unissued', 'old-issued', 'recent-issued', 'foreign'])('observes %s route dispatch recovery without reading private route payloads', async state => {
+    const { ref, run } = await seed(ServiceNames.SuuntoApp);
+    run.steps = [{ ...run.steps[0], id: 'routes', resources: ['routes'], childPaths: ['routeSyncQueue/PRIVATE_CHILD'],
+      capability: { id: 'routes', version: 1, resources: ['routes'], cooldownGroup: 'routes', completion: 'queued' } }];
+    await ref.update({ steps: run.steps });
+    await db.doc('routeSyncQueue/PRIVATE_CHILD').set({ processed: false, sourceServiceName: ServiceNames.SuuntoApp,
+      firebaseUserID: run.userID, providerUserId: run.providerUserId, providerRouteId: 'PRIVATE_ROUTE',
+      connectionHistoryRunId: state === 'foreign' ? randomUUID() : run.id,
+      dispatchedToCloudTask: state === 'recent-issued' ? Date.now() : state === 'old-issued' ? Date.now() - 900_000 : null,
+      providerRouteName: 'PRIVATE_NAME', geometry: 'PRIVATE_GEOMETRY' });
+    const getAll = vi.spyOn(Transaction.prototype, 'getAll');
+    await observe();
+    if (state === 'foreign') {
+      expect(sample('suunto')).toMatchObject({ unknownSample: 1 });
+      expect(sample('suunto')).not.toHaveProperty('dueSample'); // Unknown coverage cannot claim a healthy zero.
+    } else expect(sample('suunto')).toMatchObject({ dueSample: ['unissued', 'old-issued'].includes(state) ? 1 : 0, unknownSample: 0 });
+    const childMask = (getAll.mock.calls[1].at(-1) as { fieldMask: string[] }).fieldMask;
+    expect(childMask).not.toContain('providerRouteName'); expect(childMask).not.toContain('geometry');
+    expect(JSON.stringify(logs())).not.toContain('PRIVATE'); expect(JSON.stringify(logs())).not.toContain(run.id);
+  });
   it('counts due coordinator finalization after children finish without claiming ingestion', async () => {
     const { ref, run } = await seed(); run.steps[0].childPaths = ['workoutQueue/PRIVATE']; await ref.update({ steps: run.steps });
     await db.doc('workoutQueue/PRIVATE').set({ processed: true });

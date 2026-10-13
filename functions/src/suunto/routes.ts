@@ -526,6 +526,7 @@ async function executeSuuntoRouteReadOperation<T>(
 export async function listSuuntoRoutes(
   userID: string,
   context?: SuuntoRouteUploadContext,
+  options?: { timeout: number; maxResponseBytes: number; requireCompleteListing?: boolean },
 ): Promise<SuuntoRouteListResult> {
   const routeContext = context || await createSuuntoRouteUploadContext(userID);
   const routesByProviderKey = new Map<string, SuuntoRouteSummary>();
@@ -550,6 +551,7 @@ export async function listSuuntoRoutes(
             },
             json: true,
             url: 'https://cloudapi.suunto.com/v2/route',
+            ...(options ? { timeout: options.timeout, maxResponseBytes: options.maxResponseBytes } : {}),
           });
         },
         `list_suunto_routes for user ${userID}`,
@@ -566,17 +568,23 @@ export async function listSuuntoRoutes(
         continue;
       }
 
+      const normalizedRoutes = result.map(route => normalizeSuuntoRouteSummary({
+        ...route,
+        providerUserId: tokenRef.providerUserId,
+        providerSourceKey: tokenRef.sourceKey,
+      }));
+      // A history checkpoint must not advance past silently discarded records.
+      // Validate the entire source before admitting any of its routes.
+      if (options?.requireCompleteListing && normalizedRoutes.some(route => route === null)) {
+        throw new Error('Suunto route listing contained invalid records.');
+      }
+
       successfulProviderUserIds.add(tokenRef.providerUserId);
       successfulProviderSourceKeys.add(tokenRef.sourceKey);
       failedProviderUserIds.delete(tokenRef.providerUserId);
       failedProviderSourceKeys.delete(tokenRef.sourceKey);
 
-      for (const route of result) {
-        const normalizedRoute = normalizeSuuntoRouteSummary({
-          ...route,
-          providerUserId: tokenRef.providerUserId,
-          providerSourceKey: tokenRef.sourceKey,
-        });
+      for (const normalizedRoute of normalizedRoutes) {
         if (!normalizedRoute) {
           continue;
         }

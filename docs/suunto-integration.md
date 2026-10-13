@@ -4,6 +4,8 @@ This document is the source of truth for the Suunto 24/7 Health ingestion added 
 
 Suunto 24/7 Health is available production-wide for active connected Suunto accounts. `functions/src/suunto/health-flags.ts` remains the source-controlled kill switch, independent from Suunto Sleep enablement. An authenticated App Check-protected callable returns the current Health availability so the History Import UI follows that switch without treating retained Health sync state as authorization.
 
+New Suunto connection/reconnection history can also import the complete saved route library when the displayed history option is selected. The additive route-consent flag is bound to the expiring OAuth flow; old requests and retained runs never acquire route access implicitly. Routes use their own progress step, account-bound batches and the existing guarded route worker; the activity/Sleep/Health date range does not filter the route library. **Import existing routes** remains available separately. See [connection route history](connection-history-import.md#suunto-saved-route-library) for limits, lifecycle, monitoring and backend-first rollout.
+
 The separate Suunto activity-history picker defaults to the latest two calendar years through today. Users can select a longer or shorter range before submitting; this default does not change the Sleep and 24/7 Health history range policies below.
 
 Queued workout FIT downloads retain their 60-second deadline and apply a QS response limit of 128 MiB with redirects

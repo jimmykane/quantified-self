@@ -2,6 +2,8 @@
 
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { ServiceNames } from '@sports-alliance/sports-lib';
+import { withHistoryExecution } from '../connection-history/context';
+import { HistoryLifecycleChangedError, type HistoryExecution } from '../connection-history/execution';
 
 const routeDocuments = new Map<string, Record<string, unknown>>();
 
@@ -332,6 +334,30 @@ describe('processRouteSyncQueueItem', () => {
       manual: false,
     }));
     expect(suuntoRouteMocks.createSuuntoRouteUploadContext).toHaveBeenCalledTimes(2);
+  });
+
+  it('stops unchanged history routes before downstream delivery when the history authority changes', async () => {
+    routeDocuments.set('users/user-1/routes/route-doc-1', {
+      sourceSummary: { sourceServiceName: ServiceNames.SuuntoApp, providerRouteId: 'provider-route-1',
+        providerUserId: 'suunto-user', providerRouteName: 'Morning Route', modifiedAt: 2 },
+    });
+    const guard = vi.fn().mockRejectedValue(new HistoryLifecycleChangedError());
+    await expect(withHistoryExecution({ beforeRequest: guard } as unknown as HistoryExecution,
+      () => processRouteSyncQueueItem(createQueueItem({ manual: true, providerRouteModifiedAt: 1 }))))
+      .rejects.toThrow('earlier connection');
+    expect(guard).toHaveBeenCalledTimes(1);
+    expect(routeDeliverySyncMocks.enqueueRouteDeliverySyncJobsForImportedRoute).not.toHaveBeenCalled();
+    expect(queueUtilsMocks.markQueueItemSkipped).not.toHaveBeenCalled();
+    expect(queueUtilsMocks.updateToProcessed).not.toHaveBeenCalled();
+    expect(upsertSyncedRouteMocks.upsertSyncedRoute).not.toHaveBeenCalled();
+  });
+
+  it('propagates a history lifecycle change from downstream admission instead of marking the import successful', async () => {
+    routeDeliverySyncMocks.enqueueRouteDeliverySyncJobsForImportedRoute.mockRejectedValueOnce(new HistoryLifecycleChangedError());
+    await expect(processRouteSyncQueueItem(createQueueItem())).rejects.toThrow('earlier connection');
+    expect(upsertSyncedRouteMocks.upsertSyncedRoute).toHaveBeenCalledTimes(1);
+    expect(queueUtilsMocks.updateToProcessed).not.toHaveBeenCalled();
+    expect(queueUtilsMocks.increaseRetryCountForQueueItem).not.toHaveBeenCalled();
   });
 
   it('skips signed route notifications that are absent from the current Suunto account route listing', async () => {

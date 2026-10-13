@@ -1,6 +1,6 @@
 import { ServiceNames } from '@sports-alliance/sports-lib';
 
-export type HistoryResource = 'activities' | 'sleep' | 'health';
+export type HistoryResource = 'activities' | 'sleep' | 'health' | 'routes';
 export const CONNECTION_HISTORY_DEFAULT_RANGE = '30_days' as const;
 export type ConnectionHistoryRangePreset = '30_days' | '60_days' | '90_days' | '1_year' | '2_years' | 'maximum';
 export interface ConnectionHistoryRangeOption {
@@ -11,7 +11,7 @@ export interface HistoryCapability {
   id: string;
   version: number;
   resources: readonly HistoryResource[];
-  cooldownGroup: 'activities' | 'sleep';
+  cooldownGroup: 'activities' | 'sleep' | 'routes';
   completion: 'requested' | 'queued';
 }
 const activities: HistoryCapability = { id: 'activities', version: 1, resources: ['activities'], cooldownGroup: 'activities', completion: 'queued' };
@@ -19,7 +19,8 @@ const sleep: HistoryCapability = { id: 'sleep', version: 1, resources: ['sleep']
 /** Shared presentation and orchestration inventory. New APIs register here once. */
 export const CONNECTION_HISTORY_CAPABILITIES = {
   [ServiceNames.GarminAPI]: [{ ...activities, completion: 'requested' }, { ...sleep, completion: 'requested' }, { id: 'health', version: 1, resources: ['health'], cooldownGroup: 'sleep', completion: 'requested' }],
-  [ServiceNames.SuuntoApp]: [activities, sleep, { id: 'health', version: 1, resources: ['health'], cooldownGroup: 'sleep', completion: 'queued' }],
+  [ServiceNames.SuuntoApp]: [activities, sleep, { id: 'health', version: 1, resources: ['health'], cooldownGroup: 'sleep', completion: 'queued' },
+    { id: 'routes', version: 1, resources: ['routes'], cooldownGroup: 'routes', completion: 'queued' }],
   [ServiceNames.COROSAPI]: [activities, { id: 'daily', version: 1, resources: ['sleep', 'health'], cooldownGroup: 'sleep', completion: 'queued' }],
   [ServiceNames.WahooAPI]: [activities],
 } as const satisfies Record<ServiceNames, readonly HistoryCapability[]>;
@@ -111,4 +112,13 @@ export function parseImportHistoryRange(value: unknown, service: ServiceNames): 
     throw new Error(`importHistoryRange is not valid for ${service}.`);
   }
   return value as ConnectionHistoryRangePreset;
+}
+
+/** Additive consent: older clients must not silently expand into route-library imports. */
+export function parseImportRouteHistory(value: unknown, service: ServiceNames): boolean {
+  if (value === undefined) return false;
+  if (typeof value !== 'boolean' || (value && service !== ServiceNames.SuuntoApp)) {
+    throw new Error('importRouteHistory is only supported for Suunto and must be a boolean.');
+  }
+  return value;
 }
