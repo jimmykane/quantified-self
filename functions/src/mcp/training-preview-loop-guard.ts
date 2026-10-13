@@ -3,7 +3,7 @@ import { Timestamp } from 'firebase-admin/firestore';
 import { createHash } from 'node:crypto';
 import { getUserDeletionGuardStateInTransaction } from '../shared/user-deletion-guard';
 import { MCP_OAUTH_COLLECTIONS } from './oauth.service';
-import { TRAINING_WRITE_INPUTS, type TrainingWriteTool } from './training-plans.schemas';
+import { TRAINING_PREVIEW_TOOLS, TRAINING_WRITE_INPUTS } from './training-plans.schemas';
 import {
   type McpValidationIssueSummary,
   summarizeMcpValidationIssues,
@@ -15,11 +15,7 @@ const WINDOW_MS = 60 * 1000;
 const BLOCK_MS = 10 * 60 * 1000;
 const DOCUMENT_LIFETIME_MS = 15 * 60 * 1000;
 
-export type GuardedTrainingPreviewTool = Extract<
-  TrainingWriteTool,
-  'preview_create_planned_workout' | 'preview_training_changes' | 'preview_strength_workout_change'
-    | 'preview_planned_workout_v2_change' | 'preview_saved_workout_change' | 'preview_training_deletion'
->;
+export type GuardedTrainingPreviewTool = typeof TRAINING_PREVIEW_TOOLS[number];
 
 export interface InvalidTrainingPreviewCall {
   toolName: GuardedTrainingPreviewTool;
@@ -96,41 +92,13 @@ export function invalidTrainingPreviewTool(body: unknown): InvalidTrainingPrevie
   const params = asRecord(envelope.params);
   const toolName = params?.name;
   const args = asRecord(params?.arguments) ?? {};
-  if (toolName === 'preview_create_planned_workout') {
-    const parsed = TRAINING_WRITE_INPUTS.preview_create_planned_workout.safeParse(args);
-    return parsed.success ? null : {
-      toolName,
-      validationIssues: summarizeMcpValidationIssues(parsed.error) ?? [],
-    };
-  }
-  if (toolName === 'preview_training_changes') {
-    const parsed = TRAINING_WRITE_INPUTS.preview_training_changes.safeParse(args);
-    return parsed.success ? null : {
-      toolName,
-      validationIssues: summarizeMcpValidationIssues(parsed.error) ?? [],
-    };
-  }
-  if (toolName === 'preview_strength_workout_change') {
-    const parsed = TRAINING_WRITE_INPUTS.preview_strength_workout_change.safeParse(args);
-    return parsed.success ? null : { toolName,
-      validationIssues: summarizeMcpValidationIssues(parsed.error) ?? [] };
-  }
-  if (toolName === 'preview_planned_workout_v2_change') {
-    const parsed = TRAINING_WRITE_INPUTS.preview_planned_workout_v2_change.safeParse(args);
-    return parsed.success ? null : { toolName,
-      validationIssues: summarizeMcpValidationIssues(parsed.error) ?? [] };
-  }
-  if (toolName === 'preview_saved_workout_change') {
-    const parsed = TRAINING_WRITE_INPUTS.preview_saved_workout_change.safeParse(args);
-    return parsed.success ? null : { toolName,
-      validationIssues: summarizeMcpValidationIssues(parsed.error) ?? [] };
-  }
-  if (toolName === 'preview_training_deletion') {
-    const parsed = TRAINING_WRITE_INPUTS.preview_training_deletion.safeParse(args);
-    return parsed.success ? null : { toolName,
-      validationIssues: summarizeMcpValidationIssues(parsed.error) ?? [] };
-  }
-  return null;
+  if (typeof toolName !== 'string' || !(TRAINING_PREVIEW_TOOLS as readonly string[]).includes(toolName)) return null;
+  // One reviewed preview catalog owns registration, validation and loop coverage.
+  // A new additive editor must not silently bypass the malformed-call guard.
+  const name = toolName as GuardedTrainingPreviewTool;
+  const parsed = TRAINING_WRITE_INPUTS[name].safeParse(args);
+  return parsed.success ? null : { toolName: name,
+    validationIssues: summarizeMcpValidationIssues(parsed.error) ?? [] };
 }
 
 export function buildTrainingPreviewLoopGuardBucketId(

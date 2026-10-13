@@ -3,6 +3,45 @@ import { TRAINING_PLAN_NEXT_STEPS_GUIDANCE, TRAINING_PRESCRIPTION_AUTHORING_GUID
 import type { AssistantWorkoutReview } from '../../../shared/assistant-workout-review';
 
 describe('Training phase preview routing', () => {
+  it.each([
+    'Update HR ranges across my plan, preserving warm-ups and early Lap.',
+    'Adjust the HR zones across my plan.',
+    'Retarget the quality runs to the new HR ranges.',
+    'Apply these HR zones to all quality runs.',
+    'Delete the heart-rate target from every quality run.',
+    'Move the recovery step after the work interval in every workout.',
+    'Change heart rate zones for all quality runs on Wednesdays.',
+    'Edit two workouts and keep their early Lap warm-ups.',
+    'Edit 18 workouts and keep their early Lap warm-ups.',
+    'Add a 20 minute warm-up to every quality run.',
+    'Create three planned workouts with early Lap.',
+  ])('selects full-recipe bulk review for %s', prompt => {
+    expect(selectAssistantTrainingPreviewTool(prompt)).toBe('preview_planned_workout_v3_changes');
+  });
+  it('keeps numeric HR clarification replies on the complete bulk editor', () => {
+    const history = [{ role: 'user' as const, text: 'Adjust the HR zones for all quality runs in my plan.' },
+      { role: 'assistant' as const, text: 'Which HR ranges should I use for steady, tempo and VO2 targets?' }];
+    expect(selectAssistantTrainingPreviewTool('Steady 142–150 bpm; tempo 152–160 bpm; VO2 164–172 bpm.', history))
+      .toBe('preview_planned_workout_v3_changes');
+    for (const prompt of ['Cancel. Keep 148–156 bpm.', 'Send the 142–150 bpm workout to Suunto.',
+      'Create a standalone run at 142–150 bpm.', 'What does 142–150 bpm mean?',
+      'Adjust my standalone workout to 142–150 bpm.']) {
+      expect(selectAssistantTrainingPreviewTool(prompt, history)).not.toBe('preview_planned_workout_v3_changes');
+    }
+    expect(selectAssistantTrainingPreviewTool('142–150 bpm', [...history,
+      { role: 'user' as const, text: 'Show my readiness instead.' }, { role: 'assistant' as const, text: 'What HR range would you like to compare?' }]))
+      .not.toBe('preview_planned_workout_v3_changes');
+    expect(selectAssistantTrainingPreviewTool('142–150 bpm', [
+      { role: 'user', text: 'Adjust the HR target of my workout.' },
+      { role: 'assistant', text: 'What new HR range should I use?' },
+    ])).toBe('preview_planned_workout_v3_change');
+    expect(selectAssistantTrainingPreviewTool('Delete my HR target workout.')).toBe('preview_training_deletion');
+  });
+  it.each(['Sync all workouts to Suunto.', 'Move two workouts to next week.',
+    'Copy my workout to every Wednesday.', 'Update my plan sync settings.',
+    'Activate my plan and sync to Suunto.'])('keeps other mutation kinds on the existing path: %s', prompt => {
+    expect(selectAssistantTrainingPreviewTool(prompt)).toBe('preview_training_changes');
+  });
   it.each(['Add a Base phase to my plan', 'Rename the recovery phase', 'Remove the taper phase from the plan',
     'Change my plan phases', "Edit my plan's phases", 'Move the taper phase a week later',
     'Extend the Base phase by two days'])('routes an explicit phase-only edit: %s', prompt => {
@@ -519,6 +558,26 @@ describe('Training preview model-tool selection', () => {
     expect(modelTools).toContain('preview_create_planned_workout');
     expect(modelTools.filter(name => name.startsWith('preview_'))).toEqual(['preview_create_planned_workout']);
     expect(session.tools.map(tool => tool.name)).toContain('preview_training_changes');
+  });
+
+  it.each([false, true].flatMap(available => [false, true].map(reply => ({ available, reply }))))(
+    'selects only the complete bulk editor, with no lossy missing-catalog fallback (available=$available, reply=$reply)', async ({ available, reply }) => {
+    const { session } = createSession();
+    session.tools.push({ name: 'preview_training_changes', title: 'Legacy preview', description: 'Legacy recipes', inputSchema: { type: 'object' } });
+    if (available) session.tools.push({ name: 'preview_planned_workout_v3_changes', title: 'Complete bulk preview', description: 'Full recipes', inputSchema: { type: 'object' } });
+    let previews: string[] = [];
+    const runtime = createAssistantRuntime({ createMcpSession: vi.fn().mockResolvedValue(session),
+      generateAnswer: async input => {
+        previews = input.tools.filter(tool => tool.name.startsWith('preview_')).map(tool => tool.name);
+        expect(input.tools.map(tool => tool.name)).not.toContain('apply_training_changes');
+        await input.tools.find(tool => tool.name === 'get_daily_report')!.execute({});
+        return { answer: available ? 'Review a small batch of complete recipes.' : 'The bulk capability needs a release/catalog refresh.', visualRequest: { chart: null, map: null } };
+      } });
+    const request = 'Update HR ranges across my plan and preserve early Lap.';
+    await runtime.answer({ uid: 'owner', appBaseUrl: 'https://quantified-self.io', prompt: reply ? 'Steady 142–150 bpm; tempo 152–160 bpm.' : request,
+      timeZone: 'Europe/Helsinki', history: reply ? [{ role: 'user', text: request },
+        { role: 'assistant', text: 'Which new HR ranges should I use?' }] : [], trainingPlansEnabled: true, trainingPlanChangesEnabled: true });
+    expect(previews).toEqual(available ? ['preview_planned_workout_v3_changes'] : []);
   });
 
   it('offers only recipe editing when removing early Lap after a deletion clarification', async () => {

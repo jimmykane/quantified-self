@@ -315,6 +315,10 @@ is six and further malformed calls enter a ten-minute invalid-call cooldown. Cor
 immediately. The counter contains no authored request content and expires, and only the first transition into a cooldown
 is logged. This guard prevents a client tool-selection failure from producing an unbounded validation loop; it never
 repairs, applies, or silently degrades input.
+Coverage derives from the same reviewed `TRAINING_PREVIEW_TOOLS` catalog and each advertised strict input schema,
+including full-recipe bulk, latest single/library, phase and replacement previews. No independent name list can omit
+an additive editor. Correct early-Lap recipes do not consume malformed-call attempts. Recovery copy preserves the
+requested action: it never suggests replacing an edit with a create or dropping fields to fit an older tool.
 
 The manually mirrored public recipe schema has an exhaustive compile-time coverage map for the version, node/ending
 kinds, step purposes, target modes and kind/mode pairs, relative-target references and speed presentation. Focused
@@ -574,6 +578,29 @@ currently eligible. No new tool, action, field, scope, consent default, provider
 registered-client refresh is introduced; connecting a provider alone never creates delivery consent or sends a workout.
 
 ### Full recipes with optional early Lap
+
+The additive `preview_planned_workout_v3_changes` previews 1–25 complete non-strength creates/updates using that
+same current full recipe. It requires existing `training-plans:read` and `training-plans:write`, includes no plan,
+deletion or provider-consent actions, and reuses separately approved `apply_training_changes`. The registered legacy
+batch and focused schemas remain frozen and fail closed rather than erase pool length or an early-Lap flag.
+For plan-wide HR retargeting, read each current v3 recipe, obtain explicit new ranges and selected dates/sessions, and
+preserve all other canonical values, node IDs/order, repeats, recovery, notes, Lap settings and association. Profile
+zone changes do not automatically recalculate absolute targets or saved relative reference snapshots. Review and read
+back each changed recipe; over 25 requires fresh revisions and separately reviewed batches, not a claim of complete
+success from one sample. The Assistant selects the full bulk schema for multi-workout recipe edits, remains prepare-only,
+and does not fall back to a lossy legacy writer if the capability is missing. Its existing app review contains complete
+before/after recipes. The six-call Assistant budget is unchanged: normally at most three fully read updates after
+discovery fit one turn; explain and separately review remaining batches rather than fabricate recipes from a sample.
+Internal routing recognizes adjust/retarget and recipe-field removal/reordering across workouts. A bounded numeric
+reply to the immediately preceding HR clarification retains its original full single/bulk editor, not a legacy writer;
+cancellation, a new explicit action or intervening unrelated context cannot revive that selection. This is only a
+tool-schema hint, never inferred HR data, provider consent or Apply approval. Tool schemas and grants are unchanged.
+Existing opt-ins reconcile eligible edits without a new Send; outside-window and past/completed
+protection still apply. An authored save is not provider acceptance or watch receipt.
+
+This is local implementation until a separately approved MCP/Assistant backend release and client catalog refresh.
+No new OAuth grant, callable, stored recipe field, migration, automatic zone linking or provider transport is added.
+Existing granted plan-change access suffices; missing access still needs the normal independent consent flow.
 
 The additive `get_planned_workout_v3` and `get_saved_workout_v2` return the entire strict recipe, including pool length
 and `allowEarlyLap` on time/distance endings. Absent, false and true are preserved; manual/repetition/kJ endings reject

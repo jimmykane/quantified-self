@@ -608,6 +608,7 @@ const service = {
       changes: [{ index: 0, kind: 'delete-workout', summary: 'Delete in QS and request eligible service-copy cleanup. Recorded activities stay.' }] }),
     previewStrengthWorkoutChange: vi.fn().mockResolvedValue(trainingPreviewFixture),
     previewPlannedWorkoutV3Change: vi.fn().mockResolvedValue(trainingPreviewFixture),
+    previewPlannedWorkoutV3Changes: vi.fn().mockResolvedValue(trainingPreviewFixture),
     previewSavedWorkoutV2Change: vi.fn().mockResolvedValue(trainingPreviewFixture),
     previewPlannedWorkoutV2Change: vi.fn().mockResolvedValue(trainingPreviewFixture),
     previewSavedWorkoutChange: vi.fn().mockResolvedValue(trainingPreviewFixture),
@@ -1448,6 +1449,9 @@ const successfulToolArguments: Record<
     structure: trainingReadFixtures.get_planned_workout_v3.workout.structure } },
   preview_saved_workout_v2_change: { expectedScheduleRevision: 1, expectedLibraryRevision: 1,
     change: { kind: 'create', title: 'Lap option', structure: trainingReadFixtures.get_saved_workout_v2.savedWorkout.structure } },
+  preview_planned_workout_v3_changes: { expectedScheduleRevision: 1, changes: [{
+    kind: 'create-workout', localKey: 'early-lap-batch', plan: null, localDate: '2026-07-02', title: 'Lap option',
+    structure: trainingReadFixtures.get_planned_workout_v3.workout.structure }] },
   preview_planned_workout_v2_change: { expectedScheduleRevision: 1, change: {
     kind: 'create-workout', localKey: 'pool-swim', plan: null, localDate: '2026-07-02', title: 'Pool swim',
     structure: { version: 1, sport: 'Swimming', poolLength: { meters: 25, presentation: 'meters' },
@@ -2096,7 +2100,7 @@ describe.each<FixtureTransport>(['in-memory', 'legacy-http', 'modern-http'])('MC
     const planWriteTools = tools.filter(tool => (TRAINING_WRITE_TOOLS as readonly string[]).includes(tool.name));
     const planWriteExtensions = planWriteTools.filter(tool => (TRAINING_WRITE_EXTENSION_TOOLS as readonly string[]).includes(tool.name)
       && tool.name !== 'preview_planned_workout_v2_change' && tool.name !== 'preview_saved_workout_change'
-      && !['preview_training_plan_phases', 'preview_training_deletion', 'preview_garmin_workout_replacement', 'preview_planned_workout_v3_change', 'preview_saved_workout_v2_change'].includes(tool.name));
+      && !['preview_training_plan_phases', 'preview_training_deletion', 'preview_garmin_workout_replacement', 'preview_planned_workout_v3_change', 'preview_planned_workout_v3_changes', 'preview_saved_workout_v2_change'].includes(tool.name));
     const planDeletionPreview = planWriteTools.filter(tool => tool.name === 'preview_training_deletion');
     const planWriteV2 = planWriteTools.filter(tool => tool.name === 'preview_planned_workout_v2_change');
     const planWriteLibrary = planWriteTools.filter(tool => tool.name === 'preview_saved_workout_change');
@@ -2107,7 +2111,7 @@ describe.each<FixtureTransport>(['in-memory', 'legacy-http', 'modern-http'])('MC
     expect(Buffer.byteLength(JSON.stringify(tools.filter(tool => tool.name === 'preview_garmin_workout_replacement')), 'utf8')).toBeLessThan(6 * 1024);
     expect(Buffer.byteLength(JSON.stringify(planWriteV2), 'utf8')).toBeLessThan(20 * 1024);
     expect(Buffer.byteLength(JSON.stringify(planWriteLibrary), 'utf8')).toBeLessThan(24 * 1024);
-    for (const name of ['get_training_plan_phases', 'preview_training_plan_phases', 'get_planned_workout_v3', 'get_saved_workout_v2', 'preview_planned_workout_v3_change', 'preview_saved_workout_v2_change']) {
+    for (const name of ['get_training_plan_phases', 'preview_training_plan_phases', 'get_planned_workout_v3', 'get_saved_workout_v2', 'preview_planned_workout_v3_change', 'preview_planned_workout_v3_changes', 'preview_saved_workout_v2_change']) {
       expect(Buffer.byteLength(JSON.stringify(tools.filter(tool => tool.name === name)), 'utf8')).toBeLessThan(24 * 1024);
     }
     const applyTrainingChangesTool = tools.find(tool => tool.name === 'apply_training_changes');

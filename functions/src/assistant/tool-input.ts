@@ -129,7 +129,7 @@ function normalizeAssistantTrainingPreviewInput(
       },
     };
   }
-  if (toolName === 'preview_training_changes' && Array.isArray(input.changes)) {
+  if ((toolName === 'preview_training_changes' || toolName === 'preview_planned_workout_v3_changes') && Array.isArray(input.changes)) {
     return {
       ...input,
       changes: input.changes.map((value) => {

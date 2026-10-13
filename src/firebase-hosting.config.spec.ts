@@ -365,7 +365,7 @@ describe('Firebase Hosting configuration', () => {
     expect(sitemapLastmodForUrl(`${siteOrigin}/features/fit-gpx-tcx-file-analyzer`)).toBe('2026-09-02');
     expect(sitemapXml).not.toContain(`${siteOrigin}/features/workout-file-comparison`);
     expect(sitemapXml).not.toContain(`${siteOrigin}/features/sports-watch-benchmark`);
-    // Connection history now includes the entire saved Suunto route library and explains its independent range.
+    // Help includes the merged swim guidance, saved Suunto route history and dashboard setup updates.
     expect(sitemapLastmodForUrl(`${siteOrigin}/help`)).toBe('2026-10-13');
     expect(sitemapLastmodForUrl(`${siteOrigin}/policies`)).toBe('2026-10-07');
     expect(sitemapLastmodForUrl(`${siteOrigin}/privacy`)).toBe('2026-10-07');

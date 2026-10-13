@@ -2617,6 +2617,42 @@ remain separate from local verification.
 
 ##### Optional early Lap on numeric endings (#784 Training 07)
 
+Full-recipe bulk editing uses additive `preview_planned_workout_v3_changes`: 1–25 complete non-strength creates or
+updates with the same latest strict recipe as the single editor, including pool length and absent/false/true Lap flags.
+It shares the existing owner/connection/grant/revision/expiry-bound preview, approval and idempotent Apply; legacy
+registered batch schemas remain frozen and cannot erase newer fields. The Assistant chooses this bulk recipe schema
+for multi-workout edits such as plan HR retargeting, presents complete before/after app reviews, and never exposes Apply
+to the model or substitutes a legacy writer when the tool is missing. Its six-call budget stays unchanged; use small
+reviews (normally up to three updates after discovery) with complete reads and truthful remaining-work disclosure.
+No plan action or new provider consent is included.
+Follow-up review covers adjust/retarget phrasing and bulk target removal/step reordering, distinguishing those fields
+from deleting/moving whole workouts. Numeric answers to an immediately preceding HR clarification keep the original
+full single/bulk preview; cancellations, new actions and unrelated context do not. This changes private routing, not
+mutation authority, values, call budgets, consent or app confirmation. The MCP malformed-call guard derives every
+preview name/schema from the same authoritative catalog, and its existing bounded error no longer steers edits toward
+new-workout creation. No new tool, scope, persisted field, provider action, registered-schema change or additional
+client refresh is introduced by these review fixes. Existing Help and bundled full-recipe/approval guidance remain valid.
+Ask for explicit HR ranges, which prescriptions they replace, and affected sessions/date range. Read complete current
+recipes and preserve IDs, order, repeats, warm-ups, recovery, notes, dates, association and other targets. Changing profile
+zones does not recalculate stored absolute targets or relative reference snapshots. Larger selections need separately
+reviewed batches with fresh revisions and exact read-back coverage. Existing plan/standalone opt-in reconciles eligible
+edits normally; this is not a new Send, guaranteed acceptance, or watch receipt. Scheduling windows and past/completed
+protection remain unchanged. No Sports Lib/model/storage change, new callable/scope, migration or transport is needed.
+Release MCP/Assistant backend and refresh external catalogs separately; existing write grants need no reauthorization.
+Local regression uses synthetic 18-run plans through external and first-party preview/apply, preserving early-Lap
+warm-ups and every non-HR field, leaving another workout/settings/completion unchanged, then updating one retained
+Suunto Guide through fixture HTTP without another create. This is not a live ChatGPT/Claude or watch test.
+Initial implementation verification: 532 focused Functions schema/transport/Assistant/loop-guard tests; the complete 17-file MCP-data emulator
+group passed 417 tests without skips. Help/hosting checks passed 106 tests, plugin tooling passed 30 tests, all seven
+bundled skills validated and fixture-ID plugin validation used an isolated profile. Functions and local frontend builds,
+70 endpoint secret bindings, diff checks and the digest-bound compatible MCP contract check passed. The existing
+developer-refresh advisory remains pending; no baseline promotion, real-profile install, push, deployment or customer
+data change was performed.
+Follow-up review verification: 596 focused Functions tests passed on an isolated rerun after a concurrent run reported
+a test-runner RPC timeout; 30 plugin tests and all seven bundled-skill validators passed. Functions build, focused lint,
+diff and contract checks passed with the candidate digest unchanged. These private routing/guard fixes require no new
+Rules or frontend access change and make no live-client, customer-data or provider-delivery verification claim.
+
 `WorkoutTimeEndingV1` and `WorkoutDistanceEndingV1` optionally carry `allowEarlyLap?: boolean`.
 True means the unchanged seconds/metres limit **or** an athlete Lap press. Absent and false keep the numeric ending;
 `manual` remains indefinite until Lap and rejects the field, as do repetitions/kilojoules. The shared strict parser
@@ -2625,10 +2661,23 @@ change or FIT SDK dependency is needed. A device's own skip behavior is separate
 step transitions never establish workout completion.
 
 The Material checkbox is initially unchecked, appears only for numeric endings, and works for top-level/repeat steps
-and saved-recipe editing. Untouched old recipes retain absence; explicit false survives save/read/copy/history/library
+and saved-recipe editing. Its label is **Also finish this step with Lap**. The associated accessible hint states
+whether the current Suunto step ends only at its time/distance limit or at that limit **or** a Lap press. With the
+option off, Lap does not advance the Guide; it can still create a recorded lap/reset a lap-average reading.
+The manual-ending hint says to press Lap to **finish this step**, not start it. For a semi-automatic pool set,
+enable the option on each 100 m Work step and leave each 15-second Rest timed without it; Lap-only Work instead
+uses **End by -> Lap button press**. These are explicit athlete choices, never inferred swim defaults.
+Untouched old recipes retain absence; explicit false survives save/read/copy/history/library
 placement. Changing the draft to manual omits the flag from that ending; returning to a numeric ending before saving
 retains the draft choice. Exact canonical seconds/metres, targets, notes, pool length and repeat counts stay intact.
 Accepted checkbox changes have one selection haptic; initialization, no-ops and disabled actions are silent.
+
+This editor/Help wording change has no MCP impact: canonical ending values and `allowEarlyLap`, complete scheduled/
+saved-recipe reads and previews, mapping behavior, consent and confirmation contracts are unchanged. It adds no
+tool, schema, scope, provider action, plugin guidance or deployment requirement beyond the frontend release.
+Focused UI regressions cover checked/unchecked hints, numeric Work with timed Rest, repeat children, accessible
+hint associations, save/library-copy fidelity and unchanged haptics; no Training data migration or provider requeue
+is performed.
 
 Suunto mapping `suunto-guides-v6` implements documented OR conditions. A true ending keeps the native time/distance
 countdown and uses `or(stepDuration|stepDistance, manualLap)`. Generated notes mention Lap without overwriting authored

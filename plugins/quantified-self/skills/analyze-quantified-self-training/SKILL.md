@@ -312,6 +312,15 @@ independent grants and native client/app confirmation remain mandatory; the Assi
 
 ## Authored plan phase context
 
+For an explicitly requested HR retarget across planned workouts, use the Training workflow's advertised full-recipe
+bulk preview (up to 25 non-strength creates/updates), not an older batch recipe. Ask for exact new ranges, which existing
+targets they replace, and affected sessions/dates. Read each complete current recipe and preserve warm-ups, Lap flags,
+recoveries, repeats, IDs/order, notes, dates, association and other targets. Profile zones do not automatically recalculate
+stored absolute targets or relative reference snapshots. Keep separate native/app approval, fresh revisions per batch
+and complete read-back coverage; partial verification is not whole-plan success. Existing opt-in can reconcile eligible
+edits, never new service consent or guaranteed watch receipt. If the bulk tool is absent, explain release/catalog
+availability or review individual edits with the current full editor; never remove fields to fit a legacy writer.
+
 With independent planning read access, discover the advertised focused plan-phase capability and resolve the exact
 current plan by name/lifecycle. Use its inclusive calendar labels and current revisions, preserving gaps and legacy
 absence. For a target-day recommendation, use the active plan and the user's explicit IANA timezone for relative dates;

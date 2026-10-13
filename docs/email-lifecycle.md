@@ -75,8 +75,9 @@ Rollout requires separate approval. Before deployment, an operator must provisio
 ## Cloud Monitoring (#835)
 
 The email monitoring dashboard, twelve metrics and seven policies were activated on 12 October 2026 with explicit
-owner approval. Configuration readback and all chart/condition queries passed; live heartbeat verification remains
-tracked in #835 until the dispatcher timing correction is deployed and observed. It uses the existing Firestore `mail`
+owner approval. Configuration readback, all chart/condition queries and duplicate-free serial reapplication passed.
+Following the approved dispatcher timing correction, both source heartbeats and live sampled-count/age series were
+verified from a natural scheduler run. Production acceptance evidence is recorded in #835. It uses the existing Firestore `mail`
 outbox and installed Trigger Email extension, not Cloud Tasks or another SMTP sender. Future production deployments,
 monitoring changes and any controlled email send require separate approval. See
 [Firebase delivery states](https://firebase.google.com/docs/extensions/official/firestore-send-email/delivery-status).
@@ -196,7 +197,8 @@ After separate approval:
 MCP/Assistant impact: **none**. Monitoring changes no tools, schemas, responses, permissions, consent, metrics exposed
 to athletes, provider actions or product availability. Help reviewed: existing notification and marketing-consent
 guidance remains accurate, so no user-facing copy change is needed. Fitness-provider queues, Training plans and their
-monitoring bundles are unchanged. Operational activation/readback remains tracked in #835, not claimed by local tests.
+monitoring bundles are unchanged. Approved production activation/readback and natural-heartbeat evidence are recorded
+in #835 separately from local test results; no simulated outage or new test email is claimed.
 
 ## Firestore template source of truth
 

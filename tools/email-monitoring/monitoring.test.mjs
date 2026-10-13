@@ -15,6 +15,7 @@ const project = 'demo-email-monitoring';
 const channel = `projects/${project}/notificationChannels/123`;
 const bundle = () => buildEmailMonitoring(project, channel);
 const metric = key => bundle().metrics.find(item => `logging.googleapis.com/user/${item.name}` === metricType(key));
+const cloudTasksMarkers = /cloud_tasks_queue|cloudtasks\.googleapis\.com|queue_id/;
 // Evaluate the emitted Logging subset, including conjunctions, comparisons and absence.
 function matches(filter, entry) {
   const tokens = filter.match(/"(?:[^"\\]|\\.)*"|>=|[=():>*]|[\w.]+/g); let at = 0;
@@ -38,9 +39,18 @@ const entry = (event, fields = {}, service = 'trackmarketingdelivery') => ({ res
   jsonPayload: { message: '[EmailDelivery]', telemetryVersion: 1, source: 'transactional', event, ...fields } });
 const selected = (key, log) => matches(metric(key).filter, log);
 
+test('Cloud Tasks absence assertion matches literal dots, not look-alike domains', () => {
+  for (const marker of ['cloud_tasks_queue', 'cloudtasks.googleapis.com', 'queue_id']) {
+    assert.match(marker, cloudTasksMarkers);
+  }
+  for (const lookalike of ['cloudtasksXgoogleapis.com', 'cloudtasks.googleapisXcom', 'cloudtasksXgoogleapisYcom']) {
+    assert.doesNotMatch(lookalike, cloudTasksMarkers);
+  }
+});
+
 test('12 fixed-category metrics, 7 sustained policies and real email runtimes, never invented Cloud Tasks', () => {
   const b = bundle(); assert.equal(b.metrics.length, 12); assert.equal(b.policies.length, 7);
-  assert.doesNotMatch(JSON.stringify(b), /cloud_tasks_queue|cloudtasks.googleapis.com|queue_id/);
+  assert.doesNotMatch(JSON.stringify(b), cloudTasksMarkers);
   for (const m of b.metrics) {
     assert.ok(m.description.startsWith(`[${OWNER}]`));
     assert.ok(m.metricDescriptor.labels.every(label => ['source', 'state', 'operation', 'outcome'].includes(label.key)));

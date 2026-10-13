@@ -874,7 +874,7 @@
             }
           </mat-select>
           @if (step.endingKind === 'manual') {
-            <mat-hint>Ends when you press the lap button, without a time or distance limit. Wahoo delivery is unsupported.</mat-hint>
+            <mat-hint>Press Lap to finish this step, without a time or distance limit. Wahoo delivery is unsupported.</mat-hint>
           }
         </mat-form-field>
         @if (step.endingKind === 'time') {
@@ -891,8 +891,15 @@
         @if (step.endingKind === 'time' || step.endingKind === 'distance') {
           <div class="early-lap-option">
             <mat-checkbox [checked]="step.allowEarlyLap === true" [disabled]="busyAction() !== null"
-              (change)="updateStep(nodeIndex, stepIndex, 'allowEarlyLap', $event.checked)">Allow early Lap</mat-checkbox>
-            <p class="editor-hint">Ends at the limit or when you press Lap. Suunto delivery supports this option.</p>
+              [aria-describedby]="'early-lap-hint-' + nodeIndex + '-' + (stepIndex ?? 'single')"
+              (change)="updateStep(nodeIndex, stepIndex, 'allowEarlyLap', $event.checked)">Also finish this step with Lap</mat-checkbox>
+            <p class="editor-hint" [id]="'early-lap-hint-' + nodeIndex + '-' + (stepIndex ?? 'single')">
+              @if (step.allowEarlyLap === true) {
+                Suunto: this step ends at the {{ step.endingKind === 'time' ? 'time' : 'distance' }} limit or when you press Lap.
+              } @else {
+                Suunto: this step ends only at the {{ step.endingKind === 'time' ? 'time' : 'distance' }} limit. Lap does not start the next step.
+              }
+            </p>
           </div>
         }
         <app-workout-targets-editor [targets]="step.targets" [sport]="editor().value.sport" [unitSettings]="editor().unitSettings"

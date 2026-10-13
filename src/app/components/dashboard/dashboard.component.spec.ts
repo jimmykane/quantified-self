@@ -311,6 +311,30 @@ describe('DashboardComponent', () => {
         expect(component.dashboardActionPrompts.some(prompt => prompt.id === 'firstActivityUpload')).toBe(false);
     });
 
+    it('keeps a failed activity count unknown and permits a later profile refresh to count again', async () => {
+        mockUser.stripeRole = 'free';
+        const users = new BehaviorSubject<AppUserInterface | null>(mockUser);
+        mockAuthService.user$ = users.asObservable();
+        const error = Object.assign(new Error('Server responded with status 504'), { code: 'unknown' });
+        mockEventService.getEventCount.mockRejectedValueOnce(error).mockResolvedValue(0);
+
+        fixture.detectChanges();
+        await fixture.whenStable();
+
+        expect(component.dashboardActionPrompts.some(prompt => prompt.id === 'firstActivityUpload')).toBe(false);
+        expect(mockLogger.warn).toHaveBeenCalledWith(
+            '[DashboardComponent] Failed to read activity count for dashboard prompt',
+            { userID: mockUser.uid }, error,
+        );
+
+        users.next(mockUser);
+        await fixture.whenStable();
+        fixture.detectChanges();
+
+        expect(mockEventService.getEventCount).toHaveBeenCalledTimes(2);
+        expect(component.dashboardActionPrompts.some(prompt => prompt.id === 'firstActivityUpload')).toBe(true);
+    });
+
     it('does not show first activity upload prompt when dismissed', async () => {
         mockUser.stripeRole = 'free';
         mockUser.settings.appSettings = {

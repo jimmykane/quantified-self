@@ -203,5 +203,17 @@ describe('Assistant tool input boundary', () => {
         change: { ...input.change, structure: { ...structure, sport: 'Running' } } });
     }
   });
+  it('normalizes only sport aliases in complete-workout bulk input without dropping Lap or HR fields', () => {
+    const input = { expectedScheduleRevision: 1, changes: [{ kind: 'update-workout', workout: { ref: 'opaque' },
+      plan: null, localDate: '2026-10-12', title: 'Quality run', structure: { version: 1, sport: 'running', nodes: [
+        { kind: 'step', id: 'warmup', purpose: 'warmup', ending: { kind: 'time', seconds: 1200, allowEarlyLap: true }, targets: [] },
+        { kind: 'step', id: 'work', purpose: 'work', ending: { kind: 'time', seconds: 180 }, note: 'Keep — exact',
+          targets: [{ kind: 'heart-rate', mode: 'absolute', minimumBpm: 142, maximumBpm: 150 }] },
+      ] } }] };
+    const copy = structuredClone(input);
+    expect(normalizeAssistantToolInput('preview_planned_workout_v3_changes', input, 'Europe/Helsinki')).toEqual({ ...input,
+      changes: [{ ...input.changes[0], structure: { ...input.changes[0].structure, sport: 'Running' } }] });
+    expect(input).toEqual(copy);
+  });
 
 });

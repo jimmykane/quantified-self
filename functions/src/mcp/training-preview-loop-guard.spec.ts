@@ -1,4 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
+import { TRAINING_PREVIEW_TOOLS } from './training-plans.schemas';
 import {
   buildTrainingPreviewLoopGuardBucketId,
   consumeInvalidTrainingPreviewAttempt,
@@ -16,6 +17,23 @@ const validStructure = {
 };
 
 describe('Training preview loop guard', () => {
+  it.each(TRAINING_PREVIEW_TOOLS)('guards malformed %s through its authoritative advertised schema', toolName => {
+    const invalid = invalidTrainingPreviewTool({ method: 'tools/call', params: { name: toolName, arguments: {} } });
+    expect(invalid).toMatchObject({ toolName, validationIssues: expect.any(Array) });
+    expect(invalid!.validationIssues.length).toBeGreaterThan(0);
+  });
+  it('accepts complete bulk recipes without treating early Lap as a malformed attempt', () => {
+    const change = { kind: 'create-workout', localKey: 'run', plan: null, localDate: '2026-10-12', title: 'Private title',
+      structure: { ...validStructure, nodes: [{ ...validStructure.nodes[0], ending: { kind: 'time', seconds: 1200, allowEarlyLap: true } }] } };
+    const call = { method: 'tools/call', params: { name: 'preview_planned_workout_v3_changes',
+      arguments: { expectedScheduleRevision: 1, changes: [change] } } };
+    expect(invalidTrainingPreviewTool(call)).toBeNull();
+    const invalid = invalidTrainingPreviewTool({ ...call, params: { ...call.params, arguments: {
+      ...call.params.arguments, changes: [{ ...change, structure: { ...change.structure, remoteId: 'private-artifact' } }],
+    } } });
+    expect(invalid).toMatchObject({ toolName: 'preview_planned_workout_v3_changes' });
+    expect(JSON.stringify(invalid)).not.toMatch(/Private title|private-artifact/);
+  });
   it('guards missing deletion choices without logging authored references', () => {
     const call = { method: 'tools/call', params: { name: 'preview_training_deletion',
       arguments: { expectedScheduleRevision: 1, change: { kind: 'delete-workout', workout: { ref: 'PRIVATE' } } } } };
