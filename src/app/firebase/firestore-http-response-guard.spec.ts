@@ -4,7 +4,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 // Exercise the browser transport: Firebase's Node entry point uses fetch and
 // cannot reproduce the XhrIo callback/pending-promise bug seen in Sentry.
 import {
-  collection, getCountFromServer, initializeFirestore, query, setLogLevel, terminate, where,
+  collection, getCountFromServer, initializeFirestore, query, terminate, where,
 } from '../../../node_modules/@firebase/firestore/dist/index.esm.js';
 import './firestore';
 import { installFirestoreHttpResponseGuard } from './firestore-http-response-guard';
@@ -62,16 +62,24 @@ describe('Firestore browser HTTP response guard', () => {
     escapedErrors.length = 0;
     vi.stubGlobal('XMLHttpRequest', MockXMLHttpRequest);
     vi.stubGlobal('fetch', vi.fn().mockRejectedValue(new Error('Unexpected network request')));
-    setLogLevel('silent');
+    // Silence expected SDK warnings locally without changing its persistent
+    // log level for subsequent suites sharing the SDK module.
+    vi.spyOn(console, 'warn').mockImplementation(() => {});
     app = initializeApp({ projectId: 'synthetic-http-test', apiKey: 'fake-api-key' }, `http-test-${++appSequence}`);
     firestore = initializeFirestore(app, { host: '127.0.0.1:8181', ssl: false });
   });
 
   afterEach(async () => {
-    await terminate(firestore);
-    await deleteApp(app);
-    vi.unstubAllGlobals();
-    vi.restoreAllMocks();
+    try {
+      try {
+        await terminate(firestore);
+      } finally {
+        await deleteApp(app);
+      }
+    } finally {
+      vi.unstubAllGlobals();
+      vi.restoreAllMocks();
+    }
   });
 
   it.each([
@@ -107,6 +115,26 @@ describe('Firestore browser HTTP response guard', () => {
       code: 'permission-denied', message: 'Access denied',
     });
     expect(escapedErrors).toEqual([]);
+  });
+
+  it('preserves structured authentication errors', async () => {
+    responses.push({ status: 401, body: JSON.stringify({
+      error: { status: 'UNAUTHENTICATED', message: 'Credentials expired' },
+    }) });
+    await expect(getCountFromServer(collection(firestore, 'events'))).rejects.toMatchObject({
+      code: 'unauthenticated', message: 'Credentials expired',
+    });
+    expect(escapedErrors).toEqual([]);
+    expect(requests).toHaveLength(1);
+  });
+
+  it('preserves connection failures with no HTTP response', async () => {
+    responses.push({ status: 0, body: '' });
+    await expect(getCountFromServer(collection(firestore, 'events'))).rejects.toMatchObject({
+      code: 'unavailable', message: 'Connection failed.',
+    });
+    expect(escapedErrors).toEqual([]);
+    expect(requests).toHaveLength(1);
   });
 
   it('allows a fresh count after a gateway failure', async () => {
