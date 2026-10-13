@@ -540,6 +540,21 @@ describe('Assistant visual projection', () => {
     });
   });
 
+  it('retains canonical types and distinct dimensions in additive endurance charts', () => {
+    const output = createMcpOutputSchemaRegistry({ activityLocation: false, routeLocation: false }).get_activity_chart_data_v2.parse({
+      activityType: 'Running', xAxis: 'elapsed_time', xAxisUnit: 'seconds', series: [
+        {metric: 'stamina', canonicalUnit: 'percent', xValues: [0, 2], values: [0, 80], sourceSampleCount: 3, returnedSampleCount: 2, missingSampleCount: 1},
+        {metric: 'estimated_sustainable_distance', canonicalUnit: 'meters', xValues: [0, 2], values: [0, 10000], sourceSampleCount: 3, returnedSampleCount: 2, missingSampleCount: 1},
+      ],
+    });
+    const source = createAssistantVisualSource('get_activity_chart_data_v2', output, 'source_3');
+    const result = resolveAssistantVisuals([source!], {chart: {sourceId: 'source_3', chartType: 'line', seriesKeys: ['series_0', 'series_1']}, map: null});
+    expect(result[0]).toMatchObject({series: [
+      {dataType: 'Stamina', unit: '%', points: [{x: 0, y: 0}, {x: 2, y: 80}]},
+      {dataType: 'Estimated Sustainable Distance', unit: 'm', points: [{x: 0, y: 0}, {x: 2, y: 10000}]},
+    ]});
+  });
+
   it('builds an activity chart and path from the existing chart-data tool', () => {
     const output = createMcpOutputSchemaRegistry({
       activityLocation: true,

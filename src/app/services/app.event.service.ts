@@ -1110,6 +1110,11 @@ export class AppEventService implements OnDestroy {
       const parsedStreams = parsedActivity.getAllStreams();
       existingActivity.clearStreams();
       existingActivity.addStreams(parsedStreams);
+      // Carry only explicit parsed manufacturer evidence into this in-memory view.
+      // Friendly/user-edited device names cannot establish metric provenance.
+      if (parsedActivity.creator?.manufacturer && existingActivity.creator && !existingActivity.creator.manufacturer) {
+        existingActivity.creator.manufacturer = parsedActivity.creator.manufacturer;
+      }
       existingActivity.setDiveSourceRecords(parsedActivity.getDiveSourceRecords());
       parsedActivitiesByID.delete(existingActivityID);
       attachedCount += 1;

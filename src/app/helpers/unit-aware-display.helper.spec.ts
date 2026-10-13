@@ -3,6 +3,7 @@ import {
   DataAscent,
   DataDescent,
   DataDistance,
+  DynamicDataLoader,
   DataDuration,
   DataHeartRateMax,
   DataJumpDistance,
@@ -26,6 +27,18 @@ import {
 } from '@shared/unit-aware-display';
 
 describe('unit-aware-display', () => {
+  it('formats sustainable-distance observations in the requested units without changing their canonical values', () => {
+    let supported = false;
+    try { supported = !!DynamicDataLoader.getDataClassFromDataType('Estimated Sustainable Distance'); } catch { /* Pending library release. */ }
+    if (!supported) return;
+    for (const type of ['Estimated Sustainable Distance', 'Minimum Estimated Sustainable Distance']) {
+      expect(resolveUnitAwareDisplayFromValue(type, 10000, getDefaultUserUnitSettings())).toMatchObject({ value: '10.00', unit: 'Km' });
+      expect(resolveUnitAwareDisplayFromValue(type, 10000, normalizeUserUnitSettings({ distanceUnits: DistanceUnits.Miles })))
+        .toMatchObject({ value: '6.22', unit: 'mi' });
+      expect(resolveUnitAwareDisplayFromValue(type, 0, getDefaultUserUnitSettings())).toMatchObject({ value: '0.0', unit: 'm' });
+    }
+  });
+
   it('uses Sports Lib for optional one-decimal TSS display under metric and imperial settings', () => {
     for (const distanceUnits of [DistanceUnits.Kilometers, DistanceUnits.Miles]) {
       const settings = normalizeUserUnitSettings({ distanceUnits });

@@ -51,6 +51,13 @@ function buildPanel(streamType: string, values: number[], unit = '') {
 }
 
 describe('event-echarts-yaxis.helper', () => {
+  it('does not share percentage and sustainable-distance axes', () => {
+    expect(canShareEventPanelYAxis(buildPanel(DataStamina.type, [0, 80], '%'),
+      buildPanel('Estimated Sustainable Distance', [0, 10000], 'm'))).toBe(false);
+    expect(canShareEventPanelYAxis(buildPanel(DataStamina.type, [0, 80], '%'),
+      buildPanel('Estimated Sustainable Distance in miles', [0, 6], 'mi'))).toBe(false);
+  });
+
   it('shares y-axis families for stamina and potential stamina panels', () => {
     const staminaPanel = buildPanel(DataStamina.type, [65, 78], '%');
     const potentialStaminaPanel = buildPanel(DataPotentialStamina.type, [80, 95], '%');

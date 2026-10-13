@@ -1,3 +1,4 @@
+import { getDefaultUserUnitSettings } from '@shared/unit-aware-display';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
   ActivityUtilities,
@@ -337,6 +338,52 @@ describe('event-echarts-data.helper', () => {
 
     expect(panels[0].series[0].gradeColorValues).toBeUndefined();
     expect(panels[0].series[0].gradeColorSourceType).toBeUndefined();
+  });
+
+  it('keeps source-aware endurance labels in mixed-source worker charts without exporting device metadata', () => {
+    const create = (manufacturer: string, id: string) => {
+      const activity = EventImporterJSON.getActivityFromJSON({
+        name: '', startDate: 0, endDate: 3000, type: ActivityTypes.Running, powerMeter: false, trainer: false,
+        creator: { name: 'private-device', manufacturer, serialNumber: 'private-serial', devices: [] },
+        stats: {}, laps: [], events: [], intensityZones: [], streams: [{ type: 'Stamina', data: [80, 0, null, 90] }],
+      } as any);
+      activity.setID(id); activity.addStream(activity.generateTimeStream()); return activity;
+    };
+    const activities = [create('Suunto', 'one'), create('Garmin', 'two')];
+    const input = { selectedActivities: activities, allActivities: activities, xAxisType: XAxisTypes.Duration,
+      showAllData: false, dataTypesToUse: ['Stamina'], userUnitSettings: getDefaultUserUnitSettings(),
+      eventColorService: { getActivityColor: () => '#ff0000' } as any };
+    const snapshot = createEventChartPanelBuildSnapshot(input);
+    expect(snapshot.selectedActivities.map(activity => activity.metricManufacturer)).toEqual(['Suunto', 'Garmin']);
+    expect(JSON.stringify(snapshot)).not.toContain('private-serial');
+    for (const panels of [buildEventChartPanels(input), buildEventChartPanelsFromSnapshot(snapshot)]) {
+      expect(panels[0].displayName).toBe('Stamina / Suunto EnergySense Endurance');
+      expect(panels[0].series.map(series => series.displayName)).toEqual(['EnergySense Endurance', 'Stamina']);
+      expect(eventChartSeriesToPoints(panels[0].series[0]).map(point => point.y)).toEqual([80, 0, null, 90]);
+    }
+  });
+
+  it('builds sustainable-distance worker charts using the shared metric and imperial conversions', () => {
+    try { DynamicDataLoader.getDataClassFromDataType('Estimated Sustainable Distance'); } catch { return; }
+    const activity = EventImporterJSON.getActivityFromJSON({
+      name: '', startDate: 0, endDate: 3000, type: ActivityTypes.Running, powerMeter: false, trainer: false,
+      creator: { name: 'Synthetic', manufacturer: 'Suunto', devices: [] }, stats: {}, laps: [], events: [], intensityZones: [],
+      streams: { 'Estimated Sustainable Distance': [1609, null, 0, 3218] },
+    });
+    activity.setID('distance'); activity.addStream(activity.generateTimeStream());
+    for (const distanceUnits of [DistanceUnits.Kilometers, DistanceUnits.Miles]) {
+      const input = { selectedActivities: [activity], allActivities: [activity], xAxisType: XAxisTypes.Duration,
+        showAllData: false, dataTypesToUse: ['Estimated Sustainable Distance'],
+        userUnitSettings: { ...getDefaultUserUnitSettings(), distanceUnits },
+        eventColorService: { getActivityColor: () => '#ff0000' } as any };
+      for (const panels of [buildEventChartPanels(input), buildEventChartPanelsFromSnapshot(createEventChartPanelBuildSnapshot(input))]) {
+        expect(panels).toHaveLength(1);
+        expect(panels[0].displayName).toBe('EnergySense Sustainable Distance');
+        expect(panels[0].unit).toBe(distanceUnits === DistanceUnits.Miles ? 'mi' : '');
+        expect(eventChartSeriesToPoints(panels[0].series[0]).map(point => point.y))
+          .toEqual(distanceUnits === DistanceUnits.Miles ? [1, null, 0, 2] : [1609, null, 0, 3218]);
+      }
+    }
   });
 
   it('builds stamina panels when stamina streams are selected', () => {

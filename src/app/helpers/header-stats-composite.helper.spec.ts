@@ -1,5 +1,6 @@
 import {
   DataAltitudeAvg,
+  DynamicDataLoader,
   DataCadenceAvg,
   DataContactTimeToFlightTimeRatioAvg,
   DataContactTimeToFlightTimeRatioMax,
@@ -33,6 +34,17 @@ import { describe, expect, it } from 'vitest';
 import { buildHeaderStatCards, expandStatsTypesForCompositeDiff, resolveMetricFamilyTypes } from './header-stats-composite.helper';
 
 describe('header-stats-composite.helper', () => {
+  it('keeps ending and minimum sustainable distance as separate cards with stable canonical identity', () => {
+    let stats;
+    try { stats = ['Estimated Sustainable Distance', 'Minimum Estimated Sustainable Distance']
+      .map(type => DynamicDataLoader.getDataInstanceFromDataType(type, 0)); } catch { return; } // Pending library release.
+    const cards = buildHeaderStatCards(stats, new Map(stats.map(stat => [stat.getType(), stat])), undefined, { manufacturer: 'Suunto' });
+    expect(cards.map(card => card.label)).toEqual(['Ending EnergySense Sustainable Distance', 'Minimum EnergySense Sustainable Distance']);
+    expect(cards.every(card => !card.isComposite)).toBe(true);
+    expect(cards.map(card => card.valueItems[0].type)).toEqual(stats.map(stat => stat.getType()));
+    expect(cards.map(card => card.valueItems[0].displayValue)).toEqual(['0.0', '0.0']);
+  });
+
   it('should resolve family types for title-case and lower-case average labels', () => {
     const titleCase = resolveMetricFamilyTypes('Average Speed in kilometers per hour');
     const lowerCase = resolveMetricFamilyTypes('average speed in kilometers per hour');

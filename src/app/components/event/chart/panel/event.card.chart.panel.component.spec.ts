@@ -515,6 +515,25 @@ describe('EventCardChartPanelComponent', () => {
     expect(option?.yAxis?.axisLabel?.formatter(10000)).toBe(expected);
   });
 
+  it.each([
+    [false, DistanceUnits.Kilometers], [true, DistanceUnits.Kilometers],
+    [false, DistanceUnits.Miles], [true, DistanceUnits.Miles],
+  ] as const)('renders sustainable-distance axes and tooltips on mobile=%s with %s', async (mobile, distanceUnits) => {
+    try { DynamicDataLoader.getDataClassFromDataType('Estimated Sustainable Distance'); } catch { return; }
+    if (mobile) setMobileViewport();
+    component.userUnitSettings = { ...getDefaultUserUnitSettings(), distanceUnits };
+    const imperial = distanceUnits === DistanceUnits.Miles;
+    const type = `Estimated Sustainable Distance${imperial ? ' in miles' : ''}`;
+    component.panel = buildTestPanel(type, imperial ? [0, 6.22] : [0, 10000]);
+    component.panel.unit = imperial ? 'mi' : '';
+    await renderComponent();
+    const formatAxis = getRenderedOption()?.yAxis?.axisLabel?.formatter;
+    expect(formatAxis(imperial ? 6.22 : 10000)).toBe(imperial ? '6.22' : '10.00Km');
+    if (!imperial) expect(formatAxis(800)).toBe('800.0m');
+    expect((component as any).formatDataValue(type, imperial ? 6.22 : 10000)).toBe(imperial ? '6.22mi' : '10.00Km');
+    expect((component as any).formatDataValue(type, 0)).toBe(imperial ? '0.00mi' : '0.0m');
+  });
+
   it('clears the active tooltip before replacing series for an overlay', async () => {
     await renderComponent();
 

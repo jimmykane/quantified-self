@@ -1807,3 +1807,16 @@ Failed late staging writes rearm retired cleanup after save or metadata errors, 
 Saved recording review distinguishes known ineligibility from temporary read failures. Missing/invalid originals remain exclusions; unavailable reads pause preparation and retain the private criteria, cursor and reviewed rows for continuation. This command creates no provider work. Monitoring is **unchanged**: delivery queues, backlog/worker outcomes, retry/lease policy and fixed telemetry labels are unaffected. MCP and Training contracts are unchanged.
 
 Stopping closes retry authority for provider-confirmed processing failures and releases their private temporary files/quota while preserving the failed result and operation identifiers. Finished retryable batches retain the Stop control, including after Pro lapse. Active/uncertain operations retain their sources; saved archive files are never deleted. Cleanup failures remain resumable through the existing Stop cursor and operation trigger. A later confirmed failure after Stop completes releases its source through the existing retry-enabled delivery projection; open failures keep their retry source. Monitoring is **unchanged**: native admission/projection-trigger error/latency diagnostics and the existing hourly cleanup failure/heartbeat fallback cover these release paths, with no new scheduler, queue outcome, worker retry policy or telemetry label. MCP and Training contracts are unaffected.
+
+### Suunto EnergySense parser support
+
+The pending Sports Lib candidate maps Suunto JSON/SML Endurance to the existing Stamina family and EnduranceDistance
+to Estimated Sustainable Distance plus its source/sampled minimum. Its raw distance unit is assumed to be metres pending
+provider confirmation. Cur and Min remain source observations, EnduranceValid is not an eligibility rule, and absent FIT
+fields are not synthesized. Canonical metric labels and reparse compatibility are described in the
+[reparse runbook](../functions/src/reparse/SPORTS_LIB_REPARSE_RUNBOOK.md#pending-energysense-library-candidate) and
+[MCP contract](mcp-server.md#energysense-and-endurance-streams-pending-coordinated-release).
+
+Monitoring review: covered unchanged by the existing import/reparse queue monitoring. This is an offline parser and
+presentation extension: no provider transport, scopes, queue state, retry, scheduler, secret, data-write endpoint,
+alert condition or deployed resource changes. Existing sanitized persistence and provider outcomes remain authoritative.

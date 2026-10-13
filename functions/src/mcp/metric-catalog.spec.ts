@@ -39,6 +39,26 @@ import {
 } from './metric-catalog';
 
 describe('MCP Sports Lib metric catalog', () => {
+  it('resolves qualified EnergySense terminology without creating duplicate or ambiguous metrics', () => {
+    expect(resolveSportsLibNumericMetric('Suunto EnergySense Endurance')?.type).toBe('Stamina');
+    expect(resolveSportsLibNumericMetric('Minimum EnergySense Endurance')?.type).toBe('Minimum Stamina');
+    expect(resolveSportsLibNumericMetric('EnergySense')).toBeNull();
+    expect(resolveSportsLibNumericMetric('EnergySense distance to target')).toBeNull();
+    const distance = resolveSportsLibNumericMetric('Estimated Sustainable Distance');
+    expect(resolveSportsLibNumericMetric('EnergySense Sustainable Distance')).toEqual(distance);
+    expect(resolveSportsLibNumericMetric('EnergySense Sustainable Distance', new Map())).toBeNull();
+    if (distance) {
+      expect(distance).toMatchObject({ type: 'Estimated Sustainable Distance', unit: 'm' });
+      expect(resolveAvailableSportsLibMetrics([{}])).not.toContainEqual(distance);
+      expect(resolveAvailableSportsLibMetrics([{ 'Estimated Sustainable Distance': 0 }])).toContainEqual(distance);
+      expect(projectSportsLibNumericMetricValue(distance.type, 0)).toBe(0);
+      for (const invalid of [null, '', '0', -1, Infinity, NaN]) {
+        expect(projectSportsLibNumericMetricValue(distance.type, invalid)).toBeNull();
+      }
+      expect(getSportsLibNumericMetricCatalog().filter(metric => metric.type === distance.type)).toHaveLength(1);
+    }
+  });
+
   it('enumerates canonical numeric data classes with their native metadata', () => {
     const distance = resolveSportsLibNumericMetric(DataDistance.type);
 

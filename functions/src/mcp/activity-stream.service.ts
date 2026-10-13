@@ -42,7 +42,7 @@ export const MCP_ACTIVITY_CHART_MAX_LOCATION_POINTS = 1_000;
 
 export type McpActivityChartXAxis = 'elapsed_time' | 'distance';
 
-interface ChartMetricDefinition {
+export interface ChartMetricDefinition {
   id: string;
   label: string;
   streamType: string;
@@ -188,13 +188,26 @@ export const MCP_ACTIVITY_CHART_METRICS = [
   },
 ] as const satisfies readonly ChartMetricDefinition[];
 
+/** Additive catalog; the registered legacy catalog above remains frozen. */
+export const MCP_ACTIVITY_STREAM_METRICS = [
+  ...MCP_ACTIVITY_CHART_METRICS,
+  { id: 'stamina', label: 'Stamina / Suunto EnergySense Endurance', streamType: 'Stamina', unit: 'percent',
+    aliases: ['stamina', 'energysense endurance', 'suunto energysense endurance'], availability: 'always', parserDependencyStreamTypes: [] },
+  { id: 'potential_stamina', label: 'Potential Stamina', streamType: 'Potential Stamina', unit: 'percent',
+    aliases: ['potential stamina'], availability: 'always', parserDependencyStreamTypes: [] },
+  { id: 'estimated_sustainable_distance', label: 'Estimated Sustainable Distance / Suunto EnergySense Sustainable Distance',
+    streamType: 'Estimated Sustainable Distance', unit: 'meters',
+    aliases: ['estimated sustainable distance', 'energysense sustainable distance', 'suunto energysense sustainable distance'],
+    availability: 'always', parserDependencyStreamTypes: [] },
+] as const satisfies readonly ChartMetricDefinition[];
+
 function normalizeMetricName(value: string): string {
   return value.trim().toLowerCase().replace(/[-_\s]+/g, ' ');
 }
 
 export function resolveMetric(value: string): ChartMetricDefinition | null {
   const normalized = normalizeMetricName(value);
-  return MCP_ACTIVITY_CHART_METRICS.find(metric => (
+  return MCP_ACTIVITY_STREAM_METRICS.find(metric => (
     normalizeMetricName(metric.id) === normalized
     || metric.aliases.some(alias => normalizeMetricName(alias) === normalized)
   )) || null;
@@ -244,13 +257,13 @@ export function getUnsupportedActivityChartMetrics(
   });
 }
 
-export function listActivityChartMetrics(activityType?: string) {
+export function listActivityChartMetrics(activityType?: string, includeEndurance = false) {
   const resolvedType = activityType
     ? ActivityTypesHelper.resolveActivityType(activityType)
     : null;
   return {
     activityType: resolvedType ? String(resolvedType) : null,
-    metrics: MCP_ACTIVITY_CHART_METRICS
+    metrics: (includeEndurance ? MCP_ACTIVITY_STREAM_METRICS : MCP_ACTIVITY_CHART_METRICS)
       .filter(metric => (
         !resolvedType
         || isChartMetricSupportedForActivityType(metric, resolvedType)

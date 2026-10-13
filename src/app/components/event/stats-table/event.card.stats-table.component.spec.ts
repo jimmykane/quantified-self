@@ -11,6 +11,7 @@ import {
     DataBeginningPotentialStamina,
     DataDistance,
     DistanceUnits,
+    DynamicDataLoader,
     SwimPaceUnits,
     DataPace,
     DataPaceAvg,
@@ -575,6 +576,22 @@ describe('EventCardStatsTableComponent', () => {
         expect(rowTypes).toContain(DataPaceAvg.type);
         expect(rowTypes).toContain(DataPaceMin.type);
         expect(rowTypes).toContain(DataPaceMax.type);
+    });
+
+    it('shows one source-aware row per sustainable-distance stat and follows distance preferences', () => {
+        let distance;
+        try { distance = DynamicDataLoader.getDataInstanceFromDataType('Estimated Sustainable Distance', 1609); } catch { return; }
+        const activity = { ...mockActivity, creator: { name: 'Custom', manufacturer: 'Suunto' },
+            getStatsAsArray: () => [distance], getStat: (type: string) => type === distance.getType() ? distance : null,
+        } as unknown as ActivityInterface;
+        component.event = { ...mockEvent, isMerge: false } as EventInterface;
+        component.selectedActivities = [activity];
+        component.userUnitSettings = { ...mockUserUnitSettings, distanceUnits: DistanceUnits.Miles };
+        component.ngOnChanges({});
+        expect(component.data.data).toHaveLength(1);
+        expect(component.data.data[0]).toMatchObject({ '__statType': 'Estimated Sustainable Distance', Name: 'Ending EnergySense Sustainable Distance' });
+        expect(JSON.stringify(component.data.data)).toContain('1.00');
+        expect(JSON.stringify(component.data.data)).toContain('mi');
     });
 
     it('should include Garmin stamina stats in detailed statistics', () => {

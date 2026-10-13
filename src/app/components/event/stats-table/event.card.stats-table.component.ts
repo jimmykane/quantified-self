@@ -21,6 +21,8 @@ import { normalizeProviderServiceName, ProviderPresentation } from '@shared/prov
 import { AppEventService } from '../../../services/app.event.service';
 import { take } from 'rxjs/operators';
 import { resolvePrimaryUnitAwareDisplayStat } from '../../../helpers/summary-display.helper';
+import { getCommonMetricManufacturer, SUSTAINABLE_DISTANCE_TYPE, SUSTAINABLE_DISTANCE_MIN_TYPE } from '@shared/endurance-metrics';
+import { resolveUnitAwareDisplayStat } from '@shared/unit-aware-display';
 
 @Component({
   selector: 'app-event-stats-table',
@@ -135,7 +137,9 @@ export class EventCardStatsTableComponent implements OnChanges {
     // Create the data as rows
     const data = Array.from(stats.values()).reduce((array, stat) => {
       let isComplexObject = false;
-      const rowLabel = normalizeUnitDerivedTypeLabel(stat.getType(), stat.getDisplayType());
+      const contributingActivities = this.selectedActivities.filter(activity => !!activity.getStat(stat.getType()));
+      const manufacturer = getCommonMetricManufacturer(contributingActivities);
+      const rowLabel = normalizeUnitDerivedTypeLabel(stat.getType(), stat.getDisplayType(), { manufacturer, surface: 'stat' });
       const row = this.selectedActivities.reduce((rowObj: any, activity, index) => {
         const activityStat = activity.getStat(stat.getType());
         if (!activityStat) {
@@ -143,7 +147,8 @@ export class EventCardStatsTableComponent implements OnChanges {
         }
         const distanceDisplay = stat.getType() === DataDistance.type
           ? resolvePrimaryUnitAwareDisplayStat(activityStat, this.userUnitSettings, DataDistance.type, [activity.type])
-          : null;
+          : [SUSTAINABLE_DISTANCE_TYPE, SUSTAINABLE_DISTANCE_MIN_TYPE].includes(stat.getType())
+            ? resolveUnitAwareDisplayStat(activityStat, this.userUnitSettings) : null;
         const displayValue = distanceDisplay?.value ?? activityStat.getDisplayValue();
         const displayUnit = distanceDisplay?.unit ?? activityStat.getDisplayUnit();
 

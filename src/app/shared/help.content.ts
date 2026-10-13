@@ -725,7 +725,10 @@ HRV and Sleep each have their own date range and older/newer navigation. While a
 
 ### Event stamina metrics
 
-- Event details can show **Stamina** and **Potential Stamina** when Garmin FIT or compatible Suunto imports include them.
+- Event details can show **Stamina** and **Potential Stamina** when the source records them. Verified Suunto sources label Stamina as **EnergySense Endurance**; both names select the same metric.
+- Suunto sources can also record **EnergySense Sustainable Distance**, an estimate of how far you could continue at the current effort. It is separate from distance travelled and distance remaining to a route target. Unknown sources use **Estimated Sustainable Distance**.
+- Ending sustainable distance and its minimum appear separately; the source ending summary can differ from the last chart reading. Zero is valid, gaps mean missing readings, and estimates can recover. Distance follows your distance-unit preference and has a separate chart axis from endurance percentage.
+- These estimates are not added across activities or devices. Reparse the original supported source to add newly supported summary metrics to older activities; opening a chart loads recorded streams on demand. A FIT file without these fields cannot recreate them.
 - Stamina metrics appear in Detailed Statistics, in event summary metric tabs, and as selectable chart metrics from **Settings -> Charts**.
 - Garmin session-level stamina values such as **Minimum Stamina**, **Beginning Potential Stamina**, and **Ending Potential Stamina** are shown when present.
 

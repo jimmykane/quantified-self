@@ -2659,6 +2659,44 @@ describe('sports-lib-reparse.service', () => {
             }
         });
 
+    it.each([0, 60])('preserves fresh EnergySense endings and minima through repeat regeneration (%s)', async ending => {
+        const sports = await vi.importActual<typeof import('@sports-alliance/sports-lib')>('@sports-alliance/sports-lib');
+        const origin = Date.parse('2026-01-01T10:00:00Z');
+        const iso = (second: number) => new Date(origin + second * 1000).toISOString();
+        const source = JSON.stringify({ DeviceLog: {
+            Device: { Name: 'Synthetic', Info: { HW: '1', SW: '1' } },
+            Header: { DateTime: iso(0), Duration: 10, EnduranceValid: 0 },
+            Windows: [{ Window: { Type: 'Activity', Duration: 10, Endurance: { Cur: ending, Min: 0 },
+                EnduranceDistance: { Cur: ending * 100, Min: 0 } } }],
+            Samples: [ { TimeISO8601: iso(0), Events: [{ Activity: { ActivityType: 3 } }], Endurance: 90, EnduranceDistance: 9000 },
+                { TimeISO8601: iso(5), Endurance: 70, EnduranceDistance: 7000 },
+                { TimeISO8601: iso(10), Events: [{ Lap: { Type: 'Stop' } }], Endurance: 80, EnduranceDistance: 8000 } ],
+        } });
+        hoisted.mockDownload.mockResolvedValue([Buffer.from(source)]);
+        hoisted.generateMissingStreamsAndStatsForActivity.mockImplementation(
+            item => sports.ActivityUtilities.generateMissingStreamsAndStatsForActivity(item));
+        const ids: string[] = [];
+        for (let pass = 0; pass < 2; pass++) {
+            const parsedEvent = await sports.EventImporterSuuntoJSON.getFromJSONString(source,
+                new sports.ActivityParsingOptions({ generateUnitStreams: false }));
+            const activity = parsedEvent.getFirstActivity();
+            hoisted.suuntoJSONImporter.getFromJSONString.mockResolvedValue(parsedEvent);
+            await reparseEventFromOriginalFiles('u1', 'e1', { mode: 'regenerate',
+                eventData: { originalFile: { path: 'users/u1/events/e1/synthetic.json' } },
+                activityDocs: [], targetSportsLibVersion: TARGET_SPORTS_LIB_VERSION });
+            expect(activity.getStat('Stamina')?.getValue()).toBe(ending);
+            expect(activity.getStat('Minimum Stamina')?.getValue()).toBe(0);
+            // The new distance is activated only after the coordinated Sports Lib release.
+            if (activity.hasStreamData('Estimated Sustainable Distance')) {
+                expect(activity.getStat('Estimated Sustainable Distance')?.getValue()).toBe(ending * 100);
+                expect(activity.getStat('Minimum Estimated Sustainable Distance')?.getValue()).toBe(0);
+                expect(activity.getStatsAsArray().filter(stat => stat.getType() === 'Estimated Sustainable Distance')).toHaveLength(1);
+            }
+            ids.push(activity.getID());
+        }
+        expect(ids[0]).toBe(ids[1]);
+    });
+
     it.each(['recorded-pauses', 'nonfirst-activity', 'all-paused'] as const)(
         'retains Suunto %s evidence through repeated original-file regeneration', async kind => {
         const sports = await vi.importActual<typeof import('@sports-alliance/sports-lib')>('@sports-alliance/sports-lib');

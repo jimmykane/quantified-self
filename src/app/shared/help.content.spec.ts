@@ -1551,6 +1551,9 @@ describe('help.content', () => {
     const gettingStartedSection = HELP_SECTIONS.find(section => section.id === 'getting-started');
 
     expect(gettingStartedSection?.content).toContain('Event stamina metrics');
+    expect(gettingStartedSection?.content).toContain('**EnergySense Endurance**');
+    expect(gettingStartedSection?.content).toContain('**EnergySense Sustainable Distance**');
+    expect(gettingStartedSection?.content).toContain('source ending summary can differ');
     expect(gettingStartedSection?.content).toContain('**Stamina** and **Potential Stamina**');
     expect(gettingStartedSection?.content).toContain('Detailed Statistics');
     expect(gettingStartedSection?.content).toContain('event summary metric tabs');

@@ -47,6 +47,7 @@ import {
 } from '../../helpers/unit-setup-preset.helper';
 import {
   getAppAdvancedChartDataTypes,
+  getChartMetricPickerLabel,
   getAppBasicChartDataTypes,
   getAppCanonicalChartDataTypes,
 } from '../../helpers/app-chart-data-types.helper';
@@ -73,6 +74,7 @@ interface SettingsSectionOption {
   standalone: false
 })
 export class UserSettingsComponent implements OnChanges, OnDestroy, OnInit {
+  public readonly getChartMetricPickerLabel = getChartMetricPickerLabel;
 
   public mandatoryAscentExclusions = ACTIVITIES_EXCLUDED_FROM_ASCENT;
   public mandatoryDescentExclusions = ACTIVITIES_EXCLUDED_FROM_DESCENT;

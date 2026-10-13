@@ -1,3 +1,4 @@
+import { MCP_ACTIVITY_CHART_METRICS, resolveMetric } from './activity-stream.service';
 import { MCP_WORKOUT_REFLECTION_INPUTS, type McpWorkoutReflectionTool } from './workout-reflections.schemas';
 import { activitySampleResultBytes, MCP_ACTIVITY_SAMPLES_LIMITS } from './activity-samples.service';
 import { toNodeHandler } from '@modelcontextprotocol/node';
@@ -716,7 +717,7 @@ function createReadOnlyToolRunner(outputSchemas: McpOutputSchemaRegistry) {
         && Buffer.byteLength(JSON.stringify(result), 'utf8') > MCP_ACTIVITY_DESCRIPTION_MAX_RESULT_BYTES - 1024) {
         throw new McpDataError('query_too_large', 'The activity description exceeds the MCP response limit. Read it in Quantified Self.');
       }
-      if (name === 'get_activity_samples' && activitySampleResultBytes(validated) > MCP_ACTIVITY_SAMPLES_LIMITS.responseBytes) {
+      if ((name === 'get_activity_samples' || name === 'get_activity_samples_v2') && activitySampleResultBytes(validated) > MCP_ACTIVITY_SAMPLES_LIMITS.responseBytes) {
         throw new McpDataError('query_too_large', 'The activity samples exceed the MCP response limit. Request a smaller page.');
       }
       if (name === 'query_activities_with_tags'
@@ -754,7 +755,7 @@ export function summarizeMcpOutputValidationIssues(
   return summarizeMcpValidationIssues(error);
 }
 
-export const MCP_ACTIVITY_SAMPLES_INSTRUCTIONS = 'Use existing activity summaries for ordinary workout overviews. Use get_activity_chart_data for a visual overview. For detailed samples, interval analysis or calculations, discover metrics with list_activity_chart_metrics and use get_activity_samples with only the needed metrics and elapsed-second range. Keep the same query and limit when following nextCursor; finish the requested range before claiming complete coverage. Null means a missing reading. Never calculate whole-activity averages, time in zones or correlations from downsampled chart points; prefer persisted summary metrics when they answer the question.';
+export const MCP_ACTIVITY_SAMPLES_INSTRUCTIONS = 'For endurance and sustainable-distance streams use the additive v2 catalog, chart and detailed-sample tools when available. Suunto EnergySense alone is ambiguous: clarify endurance percentage versus estimated sustainable distance. These are separate dimensions; sustainable distance is not target distance remaining or distance travelled. Keep zero, null gaps and rebounds, and never combine estimates across devices or legs. A source ending summary can differ from the final sample. Use existing activity summaries for ordinary workout overviews. Use get_activity_chart_data for a visual overview. For detailed samples, interval analysis or calculations, discover metrics with list_activity_chart_metrics and use get_activity_samples with only the needed metrics and elapsed-second range. Keep the same query and limit when following nextCursor; finish the requested range before claiming complete coverage. Null means a missing reading. Never calculate whole-activity averages, time in zones or correlations from downsampled chart points; prefer persisted summary metrics when they answer the question.';
 
 export const MCP_PERMISSION_RECOVERY_INSTRUCTIONS = 'If a requested Quantified Self capability has no matching advertised tool, do not interpret that as missing user data, substitute another data domain, or tell the user to reconnect a Garmin, Suunto, COROS, or Wahoo account. Explain that this MCP connection may lack the relevant Quantified Self permission or may have an older tool catalog. Guide the user to open the Quantified Self app or connection in their MCP client, choose Reconnect or start authorization again, approve the named permission and any required parent permission, complete authorization, then start a new chat or refresh the client tools. If the permission is absent from consent or the tool remains absent, ask the client or workspace administrator to refresh, rescan, or update the app catalog. Disconnect and connect again only when the client explicitly offers no reconnect path. Uninstall and reinstall is a last resort for a stale local plugin or app bundle, not the normal way to add permission.';
 
@@ -2121,9 +2122,10 @@ export function createMcpServer(
       }),
       outputSchema: outputSchemas.get_activity_samples,
       annotations: READ_ONLY_TOOL_ANNOTATIONS,
-    }, input => runReadOnlyTool('get_activity_samples', () => dataService.getActivitySamples({
-      ...input, uid: auth.uid, connectionId: auth.connectionId, scopes: auth.scopes,
-    })));
+    }, input => runReadOnlyTool('get_activity_samples', () => {
+      assertLegacyStreamMetrics(input.metrics);
+      return dataService.getActivitySamples({ ...input, uid: auth.uid, connectionId: auth.connectionId, scopes: auth.scopes });
+    }));
 
     registerMcpTool(server, 'get_activity_chart_data', {
       title: 'Get activity chart data',
@@ -2143,6 +2145,78 @@ export function createMcpServer(
       annotations: READ_ONLY_TOOL_ANNOTATIONS,
     }, input => runReadOnlyTool(
       'get_activity_chart_data',
+      () => {
+        assertLegacyStreamMetrics(input.metrics);
+        if (input.includeLocation && !activityLocationAvailable) {
+          throw new McpDataError(
+            'invalid_request',
+            'Activity breadcrumb coordinates require activity-location:read.',
+          );
+        }
+        return dataService.getActivityChartData({
+          uid: auth.uid,
+          connectionId: auth.connectionId,
+          activityRef: input.activityRef,
+          metrics: input.metrics,
+          xAxis: input.xAxis,
+          maxPoints: input.maxPoints,
+          includeLocation: input.includeLocation,
+          maxLocationPoints: input.maxLocationPoints,
+        });
+      },
+    ));
+
+    registerMcpTool(server, 'list_activity_chart_metrics_v2', {
+      title: 'List activity chart metrics including endurance',
+      description: 'List the static chart-stream catalog, canonical units, axes, and point limits. Includes Stamina, Potential Stamina and Estimated Sustainable Distance. EnergySense is ambiguous: choose endurance percentage or sustainable distance. This does not read an activity or original source file.',
+      inputSchema: z.object({
+        activityType: z.string().min(1).max(120).optional(),
+      }),
+      outputSchema: outputSchemas.list_activity_chart_metrics_v2,
+      annotations: READ_ONLY_TOOL_ANNOTATIONS,
+    }, input => runReadOnlyTool(
+      'list_activity_chart_metrics_v2',
+      async () => dataService.listActivityChartMetrics(input.activityType, true),
+    ));
+
+    registerMcpTool(server, 'get_activity_samples_v2', {
+      title: 'Get activity samples including endurance',
+      description: 'Read all available selected activity samples in bounded pages on an elapsed-second axis, without chart downsampling. Discover metrics and canonical units with list_activity_chart_metrics_v2. Use for interval analysis, calculations or detailed data requests; prefer persisted summaries for workout overviews and chart data for visual overviews. Missing readings are null, never zero-filled. Requires existing Activity details access; never returns coordinates, absolute timestamps, original files or provider/device metadata. Reads existing original files only, so unavailable sources cannot be reconstructed. Follow nextCursor with the same activity, metrics, range and limit; cursors expire after 30 minutes and a changed source requires restarting.',
+      inputSchema: z.strictObject({
+        activityRef: MCP_OPAQUE_REFERENCE_SCHEMA,
+        metrics: z.array(z.string().min(1).max(120)).min(1).max(4),
+        startOffsetSeconds: z.number().int().min(0).max(MCP_ACTIVITY_SAMPLES_LIMITS.maxOffsetSeconds).default(0)
+          .describe('Inclusive elapsed-second start; omit for the beginning.'),
+        endOffsetSeconds: z.number().int().min(1).max(MCP_ACTIVITY_SAMPLES_LIMITS.maxOffsetSeconds).optional()
+          .describe('Exclusive elapsed-second end; omit for the remainder of the available streams.'),
+        limit: z.number().int().min(1).max(MCP_ACTIVITY_SAMPLES_LIMITS.maxRows).default(MCP_ACTIVITY_SAMPLES_LIMITS.defaultRows)
+          .describe('Maximum aligned rows per page. The byte budget can produce fewer rows; use nextCursor until the requested range is complete.'),
+        cursor: MCP_CURSOR_SCHEMA.optional(),
+      }),
+      outputSchema: outputSchemas.get_activity_samples_v2,
+      annotations: READ_ONLY_TOOL_ANNOTATIONS,
+    }, input => runReadOnlyTool('get_activity_samples_v2', () => dataService.getActivitySamples({
+      ...input, uid: auth.uid, connectionId: auth.connectionId, scopes: auth.scopes,
+    })));
+
+    registerMcpTool(server, 'get_activity_chart_data_v2', {
+      title: 'Get activity chart data including endurance',
+      description: 'Parse the existing original source on demand and return bounded, whole-activity chart series. Original files, full-resolution recordings, absolute sample timestamps, and unrequested streams are never returned. Breadcrumb coordinates require activity-location access.',
+      inputSchema: z.object({
+        activityRef: MCP_OPAQUE_REFERENCE_SCHEMA,
+        metrics: z.array(z.string().min(1).max(120)).min(1).max(4),
+        xAxis: z.enum(['elapsed_time', 'distance']).default('elapsed_time'),
+        maxPoints: z.number().int().min(2).max(MCP_ACTIVITY_CHART_MAX_POINTS)
+          .default(MCP_ACTIVITY_CHART_DEFAULT_POINTS),
+        includeLocation: z.boolean().default(false),
+        maxLocationPoints: z.number().int().min(2)
+          .max(MCP_ACTIVITY_CHART_MAX_LOCATION_POINTS)
+          .default(MCP_ACTIVITY_CHART_DEFAULT_LOCATION_POINTS),
+      }),
+      outputSchema: outputSchemas.get_activity_chart_data_v2,
+      annotations: READ_ONLY_TOOL_ANNOTATIONS,
+    }, input => runReadOnlyTool(
+      'get_activity_chart_data_v2',
       () => {
         if (input.includeLocation && !activityLocationAvailable) {
           throw new McpDataError(
@@ -2521,7 +2595,7 @@ export function requiredScopesForRequest(body: unknown): McpOAuthScope[] {
     ];
   }
   if (
-    toolName === 'get_activity_chart_data'
+    (toolName === 'get_activity_chart_data' || toolName === 'get_activity_chart_data_v2')
     && toolArguments.includeLocation === true
   ) {
     return [
@@ -2539,6 +2613,9 @@ export function requiredScopesForRequest(body: unknown): McpOAuthScope[] {
     'list_activity_chart_metrics',
     'get_activity_chart_data',
     'get_activity_samples',
+    'list_activity_chart_metrics_v2',
+    'get_activity_chart_data_v2',
+    'get_activity_samples_v2',
   ].includes(toolName)) {
     return [MCP_OAUTH_SCOPES.ActivityDetailsRead];
   }
@@ -3144,3 +3221,9 @@ export const mcpApi = onRequest(MCP_API_RUNTIME_OPTIONS, async (request, respons
     await transport.close().catch(() => undefined);
   }
 });
+
+function assertLegacyStreamMetrics(metrics: readonly string[]): void {
+  if (metrics.some(value => !MCP_ACTIVITY_CHART_METRICS.some(metric => metric.id === resolveMetric(value)?.id))) {
+    throw new McpDataError('invalid_request', 'Choose a metric from list_activity_chart_metrics, or use the v2 catalog and tools for endurance streams.');
+  }
+}

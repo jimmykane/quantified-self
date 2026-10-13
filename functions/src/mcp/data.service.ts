@@ -6368,8 +6368,8 @@ export function createMcpDataService(
         activityTypes,
       };
     },
-    listActivityChartMetrics(activityType?: string) {
-      return listActivityChartMetrics(activityType);
+    listActivityChartMetrics(activityType?: string, includeEndurance = false) {
+      return listActivityChartMetrics(activityType, includeEndurance);
     },
     async listMetrics(input: ListMetricsInput): Promise<ListMetricsResult> {
       const rawLimit = Math.floor(input.limit || 50);

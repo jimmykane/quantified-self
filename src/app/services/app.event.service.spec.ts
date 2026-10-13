@@ -2273,6 +2273,7 @@ describe('AppEventService', () => {
                 tankUpdates: [{ pressure: 200 }],
             };
             const existingActivity = {
+                creator: { name: 'User label' },
                 getID: () => 'a-1',
                 clearStreams: vi.fn(),
                 addStreams: vi.fn(),
@@ -2280,6 +2281,7 @@ describe('AppEventService', () => {
                 getStat: vi.fn().mockImplementation((type: string) => type === 'Ascent' ? oldAscentStat : undefined),
             } as any;
             const parsedActivity = {
+                creator: { manufacturer: 'Suunto', serialNumber: 'private-serial' },
                 getID: () => 'a-1',
                 getAllStreams: vi.fn().mockReturnValue(parsedStreams),
                 getDiveSourceRecords: vi.fn().mockReturnValue(parsedDiveSourceRecords),
@@ -2314,6 +2316,7 @@ describe('AppEventService', () => {
                     mergeMultipleFiles: true,
                 }),
             );
+            expect(existingActivity.creator).toEqual({ name: 'User label', manufacturer: 'Suunto' });
             expect(existingActivity.clearStreams).toHaveBeenCalledTimes(1);
             expect(existingActivity.addStreams).toHaveBeenCalledWith(parsedStreams);
             expect(existingActivity.setDiveSourceRecords).toHaveBeenCalledWith(parsedDiveSourceRecords);

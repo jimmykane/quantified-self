@@ -12,7 +12,7 @@
         </ng-template>
         @if (tab.metricTypes.length > 0) {
         <app-header-stats [statsToShow]="tab.metricTypes" [layout]="layout" [stats]="stats" [unitSettings]="unitSettings"
-            [activityTypes]="activityTypes" [showDiff]="showDiff" [diffByType]="diffByType"
+            [activityTypes]="activityTypes" [metricManufacturer]="metricManufacturer" [showDiff]="showDiff" [diffByType]="diffByType"
             [singleValueTypes]="getSingleValueTypesForTab(tab)">
         </app-header-stats>
         }

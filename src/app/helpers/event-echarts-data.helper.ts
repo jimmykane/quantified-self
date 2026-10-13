@@ -51,6 +51,7 @@ import {
 } from './event-echarts-style.helper';
 import { EventChartRange, normalizeEventRange } from './event-chart-range.helper';
 import { normalizeUnitDerivedTypeLabel } from './stat-label.helper';
+import { getEnduranceMetricLabel, SUSTAINABLE_DISTANCE_TYPE } from '@shared/endurance-metrics';
 import { createSwimDistanceDisplayStat, resolveUnitAwareDisplayStat } from '@shared/unit-aware-display';
 import { resolveSummaryDisplayStat } from './summary-display.helper';
 import { AppSwimLength, getActivitySwimLengths } from './event-swim-length.helper';
@@ -133,6 +134,7 @@ export interface EventChartIntensityZoneSnapshot {
 export interface EventChartActivitySnapshot {
   id: string;
   activityName: string;
+  metricManufacturer?: string;
   activityType: unknown;
   startTimeMs: number;
   intensityZones: EventChartIntensityZoneSnapshot[];
@@ -321,9 +323,12 @@ function buildEventChartPanelsFromActivities(input: BuildEventChartPanelsCoreInp
       const streamDataClass = DynamicDataLoader.getDataClassFromDataType(stream.type);
       const displayName = normalizeUnitDerivedTypeLabel(
         stream.type,
-        streamDataClass.displayType || streamDataClass.type
+        streamDataClass.displayType || streamDataClass.type,
+        { manufacturer: activity.creator?.manufacturer, surface: 'stream' }
       );
-      const unit = streamDataClass.unit || '';
+      // Metric distance uses Sports Lib's value-dependent m/Km display. Its axis
+      // includes the unit on each tick, so a fixed '(m)' heading would be misleading.
+      const unit = stream.type === SUSTAINABLE_DISTANCE_TYPE ? '' : streamDataClass.unit || '';
 
       if (!panelsMap.has(stream.type)) {
         panelsMap.set(stream.type, {
@@ -338,6 +343,9 @@ function buildEventChartPanelsFromActivities(input: BuildEventChartPanelsCoreInp
       }
 
       const panel = panelsMap.get(stream.type) as EventChartPanelModel;
+      if (panel.displayName !== displayName) {
+        panel.displayName = getEnduranceMetricLabel(stream.type, { surface: 'picker' }) ?? panel.displayName;
+      }
       panel.minX = Math.min(panel.minX, pointResult.minX);
       panel.maxX = Math.max(panel.maxX, pointResult.maxX);
       const activityID = activity.getID() || '';
@@ -433,6 +441,7 @@ function snapshotEventChartActivity(
   return {
     id: activity.getID?.() || '',
     activityName: activity.creator?.name || 'Activity',
+    metricManufacturer: typeof activity.creator?.manufacturer === 'string' ? activity.creator.manufacturer : undefined,
     activityType: activity.type,
     startTimeMs: activity.startDate?.getTime?.() ?? Number.NaN,
     intensityZones: (activity.intensityZones || []).map((zone) => ({ ...(zone as unknown as Record<string, unknown>) })),
@@ -509,7 +518,7 @@ function createSnapshotActivity(snapshot: EventChartActivitySnapshot): ActivityI
   return {
     type: snapshot.activityType,
     startDate: new Date(snapshot.startTimeMs),
-    creator: { name: snapshot.activityName },
+    creator: { name: snapshot.activityName, manufacturer: snapshot.metricManufacturer },
     intensityZones: snapshot.intensityZones || [],
     getID: () => snapshot.id,
     getAllStreams: () => streams,
@@ -1191,6 +1200,8 @@ function getFilteredStreams(input: {
       }
 
       switch (stream.type) {
+        case SUSTAINABLE_DISTANCE_TYPE:
+          return DynamicDataLoader.getUnitBasedDataTypesFromDataType(stream.type, input.userUnitSettings).includes(stream.type);
         case DataDistance.type:
           return !shouldRemoveDistance;
         case DataDepth.type:
@@ -1501,6 +1512,8 @@ function toSeriesPoints(
     return normalizeSeriesPointResult(lineValues, pointTimes, pointCount, minX, maxX);
   }
 
+  const preserveEnduranceGaps = ['Stamina', 'Potential Stamina', 'Estimated Sustainable Distance',
+    'Estimated Sustainable Distance in miles'].includes(stream.type);
   const timeValues = getActivityTimeValues(activity, activityCache);
   const absoluteTimes = getActivityAbsoluteTimes(activity, activityCache);
   const length = Math.min(streamValues.length, timeValues.length, absoluteTimes.length);
@@ -1514,8 +1527,12 @@ function toSeriesPoints(
     const y = shouldTreatAsPace
       ? getRenderablePaceValue(streamValues[index], speedValues, index)
       : streamValues[index];
-    const seconds = timeValues[index];
-    const time = absoluteTimes[index];
+    // Canonical streams use a one-second grid. Preserve an empty position even when
+    // every sensor was absent there, so the chart cannot connect across an endurance gap.
+    // This supplies a null marker only; it never invents a reading or moves an observation.
+    const gap = preserveEnduranceGaps && !Number.isFinite(y) && !Number.isFinite(timeValues[index]);
+    const seconds = gap ? index : timeValues[index];
+    const time = gap ? activity.startDate.getTime() + index * 1000 : absoluteTimes[index];
     if (!Number.isFinite(seconds)) {
       continue;
     }

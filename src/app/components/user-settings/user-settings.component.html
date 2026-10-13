@@ -274,7 +274,7 @@
                 @for (group of dataGroups; track group.name) {
                 <mat-optgroup [label]="group.name">
                   @for (data of group.data; track $index) {
-                  <mat-option [value]="data">{{ data }}</mat-option>
+                  <mat-option [value]="data">{{ getChartMetricPickerLabel(data) }}</mat-option>
                   }
                 </mat-optgroup>
                 }

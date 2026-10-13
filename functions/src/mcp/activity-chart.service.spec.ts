@@ -1,3 +1,4 @@
+import { resolveMetric } from './activity-stream.service';
 import {
   ActivityTypes,
   DataAltitude,
@@ -90,6 +91,15 @@ function persistedIdentity(
 }
 
 describe('MCP on-demand activity charts', () => {
+  it('keeps the frozen catalog unchanged and resolves dimension-specific endurance aliases', () => {
+    expect(listActivityChartMetrics().metrics.some(metric => metric.metric === 'stamina')).toBe(false);
+    expect(listActivityChartMetrics(undefined, true).metrics.map(metric => metric.metric)).toEqual(expect.arrayContaining(['stamina', 'potential_stamina', 'estimated_sustainable_distance']));
+    expect(resolveMetric('EnergySense')).toBeNull();
+    expect(resolveMetric('distance remaining to target')).toBeNull();
+    expect(resolveMetric('EnergySense endurance')).toMatchObject({id: 'stamina', unit: 'percent', streamType: 'Stamina', parserDependencyStreamTypes: []});
+    expect(resolveMetric('EnergySense sustainable distance')).toMatchObject({id: 'estimated_sustainable_distance', unit: 'meters', streamType: 'Estimated Sustainable Distance', parserDependencyStreamTypes: []});
+  });
+
   it('lists a static family-aware catalog without reading a source', () => {
     expect(listActivityChartMetrics(ActivityTypes.TrailRunning)).toMatchObject({
       activityType: ActivityTypes.TrailRunning,

@@ -7,6 +7,25 @@ Target version source of truth:
 - `SPORTS_LIB_REPARSE_TARGET_VERSION`
 - File: `functions/src/reparse/sports-lib-reparse.config.ts`
 
+### Pending EnergySense library candidate
+
+Canonical Stamina and Potential Stamina keys remain compatible; presentation naming needs no data migration or duplicate
+stat. The new Estimated Sustainable Distance and Minimum Estimated Sustainable Distance keys require a supported
+original JSON/SML reparse to persist historical source observations. Chart hydration can read those observations on
+demand without storing streams. FIT-only originals cannot recreate fields they never recorded.
+
+Root/Functions remain on the same published 21.6.14 until a separately approved library release and aligned dependency
+update. Validate the local packed candidate first. After adoption, use only the existing authorized original-file
+reparse lifecycle. Regeneration seeds freshly parsed Stamina/endurance endings and minima before deriving missing
+statistics; it never carries stale persisted observations over the new parse. Preserve source zero, per-leg identity,
+source-minimum precedence, sanitized writes and latest user edits/Training controls. Repeat reparse is idempotent and
+must not add renamed aliases or streams to Firestore. Derived Training formulas and snapshots need no schema bump for
+these metrics alone. No automatic backfill or production campaign is authorized.
+
+Suunto EnduranceDistance is assumed to be metres pending provider confirmation. Its Cur summary describes an ending
+estimate, not necessarily the final sample; its Min can be lower than the sampled minimum. EnduranceValid remains
+undocumented and does not erase populated observations. No average, maximum, multisport sum or FIT mapping is invented.
+
 ### Sports Lib 21.6.11 reserved FIT header compatibility
 
 Sports Lib 21.6.11 introduced FIT Parser 6.2.2 compatibility, retained by the current root/Functions pin. Ordinary activity decoding can again read

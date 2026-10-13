@@ -2747,3 +2747,42 @@ interval; per-leg stream coverage cannot supply whole-lap averages. Existing sav
 coordinated package adoption and authorized source reparse. Source windows/matching evidence remain private. QS's
 deduplicated, labelled lap-table projection is presentation only and does not rewrite existing documents. No new
 Training planning, mutation or provider capability is added.
+
+## EnergySense and endurance streams (pending coordinated release)
+
+Sports Lib keeps `Stamina` and its existing summary tokens unchanged. The new numeric
+`Estimated Sustainable Distance` and `Minimum Estimated Sustainable Distance` classes are discovered from `DataStore`,
+not a parallel catalog. They become available to numeric reads only when a valid canonical value is persisted.
+Qualified EnergySense endurance aliases resolve to Stamina; qualified sustainable-distance aliases resolve to the
+new distance. Bare EnergySense and target-distance wording do not resolve. Provider-facing labels never create keys.
+
+Three additive read tools preserve the frozen registered tools: `list_activity_chart_metrics_v2`,
+`get_activity_chart_data_v2`, and `get_activity_samples_v2`. Their catalog adds `stamina` and `potential_stamina` in
+percent and `estimated_sustainable_distance` in metres to the existing stream choices. The strict output schemas
+bind each metric to its exact unit, reject private neighboring fields, and share a compact schema with a 24 KiB
+combined discovery budget. Legacy catalog, chart/sample schemas and overview capabilities stay frozen; legacy calls
+reject the new metrics before source reads. New clients must discover the additive tools rather than treating the
+legacy overview as an exhaustive list of new stream support.
+
+The existing Activity details grant, identity matching, selected-stream parsing, original-file byte/sample/runtime
+budgets, full-domain chart downsampling, detailed-sample pagination, cursor/source/access checks and cache limits
+apply unchanged. Coordinates still require the dependent location grant; samples never return coordinates, absolute
+timestamps, device/provider metadata, raw field names or original files. Nothing persists streams or calls a provider.
+A catalog entry describes support, not evidence that a particular file contains it. Missing FIT observations stay missing.
+
+Keep zero, null gaps and rebounds. Provider endings and minima are source observations and can differ from the last
+sample or sampled minimum. Sustainable distance is neither travelled distance nor distance remaining to a target;
+never sum estimates across legs/devices or interpret them as Training load. Suunto `EnduranceDistance` is provisionally
+interpreted as metres by explicit integration decision pending provider confirmation; `EnduranceValid` is undocumented.
+
+The built-in Assistant can discover and visualize the additive charts, with location fields stripped in coordinate-free
+chats. Detailed samples remain excluded from its tool allowlist. Activity and cross-domain bundled guidance distinguishes
+the two EnergySense dimensions and discovers runtime capabilities. No scopes, mutations, consent defaults, Firestore
+rules, Training planning/derived formulas, indexes, provider queue lifecycle or monitoring resources change.
+
+Root and Functions remain aligned on published 21.6.14 while the unreleased library candidate is validated from a local
+pack. The app gates its new distance chart choice on class availability; names and canonical-string handling remain
+compatible with 21.6.14. Publish the reviewed library and adopt the same new version in both package manifests/locks
+before enabling this feature in a release. Do not ship the local tarball path. Separately approved backend/frontend
+release, digest-bound registered-app refresh/rescan and bundled plugin sync are required; no deployment, contract
+promotion, real-profile plugin install or historical reparse is performed by this implementation.

@@ -2013,7 +2013,10 @@ export async function reparseEventFromOriginalFiles(
                 // Stream-derived outputs (for example NP and IF) are still regenerated.
                 for (const type of [DataFTP.type, DataDuration.type, DataTimerTime.type,
                     DataElapsedTime.type, DataMovingTime.type, DataPause.type,
-                    DataEnergy.type, DataWeight.type, DataGender.type, DataMaxHRSetting.type]) {
+                    DataEnergy.type, DataWeight.type, DataGender.type, DataMaxHRSetting.type,
+                    // Fresh source endings/minima are observations, not sampled aggregates.
+                    'Stamina', 'Minimum Stamina',
+                    'Estimated Sustainable Distance', 'Minimum Estimated Sustainable Distance']) {
                     const parsedStat = previousStats.get(type);
                     if (parsedStat) activityAny.addStat(parsedStat);
                 }
