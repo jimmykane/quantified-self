@@ -2737,3 +2737,13 @@ event title/description reads are unchanged. TSS rejection diagnostics use the e
 load keep their existing meanings. There is no schema/digest, tool, scope, consent, mutation, plugin, Training planning
 or provider-delivery change; no contract promotion or MCP deferral is needed. Verify strict outputs and negative
 identity-leakage coverage when adopting the same published package in root and Functions.
+
+### Pending native Suunto multisport lap correction
+
+The unreleased Sports Lib correction matches timestamped lap summaries to their sport and source boundary, including
+partial laps emitted at sport changes. It does not promote lap metrics to activity totals, add canonical tokens, or
+change the fixed activity-lap schema, grants, pagination or field masks. Genuine cross-sport laps retain their full
+interval; per-leg stream coverage cannot supply whole-lap averages. Existing saved lap reads change only after a
+coordinated package adoption and authorized source reparse. Source windows/matching evidence remain private. QS's
+deduplicated, labelled lap-table projection is presentation only and does not rewrite existing documents. No new
+Training planning, mutation or provider capability is added.

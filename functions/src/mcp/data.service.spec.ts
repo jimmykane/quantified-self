@@ -1695,6 +1695,28 @@ describe('MCP data service', () => {
     });
   });
 
+  it('projects corrected source lap statistics without exposing private matching evidence', async () => {
+    vi.mocked(dependencies.fetchActivityDocuments).mockResolvedValue([activityDocument()]);
+    const service = createMcpDataService(dependencies);
+    const listed = await service.listActivities({ uid: 'user-1', connectionId: 'connection-1',
+      appBaseUrl: 'https://quantified-self.io', limit: 1 });
+    const start = Date.parse('2026-07-01T08:00:00.000Z');
+    vi.mocked(dependencies.fetchActivityDetailDocument).mockResolvedValue({ id: 'activity-1', data: {
+      eventID: 'event-1', type: ActivityTypes.Running,
+      laps: [{ lapId: 1, type: 'Distance', startDate: start, endDate: start + 440_000,
+        stats: { [DataDistance.type]: 1000, [DataDuration.type]: 439.9 },
+        sourceWindow: { ActivityId: 3, privateMatchingEvidence: 'private-evidence' },
+      }],
+    } });
+    const result = await service.listActivityLaps({ uid: 'user-1', connectionId: 'connection-1',
+      activityRef: listed.activities[0].activityRef });
+    expect(result.items).toHaveLength(1);
+    expect(result.items[0]).toMatchObject({ startTimeMs: start, endTimeMs: start + 440_000,
+      stats: { durationSeconds: 439.9, distanceMeters: 1000 } });
+    expect(JSON.stringify(result)).not.toContain('private-evidence');
+    expect(JSON.stringify(result)).not.toContain('sourceWindow');
+  });
+
   it('rejects oversized activity overview projections before chart-source reads', async () => {
     vi.mocked(dependencies.fetchActivityDocuments).mockResolvedValue([
       activityDocument(),

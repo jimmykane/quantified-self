@@ -31,7 +31,7 @@ import { getNominalSwimDistanceDisplayContext } from '../../../helpers/event-swi
 import { DataTableAbstractDirective } from '../../data-table/data-table-abstract.directive';
 import { MatSnackBar } from '@angular/material/snack-bar';
 import { AppUserSettingsQueryService } from '../../../services/app.user-settings-query.service';
-import { getVisibleEventLaps } from '../../../helpers/event-lap-type.helper';
+import { getVisibleEventLaps, getEventLapContextLabel } from '../../../helpers/event-lap-type.helper';
 import {
   EventLapMetricOption,
   EventLapMetricOptionGroup,
@@ -67,6 +67,7 @@ interface LapTableRow extends Record<string, unknown> {
   members?: LapTableRow[];
   metricNotes?: Record<string, string>;
   isRest?: boolean;
+  contextLabel?: string;
   hasLengths?: boolean;
   lengthsExpanded?: boolean;
   detailId?: string;
@@ -109,6 +110,7 @@ interface LapTableView {
   selectedCount: number;
   selectedSummary: Record<string, string>;
   selectedSummaryLabel: string;
+  hasContextLabels: boolean;
   allLapRowsSelected: boolean;
   someLapRowsSelected: boolean;
 }
@@ -242,7 +244,7 @@ export class EventCardLapsComponent extends DataTableAbstractDirective implement
     this.availableLapTypes = [];
     if (this.selectedActivities) {
       this.selectedActivities.forEach(activity => {
-        const laps = getVisibleEventLaps(activity);
+        const laps = getVisibleEventLaps(activity, this.event?.getActivities?.() || this.selectedActivities);
         this.availableLapTypes = [...new Set(this.availableLapTypes.concat(
           laps.map(lap => lap.type)
         ))];
@@ -292,6 +294,7 @@ export class EventCardLapsComponent extends DataTableAbstractDirective implement
             selectedCount: 0,
             selectedSummary: {},
             selectedSummaryLabel: '',
+            hasContextLabels: data.some(row => !!row.contextLabel),
             allLapRowsSelected: false,
             someLapRowsSelected: false,
           };
@@ -332,7 +335,7 @@ export class EventCardLapsComponent extends DataTableAbstractDirective implement
   }
 
   private generateLapData(activity: ActivityInterface, lapType: LapTypes): LapTableRow[] {
-    const laps = getVisibleEventLaps(activity).filter(lap => lap.type === lapType);
+    const laps = getVisibleEventLaps(activity, this.event?.getActivities?.() || this.selectedActivities).filter(lap => lap.type === lapType);
     const metricTypes = this.getColumnsToDisplay(activity.type).filter((column) => column !== '#');
     const swimming = resolveEventLapSportFamily(activity.type) === 'swimming';
     const sourceIndexes = new Map((activity.getLaps?.() || []).map((lap, index) => [lap, index]));
@@ -346,8 +349,10 @@ export class EventCardLapsComponent extends DataTableAbstractDirective implement
       const sourceIndex = sourceIndexes.get(lap) ?? index;
       const lapIdentity = `${Number.isFinite(lap.lapId) ? lap.lapId : 'index'}-${sourceIndex}`;
       const selectionKey = `${this.getKey(activity, lapType)}-${lapIdentity}`;
-      const swim = analytics.get(lap);
+      const contextLabel = getEventLapContextLabel(activity, lap, this.event?.getActivities?.() || this.selectedActivities);
+      const swim = contextLabel ? undefined : analytics.get(lap);
       Object.defineProperties(row, {
+        contextLabel: { value: contextLabel, enumerable: false },
         isRest: { value: swim?.isRest || false, enumerable: false },
         hasLengths: { value: !!swim?.lengths.length, enumerable: false },
         lengthsExpanded: { value: this.expandedLapKeys.has(selectionKey), writable: true, enumerable: false },
@@ -361,13 +366,13 @@ export class EventCardLapsComponent extends DataTableAbstractDirective implement
       });
 
       metricTypes.forEach((metricType) => {
-        row[metricType] = metricType === EVENT_LAP_STROKE_COLUMN ? lapStrokeLabels?.get(lap) || '' : formatEventLapMetric(
+        row[metricType] = metricType === EVENT_LAP_STROKE_COLUMN ? (contextLabel ? '' : lapStrokeLabels?.get(lap) || '') : formatEventLapMetric(
           getSwimLapDisplayMetric(swim, metricType) === undefined
             ? getEventLapMetricStat(lap, metricType) : getSwimLapDisplayMetric(swim, metricType),
           metricType,
           this.unitSettings,
-          activity.type,
-          metricType === DataDistance.type ? nominalDistanceDisplay?.lapMeters.get(lap) : undefined,
+          contextLabel ? 'Other' : activity.type,
+          !contextLabel && metricType === DataDistance.type ? nominalDistanceDisplay?.lapMeters.get(lap) : undefined,
         );
       });
 
@@ -376,7 +381,8 @@ export class EventCardLapsComponent extends DataTableAbstractDirective implement
     }, []);
 
     const displayRows = swimming ? this.groupRestRows(activity, lapRows, metricTypes) : lapRows;
-    const averageMetrics = getAverageEventLapMetrics(laps, metricTypes, this.unitSettings, activity.type, activity);
+    const localLaps = laps.filter(lap => !getEventLapContextLabel(activity, lap, this.event?.getActivities?.() || this.selectedActivities));
+    const averageMetrics = getAverageEventLapMetrics(localLaps, metricTypes, this.unitSettings, activity.type, activity);
     if (averageMetrics.length === 0) {
       return displayRows;
     }
@@ -690,7 +696,7 @@ export class EventCardLapsComponent extends DataTableAbstractDirective implement
   private updateLapColumnMenuGroups(): void {
     const sportFamilies = new Set<AppEventLapSportFamily>();
     this.selectedActivities.forEach((activity) => {
-      if (getVisibleEventLaps(activity).length > 0) {
+      if (getVisibleEventLaps(activity, this.event?.getActivities?.() || this.selectedActivities).length > 0) {
         sportFamilies.add(resolveEventLapSportFamily(activity.type));
       }
     });
@@ -841,7 +847,7 @@ export class EventCardLapsComponent extends DataTableAbstractDirective implement
     ]));
 
     getSelectedEventLapSummaryMetrics(
-      selectedLaps,
+      selectedRows.filter(row => !row.contextLabel).map(row => row.lap),
       metricTypes,
       this.unitSettings,
       table.activity.type,

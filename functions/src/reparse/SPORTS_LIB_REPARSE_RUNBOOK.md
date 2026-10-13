@@ -731,3 +731,15 @@ Local npm commands in `functions/package.json`:
 - `reparse-sports-lib-events`
 - `backfill-sports-lib-processing-code`
 - `backfill-event-processing-entity`
+
+## Pending Suunto multisport lap matching
+
+The unreleased patch replaces ordinal native Suunto multisport lap-summary matching with timestamp/sport evidence,
+retains partial summaries at sport changes and stops recovering lap active duration from an unverified global span.
+Source-global laps remain intact and appear once on their ending leg. One leg's streams must not generate full-lap
+averages or reinterpret sport-specific metrics for a cross-leg lap. Public model shape and canonical tokens stay
+compatible. Historical incorrect lap statistics require retained-original parsing after coordinated root/Functions
+package adoption; native JSON alone cannot recover the correct summary association. Existing controls, applied
+policies, leg identities, recorded event totals and normal sanitization/version/deletion guards remain authoritative.
+This patch does not enable a campaign, change the target version or require saved-route reparsing. Publication,
+deployment and production reparse remain separate approvals.

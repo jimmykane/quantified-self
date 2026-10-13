@@ -182,7 +182,7 @@
 </ng-template>
 
 <ng-template #lapRowsTable let-lapTable let-rows="rows" let-nested="nested">
-    <section class="table-container">
+    <section class="table-container" [class.lap-context-table]="lapTable.hasContextLabels">
       <table mat-table [dataSource]="rows" multiTemplateDataRows>
         @for (column of lapTable.columns; track column) {
         <ng-container [matColumnDef]="column" [sticky]="column === 'selection' || column === '#'">
@@ -228,6 +228,7 @@
             } @else if (column === '#') {
             <span class="lap-index-label">{{ row[column] }}
               @if (row.isRest) { <span class="mat-label-small">Rest</span> }
+              @if (row.contextLabel) { <span class="mat-label-small">{{ row.contextLabel }}</span> }
             </span>
             } @else if (column !== 'selection') {
             {{ row[column] }}

@@ -42,7 +42,7 @@ import {
   XAxisTypes
 } from '@sports-alliance/sports-lib';
 import type { AppEventColorService } from '../services/color/app.event.color.service';
-import { isEventLapTypeAllowed, normalizeEventLapType } from './event-lap-type.helper';
+import { isEventLapTypeAllowed, normalizeEventLapType, isEventLapEndpointInActivity, getEventLapContextLabel } from './event-lap-type.helper';
 import { applyEventChartCanonicalOrderOverride } from './event-chart-order.helper';
 import {
   isEventPaceStreamType,
@@ -1037,7 +1037,8 @@ export function buildEventLapMarkers(input: {
     }
 
     laps.forEach((lap, index) => {
-      if (index === laps.length - 1) {
+      const contextLabel = getEventLapContextLabel(activity, lap, input.allActivities);
+      if (!isEventLapEndpointInActivity(activity, lap) || (index === laps.length - 1 && !contextLabel)) {
         return;
       }
 
@@ -1060,8 +1061,8 @@ export function buildEventLapMarkers(input: {
         lapNumber: index + 1,
         activityID: activity.getID() || '',
         activityName: activity.creator?.name || 'Activity',
-        tooltipTitle: `Lap ${index + 1}`,
-        tooltipDetails: buildLapTooltipDetails(lap, input.userUnitSettings, activity.type, nominalDistanceDisplay?.lapMeters.get(lap)),
+        tooltipTitle: `${contextLabel || 'Lap'} ${index + 1}`,
+        tooltipDetails: buildLapTooltipDetails(lap, input.userUnitSettings, contextLabel ? 'Other' : activity.type, contextLabel ? undefined : nominalDistanceDisplay?.lapMeters.get(lap)),
       });
     });
   });

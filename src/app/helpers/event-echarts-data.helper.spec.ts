@@ -1,6 +1,8 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
   ActivityUtilities,
+  EventImporterJSON,
+  ActivityTypes,
   DataAltitude,
   DataCadence,
   DataDistance,
@@ -42,6 +44,22 @@ import {
   resolveEventChartConfiguredDataTypes,
 } from './event-echarts-data.helper';
 import { AppDataColors } from '../services/color/app.data.colors';
+
+it('places a shared multisport lap at its actual ending leg even when it is that leg\'s sole lap', () => {
+  const lap = { lapId: 1, startDate: 0, endDate: 450_000, startIndex: null, endIndex: null,
+    type: LapTypes.Manual, stats: { [DataDuration.type]: 450, [DataDistance.type]: 1000 } };
+  const make = (start: number, end: number, type: ActivityTypes) => EventImporterJSON.getActivityFromJSON({
+    name: '', startDate: start, endDate: end, type, powerMeter: false, trainer: false,
+    creator: { name: 'Test', devices: [] }, stats: {}, laps: [lap], streams: [], events: [], intensityZones: [],
+  });
+  const first = make(0, 300_000, ActivityTypes.Swimming);
+  const last = make(300_000, 600_000, ActivityTypes.Running);
+  first.setID('first'); last.setID('last');
+  const markers = buildEventLapMarkers({ selectedActivities: [first, last], allActivities: [first, last],
+    xAxisType: XAxisTypes.Time, lapTypes: [], eventColorService: { getActivityColor: () => '#123456' } as any });
+  expect(markers).toHaveLength(1);
+  expect(markers[0]).toMatchObject({ xValue: 450_000, activityID: 'last', tooltipTitle: 'Multisport lap 1' });
+});
 
 describe('event-echarts-data.helper', () => {
   afterEach(() => {
