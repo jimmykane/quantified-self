@@ -1631,9 +1631,11 @@ export class AppUserService implements OnDestroy {
     }
 
     const result = await this.functionsService.call<
-      { redirectUri: string; importRecentHistory: boolean; importHistoryRange: ConnectionHistoryRangePreset },
+      { redirectUri: string; importRecentHistory: boolean; importHistoryRange: ConnectionHistoryRangePreset; importRouteHistory?: boolean },
       { redirect_uri: string }
-    >(functionName, { redirectUri, importRecentHistory, importHistoryRange }, { canExecute });
+    >(functionName, { redirectUri, importRecentHistory, importHistoryRange,
+      ...(serviceName === ServiceNames.SuuntoApp ? { importRouteHistory: importRecentHistory } : {}),
+    }, { canExecute });
     return result.data;
   }
 

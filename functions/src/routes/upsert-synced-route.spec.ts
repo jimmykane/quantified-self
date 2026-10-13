@@ -1,4 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { withHistoryExecution } from '../connection-history/context';
+import type { HistoryExecution } from '../connection-history/execution';
 
 const hoisted = vi.hoisted(() => {
   const mockHasProAccess = vi.fn();
@@ -203,6 +205,20 @@ describe('upsertSyncedRoute', () => {
     });
   });
 
+  it.each(['original', 'route'])('blocks the %s history write after connection authority changes', async phase => {
+    const guard = vi.fn();
+    if (phase === 'route') guard.mockResolvedValueOnce(undefined);
+    guard.mockRejectedValue(new Error('history connection changed'));
+    const execution = { inTransaction: guard } as unknown as HistoryExecution;
+    await expect(withHistoryExecution(execution, () => upsertSyncedRoute({
+      userID: 'user-1', routeID: 'route-1', routeFile: { name: 'Updated Route' } as never,
+      sourceMetadata: { sourceType: 'service_sync', sourceServiceName: 'suuntoApp' } as never,
+      originalFile: { data: Buffer.from('<gpx />'), extension: 'gpx', originalFilename: 'Updated Route.gpx' },
+    }))).rejects.toThrow('history connection changed');
+    expect(transactionSetPayloadForPath('users/user-1/routes/route-1')).toBeUndefined();
+    if (phase === 'original') expect(hoisted.mockStorageSave).not.toHaveBeenCalled();
+    else expect(hoisted.mockStorageSave).toHaveBeenCalledTimes(1);
+  });
   it('writes synced originals to a new path and deletes the replaced original after a successful update', async () => {
     const result = await upsertSyncedRoute({
       userID: 'user-1',

@@ -1,4 +1,5 @@
 import * as admin from 'firebase-admin';
+import { assertHistoryWrite } from '../connection-history/context';
 import * as logger from 'firebase-functions/logger';
 import { ServiceNames } from '@sports-alliance/sports-lib';
 import { RouteDeliverySyncRouteId } from '../../../shared/route-delivery-sync-routes';
@@ -161,6 +162,7 @@ export async function enqueueRouteDeliverySyncQueueItem(
     const queueDocRef = db.collection(ROUTE_DELIVERY_SYNC_QUEUE_COLLECTION_NAME).doc(queueItemId);
     const decision = await db.runTransaction(async (transaction): Promise<QueueInsertDecision> => {
         const existingSnapshot = await transaction.get(queueDocRef);
+        await assertHistoryWrite(transaction);
         let deletionGuard;
         try {
             deletionGuard = await getUserDeletionGuardStateInTransaction(db, transaction, userID);

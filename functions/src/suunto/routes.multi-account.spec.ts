@@ -209,6 +209,41 @@ describe('Suunto route reads with multiple accounts', () => {
     }));
   });
 
+  it.each([null, {}, { id: ' ' }, { id: 42 }])('rejects an incomplete history listing containing %j', async invalidRoute => {
+    suuntoTokens.push({ id: 'token-a', userName: 'suunto-user-a', accessToken: 'token-a' });
+    requestGetMock.mockResolvedValue([{ id: 'route-a' }, invalidRoute]);
+
+    await expect(listSuuntoRoutes('user-1', undefined, {
+      timeout: 30_000, maxResponseBytes: 4 * 1024 * 1024, requireCompleteListing: true,
+    })).rejects.toThrow('invalid records');
+  });
+
+  it('keeps another account while marking the entire malformed history source as failed', async () => {
+    suuntoTokens.push(
+      { id: 'token-a', userName: 'suunto-user-a', accessToken: 'token-a' },
+      { id: 'token-b', userName: 'suunto-user-b', accessToken: 'token-b' },
+    );
+    requestGetMock.mockImplementation(async ({ headers }) => headers.Authorization === 'Bearer token-a'
+      ? [{ id: 'route-a' }, {}] : [{ id: 'route-b' }]);
+
+    const result = await listSuuntoRoutes('user-1', undefined, {
+      timeout: 30_000, maxResponseBytes: 4 * 1024 * 1024, requireCompleteListing: true,
+    });
+    expect(result.routes.map(route => route.id)).toEqual(['route-b']);
+    expect(result.successfulProviderSourceKeys).toEqual(['suunto-user-b:unknown-created']);
+    expect(result.failedProviderSourceKeys).toEqual(['suunto-user-a:unknown-created']);
+    expect(requestGetMock).toHaveBeenCalledWith(expect.objectContaining({ timeout: 30_000, maxResponseBytes: 4 * 1024 * 1024 }));
+    expect(requestGetMock.mock.calls.every(([options]) => !('requireCompleteListing' in options))).toBe(true);
+  });
+
+  it('preserves tolerant normalization for existing manual callers', async () => {
+    suuntoTokens.push({ id: 'token-a', userName: 'suunto-user-a', accessToken: 'token-a' });
+    requestGetMock.mockResolvedValue([{ id: 'route-a' }, {}]);
+    const result = await listSuuntoRoutes('user-1');
+    expect(result.routes.map(route => route.id)).toEqual(['route-a']);
+    expect(result.failedProviderSourceKeys).toEqual([]);
+  });
+
   it('does not fall back to another connected Suunto account when the source provider token is missing', async () => {
     suuntoTokens.push(
       { id: 'token-a', userName: 'suunto-user-a', accessToken: 'token-a' },

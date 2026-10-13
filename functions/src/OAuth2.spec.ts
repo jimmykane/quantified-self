@@ -1,4 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach, Mock } from 'vitest';
+vi.unmock('@sports-alliance/sports-lib');
 import { ServiceNames } from '@sports-alliance/sports-lib';
 import { AccessToken } from 'simple-oauth2';
 import { createHash } from 'node:crypto';
@@ -713,7 +714,7 @@ describe('OAuth2', () => {
             mockDelete.mockRejectedValueOnce(new Error('firestore delete failed'));
 
             await expect(deauthorizeServiceForUser(userID, serviceName)).rejects.toThrow(
-                'Failed to fully clean up suuntoApp connection for user test-user-id',
+                'Failed to fully clean up Suunto app connection for user test-user-id',
             );
 
             expect(clearServiceConnectionState).not.toHaveBeenCalled();
@@ -1305,10 +1306,16 @@ describe('OAuth2', () => {
             await getServiceOAuth2CodeRedirectAndSaveStateToUser(userID, ServiceNames.SuuntoApp, redirectUri, consent);
             expect(mockTransactionDocumentData).toMatchObject({
                 oauthImportRecentHistory: consent === true,
+                oauthImportRouteHistory: false,
                 oauthImportHistoryRange: '30_days',
                 oauthFlowGeneration: expect.any(String),
                 oauthFlowExpiresAt: expect.any(Number),
             });
+        });
+
+        it.each([true, false])('binds route consent to a selected history import (%s)', async history => {
+            await getServiceOAuth2CodeRedirectAndSaveStateToUser(userID, ServiceNames.SuuntoApp, redirectUri, history, '30_days', true);
+            expect(mockTransactionDocumentData).toMatchObject({ oauthImportRouteHistory: history });
         });
 
         it('should not save OAuth state when account deletion is active', async () => {
@@ -1872,7 +1879,7 @@ describe('OAuth2', () => {
             mockDelete.mockRejectedValue(new Error('Delete failed'));
 
             await expect(deauthorizeServiceForUser(userID, ServiceNames.SuuntoApp))
-                .rejects.toThrow('Failed to fully clean up suuntoApp connection for user test-user-id');
+                .rejects.toThrow('Failed to fully clean up Suunto app connection for user test-user-id');
         });
     });
 
@@ -1982,6 +1989,17 @@ describe('OAuth2', () => {
             );
         });
 
+        it.each([true, false, undefined])('preserves explicit Suunto route consent (%s) through the claimed OAuth flow', async consent => {
+            mockTransactionDocumentData!.oauthImportRecentHistory = true;
+            mockTransactionDocumentData!.oauthImportRouteHistory = consent;
+            const MockAuthCode = (await import('simple-oauth2')).AuthorizationCode;
+            vi.spyOn(MockAuthCode.prototype, 'getToken').mockResolvedValue({
+                token: { user: 'test-external-user', access_token: 'mock-token' }, expired: () => false,
+            } as any);
+            await getAndSetServiceOAuth2AccessTokenForUser(userID, ServiceNames.SuuntoApp, redirectUri, code, 'some-state');
+            expect(mockMarkServiceConnected.mock.calls[0][5]).toMatchObject({ requested: true, importRouteHistory: consent === true });
+        });
+
         it.each([true, false])('returns durable acceptance only when consent and admission are enabled (%s)', async enabled => {
             vi.stubEnv('CONNECTION_HISTORY_IMPORT_ENABLED', String(enabled));
             try {
@@ -2005,6 +2023,7 @@ describe('OAuth2', () => {
                 expect(mockUpdate).toHaveBeenCalledWith(expect.objectContaining({
                     oauthImportRecentHistory: 'delete-sentinel',
                     oauthImportHistoryRange: 'delete-sentinel',
+                    oauthImportRouteHistory: 'delete-sentinel',
                 }));
             } finally { vi.unstubAllEnvs(); }
         });
@@ -3045,7 +3064,7 @@ describe('OAuth2', () => {
 
             await expect(
                 removeDuplicateConnections(currentUserID, ServiceNames.COROSAPI, externalUserId),
-            ).rejects.toThrow('Failed to delete local corosAPI token token-id-other-user for user other-user-id');
+            ).rejects.toThrow('Failed to delete local COROS API token token-id-other-user for user other-user-id');
         });
 
         it('should query openId field for COROS', async () => {

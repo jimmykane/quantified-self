@@ -409,6 +409,26 @@ describe('Cloud Tasks Utils', () => {
             );
         });
 
+        it.each(['live', 'missing', 'unknown'])('handles a %s duplicate task for revision-bound route history', async state => {
+            const { enqueueRouteSyncTask } = await import('./cloud-tasks');
+            hoisted.mockTaskQueue.enqueue.mockRejectedValueOnce(Object.assign(new Error('Already exists'), { code: 6 }));
+            if (state === 'live') hoisted.mockCloudTasksClient.getTask.mockResolvedValueOnce([{}]);
+            if (state === 'missing') hoisted.mockCloudTasksClient.getTask.mockRejectedValueOnce(Object.assign(new Error('NOT_FOUND'), { code: 5 }));
+            if (state === 'unknown') hoisted.mockCloudTasksClient.getTask.mockRejectedValueOnce(new Error('lookup unavailable'));
+            const pending = enqueueRouteSyncTask('route-history', 1000, undefined, {
+                queueRevision: 'revision-2', queueDateCreated: 1000, recoveryTaskKey: 'minute-123', recoveryScheduleDelaySeconds: 900,
+            });
+            if (state === 'unknown') await expect(pending).rejects.toThrow('lookup unavailable');
+            else await expect(pending).resolves.toBe(true);
+            expect(hoisted.mockTaskQueue.enqueue).toHaveBeenNthCalledWith(1,
+                { queueItemId: 'route-history', queueRevision: 'revision-2', queueDateCreated: 1000 },
+                { id: 'route-sync-route-history-1000-revision-revision-2', scheduleDelaySeconds: 1 });
+            expect(hoisted.mockTaskQueue.enqueue).toHaveBeenCalledTimes(state === 'missing' ? 2 : 1);
+            if (state === 'missing') expect(hoisted.mockTaskQueue.enqueue).toHaveBeenNthCalledWith(2,
+                { queueItemId: 'route-history', queueRevision: 'revision-2', queueDateCreated: 1000 },
+                { id: 'route-sync-route-history-1000-revision-revision-2-dedupe-recovery-minute-123', scheduleDelaySeconds: 900 });
+        });
+
         it('does not collide when two Sleep revisions share a creation millisecond', async () => {
             const { enqueueSleepSyncTask } = await import('./cloud-tasks');
 

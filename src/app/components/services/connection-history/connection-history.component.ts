@@ -19,7 +19,7 @@ import {
 import { AppHapticsService } from '../../../services/app.haptics.service';
 import { AppUserService } from '../../../services/app.user.service';
 
-const labels: Record<HistoryResource, string> = { activities: 'activities', sleep: 'Sleep', health: 'Health' };
+const labels: Record<HistoryResource, string> = { activities: 'activities', sleep: 'Sleep', health: 'Health', routes: 'saved routes' };
 interface HistoryRetryView { runId: string; service: ServiceNames; }
 function resourceLabel(resources: readonly HistoryResource[]): string {
   return resources.map(resource => labels[resource]).join(', ').replace(/, ([^,]*)$/, ', and $1');
@@ -34,7 +34,7 @@ export class ConnectionHistoryOptionComponent {
   readonly checkedChange = output<boolean>();
   readonly rangeChange = output<ConnectionHistoryRangePreset>();
   private readonly haptics = inject(AppHapticsService);
-  readonly description = computed(() => `Includes ${resourceLabel([...new Set(historyCapabilities(this.service()).flatMap(capability => capability.resources))])} where supported. Importing happens in the background.`);
+  readonly description = computed(() => `Includes ${resourceLabel([...new Set(historyCapabilities(this.service()).flatMap(capability => capability.resources))])} where supported. Importing happens in the background.${this.service() === ServiceNames.SuuntoApp ? ' Saved routes include your entire Suunto route library, regardless of the history range.' : ''}`);
   readonly rangeOptions = computed(() => historyRangeOptions(this.service()));
   change(checked: boolean): void {
     if (this.disabled() || this.checked() === checked) return;

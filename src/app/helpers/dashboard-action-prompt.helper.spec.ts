@@ -12,14 +12,37 @@ import {
   DASHBOARD_ACTION_PROMPT_FIRST_ACTIVITY_UPLOAD_SOURCE,
   DASHBOARD_ACTION_PROMPT_UNIT_SETUP_ID,
   isDashboardActionPromptDismissed,
+  hasGarminSleepHealthConnectionHistory,
   markDashboardActionPromptDismissed,
   normalizeDashboardActionPrompts,
   resolveDashboardActivityAutoSyncRouteIds,
 } from './dashboard-action-prompt.helper';
 import { AppAppSettingsInterface } from '../models/app-user.interface';
 import { ACTIVITY_SYNC_ROUTE_IDS } from '@shared/activity-sync-routes';
+import type { ConnectionHistoryStatus, ConnectionHistoryStatusProjection, HistoryResource } from '@shared/connection-history';
 
 describe('dashboard-action-prompt.helper', () => {
+  const history = (status: ConnectionHistoryStatus, resources: HistoryResource[]): ConnectionHistoryStatusProjection => ({
+    runId: 'history-run', rangePreset: '30_days', startMs: 1, endMs: 2, updatedAtMs: 2,
+    active: status === 'queued', canRetry: status === 'failed',
+    steps: [{ id: resources[0], resources, status, count: 0 }],
+  });
+
+  it.each<ConnectionHistoryStatus>(['queued', 'requesting', 'retrying', 'requested', 'processed', 'skipped', 'failed'])(
+    'recognizes a saved %s history request even with zero imported records', status => {
+      expect(hasGarminSleepHealthConnectionHistory(history(status, ['sleep']))).toBe(true);
+      expect(hasGarminSleepHealthConnectionHistory(history(status, ['health']))).toBe(true);
+    },
+  );
+
+  it('does not confuse activity/route history or missing runs with Sleep/Health history', () => {
+    expect(hasGarminSleepHealthConnectionHistory(history('processed', ['activities', 'routes']))).toBe(false);
+    expect(hasGarminSleepHealthConnectionHistory({ ...history('queued', ['sleep']), runId: '' })).toBe(false);
+    expect(hasGarminSleepHealthConnectionHistory({ ...history('processed', ['sleep']), steps: [] })).toBe(false);
+    expect(hasGarminSleepHealthConnectionHistory(null)).toBe(false);
+    expect(hasGarminSleepHealthConnectionHistory(undefined)).toBe(false);
+  });
+
   it('normalizes dismissed prompt states and drops invalid states', () => {
     expect(normalizeDashboardActionPrompts({
       unitSetup: {

@@ -1,6 +1,6 @@
 import { isConnectionHistoryAdmissionEnabled } from './connection-history/admission';
-import { parseImportHistoryRange, parseImportRecentHistory, type ConnectionHistoryRangePreset } from '../../shared/connection-history';
-import { OAUTH_HISTORY_FIELD, OAUTH_HISTORY_RANGE_FIELD, type HistoryConnectionContext } from './connection-history/model';
+import { parseImportHistoryRange, parseImportRecentHistory, parseImportRouteHistory, type ConnectionHistoryRangePreset } from '../../shared/connection-history';
+import { OAUTH_HISTORY_FIELD, OAUTH_HISTORY_RANGE_FIELD, OAUTH_ROUTE_HISTORY_FIELD, type HistoryConnectionContext } from './connection-history/model';
 import { ServiceNames } from '@sports-alliance/sports-lib';
 import { AccessToken } from 'simple-oauth2';
 import * as crypto from 'crypto';
@@ -224,6 +224,7 @@ async function beginOAuthFlowIfUserActive(
   state: string,
   importRecentHistory = false,
   importHistoryRange: ConnectionHistoryRangePreset = '30_days',
+  importRouteHistory = false,
 ): Promise<string> {
   const db = admin.firestore();
   const tokenRootRef = db.collection(tokenCollectionName).doc(userID);
@@ -258,6 +259,7 @@ async function beginOAuthFlowIfUserActive(
       state,
       [OAUTH_HISTORY_FIELD]: importRecentHistory,
       [OAUTH_HISTORY_RANGE_FIELD]: importHistoryRange,
+      [OAUTH_ROUTE_HISTORY_FIELD]: importRecentHistory && importRouteHistory,
       codeVerifier: FieldValue.delete(),
       [OAUTH_FLOW_GENERATION_FIELD]: generation,
       [OAUTH_FLOW_CREATED_AT_FIELD]: nowMs,
@@ -346,6 +348,7 @@ async function finishRejectedOAuthFlowIfCurrent(
       state: FieldValue.delete(),
       [OAUTH_HISTORY_FIELD]: FieldValue.delete(),
       [OAUTH_HISTORY_RANGE_FIELD]: FieldValue.delete(),
+      [OAUTH_ROUTE_HISTORY_FIELD]: FieldValue.delete(),
       codeVerifier: FieldValue.delete(),
       [OAUTH_FLOW_GENERATION_FIELD]: FieldValue.delete(),
       [OAUTH_FLOW_CREATED_AT_FIELD]: FieldValue.delete(),
@@ -410,6 +413,7 @@ async function claimOAuthFlowContext(
       state: FieldValue.delete(),
       [OAUTH_HISTORY_FIELD]: FieldValue.delete(),
       [OAUTH_HISTORY_RANGE_FIELD]: FieldValue.delete(),
+      [OAUTH_ROUTE_HISTORY_FIELD]: FieldValue.delete(),
       codeVerifier: FieldValue.delete(),
     });
     return { data, generation };
@@ -497,6 +501,7 @@ async function beginExplicitDisconnectOperation(
       state: FieldValue.delete(),
       [OAUTH_HISTORY_FIELD]: FieldValue.delete(),
       [OAUTH_HISTORY_RANGE_FIELD]: FieldValue.delete(),
+      [OAUTH_ROUTE_HISTORY_FIELD]: FieldValue.delete(),
       codeVerifier: FieldValue.delete(),
     };
     transaction.set(tokenRootRef, nextRootData, { merge: true });
@@ -816,12 +821,15 @@ export async function getServiceOAuth2CodeRedirectAndSaveStateToUser(
   redirectUri: string,
   importRecentHistory?: boolean,
   importHistoryRange?: ConnectionHistoryRangePreset,
+  importRouteHistory?: boolean,
 ): Promise<string> {
   const adapter = getServiceAdapter(serviceName);
   const state = crypto.randomBytes(20).toString('hex');
   await assertOAuthUserCanWriteServiceState(userID, serviceName, `oauth_state_prepare:${serviceName}`);
   const shouldImportHistory = parseImportRecentHistory(importRecentHistory);
   const rangePreset = parseImportHistoryRange(importHistoryRange, serviceName);
+  const routeConsent = parseImportRouteHistory(importRouteHistory, serviceName);
+  const shouldImportRoutes = shouldImportHistory && routeConsent;
   const generation = await beginOAuthFlowIfUserActive(
     userID,
     serviceName,
@@ -829,6 +837,7 @@ export async function getServiceOAuth2CodeRedirectAndSaveStateToUser(
     state,
     shouldImportHistory,
     rangePreset,
+    shouldImportRoutes,
   );
 
   try {
@@ -982,6 +991,9 @@ export async function getAndSetServiceOAuth2AccessTokenForUser(
     const connectionHistoryRunId = crypto.randomUUID();
     const historyContext: HistoryConnectionContext = {
       requested: shouldImportConnectionHistory,
+      importRouteHistory: shouldImportConnectionHistory
+        && claimedOAuthFlowContext.data[OAUTH_ROUTE_HISTORY_FIELD] === true
+        && serviceName === ServiceNames.SuuntoApp,
       rangePreset: parseImportHistoryRange(claimedOAuthFlowContext.data[OAUTH_HISTORY_RANGE_FIELD], serviceName),
       runId: connectionHistoryRunId,
       providerUserId: uniqueId || 'default',

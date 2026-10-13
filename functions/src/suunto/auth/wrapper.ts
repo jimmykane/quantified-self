@@ -24,6 +24,7 @@ const SERVICE_NAME = ServiceNames.SuuntoApp;
 
 interface GetAuthRedirectURIRequest {
   importRecentHistory?: boolean;
+  importRouteHistory?: boolean;
   importHistoryRange?: ConnectionHistoryRangePreset;
   redirectUri: string;
 }
@@ -68,6 +69,7 @@ export const getSuuntoAPIAuthRequestTokenRedirectURI = onCall({
         redirectUri,
         request.data?.importRecentHistory,
         request.data?.importHistoryRange,
+        request.data?.importRouteHistory,
       ),
     };
   } catch (error) {

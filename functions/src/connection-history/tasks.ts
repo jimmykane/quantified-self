@@ -11,6 +11,9 @@ import { onSchedule } from 'firebase-functions/v2/scheduler';
 import { onCall, HttpsError } from 'firebase-functions/v2/https';
 import { FUNCTIONS_MANIFEST } from '../../../shared/functions-manifest';
 import { config } from '../config';
+import { enqueueRouteSyncQueueItem } from '../routes/route-sync-queue';
+import type { HistoryExecution } from './execution';
+import { ROUTE_SYNC_QUEUE_COLLECTION_NAME, isRouteHistoryDispatchDue } from '../routes/route-sync.constants';
 import { FUNCTION_SECRET_BINDINGS } from '../secrets';
 import { ALLOWED_CORS_ORIGINS, enforceAppCheck, hasProAccess, getUserRoleAndGracePeriod, isGracePeriodActive } from '../utils';
 import { CLOUD_TASK_RETRY_CONFIG, MAX_PENDING_TASKS } from '../shared/queue-config';
@@ -18,7 +21,7 @@ import { enqueueConnectionHistoryTask, getCloudTaskQueueDepthForQueue } from '..
 import { CONNECTION_HISTORY_COLLECTION, historyOperationKey, historyProjection, isConnectionHistoryRunId, type ConnectionHistoryRun } from './model';
 import { assertHistoryConnectionCurrent, assertHistoryReservation, historyExecution, HistoryLifecycleChangedError, HistoryUnavailableError } from './execution';
 import { executeHistoryOperation, HistorySkippedError, isHistoryWindowTooLarge } from './adapters';
-import { advanceHistoryRun } from './advance';
+import { advanceHistoryRun, type HistoryChildObservation } from './advance';
 import { withHistoryExecution } from './context';
 import { emitHistoryMonitoring, historyMonitoringProvider, historyExpectedContention } from './monitoring';
 import { historyProbeDue, observeConnectionHistory, recordHistoryProbeUnavailable } from './monitoring-probe';
@@ -44,14 +47,31 @@ export async function dispatchConnectionHistoryRun(run: ConnectionHistoryRun): P
 }
 
 /** Missing rows never prove delivery. Failed rows are retried only through explicit owner action. */
-export async function observeHistoryChildren(paths: string[], runId?: string): Promise<'pending' | 'processed' | 'failed' | 'skipped' | 'authorization' | 'mixed'> {
+export async function observeHistoryChildren(paths: string[], runId?: string, execution?: HistoryExecution): Promise<HistoryChildObservation> {
   if (!paths.length) return 'processed';
   const db = admin.firestore();
   const rows = await db.getAll(...paths.map(path => db.doc(path)));
   const missing = rows.filter(row => !row.exists);
   const live = rows.filter(row => row.exists);
-  if (live.some(row => !row.data()?.processed)) return 'pending';
+  if (live.some(row => !row.data()?.processed)) {
+    if (execution) {
+      for (const row of live.filter(row => row.ref.parent.id === ROUTE_SYNC_QUEUE_COLLECTION_NAME
+        && isRouteHistoryDispatchDue(row.data()!))) {
+        const data = row.data()!;
+        if (data.connectionHistoryRunId !== runId || data.sourceServiceName !== ServiceNames.SuuntoApp
+          || typeof data.providerRouteId !== 'string') throw new HistoryLifecycleChangedError();
+        await withHistoryExecution(execution, () => enqueueRouteSyncQueueItem({ sourceServiceName: ServiceNames.SuuntoApp,
+          firebaseUserID: data.firebaseUserID, providerUserId: data.providerUserId, providerRouteId: data.providerRouteId,
+          providerRouteName: data.providerRouteName, providerRouteCreatedAt: data.providerRouteCreatedAt,
+          providerRouteModifiedAt: data.providerRouteModifiedAt, manual: true }));
+      }
+    }
+    return 'pending';
+  }
   const liveFailure = live.some(row => row.data()?.resultStatus === 'failed');
+  const liveAuthorization = live.some(row => row.ref.parent.id === ROUTE_SYNC_QUEUE_COLLECTION_NAME
+    && row.data()?.skippedReason === 'provider_auth_required');
+  if (liveAuthorization) return missing.length || liveFailure ? 'mixed' : 'authorization';
   if (missing.length) {
     if (runId) {
       const dead = await db.getAll(...missing.map(row => db.collection('failed_jobs').doc(row.ref.id)));
@@ -66,8 +86,17 @@ export async function observeHistoryChildren(paths: string[], runId?: string): P
     return 'failed';
   }
   if (liveFailure) return 'failed';
-  if (live.some(row => row.data()?.skippedReason || (row.data()?.resultStatus && row.data()?.resultStatus !== 'success'))) return 'skipped';
-  return 'processed';
+  if (live.some(row => {
+    const data = row.data();
+    if (row.ref.parent.id === ROUTE_SYNC_QUEUE_COLLECTION_NAME
+      && data?.resultStatus === 'skipped'
+      && ['provider_route_up_to_date', 'provider_route_content_unchanged', 'provider_route_not_found'].includes(data.skippedReason)) return false;
+    return data?.skippedReason || (data?.resultStatus && data.resultStatus !== 'success');
+  })) return 'skipped';
+  // A route removed since listing must not abandon the rest of the library.
+  return live.some(row => row.ref.parent.id === ROUTE_SYNC_QUEUE_COLLECTION_NAME
+    && row.data()?.resultStatus === 'skipped' && row.data()?.skippedReason === 'provider_route_not_found')
+    ? 'unavailable' : 'processed';
 }
 
 class HistoryCapacityWaitError extends Error {}
@@ -139,7 +168,7 @@ export async function processConnectionHistoryRun(id: string, revision: string):
     await historyExecution(run, []).beforeRequest();
     if (!(await hasProAccess(run.userID))) throw new HistoryLifecycleChangedError();
       await advanceHistoryRun(run, {
-        observe: paths => observeHistoryChildren(paths, run.id), classify: error => {
+        observe: paths => observeHistoryChildren(paths, run.id, historyExecution(run, [], { owner, revision: run.revision })), classify: error => {
           expectedContention = historyExpectedContention(error);
           return classifyHistoryFailure(error);
         },
@@ -155,7 +184,15 @@ export async function processConnectionHistoryRun(id: string, revision: string):
             throw new HistoryCapacityWaitError();
           }
           const execution = historyExecution(run, paths, { owner, revision: run.revision });
-          const result = await withHistoryExecution(execution, () => executeHistoryOperation(run, step, execution));
+          let result: Awaited<ReturnType<typeof executeHistoryOperation>>;
+          try { result = await withHistoryExecution(execution, () => executeHistoryOperation(run, step, execution)); }
+          catch (error) {
+            // A queue write can succeed before immediate dispatch fails. Keep
+            // route children reachable so the next parent attempt can dispatch
+            // them without requiring another provider read or new queue row.
+            if (step.resources.includes('routes') && paths.length > 0 && paths.length <= 100) step.childPaths = paths;
+            throw error;
+          }
           if (paths.length > 100) throw new Error('History admission bound exceeded.');
           const receipt = { key, result: { ...result, childPaths: paths } };
           await db.runTransaction(async tx => {
@@ -280,8 +317,11 @@ export const retryConnectionHistoryImport = onCall({ region, cors: ALLOWED_CORS_
       if (!data || data.connectionHistoryRunId !== run.id || data.originalCollection !== child.ref.parent.id) {
         throw new HttpsError('failed-precondition', 'Some history is no longer available to retry. Use History Import or reconnect.');
       }
-      const restored = { ...data, retryCount: 0, processed: false, dispatchedToCloudTask: false, queueRevision: randomUUID(), dateCreated: Date.now(), expireAt: getExpireAtTimestamp(TTL_CONFIG.QUEUE_ITEM_IN_DAYS) };
+      const restored = { ...data, retryCount: 0, processed: false, dispatchedToCloudTask: child.ref.parent.id === ROUTE_SYNC_QUEUE_COLLECTION_NAME ? null : false, queueRevision: randomUUID(), dateCreated: Date.now(), expireAt: getExpireAtTimestamp(TTL_CONFIG.QUEUE_ITEM_IN_DAYS) };
       for (const field of ['error', 'failedAt', 'context', 'originalCollection', 'processingOwner', 'processingRevision', 'processingLeaseExpiresAt']) delete restored[field as keyof typeof restored];
+      if (child.ref.parent.id === ROUTE_SYNC_QUEUE_COLLECTION_NAME) {
+        for (const field of ['resultStatus', 'skippedReason', 'processedAt']) delete restored[field as keyof typeof restored];
+      }
       // Queue and DLQ rows are leaves by contract; there are no descendants to restore.
       tx.set(child.ref, restored); tx.delete(child.dead.ref);
     }
