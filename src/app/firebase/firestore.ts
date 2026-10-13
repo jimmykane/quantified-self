@@ -16,6 +16,9 @@ import type {
 import { onSnapshot as firebaseOnSnapshot } from 'firebase/firestore';
 import { Observable } from 'rxjs';
 import { FirebaseApp } from './app';
+import { installFirestoreHttpResponseGuard } from './firestore-http-response-guard';
+
+installFirestoreHttpResponseGuard();
 
 export {
   Timestamp,

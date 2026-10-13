@@ -70,6 +70,7 @@
     "@angular/router": "20.3.17",
     "@angular/service-worker": "20.3.17",
     "@angular/ssr": "20.3.19",
+    "@firebase/webchannel-wrapper": "1.0.5",
     "@fontsource/barlow-condensed": "^5.3.0",
     "@fontsource/inter": "^5.3.0",
     "@fontsource/material-symbols-rounded": "^5.3.2",

@@ -174,6 +174,7 @@
     "src/app/utils/app.user.utilities.spec.ts"
   ],
   "dom": [
+    "src/app/firebase/firestore-http-response-guard.spec.ts",
     "src/app/helpers/assistant-message-format.helper.spec.ts",
     "src/app/helpers/dashboard-echarts-style.helper.spec.ts",
     "src/app/helpers/dashboard-sleep-chart.helper.spec.ts",

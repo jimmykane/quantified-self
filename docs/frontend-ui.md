@@ -310,6 +310,27 @@ QA must include genuinely overflowing content in dialogs, sheets and nested pane
 and light/dark desktop/320px views. Check computed styles, wheel/keyboard scrollability, no-overflow states and the
 existing hidden navigation exceptions; JSDOM alone cannot prove painted scrollbar size or platform touch behavior.
 
+## Firestore HTTP error responses
+
+The Firebase adapter installs `firestore-http-response-guard.ts` before browser RPCs run. The full SDK's XHR
+callback calls `getResponseJson()` on HTTP error responses without catching JSON parse failures. An empty or
+HTML gateway response can therefore escape the callback and leave the request promise pending, bypassing
+application error handling. This is separate from activity-file parsing and persisted-profile recovery.
+
+The temporary guard uses the SDK's exported `XhrIo` parser and only intercepts `SyntaxError` for HTTP errors
+with a status from 400 through 599. It returns an absent backend error object so the SDK takes its existing
+`unknown` / `Server responded with status ...` rejection path. Valid successful responses and structured
+backend errors, including permission errors, retain their original parsing and codes. Invalid successful
+responses and other exceptions remain visible. The guard adds no requests, retries, response-body logging,
+or Firestore writes; a later user/application retry can make a fresh request after a failure settles.
+
+Keep the direct `@firebase/webchannel-wrapper` dependency aligned with the full SDK's transport version.
+The DOM regression spec exercises the actual browser SDK through synthetic XHR responses, including empty
+and HTML 504s, truncated error JSON, successful filtered counts, permission failures, and subsequent recovery.
+Run it when upgrading Firebase; remove the guard once upstream rejects malformed HTTP responses itself.
+Backend queue and Cloud Monitoring coverage are unchanged because no provider, worker, queue, schedule,
+or server-side lifecycle changes. Existing application error handlers now receive the rejected promise.
+
 ## Account profile recovery
 
 Firebase Auth identity and account-profile availability are separate states. Authenticated profile reads wait for
