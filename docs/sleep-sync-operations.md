@@ -70,6 +70,26 @@ with OAuth and connection lifecycle guards. Large callback responses are written
 in 32-record checkpointed batches; a six-minute budget hands remaining work to a fresh queue revision whose
 digest-bound cursor resumes without retaining raw provider data. See [Garmin Health integration](garmin-integration.md).
 
+## Raw Sleep FIT Files
+
+Garmin Sleep currently enters through the Health API. Raw sleep FIT files are not supported by the
+activity-file upload path, and the activity importer must continue to reject them instead of creating
+workouts or Training load.
+
+Independently validated files declaring `file_id.type = 49` contain `sleep_level` and optional
+`sleep_assessment` messages without workout sessions or activity records. Garmin's public FIT profile
+leaves this file enum unnamed, so classification must use validated source contents rather than assume
+that every type-49 file has this layout. Global message number `49` (`file_creator`) is a different
+identifier and does not determine file type.
+
+[Issue #875](https://github.com/jimmykane/quantified-self/issues/875) tracks a separate Sleep import path.
+Before implementation, establish stage timestamp/boundary semantics and timezone evidence, preserve
+missing values, and define deterministic identity for repeated uploads, revisions and overlap with
+Garmin Health API sessions. Ambiguous matches must not overwrite existing Sleep. The destination remains
+the canonical Sleep store, with no synthetic workout, TSS or activity-volume contribution. Private
+originals and account/device identifiers stay outside repository documentation and public issues;
+committed regression fixtures must be synthetic.
+
 ## Provider Kill Switch
 
 Sleep provider disablement is source controlled in:
