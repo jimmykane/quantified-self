@@ -1211,6 +1211,11 @@ before queueing and again in the worker, restricted to the exact Garmin HTTPS Ac
 are refused by the actual HTTP client. These checks apply to previously queued rows too. The detailed compatibility
 and migration limits are in [Garmin integration](garmin-integration.md#delivery-and-trust-boundary).
 
+Wahoo's [FIT request diagnostics](wahoo-integration.md#fit-download-diagnostics) distinguish provider HTTP failures
+from the local deadline using fixed outcomes, bounded numeric metadata, cache categories and hashed request IDs.
+They add no raw headers, file/account data, retries or provider calls. Monitoring is **covered/unchanged** by the
+existing recorded-import worker/commit filters; Help, MCP, Training and persistence contracts are unaffected.
+
 Do not use a provider's short-lived file URL as durable application data. Download it in the worker, validate it, and store the original file through the existing event/file flow so reprocessing, export, and sync use the owned copy.
 
 ### Original-file upload integrity

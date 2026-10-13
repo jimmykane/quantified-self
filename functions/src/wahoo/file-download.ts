@@ -1,5 +1,7 @@
 import { currentHistoryExecution } from '../connection-history/context';
-import fetch from 'node-fetch';
+import fetch, { type Response } from 'node-fetch';
+import { createHash } from 'crypto';
+import * as logger from 'firebase-functions/logger';
 import * as net from 'net';
 import { config } from '../config';
 import { MAX_ACTIVITY_UPLOAD_BYTES, MAX_ACTIVITY_UPLOAD_BYTES_LABEL } from '../shared/activity-processing-config';
@@ -7,6 +9,57 @@ import { WAHOO_FIT_DOWNLOAD_TIMEOUT_MS } from './constants';
 import { WahooRequestTimeoutError, withWahooRequestTimeout } from './request-timeout';
 
 const MAX_REDIRECTS = 3;
+
+type DownloadRequestOutcome = 'success' | 'redirect' | 'http_error' | 'timeout' | 'request_error';
+
+function numericHeader(value: string | null): number | null {
+  if (!value || value.length > 16 || !/^\d+$/.test(value)) return null;
+  const number = Number(value);
+  return Number.isSafeInteger(number) ? number : null;
+}
+
+function requestIdHash(value: string | null): string | null {
+  return value && value.length <= 256
+    ? createHash('sha256').update(value).digest('hex')
+    : null;
+}
+
+function cacheStatus(value: string | null): string {
+  switch (value?.toLowerCase()) {
+    case 'hit from cloudfront': return 'hit';
+    case 'miss from cloudfront': return 'miss';
+    case 'error from cloudfront': return 'error';
+    case 'refreshhit from cloudfront': return 'refresh_hit';
+    default: return value === null ? 'missing' : 'other';
+  }
+}
+
+function logDownloadRequest(
+  startedAtMs: number,
+  requestAttempt: number,
+  response: Response | undefined,
+  outcome: DownloadRequestOutcome,
+): void {
+  try {
+    const readHeader = (name: string) => response?.headers.get(name) ?? null;
+    const details = {
+      outcome,
+      requestAttempt,
+      elapsedMs: Math.max(0, Date.now() - startedAtMs),
+      timeoutMs: WAHOO_FIT_DOWNLOAD_TIMEOUT_MS,
+      statusCode: response?.status ?? null,
+      cacheStatus: cacheStatus(readHeader('x-cache')),
+      cacheAgeSeconds: numericHeader(readHeader('age')),
+      retryAfterSeconds: numericHeader(readHeader('retry-after')),
+      cdnRequestIdHash: requestIdHash(readHeader('x-amz-cf-id')),
+      originRequestIdHash: requestIdHash(readHeader('x-amz-request-id')),
+    };
+    const log = outcome === 'success' || outcome === 'redirect' ? logger.info : logger.warn;
+    log('[WahooFITDownload] Request diagnostic.', details);
+  } catch {
+    // Optional diagnostics must never change the download or its retry behavior.
+  }
+}
 
 export class UnsafeWahooFileUrlError extends Error {
   constructor(message: string) {
@@ -66,10 +119,14 @@ async function readBoundedBody(body: NodeJS.ReadableStream | null, contentLength
 export async function downloadWahooFITFile(rawUrl: string): Promise<Buffer> {
   let currentUrl = assertAllowedUrl(rawUrl);
   for (let redirectCount = 0; redirectCount <= MAX_REDIRECTS; redirectCount++) {
+    let requestStartedAtMs: number | undefined;
+    let response: Response | undefined;
+    let outcome: DownloadRequestOutcome = 'request_error';
     try {
       const result = await withWahooRequestTimeout(WAHOO_FIT_DOWNLOAD_TIMEOUT_MS, async (signal) => {
         await currentHistoryExecution()?.beforeRequest();
-        const response = await fetch(currentUrl.toString(), {
+        requestStartedAtMs = Date.now();
+        response = await fetch(currentUrl.toString(), {
           method: 'GET',
           redirect: 'manual',
           headers: { Accept: 'application/octet-stream' },
@@ -94,18 +151,26 @@ export async function downloadWahooFITFile(rawUrl: string): Promise<Buffer> {
           throw new UnsafeWahooFileUrlError('Wahoo FIT redirect could not be followed safely.');
         }
         currentUrl = assertAllowedUrl(new URL(result.redirectLocation, currentUrl).toString());
+        outcome = 'redirect';
         continue;
       }
       if (!result.payload) throw new Error('Wahoo FIT response did not contain a body.');
       assertFitPayload(result.payload);
+      outcome = 'success';
       return result.payload;
     } catch (error) {
+      outcome = error instanceof WahooRequestTimeoutError ? 'timeout'
+        : response && response.status >= 400 ? 'http_error' : 'request_error';
       if (error instanceof UnsafeWahooFileUrlError) throw error;
       if (error instanceof WahooRequestTimeoutError) throw new Error('Wahoo FIT download timed out.');
       if ((error as { statusCode?: unknown })?.statusCode) throw error;
       const errorMessage = error instanceof Error ? error.message : '';
       if (errorMessage.includes(MAX_ACTIVITY_UPLOAD_BYTES_LABEL) || errorMessage.includes('valid FIT')) throw error;
       throw new Error('Wahoo FIT download request failed.');
+    } finally {
+      if (requestStartedAtMs !== undefined) {
+        logDownloadRequest(requestStartedAtMs, redirectCount + 1, response, outcome);
+      }
     }
   }
   throw new UnsafeWahooFileUrlError('Wahoo FIT redirect limit exceeded.');

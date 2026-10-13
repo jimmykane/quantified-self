@@ -130,6 +130,22 @@ Wahoo requires six composite indexes: one `tokens` collection-group index on `wa
 - Pro access is required to connect, receive new imports, and run history. Disconnect remains available after Pro access ends.
 - User deletion guards run before queue insertion, worker processing, and event persistence. Local cleanup remains authoritative if provider deauthorization is temporarily unavailable.
 
+### FIT download diagnostics
+
+`[WahooFITDownload] Request diagnostic.` records each started download request at INFO for a validated FIT
+or allowed redirect, and WARNING for `http_error`, `timeout`, or `request_error`. It includes request elapsed
+milliseconds, the existing deadline, HTTP status (null before a response), and `requestAttempt` (one-based
+HTTP request number within this download, including redirects; not the durable queue retry count).
+CloudFront cache text is reduced to fixed `hit`, `miss`, `error`, `refresh_hit`, `missing`, or `other` categories.
+`Age` and numeric `Retry-After` are retained only as nonnegative safe integers; absent or invalid values, including
+date-form Retry-After, are null.
+`x-amz-cf-id` and `x-amz-request-id` values of at most 256 characters are SHA-256 hashed, never logged raw.
+No URLs, filenames, user/workout identities, bodies, raw headers, exception text or credentials enter these logs.
+Correlate through the existing platform execution ID. A pre-request lifecycle rejection emits no request diagnostic,
+and logging failure cannot change download success or the original sanitized error. The 60-second deadline,
+redirect/size/FIT checks, request count and durable retry behavior are unchanged. After separate approval, deploy
+only `processWorkoutTask`; no cloud monitoring apply or replay is required.
+
 ## Release checklist
 
 1. Verify both application lockfiles resolve the approved published `@sports-alliance/sports-lib` version and integrity before running `npm ci` in release automation. The completed Training completion proof uses Sports Lib 21.4.0; do not revert to the original 17.2.2 launch dependency.

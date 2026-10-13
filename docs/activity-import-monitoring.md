@@ -145,6 +145,12 @@ promotion remain unchanged. See [original-file upload integrity](provider-integr
 for the byte/checksum contract and local verification; no live rollout or monitoring activation is
 claimed by those tests.
 
+Wahoo FIT request diagnosis uses `jsonPayload.message="[WahooFITDownload] Request diagnostic."` and the
+platform execution ID. See [field meanings and privacy bounds](wahoo-integration.md#fit-download-diagnostics).
+These INFO/WARNING transport observations are not import outcomes. Monitoring coverage is **unchanged**:
+the reviewed bundle selects `[ActivityImport]` commit/worker events, so diagnostics do not add failure counts,
+metric labels or alerts. Retry policy, dispatchers, lifecycle guards and resource settings are unchanged.
+
 1. Open **QS Activity Imports** in Cloud Monitoring and **Admin → Queue Monitor**.
    Separate native dispatched/retry work from the bounded Firestore sample.
 2. Inspect fixed provider/outcome charts and dispatcher executions. An empty/unknown
