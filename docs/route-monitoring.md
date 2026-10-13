@@ -36,7 +36,11 @@ masked run identity and credential/connection generations. It excludes stale/mis
 changing ordinary webhook/manual eligibility. No raw run IDs enter telemetry and no new dashboard/metric/alert is needed.
 History-triggered follow-up deliveries are fenced before handoff and in their canonical queue transaction. Lost history
 authority remains a lifecycle skip, and removed source routes do not prevent the coordinator from admitting later batches.
-The existing schedules, retry policy, original cleanup, leases, terminal metrics and cloud configuration remain unchanged.
+The coordinator's bounded probe includes due route redispatch, with masked owner/account/run checks. Stale task revisions
+are acknowledged without committed success/failure; the existing attempt filter includes these ACKs and failure alerts
+exclude them. Missing live tasks can recover under new revision-bound task names with the configured retry backoff;
+late dispatch markers are fenced to the admitted queue revision and retry count. Native task settings, retry limits,
+original cleanup, leases, metric definitions and cloud configuration remain unchanged.
 See [connection history](connection-history-import.md#suunto-saved-route-library) for admission bounds and release order.
 
 ## Signals and privacy

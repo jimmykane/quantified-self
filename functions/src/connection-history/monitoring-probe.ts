@@ -10,6 +10,7 @@ import { isSleepProviderEnabled, isSleepSyncUserAllowed } from '../sleep/provide
 import { isGarminHealthSyncEnabled } from '../garmin/health-flags';
 import { isSuuntoHealthSyncEnabled } from '../suunto/health-flags';
 import { CONNECTION_HISTORY_COLLECTION, historyOperationKey, type ConnectionHistoryRun } from './model';
+import { ROUTE_SYNC_QUEUE_COLLECTION_NAME, isRouteHistoryDispatchDue } from '../routes/route-sync.constants';
 import { emitHistoryMonitoring, historyMonitoringProvider, HISTORY_PROVIDERS } from './monitoring';
 
 export const HISTORY_PROBE_LIMIT = 20;
@@ -18,7 +19,7 @@ const ROOTS: Record<ServiceNames, string> = {
   [ServiceNames.GarminAPI]: GARMIN_API_TOKENS_COLLECTION_NAME, [ServiceNames.SuuntoApp]: SUUNTOAPP_ACCESS_TOKENS_COLLECTION_NAME,
   [ServiceNames.COROSAPI]: COROSAPI_ACCESS_TOKENS_COLLECTION_NAME, [ServiceNames.WahooAPI]: WAHOO_API_ACCESS_TOKENS_COLLECTION_NAME,
 };
-const RUN_FIELDS = ['userID', 'serviceName', 'rootPath', 'tokenPath', 'credentialGeneration', 'connectionGeneration',
+const RUN_FIELDS = ['userID', 'serviceName', 'providerUserId', 'rootPath', 'tokenPath', 'credentialGeneration', 'connectionGeneration',
   'revision', 'processed', 'nextAttemptAt', 'leaseExpiresAt', 'dateCreated', 'updatedAtMs', 'endMs', 'steps', 'lastOperation.key'];
 const STATE_FIELDS = [...RUN_FIELDS, 'expireAt', 'activeOAuthCredentialGeneration', 'tokenCredentialGeneration', 'permissions',
   'disconnectOperationGeneration', 'disconnectGeneration', 'connectionState', 'connectionStateGeneration',
@@ -92,11 +93,22 @@ export async function observeConnectionHistory(db: FirebaseFirestore.Firestore, 
           if (step.childPaths.length > childBudget) return 'unknown';
           childBudget -= step.childPaths.length;
           if (step.childPaths.some(path => typeof path !== 'string' || path.split('/').length !== 2)) return 'unknown';
-          const children = await tx.getAll(...step.childPaths.map(path => db.doc(path)), { fieldMask: ['processed', 'resultStatus', 'skippedReason'] });
+          const children = await tx.getAll(...step.childPaths.map(path => db.doc(path)), { fieldMask: ['processed', 'resultStatus', 'skippedReason',
+            'dispatchedToCloudTask', 'connectionHistoryRunId', 'sourceServiceName', 'firebaseUserID', 'providerUserId', 'providerRouteId'] });
           if (stopped) return 'excluded';
-          // Waiting children belong to downstream monitoring. Terminal failures
-          // or missing children require coordinator finalization, not admission.
-          if (children.some(child => child.exists && child.get('processed') === false)) return 'excluded';
+          // Route redispatch is coordinator work even before a child finishes.
+          // Waiting live tasks remain downstream work; no task API is consulted by this probe.
+          const pending = children.filter(child => child.exists && child.get('processed') === false);
+          if (pending.length) {
+            const due = step.resources.includes('routes') ? pending.filter(child => child.ref.parent.id === ROUTE_SYNC_QUEUE_COLLECTION_NAME
+              && isRouteHistoryDispatchDue(child.data()!, now)) : [];
+            if (!due.length) return 'excluded';
+            if (due.some(child => child.get('connectionHistoryRunId') !== doc.id
+              || child.get('sourceServiceName') !== ServiceNames.SuuntoApp || child.get('firebaseUserID') !== run.userID
+              || child.get('providerUserId') !== run.providerUserId || typeof child.get('providerRouteId') !== 'string')) return 'unknown';
+            return 'eligible';
+          }
+          // Terminal failures or missing children need finalization, not admission.
           if (children.some(child => child.exists && child.get('processed') !== true)) return 'unknown';
           if (children.some(child => !child.exists || child.get('skippedReason')
             || child.get('resultStatus') && child.get('resultStatus') !== 'success')) return 'eligible';

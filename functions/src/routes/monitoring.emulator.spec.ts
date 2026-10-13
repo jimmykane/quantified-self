@@ -146,6 +146,25 @@ describe.skipIf(!process.env.FIRESTORE_EMULATOR_HOST)('route observations with r
         expect((await ref.get()).updateTime!.isEqual(before.updateTime!)).toBe(true);
         expect(paths).toHaveLength(1);
     });
+    it.each(['completed', 'restored', 'retry'])('leaves %s history children unchanged when an old dispatch marker arrives late', async change => {
+        const { run } = await seedRouteHistory(); const execution = historyExecution(run, []);
+        let changed: Awaited<ReturnType<FirebaseFirestore.DocumentReference['get']>>;
+        state.enqueue.mockImplementationOnce(async (id: string) => {
+            const ref = state.db.doc(`routeSyncQueue/${id}`);
+            await ref.update(change === 'completed' ? { processed: true, resultStatus: 'success' }
+                : change === 'restored' ? { queueRevision: 'PRIVATE_RESTORED', dateCreated: Date.now() + 1 }
+                : { retryCount: 1, dispatchedToCloudTask: null });
+            changed = await ref.get(); return true;
+        });
+        const result = await withHistoryExecution(execution, () => enqueueRouteSyncQueueItem({
+            sourceServiceName: ServiceNames.SuuntoApp, providerUserId: run.providerUserId, providerRouteId: 'PRIVATE_ROUTE',
+            manual: true, firebaseUserID: 'qa',
+        }));
+        expect(result).toMatchObject({ enqueued: true });
+        const after = await state.db.doc(`routeSyncQueue/${result.queueItemId}`).get();
+        expect(after.updateTime!.isEqual(changed!.updateTime!)).toBe(true);
+        expect(after.get('dispatchedToCloudTask')).toBeNull();
+    });
     it.each(['replacement', 'pro'])('stops route history before queued work or route writes after %s changes', async change => {
         const { run } = await seedRouteHistory(); const paths: string[] = []; const execution = historyExecution(run, paths);
         const params = { sourceServiceName: ServiceNames.SuuntoApp, providerUserId: run.providerUserId, providerRouteId: 'PRIVATE_ROUTE', manual: true, firebaseUserID: 'qa' };

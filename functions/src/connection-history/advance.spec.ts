@@ -71,6 +71,17 @@ describe('history continuation', () => {
     await advanceHistoryRun(job, deps, now); expect(job.steps[0].status).toBe('retrying');
     expect(job.nextAttemptAt).toBe(now + 900000); expect(job.steps[0].nextStartMs).toBe(start);
   });
+  it('keeps the current capacity wait reason after earlier routes became unavailable', async () => {
+    const job = run(); job.steps[0].resources = ['routes']; job.steps[0].hadUnavailableRoutes = true;
+    const deps = dependencies(); deps.execute = vi.fn().mockRejectedValue(new Error('capacity'));
+    deps.classify = () => ({ kind: 'wait', message: 'Waiting for capacity. Your history will continue automatically.' });
+    await advanceHistoryRun(job, deps, now);
+    expect(job.steps[0]).toMatchObject({ status: 'queued', done: false, hadUnavailableRoutes: true,
+      message: 'Waiting for capacity. Your history will continue automatically.' });
+    deps.execute = vi.fn().mockResolvedValue({ count: 1, nextStartMs: job.endMs + 1000, nextPage: 1, childPaths: [] });
+    await advanceHistoryRun(job, deps, now + 60000);
+    expect(job.processed).toBe(true); expect(job.steps[0].message).toContain('no longer available');
+  });
   it('skips a cooldown and preserves its availability date', async () => {
     const job = run(); const deps = dependencies(); deps.execute = vi.fn().mockRejectedValue(new Error());
     deps.classify = () => ({ kind: 'skip', message: 'Cooldown', nextAllowedAtMs: now + 86400000 });

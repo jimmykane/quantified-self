@@ -104,6 +104,7 @@ vi.mock('../queue/cleanup-tombstone', () => ({
 import { enqueueRouteSyncQueueItem } from './route-sync-queue';
 import { withHistoryExecution } from '../connection-history/context';
 import type { HistoryExecution } from '../connection-history/execution';
+import { isRouteHistoryDispatchDue } from './route-sync.constants';
 
 describe('enqueueRouteSyncQueueItem', () => {
   beforeEach(() => {
@@ -136,6 +137,14 @@ describe('enqueueRouteSyncQueueItem', () => {
     expect(execution.inTransaction).toHaveBeenCalledTimes(1);
     expect(execution.onQueued).toHaveBeenCalledWith(hoisted.queueDocRef.path);
     expect(hoisted.transactionSet).toHaveBeenCalledWith(hoisted.queueDocRef, expect.objectContaining({ connectionHistoryRunId: 'history-run', queueRevision: expect.any(String) }));
+    const admitted = hoisted.transactionSet.mock.calls[0][1];
+    expect(hoisted.enqueueRouteSyncTask).toHaveBeenCalledWith('route-sync-queue-id', admitted.dateCreated, undefined,
+      expect.objectContaining({ queueRevision: admitted.queueRevision, queueDateCreated: admitted.dateCreated }));
+    const marker = hoisted.markQueueItemDispatchedIfUserActive.mock.calls[0][0];
+    expect(marker.isCurrent(admitted)).toBe(true);
+    expect(marker.isCurrent({ ...admitted, queueRevision: 'replacement' })).toBe(false);
+    expect(marker.isCurrent({ ...admitted, retryCount: 1 })).toBe(false);
+    expect(marker.isCurrent({ ...admitted, processed: true })).toBe(false);
   });
   it('preserves a completed history child when the coordinator replays an interrupted checkpoint', async () => {
     hoisted.state.existingQueueData = { processed: true, connectionHistoryRunId: 'history-run' };
@@ -144,6 +153,14 @@ describe('enqueueRouteSyncQueueItem', () => {
       providerUserId: 'account', providerRouteId: 'route', manual: true, firebaseUserID: 'owner' }));
     expect(hoisted.transactionSet).not.toHaveBeenCalled(); expect(hoisted.enqueueRouteSyncTask).not.toHaveBeenCalled();
     expect(execution.onQueued).toHaveBeenCalledWith(hoisted.queueDocRef.path);
+  });
+  it('rechecks old history dispatches while leaving live, completed and parked work alone', () => {
+    const now = 2_000_000;
+    expect(isRouteHistoryDispatchDue({ processed: false, dispatchedToCloudTask: null }, now)).toBe(true);
+    expect(isRouteHistoryDispatchDue({ processed: false, dispatchedToCloudTask: now - 900_000 }, now)).toBe(true);
+    expect(isRouteHistoryDispatchDue({ processed: false, dispatchedToCloudTask: now - 899_999 }, now)).toBe(false);
+    expect(isRouteHistoryDispatchDue({ processed: true, dispatchedToCloudTask: null }, now)).toBe(false);
+    expect(isRouteHistoryDispatchDue({ processed: false, dispatchedToCloudTask: Number.MAX_SAFE_INTEGER }, now)).toBe(false);
   });
   it('rejects stale history admission inside the queue transaction', async () => {
     const execution = { runId: 'history-run', userID: 'owner', serviceName: ServiceNames.SuuntoApp, providerUserId: 'account', inTransaction: vi.fn().mockRejectedValue(new Error('superseded')), onQueued: vi.fn() } as unknown as HistoryExecution;

@@ -13,7 +13,7 @@ import { FUNCTIONS_MANIFEST } from '../../../shared/functions-manifest';
 import { config } from '../config';
 import { enqueueRouteSyncQueueItem } from '../routes/route-sync-queue';
 import type { HistoryExecution } from './execution';
-import { ROUTE_SYNC_QUEUE_COLLECTION_NAME } from '../routes/route-sync.constants';
+import { ROUTE_SYNC_QUEUE_COLLECTION_NAME, isRouteHistoryDispatchDue } from '../routes/route-sync.constants';
 import { FUNCTION_SECRET_BINDINGS } from '../secrets';
 import { ALLOWED_CORS_ORIGINS, enforceAppCheck, hasProAccess, getUserRoleAndGracePeriod, isGracePeriodActive } from '../utils';
 import { CLOUD_TASK_RETRY_CONFIG, MAX_PENDING_TASKS } from '../shared/queue-config';
@@ -56,7 +56,7 @@ export async function observeHistoryChildren(paths: string[], runId?: string, ex
   if (live.some(row => !row.data()?.processed)) {
     if (execution) {
       for (const row of live.filter(row => row.ref.parent.id === ROUTE_SYNC_QUEUE_COLLECTION_NAME
-        && row.data()?.processed === false && !row.data()?.dispatchedToCloudTask)) {
+        && isRouteHistoryDispatchDue(row.data()!))) {
         const data = row.data()!;
         if (data.connectionHistoryRunId !== runId || data.sourceServiceName !== ServiceNames.SuuntoApp
           || typeof data.providerRouteId !== 'string') throw new HistoryLifecycleChangedError();

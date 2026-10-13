@@ -10,9 +10,12 @@ import { ROUTE_SYNC_QUEUE_COLLECTION_NAME } from '../routes/route-sync.constants
 import { processRouteSyncQueueItem } from '../routes/process-route-sync-queue-item';
 import { FUNCTION_SECRET_BINDINGS } from '../secrets';
 import { recordRouteQueueAttempt, routeQueueFailureOutcome, type RouteQueueAttempt } from '../routes/monitoring';
+import { hasMatchingQueueRevision, normalizeQueueRevision } from '../queue/revision-identity';
 
 interface RouteSyncTaskPayload {
     queueItemId: string;
+    queueRevision?: string;
+    queueDateCreated?: number;
 }
 
 export const processRouteSyncTask = onTaskDispatched({
@@ -28,7 +31,8 @@ export const processRouteSyncTask = onTaskDispatched({
     let queueItemId: string | undefined;
 
     try {
-        ({ queueItemId } = request.data as RouteSyncTaskPayload);
+        const payload = request.data as RouteSyncTaskPayload;
+        ({ queueItemId } = payload);
         logger.info(`[RouteSyncTaskWorker] Starting task for queue item ${queueItemId}`);
         const queueRef = admin.firestore().collection(ROUTE_SYNC_QUEUE_COLLECTION_NAME).doc(queueItemId);
         const queueDoc = await queueRef.get();
@@ -55,6 +59,19 @@ export const processRouteSyncTask = onTaskDispatched({
             outcome = 'already_processed';
             logger.info(`[RouteSyncTaskWorker] Item ${queueItemId} already processed, skipping.`);
             return;
+        }
+        if (payload.queueRevision !== undefined || payload.queueDateCreated !== undefined) {
+            const invalidIdentity = payload.queueRevision !== undefined && !normalizeQueueRevision(payload.queueRevision)
+                || payload.queueDateCreated !== undefined && (typeof payload.queueDateCreated !== 'number'
+                    || !Number.isSafeInteger(payload.queueDateCreated) || payload.queueDateCreated < 0
+                    || payload.queueDateCreated !== queueItem?.dateCreated);
+            if (invalidIdentity || !hasMatchingQueueRevision({ currentQueueItem: queueItem || {}, attemptedQueueItem: payload,
+                legacyIdentityMatches: payload.queueDateCreated !== undefined && payload.queueDateCreated === queueItem?.dateCreated })) {
+                // ACK only the obsolete task, without a committed import outcome.
+                outcome = 'acknowledged';
+                logger.info('[RouteSyncTaskWorker] Task identity is stale; leaving the replacement revision queued.');
+                return;
+            }
         }
 
         const result = await processRouteSyncQueueItem(Object.assign({

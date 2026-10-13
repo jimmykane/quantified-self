@@ -68,7 +68,7 @@ export async function advanceHistoryRun(run: ConnectionHistoryRun, deps: History
       run.nextAttemptAt = step.done ? now + 2_000 : Math.max(failure.retryAt || 0, now + getCloudTaskRetryBackoffSeconds(step.retryCount) * 1000);
     }
   }
-  if (step.hadUnavailableRoutes && (step.status === 'queued' || step.status === 'processed')) {
+  if (step.hadUnavailableRoutes && (step.status === 'queued' && !step.message || step.status === 'processed')) {
     step.message = 'Some routes were no longer available and were skipped.';
   }
   run.processed = run.steps.every(x => x.done);

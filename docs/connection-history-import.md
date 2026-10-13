@@ -33,6 +33,13 @@ Children use the existing `routeSyncQueue`/`processRouteSyncTask`, original-file
 run-scoped queue identity and immutable queue revision. Interrupted parent checkpoints reuse completed children. Every
 admission, provider request and route/original-file write checks the current connection, exact credentials, Pro access and
 account deletion. The parent retains children written before an immediate dispatch failure and reuses the canonical enqueuer for undispatched or restored route children. Route retries retain their run and cursor; no activity or Sleep cooldown gates route-library work.
+History route tasks bind both their payload and task name to the queue revision. Every 15 minutes, issued children are
+eligible for a task-liveness recheck through the existing revision-bound dispatcher; recently issued children wait.
+A reserved name with no live task gets a recovery task with the configured queue backoff (at least 15 minutes), so
+recovery cannot race the nine-minute worker timeout or accelerate provider retries. Failed task lookups preserve the
+queue state instead of guessing that delivery is safe. Late dispatch markers cannot overwrite completed, restored or
+retried children. Ordinary webhook/manual route dispatch keeps its existing behavior. Task lookup requires the existing
+`cloudtasks.tasks.get` permission used by the shared revision-bound dispatchers.
 An unchanged route is a completed history observation. Routes that disappear after listing are retired without stopping
 later batches, and their explanation is retained in the final progress. Authorization and lifecycle skips still stop that
 capability. Follow-up deliveries inherit the history guard before handoff and inside their queue transaction, including
@@ -148,7 +155,7 @@ A durable receipt matching the exact current step, capability version, cursor, w
 
 Capacity checks reuse the actual downstream queue/collection mapping, cache each mapping within the observation, and require both native depth and Firestore pending count below the existing half-capacity threshold. No provider API, refresh, queue write, account pinning, dispatch decision or retry change occurs. Capacity reads settle together on ordinary errors. A shared **five-second deadline** stops further reads and suppresses late healthy emissions; already-started requests may finish afterward.
 
-Future retries, active leases, pending children, superseded/disconnected/deleting accounts and non-Pro access are excluded. Downstream saturation and expected permission/cooldown skips exclude new admissions, not receipt recovery or finalization. A retry that is already overdue remains eligible; its future backoff window is not mistaken for a stall. Age is the delay since the sampled revision's `nextAttemptAt`, not the lifetime of a years-long import. A same-revision edit racing the sample is unknown, not zero.
+Future retries, active leases, children waiting on live/recent tasks, superseded/disconnected/deleting accounts and non-Pro access are excluded. Unissued or old-issued route children needing coordinator redispatch are eligible; masked ownership/source mismatches are unknown. The probe makes no task or provider API calls. Downstream saturation and expected permission/cooldown skips exclude new admissions, not receipt recovery or finalization. A retry that is already overdue remains eligible; its future backoff window is not mistaken for a stall. Age is the delay since the sampled revision's `nextAttemptAt`, not the lifetime of a years-long import. A same-revision edit racing the sample is unknown, not zero.
 
 Positive count/age values are lower bounds. A global saturated or unknown prefix without a proven eligible count omits count/age, including for unseen providers; it cannot clear backlog as healthy zero. Query/read/capacity failure or timeout emits unavailable for all four groups. A complete idle observation emits real zero. Histogram chart means preserve zero observations without interpolating a false positive age; the backlog policy uses the exact emitted count/age predicate instead.
 

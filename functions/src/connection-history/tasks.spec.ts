@@ -255,9 +255,11 @@ describe('durable history coordinator', () => {
     mocks.rows.set('routeSyncQueue/pending', { processed: false, dispatchedToCloudTask: null, connectionHistoryRunId: run.id,
       sourceServiceName: ServiceNames.SuuntoApp, providerUserId: 'account', providerRouteId: 'route', firebaseUserID: 'owner' });
     mocks.rows.set('routeSyncQueue/issued', { processed: false, dispatchedToCloudTask: now, connectionHistoryRunId: run.id });
+    mocks.rows.set('routeSyncQueue/old-issued', { processed: false, dispatchedToCloudTask: now - 900000, connectionHistoryRunId: run.id,
+      sourceServiceName: ServiceNames.SuuntoApp, providerUserId: 'account', providerRouteId: 'old-route', firebaseUserID: 'owner' });
     mocks.routeEnqueue.mockResolvedValue({ enqueued: false });
-    expect(await observeHistoryChildren(['routeSyncQueue/pending', 'routeSyncQueue/issued'], run.id, historyExecution(run, []))).toBe('pending');
-    expect(mocks.routeEnqueue).toHaveBeenCalledTimes(1);
+    expect(await observeHistoryChildren(['routeSyncQueue/pending', 'routeSyncQueue/issued', 'routeSyncQueue/old-issued'], run.id, historyExecution(run, []))).toBe('pending');
+    expect(mocks.routeEnqueue).toHaveBeenCalledTimes(2);
     expect(mocks.routeEnqueue).toHaveBeenCalledWith(expect.objectContaining({ providerRouteId: 'route', providerUserId: 'account', firebaseUserID: 'owner', manual: true }));
   });
   it('restores failed route children without inheriting an issued marker or terminal status', async () => {
