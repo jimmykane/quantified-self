@@ -30,6 +30,24 @@ describe('history continuation', () => {
     deps.observe = vi.fn(async () => 'pending'); await advanceHistoryRun(job, deps, now);
     expect(deps.execute).not.toHaveBeenCalled(); expect(job.nextAttemptAt).toBe(now + 60000);
   });
+  it('continues later route batches after a route disappears and retains the explanation through completion', async () => {
+    const job = createHistoryRun('owner', ServiceNames.SuuntoApp, { requested: true, importRouteHistory: true, rangePreset: '30_days',
+      providerUserId: 'account', tokenPath: 'tokens/account', rootPath: 'tokens', credentialGeneration: 'credential',
+      runId: '11111111-1111-4111-8111-111111111111' }, 'connection', now);
+    for (const step of job.steps.slice(0, 3)) step.done = true;
+    const routes = job.steps[3]; routes.count = 100; routes.routeAfterId = 'route-099'; routes.page = 2;
+    routes.childPaths = ['routeSyncQueue/deleted'];
+    const deps = dependencies(); deps.observe = vi.fn(async () => 'unavailable');
+    deps.execute = vi.fn(async () => ({ count: 5, nextStartMs: job.endMs + 1000, nextPage: 1,
+      routeAfterId: 'route-104', childPaths: ['routeSyncQueue/final'] }));
+    await advanceHistoryRun(job, deps, now);
+    expect(routes).toMatchObject({ count: 105, routeAfterId: 'route-104', status: 'queued', done: false });
+    expect(deps.execute).toHaveBeenCalledTimes(1);
+    deps.observe = vi.fn(async () => 'processed');
+    await advanceHistoryRun(job, deps, now + 60000);
+    expect(job.processed).toBe(true); expect(routes.status).toBe('processed');
+    expect(routes.message).toContain('no longer available');
+  });
   it.each(['failed', 'authorization'] as const)('finishes a %s child with actionable status and no redundant provider work', async observed => {
     const job = run(); job.steps[0].childPaths = ['queue/item']; const deps = dependencies(); deps.observe = vi.fn(async () => observed);
     await advanceHistoryRun(job, deps, now);

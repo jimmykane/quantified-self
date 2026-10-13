@@ -11,6 +11,7 @@ export interface HistoryStep extends ConnectionHistoryStepStatus {
   nextStartMs: number;
   page: number;
   routeAfterId?: string;
+  hadUnavailableRoutes?: boolean;
   windowDays?: number;
   retryCount: number;
   done: boolean;

@@ -23,6 +23,7 @@ capability. Missing flags and previously staged runs never gain that capability.
 
 The Routes step reads only the exact token/account bound to the run, through the existing Suunto listing. Listing requests
 have a 30-second deadline and 4 MiB response limit; at most 10,000 normalized routes are supported by connection import.
+Malformed listing records fail the source before admission; a partial normalized list cannot be recorded as complete.
 Oversized libraries fail visibly with the existing manual catch-up action named, rather than silently truncating. Up to
 100 routes are admitted per dispatch in stable ID order. A private last-route-ID cursor resumes after children finish;
 earlier route deletion cannot shift an offset page. Routes added behind an in-flight cursor continue through ordinary
@@ -32,7 +33,10 @@ Children use the existing `routeSyncQueue`/`processRouteSyncTask`, original-file
 run-scoped queue identity and immutable queue revision. Interrupted parent checkpoints reuse completed children. Every
 admission, provider request and route/original-file write checks the current connection, exact credentials, Pro access and
 account deletion. The parent retains children written before an immediate dispatch failure and reuses the canonical enqueuer for undispatched or restored route children. Route retries retain their run and cursor; no activity or Sleep cooldown gates route-library work.
-An unchanged route is a completed history observation, while unavailable/auth-required records remain separately explained.
+An unchanged route is a completed history observation. Routes that disappear after listing are retired without stopping
+later batches, and their explanation is retained in the final progress. Authorization and lifecycle skips still stop that
+capability. Follow-up deliveries inherit the history guard before handoff and inside their queue transaction, including
+unchanged routes that bypass route persistence; existing outbound settings remain required.
 The per-account manual catch-up admission marker is updated through the same transaction fence after the final batch;
 it does not claim that child workers have already saved every route.
 

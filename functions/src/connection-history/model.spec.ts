@@ -104,7 +104,9 @@ describe('connection history contract', () => {
     const run = createHistoryRun('owner', ServiceNames.COROSAPI, { requested: true, rangePreset: 'maximum', runId: '11111111-1111-4111-8111-111111111111', tokenPath: 'private/token', rootPath: 'private/root', providerUserId: 'private-id', credentialGeneration: 'private-gen' }, 'connection', Date.parse('2026-09-14T12:00:00Z'));
     expect(run.id).toBe('11111111-1111-4111-8111-111111111111');
     expect(run.steps[0].capability).not.toBe(historyCapabilities(ServiceNames.COROSAPI)[0]);
+    run.steps[0].routeAfterId = 'private-route-cursor'; run.steps[0].hadUnavailableRoutes = true;
     const projection = historyProjection(run);
+    expect(projection.steps.some(step => 'hadUnavailableRoutes' in step || 'routeAfterId' in step)).toBe(false);
     expect(JSON.stringify(projection)).not.toMatch(/private|credential|lease|nextStart|connectionGeneration/);
     expect(projection.active).toBe(true);
     expect(projection.rangePreset).toBe('maximum');

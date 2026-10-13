@@ -1,5 +1,6 @@
 import * as admin from 'firebase-admin';
 import { withHistoryQueueExecution, HistoryLifecycleChangedError } from '../connection-history/execution';
+import { currentHistoryExecution } from '../connection-history/context';
 import * as logger from 'firebase-functions/logger';
 import { HttpsError } from 'firebase-functions/v2/https';
 import { ServiceNames } from '@sports-alliance/sports-lib';
@@ -310,6 +311,7 @@ async function enqueueRouteDeliveryForSavedSuuntoRoute(params: {
 }): Promise<void> {
     // Recheck immediately before creating downstream work. The source can be
     // disconnected after this worker imports or reads an unchanged route.
+    await currentHistoryExecution()?.beforeRequest();
     const sourceAuthorization = await requireActiveSuuntoRouteSource(
         params.userID,
         params.queueItem.providerUserId,
@@ -337,6 +339,7 @@ async function enqueueRouteDeliveryForSavedSuuntoRoute(params: {
             manual: false,
         });
     } catch (routeDeliverySyncError) {
+        if (routeDeliverySyncError instanceof HistoryLifecycleChangedError) throw routeDeliverySyncError;
         logger.error(`[RouteDeliverySync] Failed to enqueue post-import delivery sync for route ${params.routeID} and user ${params.userID}. Route import remains successful.`, routeDeliverySyncError);
     }
 }

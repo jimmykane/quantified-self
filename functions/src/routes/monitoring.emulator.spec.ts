@@ -4,9 +4,9 @@ import * as logger from 'firebase-functions/logger';
 import { ServiceNames } from '@sports-alliance/sports-lib';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { QueueItemInterface } from '../queue/queue-item.interface';
-const state = vi.hoisted(() => ({ db: null as unknown as Firestore, pro: vi.fn(), enqueue: vi.fn() }));
+const state = vi.hoisted(() => ({ db: null as unknown as Firestore, pro: vi.fn(), enqueue: vi.fn(), deliveryEnqueue: vi.fn() }));
 vi.mock('../utils', async importOriginal => ({ ...await importOriginal<typeof import('../utils')>(),
-    hasProAccess: state.pro, enqueueRouteSyncTask: state.enqueue }));
+    hasProAccess: state.pro, enqueueRouteSyncTask: state.enqueue, enqueueRouteDeliverySyncTask: state.deliveryEnqueue }));
 vi.mock('firebase-admin', () => ({ firestore: () => state.db }));
 vi.mock('firebase-functions/logger', () => ({ info: vi.fn(), warn: vi.fn(), error: vi.fn() }));
 vi.unmock('@sports-alliance/sports-lib');
@@ -15,6 +15,8 @@ import { historyExecution, withHistoryQueueExecution } from '../connection-histo
 import { withHistoryExecution, assertHistoryWrite } from '../connection-history/context';
 import { createHistoryRun } from '../connection-history/model';
 import { enqueueRouteSyncQueueItem } from './route-sync-queue';
+import { enqueueRouteDeliverySyncQueueItem } from '../route-delivery-sync/queue';
+import { ROUTE_DELIVERY_SYNC_ROUTE_IDS } from '../../../shared/route-delivery-sync-routes';
 import { observeRouteQueues, ROUTE_QUEUE_PROBE_LIMIT } from './monitoring-probe';
 import { ACTIVE_OAUTH_CREDENTIAL_GENERATION_FIELD } from '../token-refresh-coordinator';
 import { SUUNTOAPP_ACCESS_TOKENS_COLLECTION_NAME } from '../suunto/constants';
@@ -26,7 +28,7 @@ describe.skipIf(!process.env.FIRESTORE_EMULATOR_HOST)('route observations with r
     const host = process.env.FIRESTORE_EMULATOR_HOST;
     if (host && !/^(127\.0\.0\.1|localhost):\d+$/.test(host)) throw new Error('Loopback emulator required.');
     beforeEach(async () => {
-        vi.clearAllMocks(); state.pro.mockResolvedValue(true); state.enqueue.mockResolvedValue(false);
+        vi.clearAllMocks(); state.pro.mockResolvedValue(true); state.enqueue.mockResolvedValue(false); state.deliveryEnqueue.mockResolvedValue(false);
         state.db = new Firestore({ projectId: `demo-route-monitor-${randomUUID().slice(0, 8)}` });
         state.db.settings({ ignoreUndefinedProperties: true });
         await state.db.doc('users/qa').set({ private: 'PRIVATE_OWNER' });
@@ -168,6 +170,22 @@ describe.skipIf(!process.env.FIRESTORE_EMULATOR_HOST)('route observations with r
         await observeRouteQueues(state.db, async () => change !== 'pro', seeded.now);
         expect(sampleFor('import', 'qs')).toMatchObject({ dueSample: change === 'current' ? 1 : 0, unknownSample: 0 });
         expect(JSON.stringify(observed())).not.toContain('PRIVATE'); expect(JSON.stringify(observed())).not.toContain(run.id);
+    });
+    it.each(['replacement', 'pro'])('fences follow-up deliveries after history %s changes inside real queue transactions', async change => {
+        const { run } = await seedRouteHistory(); const execution = historyExecution(run, []);
+        await execution.beforeRequest();
+        if (change === 'replacement') await state.db.doc(run.tokenPath).update({ tokenCredentialGeneration: 'PRIVATE_NEW' });
+        else state.pro.mockResolvedValue(false);
+        const before = await state.db.collection('routeDeliverySyncQueue').get();
+        await expect(withHistoryExecution(execution, () => enqueueRouteDeliverySyncQueueItem({
+            routeId: ROUTE_DELIVERY_SYNC_ROUTE_IDS.SuuntoApp_to_WahooAPI, userID: 'qa', savedRouteID: 'PRIVATE_ROUTE',
+            sourceServiceName: ServiceNames.SuuntoApp, destinationServiceName: ServiceNames.WahooAPI,
+            sourceRevisionKey: 'PRIVATE_NEW_REVISION', sourceProviderUserId: run.providerUserId, manual: false,
+        }))).rejects.toThrow('earlier connection');
+        const after = await state.db.collection('routeDeliverySyncQueue').get();
+        expect(after.docs.map(doc => doc.id)).toEqual(before.docs.map(doc => doc.id));
+        expect(after.docs[0].updateTime!.isEqual(before.docs[0].updateTime!)).toBe(true);
+        expect(state.deliveryEnqueue).not.toHaveBeenCalled();
     });
     it.each([ServiceNames.WahooAPI, ServiceNames.GarminAPI, ServiceNames.COROSAPI])('observes eligible import and %s delivery without writes or private payload reads', async destination => {
         const seeded = await seedProbe(destination);

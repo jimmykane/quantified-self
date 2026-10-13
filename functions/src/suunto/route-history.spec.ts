@@ -28,7 +28,7 @@ describe('connection route library admission', () => {
   it('reads only the exact connected account, keeps ancient routes and bounds the request', async () => {
     expect(await queueSuuntoRouteHistory('owner', execution)).toEqual({ count: 1, hasMore: false, afterRouteId: 'route-0000' });
     expect(mocks.list).toHaveBeenCalledWith('owner', expect.objectContaining({ tokenRefs: [expect.objectContaining({
-      providerUserId: 'selected-account', ref: { path: execution.tokenPath } })] }), { timeout: 30_000, maxResponseBytes: 4 * 1024 * 1024 });
+      providerUserId: 'selected-account', ref: { path: execution.tokenPath } })] }), { timeout: 30_000, maxResponseBytes: 4 * 1024 * 1024, requireCompleteListing: true });
     expect(mocks.enqueue).toHaveBeenCalledWith(expect.objectContaining({ providerRouteCreatedAt: 0,
       providerRouteId: 'route-0000', providerUserId: 'selected-account', firebaseUserID: 'owner', manual: true }));
     expect(mocks.guard).toHaveBeenCalledTimes(1);

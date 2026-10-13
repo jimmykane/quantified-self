@@ -21,7 +21,7 @@ import { enqueueConnectionHistoryTask, getCloudTaskQueueDepthForQueue } from '..
 import { CONNECTION_HISTORY_COLLECTION, historyOperationKey, historyProjection, isConnectionHistoryRunId, type ConnectionHistoryRun } from './model';
 import { assertHistoryConnectionCurrent, assertHistoryReservation, historyExecution, HistoryLifecycleChangedError, HistoryUnavailableError } from './execution';
 import { executeHistoryOperation, HistorySkippedError, isHistoryWindowTooLarge } from './adapters';
-import { advanceHistoryRun } from './advance';
+import { advanceHistoryRun, type HistoryChildObservation } from './advance';
 import { withHistoryExecution } from './context';
 import { emitHistoryMonitoring, historyMonitoringProvider, historyExpectedContention } from './monitoring';
 import { historyProbeDue, observeConnectionHistory, recordHistoryProbeUnavailable } from './monitoring-probe';
@@ -47,7 +47,7 @@ export async function dispatchConnectionHistoryRun(run: ConnectionHistoryRun): P
 }
 
 /** Missing rows never prove delivery. Failed rows are retried only through explicit owner action. */
-export async function observeHistoryChildren(paths: string[], runId?: string, execution?: HistoryExecution): Promise<'pending' | 'processed' | 'failed' | 'skipped' | 'authorization' | 'mixed'> {
+export async function observeHistoryChildren(paths: string[], runId?: string, execution?: HistoryExecution): Promise<HistoryChildObservation> {
   if (!paths.length) return 'processed';
   const db = admin.firestore();
   const rows = await db.getAll(...paths.map(path => db.doc(path)));
@@ -90,10 +90,13 @@ export async function observeHistoryChildren(paths: string[], runId?: string, ex
     const data = row.data();
     if (row.ref.parent.id === ROUTE_SYNC_QUEUE_COLLECTION_NAME
       && data?.resultStatus === 'skipped'
-      && ['provider_route_up_to_date', 'provider_route_content_unchanged'].includes(data.skippedReason)) return false;
+      && ['provider_route_up_to_date', 'provider_route_content_unchanged', 'provider_route_not_found'].includes(data.skippedReason)) return false;
     return data?.skippedReason || (data?.resultStatus && data.resultStatus !== 'success');
   })) return 'skipped';
-  return 'processed';
+  // A route removed since listing must not abandon the rest of the library.
+  return live.some(row => row.ref.parent.id === ROUTE_SYNC_QUEUE_COLLECTION_NAME
+    && row.data()?.resultStatus === 'skipped' && row.data()?.skippedReason === 'provider_route_not_found')
+    ? 'unavailable' : 'processed';
 }
 
 class HistoryCapacityWaitError extends Error {}

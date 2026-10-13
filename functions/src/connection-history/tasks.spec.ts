@@ -135,6 +135,15 @@ describe('durable history coordinator', () => {
     mocks.rows.set('routeSyncQueue/item', { processed: true, skippedReason: 'provider_auth_required', resultStatus: 'skipped' });
     expect(await observeHistoryChildren(['routeSyncQueue/item'])).toBe('authorization');
   });
+  it('distinguishes disappeared route records from lifecycle or authorization skips', async () => {
+    mocks.rows.set('routeSyncQueue/deleted', { processed: true, skippedReason: 'provider_route_not_found', resultStatus: 'skipped' });
+    mocks.rows.set('routeSyncQueue/saved', { processed: true, resultStatus: 'success' });
+    expect(await observeHistoryChildren(['routeSyncQueue/deleted', 'routeSyncQueue/saved'])).toBe('unavailable');
+    mocks.rows.set('routeSyncQueue/saved', { processed: true, skippedReason: 'connection_history_superseded', resultStatus: 'skipped' });
+    expect(await observeHistoryChildren(['routeSyncQueue/deleted', 'routeSyncQueue/saved'])).toBe('skipped');
+    mocks.rows.set('queue/deleted', { processed: true, skippedReason: 'provider_route_not_found', resultStatus: 'skipped' });
+    expect(await observeHistoryChildren(['queue/deleted'])).toBe('skipped');
+  });
   it.each(['user_not_allowed', 'provider_disabled', 'deferred', 'manual_reconciliation_required'])('does not claim delivery for terminal %s worker outcomes', async resultStatus => {
     mocks.rows.set('queue/item', { processed: true, resultStatus });
     expect(await observeHistoryChildren(['queue/item'])).toBe('skipped');

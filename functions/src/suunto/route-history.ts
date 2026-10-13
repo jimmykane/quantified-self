@@ -34,7 +34,7 @@ async function queueSelectedSuuntoRouteHistory(userID: string, execution: Histor
   };
   let listing: Awaited<ReturnType<typeof listSuuntoRoutes>>;
   try {
-    listing = await listSuuntoRoutes(userID, context, { timeout: 30_000, maxResponseBytes: 4 * 1024 * 1024 });
+    listing = await listSuuntoRoutes(userID, context, { timeout: 30_000, maxResponseBytes: 4 * 1024 * 1024, requireCompleteListing: true });
   } catch (error) {
     if (error instanceof Error && error.name === 'ResponseBodyTooLargeError') {
       throw new HistoryUnavailableError('The Suunto route library exceeds the supported connection-import size. Use Import existing routes.');
