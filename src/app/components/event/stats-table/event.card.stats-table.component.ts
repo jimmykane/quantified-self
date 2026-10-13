@@ -158,7 +158,7 @@ export class EventCardStatsTableComponent implements OnChanges {
         }
 
         rowObj[activityColumnKeys[index]] =
-          (displayValue || '') +
+          (displayValue ?? '') +
           ' ' +
           (displayUnit || '');
         return rowObj;

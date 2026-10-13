@@ -18,6 +18,7 @@ import {
     DataPaceMax,
     DataPaceMin,
     DataPotentialStaminaAvg,
+    DataStamina,
     DataSpeedAvgKilometersPerHour,
     DataSpeedAvgMilesPerHour,
     DataStaminaMin,
@@ -592,6 +593,33 @@ describe('EventCardStatsTableComponent', () => {
         expect(component.data.data[0]).toMatchObject({ '__statType': 'Estimated Sustainable Distance', Name: 'Ending EnergySense Sustainable Distance' });
         expect(JSON.stringify(component.data.data)).toContain('1.00');
         expect(JSON.stringify(component.data.data)).toContain('mi');
+    });
+
+    it.each(['Suunto', 'Garmin', undefined])('retains zero stamina in one canonical row and copied output for %s', manufacturer => {
+        const stamina = new DataStamina(0);
+        const minimum = new DataStaminaMin(0);
+        const potential = new DataPotentialStaminaAvg(0);
+        const stats = [stamina, minimum, potential];
+        const savedStats = stats.map(stat => stat.toJSON());
+        component.event = { ...mockEvent, isMerge: false } as EventInterface;
+        component.selectedActivities = [{
+            ...mockActivity,
+            creator: { name: 'Custom name', manufacturer },
+            getStatsAsArray: () => stats,
+            getStat: (type: string) => stats.find(stat => stat.getType() === type),
+        } as unknown as ActivityInterface];
+        for (let pass = 0; pass < 2; pass++) {
+            component.ngOnChanges({});
+            expect(component.data.data).toHaveLength(3);
+            expect(component.data.data.map(row => row.__statType).sort()).toEqual(stats.map(stat => stat.getType()).sort());
+            for (const row of component.data.data) expect(row[component.columns[1]]).toBe('0 %');
+        }
+        const staminaRow = component.data.data.find(row => row.__statType === DataStamina.type);
+        expect(staminaRow.Name).toBe(manufacturer === 'Suunto' ? 'EnergySense Endurance' : 'Stamina');
+        component.selection.select(staminaRow);
+        component.copyToSheets();
+        expect(mockDataExportService.copyToSheets).toHaveBeenCalledWith([staminaRow], component.columns, undefined);
+        expect(stats.map(stat => stat.toJSON())).toEqual(savedStats);
     });
 
     it('should include Garmin stamina stats in detailed statistics', () => {

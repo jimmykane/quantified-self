@@ -1318,6 +1318,28 @@ describe('MCP data service', () => {
     });
   });
 
+  it.each([0, undefined])('deduplicates Stamina and EnergySense aliases using only canonical persisted data (%s)', async value => {
+    vi.mocked(dependencies.fetchActivityDocuments).mockResolvedValue([activityDocument()]);
+    const service = createMcpDataService(dependencies);
+    const listed = await service.listActivities({
+      uid: 'user-1', connectionId: 'connection-1', appBaseUrl: 'https://quantified-self.io',
+      startTimeMs: Date.parse('2026-07-01T00:00:00.000Z'), endTimeMs: Date.parse('2026-07-02T00:00:00.000Z'),
+    });
+    const stats = { ...(value === undefined ? {} : { Stamina: value }), 'EnergySense Endurance': 99 };
+    vi.mocked(dependencies.fetchActivityMetricDocument).mockResolvedValue({
+      id: 'activity-1', data: { eventID: 'event-1', stats },
+    });
+    const result = await service.getActivityMetrics({
+      uid: 'user-1', connectionId: 'connection-1', activityRef: listed.activities[0].activityRef,
+      metrics: ['Stamina', 'energysense endurance', 'Suunto EnergySense Endurance'],
+    });
+    expect(dependencies.fetchActivityMetricDocument).toHaveBeenCalledExactlyOnceWith('user-1', 'activity-1', ['Stamina']);
+    expect(result).toMatchObject({ selectedMetricCount: 1, availableMetricCount: value === undefined ? 0 : 1,
+      metrics: [{ type: 'Stamina', value: value ?? null, available: value !== undefined, unit: '%' }],
+    });
+    expect(stats).toEqual({ ...(value === undefined ? {} : { Stamina: value }), 'EnergySense Endurance': 99 });
+  });
+
   it('returns only explicitly selected canonical numeric metrics for a referenced activity', async () => {
     vi.mocked(dependencies.fetchActivityDocuments).mockResolvedValue([
       activityDocument(),
