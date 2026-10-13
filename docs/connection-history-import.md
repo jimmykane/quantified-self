@@ -9,9 +9,46 @@ Eligible Pro users can leave **Import history from this service** selected when 
 | COROS | 30 days, 60 days, maximum | Latest rolling 3 months |
 | Wahoo | 30 days, 90 days, 1 year, 2 years, maximum | All eligible retained FIT-backed workouts |
 
-The 30-day range contains the connection day and preceding 29 UTC calendar dates. Longer fixed-day ranges follow the same inclusive rule; calendar-year and provider-maximum choices preserve calendar boundaries. Every range ends at successful connection time with whole-second precision. The coordinator never continues earlier than the selected boundary, and there is no existing-user rollout. Saved-route libraries and outbound delivery settings remain separate.
+The 30-day range contains the connection day and preceding 29 UTC calendar dates. Longer fixed-day ranges follow the same inclusive rule; calendar-year and provider-maximum choices preserve calendar boundaries. Every range ends at successful connection time with whole-second precision. The coordinator never continues earlier than the selected boundary, and there is no existing-user rollout. For new Suunto requests that explicitly include routes, the entire saved route library is imported independently of this date range. Outbound delivery settings remain separate.
 
-The checkbox uses the shared capability inventory for its description. Dashboard, Routes, and Wahoo permission shortcuts navigate to Connections with the provider selected and reconnect controls visible. They do not begin OAuth. Omitted consent from an older client means false.
+The checkbox uses the shared capability inventory for its description. Dashboard, Routes, and Wahoo permission shortcuts navigate to Connections with the provider selected and reconnect controls visible. They do not begin OAuth. Omitted history consent from an older client means false. Suunto route inclusion also requires the additive `importRouteHistory` flag; a pre-route client or already-staged run retains its original activities/Sleep/Health scope.
+
+## Suunto saved-route library
+
+The connection option names saved routes and explains that its date picker applies to activity/Sleep/Health history,
+not the route library. The new frontend binds `importRouteHistory` to that selected Suunto option. OAuth start validates
+and stores the additive flag in the same expiring single-use flow; every claim, cleanup and expired-flow reconciliation
+scrubs it. The callback must retain explicit route consent before the connection transaction can snapshot the Routes
+capability. Missing flags and previously staged runs never gain that capability. No provider or MCP OAuth scope changes.
+
+The Routes step reads only the exact token/account bound to the run, through the existing Suunto listing. Listing requests
+have a 30-second deadline and 4 MiB response limit; at most 10,000 normalized routes are supported by connection import.
+Oversized libraries fail visibly with the existing manual catch-up action named, rather than silently truncating. Up to
+100 routes are admitted per dispatch in stable ID order. A private last-route-ID cursor resumes after children finish;
+earlier route deletion cannot shift an offset page. Routes added behind an in-flight cursor continue through ordinary
+Suunto webhooks; the importer does not promise an immutable provider-library snapshot.
+
+Children use the existing `routeSyncQueue`/`processRouteSyncTask`, original-file persistence and route IDs, with an additional
+run-scoped queue identity and immutable queue revision. Interrupted parent checkpoints reuse completed children. Every
+admission, provider request and route/original-file write checks the current connection, exact credentials, Pro access and
+account deletion. The parent retains children written before an immediate dispatch failure and reuses the canonical enqueuer for undispatched or restored route children. Route retries retain their run and cursor; no activity or Sleep cooldown gates route-library work.
+An unchanged route is a completed history observation, while unavailable/auth-required records remain separately explained.
+The per-account manual catch-up admission marker is updated through the same transaction fence after the final batch;
+it does not claim that child workers have already saved every route.
+
+**Monitoring: covered.** The existing #847 coordinator and #833 route import filters cover Suunto and this canonical queue.
+The coordinator probe treats Routes independently of Sleep rollout/cooldown. The route probe uses masked, bounded reads of
+the private history identity to exclude superseded or non-Pro history children. Existing ordinary webhook/manual import
+eligibility, metrics, modes, dashboards, retry schedules and alerts remain intact; no cloud configuration was changed.
+
+**MCP impact: no contract change.** Imported routes retain the existing route model and explicit `routes:read`/
+`route-location:read` projections. No fields, tools, scope, consent or provider action are added to MCP or the Assistant.
+The additive consent flag belongs only to provider connection history.
+
+Release the backend before the frontend: the shared OAuth start/callback and expired-flow cleanup consumers, connection
+history worker/retry/recovery, route import worker and route dispatcher must understand this capability and its guards.
+No new Function, secret, index, Rules or queue is needed. Reverting the frontend stops new route-inclusive requests;
+retained runs/children must keep their supported backend adapter until they drain. Deployment requires separate approval.
 
 ## Acceptance and ownership
 
@@ -30,7 +67,7 @@ Only server code reads runs, receipts, cursors, and leases. Client metadata cont
 | Provider | Shared operations used by manual and connection imports | Completion |
 | --- | --- | --- |
 | Garmin | Activity backfill, Sleep requests, existing all-family Health cursor | Requested; delivery can take hours or days |
-| Suunto | Activity history queue admission, Sleep windows, 24/7 Health windows | Processed by existing ingestion workers |
+| Suunto | Activity history queue admission, Sleep windows, 24/7 Health windows, explicitly included saved-route library | Processed by existing ingestion workers |
 | COROS | Activity history queue admission, combined daily Sleep/Health requests | Processed by existing ingestion workers |
 | Wahoo | Paginated eligible FIT-backed workout history | Processed by existing ingestion workers |
 

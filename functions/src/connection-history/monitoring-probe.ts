@@ -111,7 +111,7 @@ export async function observeConnectionHistory(db: FirebaseFirestore.Firestore, 
           if (meta.get('connectionHistoryReservation') !== doc.id
             && (historyCooldownUntil(run.serviceName, meta.data()) > now || Number(meta.get('connectionHistoryReservationExpiresAt')) > now)) return 'excluded';
           if (Number(meta.get('historyImportLeaseExpiresAt')) > now) return 'excluded';
-        } else {
+        } else if (step.capability.cooldownGroup === 'sleep') {
           const provider = historySleepProvider(run.serviceName);
           if (!isSleepProviderEnabled(provider) || !isSleepSyncUserAllowed(run.userID)
             || step.id === 'health' && (run.serviceName === ServiceNames.GarminAPI && !isGarminHealthSyncEnabled()

@@ -26,6 +26,17 @@ No entitlement, provider support, transport, revision, lease, scheduling, retry,
 TTL, disconnect, or deletion behavior changes. There is no new scheduler or unbounded
 scanner; the bounded observations run on the existing outbound dispatcher.
 
+## Connection-history route coverage
+
+Suunto connection-history route children reuse `routeSyncQueue` and `processRouteSyncTask`, with the existing
+`lane=import`, `source=suunto`, `destination=qs`, `mode=manual` categories. Coverage is **covered** by this bundle and
+by #847 for parent coordination. A run-scoped queue identity and revision keep interrupted checkpoint replays and
+superseded connections independent. Current history children require Pro; the bounded read-only probe checks their
+masked run identity and credential/connection generations. It excludes stale/missing runs and lost entitlement without
+changing ordinary webhook/manual eligibility. No raw run IDs enter telemetry and no new dashboard/metric/alert is needed.
+The existing schedules, retry policy, original cleanup, leases, terminal metrics and cloud configuration remain unchanged.
+See [connection history](connection-history-import.md#suunto-saved-route-library) for admission bounds and release order.
+
 ## Signals and privacy
 
 | Event | Meaning |

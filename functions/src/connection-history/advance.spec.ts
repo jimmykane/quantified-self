@@ -12,6 +12,19 @@ describe('history continuation', () => {
     expect(job.processed).toBe(true); expect(job.steps[0].status).toBe('processed');
     await advanceHistoryRun(job, deps, now); expect(deps.execute).toHaveBeenCalledTimes(1);
   });
+  it('persists a route-library cursor and waits for imported children before admitting another batch', async () => {
+    const job = run(); const deps = dependencies();
+    deps.execute = vi.fn().mockResolvedValueOnce({ count: 100, nextStartMs: job.startMs, nextPage: 2,
+      routeAfterId: 'route-100', childPaths: ['routeSyncQueue/item'] });
+    await advanceHistoryRun(job, deps, now);
+    expect(job.steps[0]).toMatchObject({ count: 100, page: 2, routeAfterId: 'route-100', done: false });
+    deps.observe = vi.fn(async () => 'pending');
+    await advanceHistoryRun(job, deps, now + 60000); expect(deps.execute).toHaveBeenCalledTimes(1);
+    deps.observe = vi.fn(async () => 'processed');
+    deps.execute = vi.fn().mockResolvedValue({ count: 1, nextStartMs: job.endMs + 1000, nextPage: 1, routeAfterId: 'route-101', childPaths: [] });
+    await advanceHistoryRun(job, deps, now + 120000);
+    expect(job.steps[0]).toMatchObject({ count: 101, routeAfterId: 'route-101', status: 'processed', done: true });
+  });
   it('waits for workers without replaying the provider request', async () => {
     const job = run(); job.steps[0].childPaths = ['queue/item']; const deps = dependencies();
     deps.observe = vi.fn(async () => 'pending'); await advanceHistoryRun(job, deps, now);

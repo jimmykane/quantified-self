@@ -14,6 +14,7 @@
   <div class="history-step">
     <strong>{{ step.label }}</strong>
     <span>{{ step.description }}</span>
+    @if (step.resources.includes('routes')) { <span>Entire saved route library</span> }
     @if (step.count > 0) { <span>{{ step.count }} items or requests</span> }
     @if (step.message) { <p>{{ step.message }}</p> }
     @if (step.nextAllowedAtMs) { <p>Available again: {{ step.nextAllowedAtMs | date:'medium' }}</p> }

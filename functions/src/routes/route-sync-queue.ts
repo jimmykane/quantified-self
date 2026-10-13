@@ -1,4 +1,7 @@
 import * as admin from 'firebase-admin';
+import { randomUUID } from 'node:crypto';
+import { HistoryLifecycleChangedError } from '../connection-history/execution';
+import { currentHistoryExecution } from '../connection-history/context';
 import * as logger from 'firebase-functions/logger';
 import { ServiceNames } from '@sports-alliance/sports-lib';
 
@@ -142,6 +145,7 @@ export async function buildRouteSyncQueueItemId(
     providerUserId: string,
     providerRouteId: string,
     firebaseUserID: string,
+    connectionHistoryRunId?: string,
 ): Promise<string> {
     const normalizedFirebaseUserID = normalizeNonEmptyString(firebaseUserID);
     return generateIDFromParts([
@@ -150,6 +154,7 @@ export async function buildRouteSyncQueueItemId(
         providerUserId,
         providerRouteId,
         ...(normalizedFirebaseUserID ? [normalizedFirebaseUserID] : []),
+        ...(connectionHistoryRunId ? ['connectionHistory', connectionHistoryRunId] : []),
     ]);
 }
 
@@ -162,17 +167,22 @@ export async function enqueueRouteSyncQueueItem(
         throw new Error('providerUserId and providerRouteId are required for route sync queue items.');
     }
 
+    const execution = currentHistoryExecution();
+    if (execution && (execution.userID !== params.firebaseUserID || execution.serviceName !== params.sourceServiceName
+        || execution.providerUserId !== providerUserId)) throw new HistoryLifecycleChangedError();
     const queueItemId = await buildRouteSyncQueueItemId(
         params.sourceServiceName,
         providerUserId,
         providerRouteId,
         params.firebaseUserID,
+        execution?.runId,
     );
     const firebaseUserID = await resolveFirebaseUserIDForRouteSync(params, queueItemId);
     const db = admin.firestore();
     const queueDocRef = db.collection(ROUTE_SYNC_QUEUE_COLLECTION_NAME).doc(queueItemId);
     const decision = await db.runTransaction(async (transaction): Promise<QueueInsertDecision> => {
         const existingSnapshot = await transaction.get(queueDocRef);
+        await execution?.inTransaction(transaction);
         let deletionGuard;
         try {
             deletionGuard = await getUserDeletionGuardStateInTransaction(db, transaction, firebaseUserID);
@@ -189,6 +199,13 @@ export async function enqueueRouteSyncQueueItem(
             );
         }
 
+        if (execution && existingSnapshot.exists) {
+            const existingData = existingSnapshot.data() as Partial<RouteSyncQueueItemInterface>;
+            // A checkpoint replay observes the same child, including its terminal result.
+            return { enqueued: false, queueItemId, reason: 'already_pending',
+                dateCreated: Number(existingData.dateCreated) || Date.now(),
+                shouldDispatchExisting: !existingData.processed && !existingData.dispatchedToCloudTask };
+        }
         if (existingSnapshot.exists) {
             const existingData = existingSnapshot.data() as Partial<RouteSyncQueueItemInterface>;
             const isDeferredForPendingDisconnect = isPendingDisconnectQueueItemDeferred(existingData);
@@ -213,6 +230,7 @@ export async function enqueueRouteSyncQueueItem(
         const dateCreated = Date.now();
         const queueItem: RouteSyncQueueItemInterface = {
             id: queueItemId,
+            ...(execution ? { connectionHistoryRunId: execution.runId, queueRevision: randomUUID() } : {}),
             dateCreated,
             processed: false,
             retryCount: 0,
@@ -238,6 +256,7 @@ export async function enqueueRouteSyncQueueItem(
         };
     });
 
+    execution?.onQueued(queueDocRef.path);
     if (decision.enqueued) {
         if (!(await observeRouteDispatch('import', params, 'guard', () => canDispatchRouteSyncQueueItem(db, queueDocRef, queueItemId, firebaseUserID, 'route_sync_queue_dispatch_new')))) {
             return {

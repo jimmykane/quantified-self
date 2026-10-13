@@ -14,6 +14,8 @@ import { isGarminHealthSyncEnabled } from '../garmin/health-flags';
 import { isSuuntoHealthSyncEnabled } from '../suunto/health-flags';
 import { isSleepProviderEnabled, isSleepSyncUserAllowed } from '../sleep/provider-flags';
 import { assertHistoryConnectionCurrent, HistoryUnavailableError, HistoryWindowTooLargeError, type HistoryExecution } from './execution';
+import { queueSuuntoRouteHistory } from '../suunto/route-history';
+import { ROUTE_SYNC_QUEUE_COLLECTION_NAME } from '../routes/route-sync.constants';
 import type { ConnectionHistoryRun, HistoryStep } from './model';
 
 export class HistorySkippedError extends Error {
@@ -44,11 +46,11 @@ async function reserveActivities(run: ConnectionHistoryRun): Promise<void> {
     tx.set(ref, { connectionHistoryReservation: run.id, connectionHistoryReservationExpiresAt: Date.now() + 7 * 86400000 }, { merge: true });
   });
 }
-export interface HistoryOperationResult { count: number; nextStartMs: number; nextPage: number; }
+export interface HistoryOperationResult { count: number; nextStartMs: number; nextPage: number; routeAfterId?: string; }
 type HistoryOperation = (run: ConnectionHistoryRun, step: HistoryStep, execution: HistoryExecution) => Promise<HistoryOperationResult>;
 export interface HistoryAdapter {
   execute: HistoryOperation;
-  downstream: 'activities' | 'sleep' | 'garmin-health';
+  downstream: 'activities' | 'sleep' | 'garmin-health' | 'routes';
 }
 function historyWindow(run: ConnectionHistoryRun, step: HistoryStep) {
   const endMs = Math.min(run.endMs, step.nextStartMs + (step.windowDays ?? 30) * 86400000 - 1000);
@@ -61,6 +63,7 @@ export function getHistoryAdapter(run: ConnectionHistoryRun, step: HistoryStep):
 }
 export function historyAdmissionQueue(run: ConnectionHistoryRun, step: HistoryStep): { taskQueue: string; collection: string } {
   const { downstream } = getHistoryAdapter(run, step);
+  if (downstream === 'routes') return { taskQueue: config.cloudtasks.routeSyncQueue, collection: ROUTE_SYNC_QUEUE_COLLECTION_NAME };
   return downstream === 'activities'
     ? { taskQueue: config.cloudtasks.workoutQueue, collection: getServiceWorkoutQueueName(run.serviceName) }
     : { taskQueue: downstream === 'garmin-health' ? config.cloudtasks.garminHealthBackfillQueue : config.cloudtasks.sleepSyncQueue, collection: SLEEP_SYNC_QUEUE_COLLECTION_NAME };
@@ -119,6 +122,12 @@ async function executeSleepHealthHistory(run: ConnectionHistoryRun, step: Histor
   }
   return { count: step.id === 'health' ? result.healthQueued ?? 0 : result.sleepQueued ?? result.queued, nextStartMs, nextPage: 1 };
 }
+async function executeRouteHistory(run: ConnectionHistoryRun, step: HistoryStep, execution: HistoryExecution): Promise<HistoryOperationResult> {
+  const result = await queueSuuntoRouteHistory(run.userID, execution, step.routeAfterId, step.count);
+  return { count: result.count, nextStartMs: result.hasMore ? run.startMs : run.endMs + 1000,
+    nextPage: result.hasMore ? step.page + 1 : 1,
+    ...(result.afterRouteId === undefined ? {} : { routeAfterId: result.afterRouteId }) };
+}
 const HISTORY_SLEEP_OPERATIONS = {
   [ServiceNames.GarminAPI]: queueGarminSleepHealthHistory,
   [ServiceNames.SuuntoApp]: queueSuuntoSleepHealthHistory,
@@ -139,6 +148,7 @@ export const HISTORY_ADAPTERS: Record<ServiceNames, Record<string, Record<number
     health: { 1: { execute: executeSleepHealthHistory, downstream: 'garmin-health' } },
   },
   [ServiceNames.SuuntoApp]: {
+    routes: { 1: { execute: executeRouteHistory, downstream: 'routes' } },
     activities: { 1: { execute: executeActivityHistory, downstream: 'activities' } },
     sleep: { 1: { execute: executeSleepHealthHistory, downstream: 'sleep' } },
     health: { 1: { execute: executeSleepHealthHistory, downstream: 'sleep' } },

@@ -5,10 +5,12 @@ import { connectionHistoryRange, historyCapabilities, type ConnectionHistoryRang
 export const CONNECTION_HISTORY_COLLECTION = 'connectionHistoryImports';
 export const OAUTH_HISTORY_FIELD = 'oauthImportRecentHistory';
 export const OAUTH_HISTORY_RANGE_FIELD = 'oauthImportHistoryRange';
+export const OAUTH_ROUTE_HISTORY_FIELD = 'oauthImportRouteHistory';
 export interface HistoryStep extends ConnectionHistoryStepStatus {
   capability: HistoryCapability;
   nextStartMs: number;
   page: number;
+  routeAfterId?: string;
   windowDays?: number;
   retryCount: number;
   done: boolean;
@@ -34,12 +36,13 @@ export interface ConnectionHistoryRun {
   failed?: boolean;
   garminHealthSummaryTypes?: readonly GarminHealthSummaryType[];
   steps: HistoryStep[];
-  lastOperation?: { key: string; result: { count: number; nextStartMs: number; nextPage: number; childPaths: string[] } };
+  lastOperation?: { key: string; result: { count: number; nextStartMs: number; nextPage: number; routeAfterId?: string; childPaths: string[] } };
   leaseOwner?: string;
   leaseExpiresAt?: number;
 }
 export interface HistoryConnectionContext {
   requested: boolean;
+  importRouteHistory?: boolean;
   rangePreset: ConnectionHistoryRangePreset;
   runId: string;
   tokenPath: string;
@@ -49,7 +52,8 @@ export interface HistoryConnectionContext {
 }
 /** Exact identity of the committed provider operation, shared with read-only recovery monitoring. */
 export function historyOperationKey(step: HistoryStep): string {
-  return JSON.stringify([step.id, step.capability.version, step.nextStartMs, step.windowDays || 30, step.page]);
+  return JSON.stringify([step.id, step.capability.version, step.nextStartMs, step.windowDays || 30, step.page,
+    ...(step.routeAfterId === undefined ? [] : [step.routeAfterId])]);
 }
 export function isConnectionHistoryRunId(value: unknown): value is string {
   return typeof value === 'string'
@@ -64,10 +68,12 @@ export function createHistoryRun(userID: string, serviceName: ServiceNames, cont
     credentialGeneration: context.credentialGeneration, connectionGeneration, rangePreset: context.rangePreset, ...range,
     dateCreated: nowMs, updatedAtMs: nowMs, nextAttemptAt: nowMs, processed: false, revision: 0,
     ...(serviceName === ServiceNames.GarminAPI ? { garminHealthSummaryTypes: [...GARMIN_HEALTH_SUMMARY_TYPES] } : {}),
-    steps: historyCapabilities(serviceName).map(capability => ({
-      id: capability.id, resources: [...capability.resources], capability: { ...capability, resources: [...capability.resources] },
-      status: 'queued', count: 0, nextStartMs: range.startMs, page: 1, retryCount: 0, done: false, childPaths: [],
-    })),
+    steps: historyCapabilities(serviceName)
+      .filter(capability => !capability.resources.includes('routes') || (context.requested && context.importRouteHistory === true))
+      .map(capability => ({
+        id: capability.id, resources: [...capability.resources], capability: { ...capability, resources: [...capability.resources] },
+        status: 'queued', count: 0, nextStartMs: range.startMs, page: 1, retryCount: 0, done: false, childPaths: [],
+      })),
   };
 }
 export function historyProjection(run: ConnectionHistoryRun): ConnectionHistoryStatusProjection {

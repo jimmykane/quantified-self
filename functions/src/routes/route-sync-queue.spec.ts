@@ -102,6 +102,8 @@ vi.mock('../queue/cleanup-tombstone', () => ({
 }));
 
 import { enqueueRouteSyncQueueItem } from './route-sync-queue';
+import { withHistoryExecution } from '../connection-history/context';
+import type { HistoryExecution } from '../connection-history/execution';
 
 describe('enqueueRouteSyncQueueItem', () => {
   beforeEach(() => {
@@ -126,6 +128,29 @@ describe('enqueueRouteSyncQueueItem', () => {
     }));
   });
 
+  it('fences and records history children under a run-specific queue identity', async () => {
+    const execution = { runId: 'history-run', userID: 'owner', serviceName: ServiceNames.SuuntoApp, providerUserId: 'account', inTransaction: vi.fn(), onQueued: vi.fn() } as unknown as HistoryExecution;
+    await withHistoryExecution(execution, () => enqueueRouteSyncQueueItem({ sourceServiceName: ServiceNames.SuuntoApp,
+      providerUserId: 'account', providerRouteId: 'route', manual: true, firebaseUserID: 'owner' }));
+    expect(hoisted.generateIDFromParts).toHaveBeenCalledWith(['routeSync', ServiceNames.SuuntoApp, 'account', 'route', 'owner', 'connectionHistory', 'history-run']);
+    expect(execution.inTransaction).toHaveBeenCalledTimes(1);
+    expect(execution.onQueued).toHaveBeenCalledWith(hoisted.queueDocRef.path);
+    expect(hoisted.transactionSet).toHaveBeenCalledWith(hoisted.queueDocRef, expect.objectContaining({ connectionHistoryRunId: 'history-run', queueRevision: expect.any(String) }));
+  });
+  it('preserves a completed history child when the coordinator replays an interrupted checkpoint', async () => {
+    hoisted.state.existingQueueData = { processed: true, connectionHistoryRunId: 'history-run' };
+    const execution = { runId: 'history-run', userID: 'owner', serviceName: ServiceNames.SuuntoApp, providerUserId: 'account', inTransaction: vi.fn(), onQueued: vi.fn() } as unknown as HistoryExecution;
+    await withHistoryExecution(execution, () => enqueueRouteSyncQueueItem({ sourceServiceName: ServiceNames.SuuntoApp,
+      providerUserId: 'account', providerRouteId: 'route', manual: true, firebaseUserID: 'owner' }));
+    expect(hoisted.transactionSet).not.toHaveBeenCalled(); expect(hoisted.enqueueRouteSyncTask).not.toHaveBeenCalled();
+    expect(execution.onQueued).toHaveBeenCalledWith(hoisted.queueDocRef.path);
+  });
+  it('rejects stale history admission inside the queue transaction', async () => {
+    const execution = { runId: 'history-run', userID: 'owner', serviceName: ServiceNames.SuuntoApp, providerUserId: 'account', inTransaction: vi.fn().mockRejectedValue(new Error('superseded')), onQueued: vi.fn() } as unknown as HistoryExecution;
+    await expect(withHistoryExecution(execution, () => enqueueRouteSyncQueueItem({ sourceServiceName: ServiceNames.SuuntoApp,
+      providerUserId: 'account', providerRouteId: 'route', manual: true, firebaseUserID: 'owner' }))).rejects.toThrow('superseded');
+    expect(hoisted.transactionSet).not.toHaveBeenCalled(); expect(hoisted.enqueueRouteSyncTask).not.toHaveBeenCalled();
+  });
   it('namespaces shared-account route queue identities by Firebase owner', async () => {
     await enqueueRouteSyncQueueItem({
       sourceServiceName: ServiceNames.SuuntoApp,

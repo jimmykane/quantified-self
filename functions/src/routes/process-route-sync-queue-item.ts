@@ -1,4 +1,5 @@
 import * as admin from 'firebase-admin';
+import { withHistoryQueueExecution, HistoryLifecycleChangedError } from '../connection-history/execution';
 import * as logger from 'firebase-functions/logger';
 import { HttpsError } from 'firebase-functions/v2/https';
 import { ServiceNames } from '@sports-alliance/sports-lib';
@@ -472,6 +473,10 @@ function isTokenUseSkippedForPendingDisconnectError(error: unknown): boolean {
 export async function processRouteSyncQueueItem(
     queueItem: RouteSyncQueueItemInterface,
 ): Promise<QueueResult> {
+    return withHistoryQueueExecution(queueItem, () => processHistoryGuardedRouteSyncQueueItem(queueItem));
+}
+
+async function processHistoryGuardedRouteSyncQueueItem(queueItem: RouteSyncQueueItemInterface): Promise<QueueResult> {
     if (queueItem.sourceServiceName !== ServiceNames.SuuntoApp) {
         return moveToDeadLetterQueue(queueItem, new Error(`Route sync source ${queueItem.sourceServiceName} is not supported.`), undefined, 'UNSUPPORTED_ROUTE_SYNC_SOURCE');
     }
@@ -592,6 +597,7 @@ export async function processRouteSyncQueueItem(
             sourceRouteModifiedAt: queueItem.providerRouteModifiedAt || null,
         });
     } catch (error) {
+        if (error instanceof HistoryLifecycleChangedError) throw error;
         if (error instanceof SyncedRouteLimitExceededError) {
             return markQueueItemSkipped(queueItem, undefined, 'route_limit_exceeded', {
                 resultStatus: 'skipped',

@@ -14,6 +14,13 @@ import {
 } from './policies.content';
 
 describe('help.content', () => {
+  it('explains saved Suunto route import scope without enabling outbound directions', () => {
+    const content = HELP_SECTIONS.map(section => section.content).join('\n');
+    expect(content).toContain('Suunto also includes existing saved routes');
+    expect(content).toContain('entire route library, regardless of the selected history range');
+    expect(content).toContain('**Import existing routes** remains available separately');
+    expect(content).not.toContain('Saved-route libraries remain separate manual actions');
+  });
   it('explains tag-library selection, partial history, saved empty tags and refresh', () => {
     const copy = HELP_SECTIONS.find(section => section.id === 'getting-started')!.content;
     for (const phrase of ['**Tags** opens your saved tag library', '**Find a tag**', '**Load older activities**',

@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 vi.unmock('@sports-alliance/sports-lib');
 import { ServiceNames } from '@sports-alliance/sports-lib';
-import { connectionHistoryRange, historyCapabilities, historyRangeOptions, parseImportHistoryRange, parseImportRecentHistory } from '../../../shared/connection-history';
+import { connectionHistoryRange, historyCapabilities, historyRangeOptions, parseImportHistoryRange, parseImportRecentHistory, parseImportRouteHistory } from '../../../shared/connection-history';
 import { isConnectionHistoryAdmissionEnabled } from './admission';
 import { CONNECTION_HISTORY_CAPABILITIES } from '../../../shared/connection-history';
 import { createHistoryRun, historyOperationKey, historyProjection, isConnectionHistoryRunId } from './model';
@@ -16,7 +16,7 @@ describe('connection history contract', () => {
     expect(key).toBe(JSON.stringify([step.id, step.capability.version, step.nextStartMs, 30, step.page]));
     expect(historyOperationKey({ ...step, windowDays: 30 })).toBe(key);
     for (const changed of [{ page: step.page + 1 }, { nextStartMs: step.nextStartMs + 1 }, { windowDays: 15 },
-      { id: 'another' }, { capability: { ...step.capability, version: 2 } }]) {
+      { id: 'another' }, { routeAfterId: 'private-route' }, { capability: { ...step.capability, version: 2 } }]) {
       expect(historyOperationKey({ ...step, ...changed })).not.toBe(key);
     }
   });
@@ -81,9 +81,24 @@ describe('connection history contract', () => {
   });
   it('covers every current OAuth provider with the supported domains', () => {
     for (const service of [ServiceNames.GarminAPI, ServiceNames.SuuntoApp, ServiceNames.COROSAPI]) {
-      expect(new Set(historyCapabilities(service).flatMap(x => x.resources))).toEqual(new Set(['activities', 'sleep', 'health']));
+      expect(new Set(historyCapabilities(service).flatMap(x => x.resources))).toEqual(new Set(['activities', 'sleep', 'health', ...(service === ServiceNames.SuuntoApp ? ['routes'] : [])]));
     }
     expect(historyCapabilities(ServiceNames.WahooAPI).flatMap(x => x.resources)).toEqual(['activities']);
+  });
+  it('requires explicit additive route consent and leaves older requests unchanged', () => {
+    const context = { requested: true, rangePreset: '30_days' as const,
+      runId: '11111111-1111-4111-8111-111111111111', tokenPath: 'private/token', rootPath: 'private/root',
+      providerUserId: 'account', credentialGeneration: 'credential' };
+    expect(createHistoryRun('owner', ServiceNames.SuuntoApp, context, 'connection', Date.now()).steps.map(step => step.id))
+      .toEqual(['activities', 'sleep', 'health']);
+    expect(createHistoryRun('owner', ServiceNames.SuuntoApp, { ...context, importRouteHistory: true }, 'connection', Date.now()).steps.map(step => step.id))
+      .toEqual(['activities', 'sleep', 'health', 'routes']);
+    expect(parseImportRouteHistory(undefined, ServiceNames.SuuntoApp)).toBe(false);
+    expect(parseImportRouteHistory(true, ServiceNames.SuuntoApp)).toBe(true);
+    for (const service of [ServiceNames.GarminAPI, ServiceNames.COROSAPI, ServiceNames.WahooAPI]) {
+      expect(() => parseImportRouteHistory(true, service)).toThrow();
+    }
+    for (const value of ['true', 1, null, {}]) expect(() => parseImportRouteHistory(value, ServiceNames.SuuntoApp)).toThrow();
   });
   it('snapshots capabilities and hides account, credential, cursor and lease fields', () => {
     const run = createHistoryRun('owner', ServiceNames.COROSAPI, { requested: true, rangePreset: 'maximum', runId: '11111111-1111-4111-8111-111111111111', tokenPath: 'private/token', rootPath: 'private/root', providerUserId: 'private-id', credentialGeneration: 'private-gen' }, 'connection', Date.parse('2026-09-14T12:00:00Z'));

@@ -70,6 +70,14 @@ describe.skipIf(!process.env.FIRESTORE_EMULATOR_HOST)('connection history bounde
     expect(logs().some(([, fields]) => fields.dueSample > 0)).toBe(false);
     expect(logger.warn).not.toHaveBeenCalled();
   });
+  it('observes route-library work independently of Sleep rollout and cooldown state', async () => {
+    const { ref, run } = await seed(ServiceNames.SuuntoApp);
+    const routes = { ...run.steps[0], id: 'routes', resources: ['routes' as const],
+      capability: { id: 'routes', version: 1, resources: ['routes' as const], cooldownGroup: 'routes' as const, completion: 'queued' as const } };
+    run.steps = [routes]; await ref.update({ steps: run.steps });
+    await db.doc('users/PRIVATE_OWNER/sleepSyncState/suunto').set({ nextBackfillAllowedAtMs: Date.now() + 86400000 });
+    await observe(); expect(sample('suunto')).toMatchObject({ dueSample: 1, unknownSample: 0 });
+  });
   it('counts due coordinator finalization after children finish without claiming ingestion', async () => {
     const { ref, run } = await seed(); run.steps[0].childPaths = ['workoutQueue/PRIVATE']; await ref.update({ steps: run.steps });
     await db.doc('workoutQueue/PRIVATE').set({ processed: true });

@@ -2,7 +2,7 @@ import { getCloudTaskRetryBackoffSeconds, MAX_RETRY_COUNT } from '../shared/queu
 import type { ConnectionHistoryRun, HistoryStep } from './model';
 
 export interface HistoryAdvanceDependencies {
-  execute(step: HistoryStep): Promise<{ count: number; nextStartMs: number; nextPage: number; childPaths: string[] }>;
+  execute(step: HistoryStep): Promise<{ count: number; nextStartMs: number; nextPage: number; routeAfterId?: string; childPaths: string[] }>;
   observe(paths: string[]): Promise<'pending' | 'processed' | 'failed' | 'skipped' | 'authorization' | 'mixed'>;
   classify(error: unknown): { kind: 'split' | 'skip' | 'retry' | 'wait'; message: string; nextAllowedAtMs?: number; retryAt?: number };
 }
@@ -38,6 +38,7 @@ export async function advanceHistoryRun(run: ConnectionHistoryRun, deps: History
       step.status = 'requesting';
       const result = await deps.execute(step);
       step.count += result.count; step.nextStartMs = result.nextStartMs; step.page = result.nextPage;
+      if (result.routeAfterId !== undefined) step.routeAfterId = result.routeAfterId;
       step.retryCount = 0; delete step.message;
       step.childPaths = result.childPaths;
       if (step.nextStartMs > run.endMs && !step.childPaths.length) {

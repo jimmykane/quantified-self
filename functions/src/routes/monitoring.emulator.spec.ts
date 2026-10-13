@@ -4,11 +4,17 @@ import * as logger from 'firebase-functions/logger';
 import { ServiceNames } from '@sports-alliance/sports-lib';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { QueueItemInterface } from '../queue/queue-item.interface';
-const state = vi.hoisted(() => ({ db: null as unknown as Firestore }));
+const state = vi.hoisted(() => ({ db: null as unknown as Firestore, pro: vi.fn(), enqueue: vi.fn() }));
+vi.mock('../utils', async importOriginal => ({ ...await importOriginal<typeof import('../utils')>(),
+    hasProAccess: state.pro, enqueueRouteSyncTask: state.enqueue }));
 vi.mock('firebase-admin', () => ({ firestore: () => state.db }));
 vi.mock('firebase-functions/logger', () => ({ info: vi.fn(), warn: vi.fn(), error: vi.fn() }));
 vi.unmock('@sports-alliance/sports-lib');
 import { increaseRetryCountIfCurrentUserActive, moveToDeadLetterQueueIfCurrentUserActive, QueueResult, updateToProcessed } from '../queue-utils';
+import { historyExecution, withHistoryQueueExecution } from '../connection-history/execution';
+import { withHistoryExecution, assertHistoryWrite } from '../connection-history/context';
+import { createHistoryRun } from '../connection-history/model';
+import { enqueueRouteSyncQueueItem } from './route-sync-queue';
 import { observeRouteQueues, ROUTE_QUEUE_PROBE_LIMIT } from './monitoring-probe';
 import { ACTIVE_OAUTH_CREDENTIAL_GENERATION_FIELD } from '../token-refresh-coordinator';
 import { SUUNTOAPP_ACCESS_TOKENS_COLLECTION_NAME } from '../suunto/constants';
@@ -20,7 +26,7 @@ describe.skipIf(!process.env.FIRESTORE_EMULATOR_HOST)('route observations with r
     const host = process.env.FIRESTORE_EMULATOR_HOST;
     if (host && !/^(127\.0\.0\.1|localhost):\d+$/.test(host)) throw new Error('Loopback emulator required.');
     beforeEach(async () => {
-        vi.clearAllMocks();
+        vi.clearAllMocks(); state.pro.mockResolvedValue(true); state.enqueue.mockResolvedValue(false);
         state.db = new Firestore({ projectId: `demo-route-monitor-${randomUUID().slice(0, 8)}` });
         state.db.settings({ ignoreUndefinedProperties: true });
         await state.db.doc('users/qa').set({ private: 'PRIVATE_OWNER' });
@@ -117,6 +123,52 @@ describe.skipIf(!process.env.FIRESTORE_EMULATOR_HOST)('route observations with r
     }
     const samples = () => observed().filter(([, fields]) => fields.event === 'queue_sample');
     const sampleFor = (lane: string, destination: string) => samples().find(([, fields]) => fields.lane === lane && fields.destination === destination)?.[1];
+    async function seedRouteHistory() {
+        const seeded = await seedProbe();
+        await state.db.collection(SUUNTOAPP_ACCESS_TOKENS_COLLECTION_NAME).doc('qa').update({ activeOAuthCredentialGeneration: 'PRIVATE_TOKEN' });
+        const run = createHistoryRun('qa', ServiceNames.SuuntoApp, { requested: true, importRouteHistory: true, rangePreset: '30_days',
+            runId: randomUUID(), providerUserId: 'PRIVATE_ACCOUNT', tokenPath: `${SUUNTOAPP_ACCESS_TOKENS_COLLECTION_NAME}/qa/tokens/PRIVATE_ACCOUNT`,
+            rootPath: `${SUUNTOAPP_ACCESS_TOKENS_COLLECTION_NAME}/qa`, credentialGeneration: 'PRIVATE_TOKEN' }, 'PRIVATE_CONNECTION', Date.now());
+        await state.db.doc(`connectionHistoryImports/${run.id}`).set(run);
+        return { seeded, run };
+    }
+    it('keeps route history in the monitored import queue and preserves terminal children on checkpoint replay', async () => {
+        const { run } = await seedRouteHistory(); const paths: string[] = []; const execution = historyExecution(run, paths);
+        const params = { sourceServiceName: ServiceNames.SuuntoApp, providerUserId: run.providerUserId, providerRouteId: 'PRIVATE_ROUTE', manual: true, firebaseUserID: 'qa' };
+        const result = await withHistoryExecution(execution, () => enqueueRouteSyncQueueItem(params));
+        expect(paths).toEqual([`routeSyncQueue/${result.queueItemId}`]);
+        const ref = state.db.doc(paths[0]); const child = (await ref.get()).data()!;
+        expect(child.connectionHistoryRunId).toBe(run.id); expect(child.queueRevision).toBeTypeOf('string');
+        await ref.update({ processed: true, resultStatus: 'success' }); const before = await ref.get();
+        await withHistoryExecution(execution, () => enqueueRouteSyncQueueItem(params));
+        expect((await ref.get()).updateTime!.isEqual(before.updateTime!)).toBe(true);
+        expect(paths).toHaveLength(1);
+    });
+    it.each(['replacement', 'pro'])('stops route history before queued work or route writes after %s changes', async change => {
+        const { run } = await seedRouteHistory(); const paths: string[] = []; const execution = historyExecution(run, paths);
+        const params = { sourceServiceName: ServiceNames.SuuntoApp, providerUserId: run.providerUserId, providerRouteId: 'PRIVATE_ROUTE', manual: true, firebaseUserID: 'qa' };
+        const result = await withHistoryExecution(execution, () => enqueueRouteSyncQueueItem(params));
+        const ref = state.db.doc(`routeSyncQueue/${result.queueItemId}`); const child = { ...(await ref.get()).data(), ref, id: ref.id } as QueueItemInterface;
+        if (change === 'replacement') await state.db.doc(run.tokenPath).update({ tokenCredentialGeneration: 'PRIVATE_NEW' });
+        else state.pro.mockResolvedValue(false);
+        const operation = vi.fn(async () => QueueResult.Processed);
+        expect(await withHistoryQueueExecution(child, operation)).toBe(QueueResult.Processed);
+        expect(operation).not.toHaveBeenCalled();
+        expect((await ref.get()).get('skippedReason')).toBe('connection_history_superseded');
+        await expect(withHistoryExecution(execution, () => state.db.runTransaction(async tx => {
+            await assertHistoryWrite(tx); tx.set(state.db.doc('users/qa/routes/new-route'), { private: 'PRIVATE' });
+        }))).rejects.toThrow('earlier connection');
+        expect((await state.db.doc('users/qa/routes/new-route').get()).exists).toBe(false);
+    });
+    it.each(['current', 'replacement', 'missing', 'pro'])('observes only eligible %s route-history admissions without exposing private run data', async change => {
+        const { seeded, run } = await seedRouteHistory();
+        await seeded.imported.update({ connectionHistoryRunId: run.id });
+        if (change === 'replacement') await state.db.doc(`connectionHistoryImports/${run.id}`).update({ connectionGeneration: 'PRIVATE_OLD' });
+        if (change === 'missing') await state.db.doc(`connectionHistoryImports/${run.id}`).delete(); // Synthetic leaf only.
+        await observeRouteQueues(state.db, async () => change !== 'pro', seeded.now);
+        expect(sampleFor('import', 'qs')).toMatchObject({ dueSample: change === 'current' ? 1 : 0, unknownSample: 0 });
+        expect(JSON.stringify(observed())).not.toContain('PRIVATE'); expect(JSON.stringify(observed())).not.toContain(run.id);
+    });
     it.each([ServiceNames.WahooAPI, ServiceNames.GarminAPI, ServiceNames.COROSAPI])('observes eligible import and %s delivery without writes or private payload reads', async destination => {
         const seeded = await seedProbe(destination);
         const before = await seeded.delivery.get();

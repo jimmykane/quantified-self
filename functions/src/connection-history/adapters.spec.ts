@@ -1,7 +1,8 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 vi.unmock('@sports-alliance/sports-lib');
 const mocks = vi.hoisted(() => ({ activity: vi.fn(), garminActivity: vi.fn(), wahoo: vi.fn(), suunto: vi.fn(), coros: vi.fn(), garmin: vi.fn(),
-  healthEnabled: vi.fn(), sleepEnabled: vi.fn(), before: vi.fn(), meta: {} as Record<string, unknown> }));
+  routes: vi.fn(), healthEnabled: vi.fn(), sleepEnabled: vi.fn(), before: vi.fn(), meta: {} as Record<string, unknown> }));
+vi.mock('../suunto/route-history', () => ({ queueSuuntoRouteHistory: mocks.routes }));
 vi.mock('../history', () => ({ addHistoryToQueue: mocks.activity }));
 vi.mock('../garmin/backfill', () => ({ processGarminBackfill: mocks.garminActivity, GarminHistoryRangeUnavailableError: class GarminHistoryRangeUnavailableError extends Error { constructor(public readonly minimumDate?: Date) { super('Unavailable range'); } } }));
 vi.mock('../wahoo/history-to-queue', () => ({ importWahooHistory: mocks.wahoo }));
@@ -19,9 +20,10 @@ import { createHistoryRun } from './model';
 import { executeHistoryOperation, HISTORY_ADAPTERS, historyAdmissionQueue } from './adapters';
 import { HistoryUnavailableError, type HistoryExecution } from './execution';
 const now = Date.parse('2026-03-01T13:00:00+02:00');
-function run(service: ServiceNames) { return createHistoryRun('owner', service, { requested: true, rangePreset: '30_days', runId: '11111111-1111-4111-8111-111111111111', providerUserId: 'selected-account', tokenPath: 'private/exact/token', rootPath: 'private/root', credentialGeneration: 'credential' }, 'connection', now); }
+function run(service: ServiceNames) { return createHistoryRun('owner', service, { requested: true, importRouteHistory: true, rangePreset: '30_days', runId: '11111111-1111-4111-8111-111111111111', providerUserId: 'selected-account', tokenPath: 'private/exact/token', rootPath: 'private/root', credentialGeneration: 'credential' }, 'connection', now); }
 const execution = { runId: 'run', tokenPath: 'private/exact/token', providerUserId: 'selected-account', beforeRequest: mocks.before } as unknown as HistoryExecution;
 beforeEach(() => { vi.clearAllMocks(); mocks.meta = {}; mocks.healthEnabled.mockReturnValue(true); mocks.sleepEnabled.mockReturnValue(true);
+  mocks.routes.mockResolvedValue({ count: 2, hasMore: false, afterRouteId: 'last-route' });
   mocks.activity.mockResolvedValue({ successCount: 2, failureCount: 0 }); mocks.garminActivity.mockResolvedValue(undefined); mocks.wahoo.mockResolvedValue({ successCount: 2 });
   for (const fn of [mocks.suunto, mocks.coros, mocks.garmin]) fn.mockResolvedValue({ queued: 1, sleepQueued: 1, healthQueued: 1 }); });
 describe('shared history adapter contracts', () => {
@@ -51,6 +53,17 @@ describe('shared history adapter contracts', () => {
     const job = run(service); await executeHistoryOperation(job, job.steps[0], execution);
     expect(mocks.activity).toHaveBeenCalledWith('owner', service, new Date(job.startMs), new Date(job.endMs), expect.objectContaining({ execution, maxItems: 100, expectedProviderUserId: 'selected-account' }));
     expect(new Date(job.startMs).toISOString()).toBe('2026-01-31T00:00:00.000Z');
+  });
+  it('uses the independent route queue and a library cursor instead of the history date range', async () => {
+    const job = run(ServiceNames.SuuntoApp); const step = job.steps.find(step => step.id === 'routes')!;
+    expect(historyAdmissionQueue(job, step)).toEqual({ taskQueue: 'processRouteSyncTask', collection: 'routeSyncQueue' });
+    mocks.routes.mockResolvedValueOnce({ count: 100, hasMore: true, afterRouteId: 'route-100' });
+    expect(await executeHistoryOperation(job, step, execution)).toEqual({ count: 100, nextStartMs: job.startMs, nextPage: 2, routeAfterId: 'route-100' });
+    expect(mocks.routes).toHaveBeenCalledWith('owner', execution, undefined, 0);
+    step.routeAfterId = 'route-100'; step.count = 100; step.page = 2;
+    expect(await executeHistoryOperation(job, step, execution)).toEqual({ count: 2, nextStartMs: job.endMs + 1000, nextPage: 1, routeAfterId: 'last-route' });
+    expect(mocks.routes).toHaveBeenLastCalledWith('owner', execution, 'route-100', 100);
+    expect(mocks.activity).not.toHaveBeenCalled(); expect(mocks.suunto).not.toHaveBeenCalled();
   });
   it('reuses Garmin submission without claiming webhook delivery', async () => {
     const job = run(ServiceNames.GarminAPI); await executeHistoryOperation(job, job.steps[0], execution);
@@ -90,7 +103,7 @@ describe('shared history adapter contracts', () => {
   });
   it.each([ServiceNames.SuuntoApp, ServiceNames.GarminAPI, ServiceNames.COROSAPI])('reuses Sleep/Health operations with explicit ranges and capability scope for %s', async service => {
     const job = run(service); const fn = service === ServiceNames.SuuntoApp ? mocks.suunto : service === ServiceNames.GarminAPI ? mocks.garmin : mocks.coros;
-    for (const step of job.steps.slice(1)) {
+    for (const step of job.steps.slice(1).filter(step => step.id !== 'routes')) {
       await executeHistoryOperation(job, step, execution);
       expect(fn).toHaveBeenLastCalledWith('owner', { execution, startMs: job.startMs, endMs: job.endMs, resources: step.resources });
     }

@@ -32,6 +32,7 @@ describe('bounded route observations', () => {
         expect(logger.info).toHaveBeenCalledTimes(4);
         expect(vi.mocked(logger.info).mock.calls.every(([, fields]) => fields.event === 'queue_sample_unavailable')).toBe(true);
         expect(chain.limit).toHaveBeenCalledWith(21);
+        expect(chain.select.mock.calls[0]).toContain('connectionHistoryRunId');
         expect(chain.select.mock.calls[0]).not.toContain('errors');
         expect(chain.select.mock.calls[0]).not.toContain('geometry');
         expect(JSON.stringify(vi.mocked(logger.info).mock.calls)).not.toContain('PRIVATE');

@@ -526,6 +526,7 @@ async function executeSuuntoRouteReadOperation<T>(
 export async function listSuuntoRoutes(
   userID: string,
   context?: SuuntoRouteUploadContext,
+  limits?: { timeout: number; maxResponseBytes: number },
 ): Promise<SuuntoRouteListResult> {
   const routeContext = context || await createSuuntoRouteUploadContext(userID);
   const routesByProviderKey = new Map<string, SuuntoRouteSummary>();
@@ -550,6 +551,7 @@ export async function listSuuntoRoutes(
             },
             json: true,
             url: 'https://cloudapi.suunto.com/v2/route',
+            ...(limits || {}),
           });
         },
         `list_suunto_routes for user ${userID}`,
