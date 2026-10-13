@@ -16,6 +16,8 @@ import { getMetadata } from 'app/firebase/storage';
 import { webcrypto } from 'node:crypto';
 import { POWER_CURVE_STAT_TYPE } from '@shared/power-curve';
 import { ActivityTypes, DataActivityTypes } from '@sports-alliance/sports-lib';
+import { sanitizeActivityFirestoreWritePayload } from '@shared/firestore-write-sanitizer';
+import { PerformanceCurveDataService } from './performance-curve-data.service';
 
 // Polyfill crypto for JSDOM environment
 if (!globalThis.crypto || !globalThis.crypto.subtle) {
@@ -2183,6 +2185,83 @@ describe('AppEventService', () => {
                 { getID: () => 'event-1' } as any,
             )).rejects.toThrow('No positional data found for GPX export.');
         });
+
+        it.each(['missing', 'zero', 'timer-only', 'moving-only', 'duration-only'])(
+            'preserves durability eligibility and recorded TSS through saved JSON and source hydration: %s',
+            async (durationState) => {
+                const actual = await vi.importActual<typeof import('@sports-alliance/sports-lib')>('@sports-alliance/sports-lib');
+                const { EventJSONSanitizer } = await vi.importActual<typeof import('../utils/event-json-sanitizer')>('../utils/event-json-sanitizer');
+                const start = new Date('2026-01-01T10:00:00Z');
+                const end = new Date('2026-01-01T11:00:00Z');
+                const parsed = actual.EventImporterJSON.getActivityFromJSON({
+                    name: null, startDate: +start, endDate: +end, type: actual.ActivityTypes.Cycling,
+                    creator: { name: 'Test watch' }, powerMeter: true, trainer: false,
+                    stats: {}, streams: [], laps: [], intensityZones: [], events: [],
+                });
+                parsed.setID('leg-1');
+                parsed.setDuration(new actual.DataDuration(3600));
+                parsed.addStat(new actual.DataElapsedTime(3600));
+                parsed.addStat(new actual.DataTrainingStressScore(50));
+                parsed.addStat(new actual.DataTrainingStressScoreMethod(actual.TrainingStressScoreMethod.IMPORTED));
+                parsed.addStreams([
+                    new actual.Stream(actual.DataPower.type, Array(3600).fill(200)),
+                    new actual.Stream(actual.DataHeartRate.type, Array(3600).fill(150)),
+                ]);
+                const cachedSummary = actual.analyzeActivityDurability(parsed).summary;
+                expect(cachedSummary?.eligibility.eligible).toBe(true);
+                if (!cachedSummary) {
+                    throw new Error('Expected eligible synthetic durability evidence');
+                }
+                parsed.addStat(new actual.DataDurabilityEvidence(cachedSummary));
+                if (durationState !== 'duration-only') {
+                    parsed.removeStat(actual.DataDuration.type);
+                }
+                if (durationState === 'zero') {
+                    parsed.setDuration(new actual.DataDuration(0));
+                } else if (durationState === 'timer-only') {
+                    parsed.addStat(new actual.DataTimerTime(3600));
+                } else if (durationState === 'moving-only') {
+                    parsed.addStat(new actual.DataMovingTime(3600));
+                }
+
+                const saved = sanitizeActivityFirestoreWritePayload(JSON.parse(JSON.stringify(parsed.toJSON())));
+                expect(saved).not.toHaveProperty('streams');
+                mocks.sanitize.mockImplementation(EventJSONSanitizer.sanitize.bind(EventJSONSanitizer));
+                mocks.getActivityFromJSON.mockImplementation(actual.EventImporterJSON.getActivityFromJSON.bind(actual.EventImporterJSON));
+                const [restored] = service['parseActivitiesFromSnapshots']('event-1', [{ ...saved, id: 'leg-1' }]);
+                expect(restored.getAllStreams()).toEqual([]);
+                const recordedStats = JSON.parse(JSON.stringify(restored.toJSON().stats));
+                const eventJSON = {
+                    name: 'Saved workout', startDate: +start, endDate: +end, srcFileType: actual.FileType.FIT,
+                    privacy: actual.Privacy.Private, description: null, isMerge: false, stats: {}, activities: [],
+                };
+                const event = Object.assign(actual.EventImporterJSON.getEventFromJSON(eventJSON).setID('event-1'), {
+                    originalFile: { path: 'users/u1/events/event-1/original.fit' },
+                });
+                event.addActivity(restored);
+                const parsedEvent = actual.EventImporterJSON.getEventFromJSON(eventJSON);
+                parsedEvent.addActivity(parsed);
+                vi.spyOn(service['originalFileHydrationService'], 'parseEventFromOriginalFiles').mockResolvedValue({
+                    finalEvent: parsedEvent, parsedEvents: [parsedEvent], sourceFilesCount: 1, failedFiles: [],
+                });
+
+                const hydrated = await firstValueFrom(service.attachStreamsToEventWithActivities(
+                    { uid: 'u1' } as Parameters<AppEventService['attachStreamsToEventWithActivities']>[0],
+                    event,
+                ));
+                const chart = new PerformanceCurveDataService();
+                const result = chart.buildDurabilitySeriesWithMarkerSource(hydrated.getActivities());
+
+                expect(hydrated.getFirstActivity()).toBe(restored);
+                expect(restored.getAllStreams()).toHaveLength(2);
+                expect(result.renderSeries).toHaveLength(durationState === 'duration-only' ? 1 : 0);
+                expect(result.activitySummaries).toHaveLength(durationState === 'duration-only' ? 1 : 0);
+                expect(chart.getAvailability(hydrated.getActivities()).hasDurability).toBe(durationState === 'duration-only');
+                expect(restored.toJSON().stats).toEqual(recordedStats);
+                expect(restored.getStat(actual.DataTrainingStressScore.type)?.getValue()).toBe(50);
+                expect(restored.getStat(actual.DataDurabilityEvidence.type)?.getValue()).toEqual(cachedSummary);
+            },
+        );
 
         it('should delegate attachStreamsToEventWithActivities to parsing and attach source-hydrated activity data by default', async () => {
             const hydrationService = (service as any).originalFileHydrationService;

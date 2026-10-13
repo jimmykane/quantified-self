@@ -1538,6 +1538,15 @@ describe('help.content', () => {
     expect(gettingStartedSection?.content).toContain('Missing values stay unavailable rather than becoming zero');
   });
 
+  it('explains the active-duration requirement for event-detail durability after reload', () => {
+    const gettingStartedSection = HELP_SECTIONS.find(section => section.id === 'getting-started');
+
+    expect(gettingStartedSection?.content).toContain('valid, positive active **Duration**');
+    expect(gettingStartedSection?.content).toContain('reopening the workout does not calculate or reuse a durability result');
+    expect(gettingStartedSection?.content).toContain('Zero active time cannot support this long-session comparison');
+    expect(gettingStartedSection?.content).toContain('does not change your saved Training load or Training history');
+  });
+
   it('should document event stamina metrics', () => {
     const gettingStartedSection = HELP_SECTIONS.find(section => section.id === 'getting-started');
 

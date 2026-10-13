@@ -5615,6 +5615,21 @@ both consumers. Historical lost records require original-file reparse and normal
 or saved Activity JSON alone cannot restore them. Release, deployment and production reparse remain on hold pending
 separate approval; neither correction enables a scanner or changes a public schema, write path or queue lifecycle.
 
+Two additional FIT bounds safeguards are prepared locally and remain pending library release and adoption. A lap's
+positive source start/end and elapsed duration must agree at FIT whole-second timestamp precision, have a unique raw
+start and a unique containing explicit source session, and remain within the resolved activity. When supplied, timer
+time must be finite and nonnegative. A timer greater than elapsed time must also quantize to that same whole-second
+source span (its floor or ceiling); an absent timer is allowed. This uses encoded precision, with no additional
+tolerance. Only then may its source end take precedence over unrelated records assigned by the parser's cascade.
+Missing or conflicting proof
+retains the existing recovery path. The terminal-record safeguard applies only to an otherwise clamped, sole explicit
+session: complete alternating timer events from one group must start at the session start and stop at the last ordered
+raw record, exactly at the ceiling of fractional source elapsed time. Each active interval needs distinct record
+support, and its combined duration must agree with source active time within the precision of the encoded timestamps.
+This preserves the supported final record and corrects elapsed/pause values without adding timer/active time or relaxing
+the maximum-duration bound. Zero-length or unsupported timer intervals do not qualify. Both corrections require the
+original source and the same separately approved adoption/reparse lifecycle; they do not initiate a historical rewrite.
+
 Pool swims use that same parsed-total rule. The former QS-only length/lap corroboration gate is unnecessary:
 Sports Lib already owns FIT pool counter/length/session precedence. QS does not reinterpret those inputs during
 regeneration. Historical distance corrections require original-file **Regenerate statistics** and normal derived
@@ -6427,6 +6442,22 @@ long-running heavy reparse jobs before changing queue retry policy.
 
 Event detail uses the same sports-lib analyzer and may request a transient timeline for visualization. This does not alter
 the Training rule: aggregate Training snapshots use only persisted compact activity evidence.
+
+Before reusing cached evidence or running the analyzer, the event-detail performance service requires a finite,
+positive canonical `Duration` stat on each activity. This read-time guard preserves unavailable active timing after
+ordinary Activity JSON reload, which cannot restore private original-file timing evidence. Start/end dates, elapsed
+time, moving time and a timer-only stat cannot substitute for `Duration` at this boundary. Older activities with a valid
+positive `Duration` remain supported even without a separate timer stat; zero remains a valid recorded duration but
+cannot establish a long-session durability comparison. Missing or invalid active duration yields neither a durability
+summary nor a plotted timeline, including when an older cached summary exists. Other eligible selected legs remain
+independently available.
+
+The guard is local to event-detail durability. It does not rewrite activity JSON, remove stored compact evidence,
+recalculate saved modeled TSS, change generic Sports Lib duration fallbacks, query history, or trigger reparse. Stored
+Training durability continues through its existing snapshot path. An original-file correction still follows the
+separately approved parser adoption/reparse lifecycle above. MCP impact is none: there is no new metric, public field,
+schema, scope, instruction, planning/delivery capability or mutation; persisted Training projections and bounded
+transient source chart/sample reads retain their existing contracts.
 
 The event performance-chart region uses a shared `23.1vh` height. On extra-small viewports, the durability eligibility
 summary starts collapsed behind an accessible disclosure button so the plot retains useful vertical space. Expanding the
