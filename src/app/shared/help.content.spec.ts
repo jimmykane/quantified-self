@@ -1260,6 +1260,10 @@ describe('help.content', () => {
     expect(gettingStartedSection?.content).toContain('**No activities yet**');
     expect(gettingStartedSection?.content).toContain('**Upload activity**');
     expect(gettingStartedSection?.content).toContain('**Connect service**');
+    expect(gettingStartedSection?.content).toContain('only after checking that no activity service is connected');
+    expect(gettingStartedSection?.content).toContain('even if history returns no activities');
+    expect(gettingStartedSection?.content).toContain('including while it is queued');
+    expect(gettingStartedSection?.content).toContain('retry failed connection imports in **Services**');
     expect(gettingStartedSection?.content).toContain('FIT, GPX, TCX, JSON, and SML files');
     expect(gettingStartedSection?.content).toContain('Garmin, Suunto, COROS, and Wahoo');
     expect(gettingStartedSection?.content).toContain('after activity data exists');

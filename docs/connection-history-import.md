@@ -13,6 +13,8 @@ The 30-day range contains the connection day and preceding 29 UTC calendar dates
 
 The checkbox uses the shared capability inventory for its description. Dashboard, Routes, and Wahoo permission shortcuts navigate to Connections with the provider selected and reconnect controls visible. They do not begin OAuth. Omitted history consent from an older client means false. Suunto route inclusion also requires the additive `importRouteHistory` flag; a pre-route client or already-staged run retains its original activities/Sleep/Health scope.
 
+Dashboard setup actions read durable service state on every visit. The empty-activity card offers **Connect service** only after confirming that no activity service is connected, including for accounts with dismissed prompts or without Pro. A saved Garmin connection-history run covering Sleep or Health suppresses the generic history prompt from admission onward, even with zero records or failed/skipped steps; progress and retries remain in Services. Activity-only history does not suppress the Sleep/Health offer. The prompt waits for service metadata and preserves the older manual backfill markers. These frontend decisions change no queue, monitoring, MCP, consent or provider API contract.
+
 ## Suunto saved-route library
 
 The connection option names saved routes and explains that its date picker applies to activity/Sleep/Health history,

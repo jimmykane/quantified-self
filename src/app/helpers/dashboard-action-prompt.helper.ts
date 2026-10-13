@@ -13,6 +13,7 @@ import {
 } from '@shared/activity-sync-routes';
 import { isActivitySyncRouteUIDAllowlisted } from '@shared/activity-sync-rollout';
 import { getProviderDisplayName } from '@shared/provider-presentation';
+import type { ConnectionHistoryStatusProjection } from '@shared/connection-history';
 
 export const DASHBOARD_ACTION_PROMPT_UNIT_SETUP_ID: AppDashboardActionPromptId = 'unitSetup';
 export const DASHBOARD_ACTION_PROMPT_FIRST_ACTIVITY_UPLOAD_ID: AppDashboardActionPromptId = 'firstActivityUpload';
@@ -182,6 +183,13 @@ export function markDashboardActionPromptDismissed(
 
 export function buildReconnectSuuntoServicePromptSource(lastDisconnectedAt: number | null | undefined): string {
   return `${DASHBOARD_ACTION_PROMPT_RECONNECT_SUUNTO_SERVICE_SOURCE}:${Number.isFinite(lastDisconnectedAt) ? lastDisconnectedAt : 'unknown'}`;
+}
+
+export function hasGarminSleepHealthConnectionHistory(status: ConnectionHistoryStatusProjection | null | undefined): boolean {
+  // Failed/skipped runs belong to the existing Services progress/retry flow, not a second import prompt.
+  return !!status?.runId && Array.isArray(status.steps) && status.steps.some(step => (
+    Array.isArray(step.resources) && step.resources.some(resource => resource === 'sleep' || resource === 'health')
+  ));
 }
 
 export function resolveDashboardActivityAutoSyncRouteIds(

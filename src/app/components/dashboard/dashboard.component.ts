@@ -53,6 +53,7 @@ import {
   DashboardActionPromptMenuEvent,
   DashboardActionPromptViewModel,
   isDashboardActionPromptDismissed,
+  hasGarminSleepHealthConnectionHistory,
   markDashboardActionPromptDismissed,
   resolveDashboardActivityAutoSyncRouteIds,
 } from '../../helpers/dashboard-action-prompt.helper';
@@ -69,6 +70,7 @@ import { SLEEP_PROVIDERS, SleepSyncState } from '@shared/sleep';
 import { AppEventInterface } from '@shared/app-event.interface';
 import { getEventTags } from '@shared/event-tags';
 import { GARMIN_SLEEP_BACKFILL_REQUIRED_PERMISSIONS } from '@shared/sleep-backfill';
+import type { ConnectionHistoryStatusProjection } from '@shared/connection-history';
 
 
 @Component({
@@ -110,6 +112,8 @@ export class DashboardComponent implements OnInit, OnDestroy {
   public isDismissingGarminSleepPrompt = false;
   public garminSleepBackfillPromptError: string | null = null;
   public showNoActivityDashboardState = false;
+  public showNoActivityConnectServiceAction = false;
+  public noActivityDashboardDescription = 'Upload an activity file to get started.';
   public readonly noActivityConnectServiceOptions = [
     { serviceName: ServiceNames.GarminAPI, label: 'Garmin' },
     { serviceName: ServiceNames.SuuntoApp, label: 'Suunto' },
@@ -135,6 +139,8 @@ export class DashboardComponent implements OnInit, OnDestroy {
     serviceMeta: null,
   });
   private garminSleepSyncState: SleepSyncState | null = null;
+  private garminConnectionHistory: ConnectionHistoryStatusProjection | null = null;
+  private garminConnectionHistoryLoaded = false;
   private garminSleepSyncStateLoaded = false;
   private garminSleepBackfillPermissionsLoaded = false;
   private hasGarminSleepBackfillPermissions = false;
@@ -1038,7 +1044,8 @@ export class DashboardComponent implements OnInit, OnDestroy {
         this.activityServiceConnectionState = null;
         this.syncDashboardActionPromptState();
 
-        if (!this.shouldEvaluateActivityServicePrompts(user)) {
+        // Empty-state connection actions also need this state, regardless of plan or prompt dismissals.
+        if (!user || !this.isOwnerDashboard(user)) {
           return of(null);
         }
 
@@ -1090,6 +1097,8 @@ export class DashboardComponent implements OnInit, OnDestroy {
     this.authService.user$.pipe(
       switchMap((user: AppUserInterface | null) => {
         this.garminSleepSyncState = null;
+        this.garminConnectionHistory = null;
+        this.garminConnectionHistoryLoaded = false;
         this.garminSleepSyncStateLoaded = false;
         this.garminSleepBackfillPermissionsLoaded = false;
         this.hasGarminSleepBackfillPermissions = false;
@@ -1101,6 +1110,8 @@ export class DashboardComponent implements OnInit, OnDestroy {
             state: null as SleepSyncState | null,
             permissionsLoaded: false,
             hasPermissions: false,
+            historyLoaded: false,
+            history: null as ConnectionHistoryStatusProjection | null,
           });
         }
 
@@ -1122,21 +1133,34 @@ export class DashboardComponent implements OnInit, OnDestroy {
               return of(false);
             }),
           ),
+          this.userService.getUserMetaForService(user, ServiceNames.GarminAPI).pipe(
+            map(meta => ({ loaded: true, history: meta?.connectionHistoryImport || null })),
+            catchError(error => {
+              this.logger.warn('[DashboardComponent] Failed to read Garmin connection history for dashboard prompt', {
+                userID: user.uid,
+              }, error);
+              return of({ loaded: false, history: null as ConnectionHistoryStatusProjection | null });
+            }),
+          ),
         ]).pipe(
-          map(([state, hasPermissions]) => ({
+          map(([state, hasPermissions, connectionHistory]) => ({
             stateLoaded: true,
             state,
             permissionsLoaded: true,
             hasPermissions,
+            historyLoaded: connectionHistory.loaded,
+            history: connectionHistory.history,
           })),
         );
       }),
       takeUntilDestroyed(this.destroyRef),
-    ).subscribe(({ stateLoaded, state, permissionsLoaded, hasPermissions }) => {
+    ).subscribe(({ stateLoaded, state, permissionsLoaded, hasPermissions, historyLoaded, history }) => {
       this.garminSleepSyncStateLoaded = stateLoaded;
       this.garminSleepSyncState = state;
       this.garminSleepBackfillPermissionsLoaded = permissionsLoaded;
       this.hasGarminSleepBackfillPermissions = hasPermissions;
+      this.garminConnectionHistoryLoaded = historyLoaded;
+      this.garminConnectionHistory = history;
       this.syncDashboardActionPromptState();
     });
   }
@@ -1237,6 +1261,8 @@ export class DashboardComponent implements OnInit, OnDestroy {
       || !this.garminSleepSyncStateLoaded
       || !this.garminSleepBackfillPermissionsLoaded
       || !this.hasGarminSleepBackfillPermissions
+      || !this.garminConnectionHistoryLoaded
+      || hasGarminSleepHealthConnectionHistory(this.garminConnectionHistory)
     ) {
       return false;
     }
@@ -1294,17 +1320,18 @@ export class DashboardComponent implements OnInit, OnDestroy {
     return this.suuntoConnectionView.reconnectPromptSource;
   }
 
-  private shouldEvaluateActivityServicePrompts(user: AppUserInterface | null | undefined): user is AppUserInterface {
-    return this.shouldEvaluateActivityServiceConnectionPrompt(user)
-      || this.shouldEvaluateActivityAutoSyncPrompt(user)
-      || this.shouldEvaluateGarminSleepBackfillPrompt(user);
-  }
-
   private updateNoActivityDashboardState(): void {
     this.showNoActivityDashboardState = this.isInitialized
       && this.hasAnyActivity === false
       && !!this.user
       && this.isOwnerDashboard(this.user);
+    this.showNoActivityConnectServiceAction = this.showNoActivityDashboardState
+      && this.hasActivityServiceConnection === false;
+    this.noActivityDashboardDescription = this.hasActivityServiceConnection === true
+      ? 'You have a connected service. You can also upload an activity file.'
+      : this.hasActivityServiceConnection === false
+        ? 'Upload an activity file or connect Garmin, Suunto, COROS, or Wahoo.'
+        : 'Upload an activity file to get started.';
   }
 
   private markDashboardHasActivity(): void {
