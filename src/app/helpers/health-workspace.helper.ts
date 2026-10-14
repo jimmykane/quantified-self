@@ -75,6 +75,7 @@ import {
 } from './dashboard-sleep-chart.helper';
 import { formatDashboardRelativeDay } from './dashboard-relative-date.helper';
 import { heartRateSemanticLabel } from './health-heart-rate-summary.helper';
+import type { HealthWorkspaceSleepSession } from './health-sleep-account.helper';
 import {
   calculatePersonalMetricPointRange,
   calculatePersonalMetricRange,
@@ -89,11 +90,7 @@ import {
 export const HEALTH_WORKSPACE_RANGES = APP_HEALTH_WORKSPACE_RANGES;
 export type HealthWorkspaceRange = AppHealthWorkspaceRange;
 export type HealthWorkspaceMetricSelection = AppHealthWorkspaceMetric;
-/** Read-time identities shared with typed Health references; never persisted. */
-export type HealthWorkspaceSleepSession = SleepSession & {
-  healthAccountKey?: string;
-  nightlyHrvSourceKey?: string;
-};
+export type { HealthWorkspaceSleepSession } from './health-sleep-account.helper';
 
 interface CanonicalHealthSleepRecord {
   point: DashboardSleepTrendPoint;
@@ -1504,6 +1501,9 @@ function sleepHrvDatums(
         && representedReferences.has(sleepHrvReferenceIdentity(session.id, field)))) {
         return [];
       }
+      if (field === 'vitals.overnightHrvMs' && representedNightlyHealthHrv(record, result, value)) {
+        return [];
+      }
       return [{
         metricId: HEALTH_METRIC_IDS.HeartRateVariability,
         provider,
@@ -1535,6 +1535,28 @@ function sleepHrvDatums(
         manualMeasurement: null,
       } satisfies MetricDatum];
     });
+  });
+}
+
+/** An enriched Sleep value is a copy, while independently recorded Sleep HRV stays separate. */
+function representedNightlyHealthHrv(
+  record: CanonicalHealthSleepRecord,
+  result: HealthRangeResult,
+  value: number,
+): boolean {
+  if (!record.sessions.some(session => session.nightlyHrvSourceKey)) return false;
+  return result.observations.some(observation => {
+    const entry = observation.entry;
+    if (observation.provider !== record.provider || observation.accountKey !== record.accountKey
+      || observation.calendarDate !== record.point.sleepDate || entry.kind !== 'value'
+      || entry.metricId !== HEALTH_METRIC_IDS.HeartRateVariability
+      || entry.normalizationStatus !== HEALTH_NORMALIZATION_STATUSES.Canonical
+      || entry.canonical?.unit !== HEALTH_UNITS.Millisecond || entry.canonical.value !== value) return false;
+    return record.sessions.some(session => session.nightlyHrvSourceKey === JSON.stringify([
+      'health', sleepEvidenceSourceKey(session), entry.semanticVariant,
+      entry.aggregation, entry.origin, entry.recordingMethod,
+    ]) && observation.startTimeMs < session.endTimeMs
+      && observation.endTimeMs > resolveSleepEffectiveStartTimeMs(session));
   });
 }
 

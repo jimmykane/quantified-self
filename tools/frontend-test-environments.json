@@ -97,6 +97,7 @@
     "src/app/helpers/health-heart-rate-summary.helper.spec.ts",
     "src/app/helpers/health-highlight-preferences.helper.spec.ts",
     "src/app/helpers/health-metric-icon.helper.spec.ts",
+    "src/app/helpers/health-sleep-account.helper.spec.ts",
     "src/app/helpers/health-source-selection.helper.spec.ts",
     "src/app/helpers/help-search.helper.spec.ts",
     "src/app/helpers/intensity-zones-chart-data-helper.spec.ts",

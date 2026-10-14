@@ -650,6 +650,8 @@ describe('help.content', () => {
     expect(healthSection?.content).toContain('read average and overnight HRV directly at display time');
     expect(healthSection?.content).toContain('never averaged with standalone HRV');
     expect(healthSection?.content).toContain('equivalent typed Sleep reference is already present');
+    expect(healthSection?.content).toContain('show the matching reading once under the same connected account');
+    expect(healthSection?.content).toContain('Independently recorded Sleep HRV remains separate');
     expect(healthSection?.content).toContain('Health and Sleep availability are checked independently');
     expect(healthSection?.content).toContain('only that domain stays unfiltered');
     expect(healthSection?.content).toContain('Use **1d**, **14d**, **30d**, or **90d** for detailed sample readings');

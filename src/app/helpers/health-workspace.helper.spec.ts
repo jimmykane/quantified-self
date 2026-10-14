@@ -26,6 +26,7 @@ import {
   type ActivityHealthObservation,
 } from '@shared/activity-health';
 import { projectLoadedHealthRange } from '@shared/health-query';
+import { enrichSleepWithNightlyHrv, nightlyHealthAccountKey } from '@shared/nightly-hrv';
 import { withDailyHeartRateSummaries } from './health-heart-rate-summary.helper';
 import { normalizeUserUnitSettings } from '@shared/unit-aware-display';
 import { formatCanonicalHealthMetricSportsLibValue } from '@shared/sports-lib-health-data';
@@ -1597,6 +1598,49 @@ describe('Health workspace helpers', () => {
       'sleep_session_average_hrv',
     ]));
   });
+
+  it.each([null, normalizeUserUnitSettings({ distanceUnits: DistanceUnits.Miles })])(
+    'projects a Health overnight reading once when it also enriches Sleep (%s)', async units => {
+      const session = sleepSession({ vitals: {} });
+      const accountKey = await nightlyHealthAccountKey('user-1', 'GarminAPI', session.source.providerUserId);
+      const record = sourceRecord({ id: 'nightly-hrv', provider: HEALTH_PROVIDERS.GarminAPI, accountKey,
+        calendarDate: session.sleepDate, metrics: [valueEntry({
+          metricId: HEALTH_METRIC_IDS.HeartRateVariability, semanticVariant: 'overnight_rmssd',
+          native: { metric: 'lastNightAvg', value: 33, unit: 'ms' }, canonical: { value: 33, unit: HEALTH_UNITS.Millisecond },
+        })] });
+      const enriched = (await enrichSleepWithNightlyHrv('user-1', [session], [record]))
+        .map(item => ({ ...item, healthAccountKey: accountKey }));
+      expect(enriched[0].vitals?.overnightHrvMs).toBe(33);
+      const query = { startDate: session.sleepDate, endDate: session.sleepDate, metricIds: [HEALTH_METRIC_IDS.HeartRateVariability] };
+      const result = projectLoadedHealthRange([record], [], query, { sourceRecordsComplete: true, samplesComplete: true });
+      const view = buildHealthMetricWorkspaceView(result, enriched, [], units);
+      expect(view.series).toHaveLength(1);
+      expect(view.series[0]).toMatchObject({ sourceLabel: 'Garmin', semanticVariant: 'overnight_rmssd' });
+      expect(view.series[0].points).toHaveLength(1);
+      expect(formatHealthValue(view.series[0].metricId, view.series[0].points[0].value, view.series[0].unit, false, units)).toBe('33 ms');
+      expect(selectHealthPriorityTrendSeries(result, enriched, units)).toHaveLength(1);
+
+      const sleepOnly = projectLoadedHealthRange([], [], query, { sourceRecordsComplete: true, samplesComplete: true });
+      expect(buildHealthMetricWorkspaceView(sleepOnly, enriched).series[0])
+        .toMatchObject({ sourceLabel: 'Garmin', semanticVariant: 'sleep_overnight_hrv' });
+
+      // Identical native Sleep evidence remains independent of a Health reading.
+      const nativeSleep = { ...session, healthAccountKey: accountKey, vitals: { overnightHrvMs: 33 } };
+      expect(buildHealthMetricWorkspaceView(result, [nativeSleep]).series).toHaveLength(2);
+
+      // A matching value from another account is not the originating reading.
+      const otherAccount = projectLoadedHealthRange([{ ...record, source: { ...record.source, accountKey: 'another-account' } }],
+        [], query, { sourceRecordsComplete: true, samplesComplete: true });
+      expect(buildHealthMetricWorkspaceView(otherAccount, enriched).series).toHaveLength(2);
+
+      // A correction must not hide an older Sleep copy while the independent reads update.
+      const corrected = projectLoadedHealthRange([{ ...record, metrics: [valueEntry({
+        metricId: HEALTH_METRIC_IDS.HeartRateVariability, semanticVariant: 'overnight_rmssd',
+        native: { metric: 'lastNightAvg', value: 34, unit: 'ms' }, canonical: { value: 34, unit: HEALTH_UNITS.Millisecond },
+      })] }], [], query, { sourceRecordsComplete: true, samplesComplete: true });
+      expect(buildHealthMetricWorkspaceView(corrected, enriched).series).toHaveLength(2);
+    },
+  );
 
   it('uses local account ordinals for Sleep priority rows and never exposes provider IDs', () => {
     const rows = buildSleepPriorityRows([
