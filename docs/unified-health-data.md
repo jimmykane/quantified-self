@@ -339,10 +339,13 @@ Health metric lines use a consistent 1px stroke in Highlights and the explorer, 
 Hover retains that stroke weight; data markers, personal-range shading, and the shared Sleep chart are unchanged.
 
 Health and Dashboard Health charts share explicit source/reading labels: daily resting HR, average sleep HR and minimum
-sleep HR are not interchangeable. Full cards show the selected record's provider-calendar date and reported device
-label when available; no physical device is guessed from a provider/account. Source captions and menu triggers wrap
+sleep HR are not interchangeable. Full numeric cards show the selected record's provider-calendar date and series device
+attribution when available; no physical device is guessed from a provider/account. Invalid calendar dates are omitted,
+not normalized into a different day. Dates retain the normal metadata style; numeric emphasis stays on the unit.
+Source captions and menu triggers wrap
 instead of truncating their measurement meaning. Health's Sleep highlights name Sleep HRV and average sleep HR explicitly.
-Dashboard/library thumbnails retain a visible source caption and full accessible source/reading context.
+Dashboard/library thumbnails retain a visible source caption. Library rows include the full source/reading and sparse
+evidence in their accessible description outside the decorative, accessibility-hidden thumbnail.
 
 The shared Health chart model selects dots for one or two numeric observation times, or histories with no nearby
 readings to connect. These views state the recorded reading count and **No trend inferred**. For longer line histories,

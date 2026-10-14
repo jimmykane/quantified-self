@@ -88,6 +88,8 @@ describe('HealthMetricChartComponent', () => {
     expect(host.textContent).toContain('Daily resting HR');
     expect(host.textContent).toContain('Latest record:');
     expect(host.textContent).toContain('No trend inferred');
+    expect(host.querySelector('.health-chart-unit')?.textContent?.trim()).toBe('bpm');
+    expect(host.querySelector('.health-chart-unit')?.textContent).not.toContain('Latest record:');
   });
 
   it('does not render an empty device label when attribution is unavailable', async () => {
@@ -148,6 +150,7 @@ describe('HealthMetricChartComponent', () => {
     const chart = fixture.debugElement.query(By.directive(HealthMetricSeriesChartStubComponent))
       .componentInstance as HealthMetricSeriesChartStubComponent;
     expect(host.querySelector('.health-chart-footer')?.textContent).toContain('mi');
+    expect(host.querySelector('.health-chart-unit')?.textContent?.trim()).toBe('mi');
     expect(chart.unitSettings).toEqual(units);
     expect(chart.model.ariaLabel).toContain('1.00 mi');
   });

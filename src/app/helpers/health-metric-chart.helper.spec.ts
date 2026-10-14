@@ -175,8 +175,13 @@ describe('Health metric chart helpers', () => {
     expect(model.series).toBe(source);
     expect(model.readingLabel).toBe('Daily resting HR');
     expect(model.recordedDateText).toContain('13');
-    const invalid = buildHealthChartModels([series({ points: [{ ...source.points[0], calendarDate: '2026-99-99' }] })], 0, Date.UTC(2026, 9, 31))[0];
-    expect(invalid.recordedDateText).toBeNull();
+    for (const calendarDate of ['2026-99-99', '2026-02-30', '2025-02-29']) {
+      const invalid = buildHealthChartModels([series({ points: [{ ...source.points[0], calendarDate }] })], 0, Date.UTC(2026, 9, 31))[0];
+      expect(invalid.recordedDateText).toBeNull();
+      expect(invalid.ariaLabel).not.toContain(', recorded ');
+    }
+    const leapDay = buildHealthChartModels([series({ points: [{ ...source.points[0], calendarDate: '2028-02-29' }] })], 0, Date.UTC(2028, 2, 1))[0];
+    expect(leapDay.recordedDateText).toContain('29');
   });
 
   it.each(['overnight_average', 'overnight_rmssd', 'sleep_overnight_hrv', 'sleep_session_average_hrv'])(

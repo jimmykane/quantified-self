@@ -754,6 +754,7 @@ function buildSeriesModel(
   const recordedDateMs = latest && /^\d{4}-\d{2}-\d{2}$/.test(latest.calendarDate)
     ? Date.parse(`${latest.calendarDate}T12:00:00.000Z`) : NaN;
   const recordedDateText = Number.isFinite(recordedDateMs)
+    && new Date(recordedDateMs).toISOString().slice(0, 10) === latest?.calendarDate
     ? getDateTimeFormatter(undefined, { month: 'short', day: 'numeric', year: 'numeric', timeZone: 'UTC' })
       .format(recordedDateMs) : null;
 

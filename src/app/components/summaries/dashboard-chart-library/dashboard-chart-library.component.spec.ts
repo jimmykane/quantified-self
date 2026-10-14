@@ -25,6 +25,8 @@ import { DashboardDerivedMetricsService } from '../../../services/dashboard-deri
 import { AppUserInterface } from '../../../models/app-user.interface';
 import { buildDashboardExampleEvents } from '../../../helpers/dashboard-chart-preview.helper';
 import { getDashboardChartCatalog } from '../../../helpers/dashboard-chart-catalog.helper';
+import { buildDashboardHealthContext } from '../../../helpers/dashboard-health-context.helper';
+import { resolveHealthWorkspaceWindow } from '../../../helpers/health-workspace.helper';
 
 describe('responsive chart picker interactions', () => {
   let fixture: ComponentFixture<DashboardChartLibraryComponent>;
@@ -152,6 +154,28 @@ describe('responsive chart picker interactions', () => {
     expect(component.filtered().map(entry => entry.definition.id)).toEqual(['health:body_weight']);
     const trigger = fixture.nativeElement.querySelector('button');
     expect(trigger.getAttribute('matBadgePosition')).toBe('above before');
+  });
+
+  it('describes the actual Health source, reading and sparse evidence outside decorative thumbnails', async () => {
+    fixture.componentRef.setInput('lane', 'section:health'); await settle();
+    await component.toggle(); await settle(); haptics.selection.mockClear();
+    const window = resolveHealthWorkspaceWindow({ metric: 'heart_rate', range: '30d', endDate: '2026-10-14' });
+    const context = buildDashboardHealthContext({ window, health: null, history: null, activities: null, errors: [],
+      sessions: [{ id: 'night', userID: user.uid, sleepDate: '2026-10-14',
+        source: { provider: 'SuuntoApp', providerUserId: 'test-account', sourceSessionKey: 'night' },
+        startTimeMs: Date.parse('2026-10-13T22:00:00Z'), endTimeMs: Date.parse('2026-10-14T06:00:00Z'),
+        durationSeconds: 28800, isNap: false, stages: [], vitals: { minimumHeartRateBpm: 57 }, createdAtMs: 0, updatedAtMs: 0 }],
+    }, { metric: 'heart_rate', range: '30d' });
+    component.healthContext('health:heart_rate', context); await settle();
+    const row = document.querySelector<HTMLButtonElement>('button[data-preset-id="health:heart_rate"]')!;
+    const description = document.getElementById(row.getAttribute('aria-describedby')!);
+    expect(description?.textContent).toContain('Suunto');
+    expect(description?.textContent).toContain('Minimum heart rate');
+    expect(description?.textContent).toContain('Sleep session');
+    expect(description?.textContent).toContain('No trend inferred');
+    expect(description?.closest('[aria-hidden="true"]')).toBeNull();
+    expect(haptics.selection).not.toHaveBeenCalled();
+    expect(save).not.toHaveBeenCalled();
   });
 
   it('shows new types without fetching chart data and acknowledges only an opened browse list', async () => {
