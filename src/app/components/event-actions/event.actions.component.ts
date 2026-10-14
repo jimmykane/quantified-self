@@ -45,8 +45,8 @@ export class EventActionsComponent implements OnInit, OnDestroy {
   async sendToService(): Promise<void> {
     if (!this.canSendOwnedActivities) return;
     const ids = [this.event.getID()];
-    this.hapticsService.selection();
-    await this.router.navigate(['/send-activities'], { queryParams: { source: 'saved' }, state: { activitySendSelection: ids, activitySendOwner: this.user.uid } });
+    const opened = await this.router.navigate(['/send-activities'], { queryParams: { source: 'saved' }, state: { activitySendSelection: ids, activitySendOwner: this.user.uid } });
+    if (opened) this.hapticsService.selection();
   }
 
   @Input() event!: EventInterface;

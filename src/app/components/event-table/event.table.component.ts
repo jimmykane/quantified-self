@@ -103,8 +103,8 @@ export class EventTableComponent extends DataTableAbstractDirective implements O
     if (!this.canSendOwnedActivities) return;
     const ids = this.selection.selected.map(row => row.Event.getID());
     if (!ids.length || ids.length > 50) { this.snackBar.open('Select up to 50 activities to send.', undefined, { duration: 4000 }); return; }
-    this.hapticsService.selection();
-    await this.router.navigate(['/send-activities'], { queryParams: { source: 'saved' }, state: { activitySendSelection: ids, activitySendOwner: this.user.uid } });
+    const opened = await this.router.navigate(['/send-activities'], { queryParams: { source: 'saved' }, state: { activitySendSelection: ids, activitySendOwner: this.user.uid } });
+    if (opened) this.hapticsService.selection();
   }
 
   @Input() user!: User;
