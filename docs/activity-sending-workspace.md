@@ -16,6 +16,8 @@ The prepared revision must be explicitly confirmed. The private operation write 
 
 The finished count includes delivered, duplicate/excluded, stopped and needs-action rows. It is not a success percentage. Transfer progress measures bytes; waiting for provider processing has no invented percentage. Global processing jobs survive page navigation and are reconciled from confirmed operations separately from recent-history reads.
 
+Delivery details combine recorded provider-claim starts with worker retry history. Explicit restart atomically retires the previous claim and any reset legacy retry fallback into server-private source-row `priorAttempts`, alongside the queue reset. Projection adds that retained history to the current claim and worker retry count, so restarting does not erase completed attempts. Rejected duplicate retries and repeated projections cannot inflate it; an unclaimed resume adds no claim. Missing history defaults to zero, with no reconstruction of previously lost attempts. Worker retry budgets, task generations and cumulative worker retry counters keep their existing semantics.
+
 | State/recovery | Behavior |
 | --- | --- |
 | Preparing / ready | Private staging and review; no provider delivery yet |
@@ -44,6 +46,8 @@ Opening a created draft must succeed before local uploads or saved preview start
 - `users/{uid}/activitySendSources/{batch}/{row}.fit`: private immutable temporary local bytes. Existing Storage rules permit owner reads and deny client writes; public event sharing does not expose this prefix.
 
 Unconfirmed drafts expire after 24 hours. Confirmed local sources are usable for seven days; delivered/stopped sources are removed earlier. Hourly cleanup removes expired objects with exact generation checks, releases reservations idempotently and prevents unclaimed expired work from starting. Accepted uploads retain their provider identifiers and can finish without the source. Display/private batch trees are recursively pruned 30 days from creation. Scheduled cleanup failures can delay physical deletion; the expiry boundary still blocks new temporary-source reads. Retained saved-event originals follow their existing archive retention policy and are never deleted by this feature.
+
+History pruning keeps the private operation's expiry marker until cleanup succeeds. It recursively removes the public display tree, then every private child collection, then the private root. This preserves the next scheduled retry even if Firestore removes a document root while a descendant deletion fails. Nested and missing-parent descendants remain discoverable through the marker; pruning never touches retained archive events or accepted queue identifiers.
 
 Removing a draft row atomically records private `cleanupPending` intent with the display deletion and revision change. The command acknowledges that committed removal; it does not hold its reply for Storage deletion. The existing retry-enabled operation trigger drains pending cleanup in pages of 50, including drafts and expired/stopped sends, and schedules the next page through a private operation progress write. Successful exact-generation deletion and transactional quota release clear the intent together. A failed cleanup remains retryable even though the browser no longer has a row to act on. Saved-original removals clear only the marker and never delete archive objects. Late staging cannot adopt a removed row. Account-deletion guards remain authoritative before background work and inside release/progress transactions.
 

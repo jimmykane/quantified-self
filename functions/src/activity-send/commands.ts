@@ -94,7 +94,8 @@ export async function runSendCommand(uid: string, request: ActivitySendCommand) 
   }
   if (request.action === 'check' || request.action === 'retry') {
     const rowId = sendIdentifier(request.rowId);
-    const source = (await ref.collection('rows').doc(rowId).get()).data() as SendSource | undefined;
+    const sourceRef = ref.collection('rows').doc(rowId);
+    const source = (await sourceRef.get()).data() as SendSource | undefined;
     if (!source?.queueId) throw new HttpsError('failed-precondition', 'No provider operation is available.');
     if (request.action === 'retry') {
       const operation = (await ref.get()).data() as SendOperation;
@@ -113,6 +114,15 @@ export async function runSendCommand(uid: string, request: ActivitySendCommand) 
       if (request.action === 'check' && !queue.destinationUploadID) throw new HttpsError('failed-precondition', 'Check the provider directly; no safe operation identifier is available.');
       if (request.action === 'check' && !queue.processed) return null;
       const dateCreated = Math.max(Date.now(), Number(queue.dateCreated) + 1);
+      if (request.action === 'retry') {
+        const currentSource = await tx.get(sourceRef);
+        if (!currentSource.exists || currentSource.data()?.queueId !== source.queueId) throw new HttpsError('not-found', 'Delivery source was not found.');
+        // Retire the previous claim and any legacy retry fallback before clearing them.
+        // Worker retry budgets and cumulative worker retries retain their existing meaning.
+        const priorAttempts = Number(currentSource.data()?.priorAttempts || 0) + Number(!!queue.providerOperationStartedAt)
+          + (queue.totalRetryCount ? 0 : Number(queue.retryCount || 0));
+        tx.update(sourceRef, { priorAttempts });
+      }
       tx.update(queueRef, { dateCreated, processed: false, resultStatus: null, skippedReason: null, deferredReason: null, dispatchedToCloudTask: null, ...(request.action === 'retry' ? { destinationUploadID: null, destinationProviderUserID: null, destinationWorkoutKey: null, destinationInfoCode: null, providerOperationStartedAt: null, destinationUploadContinuation: null, destinationExpectedWorkoutTypeID: FieldValue.delete(), retryCount: 0, sendConfirmedFailure: false } : {}) });
       return dateCreated;
     });

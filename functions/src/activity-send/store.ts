@@ -34,6 +34,8 @@ export interface SendSource {
   digest?: string;
   reservedBytes?: number;
   queueId?: string;
+  /** Completed attempts whose claim or legacy retry counter was cleared by an explicit restart. */
+  priorAttempts?: number;
 }
 export const operationRef = (uid: string, id: string) => admin.firestore().doc(`users/${uid}/activitySendOperations/${id}`);
 export const batchRef = (uid: string, id: string) => admin.firestore().doc(`users/${uid}/activitySends/${id}`);

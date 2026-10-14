@@ -132,11 +132,11 @@ export async function projectSendDelivery(queueRef: admin.firestore.DocumentRefe
     const batch = batchRef(data.userID, data.sendBatchID);
     const rowRef = batch.collection('rows').doc(data.sendRowID);
     const operation = operationRef(data.userID, data.sendBatchID);
-    const [parent, row, privateParent] = await Promise.all([tx.get(batch), tx.get(rowRef), tx.get(operation)]);
+    const [parent, row, privateParent, source] = await Promise.all([tx.get(batch), tx.get(rowRef), tx.get(operation), tx.get(operation.collection('rows').doc(data.sendRowID))]);
     if (!parent.exists || !row.exists) return;
     const projection = projectSendQueue(data);
     const finished = Number(parent.data()?.finished || 0) + Number(activitySendTerminal(projection.status)) - Number(activitySendTerminal(row.data()!.status));
-    tx.update(rowRef, { ...projection, attempts: Number(data.totalRetryCount || data.retryCount || 0) + Number(!!data.providerOperationStartedAt) });
+    tx.update(rowRef, { ...projection, attempts: Number(data.totalRetryCount || data.retryCount || 0) + Number(source.data()?.priorAttempts || 0) + Number(!!data.providerOperationStartedAt) });
     const state = finished >= Number(parent.data()?.total) ? 'complete' : 'confirmed';
     tx.update(batch, { finished, updatedAt: Date.now(), state });
     if (privateParent.exists) tx.update(operation, { finished, updatedAt: Date.now() });
@@ -168,8 +168,11 @@ export async function cleanupExpiredSends(now = Date.now()): Promise<void> {
       await cleanupSendSources(op.ref);
       const uid = op.ref.parent.parent!.id;
       if (op.data().sourceExpired || (await getUserDeletionGuardState(admin.firestore(), uid)).shouldSkip) {
-        await admin.firestore().recursiveDelete(op.ref);
+        // Keep the scheduled retry marker until every descendant tree is gone. The SDK can
+        // delete a document root even when a descendant deletion fails.
         await admin.firestore().recursiveDelete(batchRef(uid, op.id));
+        for (const descendants of await op.ref.listCollections()) await admin.firestore().recursiveDelete(descendants);
+        await admin.firestore().recursiveDelete(op.ref);
         continue;
       }
       const rows = await op.ref.collection('rows').get();

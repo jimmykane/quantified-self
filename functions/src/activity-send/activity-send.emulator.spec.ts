@@ -232,8 +232,13 @@ describe.skipIf(!process.env.FIRESTORE_EMULATOR_HOST)('durable activity sends in
   });
   it('resumes an unclaimed skipped send after Pro returns without reserving another copy', async () => {
     const queue = await confirm(); await queue.ref.update({ processed: true, resultStatus: 'skipped', skippedReason: 'no_pro_access' });
+    const visible = batchRef(uid, id).collection('rows').doc('row-one');
+    await projectSendDelivery(queue.ref); expect((await visible.get()).data()?.attempts).toBe(0);
     await runSendCommand(uid, { version: 1, action: 'retry', batchId: id, rowId: 'row-one' });
+    await projectSendDelivery(queue.ref); expect((await visible.get()).data()?.attempts).toBe(0);
     expect((await queue.ref.get()).data()).toMatchObject({ processed: false, skippedReason: null });
+    await queue.ref.update({ providerOperationStartedAt: 1 }); await projectSendDelivery(queue.ref);
+    expect((await visible.get()).data()?.attempts).toBe(1);
     expect(state.files.size).toBe(1);
   });
   it('can stop an unclaimed Pro-lapsed result and release its reservation', async () => {
@@ -475,6 +480,29 @@ describe.skipIf(!process.env.FIRESTORE_EMULATOR_HOST)('durable activity sends in
     const queue = await confirm(); await queue.ref.update({ processed: true, resultStatus: 'manual_reconciliation_required', providerOperationStartedAt: 1 });
     await expect(runSendCommand(uid, { version: 1, action: 'retry', batchId: id, rowId: 'row-one' })).rejects.toMatchObject({ code: 'failed-precondition' });
   });
+  it.each([{ totalRetryCount: 0, retryCount: 0 }, { totalRetryCount: 3, retryCount: 1 }, { retryCount: 2 }, { totalRetryCount: 0, retryCount: 2 }])('keeps completed attempt counts across explicit failure retries: %j', async retries => {
+    const queue = await confirm();
+    await queue.ref.update({ ...retries, ...(retries.totalRetryCount === undefined ? { totalRetryCount: admin.firestore.FieldValue.delete() } : {}) });
+    const priorRetries = retries.totalRetryCount || retries.retryCount || 0;
+    const visible = batchRef(uid, id).collection('rows').doc('row-one');
+    state.enqueue.mockClear();
+    for (let attempt = 1; attempt <= 2; attempt++) {
+      await queue.ref.update({ providerOperationStartedAt: attempt, destinationUploadID: `failed-${attempt}`, processed: true, resultStatus: 'skipped', sendConfirmedFailure: true });
+      await projectSendDelivery(queue.ref);
+      expect((await visible.get()).data()?.attempts).toBe(priorRetries + attempt);
+      await runSendCommand(uid, { version: 1, action: 'retry', batchId: id, rowId: 'row-one' });
+      await projectSendDelivery(queue.ref); await projectSendDelivery(queue.ref);
+      expect((await visible.get()).data()).toMatchObject({ status: 'queued', attempts: priorRetries + attempt });
+      expect((await visible.get()).data()).not.toHaveProperty('priorAttempts');
+      const retried = (await queue.ref.get()).data()!;
+      expect(retried).toMatchObject({ providerOperationStartedAt: null, destinationUploadID: null, retryCount: 0 });
+      expect(retried.totalRetryCount).toBe(retries.totalRetryCount);
+      await expect(runSendCommand(uid, { version: 1, action: 'retry', batchId: id, rowId: 'row-one' })).rejects.toMatchObject({ code: 'failed-precondition' });
+      await projectSendDelivery(queue.ref);
+      expect((await visible.get()).data()?.attempts).toBe(priorRetries + attempt);
+    }
+    expect(state.enqueue).toHaveBeenCalledTimes(2);
+  });
   it('clears every previous provider result before an explicit confirmed-failure retry', async () => {
     const queue = await confirm();
     await queue.ref.update({ processed: true, sendConfirmedFailure: true, resultStatus: 'skipped', destinationUploadID: 'failed-upload', destinationProviderUserID: 'reviewed-account', destinationWorkoutKey: 'failed-workout', destinationInfoCode: 'old-result', providerOperationStartedAt: 1, destinationUploadContinuation: { type: 'suunto_blob_put_v1', uploadUrl: 'https://example.invalid/old-upload', uploadHeaders: {} }, destinationExpectedWorkoutTypeID: 2, retryCount: 4 });
@@ -582,6 +610,43 @@ describe.skipIf(!process.env.FIRESTORE_EMULATOR_HOST)('durable activity sends in
     await cleanupExpiredSends(createdAt + 31 * 86400_000);
     expect((await operationRef(uid, id).collection('rows').get()).empty).toBe(true);
     expect((await batchRef(uid, id).collection('rows').get()).empty).toBe(true);
+  });
+  it.each(['public', 'private'] as const)('retains the expiry marker after partial %s history pruning and resumes nested cleanup', async target => {
+    const queue = await confirm(); await queue.ref.update({ destinationUploadID: 'accepted-canary' });
+    const op = operationRef(uid, id); const visible = batchRef(uid, id);
+    const createdAt = (await op.get()).data()!.createdAt;
+    await cleanupExpiredSends(createdAt + 8 * 86400_000);
+    const privateNested = op.collection('rows').doc('row-one').collection('details').doc('nested');
+    const extraPrivate = op.collection('retained').doc('entry').collection('details').doc('nested');
+    const publicNested = visible.collection('rows').doc('row-one').collection('details').doc('nested');
+    const unrelated = db.doc(`users/${uid}/events/retained-archive`);
+    await Promise.all([privateNested.set({ synthetic: true }), extraPrivate.set({ synthetic: true }), publicNested.set({ synthetic: true }), unrelated.set({ synthetic: true })]);
+    const recursiveDelete = db.recursiveDelete.bind(db);
+    let injected = false;
+    const pruning = vi.spyOn(db, 'recursiveDelete').mockImplementation(async ref => {
+      const selected = target === 'public' ? ref.path === visible.path : ref.path === op.path || ref.path === op.collection('rows').path;
+      if (!injected && selected) {
+        injected = true;
+        // Fault injection models the SDK deleting a target/root while a descendant delete fails.
+        // These leaf/root deletes deliberately leave an orphan for the next recursive cleanup.
+        if (target === 'public') await visible.delete();
+        else if (ref.path === op.path) await op.delete();
+        else await op.collection('rows').doc('row-one').delete();
+        throw new Error('Synthetic partial history pruning failure');
+      }
+      return recursiveDelete(ref);
+    });
+    try {
+      await expect(cleanupExpiredSends(createdAt + 31 * 86400_000)).rejects.toThrow('cleanup must be retried');
+      expect(injected).toBe(true); expect((await op.get()).exists).toBe(true);
+      expect((await (target === 'public' ? publicNested : privateNested).get()).exists).toBe(true);
+      await cleanupExpiredSends(createdAt + 31 * 86400_000);
+      expect((await op.get()).exists).toBe(false); expect((await visible.get()).exists).toBe(false);
+      for (const nested of [privateNested, extraPrivate, publicNested]) expect((await nested.get()).exists).toBe(false);
+      expect((await unrelated.get()).exists).toBe(true);
+      expect((await queue.ref.get()).data()?.destinationUploadID).toBe('accepted-canary');
+      expect((await db.doc(`users/${uid}/activitySendQuota/current`).get()).data()?.bytes).toBe(0);
+    } finally { pruning.mockRestore(); }
   });
   it('excludes expired work before admission even if scheduled cleanup has not run', async () => {
     const reviewed = await prepare(); await runSendCommand(uid, { version: 1, action: 'confirm', batchId: id, revision: reviewed.revision });

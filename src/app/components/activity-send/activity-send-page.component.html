@@ -80,7 +80,7 @@
           <button mat-button (click)="newDraft()" [disabled]="busy()">Start a new send</button>
         </div>
         <button mat-button [attr.aria-expanded]="showDetails()" aria-controls="activity-send-details" (click)="toggleDetails()">{{ showDetails() ? 'Hide' : 'Show' }} delivery details</button>
-        <div id="activity-send-details" class="delivery-details" [hidden]="!showDetails()"><p>Files are processed individually. The overall finished count includes deliveries, exclusions, stopped items, and items needing action.</p>@for (row of sends.rows(); track row.id) { <p>{{ row.name }} · {{ row.attempts }} sending/status attempts</p> }</div>
+        <div id="activity-send-details" class="delivery-details" [hidden]="!showDetails()"><p>Files are processed individually. The overall finished count includes deliveries, exclusions, stopped items, and items needing action.</p>@for (row of sends.rows(); track row.id) { <p>{{ row.name }} · {{ row.attempts }} recorded sending/status attempts</p> }</div>
         <p>Stopping affects activities that have not started sending. Accepted uploads continue processing. Results stay available for 30 days.</p>
       </section>
     }
