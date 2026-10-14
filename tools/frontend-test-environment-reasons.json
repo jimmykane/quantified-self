@@ -27,6 +27,10 @@
     "environment": "angular",
     "reason": "Compiles legacy error and browser guidance dialogs with real Material controls in TestBed to verify rendered actions, silent initialization and single-owner haptic feedback."
   },
+  "src/app/components/shared/health-change-summary/health-change-summary.component.spec.ts": {
+    "environment": "angular",
+    "reason": "Compiles the shared Health change summary with TestBed and real Material buttons to verify disclosure accessibility, signal refreshes, owner resets and single-owner haptic feedback."
+  },
   "src/app/components/shared/metric-history-chart/metric-history-chart.component.spec.ts": {
     "environment": "angular",
     "reason": "Creates the chart with TestBed to verify signal input changes, rendered accessibility text, chart host initialization, responsive tooltips, haptic ownership and fixture teardown."

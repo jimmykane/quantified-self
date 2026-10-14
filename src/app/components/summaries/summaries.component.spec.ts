@@ -65,6 +65,7 @@ import { DashboardTileBoardComponent } from './dashboard-tile-board/dashboard-ti
 import { DashboardTileCellComponent } from './dashboard-tile-cell/dashboard-tile-cell.component';
 import { CalendarMonthPickerBottomSheetComponent } from '../calendar/calendar-month-picker-bottom-sheet/calendar-month-picker-bottom-sheet.component';
 import { MetricIndicatorComponent } from '../shared/metric-indicator/metric-indicator.component';
+import { HealthChangeSummaryComponent } from '../shared/health-change-summary/health-change-summary.component';
 
 describe('SummariesComponent', () => {
   let component: SummariesComponent;
@@ -183,7 +184,7 @@ describe('SummariesComponent', () => {
 
     await TestBed.configureTestingModule({
       declarations: [SummariesComponent, DashboardTileBoardComponent, DashboardTileCellComponent],
-      imports: [AppChartSharedModule, TimelineNotesWorkspaceComponent, PageHeaderComponent, MetricIndicatorComponent, MatMenuModule, MatProgressSpinnerModule, NoopAnimationsModule, RouterModule],
+      imports: [AppChartSharedModule, TimelineNotesWorkspaceComponent, PageHeaderComponent, MetricIndicatorComponent, HealthChangeSummaryComponent, MatMenuModule, MatProgressSpinnerModule, NoopAnimationsModule, RouterModule],
       schemas: [NO_ERRORS_SCHEMA],
       providers: [provideRouter([]),
         { provide: AppTimelineNotesService, useValue: {
@@ -1557,6 +1558,26 @@ describe('SummariesComponent', () => {
     expect(nativeElement.querySelector('.dashboard-empty-section-guidance')).toBeNull();
     expect(nativeElement.querySelector('.dashboard-empty')).toBeNull();
     expect(nativeElement.querySelector('app-dashboard-chart-library')).toBeNull();
+    expect(nativeElement.querySelector('app-health-change-summary')).toBeNull();
+  });
+
+  it('adds owner-only change evidence without rewriting or hiding saved Dashboard charts', () => {
+    const savedTiles = [getDashboardChartCatalog().find(entry => entry.definition.id === 'health:steps')!.tile];
+    const dashboardSettings = { tiles: savedTiles, showTodaySummary: true };
+    component.user = { uid: 'owner', settings: { dashboardSettings } } as any;
+    component.showActions = true; component.isOwnerDashboard = true;
+    const host = fixture.nativeElement as HTMLElement;
+    fixture.detectChanges();
+    const summary = host.querySelector('app-health-change-summary')!;
+    expect(summary.textContent).toContain('What changed?');
+    summary.querySelector('button')!.click(); fixture.detectChanges();
+    expect(component.user.settings.dashboardSettings.tiles).toBe(savedTiles);
+    expect(mockUserService.updateUserProperties).not.toHaveBeenCalled();
+    dashboardSettings.showTodaySummary = false;
+    component.showTodaySummary = false;
+    component['changeDetector'].markForCheck(); fixture.detectChanges();
+    expect(host.querySelector('app-health-change-summary')).toBeNull();
+    expect(component.user.settings.dashboardSettings.tiles).toBe(savedTiles);
   });
 
   it('shows shared readiness drivers in Today and treats lower overnight heart rate as supportive', () => {
@@ -1712,6 +1733,7 @@ describe('SummariesComponent', () => {
       vi.advanceTimersToNextFrame();
 
       expect(component.dashboardTodayReadiness.loading).toBe(true);
+      expect(component.dashboardTodayReadiness.changeSignals.every(signal => signal.state === 'loading')).toBe(true);
       expect(component.dashboardTodayReadiness.score).toBeNull();
       const element = render();
       expect(element.querySelector('.dashboard-readiness-primary-value')?.textContent).toContain('Loading readiness…');
@@ -1724,6 +1746,9 @@ describe('SummariesComponent', () => {
       vi.advanceTimersToNextFrame();
 
       expect(component.dashboardTodayReadiness).toMatchObject({ loading: false, score: 67, availableSignalCount: 3 });
+      expect(component.dashboardTodayReadiness.changeSignals.find(signal => signal.id === 'hrv')).toMatchObject({
+        state: 'insufficient', sourceLabel: 'Suunto · Sleep HRV',
+      });
       expect(render().querySelector('.dashboard-readiness-primary-value')?.textContent).toContain('67/100');
       expect(element.querySelector('[aria-label="Loading readiness"]')).toBeNull();
       expect(element.querySelector('.dashboard-current-state-primary[aria-busy="false"]')).not.toBeNull();
@@ -1736,6 +1761,7 @@ describe('SummariesComponent', () => {
       sleep$.next([]);
       vi.advanceTimersToNextFrame();
       expect(component.dashboardTodayReadiness).toMatchObject({ loading: false, score: 75, availableSignalCount: 1, warningText: '' });
+      expect(component.dashboardTodayReadiness.changeSignals.every(signal => signal.state === 'insufficient')).toBe(true);
       expect(render().querySelector('.dashboard-current-state-row')?.textContent).toContain('No eligible night');
       // Newly imported sleep continues updating the open dashboard.
       sleep$.next(nights);
@@ -1788,6 +1814,7 @@ describe('SummariesComponent', () => {
       sleep$.error(new Error('refresh failed'));
       vi.advanceTimersToNextFrame();
       render();
+      expect(component.dashboardTodayReadiness.changeSignals.every(signal => signal.state === 'unavailable')).toBe(true);
       expect(readiness.querySelector('.dashboard-readiness-method[role="status"]')?.textContent).toContain('Sleep could not be loaded');
       expect(host.querySelector('.dashboard-readiness-recovery-indicator')).not.toBeNull();
       expect(reservations()).toEqual(pendingLayout);

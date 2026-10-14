@@ -52,6 +52,13 @@ with their content; do not truncate recovery messages or HRV range details to me
 
 ## Workspace Shells
 
+Health All and the owner Dashboard Today share the surface-free **What changed?** summary from
+`components/shared/health-change-summary/`. Keep established changes visible while evidence details are collapsed.
+Use the existing Material Show/Hide button pattern with `aria-expanded`, `aria-controls` and a mounted hidden region;
+do not add a raised card or expansion panel. Evidence rows stack at narrow phone widths, preserving 44px button targets.
+The local disclosure resets on owner change without feedback or persistence. This overview is additive: saved Dashboard
+charts remain mounted and controlled by their existing settings, including the Show/Hide Today choice.
+
 Authenticated product workspaces, except Settings, use the shared `qs-workspace-page` shell from `src/styles.scss`. It
 owns the 1440 px maximum page width, border-box sizing, and common responsive inline gutters. Apply it on the route root
 alongside the route-specific class; do not add another outer width, margin, or padding rule in the component stylesheet.

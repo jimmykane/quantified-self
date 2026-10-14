@@ -360,6 +360,30 @@ The authenticated `/health` route is client-rendered and `noindex`, with owner-s
 
 ### Category overview
 
+#### Calmer change summary
+
+On Health's **All** overview, **What changed?** sits before the existing highlights and metric cards.
+The same flat shared component appears before Dashboard Today for the signed-in owner, following the existing
+Show/Hide Today preference. It is absent from another person's Dashboard, focused metric history and category views.
+It does not hide, reorder or rewrite saved Dashboard charts or change the Health card availability rules.
+
+The first version covers Sleep and nightly HRV from reads already owned by each surface. Only existing HRV
+personal-range classifications count as assessed evidence: positive means within range, caution/negative means
+outside range, and neutral/missing baseline or recent average means insufficient evidence. Within range is not
+proof of a stable time trend or a medical all-clear. Sleep is recorded context, not a newly classified normal signal;
+other metrics are not implicitly assessed. No anomaly engine, extra score, threshold or cross-source average is added.
+
+Outside-range signals remain visible with their source. **Show details** reveals source-separated evidence,
+existing range/baseline wording and recorded dates using shared local date and canonical metric formatters.
+Loading, failed refreshes, bounded incomplete reads and missing evidence remain distinct from within range.
+Health follows the same selected Highlight account and semantic series, including filtered-source fallback without
+overwriting preferences. Dashboard follows its existing current eligible Sleep evidence, not a paged chart window;
+an ambiguous source attribution is not guessed. The disclosure is local, resets on owner change, emits selection
+haptics only for user toggles and never writes settings.
+
+MCP impact: presentation only. No exposed metrics, read/write contracts, scopes, consent, provider actions,
+backend requests, Training calculations or storage schemas change. No migration, Rules or Functions deployment is required.
+
 The Health landing view groups the existing available catalog into Body, Vitals, Movement & energy, Recovery & sleep, and Fitness. This is presentation only: the canonical stored categories and IDs remain unchanged. On both mobile and desktop, All shows the existing **Your recent Health** highlights first, then selects at most six other available metrics in product order (Weight, HRV, resting heart rate, Steps, VO₂ max, Sleep), filling missing slots from available categories. Only exact metric IDs already represented by a currently visible highlight are excluded from All's cards; if a highlight is unavailable or filtered away, the corresponding catalog card remains eligible. A category hides the highlight block and shows all of its available metrics, including those covered by highlights on All. Category counts and lifetime availability are not reduced. Unverified catalog entries remain visible under the existing independent availability rules; an empty 30-day card does not imply no lifetime history. When highlights cover every available metric, the empty card grid does not falsely claim that no readings exist.
 
 Cards reuse `DashboardHealthChartComponent` in a fixed 30-day overview mode, `DashboardHealthService`, the shared three-read queue/cache, canonical Sports Lib unit formatting, and existing ECharts/Sleep renderers. Reads start near the viewport and are cancelled on card teardown. Source changes and user-unit changes reproject bounded evidence locally. The overview applies workspace provider filters to Health, baseline, workout-context and Sleep evidence before source selection. Each metric keeps one local source/reading key across category changes and provider updates; a filtered or missing selected reading stays explicitly unavailable. No cross-source latest value or average is calculated. The recorded date comes from the selected observation's provider-calendar date, never its receipt time. Failed refreshes retain prior readings with the shared stale-source notice.

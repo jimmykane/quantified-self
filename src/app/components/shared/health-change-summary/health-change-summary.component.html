@@ -1,0 +1,27 @@
+<section class="health-change-summary" [attr.aria-labelledby]="summaryId() + '-title'">
+  <div class="health-change-heading">
+    <h2 [id]="summaryId() + '-title'">What changed?</h2>
+    <button mat-button type="button" [attr.aria-expanded]="expanded()" [attr.aria-controls]="summaryId() + '-details'"
+      (click)="toggleDetails()">
+      {{ expanded() ? 'Hide details' : 'Show details' }}
+      <mat-icon iconPositionEnd aria-hidden="true">{{ expanded() ? 'expand_less' : 'expand_more' }}</mat-icon>
+    </button>
+  </div>
+  <p class="health-change-headline" role="status" aria-atomic="true">{{ summary().headline }}</p>
+  <p class="health-change-coverage">{{ summary().coverageText }}</p>
+  @for (change of summary().changes; track change.id) {
+    <p class="health-change-notice"><mat-icon aria-hidden="true">info_outline</mat-icon><span><strong>{{ change.label }} · {{ change.statusText }}</strong><small>{{ change.sourceLabel }}</small></span></p>
+  }
+  <p class="health-change-scope">Sleep and nightly HRV · Existing range evidence, not a new score.</p>
+  <div [id]="summaryId() + '-details'" [hidden]="!expanded()">
+    <dl class="health-change-evidence">
+      @for (signal of signals(); track signal.id) {
+        <div [attr.data-state]="signal.state">
+          <dt>{{ signal.label }}<small>{{ signal.sourceLabel }}</small></dt>
+          <dd><span class="health-change-status">{{ signal.statusText }}</span><small>{{ signal.detailText }}</small></dd>
+        </div>
+      }
+    </dl>
+    <p class="health-change-footnote">Within range is not proof of a stable trend. Recorded context is not a change assessment. This is not medical advice or a training instruction. Your charts remain below.</p>
+  </div>
+</section>

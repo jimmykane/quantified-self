@@ -59,6 +59,7 @@ import { AppThemeService } from '../../services/app.theme.service';
 import { AppUserSettingsQueryService } from '../../services/app.user-settings-query.service';
 import { AppHealthHighlightId, AppHealthHighlightSources } from '../../models/app-user.interface';
 import { normalizeHealthHighlightSources } from '../../helpers/health-highlight-preferences.helper';
+import { buildHealthHighlightChangeSignals } from '../../helpers/health-change-summary.helper';
 import { AppChartsModule } from '../../modules/app-charts.module';
 import { PageHeaderComponent } from '../shared/page-header/page-header.component';
 import { HealthMetricChartComponent } from './health-metric-chart.component';
@@ -344,6 +345,8 @@ export class HealthWorkspaceComponent {
   readonly priorityHeartRateStatus = signal<HealthLoadStatus>('loading');
   readonly priorityHrvLoad = signal<HealthWorkspaceRangeLoad | null>(null);
   readonly priorityHrvStatus = signal<HealthLoadStatus>('loading');
+  readonly priorityHrvRefreshFailed = signal(false);
+  readonly priorityHrvRefreshing = signal(false);
   readonly syncStates = signal<HealthSyncState[]>([]);
   readonly syncStatesStatus = signal<HealthLoadStatus>('loading');
   readonly selectedProviders = signal<HealthProvider[]>([]);
@@ -907,6 +910,20 @@ export class HealthWorkspaceComponent {
     card.id === 'heart_rate_variability' || card.id === 'heart_rate'
       ? card.chartSeries.length > 0
       : card.loading || card.error || card.rows.length > 0 || card.chartSeries.length > 0));
+  readonly overviewChangeSignals = computed(() => buildHealthHighlightChangeSignals(
+    this.priorityCards().filter(card => card.id === 'sleep' || card.id === 'heart_rate_variability').map(card => {
+      const providers = this.selectedProviders();
+      const hrv = card.id === 'heart_rate_variability';
+      return { ...card,
+        rows: providers.length ? card.rows.filter(row => providers.includes(row.provider)) : card.rows,
+        chartSeries: providers.length ? card.chartSeries.filter(series => providers.includes(series.provider)) : card.chartSeries,
+        loading: card.loading || hrv && (this.prioritySleepStatus() === 'loading' || this.priorityHrvRefreshing()),
+        comparisonUnavailable: hrv && (this.priorityHrvRefreshFailed() || !!this.priorityHrvLoad()?.limitReached
+          || this.priorityHrvLoad()?.result.pageInfo.sourceRecordAggregateComplete === false
+          || this.prioritySleepStatus() === 'error' || this.prioritySleepStatus() === 'denied'),
+      };
+    }), this.preferredHighlightSources(),
+  ));
   readonly visibleOverviewPriorityCards = computed(() => this.visiblePriorityCards()
     .filter(card => card.id === 'sleep' || card.id === 'heart_rate_variability'));
   readonly visibleVitalsPriorityCards = computed(() => this.visiblePriorityCards().filter(card => card.id === 'heart_rate'));
@@ -1238,6 +1255,7 @@ export class HealthWorkspaceComponent {
       if (userChanged) {
         this.priorityHeartRateLoad.set(null);
         this.priorityHrvLoad.set(null);
+        this.priorityHrvRefreshFailed.set(false);
       }
       if (!currentHeartRateLoad || userChanged) {
         this.priorityHeartRateStatus.set('loading');
@@ -1246,6 +1264,7 @@ export class HealthWorkspaceComponent {
         this.priorityHrvStatus.set('loading');
       }
       if (!uid) {
+        this.priorityHrvRefreshing.set(false);
         return;
       }
       // Provider calendar dates can differ from the viewer's local day. Read
@@ -1643,6 +1662,7 @@ export class HealthWorkspaceComponent {
     includeSamples: boolean,
     endDate = this.todayDate,
   ): Promise<void> {
+    if (metricId === HEALTH_METRIC_IDS.HeartRateVariability) this.priorityHrvRefreshing.set(true);
     try {
       const result = await this.healthQueries.loadMetricRange(uid, {
         startDate,
@@ -1660,6 +1680,8 @@ export class HealthWorkspaceComponent {
       } else {
         this.priorityHrvLoad.set(result);
         this.priorityHrvStatus.set('ready');
+        this.priorityHrvRefreshFailed.set(false);
+        this.priorityHrvRefreshing.set(false);
       }
     } catch (error) {
       if (generation !== this.priorityLoadGeneration) {
@@ -1670,6 +1692,8 @@ export class HealthWorkspaceComponent {
           this.priorityHeartRateStatus.set(loadErrorStatus(error));
         }
       } else {
+        this.priorityHrvRefreshFailed.set(true);
+        this.priorityHrvRefreshing.set(false);
         if (!this.priorityHrvLoad()) {
           this.priorityHrvStatus.set(loadErrorStatus(error));
         }

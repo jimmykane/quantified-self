@@ -11,6 +11,10 @@
     }
   </mat-chip-listbox>
 
+  @if (selectedCategory() === 'all' && !exampleOnly()) {
+    <app-health-change-summary summaryId="health-overview-changes" [scopeKey]="user().uid" [signals]="changeSignals()" />
+  }
+
   <div class="health-overview-highlights" [hidden]="!hasOverviewHighlights()">
     <ng-content select="[healthOverviewHighlights]"></ng-content>
   </div>
