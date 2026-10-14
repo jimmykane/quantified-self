@@ -1,5 +1,6 @@
 import { cleanupSendSourceRow } from './source-cleanup';
 import * as admin from 'firebase-admin';
+import { cleanupSendUploadReservations } from './upload-cleanup';
 import { onDocumentWritten, onDocumentDeleted } from 'firebase-functions/v2/firestore';
 import { onSchedule } from 'firebase-functions/v2/scheduler';
 import { FieldPath, FieldValue, Timestamp } from 'firebase-admin/firestore';
@@ -163,6 +164,7 @@ export async function cleanupSendSources(op: admin.firestore.DocumentReference):
 export async function cleanupExpiredSends(now = Date.now()): Promise<void> {
   const expired = await admin.firestore().collectionGroup('activitySendOperations').where('cleanupAfter', '<=', Timestamp.fromMillis(now)).limit(100).get();
   let failed = 0;
+  try { await cleanupSendUploadReservations(now); } catch { failed++; }
   for (const op of expired.docs) {
     try {
       await cleanupSendSources(op.ref);
@@ -200,8 +202,15 @@ export async function cleanupExpiredSends(now = Date.now()): Promise<void> {
 }
 export const cleanupActivitySends = onSchedule({ schedule: 'every 60 minutes', region: 'europe-west2', memory: '256MiB', timeoutSeconds: 300 }, () => cleanupExpiredSends());
 
+export async function cleanupDeletedSendAccount(uid: string, now = Date.now()): Promise<void> {
+  const results = await Promise.allSettled([
+    admin.storage().bucket().deleteFiles({ prefix: `users/${uid}/activitySendSources/` }),
+    cleanupSendUploadReservations(now, uid),
+  ]);
+  if (results.some(result => result.status === 'rejected')) throw new Error('Deleted account activity source cleanup must be retried.');
+}
 export const cleanupActivitySendOnDelete = onDocumentDeleted({ document: 'users/{uid}', region: 'europe-west2', memory: '256MiB', timeoutSeconds: 300, retry: true }, async event => {
   if (!event.data) return;
   // Account cleanup owns this exact feature prefix, including late/orphan staging writes.
-  await admin.storage().bucket().deleteFiles({ prefix: `users/${event.params.uid}/activitySendSources/` });
+  await cleanupDeletedSendAccount(event.params.uid);
 });

@@ -5,6 +5,7 @@ import { ALLOWED_CORS_ORIGINS, hasProAccess, shouldEnforceAppCheck } from '../ut
 import { decodeSendFile, sendFileHash, sendIdentifier } from './policy';
 import { batchRef, describeFIT, guardedSendTransaction, operationRef, publicBatch, requireDraft, SendOperation, SendSource } from './store';
 import { queueRetiredSendSourceCleanup } from './source-cleanup';
+import { reserveSendUploadCleanup, sendUploadCleanupRef } from './upload-cleanup';
 
 export async function stageSendFile(uid: string, batchId: string, rowId: string, filename: string, raw: Buffer) {
   sendIdentifier(batchId); sendIdentifier(rowId);
@@ -20,20 +21,24 @@ export async function stageSendFile(uid: string, batchId: string, rowId: string,
   const sourceRef = ref.collection('rows').doc(rowId);
   const quotaRef = admin.firestore().doc(`users/${uid}/activitySendQuota/current`);
   const path = `users/${uid}/activitySendSources/${batchId}/${rowId}.fit`;
+  const cleanupRef = sendUploadCleanupRef(path);
   const alreadyStaged = await guardedSendTransaction(uid, async tx => {
-    const [currentSnapshot, sourceSnapshot, quota, duplicate] = await Promise.all([
-      tx.get(ref), tx.get(sourceRef), tx.get(quotaRef), tx.get(ref.collection('rows').where('digest', '==', digest).limit(1)),
+    const [currentSnapshot, sourceSnapshot, quota, duplicate, cleanup] = await Promise.all([
+      tx.get(ref), tx.get(sourceRef), tx.get(quotaRef), tx.get(ref.collection('rows').where('digest', '==', digest).limit(1)), tx.get(cleanupRef),
     ]);
     const current = currentSnapshot.data() as SendOperation;
     if (current.state !== 'draft' || current.stopped || current.expiresAt <= Date.now()) throw new HttpsError('failed-precondition', 'Draft expired or changed.');
     if (sourceSnapshot.data()?.removed) throw new HttpsError('failed-precondition', 'This file was removed. Start a new draft to select it again.');
     if (sourceSnapshot.exists) {
       if (sourceSnapshot.data()?.digest !== digest) throw new HttpsError('failed-precondition', 'File reference cannot be replaced.');
-      return !!sourceSnapshot.data()?.originalFile;
+      if (sourceSnapshot.data()?.originalFile) return true;
+      reserveSendUploadCleanup(tx, cleanup, { uid, batchId, rowId, path, digest });
+      return false;
     }
     if (!duplicate.empty) throw new HttpsError('already-exists', 'This file is already in the draft.');
     const bytes = Number(quota.data()?.bytes || 0);
     if (bytes + fit.length > ACTIVITY_SEND_LIMITS.userBytes || current.total >= ACTIVITY_SEND_LIMITS.files) throw new HttpsError('resource-exhausted', 'Temporary storage limit reached: 50 files per batch and 200 MiB per account.');
+    reserveSendUploadCleanup(tx, cleanup, { uid, batchId, rowId, path, digest });
     tx.set(sourceRef, { digest, reservedBytes: fit.length, storagePath: path });
     tx.set(quotaRef, { bytes: bytes + fit.length });
     current.total++; current.revision++; current.reviewed = false; current.updatedAt = Date.now();
@@ -61,7 +66,9 @@ export async function stageSendFile(uid: string, batchId: string, rowId: string,
     await guardedSendTransaction(uid, async tx => {
       const current = (await tx.get(ref)).data() as SendOperation | undefined;
       const reserved = await tx.get(sourceRef);
+      const cleanup = (await tx.get(cleanupRef)).data();
       if (!current || current.state !== 'draft' || current.stopped || current.expiresAt <= Date.now() || reserved.data()?.digest !== digest || reserved.data()?.removed) throw new HttpsError('failed-precondition', 'Draft changed while uploading.');
+      if (!cleanup || cleanup.digest !== digest || cleanup.leaseID) throw new HttpsError('failed-precondition', 'Temporary file cleanup superseded this upload. Retry this file.');
       const source: SendSource = { sourceServiceName: 'manualUpload', eventID: `file_${digest}`, digest, reservedBytes: fit.length, originalFile: { path, generation: storedGeneration, extension: 'fit', originalFilename: filename.slice(0, 256) } };
       tx.set(sourceRef, { ...source, admitted: false });
       tx.update(batchRef(uid, batchId).collection('rows').doc(rowId), { status: 'ready', message: 'Ready to review.' });
@@ -73,7 +80,7 @@ export async function stageSendFile(uid: string, batchId: string, rowId: string,
     // Exact-generation cleanup fences a write finishing after draft/account deletion.
     const adopted = (await sourceRef.get()).data();
     if (generation && (adopted?.originalFile?.generation !== generation || adopted?.removed)) await admin.storage().bucket().file(path, { generation }).delete({ ignoreNotFound: true });
-    // A deleted account/tree cannot retain cleanup intent. This derived immutable row path has no owner left.
+    // The external reservation survives even if inline deletion fails or an unknown write appears later.
     if (!generation && !adopted) await file.delete({ ignoreNotFound: true });
     throw error;
   }

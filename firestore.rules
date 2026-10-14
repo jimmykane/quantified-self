@@ -537,6 +537,11 @@ service cloud.firestore {
       allow read, write: if false;
     }
 
+    // Backend-only leaves survive user-tree deletion until temporary uploads are reconciled.
+    match /activitySendUploadCleanup/{document=**} {
+      allow read, write: if false;
+    }
+
     match /mcpOAuthRateLimits/{document=**} {
       allow read, write: if false;
     }

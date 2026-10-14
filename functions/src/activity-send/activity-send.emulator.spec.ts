@@ -4,12 +4,15 @@ import { ServiceNames } from '@sports-alliance/sports-lib';
 import { createCOROSActivityFITFixture } from '../../test-utils/coros-activity-fit';
 import { runSendCommand } from './commands';
 import { stageSendFile } from './upload';
-import { admitSendRows, projectSendDelivery, cleanupSendSources, cleanupExpiredSends } from './lifecycle';
+import { admitSendRows, projectSendDelivery, cleanupSendSources, cleanupExpiredSends, cleanupDeletedSendAccount } from './lifecycle';
+import { Timestamp } from 'firebase-admin/firestore';
 import { operationRef, batchRef, guardedBackgroundSendTransaction } from './store';
 import { ACTIVITY_SEND_LIMITS } from '../../../shared/activity-send';
 import { queueRetiredSendSourceCleanup } from './source-cleanup';
+import { SEND_UPLOAD_CLEANUP_COLLECTION, SEND_UPLOAD_RESERVATION_MS, cleanupSendUploadReservations, sendUploadCleanupRef } from './upload-cleanup';
 
 const state = vi.hoisted(() => ({ pro: true, account: 'reviewed-account', enqueue: vi.fn(async () => true), failDeleteOnce: false, failMetadataOnce: false, downloadFailure: undefined as undefined | { path: string; code: number }, downloaded: [] as string[], beforeSave: undefined as undefined | (() => Promise<void>), afterSave: undefined as undefined | (() => Promise<void>), afterDelete: undefined as undefined | (() => Promise<void>), files: new Map<string, { bytes: Buffer; metadata: Record<string, string>; generation?: string }>() }));
+const cleanupState = vi.hoisted(() => ({ failPrefixOnce: false }));
 vi.mock('../utils', async original => ({ ...await original<typeof import('../utils')>(), hasProAccess: async () => state.pro, enqueueActivitySyncTask: state.enqueue }));
 vi.mock('../activity-sync/process-queue-item', () => ({ getDestinationConnectionStatus: async () => 'connected' }));
 vi.mock('../coros/account', () => ({ getActiveCOROSTokenSnapshot: async () => ({ id: state.account }) }));
@@ -19,7 +22,7 @@ vi.mock('firebase-admin', async original => ({ ...await original<typeof import('
   getMetadata: async () => { if (state.failMetadataOnce) { state.failMetadataOnce = false; throw Object.assign(new Error('Synthetic metadata failure'), { code: 503 }); } const value = state.files.get(path); if (!value || objectOptions?.generation && objectOptions.generation !== (value.generation || '1')) throw Object.assign(new Error('missing'), { code: 404 }); return [{ size: value.bytes.length, generation: value.generation || '1', metadata: value.metadata }]; },
   download: async () => { state.downloaded.push(path); if (state.downloadFailure?.path === path) { const code = state.downloadFailure.code; state.downloadFailure = undefined; throw Object.assign(new Error('Synthetic download failure'), { code }); } const value = state.files.get(path); if (!value || objectOptions?.generation && objectOptions.generation !== (value.generation || '1')) throw Object.assign(new Error('missing'), { code: 404 }); return [value.bytes]; },
   delete: async () => { if (state.failDeleteOnce) { state.failDeleteOnce = false; throw new Error('Synthetic temporary storage failure'); } const value = state.files.get(path); if (!objectOptions?.generation || objectOptions.generation === (value?.generation || '1')) state.files.delete(path); await state.afterDelete?.(); },
-}) }) }) }));
+}), deleteFiles: async ({ prefix }: { prefix: string }) => { if (cleanupState.failPrefixOnce) { cleanupState.failPrefixOnce = false; throw new Error('Synthetic prefix cleanup failure'); } for (const path of state.files.keys()) if (path.startsWith(prefix)) state.files.delete(path); } }) }) }));
 vi.unmock('@sports-alliance/sports-lib');
 
 describe.skipIf(!process.env.FIRESTORE_EMULATOR_HOST)('durable activity sends in isolated Firestore', () => {
@@ -31,10 +34,12 @@ describe.skipIf(!process.env.FIRESTORE_EMULATOR_HOST)('durable activity sends in
   beforeEach(async () => {
     state.pro = true; state.account = 'reviewed-account'; state.enqueue.mockClear(); state.files.clear(); state.afterSave = undefined; state.beforeSave = undefined; state.afterDelete = undefined; state.failDeleteOnce = false; state.failMetadataOnce = false;
     state.downloadFailure = undefined; state.downloaded = [];
+    cleanupState.failPrefixOnce = false;
     await db.recursiveDelete(db.doc(`users/${uid}`));
     await db.recursiveDelete(db.doc(`userDeletionTombstones/${uid}`));
     const queues = await db.collection('activitySyncQueue').get();
     for (const queue of queues.docs) await db.recursiveDelete(queue.ref);
+    await db.recursiveDelete(db.collection(SEND_UPLOAD_CLEANUP_COLLECTION));
     await db.doc(`users/${uid}`).set({ stripeRole: 'pro' });
   });
   afterAll(async () => { if (db) await db.terminate(); });
@@ -108,6 +113,33 @@ describe.skipIf(!process.env.FIRESTORE_EMULATOR_HOST)('durable activity sends in
     state.pro = false;
     await expect(create()).rejects.toMatchObject({ code: 'permission-denied' });
     expect((await operationRef(uid, id).get()).exists).toBe(false);
+  });
+  it('keeps delayed cleanup after a successful inline delete for an unknown late write', async () => {
+    await create();
+    state.beforeSave = async () => { await db.recursiveDelete(db.doc(`users/${uid}`)); state.failMetadataOnce = true; };
+    await expect(stageSendFile(uid, id, 'row-one', 'Synthetic.fit', createCOROSActivityFITFixture())).rejects.toThrow('Synthetic metadata failure');
+    const path = `users/${uid}/activitySendSources/${id}/row-one.fit`;
+    const reservation = await sendUploadCleanupRef(path).get();
+    expect(reservation.exists).toBe(true);
+    await cleanupSendUploadReservations(Date.now(), uid);
+    expect((await reservation.ref.get()).exists).toBe(true);
+    state.files.set(path, { bytes: createCOROSActivityFITFixture(), metadata: { sendDigest: reservation.data()!.digest } });
+    await cleanupSendUploadReservations(Date.now() + SEND_UPLOAD_RESERVATION_MS + 1, uid);
+    expect(state.files.size).toBe(0);
+    expect((await reservation.ref.get()).exists).toBe(false);
+    expect((await db.doc(`users/${uid}`).get()).exists).toBe(false);
+  });
+  it('retains a failed active preview and safely retires its reservation after resumption', async () => {
+    await create(); state.failMetadataOnce = true;
+    await expect(stageSendFile(uid, id, 'row-one', 'Synthetic.fit', createCOROSActivityFITFixture())).rejects.toThrow('Synthetic metadata failure');
+    const path = `users/${uid}/activitySendSources/${id}/row-one.fit`;
+    await cleanupSendUploadReservations(Date.now() + SEND_UPLOAD_RESERVATION_MS + 1);
+    expect(state.files.size).toBe(1);
+    expect((await sendUploadCleanupRef(path).get()).exists).toBe(true);
+    await stageSendFile(uid, id, 'row-one', 'Synthetic.fit', createCOROSActivityFITFixture());
+    await cleanupSendUploadReservations(Date.now() + SEND_UPLOAD_RESERVATION_MS + 1);
+    expect(state.files.size).toBe(1);
+    expect((await sendUploadCleanupRef(path).get()).exists).toBe(false);
   });
   it('continues an interrupted saved preview from private criteria after the browser loses its selection', async () => {
     const writes = db.batch();
@@ -460,6 +492,133 @@ describe.skipIf(!process.env.FIRESTORE_EMULATOR_HOST)('durable activity sends in
     await expect(stageSendFile(uid, id, 'row-one', 'Synthetic.fit', createCOROSActivityFITFixture())).rejects.toThrow('Synthetic metadata failure');
     expect(state.files.size).toBe(0); expect((await db.doc(`users/${uid}`).get()).exists).toBe(false);
     expect((await operationRef(uid, id).collection('rows').get()).empty).toBe(true);
+  });
+  it('redrives a late account-deletion upload when inline Storage cleanup fails', async () => {
+    await create();
+    state.beforeSave = async () => {
+      await db.recursiveDelete(db.doc(`users/${uid}`));
+      // Account prefix cleanup completed before the in-flight upload appeared.
+      await cleanupDeletedSendAccount(uid);
+      state.failDeleteOnce = true;
+    };
+    await expect(stageSendFile(uid, id, 'row-one', 'Synthetic.fit', createCOROSActivityFITFixture())).rejects.toThrow('Synthetic temporary storage failure');
+    expect(state.files.size).toBe(1);
+    await cleanupExpiredSends(Date.now() + 86400_000);
+    expect(state.files.size).toBe(0);
+    expect((await db.doc(`users/${uid}`).get()).exists).toBe(false);
+    expect((await operationRef(uid, id).get()).exists).toBe(false);
+  });
+  it('retries failed orphan cleanup without losing its lease or touching archived originals', async () => {
+    await prepare();
+    const archive = await savedOriginal('retained-archive');
+    const path = `users/${uid}/activitySendSources/${id}/row-one.fit`;
+    const marker = sendUploadCleanupRef(path);
+    await db.recursiveDelete(db.doc(`users/${uid}`));
+    state.failDeleteOnce = true;
+    const due = Date.now() + SEND_UPLOAD_RESERVATION_MS + 1;
+    await expect(cleanupSendUploadReservations(due)).rejects.toThrow('must be retried');
+    const failed = (await marker.get()).data()!;
+    expect(failed.leaseUntil.toMillis()).toBeGreaterThan(due);
+    expect(failed.cleanupAfter.toMillis()).toBeGreaterThan(due);
+    expect(state.files.has(path)).toBe(true);
+    await cleanupSendUploadReservations(due + 31 * 60_000);
+    expect((await marker.get()).exists).toBe(false);
+    expect(state.files.has(path)).toBe(false);
+    expect(state.files.has(archive)).toBe(true);
+    expect((await db.doc(`users/${uid}`).get()).exists).toBe(false);
+  });
+  it('reconciles account reservations even when the independent prefix cleanup fails', async () => {
+    await prepare();
+    const archive = await savedOriginal('retained-archive');
+    await db.recursiveDelete(db.doc(`users/${uid}`));
+    cleanupState.failPrefixOnce = true;
+    await expect(cleanupDeletedSendAccount(uid, Date.now() + SEND_UPLOAD_RESERVATION_MS + 1)).rejects.toThrow('must be retried');
+    expect((await db.collection(SEND_UPLOAD_CLEANUP_COLLECTION).get()).empty).toBe(true);
+    expect(state.files.has(archive)).toBe(true);
+    expect(state.files.size).toBe(1);
+  });
+  it('honors an account tombstone even while committed source documents remain', async () => {
+    await prepare();
+    await db.doc(`userDeletionTombstones/${uid}`).set({ active: true });
+    await cleanupSendUploadReservations(Date.now() + SEND_UPLOAD_RESERVATION_MS + 1, uid);
+    expect(state.files.size).toBe(0);
+    expect((await db.collection(SEND_UPLOAD_CLEANUP_COLLECTION).get()).empty).toBe(true);
+    expect((await operationRef(uid, id).collection('rows').doc('row-one').get()).data()?.reservedBytes).toBeGreaterThan(0);
+  });
+  it('preserves a replacement cleanup claim and newer generation after an older delete finishes', async () => {
+    await prepare();
+    const path = `users/${uid}/activitySendSources/${id}/row-one.fit`;
+    const marker = sendUploadCleanupRef(path);
+    const initial = (await marker.get()).data()!;
+    await db.recursiveDelete(db.doc(`users/${uid}`));
+    state.afterDelete = async () => {
+      state.afterDelete = undefined;
+      await marker.set({ ...initial, leaseID: 'replacement-cleaner', leaseUntil: Timestamp.fromMillis(Date.now() + 3600_000), cleanupAfter: Timestamp.fromMillis(Date.now() + 3600_000) });
+      state.files.set(path, { bytes: createCOROSActivityFITFixture(), metadata: { sendDigest: initial.digest }, generation: '2' });
+    };
+    await cleanupSendUploadReservations(Date.now() + SEND_UPLOAD_RESERVATION_MS + 1);
+    expect((await marker.get()).data()?.leaseID).toBe('replacement-cleaner');
+    expect(state.files.get(path)?.generation).toBe('2');
+    await cleanupSendUploadReservations(Date.now() + 2 * 3600_000);
+    expect((await marker.get()).exists).toBe(false);
+    expect(state.files.has(path)).toBe(false);
+  });
+  it('retains mismatched object identity for investigation instead of deleting different bytes', async () => {
+    await prepare();
+    const path = `users/${uid}/activitySendSources/${id}/row-one.fit`;
+    await db.recursiveDelete(db.doc(`users/${uid}`));
+    state.files.get(path)!.metadata.sendDigest = 'different-private-digest';
+    await expect(cleanupSendUploadReservations(Date.now() + SEND_UPLOAD_RESERVATION_MS + 1)).rejects.toThrow('must be retried');
+    expect(state.files.has(path)).toBe(true);
+    expect((await sendUploadCleanupRef(path).get()).exists).toBe(true);
+  });
+  it('reconciles multiple reservation pages while bounding each run and retaining remaining work', async () => {
+    const digest = 'a'.repeat(64);
+    let writes = db.batch();
+    for (let index = 0; index < 501; index++) {
+      const rowID = `orphan-${index}`;
+      const path = `users/${uid}/activitySendSources/${id}/${rowID}.fit`;
+      writes.set(sendUploadCleanupRef(path), { version: 1, userID: uid, batchID: id, rowID, path, digest, cleanupAfter: Timestamp.fromMillis(0) });
+      if (index === 449) { await writes.commit(); writes = db.batch(); }
+    }
+    await writes.commit();
+    await cleanupSendUploadReservations();
+    expect((await db.collection(SEND_UPLOAD_CLEANUP_COLLECTION).get()).size).toBe(1);
+    await cleanupSendUploadReservations();
+    expect((await db.collection(SEND_UPLOAD_CLEANUP_COLLECTION).get()).empty).toBe(true);
+    expect((await operationRef(uid, id).get()).exists).toBe(false);
+    expect((await db.doc(`users/${uid}/activitySendQuota/current`).get()).exists).toBe(false);
+  }, 60_000);
+  it('rejects forged cleanup paths without deleting an archive or the temporary source', async () => {
+    await prepare();
+    const archive = await savedOriginal('retained-archive');
+    const path = `users/${uid}/activitySendSources/${id}/row-one.fit`;
+    await sendUploadCleanupRef(path).update({ path: archive, cleanupAfter: Timestamp.fromMillis(0) });
+    await expect(cleanupSendUploadReservations()).rejects.toThrow('must be retried');
+    expect(state.files.has(archive)).toBe(true);
+    expect(state.files.has(path)).toBe(true);
+    expect((await sendUploadCleanupRef(path).get()).exists).toBe(true);
+  });
+  it('blocks staging behind an active cleanup claim before uploading or changing quota', async () => {
+    await create(); state.failMetadataOnce = true;
+    await expect(stageSendFile(uid, id, 'row-one', 'Synthetic.fit', createCOROSActivityFITFixture())).rejects.toThrow('Synthetic metadata failure');
+    const path = `users/${uid}/activitySendSources/${id}/row-one.fit`;
+    const marker = sendUploadCleanupRef(path);
+    await marker.update({ leaseID: 'synthetic-cleaner', leaseUntil: Timestamp.fromMillis(Date.now() + SEND_UPLOAD_RESERVATION_MS) });
+    const before = (await db.doc(`users/${uid}/activitySendQuota/current`).get()).data();
+    state.beforeSave = async () => { throw new Error('No Storage write may begin behind cleanup.'); };
+    await expect(stageSendFile(uid, id, 'row-one', 'Synthetic.fit', createCOROSActivityFITFixture())).rejects.toMatchObject({ code: 'unavailable' });
+    expect((await db.doc(`users/${uid}/activitySendQuota/current`).get()).data()).toEqual(before);
+    expect(state.files.size).toBe(1);
+  });
+  it('rejects late adoption after a cleanup claim supersedes its reservation', async () => {
+    await create();
+    state.afterSave = async () => {
+      await sendUploadCleanupRef(`users/${uid}/activitySendSources/${id}/row-one.fit`).update({ leaseID: 'synthetic-cleaner', leaseUntil: Timestamp.fromMillis(Date.now() + SEND_UPLOAD_RESERVATION_MS) });
+    };
+    await expect(stageSendFile(uid, id, 'row-one', 'Synthetic.fit', createCOROSActivityFITFixture())).rejects.toMatchObject({ code: 'failed-precondition' });
+    expect((await operationRef(uid, id).collection('rows').doc('row-one').get()).data()).not.toHaveProperty('originalFile');
+    expect(state.files.size).toBe(0);
   });
   it('preserves a newer cleanup request arriving during an older generation deletion', async () => {
     await prepare(); await runSendCommand(uid, { version: 1, action: 'remove', batchId: id, rowId: 'row-one' });

@@ -155,6 +155,11 @@ describe('firestore indexes', () => {
         expect(cleanupOverrides).toEqual([]);
     });
 
+    it('keeps unresolved activity upload reservations on default collection indexes without TTL', () => {
+        const config = loadFirestoreIndexes();
+        expect(config.fieldOverrides.filter(field => field.collectionGroup === 'activitySendUploadCleanup')).toEqual([]);
+    });
+
     it('expires durable Suunto Health webhook ingress envelopes', () => {
         const config = loadFirestoreIndexes();
 
