@@ -1,3 +1,4 @@
+import { AppHapticsService } from '../../../services/app.haptics.service';
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { AccountLinkingDialogComponent, AccountLinkingData } from './account-linking-dialog.component';
 import { MAT_DIALOG_DATA, MatDialogRef, MatDialogModule } from '@angular/material/dialog';
@@ -7,6 +8,8 @@ import { vi, describe, it, expect, beforeEach } from 'vitest';
 import { By } from '@angular/platform-browser';
 
 
+
+const haptics = { selection: vi.fn(), success: vi.fn(), error: vi.fn() };
 
 describe('AccountLinkingDialogComponent', () => {
     let component: AccountLinkingDialogComponent;
@@ -20,6 +23,7 @@ describe('AccountLinkingDialogComponent', () => {
     };
 
     beforeEach(async () => {
+        vi.clearAllMocks();
         mockDialogRef = {
             close: vi.fn()
         };
@@ -30,6 +34,7 @@ describe('AccountLinkingDialogComponent', () => {
                 MatDialogModule
             ],
             providers: [
+                { provide: AppHapticsService, useValue: haptics },
                 { provide: MatDialogRef, useValue: mockDialogRef },
                 { provide: MAT_DIALOG_DATA, useValue: mockData }
             ],
@@ -41,8 +46,17 @@ describe('AccountLinkingDialogComponent', () => {
         fixture.detectChanges();
     });
 
+    it('ignores unavailable sign-in methods without feedback', () => {
+        component.onSelectProvider('unknown.com');
+        expect(mockDialogRef.close).not.toHaveBeenCalled();
+        expect(haptics.selection).not.toHaveBeenCalled();
+    });
+
     it('should create', () => {
         expect(component).toBeTruthy();
+        expect(haptics.selection).not.toHaveBeenCalled();
+        expect(fixture.nativeElement.querySelector('h2[mat-dialog-title]')).not.toBeNull();
+        expect(fixture.nativeElement.querySelector('mat-dialog-actions')).not.toBeNull();
     });
 
     it('should display the correct email', () => {
@@ -60,7 +74,7 @@ describe('AccountLinkingDialogComponent', () => {
         const compiled = fixture.nativeElement;
         // Depending on exact text structure. 
         // "to link your new EmailLink login."
-        expect(compiled.textContent).toContain('EmailLink');
+        expect(compiled.textContent).toContain('email link');
     });
 
     it('should render buttons for all existing providers', () => {
@@ -72,12 +86,16 @@ describe('AccountLinkingDialogComponent', () => {
         const googleButton = fixture.debugElement.query(By.css('.provider-button.google'));
         googleButton.triggerEventHandler('click', null);
         expect(mockDialogRef.close).toHaveBeenCalledWith('google.com');
+        expect(haptics.selection).toHaveBeenCalledOnce();
+        expect(haptics.success).not.toHaveBeenCalled();
     });
 
     it('should close dialog with "github.com" when GitHub button is clicked', () => {
         const githubButton = fixture.debugElement.query(By.css('.provider-button.github'));
         githubButton.triggerEventHandler('click', null);
         expect(mockDialogRef.close).toHaveBeenCalledWith('github.com');
+        expect(haptics.selection).toHaveBeenCalledOnce();
+        expect(haptics.success).not.toHaveBeenCalled();
     });
 
     it('should close dialog with "emailLink" when Magic Link button is clicked', () => {
@@ -85,11 +103,15 @@ describe('AccountLinkingDialogComponent', () => {
         const emailButton = fixture.debugElement.query(By.css('.provider-button.email'));
         emailButton.triggerEventHandler('click', null);
         expect(mockDialogRef.close).toHaveBeenCalledWith('emailLink');
+        expect(haptics.selection).toHaveBeenCalledOnce();
+        expect(haptics.success).not.toHaveBeenCalled();
     });
 
     it('should close dialog with null when Cancel is clicked', () => {
         const cancelButton = fixture.debugElement.query(By.css('.cancel-button'));
         cancelButton.triggerEventHandler('click', null);
         expect(mockDialogRef.close).toHaveBeenCalledWith(null);
+        expect(haptics.selection).toHaveBeenCalledOnce();
+        expect(haptics.success).not.toHaveBeenCalled();
     });
 });

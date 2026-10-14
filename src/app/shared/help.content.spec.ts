@@ -1561,6 +1561,8 @@ describe('help.content', () => {
     const gettingStartedSection = HELP_SECTIONS.find(section => section.id === 'getting-started');
 
     expect(gettingStartedSection?.content).toContain('haptic feedback');
+    expect(gettingStartedSection?.content).toContain('Dialog choices, **Cancel**, rename saves');
+    expect(gettingStartedSection?.content).toContain('Typing, unchanged choices, invalid submissions and disabled actions stay silent');
     expect(gettingStartedSection?.content).toContain('supported mobile devices');
     expect(gettingStartedSection?.content).toContain('vibration support is unavailable');
     expect(gettingStartedSection?.content).toContain('reduced-motion is enabled');

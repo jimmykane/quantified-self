@@ -1,9 +1,15 @@
-/* Global .qs-form styles handle width and spacing now. */
-.radio-container {
-  margin-bottom: 1em;
+:host,
+form {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
 }
 
-.mat-radio-button {
-  margin-top: 1em;
-  margin-right: 1em;
+:host {
+  max-height: calc(100dvh - 32px);
+}
+
+mat-dialog-actions {
+  flex-wrap: wrap;
+  gap: 8px;
 }

@@ -262,7 +262,8 @@ export class LoginComponent implements OnInit, OnDestroy {
               existingProviders: methods, // Pass ALL existing methods
               pendingProvider: pendingProviderId
             },
-            maxWidth: '500px',
+            width: '480px',
+            maxWidth: 'calc(100vw - 32px)',
             autoFocus: false
           });
 

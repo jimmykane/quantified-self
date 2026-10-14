@@ -26,6 +26,7 @@ import { DynamicDataLoader } from '@sports-alliance/sports-lib';
 import { convertSpeedToPace } from '@sports-alliance/sports-lib';
 import { convertSpeedToSwimPace } from '@sports-alliance/sports-lib';
 import { AppAnalyticsService } from '../../services/app.analytics.service';
+import { AppHapticsService } from '../../services/app.haptics.service';
 import { LoggerService } from '../../services/logger.service';
 import { resolveUnitAwareDisplayStat } from '@shared/unit-aware-display';
 
@@ -54,6 +55,7 @@ export class EventsExportFormComponent extends FormsAbstract {
   public startDate: Date;
   public endDate: Date;
   public isLoading: boolean;
+  readonly haptics = inject(AppHapticsService);
   private analyticsService = inject(AppAnalyticsService);
   private logger = inject(LoggerService);
 
@@ -109,6 +111,8 @@ export class EventsExportFormComponent extends FormsAbstract {
 
   async onSubmit(someEvent) {
     super.onSubmit(someEvent);
+    if (this.isLoading || this.exportFromGroup.invalid) return;
+    this.haptics.selection();
     // create csv header
     this.user.settings.exportToCSVSettings.startDate = this.exportFromGroup.get('startDate').value;
     this.user.settings.exportToCSVSettings.name = this.exportFromGroup.get('name').value;

@@ -19,6 +19,10 @@
     "environment": "angular",
     "reason": "Compiles both history component templates with TestBed and verifies signal input bindings, rendered controls, haptics, and DestroyRef teardown during pending retries."
   },
+  "src/app/components/shared/dialog-actions-haptics.spec.ts": {
+    "environment": "angular",
+    "reason": "Compiles legacy error and browser guidance dialogs with real Material controls in TestBed to verify rendered actions, silent initialization and single-owner haptic feedback."
+  },
   "src/app/components/shared/metric-history-chart/metric-history-chart.component.spec.ts": {
     "environment": "angular",
     "reason": "Creates the chart with TestBed to verify signal input changes, rendered accessibility text, chart host initialization, responsive tooltips, haptic ownership and fixture teardown."

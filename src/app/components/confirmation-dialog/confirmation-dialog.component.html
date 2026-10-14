@@ -12,6 +12,8 @@
     </div>
 </mat-dialog-content>
 <mat-dialog-actions align="end">
-    <button mat-stroked-button (click)="onCancel()" *ngIf="showCancel">{{ cancelButtonText }}</button>
-    <button mat-flat-button [color]="confirmColor" [class.qs-mat-warn]="confirmColor === 'warn'" (click)="onConfirm()">{{ confirmButtonText }}</button>
+    <button mat-button type="button" (click)="onCancel()" *ngIf="showCancel">{{ cancelButtonText }}</button>
+    <button mat-flat-button type="button" [color]="confirmColor" [class.qs-mat-primary]="confirmColor === 'primary'"
+        [class.qs-mat-accent]="confirmColor === 'accent'" [class.qs-mat-warn]="confirmColor === 'warn'"
+        (click)="onConfirm()">{{ confirmButtonText }}</button>
 </mat-dialog-actions>

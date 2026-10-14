@@ -1,6 +1,7 @@
-import { Component } from '@angular/core';
+import { Component, inject } from '@angular/core';
 import { MatDialogRef } from '@angular/material/dialog';
 import { EventEmitter } from '@angular/core';
+import { AppHapticsService } from '../../../services/app.haptics.service';
 
 export type MergeOption = 'benchmark' | 'multi';
 
@@ -11,6 +12,7 @@ export type MergeOption = 'benchmark' | 'multi';
   standalone: false
 })
 export class MergeOptionsDialogComponent {
+  private readonly haptics = inject(AppHapticsService);
   public selectedOption: MergeOption = 'benchmark';
   public isMerging = false;
   public mergeRequested = new EventEmitter<MergeOption>();
@@ -18,7 +20,9 @@ export class MergeOptionsDialogComponent {
   constructor(private dialogRef: MatDialogRef<MergeOptionsDialogComponent>) { }
 
   selectOption(option: MergeOption) {
+    if (this.isMerging || option === this.selectedOption) return;
     this.selectedOption = option;
+    this.haptics.selection();
   }
 
   confirm() {
@@ -26,6 +30,7 @@ export class MergeOptionsDialogComponent {
       return;
     }
     this.isMerging = true;
+    this.haptics.selection();
     this.mergeRequested.emit(this.selectedOption);
   }
 
@@ -33,6 +38,7 @@ export class MergeOptionsDialogComponent {
     if (this.isMerging) {
       return;
     }
+    this.haptics.selection();
     this.dialogRef.close(null);
   }
 }

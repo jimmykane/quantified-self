@@ -682,9 +682,9 @@ export class EventTableComponent extends DataTableAbstractDirective implements O
     this.loading();
     const dialogRef = this.dialog.open(ConfirmationDialogComponent, {
       data: {
-        title: 'Are you sure you want to delete?',
-        message: 'All data will be permanently deleted. This operation cannot be undone.',
-        confirmLabel: 'Delete',
+        title: eventIDs.length === 1 ? 'Delete activity?' : `Delete ${eventIDs.length} activities?`,
+        message: 'The selected activities, their recorded data and original files will be permanently deleted. You cannot undo this.',
+        confirmLabel: eventIDs.length === 1 ? 'Delete activity' : 'Delete activities',
         cancelLabel: 'Cancel',
         confirmColor: 'warn',
       }

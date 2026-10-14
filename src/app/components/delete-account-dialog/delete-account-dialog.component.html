@@ -29,7 +29,7 @@
         <strong>This action is irreversible.</strong> Your data cannot be recovered.
     </p>
 
-    <mat-checkbox [(ngModel)]="confirmChecked" class="qs-checkbox-warn">
+    <mat-checkbox [checked]="confirmChecked" (change)="onConfirmationChange($event.checked)" class="qs-checkbox-warn">
         I understand and want to delete my account
     </mat-checkbox>
 </mat-dialog-content>

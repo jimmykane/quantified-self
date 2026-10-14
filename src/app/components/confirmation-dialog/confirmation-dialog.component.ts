@@ -39,6 +39,7 @@ export class ConfirmationDialogComponent {
   }
 
   onPastProviderCleanupChange(checked: boolean): void {
+    if (checked === this.removePastProviderCopies) return;
     this.removePastProviderCopies = checked;
     this._hapticsService.selection();
   }

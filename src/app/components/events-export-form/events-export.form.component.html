@@ -1,9 +1,7 @@
+<h2 mat-dialog-title>Export activities</h2>
+<form [formGroup]="exportFromGroup" (ngSubmit)="onSubmit($event)">
 <mat-dialog-content>
   <app-loading-overlay [isLoading]="isLoading" [showSkeleton]="false" height="auto">
-    <section>
-      <span class="mat-headline">Export to CSV</span>
-    </section>
-
     <section>
       <span class="mat-subheading-1">From {{this.startDate | date:'medium'}}</span>
     </section>
@@ -14,158 +12,116 @@
 
 
     @if (exportFromGroup) {
-    <form [formGroup]="exportFromGroup" (ngSubmit)="onSubmit($event)" class="qs-form">
+    <div class="qs-form">
       <section>
         <span class="mat-subheading-2">Select the data you want to include</span>
       </section>
       <section>
-        <mat-slide-toggle formControlName="startDate">
-          <span matTooltip="Include the start date in the export">
-            Start date
-          </span>
+        <mat-slide-toggle (change)="haptics.selection()" formControlName="startDate">
+          Start date
         </mat-slide-toggle>
       </section>
       <section>
-        <mat-slide-toggle formControlName="name">
-          <span matTooltip="Include name in the export">
-            Name
-          </span>
+        <mat-slide-toggle (change)="haptics.selection()" formControlName="name">
+          Name
         </mat-slide-toggle>
       </section>
       <section>
-        <mat-slide-toggle formControlName="description">
-          <span matTooltip="Include description in the export">
-            Description
-          </span>
+        <mat-slide-toggle (change)="haptics.selection()" formControlName="description">
+          Description
         </mat-slide-toggle>
       </section>
       <section>
-        <mat-slide-toggle formControlName="activityTypes">
-          <span matTooltip="Include activity types in the export">
-            Activity types
-          </span>
+        <mat-slide-toggle (change)="haptics.selection()" formControlName="activityTypes">
+          Activity types
         </mat-slide-toggle>
       </section>
       <section>
-        <mat-slide-toggle formControlName="distance">
-          <span matTooltip="Include distance in the export">
-            Distance
-          </span>
+        <mat-slide-toggle (change)="haptics.selection()" formControlName="distance">
+          Distance
         </mat-slide-toggle>
       </section>
       <section>
-        <mat-slide-toggle formControlName="duration">
-          <span matTooltip="Include duration in the export">
-            Duration
-          </span>
+        <mat-slide-toggle (change)="haptics.selection()" formControlName="duration">
+          Duration
         </mat-slide-toggle>
       </section>
       <section>
-        <mat-slide-toggle formControlName="ascent">
-          <span matTooltip="Include ascent in the export">
-            Ascent
-          </span>
+        <mat-slide-toggle (change)="haptics.selection()" formControlName="ascent">
+          Ascent
         </mat-slide-toggle>
       </section>
       <section>
-        <mat-slide-toggle formControlName="descent">
-          <span matTooltip="Include descent in the export">
-            Descent
-          </span>
+        <mat-slide-toggle (change)="haptics.selection()" formControlName="descent">
+          Descent
         </mat-slide-toggle>
       </section>
       <section>
-        <mat-slide-toggle formControlName="calories">
-          <span matTooltip="Include calories in the export">
-            Calories
-          </span>
+        <mat-slide-toggle (change)="haptics.selection()" formControlName="calories">
+          Calories
         </mat-slide-toggle>
       </section>
       <section>
-        <mat-slide-toggle formControlName="feeling">
-          <span matTooltip="Include feeling in the export">
-            Feeling
-          </span>
+        <mat-slide-toggle (change)="haptics.selection()" formControlName="feeling">
+          Feeling
         </mat-slide-toggle>
       </section>
       <section>
-        <mat-slide-toggle formControlName="rpe">
-          <span matTooltip="Include RPE in the export">
-            RPE
-          </span>
+        <mat-slide-toggle (change)="haptics.selection()" formControlName="rpe">
+          RPE
         </mat-slide-toggle>
       </section>
       <section>
-        <mat-slide-toggle formControlName="averageSpeed">
-          <span matTooltip="Include average speed in the export">
-            Average speed
-          </span>
+        <mat-slide-toggle (change)="haptics.selection()" formControlName="averageSpeed">
+          Average speed
         </mat-slide-toggle>
       </section>
       <section>
-        <mat-slide-toggle formControlName="averagePace">
-          <span matTooltip="Include average pace in the export">
-            Average pace
-          </span>
+        <mat-slide-toggle (change)="haptics.selection()" formControlName="averagePace">
+          Average pace
         </mat-slide-toggle>
       </section>
       <section>
-        <mat-slide-toggle formControlName="averageSwimPace">
-          <span matTooltip="Include average swim pace in the export">
-            Average swim pace
-          </span>
+        <mat-slide-toggle (change)="haptics.selection()" formControlName="averageSwimPace">
+          Average swim pace
         </mat-slide-toggle>
       </section>
       <section>
-        <mat-slide-toggle formControlName="averageGradeAdjustedPace">
-          <span matTooltip="Include average grade adjusted pace in the export">
-            Average grade adjusted pace
-          </span>
+        <mat-slide-toggle (change)="haptics.selection()" formControlName="averageGradeAdjustedPace">
+          Average grade adjusted pace
         </mat-slide-toggle>
       </section>
       <section>
-        <mat-slide-toggle formControlName="averageHeartRate">
-          <span matTooltip="Include average heart rate in the export">
-            Average heart rate
-          </span>
+        <mat-slide-toggle (change)="haptics.selection()" formControlName="averageHeartRate">
+          Average heart rate
         </mat-slide-toggle>
       </section>
       <section>
-        <mat-slide-toggle formControlName="maximumHeartRate">
-          <span matTooltip="Include maximum heart rate in the export">
-            Maximum heart rate
-          </span>
+        <mat-slide-toggle (change)="haptics.selection()" formControlName="maximumHeartRate">
+          Maximum heart rate
         </mat-slide-toggle>
       </section>
       <section>
-        <mat-slide-toggle formControlName="averagePower">
-          <span matTooltip="Include average power in the export">
-            Average power
-          </span>
+        <mat-slide-toggle (change)="haptics.selection()" formControlName="averagePower">
+          Average power
         </mat-slide-toggle>
       </section>
       <section>
-        <mat-slide-toggle formControlName="maximumPower">
-          <span matTooltip="Include maximum power in the export">
-            Maximum power
-          </span>
+        <mat-slide-toggle (change)="haptics.selection()" formControlName="maximumPower">
+          Maximum power
         </mat-slide-toggle>
       </section>
       <section>
-        <mat-slide-toggle formControlName="vO2Max">
-          <span matTooltip="Include VO2Max in the export">
-            VO2Max
-          </span>
+        <mat-slide-toggle (change)="haptics.selection()" formControlName="vO2Max">
+          VO2Max
         </mat-slide-toggle>
       </section>
-      <div class="qs-form-actions">
-        <button mat-stroked-button (click)="close($event)">Cancel</button>
-        @if (!hasError(exportFromGroup)) {
-        <button mat-flat-button class="qs-mat-primary" (click)="onSubmit($event)">Export
-        </button>
-        }
-      </div>
-    </form>
+    </div>
     }
   </app-loading-overlay>
 </mat-dialog-content>
+<mat-dialog-actions align="end">
+  <button mat-button type="button" appHapticTap (click)="close($event)" [disabled]="isLoading">Cancel</button>
+  <button mat-flat-button class="qs-mat-primary" type="submit" [disabled]="isLoading || exportFromGroup.invalid">Export CSV</button>
+</mat-dialog-actions>
+</form>

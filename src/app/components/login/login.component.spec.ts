@@ -773,6 +773,10 @@ describe('LoginComponent', () => {
         await new Promise(resolve => setTimeout(resolve, 0));
 
         expect(mockAuthService.fetchSignInMethods).toHaveBeenCalledWith('test@example.com');
+        expect(mockDialog.open).toHaveBeenCalledWith(expect.anything(), expect.objectContaining({
+            width: '480px',
+            maxWidth: 'calc(100vw - 32px)',
+        }));
         expect(mockAuthService.localStorageService.removeItem).toHaveBeenCalledWith(EMAIL_LINK_RETURN_URL_STORAGE_KEY);
         expect(mockRouter.navigateByUrl).toHaveBeenCalledWith('/dashboard');
     });

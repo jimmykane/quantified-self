@@ -78,6 +78,33 @@ or collapse, with no feedback during route hydration or while busy.
 Background profile updates refresh untouched consent switches while preserving explicit local edits. Privacy switches
 are disabled during saving, duplicate submissions are ignored, and failed saves retain the user's choice for retry.
 
+## Dialog actions and haptic ownership
+
+Use the global Material dialog surface with `mat-dialog-title`, a bounded `mat-dialog-content` scroll owner, and
+`mat-dialog-actions`. Confirmation, account-linking, sign-in error, browser guidance and CSV export use these same
+shell conventions. Merge uses compact Material radio options with explicit stats/comparison consequences instead of
+custom selectable cards. Confirmations keep text Cancel and the themed primary/destructive action alongside each other
+when they fit on a phone; long labels wrap instead of forcing every confirmation into two full-width button rows.
+Activity deletion names the activity/selection and limits its warning to those activities, their data and original files.
+CSV export keeps its actions outside the scrolling column list and has one `ngSubmit` owner, without a duplicate
+button-click export. Its visible option labels are sufficient; redundant Include-in-export tooltips are removed so
+swiping across the labels keeps native touch scrolling.
+
+Haptics belong to the accepted user action, not the overlay opening lifecycle. Use `appHapticTap` for unconditional
+enabled dismissals such as tag-editor Cancel. Handler-owned feedback follows guards for rename submissions, merge
+choices/actions, benchmark selection/swap/alignment, account-linking methods, CSV submission and account-deletion
+acknowledgement. Material change events cover toggles and checkboxes; they do not vibrate for programmatic form
+hydration or typing. Duplicate/unchanged choices, invalid submissions and busy actions stay silent. The dialog uses
+selection feedback when returning a draft or starting an operation; the existing mutation owner retains success/error
+feedback after persistence. Destructive confirmations retain warning feedback, without pretending the deletion has
+already completed. Do not combine a directive and handler for the same action.
+
+Reuse `AppHapticsService` so unsupported devices, reduced motion, pointer type and rate limiting keep their existing
+behavior. Tests mock this service and cover initialization, no-ops, disabled actions and accepted outcomes. Browser
+checks verify control wiring, wrapping, focus and scroll ownership; actual vibration still requires a supported phone.
+These changes affect presentation and local feedback only; event, plan/workout, provider and MCP contracts remain
+unchanged.
+
 ## Dashboard unit setup
 
 The Dashboard Default units prompt uses `appSettings.unitSetupCompleted === false` and is owner-only, including

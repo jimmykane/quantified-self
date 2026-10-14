@@ -45,6 +45,17 @@ describe('EventTagsDialogComponent', () => {
     fixture.detectChanges();
   });
 
+  it('gives one selection feedback on cancel and none while disabled', () => {
+    component.isSaving.set(true); fixture.detectChanges();
+    const button = fixture.nativeElement.querySelector('button[mat-button]') as HTMLButtonElement;
+    button.click();
+    expect(hapticsService.selection).not.toHaveBeenCalled();
+    expect(close).not.toHaveBeenCalled();
+    component.isSaving.set(false); fixture.detectChanges(); button.click();
+    expect(hapticsService.selection).toHaveBeenCalledOnce();
+    expect(close).toHaveBeenCalledOnce();
+  });
+
   it('uses activity language in the default dialog title', () => {
     expect(component.title).toBe('Activity tags');
   });

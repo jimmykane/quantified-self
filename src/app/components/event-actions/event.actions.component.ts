@@ -443,9 +443,9 @@ export class EventActionsComponent implements OnInit, OnDestroy {
   async delete() {
     const dialogRef = this.dialog.open(ConfirmationDialogComponent, {
       data: {
-        title: 'Are you sure you want to delete?',
-        message: 'All data will be permanently deleted. This operation cannot be undone.',
-        confirmLabel: 'Delete',
+        title: 'Delete activity?',
+        message: 'This activity, its recorded data and original files will be permanently deleted. You cannot undo this.',
+        confirmLabel: 'Delete activity',
         cancelLabel: 'Cancel',
         confirmColor: 'warn',
       } as ConfirmationDialogData,
