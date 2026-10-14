@@ -392,8 +392,11 @@ export class HealthWorkspaceComponent {
       this.unitSettings(),
     ).series.map(series => [series.id, series]));
     return Object.fromEntries(this.priorityHrvTrendSeries().flatMap(series => {
+      const fullSeries = fullSeriesById.get(series.id) || series;
+      const pointKeys = new Set(fullSeries.points.map(point => `${point.timestampMs}:${point.calendarDate}`));
+      const missingPoints = series.points.filter(point => !pointKeys.has(`${point.timestampMs}:${point.calendarDate}`));
       const status = buildHealthHrvPersonalRangeStatus(
-        fullSeriesById.get(series.id) || series,
+        { ...fullSeries, points: [...fullSeries.points, ...missingPoints] },
         this.priorityHrvWindow.endTimeMs,
         this.unitSettings(),
         series.points.map(point => point.timestampMs),

@@ -1421,6 +1421,37 @@ describe('HealthWorkspaceComponent', () => {
     expect(hrvChartOption?.series?.slice(1).every(series => series.lineStyle?.color !== 'transparent')).toBe(true);
   });
 
+  it('grades every displayed HRV highlight point when an out-of-window Health summary enriches Sleep', async () => {
+    await createComponent(metricId => Promise.resolve(rangeLoad(metricId, true)));
+    const accountKey = 'secret-account-nightly';
+    const endTimeMs = todayStartMs + 8 * 3_600_000;
+    const record = { ...sourceRecord(HEALTH_METRIC_IDS.HeartRateVariability, HEALTH_PROVIDERS.GarminAPI, 62, 'nightly'),
+      startTimeMs: endTimeMs - 8 * 3_600_000, endTimeMs: component.priorityHrvWindow.endTimeMs + 1,
+      metrics: [{ ...metricEntry(HEALTH_METRIC_IDS.HeartRateVariability, 62), semanticVariant: 'overnight_rmssd' }] };
+    const current = { ...sleepSession({ endTimeMs, startTimeMs: endTimeMs - 8 * 3_600_000, vitals: { overnightHrvMs: 62 } }),
+      healthAccountKey: accountKey, nightlyHrvSourceKey: JSON.stringify(['health',
+        JSON.stringify([SLEEP_PROVIDERS.GarminAPI, sleepSession().source.providerUserId]), 'overnight_rmssd',
+        'average', HEALTH_VALUE_ORIGINS.ProviderSummary, HEALTH_RECORDING_METHODS.ProviderCalculated]) };
+    const previous = Array.from({ length: 23 }, (_, index) => {
+      const wakeTime = endTimeMs - (index + 1) * 86_400_000;
+      return { ...sleepSession({ id: `native-night-${index}`, sleepDate: localCalendarDate(wakeTime),
+        startTimeMs: wakeTime - 8 * 3_600_000, endTimeMs: wakeTime, vitals: { overnightHrvMs: 50 + index % 3 } }),
+        healthAccountKey: accountKey };
+    });
+    component.prioritySleepSessions.set([...previous, current]);
+    component.priorityHrvLoad.set({ ...rangeLoad(HEALTH_METRIC_IDS.HeartRateVariability, true),
+      result: projectLoadedHealthRange([record], [], { startDate: component.priorityHrvHistoryStartDate,
+        endDate: component.priorityHrvWindow.endDate, metricIds: [HEALTH_METRIC_IDS.HeartRateVariability] },
+        { sourceRecordsComplete: true, samplesComplete: true }),
+    });
+    fixture.detectChanges();
+    const series = component.priorityHrvTrendSeries()[0];
+    expect(series.points.at(-1)).toMatchObject({ timestampMs: endTimeMs, value: 62 });
+    const status = component.priorityHrvChartStatuses()[series.id];
+    expect(status.pointStatuses).toHaveLength(series.points.length);
+    expect(status.pointStatuses.at(-1)).toMatchObject({ timestampMs: endTimeMs, tone: 'negative', normalRange: expect.any(Object) });
+  });
+
   it('applies the same historical personal-range colors to the selected HRV chart', async () => {
     await createComponent(metricId => Promise.resolve(rangeLoad(
       metricId,
