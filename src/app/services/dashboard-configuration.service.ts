@@ -37,12 +37,17 @@ export class DashboardConfigurationService {
     if (!uid) throw new Error('A dashboard owner is required.');
     const baseline = cloneDashboardSettings(expected);
     const update = cloneDashboardSettings(patch);
+    const keys = Object.keys(update);
     const reference = doc(this.firestore, 'users', uid, 'config', 'settings');
     await runTransaction(this.firestore, async transaction => {
       const snapshot = await transaction.get(reference);
       const current = snapshot.data()?.['dashboardSettings'] || {};
-      if (snapshot.exists()) assertDashboardConfigurationCurrent(current, baseline, Object.keys(update));
-      transaction.set(reference, { dashboardSettings: update }, { merge: true });
+      if (snapshot.exists()) assertDashboardConfigurationCurrent(current, baseline, keys);
+      // Replace each validated field as a whole. Recursive merge retains old
+      // auto-tile timestamps and makes our own next draft appear stale.
+      transaction.set(reference, { dashboardSettings: update }, {
+        mergeFields: keys.map(key => `dashboardSettings.${key}`),
+      });
     });
   }
 }

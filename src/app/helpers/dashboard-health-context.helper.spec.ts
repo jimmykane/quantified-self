@@ -3,7 +3,10 @@ import { normalizeUserUnitSettings } from '@shared/unit-aware-display';
 import { formatCanonicalHealthMetricSportsLibValue } from '@shared/sports-lib-health-data';
 import { describe, expect, it } from 'vitest';
 import { HEALTH_METRIC_CATALOG, HealthMetricId, HealthSourceRecord } from '@shared/health';
+import type { SleepSession } from '@shared/sleep';
 import { projectLoadedHealthRange } from '@shared/health-query';
+import { enrichSleepWithNightlyHrv, nightlyHealthAccountKey } from '@shared/nightly-hrv';
+import { withHealthSleepAccountKeys } from './health-sleep-account.helper';
 import { AppDashboardHealthMetricSettings } from '../models/app-user.interface';
 import { buildDashboardHealthContext, filterDashboardHealthEvidence, DashboardHealthEvidence } from './dashboard-health-context.helper';
 import { DASHBOARD_HEALTH_GROUPS } from './dashboard-health-tile.helper';
@@ -20,6 +23,39 @@ function evidence(metric:HealthMetricId, accounts=['first'], range:AppDashboardH
   return {window,health:{result,limitReached:null,sourceRecordCount:records.length,sampleChunkCount:0,samplePointCount:0,serializedBytes:0,hasMatchingSourceRecords:!!records.length,hasSampleBackedMetric:false,providers:['GarminAPI'],sampleBackedProviders:[]},history:null,activities:null,sessions:[],errors:[]};
 }
 describe('dashboard Health semantics',()=>{
+  it.each(['visible', 'history'])('shares typed Sleep account evidence from %s across HRV card and baseline', location => {
+    const data = evidence('heart_rate_variability');
+    const sessions: SleepSession[] = Array.from({ length: 90 }, (_, index) => {
+      const endTimeMs = Date.parse('2026-09-15T08:00:00Z') - index * 86_400_000;
+      return { id: `night-${index}`, userID: 'owner', source: { provider: 'GarminAPI', providerUserId: 'provider-account',
+        sourceSessionKey: `night-${index}` }, sleepDate: new Date(endTimeMs).toISOString().slice(0, 10),
+        startTimeMs: endTimeMs - 8 * 3_600_000, endTimeMs, durationSeconds: 28_800,
+        isNap: false, stages: [], stageDurationsSeconds: {}, vitals: { averageHrvMs: 50 + index % 3 },
+        createdAtMs: endTimeMs, updatedAtMs: endTimeMs };
+    });
+    const session = sessions[location === 'visible' ? 0 : 30];
+    const reference = { ...data.health!.result.observations[0], calendarDate: session.sleepDate,
+      startTimeMs: session.startTimeMs, endTimeMs: session.endTimeMs, entry: {
+        kind: 'sleep_reference' as const, metricId: 'heart_rate_variability' as const, valueType: 'number' as const,
+        aggregation: 'average', semanticVariant: 'sleep_session_average_hrv', origin: 'provider_summary' as const,
+        recordingMethod: 'provider_calculated' as const, quality: { status: 'valid' as const },
+        reference: { domain: 'sleep' as const, documentId: session.id!, field: 'vitals.averageHrvMs' as const },
+      } };
+    const historyWindow = { startDate: new Date(Date.parse(data.window.startDate) - 60 * 86_400_000).toISOString().slice(0, 10),
+      endDate: new Date(Date.parse(data.window.startDate) - 86_400_000).toISOString().slice(0, 10) };
+    data.history = { ...data.health!, result: projectLoadedHealthRange([], [],
+      { ...historyWindow, metricIds: ['heart_rate_variability'] }, { sourceRecordsComplete: true, samplesComplete: true }) };
+    data.health!.result.observations = location === 'visible' ? [reference] : [];
+    data.history.result.observations = location === 'history' ? [reference] : [];
+    data.sessions = sessions;
+    for (const units of [null, normalizeUserUnitSettings({ distanceUnits: DistanceUnits.Miles })]) {
+      const view = buildDashboardHealthContext(data, { metric: 'heart_rate_variability', range: '30d' }, units);
+      expect(view.sources).toHaveLength(1);
+      expect(view.selected?.status).toMatchObject({ observationDayCount: 60, normalRange: expect.any(Object) });
+      expect(view.selected?.model.series.sourceLabel).toBe('Garmin');
+      expect(view.selected?.latestValueText).toBe('50 ms');
+    }
+  });
   it('filters overview evidence before selecting a source and never broadens a missing pinned reading', () => {
     const data = evidence('body_weight');
     const first = buildDashboardHealthContext(data, { metric: 'body_weight', range: '30d' });
@@ -63,6 +99,31 @@ describe('dashboard Health semantics',()=>{
     expect(saved.hasData).toBe(false);
     expect(saved.selected).toBeNull();
   });
+  it('retains a drawable enriched Sleep reading when the originating Health point is outside the selected window', async () => {
+    const accountKey = await nightlyHealthAccountKey('owner', 'GarminAPI', 'provider-account');
+    const data = evidence('heart_rate_variability', [accountKey]);
+    const observation = data.health!.result.observations[0];
+    if (observation.entry.kind !== 'value') throw new Error('Expected a Health value fixture');
+    observation.entry.semanticVariant = 'overnight_rmssd';
+    observation.endTimeMs = data.window.endTimeMs + 1;
+    const endTimeMs = observation.startTimeMs + 8 * 3_600_000;
+    const sessions = await enrichSleepWithNightlyHrv('owner', [{ id: 'night', userID: 'owner',
+      source: { provider: 'GarminAPI', providerUserId: 'provider-account', sourceSessionKey: 'night' },
+      sleepDate: observation.calendarDate, startTimeMs: observation.startTimeMs, endTimeMs,
+      durationSeconds: 28_800, isNap: false, stages: [], stageDurationsSeconds: {},
+      createdAtMs: endTimeMs, updatedAtMs: endTimeMs,
+    }], [{ userID: 'owner', schemaVersion: 1, kind: 'interval_summary',
+      source: { provider: 'GarminAPI', accountKey }, calendarDate: observation.calendarDate,
+      startTimeMs: observation.startTimeMs, endTimeMs: observation.endTimeMs, metrics: [observation.entry],
+    }]);
+    data.sessions = await withHealthSleepAccountKeys('owner', sessions);
+    const view = buildDashboardHealthContext(data, { metric: 'heart_rate_variability', range: '30d' });
+    expect(view.hasData).toBe(true);
+    expect(view.sources).toHaveLength(1);
+    expect(view.selected?.model.series.semanticVariant).toBe('sleep_overnight_hrv');
+    expect(view.selected?.latestValueText).toBe('54 ms');
+    expect(view.selected?.model.displayedPoints[0].timestampMs).toBe(endTimeMs);
+  });
   it('keeps valid zero readings and categorical states selectable', () => {
     for (const metric of ['steps', 'stress_state'] as const) {
       const data = evidence(metric);
@@ -72,6 +133,60 @@ describe('dashboard Health semantics',()=>{
       expect(view.sources).toHaveLength(1);
       expect(view.hasData).toBe(true);
     }
+  });
+  it.each(['steps', 'resting_heart_rate', 'heart_rate_variability', 'body_weight', 'vo2_max', 'active_energy'] as const)(
+    'defaults %s to useful readings while retaining explicit zero-source choices and filters', metric => {
+      const data = evidence(metric, ['zero', 'real']);
+      for (const observation of data.health!.result.observations) {
+        observation.provider = observation.accountKey === 'real' ? 'SuuntoApp' : 'GarminAPI';
+        if (observation.entry.kind === 'value') observation.entry.canonical!.value = observation.accountKey === 'real' ? 54 : 0;
+      }
+      const settings = { metric, range: '30d' as const };
+      const automatic = buildDashboardHealthContext(data, settings);
+      expect(automatic.selected?.model.series.provider).toBe('SuuntoApp');
+      const zeroKey = automatic.sources.find(source => source.provider === 'GarminAPI')!.key;
+      const explicit = buildDashboardHealthContext(data, { ...settings, sourceKey: zeroKey });
+      expect(explicit.selectedKey).toBe(zeroKey);
+      expect(explicit.selected?.model.series.points[0].value).toBe(0);
+      expect(explicit.hasData).toBe(true);
+      expect(buildDashboardHealthContext(data, settings, null, undefined, ['GarminAPI']).selectedKey).toBe(zeroKey);
+      expect(buildDashboardHealthContext(data, settings, null, undefined, ['GarminAPI', 'SuuntoApp']).selected?.model.series.provider).toBe('SuuntoApp');
+    });
+  it('ranks freshness without provider preference for meaningful zero readings', () => {
+    const data = evidence('skin_temperature_deviation', ['older', 'recent']);
+    for (const observation of data.health!.result.observations) {
+      observation.provider = observation.accountKey === 'recent' ? 'SuuntoApp' : 'GarminAPI';
+      observation.endTimeMs = Date.parse(observation.accountKey === 'recent' ? '2026-09-15T12:00:00Z' : '2026-09-14T12:00:00Z');
+      observation.calendarDate = observation.accountKey === 'recent' ? '2026-09-15' : '2026-09-14';
+      if (observation.entry.kind === 'value') observation.entry.canonical!.value = observation.accountKey === 'recent' ? 0 : 2;
+    }
+    const view = buildDashboardHealthContext(data, { metric: 'skin_temperature_deviation', range: '30d' });
+    expect(view.selected?.model.series.provider).toBe('SuuntoApp');
+    expect(view.selected?.model.series.points[0].value).toBe(0);
+  });
+  it('honors an HRV account preference within the provider filter and an explicit source over that preference', () => {
+    const data = evidence('heart_rate_variability', ['preferred', 'other']);
+    data.health!.result.observations.find(item => item.accountKey === 'other')!.provider = 'SuuntoApp';
+    const settings = { metric: 'heart_rate_variability' as const, range: '30d' as const };
+    const view = buildDashboardHealthContext(data, settings);
+    const garmin = view.sources.find(source => source.provider === 'GarminAPI')!;
+    const suunto = view.sources.find(source => source.provider === 'SuuntoApp')!;
+    const hint = buildDashboardHealthContext(data, { ...settings, sourceKey: suunto.key }).selected!.model.series.sourceSelectionKey;
+    expect(buildDashboardHealthContext(data, settings, null, hint).selectedKey).toBe(suunto.key);
+    expect(buildDashboardHealthContext(data, settings, null, hint, ['GarminAPI']).selectedKey).toBe(garmin.key);
+    expect(buildDashboardHealthContext(data, { ...settings, sourceKey: garmin.key }, null, hint).selectedKey).toBe(garmin.key);
+  });
+  it('defaults Sleep to the source with the newest rendered night', () => {
+    const data = evidence('sleep_duration', []);
+    const base = { userID: 'owner', startTimeMs: Date.parse('2026-09-13T22:00:00Z'),
+      endTimeMs: Date.parse('2026-09-14T06:00:00Z'), durationSeconds: 28800,
+      stages: [], isNap: false, createdAtMs: 0, updatedAtMs: 0 };
+    data.sessions = [
+      { ...base, id: 'older', sleepDate: '2026-09-14', source: { provider: 'GarminAPI', providerUserId: 'garmin', sourceSessionKey: 'older' } },
+      { ...base, id: 'recent', sleepDate: '2026-09-15', startTimeMs: base.startTimeMs + 86400000,
+        endTimeMs: base.endTimeMs + 86400000, source: { provider: 'SuuntoApp', providerUserId: 'suunto', sourceSessionKey: 'recent' } },
+    ];
+    expect(buildDashboardHealthContext(data, { metric: 'sleep', range: '30d' }).sleep.latestPoint?.provider).toBe('SuuntoApp');
   });
   it('does not offer a Sleep source whose sessions cannot be rendered', () => {
     const data = evidence('sleep_duration', []);

@@ -14,6 +14,20 @@ import {
 } from './policies.content';
 
 describe('help.content', () => {
+  it('explains saved Suunto route import scope without enabling outbound directions', () => {
+    const content = HELP_SECTIONS.map(section => section.content).join('\n');
+    expect(content).toContain('Suunto also includes existing saved routes');
+    expect(content).toContain('entire route library, regardless of the selected history range');
+    expect(content).toContain('**Import existing routes** remains available separately');
+    expect(content).not.toContain('Saved-route libraries remain separate manual actions');
+  });
+  it('explains tag-library selection, partial history, saved empty tags and refresh', () => {
+    const copy = HELP_SECTIONS.find(section => section.id === 'getting-started')!.content;
+    for (const phrase of ['**Tags** opens your saved tag library', '**Find a tag**', '**Load older activities**',
+      'cover only loaded activities', 'page-size choices on Tags stay local to the page', 'may still have older activities',
+      'saved tag remains available', '**Refresh tags and activities**', 'Generated timestamp names are hidden',
+      'the sport stays visible and opens the activity', 'Custom names remain visible']) expect(copy).toContain(phrase);
+  });
   it('explains a busy activity-history request for all four providers without claiming success or failure', () => {
     const copy = HELP_SECTIONS.find(section => section.id === 'service-connections')!.content;
     expect(copy).toContain('For Garmin, Suunto, COROS, and Wahoo, **Import already running**');
@@ -186,15 +200,15 @@ describe('help.content', () => {
   });
   it('explains manual pool progress and rest screens without promising measurement or fixed-position fixes', () => {
     const content = HELP_SECTIONS.find(section => section.id === 'training-plans')!.content;
-    for (const phrase of ['**manual pool-swim work**', '**Swum**', '**Elapsed**', '**Dist rem**', '**Time rem**',
+    for (const phrase of ['**Manual pool-swim work**', '**Swum**', '**Elapsed**', '**Dist rem**', '**Time rem**',
       'not newly reset swim averages or the preceding swim\'s statistics', 'Active **Recovery** keeps swim readings',
-      'does not offer a configurable field editor or guarantee fixed positions', 'do not fix delayed pool-length detection',
+      '**Show swimming Guide screens**', 'cannot guarantee fixed positions', 'do not fix delayed pool-length detection',
       'retain the existing lap-boundary behavior even when a rest screen no longer shows averages']) expect(content).toContain(phrase);
   });
   it('explains swim manual-step timing and native cumulative Rest distance without promising finished-interval statistics', () => {
     const content = HELP_SECTIONS.find(section => section.id === 'training-plans')!.content;
     for (const phrase of ['**pool and open-water swimming**', '**Total**', 'native cumulative distance for the whole recording',
-      'not the distance or pace of the last interval', 'Open-water Work/recovery fields are unchanged',
+      'not the distance or pace of the last interval', 'Active **Recovery** keeps swim readings',
       '**Swim now. Press Lap to finish this interval.**', '**Rest now. Press Lap to finish this rest.**',
       'Lap finishes the current step, not starts it', 'Older Guides may still say **Press lap when ready**']) expect(content).toContain(phrase);
   });
@@ -223,12 +237,20 @@ describe('help.content', () => {
       'your complete step notes', 'exercises, sets, loads and rests', 'app-only text, not a new watch screen',
       'Extremely large previews keep the short description', 'past and completed copies remain unchanged']) expect(content).toContain(phrase);
   });
+  it('explains configurable swim screens, planned context and the limited short-rest popup mitigation', () => {
+    const content = HELP_SECTIONS.find(section => section.id === 'training-plans')!.content;
+    for (const phrase of ['**Save Guide screens**', '**Interval 1/10**', '**Prev plan**/**Next plan**',
+      'prescribed, not measured', 'not pool lengths or recorded laps', 'no fake target field',
+      'past and completed copies stay unchanged', 'does not expose a previous-lap selector', '**m:ss/100m**',
+      'removing an average from Work or Rest does not remove automatic laps',
+      '**20 seconds or less**', 'does not guarantee an audible or vibrating alert', 'your own Rest instructions still show']) expect(content).toContain(phrase);
+  });
   it('explains pool-only measured SWOLF without target, pool-length or sensor promises', () => {
     const content = HELP_SECTIONS.find(section => section.id === 'training-plans')!.content;
     for (const phrase of ['pool-only **AvgSWOLF**', '**Avg SWOLF** on older Guides', '**SWOLF is a measured reading, not a target.**',
       "your watch's pool-length setting", 'Compare it only within the same pool length and stroke',
       'does not send the selected pool length to Suunto', 'calculate a substitute SWOLF',
-      'instead of optional HR', 'with current HR for an HR target', 'without SWOLF',
+      'with current HR for an HR target', 'without SWOLF',
       'requires the updated Functions release']) expect(content).toContain(phrase);
     expect(searchHelpSections(HELP_SECTIONS, 'Avg SWOLF').map(section => section.id)).toContain('training-plans');
     expect(searchHelpSections(HELP_SECTIONS, 'AvgSWOLF').map(section => section.id)).toContain('training-plans');
@@ -428,6 +450,10 @@ describe('help.content', () => {
     expect(health).toContain('New readings can bring an omitted card back');
     expect(health).toContain('Each chart identifies its own period');
     expect(health).toContain('the HRV highlight uses 14 days');
+    expect(health).toContain('**Automatic source selection** considers usable readings, freshness, and distinct days of coverage');
+    expect(health).toContain('All recorded zeros remain available');
+    expect(health).toContain('selecting a source explicitly keeps it selected');
+    expect(health).toContain('An automatic overview choice can update when new readings arrive');
     expect(health).toContain('**Vitals** includes today’s heart-rate highlight');
     expect(health).toContain('replacing its general Heart rate card');
     expect(health).toContain('Other category views show their metric cards without highlights');
@@ -632,6 +658,8 @@ describe('help.content', () => {
     expect(healthSection?.content).toContain('read average and overnight HRV directly at display time');
     expect(healthSection?.content).toContain('never averaged with standalone HRV');
     expect(healthSection?.content).toContain('equivalent typed Sleep reference is already present');
+    expect(healthSection?.content).toContain('show the matching reading once under the same connected account');
+    expect(healthSection?.content).toContain('Independently recorded Sleep HRV remains separate');
     expect(healthSection?.content).toContain('Health and Sleep availability are checked independently');
     expect(healthSection?.content).toContain('only that domain stays unfiltered');
     expect(healthSection?.content).toContain('Use **1d**, **14d**, **30d**, or **90d** for detailed sample readings');
@@ -1078,7 +1106,9 @@ describe('help.content', () => {
     expect(trainingSection?.content).toContain('**This workout’s contribution**');
     expect(trainingSection?.content).toContain('**Day result**');
     expect(trainingSection?.content).toContain('includes all training counted for that day, not only this workout');
-    expect(trainingSection?.content).toContain('**How it’s calculated**');
+    expect(trainingSection?.content).toContain('**info icon** beside the day result');
+    expect(trainingSection?.content).toContain('**How Training impact is calculated**');
+    expect(trainingSection?.content).toContain('You can scroll normally over the icon on a phone');
     expect(trainingSection?.content).toContain('fixed daily cutoff, which may differ from local midnight');
     expect(trainingSection?.content).not.toContain('**About Training impact**');
     expect(trainingSection?.content).toContain('their event detail pages do not show Training impact');
@@ -1240,6 +1270,10 @@ describe('help.content', () => {
     expect(gettingStartedSection?.content).toContain('**No activities yet**');
     expect(gettingStartedSection?.content).toContain('**Upload activity**');
     expect(gettingStartedSection?.content).toContain('**Connect service**');
+    expect(gettingStartedSection?.content).toContain('only after checking that no activity service is connected');
+    expect(gettingStartedSection?.content).toContain('even if history returns no activities');
+    expect(gettingStartedSection?.content).toContain('including while it is queued');
+    expect(gettingStartedSection?.content).toContain('retry failed connection imports in **Services**');
     expect(gettingStartedSection?.content).toContain('FIT, GPX, TCX, JSON, and SML files');
     expect(gettingStartedSection?.content).toContain('Garmin, Suunto, COROS, and Wahoo');
     expect(gettingStartedSection?.content).toContain('after activity data exists');
@@ -1257,12 +1291,22 @@ describe('help.content', () => {
 
   it('should document event swim length tables', () => {
     const gettingStartedSection = HELP_SECTIONS.find(section => section.id === 'getting-started');
+    expect(gettingStartedSection?.content).toContain('**Selected columns** stay at the top in table order');
+    expect(gettingStartedSection?.content).toContain('**Move up** or **Move down**');
+    expect(gettingStartedSection?.content).toContain('with touch or keyboard');
+    expect(gettingStartedSection?.content).toContain('Search filters **Add columns** only');
+    expect(gettingStartedSection?.content).toContain('If a save fails, the previous selection and order return');
 
     expect(gettingStartedSection?.content).toContain('individual recorded FIT pool lengths');
     expect(gettingStartedSection?.content).toContain('**Total strokes**');
     expect(gettingStartedSection?.content).toContain('**SWOLF (25 yd)**');
     expect(gettingStartedSection?.content).toContain('Stroke, total strokes and normalized SWOLF columns are available only for swimming');
     expect(gettingStartedSection?.content).toContain('Swimming **Avg** values exclude rest');
+    expect(gettingStartedSection?.content).toContain('touching, non-overlapping recorded times');
+    expect(gettingStartedSection?.content).toContain('positive recorded active-length count');
+    expect(gettingStartedSection?.content).toContain('sums its original lap durations once');
+    expect(gettingStartedSection?.content).toContain('estimate weighted by recorded lap duration');
+    expect(gettingStartedSection?.content).toContain('**Selected avg** still averages the original selected laps');
     expect(gettingStartedSection?.content).toContain('not divided into invented splits');
     expect(gettingStartedSection?.content).toContain('Incomplete length details can use valid native interval metrics');
     expect(gettingStartedSection?.content).toContain('recorded active-length count differs');
@@ -1280,6 +1324,9 @@ describe('help.content', () => {
     expect(gettingStartedSection?.content).toContain('**Settings -> Units & formatting -> Customize units -> Swim pace**');
     expect(gettingStartedSection?.content).toContain('25 yd, 50 yd, 75 yd, and 100 yd splits before the rest row');
     expect(gettingStartedSection?.content).toContain('Stored distances remain in meters');
+    expect(gettingStartedSection?.content).toContain('complete length data can confirm a nominal 25- or 50-yard pool');
+    expect(gettingStartedSection?.content).toContain('Custom pools and recordings with missing or conflicting evidence keep recorded precision');
+    expect(gettingStartedSection?.content).toContain('recorded distances, pace, SWOLF and Training load stay unchanged');
     expect(gettingStartedSection?.content).toContain('**Swim** time (excluding idle/rest lengths)');
     expect(gettingStartedSection?.content).toContain('**Total** keeps the combined time');
     expect(gettingStartedSection?.content).toContain('Set swim pace, stroke totals, average stroke rate, and efficiency exclude rest too');
@@ -1302,8 +1349,18 @@ describe('help.content', () => {
     expect(gettingStartedSection?.content).toContain('including Garmin **Session end** laps and Suunto final partial laps');
     expect(gettingStartedSection?.content).toContain('**Laps -> Columns**');
     expect(gettingStartedSection?.content).toContain('typed metric search');
+    expect(gettingStartedSection?.content).toContain('**Tab** and **Shift+Tab**');
+    expect(gettingStartedSection?.content).toContain('returns focus to its trigger');
     expect(gettingStartedSection?.content).toContain('Running, Cycling, Swimming, or Other activities');
     expect(gettingStartedSection?.content).toContain('separate column list for each of those sport families');
+    expect(gettingStartedSection?.content).toContain('Swimming choices focus on duration, distance, swim pace');
+    expect(gettingStartedSection?.content).toContain('**Show other metrics**');
+    expect(gettingStartedSection?.content).toContain('**Lap sport family** selector when more than one sport is present');
+    expect(gettingStartedSection?.content).toContain('stay visible while its contents scroll');
+    expect(gettingStartedSection?.content).toContain('the picker shows their match count');
+    expect(gettingStartedSection?.content).toContain('metrics recorded in the current laps, even before you select them');
+    expect(gettingStartedSection?.content).toContain('search or restore older choices');
+    expect(gettingStartedSection?.content).toContain('Existing saved selections and their order stay unchanged');
     expect(gettingStartedSection?.content).toContain('Running and trail-running laps use pace');
     expect(gettingStartedSection?.content).toContain('Each lap table includes a persistent **Avg** row directly below its headers');
     expect(gettingStartedSection?.content).toContain('Accumulated totals, such as duration, distance, elevation, energy, and work, are not averaged');
@@ -1514,6 +1571,8 @@ describe('help.content', () => {
     const gettingStartedSection = HELP_SECTIONS.find(section => section.id === 'getting-started');
 
     expect(gettingStartedSection?.content).toContain('haptic feedback');
+    expect(gettingStartedSection?.content).toContain('Dialog choices, **Cancel**, rename saves');
+    expect(gettingStartedSection?.content).toContain('Typing, unchanged choices, invalid submissions and disabled actions stay silent');
     expect(gettingStartedSection?.content).toContain('supported mobile devices');
     expect(gettingStartedSection?.content).toContain('vibration support is unavailable');
     expect(gettingStartedSection?.content).toContain('reduced-motion is enabled');
@@ -1693,6 +1752,10 @@ describe('help.content', () => {
     expect(serviceConnectionsSection?.content).toContain('Preview checks saved activities in batches');
     expect(serviceConnectionsSection?.content).toContain('**Send** becomes available after the full preview finishes');
     expect(serviceConnectionsSection?.content).toContain('stopping a preview sends nothing');
+    expect(serviceConnectionsSection?.content).toContain('Checks against unrelated sources are not counted as exclusions');
+    expect(serviceConnectionsSection?.content).toContain('Reason counts are by source');
+    expect(serviceConnectionsSection?.content).toContain('explains why it is disabled');
+    expect(serviceConnectionsSection?.content).toContain('failed checks can be retried with **Preview**');
     expect(serviceConnectionsSection?.content).toContain('send past activities while automatic activity sync is off');
     expect(serviceConnectionsSection?.content).toContain('dashboard may offer a one-time action prompt to turn on automatic Garmin to Suunto activity sync');
     expect(serviceConnectionsSection?.content).toContain('Disconnecting Garmin, COROS, Suunto, or Wahoo turns off related automatic activity or route delivery');
@@ -2109,12 +2172,17 @@ it('explains separately approved activity description access and event semantics
 
   it('explains early Lap separately from indefinite Lap and gates unsupported delivery', () => {
     const content = JSON.stringify(HELP_SECTIONS);
-    expect(content).toContain('Allow early Lap');
+    expect(content).toContain('**Also finish this step with Lap**');
+    expect(content).not.toContain('**Allow early Lap**');
+    expect(content).toContain('when off, the Suunto Guide waits for the numeric limit and Lap does not start the next step');
+    expect(content).toContain('Work ends at 100 m **or** when you press Lap');
+    expect(content).toContain('Leave each Rest at **Time -> 15 seconds**, with the option unchecked');
+    expect(content).toContain('Lap finishes the current Work step and starts Rest; it is not needed to start swimming');
     expect(content).toContain('no numeric limit');
     expect(content).toContain('Suunto delivery supports the early-Lap option');
     expect(content).toContain('Garmin, COROS and Wahoo');
     expect(content).toContain('explicitly review enabling or removing');
-    expect(content).toContain('With **Allow early Lap** off, pressing Lap');
+    expect(content).toContain('With **Also finish this step with Lap** off, pressing Lap');
     expect(content).toContain('With it enabled, Lap ends that step early');
     expect(content).toContain('generated time/distance alerts also mention Lap');
   });

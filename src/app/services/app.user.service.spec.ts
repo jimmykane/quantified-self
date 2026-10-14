@@ -17,6 +17,7 @@ import { ROUTE_DELIVERY_SYNC_ROUTE_IDS } from '@shared/route-delivery-sync-route
 import { getAppCanonicalChartDataTypes } from '../helpers/app-chart-data-types.helper';
 import { AppCheckReadinessService } from './app-check-readiness.service';
 import { UserProfileVerificationService } from './user-profile-verification.service';
+import { defaultSuuntoSwimmingGuideSettings } from '@shared/suunto-swimming-guide-settings';
 
 const verificationSDK = vi.hoisted(() => ({ getFirestore: vi.fn(), doc: vi.fn(), getDoc: vi.fn() }));
 vi.mock('firebase/firestore/lite', () => verificationSDK);
@@ -2083,6 +2084,17 @@ describe('AppUserService', () => {
             expect(setDoc).toHaveBeenCalledWith(expect.anything(), settings, { merge: true });
         });
 
+        it('persists swimming Guide display preferences only in canonical owner config without changing Training authority', async () => {
+            const user = { uid: 'u1' } as AppUserInterface;
+            const preferences = { ...defaultSuuntoSwimmingGuideSettings(), workFields: ['strokes'] };
+            vi.mocked(doc).mockClear();
+            await service.updateUserProperties(user, { settings: { suuntoSwimmingGuide: preferences } });
+            expect(doc).toHaveBeenCalledWith(expect.anything(), 'users/u1/config/settings');
+            expect(setDoc).toHaveBeenCalledExactlyOnceWith(expect.anything(), { suuntoSwimmingGuide: preferences }, { merge: true });
+            expect(updateDoc).not.toHaveBeenCalled();
+            expect(mockFunctionsService.call).not.toHaveBeenCalled();
+        });
+
         it('strips server-owned Training settings while retaining client-owned workspace preferences', async () => {
             const user = { uid: 'u1' } as AppUserInterface;
             const updates = {
@@ -2861,6 +2873,7 @@ describe('AppUserService', () => {
 
                 expect(mockFunctionsService.call).toHaveBeenCalledWith('getSuuntoAPIAuthRequestTokenRedirectURI', {
                     redirectUri: 'http://localhost/services?serviceName=Suunto%20app&connect=1',
+                    importRouteHistory: false,
                     importRecentHistory: false,
                     importHistoryRange: '30_days',
                 }, { canExecute: expect.any(Function) });
@@ -2897,6 +2910,13 @@ describe('AppUserService', () => {
                 currentView = true;
                 mockAuth.currentUser = { ...mockAuth.currentUser };
                 expect(canExecute()).toBe(false);
+            });
+
+            it('includes routes only with the Suunto history option selected', async () => {
+                await service.getCurrentUserServiceTokenAndRedirectURI(ServiceNames.SuuntoApp, true, '30_days');
+                expect(mockFunctionsService.call).toHaveBeenCalledWith('getSuuntoAPIAuthRequestTokenRedirectURI',
+                    expect.objectContaining({ importRecentHistory: true, importRouteHistory: true }),
+                    { canExecute: expect.any(Function) });
             });
 
             it('forwards the selected provider-valid history range', async () => {

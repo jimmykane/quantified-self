@@ -35,10 +35,10 @@ export const TRAINING_READ_TOOLS = ['list_training_plans', 'get_training_plan', 
   ...TRAINING_READ_EXTENSION_TOOLS] as const;
 export type TrainingReadTool = typeof TRAINING_READ_TOOLS[number];
 export const TRAINING_PREVIEW_TOOLS = ['preview_training_plan_phases', 'preview_create_planned_workout', 'preview_training_changes',
-  'preview_strength_workout_change', 'preview_planned_workout_v2_change', 'preview_planned_workout_v3_change', 'preview_saved_workout_change', 'preview_saved_workout_v2_change',
+  'preview_strength_workout_change', 'preview_planned_workout_v2_change', 'preview_planned_workout_v3_change', 'preview_planned_workout_v3_changes', 'preview_saved_workout_change', 'preview_saved_workout_v2_change',
   'preview_training_deletion', 'preview_garmin_workout_replacement'] as const;
 export const TRAINING_WRITE_TOOLS = [...TRAINING_PREVIEW_TOOLS, 'apply_training_changes', 'apply_saved_workout_change'] as const;
-export const TRAINING_WRITE_EXTENSION_TOOLS = ['preview_training_plan_phases', 'preview_strength_workout_change', 'preview_planned_workout_v2_change', 'preview_planned_workout_v3_change',
+export const TRAINING_WRITE_EXTENSION_TOOLS = ['preview_training_plan_phases', 'preview_strength_workout_change', 'preview_planned_workout_v2_change', 'preview_planned_workout_v3_change', 'preview_planned_workout_v3_changes',
   'preview_saved_workout_change', 'preview_saved_workout_v2_change', 'apply_saved_workout_change', 'preview_training_deletion', 'preview_garmin_workout_replacement'] as const;
 export type TrainingWriteTool = typeof TRAINING_WRITE_TOOLS[number];
 export const trainingDate = z.string().length(10).refine(value => {
@@ -449,6 +449,8 @@ export const TRAINING_WRITE_INPUTS = {
     change: TRAINING_WORKOUT_V2_CHANGE_SCHEMA }),
   preview_planned_workout_v3_change: z.strictObject({ expectedScheduleRevision: count,
     change: TRAINING_WORKOUT_V3_CHANGE_SCHEMA }),
+  preview_planned_workout_v3_changes: z.strictObject({ expectedScheduleRevision: count,
+    changes: z.array(TRAINING_WORKOUT_V3_CHANGE_SCHEMA).min(1).max(25) }),
   preview_saved_workout_v2_change: z.strictObject({ expectedScheduleRevision: count,
     expectedLibraryRevision: count, change: savedWorkoutV2Change }),
   preview_saved_workout_change: z.strictObject({ expectedScheduleRevision: count,
@@ -481,6 +483,7 @@ export const TRAINING_WRITE_OUTPUTS = {
   preview_saved_workout_change: trainingPreviewOutput,
   preview_saved_workout_v2_change: trainingPreviewOutput,
   preview_planned_workout_v3_change: trainingPreviewOutput,
+  preview_planned_workout_v3_changes: trainingPreviewOutput,
   apply_training_changes: z.strictObject({ proposalRef: ref,
     status: z.enum(['applied', 'partially_applied']), scheduleRevision: count,
     changes: z.array(appliedChange).max(25), providers: z.array(providerResult).max(100),

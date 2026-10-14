@@ -32,8 +32,12 @@ export function buildDashboardHrvContext(
   window: ReturnType<typeof dashboardHrvWindows>['visible'],
   unitSettings: UserUnitSettingsInterface | null = null,
 ) {
-  const visibleSeries = buildHealthMetricWorkspaceView(visibleResult, sessions, [], unitSettings).series;
-  const historySeries = buildHealthMetricWorkspaceView(historyResult, sessions, [], unitSettings).series;
+  const accountObservations = [...visibleResult.observations, ...historyResult.observations];
+  const visibleSeries = buildHealthMetricWorkspaceView(visibleResult, sessions, [], unitSettings, window, accountObservations).series
+    .map(series => ({ ...series, points: series.points.filter(point =>
+      point.timestampMs >= window.startTimeMs && point.timestampMs <= window.endTimeMs) }))
+    .filter(series => series.points.length > 0);
+  const historySeries = buildHealthMetricWorkspaceView(historyResult, sessions, [], unitSettings, {}, accountObservations).series;
   const historyById = new Map(historySeries.map(series => [series.id, series]));
   const charts = buildHealthChartModels(visibleSeries, window.startTimeMs, window.endTimeMs, unitSettings).map(model => {
     const history = historyById.get(model.series.id);
@@ -44,7 +48,7 @@ export function buildDashboardHrvContext(
       model.series.points.map(point => point.timestampMs), window.startTimeMs);
     const latest = model.series.points.at(-1);
     return {
-      model, status, key: model.series.sourceSelectionKey || model.series.id,
+      model, status, key: model.series.id,
       latestValueText: latest ? formatHealthValue(model.series.metricId, latest.value, model.series.unit, model.series.nativeOnly, unitSettings) : '—',
       statusOverlay: buildHealthHrvChartStatusOverlay(status),
       statusDescription: healthHrvChartStatusDescription(status),

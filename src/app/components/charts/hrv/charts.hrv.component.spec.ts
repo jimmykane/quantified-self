@@ -8,7 +8,8 @@ import { HealthMetricSeriesChartComponent } from '../../health/health-metric-ser
 import { getDashboardChartCatalog } from '../../../helpers/dashboard-chart-catalog.helper';
 import { buildDashboardExamplePreview } from '../../../helpers/dashboard-chart-preview.helper';
 import type { DashboardChartTileViewModel } from '../../../helpers/dashboard-tile-view-model.helper';
-import type { DashboardHrvContext } from '../../../helpers/dashboard-hrv-context.helper';
+import { buildDashboardHrvContext, type DashboardHrvContext } from '../../../helpers/dashboard-hrv-context.helper';
+import { projectLoadedHealthRange } from '@shared/health-query';
 import { AppHapticsService } from '../../../services/app.haptics.service';
 
 @Component({ selector: 'app-health-metric-series-chart', standalone: true, template: '' })
@@ -77,6 +78,37 @@ describe('dashboard HRV chart', () => {
     }
     fixture.componentRef.setInput('context', context); fixture.detectChanges();
     expect(fixture.nativeElement.querySelector('[role="status"]')).toBeNull();
+    expect(haptics.selection).not.toHaveBeenCalled();
+  });
+  it('selects each HRV variant from the same account and emits one pulse for a changed tab', () => {
+    const empty = projectLoadedHealthRange([], [], { startDate: context.window.startDate, endDate: context.window.endDate,
+      metricIds: ['heart_rate_variability'] }, { sourceRecordsComplete: true, samplesComplete: true });
+    const endTimeMs = context.window.endTimeMs - 3_600_000;
+    context = buildDashboardHrvContext(empty, empty, [{ id: 'night', userID: 'owner',
+      source: { provider: 'GarminAPI', providerUserId: 'account', sourceSessionKey: 'night' },
+      sleepDate: context.window.endDate, startTimeMs: endTimeMs - 8 * 3_600_000, endTimeMs,
+      durationSeconds: 28_800, isNap: false, stages: [], stageDurationsSeconds: {},
+      vitals: { averageHrvMs: 40, overnightHrvMs: 44 }, createdAtMs: endTimeMs, updatedAtMs: endTimeMs,
+    }], context.window);
+    const fixture = TestBed.createComponent(ChartsHrvComponent);
+    fixture.componentRef.setInput('context', context); fixture.detectChanges();
+    fixture.componentInstance.selectSource(1); fixture.detectChanges();
+    expect(fixture.componentInstance.selectedIndex()).toBe(1);
+    const rendered = fixture.debugElement.query(By.directive(HealthChartStub)).componentInstance as HealthChartStub;
+    expect(rendered.model).toBe(context.charts[1].model);
+    expect(haptics.selection).toHaveBeenCalledOnce();
+    fixture.componentInstance.selectSource(1);
+    expect(haptics.selection).toHaveBeenCalledOnce();
+  });
+  it('restores a preferred account when chart keys identify individual HRV variants', () => {
+    const first = context.charts[0];
+    const preferred = { ...first, key: 'other-series', model: { ...first.model,
+      series: { ...first.model.series, id: 'other-series', sourceSelectionKey: 'preferred-account' } } };
+    context.charts.push(preferred);
+    const fixture = TestBed.createComponent(ChartsHrvComponent);
+    fixture.componentRef.setInput('context', context);
+    fixture.componentRef.setInput('preferredSource', 'preferred-account'); fixture.detectChanges();
+    expect(fixture.componentInstance.chart()).toBe(preferred);
     expect(haptics.selection).not.toHaveBeenCalled();
   });
   it('shows initial loading, errors and confirmed empty windows without an old chart', () => {

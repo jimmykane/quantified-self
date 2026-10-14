@@ -1,6 +1,14 @@
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { SimpleChange } from '@angular/core';
 import { EventTableComponent, MatPaginatorIntlFireStore } from './event.table.component';
+import { EventTableActionsComponent } from './actions/event.table.actions.component';
+import { MatListModule, type MatSelectionListChange } from '@angular/material/list';
+import { MatMenuModule, MatMenuTrigger } from '@angular/material/menu';
+import { MatButtonModule } from '@angular/material/button';
+import { MatIconModule } from '@angular/material/icon';
+import { OverlayContainer } from '@angular/cdk/overlay';
+import { By } from '@angular/platform-browser';
+import { HapticTapDirective } from '../../directives/haptic-tap.directive';
 import { AppEventService } from '../../services/app.event.service';
 import { AppEventMergeService } from '../../services/app.event-merge.service';
 import { AppUserService } from '../../services/app.user.service';
@@ -27,11 +35,8 @@ import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 
 // Mock MatTableDataSource without hiding MatTableModule from shared Material imports.
-vi.mock('@angular/material/table', async (importOriginal) => {
-    const actual = await importOriginal<typeof import('@angular/material/table')>();
-    const { of: observableOf } = await import('rxjs');
-    return {
-        ...actual,
+vi.mock('@angular/material/table', (importOriginal) => importOriginal<typeof import('@angular/material/table')>()
+    .then(actual => import('rxjs').then(({ of: observableOf }) => Object.assign({}, actual, {
         MatTableDataSource: class {
             data = [];
             paginator = null;
@@ -41,8 +46,7 @@ vi.mock('@angular/material/table', async (importOriginal) => {
             connect() { return observableOf([]); }
             disconnect() { }
         }
-    };
-});
+    }))));
 // Mock Analytics module
 vi.mock('app/firebase/analytics', () => ({
     Analytics: class { },
@@ -369,6 +373,231 @@ describe('EventTableComponent', () => {
         expect(mainRow.contains(filtersRow)).toBe(true);
     });
 
+    it('allows a parent tag selector without leaving a hidden table tag filter active', () => {
+        component.tagFilter = 'Race';
+        component.showTagFilter = false;
+        component.ngOnChanges({ showTagFilter: new SimpleChange(true, false, false) });
+        fixture.detectChanges();
+        expect(component.tagFilter).toBe('');
+        expect(fixture.nativeElement.querySelector('.tag-filter-field')).toBeNull();
+        expect(fixture.nativeElement.querySelector('.qs-search-field')).toBeTruthy();
+    });
+
+    it('presents the Tag library with grouped activity names, compact dates, and the chosen default columns', () => {
+        component.showActions = true;
+        component.events[0].startDate = new Date('2026-10-11T08:15:00');
+        component.presentation = 'tag-library';
+        component.ngOnChanges({ presentation: new SimpleChange('dashboard', 'tag-library', false) });
+        expect(component.displayedColumns).toEqual(['Checkbox', 'Start Date', 'Name', 'Distance', 'Duration', 'Tags', 'Actions']);
+        expect(component.tablePageSize).toBe(5);
+        expect(component.tableSortActive).toBe('Start Date');
+        expect(component.tableSortDirection).toBe('desc');
+        expect(component.isColumnHeaderSortable('Name')).toBe(true);
+        expect(component.data.data[0]['Name']).toBe('Test Run');
+        expect(component.data.data[0]['Activity Types']).toBe('Run');
+        expect(component.data.data[0]['Start Date']).toBe('11 Oct');
+        expect(component.data.data[0]['Start Time']).toBe('08:15');
+    });
+
+    it('keeps Tag library columns, sorting, and pagination local without changing Dashboard preferences', async () => {
+        const previousSettings = JSON.stringify(mockUser.settings.dashboardSettings);
+        component.presentation = 'tag-library';
+        component.ngOnChanges({ presentation: new SimpleChange('dashboard', 'tag-library', false) });
+        await component.selectedColumnsChange(['Distance', 'Ascent', 'Activity Types']);
+        await component.pageChanges({ pageSize: 10 } as any);
+        component.sort.sortChange.next({ active: 'Name', direction: 'asc' });
+        expect(component.selectedColumns).toEqual(['Distance', 'Ascent']);
+        expect(component.displayedColumns).toContain('Name');
+        expect(component.tablePageSize).toBe(10);
+        expect(component.tableSortActive).toBe('Name');
+        expect(component.tableSortDirection).toBe('asc');
+        expect(JSON.stringify(mockUser.settings.dashboardSettings)).toBe(previousSettings);
+        expect(mockUserService.updateUserProperties).not.toHaveBeenCalled();
+        component.ngOnChanges({ user: new SimpleChange(mockUser, mockUser, false) });
+        expect(component.selectedColumns).toEqual(['Distance', 'Ascent']);
+    });
+
+    it('uses sport and readable date labels for generated names in Tags without changing the event', () => {
+        const event = component.events[0];
+        event.startDate = new Date('2026-10-11T08:15:00');
+        event.name = event.startDate.toISOString();
+        component.presentation = 'tag-library';
+        component.ngOnChanges({ presentation: new SimpleChange('dashboard', 'tag-library', false) });
+        const row = component.data.data[0];
+        expect(row['Library Activity Name']).toBe('');
+        expect(row['Library Activity Label']).toBe('Run on 11 Oct 2026, 08:15');
+        expect(row['Tag Action Label']).toBe('Add activity tags for Run on 11 Oct 2026, 08:15');
+        expect(row['sort.Name']).toBe('Run');
+        expect(row.Name).toBe(event.startDate.toISOString());
+        expect(event.name).toBe(event.startDate.toISOString());
+        expect(mockEventService.updateEventProperties).not.toHaveBeenCalled();
+    });
+
+    it('restores a custom name immediately when a cached generated-name row is renamed', () => {
+        const event = component.events[0];
+        event.name = event.startDate.toISOString();
+        component.presentation = 'tag-library';
+        component.ngOnChanges({ presentation: new SimpleChange('dashboard', 'tag-library', false) });
+        expect(component.data.data[0]['Library Activity Name']).toBe('');
+        event.name = 'Spring race';
+        component.ngOnChanges({ events: new SimpleChange(component.events, [...component.events], false) });
+        expect(component.data.data[0]['Library Activity Name']).toBe('Spring race');
+        expect(component.data.data[0]['Library Activity Label']).toBe('Spring race');
+        expect(component.data.data[0]['sort.Name']).toBe('Spring race');
+    });
+
+    it('keeps timestamp names and existing accessible labels in Dashboard presentation', () => {
+        const event = component.events[0];
+        event.name = event.startDate.toISOString();
+        component.ngOnChanges({ events: new SimpleChange(component.events, [...component.events], false) });
+        const row = component.data.data[0];
+        expect(row['Library Activity Name']).toBeUndefined();
+        expect(row['Library Activity Label']).toBeUndefined();
+        expect(row['Tag Action Label']).toBe(`Add activity tags for ${event.name}`);
+        expect(row['sort.Name']).toBe(event.name);
+    });
+
+    it('initializes library column choices before a synchronous loading render can create the Material menu', () => {
+        component.presentation = 'tag-library';
+        component.selectedColumns = ['Distance', 'Duration', 'Ascent'];
+        const renderedChoices: string[][] = [];
+        vi.spyOn(component, 'loaded').mockImplementation(() => { renderedChoices.push([...component.selectedColumns]); });
+        component.ngOnChanges({ presentation: new SimpleChange('dashboard', 'tag-library', true) });
+        expect(renderedChoices.length).toBeGreaterThan(0);
+        expect(renderedChoices.every(choices => choices.join(',') === 'Distance,Duration')).toBe(true);
+    });
+
+    it('keeps the Tag library metric order stable when the picker adds and restores columns', async () => {
+        component.showActions = true;
+        component.presentation = 'tag-library';
+        component.ngOnChanges({ presentation: new SimpleChange('dashboard', 'tag-library', false) });
+        await component.selectedColumnsChange(['Duration', 'Distance', 'Ascent']);
+        expect(component.displayedColumns).toEqual(['Checkbox', 'Start Date', 'Name', 'Distance', 'Duration', 'Ascent', 'Tags', 'Actions']);
+        await component.selectedColumnsChange(['Duration', 'Ascent']);
+        await component.selectedColumnsChange(['Duration', 'Ascent', 'Distance']);
+        expect(component.selectedColumns).toEqual(['Distance', 'Duration', 'Ascent']);
+        expect(component.libraryAvailableColumns.slice(0, 2)).toEqual(['Distance', 'Duration']);
+        expect(mockUserService.updateUserProperties).not.toHaveBeenCalled();
+    });
+
+    it.each(['dashboard', 'tag-library'] as const)('keeps parent-owned history loading active in %s while rendering empty rows or rebuilding them', (presentation) => {
+        component.presentation = presentation;
+        component.events = [];
+        component.isLoading = true;
+        component.ngOnChanges({ events: new SimpleChange(component.events, [], false) });
+        expect(component.isLoading).toBe(true);
+        component.events = [new MockEvent('loaded') as any];
+        component.ngOnChanges({ events: new SimpleChange([], component.events, false) });
+        expect(component.isLoading).toBe(true);
+        component.isLoading = false;
+        component.ngOnChanges({ isLoading: new SimpleChange(true, false, false) });
+        expect(component.isLoading).toBe(false);
+    });
+
+    it('restores Dashboard presentation when leaving the Tag library mode', () => {
+        component.presentation = 'tag-library';
+        component.ngOnChanges({ presentation: new SimpleChange('dashboard', 'tag-library', false) });
+        component.presentation = 'dashboard';
+        component.ngOnChanges({ presentation: new SimpleChange('tag-library', 'dashboard', false) });
+        expect(component.selectedColumns).toEqual(mockUser.settings.dashboardSettings.tableSettings.selectedColumns);
+        expect(component.displayedColumns).toContain('Description');
+        expect(component.displayedColumns).not.toContain('Name');
+        expect(component.tablePageSize).toBe(10);
+    });
+
+    it('selects only the current sorted page in the Tag library and preserves selection on other pages', async () => {
+        const { MatTableDataSource } = await vi.importActual<typeof import('@angular/material/table')>('@angular/material/table');
+        const materialData = new MatTableDataSource();
+        materialData.sortingDataAccessor = component.data.sortingDataAccessor;
+        component.data.sortData = materialData.sortData.bind(materialData);
+        component.presentation = 'tag-library';
+        component.events = Array.from({ length: 6 }, (_value, index) => {
+            const event = new MockEvent(`page-${index}`);
+            event.startDate = new Date(2026, 9, 1 + index);
+            return event as any;
+        });
+        component.paginator.pageSize = 5;
+        component.paginator.pageIndex = 0;
+        component.sort.active = 'Start Date';
+        component.sort.direction = 'desc';
+        component.ngOnChanges({ events: new SimpleChange([], component.events, false) });
+        component.masterToggle();
+        expect(component.selection.selected.map(row => row.Event.getID())).toEqual(['page-5', 'page-4', 'page-3', 'page-2', 'page-1']);
+        component.paginator.pageIndex = 1;
+        expect(component.isSelectionIndeterminate).toBe(false);
+        expect(component.isAllSelected()).toBe(false);
+        component.masterToggle();
+        expect(component.selection.selected).toHaveLength(6);
+        component.masterToggle();
+        expect(component.selection.selected).toHaveLength(5);
+        materialData.disconnect();
+    });
+
+    it('gives column selection feedback once and stays silent when the selection is unchanged', () => {
+        const actions = TestBed.runInInjectionContext(() => new EventTableActionsComponent());
+        actions.selectedDataTypes = ['Distance'];
+        const change = { source: { selectedOptions: { selected: [{ value: 'Distance' }, { value: 'Duration' }] } } } as unknown as MatSelectionListChange;
+        actions.selectionChange(change);
+        actions.selectionChange(change);
+        expect(actions.selectedDataTypes).toEqual(['Distance', 'Duration']);
+        expect(mockHapticsService.selection).toHaveBeenCalledOnce();
+    });
+
+    it('gives library sorting and pagination feedback for changes while keeping hydration and parent resets silent', async () => {
+        component.presentation = 'tag-library';
+        component.ngOnChanges({ presentation: new SimpleChange('dashboard', 'tag-library', false) });
+        expect(mockHapticsService.selection).not.toHaveBeenCalled();
+        component.sort.sortChange.next({ active: 'Distance', direction: 'asc' });
+        component.sort.sortChange.next({ active: 'Distance', direction: 'asc' });
+        await component.pageChanges({ pageIndex: 1, pageSize: 5 } as any);
+        await component.pageChanges({ pageIndex: 1, pageSize: 5 } as any);
+        expect(mockHapticsService.selection).toHaveBeenCalledTimes(2);
+        component.paginator.firstPage = () => { void component.pageChanges({ pageIndex: 0, pageSize: 5 } as any); };
+        component.ngOnChanges({ filterContext: new SimpleChange('endurance', 'recovery', false) });
+        expect(mockHapticsService.selection).toHaveBeenCalledTimes(2);
+    });
+
+    it('gives page feedback after the data source silently clamps a filtered page back to the first page', async () => {
+        component.presentation = 'tag-library';
+        await component.pageChanges({ pageIndex: 1, previousPageIndex: 0, pageSize: 5 } as any);
+        mockHapticsService.selection.mockClear();
+        // Material can clamp pageIndex without emitting a page event after filtering.
+        component.paginator.pageIndex = 0;
+        await component.pageChanges({ pageIndex: 1, previousPageIndex: 0, pageSize: 5 } as any);
+        expect(mockHapticsService.selection).toHaveBeenCalledOnce();
+    });
+
+    it('does not restore pending activity search after the user clears it and gives one feedback', async () => {
+        component.onSearchInput({ target: { value: 'old search' } } as unknown as Event);
+        component.clearSearch();
+        component.clearSearch();
+        await new Promise(resolve => setTimeout(resolve, 300));
+        expect(component.searchTerm).toBe('');
+        expect(JSON.parse(component.data.filter).text).toBe('');
+        expect(mockHapticsService.selection).toHaveBeenCalledOnce();
+    });
+
+    it('clears previous activity search, selection and pagination when the parent tag context changes', () => {
+        component.searchTerm = 'old search';
+        component.selection.select(component.data.data[0]);
+        const firstPage = vi.fn();
+        component.paginator.firstPage = firstPage;
+        component.ngOnChanges({ filterContext: new SimpleChange('endurance', 'recovery', false) });
+        expect(component.searchTerm).toBe('');
+        expect(component.selection.isEmpty()).toBe(true);
+        expect(firstPage).toHaveBeenCalledOnce();
+        expect(mockHapticsService.selection).not.toHaveBeenCalled();
+    });
+
+    it('does not restore a pending activity search after the parent switches tags', async () => {
+        component.paginator.firstPage = vi.fn();
+        component.onSearchInput({ target: { value: 'old search' } } as unknown as Event);
+        component.ngOnChanges({ filterContext: new SimpleChange('endurance', 'recovery', false) });
+        await new Promise(resolve => setTimeout(resolve, 300));
+        expect(component.searchTerm).toBe('');
+        expect(JSON.parse(component.data.filter).text).toBe('');
+    });
+
     it('renders row actions in browse presentation without bulk controls or persisted table changes', async () => {
         component.presentation = 'browse';
         component.showActions = true;
@@ -387,7 +616,7 @@ describe('EventTableComponent', () => {
             join(process.cwd(), 'src/app/components/event-table/event.table.component.html'),
             'utf8'
         );
-        expect(template).toContain("[attr.aria-label]=\"canManageEvents ? null : 'Activity actions'\"");
+        expect(template).toContain("[attr.aria-label]=\"isLibraryPresentation || !canManageEvents ? 'Activity actions' : null\"");
         expect(fixture.nativeElement.querySelector('app-event-table-actions')).toBeNull();
         expect(component.showRowActions).toBe(true);
 
@@ -469,7 +698,9 @@ describe('EventTableComponent', () => {
         );
 
         expect(template).toContain('placeholder="Search activities"');
-        expect(template).toContain("[errorMessage]=\"'No activities yet'\"");
+        expect(template).toContain('[errorMessage]="emptyMessage"');
+        expect(component.emptyMessage).toBe('No activities yet');
+        expect(component.emptyHint).toBe('Import an activity or change your filters');
         expect(template).toContain('[allowErrorPassthrough]="true"');
         expect(template).toContain('activity-table-no-data-row--hidden');
         expect(template).not.toContain('No events found');
@@ -920,6 +1151,8 @@ describe('EventTableComponent', () => {
     });
 
     it('should save tags from a row dialog without navigating the row', async () => {
+        const changes = vi.fn();
+        component.eventsChange.subscribe(changes);
         const event = component.events[0] as any;
         const domEvent = { preventDefault: vi.fn(), stopPropagation: vi.fn() } as any;
         component.showActions = true;
@@ -934,6 +1167,8 @@ describe('EventTableComponent', () => {
         expect(domEvent.stopPropagation).toHaveBeenCalled();
         expect(mockEventTagService.saveTags).toHaveBeenCalledWith(mockUser, event, ['Race'], []);
         expect(event.tags).toEqual(['Race']);
+        expect(changes).toHaveBeenCalledOnce();
+        expect(changes).toHaveBeenCalledWith({ userID: mockUser.uid, updatedTags: { [event.getID()]: ['Race'] }, deletedEventIDs: [] });
     });
 
     it('should apply saved row tags to a refreshed event instance with the same ID', async () => {
@@ -965,6 +1200,8 @@ describe('EventTableComponent', () => {
     });
 
     it('should not overwrite a newer row refresh that arrives after the tag save completes', async () => {
+        const changes = vi.fn();
+        component.eventsChange.subscribe(changes);
         const originalEvent = component.events[0] as any;
         const refreshedEvent = new MockEvent(originalEvent.getID()) as any;
         refreshedEvent.tags = ['Concurrent'];
@@ -981,6 +1218,7 @@ describe('EventTableComponent', () => {
             originalEvent,
         );
         const savedTags = await dialogData.save(['Race']);
+        expect(changes).toHaveBeenCalledWith({ userID: mockUser.uid, updatedTags: { [originalEvent.getID()]: ['Race'] }, deletedEventIDs: [] });
         component.events = [refreshedEvent, ...component.events.slice(1)];
         closed.next(savedTags);
         closed.complete();
@@ -989,9 +1227,47 @@ describe('EventTableComponent', () => {
         expect(originalEvent.tags).toEqual(['Race']);
         expect(refreshedEvent.tags).toEqual(['Concurrent']);
         expect((component.data.data[0] as any)['Tag Values']).toEqual(['Concurrent']);
+        expect(changes).toHaveBeenCalledOnce();
+    });
+
+    it.each(['account change', 'component teardown'])('ignores a completed tag save and its closing notification after %s', async (contextChange) => {
+        const originalEvent = component.events[0] as any;
+        const otherEvent = new MockEvent(originalEvent.getID()) as any;
+        otherEvent.tags = ['Other owner'];
+        const closed = new Subject<string[] | null>();
+        let dialogData: any;
+        let resolveSave: (tags: string[]) => void;
+        mockEventTagService.saveTags.mockReturnValue(new Promise<string[]>(resolve => { resolveSave = resolve; }));
+        component.showActions = true;
+        mockDialog.open.mockImplementation((_component: unknown, config: any) => {
+            dialogData = config.data;
+            return { afterClosed: () => closed.asObservable() };
+        });
+        const open = component.openEventTagsDialog({ preventDefault: vi.fn(), stopPropagation: vi.fn() } as any, originalEvent);
+        const save = dialogData.save(['Old owner edit']);
+        component.events = [otherEvent];
+        if (contextChange === 'account change') {
+            component.user = new User('other-owner');
+            component.user.settings = mockUser.settings;
+        } else {
+            fixture.destroy();
+        }
+        const changes = vi.fn();
+        component.eventsChange.subscribe(changes);
+        resolveSave(['Old owner edit']);
+        const savedTags = await save;
+        closed.next(savedTags);
+        closed.complete();
+        await open;
+        expect(mockEventTagService.saveTags).toHaveBeenCalledWith(mockUser, originalEvent, ['Old owner edit'], []);
+        expect(otherEvent.tags).toEqual(['Other owner']);
+        expect(changes).not.toHaveBeenCalled();
+        expect(mockSnackBar.open).not.toHaveBeenCalled();
     });
 
     it('should apply bulk add/remove changes and update selected event rows', async () => {
+        const changes = vi.fn();
+        component.eventsChange.subscribe(changes);
         const selectedRows = component.data.data.slice(0, 2) as any[];
         component.selection.select(...selectedRows);
         mockEventTagService.applyBulkChanges.mockResolvedValue({
@@ -1013,9 +1289,13 @@ describe('EventTableComponent', () => {
         expect((component.events[0] as any).tags).toEqual(['Race']);
         expect((component.events[1] as any).tags).toEqual(['Recovery']);
         expect(component.selection.isEmpty()).toBe(true);
+        expect(changes).toHaveBeenCalledOnce();
+        expect(changes).toHaveBeenCalledWith({ userID: mockUser.uid, updatedTags: { event1: ['Race'], event2: ['Recovery'] }, deletedEventIDs: [] });
     });
 
     it('should not overwrite a newer row refresh after a bulk tag save completes', async () => {
+        const changes = vi.fn();
+        component.eventsChange.subscribe(changes);
         const selectedRow = component.data.data[0] as any;
         const selectedEvent = selectedRow.Event as any;
         const refreshedEvent = new MockEvent(selectedEvent.getID()) as any;
@@ -1035,6 +1315,7 @@ describe('EventTableComponent', () => {
             { preventDefault: vi.fn(), stopPropagation: vi.fn() } as any,
         );
         await dialogData.save({ add: ['Race'], remove: [] });
+        expect(changes).toHaveBeenCalledWith({ userID: mockUser.uid, updatedTags: { [selectedEvent.getID()]: ['Race'] }, deletedEventIDs: [] });
         component.events = [refreshedEvent, ...component.events.slice(1)];
         closed.next(true);
         closed.complete();
@@ -1043,6 +1324,42 @@ describe('EventTableComponent', () => {
         expect(selectedEvent.tags).toEqual(['Race']);
         expect(refreshedEvent.tags).toEqual(['Concurrent']);
         expect((component.data.data[0] as any)['Tag Values']).toEqual(['Concurrent']);
+        expect(changes).toHaveBeenCalledOnce();
+    });
+
+    it.each(['account change', 'component teardown'])('ignores completed bulk tag saves and their closing notification after %s', async (contextChange) => {
+        const selectedRow = component.data.data[0] as any;
+        const otherEvent = new MockEvent(selectedRow.Event.getID()) as any;
+        otherEvent.tags = ['Other owner'];
+        const closed = new Subject<boolean>();
+        let dialogData: any;
+        let resolveSave: (tags: Record<string, string[]>) => void;
+        mockEventTagService.applyBulkChanges.mockReturnValue(new Promise<Record<string, string[]>>(resolve => { resolveSave = resolve; }));
+        component.selection.select(selectedRow);
+        mockDialog.open.mockImplementation((_component: unknown, config: any) => {
+            dialogData = config.data;
+            return { afterClosed: () => closed.asObservable() };
+        });
+        const open = component.openBulkEventTagsDialog({ preventDefault: vi.fn(), stopPropagation: vi.fn() } as any);
+        const save = dialogData.save({ add: ['Old owner edit'], remove: [] });
+        component.events = [otherEvent];
+        if (contextChange === 'account change') {
+            component.user = new User('other-owner');
+            component.user.settings = mockUser.settings;
+        } else {
+            fixture.destroy();
+        }
+        const changes = vi.fn();
+        component.eventsChange.subscribe(changes);
+        resolveSave({ [selectedRow.Event.getID()]: ['Old owner edit'] });
+        await save;
+        closed.next(true);
+        closed.complete();
+        await open;
+        expect(mockEventTagService.applyBulkChanges).toHaveBeenCalledWith(mockUser, [selectedRow.Event.getID()], { add: ['Old owner edit'], remove: [] });
+        expect(otherEvent.tags).toEqual(['Other owner']);
+        expect(changes).not.toHaveBeenCalled();
+        expect(mockSnackBar.open).not.toHaveBeenCalled();
     });
 
     it('should reject oversized bulk tag selections before opening the dialog', async () => {
@@ -1283,6 +1600,8 @@ describe('EventTableComponent', () => {
 
     describe('deleteSelection', () => {
         it('removes a row deleted through its action menu', () => {
+            const changes = vi.fn();
+            component.eventsChange.subscribe(changes);
             const e1 = new MockEvent('event1');
             const e2 = new MockEvent('event2');
             component.events = [e1 as any, e2 as any];
@@ -1294,6 +1613,16 @@ describe('EventTableComponent', () => {
             expect(component.events.map((event: any) => event.getID())).toEqual(['event2']);
             expect(component.selection.selected).toEqual([]);
             expect(processChangesSpy).toHaveBeenCalledWith('after_delete_row');
+            expect(changes).toHaveBeenCalledWith({ userID: mockUser.uid, updatedTags: {}, deletedEventIDs: ['event1'] });
+        });
+
+        it('reports a confirmed deletion even after a parent filter removed the row from this table', () => {
+            const changes = vi.fn();
+            component.eventsChange.subscribe(changes);
+            component.events = [new MockEvent('event2') as any];
+            component.removeDeletedEvent('event1');
+            expect(component.events.map(event => event.getID())).toEqual(['event2']);
+            expect(changes).toHaveBeenCalledWith({ userID: mockUser.uid, updatedTags: {}, deletedEventIDs: ['event1'] });
         });
 
         it('should abort delete when confirmation dialog is cancelled', async () => {
@@ -1331,6 +1660,107 @@ describe('EventTableComponent', () => {
             expect(processChangesSpy).toHaveBeenCalledWith('after_delete_selection');
             expect(mockAnalyticsService.logEvent).toHaveBeenCalledWith('delete_events');
             expect(mockSnackBar.open).toHaveBeenCalledWith('Activities deleted', undefined, { duration: 2000 });
+            expect(component.isLoading).toBe(false);
+        });
+
+        it('reconciles confirmed deletions even when another selected activity fails to delete', async () => {
+            const changes = vi.fn();
+            component.eventsChange.subscribe(changes);
+            const e1 = new MockEvent('event1');
+            const e2 = new MockEvent('event2');
+            component.events = [e1 as any, e2 as any, new MockEvent('event3') as any];
+            component.selection.select({ Event: e1 } as any, { Event: e2 } as any);
+            mockEventService.deleteAllEventData.mockResolvedValueOnce(true).mockRejectedValueOnce(new Error('failed'));
+            mockDialog.open.mockReturnValueOnce({ afterClosed: () => of(true) });
+
+            await component.deleteSelection();
+            await new Promise(resolve => setTimeout(resolve, 0));
+
+            expect(component.events.map(event => event.getID())).toEqual(['event2', 'event3']);
+            expect(changes).toHaveBeenCalledOnce();
+            expect(changes).toHaveBeenCalledWith({ userID: mockUser.uid, updatedTags: {}, deletedEventIDs: ['event1'] });
+            expect(mockHapticsService.error).toHaveBeenCalledOnce();
+            expect(mockHapticsService.success).not.toHaveBeenCalled();
+            expect(component.isLoading).toBe(false);
+        });
+
+        it('keeps activity search and sort persistence active after bulk deletion', async () => {
+            component.events = [new MockEvent('event1') as any, new MockEvent('event2') as any];
+            component.selection.select({ Event: component.events[0] } as any);
+            mockDialog.open.mockReturnValueOnce({ afterClosed: () => of(true) });
+            await component.deleteSelection();
+            await new Promise(resolve => setTimeout(resolve, 0));
+
+            component.onSearchInput({ target: { value: 'test run' } } as unknown as Event);
+            await new Promise(resolve => setTimeout(resolve, 300));
+            expect(component.searchTerm).toBe('test run');
+            expect(JSON.parse(component.data.filter).text).toBe('test run');
+            component.sort.sortChange.next({ active: 'Distance', direction: 'asc' });
+            expect(mockUserService.updateUserProperties).toHaveBeenCalledWith(mockUser, {
+                settings: { dashboardSettings: { tableSettings: { active: 'Distance', direction: 'asc' } } },
+            });
+        });
+
+        it('deletes the confirmed IDs when the tag context changes while confirmation is open', async () => {
+            const original = new MockEvent('event1');
+            component.events = [original as any, new MockEvent('event2') as any];
+            component.selection.select({ Event: original } as any);
+            const closed = new Subject<boolean>();
+            mockDialog.open.mockReturnValueOnce({ afterClosed: () => closed.asObservable() });
+            const changes = vi.fn();
+            component.eventsChange.subscribe(changes);
+            await component.deleteSelection();
+
+            component.events = [new MockEvent('event2') as any];
+            component.paginator.firstPage = vi.fn();
+            component.ngOnChanges({ filterContext: new SimpleChange('Endurance', 'Recovery', false) });
+            closed.next(true);
+            closed.complete();
+            await new Promise(resolve => setTimeout(resolve, 0));
+
+            expect(mockEventService.deleteAllEventData).toHaveBeenCalledWith(mockUser, 'event1');
+            expect(changes).toHaveBeenCalledWith({ userID: mockUser.uid, updatedTags: {}, deletedEventIDs: ['event1'] });
+            expect(component.events.map(event => event.getID())).toEqual(['event2']);
+        });
+
+        it('abandons a pending delete confirmation when the account changes', async () => {
+            component.selection.select({ Event: component.events[0] } as any);
+            const closed = new Subject<boolean>();
+            mockDialog.open.mockReturnValueOnce({ afterClosed: () => closed.asObservable() });
+            await component.deleteSelection();
+            component.user = new User('other');
+            closed.next(true);
+            closed.complete();
+            await new Promise(resolve => setTimeout(resolve, 0));
+            expect(mockEventService.deleteAllEventData).not.toHaveBeenCalled();
+            expect(mockHapticsService.success).not.toHaveBeenCalled();
+            expect(mockHapticsService.error).not.toHaveBeenCalled();
+        });
+
+        it.each(['account change', 'component teardown'])('keeps completed bulk deletion callbacks silent after %s', async (contextChange) => {
+            const originalEvent = component.events[0];
+            component.selection.select({ Event: originalEvent } as any);
+            let resolveDelete: (value: boolean) => void;
+            mockEventService.deleteAllEventData.mockReturnValueOnce(new Promise<boolean>(resolve => { resolveDelete = resolve; }));
+            mockDialog.open.mockReturnValueOnce({ afterClosed: () => of(true) });
+            const changes = vi.fn();
+            component.eventsChange.subscribe(changes);
+            await component.deleteSelection();
+            if (contextChange === 'account change') {
+                component.user = new User('other-owner');
+                component.user.settings = mockUser.settings;
+            } else {
+                fixture.destroy();
+            }
+            const loaded = vi.spyOn(component, 'loaded');
+            resolveDelete(true);
+            await new Promise(resolve => setTimeout(resolve, 0));
+            expect(mockEventService.deleteAllEventData).toHaveBeenCalledWith(mockUser, originalEvent.getID());
+            expect(changes).not.toHaveBeenCalled();
+            expect(loaded).not.toHaveBeenCalled();
+            expect(mockSnackBar.open).not.toHaveBeenCalled();
+            expect(mockHapticsService.success).not.toHaveBeenCalled();
+            expect(mockHapticsService.error).not.toHaveBeenCalled();
         });
     });
 
@@ -1791,5 +2221,38 @@ describe('EventTableComponent', () => {
         expect(intl.itemsPerPageLabel).toBe('Items');
         expect(intl.nextPageLabel).toBe('Next');
         expect(intl.previousPageLabel).toBe('Previous');
+    });
+});
+
+describe('EventTableActionsComponent Material menu', () => {
+    it('initializes only the visible metric columns as selected and applies an accepted change', async () => {
+        const haptics = { selection: vi.fn() };
+        await TestBed.configureTestingModule({
+            declarations: [EventTableActionsComponent, HapticTapDirective],
+            imports: [MatListModule, MatMenuModule, MatButtonModule, MatIconModule, NoopAnimationsModule],
+            providers: [{ provide: AppHapticsService, useValue: haptics }],
+        }).compileComponents();
+        const menuFixture = TestBed.createComponent(EventTableActionsComponent);
+        menuFixture.componentRef.setInput('selectedDataTypes', ['Distance', 'Duration']);
+        menuFixture.componentRef.setInput('dataTypes', ['Duration', 'Distance', 'Ascent']);
+        menuFixture.detectChanges();
+        const changes = vi.fn();
+        menuFixture.componentInstance.selectedDataTypesChange.subscribe(changes);
+        const trigger = menuFixture.debugElement.query(By.directive(MatMenuTrigger)).injector.get(MatMenuTrigger);
+        trigger.openMenu();
+        menuFixture.detectChanges();
+        await menuFixture.whenStable();
+        const overlay = TestBed.inject(OverlayContainer).getContainerElement();
+        const options = [...overlay.querySelectorAll<HTMLElement>('[role="option"]')];
+        expect(options.map(option => [option.textContent.trim(), option.getAttribute('aria-selected')])).toEqual([
+            ['Duration', 'true'], ['Distance', 'true'], ['Ascent', 'false'],
+        ]);
+        expect(haptics.selection).not.toHaveBeenCalled();
+        options[2].click();
+        menuFixture.detectChanges();
+        expect(haptics.selection).toHaveBeenCalledOnce();
+        trigger.closeMenu();
+        await menuFixture.whenStable();
+        expect(changes).toHaveBeenCalledWith(['Duration', 'Distance', 'Ascent']);
     });
 });

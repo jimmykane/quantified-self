@@ -63,16 +63,22 @@
       <div>Activities checked: {{ preview().scanned }}</div>
       @for (option of sourceOptions; track option.id) {
         @if (option.selected) {
-          <div>{{ option.label }}: {{ preview().eligibleBySource[option.id] || 0 }} eligible · {{ preview().skippedBySource[option.id] || 0 }} skipped</div>
+          <div>{{ option.label }}: {{ preview().eligibleBySource[option.id] || 0 }} ready to send</div>
         }
       }
-      <div>Already queued: {{ preview().skippedByReason['already_queued'] || 0 }} · Already sent: {{ preview().skippedByReason['already_sent'] || 0 }}</div>
-      <div>Skipped source matches and unavailable files: {{ previewSkippedCount }}</div>
-      @if (preview().failedCount) {
-        <div>Could not check {{ preview().failedCount }} source matches. Run Preview again to retry them.</div>
-      }
-      @if (!previewEligibleCount()) {
-        <div>{{ preview().failedCount ? 'No eligible activities confirmed. Try Preview again.' : 'No eligible activities to send for this selection.' }}</div>
+      @if (previewExclusions().length) {
+        <div class="historical-send__exclusions">
+          <div>Not ready to send</div>
+          <dl>
+            @for (reason of previewExclusions(); track reason.key) {
+              <div><dt>{{ reason.label }}</dt><dd>{{ reason.count }}</dd></div>
+            }
+          </dl>
+          <p class="historical-send__note">Counts are source checks; an activity can appear more than once. Unrelated sources are not counted.</p>
+          @if (preview().failedCount && previewEligibleCount()) {
+            <p>Run Preview again to retry checks that failed.</p>
+          }
+        </div>
       }
     </app-status-info>
   }
@@ -83,6 +89,9 @@
       <div>Provider delivery continues in the background.</div>
     </app-status-info>
   }
+  @if (sendDisabledReason) {
+    <p class="historical-send__note" [id]="sendHintID">{{ sendDisabledReason }}</p>
+  }
   <div class="historical-send__actions">
     <button mat-stroked-button type="button" [disabled]="!canPreview" [attr.aria-busy]="busy() === 'preview'"
       (click)="runPreview()">
@@ -92,6 +101,7 @@
       </span>
     </button>
     <button mat-flat-button class="qs-mat-primary" type="button" [disabled]="!canSend"
+      [attr.aria-describedby]="sendDisabledReason ? sendHintID : null"
       [attr.aria-busy]="busy() === 'send'" (click)="runSend()">
       <span class="historical-send__button-content">
         @if (busy() === 'send') { <mat-spinner diameter="18"></mat-spinner> }

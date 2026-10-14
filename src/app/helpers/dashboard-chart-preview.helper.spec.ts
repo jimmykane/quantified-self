@@ -39,6 +39,16 @@ describe('dashboard example previews', () => {
     });
     expect(preview.startOfWeek).toBe(DaysOfTheWeek.Sunday);
   });
+  it('orders HRV thumbnails by the saved account even when variants have individual keys', () => {
+    const tile = getDashboardChartCatalog().find(entry => entry.definition.id === 'curated-hrv')!.tile;
+    const context = (buildDashboardExamplePreview(tile).tile as DashboardChartTileViewModel).hrvTrend!;
+    context.window = dashboardHrvWindows().visible;
+    const first = context.charts[0];
+    context.charts.push({ ...first, key: 'preferred-series', model: { ...first.model,
+      series: { ...first.model.series, id: 'preferred-series', sourceSelectionKey: 'preferred-account' } } });
+    const preview = buildDashboardThumbnailPreview(tile, { tiles: [], hrvTrend: context, hrvPreferredSource: 'preferred-account' });
+    expect((preview.tile as DashboardChartTileViewModel).hrvTrend?.charts[0].key).toBe('preferred-series');
+  });
   it('provides renderable, explicitly synthetic data for the public-compatible catalog', () => {
     for (const entry of getDashboardChartCatalog().filter(entry => !isPrivateDashboardHealthTile(entry.tile))) {
       const preview = buildDashboardExamplePreview(entry.tile);

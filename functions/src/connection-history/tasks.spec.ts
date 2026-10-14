@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 vi.unmock('@sports-alliance/sports-lib');
 const mocks = vi.hoisted(() => ({
-  replayFinalCommit: false, rejectFinalCommit: false, rows: new Map<string, any>(), pro: vi.fn(), depth: vi.fn(), enqueue: vi.fn(), execute: vi.fn(), appCheck: vi.fn(), skip: vi.fn(), probe: vi.fn(), probeUnavailable: vi.fn(),
+  replayFinalCommit: false, rejectFinalCommit: false, rows: new Map<string, any>(), pro: vi.fn(), routeEnqueue: vi.fn(), depth: vi.fn(), enqueue: vi.fn(), execute: vi.fn(), appCheck: vi.fn(), skip: vi.fn(), probe: vi.fn(), probeUnavailable: vi.fn(),
 }));
 vi.mock('firebase-functions/logger', () => ({ info: vi.fn(), warn: vi.fn() }));
 vi.mock('./monitoring-probe', () => ({ historyProbeDue: (time: string) => time.endsWith(':00:00Z'), observeConnectionHistory: mocks.probe, recordHistoryProbeUnavailable: mocks.probeUnavailable }));
@@ -9,6 +9,7 @@ vi.mock('firebase-functions/v2/tasks', () => ({ onTaskDispatched: (_: unknown, h
 vi.mock('firebase-functions/v2/firestore', () => ({ onDocumentWritten: (_: unknown, handler: unknown) => handler }));
 vi.mock('firebase-functions/v2/scheduler', () => ({ onSchedule: (_: unknown, handler: unknown) => handler }));
 vi.mock('firebase-functions/v2/https', async original => ({ ...await original<any>(), onCall: (_: unknown, handler: unknown) => handler }));
+vi.mock('../routes/route-sync-queue', () => ({ enqueueRouteSyncQueueItem: mocks.routeEnqueue }));
 vi.mock('../utils', () => ({ hasProAccess: mocks.pro, enforceAppCheck: mocks.appCheck, ALLOWED_CORS_ORIGINS: [] }));
 vi.mock('../config', () => ({ config: { cloudtasks: { workoutQueue: 'workout', sleepSyncQueue: 'sleep', garminHealthBackfillQueue: 'health', connectionHistoryQueue: 'history' } } }));
 vi.mock('../secrets', () => ({ FUNCTION_SECRET_BINDINGS: { processConnectionHistoryTask: [] } }));
@@ -61,6 +62,7 @@ beforeEach(() => {
   mocks.replayFinalCommit = false; mocks.rejectFinalCommit = false; vi.restoreAllMocks(); vi.clearAllMocks(); vi.spyOn(Date, 'now').mockReturnValue(now); mocks.rows.clear();
   mocks.probe.mockReset().mockResolvedValue(undefined); mocks.probeUnavailable.mockReset();
   mocks.pro.mockReset().mockResolvedValue(true); mocks.depth.mockReset().mockResolvedValue(0); mocks.enqueue.mockReset().mockResolvedValue(true); mocks.appCheck.mockReset();
+  mocks.routeEnqueue.mockReset().mockResolvedValue({ enqueued: false });
   mocks.skip.mockReset().mockResolvedValue('PROCESSED');
   run = createHistoryRun('owner', ServiceNames.WahooAPI, { requested: true, rangePreset: '30_days', runId, tokenPath: 'wahooAPIAccessTokens/owner/tokens/account', rootPath: 'wahooAPIAccessTokens/owner', providerUserId: 'account', credentialGeneration: 'credential' }, 'connection', now);
   mocks.rows.set(path(), run); mocks.rows.set('users/owner', { uid: 'owner' });
@@ -127,6 +129,21 @@ describe('durable history coordinator', () => {
     mocks.rows.set('queue/item', { processed: false }); expect(await observeHistoryChildren(['queue/item'])).toBe('pending');
     mocks.rows.set('queue/item', { processed: true, skippedReason: 'disconnected' }); expect(await observeHistoryChildren(['queue/item'])).toBe('skipped');
   });
+  it.each(['provider_route_up_to_date', 'provider_route_content_unchanged'])('accepts retained route history with %s without treating other skips as successful imports', async skippedReason => {
+    mocks.rows.set('routeSyncQueue/item', { processed: true, skippedReason, resultStatus: 'skipped' });
+    expect(await observeHistoryChildren(['routeSyncQueue/item'])).toBe('processed');
+    mocks.rows.set('routeSyncQueue/item', { processed: true, skippedReason: 'provider_auth_required', resultStatus: 'skipped' });
+    expect(await observeHistoryChildren(['routeSyncQueue/item'])).toBe('authorization');
+  });
+  it('distinguishes disappeared route records from lifecycle or authorization skips', async () => {
+    mocks.rows.set('routeSyncQueue/deleted', { processed: true, skippedReason: 'provider_route_not_found', resultStatus: 'skipped' });
+    mocks.rows.set('routeSyncQueue/saved', { processed: true, resultStatus: 'success' });
+    expect(await observeHistoryChildren(['routeSyncQueue/deleted', 'routeSyncQueue/saved'])).toBe('unavailable');
+    mocks.rows.set('routeSyncQueue/saved', { processed: true, skippedReason: 'connection_history_superseded', resultStatus: 'skipped' });
+    expect(await observeHistoryChildren(['routeSyncQueue/deleted', 'routeSyncQueue/saved'])).toBe('skipped');
+    mocks.rows.set('queue/deleted', { processed: true, skippedReason: 'provider_route_not_found', resultStatus: 'skipped' });
+    expect(await observeHistoryChildren(['queue/deleted'])).toBe('skipped');
+  });
   it.each(['user_not_allowed', 'provider_disabled', 'deferred', 'manual_reconciliation_required'])('does not claim delivery for terminal %s worker outcomes', async resultStatus => {
     mocks.rows.set('queue/item', { processed: true, resultStatus });
     expect(await observeHistoryChildren(['queue/item'])).toBe('skipped');
@@ -156,12 +173,14 @@ describe('durable history coordinator', () => {
       await expect(execution.beforeRequest()).rejects.toThrow('earlier connection');
     }); expect(currentHistoryExecution()).toBeUndefined();
   });
-  it.each(['connection', 'missing-run', 'pro'])('acknowledges a queued history child after %s changes without provider work or task retries', async change => {
+  it.each(['connection', 'missing-run', 'pro', 'foreign-provider', 'foreign-account'])('acknowledges a queued history child after %s changes without provider work or task retries', async change => {
     const item: QueueItemInterface = { id: 'child', dateCreated: now, processed: false, retryCount: 0, dispatchedToCloudTask: null,
       connectionHistoryRunId: run.id, firebaseUserID: 'owner', queueRevision: 'child-revision' };
     if (change === 'connection') mocks.rows.get(`users/owner/meta/${run.serviceName}`).connectionStateGeneration = 'replacement';
     if (change === 'missing-run') mocks.rows.delete(path());
     if (change === 'pro') mocks.pro.mockResolvedValue(false);
+    if (change === 'foreign-provider') Object.assign(item, { sourceServiceName: ServiceNames.SuuntoApp });
+    if (change === 'foreign-account') Object.assign(item, { providerUserId: 'foreign' });
     const operation = vi.fn(async () => 'PROCESSED' as QueueResult);
     await expect(withHistoryQueueExecution(item, operation)).resolves.toBe('PROCESSED');
     expect(operation).not.toHaveBeenCalled();
@@ -218,6 +237,42 @@ describe('durable history coordinator', () => {
     const retry = retryConnectionHistoryImport as unknown as (request: any) => Promise<unknown>;
     await expect(retry({ auth: { uid: 'owner' }, data: { runId: run.id } })).rejects.toMatchObject({ code: 'failed-precondition' });
     expect(mocks.rows.has('workoutQueue/failed')).toBe(false); expect(saved().processed).toBe(true);
+  });
+  it('retains route children admitted before a dispatch failure for bounded parent recovery', async () => {
+    run = createHistoryRun('owner', ServiceNames.SuuntoApp, { requested: true, importRouteHistory: true, rangePreset: '30_days', runId,
+      tokenPath: 'suuntoAppAccessTokens/owner/tokens/account', rootPath: 'suuntoAppAccessTokens/owner', providerUserId: 'account', credentialGeneration: 'credential' }, 'connection', now);
+    run.steps = run.steps.filter(step => step.id === 'routes');
+    mocks.rows.set(path(), run); mocks.rows.set(run.rootPath, { activeOAuthCredentialGeneration: 'credential' });
+    mocks.rows.set(run.tokenPath, { tokenCredentialGeneration: 'credential' });
+    mocks.rows.set(`users/owner/meta/${run.serviceName}`, { connectionState: 'connected', connectionStateGeneration: 'connection' });
+    mocks.execute.mockImplementationOnce(async (_run, _step, execution) => {
+      execution.onQueued('routeSyncQueue/admitted'); throw new Error('dispatch failed');
+    });
+    await processConnectionHistoryRun(run.id, '0');
+    expect(saved().steps[0]).toMatchObject({ status: 'retrying', childPaths: ['routeSyncQueue/admitted'], count: 0 });
+  });
+  it('redispatches only undispatched route children using the current history connection', async () => {
+    mocks.rows.set('routeSyncQueue/pending', { processed: false, dispatchedToCloudTask: null, connectionHistoryRunId: run.id,
+      sourceServiceName: ServiceNames.SuuntoApp, providerUserId: 'account', providerRouteId: 'route', firebaseUserID: 'owner' });
+    mocks.rows.set('routeSyncQueue/issued', { processed: false, dispatchedToCloudTask: now, connectionHistoryRunId: run.id });
+    mocks.rows.set('routeSyncQueue/old-issued', { processed: false, dispatchedToCloudTask: now - 900000, connectionHistoryRunId: run.id,
+      sourceServiceName: ServiceNames.SuuntoApp, providerUserId: 'account', providerRouteId: 'old-route', firebaseUserID: 'owner' });
+    mocks.routeEnqueue.mockResolvedValue({ enqueued: false });
+    expect(await observeHistoryChildren(['routeSyncQueue/pending', 'routeSyncQueue/issued', 'routeSyncQueue/old-issued'], run.id, historyExecution(run, []))).toBe('pending');
+    expect(mocks.routeEnqueue).toHaveBeenCalledTimes(2);
+    expect(mocks.routeEnqueue).toHaveBeenCalledWith(expect.objectContaining({ providerRouteId: 'route', providerUserId: 'account', firebaseUserID: 'owner', manual: true }));
+  });
+  it('restores failed route children without inheriting an issued marker or terminal status', async () => {
+    run.processed = true; run.steps[0].status = 'failed'; run.steps[0].done = true;
+    run.steps[0].capability.cooldownGroup = 'routes'; run.steps[0].childPaths = ['routeSyncQueue/failed'];
+    mocks.rows.set('failed_jobs/failed', { connectionHistoryRunId: run.id, originalCollection: 'routeSyncQueue',
+      queueRevision: 'old', dispatchedToCloudTask: now, resultStatus: 'failed', processedAt: now });
+    const retry = retryConnectionHistoryImport as unknown as (request: any) => Promise<unknown>;
+    await retry({ auth: { uid: 'owner' }, data: { runId: run.id } });
+    expect(mocks.rows.get('routeSyncQueue/failed')).toMatchObject({ processed: false, dispatchedToCloudTask: null, retryCount: 0 });
+    expect(mocks.rows.get('routeSyncQueue/failed')).not.toHaveProperty('resultStatus');
+    expect(mocks.rows.get('routeSyncQueue/failed')).not.toHaveProperty('processedAt');
+    expect(mocks.rows.has('failed_jobs/failed')).toBe(false);
   });
   it('restores its own failed child with a new revision without resetting its original cooldown', async () => {
     run.processed = true; run.steps[0].status = 'failed'; run.steps[0].done = true;

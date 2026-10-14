@@ -1,5 +1,6 @@
-import { Component, Inject } from '@angular/core';
+import { Component, Inject, inject } from '@angular/core';
 import { MAT_DIALOG_DATA, MatDialogRef } from '@angular/material/dialog';
+import { AppHapticsService } from '../../../services/app.haptics.service';
 
 export interface AccountLinkingData {
     email: string;
@@ -14,21 +15,29 @@ export interface AccountLinkingData {
     standalone: false
 })
 export class AccountLinkingDialogComponent {
+    private readonly haptics = inject(AppHapticsService);
+    readonly pendingProviderName: string;
     constructor(
         public dialogRef: MatDialogRef<AccountLinkingDialogComponent>,
         @Inject(MAT_DIALOG_DATA) public data: AccountLinkingData
-    ) { }
+    ) { this.pendingProviderName = this.getProviderName(data.pendingProvider); }
 
     onCancel(): void {
+        this.haptics.selection();
         this.dialogRef.close(null); // Return null for cancel
     }
 
     onSelectProvider(providerId: string): void {
+        if (!this.data.existingProviders.includes(providerId)
+            && !(providerId === 'emailLink' && this.data.existingProviders.includes('password'))) return;
+        this.haptics.selection();
         this.dialogRef.close(providerId); // Return the selected provider ID
     }
 
     getProviderName(providerId: string): string {
-        if (!providerId) return 'Email/Password';
+        if (providerId === 'emailLink') return 'email link';
+        if (providerId === 'github.com') return 'GitHub';
+        if (!providerId) return 'email';
         if (providerId === 'password') return 'Email & Password';
         // Simplified provider name (e.g.,google.com -> Google)
         const name = providerId.split('.')[0];

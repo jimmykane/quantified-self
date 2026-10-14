@@ -2617,6 +2617,42 @@ remain separate from local verification.
 
 ##### Optional early Lap on numeric endings (#784 Training 07)
 
+Full-recipe bulk editing uses additive `preview_planned_workout_v3_changes`: 1–25 complete non-strength creates or
+updates with the same latest strict recipe as the single editor, including pool length and absent/false/true Lap flags.
+It shares the existing owner/connection/grant/revision/expiry-bound preview, approval and idempotent Apply; legacy
+registered batch schemas remain frozen and cannot erase newer fields. The Assistant chooses this bulk recipe schema
+for multi-workout edits such as plan HR retargeting, presents complete before/after app reviews, and never exposes Apply
+to the model or substitutes a legacy writer when the tool is missing. Its six-call budget stays unchanged; use small
+reviews (normally up to three updates after discovery) with complete reads and truthful remaining-work disclosure.
+No plan action or new provider consent is included.
+Follow-up review covers adjust/retarget phrasing and bulk target removal/step reordering, distinguishing those fields
+from deleting/moving whole workouts. Numeric answers to an immediately preceding HR clarification keep the original
+full single/bulk preview; cancellations, new actions and unrelated context do not. This changes private routing, not
+mutation authority, values, call budgets, consent or app confirmation. The MCP malformed-call guard derives every
+preview name/schema from the same authoritative catalog, and its existing bounded error no longer steers edits toward
+new-workout creation. No new tool, scope, persisted field, provider action, registered-schema change or additional
+client refresh is introduced by these review fixes. Existing Help and bundled full-recipe/approval guidance remain valid.
+Ask for explicit HR ranges, which prescriptions they replace, and affected sessions/date range. Read complete current
+recipes and preserve IDs, order, repeats, warm-ups, recovery, notes, dates, association and other targets. Changing profile
+zones does not recalculate stored absolute targets or relative reference snapshots. Larger selections need separately
+reviewed batches with fresh revisions and exact read-back coverage. Existing plan/standalone opt-in reconciles eligible
+edits normally; this is not a new Send, guaranteed acceptance, or watch receipt. Scheduling windows and past/completed
+protection remain unchanged. No Sports Lib/model/storage change, new callable/scope, migration or transport is needed.
+Release MCP/Assistant backend and refresh external catalogs separately; existing write grants need no reauthorization.
+Local regression uses synthetic 18-run plans through external and first-party preview/apply, preserving early-Lap
+warm-ups and every non-HR field, leaving another workout/settings/completion unchanged, then updating one retained
+Suunto Guide through fixture HTTP without another create. This is not a live ChatGPT/Claude or watch test.
+Initial implementation verification: 532 focused Functions schema/transport/Assistant/loop-guard tests; the complete 17-file MCP-data emulator
+group passed 417 tests without skips. Help/hosting checks passed 106 tests, plugin tooling passed 30 tests, all seven
+bundled skills validated and fixture-ID plugin validation used an isolated profile. Functions and local frontend builds,
+70 endpoint secret bindings, diff checks and the digest-bound compatible MCP contract check passed. The existing
+developer-refresh advisory remains pending; no baseline promotion, real-profile install, push, deployment or customer
+data change was performed.
+Follow-up review verification: 596 focused Functions tests passed on an isolated rerun after a concurrent run reported
+a test-runner RPC timeout; 30 plugin tests and all seven bundled-skill validators passed. Functions build, focused lint,
+diff and contract checks passed with the candidate digest unchanged. These private routing/guard fixes require no new
+Rules or frontend access change and make no live-client, customer-data or provider-delivery verification claim.
+
 `WorkoutTimeEndingV1` and `WorkoutDistanceEndingV1` optionally carry `allowEarlyLap?: boolean`.
 True means the unchanged seconds/metres limit **or** an athlete Lap press. Absent and false keep the numeric ending;
 `manual` remains indefinite until Lap and rejects the field, as do repetitions/kilojoules. The shared strict parser
@@ -2625,10 +2661,23 @@ change or FIT SDK dependency is needed. A device's own skip behavior is separate
 step transitions never establish workout completion.
 
 The Material checkbox is initially unchecked, appears only for numeric endings, and works for top-level/repeat steps
-and saved-recipe editing. Untouched old recipes retain absence; explicit false survives save/read/copy/history/library
+and saved-recipe editing. Its label is **Also finish this step with Lap**. The associated accessible hint states
+whether the current Suunto step ends only at its time/distance limit or at that limit **or** a Lap press. With the
+option off, Lap does not advance the Guide; it can still create a recorded lap/reset a lap-average reading.
+The manual-ending hint says to press Lap to **finish this step**, not start it. For a semi-automatic pool set,
+enable the option on each 100 m Work step and leave each 15-second Rest timed without it; Lap-only Work instead
+uses **End by -> Lap button press**. These are explicit athlete choices, never inferred swim defaults.
+Untouched old recipes retain absence; explicit false survives save/read/copy/history/library
 placement. Changing the draft to manual omits the flag from that ending; returning to a numeric ending before saving
 retains the draft choice. Exact canonical seconds/metres, targets, notes, pool length and repeat counts stay intact.
 Accepted checkbox changes have one selection haptic; initialization, no-ops and disabled actions are silent.
+
+This editor/Help wording change has no MCP impact: canonical ending values and `allowEarlyLap`, complete scheduled/
+saved-recipe reads and previews, mapping behavior, consent and confirmation contracts are unchanged. It adds no
+tool, schema, scope, provider action, plugin guidance or deployment requirement beyond the frontend release.
+Focused UI regressions cover checked/unchecked hints, numeric Work with timed Rest, repeat children, accessible
+hint associations, save/library-copy fidelity and unchanged haptics; no Training data migration or provider requeue
+is performed.
 
 Suunto mapping `suunto-guides-v6` implements documented OR conditions. A true ending keeps the native time/distance
 countdown and uses `or(stepDuration|stepDistance, manualLap)`. Generated notes mention Lap without overwriting authored
@@ -2948,7 +2997,8 @@ approval equivalence is retained only for unchanged content/authority, never new
 
 ##### Suunto app workout preview (v13)
 
-Current sends use private `suunto-guides-v13` to add the documented optional Guide `richText` Markdown field.
+Non-swimming sends use private `suunto-guides-v13` to add the documented optional Guide `richText` Markdown field;
+swimming v14 below retains this same app preview.
 Suunto app Guide details show a definition-order preview: title/sport, step purpose, exact prescribed ending,
 target ranges and complete notes. Repeats are grouped, not expanded. Manual endings explicitly say Lap finishes
 the current step; early-Lap alternatives remain visible. Strength uses the validated complete companion for
@@ -2982,6 +3032,74 @@ Monitoring is **covered/unchanged**: existing provider/event metrics, dashboard,
 cover v13; only the private diagnostic version allowlist grows. No queue, scheduler, retention or resource changes.
 Release needs separately approved Functions deployment. Local ZIP/Firestore fixtures are not live Suunto app proof;
 after release, sync an eligible future Guide and confirm the full Description in the Suunto app.
+
+##### Configurable swimming Guide screens (v14)
+
+The private `suunto-guides-v14` mapping applies only to pool/open-water swimming. Other sport payloads remain
+exactly v13. In the Suunto sync dialog, **Show swimming Guide screens** offers separate ordered Work/Rest
+preferences, Restore defaults and an explicit Save. This uses the existing owner settings writer and
+`users/{uid}/config/settings.suuntoSwimmingGuide`, not workout mutation or sending consent. The delivery reader
+uses this canonical config document; the historical root owner-unit source is deliberately unchanged for exact
+v13 reconstruction. Preferences have a strict versioned enum allowlist, no duplicate fields and at most five
+optional choices per screen. Missing/malformed preferences normalize to defaults, without rewriting owner data.
+
+- Mandatory native countdowns, authored targets and notes reserve their slots first, within the existing five-field
+  limit. Documented measured target counterparts are adjacent to their targets where space permits. Missing HR
+  targets do not create a fake `Tgt HR`. Long instructions remain text-only. Watch firmware adapts physical layout;
+  ordering is a priority request, not fixed-position/font-size proof.
+- Work defaults request native step distance/remaining, elapsed step time, current-manual-lap average pace and
+  a dedicated `Interval N/Total` text field where space remains. Selectable alternatives include current HR,
+  native manual-lap stroke **count**, separate average stroke **rate**, pool-only average SWOLF and clearly labelled
+  total workout distance. SWOLF is omitted for open water; count is never inferred from cadence/rate.
+- Rest defaults request countdown first, a dedicated interval field, `Prev plan`/`Next plan` distance when the
+  adjacent Work prescription really contains a distance ending, then current HR where slots remain. The counter
+  counts actual prescribed Work occurrences across flat/pyramid/complex repeats, not pool lengths, repeat passes,
+  recorded laps or adherence. Manual prescriptions never gain distance from titles/notes. Planned context uses
+  Sports Lib owner-unit formatting, never relabelled as measured completed distance. Optional Rest totals are
+  native whole-recording distance or strokes, explicitly labelled as totals, not last-interval summaries.
+- Rest does not request freshly reset lap-average values. The published schema has no documented previous-lap
+  selector; completed-effort pace/time/distance/strokes, selectable native `/100m` pace formatting and a forced
+  last-five-second beep/vibration pattern remain unimplemented capability gaps. Do not guess JSON resource keys,
+  fabricate sensor values or add countdown steps. Pool length detection and automatic distance transitions remain
+  native; no early distance subtraction or guessed final length is introduced.
+- Suunto documents start popups lasting approximately 20 seconds. Generated start notifications are omitted for
+  timed swimming Rest of 20 seconds or less **only when there are no authored notes**. This avoids requesting a
+  popup longer than the Rest; Work/Complete, manual/long Rest and authored-note notifications stay intact. It is
+  an alert-overlap mitigation, not evidence of audible/haptic reliability or the requested five-second sequence.
+- Warm-up, active Recovery and cool-down keep the frozen v11 screens. All ending conditions, early-Lap branch
+  identities, recorded-lap boundaries, target ranges and durations remain unchanged. Expanded interval context
+  stays within 1,000 screens and 256 KiB enriched JSON; larger candidates retain native repeats without guessed
+  counters/context. If even optional compact fields cannot fit, preserve all frozen steps rather than discard
+  instructions or increase archive limits.
+
+Private operation snapshots retain the exact swimming preferences used for a send. Frozen v13 and earlier attempts
+must prove their original acceptance before any eligible same-ID update; changed owner preferences never alter an
+uncertain recovery payload. Pinning, Pro, current connection authority, completed/past-copy protection and complete
+prescription/loss approval fences remain intact. Retain at most the original approved/latest proved presentation
+snapshots when carrying unchanged mapping losses; edited prescription/authority never inherits approval. Saving
+screens updates already-consented eligible future Guides on the existing periodic reconciliation, not a new Send.
+
+MCP impact: **no wire impact**. These are provider-private display choices, not recipe fields, Training metrics,
+targets, read fields, proposals, mutation kinds or wider consent. Native and MCP delivery assessment use the same
+canonical preference reader. Strict Training reads/status outputs reject private config/operation/proof fields;
+existing plan/workout read coverage and proposal schema remain unchanged, so no catalog/plugin refresh is needed.
+Monitoring is **covered/unchanged** by existing Suunto provider/event outcome and failure metrics/alerts; only the
+private exact-digest diagnostic allowlist adds v14. No queue, Rules, index, credential or resource changes.
+
+Verification covers bounded enum settings, field budget/target pairing, untargeted screens, flat/complex counters,
+Sports Lib unit formatting, unchanged execution/lap graph, short-Rest notification scope, compact/enriched JSON
+fallback, account-scoped frontend saves and original-payload recovery/same-ID updates with isolated demo Firestore
+and synthetic provider HTTP. This is local implementation. Separately approved Functions and frontend releases,
+then physical app/watch checks, are required before claiming layout, sensor values or alert behavior are verified.
+
+Local verification for v14: 2,746 provider/delivery/Training MCP unit tests, 102 strict MCP output-contract tests,
+378 frontend/settings/help tests and all 160 Suunto lifecycle emulator tests passed with no skips. Functions and
+the local frontend build pass; frontend registry/workflow/policy and 13 monitoring-definition checks pass. The
+compiled MCP contract is compatible with the unchanged developer-refresh advisory. Initial beta verification hit
+an existing total-script budget failure, also reproduced on a clean `50432cebb` baseline. The follow-up
+[lazy chart import fix](frontend-ui.md#lazy-chart-code-and-release-bundle-budgets) resolves it: beta and production
+release builds now pass without raising budgets. No production resource, provider upload or account prescription
+was changed by either task; deployment and physical Guide verification still need separate approval.
 
 ##### Current readings and boundary notifications (#784)
 
@@ -3075,16 +3193,16 @@ marker is private readback metadata, never persisted in authored recipes or proj
 file GETs by default; lifecycle tests cover lost responses, rescheduling, duplicate dispatch and strict mismatch cases.
 
 Existing `[TrainingDelivery]` Suunto acceptance, recovered-acceptance, stale-suppression, failure and checkpoint-failure
-events include two transient allowlisted labels: `guideMappingVersion` (`suunto-guides-v13`, `suunto-guides-v12`, `suunto-guides-v11`, `suunto-guides-v10`, `suunto-guides-v9`, `suunto-guides-v8`, `suunto-guides-v7`, `suunto-guides-v6`, `suunto-guides-v5`, `suunto-guides-v4`, `suunto-guides-v3`, `suunto-guides-v2`, `unknown`,
+events include two transient allowlisted labels: `guideMappingVersion` (`suunto-guides-v14`, `suunto-guides-v13`, `suunto-guides-v12`, `suunto-guides-v11`, `suunto-guides-v10`, `suunto-guides-v9`, `suunto-guides-v8`, `suunto-guides-v7`, `suunto-guides-v6`, `suunto-guides-v5`, `suunto-guides-v4`, `suunto-guides-v3`, `suunto-guides-v2`, `unknown`,
 or `not_applicable` for removal) and `deliveryPhase` (`execute` or `recover`). The version is proved by recomputing the
 immutable upsert operation's exact payload digest, including strength details, rather than copying the current adapter's
 version onto a legacy attempt. An unrecognized digest or classification failure yields `unknown` and cannot alter
 delivery/recovery. Classification runs once per claimed operation without credentials or HTTP; the phase switches to
 `execute` if recovery resumes a safe request. Other providers' existing events are unchanged.
 For rollout triage, combine `jsonPayload.message="[TrainingDelivery]"`, `jsonPayload.provider="suunto"` and
-`jsonPayload.event="failure"` with current `suunto-guides-v13` for app-preview delivery, or the exact historical label and
+`jsonPayload.event="failure"` with current swimming `suunto-guides-v14` or other-sport `suunto-guides-v13`, or the exact historical label and
 `jsonPayload.deliveryPhase="recover"` for legacy recovery. The aggregate monitoring metrics filter provider/event,
-not Guide mapping version, and already cover v13 and historical versions without additional policies or queue changes.
+not Guide mapping version, and already cover v14/v13 and historical versions without additional policies or queue changes.
 Checkpoint failures use `jsonPayload.event="checkpoint_failed"`. These labels are not stored in Firestore or exposed
 to the browser/MCP, and contain no UID, account/Guide/workout identity, digest, recipe, instruction, sensor reading,
 credential, provider body or raw error. They report serializer/recovery provenance, not app/watch receipt or completion.
@@ -3202,6 +3320,23 @@ memory bounds protect Functions, not provider capacity. Mutations journal start 
 revisions. Lost POST acknowledgement or 409 recovers only through exact app/account/external-ID and full-content proof;
 three 50-item inventory pages per attempt make recovery resumable. Empty/unstable listings never authorize another POST.
 Unknown recovery remains needs-attention, including Retry; accepted IDs survive newer edits and Stop.
+Create replies with HTTP 200 are decoded without pretending they were the documented HTTP 201. Acceptance requires
+the account-bound success envelope, valid matching owner/external-ID/date metadata, and exact owned ZIP content readback.
+The acknowledged Guide ID is durably checkpointed with `create/started` before that GET. If readback fails, recovery reads
+that retained ID and the digest-verified frozen recipe; it never issues another POST or treats an empty listing/404 as
+nonacceptance. Malformed metadata, changed content and HTTP 200 application-error envelopes remain uncertain. Such error
+envelopes retain only bounded fixed validation labels, never the provider text. Older attempts whose reply was discarded
+before retaining an ID still require positive discovery or separately reviewed operator recovery; deployment does not reset
+them. Normal HTTP 201 delivery, mapping versions/digests, consent, entitlement, connection and deletion guards are unchanged.
+Offline HTTP/transport tests and the existing demo-Firestore Suunto worker suite cover 200 acknowledgement, exact readback,
+interrupted readback with a retained ID, idempotent Retry, mismatched ownership/date/content, and no speculative create.
+Monitoring impact: **covered/unchanged**. The existing Training monitoring bundle includes Suunto accepted/recovered/failure
+outcomes, retryable/uncertain categories, worker latency and queue health. The extra GET uses existing guarded requests;
+no queue, retry/backoff, lease, schedule, alert policy or log-label vocabulary is added. Only `processTrainingDeliveryTask`
+needs a separately approved Functions deployment; no Rules, indexes, frontend, secret or monitoring apply is required.
+MCP impact: **none**. This is private HTTP acknowledgement handling; all authored plan/workout reads, proposal/confirmation
+contracts, scopes, statuses and output schemas are unchanged. Product Help was reviewed: its accepted-send versus app/watch
+availability distinction remains accurate and needs no copy change for this internal fix.
 For HTTP 400 Guide rejections, the client reads at most 8 KiB of Suunto's documented error envelope and records only
 fixed response-shape, rejection, structural-field and validation categories in the existing `[TrainingDelivery]` failure
 event. The raw `error.description`, authored workout text, ZIP, account identifiers and response body are never logged or
@@ -4836,6 +4971,17 @@ The picker shows up to 20 tagged races and up to 100 other historical events. It
 or earlier history, and sort by latest, longest, or highest load. Generic `New Event` names are suppressed; date and
 available distance, duration, and TSS provide identity.
 
+The benchmark dialog uses flat, labelled event sections inside the shared Material dialog shell, without nested cards
+or list borders. Native two-line event rows use the public Material list tokens for compact 56px rows (72px when an
+unavailable race needs an explanation), while retaining the tonal selected-row state. Lists stay independently bounded
+and scrollable; on mobile the sections stack. Content flexes within the shared Material shell rather than using fixed
+viewport offsets, so wrapped titles do not clip footer actions. Selected reference details and exact window dates wrap
+instead of truncating. User changes and disclosure/cancel actions have one haptic owner; hydration, repeated selections
+and date typing remain silent. Save/clear feedback waits for the actual callable outcome. Pending writes block duplicate
+submissions and edits.
+This presentation change does not alter benchmark eligibility, stored selections, callable/MCP contracts, plan/workout
+read coverage or consent. Existing Best Build help remains accurate; no user-facing calculation or workflow changed.
+
 The Best Build card identifies event-mode selections as a **Selected reference event** and explains that the event day is
 excluded from the compared workload. It shows a meaningful selected-event name when one exists. Default, blank, or
 timestamp-like event names are never repeated as a card heading: event-mode benchmarks instead show `Event on <UTC
@@ -5063,8 +5209,10 @@ It explicitly includes all training counted for that day, not only this workout.
 maintenance headline appears in event details, and UTC terminology stays out of its main presentation.
 When the strip is present, the activity summary uses the shared
 header's bottom-padding hooks to leave an 8px join instead of stacking summary and phone metric padding. Other summary
-surfaces retain their existing spacing. A surface-free **How it’s calculated** Material text button sits alongside the
-day result and wraps beneath it when needed. It controls a labelled hidden region through `aria-expanded` and
+surfaces retain their existing spacing. A Material info icon stays beside the day result, including on phones, with
+the accessible label and hover/keyboard tooltip **How Training impact is calculated**. Its native tooltip touch gestures
+are disabled (`matTooltipTouchGestures="off"`), so long-press handling never suppresses mobile scrolling. A tap or
+keyboard activation still controls a labelled hidden region through `aria-expanded` and
 `aria-controls`, with one selection-haptic owner per activation. The initially collapsed explanation contains the
 workout's recorded TSS, contribution formulas, all-training/day-decay meaning, fixed daily cutoff caveat, and existing
 physiological-adaptation disclaimer. Disclosure state is component-local, survives same-event ready refreshes, and

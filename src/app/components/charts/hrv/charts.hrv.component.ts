@@ -31,8 +31,11 @@ export class ChartsHrvComponent {
   private readonly haptics = inject(AppHapticsService);
   readonly charts = computed(() => this.context()?.charts || []);
   readonly selectedIndex = computed(() => {
-    const key = this.selectedSource() || this.preferredSource();
-    return Math.max(0, this.charts().findIndex(chart => chart.key === key));
+    const selectedIndex = this.charts().findIndex(chart => chart.key === this.selectedSource());
+    if (selectedIndex >= 0) return selectedIndex;
+    const preferred = this.preferredSource();
+    return Math.max(0, this.charts().findIndex(chart => chart.key === preferred
+      || chart.model.series.sourceSelectionKey === preferred));
   });
   readonly chart = computed(() => this.charts()[this.selectedIndex()] || null);
 

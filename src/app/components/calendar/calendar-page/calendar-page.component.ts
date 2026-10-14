@@ -58,6 +58,8 @@ import { CalendarMonthTotalsComponent } from '../calendar-month-totals/calendar-
 import { buildCalendarPeriodSummary, resolveCalendarCompletionCoverage, type CalendarPeriodSource } from '../../../helpers/calendar-period-summary.helper';
 import type { TrainingWorkoutCompletionV1 } from '@shared/training-workout-completion';
 import { AppHapticsService } from '../../../services/app.haptics.service';
+import { LoggerService } from '../../../services/logger.service';
+import { calendarReadErrorDetails } from '../../../helpers/calendar-read-error.helper';
 import { TrainingImpactService, type TrainingImpactSnapshotState } from '../../../services/training-impact.service';
 
 interface CalendarEventsState {
@@ -111,6 +113,7 @@ export class CalendarPageComponent {
   private readonly trainingImpact = inject(TrainingImpactService);
   private readonly locale = inject(LOCALE_ID);
   private readonly haptics = inject(AppHapticsService);
+  private readonly logger = inject(LoggerService);
   private readonly notesWorkspace = viewChild(TimelineNotesWorkspaceComponent);
   private readonly reloadSequence = signal(0);
   private readonly today = signal(new Date());
@@ -179,12 +182,16 @@ export class CalendarPageComponent {
       && a.bounded === b.bounded && a.window.startMs === b.window.startMs && a.window.endExclusiveMs === b.window.endExclusiveMs),
     switchMap(({ user, bounded, window: queryWindow }) => {
       if (!user?.uid) return of({ status: 'ready', events: [] } as CalendarEventsState);
+      const startedAt = Date.now();
       const events$ = bounded ? this.calendarService.watchSummaryEvents(user, queryWindow)
         : this.calendarService.watchEvents(user, queryWindow).pipe(map(events => ({ events, complete: true })));
       return events$.pipe(
         map(result => ({ status: 'ready', ...result }) as CalendarEventsState),
         startWith({ status: 'loading', events: [] } as CalendarEventsState),
-        catchError(() => of({ status: 'error', events: [] } as CalendarEventsState)),
+        catchError((error: unknown) => {
+          this.logReadFailure('activities', error, startedAt, bounded);
+          return of({ status: 'error', events: [] } as CalendarEventsState);
+        }),
       );
     }),
   ), { initialValue: { status: 'loading', events: [] } as CalendarEventsState });
@@ -195,6 +202,7 @@ export class CalendarPageComponent {
       && (!a.bounded || (a.window.startMs === b.window.startMs && a.window.endExclusiveMs === b.window.endExclusiveMs))),
     switchMap(({ uid, bounded, window }) => {
       if (!uid) return of({ status: 'ready', schedule: null } as CalendarPlansState);
+      const startedAt = Date.now();
       const schedule$ = bounded ? this.plansService.watchCalendarSchedule(uid, formatActivityCalendarDateParam(new Date(window.startMs)),
         formatActivityCalendarDateParam(new Date(window.endExclusiveMs - 1))) : this.plansService.watchSchedule(uid);
       return schedule$.pipe(
@@ -202,7 +210,10 @@ export class CalendarPageComponent {
           ? ({ status: 'error', schedule: null, restoreInProgress: true } as CalendarPlansState)
           : ({ status: 'ready', schedule } as CalendarPlansState)),
         startWith({ status: 'loading', schedule: null } as CalendarPlansState),
-        catchError(() => of({ status: 'error', schedule: null } as CalendarPlansState)),
+        catchError((error: unknown) => {
+          this.logReadFailure('planned-workouts', error, startedAt, bounded);
+          return of({ status: 'error', schedule: null } as CalendarPlansState);
+        }),
       );
     }),
   ), { initialValue: { status: 'loading', schedule: null } as CalendarPlansState });
@@ -218,11 +229,15 @@ export class CalendarPageComponent {
       const context = JSON.stringify([uid, bounded, reload, ids]);
       if (!uid) return of({ status: 'ready', data: [], complete: true, context } as CalendarCompletionState);
       if (bounded && status !== 'ready') return of({ status, data: [], complete: false, context } as CalendarCompletionState);
+      const startedAt = Date.now();
       const links$ = bounded ? this.plansService.watchWorkoutCompletionsForWorkouts(uid, ids) : this.plansService.watchWorkoutCompletions(uid);
       return links$.pipe(
         map(data => ({ status: 'ready', data, complete: true, context } as CalendarCompletionState)),
         startWith({ status: 'loading', data: [], complete: false, context } as CalendarCompletionState),
-        catchError(() => of({ status: 'error', data: [], complete: false, context } as CalendarCompletionState)),
+        catchError((error: unknown) => {
+          this.logReadFailure('workout-completions', error, startedAt, bounded);
+          return of({ status: 'error', data: [], complete: false, context } as CalendarCompletionState);
+        }),
       );
     }),
   ), { initialValue: { status: 'loading', data: [], complete: false, context: '' } as CalendarCompletionState });
@@ -532,6 +547,37 @@ export class CalendarPageComponent {
         scrollRestore.unsubscribe();
         this.pendingScrollRestore = null;
       }
+    });
+  }
+
+  private logReadFailure(
+    source: 'activities' | 'planned-workouts' | 'workout-completions',
+    error: unknown,
+    startedAt: number,
+    bounded: boolean,
+  ): void {
+    const details = {
+      ...calendarReadErrorDetails(error),
+      source,
+      view: this.routeState().view,
+      routeMode: this.isDayRoute ? 'day' : 'calendar',
+      bounded,
+      elapsedMs: Math.max(0, Date.now() - startedAt),
+      online: typeof navigator === 'undefined' ? null : navigator.onLine,
+    };
+    // Pass only fixed labels and operational state, never the original error or calendar query/records.
+    this.logger.error('[CalendarPage] Data read failed.', details);
+    this.logger.captureMessage('Calendar data read failed', {
+      level: 'error',
+      tags: {
+        calendarReadSource: source,
+        calendarView: details.view,
+        calendarRouteMode: details.routeMode,
+        calendarErrorName: details.errorName,
+        calendarErrorCode: details.errorCode,
+      },
+      extra: details,
+      fingerprint: ['calendar-read-failure', source, details.errorName, details.errorCode],
     });
   }
 

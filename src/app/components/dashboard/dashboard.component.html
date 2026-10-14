@@ -22,7 +22,7 @@
             <div class="dashboard-no-activity__copy">
               <h2 class="dashboard-no-activity__title">No activities yet</h2>
               <p class="dashboard-no-activity__description">
-                Upload an activity file or connect Garmin, Suunto, COROS, or Wahoo.
+                {{ noActivityDashboardDescription }}
               </p>
             </div>
           </div>
@@ -35,10 +35,12 @@
               uploadLabel="Upload activity"
               (activityUploadComplete)="onNoActivityUploadComplete()">
             </app-upload-activities>
+            @if (showNoActivityConnectServiceAction) {
             <button mat-stroked-button type="button" [matMenuTriggerFor]="noActivityConnectServiceMenu">
               <mat-icon aria-hidden="true">sync</mat-icon>
               <span>Connect service</span>
             </button>
+            }
             <a mat-button routerLink="/features/supported-activities">
               <mat-icon aria-hidden="true">category</mat-icon>
               <span>See supported activity types</span>

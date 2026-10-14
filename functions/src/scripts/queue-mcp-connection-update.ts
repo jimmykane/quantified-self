@@ -1,4 +1,5 @@
 import * as admin from 'firebase-admin';
+import { newEmailDeliveryFields } from '../email/queue-metadata';
 import { FieldValue } from 'firebase-admin/firestore';
 import * as path from 'path';
 import {
@@ -312,6 +313,7 @@ export function buildCampaignMailDocument(recipient: CampaignRecipient): Campaig
     });
 
     return {
+        ...newEmailDeliveryFields(),
         to: recipient.email,
         // The mail extension resolves a top-level toUids field through the
         // user document. Our authoritative recipient address comes from Auth,

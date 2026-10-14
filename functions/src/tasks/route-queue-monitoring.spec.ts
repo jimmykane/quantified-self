@@ -45,6 +45,30 @@ describe.each([
         await expect(invoke()).rejects.toThrow('PRIVATE');
         expect(observed()[0][1]).toMatchObject({ lane, outcome: 'failed' });
     });
+    if (lane === 'import') {
+        it.each([
+            { queueRevision: 'old', queueDateCreated: 1000 },
+            { queueRevision: 'current', queueDateCreated: 999 },
+            { queueRevision: '', queueDateCreated: 1000 },
+            { queueRevision: 'current', queueDateCreated: '1000' },
+        ])('acknowledges stale or malformed route identity %j without processing its replacement', async identity => {
+            mock.get.mockResolvedValueOnce({ exists: true, data: () => ({ processed: false, sourceServiceName: ServiceNames.SuuntoApp,
+                queueRevision: 'current', dateCreated: 1000, manual: true }) });
+            await invoke({ data: { queueItemId: 'PRIVATE', ...identity } });
+            expect(processor).not.toHaveBeenCalled();
+            expect(observed()[0][1]).toMatchObject({ lane: 'import', outcome: 'acknowledged' });
+            expect(observed().some(([, fields]) => fields.event === 'committed')).toBe(false);
+            expect(JSON.stringify(observed())).not.toContain('PRIVATE');
+        });
+        it('processes a route task bound to the current queue revision', async () => {
+            mock.get.mockResolvedValueOnce({ exists: true, id: 'PRIVATE', ref: {},
+                data: () => ({ processed: false, queueRevision: 'current', dateCreated: 1000 }) });
+            processor.mockResolvedValueOnce('PROCESSED');
+            await invoke({ data: { queueItemId: 'PRIVATE', queueRevision: 'current', queueDateCreated: 1000 } });
+            expect(processor).toHaveBeenCalledOnce();
+            expect(observed()[0][1]).toMatchObject({ outcome: 'acknowledged' });
+        });
+    }
     it.each([null, undefined])('observes malformed payload %s and still fails without processing', async data => {
         await expect(invoke({ data })).rejects.toThrow(TypeError);
         expect(observed()).toHaveLength(1);

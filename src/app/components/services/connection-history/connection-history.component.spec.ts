@@ -19,6 +19,15 @@ describe('recent history option', () => {
     expect(fixture.nativeElement.textContent).toContain('Includes activities where supported');
     expect(fixture.nativeElement.textContent).not.toContain('Sleep'); expect(haptics.selection).not.toHaveBeenCalled();
   });
+  it('describes Suunto route-library scope independently of the date range', () => {
+    const fixture = TestBed.createComponent(ConnectionHistoryOptionComponent);
+    fixture.componentRef.setInput('service', ServiceNames.SuuntoApp); fixture.detectChanges();
+    expect(fixture.nativeElement.textContent).toContain('activities, Sleep, Health, and saved routes');
+    expect(fixture.nativeElement.textContent).toContain('entire Suunto route library, regardless of the history range');
+    fixture.componentRef.setInput('range', 'maximum'); fixture.detectChanges();
+    expect(fixture.nativeElement.textContent).toContain('entire Suunto route library');
+    expect(haptics.selection).not.toHaveBeenCalled();
+  });
   it('offers provider-specific maximums and emits an accessible range choice', () => {
     const fixture = TestBed.createComponent(ConnectionHistoryOptionComponent); const changed = vi.fn();
     fixture.componentInstance.rangeChange.subscribe(changed); fixture.detectChanges();

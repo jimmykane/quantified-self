@@ -1,4 +1,8 @@
 {
+  "src/app/components/event/laps/event.card.laps.picker.spec.ts": {
+    "environment": "angular",
+    "reason": "Compiles the lap column picker with real Material dialogs, selection lists, checkboxes and buttons to verify keyboard selection, focus restoration, save outcomes and haptic ownership."
+  },
   "src/app/components/health/health-category-overview.component.spec.ts": {
     "environment": "angular",
     "reason": "Compiles the Health overview with TestBed to verify signal inputs, child chart bindings, Material category controls, account-scoped source choices and haptic feedback."
@@ -6,6 +10,10 @@
   "src/app/components/home/home-reveal.directive.spec.ts": {
     "environment": "angular",
     "reason": "Compiles a directive host with TestBed to verify host class bindings, afterNextRender viewport handling, SSR behavior and DestroyRef teardown."
+  },
+  "src/app/components/plans/suunto-swimming-guide-settings.component.spec.ts": {
+    "environment": "angular",
+    "reason": "Compiles the swimming Guide screen controls with TestBed to verify Material selectors, disclosure bindings, owner-scoped preference saves and haptic feedback across pending/error/account-change paths."
   },
   "src/app/components/public-seo/health-overview-preview.component.spec.ts": {
     "environment": "angular",
@@ -15,8 +23,16 @@
     "environment": "angular",
     "reason": "Compiles both history component templates with TestBed and verifies signal input bindings, rendered controls, haptics, and DestroyRef teardown during pending retries."
   },
+  "src/app/components/shared/dialog-actions-haptics.spec.ts": {
+    "environment": "angular",
+    "reason": "Compiles legacy error and browser guidance dialogs with real Material controls in TestBed to verify rendered actions, silent initialization and single-owner haptic feedback."
+  },
   "src/app/components/shared/metric-history-chart/metric-history-chart.component.spec.ts": {
     "environment": "angular",
     "reason": "Creates the chart with TestBed to verify signal input changes, rendered accessibility text, chart host initialization, responsive tooltips, haptic ownership and fixture teardown."
+  },
+  "src/app/components/tags/tags-page.component.spec.ts": {
+    "environment": "angular",
+    "reason": "Compiles the Tags route with TestBed to verify Material selector and search bindings, the events-table input/output boundary, async owner changes, route query hydration, DestroyRef teardown and haptic ownership."
   }
 }

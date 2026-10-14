@@ -23,6 +23,7 @@ import {
   SLEEP_SYNC_STATE_COLLECTION_ID,
 } from '@shared/sleep';
 import { decodeSleepSessionSportsLibData } from '@shared/sports-lib-health-data';
+import { withHealthSleepAccountKeys, type HealthWorkspaceSleepSession } from '../helpers/health-sleep-account.helper';
 
 @Injectable({
   providedIn: 'root',
@@ -53,7 +54,7 @@ export class AppSleepService {
     userID: string | null | undefined,
     startDate: Date | number | null | undefined,
     endDate: Date | number | null | undefined,
-  ): Observable<SleepSession[]> {
+  ): Observable<HealthWorkspaceSleepSession[]> {
     const uid = `${userID || ''}`.trim();
     return this.watchSessions(userID, startDate, endDate).pipe(
       switchMap(sessions => {
@@ -65,6 +66,7 @@ export class AppSleepService {
           catchError(() => of(sessions)),
         );
       }),
+      switchMap(sessions => from(withHealthSleepAccountKeys(uid, sessions))),
     );
   }
 

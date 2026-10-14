@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto';
 import * as admin from 'firebase-admin';
 import { FieldPath } from 'firebase-admin/firestore';
 import { z } from 'zod';
@@ -5,7 +6,7 @@ import { calculatePersonalMetricRange, calculatePersonalMetricPointRange, calcul
   HRV_PERSONAL_RANGE_OPTIONS, HRV_PERSONAL_RANGE_VARIANTS } from '../../../shared/personal-metric-range';
 import { decodeHealthMetricSportsLibData, decodeSleepSessionSportsLibData, formatCanonicalHealthMetricSportsLibValue } from '../../../shared/sports-lib-health-data';
 import { HealthMetricEntry, HEALTH_UNITS } from '../../../shared/health';
-import { aggregateNightlyHrvEvidence } from '../../../shared/nightly-hrv';
+import { aggregateNightlyHrvEvidence, healthAccountIdentityParts } from '../../../shared/nightly-hrv';
 import { groupCanonicalSleepNightFragments, resolveSleepDisplayDate, resolveSleepEffectiveStartTimeMs, SleepSession,
   SLEEP_PROVIDERS, SLEEP_SPORTS_LIB_METRIC_FIELDS } from '../../../shared/sleep';
 import { getUserDeletionGuardState } from '../shared/user-deletion-guard';
@@ -93,7 +94,9 @@ export async function queryHrvPersonalRange(input: HrvRangeInput, reads: HrvRang
   const suuntoSleepSessions: SleepSession[] = [];
   function add(source: 'health' | 'sleep', provider: unknown, account: unknown, date: unknown, timestamp: unknown,
     variant: unknown, value: unknown, aggregation: unknown, origin: unknown, method: unknown) {
-    if (!['GarminAPI', 'SuuntoApp', 'COROSAPI'].includes(String(provider)) || typeof account !== 'string' || !account || account.length > 1024
+    const resolvedAccount = source === 'sleep' ? account || 'default' : account;
+    if (typeof provider !== 'string' || !['GarminAPI', 'SuuntoApp', 'COROSAPI'].includes(provider)
+      || typeof resolvedAccount !== 'string' || !resolvedAccount || resolvedAccount.length > 1024
       || !z.iso.date().safeParse(date).success || typeof timestamp !== 'number' || !Number.isSafeInteger(timestamp)
       || timestamp < historyStart || timestamp > end || !variants.includes(variant as typeof variants[number])
       || typeof value !== 'number' || !Number.isFinite(value) || value <= 0
@@ -103,9 +106,15 @@ export async function queryHrvPersonalRange(input: HrvRangeInput, reads: HrvRang
     const formatted = formatCanonicalHealthMetricSportsLibValue('heart_rate_variability', value, unitSettings);
     if (!formatted) { excludedValues++; return; }
     if (++values > 8192) throw new McpHealthError('query_too_large', 'Too many HRV readings. Narrow the range.');
-    const accountKey = JSON.stringify([source, provider, account]);
+    // Share the Health writer's owner/provider/account identity, but keep unidentified Sleep separate.
+    const unidentifiedSleep = source === 'sleep' && (typeof account !== 'string' || !account.trim());
+    const canonicalAccount = source === 'sleep' && !unidentifiedSleep
+      ? createHash('sha256').update(JSON.stringify(healthAccountIdentityParts(input.uid, provider, resolvedAccount))).digest('hex')
+      : resolvedAccount;
+    const accountKey = unidentifiedSleep
+      ? JSON.stringify(['unidentified-sleep', provider]) : JSON.stringify([provider, canonicalAccount]);
     if (!accounts.has(accountKey)) accounts.set(accountKey, accounts.size + 1);
-    const key = JSON.stringify([accountKey, variant, aggregation, origin, method]);
+    const key = JSON.stringify([source, accountKey, variant, aggregation, origin, method]);
     if (!series.has(key)) {
       if (series.size === 32) throw new McpHealthError('query_too_large', 'Too many HRV series. Narrow the range.');
       series.set(key, { source, provider: provider as Series['provider'], accountNumber: accounts.get(accountKey)!,
@@ -156,7 +165,7 @@ export async function queryHrvPersonalRange(input: HrvRangeInput, reads: HrvRang
           for (const [field, variant] of [['averageHrvMs', 'sleep_session_average_hrv'], ['overnightHrvMs', 'sleep_overnight_hrv']] as const) {
             const value = session.vitals?.[field];
             if (value === null || value === undefined) continue;
-            add(source, session.source?.provider, session.source?.providerUserId || 'default', sleepDate,
+            add(source, session.source?.provider, session.source?.providerUserId, sleepDate,
               session.endTimeMs, variant, value, 'average', 'provider_summary', 'provider_calculated');
           }
         }

@@ -873,7 +873,7 @@ export async function previewGarminWorkoutReplacement(
 export async function previewTrainingChanges(
   input: TrainingWriteInput,
   provided?: TrainingWriteDependencies,
-  recipeMode: 'legacy' | 'strength' | 'v2' | 'v3' | 'deletion' | 'phases' = 'legacy',
+  recipeMode: 'legacy' | 'strength' | 'v2' | 'v3' | 'v3-batch' | 'deletion' | 'phases' = 'legacy',
 ): Promise<PreviewResult> {
   const deps = provided ?? defaultDependencies();
   assertBytes(input.arguments);
@@ -883,6 +883,8 @@ export async function previewTrainingChanges(
     : recipeMode === 'strength'
     ? z.strictObject({ expectedScheduleRevision: z.number().int().nonnegative().safe(),
       changes: z.array(TRAINING_STRENGTH_INTERNAL_CHANGE_SCHEMA).length(1) }).safeParse(input.arguments)
+    : recipeMode === 'v3-batch'
+      ? TRAINING_WRITE_INPUTS.preview_planned_workout_v3_changes.safeParse(input.arguments)
     : (recipeMode === 'v2' || recipeMode === 'v3')
       ? z.strictObject({ expectedScheduleRevision: z.number().int().nonnegative().safe(),
         changes: z.array(recipeMode === 'v3' ? TRAINING_WORKOUT_V3_CHANGE_SCHEMA : TRAINING_WORKOUT_V2_CHANGE_SCHEMA).length(1) }).safeParse(input.arguments)
@@ -941,7 +943,7 @@ export async function previewTrainingChanges(
         summary: `Permanently delete plan “${plan.name}” and its revision history. ${workoutEffect} ${describeProviderDeletion(request.removePastProviderCopies === true)}` });
       return;
     }
-    if (recipeMode !== 'v3' && change.kind === 'update-workout') {
+    if (recipeMode !== 'v3' && recipeMode !== 'v3-batch' && change.kind === 'update-workout') {
       const workoutId = resolveReference(change.workout, 'workout', input, simulated, locals);
       if (hasAuthoredEarlyLapV1(simulated.workouts.get(workoutId)!.structure)) {
         invalid('Read the v3 recipe and use the v3 preview to preserve or explicitly change early Lap permission.');
@@ -989,8 +991,8 @@ export async function previewTrainingChanges(
       ? before.workouts.get(operation.workoutId) : null;
     const summary = (deletionTarget
       ? `Delete “${deletionTarget.title}” on ${deletionTarget.localDate}. ` : '') + describeScheduleEffects(operation, before, simulated)
-      + (['v2', 'v3'].includes(recipeMode) ? describePoolLengthEffect(operation, before, simulated) : '')
-      + (recipeMode === 'v3' ? describeEarlyLapEffect(operation, before, simulated) : '');
+      + (['v2', 'v3', 'v3-batch'].includes(recipeMode) ? describePoolLengthEffect(operation, before, simulated) : '')
+      + (['v3', 'v3-batch'].includes(recipeMode) ? describeEarlyLapEffect(operation, before, simulated) : '');
     const reviewStructure = ['create-workout', 'update-workout', 'copy-workout'].includes(operation.kind)
       && 'workoutId' in operation ? simulated.workouts.get(operation.workoutId)?.structure : null;
     publicChanges.push({ index, kind: operation.kind, summary: summary + (reviewStructure
@@ -1213,6 +1215,17 @@ export async function previewPlannedWorkoutV3Change(input: TrainingWriteInput, p
   if (parsed.data.change.structure.sport === ActivityTypes.StrengthTraining) invalid('Use the complete strength workout preview.');
   return previewTrainingChanges({ ...input, arguments: { expectedScheduleRevision: parsed.data.expectedScheduleRevision,
     changes: [parsed.data.change] } }, provided, 'v3');
+}
+
+/** Complete non-strength recipes in one bounded review; no additional write or delivery authority. */
+export async function previewPlannedWorkoutV3Changes(input: TrainingWriteInput, provided?: TrainingWriteDependencies): Promise<PreviewResult> {
+  assertBytes(input.arguments);
+  const parsed = TRAINING_WRITE_INPUTS.preview_planned_workout_v3_changes.safeParse(input.arguments);
+  if (!parsed.success) invalid('Provide 1–25 complete, valid planned workout v3 creates or updates.');
+  if (parsed.data.changes.some(change => change.structure.sport === ActivityTypes.StrengthTraining)) {
+    invalid('Use the complete strength workout preview for exercise and set prescriptions.');
+  }
+  return previewTrainingChanges({ ...input, arguments: parsed.data }, provided, 'v3-batch');
 }
 
 /** Additive phase-only proposal; the existing separately approved apply owns persistence. */

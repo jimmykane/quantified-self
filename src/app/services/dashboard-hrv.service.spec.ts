@@ -10,6 +10,7 @@ import { HrvHistoryService } from './hrv-history.service';
 import { BrowserCompatibilityService } from './browser.compatibility.service';
 import { DashboardHrvService } from './dashboard-hrv.service';
 import { buildDashboardHrvContext, dashboardHrvWindows } from '../helpers/dashboard-hrv-context.helper';
+import { withHealthSleepAccountKeys } from '../helpers/health-sleep-account.helper';
 
 describe('read-only dashboard HRV data', () => {
   const history = { watch: vi.fn() };
@@ -60,11 +61,49 @@ describe('read-only dashboard HRV data', () => {
       ...window, metricIds: ['heart_rate_variability'], includeSamples: false,
     }, { sourceRecordsComplete: true, samplesComplete: true });
     const previous = buildDashboardHrvContext(project(windows.visible), project(windows.history),
-      await enrichSleepWithNightlyHrv('owner', sessions, records), windows.visible);
+      await withHealthSleepAccountKeys('owner', await enrichSleepWithNightlyHrv('owner', sessions, records)), windows.visible);
     const context = await firstValueFrom(TestBed.inject(DashboardHrvService).watch('owner', '14d', end));
     expect(context).toEqual(previous);
     expect(context.charts.every(chart => chart.model.series.points.length === 14)).toBe(true);
     expect(context.charts.some(chart => chart.status?.normalRange)).toBe(true);
+  });
+  it('shows one Garmin source when the same overnight HRV also enriches Sleep', async () => {
+    const context = await firstValueFrom(TestBed.inject(DashboardHrvService).watch('owner', '14d', end));
+    expect(context.charts).toHaveLength(1);
+    expect(context.charts[0].model.series.sourceLabel).toBe('Garmin');
+    expect(context.charts[0].model.series.semanticVariant).toBe('overnight_rmssd');
+    expect(context.charts[0].model.series.points).toHaveLength(14);
+    expect(context.charts[0].latestValueText).toBe('40 ms');
+    expect(sessions.every(session => !session.vitals)).toBe(true);
+  });
+  it('keeps a second Garmin account separate even when its latest HRV is identical', async () => {
+    const other = { ...sessions[0], id: 'other-account-sleep',
+      source: { ...sessions[0].source, providerUserId: 'other-account' }, vitals: { averageHrvMs: 40 } };
+    sleep.watchSessions.mockReturnValue(of([...sessions, other]));
+    const context = await firstValueFrom(TestBed.inject(DashboardHrvService).watch('owner', '14d', end));
+    expect(context.charts).toHaveLength(2);
+    expect(new Set(context.charts.map(chart => chart.key)).size).toBe(2);
+    expect(context.charts.map(chart => chart.model.series.sourceLabel).sort()).toEqual(['Garmin account 1', 'Garmin account 2']);
+    expect(context.charts.every(chart => chart.latestValueText === '40 ms')).toBe(true);
+  });
+  it('gives independently recorded Sleep and Health HRV unique chart keys within one account', async () => {
+    sleep.watchSessions.mockReturnValue(of(sessions.map(session => ({ ...session, vitals: { averageHrvMs: 55 } }))));
+    const context = await firstValueFrom(TestBed.inject(DashboardHrvService).watch('owner', '14d', end));
+    expect(context.charts).toHaveLength(2);
+    expect(new Set(context.charts.map(chart => chart.model.series.sourceSelectionKey)).size).toBe(1);
+    expect(new Set(context.charts.map(chart => chart.key)).size).toBe(2);
+  });
+  it('plots the Sleep fallback when the matching Health summary ends outside the chart', async () => {
+    const windows = dashboardHrvWindows('14d', end);
+    const night = sessions[0];
+    const outside = { ...records[0], endTimeMs: windows.visible.endTimeMs + 1 };
+    history.watch.mockReturnValue(of([outside]));
+    sleep.watchSessions.mockReturnValue(of([night]));
+    const context = await firstValueFrom(TestBed.inject(DashboardHrvService).watch('owner', '14d', end));
+    expect(context.charts).toHaveLength(1);
+    expect(context.charts[0].model.series.semanticVariant).toBe('sleep_overnight_hrv');
+    expect(context.charts[0].model.displayedPoints[0]).toMatchObject({ timestampMs: night.endTimeMs, value: 40 });
+    expect(context.charts[0].latestValueText).toBe('40 ms');
   });
   it('shares concurrent tile/preview requests and releases both live sources with the final consumer', () => {
     const health$ = new BehaviorSubject(records);
@@ -94,7 +133,7 @@ describe('read-only dashboard HRV data', () => {
     const project = (window: { startDate: string; endDate: string }) => projectLoadedHealthRange([], [], {
       ...window, metricIds: ['heart_rate_variability'], includeSamples: false,
     }, { sourceRecordsComplete: true, samplesComplete: true });
-    const enriched = await enrichSleepWithNightlyHrv('owner', [night], [boundaryRecord]);
+    const enriched = await withHealthSleepAccountKeys('owner', await enrichSleepWithNightlyHrv('owner', [night], [boundaryRecord]));
     expect(enriched[0].vitals?.overnightHrvMs).toBe(40);
     expect(context).toEqual(buildDashboardHrvContext(project(windows.visible), project(windows.history), enriched, windows.visible));
   });

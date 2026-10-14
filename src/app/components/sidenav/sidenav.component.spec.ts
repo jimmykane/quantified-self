@@ -17,7 +17,7 @@ import { provideRouter, Router, RouterLink, RouterLinkActive } from '@angular/ro
 
 import { AppWhatsNewService } from '../../services/app.whats-new.service';
 import { signal } from '@angular/core';
-import { AppThemes } from '@sports-alliance/sports-lib';
+import { AppThemes, User } from '@sports-alliance/sports-lib';
 import { SYSTEM_THEME_PREFERENCE } from '../../models/app-theme-preference.type';
 const TRAINING_PLANNING_NAVIGATION_ALLOWED_UID = 'planning-user';
 
@@ -87,6 +87,14 @@ describe('SideNavComponent', () => {
 
     it('should create', () => {
         expect(component).toBeTruthy();
+    });
+
+    it('keeps Tags hidden from the sidenav for guests and signed-in users', () => {
+        fixture.detectChanges();
+        expect(fixture.debugElement.queryAll(By.directive(RouterLink)).some(link => link.injector.get(RouterLink).urlTree?.toString() === '/tags')).toBe(false);
+        mockUserService.user.mockReturnValue(new User('tags-owner'));
+        fixture.detectChanges();
+        expect(fixture.debugElement.queryAll(By.directive(RouterLink)).some(link => link.injector.get(RouterLink).urlTree?.toString() === '/tags')).toBe(false);
     });
 
     it('does not render a navigation section heading', () => {
@@ -421,6 +429,7 @@ describe('SideNavComponent', () => {
         const plansItem = navigationItems.find(item => item.nativeElement.textContent.includes('Plans'));
         const trainingItem = navigationItems.find(item => item.nativeElement.textContent.includes('Training'));
         const routesItem = navigationItems.find(item => item.nativeElement.textContent.includes('Routes'));
+        const tagsItem = navigationItems.find(item => item.nativeElement.textContent.includes('Tags'));
         const myTracksItem = navigationItems.find(item => item.nativeElement.textContent.includes('My Tracks'));
         const assistantItem = navigationItems.find(item => item.nativeElement.textContent.includes('Assistant'));
         const compareFilesItem = navigationItems.find(item => item.nativeElement.textContent.includes('Compare Files'));
@@ -431,6 +440,7 @@ describe('SideNavComponent', () => {
         expect(plansItem).toBeTruthy();
         expect(trainingItem).toBeTruthy();
         expect(routesItem).toBeTruthy();
+        expect(tagsItem).toBeUndefined();
         expect(myTracksItem).toBeTruthy();
         expect(assistantItem).toBeTruthy();
         expect(compareFilesItem).toBeTruthy();

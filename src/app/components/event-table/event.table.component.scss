@@ -1,3 +1,4 @@
+@use '@angular/material' as mat;
 @use '../../../styles/breakpoints' as bp;
 
 /* Consolidated and cleaned up styles for event table */
@@ -488,6 +489,38 @@ mat-icon {
 .table-wrapper {
   overflow: auto;
   width: 100%;
+}
+
+// Tag library presentation keeps the shared table's behavior and canonical
+// metric rendering while matching the selected design's grouped activity rows.
+.table-container--library {
+  --qs-glass-panel-radius: 12px;
+  @include mat.table-overrides((header-container-height: 44px, row-item-container-height: 66px));
+  @include mat.form-field-density(-3);
+  @include mat.form-field-overrides((outlined-container-shape: 8px, outlined-outline-color: var(--mat-sys-outline-variant)));
+
+  .table-toolbar-main { grid-template-columns: minmax(0, 1fr) auto; }
+  .table-toolbar-filters { grid-column: auto; width: auto; flex-direction: row; }
+  .table-toolbar-main .qs-search-field { grid-column: auto; max-width: none; }
+  .library-column-label { text-transform: none; letter-spacing: 0; font: var(--mat-sys-body-small); }
+  .activity-row td:first-child::before { display: none; }
+  td { padding: 8px 10px !important; }
+  .library-date-cell { min-width: 70px !important; width: 84px !important; font: var(--mat-sys-body-small); }
+  .library-date, .library-time { display: block; white-space: nowrap; }
+  .library-time { color: var(--mat-sys-on-surface-variant); }
+  .library-activity-cell { min-width: 150px; max-width: 240px; font: var(--mat-sys-body-small); }
+  .library-activity-name { color: var(--mat-sys-on-surface); font-weight: 500; text-decoration: none; white-space: normal; }
+  .library-activity-name:hover { color: var(--mat-sys-primary); text-decoration: underline; }
+  .library-activity-name--sport { display: inline-flex; align-items: center; gap: 4px; }
+  .library-activity-type { display: flex; align-items: center; gap: 4px; margin-top: 4px; color: var(--mat-sys-on-surface-variant); }
+  .data-cell { font-size: 16px; }
+  .library-tags-cell { min-width: 130px !important; width: 145px !important; max-width: 145px !important; }
+  .event-tags-chip-set {
+    @include mat.chips-overrides((container-shape-radius: 6px, outline-color: var(--mat-sys-outline-variant), elevated-container-color: var(--mat-sys-surface-container-low), label-text-size: 11px, label-text-weight: 400));
+    display: block; max-width: 145px; --mat-chip-container-height: 24px;
+  }
+  .event-tags-mobile-summary { display: none; }
+  .event-tags-cell-button { justify-content: flex-start; padding: 0; }
 }
 
 .activity-table-overlay {

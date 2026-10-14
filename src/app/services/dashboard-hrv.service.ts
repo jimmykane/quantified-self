@@ -8,6 +8,7 @@ import { HrvHistoryService } from './hrv-history.service';
 import { BrowserCompatibilityService } from './browser.compatibility.service';
 import { AppSleepService } from './app.sleep.service';
 import { buildDashboardHrvContext, dashboardHrvWindows, type DashboardHrvContext } from '../helpers/dashboard-hrv-context.helper';
+import { withHealthSleepAccountKeys } from '../helpers/health-sleep-account.helper';
 import type { AppDashboardSleepTrendRange } from '../models/app-user.interface';
 
 /** Read-only adapter shared by the saved tile and chart picker. */
@@ -43,10 +44,11 @@ export class DashboardHrvService {
               const allRecords = pages.flat();
               assertNightlyHrvRecordBudget(allRecords);
               const enriched = missing ? await enrichSleepWithNightlyHrv(uid, sessions, allRecords) : sessions;
+              const matched = await withHealthSleepAccountKeys(uid, enriched);
               const project = (window: { startDate: string; endDate: string }) => projectLoadedHealthRange(records, [], {
                 ...window, metricIds: [HEALTH_METRIC_IDS.HeartRateVariability], includeSamples: false,
               }, { sourceRecordsComplete: true, samplesComplete: true });
-              return buildDashboardHrvContext(project(windows.visible), project(windows.history), enriched, windows.visible, unitSettings);
+              return buildDashboardHrvContext(project(windows.visible), project(windows.history), matched, windows.visible, unitSettings);
             }));
           }),
           finalize(() => this.requests.delete(key)),

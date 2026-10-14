@@ -9,6 +9,7 @@ import { AppUpdateService } from '../../services/app.update.service';
 import { AppAnalyticsService } from '../../services/app.analytics.service';
 import { WhatsNewFeedComponent } from './whats-new-feed.component';
 import { Router } from '@angular/router';
+import { AppHapticsService } from '../../services/app.haptics.service';
 import { computed } from '@angular/core';
 
 @Component({
@@ -52,11 +53,12 @@ import { computed } from '@angular/core';
     </mat-dialog-content>
     <mat-dialog-actions align="end">
       <button mat-button *ngIf="!isReleasesPage()" (click)="navigateToReleases()">View All Updates</button>
-      <button mat-raised-button class="qs-mat-primary" mat-dialog-close>Got it</button>
+      <button mat-flat-button class="qs-mat-primary" type="button" (click)="close()">Got it</button>
     </mat-dialog-actions>
   `
 })
 export class WhatsNewDialogComponent implements OnInit {
+  private readonly haptics = inject(AppHapticsService);
   private whatsNewService = inject(AppWhatsNewService);
   private updateService = inject(AppUpdateService);
   private analyticsService = inject(AppAnalyticsService);
@@ -73,10 +75,19 @@ export class WhatsNewDialogComponent implements OnInit {
   }
 
   reload() {
+    if (!this.isUpdateAvailable()) return;
+    this.haptics.selection();
     this.updateService.activateUpdate();
   }
 
+  close(): void {
+    this.haptics.selection();
+    this.dialogRef.close();
+  }
+
   navigateToReleases() {
+    if (this.isReleasesPage()) return;
+    this.haptics.selection();
     this.router.navigate(['/releases']);
     this.dialogRef.close();
   }

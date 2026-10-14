@@ -29,6 +29,7 @@ import {
   HEALTH_SOURCE_RECORD_KINDS,
   HEALTH_SYNC_STATUSES,
   HEALTH_VALUE_ORIGINS,
+  HEALTH_VALUE_TYPES,
   HealthMetricId,
   HealthProvider,
   HealthSourceRecord,
@@ -1420,6 +1421,37 @@ describe('HealthWorkspaceComponent', () => {
     expect(hrvChartOption?.series?.slice(1).every(series => series.lineStyle?.color !== 'transparent')).toBe(true);
   });
 
+  it('grades every displayed HRV highlight point when an out-of-window Health summary enriches Sleep', async () => {
+    await createComponent(metricId => Promise.resolve(rangeLoad(metricId, true)));
+    const accountKey = 'secret-account-nightly';
+    const endTimeMs = todayStartMs + 8 * 3_600_000;
+    const record = { ...sourceRecord(HEALTH_METRIC_IDS.HeartRateVariability, HEALTH_PROVIDERS.GarminAPI, 62, 'nightly'),
+      startTimeMs: endTimeMs - 8 * 3_600_000, endTimeMs: component.priorityHrvWindow.endTimeMs + 1,
+      metrics: [{ ...metricEntry(HEALTH_METRIC_IDS.HeartRateVariability, 62), semanticVariant: 'overnight_rmssd' }] };
+    const current = { ...sleepSession({ endTimeMs, startTimeMs: endTimeMs - 8 * 3_600_000, vitals: { overnightHrvMs: 62 } }),
+      healthAccountKey: accountKey, nightlyHrvSourceKey: JSON.stringify(['health',
+        JSON.stringify([SLEEP_PROVIDERS.GarminAPI, sleepSession().source.providerUserId]), 'overnight_rmssd',
+        'average', HEALTH_VALUE_ORIGINS.ProviderSummary, HEALTH_RECORDING_METHODS.ProviderCalculated]) };
+    const previous = Array.from({ length: 23 }, (_, index) => {
+      const wakeTime = endTimeMs - (index + 1) * 86_400_000;
+      return { ...sleepSession({ id: `native-night-${index}`, sleepDate: localCalendarDate(wakeTime),
+        startTimeMs: wakeTime - 8 * 3_600_000, endTimeMs: wakeTime, vitals: { overnightHrvMs: 50 + index % 3 } }),
+        healthAccountKey: accountKey };
+    });
+    component.prioritySleepSessions.set([...previous, current]);
+    component.priorityHrvLoad.set({ ...rangeLoad(HEALTH_METRIC_IDS.HeartRateVariability, true),
+      result: projectLoadedHealthRange([record], [], { startDate: component.priorityHrvHistoryStartDate,
+        endDate: component.priorityHrvWindow.endDate, metricIds: [HEALTH_METRIC_IDS.HeartRateVariability] },
+        { sourceRecordsComplete: true, samplesComplete: true }),
+    });
+    fixture.detectChanges();
+    const series = component.priorityHrvTrendSeries()[0];
+    expect(series.points.at(-1)).toMatchObject({ timestampMs: endTimeMs, value: 62 });
+    const status = component.priorityHrvChartStatuses()[series.id];
+    expect(status.pointStatuses).toHaveLength(series.points.length);
+    expect(status.pointStatuses.at(-1)).toMatchObject({ timestampMs: endTimeMs, tone: 'negative', normalRange: expect.any(Object) });
+  });
+
   it('applies the same historical personal-range colors to the selected HRV chart', async () => {
     await createComponent(metricId => Promise.resolve(rangeLoad(
       metricId,
@@ -1446,6 +1478,41 @@ describe('HealthWorkspaceComponent', () => {
       metricId: HEALTH_METRIC_IDS.HeartRateVariability,
       includeSamples: false,
     });
+  });
+
+  it.each(['visible', 'history'])('keeps typed Sleep account identity from the %s range across the explorer baseline', async location => {
+    const sessions = Array.from({ length: 74 }, (_, daysAgo) => {
+      const endTimeMs = todayStartMs + 8 * 3_600_000 - daysAgo * 86_400_000;
+      return sleepSession({ id: `reference-night-${daysAgo}`, sleepDate: localCalendarDate(endTimeMs),
+        startTimeMs: endTimeMs - 8 * 3_600_000, endTimeMs, vitals: { averageHrvMs: 50 + daysAgo % 3 } });
+    });
+    await createComponent(metricId => Promise.resolve(rangeLoad(metricId, true)), '14d',
+      { sleepSessions: sessions }, HEALTH_METRIC_IDS.HeartRateVariability);
+    // The query service normally attaches hashes; exercise its native-only fallback after a crypto failure.
+    component.selectedSleepSessions.set(sessions);
+    const session = sessions[location === 'visible' ? 0 : 14];
+    const reference = { ...sourceRecord(HEALTH_METRIC_IDS.HeartRateVariability, HEALTH_PROVIDERS.GarminAPI, 50, 'sleep-reference'),
+      calendarDate: session.sleepDate, startTimeMs: session.startTimeMs, endTimeMs: session.endTimeMs,
+      metrics: [{ kind: 'sleep_reference' as const, metricId: HEALTH_METRIC_IDS.HeartRateVariability,
+        valueType: HEALTH_VALUE_TYPES.Number, aggregation: 'average', semanticVariant: 'sleep_session_average_hrv',
+        origin: HEALTH_VALUE_ORIGINS.ProviderSummary, recordingMethod: HEALTH_RECORDING_METHODS.ProviderCalculated,
+        quality: { status: HEALTH_QUALITY_STATUSES.Valid },
+        reference: { domain: 'sleep' as const, documentId: session.id!, field: 'vitals.averageHrvMs' as const } }] };
+    const load = (window: { startDate: string; endDate: string }): HealthWorkspaceRangeLoad => ({
+      ...rangeLoad(HEALTH_METRIC_IDS.HeartRateVariability, true),
+      result: projectLoadedHealthRange([reference], [], { ...window, metricIds: [HEALTH_METRIC_IDS.HeartRateVariability] },
+        { sourceRecordsComplete: true, samplesComplete: true }),
+    });
+    component.selectedHealthLoad.set(load(component.selectedWindow()));
+    component.selectedHrvContextHealthLoad.set(load(component.selectedHrvContextWindow()));
+    fixture.detectChanges();
+    const series = component.metricView().series;
+    expect(series).toHaveLength(1);
+    expect(series[0].sourceLabel).toBe('Garmin');
+    expect(component.selectedHrvChartStatuses()[series[0].id]).toMatchObject({
+      observationDayCount: 60, normalRange: expect.any(Object),
+    });
+    expect(component.selectedHrvChartStatuses()[series[0].id].pointStatuses.every(point => point.normalRange !== null)).toBe(true);
   });
 
   it('restores account preferences and records metric switches in the URL while keeping the range account-owned', async () => {
@@ -1809,6 +1876,31 @@ describe('HealthWorkspaceComponent', () => {
     expect(component.priorityWindow.dayCount).toBe(30);
     expect(component.priorityHrvWindow.label).toBe('14-day trend');
     expect(component.selectedRange()).toBe('1y');
+  });
+  it('uses the shared default source policy for highlights and preserves an explicit provider choice', async () => {
+    await createComponent();
+    const summaryFixture = TestBed.createComponent(HealthPrioritySummaryComponent);
+    const heart = component.priorityCards().find(card => card.id === 'heart_rate')!;
+    const series = heart.chartSeries.map(source => ({ ...source, points: source.points.map(point => ({
+      ...point, value: source.provider === HEALTH_PROVIDERS.GarminAPI ? 0 : point.value,
+    })) })).sort((left, right) => left.provider.localeCompare(right.provider));
+    const garmin = series.find(source => source.provider === HEALTH_PROVIDERS.GarminAPI)!;
+    garmin.points.push({ ...garmin.points[0], value: 120, timestampMs: component.priorityHeartRateWindow.endTimeMs + 1000 });
+    summaryFixture.componentRef.setInput('cards', [{ ...heart, chartSeries: series }]);
+    summaryFixture.componentRef.setInput('startTimeMs', component.priorityHeartRateWindow.startTimeMs);
+    summaryFixture.componentRef.setInput('endTimeMs', component.priorityHeartRateWindow.endTimeMs);
+    summaryFixture.detectChanges();
+    const selected = () => {
+      const card = summaryFixture.componentInstance.renderedCards()[0]; return card.sources[card.selectedSourceIndex];
+    };
+    expect(selected().label).toBe('Suunto');
+    const garminKey = garmin.sourceSelectionKey!;
+    summaryFixture.componentRef.setInput('preferredSources', { heart_rate: garminKey }); summaryFixture.detectChanges();
+    expect(selected().label).toBe('Garmin');
+    expect(selected().valueText).toBe('0 bpm');
+    expect(selected().chart?.model.displayedPoints.every(point => point.value === 0)).toBe(true);
+    expect(haptics.selection).not.toHaveBeenCalled();
+    summaryFixture.destroy();
   });
 
   it('keeps successfully loaded today readings reachable when the metric inventory is stale', async () => {

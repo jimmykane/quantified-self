@@ -72,6 +72,134 @@ The signed `/email/unsubscribe?token=...` endpoint is public: GET only shows a c
 
 Rollout requires separate approval. Before deployment, an operator must provision the signing secret, verify `updates@quantified-self.io` as an allowed sender with the existing SMTP provider, deploy Functions/Hosting/Rules/indexes, inspect desktop and phone previews, and perform a controlled-inbox test. Neither local tests nor a PR prove sender-domain authorization or inbox placement. Do not launch a live campaign without separate approval.
 
+## Cloud Monitoring (#835)
+
+The email monitoring dashboard, twelve metrics and seven policies were activated on 12 October 2026 with explicit
+owner approval. Configuration readback, all chart/condition queries and duplicate-free serial reapplication passed.
+Following the approved dispatcher timing correction, both source heartbeats and live sampled-count/age series were
+verified from a natural scheduler run. Production acceptance evidence is recorded in #835. It uses the existing Firestore `mail`
+outbox and installed Trigger Email extension, not Cloud Tasks or another SMTP sender. Future production deployments,
+monitoring changes and any controlled email send require separate approval. See
+[Firebase delivery states](https://firebase.google.com/docs/extensions/official/firestore-send-email/delivery-status).
+
+### Lean storage and lifecycle
+
+Every new application/operator mail producer spreads `newEmailDeliveryFields()` into its **existing** mail write.
+It supplies `queuedAt` and a complete initial `delivery` object: `PENDING`, `startTime`, zero attempts and null error.
+Both timestamps are server commit timestamps. This lets a read-only state query see mail even if the extension has
+not picked it up. It adds fields, not another write, collection, projection, observer Function or recipient history.
+Never use the helper to update retained mail: resetting a terminal state can resend it. Existing deterministic IDs,
+deduplication, deletion guards, consent, sender/template content and retry controls remain unchanged.
+
+The checked-in extension has `TTL_EXPIRE_TYPE=never`; the existing top-level `expireAt` mail policy remains 90 days.
+No TTL policy, retention, cleanup or extension configuration changes. The offline contract test deliberately rejects
+changing that extension TTL boundary without reviewing pending-state initialization. Existing account cleanup still
+owns the original mail, with no new user-data copy to remove.
+
+The existing `trackMarketingDelivery` updated-document trigger emits fixed-category observations for all mail, while
+preserving its marketing-only tracking behavior. `PENDING` is queued work, **not extension acceptance**; `PROCESSING`
+is a claimed attempt, not delivery. `SUCCESS` is SMTP acceptance; nonempty rejected/pending recipient arrays make it
+partial acceptance. `ERROR` is failure. None proves inbox delivery, reading, opens or clicks. Only state categories
+are emitted, never those arrays or SMTP response/error text. Unchanged state/attempt updates do not count as a new
+transition. Eventarc notifications are at-least-once; counters are observations, not unique recipients or messages.
+
+`dispatchCampaigns` emits completed/failed invocation categories and completed-run submission counts, including the
+existing Start/Resume path. A submission is not SMTP success. Normal daily caps, future schedules and consent/account
+suppression do not become failures. The existing scheduled dispatcher remains every five minutes, UTC, with its
+current resources/secrets. In the first five-minute slot of each UTC quarter-hour it additionally runs `observeEmailOutbox`
+in `finally`, so interval jobs with an offset minute phase still sample every fifteen minutes. Idle,
+capped and failed dispatches still produce observation heartbeats. Monitoring/client/logging failures cannot replace
+the dispatcher's result or original exception. No new Function, secret, scheduler, SMTP call or automatic retry exists.
+
+### Read bounds, exclusions and privacy
+
+One field-masked query reads at most 21 actual mail records with `delivery.state` in `PENDING`, `PROCESSING`, `RETRY`;
+20 are classified and one is a saturation sentinel. It uses the existing single-field index, without a new composite
+index or Rules change. It has a five-second waiting budget and suppresses late observations after a timeout. No
+message/subject/template, address, unsubscribe token, SMTP error/response or credential fields are fetched by the probe.
+Source markers are used only to select the fixed `transactional`/`marketing` category; their values never reach logs.
+
+- Pending age uses `queuedAt`; legacy pending records without that field use document creation time.
+- Explicit `RETRY`, or `PENDING` resend with prior attempts, ages from the latest document write, not the original message.
+- A live processing lease is excluded. An expired lease is due only from its expiry; a missing/invalid lease is unknown.
+- Terminal states and deleted mail are not queried. Unavailable/invalid observations and capped zeroes are **not**
+  healthy empty backlogs. Positive samples remain lower bounds, never complete queue totals or oldest-mail guarantees.
+- Pending campaign recipients are not mail backlog: daily caps, schedules, pauses, unsubscribed/suppressed accounts and
+  empty audiences cannot create stalled-campaign alerts. Pausing a campaign does not pause mail already submitted.
+- Legacy mail with **no delivery state at all** is outside the indexed sample. New mail prevents this gap by starting
+  PENDING. Activation must record a bounded, read-only legacy audit; never initialize/resubmit old mail merely for
+  monitoring. Do not claim historical outbox coverage from a healthy sample.
+
+The fixed log envelope is `[EmailDelivery]`, `telemetryVersion: 1`, with events `state_observed`, `operation`,
+`dispatch_deferred`, `outbox_sample`, `outbox_sample_unavailable`. Labels are fixed source/state/operation/outcome
+categories, not IDs or payload-derived strings. Native ERROR metrics select only the exact installed extension and
+background email runtimes, without free-text extraction. Callable Auth/validation/test-approval failures are excluded
+from native runtime pages; actual callable-triggered dispatch exceptions still have their structured dispatch signal.
+Generated extension code/logging is not modified; keep any existing
+private diagnostics in the authorized console, never copied into incident documentation.
+
+### Bundle, initial thresholds and cost
+
+`tools/email-monitoring/` reuses the shared ownership-checked, paginated provisioner. Owner is
+`qs-email-monitoring-v1`: one dashboard, twelve versioned log metrics and seven policies (nine conditions). It preserves
+other bundles/channels and retained policy/condition identities on serial reapplication; it has no DELETE operation.
+Alerts use the existing **direct Cloud Monitoring Alerts email channel**, not the monitored Send Email extension.
+
+| Policy | Initial condition |
+| --- | --- |
+| Submitted-mail stall | Three positive samples at least 15 minutes overdue, per source, within one hour |
+| SMTP/delivery errors | Three observed ERROR/partial-success attempts per source in 15 minutes |
+| Extension/runtime errors | Three native ERROR log observations per generation in 15 minutes, with explicit Gen 1/Gen 2 conditions |
+| Marketing dispatcher failures | Three actual dispatch exceptions in 15 minutes |
+| Delivery tracking failures | Three existing-tracker exceptions in 15 minutes |
+| Observation unavailable | Two unknown/unavailable samples per source within one hour |
+| Missing heartbeat | No observation for one hour, separately for both source groups |
+
+Thresholds are initial operational values to tune from measured volume. Idle mail is not an outage. Absence conditions
+need an initial post-activation series. The dashboard distinguishes supported states, submissions, SMTP errors,
+runtime failures, bounded backlog/age and heartbeats; extension Gen 1/Gen 2 native charts are generation-dependent.
+Do not treat empty native charts for the other generation as failed delivery.
+
+No extra document write or Function invocation is added to a mail producer; the existing trigger adds bounded logs.
+At the normal 96 quarter-hour sampling slots/day, the probe reads at most 2,016 mail documents (an empty query still incurs its
+minimum read). Scheduler duplicates/retries can add invocations. Standard Firestore, Logging, custom-metric and alert
+charges apply; no cost-free claim is made. Metric labels have fixed, small cardinality. Existing SMTP pricing and mail
+retention are unchanged.
+
+### Verification and separately approved activation
+
+Local checks: `npm run test:email-monitoring`, focused Functions email/marketing tests, the isolated `mcp-data`
+emulator group (including caps, schedules, consent, idempotency and a 100-mail bounded sample), emulator/workflow guards,
+Functions build, entrypoint/secret/deployment-file checks, targeted lint and `git diff --check`.
+The demo runner starts only loopback Auth/Firestore, never Functions/Extensions or SMTP, and scrubs real credentials.
+Local tests are not live extension acceptance or production policy/email evidence.
+
+After separate approval:
+
+1. Deploy the affected existing Functions: `sendRegistrationWelcomeEmail`, `onSubscriptionUpdated`,
+   `checkSubscriptionNotifications`, `previewAdminSubscriptionGift`, `grantAdminSubscriptionGift`, `deleteSelf`,
+   `sendMarketingTest`, `changeMarketingCampaignStatus`, `dispatchMarketingCampaigns`, `trackMarketingDelivery`.
+   Preserve their current generations, regions, resources, schedules, retries and secret bindings. No Hosting, Rules,
+   indexes, extension update or resource deletion is needed for this ticket. Operator scripts use the updated build.
+2. Record the bounded read-only audit of retained mail/legacy missing-state coverage and verify deployed configuration.
+   This authorizes no backfill, state reset, resend, purge or new campaign.
+3. Preview without credentials/network: `node tools/email-monitoring/cli.mjs --project=quantified-self-io`.
+   With separately approved configuration authority, apply using `--apply`, matching
+   `--confirm-project=quantified-self-io` and `--notification-channel=projects/quantified-self-io/notificationChannels/CHANNEL_ID`.
+   Verify that channel is the existing independent Alerts channel; do not create another sender/channel.
+4. Read back the owned dashboard/metrics/seven policies, validate every chart/condition query, then reapply serially
+   and prove no duplicates or changes to unrelated configuration. Record both native extension generation and actual
+   post-creation heartbeat/count/age series from a natural first-slot tick in a UTC quarter-hour. Native-only idle is not delivery proof.
+5. Reuse #655's same-channel alert-email proof where valid. Any new controlled SMTP email, temporary test policy,
+   deliberate fault or resource deletion requires separate exact-scope approval. Record representative real delivery
+   state/dispatcher evidence and exclusions on #835 before operational completion.
+
+MCP/Assistant impact: **none**. Monitoring changes no tools, schemas, responses, permissions, consent, metrics exposed
+to athletes, provider actions or product availability. Help reviewed: existing notification and marketing-consent
+guidance remains accurate, so no user-facing copy change is needed. Fitness-provider queues, Training plans and their
+monitoring bundles are unchanged. Approved production activation/readback and natural-heartbeat evidence are recorded
+in #835 separately from local test results; no simulated outage or new test email is claimed.
+
 ## Firestore template source of truth
 
 The allowlisted template and partial catalog is in `functions/src/email/template-catalog.ts`. HTML and plaintext sources are under `functions/templates/`. Standard sender addresses, URLs, date formatting, grace-period calculation, and plan descriptions are centralized in `functions/src/email/config.ts`; numeric limits and device-sync entitlement come from `shared/limits.ts`.

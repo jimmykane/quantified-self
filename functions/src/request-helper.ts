@@ -17,6 +17,11 @@ export interface BinaryResponse {
     contentLength: number | null;
 }
 
+export interface ResponseMetadata {
+    statusCode: number;
+    contentType: string | null;
+}
+
 function normalizeMaxResponseBytes(value: unknown): number | null {
     if (value === undefined || value === null) return null;
     if (typeof value !== 'number' || !Number.isSafeInteger(value) || value <= 0) {
@@ -173,6 +178,15 @@ async function request(urlOrOptions: string | any, options: any = {}) {
         }
 
         const response = await fetch(url, fetchOptions);
+        // Optional diagnostics must not change response/error handling or expose headers/bodies.
+        if (typeof opts.onResponseMetadata === 'function') {
+            try {
+                opts.onResponseMetadata({
+                    statusCode: response.status,
+                    contentType: response.headers?.get('content-type') ?? null,
+                } satisfies ResponseMetadata);
+            } catch { /* Observability failure must not fail the request. */ }
+        }
         const boundedResponseBody = maxResponseBytes === null
             ? null
             : await readResponseBodyWithinLimit(response, maxResponseBytes);

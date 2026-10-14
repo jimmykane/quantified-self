@@ -75,6 +75,7 @@ import {
 } from './dashboard-sleep-chart.helper';
 import { formatDashboardRelativeDay } from './dashboard-relative-date.helper';
 import { heartRateSemanticLabel } from './health-heart-rate-summary.helper';
+import type { HealthWorkspaceSleepSession } from './health-sleep-account.helper';
 import {
   calculatePersonalMetricPointRange,
   calculatePersonalMetricRange,
@@ -89,11 +90,7 @@ import {
 export const HEALTH_WORKSPACE_RANGES = APP_HEALTH_WORKSPACE_RANGES;
 export type HealthWorkspaceRange = AppHealthWorkspaceRange;
 export type HealthWorkspaceMetricSelection = AppHealthWorkspaceMetric;
-/** Read-time identities shared with typed Health references; never persisted. */
-export type HealthWorkspaceSleepSession = SleepSession & {
-  healthAccountKey?: string;
-  nightlyHrvSourceKey?: string;
-};
+export type { HealthWorkspaceSleepSession } from './health-sleep-account.helper';
 
 interface CanonicalHealthSleepRecord {
   point: DashboardSleepTrendPoint;
@@ -233,6 +230,8 @@ export interface HealthPriorityTrendSelectionOptions {
   semanticVariants?: readonly string[];
   semanticVariantPriority?: readonly string[];
 }
+
+type HealthMetricProjectionWindow = Pick<HealthPriorityTrendSelectionOptions, 'startTimeMs' | 'endTimeMs'>;
 
 export const HEALTH_HRV_PERSONAL_RANGE_SEMANTIC_VARIANTS = HRV_PERSONAL_RANGE_VARIANTS;
 type HealthHrvPersonalRangeSemanticVariant = typeof HEALTH_HRV_PERSONAL_RANGE_SEMANTIC_VARIANTS[number];
@@ -553,9 +552,12 @@ export function buildHealthMetricWorkspaceView(
   sleepSessions: readonly SleepSession[] = [],
   activityObservations: readonly ActivityHealthObservation[] = [],
   unitSettings: UserUnitSettingsInterface | null = null,
+  window: HealthMetricProjectionWindow = {},
+  sleepAccountObservations: readonly HealthObservation[] = result.observations,
 ): HealthMetricWorkspaceView {
   const sleepById = new Map(sleepSessions.flatMap(session => session.id ? [[session.id, session] as const] : []));
-  const canonicalSleepRecords = buildCanonicalHealthSleepRecords(sleepSessions);
+  // Visible and baseline projections can share identity evidence without sharing readings.
+  const canonicalSleepRecords = buildCanonicalHealthSleepRecords(sleepSessions, sleepAccountObservations);
   const canonicalSleepById = new Map(canonicalSleepRecords.flatMap(record => record.sessions.flatMap(session =>
     session.id ? [[session.id, record] as const] : [])));
   const datums: MetricDatum[] = [];
@@ -569,9 +571,9 @@ export function buildHealthMetricWorkspaceView(
     datums.push(...chunkDatums(chunk));
   }
   if (result.query.metricIds.includes(HEALTH_METRIC_IDS.HeartRateVariability)) {
-    datums.push(...sleepHrvDatums(canonicalSleepRecords, result));
+    datums.push(...sleepHrvDatums(canonicalSleepRecords, result, window));
   }
-  datums.push(...sleepSummaryDatums(canonicalSleepRecords, result));
+  datums.push(...sleepSummaryDatums(canonicalSleepRecords, result, window));
   for (const observation of activityObservations) {
     datums.push(activityObservationDatum(observation));
   }
@@ -829,7 +831,7 @@ export function selectHealthPriorityTrendSeries(
       semanticVariantCount - index,
     ]),
   );
-  for (const sourceSeries of buildHealthMetricWorkspaceView(result, sleepSessions, [], unitSettings).series) {
+  for (const sourceSeries of buildHealthMetricWorkspaceView(result, sleepSessions, [], unitSettings, options).series) {
     if (semanticVariants && !semanticVariants.has(sourceSeries.semanticVariant)) {
       continue;
     }
@@ -1022,7 +1024,20 @@ export function isHealthHrvPersonalRangeSemanticVariant(
 
 function buildCanonicalHealthSleepRecords(
   sessions: readonly HealthWorkspaceSleepSession[],
+  observations: readonly HealthObservation[] = [],
 ): CanonicalHealthSleepRecord[] {
+  const sessionsById = new Map(sessions.flatMap(session => session.id ? [[session.id, session] as const] : []));
+  const referencedAccounts = new Map<string, Set<string>>();
+  for (const observation of observations) {
+    if (observation.entry.kind !== 'sleep_reference' || !observation.accountKey) continue;
+    const session = sessionsById.get(observation.entry.reference.documentId);
+    if (!session || observation.provider !== session.source?.provider) continue;
+    const identity = sleepReferenceAccountIdentity(session);
+    if (!identity) continue;
+    const keys = referencedAccounts.get(identity) || new Set<string>();
+    keys.add(observation.accountKey);
+    referencedAccounts.set(identity, keys);
+  }
   const candidates = sessions.flatMap(session => {
     const provider = normalizeSleepProvider(session.source?.provider);
     const sleepDate = resolveSleepTrendDate(session);
@@ -1046,15 +1061,33 @@ function buildCanonicalHealthSleepRecords(
     if (!point || !point.provider) return [];
     const latestSession = [...groupSessions].sort((left, right) => right.endTimeMs - left.endTimeMs
       || right.startTimeMs - left.startTimeMs || `${right.id || ''}`.localeCompare(`${left.id || ''}`))[0];
+    const references = groupSessions.map(session => {
+      const identity = sleepReferenceAccountIdentity(session);
+      return identity ? referencedAccounts.get(identity) : undefined;
+    });
+    const referencedKeys = new Set(references.flatMap(keys => keys ? [...keys] : []));
+    const referencedAccountKey = references.every(keys => keys?.size === 1) && referencedKeys.size === 1
+      ? [...referencedKeys][0] : null;
     return [{
       point,
       sessions: groupSessions,
       latestSession,
       provider: point.provider as HealthProvider,
       accountKey: groupSessions.map(session => session.healthAccountKey).find((value): value is string => !!value)
-        || latestSession.source.providerUserId || 'default',
+        || referencedAccountKey || latestSession.source.providerUserId || 'default',
     }];
   });
+}
+
+/** Only a typed reference proves an alias; unidentified sessions cannot alias other documents. */
+function sleepReferenceAccountIdentity(session: SleepSession): string | null {
+  const provider = normalizeSleepProvider(session.source?.provider);
+  if (!provider) return null;
+  const providerAccountId = session.source.providerUserId;
+  if (typeof providerAccountId === 'string' && providerAccountId.trim()) {
+    return JSON.stringify(['account', provider, providerAccountId]);
+  }
+  return session.id ? JSON.stringify(['sleep-document', provider, session.id]) : null;
 }
 
 function canonicalSleepHrvValue(
@@ -1464,11 +1497,13 @@ function chunkDatums(chunk: HealthSampleChunk): MetricDatum[] {
 function sleepHrvDatums(
   records: readonly CanonicalHealthSleepRecord[],
   result: HealthRangeResult,
+  window: HealthMetricProjectionWindow,
 ): MetricDatum[] {
   const representedReferences = new Set(result.observations.flatMap(observation => {
     const entry = observation.entry;
     return entry.kind === 'sleep_reference'
       && entry.metricId === HEALTH_METRIC_IDS.HeartRateVariability
+      && healthObservationInProjectionWindow(observation, window)
       ? [sleepHrvReferenceIdentity(entry.reference.documentId, entry.reference.field)]
       : [];
   }));
@@ -1504,6 +1539,9 @@ function sleepHrvDatums(
         && representedReferences.has(sleepHrvReferenceIdentity(session.id, field)))) {
         return [];
       }
+      if (field === 'vitals.overnightHrvMs' && representedNightlyHealthHrv(record, result, value, window)) {
+        return [];
+      }
       return [{
         metricId: HEALTH_METRIC_IDS.HeartRateVariability,
         provider,
@@ -1536,6 +1574,35 @@ function sleepHrvDatums(
       } satisfies MetricDatum];
     });
   });
+}
+
+/** An enriched Sleep value is a copy, while independently recorded Sleep HRV stays separate. */
+function representedNightlyHealthHrv(
+  record: CanonicalHealthSleepRecord,
+  result: HealthRangeResult,
+  value: number,
+  window: HealthMetricProjectionWindow,
+): boolean {
+  if (!record.sessions.some(session => session.nightlyHrvSourceKey)) return false;
+  return result.observations.some(observation => {
+    const entry = observation.entry;
+    if (observation.provider !== record.provider || observation.accountKey !== record.accountKey
+      || !healthObservationInProjectionWindow(observation, window)
+      || observation.calendarDate !== record.point.sleepDate || entry.kind !== 'value'
+      || entry.metricId !== HEALTH_METRIC_IDS.HeartRateVariability
+      || entry.normalizationStatus !== HEALTH_NORMALIZATION_STATUSES.Canonical
+      || entry.canonical?.unit !== HEALTH_UNITS.Millisecond || entry.canonical.value !== value) return false;
+    return record.sessions.some(session => session.nightlyHrvSourceKey === JSON.stringify([
+      'health', sleepEvidenceSourceKey(session), entry.semanticVariant,
+      entry.aggregation, entry.origin, entry.recordingMethod,
+    ]) && observation.startTimeMs < session.endTimeMs
+      && observation.endTimeMs > resolveSleepEffectiveStartTimeMs(session));
+  });
+}
+
+function healthObservationInProjectionWindow(observation: HealthObservation, window: HealthMetricProjectionWindow): boolean {
+  return (window.startTimeMs === undefined || observation.endTimeMs >= window.startTimeMs)
+    && (window.endTimeMs === undefined || observation.endTimeMs <= window.endTimeMs);
 }
 
 /** Recorded Sleep summaries do not require a separate provider Health record. */
@@ -1584,22 +1651,18 @@ function canonicalSleepSummaryValues(record: CanonicalHealthSleepRecord) {
   });
 }
 
-function sleepSummaryDatums(records: readonly CanonicalHealthSleepRecord[], result: HealthRangeResult): MetricDatum[] {
+function sleepSummaryDatums(
+  records: readonly CanonicalHealthSleepRecord[], result: HealthRangeResult, window: HealthMetricProjectionWindow,
+): MetricDatum[] {
   const requested = new Set<HealthMetricId>(result.query.metricIds.filter(metric =>
     SLEEP_SUMMARY_FIELDS.some(definition => definition.metricId === metric)));
   if (!requested.size) return [];
-  const sessions = records.flatMap(record => record.sessions);
-  const sessionsById = new Map(sessions.filter(session => session.id).map(session => [session.id!, session]));
   const represented = new Set<string>();
-  const referencedAccounts = new Map<string, string>();
   for (const observation of result.observations) {
     const entry = observation.entry;
-    if (entry.kind !== 'sleep_reference' || !requested.has(entry.metricId)) continue;
+    if (entry.kind !== 'sleep_reference' || !requested.has(entry.metricId)
+      || !healthObservationInProjectionWindow(observation, window)) continue;
     represented.add(JSON.stringify([entry.reference.documentId, entry.reference.field]));
-    const session = sessionsById.get(entry.reference.documentId);
-    if (session && observation.provider === session.source.provider) {
-      referencedAccounts.set(accountIdentity(session.source.provider, session.source.providerUserId), observation.accountKey);
-    }
   }
   return records.flatMap((record, index) => {
     const { point, latestSession, provider } = record;
@@ -1611,13 +1674,10 @@ function sleepSummaryDatums(records: readonly CanonicalHealthSleepRecord[], resu
       if (record.sessions.some(session => session.id
         && represented.has(JSON.stringify([session.id, field])))) return [];
       const period = point.isNap ? 'nap' : 'session';
-      const referencedAccountKey = record.sessions.map(session =>
-        referencedAccounts.get(accountIdentity(session.source.provider, session.source.providerUserId)))
-        .find((value): value is string => !!value);
       return [{
         metricId,
         provider,
-        accountKey: latestSession.healthAccountKey || referencedAccountKey || record.accountKey,
+        accountKey: record.accountKey,
         aggregation,
         semanticVariant: `${!point.isNap && label ? 'sleep_' : ''}${period}_${variant}`,
         origin: HEALTH_VALUE_ORIGINS.ProviderSummary,

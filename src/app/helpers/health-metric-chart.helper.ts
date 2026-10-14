@@ -24,11 +24,13 @@ import { AppColors } from '../services/color/app.colors';
 import {
   HealthHrvPersonalRangeStatus,
   HealthHrvPersonalRangeTone,
+  HEALTH_HRV_PERSONAL_RANGE_SEMANTIC_VARIANTS,
   HealthWorkspaceSeries,
   HealthWorkspaceSeriesPoint,
   formatHealthAxisValue,
   formatHealthUnit,
   formatHealthValue,
+  localCalendarDate,
 } from './health-workspace.helper';
 
 type ChartOption = Parameters<EChartsType['setOption']>[0];
@@ -174,13 +176,24 @@ export function buildHealthMetricEChartsOption(
       style.trendLineColor,
     )
     : [];
+  const latestNumericPoint = [...model.displayedPoints].reverse().find(point =>
+    typeof point.value === 'number' && Number.isFinite(point.value));
+  const isNightlyHrv = model.series.metricId === HEALTH_METRIC_IDS.HeartRateVariability
+    && HEALTH_HRV_PERSONAL_RANGE_SEMANTIC_VARIANTS.some(variant => variant === model.series.semanticVariant);
+  // Nightly values arrive in the morning. Remove unused hours after the final
+  // day's reading, but retain the selected days when its last night is missing.
+  const plotEndTimeMs = isNightlyHrv && latestNumericPoint
+    && localCalendarDate(startTimeMs) !== localCalendarDate(endTimeMs)
+    && latestNumericPoint.timestampMs > startTimeMs && latestNumericPoint.timestampMs <= endTimeMs
+    && localCalendarDate(latestNumericPoint.timestampMs) === localCalendarDate(endTimeMs)
+    ? latestNumericPoint.timestampMs : endTimeMs;
   // Baselines have their own daily timeline; missing readings stay missing.
   const rangeData: Array<[number, number | null, number | null]> = statusOverlay?.rangePoints
     && model.series.metricId === HEALTH_METRIC_IDS.HeartRateVariability
-    ? statusOverlay.rangePoints.filter(point => point.timestampMs >= startTimeMs && point.timestampMs <= endTimeMs)
+    ? statusOverlay.rangePoints.filter(point => point.timestampMs >= startTimeMs && point.timestampMs <= plotEndTimeMs)
       .map(({ timestampMs, normalRange }) => [timestampMs, normalRange?.min ?? null, normalRange?.max ?? null])
     : model.data.map(([timestampMs, value]) => {
-    const range = typeof value === 'number' && timestampMs >= startTimeMs && timestampMs <= endTimeMs
+    const range = typeof value === 'number' && timestampMs >= startTimeMs && timestampMs <= plotEndTimeMs
       ? hrvPointStatuses.get(timestampMs)?.normalRange : null;
     return range ? [timestampMs, range.min, range.max] : [timestampMs, null, null];
   });
@@ -188,8 +201,6 @@ export function buildHealthMetricEChartsOption(
     bounds && min !== null && max !== null
       ? { min: Math.min(bounds.min, min), max: Math.max(bounds.max, max) }
       : bounds, model.numericBounds);
-  const latestNumericPoint = [...model.displayedPoints].reverse().find(point =>
-    typeof point.value === 'number' && Number.isFinite(point.value));
   const showTimeOnXAxis = endTimeMs - startTimeMs < DAY_MS;
   const option = {
     animation: false,
@@ -261,7 +272,7 @@ export function buildHealthMetricEChartsOption(
       type: 'time',
       show: true,
       min: startTimeMs,
-      max: endTimeMs,
+      max: plotEndTimeMs,
       boundaryGap: false,
       splitNumber: compact || style.isCompactLayout ? 3 : 6,
       axisTick: { show: false },

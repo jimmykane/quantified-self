@@ -1,44 +1,41 @@
+:host {
+  display: flex;
+  flex-direction: column;
+  max-height: calc(100dvh - 32px);
+  min-width: 0;
+}
+
 mat-dialog-content {
-  font-size: 16px;
-  min-width: 300px;
-}
+  min-width: 0;
+  overflow-wrap: anywhere;
 
-@media (max-width: 599.98px) {
-  :host {
-    display: flex;
-    flex-direction: column;
-    max-height: calc(100dvh - 32px);
-  }
-
-  mat-dialog-content {
-    min-width: 0;
-  }
-
-  mat-dialog-actions {
-    flex-direction: column;
-    align-items: stretch;
-    gap: 12px;
-
-    button {
-      width: 100%;
-      min-height: 48px;
-      height: auto;
-      padding-block: 12px;
-      white-space: normal;
-    }
-
-    button + button {
-      margin: 0;
-    }
+  > p {
+    margin-block: 0;
   }
 }
+
+mat-dialog-actions {
+  flex-wrap: wrap;
+  gap: 8px;
+
+  button {
+    min-height: 48px;
+    height: auto;
+    white-space: normal;
+  }
+
+  button + button {
+    margin-inline-start: 0;
+  }
+}
+
 .past-provider-cleanup-option {
   margin-block-start: 16px;
 }
 
 .past-provider-cleanup-option p {
   color: var(--mat-sys-on-surface-variant);
-  font-size: 0.875rem;
-  line-height: 1.4;
+  font-size: var(--mat-sys-body-small-size);
+  line-height: var(--mat-sys-body-small-line-height);
   margin: 4px 0 0 32px;
 }

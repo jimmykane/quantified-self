@@ -19,6 +19,26 @@ describe('Suunto Guides HTTP isolation', () => {
     await expect(createSuuntoGuideClient(auth, key, fetcher)({ method: 'GET', path: '/v2/guides/files/id' }, async () => { throw new Error('stale'); })).rejects.toThrow('stale');
     expect(fetcher).not.toHaveBeenCalled();
   });
+  it.each([200, 201])('decodes POST %s without substituting a different success status', async status => {
+    const payload = { id: 'guide', username: 'fixture-user' };
+    const fetcher = vi.fn(async () => new Response(JSON.stringify({ error: null, payload }), { status }));
+    expect(await createSuuntoGuideClient(auth, key, fetcher)({ method: 'POST', path: '/v2/guides/files', body: Buffer.from('zip') }, vi.fn()))
+      .toEqual({ status, body: payload });
+    expect(fetcher).toHaveBeenCalledOnce();
+  });
+  it('retains uncertainty and private-safe validation labels for a POST 200 application error', async () => {
+    const privateText = 'Private athlete title';
+    const fetcher = vi.fn(async () => new Response(JSON.stringify({ error: {
+      description: `Invalid step type in ${privateText}` }, payload: null }), { status: 200 }));
+    let caught: unknown;
+    try { await createSuuntoGuideClient(auth, key, fetcher)({ method: 'POST', path: '/v2/guides/files', body: Buffer.from('zip') }, vi.fn()); }
+    catch (error) { caught = error; }
+    expect(caught).toMatchObject({ kind: 'uncertain', rejected: false, diagnostics: {
+      httpStatus: 200, failurePhase: 'decode', providerRejection: 'invalid_parameter',
+      providerField: 'guide_step', providerValidation: 'invalid_step_type', providerResponseShape: 'json',
+    } });
+    expect(JSON.stringify(caught)).not.toContain(privateText);
+  });
   it.each([[401, 'auth'], [403, 'permission'], [429, 'deferred'], [500, 'uncertain'], [202, 'uncertain']])('handles POST %s without private diagnostics', async (status, kind) => {
     const fetcher = vi.fn(async () => new Response('private', { status: Number(status), headers: { 'Retry-After': '120' } }));
     const promise = createSuuntoGuideClient(auth, key, fetcher)({ method: 'POST', path: '/v2/guides/files', body: Buffer.from('zip') }, vi.fn());
@@ -81,8 +101,9 @@ describe('Suunto Guides HTTP isolation', () => {
     const client = createSuuntoGuideClient(auth, key, vi.fn(async () => new Response(body, { status: 401 })));
     await expect(client({ method: 'GET', path: '/v2/guides/files/id' }, vi.fn())).rejects.toMatchObject({ kind: 'auth', rejected: true });
   });
-  it.each(['', 'null', '{}', '{"error":null,"payload":{"username":"other"}}', 'x'.repeat(GUIDE_RESPONSE_BYTES + 1)])('rejects empty, malformed, wrong-account or oversized envelopes', async body => {
-    const client = createSuuntoGuideClient(auth, key, vi.fn(async () => new Response(body, { status: 201 })));
+  it.each([200, 201].flatMap(status => ['', 'null', '{}', '{"error":null,"payload":{"username":"other"}}', 'x'.repeat(GUIDE_RESPONSE_BYTES + 1)]
+    .map(body => ({ status, body }))))('rejects empty, malformed, wrong-account or oversized POST $status envelopes', async ({ status, body }) => {
+    const client = createSuuntoGuideClient(auth, key, vi.fn(async () => new Response(body, { status })));
     await expect(client({ method: 'POST', path: '/v2/guides/files', body: Buffer.from('zip') }, vi.fn())).rejects.toMatchObject({ kind: 'uncertain' });
   });
   it.each(['https://evil.test', '/v2/guides/files/../id', '/v2/guides/items?fileSince=1', '/v2/workouts'])('rejects foreign paths before credentials: %s', async path => {

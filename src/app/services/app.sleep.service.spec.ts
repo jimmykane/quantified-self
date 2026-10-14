@@ -113,6 +113,21 @@ describe('AppSleepService', () => {
     expect(result[0].vitals).toEqual({averageHeartRateBpm: 50});
   });
 
+  it('matches native Sleep to its Health account for highlights without an extra Health read', async () => {
+    const start = Date.parse('2026-09-10T22:00:00Z'), end = start + 28800000;
+    const session = { id: 'sleep', userID: 'user-1', source: { provider: 'GarminAPI', providerUserId: 'provider-account' },
+      sleepDate: '2026-09-11', startTimeMs: start, endTimeMs: end, durationSeconds: 28800, isNap: false,
+      vitals: { overnightHrvMs: 33 } };
+    vi.mocked(collectionData).mockReturnValue(of([session]));
+    const result = await firstValueFrom(service.watchForDashboard('user-1', start, end));
+    expect(result[0]).toMatchObject({
+      healthAccountKey: await nightlyHealthAccountKey('user-1', 'GarminAPI', 'provider-account'),
+      vitals: { overnightHrvMs: 33 },
+    });
+    expect(session).not.toHaveProperty('healthAccountKey');
+    expect(collectionData).toHaveBeenCalledOnce();
+  });
+
   it('returns an empty stream without a user id', async () => {
     await expect(firstValueFrom(service.watchForDashboard('', null, null))).resolves.toEqual([]);
     expect(collection).not.toHaveBeenCalled();

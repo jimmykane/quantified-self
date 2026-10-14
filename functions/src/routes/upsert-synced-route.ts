@@ -1,4 +1,5 @@
 import * as admin from 'firebase-admin';
+import { assertHistoryWrite } from '../connection-history/context';
 import { saveChecksummedStorageFile } from '../shared/storage-file-save';
 import * as logger from 'firebase-functions/logger';
 import { randomUUID } from 'node:crypto';
@@ -186,6 +187,7 @@ async function assertSyncedRouteWriteAllowedInTransaction(
         throw new SyncedRouteSkippedForDeletedUserError(params.userID);
     }
 
+    await assertHistoryWrite(transaction);
     await params.assertSourceAuthorizedInTransaction?.(db, transaction);
 }
 

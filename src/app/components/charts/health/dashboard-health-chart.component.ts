@@ -190,7 +190,10 @@ export class DashboardHealthChartComponent {
         const preferred = user.settings.appSettings?.healthWorkspace?.highlightSources?.heart_rate_variability;
         const evidence = this.overview() ? filterDashboardHealthEvidence(this.evidence, this.providerFilter()) : this.evidence;
         const context = buildDashboardHealthContext(evidence, this.effectiveSettings(), user.settings.unitSettings, preferred, this.providerFilter());
-        if (!settings.sourceKey && !this.initialSource() && context.selectedKey) {
+        // Overview defaults remain automatic as readings refresh. Only a user's
+        // source action pins a reading in that workspace; saved dashboard tiles
+        // retain their existing source-persistence contract.
+        if (!this.overview() && !settings.sourceKey && !this.initialSource() && context.selectedKey) {
             this.initialSource.set(context.selectedKey);
             this.settingsChange.emit({ settings: { ...settings, sourceKey: context.selectedKey }, initial: true });
         }

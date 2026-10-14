@@ -44,6 +44,13 @@ async function resolvedRouteData(route: Route | undefined): Promise<Record<strin
 }
 
 describe('AppRoutingModule routes', () => {
+  it('keeps the Tags library authenticated, lazy loaded, and outside the public layout', async () => {
+    const route = appRoutes.find(route => route.path === 'tags');
+    expect(route?.canMatch).toEqual([authGuard, onboardingGuard]);
+    expect(route?.data).toMatchObject({ title: 'Tags', preload: true, robots: 'noindex, follow' });
+    expect((await route?.loadComponent?.())?.name).toContain('TagsPageComponent');
+    expect(publicLayoutRoute?.children?.some(route => route.path === 'tags')).toBe(false);
+  });
   it('disables shell cross-fades for public layout navigation', () => {
     expect(publicLayoutRoute?.data?.['disableRouteAnimation']).toBe(true);
     expect(publicLayoutRoute?.children?.some(route => route.path === 'help')).toBe(true);

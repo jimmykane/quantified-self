@@ -36,6 +36,7 @@ import * as admin from 'firebase-admin';
 import * as logger from 'firebase-functions/logger';
 import { ROLE_HIERARCHY, ROLE_DISPLAY_NAMES } from '../shared/pricing';
 import { getExpireAtTimestamp, TTL_CONFIG } from '../shared/ttl-config';
+import { newEmailDeliveryFields } from '../email/queue-metadata';
 import { DocumentData } from 'firebase-admin/firestore';
 import { isDeviceSyncEnabledForRole } from '../../../shared/limits';
 import {
@@ -71,6 +72,7 @@ function buildMailPayload(
     data: Record<string, unknown>,
 ): FirebaseFirestore.DocumentData {
     return {
+        ...newEmailDeliveryFields(),
         to: recipient,
         from: TRANSACTIONAL_EMAIL_FROM,
         replyTo: TRANSACTIONAL_EMAIL_REPLY_TO,

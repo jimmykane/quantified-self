@@ -51,12 +51,13 @@
             </div>
             <p class="training-impact-note">Includes all training counted for that day.</p>
           </div>
-          <button mat-button type="button" class="training-impact-calculation-toggle" appHapticTap
+          <button mat-icon-button type="button" class="training-impact-calculation-info" appHapticTap
             [id]="calculationToggleId"
+            aria-label="How Training impact is calculated"
+            matTooltip="How Training impact is calculated" matTooltipPosition="above" matTooltipTouchGestures="off"
             [attr.aria-expanded]="calculationExpanded()" [attr.aria-controls]="calculationDetailsId"
             (click)="toggleCalculation()">
-            <span>How it’s calculated</span>
-            <mat-icon aria-hidden="true">{{ calculationExpanded() ? 'expand_less' : 'expand_more' }}</mat-icon>
+            <mat-icon aria-hidden="true">info_outline</mat-icon>
           </button>
         </div>
         <div class="training-impact-calculation" [id]="calculationDetailsId" role="region"

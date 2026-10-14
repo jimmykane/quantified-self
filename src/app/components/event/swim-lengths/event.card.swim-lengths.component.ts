@@ -20,6 +20,9 @@ import { isMergeOrBenchmarkEvent } from '../../../helpers/event-visibility.helpe
 import { createSwimDistanceDisplayStat, resolveUnitAwareDisplayStat } from '@shared/unit-aware-display';
 import { getActiveSwimLengthCadence, getNormalizedSwolf, getSwimLengthDistance, getSwimLengthDuration, getSwolfColumnLabel, sumSwimValues } from '../../../helpers/event-swim-analytics.helper';
 import { AppHapticsService } from '../../../services/app.haptics.service';
+import {
+  getNominalSwimDistanceDisplayContext, getNominalSwimLengthsDisplayMeters, NominalSwimDistanceDisplayContext,
+} from '../../../helpers/event-swim-distance-display.helper';
 
 interface SwimLengthTableRow {
   '#': number;
@@ -124,10 +127,11 @@ export class EventCardSwimLengthsComponent implements OnChanges {
 
     if (this.lap) {
       const activity = this.selectedActivities[0];
+      const displayContext = getNominalSwimDistanceDisplayContext(activity);
       const rowViews = (getSwimLapLengths(activity).get(this.lap) || []).map(swimLength => ({
-        swimLength, row: this.buildSwimLengthRow(swimLength),
+        swimLength, row: this.buildSwimLengthRow(swimLength, displayContext),
       }));
-      const rows = this.buildGroupRows(rowViews);
+      const rows = this.buildGroupRows(rowViews, displayContext);
       const columns = this.buildColumns(rows);
       this.lapLengthTable = { rows, columns, columnNames: columns.map(column => column.name) };
       this.changeDetectorRef.markForCheck();
@@ -137,7 +141,8 @@ export class EventCardSwimLengthsComponent implements OnChanges {
     const pendingViews: PendingSwimLengthActivityView[] = [];
 
     this.selectedActivities.forEach((activity, index) => {
-      const rowViews = this.generateSwimLengthRowViews(activity);
+      const displayContext = getNominalSwimDistanceDisplayContext(activity);
+      const rowViews = this.generateSwimLengthRowViews(activity, displayContext);
       if (!rowViews.length) {
         return;
       }
@@ -148,7 +153,7 @@ export class EventCardSwimLengthsComponent implements OnChanges {
         key,
         activity,
         baseLabel: this.resolveActivityLabel(activity),
-        groups: this.buildSwimLengthGroups(key, rowViews),
+        groups: this.buildSwimLengthGroups(key, rowViews, displayContext),
       });
     });
 
@@ -169,14 +174,18 @@ export class EventCardSwimLengthsComponent implements OnChanges {
     return `${activityID}-${index}`;
   }
 
-  private generateSwimLengthRowViews(activity: ActivityInterface): SwimLengthRowView[] {
+  private generateSwimLengthRowViews(
+    activity: ActivityInterface, displayContext: NominalSwimDistanceDisplayContext | null,
+  ): SwimLengthRowView[] {
     return getActivitySwimLengths(activity).map((swimLength) => ({
       swimLength,
-      row: this.buildSwimLengthRow(swimLength),
+      row: this.buildSwimLengthRow(swimLength, displayContext),
     }));
   }
 
-  private buildSwimLengthRow(swimLength: AppSwimLength): SwimLengthTableRow {
+  private buildSwimLengthRow(
+    swimLength: AppSwimLength, displayContext: NominalSwimDistanceDisplayContext | null,
+  ): SwimLengthTableRow {
     return {
       '#': swimLength.index,
       isRest: isRestSwimLength(swimLength),
@@ -184,7 +193,8 @@ export class EventCardSwimLengthsComponent implements OnChanges {
       Split: '',
       Duration: this.formatDuration(swimLength),
       Distance: this.formatSwimDistanceValue(isRestSwimLength(swimLength)
-        ? this.getFiniteDataValue(swimLength.distance) : getSwimLengthDistance(swimLength)),
+        ? this.getFiniteDataValue(swimLength.distance) : getSwimLengthDistance(swimLength),
+        getNominalSwimLengthsDisplayMeters(displayContext, [swimLength])),
       Type: this.formatLabel(swimLength.type),
       Stroke: this.formatLabel(swimLength.stroke),
       Strokes: this.formatOptionalInteger(swimLength.strokes),
@@ -200,7 +210,9 @@ export class EventCardSwimLengthsComponent implements OnChanges {
     };
   }
 
-  private buildSwimLengthGroups(activityKey: string, rowViews: SwimLengthRowView[]): SwimLengthGroupView[] {
+  private buildSwimLengthGroups(
+    activityKey: string, rowViews: SwimLengthRowView[], displayContext: NominalSwimDistanceDisplayContext | null,
+  ): SwimLengthGroupView[] {
     const groupedRows: SwimLengthRowView[][] = [];
     let currentGroup: SwimLengthRowView[] = [];
 
@@ -217,15 +229,16 @@ export class EventCardSwimLengthsComponent implements OnChanges {
       groupedRows.push(currentGroup);
     }
 
-    return groupedRows.map((groupRows, index) => this.buildSwimLengthGroupView(activityKey, index, groupRows));
+    return groupedRows.map((groupRows, index) => this.buildSwimLengthGroupView(activityKey, index, groupRows, displayContext));
   }
 
   private buildSwimLengthGroupView(
     activityKey: string,
     index: number,
     rowViews: SwimLengthRowView[],
+    displayContext: NominalSwimDistanceDisplayContext | null,
   ): SwimLengthGroupView {
-    const rows = this.buildGroupRows(rowViews);
+    const rows = this.buildGroupRows(rowViews, displayContext);
     const firstIndex = rowViews[0]?.swimLength.index ?? index + 1;
     const lastIndex = rowViews[rowViews.length - 1]?.swimLength.index ?? firstIndex;
     const columns = this.buildColumns(rows);
@@ -233,7 +246,7 @@ export class EventCardSwimLengthsComponent implements OnChanges {
     return {
       key: `${activityKey}-group-${index + 1}-${firstIndex}-${lastIndex}`,
       label: firstIndex === lastIndex ? `Length ${firstIndex}` : `Lengths ${firstIndex}-${lastIndex}`,
-      summaryRow: this.buildGroupSummaryRow(rowViews),
+      summaryRow: this.buildGroupSummaryRow(rowViews, displayContext),
       activeDuration: this.formatDurationValue(this.sumDataValues(
         rowViews.map(rowView => rowView.swimLength).filter(swimLength => !this.isIdleOrRestSwimLength(swimLength)),
         swimLength => swimLength.timerTime ?? swimLength.elapsedTime,
@@ -246,9 +259,10 @@ export class EventCardSwimLengthsComponent implements OnChanges {
     };
   }
 
-  private buildGroupRows(rowViews: SwimLengthRowView[]): SwimLengthTableRow[] {
+  private buildGroupRows(rowViews: SwimLengthRowView[], displayContext: NominalSwimDistanceDisplayContext | null): SwimLengthTableRow[] {
     let activeSplitIndex = 0;
     let cumulativeDistance = 0;
+    const nominalDisplayComplete = getNominalSwimLengthsDisplayMeters(displayContext, rowViews.map(view => view.swimLength)) !== undefined;
 
     return rowViews.map((rowView) => {
       const row = { ...rowView.row };
@@ -263,7 +277,8 @@ export class EventCardSwimLengthsComponent implements OnChanges {
       const splitDistance = this.getSwimLengthSplitDistance(swimLength);
       if (splitDistance !== null) {
         cumulativeDistance += splitDistance;
-        row.Split = this.formatSwimDistanceValue(cumulativeDistance);
+        row.Split = this.formatSwimDistanceValue(cumulativeDistance,
+          nominalDisplayComplete ? activeSplitIndex * displayContext.poolMeters : undefined);
         return row;
       }
 
@@ -272,7 +287,9 @@ export class EventCardSwimLengthsComponent implements OnChanges {
     });
   }
 
-  private buildGroupSummaryRow(rowViews: SwimLengthRowView[]): SwimLengthTableRow {
+  private buildGroupSummaryRow(
+    rowViews: SwimLengthRowView[], displayContext: NominalSwimDistanceDisplayContext | null,
+  ): SwimLengthTableRow {
     const swimLengths = rowViews.map(rowView => rowView.swimLength);
     const activeSwimLengths = swimLengths.filter(swimLength => !this.isIdleOrRestSwimLength(swimLength));
     const firstIndex = swimLengths[0]?.index ?? 0;
@@ -296,7 +313,7 @@ export class EventCardSwimLengthsComponent implements OnChanges {
       Lap: this.formatLapRange(swimLengths),
       Split: '',
       Duration: this.formatDurationValue(totalDuration),
-      Distance: this.formatSwimDistanceValue(totalDistance),
+      Distance: this.formatSwimDistanceValue(totalDistance, getNominalSwimLengthsDisplayMeters(displayContext, swimLengths)),
       Type: activeSwimLengths.length === 0 ? 'Rest' : this.isIdleOrRestSwimLength(lastSwimLength) ? 'Set + Rest' : 'Set',
       Stroke: getSwimStrokeLabel(swimLengths),
       Strokes: this.formatOptionalInteger(totalStrokes),
@@ -339,9 +356,9 @@ export class EventCardSwimLengthsComponent implements OnChanges {
     })?.text ?? '';
   }
 
-  private formatSwimDistanceValue(distance: number | null): string {
+  private formatSwimDistanceValue(distance: number | null, nominalDisplayMeters?: number): string {
     return distance === null ? '' : resolveUnitAwareDisplayStat(
-      createSwimDistanceDisplayStat(distance, this.unitSettings), this.unitSettings,
+      createSwimDistanceDisplayStat(distance, this.unitSettings, nominalDisplayMeters), this.unitSettings,
     )?.text ?? '';
   }
 

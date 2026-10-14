@@ -11,6 +11,7 @@ export class SuuntoHttpFixture {
   // The partner enriches file readbacks, not the JSON that QS submitted.
   // Keep this on by default so lifecycle tests exercise the observed contract.
   addDefaultNotificationType = true;
+  createStatus: 200 | 201 = 201;
   request: SuuntoGuideClient = async (request, guard) => {
     await guard(); this.calls.push(request);
     const response = await this.handle(request);
@@ -43,7 +44,7 @@ export class SuuntoHttpFixture {
     if (request.method === 'POST') {
       if ([...this.guides.values()].some(row => row.guide.externalId === guide.externalId)) return { status: 409, body: null };
       const createdId = `guide-${++this.sequence}`; this.guides.set(createdId, { guide, pinned: false });
-      return { status: 201, body: this.meta(createdId) };
+      return { status: this.createStatus, body: this.meta(createdId) };
     }
     if (!this.guides.has(id)) return { status: 404, body: null };
     this.guides.set(id, { ...this.guides.get(id)!, guide }); return { status: 200, body: this.meta(id) };

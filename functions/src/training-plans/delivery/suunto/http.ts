@@ -139,7 +139,12 @@ export function createSuuntoGuideClient(authorize: () => Promise<{ accessToken: 
         if (response.status === 408 || response.status >= 500) throw new SuuntoGuideHttpError(mutating ? 'uncertain' : 'retryable', false, retryAfter);
         throw new SuuntoGuideHttpError('terminal', response.status >= 400 && response.status < 500, 0, providerDiagnostics);
       }
-      if (response.status !== (request.method === 'POST' ? 201 : 200)) throw new SuuntoGuideHttpError(mutating ? 'uncertain' : 'retryable', false);
+      // Some create replies use 200 rather than the documented 201. Decode the
+      // acknowledgement, but leave acceptance to exact metadata + file readback
+      // in the transport. Other unexpected 2xx statuses remain unresolved.
+      if (request.method === 'POST' ? response.status !== 201 && response.status !== 200 : response.status !== 200) {
+        throw new SuuntoGuideHttpError(mutating ? 'uncertain' : 'retryable', false);
+      }
       failurePhase = 'decode';
       if (request.method === 'DELETE') { await response.body?.cancel(); return { status: 200, body: null }; }
       const raw = await readBounded(response);
@@ -148,7 +153,13 @@ export function createSuuntoGuideClient(authorize: () => Promise<{ accessToken: 
         return { status: 200, body: raw };
       }
       const envelope = object(JSON.parse(raw.toString('utf8')));
-      if (envelope.error !== null || envelope.payload === null || envelope.payload === undefined) throw new Error('envelope');
+      if (envelope.error !== null || envelope.payload === null || envelope.payload === undefined) {
+        // An application error in a nonstandard success-status reply is not an
+        // acknowledgement or proof of nonacceptance. Retain only fixed labels.
+        if (request.method === 'POST' && response.status === 200) throw new SuuntoGuideHttpError('uncertain', false, 0,
+          raw.length > GUIDE_REJECTION_BYTES ? { providerRejection: 'oversized_response', providerResponseShape: 'oversized' } : guideRejection(raw));
+        throw new Error('envelope');
+      }
       const rows = Array.isArray(envelope.payload) ? envelope.payload : [envelope.payload];
       if (rows.some(row => object(row).username !== authority.account)) throw new Error('account');
       return { status: response.status, body: envelope.payload };

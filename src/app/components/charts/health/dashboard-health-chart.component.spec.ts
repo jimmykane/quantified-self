@@ -110,6 +110,45 @@ describe('independent dashboard Health views',()=>{
     expect(watch).toHaveBeenCalledTimes(1);expect(haptics.selection).not.toHaveBeenCalled();
     fixture.destroy();expect(streams[0].observed).toBe(false);
   });
+  it('re-evaluates automatic overview sources on refresh while preserving a user-selected zero source', () => {
+    const fixture = create('steps'), component = fixture.componentInstance;
+    fixture.componentRef.setInput('overview', true); fixture.detectChanges();
+    const changed = vi.fn(); component.settingsChange.subscribe(changed);
+    const readings = (includeSuunto: boolean): DashboardHealthEvidence => {
+      const window = component.window();
+      const records: HealthSourceRecord[] = (includeSuunto ? ['GarminAPI', 'SuuntoApp'] as const : ['GarminAPI'] as const).map(provider => ({
+        schemaVersion: 1, id: provider, userID: 'owner', kind: 'daily_summary', calendarDate: window.endDate,
+        startTimeMs: window.startTimeMs, endTimeMs: window.endTimeMs,
+        source: { provider, accountKey: provider, sourceRecordType: 'daily', sourceRecordKey: provider,
+          revision: { order: 1, token: '1', digest: provider }, receivedAtMs: window.endTimeMs },
+        metricIds: ['steps'], metrics: [{ kind: 'value', metricId: 'steps', valueType: 'number', aggregation: 'total',
+          semanticVariant: 'daily_total', origin: 'provider_summary', recordingMethod: 'provider_calculated',
+          quality: { status: 'valid' }, normalizationStatus: 'canonical',
+          native: { metric: 'steps', value: provider === 'GarminAPI' ? 0 : 1000, unit: 'count' },
+          canonical: { value: provider === 'GarminAPI' ? 0 : 1000, unit: 'count' } }],
+        coverage: { status: 'complete' }, sampleChunkIds: [], createdAtMs: 0, updatedAtMs: 0,
+      }));
+      const projected = projectLoadedHealthRange(records, [], { startDate: window.startDate, endDate: window.endDate,
+        metricIds: ['steps'], includeSamples: false }, { sourceRecordsComplete: true, samplesComplete: true });
+      return { window, health: { result: projected, limitReached: null, sourceRecordCount: records.length,
+        sampleChunkCount: 0, samplePointCount: 0, serializedBytes: 0, hasMatchingSourceRecords: true,
+        hasSampleBackedMetric: false, providers: records.map(record => record.source.provider), sampleBackedProviders: [] },
+        history: null, activities: null, sessions: [], errors: [] };
+    };
+    streams[0].next(readings(false)); fixture.detectChanges();
+    expect(component.context()?.selected?.model.series.provider).toBe('GarminAPI');
+    streams[0].next(readings(true)); fixture.detectChanges();
+    expect(component.context()?.selected?.model.series.provider).toBe('SuuntoApp');
+    expect(changed).not.toHaveBeenCalled(); expect(haptics.selection).not.toHaveBeenCalled();
+    const zeroKey = component.context()!.sources.find(source => source.provider === 'GarminAPI')!.key;
+    component.selectSource(zeroKey);
+    fixture.componentRef.setInput('settings', changed.mock.calls[0][0].settings); fixture.detectChanges();
+    streams[0].next(readings(true)); fixture.detectChanges();
+    expect(component.context()?.selectedKey).toBe(zeroKey);
+    expect(component.context()?.selected?.latestValueText).toBe('0');
+    expect(watch).toHaveBeenCalledOnce(); expect(haptics.selection).toHaveBeenCalledOnce();
+    fixture.destroy();
+  });
   it('keeps explicit public examples separate from owner reads, refreshes and evidence callbacks', () => {
     const fixture = TestBed.createComponent(DashboardHealthChartComponent), component = fixture.componentInstance;
     fixture.componentRef.setInput('user', { uid: 'owner', settings: { unitSettings: {} } });

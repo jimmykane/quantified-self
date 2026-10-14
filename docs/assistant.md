@@ -267,6 +267,12 @@ A changed activity tag list, changed note revision, stale tab, access change, ac
 chat fails closed. A stable note-create mutation ID and existing idempotent/conflict semantics make uncertain retries
 safe. No provider is called and recorded activity metrics are never edited.
 
+Local note-create/update tools explicitly request `YYYY-MM-DD` calendar dates, a nullable ongoing end date, and a separate
+IANA timezone. Their strict input-schema failures return fixed corrective guidance through the existing same-turn tool
+error path, without raw values or silently converting dates. Invalid input neither creates a proposal nor consumes its slot;
+each correction still counts against the tool budget. Permission and unexpected backend failures remain fail-closed.
+This private adapter correction changes no public MCP contract, consent, Help, or plugin and requires no app rescan.
+
 Notes may be consulted for direct questions or relevant Sleep, Training, and measurement analysis, not automatically
 for every answer. Text remains untrusted user-reported context, not model instructions, diagnoses, causal proof, or
 authorization. Deterministic evidence stores compact note titles, categories, and actual dates, not full details or raw

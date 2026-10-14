@@ -38,12 +38,20 @@ export class DeleteAccountDialogComponent {
         @Inject(MAT_DIALOG_DATA) public data: DeleteAccountDialogData
     ) { }
 
+    onConfirmationChange(checked: boolean): void {
+        if (checked === this.confirmChecked) return;
+        this.confirmChecked = checked;
+        this.hapticsService.selection();
+    }
+
     onConfirm(): void {
+        if (!this.confirmChecked) return;
         this.hapticsService.warning();
         this.dialogRef.close(true);
     }
 
     onCancel(): void {
+        this.hapticsService.selection();
         this.dialogRef.close(false);
     }
 }

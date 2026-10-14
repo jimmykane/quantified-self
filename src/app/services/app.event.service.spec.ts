@@ -1,6 +1,6 @@
 import { TestBed } from '@angular/core/testing';
 import { AppEventService } from './app.event.service';
-import { Firestore, doc, docData, collection, collectionData, deleteDoc, updateDoc, writeBatch, query, where, limit, getDocs, getDocsFromCache, onSnapshot, FieldPath } from 'app/firebase/firestore';
+import { Firestore, doc, docData, collection, collectionData, deleteDoc, updateDoc, writeBatch, query, where, limit, getDocs, getDocsFromServer, getDocsFromCache, onSnapshot, FieldPath } from 'app/firebase/firestore';
 import { Storage } from 'app/firebase/storage';
 import { Auth } from 'app/firebase/auth';
 import { AppAnalyticsService } from './app.analytics.service';
@@ -118,6 +118,7 @@ vi.mock('app/firebase/firestore', async (importOriginal) => {
         where: vi.fn(),
         limit: vi.fn(),
         getDocs: vi.fn(),
+        getDocsFromServer: vi.fn(),
         getDocsFromCache: vi.fn(),
         onSnapshot: vi.fn(),
         deleteDoc: vi.fn(),
@@ -1718,6 +1719,19 @@ describe('AppEventService', () => {
         expect((query as Mock).mock.calls[0]).toHaveLength(8);
         expect(where).toHaveBeenCalledWith('startDate', '>=', clauses[0].value);
         expect(where).toHaveBeenCalledWith('privacy', '==', 'public');
+    });
+
+    it('uses server-only reads for completeness-sensitive history pages without a cache fallback', async () => {
+        const user = { uid: 'user-page' } as any;
+        (query as Mock).mockReturnValue('page-query');
+        (getDocsFromServer as Mock).mockResolvedValueOnce({ docs: [], size: 0, metadata: { fromCache: false } });
+        const result = await firstValueFrom(service.getEventsPageOnceByWithMeta(user, [], 'startDate', false, 250, { requireServer: true }));
+        expect(getDocsFromServer).toHaveBeenCalledWith('page-query');
+        expect(getDocs).not.toHaveBeenCalled();
+        expect(result.hasMore).toBe(false);
+        (getDocsFromServer as Mock).mockRejectedValueOnce(new Error('offline'));
+        await expect(firstValueFrom(service.getEventsPageOnceByWithMeta(user, [], 'startDate', false, 250, { requireServer: true }))).rejects.toThrow('offline');
+        expect(getDocs).not.toHaveBeenCalled();
     });
 
     it('should build Firestore query without limit/cursors when disabled', () => {

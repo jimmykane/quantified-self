@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { HEALTH_METRIC_IDS } from '@shared/health';
+import { HEALTH_METRIC_IDS, type HealthSourceRecord } from '@shared/health';
 import { projectHealthRange } from '@shared/health-query';
 import { SLEEP_PROVIDERS, type SleepSession } from '@shared/sleep';
 import { buildDashboardHrvContext, dashboardHrvWindows } from './dashboard-hrv-context.helper';
@@ -19,6 +19,32 @@ export const exampleHrvSessions = (days = 74): SleepSession[] => Array.from({ le
 });
 
 describe('dashboard Health HRV context', () => {
+  it.each(['visible', 'history'])(
+    'shares a typed Sleep reference account from the %s window with the entire personal-range history', location => {
+      const sessions = exampleHrvSessions();
+      const session = sessions[location === 'visible' ? 0 : 14];
+      const reference: HealthSourceRecord = { schemaVersion: 1, id: 'sleep-reference', userID: session.userID,
+        kind: 'daily_summary', calendarDate: session.sleepDate, startTimeMs: session.startTimeMs, endTimeMs: session.endTimeMs,
+        source: { provider: session.source.provider, accountKey: 'opaque-health-account', sourceRecordType: 'sleep',
+          sourceRecordKey: 'sleep-reference', revision: { order: 1, token: '1', digest: '1' }, receivedAtMs: session.endTimeMs },
+        metricIds: [HEALTH_METRIC_IDS.HeartRateVariability], metrics: [{ kind: 'sleep_reference',
+          metricId: HEALTH_METRIC_IDS.HeartRateVariability, valueType: 'number', aggregation: 'average',
+          semanticVariant: 'sleep_session_average_hrv', origin: 'provider_summary', recordingMethod: 'provider_calculated',
+          quality: { status: 'valid' }, reference: { domain: 'sleep', documentId: session.id!, field: 'vitals.averageHrvMs' } }],
+        coverage: { status: 'complete' }, sampleChunkIds: [], createdAtMs: session.endTimeMs, updatedAtMs: session.endTimeMs };
+      const query = (startDate: string, endDate: string) => projectHealthRange([reference], [],
+        { startDate, endDate, metricIds: [HEALTH_METRIC_IDS.HeartRateVariability], includeSamples: false });
+      const context = buildDashboardHrvContext(query(windows.visible.startDate, windows.visible.endDate),
+        query(windows.history.startDate, windows.history.endDate), sessions, windows.visible);
+      const full = buildHealthMetricWorkspaceView(query(windows.history.startDate, windows.visible.endDate), sessions).series[0];
+      const expected = buildHealthHrvPersonalRangeStatus(full, windows.visible.endTimeMs, null,
+        context.charts[0].model.series.points.map(point => point.timestampMs), windows.visible.startTimeMs);
+      expect(context.charts).toHaveLength(1);
+      expect(context.charts[0].status).toEqual(expected);
+      expect(context.charts[0].status?.normalRange).not.toBeNull();
+      expect(context.charts[0].model.series.sourceLabel).toBe('Suunto');
+    },
+  );
   it.each([null, normalizeUserUnitSettings({ distanceUnits: DistanceUnits.Miles })])('uses exactly Health’s source model, historical range and canonical display (%s)', units => {
     const sessions = exampleHrvSessions();
     const visible = result(windows.visible.startDate, windows.visible.endDate);

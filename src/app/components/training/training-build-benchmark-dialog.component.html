@@ -1,10 +1,6 @@
 <h2 mat-dialog-title>Set {{ disciplineLabel }} benchmark</h2>
 
-<mat-dialog-content
-  class="benchmark-dialog-content qs-scrollbar"
-  [class.benchmark-dialog-content-scrollable]="mode === 'event' && eventSuggestionsState === 'ready'"
-  [class.benchmark-dialog-content-with-clear]="!!data.selection"
->
+<mat-dialog-content class="benchmark-dialog-content qs-scrollbar">
   <p class="dialog-intro">Compare matching historical and current builds. Event day is excluded.</p>
 
   <div class="dialog-controls">
@@ -30,19 +26,20 @@
     @if (eventSuggestionsState === 'ready') {
       <div class="event-picker" [class.event-picker-with-races]="visibleSuggestedRaces.length" aria-label="Race and event suggestions">
         @if (visibleSuggestedRaces.length) {
-          <mat-card appearance="outlined" class="event-picker-section qs-card-plain" aria-label="Race-tagged events">
+          <section class="event-picker-section" aria-labelledby="benchmark-races-heading">
             <div class="event-picker-heading">
               <div>
-                <span class="field-label">Race-tagged events</span>
+                <h3 class="field-label" id="benchmark-races-heading">Race-tagged events</h3>
                 <p>Quick picks from events already tagged <strong>Race</strong>.</p>
               </div>
               @if (visibleSuggestedRaces.length > displayedSuggestedRaces.length) {
-                <button mat-button type="button" (click)="toggleRaceList()" [disabled]="isSaving">Show all</button>
+                <button mat-button type="button" (click)="toggleRaceList()" [disabled]="isSaving" [attr.aria-expanded]="isRaceListExpanded" aria-controls="benchmark-races-list">Show all</button>
               } @else if (isRaceListExpanded && visibleSuggestedRaces.length > 3) {
-                <button mat-button type="button" (click)="toggleRaceList()" [disabled]="isSaving">Show less</button>
+                <button mat-button type="button" (click)="toggleRaceList()" [disabled]="isSaving" [attr.aria-expanded]="isRaceListExpanded" aria-controls="benchmark-races-list">Show less</button>
               }
             </div>
             <mat-selection-list
+              id="benchmark-races-list"
               class="event-option-list event-option-list-tagged qs-scrollbar"
               [attr.aria-label]="'Tagged ' + data.discipline + ' races'"
               [multiple]="false"
@@ -58,24 +55,22 @@
                   [selected]="race.eventId === eventId"
                   [disabled]="!race.isEligible"
                 >
-                  <span class="event-option-copy">
-                    <span class="event-option-title">{{ race.displayLabel || (race.startDayMs | date:'mediumDate':'UTC') }}</span>
-                    <span class="event-option-details">
-                      @if (race.displayLabel) { {{ race.startDayMs | date:'mediumDate':'UTC' }} · }
-                      {{ race.detailsText }}
-                    </span>
-                    @if (!race.isEligible) { <small>Not available for this build length</small> }
+                  <span matListItemTitle class="event-option-title">{{ race.displayLabel || (race.startDayMs | date:'mediumDate':'UTC') }}</span>
+                  <span matListItemLine class="event-option-details">
+                    @if (race.displayLabel) { {{ race.startDayMs | date:'mediumDate':'UTC' }} · }
+                    {{ race.detailsText }}
                   </span>
+                  @if (!race.isEligible) { <span matListItemLine>Not available for this build length</span> }
                 </mat-list-option>
               }
             </mat-selection-list>
-          </mat-card>
+          </section>
         }
 
-        <mat-card appearance="outlined" class="event-picker-section qs-card-plain" aria-label="Other historical events">
+        <section class="event-picker-section" aria-labelledby="benchmark-events-heading">
           <div class="event-picker-heading">
             <div>
-              <span class="field-label">Choose an event</span>
+              <h3 class="field-label" id="benchmark-events-heading">Choose an event</h3>
               <p>{{ visibleSuggestedRaces.length ? 'Or choose' : 'Choose' }} any eligible event. Its tags will not change.</p>
             </div>
           </div>
@@ -134,12 +129,10 @@
                 [selected]="event.eventId === eventId"
                 [disabled]="!event.isEligible"
               >
-                <span class="event-option-copy">
-                  <span class="event-option-title">{{ event.displayLabel || (event.startDayMs | date:'mediumDate':'UTC') }}</span>
-                  <span class="event-option-details">
-                    @if (event.displayLabel) { {{ event.startDayMs | date:'mediumDate':'UTC' }} · }
-                    {{ event.detailsText }}
-                  </span>
+                <span matListItemTitle class="event-option-title">{{ event.displayLabel || (event.startDayMs | date:'mediumDate':'UTC') }}</span>
+                <span matListItemLine class="event-option-details">
+                  @if (event.displayLabel) { {{ event.startDayMs | date:'mediumDate':'UTC' }} · }
+                  {{ event.detailsText }}
                 </span>
               </mat-list-option>
             } @empty {
@@ -153,7 +146,7 @@
                 : 'Choose a row to preview its exact build dates before saving.' }}
             </p>
           }
-        </mat-card>
+        </section>
 
       </div>
     } @else {
@@ -172,7 +165,7 @@
       </div>
     }
   } @else {
-    <mat-form-field appearance="outline" class="period-input">
+    <mat-form-field appearance="outline" subscriptSizing="dynamic" class="period-input">
       <mat-label>Historical build end date</mat-label>
       <input matInput type="date" [value]="periodEndDate" (input)="updatePeriodEndDate($any($event.target).value)" [disabled]="isSaving">
       <mat-hint>The build ends on this day and cannot overlap your current build.</mat-hint>
@@ -188,7 +181,7 @@
   @if (data.selection) {
     <button class="dialog-clear-action" mat-button color="warn" (click)="clear()" [disabled]="isSaving">Clear benchmark</button>
   }
-  <button class="dialog-cancel-action" mat-button mat-dialog-close [disabled]="isSaving">Cancel</button>
+  <button class="dialog-cancel-action" mat-button mat-dialog-close appHapticTap [disabled]="isSaving">Cancel</button>
   <button class="dialog-primary-action" mat-flat-button color="primary" (click)="save()" [disabled]="isSaving || !canSave">
     <span class="dialog-action-content">
       @if (isSaving) { <mat-spinner diameter="18"></mat-spinner> }

@@ -3,7 +3,8 @@ import { describe, expect, it, vi } from 'vitest';
 import { ActivityTypes, PaceUnits, SpeedUnits, SwimPaceUnits, VerticalSpeedUnits } from '@sports-alliance/sports-lib';
 import { normalizeUserUnitSettings } from '../../../../shared/unit-aware-display';
 import type { ScheduledWorkoutV1 } from '../../../../shared/training-plans';
-import { readSuuntoGuideUnitSettings } from './store';
+import { readSuuntoGuideUnitSettings, readSuuntoGuideOwnerPreferences } from './store';
+import { defaultSuuntoSwimmingGuideSettings } from '../../../../shared/suunto-swimming-guide-settings';
 import { suuntoGuideDescription } from '../providers/suunto-guide-description';
 
 describe('Suunto private owner-unit snapshots', () => {
@@ -51,5 +52,26 @@ describe('Suunto private owner-unit snapshots', () => {
     expect(await readSuuntoGuideUnitSettings(tx, user, 'garmin', [workout])).toBeUndefined();
     expect(await readSuuntoGuideUnitSettings(tx, user, 'suunto', [])).toBeUndefined();
     expect(read).not.toHaveBeenCalled();
+  });
+  it('reads swimming preferences from the canonical config document, never legacy root settings', async () => {
+    const config = { path: 'users/fixture/config/settings' };
+    const doc = vi.fn().mockReturnValue(config);
+    const owner = { collection: vi.fn().mockReturnValue({ doc }) } as unknown as FirebaseFirestore.DocumentReference;
+    const prefs = { ...defaultSuuntoSwimmingGuideSettings(), workFields: ['strokes'] };
+    const read = vi.fn().mockImplementation(async reference => ({ get: (key: string) => reference === config
+      ? (key === 'suuntoSwimmingGuide' ? prefs : undefined) : { suuntoSwimmingGuide: 'ignored' } }));
+    const swim = { ...workout, structure: { sport: ActivityTypes.Swimming } } as ScheduledWorkoutV1;
+    const result = await readSuuntoGuideOwnerPreferences({ get: read } as unknown as Transaction, owner, 'suunto', [swim]);
+    expect(result.swimmingSettings).toEqual(prefs);
+    expect(owner.collection).toHaveBeenCalledExactlyOnceWith('config');
+    expect(doc).toHaveBeenCalledExactlyOnceWith('settings');
+    expect(read.mock.calls.map(call => call[0])).toEqual([owner, config]);
+  });
+  it('defaults missing or malformed canonical swimming settings without reading other providers', async () => {
+    const owner = { collection: () => ({ doc: () => ({ path: 'config' }) }) } as unknown as FirebaseFirestore.DocumentReference;
+    const { tx, read } = transaction({ version: 99 });
+    const swim = { ...workout, structure: { sport: ActivityTypes.OpenWaterSwimming } } as ScheduledWorkoutV1;
+    expect((await readSuuntoGuideOwnerPreferences(tx, owner, 'suunto', [swim])).swimmingSettings).toEqual(defaultSuuntoSwimmingGuideSettings());
+    expect(read).toHaveBeenCalledTimes(2);
   });
 });

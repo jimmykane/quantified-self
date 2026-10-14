@@ -20,6 +20,7 @@ import {
 import { MCP_OAUTH_SCOPES } from '../mcp/oauth.service';
 import type { AuthenticatedMcpRequest } from '../mcp/server';
 import { createMcpServer } from '../mcp/server';
+import * as contentProposal from './content-proposal';
 
 function createTestServer(options: {
   errorTool?: typeof ASSISTANT_MCP_TOOL_NAMES[number];
@@ -294,6 +295,63 @@ describe('Assistant MCP session', () => {
         noteRef: 'note-ref', expectedRevision: 1,
       })).rejects.toThrow('only one content change');
     } finally { await session.close(); }
+  });
+
+  describe('Timeline-note input correction', () => {
+    const createNoteSession = () => createAssistantMcpSession('note-owner', 'https://quantified-self.io', {
+      createServer: () => createTestServer(),
+    }, 'coordinate_free', true, false, false, false, 'note-conversation', false, true);
+
+    it.each([
+      ['prepare_timeline_note_create', { startDate: '2026-10-11T12:00:00Z' }],
+      ['prepare_timeline_note_create', { endDate: '2026-10-12T12:00:00Z' }],
+      ['prepare_timeline_note_create', { endDate: 'null' }],
+      ['prepare_timeline_note_update', { startDate: '2026-02-30' }],
+      ['prepare_timeline_note_update', { endDate: 'private-rejected-value' }],
+      ['prepare_timeline_note_update', { unexpected: 'private-rejected-value' }],
+    ] as const)('corrects invalid %s input without consuming the proposal slot: %j', async (name, invalid) => {
+      const session = await createNoteSession();
+      const callTool = vi.spyOn(Client.prototype, 'callTool');
+      const valid = {
+        category: 'travel', title: 'Private synthetic title', details: 'Private synthetic details',
+        startDate: '2026-10-11', endDate: null, timeZone: 'Europe/Helsinki', showOnCharts: true, color: 'default',
+        ...(name === 'prepare_timeline_note_create'
+          ? { mutationId: '11111111-1111-4111-8111-111111111111' }
+          : { noteRef: 'private-note-ref', expectedRevision: 1 }),
+      };
+      try {
+        expect(session.tools.find(tool => tool.name === name)?.description).toContain('YYYY-MM-DD');
+        let failure: unknown;
+        try { await session.callTool(name, { ...valid, ...invalid }); }
+        catch (error) { failure = error; }
+        expect(failure).toBeInstanceOf(AssistantRecoverableMcpToolError);
+        expect(failure).toMatchObject({ code: 'invalid_tool_input', guidance: expect.stringContaining('endDate: null') });
+        expect(failure).not.toHaveProperty('cause');
+        expect(JSON.stringify(failure)).not.toMatch(/Private synthetic|private-note-ref|private-rejected-value|2026-02-30/);
+        const corrected = await session.callTool(name, valid);
+        expect(corrected.structuredContent).toMatchObject({ requiresConfirmation: true, arguments: valid });
+        await expect(session.callTool(name, valid)).rejects.toThrow('only one content change');
+        expect(callTool).not.toHaveBeenCalled();
+      } finally { callTool.mockRestore(); await session.close(); }
+    });
+
+    it('does not reinterpret unexpected proposal failures as correctable input', async () => {
+      const session = await createNoteSession();
+      const failure = new Error('Unexpected proposal failure');
+      const createProposal = vi.spyOn(contentProposal, 'createAssistantContentProposal').mockImplementationOnce(() => { throw failure; });
+      try {
+        await expect(session.callTool('prepare_timeline_note_create', {})).rejects.toBe(failure);
+      } finally { createProposal.mockRestore(); await session.close(); }
+    });
+
+    it('does not expose note preparation without the note-change permission', async () => {
+      const session = await createAssistantMcpSession('note-owner', 'https://quantified-self.io', {
+        createServer: () => createTestServer(),
+      }, 'coordinate_free', true, false, false, false, 'read-only-notes');
+      try {
+        await expect(session.callTool('prepare_timeline_note_create', {})).rejects.toThrow('not available');
+      } finally { await session.close(); }
+    });
   });
 
   it('resolves the complete curated boundary from the production MCP server', async () => {

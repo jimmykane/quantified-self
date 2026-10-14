@@ -53,6 +53,11 @@ remain `provider_pending`; budget exhaustion retains the failed upload identifie
 and emits the existing DLQ/manual-reconciliation outcomes only after commit.
 Monitoring definitions, labels, thresholds and native queue scope are unchanged.
 
+Malformed successful Suunto initialization replies are also **covered/unchanged**: before FIT delivery they use the
+existing committed `retry` outcome and bounded retry budget, with the provider-specific invalid-response DLQ context
+at exhaustion. A diagnostic HTTP 200 is neither initialization validity nor delivery success. Already accepted uploads
+keep their continuation/status-only guards; no monitoring resources, thresholds or labels change.
+
 COROS's #600 upload-copy mappings (Snorkeling → Open Water Swim; Sailing → GPS
 Cardio) use these same workers, destination labels and committed outcomes. Coverage
 is unchanged when Snorkeling also permits GPS-less files; Sailing retains its GPS

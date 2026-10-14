@@ -611,7 +611,8 @@ export function buildDashboardTileViewModels(
         data: [],
         sleepTrend: sleepTrendContext,
         hrvTrend: input.hrvTrend ? { ...input.hrvTrend, charts: [...input.hrvTrend.charts].sort((left, right) =>
-          Number(right.key === input.hrvPreferredSource) - Number(left.key === input.hrvPreferredSource)) } : null,
+          Number(right.key === input.hrvPreferredSource || right.model.series.sourceSelectionKey === input.hrvPreferredSource)
+          - Number(left.key === input.hrvPreferredSource || left.model.series.sourceSelectionKey === input.hrvPreferredSource)) } : null,
       });
       return viewModels;
     }

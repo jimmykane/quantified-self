@@ -130,7 +130,6 @@
 
 .training-impact-result {
   display: flex;
-  flex-wrap: wrap;
   align-items: center;
   gap: 4px 12px;
   padding-top: 4px;
@@ -138,7 +137,7 @@
 }
 
 .training-impact-result-context {
-  flex: 1 1 250px;
+  flex: 1 1 0;
   min-width: 0;
 }
 
@@ -158,8 +157,9 @@
   margin-top: 3px;
 }
 
-.training-impact-calculation-toggle {
+.training-impact-calculation-info {
   flex: 0 0 auto;
+  --mat-icon-button-icon-color: var(--mat-sys-on-surface-variant);
 }
 
 .training-impact-calculation {

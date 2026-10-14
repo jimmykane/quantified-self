@@ -53,7 +53,7 @@
 </mat-dialog-content>
 
 <mat-dialog-actions align="end">
-  <button mat-button type="button" [mat-dialog-close]="false" [disabled]="isSaving()">Cancel</button>
+  <button mat-button type="button" appHapticTap [mat-dialog-close]="false" [disabled]="isSaving()">Cancel</button>
   <button mat-flat-button class="qs-mat-primary" type="button" [disabled]="isSaving() || !hasChanges()" (click)="apply()">
     <span class="bulk-dialog-action-content">
       @if (isSaving()) { <mat-progress-spinner diameter="18" mode="indeterminate"></mat-progress-spinner> }

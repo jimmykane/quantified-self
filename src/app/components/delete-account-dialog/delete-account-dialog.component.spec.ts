@@ -35,7 +35,24 @@ describe('DeleteAccountDialogComponent', () => {
     component = TestBed.createComponent(DeleteAccountDialogComponent).componentInstance;
   });
 
+  it('keeps unconfirmed deletion and unchanged consent silent', () => {
+    component.onConfirm(); component.onConfirmationChange(false);
+    expect(close).not.toHaveBeenCalled();
+    expect(hapticsService.selection).not.toHaveBeenCalled();
+    expect(hapticsService.warning).not.toHaveBeenCalled();
+    component.onConfirmationChange(true); component.onConfirmationChange(true);
+    expect(hapticsService.selection).toHaveBeenCalledOnce();
+  });
+
+  it('gives selection feedback when cancelling', () => {
+    component.onCancel();
+    expect(close).toHaveBeenCalledExactlyOnceWith(false);
+    expect(hapticsService.selection).toHaveBeenCalledOnce();
+    expect(hapticsService.warning).not.toHaveBeenCalled();
+  });
+
   it('uses a warning haptic for account deletion confirmation', () => {
+    component.confirmChecked = true;
     component.onConfirm();
 
     expect(hapticsService.warning).toHaveBeenCalledOnce();

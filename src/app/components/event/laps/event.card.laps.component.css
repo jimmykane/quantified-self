@@ -93,53 +93,49 @@
   max-width: 104px;
 }
 
-.lap-column-menu-content {
-  box-sizing: border-box;
-  inline-size: min(380px, calc(100vw - 24px));
-  max-block-size: min(70dvh, 640px);
+.lap-column-dialog-content {
   min-inline-size: 0;
-  overflow-x: hidden;
-  overflow-y: auto;
   overscroll-behavior: contain;
-  -webkit-overflow-scrolling: touch;
 }
 
-.lap-column-family-toggle {
-  display: flex;
-  margin: 12px 16px 0;
+.lap-column-dialog-body {
+  /* Floating labels need space above the first field inside the scroll viewport. */
+  padding-block-start: 8px;
 }
 
-.lap-column-family-toggle mat-button-toggle {
-  flex: 1 1 0;
+.lap-column-family-field {
+  display: block;
+  width: 100%;
   min-width: 0;
+  margin-block-end: 12px;
 }
 
 .lap-column-menu-copy {
   color: var(--mat-sys-on-surface-variant);
   font: var(--mat-sys-body-small);
   margin: 0;
-  padding: 12px 16px 4px;
+  margin-block: 8px;
 }
 
 .lap-column-availability-summary {
   color: var(--mat-sys-on-surface-variant);
   font: var(--mat-sys-label-medium);
   margin: 0;
-  padding: 4px 16px 0;
+  margin-block: 8px;
 }
 
 .lap-column-search-field {
   box-sizing: border-box;
   display: block;
-  margin: 12px 16px 0;
-  width: calc(100% - 32px) !important;
+  width: 100%;
+  min-width: 0;
 }
 
 .lap-column-menu-empty {
   color: var(--mat-sys-on-surface-variant);
   font: var(--mat-sys-body-medium);
   margin: 0;
-  padding: 12px 16px;
+  padding-block: 12px;
 }
 
 .lap-column-menu-saving {
@@ -148,7 +144,44 @@
   display: flex;
   font: var(--mat-sys-label-medium);
   gap: 8px;
-  padding: 8px 16px 0;
+  padding-block: 8px;
+}
+
+.lap-column-section-title {
+  font: var(--mat-sys-title-small);
+  margin-block: 16px 8px;
+}
+
+.lap-column-selected-list {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+}
+
+.lap-column-selected-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  padding-block: 4px;
+}
+
+.lap-column-selected-metric {
+  flex: 1;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.lap-column-metric-availability {
+  font: var(--mat-sys-body-small);
+  color: var(--mat-sys-on-surface-variant);
+  margin: 0 0 4px 8px;
+}
+
+.lap-column-order-actions {
+  display: flex;
+  flex: 0 0 auto;
+  gap: 8px;
 }
 
 .lap-tab-label {
@@ -215,4 +248,22 @@
   .lap-tab-text {
     display: none;
   }
+}
+
+.lap-column-additional-controls {
+  margin-block: 8px;
+}
+
+.lap-column-dialog-content .lap-column-metric-option {
+  height: auto;
+  min-height: 64px;
+  padding-block: 8px;
+}
+
+.lap-column-dialog-content .lap-column-metric-option .lap-column-metric-title,
+.lap-column-dialog-content .lap-column-metric-option .lap-column-metric-status {
+  white-space: normal;
+  overflow-wrap: anywhere;
+  overflow: visible;
+  text-overflow: clip;
 }

@@ -1,3 +1,9 @@
+import { AppHapticsService } from '../../services/app.haptics.service';
+import { SharedModule } from '../../modules/shared.module';
+import { By } from '@angular/platform-browser';
+import { MatTooltip } from '@angular/material/tooltip';
+import { MatSlideToggle } from '@angular/material/slide-toggle';
+import { NoopAnimationsModule } from '@angular/platform-browser/animations';
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { NO_ERRORS_SCHEMA } from '@angular/core';
 import { ReactiveFormsModule } from '@angular/forms';
@@ -22,6 +28,8 @@ import {
   SwimPaceUnits
 } from '@sports-alliance/sports-lib';
 
+const haptics = { selection: vi.fn(), success: vi.fn(), error: vi.fn() };
+
 describe('EventsExportFormComponent', () => {
   let fixture: ComponentFixture<EventsExportFormComponent>;
   let component: EventsExportFormComponent;
@@ -39,6 +47,7 @@ describe('EventsExportFormComponent', () => {
   });
 
   beforeEach(async () => {
+    vi.clearAllMocks();
     mockUserService = {
       updateUserProperties: vi.fn().mockResolvedValue(undefined),
     };
@@ -57,8 +66,9 @@ describe('EventsExportFormComponent', () => {
 
     await TestBed.configureTestingModule({
       declarations: [EventsExportFormComponent],
-      imports: [ReactiveFormsModule],
+      imports: [ReactiveFormsModule, SharedModule, NoopAnimationsModule],
       providers: [
+        { provide: AppHapticsService, useValue: haptics },
         { provide: MatDialogRef, useValue: mockDialogRef },
         {
           provide: MAT_DIALOG_DATA,
@@ -115,6 +125,35 @@ describe('EventsExportFormComponent', () => {
 
     fixture = TestBed.createComponent(EventsExportFormComponent);
     component = fixture.componentInstance;
+  });
+
+  it('keeps initialization and blocked exports silent', async () => {
+    fixture.detectChanges();
+    expect(haptics.selection).not.toHaveBeenCalled();
+    const tooltips = fixture.debugElement.queryAll(By.directive(MatTooltip));
+    expect(tooltips).toHaveLength(0);
+    component.exportFromGroup.controls.startDate.setValue(null);
+    await component.onSubmit({ preventDefault: vi.fn() });
+    expect(haptics.selection).not.toHaveBeenCalled();
+    expect(mockFileService.downloadFile).not.toHaveBeenCalled();
+    component.exportFromGroup.controls.startDate.setValue(true);
+    component.isLoading = true;
+    await component.onSubmit({ preventDefault: vi.fn() });
+    expect(haptics.selection).not.toHaveBeenCalled();
+  });
+
+  it('gives one feedback per checkbox change, Cancel and accepted submit', async () => {
+    fixture.detectChanges();
+    fixture.debugElement.query(By.directive(MatSlideToggle)).triggerEventHandler('change', { checked: true });
+    expect(haptics.selection).toHaveBeenCalledTimes(1);
+    fixture.nativeElement.querySelector('button[type=button]').click();
+    expect(haptics.selection).toHaveBeenCalledTimes(2);
+    haptics.selection.mockClear();
+    const form = fixture.nativeElement.querySelector('form') as HTMLFormElement;
+    form.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }));
+    await fixture.whenStable();
+    expect(haptics.selection).toHaveBeenCalledOnce();
+    expect(mockFileService.downloadFile).toHaveBeenCalledOnce();
   });
 
   it('logs and swallows export settings persistence failures after download', async () => {

@@ -27,6 +27,8 @@ import { HealthSleepStageSummaryComponent } from './health-sleep-stage-summary.c
 import type { TimelineNoteChartContext } from '../../helpers/timeline-notes-chart.helper';
 import type { AppHealthHighlightId, AppHealthHighlightSources } from '../../models/app-user.interface';
 import { getDateTimeFormatter } from '../../helpers/date-time-format.helper';
+import { HEALTH_METRIC_IDS } from '@shared/health';
+import { selectDefaultHealthSourceKey } from '../../helpers/health-source-selection.helper';
 
 interface HealthPrioritySourceView {
   key: string;
@@ -113,12 +115,14 @@ export class HealthPrioritySummaryComponent {
   readonly renderedCards = computed<readonly RenderedHealthPriorityCardView[]>(() => this.cards().map(card => {
     const startTimeMs = card.chartWindow?.startTimeMs ?? this.startTimeMs();
     const endTimeMs = card.chartWindow?.endTimeMs ?? this.endTimeMs();
+    // The headline and default source use the same bounded readings as the plot.
     const chartModels = buildHealthChartModels(
-      card.chartSeries,
+      card.chartSeries.map(series => ({ ...series, points: series.points.filter(point =>
+        point.timestampMs >= startTimeMs && point.timestampMs <= endTimeMs) })),
       startTimeMs,
       endTimeMs,
       this.unitSettings(),
-    ).map(model => {
+    ).filter(model => model.displayedPointCount > 0).map(model => {
       const latestPoint = model.series.points.at(-1);
       const personalRangeStatus = card.chartStatuses?.[model.series.id] || null;
       const statusColor = personalRangeStatus
@@ -164,11 +168,18 @@ export class HealthPrioritySummaryComponent {
         valueText: row.valueText,
         row,
       }));
+    const defaultKey = selectDefaultHealthSourceKey(chartModels.length
+      ? chartModels.map(chart => ({ ...chart.model.series,
+        key: chart.model.series.sourceSelectionKey || chart.model.series.id }))
+      : card.rows.map(row => ({ key: row.sourceSelectionKey || row.id, metricId: HEALTH_METRIC_IDS.SleepDuration,
+        points: row.sleepPoint ? [{ value: row.sleepPoint.totalSeconds, timestampMs: row.observedAtMs,
+          calendarDate: row.sleepPoint.sleepDate }] : [] })));
+    const preferredIndex = sources.findIndex(source => source.key === this.preferredSources()[card.id]);
     return {
       ...card,
       chartModels,
       sources,
-      selectedSourceIndex: Math.max(0, sources.findIndex(source => source.key === this.preferredSources()[card.id])),
+      selectedSourceIndex: preferredIndex >= 0 ? preferredIndex : Math.max(0, sources.findIndex(source => source.key === defaultKey)),
     };
   }));
 

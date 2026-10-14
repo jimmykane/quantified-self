@@ -1,3 +1,4 @@
+import { CONNECTION_HISTORY_COLLECTION, isConnectionHistoryRunId } from '../connection-history/model';
 import { ServiceNames } from '@sports-alliance/sports-lib';
 import { ROUTE_DELIVERY_SYNC_ROUTES, type RouteDeliverySyncRouteId } from '../../../shared/route-delivery-sync-routes';
 import { getMissingGarminPermissionsForTokenLike, selectPreferredGarminTokenLike } from '../../../shared/garmin-service-token';
@@ -22,7 +23,7 @@ const TOKEN_LIMIT = 5;
 const ROOTS = new Map<string, string>([[ServiceNames.GarminAPI, GARMIN_API_TOKENS_COLLECTION_NAME],
     [ServiceNames.COROSAPI, COROSAPI_ACCESS_TOKENS_COLLECTION_NAME], [ServiceNames.WahooAPI, WAHOO_API_ACCESS_TOKENS_COLLECTION_NAME]]);
 // Read references/generations only for comparisons, never payloads, credentials, names or geometry.
-const QUEUE_FIELDS = ['routeId', 'sourceServiceName', 'destinationServiceName', 'manual', 'userID', 'firebaseUserID',
+const QUEUE_FIELDS = ['connectionHistoryRunId', 'routeId', 'sourceServiceName', 'destinationServiceName', 'manual', 'userID', 'firebaseUserID',
     'providerUserId', 'providerRouteId', 'savedRouteID', 'sourceRevisionKey', 'sourceProviderRouteId', 'sourceProviderUserId',
     'sourceConnectionStateGeneration', 'sourceTokenCredentialGeneration', 'sourceRootOAuthCredentialGeneration',
     'processed', 'retryCount', 'dateCreated', 'dispatchedToCloudTask', 'providerOperationStartedAt', 'processingLeaseExpiresAt',
@@ -128,7 +129,7 @@ export async function observeRouteQueues(db: FirebaseFirestore.Firestore, proAcc
                     || !isRouteDeliverySyncRouteUserAllowlisted(row.routeId as RouteDeliverySyncRouteId, uid))) { group.excludedSample++; continue; }
                 // Outgoing copies have a blanket Pro gate. Inbound work can retire
                 // unchanged/unlisted routes without saving; its upsert still requires Pro.
-                if (lane === 'delivery') {
+                if (lane === 'delivery' || row.connectionHistoryRunId != null) {
                     if (!entitlements.has(uid)) entitlements.set(uid, proAccess(uid));
                     if (!await entitlements.get(uid)) { group.excludedSample++; continue; }
                 }
@@ -157,6 +158,17 @@ export async function observeRouteQueues(db: FirebaseFirestore.Firestore, proAcc
                         tokenCredentialGeneration: token.get('tokenCredentialGeneration'), rootOAuthCredentialGeneration: root.get(ACTIVE_OAUTH_CREDENTIAL_GENERATION_FIELD) });
                     if (!root.exists || !token.exists || sourceMeta.get('connectionState') !== 'connected'
                         || token.get('serviceName') !== ServiceNames.SuuntoApp || token.get('userName') !== providerUserID || !fence) return 'excluded';
+                    if (lane === 'import' && row.connectionHistoryRunId != null) {
+                        if (!isConnectionHistoryRunId(row.connectionHistoryRunId)) return 'unknown';
+                        const [history] = await tx.getAll(db.collection(CONNECTION_HISTORY_COLLECTION).doc(row.connectionHistoryRunId),
+                            { fieldMask: ['userID', 'serviceName', 'providerUserId', 'rootPath', 'tokenPath', 'credentialGeneration', 'connectionGeneration'] });
+                        if (!history.exists || history.get('userID') !== uid || history.get('serviceName') !== ServiceNames.SuuntoApp
+                            || history.get('providerUserId') !== providerUserID || history.get('rootPath') !== sourceRoot.path
+                            || history.get('tokenPath') !== sourceToken.path
+                            || history.get('credentialGeneration') !== fence.tokenCredentialGeneration
+                            || history.get('credentialGeneration') !== fence.rootOAuthCredentialGeneration
+                            || history.get('connectionGeneration') !== fence.connectionStateGeneration) return 'excluded';
+                    }
                     if (route) {
                         if (row.manual !== true && settings.get(`serviceSyncSettings.routeDeliverySyncRoutes.${route.id}.enabled`) !== true) return 'excluded';
                         const captured = [row.sourceConnectionStateGeneration, row.sourceTokenCredentialGeneration, row.sourceRootOAuthCredentialGeneration];

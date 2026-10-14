@@ -882,6 +882,7 @@ describe('service-connection-meta', () => {
         oauthFlowCreatedAt: 'delete-sentinel',
         oauthImportRecentHistory: 'delete-sentinel',
         oauthImportHistoryRange: 'delete-sentinel',
+        oauthImportRouteHistory: 'delete-sentinel',
         oauthFlowExpiresAt: 'delete-sentinel',
       },
       { merge: true },

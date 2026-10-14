@@ -319,6 +319,47 @@
   margin-right: 0.5rem;
 }
 
+@media (min-width: 721px) {
+  /* Keep room for settled data without the phone layout's extra vertical space. */
+  .dashboard-current-state-top,
+  .dashboard-current-state-row.has-recovery .dashboard-current-state-top,
+  .dashboard-current-state-primary {
+    min-block-size: 8.5rem;
+  }
+
+  .dashboard-current-state-primary {
+    padding: 0.65rem 0.85rem;
+  }
+
+  .dashboard-training-state-scale {
+    margin-top: 0.5rem;
+  }
+
+  .dashboard-training-state-scale-labels {
+    margin-top: 0.25rem;
+  }
+
+  .dashboard-current-state-row dl,
+  .dashboard-current-state-row dl > div,
+  .dashboard-current-state-row dl > .dashboard-readiness-hrv {
+    min-block-size: 6.75rem;
+  }
+
+  .dashboard-current-state-row dl > div {
+    padding: 0.65rem 0.75rem;
+  }
+
+  .dashboard-current-state-row app-metric-indicator {
+    /* These display-only bars have no visible text line to reserve. */
+    line-height: 0;
+  }
+
+  .dashboard-readiness-recovery-band {
+    min-block-size: 3.25rem;
+    padding: 0.5rem 0.85rem;
+  }
+}
+
 @media (min-width: 721px) and (max-width: 1100px) {
   .dashboard-current-state-top {
     grid-template-columns: minmax(220px, 0.9fr) minmax(280px, 1.1fr);

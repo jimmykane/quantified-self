@@ -2525,6 +2525,7 @@ describe('PlansWorkspaceComponent', () => {
     expect(component.editor()?.value.nodes[0]).toMatchObject({ purpose: 'warmup', endingKind: 'manual' });
     expect(fixture.nativeElement.querySelector('.step-fields input[type="number"]')).toBeNull();
     const hint: HTMLElement = fixture.nativeElement.querySelector('.step-fields mat-hint');
+    expect(hint.textContent).toContain('Press Lap to finish this step');
     expect(hint.textContent).toContain('without a time or distance limit');
     expect(hint.textContent).toContain('Wahoo delivery is unsupported');
     expect(endingSelect.nativeElement.getAttribute('aria-describedby')?.split(' ')).toContain(hint.id);
@@ -2575,10 +2576,17 @@ describe('PlansWorkspaceComponent', () => {
     const fixture = await renderPlans(); const component = fixture.componentInstance;
     haptics.selection.mockClear();
     const checkbox = fixture.nativeElement.querySelector('.early-lap-option input[type="checkbox"]') as HTMLInputElement;
+    const lapOption: HTMLElement = fixture.nativeElement.querySelector('.early-lap-option');
+    const hint: HTMLElement = lapOption.querySelector('.editor-hint')!;
+    const hintText = () => hint.textContent!.replace(/\s+/g, ' ').trim();
+    expect(lapOption.querySelector('mat-checkbox')!.textContent).toContain('Also finish this step with Lap');
+    expect(checkbox.getAttribute('aria-describedby')?.split(' ')).toContain(hint.id);
     expect(checkbox.checked).toBe(false);
+    expect(hintText()).toBe('Suunto: this step ends only at the distance limit. Lap does not start the next step.');
     expect(haptics.selection).not.toHaveBeenCalled();
     checkbox.click(); fixture.detectChanges();
     expect(checkbox.checked).toBe(true);
+    expect(hintText()).toBe('Suunto: this step ends at the distance limit or when you press Lap.');
     expect(haptics.selection).toHaveBeenCalledOnce();
     component.updateStep(0, repeat ? 0 : null, 'allowEarlyLap', true);
     expect(haptics.selection).toHaveBeenCalledOnce();
@@ -2593,12 +2601,45 @@ describe('PlansWorkspaceComponent', () => {
     expect(checkbox.checked).toBe(true);
     component.busyAction.set(null); fixture.detectChanges();
     haptics.selection.mockClear(); checkbox.click(); fixture.detectChanges();
+    expect(hintText()).toBe('Suunto: this step ends only at the distance limit. Lap does not start the next step.');
     expect(haptics.selection).toHaveBeenCalledOnce();
     await component.saveWorkout();
     expect(mutate).toHaveBeenCalledWith(expect.objectContaining({ operation: expect.objectContaining({
       kind: 'update-workout', structure: expect.objectContaining({ nodes: repeat ? [expect.objectContaining({ steps: [
         expect.objectContaining({ ending: { kind: 'distance', meters: 1609.344, allowEarlyLap: false } }),
       ] })] : [expect.objectContaining({ ending: { kind: 'distance', meters: 1609.344, allowEarlyLap: false } })] }),
+    }) }));
+  });
+
+  it.each(['time', 'distance'] as const)('explains optional Lap on a pool-swim %s step without enabling it on timed Rest', async endingKind => {
+    const ending = endingKind === 'time' ? { kind: 'time' as const, seconds: 90 } : { kind: 'distance' as const, meters: 100 };
+    const rest = { kind: 'step' as const, id: 'rest', purpose: 'rest' as const,
+      ending: { kind: 'time' as const, seconds: 15 }, targets: [] };
+    schedule.workouts[0].structure = { version: 1, sport: ActivityTypes.Swimming, nodes: [
+      { kind: 'step', id: 'work', purpose: 'work', ending, targets: [] }, rest,
+    ] };
+    setRouteState({ mode: 'edit', workoutId: 'plan-workout' });
+    const fixture = await renderPlans();
+    const options = [...fixture.nativeElement.querySelectorAll('.early-lap-option')] as HTMLElement[];
+    const checkboxes = options.map(option => option.querySelector('input[type="checkbox"]') as HTMLInputElement);
+    const hints = options.map(option => option.querySelector('.editor-hint') as HTMLElement);
+    expect(checkboxes).toHaveLength(2);
+    expect(checkboxes.map(checkbox => checkbox.checked)).toEqual([false, false]);
+    expect(hints[0].textContent!.replace(/\s+/g, ' ').trim())
+      .toBe(`Suunto: this step ends only at the ${endingKind} limit. Lap does not start the next step.`);
+    expect(hints[1].textContent!.replace(/\s+/g, ' ').trim())
+      .toBe('Suunto: this step ends only at the time limit. Lap does not start the next step.');
+    expect(new Set(hints.map(hint => hint.id)).size).toBe(2);
+    checkboxes.forEach((checkbox, index) => expect(checkbox.getAttribute('aria-describedby')).toBe(hints[index].id));
+    checkboxes[0].click(); fixture.detectChanges();
+    expect(checkboxes.map(checkbox => checkbox.checked)).toEqual([true, false]);
+    expect(hints[0].textContent!.replace(/\s+/g, ' ').trim())
+      .toBe(`Suunto: this step ends at the ${endingKind} limit or when you press Lap.`);
+    await fixture.componentInstance.saveWorkout();
+    expect(mutate).toHaveBeenCalledWith(expect.objectContaining({ operation: expect.objectContaining({
+      kind: 'update-workout', structure: { version: 1, sport: ActivityTypes.Swimming, nodes: [
+        { kind: 'step', id: 'work', purpose: 'work', ending: { ...ending, allowEarlyLap: true }, targets: [] }, rest,
+      ] },
     }) }));
   });
 

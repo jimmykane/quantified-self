@@ -97,6 +97,9 @@ function expectPublicReadWriteRoundTrip(input: WorkoutStructureV1): void {
     structure: serialized,
   });
   expect(write).toMatchObject({ structure: input });
+  const bulk = TRAINING_WRITE_INPUTS.preview_planned_workout_v3_changes.parse({ expectedScheduleRevision: 3,
+    changes: [write] });
+  expect(bulk.changes[0]).toMatchObject({ structure: input });
 }
 
 describe('additive Garmin replacement boundary', () => {
@@ -449,6 +452,9 @@ describe('additive early Lap recipe contract', () => {
       const planned = TRAINING_WRITE_INPUTS.preview_planned_workout_v3_change.parse({ expectedScheduleRevision: 1,
         change: { kind: 'create-workout', localKey: 'swim', title: 'Swim', plan: null, localDate: '2026-10-05', structure: wire } });
       expect(planned.change).toMatchObject({ structure: input });
+      const bulk = TRAINING_WRITE_INPUTS.preview_planned_workout_v3_changes.parse({ expectedScheduleRevision: 1,
+        changes: [planned.change] });
+      expect(bulk.changes[0]).toMatchObject({ structure: input });
       const library = TRAINING_WRITE_INPUTS.preview_saved_workout_v2_change.parse({ expectedScheduleRevision: 1,
         expectedLibraryRevision: 1, change: { kind: 'create', title: 'Swim', structure: wire } });
       expect(library.change).toMatchObject({ structure: input });
@@ -461,6 +467,18 @@ describe('additive early Lap recipe contract', () => {
       distance: { kind: true, meters: true, allowEarlyLap: true },
       kilojoules: { kind: true, kilojoules: true }, repetitions: { kind: true, repetitions: true }, manual: { kind: true },
     });
+  });
+  it('bounds the full-recipe batch and rejects other actions and private fields', () => {
+    const change = { kind: 'update-workout', workout: { ref: 'opaque' }, plan: null,
+      localDate: '2026-10-12', title: 'Quality run', structure: recipe({ kind: 'time', seconds: 1200, allowEarlyLap: true }) };
+    const schema = TRAINING_WRITE_INPUTS.preview_planned_workout_v3_changes;
+    expect(schema.safeParse({ expectedScheduleRevision: 1, changes: Array.from({ length: 25 }, () => change) }).success).toBe(true);
+    for (const changes of [[], Array.from({ length: 26 }, () => change), [{ ...change, remoteId: 'private' }],
+      [{ kind: 'delete-workout', workout: { ref: 'opaque' } }],
+      [{ kind: 'provider-delivery', targetType: 'workout', target: { ref: 'opaque' }, providers: ['suunto'], action: 'send' }]]) {
+      expect(schema.safeParse({ expectedScheduleRevision: 1, changes }).success).toBe(false);
+    }
+    expect(TRAINING_WRITE_INPUTS.preview_training_changes.safeParse({ expectedScheduleRevision: 1, changes: [change] }).success).toBe(false);
   });
   it.each([null, 1, 'true', {}, undefined])('rejects an explicitly invalid numeric flag %s', allowEarlyLap => {
     expect(TRAINING_RECIPE_WITH_EARLY_LAP_SCHEMA.safeParse(recipe({ kind: 'time', seconds: 60, allowEarlyLap } as never)).success).toBe(false);

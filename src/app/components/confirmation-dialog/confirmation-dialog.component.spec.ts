@@ -57,7 +57,7 @@ describe('ConfirmationDialogComponent', () => {
   });
 
   it('should keep the connection when cancel is clicked with one selection feedback', () => {
-    const cancelButton: HTMLButtonElement = fixture.nativeElement.querySelector('button[mat-stroked-button]');
+    const cancelButton: HTMLButtonElement = fixture.nativeElement.querySelector('button[mat-button]');
     cancelButton.click();
 
     expect(dialogRefMock.close).toHaveBeenCalledExactlyOnceWith(false);
@@ -178,7 +178,12 @@ describe('ConfirmationDialogComponent', () => {
     expect(fixture.nativeElement.textContent).toContain('COROS cannot remove past workouts');
     component.onConfirm();
     expect(dialogRefMock.close).toHaveBeenLastCalledWith({ confirmed: true, removePastProviderCopies: false });
+    const before = hapticsServiceMock.selection.mock.calls.length;
+    component.onPastProviderCleanupChange(false);
+    expect(hapticsServiceMock.selection).toHaveBeenCalledTimes(before);
     component.onPastProviderCleanupChange(true);
+    component.onPastProviderCleanupChange(true);
+    expect(hapticsServiceMock.selection).toHaveBeenCalledTimes(before + 1);
     component.onConfirm();
     expect(dialogRefMock.close).toHaveBeenLastCalledWith({ confirmed: true, removePastProviderCopies: true });
   });

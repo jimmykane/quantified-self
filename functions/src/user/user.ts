@@ -1,6 +1,7 @@
 import * as functions from 'firebase-functions/v1';
 import * as logger from 'firebase-functions/logger';
 import * as admin from 'firebase-admin';
+import { newEmailDeliveryFields } from '../email/queue-metadata';
 import { FieldValue } from 'firebase-admin/firestore';
 
 
@@ -100,6 +101,7 @@ export const deleteSelf = functions
             if (userEmail) {
                 try {
                     await admin.firestore().collection('mail').doc(`account_deleted_confirmation_${uid}`).set({
+                        ...newEmailDeliveryFields(),
                         to: userEmail,
                         from: TRANSACTIONAL_EMAIL_FROM,
                         replyTo: TRANSACTIONAL_EMAIL_REPLY_TO,

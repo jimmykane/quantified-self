@@ -46,6 +46,10 @@ and tablets place the four drivers below the primary summaries instead of squeez
 minimums, not clipped or fixed heights: enlarged text and longer messages may still expand. Check loading-to-complete
 geometry around responsive breakpoints as well as ordinary desktop/phone screenshots when changing Today copy or layout.
 
+Above 720 px, Today uses tighter cell padding and smaller minimum heights for the primary summaries, four drivers,
+and optional recovery band. Phone spacing and wrapped-text reservations stay unchanged. Desktop cells still grow
+with their content; do not truncate recovery messages or HRV range details to meet the compact minimums.
+
 ## Workspace Shells
 
 Authenticated product workspaces, except Settings, use the shared `qs-workspace-page` shell from `src/styles.scss`. It
@@ -78,6 +82,33 @@ or collapse, with no feedback during route hydration or while busy.
 Background profile updates refresh untouched consent switches while preserving explicit local edits. Privacy switches
 are disabled during saving, duplicate submissions are ignored, and failed saves retain the user's choice for retry.
 
+## Dialog actions and haptic ownership
+
+Use the global Material dialog surface with `mat-dialog-title`, a bounded `mat-dialog-content` scroll owner, and
+`mat-dialog-actions`. Confirmation, account-linking, sign-in error, browser guidance and CSV export use these same
+shell conventions. Merge uses compact Material radio options with explicit stats/comparison consequences instead of
+custom selectable cards. Confirmations keep text Cancel and the themed primary/destructive action alongside each other
+when they fit on a phone; long labels wrap instead of forcing every confirmation into two full-width button rows.
+Activity deletion names the activity/selection and limits its warning to those activities, their data and original files.
+CSV export keeps its actions outside the scrolling column list and has one `ngSubmit` owner, without a duplicate
+button-click export. Its visible option labels are sufficient; redundant Include-in-export tooltips are removed so
+swiping across the labels keeps native touch scrolling.
+
+Haptics belong to the accepted user action, not the overlay opening lifecycle. Use `appHapticTap` for unconditional
+enabled dismissals such as tag-editor Cancel. Handler-owned feedback follows guards for rename submissions, merge
+choices/actions, benchmark selection/swap/alignment, account-linking methods, CSV submission and account-deletion
+acknowledgement. Material change events cover toggles and checkboxes; they do not vibrate for programmatic form
+hydration or typing. Duplicate/unchanged choices, invalid submissions and busy actions stay silent. The dialog uses
+selection feedback when returning a draft or starting an operation; the existing mutation owner retains success/error
+feedback after persistence. Destructive confirmations retain warning feedback, without pretending the deletion has
+already completed. Do not combine a directive and handler for the same action.
+
+Reuse `AppHapticsService` so unsupported devices, reduced motion, pointer type and rate limiting keep their existing
+behavior. Tests mock this service and cover initialization, no-ops, disabled actions and accepted outcomes. Browser
+checks verify control wiring, wrapping, focus and scroll ownership; actual vibration still requires a supported phone.
+These changes affect presentation and local feedback only; event, plan/workout, provider and MCP contracts remain
+unchanged.
+
 ## Dashboard unit setup
 
 The Dashboard Default units prompt uses `appSettings.unitSetupCompleted === false` and is owner-only, including
@@ -102,6 +133,35 @@ which supplies the optional `DataSwimDistance` display-unit constructor. No acti
 derived recomputation is required. MCP numeric metrics,
 `distanceMeters`/`poolLengthMeters`, scopes and strict schemas are unchanged; this does not alter planned-workout
 display or delivery. Existing Settings interaction/save behavior supplies the unit preference.
+
+`event-swim-distance-display.helper.ts` adds a conservative nominal-yard presentation for complete Suunto pool
+recordings. Every source length row must normalize successfully, so filtering malformed records cannot establish
+completeness. The activity's recorded Active Lengths count must match all active rows; every length must retain the
+same positive pool/distance, a unique ordered index/start, and numeric FIT speed/elapsed fields at their 1/1000
+resolution. The intersection of all speed-times-elapsed half-quantum bounds must support exactly one 25- or
+50-yard pool and exclude the recorded fractional pool. The native activity total must also agree with the summed
+bounds, allowing only FIT summary distance's 1/100 metre resolution. These source fields corroborate a display
+choice; they do not independently measure the physical pool. Missing, conflicting, partial, custom, zero-distance,
+unknown-length and open-water contexts keep the existing display.
+
+Length rows, rest-delimited splits and set headers pass nominal length counts to the shared display factory.
+The returned Sports Lib swim-distance instance delegates only display value/unit to a nominal amount; `getValue`,
+`getUnit` and native JSON retain the original canonical amount. Meter preferences ignore the nominal amount.
+Pace, recorded/normalized SWOLF, accumulated source statistics, streams, TSS and Training calculations never consume it.
+Lap rows, selected lap distance summaries and chart tooltips opt in only for independently corroborated laps:
+ordered non-rest sets and positive-distance laps must form a complete pairing. Any recorded active count must be
+finite and match its set; absent counts retain the independent timing/distance fallback. Centisecond timing and
+the summed speed/elapsed distance bounds must agree. Explicit rest laps never opt in.
+Selected distance averages may include recorded zero-distance laps alongside corroborated laps; their zeroes
+contribute unchanged. Missing or uncorroborated positive distances retain the existing selected-average display.
+Rounded `lapIndex` ownership is not used as proof and is not repaired by this change.
+
+This is a frontend presentation change with no persistence or MCP wire impact. The existing MCP activity-detail
+allowlist still returns recorded `distanceMeters` and `poolLengthMeters`; numeric metrics, registered schemas,
+scopes, consent, plugin guidance, provider integrations and planning/delivery capabilities remain unchanged.
+Existing eligible activity documents benefit without original files, source reparsing, a derived rebuild or a
+Sports Lib package change. Parser corrections in later library releases retain their separately authorized
+source-backed transition; this display rule does not repair stored canonical data.
 
 Event-level distance summaries classify all activities contributing to the total, even when only a swimming activity
 is selected. Summary display caches refresh when unit settings change. Merge and benchmark comparison helpers apply
@@ -143,8 +203,23 @@ recorded SWOLF, and swim/rest/total timings remain available. Membership uses th
 No 25-yard splits are synthesized: a six- or ten-length rep expands into six or ten recorded rows only if present.
 Disclosure state and temporary selection survive unit/column refreshes; controls expose expanded state and region
 IDs and emit one selection haptic per accepted toggle. Rest rows have both a label and a theme-based shade, including
-opaque pinned cells. Explicit Active Lap takes priority, then recorded length types; zero distance plus zero recorded
-stroke rate is a fallback only without that metadata, preserving active zero-stroke drills.
+opaque pinned cells. Explicit active length messages or a positive integer Active Lengths stat take priority over
+an inferred inactive Active Lap flag, including when individual length details are missing or incomplete;
+otherwise the recorded flag takes priority, then idle/rest length types. Zero distance plus zero recorded stroke
+rate is a fallback only without that metadata, preserving active zero-stroke drills.
+
+The lap table groups consecutive confirmed zero-distance rests only when their chronological windows touch without
+overlap and their lap types match. Grouping uses the complete recorded lap sequence before table filtering;
+an intervening active/unknown lap, changed type, gap, invalid date or overlapping window prevents merging.
+Each display block retains its original laps and shows their table-number range. Its disclosure reuses the lap table
+for individually selectable original rows, with existing length disclosures beneath them. Block selection is derived
+from constituent selections, including an indeterminate state; selection coverage and Selected avg still count and
+average original laps. Keys include the original complete-list index so repeated lap IDs cannot collide.
+Block duration is the sum of recorded lap durations, never lap plus length time or a substituted wall-clock span.
+Average HR is an estimate weighted by each available original lap's duration; minimum/maximum HR use the extrema.
+Partial HR coverage is visible, and unsupported aggregate metrics remain blank while their original rows are available.
+This is a presentation-only projection: stored laps, source files, chart boundaries, Training and MCP read contracts
+remain unchanged. It requires no Sports Lib change, source reparse or historical-data transition.
 
 Swimming defaults add **Total strokes** and **Normalized SWOLF** to the existing per-sport catalog. Saved lists,
 including empty lists, retain precedence. The display-only `DataNormalizedSwolf` extends Sports Lib's numeric data
@@ -266,6 +341,38 @@ QA must include genuinely overflowing content in dialogs, sheets and nested pane
 and light/dark desktop/320px views. Check computed styles, wheel/keyboard scrollability, no-overflow states and the
 existing hidden navigation exceptions; JSDOM alone cannot prove painted scrollbar size or platform touch behavior.
 
+## Firestore HTTP error responses
+
+The Firebase adapter installs `firestore-http-response-guard.ts` before browser RPCs run. The full SDK's XHR
+callback calls `getResponseJson()` on HTTP error responses without catching JSON parse failures. An empty or
+HTML gateway response can therefore escape the callback and leave the request promise pending, bypassing
+application error handling. This is separate from activity-file parsing and persisted-profile recovery.
+
+The temporary guard uses the SDK's exported `XhrIo` parser and only intercepts `SyntaxError` for HTTP errors
+with a status from 400 through 599. It returns an absent backend error object so the SDK takes its existing
+`unknown` / `Server responded with status ...` rejection path. Valid successful responses and structured
+backend errors, including permission errors, retain their original parsing and codes. Invalid successful
+responses and other exceptions remain visible. The guard adds no requests, retries, response-body logging,
+or Firestore writes; a later user/application retry can make a fresh request after a failure settles.
+
+Keep the direct `@firebase/webchannel-wrapper` dependency aligned with the full SDK's transport version.
+The DOM regression spec exercises the actual browser SDK through synthetic XHR responses, including empty
+and HTML 504s, truncated error JSON, successful filtered counts, permission failures, and subsequent recovery.
+Run it when upgrading Firebase; remove the guard once upstream rejects malformed HTTP responses itself.
+Backend queue and Cloud Monitoring coverage are unchanged because no provider, worker, queue, schedule,
+or server-side lifecycle changes. Existing application error handlers now receive the rejected promise.
+
+Calendar activity, planned-workout and workout-completion subscription failures emit `Calendar data read failed`
+through `LoggerService` to the console and Sentry. Sentry groups reports by read source and allowlisted error name/code;
+filter with `calendarReadSource`, `calendarView`, `calendarRouteMode`, `calendarErrorName` or `calendarErrorCode`.
+The diagnostic fields include whether the reader is bounded, elapsed milliseconds since starting the read and
+`navigator.onLine` (a browser connectivity hint, not proof that Firestore is reachable). Error names and Firestore
+codes use fixed allowlists; the added fields exclude raw errors/messages/stacks, query dates, owner identifiers,
+record identifiers and activity/workout contents. Sentry retains the application's existing session context.
+Each failed subscription reports once; successful reads, cancelled reads and a restore-in-progress state are silent.
+Error displays and user-triggered retries retain their existing behavior. This is app diagnostics only, with no
+change to Training planning semantics or MCP read/write contracts, scopes, projections or bundled workflows.
+
 ## Account profile recovery
 
 Firebase Auth identity and account-profile availability are separate states. Authenticated profile reads wait for
@@ -324,6 +431,28 @@ ignored for column layouts and defaults to false. The Health metric explorer use
 beside the metric list, with a minimum plot height for multi-row grids. Mobile, Highlights, and public previews
 retain their existing chart heights. The existing ECharts host observes the resized plot; no manual resize loop or
 extra padding is needed.
+
+### Lazy chart code and release bundle budgets
+
+`EChartsLoaderService` loads the core and `echarts-registrations.helper.ts` only in the browser, on chart demand.
+The helper uses ECharts' public named imports for the existing six chart types, twelve components and Canvas renderer.
+Do not dynamically import the whole `echarts/charts`, `echarts/components` or `echarts/renderers` namespaces:
+those imports retain unused installers and their code even when `core.use()` registers a smaller subset. New chart
+features must deliberately extend the named registration list and its exact-registration test. Core loading, shared
+promise caching, failed-load retry, SSR guards, theme, resize and haptic behavior remain owned by the existing loader.
+
+This is a bundling-only change, not a chart/Training metric, data contract, provider integration or MCP feature change.
+No readings, units, chart options, user preferences, scopes or consent change, and no Help changes are needed.
+Release verification must run the normal beta and production builds with the existing initial/total-script budgets
+unchanged, plus service-worker and public startup checks. An optimized local `--stats-json` build can attribute code
+when a release-budget failure prevents output emission; it is diagnostic only, not a substitute for release gates.
+
+Verification: beta and production release builds pass without changing `angular.json` budgets. Production's
+generated browser JavaScript totals 13,166,565 bytes against the 13,500,000-byte cap; the emitted graph contains
+only the registered chart families, not unused treemap/sunburst/sankey/gauge/graph installers. All 511 targeted
+chart/loader/host/public-preview tests, frontend environment/workflow/policy checks, service-worker asset checks
+and the public startup/prerender checks pass. A synthetic browser smoke test imports the production chunks and
+renders all six chart types on Canvas, including resize and connect/disconnect. No account or provider data is used.
 
 Dashboard plots, Health metric/Sleep-stage plots, and Training's readiness, power-systems,
 swimming-performance, and durability plots opt into `EChartsHostController.deferUntilNearViewport`.
@@ -610,6 +739,9 @@ separate, and the full chart initially honors the user's Health highlight source
 the dashboard are local display choices, with selection haptics; the shared chart host owns tooltip feedback. HRV uses
 the same 8px vertical and 10px header inset as Sleep, dashboard title/value typography, and a title info action.
 Only its title row reserves room for range/menu controls; date and source context can use the full content width.
+For supported nightly HRV series in multi-day views, the time axis ends at the latest reading when it falls on the
+selected final day, removing unused hours after the morning measurement. Missing final nights keep the full selected
+window. The personal-range band uses the same plotted bounds; reading timestamps, tooltips and query bounds stay intact.
 
 HRV and Sleep have independent saved date ranges and navigation; HRV uses Health's calendar-day windows. Loading, empty and
 failed reads remain explicit; incomplete Health loads do not produce a misleading personal range. While paging, the
@@ -620,8 +752,10 @@ Sleep remain independently addable/removable; HRV has no automatic tile or deriv
 
 `DashboardConfigurationService` persists owner-scoped dashboard patches through Firestore transactions. It compares the
 fields being changed against the draft baseline and refuses stale saves. Both sides use the profile hydration
-normalizer, so defaults and legacy tile migrations do not look like concurrent edits. It merges only dashboard settings, preserving
-server-managed Training settings. Existing tile resize/reorder/removal and filter/display changes use the same transaction
+normalizer, so defaults and legacy tile migrations do not look like concurrent edits. Explicit field masks replace each
+validated dashboard field as a whole, preserving other dashboard fields and server-managed Training settings. Recursive
+map merging would retain old auto-tile dismissal timestamps after an addition and falsely reject the next editor save.
+Existing tile resize/reorder/removal and filter/display changes use the same transaction
 path. No backend callable or schema migration is introduced. Latest-add Undo retains before/after values only for the
 fields in the chart write, checks those fields locally and transactionally, and preserves auto-tile dismissal when
 removing the addition. Event-table filters and dates remain untouched and cannot cause an unrelated Undo conflict.
@@ -649,6 +783,17 @@ The Health lane follows Training State and uses Health's existing catalog groups
 Health tile reads depend on owner, metric and window, independently of source selection and unit formatting.
 Changing those display choices reprojects retained evidence without resubscribing or resetting loading state.
 Persisting an automatically selected source preserves the existing chart model instead of building it twice.
+
+`health-source-selection.helper.ts` owns automatic source choice for every Health metric, Sleep overview and Health
+highlights. It ranks drawable readings in the inspected period by useful evidence, main-Sleep/canonical semantics,
+latest recorded calendar date and time, then distinct days of coverage. Activity totals and positive measurements
+with only zeros rank behind sources with non-zero readings; trailing zeros do not manufacture newer useful evidence.
+Zero stress, temperature deviations, altitude, resources, recovery and Sleep scores remain meaningful. Boolean and
+categorical states remain eligible. Zeros are never removed or rewritten, raw sample frequency and value magnitude
+never win a comparison, and exact ties retain the existing deterministic order. Provider filters bound the candidates;
+explicit sources and an eligible HRV account preference take precedence. Overview defaults remain automatic across
+refreshes until the user chooses a source; saved dashboard tile source persistence stays unchanged. These decisions
+reuse loaded evidence and do not change provider ingestion, metric calculations, stored values or MCP contracts.
 
 Health's All overview uses an explicit ordered selection: Sleep, HRV, resting heart rate, VO₂ max, weight, and steps.
 Missing metrics reduce the selection; catalog order never supplies replacement cards. Completed shared chart contexts

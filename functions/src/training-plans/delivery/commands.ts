@@ -16,7 +16,7 @@ import { DELIVERY_LEDGER, DELIVERY_RECEIPTS, DELIVERY_SCOPES, DELIVERY_STATE, re
 import { deliveryIdentity, resolveDeliveryIntent } from './intent';
 import { assessTrainingDeliveryMapping } from './mapping';
 import { stageTrainingDeliveryReconciliation } from './marker';
-import { readDeliveryContext, readStrengthDetailsForDelivery, readSuuntoGuideUnitSettings, writeDelivery } from './store';
+import { readDeliveryContext, readStrengthDetailsForDelivery, readSuuntoGuideOwnerPreferences, writeDelivery } from './store';
 import { productionDeliveryRuntime } from './runtime';
 import type { TrainingVerificationReceiptV1 } from '../../../../shared/training-provider-verification';
 import { VERIFICATION_COALESCE_MS, VERIFICATION_DAY_MS } from './verification-contracts';
@@ -111,9 +111,10 @@ export async function trainingDeliveryCommand(runtime: DeliveryRuntime, uid: str
     if (workouts.length > 400) throw new HttpsError('resource-exhausted', 'Plan exceeds the delivery limit.');
     const today = trainingDeliveryLocalDate(runtime.now(), timeZone);
     const strengths = await Promise.all(workouts.map(item => readStrengthDetailsForDelivery(tx, user, item)));
-    const suuntoUnitSettings = await readSuuntoGuideUnitSettings(tx, user, command.provider, workouts);
+    const preferences = await readSuuntoGuideOwnerPreferences(tx, user, command.provider, workouts);
+    const suuntoUnitSettings = preferences.unitSettings;
     const assessments = workouts.map((item, index) => transport?.assess(item, connection.destinationKey, timeZone,
-      strengths[index], strengths[index] ? suuntoUnitSettings?.weightUnits : undefined, suuntoUnitSettings)
+      strengths[index], strengths[index] ? suuntoUnitSettings?.weightUnits : undefined, suuntoUnitSettings, undefined, preferences.swimmingSettings)
       ?? assessTrainingDeliveryMapping(command.provider, item, connection.destinationKey, timeZone, strengths[index]));
     // No provider HTTP in previews/transactions. Only the server's current, complete
     // inspection can offer recovery; the worker independently reinspects before POST.
