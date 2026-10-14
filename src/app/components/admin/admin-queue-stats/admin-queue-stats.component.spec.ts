@@ -1117,10 +1117,10 @@ describe('AdminQueueStatsComponent', () => {
             const breakdown = host.querySelector<HTMLElement>('.activity-sync-breakdown');
             expect(breakdown?.textContent).toContain('Historical sends');
             expect(breakdown?.textContent).toContain('Manual uploads');
-            expect(breakdown?.textContent).toContain('Manual uploads are included in historical sends');
-            expect(breakdown?.querySelectorAll('dd')).toHaveLength(10);
+            expect(breakdown?.textContent).toContain('Manual uploads include retained QS originals and private temporary files');
+            expect(breakdown?.querySelectorAll('dd')).toHaveLength(15);
             expect(Array.from(breakdown?.querySelectorAll('dd') || []).map(item => item.textContent?.trim()))
-                .toEqual(['3', '5', '1', '0', '2', '1', '2', '0', 'N/A', '0']);
+                .toEqual(['3', '5', '1', '0', '2', '1', '2', '0', 'N/A', '0', 'N/A', 'N/A', 'N/A', 'N/A', 'N/A']);
             expect(host.textContent).not.toContain('Workout Ingestion');
             expect(host.textContent).not.toContain('Sleep Sync');
             expect(host.textContent).not.toContain('Event Reparse');

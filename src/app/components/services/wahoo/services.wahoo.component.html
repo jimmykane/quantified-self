@@ -143,7 +143,7 @@
         <span>Sending activities to Wahoo is a Pro feature.</span>
       </div>
       } @else if (isConnectedToService()) {
-      <app-upload-activity-to-service [user]="user" [hasProAccess]="hasProAccess" [serviceName]="serviceName"></app-upload-activity-to-service>
+      <a mat-stroked-button routerLink="/send-activities/wahoo" appHapticTap>Open activity sending workspace</a>
       <app-status-info type="info" title="Wahoo access">
         If Wahoo was connected before activity sending was available, reconnect it once to grant workout write access.
       </app-status-info>

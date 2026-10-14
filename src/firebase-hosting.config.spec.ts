@@ -365,11 +365,11 @@ describe('Firebase Hosting configuration', () => {
     expect(sitemapLastmodForUrl(`${siteOrigin}/features/fit-gpx-tcx-file-analyzer`)).toBe('2026-09-02');
     expect(sitemapXml).not.toContain(`${siteOrigin}/features/workout-file-comparison`);
     expect(sitemapXml).not.toContain(`${siteOrigin}/features/sports-watch-benchmark`);
-    // Help includes the dialog feedback and safe haptic behavior guidance.
-    // Calmer overview help, including independent source attribution and HRV average/latest wording, is in this revision.
+    // Help includes activity sending and the latest Health, recovery and haptic guidance.
+    // Calmer overview help includes independent source attribution and HRV average/latest wording.
     expect(sitemapLastmodForUrl(`${siteOrigin}/help`)).toBe('2026-10-15');
-    expect(sitemapLastmodForUrl(`${siteOrigin}/policies`)).toBe('2026-10-07');
-    expect(sitemapLastmodForUrl(`${siteOrigin}/privacy`)).toBe('2026-10-07');
+    expect(sitemapLastmodForUrl(`${siteOrigin}/policies`)).toBe('2026-10-14');
+    expect(sitemapLastmodForUrl(`${siteOrigin}/privacy`)).toBe('2026-10-14');
     expect(sitemapLastmodForUrl(`${siteOrigin}/terms`)).toBe('2026-10-07');
   });
 

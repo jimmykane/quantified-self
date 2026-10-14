@@ -318,7 +318,7 @@ describe('ServicesCorosComponent', () => {
         expect(fixture.nativeElement.querySelector('.connection-disconnect-button')).toBeFalsy();
         expect(fixture.nativeElement.querySelector('.qs-mat-primary')?.textContent).toContain('Connect');
         expect(fixture.nativeElement.querySelector('app-history-import-form')).toBeFalsy();
-        expect(fixture.nativeElement.querySelector('app-upload-activity-to-service')).toBeFalsy();
+        expect(fixture.nativeElement.querySelector('a[href="/send-activities/coros"]')).toBeFalsy();
     });
 
     it('discards a missing-connection error from a check that raced a completed disconnect', async () => {
@@ -843,7 +843,7 @@ describe('ServicesCorosComponent', () => {
         expect(fixture.nativeElement.querySelector('.connected-account-item')).toBeTruthy();
         expect(fixture.nativeElement.querySelector('.connection-disconnect-button')).toBeTruthy();
         expect(fixture.nativeElement.querySelector('app-history-import-form')).toBeFalsy();
-        expect(fixture.nativeElement.querySelector('app-upload-activity-to-service')).toBeFalsy();
+        expect(fixture.nativeElement.querySelector('a[href="/send-activities/coros"]')).toBeFalsy();
         expect(fixture.nativeElement.querySelector('app-upload-route-to-service')).toBeFalsy();
     });
 
@@ -933,12 +933,12 @@ describe('ServicesCorosComponent', () => {
             component.serviceTokens = [{ accessToken: 'coros-token', openId: 'coros-user' } as any];
             fixture.detectChanges();
 
-            const uploadComponent = fixture.nativeElement.querySelector('app-upload-activity-to-service');
+            const uploadComponent = fixture.nativeElement.querySelector('a[href="/send-activities/coros"]');
             const routeUploadComponent = fixture.nativeElement.querySelector('app-upload-route-to-service');
             const content = fixture.nativeElement.textContent;
             expect(uploadComponent).toBeTruthy();
             expect(routeUploadComponent).toBeTruthy();
-            expect(content).toContain('Upload FIT Activity');
+            expect(content).toContain('Send activities');
             expect(content).toContain('Upload GPX or FIT Route');
         });
 
@@ -948,7 +948,7 @@ describe('ServicesCorosComponent', () => {
             component.serviceTokens = [{ accessToken: 'coros-token', openId: 'coros-user' } as any];
             fixture.detectChanges();
 
-            expect(fixture.nativeElement.querySelector('app-upload-activity-to-service')).toBeTruthy();
+            expect(fixture.nativeElement.querySelector('a[href="/send-activities/coros"]')).toBeTruthy();
             expect(fixture.nativeElement.querySelector('app-upload-route-to-service')).toBeTruthy();
             expect(fixture.nativeElement.textContent).toContain('Upload GPX or FIT Route');
         });

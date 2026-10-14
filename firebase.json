@@ -122,6 +122,8 @@
           "source": "/services",
           "headers": [{ "key": "X-Robots-Tag", "value": "noindex, nofollow" }]
         },
+        { "source": "/send-activities", "headers": [{ "key": "X-Robots-Tag", "value": "noindex, nofollow" }] },
+        { "source": "/send-activities/**", "headers": [{ "key": "X-Robots-Tag", "value": "noindex, nofollow" }] },
         {
           "source": "/dashboard",
           "headers": [{ "key": "X-Robots-Tag", "value": "noindex, nofollow" }]
@@ -347,6 +349,8 @@
           "source": "/services",
           "destination": "/index.csr.html"
         },
+        { "source": "/send-activities", "destination": "/index.csr.html" },
+        { "source": "/send-activities/*", "destination": "/index.csr.html" },
         {
           "source": "/dashboard",
           "destination": "/index.csr.html"
@@ -687,6 +691,8 @@
           "source": "/services",
           "destination": "/index.csr.html"
         },
+        { "source": "/send-activities", "destination": "/index.csr.html" },
+        { "source": "/send-activities/*", "destination": "/index.csr.html" },
         {
           "source": "/dashboard",
           "destination": "/index.csr.html"

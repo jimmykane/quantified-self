@@ -1,3 +1,4 @@
+import { ActivitySendService } from './services/activity-send.service';
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { signal } from '@angular/core';
 import { describe, it, expect, beforeEach, vi } from 'vitest';
@@ -111,6 +112,7 @@ describe('AppShellComponent', () => {
                 RouterTestingModule
             ],
             providers: [
+                { provide: ActivitySendService, useValue: {} },
                 { provide: AppAuthService, useValue: mockAppAuthService },
                 { provide: Router, useValue: mockRouter },
                 { provide: ActivatedRoute, useValue: mockActivatedRoute },

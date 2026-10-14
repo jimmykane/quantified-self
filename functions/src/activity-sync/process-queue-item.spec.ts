@@ -1883,6 +1883,14 @@ describe('activity-sync/process-queue-item', () => {
     );
   });
 
+  it('requires explicit workspace retry after provider-confirmed processing failure', async () => {
+    const queueItem: ActivitySyncQueueItemInterface = { ...baseQueueItem, routeId: ACTIVITY_SYNC_ROUTE_IDS.GarminAPI_to_COROSAPI, destinationServiceName: ServiceNames.COROSAPI, destinationUploadID: 'accepted-id', destinationProviderUserID: 'coros-user-1', sendBatchID: 'reviewed-batch', sendRowID: 'row', retryCount: 1, ref: {} as NonNullable<ActivitySyncQueueItemInterface['ref']> };
+    mockGetCOROSActivityUploadStatus.mockRejectedValueOnce(new ProviderOperationError({ serviceName: ServiceNames.COROSAPI, operation: 'activity_upload_status', disposition: 'retryable', retryMode: 'restart', code: 'provider-processing-failed', message: 'Synthetic failed processing.', providerStatus: -1, providerUserId: 'coros-user-1', providerOperationId: 'accepted-id' }));
+    expect(await processActivitySyncQueueItem(queueItem)).toBe(QueueResult.Processed);
+    expect(mockUploadActivityFileToCOROS).not.toHaveBeenCalled();
+    expect(mockIncreaseRetryCountForQueueItem).not.toHaveBeenCalled();
+    expect(mockUpdateQueueItemIfUserActive).toHaveBeenCalledWith(expect.objectContaining({ updateData: expect.objectContaining({ resultStatus: 'skipped', sendConfirmedFailure: true }) }));
+  });
   it('restarts a confirmed COROS processing failure on the original account, then polls the new upload', async () => {
     const queueItem: ActivitySyncQueueItemInterface = {
       ...baseQueueItem,

@@ -99,6 +99,8 @@
             </span>
           </button>
 
+          @if (canSendOwnedActivities) { <button mat-button class="bulk-action-button" (click)="$event.preventDefault(); $event.stopPropagation(); sendToService()"><mat-icon>send</mat-icon><span>Send to service</span></button> }
+
           <button mat-button color="warn"
             class="bulk-action-button"
             [attr.aria-label]="'Delete ' + selection.selected.length + ' ' + (selection.selected.length === 1 ? 'activity' : 'activities')"

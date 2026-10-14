@@ -31,7 +31,10 @@ export interface EnqueueActivitySyncQueueItemParams {
     sourceActivityID?: string;
     originalFile: ActivitySyncOriginalFileMetadata;
     manual: boolean;
-    deliveryMode?: 'automatic' | 'historical';
+    deliveryMode?: 'automatic' | 'historical' | 'direct';
+    sendBatchID?: string;
+    sendRowID?: string;
+    destinationPinnedProviderUserID?: string;
 }
 
 export interface EnqueueActivitySyncQueueItemResult {
@@ -132,7 +135,11 @@ export async function enqueueActivitySyncQueueItem(
     const metadataRef = db.doc(`users/${params.userID}/events/${params.eventID}/metaData/${getActivitySyncMetadataDocId(params.routeId)}`);
     const decision = await db.runTransaction(async (transaction): Promise<QueueInsertDecision> => {
         const existingSnapshot = await transaction.get(queueDocRef);
-        const metadataSnapshot = await transaction.get(metadataRef);
+        const metadataSnapshot = params.deliveryMode === 'direct' ? null : await transaction.get(metadataRef);
+        if (params.sendBatchID) {
+            const send = await transaction.get(db.doc(`users/${params.userID}/activitySendOperations/${params.sendBatchID}`));
+            if (send.data()?.state !== 'confirmed' || send.data()?.stopped === true) return { enqueued: false, queueItemId, reason: 'already_processed' };
+        }
         let deletionGuard;
         try {
             deletionGuard = await getUserDeletionGuardStateInTransaction(db, transaction, params.userID);
@@ -148,15 +155,16 @@ export async function enqueueActivitySyncQueueItem(
             };
         }
 
-        if (metadataSnapshot.data()?.status === 'success') {
+        if (metadataSnapshot?.data()?.status === 'success') {
             return { enqueued: false, queueItemId, reason: 'already_processed' };
         }
 
         if (existingSnapshot.exists) {
             const existingData = existingSnapshot.data() as Partial<ActivitySyncQueueItemInterface>;
+            if (params.sendBatchID && (existingData.destinationUploadID || existingData.providerOperationStartedAt)) return { enqueued: false, queueItemId, reason: 'already_processed' };
             if (!existingData.processed) {
                 if (!(params.manual === true && params.deliveryMode === 'historical'
-                    && canPromotePendingActivitySyncQueueItem(existingData)
+                    && !existingData.sendBatchID && canPromotePendingActivitySyncQueueItem(existingData)
                     && existingData.routeId === params.routeId
                     && existingData.userID === params.userID
                     && existingData.eventID === params.eventID
@@ -206,7 +214,7 @@ export async function enqueueActivitySyncQueueItem(
             totalRetryCount: 0,
             errors: [],
             dispatchedToCloudTask: null,
-            expireAt: getExpireAtTimestamp(TTL_CONFIG.QUEUE_ITEM_IN_DAYS),
+            expireAt: getExpireAtTimestamp(params.sendBatchID ? 30 : TTL_CONFIG.QUEUE_ITEM_IN_DAYS),
             routeId: params.routeId,
             sourceServiceName: params.sourceServiceName,
             destinationServiceName: params.destinationServiceName,
@@ -217,6 +225,7 @@ export async function enqueueActivitySyncQueueItem(
             manual: params.manual === true,
             ...(params.deliveryMode ? { deliveryMode: params.deliveryMode } : {}),
             outboundFingerprintID: null,
+            ...(params.sendBatchID ? { sendBatchID: params.sendBatchID, sendRowID: params.sendRowID, destinationPinnedProviderUserID: params.destinationPinnedProviderUserID } : {}),
         };
 
         transaction.set(queueDocRef, queueItem);

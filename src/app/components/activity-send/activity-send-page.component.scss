@@ -1,0 +1,10 @@
+.activity-send-page { display: grid; gap: 20px; }
+header p, .send-row p { color: var(--mat-sys-on-surface-variant); }
+h1, h2 { margin: 0 0 8px; }
+.dropzone { border: 1px dashed var(--mat-sys-outline-variant); border-radius: 8px; padding: 24px; text-align: center; }
+.saved-selection, .batch-actions, .row-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; }
+.send-row { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) auto; gap: 16px; border-bottom: 1px solid var(--mat-sys-outline-variant); padding: 16px 0; overflow-wrap: anywhere; }
+.send-row p { margin: 4px 0; font: var(--mat-sys-body-small); }
+.error { color: var(--mat-sys-error); }
+.recent-send { display: block; max-width: 100%; height: auto; min-height: 48px; white-space: normal; text-align: left; }
+@media (max-width: 720px) { .send-row { grid-template-columns: minmax(0, 1fr); gap: 8px; } mat-form-field { width: 100%; } .batch-actions { flex-direction: column; align-items: stretch; } }

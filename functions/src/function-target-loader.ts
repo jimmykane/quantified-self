@@ -72,6 +72,12 @@ const TARGET_LOADERS: Readonly<Record<string, ModuleLoader>> = Object.freeze({
     () => module.require('./routes/rejected-original-cleanup') as FunctionModule,
   cleanupEventFile:
     () => module.require('./events/cleanup') as FunctionModule,
+  activitySendCommand: () => module.require('./activity-send/commands') as FunctionModule,
+  uploadActivitySendFile: () => module.require('./activity-send/upload') as FunctionModule,
+  admitActivitySend: () => module.require('./activity-send/lifecycle') as FunctionModule,
+  projectActivitySendDelivery: () => module.require('./activity-send/lifecycle') as FunctionModule,
+  cleanupActivitySends: () => module.require('./activity-send/lifecycle') as FunctionModule,
+  cleanupActivitySendOnDelete: () => module.require('./activity-send/lifecycle') as FunctionModule,
   uploadActivity:
     () => module.require('./events/upload-activity') as FunctionModule,
   fanOutSuuntoHealthWebhookIngress:

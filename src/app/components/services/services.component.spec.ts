@@ -712,13 +712,13 @@ describe('ServicesComponent', () => {
 
     it('maps provider overview cards to distinct tools', () => {
         expect(component.serviceOverviewCardsBySection.garmin.map(card => card.tool)).toEqual(['history', 'history', 'uploads', 'auto-sync']);
-        expect(component.serviceOverviewCardsBySection.suunto.map(card => card.tool)).toEqual(['history', 'history', 'routes', 'uploads', 'historical-send', 'activity-sync']);
+        expect(component.serviceOverviewCardsBySection.suunto.map(card => card.tool)).toEqual(['history', 'history', 'routes', 'send-activities', 'historical-send', 'activity-sync', 'uploads']);
         expect(component.serviceOverviewCardsBySection.suunto[3].description)
-            .toBe('Send FIT activity files or GPX/FIT route files to the Suunto app.');
-        expect(component.serviceOverviewCardsBySection.coros.map(card => card.tool)).toEqual(['history', 'history', 'uploads', 'historical-send', 'auto-sync']);
+            .toBe('Review local FIT files or saved activities and send them to Suunto in the background.');
+        expect(component.serviceOverviewCardsBySection.coros.map(card => card.tool)).toEqual(['history', 'history', 'send-activities', 'historical-send', 'auto-sync', 'uploads']);
         expect(component.serviceOverviewCardsBySection.coros[2].description)
             .toBe('Send a FIT activity directly to COROS without adding it to your Quantified Self archive.');
-        expect(component.serviceOverviewCardsBySection.wahoo.map(card => card.tool)).toEqual(['history', 'uploads', 'historical-send', 'auto-sync']);
+        expect(component.serviceOverviewCardsBySection.wahoo.map(card => card.tool)).toEqual(['history', 'send-activities', 'historical-send', 'auto-sync', 'uploads']);
     });
 
     it('does not repeat the Pro plan in provider feature details', () => {
@@ -901,13 +901,13 @@ describe('ServicesComponent', () => {
         const activePanel = fixture.nativeElement.querySelector('[aria-label="Suunto App"]');
         const manageButtons = activePanel.querySelectorAll('.service-overview-card button') as NodeListOf<HTMLButtonElement>;
 
-        expect(manageButtons).toHaveLength(6);
+        expect(manageButtons).toHaveLength(7);
         expect(activePanel.textContent).toContain('Sleep & 24/7 Health history');
         expect(activePanel.textContent).toContain('Backfill Suunto sleep and available 24/7 Health metrics.');
         expect(activePanel.textContent).toContain('Historical Sleep and 24/7 Health backfill · 7-day cooldown');
         expect(manageButtons[1].getAttribute('aria-label')).toBe('Import history for Suunto');
         expect(manageButtons[2].getAttribute('aria-label')).toBe('Route sync settings for Suunto');
-        expect(manageButtons[3].getAttribute('aria-label')).toBe('Upload files for Suunto');
+        expect(manageButtons[3].getAttribute('aria-label')).toBe('Send activities for Suunto');
         expect(manageButtons[4].getAttribute('aria-label')).toBe('Send past activities for Suunto');
         expect(manageButtons[5].getAttribute('aria-label')).toBe('Activity sync settings for Suunto');
 
@@ -925,15 +925,15 @@ describe('ServicesComponent', () => {
         dialogClosed$.next();
         manageButtons[3].click();
 
-        expect(component.managedService).toBe('suunto');
-        expect(component.managedTool).toBe('uploads');
-        expect(component.managedToolTitle).toBe('Upload activities and routes');
+        expect(component.managedService).toBeNull();
+        expect(component.managedTool).toBe('history');
+        expect(TestBed.inject(Router).navigate).toHaveBeenCalledWith(['/send-activities', 'suunto'], { queryParams: { source: 'files' } });
 
         dialogClosed$.next();
         manageButtons[4].click();
 
-        expect(component.managedService).toBe('suunto');
-        expect(component.managedTool).toBe('historical-send');
+        expect(component.managedService).toBeNull();
+        expect(TestBed.inject(Router).navigate).toHaveBeenCalledWith(['/send-activities', 'suunto'], { queryParams: { source: 'saved' } });
 
         dialogClosed$.next();
         manageButtons[5].click();
@@ -950,7 +950,7 @@ describe('ServicesComponent', () => {
         const activePanel = fixture.nativeElement.querySelector('.service-detail[aria-label="COROS"]');
         const manageButtons = activePanel.querySelectorAll('.service-overview-card button') as NodeListOf<HTMLButtonElement>;
 
-        expect(manageButtons).toHaveLength(5);
+        expect(manageButtons).toHaveLength(6);
         expect(activePanel.textContent).toContain('Sleep & daily Health history');
         expect(activePanel.textContent).toContain('Backfill COROS sleep and available daily Health metrics.');
         expect(activePanel.textContent).toContain('Historical Sleep and daily Health backfill · 7-day cooldown');

@@ -195,6 +195,19 @@ describe('EventActionsComponent', () => {
         fixture.detectChanges();
     });
 
+    it('opens an owned activity selection without starting provider delivery', async () => {
+        component.user = { uid: 'test-user' } as any;
+        component.event = { getID: () => 'owned-event' } as any;
+        await component.sendToService();
+        expect(mockRouter.navigate).toHaveBeenCalledWith(['/send-activities'], { queryParams: { source: 'saved' }, state: { activitySendSelection: ['owned-event'], activitySendOwner: 'test-user' } });
+        expect(mockHapticsService.selection).toHaveBeenCalledOnce();
+    });
+    it('does not send a shared activity owned by another account', async () => {
+        component.user = { uid: 'other-user' } as any;
+        await component.sendToService();
+        expect(mockRouter.navigate).not.toHaveBeenCalled();
+        expect(mockHapticsService.selection).not.toHaveBeenCalled();
+    });
     it('should create', () => {
         expect(component).toBeTruthy();
         expect(mockHapticsService.selection).not.toHaveBeenCalled();

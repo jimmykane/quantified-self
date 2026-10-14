@@ -137,6 +137,15 @@ service cloud.firestore {
          allow read, write: if false;
       }
 
+      // Delivery projections contain display fields only; authority stays server-owned.
+      match /activitySends/{batchID} {
+        allow read: if isOwner();
+        allow write: if false;
+        match /rows/{rowID} { allow read: if isOwner(); allow write: if false; }
+      }
+      match /activitySendOperations/{batchID}/{path=**} { allow read, write: if false; }
+      match /activitySendQuota/{quotaID} { allow read, write: if false; }
+
       // System Status (Admin Only)
       match /system/status {
          allow read: if request.auth.uid == userID;

@@ -143,7 +143,7 @@ async function getAdminCloudTaskQueueStats(queueId: string): Promise<CloudTaskQu
 async function getActivitySyncBreakdownStats(
     db: admin.firestore.Firestore,
     field: 'deliveryMode' | 'sourceServiceName',
-    value: 'historical' | 'manualUpload',
+    value: 'historical' | 'direct' | 'manualUpload',
 ): Promise<ActivitySyncBreakdownStats> {
     const queue = db.collection(ACTIVITY_SYNC_QUEUE_COLLECTION_NAME).where(field, '==', value);
     const failed = db.collection('failed_jobs')
@@ -567,9 +567,10 @@ export const getQueueStats = onAdminCall<GetQueueStatsRequest, QueueStatsRespons
             '8-9': activitySyncRetry8to9Snap?.data().count || 0,
         };
         const activitySyncThroughput = activitySyncThroughputSnap?.data().count || 0;
-        const [historicalActivitySync, manualUploadActivitySync] = await Promise.all([
+        const [historicalActivitySync, manualUploadActivitySync, directActivitySync] = await Promise.all([
             getActivitySyncBreakdownStats(db, 'deliveryMode', 'historical'),
             getActivitySyncBreakdownStats(db, 'sourceServiceName', 'manualUpload'),
+            getActivitySyncBreakdownStats(db, 'deliveryMode', 'direct'),
         ]);
         let activitySyncMaxLagMs = 0;
         const activitySyncOldestPendingDate = activitySyncOldestPendingSnap?.empty === false
@@ -1229,6 +1230,7 @@ export const getQueueStats = onAdminCall<GetQueueStatsRequest, QueueStatsRespons
                 breakdowns: {
                     historical: historicalActivitySync,
                     manualUploads: manualUploadActivitySync,
+                    directFiles: directActivitySync,
                 },
                 dlqByContext: activitySyncByContext,
                 advanced: {

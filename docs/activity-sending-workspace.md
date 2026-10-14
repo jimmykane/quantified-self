@@ -1,0 +1,56 @@
+# Activity sending workspace
+
+`/send-activities` and `/send-activities/{suunto,coros,wahoo}` are authenticated, noindex workspaces for recorded activities. The page is viewable without Pro; preparing and starting delivery require the backend's real Pro entitlement, including its existing grace policy. Lapsed owners can read results, remove draft files, stop unstarted work, and check accepted operations. Existing automatic sync settings, historical callables and direct-upload endpoints remain compatible. Route/course uploads remain in Connections.
+
+## Review and delivery
+
+Choose one destination and either local FIT/FIT.gz files or saved QS activities. Connections, an owned activity's actions, and the dashboard's selection toolbar link here. Selection never sends automatically. The destination account is pinned privately when the draft is created and checked again before confirmation. Reconnecting a different account requires a new draft.
+
+Local bytes are validated server-side as complete recorded FIT, with bounded gzip expansion and sport/category warnings. They become a private temporary source, without creating an event, archive metadata, or automatic-sync setting. Limits are 50 local files per batch, 20 MiB compressed and expanded per file, and 200 MiB reserved temporary storage per owner. SHA-256 identity and an immutable Storage generation make staging retries idempotent. Failed transfers keep the reservation until removal or expiry; reselecting the same file resumes it. Files removed from a draft require a new draft to be selected again.
+
+Saved selections accept up to 50 explicit event IDs, or sources and inclusive ISO date bounds generated from the user's local calendar days. Date-range scans use bounded 50-event pages and an opaque server-owned cursor. Each original must pass the existing owner/provenance/generation eligibility boundary, plus this workspace's size and recording checks. Excluded originals receive an explanatory row. Merged/derived events and unsupported or missing originals do not become queue work. The workspace neither exports synthesized event data nor rewrites retained originals.
+
+The prepared revision must be explicitly confirmed. The private operation write admits bounded pages through retry-enabled Firestore triggers, reusing `activitySyncQueue` and its existing task dispatcher, leases, rate limits, fingerprints and provider workers. Local sources use `deliveryMode: direct`; saved sources use `historical`. No new queue or provider credentials are introduced. Queue linkage is private. A background projection rereads current queue state and publishes a strict allowlist of display fields. Duplicate trigger delivery cannot inflate finished counts.
+
+The finished count includes delivered, duplicate/excluded, stopped and needs-action rows. It is not a success percentage. Transfer progress measures bytes; waiting for provider processing has no invented percentage. Global processing jobs survive page navigation and are reconciled from confirmed operations separately from recent-history reads.
+
+| State/recovery | Behavior |
+| --- | --- |
+| Preparing / ready | Private staging and review; no provider delivery yet |
+| Queued / sending | Durable admission or a claimed provider operation |
+| Waiting for provider | Accepted operation; poll its retained upload identifier |
+| Delivered / already exists | Provider-confirmed result, distinct from HTTP acknowledgement |
+| Connection issue / Pro lapse | Review Connections or restore Pro. Resume sending is permitted only for an unclaimed, unaccepted original within its source window and reviewed account; accepted identifiers stay protected |
+| Check status | Resume the existing accepted operation, including after Pro lapse |
+| Retry sending | Available only after a typed provider status response confirms processing failed, within the source window, with current Pro |
+| Acceptance unknown | Requires checking the provider; no automatic or manual workspace resend |
+| Stop unsent | Atomically stop only rows without an operation claim or accepted identifier |
+
+A new batch cannot overwrite a claimed/accepted delivery for the same source and destination. Already admitted work retains its pinned account. A status check on an active operation does not dispatch another task; restarting a terminal status check creates a new task generation without changing its upload ID. Explicit restart after confirmed failure is the only workspace command that clears that operation's IDs. Existing automatic delivery's restart policy is unchanged.
+
+## Persistence and cleanup
+
+- `users/{uid}/activitySends/{id}` and its `rows`: owner-readable display projection, server-write-only, available independently of subscription. These contain no provider IDs, file paths, digests, credentials, continuation URLs, or raw errors.
+- `users/{uid}/activitySendOperations/{id}` and `rows`: server-only account pin, cursor, reservations, original provenance, queue references and expiry.
+- `users/{uid}/activitySendQuota/current`: server-only transactional byte reservation.
+- `users/{uid}/activitySendSources/{batch}/{row}.fit`: private immutable temporary local bytes. Existing Storage rules permit owner reads and deny client writes; public event sharing does not expose this prefix.
+
+Unconfirmed drafts expire after 24 hours. Confirmed local sources are usable for seven days; delivered/stopped sources are removed earlier. Hourly cleanup removes expired objects with exact generation checks, releases reservations idempotently and prevents unclaimed expired work from starting. Accepted uploads retain their provider identifiers and can finish without the source. Display/private batch trees are recursively pruned 30 days from creation. Scheduled cleanup failures can delay physical deletion; the expiry boundary still blocks new temporary-source reads. Retained saved-event originals follow their existing archive retention policy and are never deleted by this feature.
+
+Every mutation transaction checks the existing user root and deletion tombstone. Background writers no-op for deleted/deleting accounts. Account deletion additionally deletes the exact feature Storage prefix; staging finishing after deletion cannot adopt its source. The user-data extension recursively removes the two user-owned Firestore trees. Workspace queue records retain accepted-operation identifiers for 30 days, matching display history; legacy queue records keep their existing TTL. Both use existing account queue cleanup.
+
+## Backend and MCP impact
+
+The callable is an internal versioned command union: create, prepare, confirm, remove, stop, check, retry. The HTTP endpoint accepts authenticated/AppCheck-verified binary FIT staging with a fixed header contract. Backend ownership is required for byte parsing, immutable source/quota reservation, private account/provenance inspection, and admission/status/retry authority. SDK listeners read only display projections; clients cannot write operations or quotas.
+
+MCP impact: no new tools, scopes, consent, metrics, Assistant access, or provider-delivery mutation is exposed. Existing event reads continue to see archived activities only. Training plans and planned-workout provider delivery are unaffected. Future MCP activity sending requires its own focused proposal/confirmation and consent review; possession of existing activity or Training grants does not authorize it.
+
+## Operations and release boundary
+
+The Admin activity queue separates historical sends, manual origins and direct temporary files. The [delivery monitoring bundle](activity-delivery-monitoring.md) includes fixed `direct` mode, explicit confirmed processing failures, bounded dispatcher observation and hourly source-cleanup failures. No identifiers or raw error strings enter its labels. Admission/projection triggers use retry-enabled Firestore delivery; native function error/latency logs remain their diagnosis surface.
+
+Release requires separate approval for Functions, Rules, indexes and Hosting deployment, and applying the monitoring bundle. Configure the collection-group `activitySendOperations.cleanupAfter` index before the cleanup scheduler runs. New exports have direct loader ownership and trigger-contract checks; no new secrets are required. Follow existing deployment safety commands and read back metrics/policies after activation. Implementation tests use demo emulators and synthetic recordings; they do not call fitness providers or mutate production.
+
+## Follow-up product ideas
+
+Consider an account selector and account-scoped delivery history if multiple destination accounts become a supported product workflow. Existing success/queue deduplication remains scoped to the service and original; reconnecting another account does not reset previous delivery history. Add provider deep links only when a confirmed operation returns a trustworthy recording URL. Older-send search/filtering and an explicit completion recap could improve large histories without treating the finished count as a success metric. Broader file-format export should remain an explicit, reviewed conversion workflow rather than silently synthesizing a recording from QS data.

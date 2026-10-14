@@ -1,0 +1,84 @@
+<main class="qs-workspace-page activity-send-page">
+  <header>
+    <h1>Send activities</h1>
+    <p>Send recorded activities to Suunto, COROS, or Wahoo. Confirmed sends continue after you leave this page.</p>
+    <a mat-button routerLink="/services" appHapticTap><mat-icon>hub</mat-icon>Manage connections</a>
+  </header>
+  <mat-form-field appearance="outline">
+    <mat-label>Destination</mat-label>
+    <mat-select [value]="provider()" (selectionChange)="chooseProvider($event.value)" [disabled]="busy()">
+      @for (option of providerOptions; track option) { <mat-option [value]="option">{{ option === 'coros' ? 'COROS' : option === 'suunto' ? 'Suunto' : 'Wahoo' }}</mat-option> }
+    </mat-select>
+  </mat-form-field>
+  @if (!users.hasProAccessSignal()) {
+    <section aria-label="Pro required"><p>Sending activities is a Pro feature. Your previous results remain available.</p><a mat-flat-button routerLink="/subscriptions" appHapticTap>Explore Pro</a></section>
+  }
+  @if (provider()) {
+    <mat-button-toggle-group aria-label="Activity source" [value]="source()" (change)="chooseSource($event.value)" [disabled]="busy() || sends.batch()?.state === 'confirmed'">
+      <mat-button-toggle value="files">Local files</mat-button-toggle><mat-button-toggle value="saved">Saved activities</mat-button-toggle>
+    </mat-button-toggle-group>
+    @if (users.hasProAccessSignal() && (!sends.batch() || sends.batch()?.state === 'draft')) {
+      @if (source() === 'files') {
+        <section class="dropzone" (dragover)="preventDrop($event)" (drop)="addFiles($event)">
+          <button mat-flat-button class="qs-mat-primary" (click)="filePicker.click()" [disabled]="busy()" appHapticTap>Choose FIT files</button>
+          <input #filePicker type="file" accept=".fit,.fit.gz" multiple hidden (change)="addFiles($event)">
+          <p>Or drop FIT / FIT.gz files here. Up to 50 files per batch; 20 MiB per expanded file.</p>
+          <p>Files are held privately for up to seven days for delivery and retries. They are not added to your QS activity archive.</p>
+        </section>
+      } @else {
+        <section aria-label="Choose saved activities" class="saved-selection">
+          @if (sends.selection().length) { <p>{{ sends.selection().length }} selected activities will be checked.</p><button mat-button [disabled]="busy()" (click)="clearSelection()">Choose a date range instead</button> }
+          @else {
+            <mat-form-field appearance="outline"><mat-label>From</mat-label><input matInput type="date" [(ngModel)]="startDate" (ngModelChange)="invalidateSaved()" [disabled]="busy()"></mat-form-field>
+            <mat-form-field appearance="outline"><mat-label>To</mat-label><input matInput type="date" [(ngModel)]="endDate" (ngModelChange)="invalidateSaved()" [disabled]="busy()"></mat-form-field>
+          }
+          <mat-form-field appearance="outline"><mat-label>Activity sources</mat-label><mat-select multiple [value]="savedSources" (selectionChange)="changeSavedSources($event.value)" [disabled]="busy()">
+            @for (option of sourceOptions; track option) { <mat-option [value]="option">{{ option === 'manualUpload' ? 'Uploaded to QS' : option }}</mat-option> }
+          </mat-select><mat-hint>All sources when empty</mat-hint></mat-form-field>
+          <button mat-stroked-button (click)="previewSaved()" [disabled]="busy()">Preview saved activities</button>
+          <p>Retained FIT originals are eligible. Merged activities, unsupported originals, and previous deliveries are excluded.</p>
+        </section>
+      }
+    }
+    @if (transfer()) { <div role="status" aria-live="polite">Preparing {{ transfer().name }} · {{ transfer().progress }}%<mat-progress-bar mode="determinate" [value]="transfer().progress"></mat-progress-bar></div> }
+    @if (busy() && !transfer()) { <p role="status"><mat-progress-bar mode="indeterminate"></mat-progress-bar>Checking your selection…</p> }
+    @if (error() || sends.readError()) { <p class="error" role="alert">{{ error() || sends.readError() }}</p> }
+    @if (sends.batch(); as batch) {
+      <section aria-label="Activity send review">
+        <h2>{{ batch.state === 'draft' ? 'Review before sending' : 'Delivery results' }}</h2>
+        <p>{{ batch.accountLabel }} · {{ batch.finished }}/{{ batch.total }} finished</p>
+        @for (row of sends.rows(); track row.id) {
+          <article class="send-row">
+            <div><strong>{{ row.name }}</strong><p>{{ row.sport || 'Recorded activity' }} @if (row.startDate) { · {{ row.startDate | date:'medium' }} } @if (row.size) { · {{ row.size / 1048576 | number:'1.1-1' }} MiB }</p>
+              @for (warning of row.warnings; track warning) { <p>{{ warning }}</p> }
+            </div>
+            <div role="status" aria-live="polite"><strong>{{ statusLabels[row.status] }}</strong><p>{{ row.message }}</p></div>
+            <div class="row-actions">
+              @if (batch.state === 'draft' && !batch.reviewed && readyCount() && users.hasProAccessSignal()) { <button mat-stroked-button [disabled]="busy()" (click)="reviewFiles()">Review prepared activities</button> }
+          @if (batch.state === 'draft') { <button mat-button (click)="rowAction(row, 'remove')" [disabled]="busy()">Remove</button> }
+              @if (row.recovery === 'check_status') { <button mat-button (click)="rowAction(row, 'check')" [disabled]="busy()">Check status</button> }
+              @if (row.recovery === 'retry_send' && users.hasProAccessSignal()) { <button mat-button (click)="rowAction(row, 'retry')" [disabled]="busy()">Retry sending</button> }
+              @if ((row.recovery === 'reconnect' || row.recovery === 'upgrade') && users.hasProAccessSignal()) { <button mat-button (click)="rowAction(row, 'retry')" [disabled]="busy()">Resume sending</button> }
+              @if (row.recovery === 'reconnect') { <a mat-button routerLink="/services" appHapticTap>Review connection</a> }
+              @if (row.recovery === 'review_provider') { <p>Check {{ batch.provider === 'coros' ? 'COROS' : batch.provider === 'suunto' ? 'Suunto' : 'Wahoo' }} before sending another copy.</p> }
+            </div>
+          </article>
+        }
+        @if (sends.rows().length < batch.total) { <button mat-button (click)="sends.loadMoreRows()" appHapticTap>Show more activities</button> }
+        <div class="batch-actions">
+          @if (batch.state === 'draft' && !batch.reviewed && readyCount() && users.hasProAccessSignal()) { <button mat-stroked-button [disabled]="busy()" (click)="reviewFiles()">Review prepared activities</button> }
+          @if (batch.state === 'draft') { <button mat-flat-button class="qs-mat-primary" [disabled]="!canConfirm()" (click)="confirm()">Send {{ readyCount() }} {{ readyCount() === 1 ? 'activity' : 'activities' }} to {{ batch.provider === 'coros' ? 'COROS' : batch.provider === 'suunto' ? 'Suunto' : 'Wahoo' }}</button> }
+          @if (batch.state === 'confirmed' || hasResumableRows()) { <button mat-stroked-button [disabled]="busy()" (click)="stop()">Stop unsent activities</button> }
+          <button mat-button (click)="newDraft()" [disabled]="busy()">Start a new send</button>
+        </div>
+        <details><summary appHapticTap>Delivery details</summary><p>Files are processed individually. The overall finished count includes deliveries, exclusions, stopped items, and items needing action.</p>@for (row of sends.rows(); track row.id) { <p>{{ row.name }} · {{ row.attempts }} sending/status attempts</p> }</details>
+        <p>Stopping affects activities that have not started sending. Accepted uploads continue processing. Results stay available for 30 days.</p>
+      </section>
+    }
+  }
+  <section aria-label="Recent sends"><h2>Recent sends</h2>
+    @for (batch of recentForProvider(); track batch.id) {
+      <button mat-button class="recent-send" [disabled]="busy()" (click)="openBatch(batch.id, batch.provider)">{{ batch.provider === 'coros' ? 'COROS' : batch.provider === 'suunto' ? 'Suunto' : 'Wahoo' }} · {{ batch.createdAt | date:'medium' }} · {{ batch.finished }}/{{ batch.total }} finished</button>
+    } @empty { <p>No recent sends yet. Choose a destination to get started.</p> }
+  </section>
+</main>

@@ -79,7 +79,7 @@ export async function observeActivityDeliveryQueue(db: FirebaseFirestore.Firesto
                 if (!await entitlements.get(uid)) { group.excludedSample++; continue; }
             }
             if (stopped) return;
-            const services = classification === 'poll' || row.deliveryMode === 'historical'
+            const services = classification === 'poll' || ['historical', 'direct'].includes(String(row.deliveryMode))
                 ? [route.destinationServiceName] : [route.sourceServiceName, route.destinationServiceName];
             const state = await db.runTransaction(async tx => {
                 const user = db.collection('users').doc(uid);
@@ -91,7 +91,7 @@ export async function observeActivityDeliveryQueue(db: FirebaseFirestore.Firesto
                 if (stopped || !current.exists || !current.updateTime?.isEqual(doc.updateTime!) || !owner.exists
                     || isUserDeletionTombstoneActive(tombstone.exists ? tombstone.data() : null, now)) return 'excluded';
                 if (activityDeliveryProbeCandidate(current.data()!, now, taskDepth) !== classification) return 'excluded';
-                if (classification === 'new' && row.manual !== true && row.deliveryMode !== 'historical'
+                if (classification === 'new' && row.manual !== true && !['historical', 'direct'].includes(String(row.deliveryMode))
                     && settings.get(`serviceSyncSettings.activitySyncRoutes.${row.routeId}.enabled`) !== true) return 'excluded';
                 for (let index = 0; index < refs.length; index++) {
                     const root = connections[index * 2]; const meta = connections[index * 2 + 1];

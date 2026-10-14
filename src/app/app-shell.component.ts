@@ -1,3 +1,4 @@
+import { ActivitySendService } from './services/activity-send.service';
 import {
   Component,
   computed,
@@ -55,6 +56,8 @@ const APP_SHELL_HEADER_VISIBILITY_TOGGLE_DELTA_PX = 24;
 })
 
 export class AppShellComponent implements OnInit, OnDestroy {
+  readonly activitySends = inject(ActivitySendService);
+
   @ViewChild(MatSidenavContainer) set sidenavContainer(container: MatSidenavContainer | undefined) {
     if (!container) {
       this.currentSidenavContainer = null;

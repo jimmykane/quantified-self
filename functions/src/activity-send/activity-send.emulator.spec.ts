@@ -1,0 +1,198 @@
+import { beforeAll, beforeEach, afterAll, describe, expect, it, vi } from 'vitest';
+import * as admin from 'firebase-admin';
+import { ServiceNames } from '@sports-alliance/sports-lib';
+import { createCOROSActivityFITFixture } from '../../test-utils/coros-activity-fit';
+import { runSendCommand } from './commands';
+import { stageSendFile } from './upload';
+import { admitSendRows, projectSendDelivery, cleanupSendSources, cleanupExpiredSends } from './lifecycle';
+import { operationRef, batchRef } from './store';
+import { ACTIVITY_SEND_LIMITS } from '../../../shared/activity-send';
+
+const state = vi.hoisted(() => ({ pro: true, account: 'reviewed-account', enqueue: vi.fn(async () => true), files: new Map<string, { bytes: Buffer; metadata: Record<string, string> }>() }));
+vi.mock('../utils', async original => ({ ...await original<typeof import('../utils')>(), hasProAccess: async () => state.pro, enqueueActivitySyncTask: state.enqueue }));
+vi.mock('../activity-sync/process-queue-item', () => ({ getDestinationConnectionStatus: async () => 'connected' }));
+vi.mock('../coros/account', () => ({ getActiveCOROSTokenSnapshot: async () => ({ id: state.account }) }));
+vi.mock('./store', async original => ({ ...await original<typeof import('./store')>(), describeFIT: async () => ({ name: 'Synthetic.fit', sport: 'Running', startDate: 1000, warnings: [] }) }));
+vi.mock('firebase-admin', async original => ({ ...await original<typeof import('firebase-admin')>(), apps: [], initializeApp: (await original<typeof import('firebase-admin')>()).default.initializeApp, firestore: (await original<typeof import('firebase-admin')>()).default.firestore, storage: () => ({ bucket: () => ({ file: (path: string) => ({
+  save: async (bytes: Buffer, options: { metadata: { metadata: Record<string, string> } }) => { if (state.files.has(path)) throw Object.assign(new Error('exists'), { code: 412 }); state.files.set(path, { bytes, metadata: options.metadata.metadata }); },
+  getMetadata: async () => { const value = state.files.get(path); if (!value) throw Object.assign(new Error('missing'), { code: 404 }); return [{ size: value.bytes.length, generation: '1', metadata: value.metadata }]; },
+  delete: async () => { state.files.delete(path); },
+}) }) }) }));
+vi.unmock('@sports-alliance/sports-lib');
+
+describe.skipIf(!process.env.FIRESTORE_EMULATOR_HOST)('durable activity sends in isolated Firestore', () => {
+  if (process.env.FIRESTORE_EMULATOR_HOST && !/^(127\.0\.0\.1|localhost):\d+$/.test(process.env.FIRESTORE_EMULATOR_HOST)) throw new Error('Loopback Firestore emulator is required.');
+  const uid = 'activity-send-owner';
+  const id = 'send-batch';
+  let db: admin.firestore.Firestore;
+  beforeAll(() => { if (!admin.apps.length) admin.initializeApp({ projectId: 'demo-activity-send' }); db = admin.firestore(); });
+  beforeEach(async () => {
+    state.pro = true; state.account = 'reviewed-account'; state.enqueue.mockClear(); state.files.clear();
+    await db.recursiveDelete(db.doc(`users/${uid}`));
+    await db.recursiveDelete(db.doc(`userDeletionTombstones/${uid}`));
+    const queues = await db.collection('activitySyncQueue').get();
+    for (const queue of queues.docs) await db.recursiveDelete(queue.ref);
+    await db.doc(`users/${uid}`).set({ stripeRole: 'pro' });
+  });
+  afterAll(async () => { if (db) await db.terminate(); });
+  async function create() { await runSendCommand(uid, { version: 1, action: 'create', batchId: id, provider: 'coros', source: 'files' }); }
+  async function prepare() {
+    await create(); await stageSendFile(uid, id, 'row-one', 'Synthetic.fit', createCOROSActivityFITFixture());
+    return runSendCommand(uid, { version: 1, action: 'prepare', batchId: id });
+  }
+  async function confirm() {
+    const reviewed = await prepare(); await runSendCommand(uid, { version: 1, action: 'confirm', batchId: id, revision: reviewed.revision });
+    await admitSendRows(uid, id);
+    return (await db.collection('activitySyncQueue').get()).docs[0];
+  }
+  it('explains excluded saved originals without creating any provider work', async () => {
+    await db.doc(`users/${uid}/events/merged-event`).set({ name: 'Synthetic merged recording', startDate: 1000, isMerge: true });
+    await runSendCommand(uid, { version: 1, action: 'create', batchId: id, provider: 'coros', source: 'saved' });
+    await runSendCommand(uid, { version: 1, action: 'prepare', batchId: id, eventIds: ['merged-event'] });
+    expect((await batchRef(uid, id).collection('rows').doc('merged-event').get()).data()).toMatchObject({ status: 'needs_action', recovery: 'choose_file' });
+    expect((await batchRef(uid, id).get()).data()).toMatchObject({ total: 1, finished: 1 });
+    expect((await db.collection('activitySyncQueue').get()).empty).toBe(true);
+  });
+  it('recovers a lost date-range preview reply and resumes at the server cursor', async () => {
+    const writes = db.batch();
+    for (let index = 0; index < 51; index++) writes.set(db.doc(`users/${uid}/events/synthetic-${String(index).padStart(2, '0')}`), { name: 'Excluded synthetic merge', startDate: 1000 + index, isMerge: true });
+    await writes.commit();
+    await runSendCommand(uid, { version: 1, action: 'create', batchId: id, provider: 'coros', source: 'saved' });
+    const request = { version: 1 as const, action: 'prepare' as const, batchId: id, startDate: new Date(0).toISOString(), endDate: new Date(2000).toISOString() };
+    const first = await runSendCommand(uid, request);
+    expect(first.nextCursor).toBeTruthy();
+    const recovered = await runSendCommand(uid, request);
+    expect(recovered.nextCursor).toBe(first.nextCursor);
+    expect((await batchRef(uid, id).get()).data()?.total).toBe(50);
+    const last = await runSendCommand(uid, { ...request, cursor: recovered.nextCursor! });
+    expect(last.nextCursor).toBeNull();
+    expect((await batchRef(uid, id).get()).data()).toMatchObject({ total: 51, reviewed: true });
+  });
+  it('denies new sends without Pro before creating any state', async () => {
+    state.pro = false;
+    await expect(create()).rejects.toMatchObject({ code: 'permission-denied' });
+    expect((await operationRef(uid, id).get()).exists).toBe(false);
+  });
+  it('stages privately without creating archive events or provider tasks', async () => {
+    await prepare();
+    expect((await db.collection(`users/${uid}/events`).get()).empty).toBe(true);
+    expect((await db.collection('activitySyncQueue').get()).empty).toBe(true);
+    const visible = (await batchRef(uid, id).get()).data()!;
+    expect(Object.keys(visible)).not.toContain('providerAccount');
+    expect(JSON.stringify(visible)).not.toContain('reviewed-account');
+    expect(state.files.size).toBe(1);
+  });
+  it('rejects stale review and a changed destination account', async () => {
+    const reviewed = await prepare();
+    await expect(runSendCommand(uid, { version: 1, action: 'confirm', batchId: id, revision: reviewed.revision - 1 })).rejects.toMatchObject({ code: 'failed-precondition' });
+    state.account = 'replacement-account';
+    await expect(runSendCommand(uid, { version: 1, action: 'confirm', batchId: id, revision: reviewed.revision })).rejects.toMatchObject({ code: 'failed-precondition' });
+    expect((await db.collection('activitySyncQueue').get()).empty).toBe(true);
+  });
+  it('confirmation and repeat admission create exactly one account-pinned queue item', async () => {
+    const queue = await confirm();
+    await runSendCommand(uid, { version: 1, action: 'confirm', batchId: id, revision: 2 }); await admitSendRows(uid, id);
+    expect((await db.collection('activitySyncQueue').get()).size).toBe(1);
+    expect(queue.data()).toMatchObject({ deliveryMode: 'direct', sourceServiceName: 'manualUpload', destinationServiceName: ServiceNames.COROSAPI, destinationPinnedProviderUserID: 'reviewed-account', sendBatchID: id });
+    expect((await operationRef(uid, id).collection('rows').doc('row-one').get()).data()?.queueId).toBe(queue.id);
+    expect(queue.data().expireAt.toMillis() - Date.now()).toBeGreaterThan(29 * 86400_000);
+  });
+  it('keeps the same staging reservation across a lost upload reply', async () => {
+    await prepare(); await stageSendFile(uid, id, 'row-one', 'Synthetic.fit', createCOROSActivityFITFixture());
+    expect((await batchRef(uid, id).get()).data()?.total).toBe(1);
+    expect(state.files.size).toBe(1);
+  });
+  it('enforces the aggregate staging quota transactionally', async () => {
+    await create(); await db.doc(`users/${uid}/activitySendQuota/current`).set({ bytes: ACTIVITY_SEND_LIMITS.userBytes });
+    await expect(stageSendFile(uid, id, 'row-one', 'Synthetic.fit', createCOROSActivityFITFixture())).rejects.toMatchObject({ code: 'resource-exhausted' });
+    expect(state.files.size).toBe(0);
+  });
+  it('stops unclaimed work but preserves provider-accepted work', async () => {
+    const queue = await confirm();
+    await queue.ref.update({ destinationUploadID: 'accepted-canary', providerOperationStartedAt: Date.now() });
+    await runSendCommand(uid, { version: 1, action: 'stop', batchId: id });
+    expect((await queue.ref.get()).data()?.processed).toBe(false);
+    expect((await queue.ref.get()).data()?.destinationUploadID).toBe('accepted-canary');
+  });
+  it('stops queued work before any provider claim and projects that committed outcome', async () => {
+    const queue = await confirm(); await runSendCommand(uid, { version: 1, action: 'stop', batchId: id });
+    await projectSendDelivery(queue.ref);
+    expect((await queue.ref.get()).data()?.processed).toBe(true);
+    expect((await batchRef(uid, id).collection('rows').doc('row-one').get()).data()).toMatchObject({ status: 'stopped', recovery: 'none' });
+  });
+  it('resumes an unclaimed skipped send after Pro returns without reserving another copy', async () => {
+    const queue = await confirm(); await queue.ref.update({ processed: true, resultStatus: 'skipped', skippedReason: 'no_pro_access' });
+    await runSendCommand(uid, { version: 1, action: 'retry', batchId: id, rowId: 'row-one' });
+    expect((await queue.ref.get()).data()).toMatchObject({ processed: false, skippedReason: null });
+    expect(state.files.size).toBe(1);
+  });
+  it('can stop an unclaimed Pro-lapsed result and release its reservation', async () => {
+    const queue = await confirm(); await queue.ref.update({ processed: true, resultStatus: 'skipped', skippedReason: 'no_pro_access' });
+    await projectSendDelivery(queue.ref); await runSendCommand(uid, { version: 1, action: 'stop', batchId: id }); await projectSendDelivery(queue.ref);
+    expect((await batchRef(uid, id).collection('rows').doc('row-one').get()).data()?.status).toBe('stopped');
+    expect((await db.doc(`users/${uid}/activitySendQuota/current`).get()).data()?.bytes).toBe(0);
+  });
+  it('cannot resend uncertain acceptance, even with Pro', async () => {
+    const queue = await confirm(); await queue.ref.update({ processed: true, resultStatus: 'manual_reconciliation_required', providerOperationStartedAt: 1 });
+    await expect(runSendCommand(uid, { version: 1, action: 'retry', batchId: id, rowId: 'row-one' })).rejects.toMatchObject({ code: 'failed-precondition' });
+  });
+  it('allows a lapsed user to check an accepted operation without changing its ID', async () => {
+    const queue = await confirm(); await queue.ref.update({ processed: true, destinationUploadID: 'accepted-canary' }); state.pro = false;
+    await runSendCommand(uid, { version: 1, action: 'check', batchId: id, rowId: 'row-one' });
+    expect((await queue.ref.get()).data()?.destinationUploadID).toBe('accepted-canary');
+  });
+  it('projects live state and completion without leaking provider identifiers', async () => {
+    const queue = await confirm(); await queue.ref.update({ destinationUploadID: 'accepted-canary' }); await projectSendDelivery(queue.ref);
+    const publicRow = batchRef(uid, id).collection('rows').doc('row-one');
+    expect((await publicRow.get()).data()?.status).toBe('processing');
+    await queue.ref.update({ processed: true, resultStatus: 'success' }); await projectSendDelivery(queue.ref); await projectSendDelivery(queue.ref);
+    expect((await batchRef(uid, id).get()).data()?.finished).toBe(1);
+    expect(JSON.stringify((await publicRow.get()).data())).not.toContain('accepted-canary');
+  });
+  it('deletion tombstones prevent staging and confirmation', async () => {
+    const reviewed = await prepare(); await db.doc(`userDeletionTombstones/${uid}`).set({ active: true });
+    await expect(runSendCommand(uid, { version: 1, action: 'confirm', batchId: id, revision: reviewed.revision })).rejects.toMatchObject({ code: 'failed-precondition' });
+  });
+  it('stops before admission and finishes the public batch without provider work', async () => {
+    const reviewed = await prepare();
+    await runSendCommand(uid, { version: 1, action: 'confirm', batchId: id, revision: reviewed.revision });
+    await runSendCommand(uid, { version: 1, action: 'stop', batchId: id });
+    await admitSendRows(uid, id);
+    expect((await db.collection('activitySyncQueue').get()).empty).toBe(true);
+    expect((await batchRef(uid, id).get()).data()).toMatchObject({ state: 'complete', finished: 1 });
+    expect(state.files.size).toBe(0);
+  });
+  it('removes an incomplete or ready file and releases quota even without Pro', async () => {
+    await prepare(); state.pro = false;
+    await runSendCommand(uid, { version: 1, action: 'remove', batchId: id, rowId: 'row-one' });
+    expect((await batchRef(uid, id).get()).data()?.total).toBe(0);
+    expect((await batchRef(uid, id).collection('rows').doc('row-one').get()).exists).toBe(false);
+    expect((await db.doc(`users/${uid}/activitySendQuota/current`).get()).data()?.bytes).toBe(0);
+    expect(state.files.size).toBe(0);
+  });
+  it('reselection of the same file resumes its original reference', async () => {
+    await prepare(); await stageSendFile(uid, id, 'another-row', 'Synthetic.fit', createCOROSActivityFITFixture());
+    expect((await batchRef(uid, id).get()).data()?.total).toBe(1);
+  });
+  it('does not dispatch duplicate checks while an accepted operation is already running', async () => {
+    const queue = await confirm(); await queue.ref.update({ destinationUploadID: 'accepted-canary' }); state.enqueue.mockClear();
+    await runSendCommand(uid, { version: 1, action: 'check', batchId: id, rowId: 'row-one' });
+    expect(state.enqueue).not.toHaveBeenCalled();
+  });
+  it('expires sources without resetting accepted provider operations and prunes descendants at 30 days', async () => {
+    const queue = await confirm(); await queue.ref.update({ destinationUploadID: 'accepted-canary' });
+    const createdAt = (await operationRef(uid, id).get()).data()!.createdAt;
+    await cleanupExpiredSends(createdAt + 8 * 86400_000);
+    expect(state.files.size).toBe(0);
+    expect((await queue.ref.get()).data()).toMatchObject({ destinationUploadID: 'accepted-canary', processed: false });
+    await cleanupExpiredSends(createdAt + 31 * 86400_000);
+    expect((await operationRef(uid, id).collection('rows').get()).empty).toBe(true);
+    expect((await batchRef(uid, id).collection('rows').get()).empty).toBe(true);
+  });
+  it('cleans only the feature source and releases quota once', async () => {
+    await prepare(); state.files.set('unrelated/original.fit', { bytes: Buffer.from('fixture'), metadata: {} });
+    await cleanupSendSources(operationRef(uid, id)); await cleanupSendSources(operationRef(uid, id));
+    expect((await db.doc(`users/${uid}/activitySendQuota/current`).get()).data()?.bytes).toBe(0);
+    expect(state.files.has('unrelated/original.fit')).toBe(true);
+  });
+});

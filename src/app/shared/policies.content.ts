@@ -210,6 +210,7 @@ export const POLICY_CONTENT: PolicyItem[] = [
             '<strong>Best Effort:</strong> While we employ best endeavors, we don\'t promise to keep your files and data accessible at all times.',
             '<strong>Backups:</strong> It\'s best advised to keep your own private copies of critical data.',
             '<strong>Portability:</strong> You have the right to request an export of your personal data stored on our platform.',
+            '<strong>Temporary activity delivery:</strong> Send activities keeps local FIT copies privately, without adding them to your QS activity archive. Unconfirmed drafts expire after 24 hours; confirmed temporary sources are usable for seven days and deleted earlier after delivery or stopping. Results are retained for 30 days. Scheduled cleanup failures can delay physical deletion. Account deletion removes feature-owned temporary files and state. Saved activity originals keep their existing archive retention.',
             '<strong>Retention:</strong> We retain your data while your account is active and has a valid subscription. After a 30-day grace period, plan limits and feature restrictions apply. Existing activities are not automatically deleted due to downgrade alone.'
         ],
         checkboxLabel: 'I have read and agree to the Data Availability Policy.',

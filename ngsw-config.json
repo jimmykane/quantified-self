@@ -52,6 +52,8 @@
     "/releases",
     "/tools/compare/saved",
     "/services",
+    "/send-activities",
+    "/send-activities/*",
     "/dashboard",
     "/health",
     "/tags",
