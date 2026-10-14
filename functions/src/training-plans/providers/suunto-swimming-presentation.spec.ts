@@ -107,7 +107,7 @@ describe('Suunto swimming display only', () => {
       { ...work, id: 'cool', purpose: 'cooldown' }] };
     const output = screens(input); const frozen = serializeSuuntoGuideV11ForRecovery(input, options).artifact.steps;
     expect(output[0]).toEqual(frozen[0]); expect(output.at(-2)).toEqual(frozen.at(-2));
-    expect(output.filter(screen => screen.title === 'Recovery').map(({ id: _id, ...row }) => row))
+    expect(output.filter(screen => screen.title === 'Recovery').map(row => Object.fromEntries(Object.entries(row).filter(([key]) => key !== 'id'))))
       .toEqual(Array(2).fill((frozen[2] as { steps: SuuntoGuideFieldsStepV1[] }).steps[1]));
     expect(output[1].fields.filter(field => field.type === 'text')).toEqual([{ type: 'text', value: 'Next plan: 100.0 m' }]);
     expect(output[5].fields).toContainEqual({ type: 'text', value: 'Interval 2/4' });

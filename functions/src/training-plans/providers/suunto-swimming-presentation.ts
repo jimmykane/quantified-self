@@ -80,8 +80,9 @@ function shortRestNotification<T extends SuuntoGuideFieldsStepV1>(screen: T): T 
   // Keep all authored notes, manual/long rests and every Work/Complete alert.
   if (screen.title !== 'Rest' || screen.fields.some(field => field.type === 'text')
     || !screen.fields.some(field => field.type === 'stepDurationCountdown' && field.value <= 20)) return screen;
-  const { notification: _notification, ...rest } = screen;
-  return rest as T;
+  const rest = { ...screen };
+  delete rest.notification;
+  return rest;
 }
 
 /** The frozen execution graph, laps, targets and authored instructions stay
