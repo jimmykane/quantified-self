@@ -2194,4 +2194,5 @@ it('documents durable activity sending, explicit review, Pro and retention', () 
   expect(content).toContain('If opening a new draft fails, reopen it from **Recent sends**');
   expect(content).toContain('If you switch destinations, sources or sends during preparation, reopen the original draft to continue');
   expect(content).toContain('Stopping closes retries and removes that temporary copy, freeing its storage allowance');
+  expect(content).toContain('If an accepted upload fails after you stop the batch, its temporary copy is removed when that failure is confirmed');
 });

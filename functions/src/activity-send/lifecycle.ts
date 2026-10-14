@@ -142,7 +142,12 @@ export async function projectSendDelivery(queueRef: admin.firestore.DocumentRefe
     if (privateParent.exists) tx.update(operation, { finished, updatedAt: Date.now() });
   });
   const current = (await queueRef.get()).data();
-  if (current && ['delivered', 'duplicate', 'stopped'].includes(projectSendQueue(current).status)) {
+  if (!current || current.userID !== initial.userID || current.sendBatchID !== initial.sendBatchID || current.sendRowID !== initial.sendRowID) return;
+  // Stop may finish while an accepted upload is still processing. Its later confirmed failure
+  // has no retry authority or source requirement, even when the Stop cursor is already complete.
+  const stoppedFailure = current.processed === true && current.resultStatus === 'skipped' && current.sendConfirmedFailure === true
+    && (await operationRef(initial.userID, initial.sendBatchID).get()).data()?.stopped === true;
+  if (stoppedFailure || ['delivered', 'duplicate', 'stopped'].includes(projectSendQueue(current).status)) {
     await cleanupSendSourceRow(operationRef(initial.userID, initial.sendBatchID).collection('rows').doc(initial.sendRowID));
   }
 }

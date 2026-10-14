@@ -251,6 +251,7 @@ describe.skipIf(!process.env.FIRESTORE_EMULATOR_HOST)('durable activity sends in
     await queue.update({ processed: true, resultStatus: 'skipped', sendConfirmedFailure: true, providerOperationStartedAt: 1, destinationUploadID: 'failed-upload', destinationProviderUserID: 'reviewed-account', destinationWorkoutKey: 'failed-key' });
     await projectSendDelivery(queue);
     expect((await batchRef(uid, id).get()).data()).toMatchObject({ state: 'confirmed', total: 2, finished: 1 });
+    expect(state.files.size).toBe(2); // An open confirmed failure keeps its source available for explicit retry.
     state.pro = false; state.enqueue.mockClear();
     await runSendCommand(uid, { version: 1, action: 'stop', batchId: id }); await admitSendRows(uid, id);
     expect((await first.get()).data()?.reservedBytes).toBe(0);
@@ -277,6 +278,48 @@ describe.skipIf(!process.env.FIRESTORE_EMULATOR_HOST)('durable activity sends in
     expect((await batchRef(uid, id).get()).data()).toMatchObject({ total: 1, finished: 1, stopped: true });
     expect((await queue.ref.get()).data()).toMatchObject({ destinationUploadID: 'failed-upload', providerOperationStartedAt: 1, sendConfirmedFailure: true });
     expect(state.files.size).toBe(0);
+  });
+  it.each([false, true])('releases a later confirmed failure after Stop completes, with cleanup failure %s', async cleanupFails => {
+    const queue = await confirm();
+    await queue.ref.update({ destinationUploadID: 'accepted-upload', destinationWorkoutKey: 'accepted-key', providerOperationStartedAt: 1 });
+    await projectSendDelivery(queue.ref); state.pro = false;
+    await runSendCommand(uid, { version: 1, action: 'stop', batchId: id });
+    expect((await operationRef(uid, id).get()).data()?.stopComplete).toBe(true);
+    expect(state.files.size).toBe(1);
+    expect((await db.doc(`users/${uid}/activitySendQuota/current`).get()).data()?.bytes).toBeGreaterThan(0);
+    state.enqueue.mockClear();
+    await queue.ref.update({ processed: true, resultStatus: 'skipped', sendConfirmedFailure: true });
+    if (cleanupFails) {
+      state.failDeleteOnce = true;
+      await expect(projectSendDelivery(queue.ref)).rejects.toThrow('Synthetic temporary storage failure');
+      expect(state.files.size).toBe(1);
+      expect((await db.doc(`users/${uid}/activitySendQuota/current`).get()).data()?.bytes).toBeGreaterThan(0);
+    }
+    await projectSendDelivery(queue.ref); await projectSendDelivery(queue.ref);
+    expect(state.files.size).toBe(0);
+    expect((await db.doc(`users/${uid}/activitySendQuota/current`).get()).data()?.bytes).toBe(0);
+    expect((await batchRef(uid, id).get()).data()).toMatchObject({ stopped: true, state: 'complete', total: 1, finished: 1 });
+    expect((await batchRef(uid, id).collection('rows').doc('row-one').get()).data()).toMatchObject({ status: 'needs_action', recovery: 'retry_send' });
+    expect((await queue.ref.get()).data()).toMatchObject({ processed: true, resultStatus: 'skipped', sendConfirmedFailure: true, destinationUploadID: 'accepted-upload', destinationWorkoutKey: 'accepted-key', providerOperationStartedAt: 1 });
+    state.pro = true;
+    await expect(runSendCommand(uid, { version: 1, action: 'retry', batchId: id, rowId: 'row-one' })).rejects.toMatchObject({ code: 'failed-precondition' });
+    expect(state.enqueue).not.toHaveBeenCalled();
+  });
+  it('preserves a saved archive original when its accepted upload fails after Stop completes', async () => {
+    const path = await savedOriginal('saved-late-failure');
+    await runSendCommand(uid, { version: 1, action: 'create', batchId: id, provider: 'coros', source: 'saved' });
+    const reviewed = await runSendCommand(uid, { version: 1, action: 'prepare', batchId: id, eventIds: ['saved-late-failure'], sources: [ServiceNames.GarminAPI] });
+    await runSendCommand(uid, { version: 1, action: 'confirm', batchId: id, revision: reviewed.revision }); await admitSendRows(uid, id);
+    const queue = (await db.collection('activitySyncQueue').get()).docs[0];
+    await queue.ref.update({ destinationUploadID: 'accepted-upload', providerOperationStartedAt: 1 });
+    await runSendCommand(uid, { version: 1, action: 'stop', batchId: id });
+    expect((await operationRef(uid, id).get()).data()?.stopComplete).toBe(true);
+    await queue.ref.update({ processed: true, resultStatus: 'skipped', sendConfirmedFailure: true });
+    await projectSendDelivery(queue.ref); await projectSendDelivery(queue.ref);
+    expect(state.files.has(path)).toBe(true);
+    expect((await db.doc(`users/${uid}/activitySendQuota/current`).get()).exists).toBe(false);
+    expect((await batchRef(uid, id).get()).data()).toMatchObject({ stopped: true, state: 'complete', total: 1, finished: 1 });
+    expect((await queue.ref.get()).data()?.destinationUploadID).toBe('accepted-upload');
   });
   it('preserves saved archive originals when stopping a confirmed processing failure', async () => {
     const path = await savedOriginal('saved-failure');
