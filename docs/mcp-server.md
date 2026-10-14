@@ -2309,8 +2309,11 @@ ambiguous fragments are withheld. The Sleep field mask also includes canonical d
 Lib decoder; it is never returned by this tool. Health
 Sleep references are skipped; normalized sessions are read through the separately required Sleep grant. Health and
 Sleep remain separately labelled series, including provider, response-local account ordinal and fixed semantics.
-The projection never guesses equivalence between opaque Health account keys and Sleep provider identities. The
-internal identities are used only to prevent blending and never appear in output. No spot-check/activity HRV, raw
+Identified Sleep uses the Health writer's exact owner/provider/account SHA-256 identity, so matching Health and Sleep
+share one account ordinal while retaining separate source/semantic series. Dates, values and statistics never establish
+an account match. Unidentified Sleep remains separate from identified accounts, including a literal `default` provider
+account. Internal identities never appear in output. This implementation correction preserves the registered schemas,
+tool metadata, grants, field masks and limits; it requires no plugin rebuild or registered-client rescan. No spot-check/activity HRV, raw
 samples, device fields, callback URLs or persisted personal-range state are exposed. Reading dates use the shared
 canonical wake-date rule: valid stored dates remain authoritative outside Suunto local-date correction, a missing date
 uses the validated wake instant, and malformed dates are rejected. Daily range instants follow the explicitly requested

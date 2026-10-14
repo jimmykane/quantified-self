@@ -223,6 +223,16 @@ function sleepSession(overrides: Partial<SleepSession> = {}): SleepSession {
   };
 }
 
+function sleepHrvReferenceRecord(session: SleepSession, accountKey: string): HealthSourceRecord {
+  return sourceRecord({ id: `sleep-hrv-reference-${session.id}`, provider: session.source.provider, accountKey,
+    calendarDate: session.sleepDate, metrics: [{ kind: 'sleep_reference', metricId: HEALTH_METRIC_IDS.HeartRateVariability,
+      valueType: HEALTH_VALUE_TYPES.Number, aggregation: 'average', semanticVariant: 'sleep_session_average_hrv',
+      origin: HEALTH_VALUE_ORIGINS.ProviderSummary, recordingMethod: HEALTH_RECORDING_METHODS.ProviderCalculated,
+      quality: { status: HEALTH_QUALITY_STATUSES.Valid },
+      reference: { domain: 'sleep', documentId: session.id!, field: 'vitals.averageHrvMs' },
+    }] });
+}
+
 function hrvSeries(values: ReadonlyArray<{ daysAgo: number; value: number }>): HealthWorkspaceSeries {
   const endDayMs = Date.parse('2026-08-01T00:00:00.000Z');
   return {
@@ -1597,6 +1607,56 @@ describe('Health workspace helpers', () => {
       'overnight_summary',
       'sleep_session_average_hrv',
     ]));
+  });
+
+  it.each([null, normalizeUserUnitSettings({ distanceUnits: DistanceUnits.Miles })])(
+    'reuses a typed Sleep reference account for sibling metrics and unreferenced nights without Web Crypto (%s)', units => {
+      const session = sleepSession({ vitals: { averageHrvMs: 62, overnightHrvMs: 44, averageHeartRateBpm: 50 } });
+      const next = { ...session, id: 'sleep-next', sleepDate: '2026-08-03',
+        startTimeMs: session.startTimeMs + DAY_MS, endTimeMs: session.endTimeMs + DAY_MS };
+      const reference = sleepHrvReferenceRecord(session, 'opaque-health-account');
+      const result = projectLoadedHealthRange([reference], [], { startDate: session.sleepDate, endDate: next.sleepDate,
+        metricIds: [HEALTH_METRIC_IDS.HeartRateVariability, HEALTH_METRIC_IDS.HeartRate] },
+      { sourceRecordsComplete: true, samplesComplete: true });
+      const view = buildHealthMetricWorkspaceView(result, [session, next], [], units);
+      expect(view.series).toHaveLength(3);
+      expect(view.series.map(series => series.sourceLabel)).toEqual(['Garmin', 'Garmin', 'Garmin']);
+      expect(new Set(view.series.map(series => series.sourceSelectionKey)).size).toBe(1);
+      expect(view.series.every(series => series.points.length === 2)).toBe(true);
+      expect(view.series.map(series => formatHealthValue(series.metricId, series.points[0].value, series.unit, false, units)).sort())
+        .toEqual(['44 ms', '50 bpm', '62 ms']);
+      expect(session).not.toHaveProperty('healthAccountKey');
+    },
+  );
+
+  it('withholds a typed account alias when references disagree for the same provider account', () => {
+    const session = sleepSession({ vitals: { averageHrvMs: 62, overnightHrvMs: 44 } });
+    const next = { ...session, id: 'sleep-next', sleepDate: '2026-08-03',
+      startTimeMs: session.startTimeMs + DAY_MS, endTimeMs: session.endTimeMs + DAY_MS };
+    const result = projectLoadedHealthRange([
+      sleepHrvReferenceRecord(session, 'health-account-a'), sleepHrvReferenceRecord(next, 'health-account-b'),
+    ], [], { startDate: session.sleepDate, endDate: next.sleepDate, metricIds: [HEALTH_METRIC_IDS.HeartRateVariability] },
+    { sourceRecordsComplete: true, samplesComplete: true });
+    const view = buildHealthMetricWorkspaceView(result, [session, next]);
+    const overnight = view.series.find(series => series.semanticVariant === 'sleep_overnight_hrv')!;
+    expect(overnight.points).toHaveLength(2);
+    expect(view.series.filter(series => series.semanticVariant === 'sleep_session_average_hrv')
+      .every(series => series.sourceSelectionKey !== overnight.sourceSelectionKey)).toBe(true);
+    expect(new Set(view.series.map(series => series.sourceSelectionKey)).size).toBe(3);
+  });
+
+  it('restricts an unidentified Sleep account alias to the referenced document', () => {
+    const session = sleepSession({ vitals: { averageHrvMs: 62, overnightHrvMs: 44 },
+      source: { ...sleepSession().source, providerUserId: '' } });
+    const next = { ...session, id: 'sleep-next', sleepDate: '2026-08-03',
+      startTimeMs: session.startTimeMs + DAY_MS, endTimeMs: session.endTimeMs + DAY_MS };
+    const result = projectLoadedHealthRange([sleepHrvReferenceRecord(session, 'health-account-a')], [],
+      { startDate: session.sleepDate, endDate: next.sleepDate, metricIds: [HEALTH_METRIC_IDS.HeartRateVariability] },
+      { sourceRecordsComplete: true, samplesComplete: true });
+    const view = buildHealthMetricWorkspaceView(result, [session, next]);
+    expect(view.series).toHaveLength(4);
+    expect(view.series.every(series => series.points.length === 1)).toBe(true);
+    expect(new Set(view.series.map(series => series.sourceSelectionKey)).size).toBe(2);
   });
 
   it.each([null, normalizeUserUnitSettings({ distanceUnits: DistanceUnits.Miles })])(

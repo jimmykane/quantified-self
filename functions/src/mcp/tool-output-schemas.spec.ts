@@ -2349,6 +2349,13 @@ describe.each<FixtureTransport>(['in-memory', 'legacy-http', 'modern-http'])('MC
     expect(service.getHrvPersonalRange).toHaveBeenCalledWith(expect.objectContaining({ uid: 'user-1',
       scopes: [MCP_OAUTH_SCOPES.HealthRead, MCP_OAUTH_SCOPES.SleepRead] }));
     const fixture = await service.getHrvPersonalRange({ uid: 'user-1', scopes: [], startTimeMs: 0, endTimeMs: DAY_MS });
+    const sharedAccount = { ...fixture, series: [fixture.series[0], { ...fixture.series[0], source: 'health',
+      seriesNumber: 2, semanticVariant: 'overnight_rmssd' }] };
+    service.getHrvPersonalRange = vi.fn().mockResolvedValue(sharedAccount);
+    const matched = await connection.client.callTool({ name: 'get_hrv_personal_range', arguments: successfulToolArguments.get_hrv_personal_range });
+    expect(matched.isError).not.toBe(true);
+    expect(matched.structuredContent).toEqual(sharedAccount);
+    expect(JSON.parse((matched.content[0] as { text: string }).text)).toEqual(sharedAccount);
     service.getHrvPersonalRange = vi.fn().mockResolvedValue({ ...fixture, series: [] });
     const empty = await connection.client.callTool({ name: 'get_hrv_personal_range', arguments: successfulToolArguments.get_hrv_personal_range });
     expect(empty.structuredContent).toMatchObject({ series: [] });

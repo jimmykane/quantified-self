@@ -15,6 +15,7 @@ import { calculatePersonalMetricRange } from '../../../shared/personal-metric-ra
 import { HEALTH_UNITS } from '../../../shared/health';
 import { DistanceUnits } from '@sports-alliance/sports-lib';
 import { normalizeUserUnitSettings } from '../../../shared/unit-aware-display';
+import { nightlyHealthAccountKey } from '../../../shared/nightly-hrv';
 const DAY = 86400000;
 vi.mock('firebase-admin', () => ({ firestore: vi.fn() }));
 const end = Date.parse('2026-09-10T23:59:59.999Z');
@@ -118,6 +119,46 @@ describe('MCP shared HRV personal range', () => {
     expect(result.series.map(series => series.semanticVariant)).not.toContain('health_snapshot_rmssd');
     expect(JSON.stringify(result)).not.toContain('accountKey');
   });
+  it.each(['GarminAPI', 'SuuntoApp', 'COROSAPI'])('uses one account ordinal for identified %s Health and Sleep while keeping their readings separate', async provider => {
+    const providerAccount = 'private-provider-account';
+    const accountKey = await nightlyHealthAccountKey('owner', provider, providerAccount);
+    const deps = reads(0);
+    vi.mocked(deps.fetchPage).mockImplementation(async (_uid, source) => [{ cursor: source, data: source === 'health'
+      ? { userID: 'owner', schemaVersion: 1, calendarDate: '2026-09-10', endTimeMs: end,
+        source: { provider, accountKey }, metrics: [{ kind: 'value', metricId: 'heart_rate_variability',
+          normalizationStatus: 'canonical', canonical: { value: 44, unit: 'ms' }, aggregation: 'average',
+          semanticVariant: 'overnight_rmssd', origin: 'provider_summary', recordingMethod: 'provider_calculated' }] }
+      : { startTimeMs: end - 8 * 3_600_000, endTimeMs: end, durationSeconds: 28_800, sleepDate: '2026-09-10',
+        source: { provider, providerUserId: providerAccount, callbackURL: 'private-callback' }, vitals: { averageHrvMs: 42 } },
+    }]);
+    const result = await queryHrvPersonalRange(input, deps);
+    expect(result.series).toHaveLength(2);
+    expect(result.series.map(series => series.source)).toEqual(['health', 'sleep']);
+    expect(result.series.map(series => series.readings[0].value)).toEqual([44, 42]);
+    expect(new Set(result.series.map(series => series.accountNumber)).size).toBe(1);
+    expect(new Set(result.series.map(series => series.seriesNumber)).size).toBe(2);
+    expect(JSON.stringify(result)).not.toMatch(/private-|accountKey|providerUserId|callbackURL/);
+    expect(MCP_HRV_RANGE_SCHEMA.safeParse(result).success).toBe(true);
+  });
+  it.each([undefined, '', ' ', 'other-account', 'default'])(
+    'matches a literal default provider account only with its identified Sleep record (%s)', async sleepAccount => {
+      const accountKey = await nightlyHealthAccountKey('owner', 'GarminAPI', 'default');
+      const deps = reads(0);
+      vi.mocked(deps.fetchPage).mockImplementation(async (_uid, source) => [{ cursor: source, data: source === 'health'
+        ? { userID: 'owner', schemaVersion: 1, calendarDate: '2026-09-10', endTimeMs: end,
+          source: { provider: 'GarminAPI', accountKey }, metrics: [{ kind: 'value', metricId: 'heart_rate_variability',
+            normalizationStatus: 'canonical', canonical: { value: 42, unit: 'ms' }, aggregation: 'average',
+            semanticVariant: 'sleep_session_average_hrv', origin: 'provider_summary', recordingMethod: 'provider_calculated' }] }
+        : { startTimeMs: end - 8 * 3_600_000, endTimeMs: end, sleepDate: '2026-09-10',
+          source: { provider: 'GarminAPI', providerUserId: sleepAccount }, vitals: { averageHrvMs: 42 } },
+      }]);
+      const result = await queryHrvPersonalRange(input, deps);
+      expect(result.series).toHaveLength(2);
+      expect(result.series.map(series => series.source)).toEqual(['health', 'sleep']);
+      expect(new Set(result.series.map(series => series.accountNumber)).size).toBe(sleepAccount === 'default' ? 1 : 2);
+      expect(new Set(result.series.map(series => series.seriesNumber)).size).toBe(2);
+    },
+  );
   it('uses the same baseline as the frontend and excludes private neighboring fields', async () => {
     const result = await queryHrvPersonalRange(input, reads());
     const observations = Array.from({ length: 70 }, (_, i) => ({ timestampMs: end - i * DAY,
