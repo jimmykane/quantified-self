@@ -8,6 +8,7 @@ import { ActivitySendCommand, ACTIVITY_SEND_PROVIDERS, ACTIVITY_SEND_LIMITS, Act
 import { ALLOWED_CORS_ORIGINS, enforceAppCheck, hasProAccess, PRO_REQUIRED_MESSAGE, enqueueActivitySyncTask } from '../utils';
 import { ServiceNames } from '@sports-alliance/sports-lib';
 import { eligibleOriginal } from '../activity-sync/historical-send';
+import { isStorageObjectMissing } from '../activity-sync/historical-manual-original';
 import { buildActivitySyncQueueItemId } from '../activity-sync/queue';
 import { getHistoricalActivityRouteId } from '../../../shared/activity-sync-routes';
 import { getActivitySyncMetadataDocId } from '../activity-sync/metadata';
@@ -181,7 +182,12 @@ async function prepareSaved(uid: string, draft: SendOperation, request: Extract<
       const original = { ...inspected.original, generation: inspected.original.generation!, extension: inspected.original.path.endsWith('.gz') ? 'fit.gz' : 'fit' };
       let summary;
       try { summary = await describeSavedFIT(original, `${event.data()?.name || original.originalFilename || 'Saved activity'}`, draft.provider); }
-      catch { continue; }
+      catch (error) {
+        if (isStorageObjectMissing(error) || error instanceof HttpsError && ['invalid-argument', 'failed-precondition'].includes(error.code)) continue;
+        // An unavailable read is not evidence of an ineligible recording. Keep the cursor and
+        // already reviewed rows so continuation can retry this original without sending anything.
+        throw new HttpsError('unavailable', 'Saved activity checking is temporarily unavailable. Reopen this draft and choose Continue saved-activity preview.');
+      }
       await guardedSendTransaction(uid, async tx => {
         const current = (await tx.get(operationRef(uid, draft.id))).data() as SendOperation;
         const prior = await tx.get(operationRef(uid, draft.id).collection('rows').doc(rowId));

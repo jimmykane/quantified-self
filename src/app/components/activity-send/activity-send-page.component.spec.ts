@@ -218,5 +218,24 @@ describe('activity sending workspace', () => {
     expect(fixture.nativeElement.querySelector('input[type=date]')).not.toBeNull();
     fixture.componentInstance.invalidateSaved(); expect(fixture.componentInstance.selectionChanged()).toBe(false);
   });
+  it.each([0, 1])('keeps continuation available after saved checking fails with %s reviewed rows', async total => {
+    const fixture = render(); fixture.componentInstance.source.set('saved');
+    sends.batch.set({ ...batchValue, source: 'saved', total, reviewed: false, savedSelectionReady: true }); sends.rows.set(total ? [row] : []);
+    sends.command.mockRejectedValueOnce(new Error('Saved activity checking is temporarily unavailable. Reopen this draft and choose Continue saved-activity preview.'));
+    await fixture.componentInstance.reviewFiles(); fixture.detectChanges();
+    expect(fixture.componentInstance.busy()).toBe(false);
+    expect(fixture.nativeElement.querySelector('[role=alert]')?.textContent).toContain('temporarily unavailable');
+    const buttons = Array.from(fixture.nativeElement.querySelectorAll('button') as NodeListOf<HTMLButtonElement>);
+    expect(buttons.find(button => button.textContent?.includes('Continue saved-activity preview'))?.disabled).toBe(false);
+    expect(buttons.find(button => button.textContent?.trim().startsWith('Send '))?.disabled).toBe(true);
+    expect(fixture.nativeElement.querySelector('input[type=date]')).toBeNull();
+    expect(haptics.error).toHaveBeenCalledOnce(); expect(haptics.success).not.toHaveBeenCalled();
+    await fixture.componentInstance.reviewFiles();
+    expect(sends.command).toHaveBeenNthCalledWith(2, { version: 1, action: 'prepare', batchId: 'batch-1' }, 'owner');
+    expect(haptics.success).toHaveBeenCalledOnce(); expect(haptics.selection).toHaveBeenCalledTimes(2);
+    sends.batch.set({ ...batchValue, source: 'saved', savedSelectionReady: true }); sends.rows.set([row]); fixture.detectChanges();
+    expect(fixture.componentInstance.error()).toBeNull(); expect(fixture.componentInstance.canConfirm()).toBe(true);
+    expect(sends.command.mock.calls.every(([request]) => request.action === 'prepare')).toBe(true);
+  });
 
 });

@@ -9,7 +9,7 @@ import { operationRef, batchRef, guardedBackgroundSendTransaction } from './stor
 import { ACTIVITY_SEND_LIMITS } from '../../../shared/activity-send';
 import { queueRetiredSendSourceCleanup } from './source-cleanup';
 
-const state = vi.hoisted(() => ({ pro: true, account: 'reviewed-account', enqueue: vi.fn(async () => true), failDeleteOnce: false, failMetadataOnce: false, beforeSave: undefined as undefined | (() => Promise<void>), afterSave: undefined as undefined | (() => Promise<void>), afterDelete: undefined as undefined | (() => Promise<void>), files: new Map<string, { bytes: Buffer; metadata: Record<string, string>; generation?: string }>() }));
+const state = vi.hoisted(() => ({ pro: true, account: 'reviewed-account', enqueue: vi.fn(async () => true), failDeleteOnce: false, failMetadataOnce: false, downloadFailure: undefined as undefined | { path: string; code: number }, downloaded: [] as string[], beforeSave: undefined as undefined | (() => Promise<void>), afterSave: undefined as undefined | (() => Promise<void>), afterDelete: undefined as undefined | (() => Promise<void>), files: new Map<string, { bytes: Buffer; metadata: Record<string, string>; generation?: string }>() }));
 vi.mock('../utils', async original => ({ ...await original<typeof import('../utils')>(), hasProAccess: async () => state.pro, enqueueActivitySyncTask: state.enqueue }));
 vi.mock('../activity-sync/process-queue-item', () => ({ getDestinationConnectionStatus: async () => 'connected' }));
 vi.mock('../coros/account', () => ({ getActiveCOROSTokenSnapshot: async () => ({ id: state.account }) }));
@@ -17,6 +17,7 @@ vi.mock('./store', async original => ({ ...await original<typeof import('./store
 vi.mock('firebase-admin', async original => ({ ...await original<typeof import('firebase-admin')>(), apps: [], initializeApp: (await original<typeof import('firebase-admin')>()).default.initializeApp, firestore: (await original<typeof import('firebase-admin')>()).default.firestore, storage: () => ({ bucket: () => ({ file: (path: string, objectOptions?: { generation?: string }) => ({
   save: async (bytes: Buffer, options: { metadata: { metadata: Record<string, string> } }) => { await state.beforeSave?.(); if (state.files.has(path)) throw Object.assign(new Error('exists'), { code: 412 }); state.files.set(path, { bytes, metadata: options.metadata.metadata }); await state.afterSave?.(); },
   getMetadata: async () => { if (state.failMetadataOnce) { state.failMetadataOnce = false; throw Object.assign(new Error('Synthetic metadata failure'), { code: 503 }); } const value = state.files.get(path); if (!value || objectOptions?.generation && objectOptions.generation !== (value.generation || '1')) throw Object.assign(new Error('missing'), { code: 404 }); return [{ size: value.bytes.length, generation: value.generation || '1', metadata: value.metadata }]; },
+  download: async () => { state.downloaded.push(path); if (state.downloadFailure?.path === path) { const code = state.downloadFailure.code; state.downloadFailure = undefined; throw Object.assign(new Error('Synthetic download failure'), { code }); } const value = state.files.get(path); if (!value || objectOptions?.generation && objectOptions.generation !== (value.generation || '1')) throw Object.assign(new Error('missing'), { code: 404 }); return [value.bytes]; },
   delete: async () => { if (state.failDeleteOnce) { state.failDeleteOnce = false; throw new Error('Synthetic temporary storage failure'); } const value = state.files.get(path); if (!objectOptions?.generation || objectOptions.generation === (value?.generation || '1')) state.files.delete(path); await state.afterDelete?.(); },
 }) }) }) }));
 vi.unmock('@sports-alliance/sports-lib');
@@ -29,6 +30,7 @@ describe.skipIf(!process.env.FIRESTORE_EMULATOR_HOST)('durable activity sends in
   beforeAll(() => { if (!admin.apps.length) admin.initializeApp({ projectId: 'demo-activity-send' }); db = admin.firestore(); });
   beforeEach(async () => {
     state.pro = true; state.account = 'reviewed-account'; state.enqueue.mockClear(); state.files.clear(); state.afterSave = undefined; state.beforeSave = undefined; state.afterDelete = undefined; state.failDeleteOnce = false; state.failMetadataOnce = false;
+    state.downloadFailure = undefined; state.downloaded = [];
     await db.recursiveDelete(db.doc(`users/${uid}`));
     await db.recursiveDelete(db.doc(`userDeletionTombstones/${uid}`));
     const queues = await db.collection('activitySyncQueue').get();
@@ -46,6 +48,39 @@ describe.skipIf(!process.env.FIRESTORE_EMULATOR_HOST)('durable activity sends in
     await admitSendRows(uid, id);
     return (await db.collection('activitySyncQueue').get()).docs[0];
   }
+  async function savedOriginal(eventId: string, bytes = createCOROSActivityFITFixture()) {
+    const path = `users/${uid}/events/${eventId}/original.fit`;
+    state.files.set(path, { bytes, metadata: {} });
+    await db.doc(`users/${uid}/events/${eventId}`).set({ name: 'Synthetic saved recording', startDate: 1000, originalFiles: [{ path, generation: '1' }] });
+    await db.doc(`users/${uid}/events/${eventId}/metaData/${ServiceNames.GarminAPI}`).set({ summaryId: eventId });
+    return path;
+  }
+  it.each(['selection', 'date range'])('continues a saved %s preview after temporary download failure without excluding or re-reading recordings', async kind => {
+    const first = await savedOriginal('saved-one');
+    const second = await savedOriginal('saved-two');
+    await runSendCommand(uid, { version: 1, action: 'create', batchId: id, provider: 'coros', source: 'saved' });
+    state.downloadFailure = { path: second, code: 503 };
+    const criteria = kind === 'selection' ? { eventIds: ['saved-one', 'saved-two'] } : { startDate: new Date(0).toISOString(), endDate: new Date(2000).toISOString() };
+    await expect(runSendCommand(uid, { version: 1, action: 'prepare', batchId: id, ...criteria, sources: [ServiceNames.GarminAPI] })).rejects.toMatchObject({ code: 'unavailable' });
+    expect((await batchRef(uid, id).get()).data()).toMatchObject({ total: 1, finished: 0, reviewed: false, savedSelectionReady: true });
+    expect((await operationRef(uid, id).collection('rows').doc('saved-two').get()).exists).toBe(false);
+    expect((await operationRef(uid, id).get()).data()).not.toHaveProperty('lastEventId');
+    await runSendCommand(uid, { version: 1, action: 'prepare', batchId: id });
+    expect((await batchRef(uid, id).get()).data()).toMatchObject({ total: 2, finished: 0, reviewed: true });
+    expect((await batchRef(uid, id).collection('rows').doc('saved-two').get()).data()?.status).toBe('ready');
+    expect(state.downloaded.filter(path => path === first)).toHaveLength(1);
+    expect(state.downloaded.filter(path => path === second)).toHaveLength(2);
+    expect((await db.collection('activitySyncQueue').get()).empty).toBe(true);
+  });
+  it.each(['missing', 'invalid'])('still excludes a permanently %s saved original', async kind => {
+    const path = await savedOriginal('saved-invalid', kind === 'invalid' ? Buffer.from('Synthetic invalid FIT') : undefined);
+    await runSendCommand(uid, { version: 1, action: 'create', batchId: id, provider: 'coros', source: 'saved' });
+    if (kind === 'missing') state.downloadFailure = { path, code: 404 };
+    await runSendCommand(uid, { version: 1, action: 'prepare', batchId: id, eventIds: ['saved-invalid'], sources: [ServiceNames.GarminAPI] });
+    expect((await batchRef(uid, id).get()).data()).toMatchObject({ total: 1, finished: 1, reviewed: true });
+    expect((await batchRef(uid, id).collection('rows').doc('saved-invalid').get()).data()?.status).toBe('needs_action');
+    expect((await db.collection('activitySyncQueue').get()).empty).toBe(true);
+  });
   it('explains excluded saved originals without creating any provider work', async () => {
     await db.doc(`users/${uid}/events/merged-event`).set({ name: 'Synthetic merged recording', startDate: 1000, isMerge: true });
     await runSendCommand(uid, { version: 1, action: 'create', batchId: id, provider: 'coros', source: 'saved' });
