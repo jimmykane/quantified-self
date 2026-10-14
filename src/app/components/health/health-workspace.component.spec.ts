@@ -1156,8 +1156,8 @@ describe('HealthWorkspaceComponent', () => {
       .toContain('health-priority-grid-single');
     const sleepDetails = (fixture.nativeElement as HTMLElement).querySelector('.health-priority-card:first-child')?.textContent;
     expect(sleepDetails).toContain('Score86');
-    expect(sleepDetails).toContain('HRV58 ms');
-    expect(sleepDetails).toContain('Avg HR52 bpm');
+    expect(sleepDetails).toContain('Sleep HRV58 ms');
+    expect(sleepDetails).toContain('Average sleep HR52 bpm');
     expect((fixture.nativeElement as HTMLElement).querySelectorAll('app-health-sleep-stage-summary')).toHaveLength(1);
     expect(sleepDetails).toContain('Sleep stages');
     expect((fixture.nativeElement as HTMLElement).querySelector('.health-provider-filters')).toBeNull();

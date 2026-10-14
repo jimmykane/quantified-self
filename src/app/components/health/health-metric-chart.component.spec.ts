@@ -85,6 +85,9 @@ describe('HealthMetricChartComponent', () => {
 
     expect(host.textContent).toContain('Device: Garmin Test');
     expect(host.textContent).toContain('bpm');
+    expect(host.textContent).toContain('Daily resting HR');
+    expect(host.textContent).toContain('Latest record:');
+    expect(host.textContent).toContain('No trend inferred');
   });
 
   it('does not render an empty device label when attribution is unavailable', async () => {

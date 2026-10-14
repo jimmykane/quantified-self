@@ -338,6 +338,21 @@ ECharts reserves label space and suppresses overlapping labels on both axes with
 Health metric lines use a consistent 1px stroke in Highlights and the explorer, including coloured HRV segments.
 Hover retains that stroke weight; data markers, personal-range shading, and the shared Sleep chart are unchanged.
 
+Health and Dashboard Health charts share explicit source/reading labels: daily resting HR, average sleep HR and minimum
+sleep HR are not interchangeable. Full cards show the selected record's provider-calendar date and reported device
+label when available; no physical device is guessed from a provider/account. Source captions and menu triggers wrap
+instead of truncating their measurement meaning. Health's Sleep highlights name Sleep HRV and average sleep HR explicitly.
+Dashboard/library thumbnails retain a visible source caption and full accessible source/reading context.
+
+The shared Health chart model selects dots for one or two numeric observation times, or histories with no nearby
+readings to connect. These views state the recorded reading count and **No trend inferred**. For longer line histories,
+gaps are determined from recorded cadence but capped at three days; intraday cadence stays adaptive. Missing periods
+remain gaps, and isolated readings remain visible even in compact charts. Bars and categorical states retain their
+existing representation. The same policy reaches Highlights, explorer charts, Health overview cards, Dashboard tiles
+and their thumbnails without changing source identities, source preferences, readings, units, HRV baselines or queries.
+This is frontend presentation only: no MCP/Assistant metric or consent contract, manual-entry mutation, Training
+calculation, Firestore schema/rule, Function, migration or deployment requirement changes.
+
 ### Public Health previews
 
 The homepage introduces Health after the Training section and links to the indexable, prerendered

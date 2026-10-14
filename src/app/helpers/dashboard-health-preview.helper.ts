@@ -29,6 +29,7 @@ function exampleRecords(metric: HealthMetricId, timestamps: number[], referenceE
       metricIds: [metric], metrics: [{ kind: 'value', metricId: metric, valueType: definition.valueType,
         aggregation: measuredWeight ? 'measurement' : fitnessEstimate ? 'latest' : total ? 'total' : 'average',
         semanticVariant: measuredWeight ? 'point' : metric === 'vo2_max' ? 'running' : metric === 'heart_rate_variability' ? 'sleep_overnight_hrv'
+          : metric === 'resting_heart_rate' ? 'daily_resting'
           : total ? 'daily_total' : 'daily_average',
         origin: measuredWeight ? 'recorded' : 'provider_summary', recordingMethod: measuredWeight ? 'manual' : 'provider_calculated',
         quality: { status: 'valid' }, normalizationStatus: 'canonical',

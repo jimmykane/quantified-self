@@ -76,7 +76,10 @@
                         <span class="health-priority-source-label">{{ chart.model.series.sourceLabel }}</span>
                       </div>
                     }
-                    <small>{{ chart.contextText }}</small>
+                    <small class="health-priority-reading-kind">{{ chart.model.readingLabel }}</small>
+                    <small>{{ chart.contextText }}@if (chart.model.recordedDateText) { · Latest record: {{ chart.model.recordedDateText }} }</small>
+                    @if (chart.model.series.deviceLabel) { <small>Device: {{ chart.model.series.deviceLabel }}</small> }
+                    @if (chart.model.plotKind === 'point') { <small>{{ chart.model.evidenceText }}</small> }
                     @if (chart.personalRangeStatus) {
                       <div class="health-priority-range-status">
                         <span

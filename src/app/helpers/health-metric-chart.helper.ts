@@ -1,5 +1,6 @@
 import { getDateTimeFormatter } from './date-time-format.helper';
 import { getNumberFormatter } from './number-format.helper';
+import { healthChartReadingLabel } from './chart-source.helper';
 import type { EChartsType } from 'echarts/core';
 import {
   DashboardEChartsStyleTokens,
@@ -65,6 +66,11 @@ interface StressStateRenderApi {
 
 export interface HealthChartSeriesModel {
   series: HealthWorkspaceSeries;
+  /** Presentation only; never changes the source series/selection identity. */
+  plotKind: HealthWorkspaceSeries['chartKind'];
+  readingLabel: string;
+  recordedDateText: string | null;
+  evidenceText: string;
   data: HealthChartDatum[];
   displayedPoints: HealthWorkspaceSeriesPoint[];
   numericBounds: { min: number; max: number } | null;
@@ -155,9 +161,9 @@ export function buildHealthMetricEChartsOption(
   compact = false,
   statusOverlay: HealthChartStatusOverlay | null = null,
 ): ChartOption {
-  const isCategorical = model.series.chartKind === 'step';
-  const isPoint = model.series.chartKind === 'point';
-  const isBar = model.series.chartKind === 'bar';
+  const isCategorical = model.plotKind === 'step';
+  const isPoint = model.plotKind === 'point';
+  const isBar = model.plotKind === 'bar';
   const pointsByTimestamp = new Map(model.displayedPoints.map(point => [point.timestampMs, point]));
   const seriesColor = resolveHealthMetricColor(model.series.metricId, style.trendLineColor);
   const useStressStateColors = model.series.metricId === HEALTH_METRIC_IDS.StressState && isCategorical;
@@ -354,7 +360,7 @@ export function buildHealthMetricEChartsOption(
       data: model.data,
       connectNulls: false,
       step: isCategorical ? 'end' : undefined,
-      showSymbol: useHrvPointColors
+      showSymbol: isPoint || model.data.some(([, value]) => value === null) || useHrvPointColors
         ? true
         : compact
         ? model.displayedPointCount <= 2
@@ -397,7 +403,7 @@ export function buildHealthMetricEChartsOption(
           data: [{ coord: [latestNumericPoint.timestampMs, latestNumericPoint.value] }],
         }
         : undefined,
-    }, ...(useHrvPointColors
+    }, ...(useHrvPointColors && !isPoint
       ? buildPointStatusLineSeries(model.data, hrvPointStatuses, seriesColor)
       : []), ...buildPersonalRangeBandSeries(rangeData, statusOverlay?.normalRangeColor)],
   };
@@ -712,6 +718,14 @@ function buildSeriesModel(
 ): HealthChartSeriesModel {
   const sortedPoints = [...series.points].sort((left, right) => left.timestampMs - right.timestampMs);
   const displayedPoints = downsamplePoints(sortedPoints, MAX_DISPLAY_POINTS);
+  const gapThreshold = resolveGapThreshold(displayedPoints, series.chartKind);
+  const numericTimestamps = new Set(sortedPoints.filter(point => typeof point.value === 'number' && Number.isFinite(point.value))
+    .map(point => point.timestampMs));
+  const hasConnectedReadings = displayedPoints.some((point, index) => index > 0
+    && point.timestampMs > displayedPoints[index - 1].timestampMs
+    && point.timestampMs - displayedPoints[index - 1].timestampMs <= gapThreshold);
+  const plotKind = series.chartKind === 'line' && (numericTimestamps.size <= 2 || !hasConnectedReadings)
+    ? 'point' : series.chartKind;
   const categoryLabels = series.chartKind === 'step'
     ? orderedCategoryLabels(
       [...new Set(displayedPoints.map(point => categoryValueLabel(point.value)))],
@@ -736,10 +750,20 @@ function buildSeriesModel(
     ? formatHealthUnit(series.metricId, latest.value, series.unit, series.nativeOnly, unitSettings)
     : '';
   const readingCountText = `${getNumberFormatter().format(sortedPoints.length)} ${sortedPoints.length === 1 ? 'reading' : 'readings'}`;
+  const evidenceText = `${readingCountText} recorded${plotKind === 'point' ? ' · No trend inferred' : ''}`;
+  const recordedDateMs = latest && /^\d{4}-\d{2}-\d{2}$/.test(latest.calendarDate)
+    ? Date.parse(`${latest.calendarDate}T12:00:00.000Z`) : NaN;
+  const recordedDateText = Number.isFinite(recordedDateMs)
+    ? getDateTimeFormatter(undefined, { month: 'short', day: 'numeric', year: 'numeric', timeZone: 'UTC' })
+      .format(recordedDateMs) : null;
 
   return {
     series,
-    data: buildChartData(displayedPoints, series.chartKind),
+    plotKind,
+    readingLabel: healthChartReadingLabel(series),
+    recordedDateText,
+    evidenceText,
+    data: buildChartData(displayedPoints, plotKind),
     displayedPoints,
     numericBounds,
     yMinLabel: series.chartKind === 'step'
@@ -754,7 +778,7 @@ function buildSeriesModel(
     displayedPointCount: displayedPoints.length,
     omittedPointCount: Math.max(0, sortedPoints.length - displayedPoints.length),
     displayUnit,
-    ariaLabel: `${series.sourceLabel}, ${series.semanticLabel}. ${readingCountText}. Latest ${latestText}. Values are not combined with other sources.`,
+    ariaLabel: `${series.sourceLabel}, ${series.semanticLabel}. ${evidenceText}. Latest ${latestText}${recordedDateText ? `, recorded ${recordedDateText}` : ''}. Values are not combined with other sources.`,
   };
 }
 
@@ -806,7 +830,11 @@ function resolveGapThreshold(
   const medianDelta = positiveDeltas.length
     ? positiveDeltas[Math.floor((positiveDeltas.length - 1) / 2)]
     : DAY_MS;
-  return Math.max(medianDelta * 3, chartKind === 'step' ? 1 : 0);
+  // Preserve the existing categorical cadence. The sparse policy is numeric only.
+  if (chartKind === 'step') return Math.max(medianDelta * 3, 1);
+  // Sparse numeric histories must not set an arbitrarily long connection limit.
+  // Preserve adaptive intraday cadence, but never bridge more than three days.
+  return Math.min(medianDelta * 3, 3 * DAY_MS);
 }
 
 function downsamplePoints(

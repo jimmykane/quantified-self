@@ -41,12 +41,12 @@ export class HealthMetricChartComponent {
   ));
   readonly renderedModels = computed(() => this.models().map(model => {
     const status = this.chartStatuses()[model.series.id] || null;
-    const [reading, ...details] = model.series.semanticLabel.split(' · ');
+    const [, ...details] = model.series.semanticLabel.split(' · ');
     const describeHeartRate = model.series.metricId === HEALTH_METRIC_IDS.HeartRate && !model.series.nativeOnly;
     return {
       model,
-      title: describeHeartRate ? reading : model.series.sourceLabel,
-      summary: describeHeartRate ? [model.series.sourceLabel, ...details].join(' · ') : model.series.semanticLabel,
+      title: describeHeartRate ? model.readingLabel : model.series.sourceLabel,
+      summary: describeHeartRate ? [model.series.sourceLabel, ...details].join(' · ') : model.readingLabel,
       statusOverlay: buildHealthHrvChartStatusOverlay(status),
       statusDescription: healthHrvChartStatusDescription(status),
     };

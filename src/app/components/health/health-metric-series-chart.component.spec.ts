@@ -118,7 +118,7 @@ describe('HealthMetricSeriesChartComponent', () => {
       expect.anything(), DASHBOARD_ECHARTS_MOBILE_TAP_FEEDBACK_OPTIONS,
     );
     const option = eChartsLoader.setOption.mock.calls[0][1] as { series: Array<{ type: string }> };
-    expect(option.series[0].type).toBe('line');
+    expect(option.series[0].type).toBe('scatter');
   });
 
   it('keeps thumbnail readings and colors while hiding axes and interaction chrome', async () => {
@@ -154,12 +154,39 @@ describe('HealthMetricSeriesChartComponent', () => {
     expect(preview.xAxis.min).toBeLessThan(0);
     expect(preview.xAxis.max).toBeGreaterThan(DAY_MS);
     expect(preview.xAxis.max).toBeLessThan(2 * DAY_MS);
-    expect(preview.series[0].lineStyle.width).toBe(1.5);
+    expect(preview.series[0].type).toBe('scatter');
     expect(preview.series[0].data).toEqual([[0, 50], [DAY_MS, 52]]);
     fixture.componentRef.setInput('thumbnail', false); fixture.detectChanges(); await fixture.whenStable();
     const full = eChartsLoader.setOption.mock.calls.at(-1)![1];
     expect(full.xAxis.max).toBe(DAY_MS * 30);
     expect(full.series[0].lineStyle.width).toBe(1);
+  });
+
+  it('keeps two monthly measurements as dots in the thumbnail and restored full chart', async () => {
+    const points = [0, 30].map(day => ({ timestampMs: day * DAY_MS,
+      calendarDate: new Date(day * DAY_MS).toISOString().slice(0, 10), value: 70 + day / 30, qualityCode: null }));
+    const model = buildHealthChartModels([series({ metricId: 'body_weight', unit: 'kilogram', points })], 0, 31 * DAY_MS)[0];
+    fixture.componentRef.setInput('model', model);
+    fixture.componentRef.setInput('endTimeMs', 31 * DAY_MS);
+    fixture.componentRef.setInput('thumbnail', true); fixture.detectChanges(); await fixture.whenStable();
+    const preview = eChartsLoader.setOption.mock.calls.at(-1)![1];
+    expect(preview.series[0]).toMatchObject({ type: 'scatter', showSymbol: true, data: [[0, 70], [30 * DAY_MS, 71]] });
+    fixture.componentRef.setInput('thumbnail', false); fixture.detectChanges(); await fixture.whenStable();
+    const full = eChartsLoader.setOption.mock.calls.at(-1)![1];
+    expect(full.series[0]).toMatchObject({ type: 'scatter', data: preview.series[0].data });
+    expect(full.xAxis).toMatchObject({ min: 0, max: 31 * DAY_MS });
+  });
+
+  it('retains dense line history and its light thumbnail stroke', async () => {
+    const points = [0, 1, 2].map(day => ({ timestampMs: day * DAY_MS,
+      calendarDate: `1970-01-0${day + 1}`, value: 50 + day, qualityCode: null }));
+    fixture.componentRef.setInput('model', buildHealthChartModels([series({ points })], 0, 2 * DAY_MS)[0]);
+    fixture.componentRef.setInput('endTimeMs', 2 * DAY_MS);
+    fixture.componentRef.setInput('thumbnail', true); fixture.detectChanges(); await fixture.whenStable();
+    const preview = eChartsLoader.setOption.mock.calls.at(-1)![1];
+    expect(preview.series[0]).toMatchObject({ type: 'line', lineStyle: { width: 1.5 }, data: [[0, 50], [DAY_MS, 51], [2 * DAY_MS, 52]] });
+    fixture.componentRef.setInput('thumbnail', false); fixture.detectChanges(); await fixture.whenStable();
+    expect(eChartsLoader.setOption.mock.calls.at(-1)![1].series[0]).toMatchObject({ type: 'line', lineStyle: { width: 1 } });
   });
 
   it('centers a visible marker for a single recorded measurement', async () => {
