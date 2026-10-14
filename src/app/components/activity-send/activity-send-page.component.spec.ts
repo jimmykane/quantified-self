@@ -201,6 +201,73 @@ describe('activity sending workspace', () => {
     expect(fixture.nativeElement.querySelector('input[type=file]')).toBeNull();
     expect(fixture.nativeElement.textContent).toContain('Start a new send');
   });
+  it.each(['files', 'saved'] as const)('does not prepare %s when opening the created draft is cancelled', async source => {
+    const fixture = render(); fixture.componentInstance.source.set(source);
+    const navigate = vi.spyOn(TestBed.inject(Router), 'navigate').mockResolvedValue(false);
+    if (source === 'files') await fixture.componentInstance.addFiles({ preventDefault: vi.fn(), dataTransfer: { files: [new File(['a'], 'one.fit')] } } as unknown as DragEvent);
+    else { sends.selection.set(['event-one']); await fixture.componentInstance.previewSaved(); }
+    expect(navigate).toHaveBeenCalledOnce();
+    expect(sends.command).toHaveBeenCalledOnce();
+    expect(sends.command).toHaveBeenCalledWith(expect.objectContaining({ action: 'create', source }), 'owner');
+    expect(sends.upload).not.toHaveBeenCalled();
+    expect(fixture.componentInstance.error()).toContain('could not be opened');
+    expect(fixture.componentInstance.busy()).toBe(false);
+    expect(haptics.error).toHaveBeenCalledOnce(); expect(haptics.success).not.toHaveBeenCalled();
+  });
+  it.each(['files', 'saved'] as const)('keeps a newly opened send when %s draft creation replies late', async source => {
+    const queryParams$ = new BehaviorSubject(convertToParamMap({ source }));
+    TestBed.overrideProvider(ActivatedRoute, { useValue: { paramMap: of(convertToParamMap({ provider: 'suunto' })), queryParamMap: queryParams$.asObservable() } });
+    const fixture = render(); const navigate = vi.spyOn(TestBed.inject(Router), 'navigate').mockResolvedValue(true);
+    sends.command.mockImplementationOnce(async () => { queryParams$.next(convertToParamMap({ batch: 'other-send', source })); return { batchId: 'batch-1', revision: 0 }; });
+    if (source === 'files') await fixture.componentInstance.addFiles({ preventDefault: vi.fn(), dataTransfer: { files: [new File(['a'], 'one.fit')] } } as unknown as DragEvent);
+    else { sends.selection.set(['event-one']); await fixture.componentInstance.previewSaved(); }
+    expect(sends.watchBatch).toHaveBeenCalledWith('other-send');
+    expect(navigate).not.toHaveBeenCalled(); expect(sends.upload).not.toHaveBeenCalled();
+    expect(sends.command).toHaveBeenCalledOnce();
+    expect(fixture.componentInstance.busy()).toBe(false); expect(fixture.componentInstance.error()).toBeNull();
+    expect(haptics.error).not.toHaveBeenCalled(); expect(haptics.success).not.toHaveBeenCalled();
+  });
+  it.each(['provider', 'source'] as const)('does not resume a late create after the %s changes away and back', async field => {
+    const params$ = new BehaviorSubject(convertToParamMap({ provider: 'suunto' }));
+    const queryParams$ = new BehaviorSubject(convertToParamMap({ source: 'files' }));
+    TestBed.overrideProvider(ActivatedRoute, { useValue: { paramMap: params$.asObservable(), queryParamMap: queryParams$.asObservable() } });
+    const fixture = render(); const navigate = vi.spyOn(TestBed.inject(Router), 'navigate').mockResolvedValue(true);
+    sends.command.mockImplementationOnce(async () => {
+      if (field === 'provider') { params$.next(convertToParamMap({ provider: 'coros' })); params$.next(convertToParamMap({ provider: 'suunto' })); }
+      else { queryParams$.next(convertToParamMap({ source: 'saved' })); queryParams$.next(convertToParamMap({ source: 'files' })); }
+      return { batchId: 'batch-1', revision: 0 };
+    });
+    await fixture.componentInstance.addFiles({ preventDefault: vi.fn(), dataTransfer: { files: [new File(['a'], 'one.fit')] } } as unknown as DragEvent);
+    expect(navigate).not.toHaveBeenCalled(); expect(sends.upload).not.toHaveBeenCalled(); expect(sends.command).toHaveBeenCalledOnce();
+    expect(haptics.error).not.toHaveBeenCalled(); expect(haptics.success).not.toHaveBeenCalled();
+  });
+  it.each(['files', 'saved'] as const)('allows the accepted draft-opening navigation to prepare %s with one feedback owner', async source => {
+    const queryParams$ = new BehaviorSubject(convertToParamMap({ source }));
+    TestBed.overrideProvider(ActivatedRoute, { useValue: { paramMap: of(convertToParamMap({ provider: 'suunto' })), queryParamMap: queryParams$.asObservable() } });
+    const fixture = render();
+    vi.spyOn(TestBed.inject(Router), 'navigate').mockImplementation(async (_commands, extras) => {
+      queryParams$.next(convertToParamMap(extras!.queryParams!));
+      sends.batch.set({ ...batchValue, source, total: 0, reviewed: false });
+      return true;
+    });
+    if (source === 'files') await fixture.componentInstance.addFiles({ preventDefault: vi.fn(), dataTransfer: { files: [new File(['a'], 'one.fit')] } } as unknown as DragEvent);
+    else { sends.selection.set(['event-one']); await fixture.componentInstance.previewSaved(); }
+    expect(sends.watchBatch).toHaveBeenCalledWith('batch-1');
+    expect(sends.command).toHaveBeenCalledTimes(2);
+    expect(sends.command).toHaveBeenNthCalledWith(2, expect.objectContaining({ action: 'prepare', batchId: 'batch-1' }), 'owner');
+    expect(sends.upload).toHaveBeenCalledTimes(source === 'files' ? 1 : 0);
+    expect(haptics.selection).toHaveBeenCalledOnce(); expect(haptics.success).toHaveBeenCalledOnce(); expect(haptics.error).not.toHaveBeenCalled();
+  });
+  it('keeps preparation active when only unrelated query parameters change for the same draft', async () => {
+    const queryParams$ = new BehaviorSubject(convertToParamMap({ batch: 'batch-1', source: 'files' }));
+    TestBed.overrideProvider(ActivatedRoute, { useValue: { paramMap: of(convertToParamMap({ provider: 'suunto' })), queryParamMap: queryParams$.asObservable() } });
+    const fixture = render(); sends.batch.set(batchValue);
+    sends.upload.mockImplementationOnce(async () => { queryParams$.next(convertToParamMap({ batch: 'batch-1', source: 'files', details: 'true' })); });
+    await fixture.componentInstance.addFiles({ preventDefault: vi.fn(), dataTransfer: { files: [new File(['a'], 'one.fit')] } } as unknown as DragEvent);
+    expect(sends.upload).toHaveBeenCalledOnce(); expect(sends.command).toHaveBeenCalledOnce();
+    expect(sends.command).toHaveBeenCalledWith({ version: 1, action: 'prepare', batchId: 'batch-1' }, 'owner');
+    expect(haptics.selection).toHaveBeenCalledOnce(); expect(haptics.success).toHaveBeenCalledOnce(); expect(haptics.error).not.toHaveBeenCalled();
+  });
   it.each(['loadingRows', 'rowReadError'])('blocks confirmation until the reviewed rows are readable: %s', async state => {
     const fixture = render(); sends.batch.set(batchValue); sends.rows.set([row]); sends[state].set(state === 'loadingRows' ? true : 'Offline');
     await fixture.componentInstance.confirm(); expect(sends.command).not.toHaveBeenCalled();

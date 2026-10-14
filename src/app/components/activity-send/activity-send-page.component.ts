@@ -69,7 +69,10 @@ export class ActivitySendPageComponent {
     this.route.paramMap.pipe(takeUntilDestroyed()).subscribe(params => {
       const value = params.get('provider');
       const provider = isActivitySendProvider(value) ? value : null;
-      if (provider !== this.provider()) this.selectionChanged.set(false);
+      if (provider !== this.provider()) {
+        this.selectionChanged.set(false);
+        if (this.busy()) this.activeOwner = null;
+      }
       this.provider.set(provider);
       if (value && !isActivitySendProvider(value)) void this.router.navigate(['/send-activities'], { replaceUrl: true });
     });
@@ -79,9 +82,14 @@ export class ActivitySendPageComponent {
       const source = params.get('source') === 'saved' ? 'saved' : 'files';
       const requested = params.get('batch');
       const id = requested && /^[A-Za-z0-9_-]{1,128}$/.test(requested) ? requested : null;
-      if (source !== this.source() || id !== this.routeBatchId) this.selectionChanged.set(false);
+      const contextChanged = source !== this.source() || id !== this.routeBatchId;
+      if (contextChanged) {
+        this.selectionChanged.set(false);
+        // The draft-opening navigation is the only context change owned by this action.
+        // Fence user navigation even before create returns an active batch.
+        if (this.busy() && (source !== this.activeSource || id !== this.activeBatch)) this.activeOwner = null;
+      }
       this.routeBatchId = id; this.source.set(source);
-      if (this.busy() && this.activeBatch && id !== this.activeBatch) this.activeOwner = null;
       if (id) this.sends.watchBatch(id);
       else this.sends.closeBatch();
     });
@@ -114,8 +122,9 @@ export class ActivitySendPageComponent {
     if (!id) throw new Error('This browser cannot create a safe send reference. Please update your browser.');
     await this.command({ version: 1, action: 'create', batchId: id, provider, source: this.source() });
     this.assertActive(); this.activeBatch = id;
-    await this.router.navigate([], { relativeTo: this.route, queryParams: { batch: id, source: this.source() }, replaceUrl: true });
+    const opened = await this.router.navigate([], { relativeTo: this.route, queryParams: { batch: id, source: this.source() }, replaceUrl: true });
     this.assertActive();
+    if (!opened) throw new Error('This draft could not be opened. Reopen it from Recent sends before preparing activities.');
     return id;
   }
   preventDrop(event: DragEvent): void { event.preventDefault(); }
