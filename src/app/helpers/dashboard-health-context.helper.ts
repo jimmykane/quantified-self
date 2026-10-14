@@ -48,16 +48,17 @@ export function buildDashboardHealthContext(evidence: DashboardHealthEvidence, s
     });
     const observations = activities && settings.metric !== 'sleep' && isActivityHealthMetricId(settings.metric)
         ? selectActivityHealthObservations(settings.metric, result, activities.observations) : [];
+    const accountObservations = [...result.observations, ...(history?.result.observations || [])];
     // Source records can exist without a point the selected chart can draw (for
     // example a missing value, or a sample outside this window). Do not offer
     // those sources, or let them win the initial selection over real readings.
-    const series = buildHealthMetricWorkspaceView(result, sessions, observations, units, window).series
+    const series = buildHealthMetricWorkspaceView(result, evidence.sessions, observations, units, window, accountObservations).series
         .map(series => ({ ...series, points: series.points.filter(point =>
             Number.isFinite(point.timestampMs) && point.timestampMs >= window.startTimeMs && point.timestampMs <= window.endTimeMs
             && (typeof point.value === 'number' ? Number.isFinite(point.value)
                 : series.chartKind === 'step' && (typeof point.value === 'boolean' || typeof point.value === 'string' && point.value.trim().length > 0))) }))
         .filter(series => series.points.length > 0);
-    const historySeries = history ? buildHealthMetricWorkspaceView(history.result, evidence.sessions, [], units).series : [];
+    const historySeries = history ? buildHealthMetricWorkspaceView(history.result, evidence.sessions, [], units, {}, accountObservations).series : [];
     const charts = buildHealthChartModels(series, window.startTimeMs, window.endTimeMs, units).map(model => {
         const previous = historySeries.find(item => item.id === model.series.id);
         const points = new Map<string, HealthWorkspaceSeries['points'][number]>();

@@ -553,9 +553,11 @@ export function buildHealthMetricWorkspaceView(
   activityObservations: readonly ActivityHealthObservation[] = [],
   unitSettings: UserUnitSettingsInterface | null = null,
   window: HealthMetricProjectionWindow = {},
+  sleepAccountObservations: readonly HealthObservation[] = result.observations,
 ): HealthMetricWorkspaceView {
   const sleepById = new Map(sleepSessions.flatMap(session => session.id ? [[session.id, session] as const] : []));
-  const canonicalSleepRecords = buildCanonicalHealthSleepRecords(sleepSessions, result.observations);
+  // Visible and baseline projections can share identity evidence without sharing readings.
+  const canonicalSleepRecords = buildCanonicalHealthSleepRecords(sleepSessions, sleepAccountObservations);
   const canonicalSleepById = new Map(canonicalSleepRecords.flatMap(record => record.sessions.flatMap(session =>
     session.id ? [[session.id, record] as const] : [])));
   const datums: MetricDatum[] = [];
@@ -571,7 +573,7 @@ export function buildHealthMetricWorkspaceView(
   if (result.query.metricIds.includes(HEALTH_METRIC_IDS.HeartRateVariability)) {
     datums.push(...sleepHrvDatums(canonicalSleepRecords, result, window));
   }
-  datums.push(...sleepSummaryDatums(canonicalSleepRecords, result));
+  datums.push(...sleepSummaryDatums(canonicalSleepRecords, result, window));
   for (const observation of activityObservations) {
     datums.push(activityObservationDatum(observation));
   }
@@ -1501,6 +1503,7 @@ function sleepHrvDatums(
     const entry = observation.entry;
     return entry.kind === 'sleep_reference'
       && entry.metricId === HEALTH_METRIC_IDS.HeartRateVariability
+      && healthObservationInProjectionWindow(observation, window)
       ? [sleepHrvReferenceIdentity(entry.reference.documentId, entry.reference.field)]
       : [];
   }));
@@ -1584,8 +1587,7 @@ function representedNightlyHealthHrv(
   return result.observations.some(observation => {
     const entry = observation.entry;
     if (observation.provider !== record.provider || observation.accountKey !== record.accountKey
-      || (window.startTimeMs !== undefined && observation.endTimeMs < window.startTimeMs)
-      || (window.endTimeMs !== undefined && observation.endTimeMs > window.endTimeMs)
+      || !healthObservationInProjectionWindow(observation, window)
       || observation.calendarDate !== record.point.sleepDate || entry.kind !== 'value'
       || entry.metricId !== HEALTH_METRIC_IDS.HeartRateVariability
       || entry.normalizationStatus !== HEALTH_NORMALIZATION_STATUSES.Canonical
@@ -1596,6 +1598,11 @@ function representedNightlyHealthHrv(
     ]) && observation.startTimeMs < session.endTimeMs
       && observation.endTimeMs > resolveSleepEffectiveStartTimeMs(session));
   });
+}
+
+function healthObservationInProjectionWindow(observation: HealthObservation, window: HealthMetricProjectionWindow): boolean {
+  return (window.startTimeMs === undefined || observation.endTimeMs >= window.startTimeMs)
+    && (window.endTimeMs === undefined || observation.endTimeMs <= window.endTimeMs);
 }
 
 /** Recorded Sleep summaries do not require a separate provider Health record. */
@@ -1644,14 +1651,17 @@ function canonicalSleepSummaryValues(record: CanonicalHealthSleepRecord) {
   });
 }
 
-function sleepSummaryDatums(records: readonly CanonicalHealthSleepRecord[], result: HealthRangeResult): MetricDatum[] {
+function sleepSummaryDatums(
+  records: readonly CanonicalHealthSleepRecord[], result: HealthRangeResult, window: HealthMetricProjectionWindow,
+): MetricDatum[] {
   const requested = new Set<HealthMetricId>(result.query.metricIds.filter(metric =>
     SLEEP_SUMMARY_FIELDS.some(definition => definition.metricId === metric)));
   if (!requested.size) return [];
   const represented = new Set<string>();
   for (const observation of result.observations) {
     const entry = observation.entry;
-    if (entry.kind !== 'sleep_reference' || !requested.has(entry.metricId)) continue;
+    if (entry.kind !== 'sleep_reference' || !requested.has(entry.metricId)
+      || !healthObservationInProjectionWindow(observation, window)) continue;
     represented.add(JSON.stringify([entry.reference.documentId, entry.reference.field]));
   }
   return records.flatMap((record, index) => {

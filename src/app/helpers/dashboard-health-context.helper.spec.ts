@@ -3,6 +3,7 @@ import { normalizeUserUnitSettings } from '@shared/unit-aware-display';
 import { formatCanonicalHealthMetricSportsLibValue } from '@shared/sports-lib-health-data';
 import { describe, expect, it } from 'vitest';
 import { HEALTH_METRIC_CATALOG, HealthMetricId, HealthSourceRecord } from '@shared/health';
+import type { SleepSession } from '@shared/sleep';
 import { projectLoadedHealthRange } from '@shared/health-query';
 import { enrichSleepWithNightlyHrv, nightlyHealthAccountKey } from '@shared/nightly-hrv';
 import { withHealthSleepAccountKeys } from './health-sleep-account.helper';
@@ -22,6 +23,39 @@ function evidence(metric:HealthMetricId, accounts=['first'], range:AppDashboardH
   return {window,health:{result,limitReached:null,sourceRecordCount:records.length,sampleChunkCount:0,samplePointCount:0,serializedBytes:0,hasMatchingSourceRecords:!!records.length,hasSampleBackedMetric:false,providers:['GarminAPI'],sampleBackedProviders:[]},history:null,activities:null,sessions:[],errors:[]};
 }
 describe('dashboard Health semantics',()=>{
+  it.each(['visible', 'history'])('shares typed Sleep account evidence from %s across HRV card and baseline', location => {
+    const data = evidence('heart_rate_variability');
+    const sessions: SleepSession[] = Array.from({ length: 90 }, (_, index) => {
+      const endTimeMs = Date.parse('2026-09-15T08:00:00Z') - index * 86_400_000;
+      return { id: `night-${index}`, userID: 'owner', source: { provider: 'GarminAPI', providerUserId: 'provider-account',
+        sourceSessionKey: `night-${index}` }, sleepDate: new Date(endTimeMs).toISOString().slice(0, 10),
+        startTimeMs: endTimeMs - 8 * 3_600_000, endTimeMs, durationSeconds: 28_800,
+        isNap: false, stages: [], stageDurationsSeconds: {}, vitals: { averageHrvMs: 50 + index % 3 },
+        createdAtMs: endTimeMs, updatedAtMs: endTimeMs };
+    });
+    const session = sessions[location === 'visible' ? 0 : 30];
+    const reference = { ...data.health!.result.observations[0], calendarDate: session.sleepDate,
+      startTimeMs: session.startTimeMs, endTimeMs: session.endTimeMs, entry: {
+        kind: 'sleep_reference' as const, metricId: 'heart_rate_variability' as const, valueType: 'number' as const,
+        aggregation: 'average', semanticVariant: 'sleep_session_average_hrv', origin: 'provider_summary' as const,
+        recordingMethod: 'provider_calculated' as const, quality: { status: 'valid' as const },
+        reference: { domain: 'sleep' as const, documentId: session.id!, field: 'vitals.averageHrvMs' as const },
+      } };
+    const historyWindow = { startDate: new Date(Date.parse(data.window.startDate) - 60 * 86_400_000).toISOString().slice(0, 10),
+      endDate: new Date(Date.parse(data.window.startDate) - 86_400_000).toISOString().slice(0, 10) };
+    data.history = { ...data.health!, result: projectLoadedHealthRange([], [],
+      { ...historyWindow, metricIds: ['heart_rate_variability'] }, { sourceRecordsComplete: true, samplesComplete: true }) };
+    data.health!.result.observations = location === 'visible' ? [reference] : [];
+    data.history.result.observations = location === 'history' ? [reference] : [];
+    data.sessions = sessions;
+    for (const units of [null, normalizeUserUnitSettings({ distanceUnits: DistanceUnits.Miles })]) {
+      const view = buildDashboardHealthContext(data, { metric: 'heart_rate_variability', range: '30d' }, units);
+      expect(view.sources).toHaveLength(1);
+      expect(view.selected?.status).toMatchObject({ observationDayCount: 60, normalRange: expect.any(Object) });
+      expect(view.selected?.model.series.sourceLabel).toBe('Garmin');
+      expect(view.selected?.latestValueText).toBe('50 ms');
+    }
+  });
   it('filters overview evidence before selecting a source and never broadens a missing pinned reading', () => {
     const data = evidence('body_weight');
     const first = buildDashboardHealthContext(data, { metric: 'body_weight', range: '30d' });

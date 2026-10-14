@@ -1645,6 +1645,23 @@ describe('Health workspace helpers', () => {
     expect(new Set(view.series.map(series => series.sourceSelectionKey)).size).toBe(3);
   });
 
+  it('withholds conflicting account aliases across separate visible and baseline projections', () => {
+    const session = sleepSession({ vitals: { averageHrvMs: 62, overnightHrvMs: 44 } });
+    const previous = { ...session, id: 'sleep-previous', sleepDate: '2026-08-01',
+      startTimeMs: session.startTimeMs - DAY_MS, endTimeMs: session.endTimeMs - DAY_MS };
+    const query = (item: SleepSession, account: string) => projectLoadedHealthRange([sleepHrvReferenceRecord(item, account)], [],
+      { startDate: item.sleepDate, endDate: item.sleepDate, metricIds: [HEALTH_METRIC_IDS.HeartRateVariability] },
+      { sourceRecordsComplete: true, samplesComplete: true });
+    const visible = query(session, 'health-account-a');
+    const history = query(previous, 'health-account-b');
+    const evidence = [...visible.observations, ...history.observations];
+    const views = [visible, history].map(result => buildHealthMetricWorkspaceView(result, [session, previous], [], null, {}, evidence));
+    expect(views.every(view => view.series.length === 2)).toBe(true);
+    const overnightKeys = views.map(view => view.series.find(series => series.semanticVariant === 'sleep_overnight_hrv')!.sourceSelectionKey);
+    expect(overnightKeys[0]).toBe(overnightKeys[1]);
+    expect(new Set(views.flatMap(view => view.series.map(series => series.sourceSelectionKey))).size).toBe(3);
+  });
+
   it('restricts an unidentified Sleep account alias to the referenced document', () => {
     const session = sleepSession({ vitals: { averageHrvMs: 62, overnightHrvMs: 44 },
       source: { ...sleepSession().source, providerUserId: '' } });
@@ -1658,6 +1675,38 @@ describe('Health workspace helpers', () => {
     expect(view.series.every(series => series.points.length === 1)).toBe(true);
     expect(new Set(view.series.map(series => series.sourceSelectionKey)).size).toBe(2);
   });
+
+  it.each(['before', 'after'])(
+    'keeps typed Sleep reference fallbacks drawable when the reference ends %s the chart window', boundary => {
+      const session = sleepSession({ vitals: { averageHrvMs: 62, averageHeartRateBpm: 50 } });
+      const window = { startTimeMs: session.endTimeMs - 3_600_000, endTimeMs: session.endTimeMs + 3_600_000 };
+      const references = [
+        { metricId: HEALTH_METRIC_IDS.HeartRateVariability, field: 'vitals.averageHrvMs' as const,
+          aggregation: 'average', semanticVariant: 'sleep_session_average_hrv' },
+        { metricId: HEALTH_METRIC_IDS.HeartRate, field: 'vitals.averageHeartRateBpm' as const,
+          aggregation: 'average', semanticVariant: 'sleep_session_average_heart_rate' },
+        { metricId: HEALTH_METRIC_IDS.SleepDuration, field: 'durationSeconds' as const,
+          aggregation: 'total', semanticVariant: 'session_duration' },
+      ];
+      const record = { ...sleepHrvReferenceRecord(session, 'health-account'),
+        metrics: references.map(({ metricId, field, aggregation, semanticVariant }) => ({ ...sleepHrvReferenceRecord(session, 'health-account').metrics[0],
+          kind: 'sleep_reference' as const, metricId, aggregation, semanticVariant,
+          reference: { domain: 'sleep' as const, documentId: session.id!, field } })),
+        metricIds: references.map(item => item.metricId),
+        endTimeMs: boundary === 'before' ? window.startTimeMs - 1 : window.endTimeMs + 1 };
+      const result = projectLoadedHealthRange([record], [], { startDate: session.sleepDate, endDate: session.sleepDate,
+        metricIds: references.map(item => item.metricId) }, { sourceRecordsComplete: true, samplesComplete: true });
+      for (const units of [null, normalizeUserUnitSettings({ distanceUnits: DistanceUnits.Miles })]) {
+        const view = buildHealthMetricWorkspaceView(result, [session], [], units, window);
+        const visible = view.series.flatMap(series => series.points.filter(point =>
+          point.timestampMs >= window.startTimeMs && point.timestampMs <= window.endTimeMs)
+          .map(point => formatHealthValue(series.metricId, point.value, series.unit, false, units)));
+        const durationDisplay = formatCanonicalHealthMetricSportsLibValue(HEALTH_METRIC_IDS.SleepDuration, session.durationSeconds, units)!;
+        expect(visible.sort()).toEqual(['50 bpm', '62 ms', [durationDisplay.value, durationDisplay.unit].filter(Boolean).join(' ')].sort());
+        expect(new Set(view.series.map(series => series.sourceSelectionKey)).size).toBe(1);
+      }
+    },
+  );
 
   it.each([null, normalizeUserUnitSettings({ distanceUnits: DistanceUnits.Miles })])(
     'projects a Health overnight reading once when it also enriches Sleep (%s)', async units => {

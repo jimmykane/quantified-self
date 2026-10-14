@@ -32,11 +32,12 @@ export function buildDashboardHrvContext(
   window: ReturnType<typeof dashboardHrvWindows>['visible'],
   unitSettings: UserUnitSettingsInterface | null = null,
 ) {
-  const visibleSeries = buildHealthMetricWorkspaceView(visibleResult, sessions, [], unitSettings, window).series
+  const accountObservations = [...visibleResult.observations, ...historyResult.observations];
+  const visibleSeries = buildHealthMetricWorkspaceView(visibleResult, sessions, [], unitSettings, window, accountObservations).series
     .map(series => ({ ...series, points: series.points.filter(point =>
       point.timestampMs >= window.startTimeMs && point.timestampMs <= window.endTimeMs) }))
     .filter(series => series.points.length > 0);
-  const historySeries = buildHealthMetricWorkspaceView(historyResult, sessions, [], unitSettings).series;
+  const historySeries = buildHealthMetricWorkspaceView(historyResult, sessions, [], unitSettings, {}, accountObservations).series;
   const historyById = new Map(historySeries.map(series => [series.id, series]));
   const charts = buildHealthChartModels(visibleSeries, window.startTimeMs, window.endTimeMs, unitSettings).map(model => {
     const history = historyById.get(model.series.id);

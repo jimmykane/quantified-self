@@ -518,15 +518,28 @@ export class HealthWorkspaceComponent {
       this.effectiveProviderFilters(),
     );
   });
+  private readonly metricSleepAccountEvidence = computed(() => {
+    const isHrv = this.routeState().metric === HEALTH_METRIC_IDS.HeartRateVariability;
+    const providers = this.effectiveProviderFilters();
+    const sessions = isHrv ? this.selectedSleepSessions() : this.windowedSleepSessions();
+    const history = isHrv ? this.selectedHrvContextHealthLoad()?.result : null;
+    return {
+      sessions: providers.length ? sessions.filter(session => providers.includes(session.source.provider as HealthProvider)) : sessions,
+      observations: [...this.metricProjectionResult().observations,
+        ...(history ? filterHealthRangeResultByProviders(history, providers).observations : [])],
+    };
+  });
   readonly metricView = computed<HealthMetricWorkspaceView>(() => {
     const result = this.metricProjectionResult();
+    const accountEvidence = this.metricSleepAccountEvidence();
     return !this.selectedIsSleep()
       ? buildHealthMetricWorkspaceView(
         result,
-        this.filteredSleepSessions(),
+        accountEvidence.sessions,
         this.filteredActivityHealthObservations(),
         this.unitSettings(),
         this.selectedWindow(),
+        accountEvidence.observations,
       )
       : emptyMetricView();
   });
@@ -551,26 +564,26 @@ export class HealthWorkspaceComponent {
     const filteredHistoryResult = historyResult
       ? filterHealthRangeResultByProviders(historyResult, selectedProviders)
       : null;
-    const historySleepSessions = selectedProviders.length
-      ? this.selectedSleepSessions().filter(session =>
-        selectedProviders.includes(session.source.provider as HealthProvider))
-      : this.selectedSleepSessions();
+    const accountEvidence = this.metricSleepAccountEvidence();
     const fullSeries = [
       ...buildHealthMetricWorkspaceView(
         visibleResult,
-        historySleepSessions,
+        accountEvidence.sessions,
         [],
         this.unitSettings(),
         this.selectedWindow(),
+        accountEvidence.observations,
       ).series,
       ...buildHealthMetricWorkspaceView(
         filteredHistoryResult || sleepOnlyHrvContextResult(
           visibleResult,
           this.selectedHrvContextWindow(),
         ),
-        historySleepSessions,
+        accountEvidence.sessions,
         [],
         this.unitSettings(),
+        {},
+        accountEvidence.observations,
       ).series,
     ];
     const fullSeriesById = new Map<string, HealthWorkspaceSeries>();

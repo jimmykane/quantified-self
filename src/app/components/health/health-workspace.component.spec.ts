@@ -29,6 +29,7 @@ import {
   HEALTH_SOURCE_RECORD_KINDS,
   HEALTH_SYNC_STATUSES,
   HEALTH_VALUE_ORIGINS,
+  HEALTH_VALUE_TYPES,
   HealthMetricId,
   HealthProvider,
   HealthSourceRecord,
@@ -1446,6 +1447,41 @@ describe('HealthWorkspaceComponent', () => {
       metricId: HEALTH_METRIC_IDS.HeartRateVariability,
       includeSamples: false,
     });
+  });
+
+  it.each(['visible', 'history'])('keeps typed Sleep account identity from the %s range across the explorer baseline', async location => {
+    const sessions = Array.from({ length: 74 }, (_, daysAgo) => {
+      const endTimeMs = todayStartMs + 8 * 3_600_000 - daysAgo * 86_400_000;
+      return sleepSession({ id: `reference-night-${daysAgo}`, sleepDate: localCalendarDate(endTimeMs),
+        startTimeMs: endTimeMs - 8 * 3_600_000, endTimeMs, vitals: { averageHrvMs: 50 + daysAgo % 3 } });
+    });
+    await createComponent(metricId => Promise.resolve(rangeLoad(metricId, true)), '14d',
+      { sleepSessions: sessions }, HEALTH_METRIC_IDS.HeartRateVariability);
+    // The query service normally attaches hashes; exercise its native-only fallback after a crypto failure.
+    component.selectedSleepSessions.set(sessions);
+    const session = sessions[location === 'visible' ? 0 : 14];
+    const reference = { ...sourceRecord(HEALTH_METRIC_IDS.HeartRateVariability, HEALTH_PROVIDERS.GarminAPI, 50, 'sleep-reference'),
+      calendarDate: session.sleepDate, startTimeMs: session.startTimeMs, endTimeMs: session.endTimeMs,
+      metrics: [{ kind: 'sleep_reference' as const, metricId: HEALTH_METRIC_IDS.HeartRateVariability,
+        valueType: HEALTH_VALUE_TYPES.Number, aggregation: 'average', semanticVariant: 'sleep_session_average_hrv',
+        origin: HEALTH_VALUE_ORIGINS.ProviderSummary, recordingMethod: HEALTH_RECORDING_METHODS.ProviderCalculated,
+        quality: { status: HEALTH_QUALITY_STATUSES.Valid },
+        reference: { domain: 'sleep' as const, documentId: session.id!, field: 'vitals.averageHrvMs' as const } }] };
+    const load = (window: { startDate: string; endDate: string }): HealthWorkspaceRangeLoad => ({
+      ...rangeLoad(HEALTH_METRIC_IDS.HeartRateVariability, true),
+      result: projectLoadedHealthRange([reference], [], { ...window, metricIds: [HEALTH_METRIC_IDS.HeartRateVariability] },
+        { sourceRecordsComplete: true, samplesComplete: true }),
+    });
+    component.selectedHealthLoad.set(load(component.selectedWindow()));
+    component.selectedHrvContextHealthLoad.set(load(component.selectedHrvContextWindow()));
+    fixture.detectChanges();
+    const series = component.metricView().series;
+    expect(series).toHaveLength(1);
+    expect(series[0].sourceLabel).toBe('Garmin');
+    expect(component.selectedHrvChartStatuses()[series[0].id]).toMatchObject({
+      observationDayCount: 60, normalRange: expect.any(Object),
+    });
+    expect(component.selectedHrvChartStatuses()[series[0].id].pointStatuses.every(point => point.normalRange !== null)).toBe(true);
   });
 
   it('restores account preferences and records metric switches in the URL while keeping the range account-owned', async () => {
