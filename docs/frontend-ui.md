@@ -717,6 +717,9 @@ separate, and the full chart initially honors the user's Health highlight source
 the dashboard are local display choices, with selection haptics; the shared chart host owns tooltip feedback. HRV uses
 the same 8px vertical and 10px header inset as Sleep, dashboard title/value typography, and a title info action.
 Only its title row reserves room for range/menu controls; date and source context can use the full content width.
+For supported nightly HRV series in multi-day views, the time axis ends at the latest reading when it falls on the
+selected final day, removing unused hours after the morning measurement. Missing final nights keep the full selected
+window. The personal-range band uses the same plotted bounds; reading timestamps, tooltips and query bounds stay intact.
 
 HRV and Sleep have independent saved date ranges and navigation; HRV uses Health's calendar-day windows. Loading, empty and
 failed reads remain explicit; incomplete Health loads do not produce a misleading personal range. While paging, the

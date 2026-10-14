@@ -131,6 +131,62 @@ describe('Health metric chart helpers', () => {
     expect(model.ariaLabel).toContain('not combined with other sources');
   });
 
+  it.each(['overnight_average', 'overnight_rmssd', 'sleep_overnight_hrv', 'sleep_session_average_hrv'])(
+    'ends a complete nightly HRV window at its final morning reading (%s)', semanticVariant => {
+      const start = new Date(2026, 9, 1).getTime();
+      const end = new Date(2026, 9, 14, 23, 59, 59, 999).getTime();
+      const points = Array.from({ length: 14 }, (_, index) => ({
+        timestampMs: new Date(2026, 9, index + 1, 7, 4).getTime(),
+        calendarDate: `2026-10-${String(index + 1).padStart(2, '0')}`,
+        value: 34 + index, qualityCode: null,
+      }));
+      const model = buildHealthChartModels([series({ metricId: HEALTH_METRIC_IDS.HeartRateVariability,
+        unit: 'millisecond', semanticVariant, points })], start, end)[0];
+      const latest = points.at(-1)!;
+      const overlay = { normalRangeColor: AppDataColors.Altitude, statusColor: AppDataColors.Altitude,
+        rangePoints: [...points.map(point => ({ timestampMs: point.timestampMs, normalRange: { min: 30, max: 50 } })),
+          { timestampMs: end, normalRange: { min: 100, max: 200 } }],
+      };
+      for (const compact of [false, true]) {
+        for (const darkTheme of [false, true]) {
+          for (const width of [320, 1000]) {
+            const option = buildHealthMetricEChartsOption(model, start, end,
+              buildDashboardEChartsStyleTokens(darkTheme, width), width < 600,
+              compact ? normalizeUserUnitSettings({ distanceUnits: DistanceUnits.Miles }) : null, compact, overlay) as {
+              xAxis: { min: number; max: number };
+              yAxis: { max: number };
+              series: Array<{ id?: string; data: unknown[]; markPoint?: { data: Array<{ coord: number[] }> } }>;
+              tooltip: { formatter: (params: { value: number[] }) => string };
+            };
+            expect(option.xAxis).toMatchObject({ min: start, max: latest.timestampMs });
+            expect(option.series[0].data).toBe(model.data);
+            expect(option.series[0].markPoint?.data[0].coord).toEqual([latest.timestampMs, latest.value]);
+            expect(option.series.find(plot => plot.id === 'hrv-personal-range-band')?.data.at(-1))
+              .toEqual([latest.timestampMs, 20]);
+            expect(option.yAxis.max).toBeLessThan(100);
+            expect(option.tooltip.formatter({ value: [latest.timestampMs, latest.value] })).toContain('47 ms');
+          }
+        }
+      }
+    });
+
+  it.each([
+    { name: 'a missing final night', metricId: HEALTH_METRIC_IDS.HeartRateVariability, semanticVariant: 'overnight_average', days: 14, readingDay: 13 },
+    { name: 'a one-day HRV view', metricId: HEALTH_METRIC_IDS.HeartRateVariability, semanticVariant: 'overnight_average', days: 1, readingDay: 1 },
+    { name: 'a one-day HRV view across a clock change', metricId: HEALTH_METRIC_IDS.HeartRateVariability, semanticVariant: 'overnight_average', days: 1, startDay: 25, readingDay: 25 },
+    { name: 'intraday HRV', metricId: HEALTH_METRIC_IDS.HeartRateVariability, semanticVariant: 'activity_interval_average', days: 14, readingDay: 14 },
+    { name: 'another Health metric', metricId: HEALTH_METRIC_IDS.RestingHeartRate, semanticVariant: 'daily_resting', days: 14, readingDay: 14 },
+  ])('keeps the complete selected axis for $name', ({ metricId, semanticVariant, days, readingDay, startDay = 1 }) => {
+    const start = new Date(2026, 9, startDay).getTime();
+    const end = new Date(2026, 9, startDay + days - 1, 23, 59, 59, 999).getTime();
+    const timestampMs = new Date(2026, 9, readingDay, 7, 4).getTime();
+    const model = buildHealthChartModels([series({ metricId, semanticVariant,
+      points: [{ timestampMs, calendarDate: `2026-10-${String(readingDay).padStart(2, '0')}`, value: 34, qualityCode: null }],
+    })], start, end)[0];
+    const option = buildHealthMetricEChartsOption(model, start, end, buildDashboardEChartsStyleTokens(false, 320), true);
+    expect(option.xAxis).toMatchObject({ min: start, max: end });
+  });
+
   it('uses Sports Lib formatting in chart accessibility text and tooltips', () => {
     const vo2Series = series({
       metricId: HEALTH_METRIC_IDS.Vo2Max,
