@@ -358,6 +358,17 @@ Run it when upgrading Firebase; remove the guard once upstream rejects malformed
 Backend queue and Cloud Monitoring coverage are unchanged because no provider, worker, queue, schedule,
 or server-side lifecycle changes. Existing application error handlers now receive the rejected promise.
 
+Calendar activity, planned-workout and workout-completion subscription failures emit `Calendar data read failed`
+through `LoggerService` to the console and Sentry. Sentry groups reports by read source and allowlisted error name/code;
+filter with `calendarReadSource`, `calendarView`, `calendarRouteMode`, `calendarErrorName` or `calendarErrorCode`.
+The diagnostic fields include whether the reader is bounded, elapsed milliseconds since starting the read and
+`navigator.onLine` (a browser connectivity hint, not proof that Firestore is reachable). Error names and Firestore
+codes use fixed allowlists; the added fields exclude raw errors/messages/stacks, query dates, owner identifiers,
+record identifiers and activity/workout contents. Sentry retains the application's existing session context.
+Each failed subscription reports once; successful reads, cancelled reads and a restore-in-progress state are silent.
+Error displays and user-triggered retries retain their existing behavior. This is app diagnostics only, with no
+change to Training planning semantics or MCP read/write contracts, scopes, projections or bundled workflows.
+
 ## Account profile recovery
 
 Firebase Auth identity and account-profile availability are separate states. Authenticated profile reads wait for

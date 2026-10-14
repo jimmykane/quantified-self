@@ -17,7 +17,7 @@ import {
   DaysOfTheWeek,
   type EventInterface,
 } from '@sports-alliance/sports-lib';
-import { BehaviorSubject, Subject, of, throwError, map } from 'rxjs';
+import { BehaviorSubject, Subject, TimeoutError, of, throwError, map } from 'rxjs';
 import type { TimelineNote } from '@shared/timeline-notes';
 import type { WorkoutStructureV1 } from '@shared/planned-workout';
 import { AppTimelineNotesService } from '../../../services/app.timeline-notes.service';
@@ -33,6 +33,7 @@ import { TrainingPlansService, type CurrentTrainingScheduleV1 } from '../../../s
 import { ActivityRangeTableSectionComponent } from '../../event-table/activity-range-table-section.component';
 import { CalendarPageComponent } from './calendar-page.component';
 import { TrainingImpactService } from '../../../services/training-impact.service';
+import { LoggerService } from '../../../services/logger.service';
 
 @Component({
   selector: 'app-activity-range-table-section',
@@ -73,6 +74,7 @@ describe('CalendarPageComponent', () => {
   const notesService = { uid: signal<string | null>(planningUserUid), showOnCharts: signal(true), changes$: new Subject<void>(), loadRange: vi.fn(), cachedRange: vi.fn(() => null), invalidate: vi.fn(), isOwner: (uid: string) => notesService.uid() === uid };
   const haptics = { selection: vi.fn() };
   const dialogs = { open: vi.fn() };
+  const logger = { error: vi.fn(), captureMessage: vi.fn() };
   let watchSchedule: ReturnType<typeof vi.fn>;
   let watchWorkoutCompletions: ReturnType<typeof vi.fn>;
   let dayDetailsNavigation: {
@@ -100,6 +102,7 @@ describe('CalendarPageComponent', () => {
     notesService.loadRange.mockReset().mockResolvedValue({ notes: [], incomplete: null });
     notesService.invalidate.mockImplementation(() => notesService.changes$.next());
     haptics.selection.mockClear(); dialogs.open.mockClear();
+    logger.error.mockClear(); logger.captureMessage.mockClear();
     watchSchedule = vi.fn().mockReturnValue(of(emptySchedule()));
     watchWorkoutCompletions = vi.fn().mockReturnValue(of([]));
     pendingDestination = signal<string | null>(null);
@@ -125,6 +128,7 @@ describe('CalendarPageComponent', () => {
         { provide: TrainingImpactService, useValue: { watch: vi.fn(() => of({ status: 'private', formPoints: null })) } },
         { provide: AppTimelineNotesService, useValue: notesService },
         { provide: AppHapticsService, useValue: haptics },
+        { provide: LoggerService, useValue: logger },
         { provide: AppEventColorService, useValue: {
           getActivityColor: vi.fn(), getColorForActivityTypeByActivityTypeGroup: vi.fn(),
         } },
@@ -769,6 +773,76 @@ describe('CalendarPageComponent', () => {
     expect(dayDetailsNavigation.consumeRestoration).toHaveBeenCalledWith(restoration);
     expect(fixture.componentInstance.selectedDay()?.dateKey).toBe('2026-08-03');
     expect(openBottomSheet).not.toHaveBeenCalled();
+  });
+
+  it.each(['activities', 'planned-workouts', 'workout-completions'] as const)(
+    'logs %s failures once with safe diagnostic fields and preserves retry recovery', async source => {
+      const error = Object.assign(new Error('users/private-owner/events/private-event on private-date'), {
+        name: 'FirebaseError', code: 'permission-denied', privateData: { token: 'private-token' },
+      });
+      const reader = source === 'activities' ? watchEvents : source === 'planned-workouts' ? watchSchedule : watchWorkoutCompletions;
+      reader.mockReturnValueOnce(throwError(() => error));
+      const fixture = TestBed.createComponent(CalendarPageComponent);
+      fixture.detectChanges(); await fixture.whenStable(); fixture.detectChanges();
+      const details = {
+        source, errorName: 'FirebaseError', errorCode: 'permission-denied', view: 'month', routeMode: 'calendar',
+        bounded: true, elapsedMs: expect.any(Number), online: true,
+      };
+      expect(logger.error).toHaveBeenCalledExactlyOnceWith('[CalendarPage] Data read failed.', details);
+      expect(logger.captureMessage).toHaveBeenCalledExactlyOnceWith('Calendar data read failed', {
+        level: 'error', extra: details,
+        tags: { calendarReadSource: source, calendarView: 'month', calendarRouteMode: 'calendar',
+          calendarErrorName: 'FirebaseError', calendarErrorCode: 'permission-denied' },
+        fingerprint: ['calendar-read-failure', source, 'FirebaseError', 'permission-denied'],
+      });
+      expect(JSON.stringify(logger.error.mock.calls)).not.toContain('private-');
+      expect(JSON.stringify(logger.captureMessage.mock.calls)).not.toContain('private-');
+      expect(JSON.stringify(logger.captureMessage.mock.calls)).not.toContain(planningUserUid);
+      expect(JSON.stringify(logger.captureMessage.mock.calls)).not.toContain('2026-08');
+      fixture.componentInstance.retry();
+      fixture.detectChanges(); await fixture.whenStable(); fixture.detectChanges();
+      expect(fixture.componentInstance.eventState().status).toBe('ready');
+      expect(fixture.componentInstance.plansState().status).toBe('ready');
+      expect(fixture.componentInstance.completionState().status).toBe('ready');
+      expect(logger.error).toHaveBeenCalledTimes(1);
+      expect(logger.captureMessage).toHaveBeenCalledTimes(1);
+    });
+
+  it('reports timeout duration and offline state for an unbounded read', async () => {
+    queryParams.next(convertToParamMap({ view: 'year', date: '2026-08-03' }));
+    const events = new Subject<EventInterface[]>();
+    watchEvents.mockReturnValue(events);
+    const online = vi.spyOn(navigator, 'onLine', 'get').mockReturnValue(false);
+    const now = vi.spyOn(Date, 'now').mockReturnValue(1000);
+    try {
+      const fixture = TestBed.createComponent(CalendarPageComponent);
+      fixture.detectChanges(); await fixture.whenStable();
+      now.mockReturnValue(31000);
+      events.error(new TimeoutError());
+      fixture.detectChanges(); await fixture.whenStable(); fixture.detectChanges();
+      expect(logger.error).toHaveBeenCalledWith('[CalendarPage] Data read failed.', {
+        source: 'activities', errorName: 'TimeoutError', errorCode: 'unknown', view: 'year', routeMode: 'calendar',
+        bounded: false, elapsedMs: 30000, online: false,
+      });
+      expect(fixture.componentInstance.eventState().status).toBe('error');
+    } finally {
+      now.mockRestore();
+      online.mockRestore();
+    }
+  });
+
+  it('does not log successful reads or failures from cancelled navigation', async () => {
+    const events = new Subject<EventInterface[]>();
+    watchEvents.mockReturnValueOnce(events);
+    const fixture = TestBed.createComponent(CalendarPageComponent);
+    fixture.detectChanges(); await fixture.whenStable();
+    queryParams.next(convertToParamMap({ view: 'month', date: '2026-09-03' }));
+    fixture.detectChanges(); await fixture.whenStable();
+    events.error(new Error('cancelled read'));
+    fixture.detectChanges(); await fixture.whenStable();
+    expect(fixture.componentInstance.eventState().status).toBe('ready');
+    expect(logger.error).not.toHaveBeenCalled();
+    expect(logger.captureMessage).not.toHaveBeenCalled();
   });
 
   it('shows a retryable error state', async () => {
