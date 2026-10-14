@@ -19,6 +19,9 @@ export function decodeSendFile(input: Buffer, filename: string): Buffer {
   return fit;
 }
 export function sendFileHash(fit: Buffer): string { return createHash('sha256').update(fit).digest('hex'); }
+export function isSendWindowOpen(operation: Record<string, unknown> | undefined, now = Date.now()): boolean {
+  return operation?.state === 'confirmed' && operation.stopped !== true && Number.isFinite(operation.expiresAt) && Number(operation.expiresAt) > now;
+}
 
 /** Project only fixed, user-actionable categories; never copy provider errors/IDs. */
 export function projectSendQueue(data: Record<string, unknown>): { status: ActivitySendStatus; recovery: ActivitySendRecovery; message: string } {

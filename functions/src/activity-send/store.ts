@@ -35,12 +35,19 @@ export interface SendSource {
 export const operationRef = (uid: string, id: string) => admin.firestore().doc(`users/${uid}/activitySendOperations/${id}`);
 export const batchRef = (uid: string, id: string) => admin.firestore().doc(`users/${uid}/activitySends/${id}`);
 export function publicBatch(operation: SendOperation): ActivitySendBatch {
-  const { id, provider, source, state, revision, accountLabel, createdAt, updatedAt, reviewed, total, finished } = operation;
-  return { id, provider, source, state, revision, accountLabel, createdAt, updatedAt, reviewed, total, finished };
+  const { id, provider, source, state, revision, accountLabel, createdAt, updatedAt, reviewed, total, finished, expiresAt } = operation;
+  return { id, provider, source, state, revision, accountLabel, createdAt, updatedAt, reviewed, total, finished, expiresAt, stopped: operation.stopped === true };
 }
 export async function guardedSendTransaction<T>(uid: string, action: (tx: admin.firestore.Transaction) => Promise<T>): Promise<T> {
   return admin.firestore().runTransaction(async tx => {
     if ((await getUserDeletionGuardStateInTransaction(admin.firestore(), tx, uid)).shouldSkip) throw new HttpsError('failed-precondition', 'Account is unavailable.');
+    return action(tx);
+  });
+}
+/** Background triggers silently retire work if account deletion wins a transaction retry. */
+export async function guardedBackgroundSendTransaction<T>(uid: string, action: (tx: admin.firestore.Transaction) => Promise<T>): Promise<T | undefined> {
+  return admin.firestore().runTransaction(async tx => {
+    if ((await getUserDeletionGuardStateInTransaction(admin.firestore(), tx, uid)).shouldSkip) return;
     return action(tx);
   });
 }
@@ -53,10 +60,10 @@ export async function providerAccount(uid: string, provider: ActivitySendProvide
   if (tokens.size !== 1) throw new HttpsError('failed-precondition', 'Connect exactly one Suunto account before sending.');
   return tokens.docs[0].id;
 }
-export async function requireDraft(uid: string, batchId: string): Promise<SendOperation> {
+export async function requireDraft(uid: string, batchId: string, allowClosed = false): Promise<SendOperation> {
   const data = (await operationRef(uid, batchId).get()).data() as SendOperation | undefined;
   if (!data) throw new HttpsError('not-found', 'Send was not found.');
-  if (data.state !== 'draft' || data.expiresAt <= Date.now()) throw new HttpsError('failed-precondition', 'Create a new send draft.');
+  if (data.state !== 'draft' || !allowClosed && (data.stopped || data.expiresAt <= Date.now())) throw new HttpsError('failed-precondition', 'Create a new send draft.');
   return data;
 }
 export async function describeFIT(fit: Buffer, name: string, provider: ActivitySendProvider): Promise<Pick<ActivitySendRow, 'name' | 'sport' | 'startDate' | 'warnings'>> {

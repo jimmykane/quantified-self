@@ -1,6 +1,6 @@
 import { BrowserCompatibilityService } from '../../services/browser.compatibility.service';
 import dayjs from 'dayjs';
-import { Component, DestroyRef, computed, effect, inject, signal } from '@angular/core';
+import { afterNextRender, Component, DestroyRef, computed, effect, inject, signal } from '@angular/core';
 import { ActivatedRoute, Router, RouterModule } from '@angular/router';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
@@ -28,8 +28,15 @@ export class ActivitySendPageComponent {
   readonly busy = signal(false);
   readonly error = signal<string | null>(null);
   readonly transfer = signal<{ name: string; progress: number } | null>(null);
+  readonly nowMs = signal(Date.now());
+  readonly showDetails = signal(false);
+  readonly sendingClosed = computed(() => {
+    const batch = this.sends.batch();
+    return !!batch && (batch.stopped === true || typeof batch.expiresAt === 'number' && batch.expiresAt <= this.nowMs());
+  });
+  readonly canRetry = computed(() => this.users.hasProAccessSignal() && !this.sendingClosed());
   readonly readyCount = computed(() => this.sends.batch()?.state === 'draft' ? Math.max(0, this.sends.batch()!.total - this.sends.batch()!.finished) : 0);
-  readonly canConfirm = computed(() => this.users.hasProAccessSignal() && !this.busy() && this.sends.batch()?.state === 'draft' && !!this.sends.batch()?.reviewed && !this.selectionChanged() && this.readyCount() > 0);
+  readonly canConfirm = computed(() => this.users.hasProAccessSignal() && !this.sendingClosed() && !this.busy() && this.sends.batch()?.state === 'draft' && !!this.sends.batch()?.reviewed && !this.selectionChanged() && this.readyCount() > 0);
   readonly hasResumableRows = computed(() => this.sends.rows().some(row => ['upgrade', 'reconnect'].includes(row.recovery)));
   readonly recentForProvider = computed(() => this.sends.recent().filter(batch => !this.provider() || batch.provider === this.provider()));
   readonly statusLabels = { preparing: 'Preparing', ready: 'Ready', queued: 'Queued', sending: 'Sending', processing: 'Waiting for provider', delivered: 'Delivered', duplicate: 'Already exists or queued', needs_action: 'Needs action', stopped: 'Stopped' };
@@ -43,8 +50,18 @@ export class ActivitySendPageComponent {
   private activeProvider: ActivitySendProvider | null = null;
   private activeSource: 'files' | 'saved' = 'files';
   private activeBatch: string | null = null;
+  private readonly sendingClock = afterNextRender(() => {
+    const handle = globalThis.setInterval(() => this.nowMs.set(Date.now()), 60_000);
+    this.destroyRef.onDestroy(() => globalThis.clearInterval(handle));
+  });
   constructor() {
     effect(() => { const uid = this.users.user()?.uid; if (!uid || uid !== this.activeOwner) this.fileReferences.clear(); });
+    effect(() => {
+      const batch = this.sends.batch();
+      if (!batch || this.busy() || batch.provider === this.provider() && batch.source === this.source()) return;
+      // A saved batch owns its destination and source, including copied deep links.
+      void this.router.navigate(['/send-activities', batch.provider], { queryParams: { batch: batch.id, source: batch.source }, replaceUrl: true });
+    });
     const navigationState = this.router.getCurrentNavigation()?.extras.state;
     if (navigationState?.['activitySendOwner'] === this.users.user()?.uid && Array.isArray(navigationState?.['activitySendSelection'])) this.sends.setSelection(navigationState['activitySendSelection']);
     this.route.paramMap.pipe(takeUntilDestroyed()).subscribe(params => {
@@ -54,6 +71,7 @@ export class ActivitySendPageComponent {
     });
     this.route.queryParamMap.pipe(takeUntilDestroyed()).subscribe(params => {
       this.error.set(null);
+      this.showDetails.set(false);
       this.source.set(params.get('source') === 'saved' ? 'saved' : 'files');
       const id = params.get('batch');
       if (this.busy() && this.activeBatch && id !== this.activeBatch) this.activeOwner = null;
@@ -79,7 +97,10 @@ export class ActivitySendPageComponent {
   private async ensureDraft(): Promise<string> {
     this.assertActive();
     const current = this.sends.batch();
-    if (current?.state === 'draft') { this.activeBatch = current.id; return current.id; }
+    if (current?.state === 'draft') {
+      if (current.stopped || current.expiresAt && current.expiresAt <= Date.now()) throw new Error('The sending window closed. Start a new send.');
+      this.activeBatch = current.id; return current.id;
+    }
     const provider = this.provider(); if (!provider) throw new Error('Choose a destination first.');
     const id = this.browser.createRandomUUID();
     if (!id) throw new Error('This browser cannot create a safe send reference. Please update your browser.');
@@ -124,7 +145,7 @@ export class ActivitySendPageComponent {
       const id = await this.ensureDraft(); let cursor: string | undefined;
       do {
         this.assertActive();
-        const result = await this.command({ version: 1, action: 'prepare', batchId: id, ...(ids.length ? { eventIds: ids } : { startDate: dayjs(this.startDate).startOf('day').toISOString(), endDate: dayjs(this.endDate).endOf('day').toISOString(), ...(this.savedSources.length ? { sources: this.savedSources } : {}) }), ...(cursor ? { cursor } : {}) });
+        const result = await this.command({ version: 1, action: 'prepare', batchId: id, ...(ids.length ? { eventIds: ids } : { startDate: dayjs(this.startDate).startOf('day').toISOString(), endDate: dayjs(this.endDate).endOf('day').toISOString() }), ...(this.savedSources.length ? { sources: this.savedSources } : {}), ...(cursor ? { cursor } : {}) });
         this.assertActive();
         cursor = result.nextCursor || undefined;
       } while (cursor);
@@ -135,17 +156,21 @@ export class ActivitySendPageComponent {
     if (batch?.state === 'draft') await this.run(() => this.command({ version: 1, action: 'prepare', batchId: batch.id }));
   }
   async confirm(): Promise<void> {
+    this.nowMs.set(Date.now());
     if (!this.canConfirm()) return;
     const batch = this.sends.batch()!;
     await this.run(() => this.command({ version: 1, action: 'confirm', batchId: batch.id, revision: batch.revision }));
   }
   async rowAction(row: ActivitySendRow, action: 'remove' | 'check' | 'retry'): Promise<void> {
+    this.nowMs.set(Date.now());
+    if (action === 'retry' && !this.canRetry()) return;
     const batch = this.sends.batch(); if (!batch) return;
     await this.run(() => this.command({ version: 1, action, batchId: batch.id, rowId: row.id }));
   }
   async stop(): Promise<void> {
     const batch = this.sends.batch(); if (batch) await this.run(() => this.command({ version: 1, action: 'stop', batchId: batch.id }));
   }
+  toggleDetails(): void { this.showDetails.update(value => !value); this.haptics.selection(); }
   private command(request: ActivitySendCommand): Promise<ActivitySendCommandResult> {
     this.assertActive();
     return this.sends.command(request, this.activeOwner!);

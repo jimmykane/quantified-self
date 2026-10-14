@@ -33,6 +33,9 @@ export interface ActivitySendBatch {
   reviewed: boolean;
   total: number;
   finished: number;
+  /** Sending window; accepted operations can still be checked after it closes. */
+  expiresAt?: number;
+  stopped?: boolean;
 }
 export type ActivitySendCommand = {
   version: 1;

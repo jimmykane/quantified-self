@@ -1,4 +1,5 @@
 import * as admin from 'firebase-admin';
+import { isSendWindowOpen } from '../activity-send/policy';
 import * as logger from 'firebase-functions/logger';
 import { ServiceNames } from '@sports-alliance/sports-lib';
 import { ActivityDeliveryRouteId, ActivityDeliverySource } from '../../../shared/activity-sync-routes';
@@ -136,9 +137,14 @@ export async function enqueueActivitySyncQueueItem(
     const decision = await db.runTransaction(async (transaction): Promise<QueueInsertDecision> => {
         const existingSnapshot = await transaction.get(queueDocRef);
         const metadataSnapshot = params.deliveryMode === 'direct' ? null : await transaction.get(metadataRef);
+        let sendRowRef: admin.firestore.DocumentReference | undefined;
         if (params.sendBatchID) {
             const send = await transaction.get(db.doc(`users/${params.userID}/activitySendOperations/${params.sendBatchID}`));
-            if (send.data()?.state !== 'confirmed' || send.data()?.stopped === true) return { enqueued: false, queueItemId, reason: 'already_processed' };
+            if (!isSendWindowOpen(send.data())) return { enqueued: false, queueItemId, reason: 'already_processed' };
+            if (!params.sendRowID) throw new Error('Activity send row is required.');
+            sendRowRef = send.ref.collection('rows').doc(params.sendRowID);
+            const source = await transaction.get(sendRowRef);
+            if (!source.exists || source.data()?.admitted || source.data()?.removed || source.data()?.excluded) return { enqueued: false, queueItemId, reason: 'already_processed' };
         }
         let deletionGuard;
         try {
@@ -229,6 +235,9 @@ export async function enqueueActivitySyncQueueItem(
         };
 
         transaction.set(queueDocRef, queueItem);
+        // Publish the ownership link before any task can run or Stop can inspect it.
+        // Concurrent admission then observes the committed row rather than replacing it.
+        if (sendRowRef) transaction.update(sendRowRef, { admitted: true, queueId: queueItemId });
         return {
             enqueued: true,
             queueItemId,

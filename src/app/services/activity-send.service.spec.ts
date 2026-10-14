@@ -59,6 +59,20 @@ describe('ActivitySendService owner and upload boundaries', () => {
     auth.currentUser.uid = 'another'; resolve({ data: { batchId: 'batch', revision: 1 } });
     await expect(call).rejects.toThrow('account changed');
   });
+  it('ignores old-owner snapshots and read errors as soon as Auth changes, before metadata updates', () => {
+    service.watchBatch('old-batch');
+    auth.currentUser.uid = 'another';
+    streams.reads[0].next([{ id: 'old-batch' }]);
+    streams.reads[1].next([{ id: 'old-batch', provider: 'suunto', state: 'confirmed', total: 1, finished: 0 }]);
+    streams.reads[2].next({ id: 'old-batch' }); streams.reads[3].next([{ id: 'old-row' }]);
+    for (const stream of streams.reads) stream.error(new Error('Old owner is no longer authorized'));
+    expect(service.recent()).toEqual([]); expect(service.batch()).toBeNull(); expect(service.rows()).toEqual([]);
+    expect(service.readError()).toBeNull(); expect(processing.addJob).not.toHaveBeenCalled();
+  });
+  it('still exposes a current-owner read failure', () => {
+    service.watchBatch('batch'); streams.reads[3].error(new Error('Offline'));
+    expect(service.readError()).toContain('Could not load delivery results');
+  });
   it('rejects an old view owner immediately when Auth changes before user metadata updates', async () => {
     auth.currentUser.uid = 'another';
     await expect(service.command({ version: 1, action: 'stop', batchId: 'batch' }, 'owner')).rejects.toThrow('account changed');

@@ -44,12 +44,12 @@ export class ActivitySendService {
       if (!uid) return;
       this.recentSubscription = collectionData(query(collection(this.firestore, `users/${uid}/activitySends`), orderBy('createdAt', 'desc'), limit(20)))
         .subscribe({ next: records => {
-          if (this.uid !== uid) return;
+          if (!this.isCurrentOwner(uid)) return;
           const batches = records as unknown as ActivitySendBatch[];
           this.recent.set(batches);
 
-        }, error: () => this.readError.set('Could not load recent sends. Check your connection and reopen the page.') });
-      this.activeSubscription = collectionData(query(collection(this.firestore, `users/${uid}/activitySends`), where('state', '==', 'confirmed'), limit(100))).subscribe({ next: records => { if (this.uid === uid) this.syncJobs(records as unknown as ActivitySendBatch[]); }, error: () => this.readError.set('Delivery status is unavailable. Reopen Send activities to check your results.') });
+        }, error: () => { if (this.isCurrentOwner(uid)) this.readError.set('Could not load recent sends. Check your connection and reopen the page.'); } });
+      this.activeSubscription = collectionData(query(collection(this.firestore, `users/${uid}/activitySends`), where('state', '==', 'confirmed'), limit(100))).subscribe({ next: records => { if (this.isCurrentOwner(uid)) this.syncJobs(records as unknown as ActivitySendBatch[]); }, error: () => { if (this.isCurrentOwner(uid)) this.readError.set('Delivery status is unavailable. Reopen Send activities to check your results.'); } });
     });
   }
   setSelection(eventIds: string[]): void { this.selection.set([...new Set(eventIds)].slice(0, 50)); }
@@ -58,8 +58,8 @@ export class ActivitySendService {
     const uid = this.auth.currentUser?.uid;
     if (!uid) return;
     this.batchSubscription = docData(doc(this.firestore, `users/${uid}/activitySends/${id}`)).subscribe({
-      next: record => { if (this.auth.currentUser?.uid === uid && this.selectedId === id) this.batch.set(record ? record as unknown as ActivitySendBatch : null); },
-      error: () => this.readError.set('This send is unavailable.') });
+      next: record => { if (this.isCurrentOwner(uid) && this.selectedId === id) this.batch.set(record ? record as unknown as ActivitySendBatch : null); },
+      error: () => { if (this.isCurrentOwner(uid) && this.selectedId === id) this.readError.set('This send is unavailable.'); } });
     this.watchRows();
   }
   loadMoreRows(): void { this.rowLimit += 50; this.watchRows(); }
@@ -72,9 +72,10 @@ export class ActivitySendService {
     const uid = this.auth.currentUser?.uid; const id = this.selectedId;
     if (!uid || !id) return;
     this.rowSubscription = collectionData(query(collection(this.firestore, `users/${uid}/activitySends/${id}/rows`), orderBy('id'), limit(this.rowLimit))).subscribe({
-      next: records => { if (this.auth.currentUser?.uid === uid && this.selectedId === id) this.rows.set(records as unknown as ActivitySendRow[]); },
-      error: () => this.readError.set('Could not load delivery results. Reopen this send to try again.') });
+      next: records => { if (this.isCurrentOwner(uid) && this.selectedId === id) this.rows.set(records as unknown as ActivitySendRow[]); },
+      error: () => { if (this.isCurrentOwner(uid) && this.selectedId === id) this.readError.set('Could not load delivery results. Reopen this send to try again.'); } });
   }
+  private isCurrentOwner(uid: string): boolean { return this.uid === uid && this.auth.currentUser?.uid === uid; }
   async command(request: ActivitySendCommand, expectedUid?: string): Promise<ActivitySendCommandResult> {
     const uid = expectedUid || this.auth.currentUser?.uid;
     if (uid && this.auth.currentUser?.uid !== uid) throw new Error('The signed-in account changed.');

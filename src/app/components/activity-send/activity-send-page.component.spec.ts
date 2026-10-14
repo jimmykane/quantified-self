@@ -103,5 +103,47 @@ describe('activity sending workspace', () => {
     expect(fixture.nativeElement.textContent).toContain('Remove');
     expect(fixture.nativeElement.textContent).toContain('Review prepared activities');
   });
+  it.each([{ stopped: true }, { expiresAt: 1 }])('closes sending and retries while keeping accepted status checks: %j', async window => {
+    const fixture = render(); sends.batch.set({ ...batchValue, ...window });
+    sends.rows.set([{ ...row, recovery: 'retry_send' }, { ...row, id: 'accepted', recovery: 'check_status' }]); fixture.detectChanges();
+    expect(fixture.nativeElement.querySelector('input[type=file]')).toBeNull();
+    expect(fixture.nativeElement.textContent).not.toContain('Retry sending');
+    expect(fixture.nativeElement.textContent).toContain('Check status');
+    expect(fixture.nativeElement.textContent).toContain('Remove');
+    expect(fixture.nativeElement.textContent).toContain('Start a new send');
+    await fixture.componentInstance.confirm(); await fixture.componentInstance.rowAction(row, 'retry');
+    expect(sends.command).not.toHaveBeenCalled(); expect(haptics.selection).not.toHaveBeenCalled();
+    await fixture.componentInstance.rowAction({ ...row, recovery: 'check_status' }, 'check');
+    expect(sends.command).toHaveBeenCalledWith(expect.objectContaining({ action: 'check' }), 'owner');
+  });
+  it('updates sending eligibility when an open view reaches its deadline', () => {
+    const fixture = render(); sends.batch.set({ ...batchValue, expiresAt: Date.now() + 60_000 }); fixture.detectChanges();
+    expect(fixture.componentInstance.canConfirm()).toBe(true);
+    fixture.componentInstance.nowMs.set(Date.now() + 60_001); fixture.detectChanges();
+    expect(fixture.componentInstance.canConfirm()).toBe(false);
+    expect(fixture.nativeElement.textContent).toContain('The sending window expired');
+  });
+  it('uses an accessible, initially closed Material disclosure with one feedback owner', () => {
+    const fixture = render(); sends.batch.set(batchValue); sends.rows.set([row]); fixture.detectChanges();
+    const button = fixture.nativeElement.querySelector('[aria-controls="activity-send-details"]') as HTMLButtonElement;
+    const details = fixture.nativeElement.querySelector('#activity-send-details') as HTMLElement;
+    expect(button.getAttribute('aria-expanded')).toBe('false'); expect(details.hidden).toBe(true);
+    expect(haptics.selection).not.toHaveBeenCalled();
+    button.click(); fixture.detectChanges();
+    expect(button.getAttribute('aria-expanded')).toBe('true'); expect(details.hidden).toBe(false);
+    expect(haptics.selection).toHaveBeenCalledOnce();
+  });
+  it('applies the chosen source filter to explicit saved-activity selections', async () => {
+    const fixture = render(); sends.batch.set({ ...batchValue, source: 'saved' }); sends.selection.set(['event-one']);
+    fixture.componentInstance.source.set('saved'); fixture.componentInstance.savedSources = ['COROS API'];
+    await fixture.componentInstance.previewSaved();
+    expect(sends.command).toHaveBeenCalledWith({ version: 1, action: 'prepare', batchId: 'batch-1', eventIds: ['event-one'], sources: ['COROS API'] }, 'owner');
+  });
+  it('restores the batch destination and source from a mismatched deep link without sending or feedback', () => {
+    const fixture = render(); const navigate = vi.spyOn(TestBed.inject(Router), 'navigate').mockResolvedValue(true);
+    sends.batch.set({ ...batchValue, provider: 'wahoo', source: 'saved' }); fixture.detectChanges();
+    expect(navigate).toHaveBeenCalledWith(['/send-activities', 'wahoo'], { queryParams: { batch: 'batch-1', source: 'saved' }, replaceUrl: true });
+    expect(sends.command).not.toHaveBeenCalled(); expect(haptics.selection).not.toHaveBeenCalled();
+  });
 
 });

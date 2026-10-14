@@ -1692,4 +1692,6 @@ The authenticated, noindex `/send-activities` workspace consolidates local recor
 
 See [Activity sending workspace](activity-sending-workspace.md) for the single detailed lifecycle, quotas, recovery and retention contract. Provider-confirmed processing failure requires an explicit workspace retry; acceptance uncertainty never permits replay. Stop preserves claimed/accepted operations. No Training or MCP provider mutation is added. Release checks include real Rules/demo-emulator isolation, entrypoint contracts/cold imports, private source cleanup, mobile/light/dark layout, Help/Privacy and monitoring activation.
 
+Queue ownership commits before dispatch so concurrent Stop/admission cannot lose or erase a claim. Local and saved sends recheck the sending window inside provider-claim transactions; reconnect release preserves this authority and the original queue retention. Duplicate temporary sources release quota immediately. Account deletion winning a background transaction is a silent no-op.
+
 Monitoring decision: source definitions cover `direct`, existing task backlog/dispatch/worker outcomes and new temporary-source cleanup failures. Deployment and production monitoring reapplication/readback remain separately approved operational work; track activation in [#876](https://github.com/jimmykane/quantified-self/issues/876).

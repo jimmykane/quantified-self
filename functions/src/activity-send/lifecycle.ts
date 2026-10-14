@@ -6,7 +6,7 @@ import { Timestamp } from 'firebase-admin/firestore';
 import { getHistoricalActivityRouteId } from '../../../shared/activity-sync-routes';
 import { ACTIVITY_SEND_PROVIDERS, activitySendTerminal } from '../../../shared/activity-send';
 import { enqueueActivitySyncQueueItem } from '../activity-sync/queue';
-import { batchRef, guardedSendTransaction, operationRef, SendOperation, SendSource } from './store';
+import { batchRef, guardedBackgroundSendTransaction, operationRef, SendOperation, SendSource } from './store';
 import { projectSendQueue } from './policy';
 import { getUserDeletionGuardState } from '../shared/user-deletion-guard';
 import { recordActivitySendCleanup } from '../activity-sync/monitoring';
@@ -19,25 +19,28 @@ export async function admitSendRows(uid: string, id: string): Promise<void> {
   for (const row of rows.docs) {
     const source = row.data() as SendSource & { excluded?: boolean; removed?: boolean };
     if (current.stopped || source.excluded || source.removed) {
-      await guardedSendTransaction(uid, async tx => {
+      const stopped = await guardedBackgroundSendTransaction(uid, async tx => {
         const sourceSnapshot = await tx.get(row.ref);
         const parent = await tx.get(batchRef(uid, id));
         const visible = await tx.get(batchRef(uid, id).collection('rows').doc(row.id));
-        if (!sourceSnapshot.exists) return;
+        // Admission can commit a queue link after this page was read. Such work
+        // belongs to the queue projection, including any already-claimed upload.
+        if (!sourceSnapshot.exists || sourceSnapshot.data()?.admitted) return false;
         tx.update(row.ref, { admitted: true });
         if (!source.excluded && !source.removed && visible.exists && parent.exists) {
           const finished = Number(parent.data()?.finished || 0) + Number(!activitySendTerminal(visible.data()!.status));
           tx.update(visible.ref, { status: 'stopped', recovery: 'none', message: 'Stopped before sending.' });
           tx.update(parent.ref, { finished, state: finished >= Number(parent.data()?.total) ? 'complete' : 'confirmed', updatedAt: Date.now() });
         }
+        return true;
       });
-      if (!source.excluded) await cleanupSendSourceRow(row.ref);
+      if (stopped && !source.excluded) await cleanupSendSourceRow(row.ref);
       continue;
     }
     const routeId = getHistoricalActivityRouteId(source.sourceServiceName, ACTIVITY_SEND_PROVIDERS[current.provider]);
     if (!routeId) throw new Error('Unsupported activity send route.');
     const result = await enqueueActivitySyncQueueItem({ routeId, userID: uid, eventID: source.eventID, sourceServiceName: source.sourceServiceName, destinationServiceName: ACTIVITY_SEND_PROVIDERS[current.provider], originalFile: source.originalFile, manual: true, deliveryMode: current.source === 'files' ? 'direct' : 'historical', sendBatchID: id, sendRowID: row.id, destinationPinnedProviderUserID: current.providerAccount });
-    await guardedSendTransaction(uid, async tx => {
+    const duplicateSource = await guardedBackgroundSendTransaction(uid, async tx => {
       const sourceSnapshot = await tx.get(row.ref);
       const queue = await tx.get(admin.firestore().collection('activitySyncQueue').doc(result.queueItemId));
       const parent = await tx.get(batchRef(uid, id));
@@ -46,16 +49,20 @@ export async function admitSendRows(uid: string, id: string): Promise<void> {
       if (!sourceSnapshot.exists || !parent.exists || !visible.exists) return;
       const ownsQueue = queue.data()?.sendBatchID === id && queue.data()?.sendRowID === row.id;
       tx.update(row.ref, { admitted: true, ...(ownsQueue ? { queueId: result.queueItemId } : {}) });
-      const projection = ownsQueue ? projectSendQueue(queue.data()!) : liveOperation.data()?.stopped
+      const projection = ownsQueue ? projectSendQueue(queue.data()!) : Number(liveOperation.data()?.expiresAt) <= Date.now()
+        ? { status: 'needs_action' as const, recovery: 'choose_file' as const, message: 'The sending window expired. Review a new draft before sending.' }
+        : liveOperation.data()?.stopped
         ? { status: 'stopped' as const, recovery: 'none' as const, message: 'Stopped before sending.' }
         : { status: 'duplicate' as const, recovery: 'none' as const, message: 'Already sent or queued; no additional copy was scheduled.' };
       const finished = Number(parent.data()?.finished || 0) + Number(activitySendTerminal(projection.status)) - Number(activitySendTerminal(visible.data()!.status));
       tx.update(visible.ref, projection);
       tx.update(parent.ref, { finished, updatedAt: Date.now(), state: finished >= Number(parent.data()?.total) ? 'complete' : 'confirmed' });
+      return !ownsQueue;
     });
+    if (duplicateSource) await cleanupSendSourceRow(row.ref);
   }
   // A bounded page progresses independently of the browser. Retry-enabled writes recover failures.
-  if (rows.size) await guardedSendTransaction(uid, async tx => {
+  if (rows.size) await guardedBackgroundSendTransaction(uid, async tx => {
     const snapshot = await tx.get(op);
     if (snapshot.exists && snapshot.data()?.state === 'confirmed') tx.update(op, { admissionProgressAt: Date.now() });
   });
@@ -68,7 +75,7 @@ export const admitActivitySend = onDocumentWritten({ document: 'users/{uid}/acti
 export async function projectSendDelivery(queueRef: admin.firestore.DocumentReference): Promise<void> {
   const initial = (await queueRef.get()).data();
   if (!initial?.sendBatchID || !initial.sendRowID || !initial.userID || (await getUserDeletionGuardState(admin.firestore(), initial.userID)).shouldSkip) return;
-  await guardedSendTransaction(initial.userID, async tx => {
+  await guardedBackgroundSendTransaction(initial.userID, async tx => {
     const snapshot = await tx.get(queueRef); const data = snapshot.data();
     if (!data || data.sendBatchID !== initial.sendBatchID || data.sendRowID !== initial.sendRowID) return;
     const batch = batchRef(data.userID, data.sendBatchID);
@@ -113,7 +120,7 @@ export async function cleanupExpiredSends(now = Date.now()): Promise<void> {
       for (const source of rows.docs) {
         if (source.data().queueId) {
           const queue = admin.firestore().collection('activitySyncQueue').doc(source.data().queueId);
-          await guardedSendTransaction(uid, async tx => {
+          await guardedBackgroundSendTransaction(uid, async tx => {
             const current = (await tx.get(queue)).data();
             if (current?.sendBatchID === op.id && !current.processed && !current.destinationUploadID && !current.providerOperationStartedAt) {
               tx.update(queue, { processed: true, resultStatus: 'skipped', skippedReason: 'send_source_expired' });
@@ -121,11 +128,11 @@ export async function cleanupExpiredSends(now = Date.now()): Promise<void> {
           });
         }
       }
-      await guardedSendTransaction(uid, async tx => {
+      await guardedBackgroundSendTransaction(uid, async tx => {
         const current = await tx.get(op.ref); const visible = await tx.get(batchRef(uid, op.id));
         if (!current.exists) return;
         tx.update(op.ref, { sourceExpired: true, stopped: true, cleanupAfter: Timestamp.fromMillis(Number(current.data()?.createdAt) + 30 * 86400_000) });
-        if (visible.exists) tx.update(visible.ref, { reviewed: false, updatedAt: now });
+        if (visible.exists) tx.update(visible.ref, { stopped: true, reviewed: false, updatedAt: now });
       });
     } catch { failed++; }
   }

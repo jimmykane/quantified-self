@@ -42,7 +42,7 @@ export async function runSendCommand(uid: string, request: ActivitySendCommand) 
     if (draft.source === 'saved') await prepareSaved(uid, draft, request);
     return guardedSendTransaction(uid, async tx => {
       const current = (await tx.get(ref)).data() as SendOperation;
-      if (current.state !== 'draft') throw new HttpsError('failed-precondition', 'Draft changed.');
+      if (current.state !== 'draft' || current.stopped || current.expiresAt <= Date.now()) throw new HttpsError('failed-precondition', 'Draft changed.');
       const rows = await tx.get(ref.collection('rows'));
       if (!rows.size || rows.docs.some(row => !row.data().originalFile && !row.data().excluded && !row.data().removed)) throw new HttpsError('failed-precondition', 'Finish selecting and validating activities first.');
       current.reviewed = !current.nextCursor; current.updatedAt = Date.now();
@@ -57,14 +57,14 @@ export async function runSendCommand(uid: string, request: ActivitySendCommand) 
     return guardedSendTransaction(uid, async tx => {
       const current = (await tx.get(ref)).data() as SendOperation;
       if (current.state !== 'draft') return { batchId: id, revision: current.revision };
-      if (!current.reviewed || current.revision !== request.revision || current.total <= current.finished || current.expiresAt <= Date.now()) throw new HttpsError('failed-precondition', 'Review the current selection before sending.');
+      if (!current.reviewed || current.stopped || current.revision !== request.revision || current.total <= current.finished || current.expiresAt <= Date.now()) throw new HttpsError('failed-precondition', 'Review the current selection before sending.');
       current.state = 'confirmed'; current.updatedAt = Date.now(); current.expiresAt = Date.now() + 7 * 86400_000; current.cleanupAfter = Timestamp.fromMillis(current.expiresAt);
       tx.set(ref, current); tx.set(batchRef(uid, id), publicBatch(current));
       return { batchId: id, revision: current.revision };
     });
   }
   if (request.action === 'remove') {
-    await requireDraft(uid, id);
+    await requireDraft(uid, id, true);
     const rowId = sendIdentifier(request.rowId);
     await guardedSendTransaction(uid, async tx => {
       const current = (await tx.get(ref)).data() as SendOperation;
@@ -84,8 +84,10 @@ export async function runSendCommand(uid: string, request: ActivitySendCommand) 
   if (request.action === 'stop') {
     await guardedSendTransaction(uid, async tx => {
       const snapshot = await tx.get(ref);
+      const visible = await tx.get(batchRef(uid, id));
       if (!snapshot.exists) throw new HttpsError('not-found', 'Send was not found.');
       tx.update(ref, { stopped: true, updatedAt: Date.now() });
+      if (visible.exists) tx.update(visible.ref, { stopped: true, updatedAt: Date.now() });
     });
     const rows = await ref.collection('rows').get();
     for (const row of rows.docs) {
@@ -119,7 +121,7 @@ export async function runSendCommand(uid: string, request: ActivitySendCommand) 
       if (request.action === 'check' && !queue.destinationUploadID) throw new HttpsError('failed-precondition', 'Check the provider directly; no safe operation identifier is available.');
       if (request.action === 'check' && !queue.processed) return null;
       const dateCreated = Math.max(Date.now(), Number(queue.dateCreated) + 1);
-      tx.update(queueRef, { dateCreated, processed: false, resultStatus: null, skippedReason: null, deferredReason: null, dispatchedToCloudTask: null, ...(request.action === 'retry' ? { destinationUploadID: null, destinationProviderUserID: null, providerOperationStartedAt: null, destinationUploadContinuation: null, destinationExpectedWorkoutTypeID: FieldValue.delete(), retryCount: 0, sendConfirmedFailure: false } : {}) });
+      tx.update(queueRef, { dateCreated, processed: false, resultStatus: null, skippedReason: null, deferredReason: null, dispatchedToCloudTask: null, ...(request.action === 'retry' ? { destinationUploadID: null, destinationProviderUserID: null, destinationWorkoutKey: null, destinationInfoCode: null, providerOperationStartedAt: null, destinationUploadContinuation: null, destinationExpectedWorkoutTypeID: FieldValue.delete(), retryCount: 0, sendConfirmedFailure: false } : {}) });
       return dateCreated;
     });
     if (dispatch !== null) await enqueueActivitySyncTask(source.queueId, dispatch);

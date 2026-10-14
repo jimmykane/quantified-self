@@ -5,7 +5,7 @@ import { createCOROSActivityFITFixture } from '../../test-utils/coros-activity-f
 import { runSendCommand } from './commands';
 import { stageSendFile } from './upload';
 import { admitSendRows, projectSendDelivery, cleanupSendSources, cleanupExpiredSends } from './lifecycle';
-import { operationRef, batchRef } from './store';
+import { operationRef, batchRef, guardedBackgroundSendTransaction } from './store';
 import { ACTIVITY_SEND_LIMITS } from '../../../shared/activity-send';
 
 const state = vi.hoisted(() => ({ pro: true, account: 'reviewed-account', enqueue: vi.fn(async () => true), files: new Map<string, { bytes: Buffer; metadata: Record<string, string> }>() }));
@@ -120,6 +120,35 @@ describe.skipIf(!process.env.FIRESTORE_EMULATOR_HOST)('durable activity sends in
     expect((await queue.ref.get()).data()?.processed).toBe(true);
     expect((await batchRef(uid, id).collection('rows').doc('row-one').get()).data()).toMatchObject({ status: 'stopped', recovery: 'none' });
   });
+  it('links queue ownership atomically so Stop can act before admission returns from dispatch', async () => {
+    const reviewed = await prepare(); await runSendCommand(uid, { version: 1, action: 'confirm', batchId: id, revision: reviewed.revision });
+    state.enqueue.mockImplementationOnce(async () => {
+      const source = (await operationRef(uid, id).collection('rows').doc('row-one').get()).data()!;
+      expect(source).toMatchObject({ admitted: true, queueId: expect.any(String) });
+      await runSendCommand(uid, { version: 1, action: 'stop', batchId: id });
+      return true;
+    });
+    await admitSendRows(uid, id);
+    const queue = (await db.collection('activitySyncQueue').get()).docs[0];
+    expect(queue.data()).toMatchObject({ processed: true, skippedReason: 'send_stopped' });
+    await projectSendDelivery(queue.ref);
+    expect(state.files.size).toBe(0);
+  });
+  it('preserves a claim and its source when Stop races admission dispatch', async () => {
+    const reviewed = await prepare(); await runSendCommand(uid, { version: 1, action: 'confirm', batchId: id, revision: reviewed.revision });
+    state.enqueue.mockImplementationOnce(async () => {
+      const queue = (await db.collection('activitySyncQueue').get()).docs[0];
+      await queue.ref.update({ providerOperationStartedAt: Date.now(), destinationUploadID: 'accepted-canary' });
+      await runSendCommand(uid, { version: 1, action: 'stop', batchId: id });
+      await admitSendRows(uid, id);
+      return true;
+    });
+    await admitSendRows(uid, id);
+    const queue = (await db.collection('activitySyncQueue').get()).docs[0];
+    expect(queue.data()).toMatchObject({ processed: false, destinationUploadID: 'accepted-canary' });
+    expect((await batchRef(uid, id).collection('rows').doc('row-one').get()).data()?.status).toBe('processing');
+    expect(state.files.size).toBe(1);
+  });
   it('resumes an unclaimed skipped send after Pro returns without reserving another copy', async () => {
     const queue = await confirm(); await queue.ref.update({ processed: true, resultStatus: 'skipped', skippedReason: 'no_pro_access' });
     await runSendCommand(uid, { version: 1, action: 'retry', batchId: id, rowId: 'row-one' });
@@ -135,6 +164,33 @@ describe.skipIf(!process.env.FIRESTORE_EMULATOR_HOST)('durable activity sends in
   it('cannot resend uncertain acceptance, even with Pro', async () => {
     const queue = await confirm(); await queue.ref.update({ processed: true, resultStatus: 'manual_reconciliation_required', providerOperationStartedAt: 1 });
     await expect(runSendCommand(uid, { version: 1, action: 'retry', batchId: id, rowId: 'row-one' })).rejects.toMatchObject({ code: 'failed-precondition' });
+  });
+  it('clears every previous provider result before an explicit confirmed-failure retry', async () => {
+    const queue = await confirm();
+    await queue.ref.update({ processed: true, sendConfirmedFailure: true, resultStatus: 'skipped', destinationUploadID: 'failed-upload', destinationProviderUserID: 'reviewed-account', destinationWorkoutKey: 'failed-workout', destinationInfoCode: 'old-result', providerOperationStartedAt: 1, destinationUploadContinuation: { type: 'suunto_blob_put_v1', uploadUrl: 'https://example.invalid/old-upload', uploadHeaders: {} }, destinationExpectedWorkoutTypeID: 2, retryCount: 4 });
+    state.enqueue.mockClear();
+    await runSendCommand(uid, { version: 1, action: 'retry', batchId: id, rowId: 'row-one' });
+    const retried = (await queue.ref.get()).data()!;
+    expect(retried).toMatchObject({ processed: false, destinationUploadID: null, destinationProviderUserID: null, destinationWorkoutKey: null, destinationInfoCode: null, providerOperationStartedAt: null, destinationUploadContinuation: null, retryCount: 0, sendConfirmedFailure: false, destinationPinnedProviderUserID: 'reviewed-account' });
+    expect(retried).not.toHaveProperty('destinationExpectedWorkoutTypeID');
+    expect(state.enqueue).toHaveBeenCalledOnce();
+  });
+  it('publishes a stopped sending window and refuses to confirm a stopped draft', async () => {
+    const reviewed = await prepare();
+    const before = (await batchRef(uid, id).get()).data()!;
+    expect(before.expiresAt).toBeGreaterThan(Date.now());
+    expect(before.stopped).toBe(false);
+    await runSendCommand(uid, { version: 1, action: 'stop', batchId: id });
+    expect((await batchRef(uid, id).get()).data()?.stopped).toBe(true);
+    await expect(runSendCommand(uid, { version: 1, action: 'confirm', batchId: id, revision: reviewed.revision })).rejects.toMatchObject({ code: 'failed-precondition' });
+    expect((await db.collection('activitySyncQueue').get()).empty).toBe(true);
+  });
+  it('keeps accepted status checks available after a batch is stopped and its sending window expires', async () => {
+    const queue = await confirm(); await queue.ref.update({ processed: true, destinationUploadID: 'accepted-canary', destinationWorkoutKey: 'accepted-key', providerOperationStartedAt: 1 });
+    await runSendCommand(uid, { version: 1, action: 'stop', batchId: id });
+    await operationRef(uid, id).update({ expiresAt: 1 });
+    await runSendCommand(uid, { version: 1, action: 'check', batchId: id, rowId: 'row-one' });
+    expect((await queue.ref.get()).data()).toMatchObject({ processed: false, destinationUploadID: 'accepted-canary', destinationWorkoutKey: 'accepted-key', providerOperationStartedAt: 1 });
   });
   it('allows a lapsed user to check an accepted operation without changing its ID', async () => {
     const queue = await confirm(); await queue.ref.update({ processed: true, destinationUploadID: 'accepted-canary' }); state.pro = false;
@@ -174,6 +230,32 @@ describe.skipIf(!process.env.FIRESTORE_EMULATOR_HOST)('durable activity sends in
     await prepare(); await stageSendFile(uid, id, 'another-row', 'Synthetic.fit', createCOROSActivityFITFixture());
     expect((await batchRef(uid, id).get()).data()?.total).toBe(1);
   });
+  it('releases a duplicate batch reservation immediately while preserving the claimed source', async () => {
+    const queue = await confirm(); await queue.ref.update({ providerOperationStartedAt: Date.now() });
+    const bytes = createCOROSActivityFITFixture(); const other = 'duplicate-batch';
+    await runSendCommand(uid, { version: 1, action: 'create', batchId: other, provider: 'coros', source: 'files' });
+    await stageSendFile(uid, other, 'duplicate-row', 'Synthetic.fit', bytes);
+    const reviewed = await runSendCommand(uid, { version: 1, action: 'prepare', batchId: other });
+    await runSendCommand(uid, { version: 1, action: 'confirm', batchId: other, revision: reviewed.revision });
+    await admitSendRows(uid, other);
+    expect((await db.collection('activitySyncQueue').get()).size).toBe(1);
+    expect((await batchRef(uid, other).collection('rows').doc('duplicate-row').get()).data()?.status).toBe('duplicate');
+    expect((await db.doc(`users/${uid}/activitySendQuota/current`).get()).data()?.bytes).toBe(bytes.length);
+    expect(state.files.size).toBe(1);
+    expect(state.files.has(`users/${uid}/activitySendSources/${id}/row-one.fit`)).toBe(true);
+  });
+  it.each([{ stopped: true }, { expiresAt: 1 }])('lets owners remove closed draft sources without Pro: %j', async window => {
+    await prepare(); state.pro = false; await operationRef(uid, id).update(window);
+    await runSendCommand(uid, { version: 1, action: 'remove', batchId: id, rowId: 'row-one' });
+    expect(state.files.size).toBe(0);
+    expect((await db.doc(`users/${uid}/activitySendQuota/current`).get()).data()?.bytes).toBe(0);
+  });
+  it('no-ops a background transaction when account deletion wins, without recreating data', async () => {
+    await db.doc(`userDeletionTombstones/${uid}`).set({ active: true });
+    const action = vi.fn(async (tx: admin.firestore.Transaction) => { tx.set(batchRef(uid, id), { unsafe: true }); });
+    await expect(guardedBackgroundSendTransaction(uid, action)).resolves.toBeUndefined();
+    expect(action).not.toHaveBeenCalled(); expect((await batchRef(uid, id).get()).exists).toBe(false);
+  });
   it('does not dispatch duplicate checks while an accepted operation is already running', async () => {
     const queue = await confirm(); await queue.ref.update({ destinationUploadID: 'accepted-canary' }); state.enqueue.mockClear();
     await runSendCommand(uid, { version: 1, action: 'check', batchId: id, rowId: 'row-one' });
@@ -188,6 +270,15 @@ describe.skipIf(!process.env.FIRESTORE_EMULATOR_HOST)('durable activity sends in
     await cleanupExpiredSends(createdAt + 31 * 86400_000);
     expect((await operationRef(uid, id).collection('rows').get()).empty).toBe(true);
     expect((await batchRef(uid, id).collection('rows').get()).empty).toBe(true);
+  });
+  it('excludes expired work before admission even if scheduled cleanup has not run', async () => {
+    const reviewed = await prepare(); await runSendCommand(uid, { version: 1, action: 'confirm', batchId: id, revision: reviewed.revision });
+    await operationRef(uid, id).update({ expiresAt: 1 });
+    await admitSendRows(uid, id);
+    expect((await db.collection('activitySyncQueue').get()).empty).toBe(true);
+    expect((await batchRef(uid, id).get()).data()).toMatchObject({ state: 'complete', finished: 1 });
+    expect((await batchRef(uid, id).collection('rows').doc('row-one').get()).data()).toMatchObject({ status: 'needs_action', recovery: 'choose_file' });
+    expect(state.files.size).toBe(0);
   });
   it('cleans only the feature source and releases quota once', async () => {
     await prepare(); state.files.set('unrelated/original.fit', { bytes: Buffer.from('fixture'), metadata: {} });

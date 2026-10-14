@@ -1,5 +1,6 @@
 import { readTemporarySendFile } from '../activity-send/temporary-source';
 import * as admin from 'firebase-admin';
+import { isSendWindowOpen } from '../activity-send/policy';
 import { FieldValue } from 'firebase-admin/firestore';
 import * as logger from 'firebase-functions/logger';
 import { ServiceNames } from '@sports-alliance/sports-lib';
@@ -833,6 +834,10 @@ async function updatePreUploadQueueItemIfUserActive(
             ...params,
             logPrefix: 'ActivitySync',
             isCurrent: currentQueueItem => isSameActivitySyncProviderState(currentQueueItem, expectedQueueItem),
+            ...(queueItem.sendBatchID && !hasPersistedDestinationUpload(queueItem) ? {
+                isAuthorizedInTransaction: async (db: admin.firestore.Firestore, transaction: admin.firestore.Transaction) =>
+                    isSendWindowOpen((await transaction.get(db.doc(`users/${queueItem.userID}/activitySendOperations/${queueItem.sendBatchID}`))).data()),
+            } : {}),
         });
     };
 
@@ -1621,6 +1626,12 @@ export async function processActivitySyncQueueItem(
                 bulkWriter,
                 unresolvedOperationError.dlqContext,
             );
+        }
+        if (queueItem.sendBatchID && !queueItem.providerOperationStartedAt && !hasPersistedDestinationUpload(queueItem)) {
+            const operation = (await admin.firestore().doc(`users/${queueItem.userID}/activitySendOperations/${queueItem.sendBatchID}`).get()).data();
+            if (!isSendWindowOpen(operation)) return finalizeActivitySyncQueueItemIfCurrent(queueItem, {
+                resultStatus: 'skipped', skippedReason: operation?.stopped ? 'send_stopped' : 'send_source_expired',
+            });
         }
         if (hasPersistedDestinationUpload(queueItem) && isProviderOperationInFlightLeaseActive(queueItem)) {
             throw new ProviderOperationStillInFlightError(
