@@ -727,8 +727,10 @@ Sleep remain independently addable/removable; HRV has no automatic tile or deriv
 
 `DashboardConfigurationService` persists owner-scoped dashboard patches through Firestore transactions. It compares the
 fields being changed against the draft baseline and refuses stale saves. Both sides use the profile hydration
-normalizer, so defaults and legacy tile migrations do not look like concurrent edits. It merges only dashboard settings, preserving
-server-managed Training settings. Existing tile resize/reorder/removal and filter/display changes use the same transaction
+normalizer, so defaults and legacy tile migrations do not look like concurrent edits. Explicit field masks replace each
+validated dashboard field as a whole, preserving other dashboard fields and server-managed Training settings. Recursive
+map merging would retain old auto-tile dismissal timestamps after an addition and falsely reject the next editor save.
+Existing tile resize/reorder/removal and filter/display changes use the same transaction
 path. No backend callable or schema migration is introduced. Latest-add Undo retains before/after values only for the
 fields in the chart write, checks those fields locally and transactionally, and preserves auto-tile dismissal when
 removing the addition. Event-table filters and dates remain untouched and cannot cause an unrelated Undo conflict.
