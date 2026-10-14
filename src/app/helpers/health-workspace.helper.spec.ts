@@ -1642,6 +1642,31 @@ describe('Health workspace helpers', () => {
     },
   );
 
+  it.each(['before', 'after'])('retains enriched Sleep HRV when its Health summary ends %s the visible window', async boundary => {
+    const window = resolveHealthWorkspaceWindow({ metric: 'heart_rate_variability', range: 'today', endDate: '2026-08-02' });
+    const session = sleepSession({ startTimeMs: window.startTimeMs - 3_600_000,
+      endTimeMs: window.startTimeMs + 7 * 3_600_000, vitals: {} });
+    const accountKey = await nightlyHealthAccountKey('user-1', 'GarminAPI', session.source.providerUserId);
+    const record = { ...sourceRecord({ id: 'boundary-hrv', provider: HEALTH_PROVIDERS.GarminAPI, accountKey,
+      calendarDate: session.sleepDate, metrics: [valueEntry({
+        metricId: HEALTH_METRIC_IDS.HeartRateVariability, semanticVariant: 'overnight_rmssd',
+        native: { metric: 'lastNightAvg', value: 33, unit: 'ms' }, canonical: { value: 33, unit: HEALTH_UNITS.Millisecond },
+      })] }), startTimeMs: session.startTimeMs,
+      endTimeMs: boundary === 'before' ? window.startTimeMs - 1 : window.endTimeMs + 1 };
+    const enriched = (await enrichSleepWithNightlyHrv('user-1', [session], [record]))
+      .map(item => ({ ...item, healthAccountKey: accountKey }));
+    expect(enriched[0].vitals?.overnightHrvMs).toBe(33);
+    const result = projectLoadedHealthRange([record], [], {
+      startDate: window.startDate, endDate: window.endDate, metricIds: [HEALTH_METRIC_IDS.HeartRateVariability],
+    }, { sourceRecordsComplete: true, samplesComplete: true });
+    const series = selectHealthPriorityTrendSeries(result, enriched, null, {
+      startTimeMs: window.startTimeMs, endTimeMs: window.endTimeMs, minimumPointCount: 1,
+    });
+    expect(series).toHaveLength(1);
+    expect(series[0].semanticVariant).toBe('sleep_overnight_hrv');
+    expect(series[0].points[0]).toMatchObject({ timestampMs: session.endTimeMs, value: 33 });
+  });
+
   it('uses local account ordinals for Sleep priority rows and never exposes provider IDs', () => {
     const rows = buildSleepPriorityRows([
       sleepSession({

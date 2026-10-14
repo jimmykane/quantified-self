@@ -4,6 +4,8 @@ import { formatCanonicalHealthMetricSportsLibValue } from '@shared/sports-lib-he
 import { describe, expect, it } from 'vitest';
 import { HEALTH_METRIC_CATALOG, HealthMetricId, HealthSourceRecord } from '@shared/health';
 import { projectLoadedHealthRange } from '@shared/health-query';
+import { enrichSleepWithNightlyHrv, nightlyHealthAccountKey } from '@shared/nightly-hrv';
+import { withHealthSleepAccountKeys } from './health-sleep-account.helper';
 import { AppDashboardHealthMetricSettings } from '../models/app-user.interface';
 import { buildDashboardHealthContext, filterDashboardHealthEvidence, DashboardHealthEvidence } from './dashboard-health-context.helper';
 import { DASHBOARD_HEALTH_GROUPS } from './dashboard-health-tile.helper';
@@ -62,6 +64,31 @@ describe('dashboard Health semantics',()=>{
     expect(saved.missingSource).toBe(true);
     expect(saved.hasData).toBe(false);
     expect(saved.selected).toBeNull();
+  });
+  it('retains a drawable enriched Sleep reading when the originating Health point is outside the selected window', async () => {
+    const accountKey = await nightlyHealthAccountKey('owner', 'GarminAPI', 'provider-account');
+    const data = evidence('heart_rate_variability', [accountKey]);
+    const observation = data.health!.result.observations[0];
+    if (observation.entry.kind !== 'value') throw new Error('Expected a Health value fixture');
+    observation.entry.semanticVariant = 'overnight_rmssd';
+    observation.endTimeMs = data.window.endTimeMs + 1;
+    const endTimeMs = observation.startTimeMs + 8 * 3_600_000;
+    const sessions = await enrichSleepWithNightlyHrv('owner', [{ id: 'night', userID: 'owner',
+      source: { provider: 'GarminAPI', providerUserId: 'provider-account', sourceSessionKey: 'night' },
+      sleepDate: observation.calendarDate, startTimeMs: observation.startTimeMs, endTimeMs,
+      durationSeconds: 28_800, isNap: false, stages: [], stageDurationsSeconds: {},
+      createdAtMs: endTimeMs, updatedAtMs: endTimeMs,
+    }], [{ userID: 'owner', schemaVersion: 1, kind: 'interval_summary',
+      source: { provider: 'GarminAPI', accountKey }, calendarDate: observation.calendarDate,
+      startTimeMs: observation.startTimeMs, endTimeMs: observation.endTimeMs, metrics: [observation.entry],
+    }]);
+    data.sessions = await withHealthSleepAccountKeys('owner', sessions);
+    const view = buildDashboardHealthContext(data, { metric: 'heart_rate_variability', range: '30d' });
+    expect(view.hasData).toBe(true);
+    expect(view.sources).toHaveLength(1);
+    expect(view.selected?.model.series.semanticVariant).toBe('sleep_overnight_hrv');
+    expect(view.selected?.latestValueText).toBe('54 ms');
+    expect(view.selected?.model.displayedPoints[0].timestampMs).toBe(endTimeMs);
   });
   it('keeps valid zero readings and categorical states selectable', () => {
     for (const metric of ['steps', 'stress_state'] as const) {

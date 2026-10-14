@@ -231,6 +231,8 @@ export interface HealthPriorityTrendSelectionOptions {
   semanticVariantPriority?: readonly string[];
 }
 
+type HealthMetricProjectionWindow = Pick<HealthPriorityTrendSelectionOptions, 'startTimeMs' | 'endTimeMs'>;
+
 export const HEALTH_HRV_PERSONAL_RANGE_SEMANTIC_VARIANTS = HRV_PERSONAL_RANGE_VARIANTS;
 type HealthHrvPersonalRangeSemanticVariant = typeof HEALTH_HRV_PERSONAL_RANGE_SEMANTIC_VARIANTS[number];
 
@@ -550,6 +552,7 @@ export function buildHealthMetricWorkspaceView(
   sleepSessions: readonly SleepSession[] = [],
   activityObservations: readonly ActivityHealthObservation[] = [],
   unitSettings: UserUnitSettingsInterface | null = null,
+  window: HealthMetricProjectionWindow = {},
 ): HealthMetricWorkspaceView {
   const sleepById = new Map(sleepSessions.flatMap(session => session.id ? [[session.id, session] as const] : []));
   const canonicalSleepRecords = buildCanonicalHealthSleepRecords(sleepSessions);
@@ -566,7 +569,7 @@ export function buildHealthMetricWorkspaceView(
     datums.push(...chunkDatums(chunk));
   }
   if (result.query.metricIds.includes(HEALTH_METRIC_IDS.HeartRateVariability)) {
-    datums.push(...sleepHrvDatums(canonicalSleepRecords, result));
+    datums.push(...sleepHrvDatums(canonicalSleepRecords, result, window));
   }
   datums.push(...sleepSummaryDatums(canonicalSleepRecords, result));
   for (const observation of activityObservations) {
@@ -826,7 +829,7 @@ export function selectHealthPriorityTrendSeries(
       semanticVariantCount - index,
     ]),
   );
-  for (const sourceSeries of buildHealthMetricWorkspaceView(result, sleepSessions, [], unitSettings).series) {
+  for (const sourceSeries of buildHealthMetricWorkspaceView(result, sleepSessions, [], unitSettings, options).series) {
     if (semanticVariants && !semanticVariants.has(sourceSeries.semanticVariant)) {
       continue;
     }
@@ -1461,6 +1464,7 @@ function chunkDatums(chunk: HealthSampleChunk): MetricDatum[] {
 function sleepHrvDatums(
   records: readonly CanonicalHealthSleepRecord[],
   result: HealthRangeResult,
+  window: HealthMetricProjectionWindow,
 ): MetricDatum[] {
   const representedReferences = new Set(result.observations.flatMap(observation => {
     const entry = observation.entry;
@@ -1501,7 +1505,7 @@ function sleepHrvDatums(
         && representedReferences.has(sleepHrvReferenceIdentity(session.id, field)))) {
         return [];
       }
-      if (field === 'vitals.overnightHrvMs' && representedNightlyHealthHrv(record, result, value)) {
+      if (field === 'vitals.overnightHrvMs' && representedNightlyHealthHrv(record, result, value, window)) {
         return [];
       }
       return [{
@@ -1543,11 +1547,14 @@ function representedNightlyHealthHrv(
   record: CanonicalHealthSleepRecord,
   result: HealthRangeResult,
   value: number,
+  window: HealthMetricProjectionWindow,
 ): boolean {
   if (!record.sessions.some(session => session.nightlyHrvSourceKey)) return false;
   return result.observations.some(observation => {
     const entry = observation.entry;
     if (observation.provider !== record.provider || observation.accountKey !== record.accountKey
+      || (window.startTimeMs !== undefined && observation.endTimeMs < window.startTimeMs)
+      || (window.endTimeMs !== undefined && observation.endTimeMs > window.endTimeMs)
       || observation.calendarDate !== record.point.sleepDate || entry.kind !== 'value'
       || entry.metricId !== HEALTH_METRIC_IDS.HeartRateVariability
       || entry.normalizationStatus !== HEALTH_NORMALIZATION_STATUSES.Canonical

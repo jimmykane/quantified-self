@@ -51,7 +51,7 @@ export function buildDashboardHealthContext(evidence: DashboardHealthEvidence, s
     // Source records can exist without a point the selected chart can draw (for
     // example a missing value, or a sample outside this window). Do not offer
     // those sources, or let them win the initial selection over real readings.
-    const series = buildHealthMetricWorkspaceView(result, sessions, observations, units).series
+    const series = buildHealthMetricWorkspaceView(result, sessions, observations, units, window).series
         .map(series => ({ ...series, points: series.points.filter(point =>
             Number.isFinite(point.timestampMs) && point.timestampMs >= window.startTimeMs && point.timestampMs <= window.endTimeMs
             && (typeof point.value === 'number' ? Number.isFinite(point.value)

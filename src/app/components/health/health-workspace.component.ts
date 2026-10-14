@@ -526,6 +526,7 @@ export class HealthWorkspaceComponent {
         this.filteredSleepSessions(),
         this.filteredActivityHealthObservations(),
         this.unitSettings(),
+        this.selectedWindow(),
       )
       : emptyMetricView();
   });
@@ -560,6 +561,7 @@ export class HealthWorkspaceComponent {
         historySleepSessions,
         [],
         this.unitSettings(),
+        this.selectedWindow(),
       ).series,
       ...buildHealthMetricWorkspaceView(
         filteredHistoryResult || sleepOnlyHrvContextResult(
