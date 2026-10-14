@@ -1729,6 +1729,10 @@ The response is a new allowlisted object. Summary and lap stats are limited to d
 average/maximum speed, heart rate, power, locomotion cadence, and energy. Canonical Stroke Rate is available through
 the selected numeric metric surface rather than being mislabeled in the fixed cadence summary field. Swim lengths expose
 only their normalized timing, distance, pool, stroke, SWOLF, energy, speed, cadence-shaped rate, and heart-rate fields.
+When the parser's optional pool `timingValidity` marker rejects a source timer/elapsed value, swim detail projections
+return `null` in the existing affected timing field; lap duration likewise stays `null` for a rejected timer, including
+when stale numeric stats coexist with the marker. Distance/strokes/rest rows remain available. The marker, its reason,
+and raw rejected values are never forwarded. No schema, consent, scope or mutation capability changes are introduced.
 For swimming, the frozen `averageCadenceRpm` wire field contains the source stroke rate; its compatibility name cannot be
 renamed without a registered-contract transition. Jump records expose timestamp, distance,
 height, hang time, speed, rotations, and score. The jump `timestampMs` is an activity-relative elapsed offset in

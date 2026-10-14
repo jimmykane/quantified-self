@@ -1,3 +1,4 @@
+import { getRejectedSwimTiming, resolveSwimTiming, SWIM_TIMING_UNAVAILABLE_REASON } from '@shared/swim-timing';
 import {
   ActivityInterface,
   ActivityTypeGroups,
@@ -1836,7 +1837,9 @@ function buildLapTooltipDetails(
 ): EventChartMarkerTooltipDetail[] {
   const details: EventChartMarkerTooltipDetail[] = [];
 
-  const duration = lap.getDuration?.();
+  const rejected = getRejectedSwimTiming(lap);
+  const duration = rejected?.timerTime !== undefined ? null : lap.getDuration?.();
+  if (rejected) appendTextDetail(details, 'Timing', SWIM_TIMING_UNAVAILABLE_REASON);
   const durationValue = formatLapDataValue(duration, { compactDuration: true });
   if (durationValue) {
     details.push({ label: 'Duration', value: durationValue });
@@ -1882,7 +1885,9 @@ function buildSwimLengthTooltipDetails(
   const details: EventChartMarkerTooltipDetail[] = [];
 
   appendTextDetail(details, 'Lap', formatNullableInteger(swimLength.lapIndex));
-  appendLapDetail(details, 'Duration', swimLength.timerTime ?? swimLength.elapsedTime, unitSettings, { compactDuration: true });
+  const seconds = resolveSwimTiming(swimLength).duration;
+  if (getRejectedSwimTiming(swimLength)) appendTextDetail(details, 'Timing', SWIM_TIMING_UNAVAILABLE_REASON);
+  appendLapDetail(details, 'Duration', seconds === null ? null : new DataDuration(seconds), unitSettings, { compactDuration: true });
   appendLapDetail(details, 'Distance', getSwimLengthDistance(swimLength, unitSettings, nominalDistanceDisplayMeters), unitSettings);
   appendTextDetail(details, 'Type', formatSwimLengthLabel(swimLength.type));
   appendTextDetail(details, 'Stroke', formatSwimLengthLabel(swimLength.stroke));
@@ -1973,6 +1978,7 @@ function normalizeDisplayUnitText(value: string): string {
 }
 
 function getSwimLengthPace(swimLength: AppSwimLength): DataSwimPace | null {
+  if (getRejectedSwimTiming(swimLength)) return null;
   const speedValue = swimLength.avgSpeed?.getValue?.();
   if (typeof speedValue !== 'number' || !Number.isFinite(speedValue) || speedValue <= 0) {
     return null;

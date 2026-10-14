@@ -1,3 +1,4 @@
+import { getRejectedSwimTiming, resolveSwimTiming } from '@shared/swim-timing';
 import {
   ActivityInterface, ActivityUtilities, DataActiveLengths, DataCadenceAvg,
   DataInterface, DataNumber, DataStrokeRateAvg, DataSwimPaceAvg, DataTotalCycles,
@@ -70,7 +71,7 @@ function completeSum(lengths: readonly AppSwimLength[], getValue: (length: AppSw
 }
 
 export function getSwimLengthDuration(length: AppSwimLength): number | null {
-  return finite(length.timerTime ?? length.elapsedTime);
+  return resolveSwimTiming(length).duration;
 }
 
 export function getSwimLengthDistance(length: AppSwimLength): number | null {
@@ -111,6 +112,7 @@ export function isRestSwimLap(lap: LapInterface, lengths: readonly AppSwimLength
 }
 
 function getActiveSwimLengthCadenceMetrics(lengths: readonly AppSwimLength[]): { value: number; duration: number } | null {
+  if (lengths.some(length => !isRestSwimLength(length) && getSwimLengthDuration(length) === null)) return null;
   let total = 0;
   let duration = 0;
   lengths.filter(length => !isRestSwimLength(length)).forEach(length => {
@@ -140,24 +142,26 @@ export function getSwimLapAnalytics(
     const completeLengths = lengths.length > 0
       && (!Number.isInteger(recordedActiveCount) || recordedActiveCount === active.length);
     const nativeFallback = active.length === lengths.length;
+    const validTiming = !getRejectedSwimTiming(lap) && !active.some(length => getRejectedSwimTiming(length));
+    const nativeTimingFallback = nativeFallback && validTiming;
     const lengthDuration = completeLengths ? completeSum(active, getSwimLengthDuration) : null;
     const lengthDistance = completeLengths ? completeSum(active, getSwimLengthDistance) : null;
-    const duration = lengthDuration ?? (nativeFallback ? finite(lap.getDuration?.()) : null);
+    const duration = lengthDuration ?? (nativeTimingFallback ? finite(lap.getDuration?.()) : null);
     const distance = lengthDistance ?? (nativeFallback ? finite(lap.getDistance?.()) : null);
     const recordedStrokes = finite(lap.getStat?.(DataTotalCycles.type));
     const strokes = (completeLengths ? completeSum(active, length => length.strokes) : null)
       ?? (nativeFallback ? recordedStrokes : null);
     const recordedPace = finite(lap.getStat?.(DataSwimPaceAvg.type));
     const pace = lengthDuration > 0 && lengthDistance > 0 ? 100 * lengthDuration / lengthDistance
-      : nativeFallback ? recordedPace : null;
+      : nativeTimingFallback ? recordedPace : null;
     const nativeCadence = finite(lap.getStat?.(DataCadenceAvg.type));
     const recordedCadence = finite(lap.getStat?.(DataStrokeRateAvg.type)) ?? nativeCadence;
     const cadenceMetrics = completeLengths ? getActiveSwimLengthCadenceMetrics(active) : null;
     const cadence = cadenceMetrics?.value
       ?? (strokes !== null && lengthDuration > 0 ? 60 * strokes / lengthDuration : null)
-      ?? (nativeFallback ? recordedCadence : null);
+      ?? (nativeTimingFallback ? recordedCadence : null);
     const swolf = getNormalizedSwolf(duration, distance, strokes, settings)
-      ?? (nativeFallback && pace > 0 && cadence !== null
+      ?? (nativeTimingFallback && pace > 0 && cadence !== null
         ? new DataNormalizedSwolf(ActivityUtilities.computeSwimSwolf(pace, cadence, getSwolfReferenceDistance(settings))) : null);
     return [lap, {
       lengths, isRest,

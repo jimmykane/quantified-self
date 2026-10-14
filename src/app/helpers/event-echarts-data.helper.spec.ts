@@ -2208,6 +2208,19 @@ describe('event-echarts-data.helper', () => {
     }));
   });
 
+  it('does not substitute elapsed time for rejected swim timing in chart tooltips', () => {
+    const activity = { getID: () => 'swim', type: 'Swimming', startDate: new Date(0), endDate: new Date(30000),
+      creator: { name: 'Test' }, getSwimLengths: () => [{ index: 1, lapIndex: 1, startDate: 0, endDate: 30000,
+        type: 'active', elapsedTime: 30, timerTime: null, distance: 25, avgSpeed: 1, strokes: 9,
+        timingValidity: { version: 1, reason: 'exceeds-workout-envelope', timerTime: 4000000 } }] } as any;
+    const markers = buildEventSwimLengthMarkers({ selectedActivities: [activity], allActivities: [activity],
+      xAxisType: XAxisTypes.Duration, eventColorService: { getActivityColor: () => '#00aaff' } as any });
+    expect(markers).toHaveLength(1);
+    expect(markers[0].tooltipDetails).toEqual(expect.arrayContaining([{ label: 'Distance', value: '25m' }, { label: 'Strokes', value: '9' }]));
+    expect(markers[0].tooltipDetails.some(detail => detail.label === 'Duration' || detail.label === 'Swim Pace')).toBe(false);
+    expect(markers[0].tooltipDetails.find(detail => detail.label === 'Timing')?.value).toContain('Recorded timing exceeds');
+  });
+
   it('places swim length markers on the nearest distance point for distance charts', () => {
     const timeStream = {
       getData: () => [0, 10, 20, 30, 40],

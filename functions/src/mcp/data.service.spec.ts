@@ -3025,6 +3025,81 @@ describe('MCP data service', () => {
     expect(JSON.stringify(result)).not.toContain('privateExtension');
   });
 
+  it('withholds rejected swim and lap timing through existing nullable fields without exposing metadata', async () => {
+    vi.mocked(dependencies.fetchActivityDocuments).mockResolvedValue([
+      activityDocument(),
+    ]);
+    const service = createMcpDataService(dependencies);
+    const activities = await service.listActivities({
+      uid: 'user-1',
+      connectionId: 'connection-1',
+      appBaseUrl: 'https://quantified-self.io',
+      startTimeMs: Date.parse('2026-07-01T00:00:00.000Z'),
+      endTimeMs: Date.parse('2026-07-02T00:00:00.000Z'),
+    });
+    vi.mocked(dependencies.fetchActivityDetailDocument).mockResolvedValue({
+      id: 'activity-1',
+      data: {
+        eventID: 'event-1',
+        laps: [{ startDate: Date.parse('2026-07-01T08:00:00.000Z'), endDate: Date.parse('2026-07-01T08:00:30.000Z'),
+          stats: { [DataDuration.type]: 4000000, [DataDistance.type]: 25 },
+          timingValidity: { version: 1, reason: 'exceeds-workout-envelope', timerTime: 4000000 } }],
+        swimLengths: [{
+          index: 4,
+          lapIndex: 1,
+          startDate: Date.parse('2026-07-01T08:00:00.000Z'),
+          endDate: Date.parse('2026-07-01T08:00:30.000Z'),
+          type: 'active',
+          stroke: 'freestyle',
+          strokes: 18,
+          elapsedTime: 30,
+          timerTime: 4000000,
+          timingValidity: { version: 1, reason: 'exceeds-workout-envelope', timerTime: 4000000 },
+          distance: 25,
+          poolLength: 25,
+          avgSpeed: 0.83,
+          avgCadence: 36,
+          avgHeartRate: 130,
+          maxHeartRate: 142,
+          swolf: 48,
+          calories: 5,
+          privateExtension: { source: 'provider' },
+        }],
+      },
+    });
+
+    const result = await service.listActivitySwimLengths({
+      uid: 'user-1',
+      connectionId: 'connection-1',
+      activityRef: activities.activities[0].activityRef,
+    });
+
+    expect(result.items).toEqual([{
+      index: 0,
+      sourceIndex: 4,
+      lapIndex: 1,
+      startTimeMs: Date.parse('2026-07-01T08:00:00.000Z'),
+      endTimeMs: Date.parse('2026-07-01T08:00:30.000Z'),
+      type: 'active',
+      stroke: 'freestyle',
+      strokeCount: 18,
+      elapsedTimeSeconds: 30,
+      timerTimeSeconds: null,
+      distanceMeters: 25,
+      poolLengthMeters: 25,
+      averageSpeedMetersPerSecond: 0.83,
+      averageCadenceRpm: 36,
+      averageHeartRateBpm: 130,
+      maximumHeartRateBpm: 142,
+      swolf: 48,
+      energyKilocalories: 5,
+    }]);
+    expect(JSON.stringify(result)).not.toMatch(/privateExtension|timingValidity|exceeds-workout-envelope|4000000/);
+    const laps = await service.listActivityLaps({ uid: 'user-1', connectionId: 'connection-1', activityRef: activities.activities[0].activityRef });
+    expect(laps.items[0].stats).toMatchObject({ durationSeconds: null, distanceMeters: 25 });
+    expect(JSON.stringify(laps)).not.toMatch(/timingValidity|exceeds-workout-envelope|4000000/);
+  });
+
   it('rejects oversized activity list and detail materialization', async () => {
     vi.mocked(dependencies.fetchActivityDocuments).mockResolvedValue([
       activityDocument({

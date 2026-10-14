@@ -152,6 +152,20 @@ describe('EventCardLapsComponent', () => {
         fixture.detectChanges();
     });
 
+    it('explains rejected lap timing while retaining lap distance and identity', () => {
+        const lap = { ...createRenderableLap(LapTypes.Manual), getDuration: () => new DataDuration(4000000),
+            getDistance: () => new DataDistance(25), timingValidity: { version: 1, reason: 'exceeds-workout-envelope', timerTime: 4000000 } } as unknown as LapInterface;
+        component.selectedActivities = [{ ...createActivity([lap]), type: 'Swimming' } as ActivityInterface];
+        component.ngOnChanges();
+        fixture.detectChanges();
+        const row = component.lapTableGroups[0].tables[0].dataSource.data.find(row => row.lap === lap)!;
+        expect(row[DataDuration.type]).toBe('');
+        expect(row.timingExplanation).toContain('Recorded timing exceeds');
+        const explanation = fixture.nativeElement.querySelector('mat-icon[aria-label^="Recorded timing exceeds"]');
+        expect(explanation.getAttribute('aria-hidden')).toBe('false');
+        expect(explanation.getAttribute('tabindex')).toBe('0');
+    });
+
     it('expands only recorded lengths, retains disclosure and selection across units, and labels rest rows', () => {
         const laps = [createRenderableLap(LapTypes.Manual), createRenderableLap(LapTypes.Manual)];
         const activity = { ...createActivity(laps), type: 'Swimming', getSwimLengths: () => [

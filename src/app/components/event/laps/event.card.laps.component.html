@@ -228,6 +228,7 @@
             } @else if (column === '#') {
             <span class="lap-index-label">{{ row[column] }}
               @if (row.isRest) { <span class="mat-label-small">Rest</span> }
+              @if (row.timingExplanation) { <mat-icon tabindex="0" aria-hidden="false" [matTooltip]="row.timingExplanation" [attr.aria-label]="row.timingExplanation">info</mat-icon> }
               @if (row.contextLabel) { <span class="mat-label-small">{{ row.contextLabel }}</span> }
             </span>
             } @else if (column !== 'selection') {

@@ -256,6 +256,22 @@ Keep automatic event and route scanners disabled. This change needs no saved-rou
 original-file action for an approved historical correction; do not bulk-rewrite recorded scores or distribute parent
 TSS across multisport legs. Validate the installed runtime/target version before any separately approved campaign.
 
+### Prepared pool timing validity correction (not released)
+
+Adopting the candidate parser classifies only source-proven impossible lap/length timing in complete single-session
+pool FIT files. It adds optional `timingValidity` JSON metadata while withholding contradicted timer/elapsed fields.
+Rest/length rows, ownership and distance/strokes remain; valid elapsed time cannot substitute for rejected active time.
+Native JSON and activity write sanitization retain the marker, and repeated regeneration cannot restore rejected time.
+Pool durability becomes unavailable for affected active lengths rather than reporting improved coverage. Moving time
+previously summed from corrupt length timers can instead use valid recorded samples; session totals and imported TSS
+retain precedence. Routes, multisession files, incomplete evidence and valid long rests retain existing behavior.
+
+Existing activities need original-file reparse after a released package is adopted in both root and Functions. Training
+refresh alone cannot classify legacy timing. Use the normal version-gated queue and derived invalidation; do not start a
+campaign, change its target, or update the aligned package versions as part of preparing this patch. MCP/frontend
+readers tolerate old documents and project missing timing through their existing contracts. See the Training guide's
+“Contradicted recorded pool timing” section for consumer behavior and eligibility.
+
 ### Sports Lib 21.5.0 recorded swim distance display
 
 Sports Lib 21.5.0 adds optional meter/yard display units to `DataSwimDistance`. Quantified Self selects these units

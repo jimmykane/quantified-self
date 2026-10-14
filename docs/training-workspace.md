@@ -6305,6 +6305,36 @@ swolf_change = final_swolf - first_swolf
 
 Higher pace retention is better. Lower SWOLF change is steadier. SWOLF remains unavailable if it is not recorded.
 
+### Contradicted recorded pool timing
+
+Sports Lib can mark a lap or length with additive `timingValidity` metadata when a complete, single-session pool FIT
+workout independently contradicts its recorded timer or elapsed duration. It compares against the conservative whole
+workout envelope, widened by all summary timestamps and, for laps, valid child totals. It does not use a fixed duration
+cap, `timer > elapsed`, a single lap boundary, or a multisport leg boundary to classify timing. Incomplete evidence and
+multisession files remain unchanged; valid long rests and cross-leg laps retain their existing ownership.
+
+Rejected fields are unavailable, not zero. A valid independent elapsed value is retained, but cannot replace a rejected
+active timer. Length/lap identities, distance, strokes and rest classification survive import, native JSON, persistence
+and regeneration. Bounds retained for containment are not measured durations. No synthetic readings come from flagged
+lengths; an affected active length prevents a complete generated distance counter. Recorded streams and authoritative
+workout totals remain available. Removing a corrupt length-derived Moving time can allow regeneration from valid
+recorded samples; imported TSS and valid workout timer/elapsed totals keep their existing precedence.
+
+An affected active length makes pool durability ineligible with `missing-output` and zero qualifying coverage; deleting
+it from a denominator must not make coverage appear better. Valid rests do not disqualify otherwise comparable active
+lengths. The validity marker participates in the durability fingerprint. In event details, incomplete active timing
+withholds set totals, calculated pace, normalized SWOLF and weighted stroke rate where those calculations require it.
+Native lap time cannot silently fill rejected length time. Unrelated distance/stroke totals and recorded values remain
+available, with an explanation in the lap/length view.
+
+`shared/swim-timing.ts` provides compatible reads of optional metadata for the frontend and MCP; classification remains
+in Sports Lib. MCP retains frozen schemas and existing nullable timing fields, with no raw validity metadata, rejected
+values, new scopes or mutations exposed. This is a recorded-data/durability correction, not a Training planning change.
+Existing write sanitization preserves the marker and null values. Historical classification requires an original-file
+reparse after coordinated package adoption; refreshing Training or restoring old JSON alone cannot supply that evidence.
+No queue lifecycle, policy, Rules, index or automatic reparse campaign is added. The implementation is prepared against a
+local candidate while root/Functions dependencies remain aligned on the published version until release approval.
+
 ### Eligibility and missing evidence
 
 Persisted ineligibility reasons include:

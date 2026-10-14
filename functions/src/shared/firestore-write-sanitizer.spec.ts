@@ -27,6 +27,14 @@ function hasStreamsKey(value: unknown): boolean {
 }
 
 describe('firestore-write-sanitizer', () => {
+  it('retains additive timing validity and null timing through import/reparse write sanitization', () => {
+    const timingValidity = { version: 1, reason: 'exceeds-workout-envelope', timerTime: 4000000 };
+    const source = { laps: [{ timingValidity, stats: { Distance: 25 } }],
+      swimLengths: [{ timingValidity, elapsedTime: 30, timerTime: null, distance: 25, type: 'idle' }], streams: [] };
+    const saved = sanitizeActivityFirestoreWritePayload(source);
+    expect(saved).toEqual({ laps: source.laps, swimLengths: source.swimLengths });
+    expect(sanitizeActivityFirestoreWritePayload(saved)).toEqual(saved);
+  });
   it('stripStreamsRecursivelyInPlace removes streams keys from nested payloads', () => {
     const payload: Record<string, unknown> = {
       streams: [{ type: 'Power', values: [100, 200] }],

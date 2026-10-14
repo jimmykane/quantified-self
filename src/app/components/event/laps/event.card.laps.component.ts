@@ -1,3 +1,4 @@
+import { getRejectedSwimTiming, SWIM_TIMING_UNAVAILABLE_REASON } from '@shared/swim-timing';
 import {
   ChangeDetectionStrategy,
   ChangeDetectorRef,
@@ -68,6 +69,7 @@ interface LapTableRow extends Record<string, unknown> {
   metricNotes?: Record<string, string>;
   isRest?: boolean;
   contextLabel?: string;
+  timingExplanation?: string;
   hasLengths?: boolean;
   lengthsExpanded?: boolean;
   detailId?: string;
@@ -353,6 +355,7 @@ export class EventCardLapsComponent extends DataTableAbstractDirective implement
       const swim = contextLabel ? undefined : analytics.get(lap);
       Object.defineProperties(row, {
         contextLabel: { value: contextLabel, enumerable: false },
+        timingExplanation: { value: getRejectedSwimTiming(lap) ? SWIM_TIMING_UNAVAILABLE_REASON : undefined, enumerable: false },
         isRest: { value: swim?.isRest || false, enumerable: false },
         hasLengths: { value: !!swim?.lengths.length, enumerable: false },
         lengthsExpanded: { value: this.expandedLapKeys.has(selectionKey), writable: true, enumerable: false },

@@ -55,6 +55,12 @@ describe('help.content', () => {
       'saved tag remains available', '**Refresh tags and activities**', 'Generated timestamp names are hidden',
       'the sport stays visible and opens the activity', 'Custom names remain visible']) expect(copy).toContain(phrase);
   });
+  it('explains unavailable pool timing without losing rests or inventing replacements', () => {
+    const copy = HELP_SECTIONS.map(section => section.content).join('\n');
+    expect(copy).toContain('Valid elapsed time is not substituted for rejected active time');
+    expect(copy).toContain('Valid long rests and multisport laps are preserved');
+    expect(copy).toContain('Its distance, strokes and rest label remain');
+  });
   it('explains source parser corrections without promising calibration or historical deletion', () => {
     const copy = HELP_SECTIONS.find(section => section.content.includes('### Form tile (CTL / ATL / TSB)'))!.content;
     expect(copy).toContain('pace-based load needs a threshold belonging to that sport');
