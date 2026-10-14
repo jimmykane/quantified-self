@@ -32,7 +32,7 @@ export function projectSendQueue(data: Record<string, unknown>): { status: Activ
   if (data.skippedReason === 'send_stopped') return { status: 'stopped', recovery: 'none', message: 'Stopped before sending.' };
   if (data.skippedReason === 'send_source_expired') return { status: 'needs_action', recovery: 'choose_file', message: 'The temporary source expired. Review a new draft before sending.' };
   if (data.skippedReason === 'no_pro_access') return { status: 'needs_action', recovery: 'upgrade', message: 'Pro is required to start this send.' };
-  if (data.sendConfirmedFailure === true) return { status: 'needs_action', recovery: 'retry_send', message: 'Provider confirmed processing failed. You can retry sending.' };
+  if (data.sendConfirmedFailure === true) return { status: 'needs_action', recovery: 'retry_send', message: 'Provider confirmed processing failed.' };
   if (data.resultStatus === 'manual_reconciliation_required' || (data.providerOperationStartedAt && !data.destinationUploadID && (data.processed || connectionIssue))) {
     return { status: 'needs_action', recovery: 'review_provider', message: 'Acceptance is unknown. Check the provider before sending another copy.' };
   }

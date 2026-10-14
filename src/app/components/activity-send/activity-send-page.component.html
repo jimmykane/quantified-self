@@ -76,7 +76,7 @@
           @if (!sendingClosed() && batch.state === 'draft' && !batch.reviewed && (batch.source === 'saved' ? batch.savedSelectionReady || batch.total : readyCount()) && users.hasProAccessSignal()) { <button mat-stroked-button [disabled]="busy()" (click)="reviewFiles()">{{ batch.source === 'saved' ? 'Continue saved-activity preview' : 'Review prepared activities' }}</button> }
           @if (batch.state === 'draft' && batch.reviewed && !readyCount()) { <p>No eligible activities in this selection. Start a new send to choose other recordings.</p> }
           @if (!sendingClosed() && batch.state === 'draft') { <button mat-flat-button class="qs-mat-primary" [disabled]="!canConfirm()" (click)="confirm()">Send {{ readyCount() }} {{ readyCount() === 1 ? 'activity' : 'activities' }} to {{ batch.provider === 'coros' ? 'COROS' : batch.provider === 'suunto' ? 'Suunto' : 'Wahoo' }}</button> }
-          @if (!sendingClosed() && (batch.state === 'confirmed' || hasResumableRows())) { <button mat-stroked-button [disabled]="busy()" (click)="stop()">Stop unsent activities</button> }
+          @if (!sendingClosed() && (batch.state === 'confirmed' || hasRetryableRows())) { <button mat-stroked-button [disabled]="busy()" (click)="stop()">Stop unsent activities</button> }
           <button mat-button (click)="newDraft()" [disabled]="busy()">Start a new send</button>
         </div>
         <button mat-button [attr.aria-expanded]="showDetails()" aria-controls="activity-send-details" (click)="toggleDetails()">{{ showDetails() ? 'Hide' : 'Show' }} delivery details</button>

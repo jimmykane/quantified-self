@@ -242,6 +242,63 @@ describe.skipIf(!process.env.FIRESTORE_EMULATOR_HOST)('durable activity sends in
     expect((await batchRef(uid, id).collection('rows').doc('row-one').get()).data()?.status).toBe('stopped');
     expect((await db.doc(`users/${uid}/activitySendQuota/current`).get()).data()?.bytes).toBe(0);
   });
+  it('releases a confirmed-failure source when stopping the remaining batch without erasing its result', async () => {
+    await prepare(); await stageSendFile(uid, id, 'row-two', 'Second.fit', createCOROSActivityFITFixture({ sport: 2 }));
+    const reviewed = await runSendCommand(uid, { version: 1, action: 'prepare', batchId: id });
+    await runSendCommand(uid, { version: 1, action: 'confirm', batchId: id, revision: reviewed.revision }); await admitSendRows(uid, id);
+    const first = operationRef(uid, id).collection('rows').doc('row-one');
+    const queue = db.collection('activitySyncQueue').doc((await first.get()).data()!.queueId);
+    await queue.update({ processed: true, resultStatus: 'skipped', sendConfirmedFailure: true, providerOperationStartedAt: 1, destinationUploadID: 'failed-upload', destinationProviderUserID: 'reviewed-account', destinationWorkoutKey: 'failed-key' });
+    await projectSendDelivery(queue);
+    expect((await batchRef(uid, id).get()).data()).toMatchObject({ state: 'confirmed', total: 2, finished: 1 });
+    state.pro = false; state.enqueue.mockClear();
+    await runSendCommand(uid, { version: 1, action: 'stop', batchId: id }); await admitSendRows(uid, id);
+    expect((await first.get()).data()?.reservedBytes).toBe(0);
+    expect((await db.doc(`users/${uid}/activitySendQuota/current`).get()).data()?.bytes).toBe(0);
+    expect(state.files.size).toBe(0);
+    expect((await queue.get()).data()).toMatchObject({ processed: true, resultStatus: 'skipped', sendConfirmedFailure: true, providerOperationStartedAt: 1, destinationUploadID: 'failed-upload', destinationProviderUserID: 'reviewed-account', destinationWorkoutKey: 'failed-key' });
+    expect((await batchRef(uid, id).collection('rows').doc('row-one').get()).data()).toMatchObject({ status: 'needs_action', recovery: 'retry_send' });
+    expect((await batchRef(uid, id).get()).data()).toMatchObject({ total: 2, finished: 2, stopped: true });
+    state.pro = true;
+    await expect(runSendCommand(uid, { version: 1, action: 'retry', batchId: id, rowId: 'row-one' })).rejects.toMatchObject({ code: 'failed-precondition' });
+    expect(state.enqueue).not.toHaveBeenCalled();
+  });
+  it('retries cleanup of a stopped confirmed failure after Storage fails without losing identifiers or quota', async () => {
+    const queue = await confirm();
+    await queue.ref.update({ processed: true, resultStatus: 'skipped', sendConfirmedFailure: true, providerOperationStartedAt: 1, destinationUploadID: 'failed-upload' });
+    await projectSendDelivery(queue.ref); state.failDeleteOnce = true; state.pro = false;
+    await expect(runSendCommand(uid, { version: 1, action: 'stop', batchId: id })).rejects.toThrow('Synthetic temporary storage failure');
+    expect((await operationRef(uid, id).get()).data()).not.toHaveProperty('stopCursor');
+    expect((await db.doc(`users/${uid}/activitySendQuota/current`).get()).data()?.bytes).toBeGreaterThan(0);
+    expect(state.files.size).toBe(1);
+    await admitSendRows(uid, id); await admitSendRows(uid, id);
+    expect((await operationRef(uid, id).get()).data()?.stopComplete).toBe(true);
+    expect((await db.doc(`users/${uid}/activitySendQuota/current`).get()).data()?.bytes).toBe(0);
+    expect((await batchRef(uid, id).get()).data()).toMatchObject({ total: 1, finished: 1, stopped: true });
+    expect((await queue.ref.get()).data()).toMatchObject({ destinationUploadID: 'failed-upload', providerOperationStartedAt: 1, sendConfirmedFailure: true });
+    expect(state.files.size).toBe(0);
+  });
+  it('preserves saved archive originals when stopping a confirmed processing failure', async () => {
+    const path = await savedOriginal('saved-failure');
+    await runSendCommand(uid, { version: 1, action: 'create', batchId: id, provider: 'coros', source: 'saved' });
+    const reviewed = await runSendCommand(uid, { version: 1, action: 'prepare', batchId: id, eventIds: ['saved-failure'], sources: [ServiceNames.GarminAPI] });
+    await runSendCommand(uid, { version: 1, action: 'confirm', batchId: id, revision: reviewed.revision }); await admitSendRows(uid, id);
+    const queue = (await db.collection('activitySyncQueue').get()).docs[0];
+    await queue.ref.update({ processed: true, resultStatus: 'skipped', sendConfirmedFailure: true, providerOperationStartedAt: 1, destinationUploadID: 'failed-upload' });
+    await runSendCommand(uid, { version: 1, action: 'stop', batchId: id });
+    expect(state.files.has(path)).toBe(true);
+    expect((await db.doc(`users/${uid}/activitySendQuota/current`).get()).exists).toBe(false);
+    expect((await queue.ref.get()).data()?.destinationUploadID).toBe('failed-upload');
+  });
+  it('keeps an uncertain operation and its temporary source when stopping the batch', async () => {
+    const queue = await confirm();
+    await queue.ref.update({ processed: true, resultStatus: 'manual_reconciliation_required', providerOperationStartedAt: 1, sendConfirmedFailure: false });
+    await runSendCommand(uid, { version: 1, action: 'stop', batchId: id });
+    expect(state.files.size).toBe(1);
+    expect((await db.doc(`users/${uid}/activitySendQuota/current`).get()).data()?.bytes).toBeGreaterThan(0);
+    expect((await batchRef(uid, id).collection('rows').doc('row-one').get()).data()).toMatchObject({ status: 'needs_action', recovery: 'review_provider' });
+    expect((await queue.ref.get()).data()).toMatchObject({ resultStatus: 'manual_reconciliation_required', providerOperationStartedAt: 1 });
+  });
   it('reconciles admitted work and quota when the stop callable is interrupted after committing its intent', async () => {
     const queue = await confirm(); await queue.ref.update({ processed: true, resultStatus: 'skipped', skippedReason: 'no_pro_access' });
     await projectSendDelivery(queue.ref);

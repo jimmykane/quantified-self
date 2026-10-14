@@ -65,6 +65,21 @@ describe('activity sending workspace', () => {
     expect(fixture.nativeElement.textContent).toContain('before sending another copy');
     expect(fixture.nativeElement.textContent).not.toContain('Retry sending');
   });
+  it.each([true, false])('offers Stop for completed confirmed failures with Pro access %s', async pro => {
+    users.hasProAccessSignal.set(pro);
+    const fixture = render(); sends.batch.set({ ...batchValue, state: 'complete', finished: 1 });
+    sends.rows.set([{ ...row, status: 'needs_action', recovery: 'retry_send' }]); fixture.detectChanges();
+    const stop = Array.from(fixture.nativeElement.querySelectorAll('button') as NodeListOf<HTMLButtonElement>).find(button => button.textContent?.includes('Stop unsent activities'));
+    expect(stop).toBeDefined(); expect(stop!.disabled).toBe(false);
+    expect(haptics.selection).not.toHaveBeenCalled();
+    const stopping = vi.spyOn(fixture.componentInstance, 'stop'); stop!.click();
+    expect(stopping).toHaveBeenCalledOnce(); await stopping.mock.results[0].value;
+    expect(sends.command).toHaveBeenCalledWith({ version: 1, action: 'stop', batchId: 'batch-1' }, 'owner');
+    expect(haptics.selection).toHaveBeenCalledOnce(); expect(haptics.success).toHaveBeenCalledOnce();
+    sends.batch.set({ ...batchValue, state: 'complete', finished: 1, stopped: true }); fixture.detectChanges();
+    expect(fixture.nativeElement.textContent).not.toContain('Stop unsent activities');
+    expect(fixture.nativeElement.textContent).not.toContain('Retry sending');
+  });
   it('reports additional drops during staging instead of silently discarding them', async () => {
     const fixture = render(); fixture.componentInstance.busy.set(true);
     await fixture.componentInstance.addFiles({ preventDefault: vi.fn(), dataTransfer: { files: [new File(['x'], 'one.fit')] } } as unknown as DragEvent);

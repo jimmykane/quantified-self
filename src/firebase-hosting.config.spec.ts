@@ -366,6 +366,7 @@ describe('Firebase Hosting configuration', () => {
     expect(sitemapXml).not.toContain(`${siteOrigin}/features/workout-file-comparison`);
     expect(sitemapXml).not.toContain(`${siteOrigin}/features/sports-watch-benchmark`);
     // Help includes activity sending and the latest Health, recovery and haptic guidance.
+    // Help includes activity sending and the latest Health, recovery and haptic guidance.
     // Calmer overview help includes independent source attribution and HRV average/latest wording.
     expect(sitemapLastmodForUrl(`${siteOrigin}/help`)).toBe('2026-10-15');
     expect(sitemapLastmodForUrl(`${siteOrigin}/policies`)).toBe('2026-10-14');

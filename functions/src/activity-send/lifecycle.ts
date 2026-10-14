@@ -27,6 +27,9 @@ export async function reconcileStoppedSend(uid: string, id: string): Promise<voi
       const queueRef = data.queueId ? admin.firestore().collection('activitySyncQueue').doc(data.queueId) : null;
       const queue = queueRef ? (await tx.get(queueRef)).data() : undefined;
       const ownsQueue = queue?.userID === uid && queue.sendBatchID === id && queue.sendRowID === source.id;
+      // Stop closes retries for a confirmed terminal failure. Its result and IDs remain intact,
+      // but the temporary source is no longer needed.
+      const failedProcessing = ownsQueue && queue.processed === true && queue.resultStatus === 'skipped' && queue.sendConfirmedFailure === true;
       const canStop = !ownsQueue || queue.resultStatus !== 'success' && projectSendQueue(queue).recovery !== 'review_provider' && !queue.destinationUploadID && !queue.providerOperationStartedAt;
       const projection = canStop
         ? { status: 'stopped' as const, recovery: 'none' as const, message: 'Stopped before sending.' }
@@ -38,7 +41,7 @@ export async function reconcileStoppedSend(uid: string, id: string): Promise<voi
         tx.update(visible.ref, projection);
         tx.update(parent.ref, { finished, state: finished >= Number(parent.data()?.total) ? 'complete' : 'confirmed', updatedAt: Date.now() });
       }
-      return canStop || ['delivered', 'duplicate', 'stopped'].includes(projection.status);
+      return canStop || failedProcessing || ['delivered', 'duplicate', 'stopped'].includes(projection.status);
     });
     if (clean) await cleanupSendSourceRow(source.ref);
   }
