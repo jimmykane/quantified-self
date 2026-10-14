@@ -3251,6 +3251,23 @@ memory bounds protect Functions, not provider capacity. Mutations journal start 
 revisions. Lost POST acknowledgement or 409 recovers only through exact app/account/external-ID and full-content proof;
 three 50-item inventory pages per attempt make recovery resumable. Empty/unstable listings never authorize another POST.
 Unknown recovery remains needs-attention, including Retry; accepted IDs survive newer edits and Stop.
+Create replies with HTTP 200 are decoded without pretending they were the documented HTTP 201. Acceptance requires
+the account-bound success envelope, valid matching owner/external-ID/date metadata, and exact owned ZIP content readback.
+The acknowledged Guide ID is durably checkpointed with `create/started` before that GET. If readback fails, recovery reads
+that retained ID and the digest-verified frozen recipe; it never issues another POST or treats an empty listing/404 as
+nonacceptance. Malformed metadata, changed content and HTTP 200 application-error envelopes remain uncertain. Such error
+envelopes retain only bounded fixed validation labels, never the provider text. Older attempts whose reply was discarded
+before retaining an ID still require positive discovery or separately reviewed operator recovery; deployment does not reset
+them. Normal HTTP 201 delivery, mapping versions/digests, consent, entitlement, connection and deletion guards are unchanged.
+Offline HTTP/transport tests and the existing demo-Firestore Suunto worker suite cover 200 acknowledgement, exact readback,
+interrupted readback with a retained ID, idempotent Retry, mismatched ownership/date/content, and no speculative create.
+Monitoring impact: **covered/unchanged**. The existing Training monitoring bundle includes Suunto accepted/recovered/failure
+outcomes, retryable/uncertain categories, worker latency and queue health. The extra GET uses existing guarded requests;
+no queue, retry/backoff, lease, schedule, alert policy or log-label vocabulary is added. Only `processTrainingDeliveryTask`
+needs a separately approved Functions deployment; no Rules, indexes, frontend, secret or monitoring apply is required.
+MCP impact: **none**. This is private HTTP acknowledgement handling; all authored plan/workout reads, proposal/confirmation
+contracts, scopes, statuses and output schemas are unchanged. Product Help was reviewed: its accepted-send versus app/watch
+availability distinction remains accurate and needs no copy change for this internal fix.
 For HTTP 400 Guide rejections, the client reads at most 8 KiB of Suunto's documented error envelope and records only
 fixed response-shape, rejection, structural-field and validation categories in the existing `[TrainingDelivery]` failure
 event. The raw `error.description`, authored workout text, ZIP, account identifiers and response body are never logged or

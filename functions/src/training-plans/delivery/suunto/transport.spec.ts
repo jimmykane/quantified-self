@@ -60,6 +60,71 @@ describe('Suunto Guide lifecycle — synthetic transport', () => {
     op = { ...op, kind: 'remove', workout: null, progress: null };
     expect(await execute()).toBeNull(); expect(server.guides.size).toBe(0);
   });
+  it('accepts a POST 200 only after exact owned file readback and retaining its acknowledged ID', async () => {
+    server.createStatus = 200;
+    const artifact = (await execute())!;
+    expect(server.calls.map(request => request.method)).toEqual(['POST', 'GET']);
+    expect(checkpoint).toHaveBeenCalledWith(artifact, { version: 1, step: 'create', state: 'started' });
+    expect(checkpoint).toHaveBeenLastCalledWith(artifact, { version: 1, step: 'finished', state: 'accepted' });
+    expect(server.guides.size).toBe(1);
+  });
+  it('recovers a POST 200 by retained ID after interrupted readback, even without inventory visibility', async () => {
+    server.createStatus = 200;
+    server.afterHandle = async request => {
+      if (request.method === 'GET') { server.afterHandle = null; throw new SuuntoGuideHttpError('retryable', false); }
+    };
+    await expect(execute()).rejects.toMatchObject({ kind: 'retryable' });
+    expect(op.artifact?.ids.guide).toBe('guide-1');
+    expect(op.progress).toEqual({ version: 1, step: 'create', state: 'started' });
+    expect(await recover()).toMatchObject({ kind: 'accepted', artifact: { ids: { guide: 'guide-1' } } });
+    expect(server.calls.map(request => request.method)).toEqual(['POST', 'GET', 'GET']);
+  });
+  it.each(['missing', 'content', 'owner', 'externalId', 'date'])('keeps POST 200 with %s readback unresolved without another upload', async change => {
+    server.createStatus = 200;
+    const client = server.request;
+    transport = new SuuntoGuideTransport(async (request, beforeSend) => {
+      const response = await client(request, beforeSend);
+      if (request.method === 'POST') {
+        const remote = server.guides.get('guide-1')!.guide;
+        if (change === 'missing') server.guides.delete('guide-1');
+        else if (change === 'content') remote.name = 'Different guide';
+        else if (change === 'owner') remote.owner = 'Other application';
+        else if (change === 'externalId') remote.externalId = 'other';
+        else remote.localDate = '2026-12-31';
+      }
+      return response;
+    }, owner, () => now);
+    await expect(execute()).rejects.toMatchObject({ kind: 'uncertain' });
+    const recovered = recover();
+    if (change === 'owner' || change === 'externalId') await expect(recovered).rejects.toMatchObject({ kind: 'uncertain' });
+    else expect(await recovered).toEqual({ kind: 'uncertain' });
+    await expect(execute()).rejects.toMatchObject({ kind: 'uncertain' });
+    expect(server.calls.filter(request => request.method === 'POST')).toHaveLength(1);
+  });
+  it('requires an exact frozen digest before reading an acknowledged POST 200 ID during recovery', async () => {
+    server.createStatus = 200;
+    server.afterHandle = async request => { if (request.method === 'GET') throw new SuuntoGuideHttpError('retryable', false); };
+    await expect(execute()).rejects.toMatchObject({ kind: 'retryable' });
+    op.digest = 'unknown';
+    const calls = server.calls.length;
+    expect(await recover()).toEqual({ kind: 'uncertain' });
+    expect(server.calls).toHaveLength(calls);
+  });
+  it.each(['id', 'owner', 'externalId', 'localDate', 'pinned'])('refuses a POST 200 with invalid %s metadata before accepting or reading a file', async field => {
+    server.createStatus = 200;
+    const client = server.request;
+    transport = new SuuntoGuideTransport(async (request, beforeSend) => {
+      const response = await client(request, beforeSend);
+      if (request.method === 'POST') response.body = { ...(response.body as object),
+        [field]: field === 'localDate' ? '2026-12-31' : field === 'id' ? '../invalid' : 'invalid' };
+      return response;
+    }, owner, () => now);
+    await expect(execute()).rejects.toMatchObject({ kind: 'uncertain' });
+    expect(op.artifact).toBeNull();
+    expect(op.progress).toEqual({ version: 1, step: 'create', state: 'started' });
+    expect(server.calls.map(request => request.method)).toEqual(['POST']);
+    expect(checkpoint).not.toHaveBeenCalledWith(expect.anything(), expect.objectContaining({ state: 'accepted' }));
+  });
   const strengthOperation = () => {
     op.strength = { version: 1, workoutId: op.workout!.id, revision: 1, exercises: [{ id: 'squat', name: 'Back squat', sets: [
       { id: 'set', ending: { kind: 'repetitions', repetitions: 5 }, externalLoadKg: DataWeight.fromDisplayValue(100, WeightUnits.Pounds).getValue() },

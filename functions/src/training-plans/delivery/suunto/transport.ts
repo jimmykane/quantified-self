@@ -183,10 +183,17 @@ export class SuuntoGuideTransport implements TrainingDeliveryTransport {
       if (recovery.kind === 'accepted') return recovery.artifact;
       throw new TrainingDeliveryTransportError('uncertain');
     }
-    if (response.status !== (previous ? 200 : 201)) throw new TrainingDeliveryTransportError('uncertain');
+    if (previous ? response.status !== 200 : response.status !== 201 && response.status !== 200) throw new TrainingDeliveryTransportError('uncertain');
     const data = this.metadata(response.body);
     if (data.externalId !== payload.externalId || data.localDate !== payload.localDate || (previous && data.id !== previous.ids.guide)) throw new TrainingDeliveryTransportError('uncertain');
     const artifact: DeliveryArtifact = { ids: { guide: guideId(data.id), externalId: payload.externalId, owner: this.owner }, localDate: payload.localDate, completed: false };
+    if (!previous && response.status === 200) {
+      // Keep the exact acknowledged ID before readback. A lost/malformed GET
+      // must resume that read, never discard the journal or create another copy.
+      await this.save(operation, checkpoint, artifact, 'create', 'started');
+      const raw = await this.read(artifact, guard);
+      if (!raw || !equal(raw, payload)) throw new TrainingDeliveryTransportError('uncertain');
+    }
     await this.save(operation, checkpoint, artifact, 'finished', 'accepted'); return artifact;
   }
   private async discover(operation: DeliveryOperation, checkpoint: DeliveryCheckpoint, guard: DeliveryRequestGuard, offset: number): Promise<DeliveryRecovery> {
@@ -220,8 +227,18 @@ export class SuuntoGuideTransport implements TrainingDeliveryTransport {
     if (progress === null) return { kind: 'not-accepted' };
     if (progress.step === 'finished' && progress.state === 'accepted') return { kind: 'accepted', artifact: operation.artifact };
     if (progress.state !== 'started') return { kind: operation.artifact ? 'resume' : 'not-accepted' };
-    if (progress.step === 'create' || progress.step.startsWith('discover-')) return this.discover(operation, checkpoint, guard,
-      progress.step === 'create' ? 0 : this.offset(progress.step.slice('discover-'.length)));
+    if (progress.step === 'create' || progress.step.startsWith('discover-')) {
+      if (operation.artifact) {
+        const expected = guidePayloadForRecovery(operation, this.owner);
+        if (!expected || operation.artifact.localDate !== expected.localDate) return { kind: 'uncertain' };
+        const raw = await this.read(operation.artifact, guard);
+        if (!raw || !equal(raw, expected)) return { kind: 'uncertain' };
+        await this.save(operation, checkpoint, operation.artifact, 'finished', 'accepted');
+        return { kind: 'accepted', artifact: operation.artifact };
+      }
+      return this.discover(operation, checkpoint, guard,
+        progress.step === 'create' ? 0 : this.offset(progress.step.slice('discover-'.length)));
+    }
     if (!operation.artifact) return { kind: 'uncertain' };
     const expected = progress.step === 'update' ? guidePayloadForRecovery(operation, this.owner) : null;
     if (progress.step === 'update' && !expected) return { kind: 'uncertain' };

@@ -115,6 +115,48 @@ describe.skipIf(!process.env.FIRESTORE_EMULATOR_HOST)('Suunto worker with real F
     }
     await db.terminate();
   });
+  const useCreate200Http = () => {
+    server.createStatus = 200;
+    // Exercise the real HTTP envelope decoder, never the real provider: the
+    // injected fetcher is an in-memory fixture with synthetic credentials.
+    const client = createSuuntoGuideClient(async () => ({ accessToken: 'fixture-token', account: 'fixture-account' }),
+      () => 'fixture-key', async (url, init) => {
+        const parsed = new URL(String(url));
+        const response = await server.request({ method: init!.method as 'GET' | 'POST' | 'PUT' | 'DELETE',
+          path: `${parsed.pathname}${parsed.search}`, ...(init?.body ? { body: Buffer.from(init.body as Uint8Array) } : {}) }, async () => {});
+        return new Response(Buffer.isBuffer(response.body) ? new Uint8Array(response.body)
+          : JSON.stringify({ error: null, payload: response.body }), { status: response.status });
+      });
+    const transport = new SuuntoGuideTransport(client, 'Quantified Self', () => now);
+    runtime.transport = provider => provider === 'suunto' ? transport : null;
+  };
+  it('accepts create HTTP 200 only after file readback with durable receipts for one Guide', async () => {
+    useCreate200Http();
+    const row = await send();
+    expect(row).toMatchObject({ status: 'delivered', attempt: null, retries: 0, actual: { ids: { guide: 'guide-1' } } });
+    expect(server.calls.map(request => request.method)).toEqual(['POST', 'GET']);
+    const attempt = (await user().collection(DELIVERY_LEDGER).doc(row.id).collection('attempts').get()).docs[0];
+    expect(attempt.data()).toMatchObject({ state: 'accepted', progress: { step: 'finished', state: 'accepted' } });
+    expect((await attempt.ref.collection('acceptances').get()).size).toBe(2); // Transport receipt + worker completion.
+    await processTrainingDelivery(runtime, uid, row.id); await drain();
+    expect(server.calls.filter(request => request.method === 'POST')).toHaveLength(1);
+  });
+  it('persists a create 200 ID before failed readback and Retry resumes only its GET', async () => {
+    useCreate200Http();
+    server.afterHandle = async request => {
+      if (request.method === 'GET') { server.afterHandle = null; throw new Error('fixture read interruption'); }
+    };
+    const row = await send();
+    expect(row).toMatchObject({ status: 'retrying', acceptedDigest: null, lastAcceptedAtMs: null,
+      actual: { ids: { guide: 'guide-1' } }, attempt: { progress: { step: 'create', state: 'started' }, artifact: { ids: { guide: 'guide-1' } } } });
+    const attempt = await user().collection(DELIVERY_LEDGER).doc(row.id).collection('attempts').doc(row.attempt!.id).get();
+    expect(attempt.data()).toMatchObject({ state: 'checkpoint', progress: { step: 'create', state: 'started' }, artifact: { ids: { guide: 'guide-1' } } });
+    expect((await attempt.ref.collection('acceptances').get()).empty).toBe(true);
+    await command('retry'); await drain(); await processTrainingDelivery(runtime, uid, row.id); await drain();
+    expect(await ledger()).toMatchObject({ status: 'delivered', attempt: null, actual: { ids: { guide: 'guide-1' } } });
+    expect(server.calls.map(request => request.method)).toEqual(['POST', 'GET', 'GET']);
+    expect(server.guides.size).toBe(1);
+  });
   it('delivers once under concurrent workers while keeping visibility checks unavailable', async () => {
     await command('send'); await drain(); const row = await ledger();
     await Promise.all([processTrainingDelivery(runtime, uid, row.id), processTrainingDelivery(runtime, uid, row.id)]);

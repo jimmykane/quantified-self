@@ -572,6 +572,12 @@ only that exact added marker on corresponding FieldsStep notifications (includin
 the sent JSON, historical digests, ownership/date/authority checks and every other field unchanged. Lost-response
 recovery can then recognize the retained copy without another create or redundant update. Unknown or changed
 content remains uncertain; this is not generic response sanitization, absence proof or app/watch receipt evidence.
+Suunto create HTTP 200 replies are decoded but accepted only with the account-bound success envelope, matching owned
+metadata and exact Guide ZIP readback. Checkpoint the acknowledged ID as `create/started` before the GET; an interrupted
+readback resumes that exact ID against the frozen digest, never another create. Application-error/malformed replies and
+missing/changed readback stay uncertain. A historical journal with no retained ID is not automatically reset on deployment.
+This private response fix changes no mapping, public/MCP contract, consent or entitlement. Existing Training monitoring
+covers its accepted/recovered/failure outcomes and queue health; no new metric, alert, queue or retry policy is needed.
 See [Suunto delivery](training-workspace.md#suuntoplus-guide-delivery-650) for the detailed comparison and tests.
 Incoming workout-reference FIT metadata is now read through Sports Lib 21.2.3's bounded
 metadata-only reader. The public workout-reference classes, return shapes and numeric values remain unchanged, irrelevant
