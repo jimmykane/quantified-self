@@ -51,6 +51,7 @@ export class ActivitySendPageComponent {
   private activeProvider: ActivitySendProvider | null = null;
   private activeSource: 'files' | 'saved' = 'files';
   private activeBatch: string | null = null;
+  private routeBatchId: string | null = null;
   private readonly sendingClock = afterNextRender(() => {
     const handle = globalThis.setInterval(() => this.nowMs.set(Date.now()), 60_000);
     this.destroyRef.onDestroy(() => globalThis.clearInterval(handle));
@@ -67,33 +68,38 @@ export class ActivitySendPageComponent {
     if (navigationState?.['activitySendOwner'] === this.users.user()?.uid && Array.isArray(navigationState?.['activitySendSelection'])) this.sends.setSelection(navigationState['activitySendSelection']);
     this.route.paramMap.pipe(takeUntilDestroyed()).subscribe(params => {
       const value = params.get('provider');
-      this.provider.set(isActivitySendProvider(value) ? value : null);
+      const provider = isActivitySendProvider(value) ? value : null;
+      if (provider !== this.provider()) this.selectionChanged.set(false);
+      this.provider.set(provider);
       if (value && !isActivitySendProvider(value)) void this.router.navigate(['/send-activities'], { replaceUrl: true });
     });
     this.route.queryParamMap.pipe(takeUntilDestroyed()).subscribe(params => {
       this.error.set(null);
       this.showDetails.set(false);
-      this.source.set(params.get('source') === 'saved' ? 'saved' : 'files');
-      const id = params.get('batch');
+      const source = params.get('source') === 'saved' ? 'saved' : 'files';
+      const requested = params.get('batch');
+      const id = requested && /^[A-Za-z0-9_-]{1,128}$/.test(requested) ? requested : null;
+      if (source !== this.source() || id !== this.routeBatchId) this.selectionChanged.set(false);
+      this.routeBatchId = id; this.source.set(source);
       if (this.busy() && this.activeBatch && id !== this.activeBatch) this.activeOwner = null;
-      if (id && /^[A-Za-z0-9_-]{1,128}$/.test(id)) this.sends.watchBatch(id);
+      if (id) this.sends.watchBatch(id);
       else this.sends.closeBatch();
     });
     this.destroyRef.onDestroy(() => { this.destroyed = true; this.sends.closeBatch(); });
   }
   async chooseProvider(provider: ActivitySendProvider): Promise<void> {
     if (provider === this.provider()) return;
-    this.haptics.selection(); if (await this.router.navigate(['/send-activities', provider], { queryParams: { source: this.source() } })) this.selectionChanged.set(false);
+    if (await this.router.navigate(['/send-activities', provider], { queryParams: { source: this.source() } })) { this.selectionChanged.set(false); this.haptics.selection(); }
   }
   async chooseSource(source: 'files' | 'saved'): Promise<void> {
     if (source === this.source()) return;
-    this.haptics.selection(); if (await this.router.navigate([], { relativeTo: this.route, queryParams: { source } })) this.selectionChanged.set(false);
+    if (await this.router.navigate([], { relativeTo: this.route, queryParams: { source } })) { this.selectionChanged.set(false); this.haptics.selection(); }
   }
   async openBatch(id: string, provider: ActivitySendProvider): Promise<void> {
-    this.haptics.selection(); await this.router.navigate(['/send-activities', provider], { queryParams: { batch: id, source: this.sends.recent().find(batch => batch.id === id)?.source || 'files' } });
+    if (await this.router.navigate(['/send-activities', provider], { queryParams: { batch: id, source: this.sends.recent().find(batch => batch.id === id)?.source || 'files' } })) { this.selectionChanged.set(false); this.haptics.selection(); }
   }
   async newDraft(): Promise<void> {
-    this.haptics.selection(); if (await this.router.navigate([], { relativeTo: this.route, queryParams: { source: this.source() } })) this.selectionChanged.set(false);
+    if (await this.router.navigate([], { relativeTo: this.route, queryParams: { source: this.source() } })) { this.selectionChanged.set(false); this.haptics.selection(); }
   }
   private async ensureDraft(): Promise<string> {
     this.assertActive();

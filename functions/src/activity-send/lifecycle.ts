@@ -2,7 +2,7 @@ import { cleanupSendSourceRow } from './source-cleanup';
 import * as admin from 'firebase-admin';
 import { onDocumentWritten, onDocumentDeleted } from 'firebase-functions/v2/firestore';
 import { onSchedule } from 'firebase-functions/v2/scheduler';
-import { FieldPath, Timestamp } from 'firebase-admin/firestore';
+import { FieldPath, FieldValue, Timestamp } from 'firebase-admin/firestore';
 import { getHistoricalActivityRouteId } from '../../../shared/activity-sync-routes';
 import { ACTIVITY_SEND_PROVIDERS, activitySendTerminal } from '../../../shared/activity-send';
 import { enqueueActivitySyncQueueItem } from '../activity-sync/queue';
@@ -53,8 +53,16 @@ export async function reconcileStoppedSend(uid: string, id: string): Promise<voi
 export async function admitSendRows(uid: string, id: string): Promise<void> {
   const op = operationRef(uid, id);
   const current = (await op.get()).data() as SendOperation | undefined;
+  if (!current || (await getUserDeletionGuardState(admin.firestore(), uid)).shouldSkip) return;
+  // Removal publishes no row to retry from the browser. Drain its durable intent even for drafts.
+  const removed = await op.collection('rows').where('cleanupPending', '==', true).limit(50).get();
+  for (const row of removed.docs) await cleanupSendSourceRow(row.ref);
+  if (removed.size === 50) await guardedBackgroundSendTransaction(uid, async tx => {
+    const live = await tx.get(op);
+    if (live.exists) tx.update(op, { sourceCleanupProgressAt: Date.now(), sourceCleanupRevision: FieldValue.increment(1) });
+  });
   if (current?.stopped) { await reconcileStoppedSend(uid, id); return; }
-  if (!current || current.state !== 'confirmed' || (await getUserDeletionGuardState(admin.firestore(), uid)).shouldSkip) return;
+  if (current.state !== 'confirmed') return;
   const rows = await op.collection('rows').where('admitted', '==', false).limit(50).get();
   for (const row of rows.docs) {
     const source = row.data() as SendSource & { excluded?: boolean; removed?: boolean };

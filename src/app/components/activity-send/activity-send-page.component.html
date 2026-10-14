@@ -54,6 +54,7 @@
         @if (sendingClosed()) {
           <p role="status">{{ batch.stopped ? 'This batch was stopped.' : 'The sending window expired.' }} Start a new send to review any unsent recordings. Accepted uploads can still be checked.</p>
         } @else if (batch.expiresAt) { <p>{{ batch.state === 'draft' ? 'Review and send before' : 'Sending and retries available until' }} {{ batch.expiresAt | date:'medium' }}.</p> }
+        @if (sends.loadingRows()) { <div role="status"><mat-progress-bar mode="indeterminate"></mat-progress-bar><p>Loading activities…</p></div> }
         @for (row of sends.rows(); track row.id) {
           <article class="send-row">
             <div><strong>{{ row.name }}</strong><p>{{ row.sport || 'Recorded activity' }} @if (row.startDate) { · {{ row.startDate | date:'medium' }} } @if (row.size) { · {{ row.size / 1048576 | number:'1.1-1' }} MiB }</p>
@@ -70,7 +71,7 @@
             </div>
           </article>
         }
-        @if (sends.rows().length < batch.total) { <button mat-button (click)="sends.loadMoreRows()" appHapticTap>Show more activities</button> }
+        @if (sends.rows().length < batch.total) { <button mat-button [disabled]="busy() || sends.loadingRows()" (click)="sends.loadMoreRows()" appHapticTap>Show more activities</button> }
         <div class="batch-actions">
           @if (!sendingClosed() && batch.state === 'draft' && !batch.reviewed && (batch.source === 'saved' ? batch.savedSelectionReady || batch.total : readyCount()) && users.hasProAccessSignal()) { <button mat-stroked-button [disabled]="busy()" (click)="reviewFiles()">{{ batch.source === 'saved' ? 'Continue saved-activity preview' : 'Review prepared activities' }}</button> }
           @if (batch.state === 'draft' && batch.reviewed && !readyCount()) { <p>No eligible activities in this selection. Start a new send to choose other recordings.</p> }

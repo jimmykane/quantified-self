@@ -2188,6 +2188,6 @@ it('explains separately approved activity description access and event semantics
 
 it('documents durable activity sending, explicit review, Pro and retention', () => {
   const content = HELP_SECTIONS.map(section => section.content).join('\n');
-  for (const text of ['/send-activities', '20 MiB compressed and expanded', '200 MiB', '24 hours', 'seven days', '30 days', 'Unknown acceptance', 'Stop unsent activities', 'rather than Basic']) expect(content).toContain(text);
+  for (const text of ['/send-activities', '20 MiB compressed and expanded', '200 MiB', '24 hours', 'seven days', '30 days', 'Unknown acceptance', 'Stop unsent activities', 'rather than Basic', 'temporary storage cleanup continues in the background', 'Start a new send to add a file you removed']) expect(content).toContain(text);
   expect(content).not.toContain('upload rows are not retained across reloads');
 });

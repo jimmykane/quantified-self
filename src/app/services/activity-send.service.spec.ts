@@ -108,6 +108,13 @@ describe('ActivitySendService owner and upload boundaries', () => {
     streams.reads[2].next({ id: 'existing' }); expect(service.batchReadError()).toBeNull();
     service.closeBatch(); expect(service.requestedBatchId()).toBeNull();
   });
+  it('keeps one paging request active and ignores paging after the selected batch closes', () => {
+    service.watchBatch('existing'); service.loadMoreRows();
+    expect(streams.reads).toHaveLength(4);
+    streams.reads[3].next([]); service.loadMoreRows(); service.loadMoreRows();
+    expect(streams.reads).toHaveLength(5); expect(streams.reads[3].observed).toBe(false);
+    service.closeBatch(); service.loadMoreRows(); expect(streams.reads).toHaveLength(5);
+  });
   it('preserves background history errors when closing a batch and clears them on owner change', () => {
     streams.reads[0].error(new Error('Offline')); service.closeBatch();
     expect(service.readError()).toContain('recent sends');

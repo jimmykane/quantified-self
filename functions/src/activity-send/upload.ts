@@ -4,6 +4,7 @@ import { ACTIVITY_SEND_LIMITS, ActivitySendRow } from '../../../shared/activity-
 import { ALLOWED_CORS_ORIGINS, hasProAccess, shouldEnforceAppCheck } from '../utils';
 import { decodeSendFile, sendFileHash, sendIdentifier } from './policy';
 import { batchRef, describeFIT, guardedSendTransaction, operationRef, publicBatch, requireDraft, SendOperation, SendSource } from './store';
+import { queueRetiredSendSourceCleanup } from './source-cleanup';
 
 export async function stageSendFile(uid: string, batchId: string, rowId: string, filename: string, raw: Buffer) {
   sendIdentifier(batchId); sendIdentifier(rowId);
@@ -43,32 +44,37 @@ export async function stageSendFile(uid: string, batchId: string, rowId: string,
   });
   if (alreadyStaged) return { batchId, rowId };
   const file = admin.storage().bucket().file(path);
+  let generation: string | undefined;
   try {
-    await file.save(fit, { resumable: false, preconditionOpts: { ifGenerationMatch: 0 }, metadata: { contentType: 'application/octet-stream', metadata: { sendDigest: digest } } });
-  } catch (error) {
-    if (Number((error as { code?: unknown }).code) !== 412) throw error;
-  }
-  const [metadata] = await file.getMetadata().catch(error => {
-    if (Number((error as { code?: unknown }).code) === 404) throw new HttpsError('failed-precondition', 'The temporary file was removed. Review this draft before continuing.');
-    throw error;
-  });
-  if (metadata.metadata?.sendDigest !== digest) throw new HttpsError('failed-precondition', 'Temporary file identity changed.');
-  const generation = `${metadata.generation}`;
-  try {
+    try {
+      await file.save(fit, { resumable: false, preconditionOpts: { ifGenerationMatch: 0 }, metadata: { contentType: 'application/octet-stream', metadata: { sendDigest: digest } } });
+    } catch (error) {
+      if (Number((error as { code?: unknown }).code) !== 412) throw error;
+    }
+    const [metadata] = await file.getMetadata().catch(error => {
+      if (Number((error as { code?: unknown }).code) === 404) throw new HttpsError('failed-precondition', 'The temporary file was removed. Review this draft before continuing.');
+      throw error;
+    });
+    if (metadata.metadata?.sendDigest !== digest) throw new HttpsError('failed-precondition', 'Temporary file identity changed.');
+    const storedGeneration = `${metadata.generation}`;
+    generation = storedGeneration;
     await guardedSendTransaction(uid, async tx => {
       const current = (await tx.get(ref)).data() as SendOperation | undefined;
       const reserved = await tx.get(sourceRef);
       if (!current || current.state !== 'draft' || current.stopped || current.expiresAt <= Date.now() || reserved.data()?.digest !== digest || reserved.data()?.removed) throw new HttpsError('failed-precondition', 'Draft changed while uploading.');
-      const source: SendSource = { sourceServiceName: 'manualUpload', eventID: `file_${digest}`, digest, reservedBytes: fit.length, originalFile: { path, generation, extension: 'fit', originalFilename: filename.slice(0, 256) } };
+      const source: SendSource = { sourceServiceName: 'manualUpload', eventID: `file_${digest}`, digest, reservedBytes: fit.length, originalFile: { path, generation: storedGeneration, extension: 'fit', originalFilename: filename.slice(0, 256) } };
       tx.set(sourceRef, { ...source, admitted: false });
       tx.update(batchRef(uid, batchId).collection('rows').doc(rowId), { status: 'ready', message: 'Ready to review.' });
       current.revision++; current.reviewed = false; current.updatedAt = Date.now();
       tx.set(ref, current); tx.set(batchRef(uid, batchId), publicBatch(current));
     });
   } catch (error) {
+    await queueRetiredSendSourceCleanup(sourceRef, digest);
     // Exact-generation cleanup fences a write finishing after draft/account deletion.
     const adopted = (await sourceRef.get()).data();
-    if (adopted?.originalFile?.generation !== generation || adopted?.removed) await admin.storage().bucket().file(path, { generation }).delete({ ignoreNotFound: true });
+    if (generation && (adopted?.originalFile?.generation !== generation || adopted?.removed)) await admin.storage().bucket().file(path, { generation }).delete({ ignoreNotFound: true });
+    // A deleted account/tree cannot retain cleanup intent. This derived immutable row path has no owner left.
+    if (!generation && !adopted) await file.delete({ ignoreNotFound: true });
     throw error;
   }
   return { batchId, rowId };

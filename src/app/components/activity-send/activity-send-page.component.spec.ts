@@ -1,6 +1,7 @@
 import { TestBed } from '@angular/core/testing';
 import { signal } from '@angular/core';
-import { provideRouter, Router } from '@angular/router';
+import { ActivatedRoute, convertToParamMap, provideRouter, Router } from '@angular/router';
+import { BehaviorSubject, of } from 'rxjs';
 import { NoopAnimationsModule } from '@angular/platform-browser/animations';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { ActivitySendPageComponent } from './activity-send-page.component';
@@ -169,6 +170,27 @@ describe('activity sending workspace', () => {
     fixture.componentInstance.selectionChanged.set(true); navigate.mockResolvedValueOnce(false); await fixture.componentInstance.chooseSource('saved');
     expect(fixture.componentInstance.selectionChanged()).toBe(true);
   });
+  it('clears stale selection invalidation only after a recent send successfully opens', async () => {
+    const fixture = render(); const navigate = vi.spyOn(TestBed.inject(Router), 'navigate').mockResolvedValue(false);
+    sends.batch.set(batchValue); sends.rows.set([row]); fixture.componentInstance.selectionChanged.set(true);
+    await fixture.componentInstance.openBatch(batchValue.id, 'suunto');
+    expect(fixture.componentInstance.selectionChanged()).toBe(true);
+    expect(haptics.selection).not.toHaveBeenCalled();
+    navigate.mockResolvedValueOnce(true); await fixture.componentInstance.openBatch(batchValue.id, 'suunto');
+    expect(fixture.componentInstance.selectionChanged()).toBe(false);
+    expect(fixture.componentInstance.canConfirm()).toBe(true); expect(sends.command).not.toHaveBeenCalled();
+    expect(haptics.selection).toHaveBeenCalledOnce();
+  });
+  it('resets selection invalidation on browser-history context changes while preserving it for the same draft', () => {
+    const queryParams = new BehaviorSubject(convertToParamMap({ batch: 'old-draft', source: 'saved' }));
+    TestBed.overrideProvider(ActivatedRoute, { useValue: { paramMap: of(convertToParamMap({ provider: 'suunto' })), queryParamMap: queryParams.asObservable() } });
+    const fixture = render(); fixture.componentInstance.selectionChanged.set(true);
+    queryParams.next(convertToParamMap({ batch: 'old-draft', source: 'saved', details: 'true' }));
+    expect(fixture.componentInstance.selectionChanged()).toBe(true);
+    queryParams.next(convertToParamMap({ batch: 'reviewed-draft', source: 'saved' }));
+    expect(fixture.componentInstance.selectionChanged()).toBe(false);
+    expect(sends.command).not.toHaveBeenCalled(); expect(haptics.selection).not.toHaveBeenCalled();
+  });
   it('does not create a replacement draft while a requested batch is loading or unavailable', async () => {
     const fixture = render(); sends.requestedBatchId.set('existing-batch'); sends.loadingBatch.set(true); fixture.detectChanges();
     expect(fixture.nativeElement.querySelector('input[type=file]')).toBeNull();
@@ -182,6 +204,14 @@ describe('activity sending workspace', () => {
   it.each(['loadingRows', 'rowReadError'])('blocks confirmation until the reviewed rows are readable: %s', async state => {
     const fixture = render(); sends.batch.set(batchValue); sends.rows.set([row]); sends[state].set(state === 'loadingRows' ? true : 'Offline');
     await fixture.componentInstance.confirm(); expect(sends.command).not.toHaveBeenCalled();
+  });
+  it('explains pending rows and disables further paging until the read finishes', () => {
+    const fixture = render(); sends.batch.set({ ...batchValue, total: 51 }); sends.rows.set([row]); sends.loadingRows.set(true); fixture.detectChanges();
+    const more = Array.from(fixture.nativeElement.querySelectorAll('button') as NodeListOf<HTMLButtonElement>).find(button => button.textContent?.includes('Show more activities'))!;
+    expect(fixture.nativeElement.textContent).toContain('Loading activities'); expect(more.disabled).toBe(true);
+    more.click(); expect(sends.loadMoreRows).not.toHaveBeenCalled(); expect(haptics.trigger).not.toHaveBeenCalled();
+    sends.loadingRows.set(false); fixture.detectChanges(); expect(more.disabled).toBe(false);
+    more.click(); expect(sends.loadMoreRows).toHaveBeenCalledOnce();
   });
   it('allows first-time selection in a saved draft whose initial preview never started', () => {
     const fixture = render(); fixture.componentInstance.source.set('saved'); sends.batch.set({ ...batchValue, source: 'saved', total: 0, finished: 0, savedSelectionReady: false }); fixture.detectChanges();

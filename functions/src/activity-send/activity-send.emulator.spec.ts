@@ -7,16 +7,17 @@ import { stageSendFile } from './upload';
 import { admitSendRows, projectSendDelivery, cleanupSendSources, cleanupExpiredSends } from './lifecycle';
 import { operationRef, batchRef, guardedBackgroundSendTransaction } from './store';
 import { ACTIVITY_SEND_LIMITS } from '../../../shared/activity-send';
+import { queueRetiredSendSourceCleanup } from './source-cleanup';
 
-const state = vi.hoisted(() => ({ pro: true, account: 'reviewed-account', enqueue: vi.fn(async () => true), failDeleteOnce: false, afterSave: undefined as undefined | (() => Promise<void>), files: new Map<string, { bytes: Buffer; metadata: Record<string, string> }>() }));
+const state = vi.hoisted(() => ({ pro: true, account: 'reviewed-account', enqueue: vi.fn(async () => true), failDeleteOnce: false, failMetadataOnce: false, beforeSave: undefined as undefined | (() => Promise<void>), afterSave: undefined as undefined | (() => Promise<void>), afterDelete: undefined as undefined | (() => Promise<void>), files: new Map<string, { bytes: Buffer; metadata: Record<string, string>; generation?: string }>() }));
 vi.mock('../utils', async original => ({ ...await original<typeof import('../utils')>(), hasProAccess: async () => state.pro, enqueueActivitySyncTask: state.enqueue }));
 vi.mock('../activity-sync/process-queue-item', () => ({ getDestinationConnectionStatus: async () => 'connected' }));
 vi.mock('../coros/account', () => ({ getActiveCOROSTokenSnapshot: async () => ({ id: state.account }) }));
 vi.mock('./store', async original => ({ ...await original<typeof import('./store')>(), describeFIT: async () => ({ name: 'Synthetic.fit', sport: 'Running', startDate: 1000, warnings: [] }) }));
-vi.mock('firebase-admin', async original => ({ ...await original<typeof import('firebase-admin')>(), apps: [], initializeApp: (await original<typeof import('firebase-admin')>()).default.initializeApp, firestore: (await original<typeof import('firebase-admin')>()).default.firestore, storage: () => ({ bucket: () => ({ file: (path: string) => ({
-  save: async (bytes: Buffer, options: { metadata: { metadata: Record<string, string> } }) => { if (state.files.has(path)) throw Object.assign(new Error('exists'), { code: 412 }); state.files.set(path, { bytes, metadata: options.metadata.metadata }); await state.afterSave?.(); },
-  getMetadata: async () => { const value = state.files.get(path); if (!value) throw Object.assign(new Error('missing'), { code: 404 }); return [{ size: value.bytes.length, generation: '1', metadata: value.metadata }]; },
-  delete: async () => { if (state.failDeleteOnce) { state.failDeleteOnce = false; throw new Error('Synthetic temporary storage failure'); } state.files.delete(path); },
+vi.mock('firebase-admin', async original => ({ ...await original<typeof import('firebase-admin')>(), apps: [], initializeApp: (await original<typeof import('firebase-admin')>()).default.initializeApp, firestore: (await original<typeof import('firebase-admin')>()).default.firestore, storage: () => ({ bucket: () => ({ file: (path: string, objectOptions?: { generation?: string }) => ({
+  save: async (bytes: Buffer, options: { metadata: { metadata: Record<string, string> } }) => { await state.beforeSave?.(); if (state.files.has(path)) throw Object.assign(new Error('exists'), { code: 412 }); state.files.set(path, { bytes, metadata: options.metadata.metadata }); await state.afterSave?.(); },
+  getMetadata: async () => { if (state.failMetadataOnce) { state.failMetadataOnce = false; throw Object.assign(new Error('Synthetic metadata failure'), { code: 503 }); } const value = state.files.get(path); if (!value || objectOptions?.generation && objectOptions.generation !== (value.generation || '1')) throw Object.assign(new Error('missing'), { code: 404 }); return [{ size: value.bytes.length, generation: value.generation || '1', metadata: value.metadata }]; },
+  delete: async () => { if (state.failDeleteOnce) { state.failDeleteOnce = false; throw new Error('Synthetic temporary storage failure'); } const value = state.files.get(path); if (!objectOptions?.generation || objectOptions.generation === (value?.generation || '1')) state.files.delete(path); await state.afterDelete?.(); },
 }) }) }) }));
 vi.unmock('@sports-alliance/sports-lib');
 
@@ -27,7 +28,7 @@ describe.skipIf(!process.env.FIRESTORE_EMULATOR_HOST)('durable activity sends in
   let db: admin.firestore.Firestore;
   beforeAll(() => { if (!admin.apps.length) admin.initializeApp({ projectId: 'demo-activity-send' }); db = admin.firestore(); });
   beforeEach(async () => {
-    state.pro = true; state.account = 'reviewed-account'; state.enqueue.mockClear(); state.files.clear(); state.afterSave = undefined; state.failDeleteOnce = false;
+    state.pro = true; state.account = 'reviewed-account'; state.enqueue.mockClear(); state.files.clear(); state.afterSave = undefined; state.beforeSave = undefined; state.afterDelete = undefined; state.failDeleteOnce = false; state.failMetadataOnce = false;
     await db.recursiveDelete(db.doc(`users/${uid}`));
     await db.recursiveDelete(db.doc(`userDeletionTombstones/${uid}`));
     const queues = await db.collection('activitySyncQueue').get();
@@ -245,6 +246,96 @@ describe.skipIf(!process.env.FIRESTORE_EMULATOR_HOST)('durable activity sends in
     expect(state.files.size).toBe(0);
     expect((await db.doc(`users/${uid}/activitySendQuota/current`).get()).data()?.bytes).toBe(0);
   });
+  it('acknowledges removal and recovers draft quota after background cleanup fails', async () => {
+    await prepare(); state.failDeleteOnce = true; state.pro = false;
+    await expect(runSendCommand(uid, { version: 1, action: 'remove', batchId: id, rowId: 'row-one' })).resolves.toMatchObject({ batchId: id });
+    expect((await batchRef(uid, id).collection('rows').doc('row-one').get()).exists).toBe(false);
+    expect((await batchRef(uid, id).get()).data()).toMatchObject({ state: 'draft', total: 0 });
+    await expect(admitSendRows(uid, id)).rejects.toThrow('Synthetic temporary storage failure');
+    expect((await operationRef(uid, id).collection('rows').doc('row-one').get()).data()?.cleanupPending).toBe(true);
+    await admitSendRows(uid, id); await admitSendRows(uid, id);
+    expect(state.files.size).toBe(0);
+    expect((await db.doc(`users/${uid}/activitySendQuota/current`).get()).data()?.bytes).toBe(0);
+    expect((await operationRef(uid, id).collection('rows').doc('row-one').get()).data()?.cleanupPending).toBe(false);
+    expect((await db.collection('activitySyncQueue').get()).empty).toBe(true);
+  });
+  it('drains removed saved rows in bounded pages without deleting archived originals', async () => {
+    await operationRef(uid, id).set({ id, source: 'saved', state: 'draft' });
+    state.files.set('archive/original.fit', { bytes: Buffer.from('Synthetic archive'), metadata: {} });
+    const writes = db.batch();
+    for (let index = 0; index < 51; index++) writes.set(operationRef(uid, id).collection('rows').doc(`removed-${index}`), { removed: true, cleanupPending: true, originalFile: { path: 'archive/original.fit', generation: '1' } });
+    await writes.commit();
+    await admitSendRows(uid, id);
+    expect((await operationRef(uid, id).collection('rows').where('cleanupPending', '==', true).get()).size).toBe(1);
+    await admitSendRows(uid, id); await admitSendRows(uid, id);
+    expect((await operationRef(uid, id).collection('rows').where('cleanupPending', '==', true).get()).empty).toBe(true);
+    expect(state.files.has('archive/original.fit')).toBe(true);
+    expect((await db.collection('activitySyncQueue').get()).empty).toBe(true);
+  });
+  it('does not recreate removed-row cleanup state when account deletion wins', async () => {
+    await prepare(); await runSendCommand(uid, { version: 1, action: 'remove', batchId: id, rowId: 'row-one' });
+    await db.doc(`userDeletionTombstones/${uid}`).set({ active: true });
+    await admitSendRows(uid, id);
+    expect((await operationRef(uid, id).collection('rows').doc('row-one').get()).data()?.cleanupPending).toBe(true);
+    expect(state.files.size).toBe(1);
+  });
+  it('fences late staging after removal and subsequently releases its reservation', async () => {
+    await create(); state.afterSave = () => runSendCommand(uid, { version: 1, action: 'remove', batchId: id, rowId: 'row-one' }).then(() => undefined);
+    await expect(stageSendFile(uid, id, 'row-one', 'Synthetic.fit', createCOROSActivityFITFixture())).rejects.toMatchObject({ code: 'failed-precondition' });
+    await admitSendRows(uid, id);
+    expect((await operationRef(uid, id).collection('rows').doc('row-one').get()).data()).toMatchObject({ removed: true, reservedBytes: 0, cleanupPending: false });
+    expect(state.files.size).toBe(0);
+  });
+  it('cleans a late staging write when removal already released quota and metadata reading fails', async () => {
+    await create();
+    state.beforeSave = async () => { await runSendCommand(uid, { version: 1, action: 'remove', batchId: id, rowId: 'row-one' }); await admitSendRows(uid, id); state.failMetadataOnce = true; };
+    await expect(stageSendFile(uid, id, 'row-one', 'Synthetic.fit', createCOROSActivityFITFixture())).rejects.toThrow('Synthetic metadata failure');
+    expect((await db.doc(`users/${uid}/activitySendQuota/current`).get()).data()?.bytes).toBe(0);
+    expect((await operationRef(uid, id).collection('rows').doc('row-one').get()).data()?.cleanupPending).toBe(true);
+    await admitSendRows(uid, id);
+    expect(state.files.size).toBe(0);
+  });
+  it('retains an active reservation after a metadata failure so the same file can resume', async () => {
+    await create(); state.failMetadataOnce = true;
+    await expect(stageSendFile(uid, id, 'row-one', 'Synthetic.fit', createCOROSActivityFITFixture())).rejects.toThrow('Synthetic metadata failure');
+    expect((await operationRef(uid, id).collection('rows').doc('row-one').get()).data()?.cleanupPending).not.toBe(true);
+    expect(state.files.size).toBe(1);
+    await stageSendFile(uid, id, 'row-one', 'Synthetic.fit', createCOROSActivityFITFixture());
+    expect((await batchRef(uid, id).get()).data()?.total).toBe(1);
+    expect((await batchRef(uid, id).collection('rows').doc('row-one').get()).data()?.status).toBe('ready');
+    expect(state.files.size).toBe(1);
+  });
+  it('cleans a newer late generation on retired rows without releasing quota twice', async () => {
+    await prepare(); await runSendCommand(uid, { version: 1, action: 'remove', batchId: id, rowId: 'row-one' }); await admitSendRows(uid, id);
+    const path = `users/${uid}/activitySendSources/${id}/row-one.fit`;
+    state.files.set(path, { bytes: createCOROSActivityFITFixture(), metadata: {}, generation: '2' });
+    state.files.set('archive/unrelated.fit', { bytes: Buffer.from('Synthetic archive'), metadata: {}, generation: '2' });
+    await cleanupSendSources(operationRef(uid, id)); await cleanupSendSources(operationRef(uid, id));
+    expect(state.files.has(path)).toBe(false); expect(state.files.has('archive/unrelated.fit')).toBe(true);
+    expect((await db.doc(`users/${uid}/activitySendQuota/current`).get()).data()?.bytes).toBe(0);
+  });
+  it('cleans a late unknown-generation write after account deletion without recreating documents', async () => {
+    await create();
+    state.beforeSave = async () => { await db.recursiveDelete(db.doc(`users/${uid}`)); state.failMetadataOnce = true; };
+    await expect(stageSendFile(uid, id, 'row-one', 'Synthetic.fit', createCOROSActivityFITFixture())).rejects.toThrow('Synthetic metadata failure');
+    expect(state.files.size).toBe(0); expect((await db.doc(`users/${uid}`).get()).exists).toBe(false);
+    expect((await operationRef(uid, id).collection('rows').get()).empty).toBe(true);
+  });
+  it('preserves a newer cleanup request arriving during an older generation deletion', async () => {
+    await prepare(); await runSendCommand(uid, { version: 1, action: 'remove', batchId: id, rowId: 'row-one' });
+    const rowRef = operationRef(uid, id).collection('rows').doc('row-one');
+    state.afterDelete = async () => {
+      state.afterDelete = undefined;
+      state.files.set(`users/${uid}/activitySendSources/${id}/row-one.fit`, { bytes: createCOROSActivityFITFixture(), metadata: {}, generation: '2' });
+      await queueRetiredSendSourceCleanup(rowRef, (await rowRef.get()).data()!.digest);
+    };
+    await admitSendRows(uid, id);
+    expect((await rowRef.get()).data()).toMatchObject({ cleanupPending: true, reservedBytes: 0 });
+    expect(state.files.size).toBe(1);
+    await admitSendRows(uid, id); await admitSendRows(uid, id);
+    expect((await rowRef.get()).data()?.cleanupPending).toBe(false); expect(state.files.size).toBe(0);
+    expect((await db.doc(`users/${uid}/activitySendQuota/current`).get()).data()?.bytes).toBe(0);
+  });
   it('cannot resend uncertain acceptance, even with Pro', async () => {
     const queue = await confirm(); await queue.ref.update({ processed: true, resultStatus: 'manual_reconciliation_required', providerOperationStartedAt: 1 });
     await expect(runSendCommand(uid, { version: 1, action: 'retry', batchId: id, rowId: 'row-one' })).rejects.toMatchObject({ code: 'failed-precondition' });
@@ -307,6 +398,7 @@ describe.skipIf(!process.env.FIRESTORE_EMULATOR_HOST)('durable activity sends in
     await runSendCommand(uid, { version: 1, action: 'remove', batchId: id, rowId: 'row-one' });
     expect((await batchRef(uid, id).get()).data()?.total).toBe(0);
     expect((await batchRef(uid, id).collection('rows').doc('row-one').get()).exists).toBe(false);
+    await admitSendRows(uid, id);
     expect((await db.doc(`users/${uid}/activitySendQuota/current`).get()).data()?.bytes).toBe(0);
     expect(state.files.size).toBe(0);
   });
@@ -331,6 +423,7 @@ describe.skipIf(!process.env.FIRESTORE_EMULATOR_HOST)('durable activity sends in
   it.each([{ stopped: true }, { expiresAt: 1 }])('lets owners remove closed draft sources without Pro: %j', async window => {
     await prepare(); state.pro = false; await operationRef(uid, id).update(window);
     await runSendCommand(uid, { version: 1, action: 'remove', batchId: id, rowId: 'row-one' });
+    await admitSendRows(uid, id);
     expect(state.files.size).toBe(0);
     expect((await db.doc(`users/${uid}/activitySendQuota/current`).get()).data()?.bytes).toBe(0);
   });

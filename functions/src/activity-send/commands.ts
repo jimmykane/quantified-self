@@ -1,5 +1,4 @@
 import { FieldValue } from 'firebase-admin/firestore';
-import { cleanupSendSourceRow } from './source-cleanup';
 import { reconcileStoppedSend } from './lifecycle';
 import * as admin from 'firebase-admin';
 import { FieldPath, Timestamp } from 'firebase-admin/firestore';
@@ -72,14 +71,13 @@ export async function runSendCommand(uid: string, request: ActivitySendCommand) 
       const rowRef = ref.collection('rows').doc(rowId);
       const row = await tx.get(rowRef);
       if (current.state !== 'draft' || !row.exists || row.data()?.removed) return;
-      // Keep the source reservation until cleanup releases quota and the exact generation.
-      tx.update(rowRef, { removed: true });
+      // Commit cleanup intent with the removal; the retry-enabled operation trigger owns completion.
+      tx.update(rowRef, { removed: true, cleanupPending: true, cleanupRevision: Number(row.data()?.cleanupRevision || 0) + 1 });
       // Display rows are leaves by contract and Rules; no nested data can exist.
       tx.delete(batchRef(uid, id).collection('rows').doc(rowId));
       current.revision++; current.reviewed = false; current.total--; if (row.data()?.excluded) current.finished--; current.updatedAt = Date.now();
       tx.set(ref, current); tx.set(batchRef(uid, id), publicBatch(current));
     });
-    await cleanupSendSourceRow(ref.collection('rows').doc(rowId));
     return { batchId: id, revision: (await ref.get()).data()?.revision || 0 };
   }
   if (request.action === 'stop') {

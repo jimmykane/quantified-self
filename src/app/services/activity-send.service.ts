@@ -71,7 +71,10 @@ export class ActivitySendService {
       error: () => { if (this.isCurrentOwner(uid) && this.selectedId === id) { this.loadingBatch.set(false); this.batchReadError.set('This send is unavailable.'); } } });
     this.watchRows();
   }
-  loadMoreRows(): void { this.rowLimit += 50; this.watchRows(); }
+  loadMoreRows(): void {
+    if (this.loadingRows() || !this.selectedId) return;
+    this.rowLimit += 50; this.watchRows();
+  }
   closeBatch(): void {
     this.batchSubscription?.unsubscribe(); this.rowSubscription?.unsubscribe();
     this.selectedId = null; this.requestedBatchId.set(null); this.batch.set(null); this.rows.set([]); this.loadingBatch.set(false); this.loadingRows.set(false); this.batchReadError.set(null); this.rowReadError.set(null);
