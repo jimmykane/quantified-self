@@ -46,6 +46,10 @@ and tablets place the four drivers below the primary summaries instead of squeez
 minimums, not clipped or fixed heights: enlarged text and longer messages may still expand. Check loading-to-complete
 geometry around responsive breakpoints as well as ordinary desktop/phone screenshots when changing Today copy or layout.
 
+Above 720 px, Today uses tighter cell padding and smaller minimum heights for the primary summaries, four drivers,
+and optional recovery band. Phone spacing and wrapped-text reservations stay unchanged. Desktop cells still grow
+with their content; do not truncate recovery messages or HRV range details to meet the compact minimums.
+
 ## Workspace Shells
 
 Authenticated product workspaces, except Settings, use the shared `qs-workspace-page` shell from `src/styles.scss`. It
