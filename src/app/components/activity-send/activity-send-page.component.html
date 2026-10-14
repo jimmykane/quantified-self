@@ -13,11 +13,14 @@
   @if (!users.hasProAccessSignal()) {
     <section aria-label="Pro required"><p>Sending activities is a Pro feature. Your previous results remain available.</p><a mat-flat-button routerLink="/subscriptions" appHapticTap>Explore Pro</a></section>
   }
+  @if (sends.loadingBatch()) { <div role="status"><mat-progress-bar mode="indeterminate"></mat-progress-bar><p>Loading this send…</p></div> }
+  @if (sends.requestedBatchId() && !sends.batch() && !sends.loadingBatch()) { <button mat-button [disabled]="busy()" (click)="newDraft()">Start a new send</button> }
+  @if (error() || sends.readError()) { <p class="error" role="alert">{{ error() || sends.readError() }}</p> }
   @if (provider()) {
     <mat-button-toggle-group aria-label="Activity source" [value]="source()" (change)="chooseSource($event.value)" [disabled]="busy() || sends.batch()?.state === 'confirmed'">
       <mat-button-toggle value="files">Local files</mat-button-toggle><mat-button-toggle value="saved">Saved activities</mat-button-toggle>
     </mat-button-toggle-group>
-    @if (users.hasProAccessSignal() && !sendingClosed() && (!sends.batch() || sends.batch()?.state === 'draft')) {
+    @if (users.hasProAccessSignal() && canEditSelection() && !sendingClosed() && (!sends.batch() || sends.batch()?.state === 'draft')) {
       @if (source() === 'files') {
         <section class="dropzone" (dragover)="preventDrop($event)" (drop)="addFiles($event)">
           <button mat-flat-button class="qs-mat-primary" (click)="filePicker.click()" [disabled]="busy()" appHapticTap>Choose FIT files</button>
@@ -25,6 +28,8 @@
           <p>Or drop FIT / FIT.gz files here. Up to 50 files per batch; 20 MiB per expanded file.</p>
           <p>Drafts expire after 24 hours. Confirmed files are held privately for up to seven days for delivery and retries. They are not added to your QS activity archive.</p>
         </section>
+      } @else if (sends.batch()?.savedSelectionReady || sends.batch()?.total) {
+        <p>This draft keeps your original saved-activity selection. Continue the preview if checking was interrupted, or start a new send to choose different dates or sources.</p>
       } @else {
         <section aria-label="Choose saved activities" class="saved-selection">
           @if (sends.selection().length) { <p>{{ sends.selection().length }} selected activities will be checked.</p><button mat-button [disabled]="busy()" (click)="clearSelection()">Choose a date range instead</button> }
@@ -41,8 +46,7 @@
       }
     }
     @if (transfer()) { <div role="status" aria-live="polite">Preparing {{ transfer().name }} · {{ transfer().progress }}%<mat-progress-bar mode="determinate" [value]="transfer().progress"></mat-progress-bar></div> }
-    @if (busy() && !transfer()) { <p role="status"><mat-progress-bar mode="indeterminate"></mat-progress-bar>Checking your selection…</p> }
-    @if (error() || sends.readError()) { <p class="error" role="alert">{{ error() || sends.readError() }}</p> }
+    @if (busy() && !transfer()) { <div role="status"><mat-progress-bar mode="indeterminate"></mat-progress-bar><p>Checking your selection…</p></div> }
     @if (sends.batch(); as batch) {
       <section aria-label="Activity send review">
         <h2>{{ batch.state === 'draft' ? 'Review before sending' : 'Delivery results' }}</h2>
@@ -68,7 +72,8 @@
         }
         @if (sends.rows().length < batch.total) { <button mat-button (click)="sends.loadMoreRows()" appHapticTap>Show more activities</button> }
         <div class="batch-actions">
-          @if (!sendingClosed() && batch.state === 'draft' && !batch.reviewed && readyCount() && users.hasProAccessSignal()) { <button mat-stroked-button [disabled]="busy()" (click)="reviewFiles()">Review prepared activities</button> }
+          @if (!sendingClosed() && batch.state === 'draft' && !batch.reviewed && (batch.source === 'saved' ? batch.savedSelectionReady || batch.total : readyCount()) && users.hasProAccessSignal()) { <button mat-stroked-button [disabled]="busy()" (click)="reviewFiles()">{{ batch.source === 'saved' ? 'Continue saved-activity preview' : 'Review prepared activities' }}</button> }
+          @if (batch.state === 'draft' && batch.reviewed && !readyCount()) { <p>No eligible activities in this selection. Start a new send to choose other recordings.</p> }
           @if (!sendingClosed() && batch.state === 'draft') { <button mat-flat-button class="qs-mat-primary" [disabled]="!canConfirm()" (click)="confirm()">Send {{ readyCount() }} {{ readyCount() === 1 ? 'activity' : 'activities' }} to {{ batch.provider === 'coros' ? 'COROS' : batch.provider === 'suunto' ? 'Suunto' : 'Wahoo' }}</button> }
           @if (!sendingClosed() && (batch.state === 'confirmed' || hasResumableRows())) { <button mat-stroked-button [disabled]="busy()" (click)="stop()">Stop unsent activities</button> }
           <button mat-button (click)="newDraft()" [disabled]="busy()">Start a new send</button>

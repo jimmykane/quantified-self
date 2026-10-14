@@ -25,6 +25,7 @@ export function isSendWindowOpen(operation: Record<string, unknown> | undefined,
 
 /** Project only fixed, user-actionable categories; never copy provider errors/IDs. */
 export function projectSendQueue(data: Record<string, unknown>): { status: ActivitySendStatus; recovery: ActivitySendRecovery; message: string } {
+  const connectionIssue = !!data.deferredReason || ['destination_not_connected', 'destination_auth_failed', 'destination_permission_required'].includes(`${data.skippedReason}`);
   if (data.resultStatus === 'success') return data.destinationInfoCode === 'ALREADY_EXISTS'
     ? { status: 'duplicate', recovery: 'none', message: 'Already exists in the provider.' }
     : { status: 'delivered', recovery: 'none', message: 'Provider confirmed delivery.' };
@@ -32,10 +33,10 @@ export function projectSendQueue(data: Record<string, unknown>): { status: Activ
   if (data.skippedReason === 'send_source_expired') return { status: 'needs_action', recovery: 'choose_file', message: 'The temporary source expired. Review a new draft before sending.' };
   if (data.skippedReason === 'no_pro_access') return { status: 'needs_action', recovery: 'upgrade', message: 'Pro is required to start this send.' };
   if (data.sendConfirmedFailure === true) return { status: 'needs_action', recovery: 'retry_send', message: 'Provider confirmed processing failed. You can retry sending.' };
-  if (data.resultStatus === 'manual_reconciliation_required' || (data.providerOperationStartedAt && !data.destinationUploadID && data.processed)) {
+  if (data.resultStatus === 'manual_reconciliation_required' || (data.providerOperationStartedAt && !data.destinationUploadID && (data.processed || connectionIssue))) {
     return { status: 'needs_action', recovery: 'review_provider', message: 'Acceptance is unknown. Check the provider before sending another copy.' };
   }
-  if (data.deferredReason || ['destination_not_connected', 'destination_auth_failed', 'destination_permission_required'].includes(`${data.skippedReason}`)) {
+  if (connectionIssue) {
     return { status: 'needs_action', recovery: data.destinationUploadID ? 'check_status' : 'reconnect', message: 'Review the connection in Connections. Accepted uploads will not be resent.' };
   }
   if (data.destinationUploadID && data.processed) return { status: 'needs_action', recovery: 'check_status', message: 'Check the existing provider operation.' };

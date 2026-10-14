@@ -35,8 +35,9 @@ export class ActivitySendPageComponent {
     return !!batch && (batch.stopped === true || typeof batch.expiresAt === 'number' && batch.expiresAt <= this.nowMs());
   });
   readonly canRetry = computed(() => this.users.hasProAccessSignal() && !this.sendingClosed());
+  readonly canEditSelection = computed(() => !this.sends.requestedBatchId() || !!this.sends.batch());
   readonly readyCount = computed(() => this.sends.batch()?.state === 'draft' ? Math.max(0, this.sends.batch()!.total - this.sends.batch()!.finished) : 0);
-  readonly canConfirm = computed(() => this.users.hasProAccessSignal() && !this.sendingClosed() && !this.busy() && this.sends.batch()?.state === 'draft' && !!this.sends.batch()?.reviewed && !this.selectionChanged() && this.readyCount() > 0);
+  readonly canConfirm = computed(() => this.users.hasProAccessSignal() && !this.sendingClosed() && !this.busy() && !this.sends.loadingBatch() && !this.sends.loadingRows() && !this.sends.batchReadError() && !this.sends.rowReadError() && this.sends.rows().length > 0 && this.sends.batch()?.state === 'draft' && !!this.sends.batch()?.reviewed && !this.selectionChanged() && this.readyCount() > 0);
   readonly hasResumableRows = computed(() => this.sends.rows().some(row => ['upgrade', 'reconnect'].includes(row.recovery)));
   readonly recentForProvider = computed(() => this.sends.recent().filter(batch => !this.provider() || batch.provider === this.provider()));
   readonly statusLabels = { preparing: 'Preparing', ready: 'Ready', queued: 'Queued', sending: 'Sending', processing: 'Waiting for provider', delivered: 'Delivered', duplicate: 'Already exists or queued', needs_action: 'Needs action', stopped: 'Stopped' };
@@ -82,20 +83,21 @@ export class ActivitySendPageComponent {
   }
   async chooseProvider(provider: ActivitySendProvider): Promise<void> {
     if (provider === this.provider()) return;
-    this.haptics.selection(); await this.router.navigate(['/send-activities', provider], { queryParams: { source: this.source() } });
+    this.haptics.selection(); if (await this.router.navigate(['/send-activities', provider], { queryParams: { source: this.source() } })) this.selectionChanged.set(false);
   }
   async chooseSource(source: 'files' | 'saved'): Promise<void> {
     if (source === this.source()) return;
-    this.haptics.selection(); await this.router.navigate([], { relativeTo: this.route, queryParams: { source } });
+    this.haptics.selection(); if (await this.router.navigate([], { relativeTo: this.route, queryParams: { source } })) this.selectionChanged.set(false);
   }
   async openBatch(id: string, provider: ActivitySendProvider): Promise<void> {
     this.haptics.selection(); await this.router.navigate(['/send-activities', provider], { queryParams: { batch: id, source: this.sends.recent().find(batch => batch.id === id)?.source || 'files' } });
   }
   async newDraft(): Promise<void> {
-    this.haptics.selection(); await this.router.navigate([], { relativeTo: this.route, queryParams: { source: this.source() } });
+    this.haptics.selection(); if (await this.router.navigate([], { relativeTo: this.route, queryParams: { source: this.source() } })) this.selectionChanged.set(false);
   }
   private async ensureDraft(): Promise<string> {
     this.assertActive();
+    if (!this.canEditSelection()) throw new Error('This send is still loading or unavailable. Reopen it or start a new send.');
     const current = this.sends.batch();
     if (current?.state === 'draft') {
       if (current.stopped || current.expiresAt && current.expiresAt <= Date.now()) throw new Error('The sending window closed. Start a new send.');
@@ -136,7 +138,11 @@ export class ActivitySendPageComponent {
     this.savedSources = sources; this.haptics.selection(); this.invalidateSaved();
   }
   clearSelection(): void { this.sends.setSelection([]); this.haptics.selection(); this.invalidateSaved(); }
-  invalidateSaved(): void { this.selectionChanged.set(true); if (this.sends.batch()) this.error.set('Sources or dates changed. Start a new draft to review this selection.'); }
+  invalidateSaved(): void {
+    const batch = this.sends.batch();
+    if (batch?.source === 'saved' && !batch.savedSelectionReady && !batch.total) return;
+    this.selectionChanged.set(true); if (batch) this.error.set('Sources or dates changed. Start a new draft to review this selection.');
+  }
   async previewSaved(): Promise<void> {
     await this.run(async () => {
       if (this.selectionChanged()) { this.sends.closeBatch(); this.selectionChanged.set(false); }
@@ -153,7 +159,15 @@ export class ActivitySendPageComponent {
   }
   async reviewFiles(): Promise<void> {
     const batch = this.sends.batch();
-    if (batch?.state === 'draft') await this.run(() => this.command({ version: 1, action: 'prepare', batchId: batch.id }));
+    if (batch?.state !== 'draft' || this.sendingClosed()) return;
+    await this.run(async () => {
+      let nextCursor: string | null | undefined;
+      do {
+        this.assertActive();
+        const result = await this.command({ version: 1, action: 'prepare', batchId: batch.id });
+        this.assertActive(); nextCursor = result.nextCursor;
+      } while (batch.source === 'saved' && nextCursor);
+    });
   }
   async confirm(): Promise<void> {
     this.nowMs.set(Date.now());

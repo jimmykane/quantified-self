@@ -1,5 +1,6 @@
 import { FieldValue } from 'firebase-admin/firestore';
 import { cleanupSendSourceRow } from './source-cleanup';
+import { reconcileStoppedSend } from './lifecycle';
 import * as admin from 'firebase-admin';
 import { FieldPath, Timestamp } from 'firebase-admin/firestore';
 import { createHash } from 'node:crypto';
@@ -44,7 +45,7 @@ export async function runSendCommand(uid: string, request: ActivitySendCommand) 
       const current = (await tx.get(ref)).data() as SendOperation;
       if (current.state !== 'draft' || current.stopped || current.expiresAt <= Date.now()) throw new HttpsError('failed-precondition', 'Draft changed.');
       const rows = await tx.get(ref.collection('rows'));
-      if (!rows.size || rows.docs.some(row => !row.data().originalFile && !row.data().excluded && !row.data().removed)) throw new HttpsError('failed-precondition', 'Finish selecting and validating activities first.');
+      if (!rows.size && !(current.source === 'saved' && current.savedSelection && !current.nextCursor) || rows.docs.some(row => !row.data().originalFile && !row.data().excluded && !row.data().removed)) throw new HttpsError('failed-precondition', 'Finish selecting and validating activities first.');
       current.reviewed = !current.nextCursor; current.updatedAt = Date.now();
       tx.set(ref, current); tx.set(batchRef(uid, id), publicBatch(current));
       return { batchId: id, revision: current.revision, nextCursor: current.nextCursor || null };
@@ -89,15 +90,7 @@ export async function runSendCommand(uid: string, request: ActivitySendCommand) 
       tx.update(ref, { stopped: true, updatedAt: Date.now() });
       if (visible.exists) tx.update(visible.ref, { stopped: true, updatedAt: Date.now() });
     });
-    const rows = await ref.collection('rows').get();
-    for (const row of rows.docs) {
-      const source = row.data() as SendSource;
-      if (source.queueId) await guardedSendTransaction(uid, async tx => {
-        const queue = admin.firestore().collection('activitySyncQueue').doc(source.queueId!);
-        const snapshot = await tx.get(queue); const data = snapshot.data();
-        if (data?.userID === uid && data.sendBatchID === id && data.sendRowID === row.id && data.resultStatus !== 'success' && projectSendQueue(data).recovery !== 'review_provider' && !data.destinationUploadID && !data.providerOperationStartedAt) tx.update(queue, { processed: true, resultStatus: 'skipped', skippedReason: 'send_stopped' });
-      });
-    }
+    await reconcileStoppedSend(uid, id);
     return { batchId: id, revision: 0 };
   }
   if (request.action === 'check' || request.action === 'retry') {
@@ -131,11 +124,25 @@ export async function runSendCommand(uid: string, request: ActivitySendCommand) 
 }
 
 async function prepareSaved(uid: string, draft: SendOperation, request: Extract<ActivitySendCommand, { action: 'prepare' }>) {
+  const hasSelection = request.eventIds !== undefined || request.startDate !== undefined || request.endDate !== undefined || request.sources !== undefined;
+  if (!hasSelection) {
+    if (!draft.savedSelection) throw new HttpsError('failed-precondition', 'Preview a saved selection before continuing.');
+    request = { ...request, ...draft.savedSelection, ...(request.cursor ? { cursor: request.cursor } : { cursor: draft.nextCursor || undefined }) };
+  }
   if (request.sources !== undefined && !Array.isArray(request.sources) || request.eventIds !== undefined && !Array.isArray(request.eventIds)) throw new HttpsError('invalid-argument', 'Choose valid activity sources.');
   if (request.sources && (request.sources.length > SOURCES.length || request.sources.some(source => !SOURCES.includes(source as typeof SOURCES[number])))) throw new HttpsError('invalid-argument', 'Choose only the supported activity sources.');
-  const sources = [...new Set(request.sources || [...SOURCES])];
+  const sources = [...new Set(request.sources || [...SOURCES])].sort();
   if (!sources.length) throw new HttpsError('invalid-argument', 'Choose activity sources.');
-  const signature = createHash('sha256').update(JSON.stringify([request.eventIds || null, request.startDate, request.endDate, sources])).digest('hex');
+  if (request.eventIds !== undefined) {
+    if (!request.eventIds.length || request.eventIds.length > ACTIVITY_SEND_LIMITS.files) throw new HttpsError('invalid-argument', 'Select up to 50 activities at a time.');
+    request = { ...request, eventIds: [...new Set(request.eventIds.map(sendIdentifier))].sort() };
+  } else {
+    const from = Date.parse(request.startDate || ''); const to = Date.parse(request.endDate || '');
+    if (!Number.isFinite(from) || !Number.isFinite(to) || from > to || to > Date.now() + 86400_000) throw new HttpsError('invalid-argument', 'Choose a valid date range.');
+    request = { ...request, startDate: new Date(from).toISOString(), endDate: new Date(to).toISOString() };
+  }
+  const savedSelection: SendOperation['savedSelection'] = { sources, ...(request.eventIds ? { eventIds: request.eventIds } : { startDate: request.startDate!, endDate: request.endDate! }) };
+  const signature = createHash('sha256').update(JSON.stringify(savedSelection)).digest('hex');
   if (draft.selectionKey && draft.selectionKey !== signature) throw new HttpsError('failed-precondition', 'Selection changed. Create a new draft.');
   if ((request.cursor || null) !== (draft.nextCursor || null)) {
     if (draft.selectionKey === signature && (request.cursor || null) === draft.previousCursor) return; // Recover a lost page reply without repeating its work.
@@ -143,18 +150,18 @@ async function prepareSaved(uid: string, draft: SendOperation, request: Extract<
   }
   await guardedSendTransaction(uid, async tx => {
     const ref = operationRef(uid, draft.id); const current = (await tx.get(ref)).data() as SendOperation;
-    if (current.state !== 'draft' || current.expiresAt <= Date.now() || current.selectionKey && current.selectionKey !== signature || (current.nextCursor || null) !== (request.cursor || null)) throw new HttpsError('failed-precondition', 'The selection changed. Review a new draft.');
-    tx.update(ref, { selectionKey: signature });
+    const visible = await tx.get(batchRef(uid, draft.id));
+    if (current.state !== 'draft' || current.stopped || current.expiresAt <= Date.now() || current.selectionKey && current.selectionKey !== signature || (current.nextCursor || null) !== (request.cursor || null)) throw new HttpsError('failed-precondition', 'The selection changed. Review a new draft.');
+    tx.update(ref, { selectionKey: signature, savedSelection });
+    if (visible.exists) tx.update(visible.ref, { savedSelectionReady: true });
   });
   const events = admin.firestore().collection('users').doc(uid).collection('events');
   let snapshots: admin.firestore.DocumentSnapshot[];
   let nextCursor: string | null = null;
   if (request.eventIds) {
-    if (!request.eventIds.length || request.eventIds.length > ACTIVITY_SEND_LIMITS.files) throw new HttpsError('invalid-argument', 'Select up to 50 activities at a time.');
     snapshots = await admin.firestore().getAll(...[...new Set(request.eventIds)].map(eventId => events.doc(sendIdentifier(eventId))));
   } else {
     const from = Date.parse(request.startDate || ''); const to = Date.parse(request.endDate || '');
-    if (!Number.isFinite(from) || !Number.isFinite(to) || from > to || to > Date.now() + 86400_000) throw new HttpsError('invalid-argument', 'Choose a valid date range.');
     let query = events.where('startDate', '>=', from).where('startDate', '<=', to).orderBy('startDate').orderBy(FieldPath.documentId()).limit(ACTIVITY_SEND_LIMITS.page);
     if (draft.lastEventId) query = query.startAfter(draft.lastStartDate, draft.lastEventId);
     snapshots = (await query.get()).docs;
@@ -162,9 +169,8 @@ async function prepareSaved(uid: string, draft: SendOperation, request: Extract<
   }
   for (const event of snapshots) {
     let added = false;
-    if (!event.exists) continue;
     if ((await operationRef(uid, draft.id).collection('rows').doc(event.id).get()).exists) continue; // Resume an interrupted page without downloading already reviewed originals.
-    for (const source of sources) {
+    for (const source of event.exists ? sources : []) {
       const route = getHistoricalActivityRouteId(source as typeof SOURCES[number], ACTIVITY_SEND_PROVIDERS[draft.provider]);
       if (!route) continue;
       const inspected = await eligibleOriginal({ userID: uid, eventID: event.id, event: event.data()!, source: source as typeof SOURCES[number], eventRef: event.ref, action: 'send', readDocument: ref => ref.get() });
@@ -181,7 +187,8 @@ async function prepareSaved(uid: string, draft: SendOperation, request: Extract<
       await guardedSendTransaction(uid, async tx => {
         const current = (await tx.get(operationRef(uid, draft.id))).data() as SendOperation;
         const prior = await tx.get(operationRef(uid, draft.id).collection('rows').doc(rowId));
-        if (current.state !== 'draft' || prior.exists) return;
+        if (current.state !== 'draft' || current.stopped || current.expiresAt <= Date.now()) throw new HttpsError('failed-precondition', 'Draft changed.');
+        if (prior.exists) return;
         const row: ActivitySendRow = { id: rowId, ...summary, status: blocked ? 'duplicate' : 'ready', recovery: 'none', message: blocked ? 'Already delivered or queued; will not be sent again.' : 'Ready to review.', attempts: 0 };
         tx.set(operationRef(uid, draft.id).collection('rows').doc(rowId), { sourceServiceName: source, eventID: event.id, originalFile: original, excluded: !!blocked, admitted: false });
         tx.set(batchRef(uid, draft.id).collection('rows').doc(rowId), row);
@@ -193,19 +200,20 @@ async function prepareSaved(uid: string, draft: SendOperation, request: Extract<
     if (!added) await guardedSendTransaction(uid, async tx => {
       const ref = operationRef(uid, draft.id); const current = (await tx.get(ref)).data() as SendOperation;
       const rowRef = ref.collection('rows').doc(sendIdentifier(event.id)); const prior = await tx.get(rowRef);
-      if (current.state !== 'draft' || prior.exists) return;
+      if (current.state !== 'draft' || current.stopped || current.expiresAt <= Date.now()) throw new HttpsError('failed-precondition', 'Draft changed.');
+      if (prior.exists) return;
       tx.set(rowRef, { excluded: true, admitted: false, eventID: event.id, sourceServiceName: 'manualUpload' });
-      tx.set(batchRef(uid, draft.id).collection('rows').doc(event.id), { id: event.id, name: `${event.data()?.name || 'Saved activity'}`.slice(0, 256), sport: null, startDate: Number(event.data()?.startDate) || null, size: 0, warnings: [], status: 'needs_action', recovery: 'choose_file', message: 'Excluded: no eligible, readable FIT original for these sources and destination (20 MiB limit). Merged or derived activities cannot be sent.', attempts: 0 });
+      tx.set(batchRef(uid, draft.id).collection('rows').doc(event.id), { id: event.id, name: `${event.data()?.name || 'Unavailable saved activity'}`.slice(0, 256), sport: null, startDate: Number(event.data()?.startDate) || null, size: 0, warnings: [], status: 'needs_action', recovery: 'choose_file', message: event.exists ? 'Excluded: no eligible, readable FIT original for these sources and destination (20 MiB limit). Merged or derived activities cannot be sent.' : 'Excluded: this saved activity is no longer available. It may have been deleted.', attempts: 0 });
       current.total++; current.finished++; current.revision++; current.reviewed = false;
       tx.set(ref, current); tx.set(batchRef(uid, draft.id), publicBatch(current));
     });
   }
   await guardedSendTransaction(uid, async tx => {
     const ref = operationRef(uid, draft.id); const current = (await tx.get(ref)).data() as SendOperation;
-    if (current.state !== 'draft') throw new HttpsError('failed-precondition', 'Draft changed.');
+    if (current.state !== 'draft' || current.stopped || current.expiresAt <= Date.now()) throw new HttpsError('failed-precondition', 'Draft changed.');
     if ((current.nextCursor || null) !== (request.cursor || null)) return; // Another copy of this page already advanced.
     current.selectionKey = signature; current.previousCursor = request.cursor || null; current.nextCursor = nextCursor;
-    if (snapshots.length) { current.lastEventId = snapshots[snapshots.length - 1].id; current.lastStartDate = Number(snapshots[snapshots.length - 1].data()?.startDate); }
+    if (!request.eventIds && snapshots.length) { current.lastEventId = snapshots[snapshots.length - 1].id; current.lastStartDate = Number(snapshots[snapshots.length - 1].data()?.startDate); }
     tx.set(ref, current);
   });
 }

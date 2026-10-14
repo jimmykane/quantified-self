@@ -17,7 +17,7 @@ describe('activity sending workspace', () => {
   let users: Record<string, any>;
   let haptics: Record<string, any>;
   beforeEach(() => {
-    sends = { batch: signal(null), rows: signal([]), recent: signal([]), readError: signal(null), selection: signal([]), watchBatch: vi.fn(), closeBatch: vi.fn(), loadMoreRows: vi.fn(), setSelection: vi.fn(), command: vi.fn().mockResolvedValue({ batchId: 'batch-1', revision: 2 }), upload: vi.fn().mockResolvedValue(undefined) };
+    sends = { batch: signal(null), requestedBatchId: signal(null), loadingBatch: signal(false), loadingRows: signal(false), batchReadError: signal(null), rowReadError: signal(null), rows: signal([]), recent: signal([]), readError: signal(null), selection: signal([]), watchBatch: vi.fn(), closeBatch: vi.fn(), loadMoreRows: vi.fn(), setSelection: vi.fn(), command: vi.fn().mockResolvedValue({ batchId: 'batch-1', revision: 2 }), upload: vi.fn().mockResolvedValue(undefined) };
     users = { user: signal({ uid: 'owner' }), hasProAccessSignal: signal(true) };
     haptics = { selection: vi.fn(), error: vi.fn(), success: vi.fn(), trigger: vi.fn() };
     TestBed.configureTestingModule({ imports: [ActivitySendPageComponent, NoopAnimationsModule], providers: [provideRouter([]), { provide: ActivitySendService, useValue: sends }, { provide: AppUserService, useValue: users }, { provide: AppHapticsService, useValue: haptics }, { provide: BrowserCompatibilityService, useValue: { createRandomUUID: () => 'batch-1' } }] });
@@ -117,7 +117,7 @@ describe('activity sending workspace', () => {
     expect(sends.command).toHaveBeenCalledWith(expect.objectContaining({ action: 'check' }), 'owner');
   });
   it('updates sending eligibility when an open view reaches its deadline', () => {
-    const fixture = render(); sends.batch.set({ ...batchValue, expiresAt: Date.now() + 60_000 }); fixture.detectChanges();
+    const fixture = render(); sends.batch.set({ ...batchValue, expiresAt: Date.now() + 60_000 }); sends.rows.set([row]); fixture.detectChanges();
     expect(fixture.componentInstance.canConfirm()).toBe(true);
     fixture.componentInstance.nowMs.set(Date.now() + 60_001); fixture.detectChanges();
     expect(fixture.componentInstance.canConfirm()).toBe(false);
@@ -144,6 +144,49 @@ describe('activity sending workspace', () => {
     sends.batch.set({ ...batchValue, provider: 'wahoo', source: 'saved' }); fixture.detectChanges();
     expect(navigate).toHaveBeenCalledWith(['/send-activities', 'wahoo'], { queryParams: { batch: 'batch-1', source: 'saved' }, replaceUrl: true });
     expect(sends.command).not.toHaveBeenCalled(); expect(haptics.selection).not.toHaveBeenCalled();
+  });
+  it('continues a saved preview after reload even when its first page only contains exclusions', async () => {
+    const fixture = render(); fixture.componentInstance.source.set('saved');
+    sends.batch.set({ ...batchValue, source: 'saved', reviewed: false, total: 50, finished: 50 }); fixture.detectChanges();
+    expect(fixture.nativeElement.textContent).toContain('Continue saved-activity preview');
+    expect(fixture.nativeElement.querySelector('input[type=date]')).toBeNull();
+    sends.command.mockResolvedValueOnce({ batchId: 'batch-1', revision: 51, nextCursor: 'private-cursor' }).mockResolvedValueOnce({ batchId: 'batch-1', revision: 52, nextCursor: null });
+    await fixture.componentInstance.reviewFiles();
+    expect(sends.command).toHaveBeenCalledTimes(2);
+    expect(sends.command).toHaveBeenNthCalledWith(1, { version: 1, action: 'prepare', batchId: 'batch-1' }, 'owner');
+    expect(sends.command).toHaveBeenNthCalledWith(2, { version: 1, action: 'prepare', batchId: 'batch-1' }, 'owner');
+    expect(haptics.selection).toHaveBeenCalledOnce(); expect(haptics.success).toHaveBeenCalledOnce();
+  });
+  it('reports a fully excluded selection without offering confirmation', () => {
+    const fixture = render(); sends.batch.set({ ...batchValue, total: 1, finished: 1 }); fixture.detectChanges();
+    expect(fixture.nativeElement.textContent).toContain('No eligible activities');
+    expect(fixture.componentInstance.canConfirm()).toBe(false);
+  });
+  it('clears selection invalidation when a new sending context is successfully opened', async () => {
+    const fixture = render(); const navigate = vi.spyOn(TestBed.inject(Router), 'navigate').mockResolvedValue(true);
+    fixture.componentInstance.selectionChanged.set(true); await fixture.componentInstance.newDraft();
+    expect(fixture.componentInstance.selectionChanged()).toBe(false);
+    fixture.componentInstance.selectionChanged.set(true); navigate.mockResolvedValueOnce(false); await fixture.componentInstance.chooseSource('saved');
+    expect(fixture.componentInstance.selectionChanged()).toBe(true);
+  });
+  it('does not create a replacement draft while a requested batch is loading or unavailable', async () => {
+    const fixture = render(); sends.requestedBatchId.set('existing-batch'); sends.loadingBatch.set(true); fixture.detectChanges();
+    expect(fixture.nativeElement.querySelector('input[type=file]')).toBeNull();
+    expect(fixture.nativeElement.textContent).toContain('Loading this send');
+    await fixture.componentInstance.addFiles({ preventDefault: vi.fn(), dataTransfer: { files: [new File(['a'], 'one.fit')] } } as unknown as DragEvent);
+    expect(sends.command).not.toHaveBeenCalled(); expect(sends.upload).not.toHaveBeenCalled();
+    sends.loadingBatch.set(false); fixture.detectChanges();
+    expect(fixture.nativeElement.querySelector('input[type=file]')).toBeNull();
+    expect(fixture.nativeElement.textContent).toContain('Start a new send');
+  });
+  it.each(['loadingRows', 'rowReadError'])('blocks confirmation until the reviewed rows are readable: %s', async state => {
+    const fixture = render(); sends.batch.set(batchValue); sends.rows.set([row]); sends[state].set(state === 'loadingRows' ? true : 'Offline');
+    await fixture.componentInstance.confirm(); expect(sends.command).not.toHaveBeenCalled();
+  });
+  it('allows first-time selection in a saved draft whose initial preview never started', () => {
+    const fixture = render(); fixture.componentInstance.source.set('saved'); sends.batch.set({ ...batchValue, source: 'saved', total: 0, finished: 0, savedSelectionReady: false }); fixture.detectChanges();
+    expect(fixture.nativeElement.querySelector('input[type=date]')).not.toBeNull();
+    fixture.componentInstance.invalidateSaved(); expect(fixture.componentInstance.selectionChanged()).toBe(false);
   });
 
 });

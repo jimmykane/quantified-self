@@ -24,7 +24,7 @@ export async function stageSendFile(uid: string, batchId: string, rowId: string,
       tx.get(ref), tx.get(sourceRef), tx.get(quotaRef), tx.get(ref.collection('rows').where('digest', '==', digest).limit(1)),
     ]);
     const current = currentSnapshot.data() as SendOperation;
-    if (current.state !== 'draft' || current.expiresAt <= Date.now()) throw new HttpsError('failed-precondition', 'Draft expired or changed.');
+    if (current.state !== 'draft' || current.stopped || current.expiresAt <= Date.now()) throw new HttpsError('failed-precondition', 'Draft expired or changed.');
     if (sourceSnapshot.data()?.removed) throw new HttpsError('failed-precondition', 'This file was removed. Start a new draft to select it again.');
     if (sourceSnapshot.exists) {
       if (sourceSnapshot.data()?.digest !== digest) throw new HttpsError('failed-precondition', 'File reference cannot be replaced.');
@@ -48,14 +48,17 @@ export async function stageSendFile(uid: string, batchId: string, rowId: string,
   } catch (error) {
     if (Number((error as { code?: unknown }).code) !== 412) throw error;
   }
-  const [metadata] = await file.getMetadata();
+  const [metadata] = await file.getMetadata().catch(error => {
+    if (Number((error as { code?: unknown }).code) === 404) throw new HttpsError('failed-precondition', 'The temporary file was removed. Review this draft before continuing.');
+    throw error;
+  });
   if (metadata.metadata?.sendDigest !== digest) throw new HttpsError('failed-precondition', 'Temporary file identity changed.');
   const generation = `${metadata.generation}`;
   try {
     await guardedSendTransaction(uid, async tx => {
       const current = (await tx.get(ref)).data() as SendOperation | undefined;
       const reserved = await tx.get(sourceRef);
-      if (!current || current.state !== 'draft' || current.expiresAt <= Date.now() || reserved.data()?.digest !== digest || reserved.data()?.removed) throw new HttpsError('failed-precondition', 'Draft changed while uploading.');
+      if (!current || current.state !== 'draft' || current.stopped || current.expiresAt <= Date.now() || reserved.data()?.digest !== digest || reserved.data()?.removed) throw new HttpsError('failed-precondition', 'Draft changed while uploading.');
       const source: SendSource = { sourceServiceName: 'manualUpload', eventID: `file_${digest}`, digest, reservedBytes: fit.length, originalFile: { path, generation, extension: 'fit', originalFilename: filename.slice(0, 256) } };
       tx.set(sourceRef, { ...source, admitted: false });
       tx.update(batchRef(uid, batchId).collection('rows').doc(rowId), { status: 'ready', message: 'Ready to review.' });

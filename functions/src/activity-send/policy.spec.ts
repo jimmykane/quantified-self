@@ -5,6 +5,7 @@ describe('activity send safety', () => {
   it.each(['../other', 'a/b', '', null])('rejects unsafe references: %s', value => expect(() => sendIdentifier(value)).toThrow());
   it('rejects a gzip expansion bomb before parsing', () => expect(() => decodeSendFile(gzipSync(Buffer.alloc(21 * 1024 * 1024)), 'recording.fit.gz')).toThrow('20 MiB'));
   it('never offers resend for uncertain acceptance', () => expect(projectSendQueue({ processed: true, providerOperationStartedAt: 1 })).toMatchObject({ recovery: 'review_provider' }));
+  it('does not offer connection resume for a paused provider claim with no accepted identifier', () => expect(projectSendQueue({ deferredReason: 'service_reconnect_required', providerOperationStartedAt: 1, processed: false })).toMatchObject({ recovery: 'review_provider' }));
   it('checks accepted operations instead of resending', () => expect(projectSendQueue({ processed: true, destinationUploadID: 'private-canary' })).toMatchObject({ recovery: 'check_status' }));
   it('offers resend only after confirmed processing failure', () => expect(projectSendQueue({ processed: true, sendConfirmedFailure: true })).toMatchObject({ recovery: 'retry_send' }));
   it('projects a duplicate as a completed result', () => expect(projectSendQueue({ resultStatus: 'success', destinationInfoCode: 'ALREADY_EXISTS' })).toMatchObject({ status: 'duplicate', recovery: 'none' }));

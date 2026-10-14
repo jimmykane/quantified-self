@@ -2,7 +2,7 @@ import { cleanupSendSourceRow } from './source-cleanup';
 import * as admin from 'firebase-admin';
 import { onDocumentWritten, onDocumentDeleted } from 'firebase-functions/v2/firestore';
 import { onSchedule } from 'firebase-functions/v2/scheduler';
-import { Timestamp } from 'firebase-admin/firestore';
+import { FieldPath, Timestamp } from 'firebase-admin/firestore';
 import { getHistoricalActivityRouteId } from '../../../shared/activity-sync-routes';
 import { ACTIVITY_SEND_PROVIDERS, activitySendTerminal } from '../../../shared/activity-send';
 import { enqueueActivitySyncQueueItem } from '../activity-sync/queue';
@@ -11,9 +11,49 @@ import { projectSendQueue } from './policy';
 import { getUserDeletionGuardState } from '../shared/user-deletion-guard';
 import { recordActivitySendCleanup } from '../activity-sync/monitoring';
 
+/** Stop is durable even when its callable reply or an intermediate storage cleanup fails. */
+export async function reconcileStoppedSend(uid: string, id: string): Promise<void> {
+  const op = operationRef(uid, id);
+  const current = (await op.get()).data() as SendOperation | undefined;
+  if (!current?.stopped || current.stopComplete || (await getUserDeletionGuardState(admin.firestore(), uid)).shouldSkip) return;
+  let query = op.collection('rows').orderBy(FieldPath.documentId()).limit(50);
+  if (current.stopCursor) query = query.startAfter(current.stopCursor);
+  const rows = await query.get();
+  for (const source of rows.docs) {
+    const clean = await guardedBackgroundSendTransaction(uid, async tx => {
+      const [live, privateRow, parent, visible] = await Promise.all([tx.get(op), tx.get(source.ref), tx.get(batchRef(uid, id)), tx.get(batchRef(uid, id).collection('rows').doc(source.id))]);
+      if (!live.data()?.stopped || !privateRow.exists) return false;
+      const data = privateRow.data()!;
+      const queueRef = data.queueId ? admin.firestore().collection('activitySyncQueue').doc(data.queueId) : null;
+      const queue = queueRef ? (await tx.get(queueRef)).data() : undefined;
+      const ownsQueue = queue?.userID === uid && queue.sendBatchID === id && queue.sendRowID === source.id;
+      const canStop = !ownsQueue || queue.resultStatus !== 'success' && projectSendQueue(queue).recovery !== 'review_provider' && !queue.destinationUploadID && !queue.providerOperationStartedAt;
+      const projection = canStop
+        ? { status: 'stopped' as const, recovery: 'none' as const, message: 'Stopped before sending.' }
+        : projectSendQueue(queue!);
+      if (ownsQueue && canStop) tx.update(queueRef!, { processed: true, resultStatus: 'skipped', skippedReason: 'send_stopped' });
+      tx.update(source.ref, { admitted: true });
+      if (!data.excluded && !data.removed && parent.exists && visible.exists) {
+        const finished = Number(parent.data()?.finished || 0) + Number(activitySendTerminal(projection.status)) - Number(activitySendTerminal(visible.data()!.status));
+        tx.update(visible.ref, projection);
+        tx.update(parent.ref, { finished, state: finished >= Number(parent.data()?.total) ? 'complete' : 'confirmed', updatedAt: Date.now() });
+      }
+      return canStop || ['delivered', 'duplicate', 'stopped'].includes(projection.status);
+    });
+    if (clean) await cleanupSendSourceRow(source.ref);
+  }
+  // Advance only after every row and exact-generation cleanup in this page succeeds.
+  await guardedBackgroundSendTransaction(uid, async tx => {
+    const live = await tx.get(op);
+    if (!live.exists || !live.data()?.stopped || (live.data()?.stopCursor || null) !== (current.stopCursor || null)) return;
+    tx.update(op, { ...(rows.size ? { stopCursor: rows.docs[rows.size - 1].id } : {}), stopComplete: rows.size < 50 });
+  });
+}
+
 export async function admitSendRows(uid: string, id: string): Promise<void> {
   const op = operationRef(uid, id);
   const current = (await op.get()).data() as SendOperation | undefined;
+  if (current?.stopped) { await reconcileStoppedSend(uid, id); return; }
   if (!current || current.state !== 'confirmed' || (await getUserDeletionGuardState(admin.firestore(), uid)).shouldSkip) return;
   const rows = await op.collection('rows').where('admitted', '==', false).limit(50).get();
   for (const row of rows.docs) {

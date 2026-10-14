@@ -23,6 +23,9 @@ export interface SendOperation extends ActivitySendBatch {
   previousCursor?: string | null;
   lastStartDate?: number;
   lastEventId?: string;
+  savedSelection?: { eventIds?: string[]; startDate?: string; endDate?: string; sources: string[] };
+  stopCursor?: string;
+  stopComplete?: boolean;
 }
 export interface SendSource {
   sourceServiceName: ServiceNames | 'manualUpload';
@@ -36,7 +39,7 @@ export const operationRef = (uid: string, id: string) => admin.firestore().doc(`
 export const batchRef = (uid: string, id: string) => admin.firestore().doc(`users/${uid}/activitySends/${id}`);
 export function publicBatch(operation: SendOperation): ActivitySendBatch {
   const { id, provider, source, state, revision, accountLabel, createdAt, updatedAt, reviewed, total, finished, expiresAt } = operation;
-  return { id, provider, source, state, revision, accountLabel, createdAt, updatedAt, reviewed, total, finished, expiresAt, stopped: operation.stopped === true };
+  return { id, provider, source, state, revision, accountLabel, createdAt, updatedAt, reviewed, total, finished, expiresAt, stopped: operation.stopped === true, savedSelectionReady: !!operation.savedSelection };
 }
 export async function guardedSendTransaction<T>(uid: string, action: (tx: admin.firestore.Transaction) => Promise<T>): Promise<T> {
   return admin.firestore().runTransaction(async tx => {

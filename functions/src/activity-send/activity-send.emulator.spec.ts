@@ -8,15 +8,15 @@ import { admitSendRows, projectSendDelivery, cleanupSendSources, cleanupExpiredS
 import { operationRef, batchRef, guardedBackgroundSendTransaction } from './store';
 import { ACTIVITY_SEND_LIMITS } from '../../../shared/activity-send';
 
-const state = vi.hoisted(() => ({ pro: true, account: 'reviewed-account', enqueue: vi.fn(async () => true), files: new Map<string, { bytes: Buffer; metadata: Record<string, string> }>() }));
+const state = vi.hoisted(() => ({ pro: true, account: 'reviewed-account', enqueue: vi.fn(async () => true), failDeleteOnce: false, afterSave: undefined as undefined | (() => Promise<void>), files: new Map<string, { bytes: Buffer; metadata: Record<string, string> }>() }));
 vi.mock('../utils', async original => ({ ...await original<typeof import('../utils')>(), hasProAccess: async () => state.pro, enqueueActivitySyncTask: state.enqueue }));
 vi.mock('../activity-sync/process-queue-item', () => ({ getDestinationConnectionStatus: async () => 'connected' }));
 vi.mock('../coros/account', () => ({ getActiveCOROSTokenSnapshot: async () => ({ id: state.account }) }));
 vi.mock('./store', async original => ({ ...await original<typeof import('./store')>(), describeFIT: async () => ({ name: 'Synthetic.fit', sport: 'Running', startDate: 1000, warnings: [] }) }));
 vi.mock('firebase-admin', async original => ({ ...await original<typeof import('firebase-admin')>(), apps: [], initializeApp: (await original<typeof import('firebase-admin')>()).default.initializeApp, firestore: (await original<typeof import('firebase-admin')>()).default.firestore, storage: () => ({ bucket: () => ({ file: (path: string) => ({
-  save: async (bytes: Buffer, options: { metadata: { metadata: Record<string, string> } }) => { if (state.files.has(path)) throw Object.assign(new Error('exists'), { code: 412 }); state.files.set(path, { bytes, metadata: options.metadata.metadata }); },
+  save: async (bytes: Buffer, options: { metadata: { metadata: Record<string, string> } }) => { if (state.files.has(path)) throw Object.assign(new Error('exists'), { code: 412 }); state.files.set(path, { bytes, metadata: options.metadata.metadata }); await state.afterSave?.(); },
   getMetadata: async () => { const value = state.files.get(path); if (!value) throw Object.assign(new Error('missing'), { code: 404 }); return [{ size: value.bytes.length, generation: '1', metadata: value.metadata }]; },
-  delete: async () => { state.files.delete(path); },
+  delete: async () => { if (state.failDeleteOnce) { state.failDeleteOnce = false; throw new Error('Synthetic temporary storage failure'); } state.files.delete(path); },
 }) }) }) }));
 vi.unmock('@sports-alliance/sports-lib');
 
@@ -27,7 +27,7 @@ describe.skipIf(!process.env.FIRESTORE_EMULATOR_HOST)('durable activity sends in
   let db: admin.firestore.Firestore;
   beforeAll(() => { if (!admin.apps.length) admin.initializeApp({ projectId: 'demo-activity-send' }); db = admin.firestore(); });
   beforeEach(async () => {
-    state.pro = true; state.account = 'reviewed-account'; state.enqueue.mockClear(); state.files.clear();
+    state.pro = true; state.account = 'reviewed-account'; state.enqueue.mockClear(); state.files.clear(); state.afterSave = undefined; state.failDeleteOnce = false;
     await db.recursiveDelete(db.doc(`users/${uid}`));
     await db.recursiveDelete(db.doc(`userDeletionTombstones/${uid}`));
     const queues = await db.collection('activitySyncQueue').get();
@@ -72,6 +72,51 @@ describe.skipIf(!process.env.FIRESTORE_EMULATOR_HOST)('durable activity sends in
     state.pro = false;
     await expect(create()).rejects.toMatchObject({ code: 'permission-denied' });
     expect((await operationRef(uid, id).get()).exists).toBe(false);
+  });
+  it('continues an interrupted saved preview from private criteria after the browser loses its selection', async () => {
+    const writes = db.batch();
+    for (let index = 0; index < 51; index++) writes.set(db.doc(`users/${uid}/events/resume-${String(index).padStart(2, '0')}`), { name: 'Synthetic excluded merge', startDate: 1000 + index, isMerge: true });
+    await writes.commit();
+    await runSendCommand(uid, { version: 1, action: 'create', batchId: id, provider: 'coros', source: 'saved' });
+    const first = await runSendCommand(uid, { version: 1, action: 'prepare', batchId: id, startDate: new Date(0).toISOString(), endDate: new Date(2000).toISOString(), sources: [ServiceNames.COROSAPI] });
+    expect(first.nextCursor).toBeTruthy();
+    expect((await batchRef(uid, id).get()).data()).not.toHaveProperty('savedSelection');
+    const resumed = await runSendCommand(uid, { version: 1, action: 'prepare', batchId: id });
+    expect(resumed.nextCursor).toBeNull();
+    expect((await batchRef(uid, id).get()).data()).toMatchObject({ total: 51, finished: 51, reviewed: true });
+    expect((await db.collection('activitySyncQueue').get()).empty).toBe(true);
+  });
+  it('rejects invalid preview criteria before freezing the draft and explains deleted selections', async () => {
+    await runSendCommand(uid, { version: 1, action: 'create', batchId: id, provider: 'coros', source: 'saved' });
+    await expect(runSendCommand(uid, { version: 1, action: 'prepare', batchId: id, startDate: 'invalid', endDate: new Date(2000).toISOString() })).rejects.toMatchObject({ code: 'invalid-argument' });
+    expect((await operationRef(uid, id).get()).data()).not.toHaveProperty('selectionKey');
+    await runSendCommand(uid, { version: 1, action: 'prepare', batchId: id, eventIds: ['deleted-event'] });
+    expect((await batchRef(uid, id).get()).data()).toMatchObject({ total: 1, finished: 1, reviewed: true });
+    expect((await batchRef(uid, id).collection('rows').doc('deleted-event').get()).data()?.message).toContain('no longer available');
+    await expect(runSendCommand(uid, { version: 1, action: 'prepare', batchId: id, eventIds: ['another-event'] })).rejects.toMatchObject({ code: 'failed-precondition' });
+  });
+  it('canonicalizes equivalent explicit selections for safe continuation', async () => {
+    await runSendCommand(uid, { version: 1, action: 'create', batchId: id, provider: 'coros', source: 'saved' });
+    expect((await batchRef(uid, id).get()).data()?.savedSelectionReady).toBe(false);
+    await runSendCommand(uid, { version: 1, action: 'prepare', batchId: id, eventIds: ['missing-two', 'missing-one', 'missing-one'], sources: [ServiceNames.COROSAPI, 'manualUpload'] });
+    await runSendCommand(uid, { version: 1, action: 'prepare', batchId: id, eventIds: ['missing-one', 'missing-two'], sources: ['manualUpload', ServiceNames.COROSAPI] });
+    await runSendCommand(uid, { version: 1, action: 'prepare', batchId: id });
+    expect((await batchRef(uid, id).get()).data()).toMatchObject({ total: 2, reviewed: true, savedSelectionReady: true });
+  });
+  it('finishes an empty saved date-range preview without creating provider work', async () => {
+    await runSendCommand(uid, { version: 1, action: 'create', batchId: id, provider: 'coros', source: 'saved' });
+    const reviewed = await runSendCommand(uid, { version: 1, action: 'prepare', batchId: id, startDate: new Date(0).toISOString(), endDate: new Date(2000).toISOString() });
+    expect(reviewed.nextCursor).toBeNull();
+    expect((await batchRef(uid, id).get()).data()).toMatchObject({ total: 0, finished: 0, reviewed: true, savedSelectionReady: true });
+    await expect(runSendCommand(uid, { version: 1, action: 'confirm', batchId: id, revision: reviewed.revision })).rejects.toMatchObject({ code: 'failed-precondition' });
+    expect((await db.collection('activitySyncQueue').get()).empty).toBe(true);
+  });
+  it('rejects late file adoption when Stop wins during storage staging', async () => {
+    await create();
+    state.afterSave = () => runSendCommand(uid, { version: 1, action: 'stop', batchId: id }).then(() => undefined);
+    await expect(stageSendFile(uid, id, 'row-one', 'Synthetic.fit', createCOROSActivityFITFixture())).rejects.toMatchObject({ code: 'failed-precondition' });
+    expect(state.files.size).toBe(0);
+    expect((await operationRef(uid, id).collection('rows').doc('row-one').get()).data()).not.toHaveProperty('originalFile');
   });
   it('stages privately without creating archive events or provider tasks', async () => {
     await prepare();
@@ -159,6 +204,45 @@ describe.skipIf(!process.env.FIRESTORE_EMULATOR_HOST)('durable activity sends in
     const queue = await confirm(); await queue.ref.update({ processed: true, resultStatus: 'skipped', skippedReason: 'no_pro_access' });
     await projectSendDelivery(queue.ref); await runSendCommand(uid, { version: 1, action: 'stop', batchId: id }); await projectSendDelivery(queue.ref);
     expect((await batchRef(uid, id).collection('rows').doc('row-one').get()).data()?.status).toBe('stopped');
+    expect((await db.doc(`users/${uid}/activitySendQuota/current`).get()).data()?.bytes).toBe(0);
+  });
+  it('reconciles admitted work and quota when the stop callable is interrupted after committing its intent', async () => {
+    const queue = await confirm(); await queue.ref.update({ processed: true, resultStatus: 'skipped', skippedReason: 'no_pro_access' });
+    await projectSendDelivery(queue.ref);
+    await operationRef(uid, id).update({ stopped: true });
+    await admitSendRows(uid, id); await admitSendRows(uid, id);
+    expect((await queue.ref.get()).data()?.skippedReason).toBe('send_stopped');
+    expect((await batchRef(uid, id).collection('rows').doc('row-one').get()).data()?.status).toBe('stopped');
+    expect((await db.doc(`users/${uid}/activitySendQuota/current`).get()).data()?.bytes).toBe(0);
+    expect((await operationRef(uid, id).get()).data()?.stopComplete).toBe(true);
+  });
+  it('continues stopping a saved batch across bounded pages after an interrupted reply', async () => {
+    const op = operationRef(uid, id); const pub = batchRef(uid, id);
+    await op.set({ id, provider: 'coros', source: 'saved', state: 'confirmed', stopped: true });
+    await pub.set({ id, total: 51, finished: 0, state: 'confirmed', stopped: true });
+    const writes = db.batch();
+    for (let index = 0; index < 51; index++) {
+      const rowId = `stop-${String(index).padStart(2, '0')}`;
+      writes.set(op.collection('rows').doc(rowId), { admitted: true, sourceServiceName: 'manualUpload', eventID: rowId });
+      writes.set(pub.collection('rows').doc(rowId), { id: rowId, status: 'ready' });
+    }
+    await writes.commit();
+    await admitSendRows(uid, id); expect((await op.get()).data()?.stopComplete).toBe(false);
+    await admitSendRows(uid, id); await admitSendRows(uid, id);
+    expect((await pub.get()).data()).toMatchObject({ finished: 51, state: 'complete' });
+    expect((await op.get()).data()?.stopComplete).toBe(true);
+    expect((await db.collection('activitySyncQueue').get()).empty).toBe(true);
+  });
+  it('retries failed Stop cleanup without advancing the cursor or inflating finished counts', async () => {
+    await confirm(); state.failDeleteOnce = true;
+    await expect(runSendCommand(uid, { version: 1, action: 'stop', batchId: id })).rejects.toThrow('Synthetic temporary storage failure');
+    expect((await operationRef(uid, id).get()).data()).not.toHaveProperty('stopCursor');
+    expect((await operationRef(uid, id).get()).data()?.stopComplete).not.toBe(true);
+    expect(state.files.size).toBe(1);
+    await admitSendRows(uid, id); await admitSendRows(uid, id);
+    expect((await batchRef(uid, id).get()).data()).toMatchObject({ finished: 1, total: 1, stopped: true });
+    expect((await operationRef(uid, id).get()).data()?.stopComplete).toBe(true);
+    expect(state.files.size).toBe(0);
     expect((await db.doc(`users/${uid}/activitySendQuota/current`).get()).data()?.bytes).toBe(0);
   });
   it('cannot resend uncertain acceptance, even with Pro', async () => {

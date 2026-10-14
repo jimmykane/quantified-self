@@ -19,7 +19,7 @@ class FakeXHR {
   status = 200; responseText = '{}'; timeout = 0;
   headers: Record<string, string> = {};
   upload: { onprogress?: (event: { lengthComputable: boolean; loaded: number; total: number }) => void } = {};
-  onload?: () => void; onerror?: () => void; ontimeout?: () => void;
+  onload?: () => void; onerror?: () => void; ontimeout?: () => void; onabort?: () => void;
   open = vi.fn(); send = vi.fn();
   constructor() { FakeXHR.latest = this; }
   setRequestHeader(key: string, value: string) { this.headers[key] = value; }
@@ -93,5 +93,24 @@ describe('ActivitySendService owner and upload boundaries', () => {
     const assertion = expect(upload).rejects.toThrow('Reselect the same file');
     await vi.waitFor(() => expect(FakeXHR.latest.timeout).toBe(150_000)); FakeXHR.latest.ontimeout!(); await assertion;
     expect(functions.call).not.toHaveBeenCalled();
+  });
+  it('rejects an aborted transfer with recoverable guidance rather than leaving it pending', async () => {
+    const upload = service.upload('batch', 'row', new File(['x'], 'one.fit'), vi.fn());
+    const assertion = expect(upload).rejects.toThrow('cancelled');
+    await vi.waitFor(() => expect(FakeXHR.latest.onabort).toBeDefined()); FakeXHR.latest.onabort!(); await assertion;
+  });
+  it('keeps a requested batch distinct from a new draft until its first snapshot arrives', () => {
+    service.watchBatch('existing');
+    expect(service.requestedBatchId()).toBe('existing'); expect(service.loadingBatch()).toBe(true); expect(service.loadingRows()).toBe(true);
+    streams.reads[2].next(undefined); streams.reads[3].next([]);
+    expect(service.loadingBatch()).toBe(false); expect(service.loadingRows()).toBe(false); expect(service.requestedBatchId()).toBe('existing');
+    expect(service.batchReadError()).toContain('unavailable');
+    streams.reads[2].next({ id: 'existing' }); expect(service.batchReadError()).toBeNull();
+    service.closeBatch(); expect(service.requestedBatchId()).toBeNull();
+  });
+  it('preserves background history errors when closing a batch and clears them on owner change', () => {
+    streams.reads[0].error(new Error('Offline')); service.closeBatch();
+    expect(service.readError()).toContain('recent sends');
+    user.user.set(null); TestBed.flushEffects(); expect(service.readError()).toBeNull();
   });
 });
