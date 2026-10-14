@@ -445,6 +445,8 @@ describe('help.content', () => {
     expect(health).toContain('not an assessment of every chart');
     expect(health).toContain('Loading, failed or incomplete reads are never treated as normal');
     expect(health).toContain('Your saved Dashboard charts stay visible and unchanged');
+    expect(health).toContain('**seven-day average** separately from the **latest nightly reading**');
+    expect(health).toContain('**Multiple recorded sources** rather than borrowing a source selected in another chart');
     expect(health).toContain('not repeated as cards on All');
     expect(health).toContain('Moderate and vigorous intensity durations appear in **Movement & energy**, and are not shown by default on **All**');
     expect(health).toContain('**Sleep → HRV → Resting heart rate → VO₂ max → Weight → Steps**');

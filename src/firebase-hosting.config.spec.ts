@@ -366,7 +366,7 @@ describe('Firebase Hosting configuration', () => {
     expect(sitemapXml).not.toContain(`${siteOrigin}/features/workout-file-comparison`);
     expect(sitemapXml).not.toContain(`${siteOrigin}/features/sports-watch-benchmark`);
     // Help includes the dialog feedback and safe haptic behavior guidance.
-    // Calmer Health overview help is part of this same-day public content revision.
+    // Calmer overview help, including independent source attribution and HRV average/latest wording, is in this revision.
     expect(sitemapLastmodForUrl(`${siteOrigin}/help`)).toBe('2026-10-14');
     expect(sitemapLastmodForUrl(`${siteOrigin}/policies`)).toBe('2026-10-07');
     expect(sitemapLastmodForUrl(`${siteOrigin}/privacy`)).toBe('2026-10-07');

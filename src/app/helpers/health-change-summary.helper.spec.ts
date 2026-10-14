@@ -1,4 +1,4 @@
-import { buildHealthChangeSummary, buildHealthHighlightChangeSignals, personalRangeChangeState, type HealthChangeSignal } from './health-change-summary.helper';
+import { buildHealthChangeSummary, buildHealthHighlightChangeSignals, personalRangeChangeState, resolveHealthChangeSourceLabel, type HealthChangeSignal } from './health-change-summary.helper';
 import type { HealthPriorityCardView } from '../components/health/health-priority-summary.component';
 import type { HealthWorkspaceSeries } from './health-workspace.helper';
 
@@ -39,6 +39,16 @@ describe('Health change summary', () => {
     expect(personalRangeChangeState(null)).toBe('insufficient');
   });
 
+  it('keeps source attribution separate from evidence availability and does not expose account keys', () => {
+    const source = { id: 'first-reading', sourceKey: 'private-source-identity', providerLabel: 'Suunto' };
+    expect(resolveHealthChangeSourceLabel([source], true)).toBe('Suunto');
+    expect(resolveHealthChangeSourceLabel([source, { ...source, id: 'another-reading' }], true)).toBe('Suunto');
+    expect(resolveHealthChangeSourceLabel([source, { ...source, sourceKey: 'other-private-account' }], true)).toBe('Multiple recorded sources');
+    expect(resolveHealthChangeSourceLabel([source, { ...source, providerLabel: 'Garmin' }], true)).toBe('Multiple recorded sources');
+    expect(resolveHealthChangeSourceLabel([], true)).toBe('Source attribution unavailable');
+    expect(resolveHealthChangeSourceLabel([], false)).toBe('No eligible current source');
+  });
+
   it('follows the selected Highlight account without blending sources or overwriting a missing preference', () => {
     const series = (id: string, sourceLabel: string, value: number): HealthWorkspaceSeries => ({
       id, sourceSelectionKey: id, metricId: 'heart_rate_variability', provider: 'SuuntoApp', providerLabel: 'Suunto',
@@ -65,5 +75,19 @@ describe('Health change summary', () => {
     expect(buildHealthHighlightChangeSignals([{ ...card, comparisonUnavailable: true }], {})[0].state).toBe('unavailable');
     expect(buildHealthHighlightChangeSignals([{ ...card, loading: true }], {})[0].state).toBe('loading');
     expect(buildHealthHighlightChangeSignals([{ ...card, chartSeries: [] }], {})[0].state).toBe('insufficient');
+    const invalidStatus = { ...card, chartStatuses: { ...card.chartStatuses,
+      first: { ...card.chartStatuses!.first, normalRange: null },
+    } };
+    expect(buildHealthHighlightChangeSignals([invalidStatus], {})[0]).toMatchObject({
+      state: 'insufficient', statusText: 'Not enough comparable evidence',
+    });
+    expect(buildHealthHighlightChangeSignals([invalidStatus], {})[0].detailText).not.toContain('7-day average 40');
+    const buildingStatus = { ...card, chartStatuses: { ...card.chartStatuses, first: {
+      ...card.chartStatuses!.first, tone: 'neutral' as const, currentAverage: null, normalRange: null,
+      label: 'Building personal range', detailText: '6/14 nights',
+    } } };
+    expect(buildHealthHighlightChangeSignals([buildingStatus], {})[0]).toMatchObject({
+      state: 'insufficient', statusText: 'Building personal range', detailText: expect.stringContaining('6/14 nights'),
+    });
   });
 });

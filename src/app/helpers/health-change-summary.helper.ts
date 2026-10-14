@@ -31,6 +31,17 @@ export function personalRangeChangeState(range: PersonalRangeSummary | null | un
   return 'insufficient';
 }
 
+/** Attribution only: never guess from a separately selected/paged chart. */
+export function resolveHealthChangeSourceLabel(
+  sources: readonly { id: string; sourceKey?: string; providerLabel: string }[],
+  hasEvidence: boolean,
+): string {
+  if (!hasEvidence) return 'No eligible current source';
+  if (!sources.length) return 'Source attribution unavailable';
+  const identities = new Set(sources.map(source => JSON.stringify([source.providerLabel, source.sourceKey || source.id])));
+  return identities.size === 1 ? sources[0].providerLabel : 'Multiple recorded sources';
+}
+
 export function buildHealthChangeSummary(signals: readonly HealthChangeSignal[]) {
   const changes = signals.filter(signal => signal.state === 'outside-range');
   const count = (state: HealthChangeState) => signals.filter(signal => signal.state === state).length;
@@ -80,10 +91,14 @@ export function buildHealthHighlightChangeSignals(
       detailText: 'A source read failed or was incomplete. Available charts remain visible; no range conclusion is made.' };
     if (series) {
       const status = card.chartStatuses?.[series.id];
+      const state = personalRangeChangeState(status);
+      // Do not retain a reassuring label/detail after rejecting its numeric range.
+      // Valid neutral statuses still explain baseline/recent-night progress.
+      const displayStatus = state !== 'insufficient' || status?.tone === 'neutral' ? status : null;
       const last = series.points.at(-1);
       const recorded = last ? `Last recorded ${getDateTimeFormatter(undefined, { dateStyle: 'medium' }).format(last.timestampMs)}.` : '';
-      return { ...base, state: personalRangeChangeState(status), statusText: status?.label || 'Not enough comparable evidence',
-        detailText: [status?.detailText || 'No established personal range for this reading.', recorded].filter(Boolean).join(' · ') };
+      return { ...base, state, statusText: displayStatus?.label || 'Not enough comparable evidence',
+        detailText: [displayStatus?.detailText || 'No established personal range for this reading.', recorded].filter(Boolean).join(' · ') };
     }
     if (row) return { ...base, state: 'recorded', statusText: 'Recorded context',
       detailText: `${row.valueText} · ${row.contextText}. No change assessment for this metric.` };

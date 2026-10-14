@@ -77,6 +77,8 @@ const HEALTH_WORKSPACE_HELP_CONTENT = `## What Health is for
 
 Use **Show details** to see the source, existing baseline or range explanation, and recorded dates; **Hide details** closes that local breakdown. Signals outside their range remain visible while details are closed. Health follows your chosen Highlight source and Sources filter; Dashboard uses its current eligible Sleep evidence. Sources and different HRV statistics are never averaged together. This adds no score or workout instruction. Your saved Dashboard charts stay visible and unchanged, and hiding Today also hides its change summary. Focused Health history and category views keep their existing layout.
 
+The change summary labels HRV's **seven-day average** separately from the **latest nightly reading**. Those values can have different range results. If a reading matches multiple sources, it says **Multiple recorded sources** rather than borrowing a source selected in another chart.
+
 See the [Health feature overview](/features/health) for sleep, HRV, and measurement previews using sample data. The HRV preview includes fictional travel, sickness, and stress notes; select a marker or **View sample notes** to read them. These examples never load or change your account notes.
 
 - **Health (Beta)** is the authenticated workspace for source-attributed Sleep, heart rate, HRV, movement, energy, wellness, body, and fitness measurements imported from supported connected services. It is available to all signed-in users; the plan and connection requirements for importing provider history do not change.

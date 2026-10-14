@@ -1635,6 +1635,10 @@ describe('SummariesComponent', () => {
     expect(nativeElement.querySelector('.dashboard-readiness-hrv')?.textContent).toContain('Latest HRV 55 ms · Today');
     const hrvRange = nativeElement.querySelector('.dashboard-readiness-hrv .metric-indicator-range');
     expect(hrvRange?.getAttribute('aria-label')).toBe('HRV: 50.8 ms; 60-day range 49.1–51.5 ms');
+    const hrvChange = component.dashboardTodayReadiness.changeSignals.find(signal => signal.id === 'hrv')!;
+    expect(hrvChange.state).toBe('within-range');
+    expect(hrvChange.detailText).toContain('7-day average 50.8 ms');
+    expect(hrvChange.detailText).toContain('Latest HRV 55 ms');
     expect(hrvRange?.querySelector('.metric-indicator-range-band')).not.toBeNull();
     expect(hrvRange?.querySelector('.metric-indicator-range-marker')?.getAttribute('data-tone')).toBe('positive');
     const overnightHeartRate = [...nativeElement.querySelectorAll('.dashboard-current-state-row dl > div')]
@@ -1753,6 +1757,29 @@ describe('SummariesComponent', () => {
       expect(element.querySelector('[aria-label="Loading readiness"]')).toBeNull();
       expect(element.querySelector('.dashboard-current-state-primary[aria-busy="false"]')).not.toBeNull();
       expect(TestBed.inject(AppHapticsService).selection).not.toHaveBeenCalled();
+    });
+
+    it('does not direct ambiguous evidence to a separately paged Sleep chart', () => {
+      load$.next(loadState);
+      sleep$.next([...nights, { ...nights[0], id: 'another-provider-night', source: {
+        provider: 'GarminAPI', sourceSessionKey: 'another-provider-night', providerUserId: 'another-account',
+      } }]);
+      vi.advanceTimersToNextFrame();
+      const changes = component.dashboardTodayReadiness.changeSignals;
+      expect(changes.find(signal => signal.id === 'hrv')?.sourceLabel).toBe('Multiple recorded sources · Sleep HRV');
+      expect(changes.find(signal => signal.id === 'sleep')?.sourceLabel).toBe('Multiple recorded sources');
+      expect(changes.some(signal => signal.sourceLabel.includes('Sleep chart'))).toBe(false);
+    });
+
+    it('attributes HRV to its own reading when multiple Sleep sources end at the same time', () => {
+      load$.next(loadState);
+      sleep$.next([...nights, { ...nights[0], id: 'garmin-without-hrv', vitals: { averageHeartRateBpm: 52 }, source: {
+        provider: 'GarminAPI', sourceSessionKey: 'garmin-without-hrv', providerUserId: 'another-account',
+      } }]);
+      vi.advanceTimersToNextFrame();
+      const changes = component.dashboardTodayReadiness.changeSignals;
+      expect(changes.find(signal => signal.id === 'hrv')?.sourceLabel).toBe('Suunto · Sleep HRV');
+      expect(changes.find(signal => signal.id === 'sleep')?.sourceLabel).toBe('Multiple recorded sources');
     });
 
     it('shows load-only readiness after an empty first sleep result', () => {

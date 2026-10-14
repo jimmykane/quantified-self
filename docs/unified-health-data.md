@@ -377,8 +377,12 @@ Outside-range signals remain visible with their source. **Show details** reveals
 existing range/baseline wording and recorded dates using shared local date and canonical metric formatters.
 Loading, failed refreshes, bounded incomplete reads and missing evidence remain distinct from within range.
 Health follows the same selected Highlight account and semantic series, including filtered-source fallback without
-overwriting preferences. Dashboard follows its existing current eligible Sleep evidence, not a paged chart window;
-an ambiguous source attribution is not guessed. The disclosure is local, resets on owner change, emits selection
+overwriting preferences. Dashboard attributes Sleep and HRV independently from their already-loaded evidence,
+matching HRV's actual latest observation rather than borrowing the source of the newest Sleep night or a paged chart.
+Multiple matching accounts/providers say **Multiple recorded sources**; a missing attribution is left explicit.
+HRV details label the assessed seven-day average separately from the latest nightly reading, reusing the existing
+Sports Lib-formatted values. Rejected numeric ranges cannot retain a within/outside-range conclusion in their details;
+valid neutral baseline/recent-night progress stays visible. The disclosure is local, resets on owner change, emits selection
 haptics only for user toggles and never writes settings.
 
 MCP impact: presentation only. No exposed metrics, read/write contracts, scopes, consent, provider actions,
