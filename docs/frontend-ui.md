@@ -432,6 +432,28 @@ beside the metric list, with a minimum plot height for multi-row grids. Mobile, 
 retain their existing chart heights. The existing ECharts host observes the resized plot; no manual resize loop or
 extra padding is needed.
 
+### Lazy chart code and release bundle budgets
+
+`EChartsLoaderService` loads the core and `echarts-registrations.helper.ts` only in the browser, on chart demand.
+The helper uses ECharts' public named imports for the existing six chart types, twelve components and Canvas renderer.
+Do not dynamically import the whole `echarts/charts`, `echarts/components` or `echarts/renderers` namespaces:
+those imports retain unused installers and their code even when `core.use()` registers a smaller subset. New chart
+features must deliberately extend the named registration list and its exact-registration test. Core loading, shared
+promise caching, failed-load retry, SSR guards, theme, resize and haptic behavior remain owned by the existing loader.
+
+This is a bundling-only change, not a chart/Training metric, data contract, provider integration or MCP feature change.
+No readings, units, chart options, user preferences, scopes or consent change, and no Help changes are needed.
+Release verification must run the normal beta and production builds with the existing initial/total-script budgets
+unchanged, plus service-worker and public startup checks. An optimized local `--stats-json` build can attribute code
+when a release-budget failure prevents output emission; it is diagnostic only, not a substitute for release gates.
+
+Verification: beta and production release builds pass without changing `angular.json` budgets. Production's
+generated browser JavaScript totals 13,166,565 bytes against the 13,500,000-byte cap; the emitted graph contains
+only the registered chart families, not unused treemap/sunburst/sankey/gauge/graph installers. All 511 targeted
+chart/loader/host/public-preview tests, frontend environment/workflow/policy checks, service-worker asset checks
+and the public startup/prerender checks pass. A synthetic browser smoke test imports the production chunks and
+renders all six chart types on Canvas, including resize and connect/disconnect. No account or provider data is used.
+
 Dashboard plots, Health metric/Sleep-stage plots, and Training's readiness, power-systems,
 swimming-performance, and durability plots opt into `EChartsHostController.deferUntilNearViewport`.
 `ChartViewportQueue` observes the nearest scroll container (including the app shell and bottom sheets) with a 600px

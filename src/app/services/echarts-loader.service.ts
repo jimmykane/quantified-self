@@ -85,34 +85,11 @@ export class EChartsLoaderService {
 
     if (!this.loader) {
       this.loader = (async () => {
-        const [core, charts, components, renderers] = await Promise.all([
+        const [core, { registerEChartsModules }] = await Promise.all([
           import('echarts/core'),
-          import('echarts/charts'),
-          import('echarts/components'),
-          import('echarts/renderers')
+          import('../helpers/echarts-registrations.helper'),
         ]);
-
-        core.use([
-            charts.BarChart,
-            charts.PictorialBarChart,
-            charts.CustomChart,
-            charts.PieChart,
-            charts.LineChart,
-            charts.ScatterChart,
-          components.GraphicComponent,
-          components.GridComponent,
-          components.TooltipComponent,
-          components.LegendComponent,
-          components.TitleComponent,
-          components.AxisPointerComponent,
-          components.MarkLineComponent,
-          components.MarkAreaComponent,
-          components.VisualMapComponent,
-          components.ToolboxComponent,
-          components.DataZoomComponent,
-          components.BrushComponent,
-          renderers.CanvasRenderer
-        ]);
+        registerEChartsModules(core);
 
         this.cachedCore = core;
         return core;

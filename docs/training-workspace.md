@@ -3095,9 +3095,11 @@ then physical app/watch checks, are required before claiming layout, sensor valu
 Local verification for v14: 2,746 provider/delivery/Training MCP unit tests, 102 strict MCP output-contract tests,
 378 frontend/settings/help tests and all 160 Suunto lifecycle emulator tests passed with no skips. Functions and
 the local frontend build pass; frontend registry/workflow/policy and 13 monitoring-definition checks pass. The
-compiled MCP contract is compatible with the unchanged developer-refresh advisory. The beta release build is
-blocked by the existing total-script budget: an isolated clean `50432cebb` baseline also fails that gate. Budgets
-were not raised and no production resource, provider upload or account prescription was changed in this task.
+compiled MCP contract is compatible with the unchanged developer-refresh advisory. Initial beta verification hit
+an existing total-script budget failure, also reproduced on a clean `50432cebb` baseline. The follow-up
+[lazy chart import fix](frontend-ui.md#lazy-chart-code-and-release-bundle-budgets) resolves it: beta and production
+release builds now pass without raising budgets. No production resource, provider upload or account prescription
+was changed by either task; deployment and physical Guide verification still need separate approval.
 
 ##### Current readings and boundary notifications (#784)
 

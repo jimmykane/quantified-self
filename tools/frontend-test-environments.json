@@ -65,6 +65,7 @@
     "src/app/helpers/date-time-format.helper.spec.ts",
     "src/app/helpers/derived-metric-status.helper.spec.ts",
     "src/app/helpers/device-chart-appearance.helper.spec.ts",
+    "src/app/helpers/echarts-registrations.helper.spec.ts",
     "src/app/helpers/echarts-tooltip-interaction.helper.spec.ts",
     "src/app/helpers/echarts-tooltip-position.helper.spec.ts",
     "src/app/helpers/event-chart-overlay.helper.spec.ts",
