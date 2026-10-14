@@ -2997,7 +2997,8 @@ approval equivalence is retained only for unchanged content/authority, never new
 
 ##### Suunto app workout preview (v13)
 
-Current sends use private `suunto-guides-v13` to add the documented optional Guide `richText` Markdown field.
+Non-swimming sends use private `suunto-guides-v13` to add the documented optional Guide `richText` Markdown field;
+swimming v14 below retains this same app preview.
 Suunto app Guide details show a definition-order preview: title/sport, step purpose, exact prescribed ending,
 target ranges and complete notes. Repeats are grouped, not expanded. Manual endings explicitly say Lap finishes
 the current step; early-Lap alternatives remain visible. Strength uses the validated complete companion for
@@ -3031,6 +3032,72 @@ Monitoring is **covered/unchanged**: existing provider/event metrics, dashboard,
 cover v13; only the private diagnostic version allowlist grows. No queue, scheduler, retention or resource changes.
 Release needs separately approved Functions deployment. Local ZIP/Firestore fixtures are not live Suunto app proof;
 after release, sync an eligible future Guide and confirm the full Description in the Suunto app.
+
+##### Configurable swimming Guide screens (v14)
+
+The private `suunto-guides-v14` mapping applies only to pool/open-water swimming. Other sport payloads remain
+exactly v13. In the Suunto sync dialog, **Show swimming Guide screens** offers separate ordered Work/Rest
+preferences, Restore defaults and an explicit Save. This uses the existing owner settings writer and
+`users/{uid}/config/settings.suuntoSwimmingGuide`, not workout mutation or sending consent. The delivery reader
+uses this canonical config document; the historical root owner-unit source is deliberately unchanged for exact
+v13 reconstruction. Preferences have a strict versioned enum allowlist, no duplicate fields and at most five
+optional choices per screen. Missing/malformed preferences normalize to defaults, without rewriting owner data.
+
+- Mandatory native countdowns, authored targets and notes reserve their slots first, within the existing five-field
+  limit. Documented measured target counterparts are adjacent to their targets where space permits. Missing HR
+  targets do not create a fake `Tgt HR`. Long instructions remain text-only. Watch firmware adapts physical layout;
+  ordering is a priority request, not fixed-position/font-size proof.
+- Work defaults request native step distance/remaining, elapsed step time, current-manual-lap average pace and
+  a dedicated `Interval N/Total` text field where space remains. Selectable alternatives include current HR,
+  native manual-lap stroke **count**, separate average stroke **rate**, pool-only average SWOLF and clearly labelled
+  total workout distance. SWOLF is omitted for open water; count is never inferred from cadence/rate.
+- Rest defaults request countdown first, a dedicated interval field, `Prev plan`/`Next plan` distance when the
+  adjacent Work prescription really contains a distance ending, then current HR where slots remain. The counter
+  counts actual prescribed Work occurrences across flat/pyramid/complex repeats, not pool lengths, repeat passes,
+  recorded laps or adherence. Manual prescriptions never gain distance from titles/notes. Planned context uses
+  Sports Lib owner-unit formatting, never relabelled as measured completed distance. Optional Rest totals are
+  native whole-recording distance or strokes, explicitly labelled as totals, not last-interval summaries.
+- Rest does not request freshly reset lap-average values. The published schema has no documented previous-lap
+  selector; completed-effort pace/time/distance/strokes, selectable native `/100m` pace formatting and a forced
+  last-five-second beep/vibration pattern remain unimplemented capability gaps. Do not guess JSON resource keys,
+  fabricate sensor values or add countdown steps. Pool length detection and automatic distance transitions remain
+  native; no early distance subtraction or guessed final length is introduced.
+- Suunto documents start popups lasting approximately 20 seconds. Generated start notifications are omitted for
+  timed swimming Rest of 20 seconds or less **only when there are no authored notes**. This avoids requesting a
+  popup longer than the Rest; Work/Complete, manual/long Rest and authored-note notifications stay intact. It is
+  an alert-overlap mitigation, not evidence of audible/haptic reliability or the requested five-second sequence.
+- Warm-up, active Recovery and cool-down keep the frozen v11 screens. All ending conditions, early-Lap branch
+  identities, recorded-lap boundaries, target ranges and durations remain unchanged. Expanded interval context
+  stays within 1,000 screens and 256 KiB enriched JSON; larger candidates retain native repeats without guessed
+  counters/context. If even optional compact fields cannot fit, preserve all frozen steps rather than discard
+  instructions or increase archive limits.
+
+Private operation snapshots retain the exact swimming preferences used for a send. Frozen v13 and earlier attempts
+must prove their original acceptance before any eligible same-ID update; changed owner preferences never alter an
+uncertain recovery payload. Pinning, Pro, current connection authority, completed/past-copy protection and complete
+prescription/loss approval fences remain intact. Retain at most the original approved/latest proved presentation
+snapshots when carrying unchanged mapping losses; edited prescription/authority never inherits approval. Saving
+screens updates already-consented eligible future Guides on the existing periodic reconciliation, not a new Send.
+
+MCP impact: **no wire impact**. These are provider-private display choices, not recipe fields, Training metrics,
+targets, read fields, proposals, mutation kinds or wider consent. Native and MCP delivery assessment use the same
+canonical preference reader. Strict Training reads/status outputs reject private config/operation/proof fields;
+existing plan/workout read coverage and proposal schema remain unchanged, so no catalog/plugin refresh is needed.
+Monitoring is **covered/unchanged** by existing Suunto provider/event outcome and failure metrics/alerts; only the
+private exact-digest diagnostic allowlist adds v14. No queue, Rules, index, credential or resource changes.
+
+Verification covers bounded enum settings, field budget/target pairing, untargeted screens, flat/complex counters,
+Sports Lib unit formatting, unchanged execution/lap graph, short-Rest notification scope, compact/enriched JSON
+fallback, account-scoped frontend saves and original-payload recovery/same-ID updates with isolated demo Firestore
+and synthetic provider HTTP. This is local implementation. Separately approved Functions and frontend releases,
+then physical app/watch checks, are required before claiming layout, sensor values or alert behavior are verified.
+
+Local verification for v14: 2,746 provider/delivery/Training MCP unit tests, 102 strict MCP output-contract tests,
+378 frontend/settings/help tests and all 160 Suunto lifecycle emulator tests passed with no skips. Functions and
+the local frontend build pass; frontend registry/workflow/policy and 13 monitoring-definition checks pass. The
+compiled MCP contract is compatible with the unchanged developer-refresh advisory. The beta release build is
+blocked by the existing total-script budget: an isolated clean `50432cebb` baseline also fails that gate. Budgets
+were not raised and no production resource, provider upload or account prescription was changed in this task.
 
 ##### Current readings and boundary notifications (#784)
 
@@ -3124,16 +3191,16 @@ marker is private readback metadata, never persisted in authored recipes or proj
 file GETs by default; lifecycle tests cover lost responses, rescheduling, duplicate dispatch and strict mismatch cases.
 
 Existing `[TrainingDelivery]` Suunto acceptance, recovered-acceptance, stale-suppression, failure and checkpoint-failure
-events include two transient allowlisted labels: `guideMappingVersion` (`suunto-guides-v13`, `suunto-guides-v12`, `suunto-guides-v11`, `suunto-guides-v10`, `suunto-guides-v9`, `suunto-guides-v8`, `suunto-guides-v7`, `suunto-guides-v6`, `suunto-guides-v5`, `suunto-guides-v4`, `suunto-guides-v3`, `suunto-guides-v2`, `unknown`,
+events include two transient allowlisted labels: `guideMappingVersion` (`suunto-guides-v14`, `suunto-guides-v13`, `suunto-guides-v12`, `suunto-guides-v11`, `suunto-guides-v10`, `suunto-guides-v9`, `suunto-guides-v8`, `suunto-guides-v7`, `suunto-guides-v6`, `suunto-guides-v5`, `suunto-guides-v4`, `suunto-guides-v3`, `suunto-guides-v2`, `unknown`,
 or `not_applicable` for removal) and `deliveryPhase` (`execute` or `recover`). The version is proved by recomputing the
 immutable upsert operation's exact payload digest, including strength details, rather than copying the current adapter's
 version onto a legacy attempt. An unrecognized digest or classification failure yields `unknown` and cannot alter
 delivery/recovery. Classification runs once per claimed operation without credentials or HTTP; the phase switches to
 `execute` if recovery resumes a safe request. Other providers' existing events are unchanged.
 For rollout triage, combine `jsonPayload.message="[TrainingDelivery]"`, `jsonPayload.provider="suunto"` and
-`jsonPayload.event="failure"` with current `suunto-guides-v13` for app-preview delivery, or the exact historical label and
+`jsonPayload.event="failure"` with current swimming `suunto-guides-v14` or other-sport `suunto-guides-v13`, or the exact historical label and
 `jsonPayload.deliveryPhase="recover"` for legacy recovery. The aggregate monitoring metrics filter provider/event,
-not Guide mapping version, and already cover v13 and historical versions without additional policies or queue changes.
+not Guide mapping version, and already cover v14/v13 and historical versions without additional policies or queue changes.
 Checkpoint failures use `jsonPayload.event="checkpoint_failed"`. These labels are not stored in Firestore or exposed
 to the browser/MCP, and contain no UID, account/Guide/workout identity, digest, recipe, instruction, sensor reading,
 credential, provider body or raw error. They report serializer/recovery provenance, not app/watch receipt or completion.

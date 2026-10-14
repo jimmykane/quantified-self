@@ -59,7 +59,9 @@ export function resolveDeliveryIntent(context: DeliveryContext, ledger?: Deliver
   const assessment = transport.assess(workout!, connection.destinationKey, timeZone, context.strength,
     context.suuntoWeightUnits, context.suuntoUnitSettings,
     [ledger?.mappingApprovalProof?.suuntoApprovedUnitSettings, ledger?.mappingApprovalProof?.suuntoMappingUnitSettings]
-      .filter((units): units is NonNullable<typeof units> => !!units));
+      .filter((units): units is NonNullable<typeof units> => !!units), context.suuntoSwimmingSettings,
+    [ledger?.mappingApprovalProof?.suuntoApprovedSwimmingSettings, ledger?.mappingApprovalProof?.suuntoMappingSwimmingSettings]
+      .filter((preferences): preferences is NonNullable<typeof preferences> => !!preferences));
   if (assessment.level === 'unsupported') return result('preserve', 'unsupported', assessment.digest, assessment.issues);
   const approval = override?.approvedDigest ?? setting?.approvedDigest;
   // A legacy payload digest can omit truncated authored text. Carry approval
@@ -82,17 +84,24 @@ export function resolveDeliveryIntent(context: DeliveryContext, ledger?: Deliver
     && !compatibleApproval) {
     return result('preserve', 'approval_required', assessment.digest, assessment.issues, assessment.digest);
   }
-  const suuntoMappingUnits = assessment.mappingVersion === 'suunto-guides-v13' ? context.suuntoUnitSettings : undefined;
-  const recordSuuntoUnits = suuntoMappingUnits && requiresDeliveryMappingApproval(assessment) && approval === assessment.digest;
+  const suuntoMappingUnits = ['suunto-guides-v13', 'suunto-guides-v14'].includes(assessment.mappingVersion) ? context.suuntoUnitSettings : undefined;
+  const suuntoMappingSwimmingSettings = assessment.mappingVersion === 'suunto-guides-v14' ? context.suuntoSwimmingSettings : undefined;
+  const recordSuuntoPresentation = !!(suuntoMappingUnits || suuntoMappingSwimmingSettings)
+    && requiresDeliveryMappingApproval(assessment) && approval === assessment.digest;
   const approvedUnits = compatibleApproval && ledger?.mappingApprovalProof?.approvedDigest === approval
-    ? ledger.mappingApprovalProof.suuntoApprovedUnitSettings : recordSuuntoUnits ? context.suuntoUnitSettings : undefined;
+    ? ledger.mappingApprovalProof.suuntoApprovedUnitSettings : recordSuuntoPresentation ? context.suuntoUnitSettings : undefined;
   return { ...result('present', ledger?.acceptedDigest === assessment.digest ? 'delivered' : 'pending', assessment.digest, assessment.issues),
-    ...((compatibleApproval && contentDigest) || recordSuuntoUnits ? { mappingApprovalProof: {
+    ...((compatibleApproval && contentDigest) || recordSuuntoPresentation ? { mappingApprovalProof: {
       approvedDigest: approval!, mappingDigest: assessment.digest,
       contentDigest: contentDigest ?? deliveryContentDigest(workout, timeZone, context.strength)!,
       // Legacy approval has no original unit snapshot, but the proved v13
       // mapping still needs one so a later metadata-only update can carry it.
       ...(approvedUnits ? { suuntoApprovedUnitSettings: approvedUnits } : {}),
       ...(suuntoMappingUnits ? { suuntoMappingUnitSettings: suuntoMappingUnits } : {}),
+      ...(suuntoMappingSwimmingSettings ? {
+        suuntoMappingSwimmingSettings,
+        suuntoApprovedSwimmingSettings: compatibleApproval && ledger?.mappingApprovalProof?.suuntoApprovedSwimmingSettings
+          ? ledger.mappingApprovalProof.suuntoApprovedSwimmingSettings : suuntoMappingSwimmingSettings,
+      } : {}),
     } } : {}) };
 }

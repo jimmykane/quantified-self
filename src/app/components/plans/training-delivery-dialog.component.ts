@@ -8,6 +8,7 @@ import { PLANNED_WORKOUT_PROVIDER_IDS, PLANNED_WORKOUT_PROVIDER_CAPABILITIES_V1,
 import { GARMIN_WORKOUT_NOT_FOUND_ISSUE, normalizeDeliveryTimeZone, TRAINING_DELIVERY_PAGE_SIZE, type TrainingDeliveryAction, type TrainingDeliveryCommandV1,
   type TrainingDeliveryPreviewV1, type TrainingDeliveryStatusV1 } from '@shared/training-provider-delivery';
 import { SharedModule } from '../../modules/shared.module';
+import { SuuntoSwimmingGuideSettingsComponent } from './suunto-swimming-guide-settings.component';
 import { AppUserService } from '../../services/app.user.service';
 import { AppHapticsService } from '../../services/app.haptics.service';
 import { TrainingPlansService } from '../../services/training-plans.service';
@@ -45,7 +46,7 @@ interface DeliveryDraft {
 }
 
 @Component({ selector: 'app-training-delivery-dialog', standalone: true,
-  imports: [SharedModule, CompactRowComponent], templateUrl: './training-delivery-dialog.component.html',
+  imports: [SharedModule, CompactRowComponent, SuuntoSwimmingGuideSettingsComponent], templateUrl: './training-delivery-dialog.component.html',
   styleUrl: './training-delivery-dialog.component.scss', changeDetection: ChangeDetectionStrategy.OnPush })
 export class TrainingDeliveryDialogComponent {
   readonly data = inject<TrainingDeliveryDialogData>(MAT_DIALOG_DATA);

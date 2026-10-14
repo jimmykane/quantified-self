@@ -2,6 +2,8 @@ import { randomUUID } from 'node:crypto';
 import { FieldPath, type Transaction } from 'firebase-admin/firestore';
 import { ActivityTypes, type UserUnitSettingsInterface } from '@sports-alliance/sports-lib';
 import { normalizeUserUnitSettings } from '../../../../shared/unit-aware-display';
+import { normalizeSuuntoSwimmingGuideSettings, type SuuntoSwimmingGuideSettings } from '../../../../shared/suunto-swimming-guide-settings';
+import { isSuuntoSwimmingSport } from '../providers/suunto-swimming-presentation';
 import {
   STRENGTH_DETAILS_COLLECTION_ID, STRENGTH_DETAILS_DOCUMENT_ID,
   parseStrengthWorkoutDetailsV1, strengthProjectionMatchesDetails,
@@ -37,16 +39,28 @@ export async function readStrengthDetailsForDelivery(tx: Transaction,
 /** Suunto's app preview uses owner units; native watch measurements remain canonical. */
 export async function readSuuntoGuideUnitSettings(tx: Transaction, user: FirebaseFirestore.DocumentReference,
   provider: PlannedWorkoutProviderId, workouts: readonly ScheduledWorkoutV1[]): Promise<UserUnitSettingsInterface | undefined> {
-  if (provider !== 'suunto' || !workouts.length) return undefined;
+  return (await readSuuntoGuideOwnerPreferences(tx, user, provider, workouts)).unitSettings;
+}
+export async function readSuuntoGuideOwnerPreferences(tx: Transaction, user: FirebaseFirestore.DocumentReference,
+  provider: PlannedWorkoutProviderId, workouts: readonly ScheduledWorkoutV1[]): Promise<{
+    unitSettings?: UserUnitSettingsInterface; swimmingSettings?: SuuntoSwimmingGuideSettings;
+  }> {
+  if (provider !== 'suunto' || !workouts.length) return {};
   const owner = await tx.get(user);
   const units = normalizeUserUnitSettings(owner.get('settings.unitSettings'));
   // Settings are owner-writable; duplicate valid enum entries must not inflate
   // every operation/proof snapshot or the per-workout conversion work.
   // First-occurrence order is unchanged, so display priority stays identical.
-  return { ...units, speedUnits: [...new Set(units.speedUnits)], paceUnits: [...new Set(units.paceUnits)],
+  const unitSettings = { ...units, speedUnits: [...new Set(units.speedUnits)], paceUnits: [...new Set(units.paceUnits)],
     swimPaceUnits: [...new Set(units.swimPaceUnits)], verticalSpeedUnits: [...new Set(units.verticalSpeedUnits)],
     gradeAdjustedSpeedUnits: [...new Set(units.gradeAdjustedSpeedUnits)],
     gradeAdjustedPaceUnits: [...new Set(units.gradeAdjustedPaceUnits)] };
+  // AppUserService writes display preferences to the owner config document,
+  // not the legacy root settings. Keep the frozen unit source unchanged so
+  // older in-flight mappings still reproduce their exact content digest.
+  if (!workouts.some(workout => workout.structure && isSuuntoSwimmingSport(workout.structure.sport))) return { unitSettings };
+  const config = await tx.get(user.collection('config').doc('settings'));
+  return { unitSettings, swimmingSettings: normalizeSuuntoSwimmingGuideSettings(config.get('suuntoSwimmingGuide')) };
 }
 
 export async function readDeliveryContext(runtime: DeliveryRuntime, tx: Transaction, uid: string,
@@ -55,7 +69,8 @@ export async function readDeliveryContext(runtime: DeliveryRuntime, tx: Transact
   const user = runtime.db.collection('users').doc(uid);
   const connection = await runtime.connection(tx, uid, provider);
   const strength = workout ? await readStrengthDetailsForDelivery(tx, user, workout) : null;
-  const suuntoUnitSettings = await readSuuntoGuideUnitSettings(tx, user, provider, workout ? [workout] : []);
+  const preferences = await readSuuntoGuideOwnerPreferences(tx, user, provider, workout ? [workout] : []);
+  const suuntoUnitSettings = preferences.unitSettings;
   const suuntoWeightUnits = strength ? suuntoUnitSettings?.weightUnits : undefined;
   const workoutId = workout?.id ?? retainedWorkoutId;
   const [overrideDoc, settingDoc, scopeDoc, planDoc] = workoutId ? await Promise.all([
@@ -67,6 +82,7 @@ export async function readDeliveryContext(runtime: DeliveryRuntime, tx: Transact
   const override = (overrideDoc?.data() ?? null) as TrainingDeliverySettingsV1 | null;
   const pastCleanup = ledger ? await readPastCleanupAuthorization(tx, runtime.db, uid, ledger, workout) : null;
   return { workout, strength, ...(suuntoWeightUnits === undefined ? {} : { suuntoWeightUnits }),
+    ...(preferences.swimmingSettings ? { suuntoSwimmingSettings: preferences.swimmingSettings } : {}),
     ...(suuntoUnitSettings === undefined ? {} : { suuntoUnitSettings }),
     planActive: planDoc?.data()?.lifecycle === 'active',
     setting: workout?.planId ? (settingDoc?.data() ?? null) as TrainingDeliverySettingsV1 | null : override,

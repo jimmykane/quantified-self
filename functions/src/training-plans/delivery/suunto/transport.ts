@@ -1,6 +1,7 @@
 import type { ScheduledWorkoutV1 } from '../../../../../shared/training-plans';
 import type { WeightUnits, UserUnitSettingsInterface } from '@sports-alliance/sports-lib';
 import type { StrengthWorkoutDetailsV1 } from '../../../../../shared/strength-workout';
+import type { SuuntoSwimmingGuideSettings } from '../../../../../shared/suunto-swimming-guide-settings';
 import { normalizeTrainingLocalDate } from '../../../../../shared/training-plans';
 import { trainingDeliveryLocalDate } from '../../../../../shared/training-provider-delivery';
 import { hashTrainingScheduleRequestPayload } from '../../persistence';
@@ -70,8 +71,10 @@ export class SuuntoGuideTransport implements TrainingDeliveryTransport {
   }
   assess(workout: ScheduledWorkoutV1, destination: string, zone: string, strength?: StrengthWorkoutDetailsV1 | null,
     suuntoWeightUnits?: WeightUnits, suuntoUnitSettings?: UserUnitSettingsInterface,
-    suuntoApprovalUnitSettings?: readonly UserUnitSettingsInterface[]) {
-    return assessSuuntoGuide(workout, destination, zone, this.owner, strength, suuntoWeightUnits, suuntoUnitSettings, suuntoApprovalUnitSettings);
+    suuntoApprovalUnitSettings?: readonly UserUnitSettingsInterface[], swimmingSettings?: SuuntoSwimmingGuideSettings,
+    approvalSwimmingSettings?: readonly SuuntoSwimmingGuideSettings[]) {
+    return assessSuuntoGuide(workout, destination, zone, this.owner, strength, suuntoWeightUnits, suuntoUnitSettings,
+      suuntoApprovalUnitSettings, swimmingSettings, approvalSwimmingSettings);
   }
   diagnosticMappingVersion(operation: DeliveryOperation): string | null {
     return guideMappingForRecovery(operation, this.owner)?.mappingVersion ?? null;
@@ -162,10 +165,10 @@ export class SuuntoGuideTransport implements TrainingDeliveryTransport {
       await this.save(operation, checkpoint, null, 'finished', 'accepted'); return null;
     }
     const assessment = this.assess(operation.workout!, operation.destinationKey, operation.timeZone, operation.strength,
-      operation.suuntoWeightUnits, operation.suuntoUnitSettings);
+      operation.suuntoWeightUnits, operation.suuntoUnitSettings, undefined, operation.suuntoSwimmingSettings);
     if (assessment.digest !== operation.digest || assessment.level === 'unsupported') throw new TrainingDeliveryTransportError('terminal');
     const payload = guideMapping(operation.workout!, operation.destinationKey, this.owner, operation.strength,
-      operation.suuntoWeightUnits, operation.suuntoUnitSettings).artifact;
+      operation.suuntoWeightUnits, operation.suuntoUnitSettings, operation.suuntoSwimmingSettings).artifact;
     if (operation.artifact) {
       const raw = await this.read(operation.artifact, guard);
       if (!raw || (raw.localDate !== operation.artifact.localDate && raw.localDate !== payload.localDate)) throw new TrainingDeliveryTransportError('uncertain');

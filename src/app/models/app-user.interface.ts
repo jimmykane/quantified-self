@@ -25,6 +25,7 @@ import { HEALTH_METRIC_IDS, type HealthMetricId } from '@shared/health';
 import type { TrainingDestinationId, TrainingSportId } from '@shared/training-disciplines';
 import { UserServiceMetaInterface } from '@sports-alliance/sports-lib';
 import type { AppFormatLocalePreference } from '../shared/adapters/app-locale';
+import type { SuuntoSwimmingGuideSettings } from '@shared/suunto-swimming-guide-settings';
 
 export type AppMapStyleName = 'default' | 'satellite' | 'outdoors';
 export type AppMyTracksTripSortDirection = 'asc' | 'desc';
@@ -283,6 +284,7 @@ export interface AppUserServiceMetaInterface extends UserServiceMetaInterface, S
 }
 
 export interface AppUserSettingsInterface extends UserSettingsInterface {
+    suuntoSwimmingGuide?: SuuntoSwimmingGuideSettings;
     myTracksSettings?: AppMyTracksSettings;
     mapSettings?: AppMapSettingsInterface;
     dashboardSettings?: AppDashboardSettingsInterface;

@@ -200,15 +200,15 @@ describe('help.content', () => {
   });
   it('explains manual pool progress and rest screens without promising measurement or fixed-position fixes', () => {
     const content = HELP_SECTIONS.find(section => section.id === 'training-plans')!.content;
-    for (const phrase of ['**manual pool-swim work**', '**Swum**', '**Elapsed**', '**Dist rem**', '**Time rem**',
+    for (const phrase of ['**Manual pool-swim work**', '**Swum**', '**Elapsed**', '**Dist rem**', '**Time rem**',
       'not newly reset swim averages or the preceding swim\'s statistics', 'Active **Recovery** keeps swim readings',
-      'does not offer a configurable field editor or guarantee fixed positions', 'do not fix delayed pool-length detection',
+      '**Show swimming Guide screens**', 'cannot guarantee fixed positions', 'do not fix delayed pool-length detection',
       'retain the existing lap-boundary behavior even when a rest screen no longer shows averages']) expect(content).toContain(phrase);
   });
   it('explains swim manual-step timing and native cumulative Rest distance without promising finished-interval statistics', () => {
     const content = HELP_SECTIONS.find(section => section.id === 'training-plans')!.content;
     for (const phrase of ['**pool and open-water swimming**', '**Total**', 'native cumulative distance for the whole recording',
-      'not the distance or pace of the last interval', 'Open-water Work/recovery fields are unchanged',
+      'not the distance or pace of the last interval', 'Active **Recovery** keeps swim readings',
       '**Swim now. Press Lap to finish this interval.**', '**Rest now. Press Lap to finish this rest.**',
       'Lap finishes the current step, not starts it', 'Older Guides may still say **Press lap when ready**']) expect(content).toContain(phrase);
   });
@@ -237,12 +237,20 @@ describe('help.content', () => {
       'your complete step notes', 'exercises, sets, loads and rests', 'app-only text, not a new watch screen',
       'Extremely large previews keep the short description', 'past and completed copies remain unchanged']) expect(content).toContain(phrase);
   });
+  it('explains configurable swim screens, planned context and the limited short-rest popup mitigation', () => {
+    const content = HELP_SECTIONS.find(section => section.id === 'training-plans')!.content;
+    for (const phrase of ['**Save Guide screens**', '**Interval 1/10**', '**Prev plan**/**Next plan**',
+      'prescribed, not measured', 'not pool lengths or recorded laps', 'no fake target field',
+      'past and completed copies stay unchanged', 'does not expose a previous-lap selector', '**m:ss/100m**',
+      'removing an average from Work or Rest does not remove automatic laps',
+      '**20 seconds or less**', 'does not guarantee an audible or vibrating alert', 'your own Rest instructions still show']) expect(content).toContain(phrase);
+  });
   it('explains pool-only measured SWOLF without target, pool-length or sensor promises', () => {
     const content = HELP_SECTIONS.find(section => section.id === 'training-plans')!.content;
     for (const phrase of ['pool-only **AvgSWOLF**', '**Avg SWOLF** on older Guides', '**SWOLF is a measured reading, not a target.**',
       "your watch's pool-length setting", 'Compare it only within the same pool length and stroke',
       'does not send the selected pool length to Suunto', 'calculate a substitute SWOLF',
-      'instead of optional HR', 'with current HR for an HR target', 'without SWOLF',
+      'with current HR for an HR target', 'without SWOLF',
       'requires the updated Functions release']) expect(content).toContain(phrase);
     expect(searchHelpSections(HELP_SECTIONS, 'Avg SWOLF').map(section => section.id)).toContain('training-plans');
     expect(searchHelpSections(HELP_SECTIONS, 'AvgSWOLF').map(section => section.id)).toContain('training-plans');

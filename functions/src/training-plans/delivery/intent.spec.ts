@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 import { ActivityTypes, DistanceUnits, WeightUnits } from '@sports-alliance/sports-lib';
 import { normalizeUserUnitSettings } from '../../../../shared/unit-aware-display';
+import { defaultSuuntoSwimmingGuideSettings } from '../../../../shared/suunto-swimming-guide-settings';
 import { projectStrengthWorkoutToV1, type StrengthWorkoutDetailsV1 } from '../../../../shared/strength-workout';
 import { resolveDeliveryIntent, deliveryIdentity, deliveryContentDigest } from './intent';
 import type { DeliveryContext, DeliveryLedgerV1 } from './contracts';
@@ -168,6 +169,29 @@ describe('delivery intent', () => {
       ledger = { ...ledger, acceptedDigest: current.digest, mappingApprovalProof: current.mappingApprovalProof };
     }
   });
+  it('carries only proved unchanged losses across swimming display choices, never granting new authority', () => {
+    const transport = new SuuntoGuideTransport(async () => { throw Error('No HTTP during assessment'); }, 'Quantified Self');
+    const workout = { ...base.workout!, structure: { ...base.workout!.structure, sport: ActivityTypes.Swimming, nodes: [
+      { kind: 'step' as const, id: 'work', purpose: 'work' as const, ending: { kind: 'time' as const, seconds: 90 }, targets: [], note: 'A'.repeat(45) }] } };
+    const initial = defaultSuuntoSwimmingGuideSettings();
+    const approval = transport.assess(workout, 'account-a', 'Europe/Helsinki', undefined, undefined, undefined, undefined, initial).digest;
+    const context: DeliveryContext = { ...base, workout, transport, suuntoSwimmingSettings: initial,
+      setting: { ...base.setting!, provider: 'suunto', approvedDigest: approval } };
+    let current = resolveDeliveryIntent(context);
+    let ledger = { connectionEpoch: 0, destinationKey: 'account-a', acceptedDigest: current.digest,
+      acceptedContentDigest: deliveryContentDigest(workout, 'Europe/Helsinki'), mappingApprovalProof: current.mappingApprovalProof } as DeliveryLedgerV1;
+    for (const workFields of [['strokes'], ['duration'], ['distance', 'pace']] as const) {
+      const changed = { ...context, suuntoSwimmingSettings: { ...initial, workFields: [...workFields] } };
+      current = resolveDeliveryIntent(changed, ledger);
+      expect(current).toMatchObject({ desired: 'present', status: 'pending', approvalDigest: null });
+      expect(current.mappingApprovalProof!.suuntoApprovedSwimmingSettings).toEqual(initial);
+      expect(resolveDeliveryIntent({ ...changed, workout: { ...workout, title: 'Changed' } }, ledger).status).toBe('approval_required');
+      expect(resolveDeliveryIntent({ ...changed, connection: { ...context.connection, epoch: 1 } }, ledger).status).toBe('fresh_consent_required');
+      expect(resolveDeliveryIntent({ ...changed, hasPro: false }, ledger).status).toBe('paused_pro');
+      expect(resolveDeliveryIntent({ ...changed, setting: null }, ledger).desired).toBe('absent');
+      ledger = { ...ledger, acceptedDigest: current.digest, mappingApprovalProof: current.mappingApprovalProof };
+    }
+  });
   it.each([assessSuuntoGuideV7ForRecovery, assessSuuntoGuideV12ForRecovery])(
     'retains legacy approval after the app-preview upgrade and subsequent unit changes (%#)', assessLegacy => {
       const transport = new SuuntoGuideTransport(async () => { throw Error('No HTTP during assessment'); }, 'Quantified Self');
@@ -254,7 +278,7 @@ describe('delivery intent', () => {
     const ledger = { connectionEpoch: 0, destinationKey: 'account-a', acceptedDigest: prior.digest,
       acceptedContentDigest: deliveryContentDigest(workout, 'Europe/Helsinki') } as DeliveryLedgerV1;
     expect(transport.assess(workout, 'account-a', 'Europe/Helsinki')).toMatchObject({
-      mappingVersion: 'suunto-guides-v13',
+      mappingVersion: [ActivityTypes.Swimming, ActivityTypes.OpenWaterSwimming].includes(sport) ? 'suunto-guides-v14' : 'suunto-guides-v13',
       compatibleApprovalDigests: expect.arrayContaining([prior.digest]),
     });
     expect(resolveDeliveryIntent(context, ledger)).toMatchObject({ desired: 'present', status: 'pending', approvalDigest: null });

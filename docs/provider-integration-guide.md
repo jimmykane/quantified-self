@@ -512,7 +512,7 @@ historical watch graphs. Existing provider/event monitoring covers this presenta
 See [Rest-first screens and verification](training-workspace.md#rest-first-interval-screens-v12).
 This needs separately approved Functions deployment and physical watch verification; it is not live evidence.
 
-Current Guide payloads use private v13 app descriptions: documented `richText` Markdown contains grouped workout
+Guide payloads retain private v13 app descriptions: documented `richText` Markdown contains grouped workout
 steps, complete notes, targets and strength sets in owner units. Native watch steps remain identical to the recipe's
 frozen presentation above. Preview/UTF-8 archive budgets fall back to the short description without changing the
 workout or increasing memory bounds. Owner units are immutable attempt snapshots; exact historical v2–v12 recovery
@@ -520,6 +520,19 @@ precedes a same-ID update, never a speculative replacement. MCP/public responses
 metadata. Monitoring is **covered/unchanged** by provider/event filters; no dashboard, queue or policy changes.
 See [app preview and verification](training-workspace.md#suunto-app-workout-preview-v13) for the impact review and
 separately approved release/app verification still required.
+
+Pool/open-water swimming now selects private v14 for bounded, configurable Work/Rest fields and a dedicated
+planned-interval counter. Native stroke count is separate from stroke rate; previous/next prescription distance
+is explicitly planned, never measured. Short generated timed-Rest popups (at most 20 seconds, no authored note)
+are omitted to avoid overlapping the next Work alert, without changing timing/laps or promising forced haptics.
+All other sports retain exactly v13. Canonical owner config preferences become immutable private operation/proof
+snapshots; frozen v13 recovery precedes an eligible same-ID update under unchanged consent/authority/Pro gates.
+The existing scheduler handles saved display preferences; no new queue, Rules or index is needed. Monitoring is
+**covered/unchanged**; MCP Training schemas/read coverage stay unchanged and reject these private fields.
+Previous-effort Rest statistics, native pace-format overrides, custom beep patterns and earlier pool-distance
+updates remain undocumented capabilities, not guessed upload fields. See the single detailed
+[swimming screen contract and verification](training-workspace.md#configurable-swimming-guide-screens-v14).
+This change still needs separately approved Functions/frontend deployment and physical watch verification.
 
 For additional authored targets, [#773](https://github.com/jimmykane/quantified-self/issues/773) records the
 6 October contract review. The published JSON reference defines only the existing HR, power, speed/pace and cadence

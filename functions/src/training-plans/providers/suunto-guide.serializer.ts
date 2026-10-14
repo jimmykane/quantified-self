@@ -15,6 +15,9 @@ import {
 import { normalizeTrainingLocalDate } from '../../../../shared/training-plans';
 import { parseStrengthWorkoutDetailsV1 } from '../../../../shared/strength-workout';
 import { presentSuuntoRestScreens } from './suunto-rest-presentation';
+import { presentSuuntoSwimmingScreens } from './suunto-swimming-presentation';
+import type { SuuntoSwimmingGuideSettings } from '../../../../shared/suunto-swimming-guide-settings';
+import type { UserUnitSettingsInterface } from '@sports-alliance/sports-lib';
 import {
     createStableProviderExternalId,
     resolveProviderSerializationIssuesV1,
@@ -32,7 +35,8 @@ export type SuuntoGuideConditionV1 =
 export type SuuntoGuideFieldV1 =
     | { type: SuuntoGuideLiveFieldType; title: string }
     | { type: 'pace' | 'power' | 'strokeRate' | 'swolf'; title: string; window: 'manualLap'; aggregate: 'average' }
-    | { type: 'distance'; title: string; window: 'step' | 'workout' }
+    | { type: 'distance'; title: string; window: 'step' | 'workout' | 'manualLap' }
+    | { type: 'strokes'; title: string; window: 'workout' | 'manualLap' }
     | { type: 'duration'; title: string; window: 'step' }
     | { type: 'text'; value: string }
     | { type: 'stepDurationCountdown'; value: number; title: string }
@@ -590,7 +594,21 @@ export function serializeSuuntoGuideJsonV1(
     structureValue: unknown,
     options: SerializeSuuntoGuideOptionsV1,
 ): ProviderSerializationResultV1<SuuntoGuideJsonV1> {
+    // Static compatibility callers keep their existing rendering. Delivery
+    // selects the versioned v14 swimming serializer explicitly, with a snapshot.
     return serializeSuuntoGuideV12ForRecovery(structureValue, options);
+}
+
+export function serializeSuuntoSwimmingGuideV14(structureValue: unknown, options: SerializeSuuntoGuideOptionsV1,
+    settings?: SuuntoSwimmingGuideSettings, units?: UserUnitSettingsInterface): ProviderSerializationResultV1<SuuntoGuideJsonV1> {
+    const structure = parseWorkoutStructureV1(structureValue);
+    if (![ActivityTypes.Swimming, ActivityTypes.OpenWaterSwimming].includes(structure.sport)) {
+        return serializeSuuntoGuideV12ForRecovery(structureValue, options);
+    }
+    const frozen = serializeSuuntoGuideV11ForRecovery(structureValue, options);
+    const steps = presentSuuntoSwimmingScreens(structure, frozen.artifact.steps, settings, units,
+        value => Buffer.byteLength(JSON.stringify({ ...frozen.artifact, steps: value }), 'utf8'));
+    return { ...frozen, artifact: { ...frozen.artifact, steps } };
 }
 
 /** Frozen watch-only v12 graph. App metadata is added by the v13 delivery mapping. */

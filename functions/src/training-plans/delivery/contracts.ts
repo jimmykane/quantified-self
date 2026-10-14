@@ -3,6 +3,7 @@ import type { WeightUnits, UserUnitSettingsInterface } from '@sports-alliance/sp
 import type { PlannedWorkoutProviderId } from '../../../../shared/planned-workout-providers';
 import type { ScheduledWorkoutV1 } from '../../../../shared/training-plans';
 import type { StrengthWorkoutDetailsV1 } from '../../../../shared/strength-workout';
+import type { SuuntoSwimmingGuideSettings } from '../../../../shared/suunto-swimming-guide-settings';
 import type { TrainingDeliveryStatus, TrainingDeliverySettingsV1 } from '../../../../shared/training-provider-delivery';
 import type { DeliveryRepair, RemoteInspection, VerificationEvidence } from './verification-contracts';
 
@@ -43,6 +44,8 @@ export interface DeliveryArtifact {
   timeZone?: string;
 }
 export interface DeliveryOperation {
+  /** Private bounded display snapshot; never an authored field or consent. */
+  suuntoSwimmingSettings?: SuuntoSwimmingGuideSettings;
   /** Private Wahoo Plan incarnation, reserved only after confirmed withdrawal. */
   wahooPlanGeneration?: number;
   id: string;
@@ -150,7 +153,9 @@ export interface TrainingDeliveryTransport {
   assess(workout: ScheduledWorkoutV1, destinationKey: string, timeZone: string,
     strength?: StrengthWorkoutDetailsV1 | null, suuntoWeightUnits?: WeightUnits,
     suuntoUnitSettings?: UserUnitSettingsInterface,
-    suuntoApprovalUnitSettings?: readonly UserUnitSettingsInterface[]): DeliveryAssessment;
+    suuntoApprovalUnitSettings?: readonly UserUnitSettingsInterface[],
+    suuntoSwimmingSettings?: SuuntoSwimmingGuideSettings,
+    suuntoApprovalSwimmingSettings?: readonly SuuntoSwimmingGuideSettings[]): DeliveryAssessment;
   canRemove(artifact: DeliveryArtifact, today: string, allowPastRemoval?: boolean): boolean;
   execute(operation: DeliveryOperation, checkpoint: DeliveryCheckpoint, guard: DeliveryRequestGuard): Promise<DeliveryArtifact | null>;
   recover(operation: DeliveryOperation, checkpoint: DeliveryCheckpoint, guard: DeliveryRequestGuard): Promise<DeliveryRecovery>;
@@ -256,6 +261,8 @@ export interface DeliveryLedgerV1 {
   updatedAtMs: number;
 }
 export interface MappingApprovalProof {
+  suuntoApprovedSwimmingSettings?: SuuntoSwimmingGuideSettings;
+  suuntoMappingSwimmingSettings?: SuuntoSwimmingGuideSettings;
   /** Private bounded provenance for unchanged Suunto app-preview unit conversions. */
   suuntoApprovedUnitSettings?: UserUnitSettingsInterface;
   suuntoMappingUnitSettings?: UserUnitSettingsInterface;
@@ -280,6 +287,7 @@ export interface DeliveryIntent {
   approvalDigest: string | null;
 }
 export interface DeliveryContext {
+  suuntoSwimmingSettings?: SuuntoSwimmingGuideSettings;
   workout: ScheduledWorkoutV1 | null;
   strength?: StrengthWorkoutDetailsV1 | null;
   suuntoWeightUnits?: WeightUnits;

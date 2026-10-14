@@ -17,6 +17,7 @@ import { ROUTE_DELIVERY_SYNC_ROUTE_IDS } from '@shared/route-delivery-sync-route
 import { getAppCanonicalChartDataTypes } from '../helpers/app-chart-data-types.helper';
 import { AppCheckReadinessService } from './app-check-readiness.service';
 import { UserProfileVerificationService } from './user-profile-verification.service';
+import { defaultSuuntoSwimmingGuideSettings } from '@shared/suunto-swimming-guide-settings';
 
 const verificationSDK = vi.hoisted(() => ({ getFirestore: vi.fn(), doc: vi.fn(), getDoc: vi.fn() }));
 vi.mock('firebase/firestore/lite', () => verificationSDK);
@@ -2081,6 +2082,17 @@ describe('AppUserService', () => {
 
             // Expect setDoc to be called for the settings
             expect(setDoc).toHaveBeenCalledWith(expect.anything(), settings, { merge: true });
+        });
+
+        it('persists swimming Guide display preferences only in canonical owner config without changing Training authority', async () => {
+            const user = { uid: 'u1' } as AppUserInterface;
+            const preferences = { ...defaultSuuntoSwimmingGuideSettings(), workFields: ['strokes'] };
+            vi.mocked(doc).mockClear();
+            await service.updateUserProperties(user, { settings: { suuntoSwimmingGuide: preferences } });
+            expect(doc).toHaveBeenCalledWith(expect.anything(), 'users/u1/config/settings');
+            expect(setDoc).toHaveBeenCalledExactlyOnceWith(expect.anything(), { suuntoSwimmingGuide: preferences }, { merge: true });
+            expect(updateDoc).not.toHaveBeenCalled();
+            expect(mockFunctionsService.call).not.toHaveBeenCalled();
         });
 
         it('strips server-owned Training settings while retaining client-owned workspace preferences', async () => {
