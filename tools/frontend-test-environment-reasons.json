@@ -19,6 +19,10 @@
     "environment": "angular",
     "reason": "Compiles the swimming Guide screen controls with TestBed to verify Material selectors, disclosure bindings, owner-scoped preference saves and haptic feedback across pending/error/account-change paths."
   },
+  "src/app/components/public-seo/health-note-comparison-preview.component.spec.ts": {
+    "environment": "angular",
+    "reason": "Compiles the public note comparison adapter with real Material selection and Health chart to verify sample-only rendering, signal bindings, canonical displays and haptic ownership without account-data providers."
+  },
   "src/app/components/public-seo/health-overview-preview.component.spec.ts": {
     "environment": "angular",
     "reason": "Compiles the real Health overview and history renderers with TestBed to verify signal inputs, chart bindings, category navigation, focus restoration and haptic feedback."

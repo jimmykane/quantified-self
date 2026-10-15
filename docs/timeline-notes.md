@@ -117,6 +117,12 @@ cannot bypass the comparison's coverage gates. An explicitly selected hidden not
 changes global/per-note chart visibility or exposes
 other notes. Public/profile previews receive no private comparison evidence.
 
+The public homepage and Health feature page highlight comparisons beside the existing HRV example. Their deferred
+`HealthNoteComparisonPreviewComponent` reuses the same comparison helper, canonical formatters and
+`HealthMetricSeriesChartComponent`, with the existing fictional trip and Health example readings. Its fixed,
+completed seven-day windows exclude the change day; a local metric selector changes only the example. It has no
+auth, note, Health-query or Sleep-service dependency, reads no account data, saves nothing and makes no causal claim.
+
 `TimelineNoteComparisonService` reuses `HealthMetricQueryService` for one combined summary-only window per Health metric
 and one native Sleep envelope. No workout/sample query, extra 60-day personal-range baseline, enrichment read or provider
 request is added. `AppSleepService.loadSummaryRange` uses its existing start-time query with 32-record pages plus lookahead,

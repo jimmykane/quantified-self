@@ -516,7 +516,7 @@ describe('AppRoutingModule routes', () => {
         path: PUBLIC_FEATURE_PATHS.health,
         title: 'Sleep, HRV and Health Trends Across Your Devices',
         h1: 'Your Health, Beyond Training.',
-        descriptionText: 'add timeline notes for travel, sickness and stress',
+        descriptionText: 'compare recorded health before and after a Timeline note',
       },
       {
         path: PUBLIC_FEATURE_PATHS.mcpServer,

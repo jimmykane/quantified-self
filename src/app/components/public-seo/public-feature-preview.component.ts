@@ -12,6 +12,7 @@ import { McpReadOnlyFlowPreviewComponent } from '../shared/mcp-read-only-flow-pr
 import type { PublicFeaturePreviewKey } from './public-feature-preview.types';
 import { HealthPreviewComponent } from './health-preview.component';
 import { HealthOverviewPreviewComponent } from './health-overview-preview.component';
+import { HealthNoteComparisonPreviewComponent } from './health-note-comparison-preview.component';
 import { TrainingExplorerPreviewComponent } from './training-explorer-preview.component';
 import { TrainingPlansPreviewComponent } from './training-plans-preview.component';
 
@@ -21,6 +22,7 @@ import { TrainingPlansPreviewComponent } from './training-plans-preview.componen
   imports: [
     HealthPreviewComponent,
     HealthOverviewPreviewComponent,
+    HealthNoteComparisonPreviewComponent,
     TrainingExplorerPreviewComponent,
     TrainingPlansPreviewComponent,
     HomeDashboardPreviewComponent,

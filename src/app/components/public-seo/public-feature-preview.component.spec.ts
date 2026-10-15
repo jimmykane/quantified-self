@@ -37,6 +37,7 @@ describe('PublicFeaturePreviewComponent', () => {
     ['health-overview', 'health-overview'],
     ['health-sleep', 'health'],
     ['health-hrv', 'health'],
+    ['health-note-comparison', 'note-comparison'],
     ['health-weight', 'health'],
     ['training-snapshot', 'training'],
     ['training-signals', 'signals'],

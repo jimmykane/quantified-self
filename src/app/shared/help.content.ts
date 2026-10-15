@@ -89,7 +89,7 @@ Use **Show details** to see the source, existing baseline or range explanation, 
 
 The change summary labels HRV's **seven-day average** separately from the **latest nightly reading**. Those values can have different range results. If a reading matches multiple sources, it says **Multiple recorded sources** rather than borrowing a source selected in another chart.
 
-See the [Health feature overview](/features/health) for sleep, HRV, and measurement previews using sample data. The HRV preview includes fictional travel, sickness, and stress notes; select a marker or **View sample notes** to read them. These examples never load or change your account notes.
+See the [Health feature overview](/features/health) for sleep, HRV, and measurement previews using sample data. The HRV preview includes fictional travel, sickness, and stress notes; select a marker or **View sample notes** to read them. The homepage and Health overview also let you switch metrics in a fictional before-and-after note comparison, using the same coverage rules and chart as saved notes. These examples never load or change your account notes.
 
 - **Health (Beta)** is the authenticated workspace for source-attributed Sleep, heart rate, HRV, movement, energy, wellness, body, and fitness measurements imported from supported connected services. It is available to all signed-in users; the plan and connection requirements for importing provider history do not change.
 - Open **Health** from the main navigation. Health is a fixed workspace, not a configurable dashboard tile.

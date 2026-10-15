@@ -1,0 +1,25 @@
+<section aria-label="Timeline note comparison with fictional sample data">
+  <div class="comparison-heading">
+    <div><p class="sample-caption">Fictional sample · Nothing is saved</p>
+      <h4>{{ example.note.title }}</h4>
+      <p class="comparison-meta">Note starts {{ anchorLabel }} · {{ example.window.days }} days on each side</p>
+    </div>
+    <mat-form-field appearance="outline" subscriptSizing="dynamic"><mat-label>Compare a metric</mat-label>
+      <mat-select aria-label="Sample comparison metric" [value]="selectedMetric()" (selectionChange)="chooseMetric($event.value)"
+        (openedChange)="$event && haptics.selection()">
+        @for (metric of metrics; track metric.id) { <mat-option [value]="metric.id">{{ metric.label }}</mat-option> }
+      </mat-select>
+    </mat-form-field>
+  </div>
+  <p class="comparison-meta">{{ row().series.sourceLabel }} · Same source and reading definition on both sides</p>
+  <dl class="comparison-summary" aria-live="polite">
+    <div><dt>Before median</dt><dd>{{ row().beforeText }}<span>{{ row().beforeCount }}/{{ example.window.days }} {{ row().countLabel }}</span></dd></div>
+    <div><dt>After median</dt><dd>{{ row().afterText }}<span>{{ row().afterCount }}/{{ example.window.days }} {{ row().countLabel }}</span></dd></div>
+    <div><dt>Observed difference</dt><dd>{{ row().differenceText }}<span>{{ row().reason }}</span></dd></div>
+  </dl>
+  <app-health-metric-series-chart [model]="model()" [startTimeMs]="start" [endTimeMs]="end" [darkTheme]="darkTheme()"
+    [unitSettings]="unitSettings()" [comparisonWindow]="example.window"
+    statusDescription="Fictional sample. Recorded daily medians; missing days and the note’s start day are gaps. Observed differences, not cause and effect." />
+  <div class="comparison-periods comparison-meta"><span>Before: {{ beforeLabel }}</span><span>After: {{ afterLabel }}</span></div>
+  <p class="comparison-meta">Change day excluded · Missing readings stay as gaps · Observed differences, not cause and effect</p>
+</section>
