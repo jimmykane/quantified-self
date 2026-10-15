@@ -6,7 +6,10 @@ function source(distance = 54900, energy: number | undefined = 200) {
     return EventImporterJSON.getEventFromJSON({ name: 'Synthetic source', startDate: 0, endDate: 10000,
         stats: { Distance: distance, ...(energy === undefined ? {} : { Energy: energy }) },
         activities: [{ startDate: 0, endDate: 10000, type: 'Running', creator: { name: 'Test' },
-            stats: { Distance: 0 }, laps: [], streams: [], intensityZones: [] }] } as any);
+            // These tests exercise parent distance/energy preservation, with a
+            // complete source clock supported by the published library too.
+            stats: { Distance: 0, Duration: 10, 'Timer time': 10, 'Elapsed time': 10, 'Pause Time': 0 },
+            laps: [], streams: [], intensityZones: [] }] } as any);
 }
 
 describe('fresh parent-only source summaries', () => {
