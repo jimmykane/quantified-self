@@ -9,6 +9,10 @@ Functions-only rules:
 Workflows:
 - `../.agent/workflows/start-emulators.md`
 
+- For activity import/upload parser failures, check `quantified-self-io-debug-files` before asking for originals.
+  Follow `../docs/provider-integration-guide.md#failed-file-debug-captures` for prefixes and log correlation; capture
+  is best effort, not guaranteed. Inspect metadata first and keep any authorized private-file downloads in temporary
+  storage, never in the repository, fixtures, logs, commits, or PR attachments.
 - When adding or renaming a Function credential, register it with `defineSecret()` in `src/secrets.ts`, bind it only to
   the endpoints that require it, keep `.secret.local.example` and `docs/function-secret-management.md` current, and run
   `npm run secrets:check`. Never generate `functions/.env` in CI or permit local environment, secret, service-account,

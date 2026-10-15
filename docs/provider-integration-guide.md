@@ -1261,6 +1261,34 @@ the checksum spec exercises the real SDK against a loopback HTTP server, includi
 without calling Firebase, providers, or production buckets. Existing objects require no migration.
 Backend deployment remains a separately approved release action.
 
+### Failed-file debug captures
+
+Before asking a user for a failed import/upload original, check the separate diagnostic bucket
+`quantified-self-io-debug-files` (`config.debug.bucketName`). Provider captures use
+`<service>/<firebaseUserID>/<queueItemId>.<extension>`; existing prefixes include `Suunto app`, `COROS API`, and
+`garmin`. Capture is best effort and not every failure reaches it; check `[DebugUpload]` logs and object metadata
+before claiming a file is available. Debug objects are not retained activity originals or successful imports.
+
+Manual archive uploads through `uploadActivity` capture unexpected parser failures, including `EVENT_EMPTY_ERROR`,
+under `manualUpload/<firebaseUserID>/<payloadSha256>.<extension>`. Match the verified `userID` and `payloadSha256`
+from `[uploadActivity] Activity parsing failed`. The stored bytes are the original bounded HTTP body, preserving
+gzip with a `.gz` extension; the logged digest identifies the **decompressed parser input**, not the compressed body.
+The path never includes the original filename. Rejected copies of the same parser input reuse the same account,
+digest, and extension path. Non-FIT supported formats use the same capture path.
+
+Capture runs only after authentication, App Check policy, size/decompression, and account-tier checks pass, and
+rechecks the account-deletion guard immediately before Storage. Successful uploads, known route/course rejections,
+authentication/quota failures, and failed decompression are not captured by this branch. Debug-storage or guard
+failures preserve the parser's existing HTTP 400; they do not create events, retries, or queue jobs. This reuses the
+existing bucket and helper without changing bucket access or retention configuration. The Send activities temporary
+source bucket/lifecycle is separate and is not covered by this manual archive-upload branch.
+
+Inspect exact-prefix metadata first. If an authorized investigation needs file contents, use private temporary
+storage outside the checkout, treat contents as untrusted data, and never commit production files or put their
+contents, private filenames, or download URLs in logs, docs, tests, issues, or PR attachments. Captures cannot recover
+earlier rejected manual uploads that were never stored. Do not replay, upload to a provider, or purge objects without
+the user's separate authorization.
+
 ### Persisting events
 
 - Resolve a deterministic event ID before writing. Put provider identity fields in safe event metadata for future deduplication and attribution.
