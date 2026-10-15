@@ -36,6 +36,7 @@ interface HealthPrioritySourceView {
   valueText: string;
   chart?: HealthPriorityChartView;
   row?: HealthPriorityRow;
+  missing?: boolean;
 }
 
 export interface HealthHighlightSourceSelection {
@@ -174,7 +175,14 @@ export class HealthPrioritySummaryComponent {
       : card.rows.map(row => ({ key: row.sourceSelectionKey || row.id, metricId: HEALTH_METRIC_IDS.SleepDuration,
         points: row.sleepPoint ? [{ value: row.sleepPoint.totalSeconds, timestampMs: row.observedAtMs,
           calendarDate: row.sleepPoint.sleepDate }] : [] })));
-    const preferredIndex = sources.findIndex(source => source.key === this.preferredSources()[card.id]);
+    const preferredKey = this.preferredSources()[card.id];
+    let preferredIndex = sources.findIndex(source => source.key === preferredKey);
+    if (preferredKey && preferredIndex < 0) {
+      // Retain an explicit empty selection rather than displaying another
+      // account's graph as if it belonged to the remembered source.
+      sources.unshift({ key: preferredKey, label: 'Preferred source', valueText: 'Unavailable', missing: true });
+      preferredIndex = 0;
+    }
     return {
       ...card,
       chartModels,
@@ -188,7 +196,7 @@ export class HealthPrioritySummaryComponent {
     const source = card?.sources[index];
     // Material also emits on initialization and programmatic hydration. Only
     // a different, available selection represents a user action.
-    if (!card || !source || card.loading || card.error || index === card.selectedSourceIndex) return;
+    if (!card || !source || source.missing || card.loading || card.error || index === card.selectedSourceIndex) return;
     this.sourceSelected.emit({ cardId, sourceKey: source.key });
   }
 }

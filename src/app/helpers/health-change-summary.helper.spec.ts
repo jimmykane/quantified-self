@@ -70,7 +70,10 @@ describe('Health change summary', () => {
       sourceLabel: 'Suunto · Account 2 · Overnight HRV', state: 'outside-range', statusText: 'Outside personal range',
     });
     const preferences = { heart_rate_variability: 'missing' };
-    expect(buildHealthHighlightChangeSignals([card], preferences)[0].state).toBe('within-range');
+    expect(buildHealthHighlightChangeSignals([card], preferences)[0]).toMatchObject({
+      state: 'unavailable', sourceLabel: 'Preferred source unavailable', statusText: 'Preferred source unavailable',
+      detailText: expect.stringContaining('No other source is substituted'),
+    });
     expect(preferences.heart_rate_variability).toBe('missing');
     expect(buildHealthHighlightChangeSignals([{ ...card, comparisonUnavailable: true }], {})[0].state).toBe('unavailable');
     expect(buildHealthHighlightChangeSignals([{ ...card, loading: true }], {})[0].state).toBe('loading');

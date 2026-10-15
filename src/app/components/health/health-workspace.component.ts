@@ -57,9 +57,9 @@ import { BrowserCompatibilityService } from '../../services/browser.compatibilit
 import { AppSleepService } from '../../services/app.sleep.service';
 import { AppThemeService } from '../../services/app.theme.service';
 import { AppUserSettingsQueryService } from '../../services/app.user-settings-query.service';
-import { AppHealthHighlightId, AppHealthHighlightSources } from '../../models/app-user.interface';
-import { normalizeHealthHighlightSources } from '../../helpers/health-highlight-preferences.helper';
 import { buildHealthHighlightChangeSignals } from '../../helpers/health-change-summary.helper';
+import { AppHealthHighlightId, AppHealthHighlightSources, AppHealthMetricSources } from '../../models/app-user.interface';
+import { normalizeHealthHighlightSources, normalizeHealthMetricSources } from '../../helpers/health-highlight-preferences.helper';
 import { AppChartsModule } from '../../modules/app-charts.module';
 import { PageHeaderComponent } from '../shared/page-header/page-header.component';
 import { HealthMetricChartComponent } from './health-metric-chart.component';
@@ -146,6 +146,7 @@ interface QueuedHealthWorkspacePreferenceWrite {
   range: HealthWorkspaceRange;
   generation: number;
   highlightSources?: AppHealthHighlightSources;
+  metricSources?: AppHealthMetricSources;
 }
 
 interface HealthOverviewPosition {
@@ -281,6 +282,7 @@ export class HealthWorkspaceComponent {
   private metricPreferenceTouched = false;
   private rangePreferenceTouched = false;
   private readonly highlightPreferencesTouched = new Set<AppHealthHighlightId>();
+  private readonly metricSourcesTouched = new Set<HealthWorkspaceMetricSelection>();
   private preferenceWriteGeneration = 0;
   private preferenceWriteInFlight = false;
   private queuedPreferenceWrite: QueuedHealthWorkspacePreferenceWrite | null = null;
@@ -303,6 +305,7 @@ export class HealthWorkspaceComponent {
   readonly isSavingPreferences = signal(false);
   readonly preferencesSaveFailed = signal(false);
   readonly preferredHighlightSources = signal<AppHealthHighlightSources>({});
+  readonly preferredMetricSources = signal<AppHealthMetricSources>({});
   readonly selectedWindow = computed(() => resolveHealthWorkspaceWindow(this.routeState(), this.todayDate));
   private readonly selectedSleepReadKey = computed(() => {
     const window=this.selectedWindow();
@@ -991,6 +994,7 @@ export class HealthWorkspaceComponent {
       const savedHighlightSources = normalizeHealthHighlightSources(
         user?.settings?.appSettings?.healthWorkspace?.highlightSources,
       );
+      const savedMetricSources = normalizeHealthMetricSources(user?.settings?.appSettings?.healthWorkspace?.metricSources);
       if (uid === this.workspacePreferenceUserID) {
         if (urlMetricChanged) {
           untracked(() => this.prepareMetricNavigation(urlMetric));
@@ -1011,6 +1015,9 @@ export class HealthWorkspaceComponent {
         const current = untracked(this.preferredHighlightSources);
         for (const id of this.highlightPreferencesTouched) savedHighlightSources[id] = current[id];
         this.preferredHighlightSources.set(savedHighlightSources);
+        const currentMetricSources = untracked(this.preferredMetricSources);
+        for (const metric of this.metricSourcesTouched) savedMetricSources[metric] = currentMetricSources[metric];
+        this.preferredMetricSources.set(savedMetricSources);
         return;
       }
       const accountChanged = this.workspacePreferenceUserID !== null;
@@ -1028,6 +1035,8 @@ export class HealthWorkspaceComponent {
       this.rangePreferenceTouched = false;
       this.highlightPreferencesTouched.clear();
       this.preferredHighlightSources.set(savedHighlightSources);
+      this.metricSourcesTouched.clear();
+      this.preferredMetricSources.set(savedMetricSources);
       this.preferenceWriteGeneration += 1;
       this.queuedPreferenceWrite = null;
       this.isSavingPreferences.set(false);
@@ -1465,6 +1474,16 @@ export class HealthWorkspaceComponent {
     this.queueWorkspacePreferenceWrite();
   }
 
+  selectMetricSource({ uid, metric, sourceKey }: { uid: string; metric: HealthWorkspaceMetricSelection; sourceKey: string }): void {
+    if (!uid || uid !== this.signedInUserID() || uid !== this.workspacePreferenceUserID
+      || normalizeHealthMetricSources({ [metric]: sourceKey })[metric] !== sourceKey
+      || this.preferredMetricSources()[metric] === sourceKey) return;
+    // The shared chart owns selection feedback; the workspace only persists it.
+    this.metricSourcesTouched.add(metric);
+    this.preferredMetricSources.update(current => ({ ...current, [metric]: sourceKey }));
+    this.queueWorkspacePreferenceWrite();
+  }
+
   showAllProviders(): void {
     if (this.effectiveProviderFilters().length) this.haptics.selection();
     this.selectedProviders.set([]);
@@ -1869,6 +1888,10 @@ export class HealthWorkspaceComponent {
         highlightSources: Object.fromEntries([...this.highlightPreferencesTouched]
           .map(id => [id, this.preferredHighlightSources()[id]])),
       } : {}),
+      ...(this.metricSourcesTouched.size ? {
+        metricSources: Object.fromEntries([...this.metricSourcesTouched]
+          .map(metric => [metric, this.preferredMetricSources()[metric]])),
+      } : {}),
     };
     this.isSavingPreferences.set(true);
     void this.flushWorkspacePreferenceWrites();
@@ -1890,6 +1913,7 @@ export class HealthWorkspaceComponent {
           metric: write.metric,
           range: write.range,
           ...(write.highlightSources ? { highlightSources: write.highlightSources } : {}),
+          ...(write.metricSources ? { metricSources: write.metricSources } : {}),
         });
       } catch {
         if (

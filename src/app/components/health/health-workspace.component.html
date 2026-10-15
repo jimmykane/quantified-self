@@ -41,6 +41,14 @@
     </div>
   </app-page-header>
 
+  @if (preferencesSaveFailed() && !isSavingPreferences()) {
+    <div class="health-range-save-status health-range-save-status-error" role="alert">
+      <mat-icon aria-hidden="true">cloud_off</mat-icon>
+      <span>This Health view is active, but it was not saved.</span>
+      <button mat-button type="button" (click)="retryPreferenceSave()">Retry</button>
+    </div>
+  }
+
   @if (metricAvailabilityNotice()) {
     <div class="health-notice" role="status">
       <mat-icon aria-hidden="true">info</mat-icon>
@@ -54,6 +62,8 @@
       [highlightedMetrics]="highlightedOverviewMetrics()"
       [vitalsHighlightedMetrics]="highlightedVitalsMetrics()"
       [changeSignals]="overviewChangeSignals()"
+      [preferredSources]="preferredMetricSources()" (sourceSelected)="selectMetricSource($event)"
+      [savingPreferences]="isSavingPreferences()"
       [referenceDate]="overviewEndDate()" [providerFilter]="selectedProviders()" [timelineNotes]="timelineNotes.context()"
       (metricSelected)="selectPriorityMetric($event)" (providersObserved)="rememberOverviewProviders($event)">
       <app-health-priority-summary healthOverviewHighlights
@@ -185,15 +195,6 @@
             }
           </div>
         </header>
-
-        @if (preferencesSaveFailed() && !isSavingPreferences()) {
-          <div class="health-range-save-status health-range-save-status-error" role="alert">
-            <mat-icon aria-hidden="true">cloud_off</mat-icon>
-            <span>This Health view is active, but it was not saved.</span>
-            <button mat-button type="button" (click)="retryPreferenceSave()">Retry</button>
-          </div>
-        }
-
 
         @if (incompleteNotice()) {
           <div class="health-notice health-notice-warning" role="alert">

@@ -266,6 +266,54 @@ describe('Health category overview', () => {
     fixture.componentRef.setInput('user', { uid: 'new-owner', settings: { unitSettings: {} } }); fixture.detectChanges();
     expect(component.cards().find(card => card.id === 'body_weight')!.settings.sourceKey).toBeUndefined(); expect(component.selectedCategory()).toBe('all');
   });
+  it('restores per-metric preferences on a fresh visit without emitting saves or hiding missing choices', () => {
+    const fixture = create(), component = fixture.componentInstance, saved = vi.fn();
+    component.sourceSelected.subscribe(saved);
+    fixture.componentRef.setInput('user', { uid: 'owner', settings: { unitSettings: {}, appSettings: { healthWorkspace: {
+      metricSources: { body_weight: 'health-series-0123456789abcdef', vo2_max: 'health-series-abcdef0123456789' },
+    } } } }); fixture.detectChanges();
+    expect(component.cards().find(card => card.id === 'body_weight')?.settings.sourceKey).toBe('health-series-0123456789abcdef');
+    expect(component.cards().find(card => card.id === 'vo2_max')?.settings.sourceKey).toBe('health-series-abcdef0123456789');
+    component.observeSources(emptyContext('body_weight')); fixture.detectChanges();
+    expect(component.cards().find(card => card.id === 'body_weight')?.hidden).toBe(false);
+    expect(saved).not.toHaveBeenCalled(); expect(haptics.selection).not.toHaveBeenCalled();
+    fixture.componentRef.setInput('user', { uid: 'new-owner', settings: { unitSettings: {} } }); fixture.detectChanges();
+    expect(component.cards().find(card => card.id === 'body_weight')?.settings.sourceKey).toBeUndefined();
+  });
+  it('emits only accepted explicit source choices and never persists an example or automatic choice', () => {
+    const fixture = create(), component = fixture.componentInstance, saved = vi.fn();
+    component.sourceSelected.subscribe(saved);
+    const settings = { metric: 'body_weight' as const, range: '30d' as const, sourceKey: 'health-series-0123456789abcdef' };
+    component.updateCardSettings(settings, true);
+    expect(saved).not.toHaveBeenCalled();
+    component.updateCardSettings({ ...settings, sourceKey: 'health-series-abcdef0123456789' });
+    expect(saved).toHaveBeenCalledExactlyOnceWith({ uid: 'owner', metric: 'body_weight', sourceKey: 'health-series-abcdef0123456789' });
+    component.updateCardSettings({ ...settings, sourceKey: 'health-series-abcdef0123456789' });
+    fixture.componentRef.setInput('exampleOnly', true); fixture.detectChanges();
+    component.updateCardSettings(settings);
+    expect(saved).toHaveBeenCalledTimes(1); expect(haptics.selection).not.toHaveBeenCalled();
+  });
+  it('announces preference saves in a stable overview status slot without hiding cards', () => {
+    const fixture = create(), component = fixture.componentInstance;
+    const cards = component.cards().length;
+    const status = fixture.nativeElement.querySelector('.health-overview-save-status') as HTMLElement;
+    expect(status).not.toBeNull(); expect(status.querySelector('mat-spinner')).toBeNull();
+    fixture.componentRef.setInput('savingPreferences', true); fixture.detectChanges();
+    expect(fixture.nativeElement.querySelector('.health-overview-save-status')).toBe(status);
+    expect(status.textContent).toContain('Saving Health preferences'); expect(status.querySelector('mat-spinner')).not.toBeNull();
+    expect(component.cards()).toHaveLength(cards);
+    fixture.componentRef.setInput('savingPreferences', false); fixture.detectChanges();
+    expect(status.textContent?.trim()).toBe(''); expect(haptics.selection).not.toHaveBeenCalled();
+  });
+  it('persists only an opaque Sleep source identity while retaining the selected account locally', () => {
+    const fixture = create(), component = fixture.componentInstance, saved = vi.fn();
+    component.sourceSelected.subscribe(saved);
+    const rawSource = JSON.stringify(['SuuntoApp', 'private-account']);
+    component.updateCardSettings({ metric: 'sleep', range: '30d', sourceKey: rawSource });
+    expect(saved).toHaveBeenCalledExactlyOnceWith({ uid: 'owner', metric: 'sleep', sourceKey: expect.stringMatching(/^health-series-[a-f0-9]{16}$/) });
+    expect(JSON.stringify(saved.mock.calls)).not.toContain('private-account');
+    expect(component.cards().find(card => card.id === 'sleep')?.settings.sourceKey).toBe(rawSource);
+  });
   it('emits history navigation once, leaves feedback to the workspace and handles empty or removed categories', () => {
     const fixture = create(), component = fixture.componentInstance, selected = vi.fn();
     component.metricSelected.subscribe(selected);

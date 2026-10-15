@@ -447,10 +447,25 @@ describe('dashboard chart source interactions', () => {
     expect(watch).toHaveBeenCalledTimes(1); expect(haptics.selection).not.toHaveBeenCalled();
     expect(host.querySelector('.health-value-row app-chart-source-picker')?.textContent).toContain('Recorded measurement');
     expect(host.querySelector('.health-evidence-text')?.textContent).toContain('1 reading recorded · No trend inferred');
+    expect(host.querySelector('.health-two-reading-comparison')).toBeNull();
+    const older = structuredClone(records[0]);
+    older.id = 'older-manual'; older.source.sourceRecordKey = 'older-manual';
+    older.startTimeMs -= 7 * 86400000; older.endTimeMs -= 7 * 86400000;
+    older.calendarDate = new Date(older.endTimeMs).toISOString().slice(0, 10);
+    if (older.metrics[0].kind !== 'value') throw new Error('Expected a Weight value fixture');
+    older.metrics[0].canonical!.value = 73;
+    older.metrics[0].native.value = 73;
+    const twoReadings = { ...evidence, health: { ...evidence.health!, result: projectLoadedHealthRange([...records, older], [],
+      { startDate: window.startDate, endDate: window.endDate, metricIds: ['body_weight'], includeSamples: true }, { sourceRecordsComplete: true, samplesComplete: true }) } };
+    readings.next(twoReadings); fixture.detectChanges();
+    const comparison = component.context()!.selected!.model.twoReadingComparisonText!;
+    expect(comparison).toContain('Recorded change:'); expect(comparison).toContain('lb');
+    expect(host.querySelector('.health-two-reading-comparison')?.textContent).toBe(comparison);
     fixture.componentRef.setInput('thumbnail', true); fixture.detectChanges();
     expect(host.querySelector('.health-thumbnail-source')?.textContent).toBe(component.context()!.selected!.model.series.sourceLabel);
     expect(host.querySelector('.health-thumbnail-value')?.textContent).toBe('158.7 lb');
     expect(host.querySelector('.health-thumbnail-summary')?.getAttribute('aria-label')).toContain('No trend inferred');
+    expect(host.querySelector('.health-thumbnail-summary')?.getAttribute('aria-label')).toContain(comparison);
     expect(watch).toHaveBeenCalledTimes(1); expect(haptics.selection).not.toHaveBeenCalled();
     fixture.componentRef.setInput('thumbnail', false); fixture.detectChanges();
     fixture.componentRef.setInput('providerFilter', ['GarminAPI']); fixture.detectChanges();

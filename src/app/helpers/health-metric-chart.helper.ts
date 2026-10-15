@@ -71,6 +71,7 @@ export interface HealthChartSeriesModel {
   readingLabel: string;
   recordedDateText: string | null;
   evidenceText: string;
+  twoReadingComparisonText: string | null;
   data: HealthChartDatum[];
   displayedPoints: HealthWorkspaceSeriesPoint[];
   numericBounds: { min: number; max: number } | null;
@@ -718,7 +719,7 @@ function buildSeriesModel(
 ): HealthChartSeriesModel {
   const sortedPoints = [...series.points].sort((left, right) => left.timestampMs - right.timestampMs);
   const displayedPoints = downsamplePoints(sortedPoints, MAX_DISPLAY_POINTS);
-  const gapThreshold = resolveGapThreshold(displayedPoints, series.chartKind);
+  const gapThreshold = resolveGapThreshold(displayedPoints, series.chartKind, series.metricId);
   const numericTimestamps = new Set(sortedPoints.filter(point => typeof point.value === 'number' && Number.isFinite(point.value))
     .map(point => point.timestampMs));
   const hasConnectedReadings = displayedPoints.some((point, index) => index > 0
@@ -751,12 +752,8 @@ function buildSeriesModel(
     : '';
   const readingCountText = `${getNumberFormatter().format(sortedPoints.length)} ${sortedPoints.length === 1 ? 'reading' : 'readings'}`;
   const evidenceText = `${readingCountText} recorded${plotKind === 'point' ? ' · No trend inferred' : ''}`;
-  const recordedDateMs = latest && /^\d{4}-\d{2}-\d{2}$/.test(latest.calendarDate)
-    ? Date.parse(`${latest.calendarDate}T12:00:00.000Z`) : NaN;
-  const recordedDateText = Number.isFinite(recordedDateMs)
-    && new Date(recordedDateMs).toISOString().slice(0, 10) === latest?.calendarDate
-    ? getDateTimeFormatter(undefined, { month: 'short', day: 'numeric', year: 'numeric', timeZone: 'UTC' })
-      .format(recordedDateMs) : null;
+  const recordedDateText = latest ? formatRecordedDate(latest.calendarDate) : null;
+  const twoReadingComparisonText = buildTwoReadingComparison(series, sortedPoints, plotKind, unitSettings);
 
   return {
     series,
@@ -764,7 +761,8 @@ function buildSeriesModel(
     readingLabel: healthChartReadingLabel(series),
     recordedDateText,
     evidenceText,
-    data: buildChartData(displayedPoints, plotKind),
+    twoReadingComparisonText,
+    data: buildChartData(displayedPoints, plotKind, gapThreshold),
     displayedPoints,
     numericBounds,
     yMinLabel: series.chartKind === 'step'
@@ -779,8 +777,38 @@ function buildSeriesModel(
     displayedPointCount: displayedPoints.length,
     omittedPointCount: Math.max(0, sortedPoints.length - displayedPoints.length),
     displayUnit,
-    ariaLabel: `${series.sourceLabel}, ${series.semanticLabel}. ${evidenceText}. Latest ${latestText}${recordedDateText ? `, recorded ${recordedDateText}` : ''}. Values are not combined with other sources.`,
+    ariaLabel: `${series.sourceLabel}, ${series.semanticLabel}. ${evidenceText}. Latest ${latestText}${recordedDateText ? `, recorded ${recordedDateText}` : ''}.${twoReadingComparisonText ? ` ${twoReadingComparisonText}.` : ''} Values are not combined with other sources.`,
   };
+}
+
+function formatRecordedDate(calendarDate: string): string | null {
+  const timestampMs = /^\d{4}-\d{2}-\d{2}$/.test(calendarDate) ? Date.parse(`${calendarDate}T12:00:00.000Z`) : NaN;
+  return Number.isFinite(timestampMs) && new Date(timestampMs).toISOString().slice(0, 10) === calendarDate
+    ? getDateTimeFormatter(undefined, { month: 'short', day: 'numeric', year: 'numeric', timeZone: 'UTC' }).format(timestampMs) : null;
+}
+
+function buildTwoReadingComparison(
+  series: HealthWorkspaceSeries,
+  points: readonly HealthWorkspaceSeriesPoint[],
+  plotKind: HealthWorkspaceSeries['chartKind'],
+  unitSettings: UserUnitSettingsInterface | null,
+): string | null {
+  if (series.nativeOnly || plotKind !== 'point' || points.length !== 2) return null;
+  const [first, last] = points;
+  if (typeof first.value !== 'number' || typeof last.value !== 'number'
+    || !Number.isFinite(first.value) || !Number.isFinite(last.value)
+    || !Number.isFinite(first.timestampMs) || !Number.isFinite(last.timestampMs)
+    || first.timestampMs >= last.timestampMs) return null;
+  let firstDate = formatRecordedDate(first.calendarDate), lastDate = formatRecordedDate(last.calendarDate);
+  if (!firstDate || !lastDate) return null;
+  if (first.calendarDate === last.calendarDate) {
+    firstDate = formatTooltipDate(first.timestampMs, first.timezoneOffsetSeconds);
+    lastDate = formatTooltipDate(last.timestampMs, last.timezoneOffsetSeconds);
+  }
+  const difference = last.value - first.value;
+  const formatted = formatHealthValue(series.metricId, Math.abs(difference), series.unit, false, unitSettings);
+  // A difference between two comparable records is not a slope or a trend.
+  return `Recorded change: ${difference > 0 ? '+' : difference < 0 ? '−' : ''}${formatted} · ${firstDate} → ${lastDate}`;
 }
 
 function orderedCategoryLabels(labels: readonly string[], metricId: HealthMetricId): string[] {
@@ -798,9 +826,9 @@ function orderedCategoryLabels(labels: readonly string[], metricId: HealthMetric
 function buildChartData(
   points: readonly HealthWorkspaceSeriesPoint[],
   chartKind: HealthWorkspaceSeries['chartKind'],
+  gapThreshold: number,
 ): HealthChartDatum[] {
   const data: HealthChartDatum[] = [];
-  const gapThreshold = resolveGapThreshold(points, chartKind);
   points.forEach((point, index) => {
     if (
       index > 0
@@ -823,6 +851,7 @@ function buildChartData(
 function resolveGapThreshold(
   points: readonly HealthWorkspaceSeriesPoint[],
   chartKind: HealthWorkspaceSeries['chartKind'],
+  metricId: HealthMetricId,
 ): number {
   const positiveDeltas = points.slice(1)
     .map((point, index) => point.timestampMs - points[index].timestampMs)
@@ -833,9 +862,27 @@ function resolveGapThreshold(
     : DAY_MS;
   // Preserve the existing categorical cadence. The sparse policy is numeric only.
   if (chartKind === 'step') return Math.max(medianDelta * 3, 1);
-  // Sparse numeric histories must not set an arbitrarily long connection limit.
-  // Preserve adaptive intraday cadence, but never bridge more than three days.
-  return Math.min(medianDelta * 3, 3 * DAY_MS);
+  // Presentation continuity limits, not physiological thresholds. Occasional
+  // measurements may have a regular weekly/monthly cadence; daily signals must
+  // still expose missing days. Neither can infer a trend from only two readings.
+  let maximumDays = 3;
+  switch (metricId) {
+    case HEALTH_METRIC_IDS.BodyWeight:
+    case HEALTH_METRIC_IDS.BodyMassIndex:
+    case HEALTH_METRIC_IDS.BodyFat:
+    case HEALTH_METRIC_IDS.BodyWater:
+    case HEALTH_METRIC_IDS.MuscleMass:
+    case HEALTH_METRIC_IDS.BoneMass:
+    case HEALTH_METRIC_IDS.BloodPressureSystolic:
+    case HEALTH_METRIC_IDS.BloodPressureDiastolic:
+      maximumDays = 14;
+      break;
+    case HEALTH_METRIC_IDS.Vo2Max:
+    case HEALTH_METRIC_IDS.FitnessAge:
+      maximumDays = 35;
+      break;
+  }
+  return Math.min(medianDelta * 3, maximumDays * DAY_MS);
 }
 
 function downsamplePoints(

@@ -1,7 +1,11 @@
 <section aria-labelledby="health-overview-title">
   <header class="health-overview-heading">
     <h2 id="health-overview-title" tabindex="-1">Your overview</h2>
-    <p>{{ exampleOnly() ? 'Fictional sample readings · Last 30 days' : 'Latest recorded readings' }}</p>
+    <p class="health-overview-caption"><span>{{ exampleOnly() ? 'Fictional sample readings · Last 30 days' : 'Latest recorded readings' }}</span>
+      <span class="health-overview-save-status" role="status" aria-live="polite">
+        @if (savingPreferences() && !exampleOnly()) { <mat-spinner diameter="16" aria-hidden="true" /><span class="cdk-visually-hidden">Saving Health preferences…</span> }
+      </span>
+    </p>
   </header>
 
   <mat-chip-listbox aria-label="Health categories" [value]="selectedCategory()" (change)="selectCategory($event.value)">
@@ -32,7 +36,7 @@
           <app-dashboard-health-chart [attr.data-chart-preload]="card.hidden ? 'background' : null"
             [user]="user()" [settings]="card.settings" [overview]="true" [hideTitle]="true" [exampleOnly]="exampleOnly()"
             [darkTheme]="darkTheme()" [referenceDate]="referenceDate()" [providerFilter]="providerFilter()" [timelineNotes]="timelineNotes()"
-            (settingsChange)="updateCardSettings($event.settings)" (contextChange)="observeSources($event)" (readFailed)="observeReadFailure(card.id)" />
+            (settingsChange)="updateCardSettings($event.settings, $event.initial)" (contextChange)="observeSources($event)" (readFailed)="observeReadFailure(card.id)" />
         </mat-card-content>
         <mat-card-actions>
           <button mat-button type="button" [attr.aria-label]="'View ' + card.label + ' history'" (click)="metricSelected.emit(card.id)">View history<mat-icon iconPositionEnd aria-hidden="true">arrow_forward</mat-icon></button>

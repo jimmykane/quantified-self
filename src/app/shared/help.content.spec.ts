@@ -459,6 +459,14 @@ describe('help.content', () => {
     expect(health).toContain('an unavailable selected source or an incomplete or failed load stay visible');
     expect(health).toContain('New readings can bring an omitted card back');
     expect(health).toContain('Each chart identifies its own period');
+    expect(health).toContain('saved per metric in your account and restored across visits');
+    expect(health).toContain('Missing or filtered saved choices stay unavailable');
+    expect(health).toContain('metric-aware gaps');
+    expect(health).toContain('monthly fitness estimates');
+    expect(health).toContain('**Two readings, not a trend.**');
+    expect(health).toContain('Exactly two comparable numeric readings from the same source and reading type');
+    expect(health).toContain('recorded-local times distinguish them');
+    expect(health).not.toContain('Overview source choices stay local');
     expect(health).toContain('the HRV highlight uses 14 days');
     expect(health).toContain('**Automatic source selection** considers usable readings, freshness, and distinct days of coverage');
     expect(health).toContain('All recorded zeros remain available');
@@ -686,6 +694,8 @@ describe('help.content', () => {
     expect(healthSection?.content).toContain('not a live sensor feed');
     expect(healthSection?.content).toContain('remembered separately for each highlight in your account settings');
     expect(healthSection?.content).toContain('without overwriting your saved choice');
+    expect(healthSection?.content).toContain('or substituting another source’s chart');
+    expect(healthSection?.content).toContain('**Retry** from both overview and history');
     expect(healthSection?.content).not.toContain('or saves a preferred source');
     expect(healthSection?.content).toContain('local labels such as **Garmin account 1**');
     expect(healthSection?.content).toContain('Detailed sample charts are available for 1d, 14-day, 30-day, and 90-day windows');

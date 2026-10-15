@@ -111,6 +111,24 @@ describe('dashboard HRV chart', () => {
     expect(fixture.componentInstance.chart()).toBe(preferred);
     expect(haptics.selection).not.toHaveBeenCalled();
   });
+  it('does not replace a missing preferred source or a vanished explicit reading with another chart', () => {
+    const fixture = TestBed.createComponent(ChartsHrvComponent), component = fixture.componentInstance;
+    fixture.componentRef.setInput('context', context);
+    fixture.componentRef.setInput('preferredSource', 'missing-account'); fixture.detectChanges();
+    expect(component.chart()).toBeNull(); expect(component.missingSource()).toBe(true);
+    expect(fixture.nativeElement.textContent).toContain('The selected source and reading have no data');
+    expect(fixture.debugElement.query(By.directive(HealthChartStub))).toBeNull();
+    expect(haptics.selection).not.toHaveBeenCalled();
+    const key = context.charts[0].key;
+    component.selectSourceKey(key); fixture.detectChanges();
+    expect(component.chart()?.key).toBe(key); expect(haptics.selection).toHaveBeenCalledOnce();
+    fixture.componentRef.setInput('context', { ...context, charts: [{ ...context.charts[0], key: 'other-reading' }] }); fixture.detectChanges();
+    expect(component.chart()).toBeNull(); expect(component.selectedSourceKey()).toBe(key);
+    expect(fixture.debugElement.query(By.directive(HealthChartStub))).toBeNull();
+    expect(haptics.selection).toHaveBeenCalledOnce();
+    fixture.componentRef.setInput('context', context); fixture.detectChanges();
+    expect(component.chart()?.key).toBe(key); expect(haptics.selection).toHaveBeenCalledOnce();
+  });
   it('shows initial loading, errors and confirmed empty windows without an old chart', () => {
     const fixture = TestBed.createComponent(ChartsHrvComponent);
     for (const value of [{ ...context, charts: [], loading: true }, { ...context, charts: [], error: true }, { ...context, charts: [] }]) {

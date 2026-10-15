@@ -218,7 +218,7 @@ export class DashboardHealthChartComponent {
         }
     }
     selectSource(sourceKey: string): void {
-        if (this.disabled() || sourceKey === this.effectiveSettings().sourceKey || !this.context()?.sources.some(source => source.key === sourceKey))
+        if (this.disabled() || sourceKey === this.context()?.selectedKey || !this.context()?.sources.some(source => source.key === sourceKey))
             return;
         this.haptics.selection();
         this.settingsChange.emit({ settings: { ...this.settings(), sourceKey }, initial: false });

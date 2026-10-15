@@ -11,10 +11,12 @@ import type { DashboardHrvContext } from '../../../helpers/dashboard-hrv-context
 import type { TimelineNoteChartContext } from '../../../helpers/timeline-notes-chart.helper';
 import { HealthMetricSeriesChartComponent } from '../../health/health-metric-series-chart.component';
 import { AppHapticsService } from '../../../services/app.haptics.service';
+import { ChartSourcePickerComponent } from '../../shared/chart-source-picker/chart-source-picker.component';
+import { healthChartSourceChoice } from '../../../helpers/chart-source.helper';
 
 @Component({
   selector: 'app-hrv-chart', standalone: true,
-  imports: [MatTabsModule, MatProgressSpinnerModule, MatProgressBarModule, MatButtonModule, MatIconModule, MatTooltipModule, AppChartSharedModule, HealthMetricSeriesChartComponent],
+  imports: [MatTabsModule, MatProgressSpinnerModule, MatProgressBarModule, MatButtonModule, MatIconModule, MatTooltipModule, AppChartSharedModule, HealthMetricSeriesChartComponent, ChartSourcePickerComponent],
   templateUrl: './charts.hrv.component.html', styleUrls: ['./charts.hrv.component.css'],
   changeDetection: ChangeDetectionStrategy.OnPush,
 })
@@ -30,14 +32,20 @@ export class ChartsHrvComponent {
   private readonly selectedSource = signal<string | null>(null);
   private readonly haptics = inject(AppHapticsService);
   readonly charts = computed(() => this.context()?.charts || []);
+  readonly selectedSourceKey = computed(() => this.selectedSource() || this.preferredSource());
+  readonly sourceChoices = computed(() => this.charts().map(chart => ({ ...healthChartSourceChoice(chart.model.series), key: chart.key })));
   readonly selectedIndex = computed(() => {
-    const selectedIndex = this.charts().findIndex(chart => chart.key === this.selectedSource());
-    if (selectedIndex >= 0) return selectedIndex;
+    if (this.selectedSource()) return this.charts().findIndex(chart => chart.key === this.selectedSource());
     const preferred = this.preferredSource();
-    return Math.max(0, this.charts().findIndex(chart => chart.key === preferred
-      || chart.model.series.sourceSelectionKey === preferred));
+    return preferred ? this.charts().findIndex(chart => chart.key === preferred
+      || chart.model.series.sourceSelectionKey === preferred) : 0;
   });
   readonly chart = computed(() => this.charts()[this.selectedIndex()] || null);
+  readonly missingSource = computed(() => !!this.selectedSourceKey() && !this.chart());
+
+  selectSourceKey(key: string): void {
+    this.selectSource(this.charts().findIndex(chart => chart.key === key));
+  }
 
   selectSource(index: number): void {
     const chart = this.charts()[index];

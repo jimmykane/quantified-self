@@ -54,6 +54,7 @@
           @if (recordedDate()) { <span class="health-recorded-date">Recorded {{ recordedDate() }}</span> }
           @if (chart.model.series.deviceLabel) { <span class="health-device-label">Device: {{ chart.model.series.deviceLabel }}</span> }
           <span class="health-evidence-text">{{ chart.model.evidenceText }}</span>
+          @if (chart.model.twoReadingComparisonText) { <span class="health-evidence-text health-two-reading-comparison">{{ chart.model.twoReadingComparisonText }}</span> }
           @if (chart.status; as status) { <span class="health-status"><span class="health-status-dot" [style.background-color]="chart.statusOverlay?.statusColor"></span>{{ status.label }}</span><span class="health-status-detail">{{ status.detailText }}</span> }
         </div>
       }

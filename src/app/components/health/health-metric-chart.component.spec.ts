@@ -98,6 +98,21 @@ describe('HealthMetricChartComponent', () => {
     expect(host.textContent).not.toContain('Device:');
   });
 
+  it('shows a dated two-reading change per source without drawing a trend or comparing different sources', async () => {
+    const host = await render(null);
+    const first = series(null), last = { ...first.points[0], timestampMs: 30 * 86400000, calendarDate: '1970-01-31', value: 48 };
+    fixture.componentRef.setInput('endTimeMs', 31 * 86400000);
+    fixture.componentRef.setInput('series', [{ ...first, points: [...first.points, last] }, { ...first, id: 'another-source' }]);
+    fixture.detectChanges();
+    const charts = fixture.debugElement.queryAll(By.directive(HealthMetricSeriesChartStubComponent));
+    const model = charts[0].componentInstance.model as HealthChartSeriesModel;
+    expect(model.plotKind).toBe('point');
+    expect(host.textContent).toContain(model.twoReadingComparisonText!);
+    expect(host.textContent).toContain('No trend inferred');
+    expect(charts[1].componentInstance.model.twoReadingComparisonText).toBeNull();
+    expect(host.textContent?.match(/Recorded change:/g)).toHaveLength(1);
+  });
+
   it('stretches chart rows only when the workspace opts in', async () => {
     const host = await render(null);
     expect(host.classList.contains('health-metric-chart-fill-height')).toBe(false);

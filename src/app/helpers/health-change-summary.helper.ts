@@ -80,15 +80,17 @@ export function buildHealthHighlightChangeSignals(
         calendarDate: row.sleepPoint.sleepDate }] : [],
     }));
     const preferred = preferences[card.id];
-    const key = candidates.some(candidate => candidate.key === preferred) ? preferred : selectDefaultHealthSourceKey(candidates);
+    const key = preferred || selectDefaultHealthSourceKey(candidates);
     const series = card.chartSeries.find(series => (series.sourceSelectionKey || series.id) === key);
     const row = card.rows.find(row => (row.sourceSelectionKey || row.id) === key);
     const sourceLabel = series ? `${series.sourceLabel} · ${series.semanticLabel}`
-      : row?.sourceLabel || (card.loading ? 'Source loading' : 'No comparable source');
+      : row?.sourceLabel || (card.loading ? 'Source loading' : preferred ? 'Preferred source unavailable' : 'No comparable source');
     const base = { id: card.id, label: card.label, sourceLabel };
     if (card.loading) return { ...base, state: 'loading', statusText: 'Loading evidence', detailText: 'Waiting for the existing source reads to finish.' };
     if (card.error || card.comparisonUnavailable) return { ...base, state: 'unavailable', statusText: 'Evidence unavailable',
       detailText: 'A source read failed or was incomplete. Available charts remain visible; no range conclusion is made.' };
+    if (preferred && !series && !row) return { ...base, state: 'unavailable', statusText: 'Preferred source unavailable',
+      detailText: 'Your preferred source has no readings in this view. No other source is substituted.' };
     if (series) {
       const status = card.chartStatuses?.[series.id];
       const state = personalRangeChangeState(status);

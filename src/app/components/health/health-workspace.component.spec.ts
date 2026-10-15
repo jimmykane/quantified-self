@@ -63,7 +63,7 @@ vi.mock('@shared/nightly-hrv', async importOriginal => ({
 }));
 import { AppHapticsService } from '../../services/app.haptics.service';
 import { DASHBOARD_ECHARTS_MOBILE_TAP_FEEDBACK_OPTIONS } from '../../helpers/echarts-tooltip-interaction.helper';
-import { AppHealthWorkspaceMetric, AppHealthWorkspaceRange, AppHealthHighlightSources } from '../../models/app-user.interface';
+import { AppHealthWorkspaceMetric, AppHealthWorkspaceRange, AppHealthHighlightSources, AppHealthMetricSources } from '../../models/app-user.interface';
 import {
   HealthWorkspaceSeries,
   type ManualHealthObservationEdit,
@@ -107,6 +107,9 @@ class HealthCategoryOverviewStubComponent {
   @Input() providerFilter: readonly HealthProvider[] = [];
   @Input() referenceDate: string | null = null;
   @Input() timelineNotes: unknown;
+  @Input() preferredSources: AppHealthMetricSources = {};
+  @Input() savingPreferences = false;
+  @Output() sourceSelected = new EventEmitter<{ uid: string; metric: HealthWorkspaceMetricSelection; sourceKey: string }>();
   @Output() metricSelected = new EventEmitter<HealthWorkspaceMetricSelection>();
   @Output() providersObserved = new EventEmitter<{ uid: string; providers: HealthProvider[] }>();
 }
@@ -417,6 +420,7 @@ describe('HealthWorkspaceComponent', () => {
   let hydrateSavedRange: (range: AppHealthWorkspaceRange) => void;
   let hydrateSavedMetric: (metric: AppHealthWorkspaceMetric) => void;
   let hydrateHighlightSources: (sources: AppHealthHighlightSources) => void;
+  let hydrateMetricSources: (sources: AppHealthMetricSources) => void;
   let syncStates: BehaviorSubject<HealthSyncState[]>;
   let setCurrentUserID: (uid: string) => void;
 
@@ -441,6 +445,7 @@ describe('HealthWorkspaceComponent', () => {
     highlightSources?: AppHealthHighlightSources,
     initialUrl = '/',
     platformId = 'browser',
+    metricSources?: AppHealthMetricSources,
   ): Promise<void> {
     haptics = { selection: vi.fn(), success: vi.fn(), error: vi.fn() };
     sourcesDismissed = new Subject();
@@ -468,6 +473,7 @@ describe('HealthWorkspaceComponent', () => {
     updateHealthWorkspacePreferences = vi.fn().mockResolvedValue(undefined);
     const savedHealthWorkspace = {
       ...(highlightSources ? { highlightSources } : {}),
+      ...(metricSources ? { metricSources } : {}),
       ...(savedRange ? { range: savedRange } : {}),
       ...(savedMetric ? { metric: savedMetric } : {}),
     };
@@ -482,6 +488,12 @@ describe('HealthWorkspaceComponent', () => {
       ...current,
       settings: { appSettings: { healthWorkspace: {
         ...current.settings.appSettings?.healthWorkspace, highlightSources,
+      } } },
+    }));
+    hydrateMetricSources = metricSources => user.update(current => ({
+      ...current,
+      settings: { appSettings: { healthWorkspace: {
+        ...current.settings.appSettings?.healthWorkspace, metricSources,
       } } },
     }));
     hydrateSavedRange = range => user.update(current => ({
@@ -1987,7 +1999,7 @@ describe('HealthWorkspaceComponent', () => {
     expect(host.querySelector('#health-priority-card-heart_rate')).toBeNull();
   });
 
-  it('falls back without overwriting a saved source when only another source has today’s readings', async () => {
+  it('shows an unavailable saved source instead of another source’s current readings', async () => {
     await createComponent();
     const summary = fixture.debugElement.query(By.css('[healthVitalsHighlights]')).componentInstance as HealthPrioritySummaryComponent;
     const heart = () => summary.renderedCards().find(card => card.id === 'heart_rate');
@@ -2002,8 +2014,9 @@ describe('HealthWorkspaceComponent', () => {
     component.priorityHeartRateLoad.set(previousDay(original, HEALTH_PROVIDERS.GarminAPI));
     fixture.detectChanges();
     await fixture.whenStable();
-    expect(heart()!.sources).toHaveLength(1);
-    expect(heart()!.sources[0].label).toBe('Suunto');
+    expect(heart()!.sources).toHaveLength(2);
+    expect(heart()!.sources[heart()!.selectedSourceIndex]).toMatchObject({ key, missing: true });
+    expect(heart()!.sources[1].label).toBe('Suunto');
     expect(component.preferredHighlightSources().heart_rate).toBe(key);
     component.priorityHeartRateLoad.set(previousDay(original));
     fixture.detectChanges();
@@ -2085,8 +2098,12 @@ describe('HealthWorkspaceComponent', () => {
     component.toggleProvider(HEALTH_PROVIDERS.SuuntoApp);
     fixture.detectChanges();
     await fixture.whenStable();
-    expect(heart().sources).toHaveLength(1);
-    expect(heart().sources[0].key).not.toBe(selectedKey);
+    expect(heart().sources).toHaveLength(2);
+    expect(heart().sources[heart().selectedSourceIndex]).toMatchObject({ key: selectedKey, missing: true });
+    fixture.detectChanges();
+    const heartElement = fixture.nativeElement.querySelector('[aria-labelledby="health-priority-card-heart_rate"]') as HTMLElement;
+    expect(heartElement.textContent).toContain('Your preferred source has no readings');
+    expect(heartElement.querySelector('app-health-metric-series-chart')).toBeNull();
     expect(component.preferredHighlightSources().heart_rate).toBe(selectedKey);
     component.showAllProviders();
     fixture.detectChanges();
@@ -2100,6 +2117,96 @@ describe('HealthWorkspaceComponent', () => {
     fixture.detectChanges();
     await fixture.whenStable();
     expect(component.preferredHighlightSources()).toEqual({ heart_rate: other, sleep: 'health-series-0123456789abcdef' });
+  });
+
+  it('restores per-metric sources on a fresh visit and protects touched choices from late settings', async () => {
+    const saved = { body_weight: 'health-series-0123456789abcdef', vo2_max: 'health-series-abcdef0123456789' };
+    await createComponent(undefined, undefined, {}, undefined, undefined, '/', 'browser', saved);
+    const overview = fixture.debugElement.query(By.directive(HealthCategoryOverviewStubComponent)).componentInstance as HealthCategoryOverviewStubComponent;
+    expect(overview.preferredSources).toEqual(saved);
+    expect(updateHealthWorkspacePreferences).not.toHaveBeenCalled();
+    expect(haptics.selection).not.toHaveBeenCalled();
+    const next = 'health-series-1111111111111111';
+    overview.sourceSelected.emit({ uid: 'user-1', metric: 'body_weight', sourceKey: next });
+    fixture.detectChanges(); await fixture.whenStable();
+    expect(updateHealthWorkspacePreferences).toHaveBeenCalledExactlyOnceWith('user-1', {
+      metric: HEALTH_METRIC_IDS.RestingHeartRate, range: '30d', metricSources: { body_weight: next },
+    });
+    hydrateMetricSources({ ...saved, vo2_max: 'health-series-2222222222222222' });
+    fixture.detectChanges(); await fixture.whenStable();
+    expect(component.preferredMetricSources()).toEqual({ body_weight: next, vo2_max: 'health-series-2222222222222222' });
+    overview.sourceSelected.emit({ uid: 'user-1', metric: 'body_weight', sourceKey: next });
+    overview.sourceSelected.emit({ uid: 'user-1', metric: 'body_weight', sourceKey: 'raw-account' });
+    overview.sourceSelected.emit({ uid: 'user-1', metric: 'toString' as never, sourceKey: next });
+    overview.sourceSelected.emit({ uid: 'other-owner', metric: 'body_weight', sourceKey: saved.body_weight });
+    expect(updateHealthWorkspacePreferences).toHaveBeenCalledTimes(1);
+    expect(haptics.selection).not.toHaveBeenCalled();
+  });
+
+  it('queues metric-source and range changes together and discards pending pins when the owner changes', async () => {
+    await createComponent();
+    let finish!: () => void;
+    updateHealthWorkspacePreferences.mockReturnValueOnce(new Promise<void>(resolve => finish = resolve));
+    const select = (metric: HealthWorkspaceMetricSelection, sourceKey: string) => component.selectMetricSource({ uid: 'user-1', metric, sourceKey });
+    select('body_weight', 'health-series-1111111111111111');
+    component.selectRange('90d');
+    select('vo2_max', 'health-series-2222222222222222');
+    expect(updateHealthWorkspacePreferences).toHaveBeenCalledTimes(1);
+    finish(); await fixture.whenStable();
+    expect(updateHealthWorkspacePreferences).toHaveBeenLastCalledWith('user-1', {
+      metric: HEALTH_METRIC_IDS.RestingHeartRate, range: '90d',
+      metricSources: { body_weight: 'health-series-1111111111111111', vo2_max: 'health-series-2222222222222222' },
+    });
+    updateHealthWorkspacePreferences.mockReturnValueOnce(new Promise<void>(resolve => finish = resolve));
+    select('body_weight', 'health-series-3333333333333333');
+    select('body_weight', 'health-series-4444444444444444');
+    setCurrentUserID('user-2'); hydrateMetricSources({}); fixture.detectChanges();
+    finish(); await fixture.whenStable();
+    select('vo2_max', 'health-series-5555555555555555');
+    expect(component.preferredMetricSources()).toEqual({});
+    expect(updateHealthWorkspacePreferences).toHaveBeenCalledTimes(3);
+    expect(updateHealthWorkspacePreferences.mock.calls.every(([uid]) => uid === 'user-1')).toBe(true);
+  });
+
+  it('retains an unsaved metric pin and retries it through the existing preference failure notice', async () => {
+    await createComponent();
+    updateHealthWorkspacePreferences.mockRejectedValueOnce(new Error('offline'));
+    const sourceKey = 'health-series-0123456789abcdef';
+    component.selectMetricSource({ uid: 'user-1', metric: 'body_weight', sourceKey });
+    await fixture.whenStable(); fixture.detectChanges();
+    expect(component.preferredMetricSources()).toEqual({ body_weight: sourceKey });
+    expect(component.preferencesSaveFailed()).toBe(true); expect(haptics.error).toHaveBeenCalledOnce();
+    const alert = fixture.nativeElement.querySelector('.health-range-save-status-error') as HTMLElement;
+    expect(component.metricDetailOpen()).toBe(false);
+    expect(alert.closest('[hidden]')).toBeNull();
+    component.retryPreferenceSave(); await fixture.whenStable();
+    expect(component.preferencesSaveFailed()).toBe(false);
+    expect(updateHealthWorkspacePreferences).toHaveBeenLastCalledWith('user-1', {
+      metric: HEALTH_METRIC_IDS.RestingHeartRate, range: '30d', metricSources: { body_weight: sourceKey },
+    });
+  });
+
+  it('requires an explicit tab choice to replace an unavailable preferred source', async () => {
+    await createComponent();
+    const summary = fixture.debugElement.query(By.css('[healthVitalsHighlights]')).componentInstance as HealthPrioritySummaryComponent;
+    const initial = summary.renderedCards().find(card => card.id === 'heart_rate')!;
+    const missingKey = initial.sources[1].key, availableKey = initial.sources[0].key;
+    hydrateHighlightSources({ heart_rate: missingKey });
+    component.toggleProvider(HEALTH_PROVIDERS.SuuntoApp);
+    fixture.detectChanges(); await fixture.whenStable(); fixture.detectChanges();
+    const heart = fixture.nativeElement.querySelector('[aria-labelledby="health-priority-card-heart_rate"]') as HTMLElement;
+    expect(heart.querySelector('app-health-metric-series-chart')).toBeNull();
+    expect(updateHealthWorkspacePreferences).not.toHaveBeenCalled();
+    haptics.selection.mockClear();
+    heart.querySelectorAll<HTMLElement>('[role="tab"]')[1].click();
+    fixture.detectChanges(); await fixture.whenStable(); fixture.detectChanges();
+    expect(heart.querySelectorAll('app-health-metric-series-chart')).toHaveLength(1);
+    expect(heart.textContent).not.toContain('Your preferred source has no readings');
+    expect(component.preferredHighlightSources().heart_rate).toBe(availableKey);
+    expect(updateHealthWorkspacePreferences).toHaveBeenCalledExactlyOnceWith('user-1', {
+      metric: HEALTH_METRIC_IDS.RestingHeartRate, range: '30d', highlightSources: { heart_rate: availableKey },
+    });
+    expect(haptics.selection).toHaveBeenCalledOnce();
   });
 
   it('keeps the selected source when newer data changes source ordering', async () => {
