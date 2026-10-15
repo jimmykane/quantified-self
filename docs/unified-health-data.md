@@ -397,19 +397,36 @@ The authenticated `/health` route is client-rendered and `noindex`, with owner-s
 
 #### Calmer change summary
 
-On Health's **All** overview, **What changed?** sits before the existing highlights and metric cards.
-The same flat shared component appears before Dashboard Today for the signed-in owner, following the existing
-Show/Hide Today preference. It is absent from another person's Dashboard, focused metric history and category views.
+On Health's **All** overview, **Your recovery** sits before the existing highlights and metric cards.
+The same flat shared component uses a compact **At a glance** presentation before Dashboard Today for the signed-in
+owner, following the existing Show/Hide Today preference. It is absent from another person's Dashboard, focused metric history and category views.
 It does not hide, reorder or rewrite saved Dashboard charts or change the Health card availability rules.
 
-The first version covers Sleep and nightly HRV from reads already owned by each surface. Only existing HRV
+Health's recovery summary covers Sleep and nightly HRV from reads already owned by that surface. Existing HRV
 personal-range classifications count as assessed evidence: positive means within range, caution/negative means
 outside range, and neutral/missing baseline or recent average means insufficient evidence. Within range is not
-proof of a stable time trend or a medical all-clear. Sleep is recorded context, not a newly classified normal signal;
-other metrics are not implicitly assessed. No anomaly engine, extra score, threshold or cross-source average is added.
+proof of a stable time trend or a medical all-clear. Sleep is recorded context, not a newly classified normal signal.
+Dashboard's `dashboard-glance.helper.ts` projects five existing Today assessments: Readiness's Ready/Mixed/Recover
+label and score, the TSS-backed training-state label, recorded Sleep score/date, HRV's personal range and overnight
+HR's existing sleep-source baseline tone. It consumes already-formatted values and reuses those assessments unchanged.
+Sleep adds no good/bad score threshold; overnight HR is not daily resting HR. No anomaly engine, extra score,
+threshold, query or cross-source average is added. The Training workspace and its calculations are unchanged.
 
-Outside-range signals remain visible with their source. **Show details** reveals source-separated evidence,
-existing range/baseline wording and recorded dates using shared local date and canonical metric formatters.
+Health keeps its comparison counts and outside-range signals visible with their source. Dashboard shows only one
+sentence combining the existing Ready label, training state and recorded sleep on ordinary days, without counts,
+another score, scope rows, repeated notices or disclaimer copy.
+Its surface-free accent rail reflects that same dominant state without a separate status icon; recorded, insufficient and
+loading evidence stay neutral rather than borrowing the within-range appearance. Color is supplementary to the sentence.
+The combined Dashboard summary prioritizes existing caution/outside-range, unavailable, insufficient and loading
+states before the normal-day sentence, showing at most two attention clauses. `attention`/`available` presentation
+states preserve existing assessments without calling them personal ranges. Missing data cannot become an all-clear.
+**Show details** is available for existing caution, outside-range, unavailable or insufficient signals. Mixed/Recover
+Readiness includes all five contributing signals, including recorded Sleep scores and still-loading evidence; otherwise
+details contain only signals needing attention. Yesterday's sleep cannot satisfy today's Readiness gate and any older
+score is explicitly last available. TSS training state stays independent when sleep is loading or fails, and a missing
+training-state classification cannot become available. A pure loading state remains a loading sentence without an empty disclosure.
+The disclosure closes silently when its attention signals resolve, the owner changes or the presentation changes.
+**Show details** reveals source-separated evidence, existing range/baseline wording and recorded dates using shared local date and canonical metric formatters.
 Loading, failed refreshes, bounded incomplete reads and missing evidence remain distinct from within range.
 Health follows the same selected Highlight account and semantic series, with missing or filtered choices unavailable without
 overwriting preferences. Dashboard attributes Sleep and HRV independently from their already-loaded evidence,

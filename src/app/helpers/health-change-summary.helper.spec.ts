@@ -1,4 +1,4 @@
-import { buildHealthChangeSummary, buildHealthHighlightChangeSignals, personalRangeChangeState, resolveHealthChangeSourceLabel, type HealthChangeSignal } from './health-change-summary.helper';
+import { buildDashboardGlanceSummary, buildHealthChangeSummary, buildHealthHighlightChangeSignals, personalRangeChangeState, resolveHealthChangeSourceLabel, type HealthChangeSignal } from './health-change-summary.helper';
 import type { HealthPriorityCardView } from '../components/health/health-priority-summary.component';
 import type { HealthWorkspaceSeries } from './health-workspace.helper';
 
@@ -6,26 +6,58 @@ const signal = (state: HealthChangeSignal['state'], id: string = state): HealthC
   id, state, label: 'HRV', sourceLabel: 'Suunto · Overnight average', statusText: state, detailText: 'Same-source evidence',
 });
 
+describe('Dashboard at a glance', () => {
+  const sleep = (state: HealthChangeSignal['state']) => ({ ...signal(state, 'sleep'), label: 'Sleep' });
+  it('uses one specific sentence on a normal day without treating recorded Sleep as a normal-range assessment', () => {
+    expect(buildDashboardGlanceSummary([sleep('recorded'), signal('within-range', 'hrv')])).toEqual({
+      headline: 'Your 7-day HRV average is within your usual range.', attentionSignals: [], state: 'within-range',
+    });
+    expect(buildDashboardGlanceSummary([sleep('recorded')])).toEqual({ headline: 'Your latest sleep reading is available.', attentionSignals: [], state: 'recorded' });
+    expect(buildDashboardGlanceSummary([])).toEqual({ headline: 'No recent sleep or nightly HRV readings yet.', attentionSignals: [], state: null });
+  });
+  it('keeps outside-range findings ahead of failed, pending or insufficient evidence', () => {
+    const outside = signal('outside-range', 'hrv'), missing = sleep('unavailable');
+    expect(buildDashboardGlanceSummary([missing, outside, signal('loading'), signal('insufficient')])).toMatchObject({
+      headline: 'Your 7-day HRV average is outside your usual range.',
+      state: 'outside-range',
+      attentionSignals: [missing, outside, signal('insufficient')],
+    });
+  });
+  it.each([
+    ['unavailable', 'Your 7-day HRV average is unavailable right now.'],
+    ['insufficient', 'Your 7-day HRV average is not ready to compare yet.'],
+  ] as const)('offers the %s reason without an all-clear claim', (state, headline) => {
+    const unavailable = signal(state, 'hrv');
+    expect(buildDashboardGlanceSummary([unavailable, sleep('recorded')])).toEqual({ headline, attentionSignals: [unavailable], state });
+  });
+  it('keeps transient loading compact without offering empty details', () => {
+    expect(buildDashboardGlanceSummary([sleep('loading'), signal('within-range', 'hrv')])).toEqual({
+      headline: 'Sleep is still loading.', attentionSignals: [], state: 'loading',
+    });
+  });
+});
+
 describe('Health change summary', () => {
   it('separates normal evidence from missing, pending, failed and unassessed evidence', () => {
     const summary = buildHealthChangeSummary(['within-range', 'insufficient', 'recorded', 'loading', 'unavailable'].map(state => signal(state as HealthChangeSignal['state'])));
-    expect(summary.headline).toBe('Some signals are still loading.');
-    expect(summary.coverageText).toBe('1 within range · 1 needs more evidence · 1 recorded only · 1 loading · 1 unavailable');
+    expect(summary.headline).toBe('We’re still loading some of your readings.');
+    expect(summary.coverageText).toBe('1 within usual range · 1 needs more readings · 1 reading shown without comparison · 1 loading · 1 unavailable');
     expect(summary.changes).toEqual([]);
   });
   it('surfaces outside-range evidence even while another source is missing', () => {
     const summary = buildHealthChangeSummary([signal('outside-range'), signal('insufficient')]);
-    expect(summary.headline).toBe('One signal is outside its usual range.');
+    expect(summary.headline).toBe('One reading is outside your usual range.');
     expect(summary.changes).toEqual([signal('outside-range')]);
     expect(buildHealthChangeSummary([signal('outside-range'), signal('outside-range', 'second')]).headline)
-      .toBe('2 signals are outside their usual ranges.');
+      .toBe('2 readings are outside your usual range.');
   });
   it('qualifies the within-range conclusion instead of making an all-clear claim', () => {
     expect(buildHealthChangeSummary([signal('within-range'), signal('insufficient')]).headline)
-      .toBe('Assessed signals are within their personal ranges.');
-    expect(buildHealthChangeSummary([]).headline).toBe('More evidence is needed to assess changes.');
-    expect(buildHealthChangeSummary([signal('recorded')]).headline).toBe('More evidence is needed to assess changes.');
-    expect(buildHealthChangeSummary([signal('unavailable')]).headline).toBe('Some evidence is unavailable.');
+      .toBe('The readings we can compare are within your usual range.');
+    expect(buildHealthChangeSummary([]).headline).toBe('No sleep or nightly HRV readings to compare yet.');
+    expect(buildHealthChangeSummary([signal('insufficient')]).headline).toBe('More readings are needed to find your usual range.');
+    expect(buildHealthChangeSummary([signal('recorded')]).headline).toBe('Your latest readings are shown below.');
+    expect(buildHealthChangeSummary([signal('unavailable')]).headline).toBe('We couldn’t load some of your readings.');
   });
   it('uses the existing personal-range tone, including caution, and refuses incomplete numeric ranges', () => {
     const range = { currentAverage: 40, normalRange: { min: 35, max: 45 }, tone: 'positive' as const };

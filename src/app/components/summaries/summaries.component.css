@@ -2,6 +2,10 @@
   margin: 0 0 0.75rem;
 }
 
+.dashboard-summary-heading--with-recovery {
+  margin-bottom: 0;
+}
+
 .dashboard-summary-header {
   margin: 0;
 }

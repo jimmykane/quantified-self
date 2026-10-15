@@ -2,7 +2,7 @@ import { ChangeDetectionStrategy, Component, computed, effect, inject, input, si
 import { MatButtonModule } from '@angular/material/button';
 import { MatIconModule } from '@angular/material/icon';
 import { AppHapticsService } from '../../../services/app.haptics.service';
-import { buildHealthChangeSummary, type HealthChangeSignal } from '../../../helpers/health-change-summary.helper';
+import { buildDashboardGlanceSummary, buildHealthChangeSummary, type HealthChangeSignal } from '../../../helpers/health-change-summary.helper';
 
 @Component({
   selector: 'app-health-change-summary', standalone: true,
@@ -14,17 +14,28 @@ import { buildHealthChangeSummary, type HealthChangeSignal } from '../../../help
 export class HealthChangeSummaryComponent {
   readonly signals = input.required<readonly HealthChangeSignal[]>();
   readonly summaryId = input.required<string>();
+  /** Dashboard keeps ordinary days to one sentence; Health retains its full overview. */
+  readonly compact = input(false);
   /** Clear private disclosure state when the account or overview scope changes. */
   readonly scopeKey = input.required<string>();
   readonly expanded = signal(false);
   readonly summary = computed(() => buildHealthChangeSummary(this.signals()));
+  readonly glance = computed(() => buildDashboardGlanceSummary(this.signals()));
+  readonly detailsAvailable = computed(() => !this.compact() || this.glance().attentionSignals.length > 0);
+  readonly detailSignals = computed(() => this.compact() ? this.glance().attentionSignals : this.signals());
   private readonly haptics = inject(AppHapticsService);
 
   constructor() {
-    effect(() => { this.scopeKey(); this.expanded.set(false); });
+    effect(() => {
+      this.scopeKey();
+      this.compact();
+      this.detailsAvailable();
+      this.expanded.set(false);
+    });
   }
 
   toggleDetails(): void {
+    if (!this.detailsAvailable()) return;
     this.haptics.selection();
     this.expanded.update(expanded => !expanded);
   }
