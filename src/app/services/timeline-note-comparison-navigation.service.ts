@@ -1,5 +1,6 @@
 import { Injectable, effect, inject } from '@angular/core';
-import { Router } from '@angular/router';
+import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
+import { NavigationEnd, Router } from '@angular/router';
 import type { TimelineNotesListState } from '../components/timeline-notes/timeline-notes-dialog.component';
 import { AppTimelineNotesService } from './app.timeline-notes.service';
 
@@ -8,13 +9,17 @@ import { AppTimelineNotesService } from './app.timeline-notes.service';
 export class TimelineNoteComparisonNavigationService {
   private readonly router = inject(Router);
   private readonly notes = inject(AppTimelineNotesService);
-  private context: { uid: string; url: string; list: TimelineNotesListState } | null = null;
+  private context: { uid: string; url: string; destination: string; list: TimelineNotesListState } | null = null;
   constructor() {
     effect(() => { if (this.context?.uid !== this.notes.uid()) this.context = null; });
+    this.router.events.pipe(takeUntilDestroyed()).subscribe(event => {
+      if (this.context && event instanceof NavigationEnd
+        && event.urlAfterRedirects.split(/[?#]/)[0] !== this.context.destination) this.context = null;
+    });
   }
   async compare(uid: string, noteId: string, list: TimelineNotesListState): Promise<boolean> {
     if (!this.notes.isOwner(uid) || !/^[a-f0-9]{64}$/.test(noteId)) return false;
-    const context = { uid, url: this.router.url, list };
+    const context = { uid, url: this.router.url, destination: `/health/compare/${noteId}`, list };
     this.context = context;
     try {
       const navigated = await this.router.navigate(['/health/compare', noteId]);

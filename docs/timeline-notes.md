@@ -86,8 +86,11 @@ Saved notes offer **Compare** in the list and the pristine editor. Unsaved draft
 manager closes before navigating to `/health/compare/:noteId`; the route re-reads that note from the signed-in owner's
 existing collection. It is auth/onboarding guarded, client-rendered and noindexed, with exact CSR/Hosting and offline
 navigation registration. Its title metadata is static, never private note text. A transient owner-scoped return context
-retains the originating URL and list-page cursors only in memory. Back returns there and reopens that page; a direct visit
-falls back to Health and the first notes page. Failed navigation restores the manager without writing the note.
+retains the originating URL and list-page cursors only in memory, bound to that comparison destination. A completed
+navigation away (including browser Back) clears it, so a later direct visit cannot reuse an unrelated return location.
+The in-app Back action returns there and reopens that page; a direct visit falls back to Health and the first notes
+page. Cancelled returns retain their context for retry. Failed comparison navigation restores the manager without
+writing the note.
 
 The MVP compares the **start** of one note, not its end or the end of an intervention. The change day and today's
 incomplete calendar day are excluded. Equal 7/14/28-day windows default to 14. Main-night duration, eligible nightly HRV
@@ -110,8 +113,8 @@ Missing device/timezone metadata is not guessed. Daily chart points use UTC-noon
 observation instants. The shared Health renderer opts into date-only tooltips, before/after series, a start marker and
 explicit nulls for every missing/change day. Existing Health/Dashboard charts retain their ordinary rendering. An
 ungated two-reading difference is also suppressed in the comparison chart's accessible description, so sparse history
-cannot bypass the comparison's coverage gates. An
-explicitly selected hidden note can be analyzed; this anchor never changes global/per-note chart visibility or exposes
+cannot bypass the comparison's coverage gates. An explicitly selected hidden note can be analyzed; this anchor never
+changes global/per-note chart visibility or exposes
 other notes. Public/profile previews receive no private comparison evidence.
 
 `TimelineNoteComparisonService` reuses `HealthMetricQueryService` for one combined summary-only window per Health metric
