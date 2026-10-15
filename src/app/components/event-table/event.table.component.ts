@@ -130,7 +130,6 @@ export class EventTableComponent extends DataTableAbstractDirective implements O
   private libraryPageIndex = 0;
   private suppressLibraryPageFeedback = false;
   private librarySort = { active: 'Start Date', direction: 'desc' as 'asc' | 'desc' };
-  readonly libraryColumnLabels: Record<string, string> = { 'Start Date': 'Date', Name: 'Activity' };
   readonly libraryAvailableColumns = [
     'Distance', 'Duration',
     ...AppUserUtilities.getDefaultSelectedTableColumns()
@@ -1364,7 +1363,7 @@ export class EventTableComponent extends DataTableAbstractDirective implements O
       return;
     }
     const processStart = performance.now();
-    const dateFormat = this.isLibraryPresentation ? 'd MMM' : this.isHandset ? 'd MMM yy' : 'EEEEEE d MMM yy HH:mm';
+    const dateFormat = this.isHandset ? 'd MMM yy' : 'EEEEEE d MMM yy HH:mm';
     const removedAscentTypes = new Set((this.user.settings.summariesSettings?.removeAscentForEventTypes || []) as ActivityTypes[]);
     const removedDescentTypes = new Set((((this.user.settings.summariesSettings as any)?.removeDescentForEventTypes || [])) as ActivityTypes[]);
     const renderContextKey = this.buildRowRenderContextKey(dateFormat);
@@ -1499,7 +1498,6 @@ export class EventTableComponent extends DataTableAbstractDirective implements O
     statRowElement['Shared Title'] = isShared ? this.sharedEventTooltip : '';
     statRowElement['Name'] = event.name;
     statRowElement['Start Date'] = startDate ? this.datePipe.transform(startDate, dateFormat) : 'None?';
-    if (this.isLibraryPresentation) statRowElement['Start Time'] = startDate ? this.datePipe.transform(startDate, 'HH:mm') : '';
     statRowElement['Activity Types'] = event.getActivityTypesAsString();
     if (this.isLibraryPresentation) {
       const name = getTagLibraryActivityName(event);
@@ -1638,6 +1636,7 @@ export class EventTableComponent extends DataTableAbstractDirective implements O
 
     return JSON.stringify({
       dateFormat,
+      presentation: this.presentation,
       unitSettings: this.user?.settings?.unitSettings ?? null,
       removeAscentForEventTypes: [...(summariesSettings?.removeAscentForEventTypes || [])].sort(),
       removeDescentForEventTypes: [...(summariesSettings?.removeDescentForEventTypes || [])].sort(),

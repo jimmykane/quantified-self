@@ -7,9 +7,11 @@ Its sidenav entry is temporarily hidden; the route remains available by URL.
 `?tag=<label>` restores the selected tag without initial haptic feedback. The route uses the shared workspace shell,
 Material controls, and the global scrollbar skin. The selector stacks above the table on phones. Table metrics continue
 to use the signed-in user's unit settings through the existing Sports Lib display path.
-The shared table's `tag-library` presentation matches the selected mockup: compact tag links that wrap on phones,
-text column headings, activity name and sport grouped together, and split date/time cells. Its initial columns are
-Date, Activity, Distance, Duration, and Tags, with five rows per page. Column, sort, and page-size choices stay local
+The `tag-library` presentation uses the same `EventTableComponent` appearance as Calendar and Dashboard: icon headings,
+row density, cell spacing and typography, sport-colored row accents, tag chips, and responsive date formatting.
+Presentation-specific styles only arrange the search/column toolbar and grouped activity identity; they do not
+override the table skin. Custom activity names use the shared single-line truncation with their full text in a tooltip.
+Its initial columns are Date, Activity, Distance, Duration, and Tags, with five rows per page. Column, sort, and page-size choices stay local
 to the Tags page instead of changing Dashboard preferences. Paging/completeness controls sit below the table.
 An ISO activity name equal to its recorded start time is treated as a generated timestamp name and hidden in Tags.
 Its sport becomes the activity link, with the sport and date identifying accessible controls. Custom names and the

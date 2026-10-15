@@ -385,9 +385,11 @@ describe('EventTableComponent', () => {
         expect(fixture.nativeElement.querySelector('.qs-search-field')).toBeTruthy();
     });
 
-    it('presents the Tag library with grouped activity names, compact dates, and the chosen default columns', () => {
+    it('presents the Tag library with grouped activity names and the same date display as Calendar and Dashboard', () => {
         component.showActions = true;
         component.events[0].startDate = new Date('2026-10-11T08:15:00');
+        component.ngOnChanges({ events: new SimpleChange(component.events, [...component.events], false) });
+        const dashboardDate = component.data.data[0]['Start Date'];
         component.presentation = 'tag-library';
         component.ngOnChanges({ presentation: new SimpleChange('dashboard', 'tag-library', false) });
         expect(component.displayedColumns).toEqual(['Checkbox', 'Start Date', 'Name', 'Distance', 'Duration', 'Tags', 'Actions']);
@@ -397,8 +399,7 @@ describe('EventTableComponent', () => {
         expect(component.isColumnHeaderSortable('Name')).toBe(true);
         expect(component.data.data[0]['Name']).toBe('Test Run');
         expect(component.data.data[0]['Activity Types']).toBe('Run');
-        expect(component.data.data[0]['Start Date']).toBe('11 Oct');
-        expect(component.data.data[0]['Start Time']).toBe('08:15');
+        expect(component.data.data[0]['Start Date']).toBe(dashboardDate);
     });
 
     it('keeps Tag library columns, sorting, and pagination local without changing Dashboard preferences', async () => {
@@ -451,8 +452,14 @@ describe('EventTableComponent', () => {
     it('keeps timestamp names and existing accessible labels in Dashboard presentation', () => {
         const event = component.events[0];
         event.name = event.startDate.toISOString();
-        component.ngOnChanges({ events: new SimpleChange(component.events, [...component.events], false) });
+        component.presentation = 'tag-library';
+        component.ngOnChanges({ presentation: new SimpleChange('dashboard', 'tag-library', false) });
+        expect(component.data.data[0]['Library Activity Name']).toBe('');
+        const libraryDate = component.data.data[0]['Start Date'];
+        component.presentation = 'dashboard';
+        component.ngOnChanges({ presentation: new SimpleChange('tag-library', 'dashboard', false) });
         const row = component.data.data[0];
+        expect(row['Start Date']).toBe(libraryDate);
         expect(row['Library Activity Name']).toBeUndefined();
         expect(row['Library Activity Label']).toBeUndefined();
         expect(row['Tag Action Label']).toBe(`Add activity tags for ${event.name}`);
