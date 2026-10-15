@@ -284,6 +284,61 @@ describe('EventCardChartComponent', () => {
     expect(mockSnackBar.open).toHaveBeenCalledWith('Could not save zone colors. Please try again.', 'OK', expect.any(Object));
   });
 
+  it.each(['save failure', 'turning colors back on'])('ignores a delayed uncolored worker result after %s', async reason => {
+    setZoneActivity();
+    const coloredPanels: eventDataHelper.EventChartPanelModel[] = [{
+      dataType: DataPower.type, displayName: 'Power', unit: 'W', colorGroupKey: 'Power',
+      minX: 0, maxX: 10,
+      series: [{
+        id: 'zone-activity::Power', activityID: 'zone-activity', activityName: 'Cycling',
+        color: '#ff0000', streamType: DataPower.type, displayName: 'Power', unit: 'W',
+        points: [{ x: 0, y: 100, time: 0 }, { x: 10, y: 150, time: 10 }],
+        zoneColorPieces: [
+          { zone: 'Zone 1', color: '#0099ff', lt: 120 },
+          { zone: 'Zone 2', color: '#00aa00', gte: 120 },
+        ],
+      }],
+    }];
+    const uncoloredPanels = coloredPanels.map(panel => ({
+      ...panel,
+      series: panel.series.map(({ zoneColorPieces: _zoneColorPieces, ...series }) => series),
+    }));
+    const worker = TestBed.inject(EventChartPanelWorkerService);
+    vi.spyOn(worker, 'shouldUseWorker').mockReturnValue(true);
+    const build = vi.spyOn(worker, 'buildPanels').mockResolvedValue(coloredPanels);
+    const rebuild = (source: string) => (component as unknown as {
+      rebuildPanels(source: string): Promise<void>;
+    }).rebuildPanels(source);
+    await rebuild('initial-zone-colors');
+    expect(mockLogger.error).not.toHaveBeenCalled();
+    expect(component.allChartPanels).toBe(coloredPanels);
+
+    let finishBuild!: (panels: eventDataHelper.EventChartPanelModel[]) => void;
+    build.mockImplementationOnce(() => new Promise(resolve => { finishBuild = resolve; }));
+    let failSave!: (error: Error) => void;
+    if (reason === 'save failure') {
+      mockUserSettingsQuery.updateChartSettings.mockImplementationOnce(() => new Promise<void>((_resolve, reject) => { failSave = reject; }));
+    }
+    const save = component.onColorIntensityZoneLinesChange(false);
+    const delayedRebuild = rebuild('disable-zone-colors');
+    expect(build).toHaveBeenLastCalledWith(expect.objectContaining({ colorIntensityZoneLines: false }), expect.any(Function));
+
+    if (reason === 'save failure') {
+      failSave(new Error('offline'));
+      await save;
+    } else {
+      await save;
+      await component.onColorIntensityZoneLinesChange(true);
+    }
+    await rebuild('restore-zone-colors');
+    expect(component.isLoading).toBe(false);
+    finishBuild(uncoloredPanels);
+    await delayedRebuild;
+    expect(component.colorIntensityZoneLines()).toBe(true);
+    expect(component.allChartPanels).toBe(coloredPanels);
+    expect(component.isLoading).toBe(false);
+  });
+
   it.each([{ isMerge: true }, { benchmarkResults: { test: {} } }])('hides and ignores zone colors for comparisons: %j', async comparison => {
     setZoneActivity();
     component.event = { ...component.event, ...comparison };

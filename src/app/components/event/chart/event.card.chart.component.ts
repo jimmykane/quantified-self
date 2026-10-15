@@ -794,18 +794,24 @@ export class EventCardChartComponent implements OnInit, OnChanges, OnDestroy {
     this.renderedXAxisType = effectiveXAxisType;
     this.zoomRangeOwnerEventID = nextEventID;
 
+    // Restoring a cached view must also invalidate any worker still building
+    // an older preference, including a failed optimistic zone-color change.
+    const rebuildRequestID = this.panelBuildRequestID + 1;
+    this.panelBuildRequestID = rebuildRequestID;
+
     if (!shouldRebuildPanels) {
       this.allChartPanels = this.applyDeviceAppearance(this.allChartPanels, allActivities);
       this.applyDataTypeVisibility();
     }
 
     if (!shouldRebuildPanels && !shouldRebuildLaps && !shouldRebuildSwimLengths) {
+      if (this.isLoading) {
+        this.loaded();
+      }
       this.cdr.markForCheck();
       return;
     }
 
-    const rebuildRequestID = this.panelBuildRequestID + 1;
-    this.panelBuildRequestID = rebuildRequestID;
     this.loading();
 
     try {
