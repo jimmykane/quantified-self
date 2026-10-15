@@ -120,6 +120,7 @@ describe.skipIf(!process.env.FIRESTORE_EMULATOR_HOST)('Suunto worker with real F
         nodes: [{ kind: 'step', id: 'step', purpose: 'work', ending: { kind: 'time', seconds: 600 }, targets: [] }] } });
   });
   afterEach(() => { vi.unstubAllEnvs(); vi.restoreAllMocks(); });
+  // Recursive cleanup covers every fixture user in the full provider matrix.
   afterAll(async () => {
     for (const id of users) {
       await db.recursiveDelete(db.collection('users').doc(id)); await db.recursiveDelete(db.collection('suuntoAppAccessTokens').doc(id));
@@ -130,7 +131,7 @@ describe.skipIf(!process.env.FIRESTORE_EMULATOR_HOST)('Suunto worker with real F
       for (const doc of (await db.collection(DELIVERY_QUEUE).where('uid', '==', id).get()).docs) await db.recursiveDelete(doc.ref);
     }
     await db.terminate();
-  });
+  }, 120_000);
   it('creates one explicitly reviewed fresh identity for the same QS workout without changing the earlier Guide', async () => {
     const first = await send(); const original = structuredClone(server.guides.get(first.actual!.ids.guide));
     const workout = (await user().collection('scheduledWorkouts').doc('w').get()).data();
