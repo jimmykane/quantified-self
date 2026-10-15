@@ -89,6 +89,8 @@ export const CLIENT_RENDERED_APP_ROUTES = [
   'releases',
   'tools/compare/saved',
   'services',
+  'send-activities',
+  'send-activities/:provider',
   'dashboard',
   'health',
   'tags',

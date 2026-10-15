@@ -29,8 +29,11 @@
           [statusDescription]="chart.statusDescription">
         </app-health-metric-series-chart>
       <div class="health-chart-footer">
+        @if (model.recordedDateText) { <span>Latest record: {{ model.recordedDateText }}</span> }
+        <span>{{ model.evidenceText }}</span>
+        @if (model.twoReadingComparisonText) { <span>{{ model.twoReadingComparisonText }}</span> }
         @if (model.displayUnit; as displayUnit) {
-          <span>{{ displayUnit }}</span>
+          <span class="health-chart-unit">{{ displayUnit }}</span>
         }
         @if (model.series.deviceLabel) {
           <span>Device: {{ model.series.deviceLabel }}</span>

@@ -292,6 +292,29 @@ describe('AppUserSettingsQueryService', () => {
     });
 
     describe('Health workspace preferences', () => {
+        it('merges only the selected metric source without replacing other metric preferences', async () => {
+            const user = createMockUser({ uid: 'test-uid' });
+            mockUserSubject.next(user);
+            await service.updateHealthWorkspacePreferences('test-uid', {
+                metric: 'sleep', range: '30d', metricSources: { body_weight: 'health-series-0123456789abcdef' },
+            });
+            expect(mockUserService.updateUserProperties).toHaveBeenCalledWith(user, {
+                settings: { appSettings: { healthWorkspace: {
+                    metric: 'sleep', range: '30d', metricSources: { body_weight: 'health-series-0123456789abcdef' },
+                } } },
+            });
+        });
+
+        it('rejects malformed metric source patches before persistence', async () => {
+            mockUserSubject.next(createMockUser({ uid: 'test-uid' }));
+            for (const metricSources of [{ sleep: '["suunto","account"]' }, { unknown: 'health-series-0123456789abcdef' }, null]) {
+                await expect(service.updateHealthWorkspacePreferences('test-uid', {
+                    metric: 'sleep', range: '30d', metricSources: metricSources as never,
+                })).rejects.toThrow('opaque Health metric');
+            }
+            expect(mockUserService.updateUserProperties).not.toHaveBeenCalled();
+        });
+
         it('merges only the chosen highlight without replaying other saved sources', async () => {
             const user = createMockUser({ uid: 'test-uid' });
             mockUserSubject.next(user);

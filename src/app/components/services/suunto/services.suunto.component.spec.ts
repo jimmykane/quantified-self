@@ -361,7 +361,7 @@ describe('ServicesSuuntoComponent', () => {
         expect(component.activeProviderTool).toBe('uploads');
         expect(panels[1].hidden).toBe(true);
         expect(panels[2].hidden).toBe(false);
-        expect(panels[2].textContent).toContain('Upload FIT Activity');
+        expect(panels[2].textContent).toContain('Send activities');
     });
 
     it('renders disconnect beside the connected account details', () => {
@@ -514,7 +514,7 @@ describe('ServicesSuuntoComponent', () => {
 
             const content = fixture.nativeElement.textContent;
 
-            expect(fixture.nativeElement.querySelector('app-upload-activity-to-service')).toBeFalsy();
+            expect(fixture.nativeElement.querySelector('a[href="/send-activities/suunto"]')).toBeFalsy();
             expect(fixture.nativeElement.querySelector('app-upload-route-to-service')).toBeFalsy();
             expect(content).toContain('before uploading activities');
             expect(content).toContain('before uploading routes');
@@ -525,7 +525,7 @@ describe('ServicesSuuntoComponent', () => {
             component.serviceTokens = [{ accessToken: 'token', userName: 'suunto-user' } as any];
             fixture.detectChanges();
 
-            expect(fixture.nativeElement.querySelector('app-upload-activity-to-service')).toBeTruthy();
+            expect(fixture.nativeElement.querySelector('a[href="/send-activities/suunto"]')).toBeTruthy();
             expect(fixture.nativeElement.querySelector('app-upload-route-to-service')).toBeTruthy();
         });
 
@@ -540,7 +540,7 @@ describe('ServicesSuuntoComponent', () => {
 
             const content = fixture.nativeElement.textContent;
 
-            expect(fixture.nativeElement.querySelector('app-upload-activity-to-service')).toBeFalsy();
+            expect(fixture.nativeElement.querySelector('a[href="/send-activities/suunto"]')).toBeFalsy();
             expect(fixture.nativeElement.querySelector('app-upload-route-to-service')).toBeFalsy();
             expect(content).toContain('before uploading activities');
             expect(content).toContain('before uploading routes');
@@ -874,7 +874,7 @@ describe('ServicesSuuntoComponent', () => {
         expect(component.isConnectedToService()).toBe(false);
         expect(component.connectedSuuntoServiceTokens).toEqual([]);
         expect(fixture.nativeElement.querySelector('app-history-import-form')).toBeFalsy();
-        expect(fixture.nativeElement.querySelector('app-upload-activity-to-service')).toBeFalsy();
+        expect(fixture.nativeElement.querySelector('a[href="/send-activities/suunto"]')).toBeFalsy();
         expect(fixture.nativeElement.querySelector('app-upload-route-to-service')).toBeFalsy();
         expect(fixture.nativeElement.textContent).toContain('before importing history');
         expect(fixture.nativeElement.textContent).toContain('before uploading activities');

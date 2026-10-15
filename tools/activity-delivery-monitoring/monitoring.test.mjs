@@ -12,7 +12,7 @@ const bundle = () => buildActivityDeliveryMonitoring(project, channel);
 const type = filter => /metric\.type="([^"]+)"/.exec(filter)?.[1];
 
 test('fixed dimensions, committed semantics and exact native queue scope', () => {
-  const config = bundle(); assert.equal(config.metrics.length, 12); assert.equal(config.policies.length, 7);
+  const config = bundle(); assert.equal(config.metrics.length, 14); assert.equal(config.policies.length, 9);
   const logTypes = new Set(config.metrics.map(metric => `logging.googleapis.com/user/${metric.name}`));
   const native = new Set(['depth', 'task_attempt_count', 'task_attempt_delays'].map(key => `cloudtasks.googleapis.com/queue/${key}`));
   for (const metric of config.metrics) {
@@ -46,6 +46,7 @@ test('sustained alerts use bounded metrics, idle heartbeats and explicit missing
       const body = condition.conditionThreshold || condition.conditionAbsent;
       assert.ok(type(body.filter).startsWith('logging.googleapis.com/user/qs_activity_delivery_'));
       if (condition.conditionThreshold) { assert.equal(body.evaluationMissingData, 'EVALUATION_MISSING_DATA_INACTIVE'); assert.equal(body.duration, '60s'); }
+      else if (policy.userLabels.policy_id === 'send-cleanup-heartbeat') { assert.equal(body.duration, '10800s'); assert.equal(type(body.filter), metricType('send_cleanup_runs')); }
       else { assert.equal(body.duration, '7200s'); assert.equal(type(body.filter), metricType('queue_samples')); }
     }
   }
@@ -72,8 +73,8 @@ function transport(existing = false, collision = false) {
 test('serial create/reapply preserves other bundles, condition IDs and etags without deletion', async () => {
   for (const existing of [false, true]) {
     const source = transport(existing); const result = await applyActivityDeliveryMonitoring(bundle(), source.request);
-    assert.equal(result.metrics, 12); assert.equal(result.policies, 7);
-    assert.equal(source.calls.filter(call => call.method === 'POST').length, existing ? 0 : 8);
+    assert.equal(result.metrics, 14); assert.equal(result.policies, 9);
+    assert.equal(source.calls.filter(call => call.method === 'POST').length, existing ? 0 : 10);
     assert.ok(source.calls.every(call => call.method !== 'DELETE'));
     assert.ok(source.calls.filter(call => call.method !== 'GET').every(call => !call.url.includes('other-')));
     if (existing) {

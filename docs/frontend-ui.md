@@ -25,7 +25,7 @@ provides:
 - `pageHeaderActions` for existing Material controls. Route actions move to a dedicated full-width row below 800 px;
   compact headers retain their inline action layout.
 
-The Dashboard, Calendar, Training, Routes, signed-in Compare files, and Settings workspaces use this component. A
+The Dashboard, Calendar, Training, Routes, Send activities, signed-in Compare files, and Settings workspaces use this component. A
 page should not add route-local heading font sizes, action-row breakpoints, or a second title treatment. Keep page CSS
 limited to the surrounding layout and domain-specific action groups.
 
@@ -50,7 +50,24 @@ Above 720 px, Today uses tighter cell padding and smaller minimum heights for th
 and optional recovery band. Phone spacing and wrapped-text reservations stay unchanged. Desktop cells still grow
 with their content; do not truncate recovery messages or HRV range details to meet the compact minimums.
 
+Today distinguishes calculation evidence from same-day presentation. Once both initial reads settle, it withholds the
+Readiness score, confidence and signal indicators until the latest eligible completed main night ends on the current
+browser-local date. It says **Awaiting today’s sleep**, retaining the independent TSS-only Training state, eligible
+previous-night Sleep and Overnight HR values labelled **Last available** with their date, and the weekly HRV average
+with its latest reading's date. A failed Sleep read says **Readiness unavailable** and clears that evidence. The existing
+refresh timer also reevaluates at local midnight using calendar arithmetic, including DST, and remains owner/disposal
+scoped. The score slot and minimum layout reservations remain mounted while awaiting sleep. This is a Dashboard Today
+presentation change: the shared 48-hour formula, Training workspace, saved daily history, Calendar and MCP/Assistant
+contracts, consent, queries and mutations are unchanged. No backend deployment or data migration is required.
+
 ## Workspace Shells
+
+Health All and the owner Dashboard Today share the surface-free **What changed?** summary from
+`components/shared/health-change-summary/`. Keep established changes visible while evidence details are collapsed.
+Use the existing Material Show/Hide button pattern with `aria-expanded`, `aria-controls` and a mounted hidden region;
+do not add a raised card or expansion panel. Evidence rows stack at narrow phone widths, preserving 44px button targets.
+The local disclosure resets on owner change without feedback or persistence. This overview is additive: saved Dashboard
+charts remain mounted and controlled by their existing settings, including the Show/Hide Today choice.
 
 Authenticated product workspaces, except Settings, use the shared `qs-workspace-page` shell from `src/styles.scss`. It
 owns the 1440 px maximum page width, border-box sizing, and common responsive inline gutters. Apply it on the route root

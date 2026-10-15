@@ -137,7 +137,7 @@ async function checkOriginal(
     }
 }
 
-async function eligibleOriginal(params: {
+export async function eligibleOriginal(params: {
     userID: string;
     eventID: string;
     event: Record<string, unknown>;

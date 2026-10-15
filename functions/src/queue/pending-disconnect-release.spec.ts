@@ -318,6 +318,20 @@ describe('pending disconnect queue release', () => {
         expect(notDeferredSleepUpdate).not.toHaveBeenCalled();
         expect(otherRouteSyncUpdate).not.toHaveBeenCalled();
     });
+    it.each([
+        { operation: { state: 'confirmed', expiresAt: Number.MAX_SAFE_INTEGER }, accepted: false, releases: 1 },
+        { operation: { state: 'confirmed', expiresAt: 1 }, accepted: false, releases: 0 },
+        { operation: { state: 'confirmed', expiresAt: Number.MAX_SAFE_INTEGER, stopped: true }, accepted: false, releases: 0 },
+        { operation: undefined, accepted: false, releases: 0 },
+        { operation: undefined, accepted: true, releases: 1 },
+    ])('preserves workspace retention and sending authority on reconnect: %j', async ({ operation, accepted, releases }) => {
+        const expireAt = new Date(Date.now() + 30 * 86400_000);
+        if (operation) addDoc('users/user-1/activitySendOperations', 'batch', operation);
+        const update = addDoc(ACTIVITY_SYNC_QUEUE_COLLECTION_NAME, 'workspace', { userID: 'user-1', sendBatchID: 'batch', deferredReason: QUEUE_DEFERRED_REASONS.ServiceDisconnectPending, deferredServiceName: ServiceNames.SuuntoApp, expireAt, ...(accepted ? { destinationUploadID: 'accepted-canary' } : {}) });
+        expect(await releaseQueueItemsDeferredForPendingDisconnect('user-1', ServiceNames.SuuntoApp)).toBe(releases);
+        if (releases) expect(update).toHaveBeenCalledWith(expect.objectContaining({ processed: false, expireAt }));
+        else expect(update).not.toHaveBeenCalled();
+    });
 
     it('does not let another service consume the target service release page budget', async () => {
         const deferredReason = QUEUE_DEFERRED_REASONS.ServiceDisconnectPending;

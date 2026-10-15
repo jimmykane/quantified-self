@@ -78,6 +78,11 @@
   min-block-size: 8.5rem;
 }
 
+.dashboard-readiness-primary app-metric-indicator {
+  /* Display-only tracks need no text baseline, including on phones. */
+  line-height: 0;
+}
+
 .dashboard-training-state-primary {
   border-right: 1px solid var(--qs-glass-panel-border, var(--mat-sys-outline-variant));
   min-block-size: 8.5rem;
@@ -258,6 +263,10 @@
   margin-top: 0.15rem;
 }
 
+.dashboard-readiness-night-context {
+  min-block-size: 1.2em;
+}
+
 .dashboard-today-history-slot {
   align-items: end;
   display: flex;
@@ -408,6 +417,10 @@
 }
 
 @media (max-width: 360px) {
+  .dashboard-readiness-night-context {
+    min-block-size: 2.4em;
+  }
+
   .dashboard-training-state-primary {
     min-block-size: 8.75rem;
   }

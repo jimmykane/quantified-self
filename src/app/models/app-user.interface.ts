@@ -63,7 +63,11 @@ export interface AppHealthWorkspaceSettingsInterface {
     range?: AppHealthWorkspaceRange;
     /** Display-only source choices, independent of explorer filters and metric calculations. */
     highlightSources?: AppHealthHighlightSources;
+    /** Explicit source/reading pins for overview metrics; missing data never selects a replacement. */
+    metricSources?: AppHealthMetricSources;
 }
+
+export type AppHealthMetricSources = Partial<Record<AppHealthWorkspaceMetric, string>>;
 
 export const APP_HEALTH_HIGHLIGHT_IDS = ['sleep', 'heart_rate', 'heart_rate_variability'] as const;
 export type AppHealthHighlightId = typeof APP_HEALTH_HIGHLIGHT_IDS[number];

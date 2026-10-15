@@ -2684,6 +2684,11 @@
       "collectionGroup": "connectionHistoryImports",
       "fieldPath": "steps",
       "indexes": []
+    },
+    {
+      "collectionGroup": "activitySendOperations",
+      "fieldPath": "cleanupAfter",
+      "indexes": [{ "order": "ASCENDING", "queryScope": "COLLECTION_GROUP" }]
     }
   ]
 }

@@ -10,7 +10,7 @@ import { withHealthSleepAccountKeys } from './health-sleep-account.helper';
 import { AppDashboardHealthMetricSettings } from '../models/app-user.interface';
 import { buildDashboardHealthContext, filterDashboardHealthEvidence, DashboardHealthEvidence } from './dashboard-health-context.helper';
 import { DASHBOARD_HEALTH_GROUPS } from './dashboard-health-tile.helper';
-import { resolveHealthWorkspaceWindow } from './health-workspace.helper';
+import { resolveHealthWorkspaceWindow, opaqueHealthSeriesId } from './health-workspace.helper';
 
 function evidence(metric:HealthMetricId, accounts=['first'], range:AppDashboardHealthMetricSettings['range']='30d'):DashboardHealthEvidence {
   const definition=HEALTH_METRIC_CATALOG[metric]; const value=definition.valueType==='category' ? 'rest' : 54;
@@ -23,6 +23,30 @@ function evidence(metric:HealthMetricId, accounts=['first'], range:AppDashboardH
   return {window,health:{result,limitReached:null,sourceRecordCount:records.length,sampleChunkCount:0,samplePointCount:0,serializedBytes:0,hasMatchingSourceRecords:!!records.length,hasSampleBackedMetric:false,providers:['GarminAPI'],sampleBackedProviders:[]},history:null,activities:null,sessions:[],errors:[]};
 }
 describe('dashboard Health semantics',()=>{
+  it('restores an opaque Sleep preference and retains it as unavailable instead of switching accounts', () => {
+    const data = evidence('sleep_duration', []);
+    const base = { userID: 'owner', sleepDate: '2026-09-14', startTimeMs: Date.parse('2026-09-13T23:00:00Z'),
+      endTimeMs: Date.parse('2026-09-14T07:00:00Z'), durationSeconds: 28800, isNap: false, stages: [],
+      stageDurationsSeconds: {}, vitals: {}, createdAtMs: 0, updatedAtMs: 0 };
+    data.sessions = ['first', 'second'].map(account => ({ ...base, id: account,
+      source: { provider: 'SuuntoApp', providerUserId: account, sourceSessionKey: account } }));
+    const all = buildDashboardHealthContext(data, { metric: 'sleep', range: '30d' });
+    const rawKey = all.sources[1].key;
+    const sourceKey = opaqueHealthSeriesId(rawKey);
+    const settings = { metric: 'sleep' as const, range: '30d' as const, sourceKey };
+    const pinned = buildDashboardHealthContext(data, settings);
+    expect(pinned.selectedKey).toBe(rawKey);
+    expect(pinned.hasData).toBe(true);
+    expect(pinned.missingSource).toBe(false);
+    expect(buildDashboardHealthContext(data, { ...settings, sourceKey: rawKey }).selectedKey).toBe(rawKey);
+    data.sessions = data.sessions.slice(0, 1);
+    const missing = buildDashboardHealthContext(data, settings);
+    expect(missing.selectedKey).toBe(sourceKey);
+    expect(missing.missingSource).toBe(true);
+    expect(missing.hasData).toBe(false);
+    expect(missing.sleep.hasRealPoints).toBe(false);
+    expect(missing.sources).toHaveLength(1);
+  });
   it.each(['visible', 'history'])('shares typed Sleep account evidence from %s across HRV card and baseline', location => {
     const data = evidence('heart_rate_variability');
     const sessions: SleepSession[] = Array.from({ length: 90 }, (_, index) => {
@@ -251,7 +275,10 @@ describe('dashboard Health semantics',()=>{
         vitals: { averageHeartRateBpm: 57, restingHeartRateBpm: 50, maxSpo2Percent: 98, averageRespirationBrpm: 14 } }];
       const view = buildDashboardHealthContext(data, { metric, range: '30d' });
       expect(view.hasData).toBe(true); expect(view.availability.state).toBe('ready');
-      expect(view.sources).toHaveLength(1); expect(view.sources[0].shortLabel).toContain('Sleep');
+      expect(view.sources).toHaveLength(1);
+      const expectedReading = metric === 'heart_rate' ? 'Average sleep HR'
+        : metric === 'blood_oxygen_saturation' ? 'Maximum sleep SpO₂' : 'Sleep';
+      expect(view.sources[0].shortLabel).toContain(expectedReading);
       expect(view.selected?.model.series.provider).toBe('SuuntoApp');
       expect(view.notices).toContain('Health readings could not be loaded. Try again.');
     });

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { DistanceUnits } from '@sports-alliance/sports-lib';
+import { DistanceUnits, WeightUnits } from '@sports-alliance/sports-lib';
 import {
   HEALTH_METRIC_IDS,
   HEALTH_PROVIDERS,
@@ -12,7 +12,8 @@ import { AppColors } from '../services/color/app.colors';
 import { normalizeUserUnitSettings } from '@shared/unit-aware-display';
 import { buildDashboardEChartsStyleTokens } from './dashboard-echarts-style.helper';
 import { buildHealthChartModels, buildHealthMetricEChartsOption } from './health-metric-chart.helper';
-import { HealthWorkspaceSeries } from './health-workspace.helper';
+import { HealthWorkspaceSeries, formatHealthValue } from './health-workspace.helper';
+import { getDateTimeFormatter } from './date-time-format.helper';
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 
@@ -90,6 +91,46 @@ function series(overrides: Partial<HealthWorkspaceSeries> = {}): HealthWorkspace
 }
 
 describe('Health metric chart helpers', () => {
+  it('compares exactly two same-series readings using recorded dates and the selected weight units without inferring a trend', () => {
+    const points = [
+      { timestampMs: 0, calendarDate: '1970-01-01', value: 72, qualityCode: null },
+      { timestampMs: 30 * DAY_MS, calendarDate: '1970-01-31', value: 71, qualityCode: null },
+    ];
+    for (const unitSettings of [null, normalizeUserUnitSettings({ weightUnits: WeightUnits.Pounds })]) {
+      const model = buildHealthChartModels([series({ metricId: HEALTH_METRIC_IDS.BodyWeight, unit: 'kilogram', points: [...points].reverse() })], 0, 31 * DAY_MS, unitSettings)[0];
+      const dates = points.map(point => getDateTimeFormatter(undefined, { month: 'short', day: 'numeric', year: 'numeric', timeZone: 'UTC' })
+        .format(Date.parse(`${point.calendarDate}T12:00:00Z`)));
+      expect(model.twoReadingComparisonText).toBe(`Recorded change: −${formatHealthValue(HEALTH_METRIC_IDS.BodyWeight, 1, 'kilogram', false, unitSettings)} · ${dates[0]} → ${dates[1]}`);
+      expect(model.plotKind).toBe('point'); expect(model.evidenceText).toContain('No trend inferred');
+      expect(model.ariaLabel).toContain(model.twoReadingComparisonText!);
+    }
+  });
+
+  it.each([0, 2])('shows the recorded two-reading difference of %s without a trend claim', change => {
+    const model = buildHealthChartModels([series({ points: [0, 1].map(index => ({ timestampMs: index * DAY_MS,
+      calendarDate: `1970-01-0${index + 1}`, value: 50 + index * change, qualityCode: null })) })], 0, 2 * DAY_MS)[0];
+    expect(model.twoReadingComparisonText).toContain(`Recorded change: ${change > 0 ? '+' : ''}${formatHealthValue(HEALTH_METRIC_IDS.RestingHeartRate, change, 'bpm', false)}`);
+  });
+
+  it('does not compare native scales, categories, totals, invalid dates, repeated timestamps or more than two records', () => {
+    const base = series({ points: series().points.slice(0, 2) });
+    for (const candidate of [series(), { ...base, nativeOnly: true }, { ...base, chartKind: 'bar' as const },
+      { ...base, chartKind: 'step' as const }, { ...base, points: [base.points[0]] },
+      { ...base, points: [base.points[0], { ...base.points[1], calendarDate: '1970-02-30' }] },
+      { ...base, points: [base.points[0], { ...base.points[1], timestampMs: 0 }] }]) {
+      expect(buildHealthChartModels([candidate], 0, 10 * DAY_MS)[0].twoReadingComparisonText).toBeNull();
+    }
+    const separate = buildHealthChartModels([{ ...base, points: [base.points[0]] }, { ...base, id: 'another-source', points: [base.points[1]] }], 0, 2 * DAY_MS);
+    expect(separate.every(model => model.twoReadingComparisonText === null)).toBe(true);
+  });
+
+  it('includes recorded local times when both observations share a calendar date', () => {
+    const model = buildHealthChartModels([series({ points: [0, 3_600_000].map(timestampMs => ({
+      timestampMs, calendarDate: '1970-01-01', value: 50, qualityCode: null, timezoneOffsetSeconds: 7200,
+    })) })], 0, DAY_MS)[0];
+    expect(model.twoReadingComparisonText).toContain('02:00'); expect(model.twoReadingComparisonText).toContain('03:00');
+    expect(model.twoReadingComparisonText).toContain('UTC+2');
+  });
   it.each([false, true])('keeps Health strokes light at rest and on hover (compact: %s)', compact => {
     const model = buildHealthChartModels([series()], 0, DAY_MS * 13)[0];
     for (const darkTheme of [false, true]) {
@@ -129,6 +170,89 @@ describe('Health metric chart helpers', () => {
     const model = buildHealthChartModels([series()], 0, DAY_MS * 13)[0];
     expect(model.data.filter(([, value]) => value === null)).toHaveLength(1);
     expect(model.ariaLabel).toContain('not combined with other sources');
+  });
+
+  it.each([false, true])('shows two monthly weigh-ins as dots, not a trend (compact: %s)', compact => {
+    const readings = [0, 30].map(day => ({ timestampMs: day * DAY_MS,
+      calendarDate: day ? '1970-01-31' : '1970-01-01', value: 70 + day / 30, qualityCode: null }));
+    const model = buildHealthChartModels([series({ metricId: HEALTH_METRIC_IDS.BodyWeight, unit: 'kilogram', points: readings })], 0, 31 * DAY_MS)[0];
+    const option = buildHealthMetricEChartsOption(model, 0, 31 * DAY_MS, buildDashboardEChartsStyleTokens(false, 320), true, null, compact) as { series: Array<{ type: string; data: unknown; showSymbol: boolean }> };
+    expect(option.series[0]).toMatchObject({ type: 'scatter', showSymbol: true });
+    expect(option.series[0].data).toEqual([[0, 70], [30 * DAY_MS, 71]]);
+    expect(model.ariaLabel).toContain('No trend inferred');
+  });
+
+  it('does not let widely spaced readings define a month-long connection threshold', () => {
+    const model = buildHealthChartModels([series({ points: [0, 30, 60].map(day => ({
+      timestampMs: day * DAY_MS, calendarDate: new Date(day * DAY_MS).toISOString().slice(0, 10), value: 50, qualityCode: null,
+    })) })], 0, 61 * DAY_MS)[0];
+    const option = buildHealthMetricEChartsOption(model, 0, 61 * DAY_MS, buildDashboardEChartsStyleTokens(false, 1000), false);
+    expect(option.series[0].type).toBe('scatter');
+    expect(model.displayedPoints).toHaveLength(3);
+  });
+
+  it.each([
+    { metricId: HEALTH_METRIC_IDS.BodyWeight, unit: 'kilogram', intervalDays: 7 },
+    { metricId: HEALTH_METRIC_IDS.BloodPressureSystolic, unit: 'millimeter_of_mercury', intervalDays: 14 },
+    { metricId: HEALTH_METRIC_IDS.Vo2Max, unit: 'milliliter_per_kilogram_per_minute', intervalDays: 30 },
+  ])('uses recorded cadence for occasional $metricId observations without inventing intermediate values', ({ metricId, unit, intervalDays }) => {
+    const points = [0, 1, 2, 3].map(index => ({ timestampMs: index * intervalDays * DAY_MS,
+      calendarDate: new Date(index * intervalDays * DAY_MS).toISOString().slice(0, 10), value: 60 + index, qualityCode: null }));
+    const model = buildHealthChartModels([series({ metricId, unit, points })], 0, 100 * DAY_MS)[0];
+    expect(model.plotKind).toBe('line');
+    expect(model.data).toEqual(points.map(point => [point.timestampMs, point.value]));
+    const distant = { ...points.at(-1)!, timestampMs: 180 * DAY_MS, calendarDate: '1970-06-30' };
+    const gapped = buildHealthChartModels([series({ metricId, unit, points: [...points, distant] })], 0, 181 * DAY_MS)[0];
+    expect(gapped.data.filter(([, value]) => value === null)).toHaveLength(1);
+  });
+
+  it.each([HEALTH_METRIC_IDS.RestingHeartRate, HEALTH_METRIC_IDS.HeartRateVariability, HEALTH_METRIC_IDS.SkinTemperatureDeviation])(
+    'does not treat weekly %s signals as regular body measurements', metricId => {
+      const model = buildHealthChartModels([series({ metricId, points: [0, 7, 14].map(day => ({
+        timestampMs: day * DAY_MS, calendarDate: new Date(day * DAY_MS).toISOString().slice(0, 10), value: 50, qualityCode: null,
+      })) })], 0, 15 * DAY_MS)[0];
+      expect(model.plotKind).toBe('point'); expect(model.evidenceText).toContain('No trend inferred');
+    });
+
+  it('keeps two monthly fitness estimates as dots despite their supported recording cadence', () => {
+    const model = buildHealthChartModels([series({ metricId: HEALTH_METRIC_IDS.Vo2Max, points: [0, 30].map(day => ({
+      timestampMs: day * DAY_MS, calendarDate: new Date(day * DAY_MS).toISOString().slice(0, 10), value: 50, qualityCode: null,
+    })) })], 0, 31 * DAY_MS)[0];
+    expect(model.plotKind).toBe('point');
+  });
+
+  it('keeps dense daily history connected and retains zero readings', () => {
+    const model = buildHealthChartModels([series({ points: [0, 1, 2].map(day => ({
+      timestampMs: day * DAY_MS, calendarDate: `1970-01-0${day + 1}`, value: day, qualityCode: null,
+    })) })], 0, 3 * DAY_MS)[0];
+    const option = buildHealthMetricEChartsOption(model, 0, 3 * DAY_MS, buildDashboardEChartsStyleTokens(false, 1000), false);
+    expect(option.series[0].type).toBe('line');
+    expect(model.data).toEqual([[0, 0], [DAY_MS, 1], [2 * DAY_MS, 2]]);
+  });
+
+  it('preserves the existing categorical cadence instead of applying the numeric sparse policy', () => {
+    const model = buildHealthChartModels([series({ chartKind: 'step', valueType: HEALTH_VALUE_TYPES.Category,
+      points: [0, 7, 14].map(day => ({ timestampMs: day * DAY_MS,
+        calendarDate: new Date(day * DAY_MS).toISOString().slice(0, 10), value: 'normal', qualityCode: null })),
+    })], 0, 15 * DAY_MS)[0];
+    expect(model.plotKind).toBe('step');
+    expect(model.data).toEqual([[0, 'normal'], [7 * DAY_MS, 'normal'], [14 * DAY_MS, 'normal']]);
+    expect(model.evidenceText).not.toContain('No trend inferred');
+  });
+
+  it('keeps source identity and provider-calendar attribution without inventing a date', () => {
+    const source = series({ points: [{ timestampMs: Date.UTC(2026, 9, 14), calendarDate: '2026-10-13', value: 72, qualityCode: null }] });
+    const model = buildHealthChartModels([source], Date.UTC(2026, 9, 1), Date.UTC(2026, 9, 31))[0];
+    expect(model.series).toBe(source);
+    expect(model.readingLabel).toBe('Daily resting HR');
+    expect(model.recordedDateText).toContain('13');
+    for (const calendarDate of ['2026-99-99', '2026-02-30', '2025-02-29']) {
+      const invalid = buildHealthChartModels([series({ points: [{ ...source.points[0], calendarDate }] })], 0, Date.UTC(2026, 9, 31))[0];
+      expect(invalid.recordedDateText).toBeNull();
+      expect(invalid.ariaLabel).not.toContain(', recorded ');
+    }
+    const leapDay = buildHealthChartModels([series({ points: [{ ...source.points[0], calendarDate: '2028-02-29' }] })], 0, Date.UTC(2028, 2, 1))[0];
+    expect(leapDay.recordedDateText).toContain('29');
   });
 
   it.each(['overnight_average', 'overnight_rmssd', 'sleep_overnight_hrv', 'sleep_session_average_hrv'])(
@@ -229,7 +353,8 @@ describe('Health metric chart helpers', () => {
     expect(option.yAxis.axisLabel.formatter(50)).toBe('50');
     expect(model.displayUnit).toBe('bpm');
     expect(option.series).toHaveLength(1);
-    expect(option.series[0].showSymbol).toBe(false);
+    // The isolated reading after the gap must remain visible in compact plots.
+    expect(option.series[0].showSymbol).toBe(true);
 
     const sparseModel = buildHealthChartModels([
       series({ points: [series().points[0]] }),
@@ -322,12 +447,8 @@ describe('Health metric chart helpers', () => {
     expect(option.series[0].lineStyle).toEqual({ color: 'transparent', width: 1 });
     expect(option.series[0].itemStyle?.color({ value: [0, 40] })).toBe(AppDataColors.Altitude);
     expect(option.series[0].itemStyle?.color({ value: [DAY_MS, 46] })).toBe(AppDataColors.Stress);
-    expect(option.series[1]).toMatchObject({
-      data: [[0, 40], [DAY_MS, 46]],
-      showSymbol: false,
-      lineStyle: { color: AppDataColors.Stress, width: 1 },
-      silent: true,
-    });
+    expect(option.series[0]).toMatchObject({ type: 'scatter' });
+    expect(option.series.filter(plot => plot.lineStyle.color === AppDataColors.Stress)).toHaveLength(0);
     expect(option.series[0].markArea).toBeUndefined();
     expect(option.series.find(item => item.id === 'hrv-personal-range-lower')).toMatchObject({
       data: [[0, 30], [DAY_MS, 35]], silent: true, connectNulls: false,
@@ -347,6 +468,25 @@ describe('Health metric chart helpers', () => {
     expect(option.tooltip.formatter({ value: [DAY_MS, 46] })).toContain('35 ms–50 ms');
     expect(option.tooltip.formatter({ value: [DAY_MS, 46] }))
       .toContain(`background:${AppDataColors.Stress}`);
+  });
+
+  it('keeps date-colored HRV line segments for dense history', () => {
+    const points = [0, 1, 2].map(day => ({ timestampMs: day * DAY_MS,
+      calendarDate: `1970-01-0${day + 1}`, value: 40 + day, qualityCode: null }));
+    const model = buildHealthChartModels([series({ metricId: HEALTH_METRIC_IDS.HeartRateVariability,
+      unit: 'millisecond', points })], 0, 2 * DAY_MS)[0];
+    const option = buildHealthMetricEChartsOption(model, 0, 2 * DAY_MS,
+      buildDashboardEChartsStyleTokens(false, 320), false, null, true, {
+        normalRangeColor: AppDataColors.Altitude, statusColor: AppDataColors.Stress,
+        pointStatuses: points.map((point, index) => ({ timestampMs: point.timestampMs,
+          color: index === 1 ? AppDataColors.Stress : AppDataColors.Altitude,
+          label: 'Recorded personal range', normalRange: null })),
+      });
+    expect(option.series[0].type).toBe('line');
+    expect(option.series[1]).toMatchObject({ data: [[0, 40], [DAY_MS, 41]],
+      lineStyle: { color: AppDataColors.Stress, width: 1 }, showSymbol: false, silent: true });
+    expect(option.series[2]).toMatchObject({ data: [[DAY_MS, 41], [2 * DAY_MS, 42]],
+      lineStyle: { color: AppDataColors.Altitude, width: 1 }, showSymbol: false, silent: true });
   });
 
   it.each([false, true])('renders baseline days independently of missing readings (compact=%s)', compact => {
@@ -854,7 +994,7 @@ describe('Health metric chart helpers', () => {
       points: [{ timestampMs: 0, calendarDate: '1970-01-01', value: 50, qualityCode: null }],
     })], 0, DAY_MS)[0];
 
-    expect(model.ariaLabel).toContain('1 reading.');
+    expect(model.ariaLabel).toContain('1 reading recorded');
     expect(model.ariaLabel).not.toContain('1 readings.');
   });
 });

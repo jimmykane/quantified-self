@@ -90,6 +90,7 @@ async function setActivitySyncMetadata(
     status: ActivitySyncStatus,
     payload: Record<string, unknown>,
 ): Promise<void> {
+    if (params.temporarySource) return;
     const db = admin.firestore();
     const ref = getActivitySyncMetadataRef(db, params.userID, params.eventID, params.routeId);
 
@@ -130,6 +131,7 @@ interface BaseMetadataParams {
     destinationServiceName: ServiceNames;
     manual: boolean;
     requireEventExists?: boolean;
+    temporarySource?: boolean;
 }
 
 export async function setActivitySyncQueuedMetadata(params: BaseMetadataParams): Promise<void> {
@@ -246,6 +248,7 @@ export async function setActivitySyncRetryingMetadata(params: ErrorMetadataParam
 export async function setActivitySyncRetryingMetadataIfQueueItemDeferred(
     params: DeferredRetryingMetadataParams,
 ): Promise<boolean> {
+    if (params.temporarySource) return false;
     const db = admin.firestore();
     const metadataRef = getActivitySyncMetadataRef(db, params.userID, params.eventID, params.routeId);
 

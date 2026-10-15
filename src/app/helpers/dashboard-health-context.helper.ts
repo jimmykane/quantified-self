@@ -7,7 +7,7 @@ import { sleepEvidenceSourceKey } from '@shared/nightly-hrv';
 import type { SleepSession } from '@shared/sleep';
 import type { HealthWorkspaceRangeLoad } from '../services/app.health.service';
 import type { AppDashboardHealthMetricSettings } from '../models/app-user.interface';
-import { HEALTH_WORKSPACE_SAMPLE_MAX_DAYS, buildHealthMetricWorkspaceView, buildHealthHrvPersonalRangeStatus, selectActivityHealthObservations, selectWorkoutWeightContextFallback, filterHealthRangeResultByProviders, type HealthWorkspaceWindow, type HealthWorkspaceSeries, formatHealthValue } from './health-workspace.helper';
+import { HEALTH_WORKSPACE_SAMPLE_MAX_DAYS, buildHealthMetricWorkspaceView, buildHealthHrvPersonalRangeStatus, selectActivityHealthObservations, selectWorkoutWeightContextFallback, filterHealthRangeResultByProviders, type HealthWorkspaceWindow, type HealthWorkspaceSeries, formatHealthValue, opaqueHealthSeriesId } from './health-workspace.helper';
 import { buildHealthChartModels, buildHealthHrvChartStatusOverlay, healthHrvChartStatusDescription } from './health-metric-chart.helper';
 import { buildDashboardSleepTrendContext, resolveSleepTrendDate } from './dashboard-sleep-chart.helper';
 import type { DashboardChartAvailability } from './dashboard-chart-availability.helper';
@@ -98,13 +98,17 @@ export function buildDashboardHealthContext(evidence: DashboardHealthEvidence, s
     const defaultKey = selectDefaultHealthSourceKey(candidates.filter(candidate => eligibleKeys.has(candidate.key)));
     const initial = eligible.find(source => source.key === defaultKey) || eligible[0];
     const missingFilteredSource = !settings.sourceKey && providerFilter.length > 0 && !initial;
-    const selectedKey = settings.sourceKey || initial?.key || null;
+    // Existing Dashboard Sleep tiles use the legacy raw key. Health preferences
+    // store its opaque alias; both resolve to the exact same account, never a fallback.
+    const pinnedSource = settings.sourceKey ? sources.find(source => source.key === settings.sourceKey
+        || settings.metric === 'sleep' && opaqueHealthSeriesId(source.key) === settings.sourceKey) : undefined;
+    const selectedKey = settings.sourceKey ? pinnedSource?.key || settings.sourceKey : initial?.key || null;
     const selected = charts.find(chart => chart.key === selectedKey) || null;
     const sleep = buildDashboardSleepTrendContext(sessions.filter(session => sleepEvidenceSourceKey(session) === selectedKey), {
         sleepWindow: { startMs: window.startTimeMs, endMs: window.endTimeMs }, nowMs: window.endTimeMs,
     });
     const hasData = settings.metric === 'sleep' ? sleep.hasRealPoints === true : !!selected?.model.displayedPointCount;
-    const missingSource = !!settings.sourceKey && !sources.some(source => source.key === settings.sourceKey);
+    const missingSource = !!settings.sourceKey && !pinnedSource;
     const sampleOnly = !window.includeSamples && !!health?.hasSampleBackedMetric && !hasData;
     const sampleRangeLimited = sampleOnly || (settings.metric !== HEALTH_METRIC_IDS.HeartRate
         && (selected?.model.series.sampleBased === true || !hasData && !!health?.hasSampleBackedMetric));

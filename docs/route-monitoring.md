@@ -71,6 +71,22 @@ geometry, original-file paths or buckets, credentials, provider payloads, or raw
 Existing private diagnostic logs and queue records are unchanged; do not export them
 into metric labels or incident email text.
 
+### Suunto route webhook correlation
+
+The receiver's private diagnostics use a SHA-256 `notificationId` derived from the provider account,
+route ID and modification time. Redelivery of that notification retains the fingerprint. Each
+`[SuuntoRouteWebhook] Queue result` includes the canonical `queueItemId` and distinguishes
+`enqueued`, `redispatched`, `already_pending` and lifecycle `skipped`; none proves `processed=true`.
+`Notification failed` retains the fingerprint, failed recipient queue IDs, `binding_lookup`/`enqueue`
+phase, HTTP 500 and an allowlisted numeric gRPC `errorCode` (10 means transaction aborted), or
+`unknown`. It does not log raw exceptions, provider identities, route names, signatures or bodies.
+Follow the fingerprint to a later HTTP 200, then use the queue IDs to inspect worker logs and actual
+Firestore completion. An empty queue or acknowledged webhook alone does not prove recovery.
+
+Monitoring coverage is **unchanged**: these private correlation records are not `[RouteQueue]`
+metrics and must not become metric labels. Existing dispatch/worker alerts, queue behavior,
+provider requests and HTTP retry responses are unchanged; no monitoring resources need deployment.
+
 Observations run after persistence resolves, not inside retryable transaction callbacks.
 Stale or deletion-fenced guarded transitions and persistence failures emit no new
 commit. Queued, unawaited BulkWriter writes make no commit claim. Logger failures are

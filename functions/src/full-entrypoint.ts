@@ -253,3 +253,7 @@ export { cleanupStripeCustomer } from './stripe/cleanup';
 
 exports[SPORTS_LIB_REPARSE_HEAVY_TASK_FUNCTION_NAME] = processSportsLibReparseHeavyTaskFunction;
 exports[RETRY_SPORTS_LIB_REPARSE_HEAVY_JOB_FUNCTION_NAME] = retrySportsLibReparseHeavyJobFunction;
+
+export { activitySendCommand } from './activity-send/commands';
+export { uploadActivitySendFile } from './activity-send/upload';
+export { admitActivitySend, projectActivitySendDelivery, cleanupActivitySends, cleanupActivitySendOnDelete } from './activity-send/lifecycle';

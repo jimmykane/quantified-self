@@ -109,7 +109,11 @@ export interface ActivitySyncQueueItemInterface extends QueueItemInterface {
   originalFile: ActivitySyncOriginalFileMetadata;
   manual: boolean;
   /** Historical requests are independent of the source provider's current connection. */
-  deliveryMode?: 'automatic' | 'historical';
+  deliveryMode?: 'automatic' | 'historical' | 'direct';
+  sendBatchID?: string;
+  sendRowID?: string;
+  destinationPinnedProviderUserID?: string;
+  sendConfirmedFailure?: boolean;
   successProcessedAt?: number;
   destinationUploadID?: string | null;
   destinationProviderUserID?: string | null;

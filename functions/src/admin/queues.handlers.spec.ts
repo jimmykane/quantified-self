@@ -428,6 +428,7 @@ describe('getQueueStats Cloud Function', () => {
             breakdowns: {
                 historical: { pending: 5, succeeded: 5, stuck: 5, manualReconciliationRequired: 5, dead: 5 },
                 manualUploads: { pending: 5, succeeded: 5, stuck: 5, manualReconciliationRequired: 5, dead: 5 },
+                directFiles: { pending: 5, succeeded: 5, stuck: 5, manualReconciliationRequired: 5, dead: 5 },
             },
             dlqByContext: expect.arrayContaining([
                 { context: 'NO_TOKEN_FOUND', count: 1 },
@@ -826,6 +827,7 @@ describe('getQueueStats Cloud Function', () => {
 
             const historical = has('deliveryMode', '==', 'historical');
             const manualUpload = has('sourceServiceName', '==', 'manualUpload');
+            if (has('deliveryMode', '==', 'direct')) return 0;
             if (historical || manualUpload) {
                 const counts = historical
                     ? { pending: 3, succeeded: 2, stuck: 1, manualReconciliationRequired: 1 }
@@ -904,7 +906,7 @@ describe('getQueueStats Cloud Function', () => {
                     count: vi.fn(() => ({
                         get: vi.fn().mockResolvedValue({
                             data: () => ({
-                                count: filters.some((f) => f.field === 'deliveryMode' && f.value === 'historical')
+                                count: filters.some((f) => f.field === 'deliveryMode' && f.value === 'direct') ? 0 : filters.some((f) => f.field === 'deliveryMode' && f.value === 'historical')
                                     || filters.some((f) => f.field === 'sourceServiceName' && f.value === 'manualUpload')
                                     ? 1
                                     : filters.some((f) => f.field === 'originalCollection' && f.value === 'activitySyncQueue') ? 2 : 5,
@@ -957,6 +959,7 @@ describe('getQueueStats Cloud Function', () => {
             breakdowns: {
                 historical: { pending: 3, succeeded: 2, stuck: 1, manualReconciliationRequired: 1, dead: 1 },
                 manualUploads: { pending: 1, succeeded: 1, stuck: 0, manualReconciliationRequired: null, dead: 1 },
+                directFiles: { pending: 0, succeeded: 0, stuck: 0, manualReconciliationRequired: 0, dead: 0 },
             },
             advanced: expect.objectContaining({
                 throughput: 1,

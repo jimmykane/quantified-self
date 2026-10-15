@@ -89,11 +89,6 @@
     <span class="fill-space"></span>
   </mat-list-item>
 
-  <mat-list-item routerLinkActive="active" routerLink="/tools/compare" (click)="openCompareFilesFromNav()">
-    <mat-icon>compare_arrows</mat-icon>
-    <span>Compare Files</span>
-  </mat-list-item>
-
   <mat-list-item [routerLinkActive]="hasAssistantAccess ? 'active' : ''" [routerLinkActiveOptions]="{exact: true}" [routerLink]="assistantRoute"
     (click)="closeSideNav()">
     <mat-icon>auto_awesome</mat-icon>
@@ -106,12 +101,21 @@
   </mat-list-item>
   }
 
-  @if (!user) {
-  <mat-list-item routerLinkActive="active" routerLink="/tools/compare" (click)="openCompareFilesFromNav()">
-    <mat-icon>compare_arrows</mat-icon>
-    <span>Compare Files</span>
-  </mat-list-item>
-  }
+  <div role="group" aria-labelledby="sidenav-tools-heading">
+    <div id="sidenav-tools-heading" class="sidenav-section-header">Tools</div>
+
+    <mat-list-item routerLinkActive="active" routerLink="/tools/compare" (click)="openCompareFilesFromNav()">
+      <mat-icon>compare_arrows</mat-icon>
+      <span>Compare Files</span>
+    </mat-list-item>
+
+    @if (user) {
+    <mat-list-item routerLinkActive="active" routerLink="/send-activities" (click)="closeSideNav()">
+      <mat-icon>send</mat-icon>
+      <span>Send activities</span>
+    </mat-list-item>
+    }
+  </div>
 
   @if (!user) {
   <mat-list-item routerLinkActive="active" routerLink="/pricing" (click)="closeSideNav()">

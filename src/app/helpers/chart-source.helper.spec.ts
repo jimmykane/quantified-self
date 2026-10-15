@@ -7,14 +7,14 @@ describe('compact chart source attribution', () => {
   it('keeps account and reading meaning while moving provenance to expanded details', () => {
     const choice = healthChartSourceChoice(series);
     expect(choice.key).toBe(series.id);
-    expect(choice.shortLabel).toBe('Suunto · Account 2 · Sleep average');
+    expect(choice.shortLabel).toBe('Suunto · Account 2 · Average sleep HRV');
     expect(choice.detail).toBe(series.semanticLabel);
     expect(choice.label).toBe(`${series.sourceLabel} · ${series.semanticLabel}`);
-    expect(healthChartSourceChoice({ ...series, semanticVariant: 'sleep_overnight_hrv' }).shortLabel).toContain('Overnight average');
+    expect(healthChartSourceChoice({ ...series, semanticVariant: 'sleep_overnight_hrv' }).shortLabel).toContain('Overnight HRV');
   });
   it('keeps new Sleep vital labels compact without disguising minimums, maximums or naps', () => {
-    for (const [variant, label] of [['sleep_session_minimum_heart_rate', 'Sleep minimum'], ['sleep_session_maximum_spo2', 'Sleep maximum'],
-      ['sleep_session_resting_heart_rate', 'Sleep resting'], ['nap_average_respiration', 'Nap average']]) {
+    for (const [variant, label] of [['sleep_session_minimum_heart_rate', 'Minimum sleep HR'], ['sleep_session_maximum_spo2', 'Maximum sleep SpO₂'],
+      ['sleep_session_resting_heart_rate', 'Sleep resting HR'], ['nap_average_respiration', 'Nap average']]) {
       const choice = healthChartSourceChoice({ ...series, semanticVariant: variant });
       expect(choice.shortLabel).toBe(`Suunto · Account 2 · ${label}`);
       expect(choice.detail).toBe(series.semanticLabel);
@@ -26,5 +26,16 @@ describe('compact chart source attribution', () => {
     const native = healthChartSourceChoice({ ...series, semanticVariant: 'provider_new_reading', semanticLabel: 'Special reading · Recorded · Device', nativeOnly: true });
     expect(native.shortLabel).toContain('Special reading · Provider scale');
     expect(native.detail).toBe('Special reading · Recorded · Device · Native provider scale');
+  });
+
+  it('distinguishes daily resting heart rate from sleep average and minimum heart rate in the visible label', () => {
+    const resting = healthChartSourceChoice({ ...series, semanticVariant: 'daily_resting',
+      semanticLabel: 'Average · Daily resting · Provider summary · Provider calculated', sourceLabel: 'Garmin' });
+    const average = healthChartSourceChoice({ ...series, semanticVariant: 'sleep_session_average_heart_rate' });
+    const minimum = healthChartSourceChoice({ ...series, semanticVariant: 'sleep_session_minimum_heart_rate' });
+    expect(resting.shortLabel).toBe('Garmin · Daily resting HR');
+    expect(average.shortLabel).toBe('Suunto · Account 2 · Average sleep HR');
+    expect(minimum.shortLabel).toBe('Suunto · Account 2 · Minimum sleep HR');
+    expect(minimum.key).toBe(series.id);
   });
 });

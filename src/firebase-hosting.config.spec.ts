@@ -341,7 +341,7 @@ describe('Firebase Hosting configuration', () => {
 
   it('marks recently updated public discovery surfaces in sitemap', () => {
     expect(sitemapLastmodForUrl(`${siteOrigin}/`)).toBe('2026-10-11');
-    expect(sitemapLastmodForUrl(`${siteOrigin}/features/health`)).toBe('2026-10-11');
+    expect(sitemapLastmodForUrl(`${siteOrigin}/features/health`)).toBe('2026-10-15');
     expect(sitemapLastmodForUrl(`${siteOrigin}/features`)).toBe('2026-10-09');
     expect(sitemapLastmodForUrl(`${siteOrigin}/features/activity-calendar`)).toBe('2026-10-09');
     expect(sitemapLastmodForUrl(`${siteOrigin}/features/ai-insights`)).toBe('2026-09-02');
@@ -366,9 +366,10 @@ describe('Firebase Hosting configuration', () => {
     expect(sitemapXml).not.toContain(`${siteOrigin}/features/workout-file-comparison`);
     expect(sitemapXml).not.toContain(`${siteOrigin}/features/sports-watch-benchmark`);
     // Help includes the dialog feedback and safe haptic behavior guidance.
-    expect(sitemapLastmodForUrl(`${siteOrigin}/help`)).toBe('2026-10-14');
-    expect(sitemapLastmodForUrl(`${siteOrigin}/policies`)).toBe('2026-10-07');
-    expect(sitemapLastmodForUrl(`${siteOrigin}/privacy`)).toBe('2026-10-07');
+    // Calmer overview help, including independent source attribution and HRV average/latest wording, is in this revision.
+    expect(sitemapLastmodForUrl(`${siteOrigin}/help`)).toBe('2026-10-15');
+    expect(sitemapLastmodForUrl(`${siteOrigin}/policies`)).toBe('2026-10-14');
+    expect(sitemapLastmodForUrl(`${siteOrigin}/privacy`)).toBe('2026-10-14');
     expect(sitemapLastmodForUrl(`${siteOrigin}/terms`)).toBe('2026-10-07');
   });
 

@@ -1373,8 +1373,8 @@ describe('Health workspace helpers', () => {
     expect(priorityRows[0]).toMatchObject({ valueText: '08h 06m' });
     expect(priorityRows[0].details).toEqual(expect.arrayContaining([
       { label: 'Score', valueText: '72' },
-      { label: 'HRV', valueText: '33.8 ms' },
-      { label: 'Avg HR', valueText: '63 bpm' },
+      { label: 'Sleep HRV', valueText: '33.8 ms' },
+      { label: 'Average sleep HR', valueText: '63 bpm' },
     ]));
     expect(observationRows).toHaveLength(1);
     expect(observationRows[0]).toMatchObject({ durationText: '08h 06m', scoreText: '72', hrvText: '33.8 ms' });
@@ -1804,7 +1804,7 @@ describe('Health workspace helpers', () => {
       contextText: 'Today',
       details: [
         { label: 'Score', valueText: '88' },
-        { label: 'HRV', valueText: '62 ms' },
+        { label: 'Sleep HRV', valueText: '62 ms' },
       ],
     });
     expect(rows[1].sleepPoint).toMatchObject({

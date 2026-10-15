@@ -3,10 +3,11 @@ import { MatButtonModule } from '@angular/material/button';
 import { MatCardModule } from '@angular/material/card';
 import { MatChipsModule } from '@angular/material/chips';
 import { MatIconModule } from '@angular/material/icon';
+import { MatProgressSpinnerModule } from '@angular/material/progress-spinner';
 import type { HealthProvider } from '@shared/health';
-import type { AppDashboardHealthMetricSettings, AppUserInterface } from '../../models/app-user.interface';
+import type { AppDashboardHealthMetricSettings, AppHealthMetricSources, AppUserInterface } from '../../models/app-user.interface';
 import {
-  buildHealthOverviewCategories, selectHealthOverviewMetrics,
+  buildHealthOverviewCategories, selectHealthOverviewMetrics, opaqueHealthSeriesId,
   type HealthMetricCatalogGroup, type HealthOverviewCategoryId, type HealthWorkspaceMetricSelection,
 } from '../../helpers/health-workspace.helper';
 import { healthMetricIcon } from '../../helpers/health-metric-icon.helper';
@@ -14,11 +15,20 @@ import type { TimelineNoteChartContext } from '../../helpers/timeline-notes-char
 import { AppHapticsService } from '../../services/app.haptics.service';
 import { DashboardHealthChartComponent } from '../charts/health/dashboard-health-chart.component';
 import type { DashboardHealthContext } from '../../helpers/dashboard-health-context.helper';
+import type { HealthChangeSignal } from '../../helpers/health-change-summary.helper';
+import { HealthChangeSummaryComponent } from '../shared/health-change-summary/health-change-summary.component';
+import { normalizeHealthMetricSources } from '../../helpers/health-highlight-preferences.helper';
+
+export interface HealthMetricSourceSelection {
+  uid: string;
+  metric: HealthWorkspaceMetricSelection;
+  sourceKey: string;
+}
 
 @Component({
   selector: 'app-health-category-overview',
   standalone: true,
-  imports: [MatButtonModule, MatCardModule, MatChipsModule, MatIconModule, DashboardHealthChartComponent],
+  imports: [MatButtonModule, MatCardModule, MatChipsModule, MatIconModule, MatProgressSpinnerModule, DashboardHealthChartComponent, HealthChangeSummaryComponent],
   templateUrl: './health-category-overview.component.html',
   styleUrls: ['./health-category-overview.component.scss'],
   changeDetection: ChangeDetectionStrategy.OnPush,
@@ -34,8 +44,12 @@ export class HealthCategoryOverviewComponent {
   readonly referenceDate = input<string | null>(null);
   readonly providerFilter = input<readonly HealthProvider[]>([]);
   readonly timelineNotes = input<TimelineNoteChartContext | null>(null);
+  readonly changeSignals = input<readonly HealthChangeSignal[]>([]);
+  readonly preferredSources = input<AppHealthMetricSources | null>(null);
+  readonly savingPreferences = input(false);
   readonly metricSelected = output<HealthWorkspaceMetricSelection>();
   readonly providersObserved = output<{ uid: string; providers: HealthProvider[] }>();
+  readonly sourceSelected = output<HealthMetricSourceSelection>();
   private readonly owner = computed(() => this.user().uid);
   private readonly haptics = inject(AppHapticsService);
   private readonly category = signal<HealthOverviewCategoryId | 'all'>('all');
@@ -59,18 +73,21 @@ export class HealthCategoryOverviewComponent {
       : categories.find(category => category.id === this.selectedCategory())!.metrics
         .filter(metric => !this.hasVitalsHighlights() || !this.vitalsHighlightedMetrics().includes(metric.id));
     const settings = this.sourceSettings();
+    const preferred = normalizeHealthMetricSources(this.preferredSources() ?? this.user().settings?.appSettings?.healthWorkspace?.metricSources);
     const availability = this.observedAvailability();
     const scope = this.availabilityScope();
     return metrics.map(metric => ({ ...metric, icon: healthMetricIcon(metric.id),
-      settings: settings[metric.id] || { metric: metric.id, range: '30d' as const },
+      settings: settings[metric.id] || { metric: metric.id, range: '30d' as const,
+        ...(preferred[metric.id] ? { sourceKey: preferred[metric.id] } : {}) },
       hidden: this.selectedCategory() === 'all' && !this.exampleOnly()
+        && !settings[metric.id]?.sourceKey && !preferred[metric.id]
         && availability[metric.id]?.scope === scope && availability[metric.id].empty,
     }));
   });
   readonly hasVisibleCards = computed(() => this.cards().some(card => !card.hidden));
 
   constructor() {
-    // Source and category choices belong only to this open account workspace.
+    // Optimistic choices and category browsing cannot cross account boundaries.
     effect(() => {
       this.owner();
       this.sourceSettings.set({});
@@ -85,9 +102,15 @@ export class HealthCategoryOverviewComponent {
     this.category.set(category);
   }
 
-  updateCardSettings(settings: AppDashboardHealthMetricSettings): void {
+  updateCardSettings(settings: AppDashboardHealthMetricSettings, initial = false): void {
     if (settings.range !== '30d' || !this.cards().some(card => card.id === settings.metric)) return;
+    const previous = this.cards().find(card => card.id === settings.metric)?.settings.sourceKey;
     this.sourceSettings.update(current => ({ ...current, [settings.metric]: settings }));
+    if (initial || this.exampleOnly() || !settings.sourceKey || settings.sourceKey === previous) return;
+    const sourceKey = settings.metric === 'sleep' ? opaqueHealthSeriesId(settings.sourceKey) : settings.sourceKey;
+    if (normalizeHealthMetricSources({ [settings.metric]: sourceKey })[settings.metric] === sourceKey) {
+      this.sourceSelected.emit({ uid: this.owner(), metric: settings.metric, sourceKey });
+    }
   }
 
   observeReadFailure(metric: HealthWorkspaceMetricSelection): void {

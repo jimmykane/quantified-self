@@ -34,7 +34,7 @@ import {
 import { isTrainingDestinationId } from '@shared/training-disciplines';
 
 import { LoggerService } from './logger.service';
-import { normalizeHealthHighlightSources } from '../helpers/health-highlight-preferences.helper';
+import { normalizeHealthHighlightSources, normalizeHealthMetricSources } from '../helpers/health-highlight-preferences.helper';
 
 @Injectable({
     providedIn: 'root'
@@ -229,7 +229,7 @@ export class AppUserSettingsQueryService {
     public async updateHealthWorkspacePreferences(
         expectedUserUID: string,
         preferences: Required<Pick<AppHealthWorkspaceSettingsInterface, 'metric' | 'range'>>
-            & Pick<AppHealthWorkspaceSettingsInterface, 'highlightSources'>,
+            & Pick<AppHealthWorkspaceSettingsInterface, 'highlightSources' | 'metricSources'>,
     ): Promise<void> {
         if (
             !expectedUserUID
@@ -242,10 +242,15 @@ export class AppUserSettingsQueryService {
         if (preferences.highlightSources !== undefined && !equal(highlightSources, preferences.highlightSources)) {
             throw new Error('Supported opaque Health highlight source selections are required.');
         }
+        const metricSources = normalizeHealthMetricSources(preferences.metricSources);
+        if (preferences.metricSources !== undefined && !equal(metricSources, preferences.metricSources)) {
+            throw new Error('Supported opaque Health metric source selections are required.');
+        }
         const normalized = {
             metric: preferences.metric,
             range: preferences.range,
             ...(Object.keys(highlightSources).length ? { highlightSources } : {}),
+            ...(Object.keys(metricSources).length ? { metricSources } : {}),
         };
         const user = await this.getCurrentUser();
         if (!user?.uid || user.uid !== expectedUserUID) {

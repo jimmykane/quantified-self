@@ -47,7 +47,10 @@
                 animationDuration="0ms" [selectedIndex]="card.selectedSourceIndex"
                 [attr.aria-label]="card.label + ' highlight source'"
                 (selectedIndexChange)="selectSource(card.id, $event)">
-                @for (source of card.sources; track source.key) {
+                <!-- Selection is controlled by the saved source index. Keep tab
+                     positions stable so Material cannot retain a different
+                     active tab by identity when sources hydrate or disappear. -->
+                @for (source of card.sources; track $index) {
                   <mat-tab>
                     <ng-template mat-tab-label>
                       <span class="health-priority-tab-label">
@@ -68,7 +71,9 @@
             }
 
             <ng-template #sourceContent let-source let-multiple="multiple">
-                @if (source.chart; as chart) {
+                @if (source.missing) {
+                  <p class="health-priority-state" role="status">Your preferred source has no readings in this view. Adjust the source filter or choose another source explicitly.</p>
+                } @else if (source.chart; as chart) {
                   <section class="health-priority-chart-source">
                     @if (!multiple) {
                       <div class="health-priority-reading">
@@ -76,7 +81,11 @@
                         <span class="health-priority-source-label">{{ chart.model.series.sourceLabel }}</span>
                       </div>
                     }
-                    <small>{{ chart.contextText }}</small>
+                    <small class="health-priority-reading-kind">{{ chart.model.readingLabel }}</small>
+                    <small>{{ chart.contextText }}@if (chart.model.recordedDateText) { · Latest record: {{ chart.model.recordedDateText }} }</small>
+                    @if (chart.model.series.deviceLabel) { <small>Device: {{ chart.model.series.deviceLabel }}</small> }
+                    @if (chart.model.plotKind === 'point') { <small>{{ chart.model.evidenceText }}</small> }
+                    @if (chart.model.twoReadingComparisonText) { <small>{{ chart.model.twoReadingComparisonText }}</small> }
                     @if (chart.personalRangeStatus) {
                       <div class="health-priority-range-status">
                         <span

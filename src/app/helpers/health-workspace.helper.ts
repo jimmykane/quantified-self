@@ -1175,8 +1175,8 @@ export function buildSleepPriorityRows(
     );
     const details = [
       scoreText !== '—' ? { label: 'Score', valueText: scoreText } : null,
-      hrvText !== '—' ? { label: 'HRV', valueText: hrvText } : null,
-      heartRateText !== '—' ? { label: 'Avg HR', valueText: heartRateText } : null,
+      hrvText !== '—' ? { label: 'Sleep HRV', valueText: hrvText } : null,
+      heartRateText !== '—' ? { label: 'Average sleep HR', valueText: heartRateText } : null,
     ].filter((detail): detail is HealthPriorityDetail => detail !== null);
     return {
       id,
@@ -1858,7 +1858,7 @@ function metricDatumSeriesIdentity(datum: MetricDatum): string {
  * Keeps the source-series identity stable across adjacent range loads without
  * exposing the underlying account key to the rendered workspace model.
  */
-function opaqueHealthSeriesId(identity: string): string {
+export function opaqueHealthSeriesId(identity: string): string {
   let first = 0x811c9dc5;
   let second = 0x9e3779b9;
   for (let index = 0; index < identity.length; index += 1) {

@@ -30,6 +30,7 @@ import { from, of, Subject } from 'rxjs';
 import { User, DataPace, DataSpeedAvg, ActivityTypes, DataDeviceNames } from '@sports-alliance/sports-lib';
 import { vi, describe, it, expect, beforeEach } from 'vitest';
 import { Analytics } from 'app/firebase/analytics';
+import { Auth } from 'app/firebase/auth';
 import { NoopAnimationsModule } from '@angular/platform-browser/animations';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
@@ -291,6 +292,7 @@ describe('EventTableComponent', () => {
             declarations: [EventTableComponent],
             providers: [
                 { provide: Analytics, useValue: {} },
+                { provide: Auth, useValue: { currentUser: { uid: 'testUser' } } },
                 { provide: AppAnalyticsService, useValue: mockAnalyticsService },
                 { provide: AppEventService, useValue: mockEventService },
                 { provide: AppEventMergeService, useValue: mockEventMergeService },
@@ -640,7 +642,8 @@ describe('EventTableComponent', () => {
         expect(selectionToolbar.textContent).toContain('1 activity selected');
         expect(mainRow.contains(selectionToolbar)).toBe(false);
         expect(mainRow.querySelector('.selection-actions')).toBeNull();
-        expect(actionButtons.length).toBe(7);
+        expect(actionButtons.length).toBe(8);
+        expect(actionButtons.item(5).getAttribute('aria-label')).toBe('Send to service: review 1 selected activity');
     });
 
     it('should keep selected-event actions accessible without hover tooltip overlays', () => {
@@ -659,6 +662,7 @@ describe('EventTableComponent', () => {
             'Download CSV for 2 activities',
             'Download GPX for 2 activities',
             'Download original files',
+            'Send to service: review 2 selected activities',
             'Delete 2 activities',
             'Clear selection',
         ]);
@@ -2184,6 +2188,25 @@ describe('EventTableComponent', () => {
     });
 
     describe('Selection actions', () => {
+        it.each([true, false])('waits for accepted selection-send navigation before feedback: %s', async opened => {
+            component.selection.select({ Event: new MockEvent('event1') });
+            let finishNavigation!: (result: boolean) => void;
+            mockRouter.navigate.mockReturnValueOnce(new Promise<boolean>(resolve => { finishNavigation = resolve; }));
+            const action = component.sendToService();
+            expect(mockRouter.navigate).toHaveBeenCalledWith(['/send-activities'], { queryParams: { source: 'saved' }, state: { activitySendSelection: ['event1'], activitySendOwner: 'testUser' } });
+            expect(mockHapticsService.selection).not.toHaveBeenCalled();
+            finishNavigation(opened); await action;
+            expect(mockHapticsService.selection).toHaveBeenCalledTimes(Number(opened));
+            expect(mockHapticsService.success).not.toHaveBeenCalled();
+            expect(mockHapticsService.error).not.toHaveBeenCalled();
+        });
+        it('keeps shared selections outside activity sending', async () => {
+            component.selection.select({ Event: new MockEvent('event1') });
+            component.targetUser = new User('another-owner');
+            await component.sendToService();
+            expect(mockRouter.navigate).not.toHaveBeenCalled();
+            expect(mockHapticsService.selection).not.toHaveBeenCalled();
+        });
         it('should allow downloadOriginals when more than 20 events are selected', async () => {
             const events = Array.from({ length: 21 }, (_, i) => new MockEvent(`event${i}`));
             events.forEach(e => {

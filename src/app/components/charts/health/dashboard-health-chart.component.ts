@@ -75,7 +75,8 @@ export class DashboardHealthChartComponent {
     readonly title = computed(() => this.settings().metric === 'sleep' ? 'Sleep' : HEALTH_METRIC_CATALOG[this.settings().metric]?.label || 'Health');
     readonly recordedDate = computed(() => {
         const context = this.displayContext();
-        const date = context?.selected?.model.series.points.at(-1)?.calendarDate || context?.sleep.latestPoint?.sleepDate;
+        if (context?.selected) return context.selected.model.recordedDateText;
+        const date = context?.sleep.latestPoint?.sleepDate;
         return date ? getDateTimeFormatter(undefined, { month: 'short', day: 'numeric', year: 'numeric', timeZone: 'UTC' })
             .format(new Date(`${date}T12:00:00.000Z`)) : null;
     });
@@ -95,6 +96,11 @@ export class DashboardHealthChartComponent {
     readonly displayContext = computed(() => this.showingExample()
         ? buildDashboardHealthExample(this.settings(), this.window(), this.user().settings.unitSettings)
         : this.previewEvidence());
+    readonly selectedSourceLabel = computed(() => {
+        const view = this.displayContext();
+        return this.showingExample() ? 'Example data'
+            : view?.sources.find(source => source.key === view.selectedKey)?.sourceLabel || null;
+    });
     readonly previewNotice = computed(() => this.showingExample()
         ? this.loading() ? 'Showing an example while your readings load.'
             : this.error() ? 'Your readings could not be loaded. This is an example.'
@@ -212,7 +218,7 @@ export class DashboardHealthChartComponent {
         }
     }
     selectSource(sourceKey: string): void {
-        if (this.disabled() || sourceKey === this.effectiveSettings().sourceKey || !this.context()?.sources.some(source => source.key === sourceKey))
+        if (this.disabled() || sourceKey === this.context()?.selectedKey || !this.context()?.sources.some(source => source.key === sourceKey))
             return;
         this.haptics.selection();
         this.settingsChange.emit({ settings: { ...this.settings(), sourceKey }, initial: false });

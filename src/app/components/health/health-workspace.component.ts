@@ -57,8 +57,9 @@ import { BrowserCompatibilityService } from '../../services/browser.compatibilit
 import { AppSleepService } from '../../services/app.sleep.service';
 import { AppThemeService } from '../../services/app.theme.service';
 import { AppUserSettingsQueryService } from '../../services/app.user-settings-query.service';
-import { AppHealthHighlightId, AppHealthHighlightSources } from '../../models/app-user.interface';
-import { normalizeHealthHighlightSources } from '../../helpers/health-highlight-preferences.helper';
+import { buildHealthHighlightChangeSignals } from '../../helpers/health-change-summary.helper';
+import { AppHealthHighlightId, AppHealthHighlightSources, AppHealthMetricSources } from '../../models/app-user.interface';
+import { normalizeHealthHighlightSources, normalizeHealthMetricSources } from '../../helpers/health-highlight-preferences.helper';
 import { AppChartsModule } from '../../modules/app-charts.module';
 import { PageHeaderComponent } from '../shared/page-header/page-header.component';
 import { HealthMetricChartComponent } from './health-metric-chart.component';
@@ -145,6 +146,7 @@ interface QueuedHealthWorkspacePreferenceWrite {
   range: HealthWorkspaceRange;
   generation: number;
   highlightSources?: AppHealthHighlightSources;
+  metricSources?: AppHealthMetricSources;
 }
 
 interface HealthOverviewPosition {
@@ -280,6 +282,7 @@ export class HealthWorkspaceComponent {
   private metricPreferenceTouched = false;
   private rangePreferenceTouched = false;
   private readonly highlightPreferencesTouched = new Set<AppHealthHighlightId>();
+  private readonly metricSourcesTouched = new Set<HealthWorkspaceMetricSelection>();
   private preferenceWriteGeneration = 0;
   private preferenceWriteInFlight = false;
   private queuedPreferenceWrite: QueuedHealthWorkspacePreferenceWrite | null = null;
@@ -302,6 +305,7 @@ export class HealthWorkspaceComponent {
   readonly isSavingPreferences = signal(false);
   readonly preferencesSaveFailed = signal(false);
   readonly preferredHighlightSources = signal<AppHealthHighlightSources>({});
+  readonly preferredMetricSources = signal<AppHealthMetricSources>({});
   readonly selectedWindow = computed(() => resolveHealthWorkspaceWindow(this.routeState(), this.todayDate));
   private readonly selectedSleepReadKey = computed(() => {
     const window=this.selectedWindow();
@@ -344,6 +348,8 @@ export class HealthWorkspaceComponent {
   readonly priorityHeartRateStatus = signal<HealthLoadStatus>('loading');
   readonly priorityHrvLoad = signal<HealthWorkspaceRangeLoad | null>(null);
   readonly priorityHrvStatus = signal<HealthLoadStatus>('loading');
+  readonly priorityHrvRefreshFailed = signal(false);
+  readonly priorityHrvRefreshing = signal(false);
   readonly syncStates = signal<HealthSyncState[]>([]);
   readonly syncStatesStatus = signal<HealthLoadStatus>('loading');
   readonly selectedProviders = signal<HealthProvider[]>([]);
@@ -907,6 +913,20 @@ export class HealthWorkspaceComponent {
     card.id === 'heart_rate_variability' || card.id === 'heart_rate'
       ? card.chartSeries.length > 0
       : card.loading || card.error || card.rows.length > 0 || card.chartSeries.length > 0));
+  readonly overviewChangeSignals = computed(() => buildHealthHighlightChangeSignals(
+    this.priorityCards().filter(card => card.id === 'sleep' || card.id === 'heart_rate_variability').map(card => {
+      const providers = this.selectedProviders();
+      const hrv = card.id === 'heart_rate_variability';
+      return { ...card,
+        rows: providers.length ? card.rows.filter(row => providers.includes(row.provider)) : card.rows,
+        chartSeries: providers.length ? card.chartSeries.filter(series => providers.includes(series.provider)) : card.chartSeries,
+        loading: card.loading || hrv && (this.prioritySleepStatus() === 'loading' || this.priorityHrvRefreshing()),
+        comparisonUnavailable: hrv && (this.priorityHrvRefreshFailed() || !!this.priorityHrvLoad()?.limitReached
+          || this.priorityHrvLoad()?.result.pageInfo.sourceRecordAggregateComplete === false
+          || this.prioritySleepStatus() === 'error' || this.prioritySleepStatus() === 'denied'),
+      };
+    }), this.preferredHighlightSources(),
+  ));
   readonly visibleOverviewPriorityCards = computed(() => this.visiblePriorityCards()
     .filter(card => card.id === 'sleep' || card.id === 'heart_rate_variability'));
   readonly visibleVitalsPriorityCards = computed(() => this.visiblePriorityCards().filter(card => card.id === 'heart_rate'));
@@ -974,6 +994,7 @@ export class HealthWorkspaceComponent {
       const savedHighlightSources = normalizeHealthHighlightSources(
         user?.settings?.appSettings?.healthWorkspace?.highlightSources,
       );
+      const savedMetricSources = normalizeHealthMetricSources(user?.settings?.appSettings?.healthWorkspace?.metricSources);
       if (uid === this.workspacePreferenceUserID) {
         if (urlMetricChanged) {
           untracked(() => this.prepareMetricNavigation(urlMetric));
@@ -994,6 +1015,9 @@ export class HealthWorkspaceComponent {
         const current = untracked(this.preferredHighlightSources);
         for (const id of this.highlightPreferencesTouched) savedHighlightSources[id] = current[id];
         this.preferredHighlightSources.set(savedHighlightSources);
+        const currentMetricSources = untracked(this.preferredMetricSources);
+        for (const metric of this.metricSourcesTouched) savedMetricSources[metric] = currentMetricSources[metric];
+        this.preferredMetricSources.set(savedMetricSources);
         return;
       }
       const accountChanged = this.workspacePreferenceUserID !== null;
@@ -1011,6 +1035,8 @@ export class HealthWorkspaceComponent {
       this.rangePreferenceTouched = false;
       this.highlightPreferencesTouched.clear();
       this.preferredHighlightSources.set(savedHighlightSources);
+      this.metricSourcesTouched.clear();
+      this.preferredMetricSources.set(savedMetricSources);
       this.preferenceWriteGeneration += 1;
       this.queuedPreferenceWrite = null;
       this.isSavingPreferences.set(false);
@@ -1238,6 +1264,7 @@ export class HealthWorkspaceComponent {
       if (userChanged) {
         this.priorityHeartRateLoad.set(null);
         this.priorityHrvLoad.set(null);
+        this.priorityHrvRefreshFailed.set(false);
       }
       if (!currentHeartRateLoad || userChanged) {
         this.priorityHeartRateStatus.set('loading');
@@ -1246,6 +1273,7 @@ export class HealthWorkspaceComponent {
         this.priorityHrvStatus.set('loading');
       }
       if (!uid) {
+        this.priorityHrvRefreshing.set(false);
         return;
       }
       // Provider calendar dates can differ from the viewer's local day. Read
@@ -1446,6 +1474,16 @@ export class HealthWorkspaceComponent {
     this.queueWorkspacePreferenceWrite();
   }
 
+  selectMetricSource({ uid, metric, sourceKey }: { uid: string; metric: HealthWorkspaceMetricSelection; sourceKey: string }): void {
+    if (!uid || uid !== this.signedInUserID() || uid !== this.workspacePreferenceUserID
+      || normalizeHealthMetricSources({ [metric]: sourceKey })[metric] !== sourceKey
+      || this.preferredMetricSources()[metric] === sourceKey) return;
+    // The shared chart owns selection feedback; the workspace only persists it.
+    this.metricSourcesTouched.add(metric);
+    this.preferredMetricSources.update(current => ({ ...current, [metric]: sourceKey }));
+    this.queueWorkspacePreferenceWrite();
+  }
+
   showAllProviders(): void {
     if (this.effectiveProviderFilters().length) this.haptics.selection();
     this.selectedProviders.set([]);
@@ -1643,6 +1681,7 @@ export class HealthWorkspaceComponent {
     includeSamples: boolean,
     endDate = this.todayDate,
   ): Promise<void> {
+    if (metricId === HEALTH_METRIC_IDS.HeartRateVariability) this.priorityHrvRefreshing.set(true);
     try {
       const result = await this.healthQueries.loadMetricRange(uid, {
         startDate,
@@ -1660,6 +1699,8 @@ export class HealthWorkspaceComponent {
       } else {
         this.priorityHrvLoad.set(result);
         this.priorityHrvStatus.set('ready');
+        this.priorityHrvRefreshFailed.set(false);
+        this.priorityHrvRefreshing.set(false);
       }
     } catch (error) {
       if (generation !== this.priorityLoadGeneration) {
@@ -1670,6 +1711,8 @@ export class HealthWorkspaceComponent {
           this.priorityHeartRateStatus.set(loadErrorStatus(error));
         }
       } else {
+        this.priorityHrvRefreshFailed.set(true);
+        this.priorityHrvRefreshing.set(false);
         if (!this.priorityHrvLoad()) {
           this.priorityHrvStatus.set(loadErrorStatus(error));
         }
@@ -1845,6 +1888,10 @@ export class HealthWorkspaceComponent {
         highlightSources: Object.fromEntries([...this.highlightPreferencesTouched]
           .map(id => [id, this.preferredHighlightSources()[id]])),
       } : {}),
+      ...(this.metricSourcesTouched.size ? {
+        metricSources: Object.fromEntries([...this.metricSourcesTouched]
+          .map(metric => [metric, this.preferredMetricSources()[metric]])),
+      } : {}),
     };
     this.isSavingPreferences.set(true);
     void this.flushWorkspacePreferenceWrites();
@@ -1866,6 +1913,7 @@ export class HealthWorkspaceComponent {
           metric: write.metric,
           range: write.range,
           ...(write.highlightSources ? { highlightSources: write.highlightSources } : {}),
+          ...(write.metricSources ? { metricSources: write.metricSources } : {}),
         });
       } catch {
         if (
