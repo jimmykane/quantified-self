@@ -568,6 +568,8 @@ describe('help.content', () => {
     }
     expect(searchHelpSections(HELP_SECTIONS, 'Timeline notes').map(section => section.id)).toEqual(expect.arrayContaining(['health', 'training-analysis']));
     const calendar = HELP_SECTIONS.find(section => section.id === 'activity-calendar')?.content;
+    expect(calendar).toContain('Activity tags appear beneath each activity name');
+    expect(calendar).toContain('All tags stay visible and wrap on narrow screens');
     expect(calendar).toContain('a slim colored tick on the right marks days');
     expect(calendar).toContain('notes and their individual colors');
     expect(calendar).toContain('the Today mini-calendar, a slim colored tick on the right marks days');

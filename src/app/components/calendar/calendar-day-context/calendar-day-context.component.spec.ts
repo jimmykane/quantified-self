@@ -107,6 +107,8 @@ describe('CalendarDayContextComponent', () => {
       { id: 'ride', hour: 17, type: 'Cycling', seconds: 1200 },
       { id: '', hour: 9, type: 'Running', seconds: null },
     ].map(({ id, hour, type, seconds }) => ({
+      tags: id ? [' Race ', 'race', 'Autumn   build', 'ABCDEFGHIJKLMNOPQRSTUVWXYZ123456', '<b>Team</b>', null] : undefined,
+      benchmarkReviewTags: id ? ['Old tag'] : ['Easy'],
       startDate: new Date(2026, 8, 13, hour),
       getID: () => id,
       getActivityTypesAsArray: () => [type],
@@ -126,6 +128,7 @@ describe('CalendarDayContextComponent', () => {
       { dashboardTile: false, calmMonth: false, standaloneDayPage: false },
       { dashboardTile: false, calmMonth: false, standaloneDayPage: true },
     ]) {
+      haptics.selection.mockClear();
       for (const [inputName, value] of Object.entries(presentation)) fixture.componentRef.setInput(inputName, value);
       fixture.detectChanges();
       const rows = [...fixture.nativeElement.querySelectorAll('.calendar-day-context-preview-entry')] as HTMLElement[];
@@ -136,11 +139,18 @@ describe('CalendarDayContextComponent', () => {
       const run = rows.find(row => row.querySelector('.calendar-day-context-preview-title')?.textContent === 'Running')!;
       expect(ride.querySelector('small')?.textContent).toBe('20m');
       expect(ride.getAttribute('href')).toBe('/user/owner/event/ride');
+      expect([...ride.querySelectorAll('.calendar-activity-tag-label')].map(tag => tag.textContent))
+        .toEqual(['Race', 'Autumn build', 'ABCDEFGHIJKLMNOPQRSTUVWXYZ123456', '<b>Team</b>']);
+      expect(ride.querySelector('b')).toBeNull();
+      expect([...run.querySelectorAll('.calendar-activity-tag-label')].map(tag => tag.textContent)).toEqual(['Easy']);
+      expect(ride.querySelector('button, [tabindex="0"]')).toBeNull();
+      expect(haptics.selection).not.toHaveBeenCalled();
       expect(run.querySelector('small')?.textContent).toBe('Duration unavailable');
       expect(run.tagName).toBe('DIV');
       expect(fixture.nativeElement.querySelector('[aria-label="Activities on selected day"] [mat-list-item]')).toBeNull();
       expect(fixture.nativeElement.querySelector('app-training-impact')).toBeNull();
-      haptics.selection.mockClear(); prepareReturn.mockClear(); ride.click();
+      haptics.selection.mockClear(); prepareReturn.mockClear();
+      (ride.querySelector('.calendar-activity-tag-label') as HTMLElement).click();
       expect(haptics.selection).toHaveBeenCalledOnce();
       expect(prepareReturn).toHaveBeenCalledOnce();
       if (presentation.standaloneDayPage) {
@@ -157,6 +167,7 @@ describe('CalendarDayContextComponent', () => {
     for (const calmMonth of [false, true]) {
       fixture.componentRef.setInput('calmMonth', calmMonth);
       activities.set({ status: 'ready', day: emptyDay.day }); fixture.detectChanges();
+      expect(fixture.nativeElement.querySelector('app-calendar-activity-tags')).toBeNull();
       expect(fixture.nativeElement.querySelector('[aria-label="Activities on selected day"]')).toBeNull();
       activities.set({ status: 'loading', day: emptyDay.day }); fixture.detectChanges();
       expect(fixture.nativeElement.querySelector('[aria-label="Activities on selected day"] [role="status"]')?.textContent)

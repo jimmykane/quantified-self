@@ -11,6 +11,7 @@ import {
 import { firstValueFrom, of, Subject } from 'rxjs';
 import { ActivityCalendarService } from './activity-calendar.service';
 import { AppEventService } from './app.event.service';
+import type { AppEventInterface } from '@shared/app-event.interface';
 import {
   DASHBOARD_FORM_LEGACY_TRAINING_STRESS_SCORE_TYPE,
   DASHBOARD_FORM_TRAINING_STRESS_SCORE_TYPE,
@@ -27,6 +28,30 @@ describe('ActivityCalendarService', () => {
         { provide: AppEventService, useValue: { watchEventDocumentsBy } },
       ],
     });
+  });
+
+  it.each(['watchEvents', 'watchSummaryEvents'] as const)('preserves normalized tags in %s and replaces them on live updates', async reader => {
+    const documents = new Subject<ReturnType<typeof eventAt>[]>();
+    watchEventDocumentsBy.mockReturnValue(documents);
+    const service = TestBed.inject(ActivityCalendarService);
+    const seen: string[][][] = [];
+    const subscription = service[reader]({ uid: 'owner' } as User, { startMs: 1, endExclusiveMs: 100 })
+      .subscribe(result => {
+        const events = Array.isArray(result) ? result : result.events;
+        seen.push(events.map(event => (event as AppEventInterface).tags));
+      });
+    const event = eventAt('tagged', new Date(2));
+    documents.next([
+      { ...event, tags: [' Race ', 'race', 12, 'Autumn   build'], benchmarkReviewTags: ['Old'] },
+      { ...event, id: 'legacy', benchmarkReviewTags: ['Legacy'] },
+      { ...event, id: 'cleared', tags: [], benchmarkReviewTags: ['Hidden'] },
+      { ...event, id: 'untagged' },
+    ] as ReturnType<typeof eventAt>[]);
+    expect(seen.at(-1)).toEqual([['Race', 'Autumn build'], ['Legacy'], [], []]);
+    documents.next([{ ...event, tags: ['Recovery'] }] as ReturnType<typeof eventAt>[]);
+    expect(seen.at(-1)).toEqual([['Recovery']]);
+    subscription.unsubscribe();
+    expect(documents.observed).toBe(false);
   });
 
   it('queries the visible interval with an exclusive end and no result limit', async () => {

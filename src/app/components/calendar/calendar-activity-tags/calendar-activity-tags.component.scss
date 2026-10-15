@@ -1,0 +1,23 @@
+@use '@angular/material' as mat;
+
+:host { display: block; min-width: 0; }
+
+mat-chip-set {
+  @include mat.chips-overrides((container-height: 24px));
+  max-width: 100%;
+  margin-block: 2px;
+}
+
+mat-chip {
+  max-width: 100%;
+  height: auto;
+  min-height: 24px;
+}
+
+.calendar-activity-tag-label {
+  display: block;
+  padding-block: 3px;
+  white-space: normal;
+  overflow-wrap: anywhere;
+  font: var(--mat-sys-body-small);
+}

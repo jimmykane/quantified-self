@@ -117,6 +117,9 @@
                 aria-hidden="true"></app-activity-type-icon>
               <div class="calendar-day-entry-copy">
                 <span class="calendar-day-entry-title">{{ event.label }}</span>
+                @if (event.tags.length) {
+                  <app-calendar-activity-tags [tags]="event.tags"></app-calendar-activity-tags>
+                }
                 <div class="calendar-day-event-supporting">
                   <span class="calendar-day-event-detail">
                     @for (part of event.detailParts; track $index) {
@@ -146,6 +149,9 @@
                 aria-hidden="true"></app-activity-type-icon>
               <div class="calendar-day-entry-copy">
                 <span class="calendar-day-entry-title">{{ event.label }}</span>
+                @if (event.tags.length) {
+                  <app-calendar-activity-tags [tags]="event.tags"></app-calendar-activity-tags>
+                }
                 <div class="calendar-day-event-supporting">
                   <span class="calendar-day-event-detail">
                     @for (part of event.detailParts; track $index) {

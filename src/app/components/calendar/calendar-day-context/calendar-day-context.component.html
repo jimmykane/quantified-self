@@ -358,6 +358,9 @@
       size="20px" aria-hidden="true"></app-activity-type-icon>
     <div class="calendar-day-context-preview-copy">
       <span class="calendar-day-context-preview-title">{{ activity.name }}</span>
+      @if (activity.tags.length) {
+        <app-calendar-activity-tags [tags]="activity.tags"></app-calendar-activity-tags>
+      }
       <small>{{ activity.duration }}</small>
       @if (trainingImpactState().status !== 'private') {
         <app-training-impact [impact]="activity.trainingImpact" variant="compact"></app-training-impact>

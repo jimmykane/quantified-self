@@ -364,6 +364,7 @@ Workout time can be an estimate or a total of only the steps with a set time. Mo
 
 ## Read activity days
 
+- Activity tags appear beneath each activity name in the dashboard Calendar, Calendar day panels, full-day timeline, and Today day sheet. All tags stay visible and wrap on narrow screens. Tap the activity to open its details and edit tags there.
 - A circle's color identifies an activity group and its size reflects recorded duration. Larger circles mean more recorded time, using a bounded scale so unusually long activities do not dominate the grid.
 - Month view, the dashboard tile, and the Today mini-calendar show overlapping activity-group circles, with a count when several activities share a group. The mini-calendar keeps the same markers in smaller cells. Week view separates duration-sized circles; Year view uses compact concentric circles.
 - A small pulsing dot in the corner marks today's date in Month view, the dashboard Calendar, and the Today mini-calendar. It stays on today when you select a different date. On narrow calendars the word **Today** is hidden to keep the cell clear; the date's accessible label still announces it. Reduced-motion settings keep the dot still.
