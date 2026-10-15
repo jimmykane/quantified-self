@@ -93,7 +93,7 @@
         <div class="dashboard-readiness-score">
           @if (dashboardTodayReadiness.loading) {
           <mat-progress-bar mode="indeterminate" aria-label="Loading readiness"></mat-progress-bar>
-          } @else {
+          } @else if (dashboardTodayReadiness.score !== null) {
           <app-metric-indicator class="dashboard-readiness-score-indicator" label="Readiness"
             [value]="dashboardTodayReadiness.score" [tone]="$any(dashboardTodayReadiness.label.toLowerCase())"
             [showThresholds]="true"></app-metric-indicator>
@@ -102,11 +102,13 @@
         @if (dashboardTodayReadiness.loading) {
         <small>Waiting for load and sleep data</small>
         } @else {
-        <small class="dashboard-readiness-method" [attr.role]="dashboardTodayReadiness.warningText ? 'status' : null">{{ dashboardTodayReadiness.warningText || 'Load + sleep signals · Freshness stays TSS-only' }}</small>
+        <small class="dashboard-readiness-method" [attr.role]="dashboardTodayReadiness.warningText || dashboardTodayReadiness.awaitingSleep ? 'status' : null">{{ dashboardTodayReadiness.warningText || (dashboardTodayReadiness.awaitingSleep ? 'Today’s readiness will appear after sleep syncs.' : 'Load + sleep signals · Freshness stays TSS-only') }}</small>
+        @if (dashboardTodayReadiness.score !== null) {
         <small>{{ dashboardTodayReadiness.confidenceText }} · {{ dashboardTodayReadiness.evidenceText }}</small>
         <app-metric-indicator variant="segments" label="Available readiness signals"
           [value]="dashboardTodayReadiness.availableSignalCount"
           [total]="4" [tone]="$any(dashboardTodayReadiness.label.toLowerCase())"></app-metric-indicator>
+        }
         }
       </div>
     </div>
@@ -172,6 +174,7 @@
         }
         </div>
         <small>vs baseline · lower supports</small>
+        <small class="dashboard-readiness-night-context">{{ dashboardTodayReadiness.overnightHeartRateContextText }}</small>
       </div>
     </dl>
   </section>

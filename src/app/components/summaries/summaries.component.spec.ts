@@ -59,7 +59,6 @@ import {
   DASHBOARD_SLEEP_TREND_CHART_TYPE,
 } from '../../helpers/dashboard-special-chart-types';
 import { getDashboardPowerCurveActivityTypes } from '../../helpers/dashboard-power-curve-scope.helper';
-import { DASHBOARD_READINESS_SLEEP_MAX_AGE_MS } from '../../helpers/dashboard-training-insights.helper';
 import { SummariesComponent } from './summaries.component';
 import { DashboardTileBoardComponent } from './dashboard-tile-board/dashboard-tile-board.component';
 import { DashboardTileCellComponent } from './dashboard-tile-cell/dashboard-tile-cell.component';
@@ -1730,17 +1729,59 @@ describe('SummariesComponent', () => {
       expect(TestBed.inject(AppHapticsService).selection).not.toHaveBeenCalled();
     });
 
-    it('shows load-only readiness after an empty first sleep result', () => {
+    it('awaits today’s sleep after an empty first result and shows readiness when it arrives', () => {
       load$.next(loadState);
       vi.advanceTimersToNextFrame();
       sleep$.next([]);
       vi.advanceTimersToNextFrame();
-      expect(component.dashboardTodayReadiness).toMatchObject({ loading: false, score: 75, availableSignalCount: 1, warningText: '' });
-      expect(render().querySelector('.dashboard-current-state-row')?.textContent).toContain('No eligible night');
+      expect(component.dashboardTodayReadiness).toMatchObject({ loading: false, awaitingSleep: true, score: null, warningText: '' });
+      expect(render().querySelector('.dashboard-readiness-primary-value')?.textContent).toContain('Awaiting today’s sleep');
+      expect(render().querySelector('[label="Available readiness signals"]')).toBeNull();
       // Newly imported sleep continues updating the open dashboard.
       sleep$.next(nights);
       vi.advanceTimersToNextFrame();
       expect(component.dashboardTodayReadiness.score).toBe(67);
+    });
+
+    it('keeps yesterday’s readings dated without presenting their score or confidence as today’s', () => {
+      load$.next(loadState);
+      sleep$.next(nights.map(night => ({
+        ...night,
+        startTimeMs: night.startTimeMs! - 86_400_000,
+        endTimeMs: night.endTimeMs! - 86_400_000,
+      })));
+      vi.advanceTimersToNextFrame();
+      const host = render();
+      expect(component.dashboardTodayReadiness).toMatchObject({
+        loading: false, awaitingSleep: true, label: 'Awaiting today’s sleep', score: null, scoreText: '',
+        sleepText: '68/100', sleepContextText: 'Last available · Sep 10',
+        overnightHeartRateContextText: 'Last available · Sep 10',
+      });
+      const primary = host.querySelector('.dashboard-readiness-primary')!;
+      expect(primary.textContent).toContain('Today’s readiness will appear after sleep syncs.');
+      expect(primary.textContent).not.toContain('confidence');
+      expect(primary.textContent).not.toContain('/100');
+      expect(primary.querySelector('app-metric-indicator')).toBeNull();
+      expect(host.querySelector('.dashboard-readiness-hrv')?.textContent).toContain('Latest HRV');
+      expect(component.dashboardTodayReadiness.loadText).toBe('+24.9 / -1.3');
+      expect(TestBed.inject(AppHapticsService).selection).not.toHaveBeenCalled();
+      sleep$.next(nights);
+      vi.advanceTimersToNextFrame();
+      expect(component.dashboardTodayReadiness).toMatchObject({ awaitingSleep: false, score: 67, sleepContextText: 'Today' });
+      expect(render().querySelector('[label="Available readiness signals"]')).not.toBeNull();
+      expect(TestBed.inject(AppHapticsService).selection).not.toHaveBeenCalled();
+    });
+
+    it('changes to awaiting sleep at local midnight without another source emission', async () => {
+      vi.setSystemTime(new Date(2026, 8, 11, 23, 59, 59));
+      load$.next(loadState);
+      sleep$.next(nights);
+      vi.advanceTimersToNextFrame();
+      expect(component.dashboardTodayReadiness.score).not.toBeNull();
+      await vi.advanceTimersByTimeAsync(1_050);
+      expect(component.dashboardTodayReadiness).toMatchObject({ awaitingSleep: true, score: null });
+      expect(render().textContent).toContain('Last available · Sep 11');
+      expect(TestBed.inject(AppHapticsService).selection).not.toHaveBeenCalled();
     });
 
     it('keeps the Today layout reservations and score slot through hydration, recovery expiry and errors', () => {
@@ -1806,7 +1847,7 @@ describe('SummariesComponent', () => {
       vi.advanceTimersToNextFrame();
       load$.next(createDashboardDerivedMetricsMissingState());
       vi.advanceTimersToNextFrame();
-      expect(component.dashboardTodayReadiness).toMatchObject({ loading: false, score: null, label: 'Awaiting data' });
+      expect(component.dashboardTodayReadiness).toMatchObject({ loading: false, score: null, label: 'Awaiting today’s sleep' });
       expect(render().querySelector('[aria-label="Loading readiness"]')).toBeNull();
     });
 
@@ -1815,7 +1856,7 @@ describe('SummariesComponent', () => {
       vi.advanceTimersToNextFrame();
       sleep$.error(new Error('read failed'));
       vi.advanceTimersToNextFrame();
-      expect(component.dashboardTodayReadiness).toMatchObject({ loading: false, score: 75, sleepContextText: 'Sleep unavailable' });
+      expect(component.dashboardTodayReadiness).toMatchObject({ loading: false, score: null, label: 'Readiness unavailable', sleepContextText: 'Sleep unavailable' });
       expect(render().querySelector('.dashboard-current-state-primary [role="status"]')?.textContent).toContain('Sleep could not be loaded');
       expect(fixture.nativeElement.textContent).not.toContain('No eligible night');
     });
@@ -1827,7 +1868,7 @@ describe('SummariesComponent', () => {
       vi.advanceTimersToNextFrame();
       sleep$.error(new Error('refresh failed'));
       vi.advanceTimersToNextFrame();
-      expect(component.dashboardTodayReadiness).toMatchObject({ loading: false, score: 75, availableSignalCount: 1, sleepContextText: 'Sleep unavailable' });
+      expect(component.dashboardTodayReadiness).toMatchObject({ loading: false, score: null, label: 'Readiness unavailable', availableSignalCount: 1, sleepContextText: 'Sleep unavailable' });
       expect(render().querySelector('.dashboard-current-state-primary [role="status"]')?.textContent).toContain('Sleep could not be loaded');
     });
 
@@ -1849,7 +1890,7 @@ describe('SummariesComponent', () => {
       expect(component.dashboardTodayReadiness).toMatchObject({ loading: true, score: null });
       reopened$.next([]);
       vi.advanceTimersToNextFrame();
-      expect(component.dashboardTodayReadiness).toMatchObject({ loading: false, score: 75 });
+      expect(component.dashboardTodayReadiness).toMatchObject({ loading: false, score: null, awaitingSleep: true });
     });
 
     it('does not combine a new owner’s load with the previous owner’s sleep', () => {
@@ -1870,7 +1911,7 @@ describe('SummariesComponent', () => {
       expect(sleep$.observed).toBe(false);
       nextSleep$.next([]);
       vi.advanceTimersToNextFrame();
-      expect(component.dashboardTodayReadiness).toMatchObject({ loading: false, score: 75, availableSignalCount: 1 });
+      expect(component.dashboardTodayReadiness).toMatchObject({ loading: false, score: null, awaitingSleep: true, availableSignalCount: 1 });
     });
   });
 
@@ -3045,9 +3086,9 @@ describe('SummariesComponent', () => {
       },
       {
         id: 'future-sleep',
-        sleepDate: '2026-05-01',
-        startTimeMs: nowMs + (16 * 60 * 60 * 1000),
-        endTimeMs: nowMs + (24 * 60 * 60 * 1000),
+        sleepDate: '2026-04-30',
+        startTimeMs: nowMs - (8 * 60 * 60 * 1000) + 1_000,
+        endTimeMs: nowMs + 1_000,
         durationSeconds: 8 * 60 * 60,
         isNap: false,
         source: { provider: 'GarminAPI', sourceSessionKey: 'future-sleep' },
@@ -3058,7 +3099,7 @@ describe('SummariesComponent', () => {
     (component as any).updateReadinessSleepRefreshTimer();
     expect((component as any).readinessSleepRefreshTimeoutHandle).not.toBeNull();
 
-    await vi.advanceTimersByTimeAsync(DASHBOARD_READINESS_SLEEP_MAX_AGE_MS + 1);
+    await vi.advanceTimersByTimeAsync(1_050);
 
     expect(rebuildSpy).toHaveBeenCalledTimes(1);
     expect((component as any).readinessSleepRefreshTimeoutHandle).not.toBeNull();

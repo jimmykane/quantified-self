@@ -54,6 +54,10 @@ describe('help.content', () => {
     const dashboard = HELP_SECTIONS.find(section => section.id === 'getting-started')!.content;
     expect(dashboard).toContain('**history columns**');
     expect(dashboard).toContain('past zero-load scenarios');
+    expect(dashboard).toContain('**Awaiting today’s sleep**');
+    expect(dashboard).toContain('withholds the readiness score and confidence');
+    expect(dashboard).toContain('**Last available** with their date');
+    expect(dashboard).toContain('updates at local midnight');
   });
   it('explains campaign sender names, fixed addresses and retesting after sender edits', () => {
     const copy = HELP_SECTIONS.find(section => section.id === 'data-and-privacy')!.content;
