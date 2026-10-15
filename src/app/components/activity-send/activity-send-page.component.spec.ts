@@ -42,6 +42,18 @@ describe('activity sending workspace', () => {
     await fixture.componentInstance.confirm();
     expect(sends.command).toHaveBeenCalledWith({ version: 1, action: 'confirm', batchId: 'batch-1', revision: 2 }, 'owner');
   });
+  it('identifies each recording in row-action labels and removes only the chosen row with one feedback owner', async () => {
+    const fixture = render();
+    sends.batch.set({ ...batchValue, total: 2 });
+    sends.rows.set([row, { ...row, id: 'evening', name: 'Evening.fit' }]); fixture.detectChanges();
+    const buttons = Array.from(fixture.nativeElement.querySelectorAll('button') as NodeListOf<HTMLButtonElement>)
+      .filter(button => button.textContent?.trim() === 'Remove');
+    expect(buttons.map(button => button.getAttribute('aria-label'))).toEqual(['Remove Morning.fit from this draft', 'Remove Evening.fit from this draft']);
+    const removing = vi.spyOn(fixture.componentInstance, 'rowAction');
+    buttons[1].click(); await removing.mock.results[0].value;
+    expect(sends.command).toHaveBeenCalledExactlyOnceWith({ version: 1, action: 'remove', batchId: 'batch-1', rowId: 'evening' }, 'owner');
+    expect(haptics.selection).toHaveBeenCalledOnce(); expect(haptics.success).toHaveBeenCalledOnce();
+  });
   it.each([false, null])('does not send an unreviewed selection: %s', async reviewed => {
     const fixture = render(); sends.batch.set({ ...batchValue, reviewed }); sends.rows.set([row]);
     await fixture.componentInstance.confirm(); expect(sends.command).not.toHaveBeenCalled();

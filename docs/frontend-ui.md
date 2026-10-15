@@ -25,7 +25,7 @@ provides:
 - `pageHeaderActions` for existing Material controls. Route actions move to a dedicated full-width row below 800 px;
   compact headers retain their inline action layout.
 
-The Dashboard, Calendar, Training, Routes, signed-in Compare files, and Settings workspaces use this component. A
+The Dashboard, Calendar, Training, Routes, Send activities, signed-in Compare files, and Settings workspaces use this component. A
 page should not add route-local heading font sizes, action-row breakpoints, or a second title treatment. Keep page CSS
 limited to the surrounding layout and domain-specific action groups.
 

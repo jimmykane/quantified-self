@@ -36,6 +36,8 @@ The display projection includes the sending deadline and stopped flag. Closed wi
 
 The activity menu and selection toolbar emit selection feedback only after navigation to the workspace succeeds. Pending or cancelled navigation stays silent. The bulk action's accessible label names review and the selected activity count; opening the workspace never starts provider delivery.
 
+The workspace uses the shared page header and shell. Destination and the visibly labelled Activity source controls form one setup group, with a 24 px desktop gap and stacked controls below 720 px. Review rows keep recording details, status and recovery actions distinct; batch actions have their own spacing below the list and stack on phones. Row-action accessible names identify their recording, and the empty Recent sends state explains that drafts/results appear there. Retention guidance stays visible as secondary text. These presentation changes preserve the existing haptic owners, permission/loading guards and Help instructions. Monitoring, provider delivery, MCP and Training contracts are unchanged.
+
 Opening a created draft must succeed before local uploads or saved preview start. A cancelled navigation leaves an empty draft recoverable from Recent sends and reports an error in the current view. Changing destination, source or batch during an action permanently fences its follow-up commands and feedback, including before create replies and when navigation returns to the original values. The action's own accepted draft navigation and unrelated query changes for the same draft remain active. Existing staged rows can be resumed from their draft; confirmed backend work continues independently.
 
 ## Persistence and cleanup

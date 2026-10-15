@@ -8,11 +8,12 @@ import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { MaterialModule } from '../../modules/material.module';
 import { AppChartSharedModule } from '../../modules/app-chart-shared.module';
 import { ActivitySendService } from '../../services/activity-send.service';
+import { PageHeaderComponent } from '../shared/page-header/page-header.component';
 import { AppUserService } from '../../services/app.user.service';
 import { AppHapticsService } from '../../services/app.haptics.service';
 import { ACTIVITY_SEND_LIMITS, ActivitySendCommand, ActivitySendCommandResult, ActivitySendProvider, ActivitySendRow, isActivitySendProvider } from '@shared/activity-send';
 
-@Component({ selector: 'app-activity-send-page', standalone: true, imports: [CommonModule, FormsModule, RouterModule, MaterialModule, AppChartSharedModule], templateUrl: './activity-send-page.component.html', styleUrl: './activity-send-page.component.scss' })
+@Component({ selector: 'app-activity-send-page', standalone: true, imports: [CommonModule, FormsModule, RouterModule, MaterialModule, AppChartSharedModule, PageHeaderComponent], templateUrl: './activity-send-page.component.html', styleUrl: './activity-send-page.component.scss' })
 export class ActivitySendPageComponent {
   readonly sends = inject(ActivitySendService);
   readonly users = inject(AppUserService);
