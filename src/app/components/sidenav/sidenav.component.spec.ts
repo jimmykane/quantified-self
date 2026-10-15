@@ -295,8 +295,8 @@ describe('SideNavComponent', () => {
         expect(healthItem?.nativeElement.getAttribute('routerlink')).toBe('/health');
         expect(healthItem?.nativeElement.textContent).not.toContain('BETA');
         expect(healthItem?.nativeElement.querySelector('.pro-badge')).toBeNull();
-        expect(navigationItems.slice(0, 8).map(item => item.nativeElement.getAttribute('routerlink')))
-            .toEqual(['/dashboard', '/calendar', '/training', '/training/plans', '/health', '/send-activities', '/routes', '/mytracks']);
+        expect(navigationItems.slice(0, 8).map(item => item.injector.get(RouterLink).urlTree?.toString()))
+            .toEqual(['/dashboard', '/calendar', '/training', '/training/plans', '/health', '/routes', '/mytracks', '/ai-insights']);
         const sendItem = navigationItems.find(item => item.nativeElement.getAttribute('routerlink') === '/send-activities');
         expect(sendItem?.nativeElement.textContent).toContain('Send activities');
         expect(sendItem?.nativeElement.querySelector('.pro-badge')).toBeNull();
@@ -417,7 +417,7 @@ describe('SideNavComponent', () => {
         expect(template).toContain('routerLink="/settings" [queryParams]="{ section: \'profile\' }"');
     });
 
-    it('orders signed-in navigation with Assistant last', () => {
+    it('groups Compare Files and Send activities in Tools after Assistant and before Account', () => {
         mockUserService.user = vi.fn().mockReturnValue({
             uid: TRAINING_PLANNING_NAVIGATION_ALLOWED_UID,
             displayName: 'Athlete',
@@ -456,11 +456,11 @@ describe('SideNavComponent', () => {
             navigationItems.indexOf(trainingItem!),
             navigationItems.indexOf(plansItem!),
             navigationItems.indexOf(healthItem!),
-            navigationItems.indexOf(sendItem!),
             navigationItems.indexOf(routesItem!),
             navigationItems.indexOf(myTracksItem!),
-            navigationItems.indexOf(compareFilesItem!),
             navigationItems.indexOf(assistantItem!),
+            navigationItems.indexOf(compareFilesItem!),
+            navigationItems.indexOf(sendItem!),
         ]).toEqual([
             dashboardIndex,
             dashboardIndex + 1,
@@ -477,6 +477,16 @@ describe('SideNavComponent', () => {
         expect(assistantItem?.nativeElement.textContent).not.toContain('Going away');
         expect(assistantItem?.nativeElement.textContent).not.toContain('BETA');
         expect(assistantItem?.nativeElement.getAttribute('aria-label')).toBeNull();
+        const toolsGroup = fixture.nativeElement.querySelector('[role="group"][aria-labelledby="sidenav-tools-heading"]') as HTMLElement;
+        expect(toolsGroup.querySelector('#sidenav-tools-heading')?.textContent?.trim()).toBe('Tools');
+        expect(compareFilesItem?.nativeElement.parentElement).toBe(toolsGroup);
+        expect(sendItem?.nativeElement.parentElement).toBe(toolsGroup);
+        expect(toolsGroup.previousElementSibling).toBe(assistantItem?.nativeElement);
+        expect(toolsGroup.nextElementSibling?.textContent?.trim()).toBe('Account');
+        expect(mockHapticsService.selection).not.toHaveBeenCalled();
+        sendItem!.triggerEventHandler('click', new MouseEvent('click'));
+        expect(mockSideNavService.close).toHaveBeenCalledOnce();
+        expect(mockHapticsService.selection).toHaveBeenCalledOnce();
     });
 
     it('should link My Tracks directly for logged-in free users', () => {
@@ -559,7 +569,7 @@ describe('SideNavComponent', () => {
         );
     });
 
-    it('should show file comparison in navigation for guests and signed-in users without a new badge', () => {
+    it('keeps Compare Files in Tools for guests and signed-in users and hides Send activities on sign-out', () => {
         fixture.detectChanges();
 
         let compareFilesItem = fixture.debugElement
@@ -572,8 +582,14 @@ describe('SideNavComponent', () => {
             ?? compareFilesItem?.nativeElement.getAttribute('routerLink')
         ).toBe('/tools/compare');
         expect(compareFilesItem?.nativeElement.textContent).not.toContain('New');
+        const toolsGroup = fixture.nativeElement.querySelector('[aria-labelledby="sidenav-tools-heading"]') as HTMLElement;
+        expect(compareFilesItem?.nativeElement.parentElement).toBe(toolsGroup);
+        expect(toolsGroup.querySelectorAll('mat-list-item')).toHaveLength(1);
+        expect(toolsGroup.querySelector('[routerlink="/send-activities"]')).toBeNull();
         compareFilesItem?.triggerEventHandler('click', new MouseEvent('click'));
         expect(mockAnalyticsService.logToolCompareEntry).toHaveBeenCalledWith('side_nav', false);
+        expect(mockSideNavService.close).toHaveBeenCalledOnce();
+        expect(mockHapticsService.selection).toHaveBeenCalledOnce();
 
         mockUserService.user = vi.fn().mockReturnValue({
             uid: 'user-1',
@@ -587,6 +603,18 @@ describe('SideNavComponent', () => {
             .find(item => item.nativeElement.textContent.includes('Compare Files'));
 
         expect(compareFilesItem).toBeTruthy();
+        expect(compareFilesItem?.nativeElement.parentElement).toBe(toolsGroup);
+        expect(toolsGroup.querySelectorAll('mat-list-item')).toHaveLength(2);
+        compareFilesItem!.triggerEventHandler('click', new MouseEvent('click'));
+        expect(mockAnalyticsService.logToolCompareEntry).toHaveBeenLastCalledWith('side_nav', true);
+        expect(mockSideNavService.close).toHaveBeenCalledTimes(2);
+        expect(mockHapticsService.selection).toHaveBeenCalledTimes(2);
+
+        mockUserService.user.mockReturnValue(null);
+        fixture.detectChanges();
+        expect(toolsGroup.querySelectorAll('mat-list-item')).toHaveLength(1);
+        expect(toolsGroup.querySelector('[routerlink="/send-activities"]')).toBeNull();
+        expect(fixture.nativeElement.querySelectorAll('[routerlink="/tools/compare"]')).toHaveLength(1);
     });
 
     it('should link Assistant directly for basic users without a beta badge', () => {
