@@ -102,6 +102,7 @@ class HealthCategoryOverviewStubComponent {
   @Input() showSleep = false;
   @Input() highlightedMetrics: readonly HealthWorkspaceMetricSelection[] = [];
   @Input() vitalsHighlightedMetrics: readonly HealthWorkspaceMetricSelection[] = [];
+  @Input() changeSignals: unknown;
   @Input() darkTheme = false;
   @Input() providerFilter: readonly HealthProvider[] = [];
   @Input() referenceDate: string | null = null;
@@ -609,6 +610,7 @@ describe('HealthWorkspaceComponent', () => {
     expect(host.querySelector('.health-history app-health-priority-summary')).toBeNull();
     const overview = fixture.debugElement.query(By.directive(HealthCategoryOverviewStubComponent)).componentInstance as HealthCategoryOverviewStubComponent;
     expect(overview.highlightedMetrics).toEqual(component.visibleOverviewPriorityCards().map(card => card.metric));
+    expect(overview.changeSignals).toEqual(component.overviewChangeSignals());
     expect(overview.vitalsHighlightedMetrics).toEqual([HEALTH_METRIC_IDS.HeartRate]);
     expect(host.querySelector('[healthOverviewHighlights] #health-priority-card-heart_rate')).toBeNull();
     expect(host.querySelector('[healthVitalsHighlights] #health-priority-card-heart_rate')).not.toBeNull();
@@ -1419,6 +1421,51 @@ describe('HealthWorkspaceComponent', () => {
     });
     expect(hrvChartOption?.series?.length).toBeGreaterThan(1);
     expect(hrvChartOption?.series?.slice(1).every(series => series.lineStyle?.color !== 'transparent')).toBe(true);
+  });
+
+  it('retains the HRV chart but withholds its change assessment after a failed refresh and recovers on success', async () => {
+    await createComponent(metricId => Promise.resolve(rangeLoad(metricId, metricId === HEALTH_METRIC_IDS.HeartRateVariability)),
+      undefined, { sleepSessions: hrvBaselineSleepSessions() });
+    const previous = component.priorityHrvLoad();
+    expect(component.overviewChangeSignals().find(signal => signal.id === 'heart_rate_variability')?.state).toBe('within-range');
+    loadMetricRange.mockRejectedValueOnce(new Error('offline'));
+    TestBed.inject(HealthMetricQueryService).invalidate('user-1');
+    await component['loadPriorityMetric']('user-1', HEALTH_METRIC_IDS.HeartRateVariability,
+      component.priorityHrvHistoryStartDate, component['priorityLoadGeneration'], false);
+    expect(component.priorityHrvLoad()).toBe(previous);
+    expect(component.priorityHrvStatus()).toBe('ready');
+    expect(component.overviewChangeSignals().find(signal => signal.id === 'heart_rate_variability')?.state).toBe('unavailable');
+    loadMetricRange.mockResolvedValueOnce(previous!);
+    TestBed.inject(HealthMetricQueryService).invalidate('user-1');
+    await component['loadPriorityMetric']('user-1', HEALTH_METRIC_IDS.HeartRateVariability,
+      component.priorityHrvHistoryStartDate, component['priorityLoadGeneration'], false);
+    expect(component.overviewChangeSignals().find(signal => signal.id === 'heart_rate_variability')?.state).toBe('within-range');
+  });
+
+  it('withholds overview range conclusions while evidence is missing, loading, partial or stale', async () => {
+    await createComponent();
+    component.priorityHrvStatus.set('ready');
+    component.prioritySleepStatus.set('ready');
+    component.priorityHrvLoad.set({ ...rangeLoad(HEALTH_METRIC_IDS.HeartRateVariability, false), limitReached: 'source_records' });
+    expect(component.overviewChangeSignals().find(signal => signal.id === 'heart_rate_variability')?.state).toBe('unavailable');
+    component.priorityHrvLoad.set(rangeLoad(HEALTH_METRIC_IDS.HeartRateVariability, false));
+    component.priorityHrvLoad.update(load => load ? { ...load, result: { ...load.result,
+      pageInfo: { ...load.result.pageInfo, sourceRecordAggregateComplete: false } } } : null);
+    expect(component.overviewChangeSignals().find(signal => signal.id === 'heart_rate_variability')?.state).toBe('unavailable');
+    component.priorityHrvLoad.set(rangeLoad(HEALTH_METRIC_IDS.HeartRateVariability, false));
+    component.priorityHrvRefreshFailed.set(true);
+    expect(component.overviewChangeSignals().find(signal => signal.id === 'heart_rate_variability')?.state).toBe('unavailable');
+    component.priorityHrvRefreshFailed.set(false);
+    component.priorityHrvRefreshing.set(true);
+    expect(component.overviewChangeSignals().find(signal => signal.id === 'heart_rate_variability')?.state).toBe('loading');
+    component.priorityHrvRefreshing.set(false);
+    component.prioritySleepStatus.set('loading');
+    expect(component.overviewChangeSignals().find(signal => signal.id === 'heart_rate_variability')?.state).toBe('loading');
+    component.prioritySleepStatus.set('error');
+    expect(component.overviewChangeSignals().find(signal => signal.id === 'heart_rate_variability')?.state).toBe('unavailable');
+    component.prioritySleepStatus.set('ready');
+    component.prioritySleepSessions.set([]);
+    expect(component.overviewChangeSignals().map(signal => signal.state)).toEqual(['insufficient', 'insufficient']);
   });
 
   it('grades every displayed HRV highlight point when an out-of-window Health summary enriches Sleep', async () => {

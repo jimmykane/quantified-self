@@ -52,6 +52,25 @@ describe('Health category overview', () => {
       health: null, history: null, activities: null, sessions: [], errors: [],
     }, settings);
   }
+  it('puts the change summary above existing metrics only on All and leaves cards intact', () => {
+    const fixture = create();
+    fixture.componentRef.setInput('changeSignals', [{ id: 'hrv', label: 'HRV', sourceLabel: 'Suunto',
+      state: 'insufficient', statusText: 'Building personal range', detailText: '6/14 nights' }]);
+    fixture.detectChanges();
+    const host = fixture.nativeElement as HTMLElement;
+    const summary = host.querySelector('app-health-change-summary')!;
+    const originalCards = fixture.componentInstance.cards().map(card => card.id);
+    expect(summary.textContent).toContain('More evidence is needed');
+    expect(summary.compareDocumentPosition(host.querySelector('.health-overview-grid')!) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    summary.querySelector('button')!.click(); fixture.detectChanges();
+    expect(summary.textContent).toContain('6/14 nights');
+    expect(fixture.componentInstance.cards().map(card => card.id)).toEqual(originalCards);
+    fixture.componentInstance.selectCategory('vitals'); fixture.detectChanges();
+    expect(host.querySelector('app-health-change-summary')).toBeNull();
+    expect(fixture.componentInstance.cards().length).toBeGreaterThan(0);
+    fixture.componentInstance.selectCategory('all'); fixture.detectChanges();
+    expect(host.querySelector('app-health-change-summary button')!.getAttribute('aria-expanded')).toBe('false');
+  });
   it('omits confirmed empty default readings while retaining their readers and category history', () => {
     const fixture = create(), component = fixture.componentInstance;
     fixture.componentRef.setInput('groups', buildHealthMetricCatalogGroups(['body_weight', 'vo2_max']));

@@ -14,11 +14,13 @@ import type { TimelineNoteChartContext } from '../../helpers/timeline-notes-char
 import { AppHapticsService } from '../../services/app.haptics.service';
 import { DashboardHealthChartComponent } from '../charts/health/dashboard-health-chart.component';
 import type { DashboardHealthContext } from '../../helpers/dashboard-health-context.helper';
+import type { HealthChangeSignal } from '../../helpers/health-change-summary.helper';
+import { HealthChangeSummaryComponent } from '../shared/health-change-summary/health-change-summary.component';
 
 @Component({
   selector: 'app-health-category-overview',
   standalone: true,
-  imports: [MatButtonModule, MatCardModule, MatChipsModule, MatIconModule, DashboardHealthChartComponent],
+  imports: [MatButtonModule, MatCardModule, MatChipsModule, MatIconModule, DashboardHealthChartComponent, HealthChangeSummaryComponent],
   templateUrl: './health-category-overview.component.html',
   styleUrls: ['./health-category-overview.component.scss'],
   changeDetection: ChangeDetectionStrategy.OnPush,
@@ -34,6 +36,7 @@ export class HealthCategoryOverviewComponent {
   readonly referenceDate = input<string | null>(null);
   readonly providerFilter = input<readonly HealthProvider[]>([]);
   readonly timelineNotes = input<TimelineNoteChartContext | null>(null);
+  readonly changeSignals = input<readonly HealthChangeSignal[]>([]);
   readonly metricSelected = output<HealthWorkspaceMetricSelection>();
   readonly providersObserved = output<{ uid: string; providers: HealthProvider[] }>();
   private readonly owner = computed(() => this.user().uid);

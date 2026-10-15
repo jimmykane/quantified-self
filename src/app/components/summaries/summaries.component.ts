@@ -5,6 +5,7 @@ import { MatSnackBar } from '@angular/material/snack-bar';
 import { dashboardHealthMetric, dashboardHealthSettings, isPrivateDashboardHealthTile } from '../../helpers/dashboard-health-tile.helper';
 import type { AppDashboardHealthMetricSettings } from '../../models/app-user.interface';
 import { buildReadinessHrvDisplay } from '../../helpers/readiness-hrv-display.helper';
+import { personalRangeChangeState, resolveHealthChangeSourceLabel, type HealthChangeSignal } from '../../helpers/health-change-summary.helper';
 import { localCalendarDate } from '../../helpers/health-workspace.helper';
 import { DashboardHrvService } from '../../services/dashboard-hrv.service';
 import { dashboardHrvWindows, type DashboardHrvContext } from '../../helpers/dashboard-hrv-context.helper';
@@ -147,7 +148,7 @@ import {
   type CalendarMonthPickerBottomSheetData,
 } from '../calendar/calendar-month-picker-bottom-sheet/calendar-month-picker-bottom-sheet.component';
 import type { SleepSession } from '@shared/sleep';
-import { resolveReadinessHrvRecentTrend } from '@shared/readiness';
+import { readinessHrvObservations, resolveReadinessHrvRecentTrend } from '@shared/readiness';
 import {
   DERIVED_METRIC_KINDS,
   type DerivedMetricKind,
@@ -223,6 +224,7 @@ interface DashboardDerivedMetricsBanner {
 type DashboardTodayReadinessTone = 'positive' | 'negative' | 'neutral';
 
 interface DashboardTodayReadinessViewModel {
+  changeSignals: HealthChangeSignal[];
   loading: boolean;
   awaitingSleep: boolean;
   warningText: string;
@@ -263,6 +265,10 @@ interface DashboardTodayTrainingStateViewModel {
 
 function createEmptyDashboardTodayReadinessViewModel(loading = false): DashboardTodayReadinessViewModel {
   return {
+    changeSignals: ['Sleep', 'HRV'].map(label => ({ id: label.toLowerCase(), label,
+      sourceLabel: loading ? 'Source loading' : 'No eligible source', state: loading ? 'loading' : 'insufficient',
+      statusText: loading ? 'Loading evidence' : 'Not enough comparable evidence',
+      detailText: loading ? 'Waiting for the existing source reads to finish.' : 'No eligible current sleep evidence.' })),
     loading,
     awaitingSleep: !loading,
     warningText: '',
@@ -2091,6 +2097,8 @@ export class SummariesComponent extends LoadingAbstractDirective implements OnIn
     if (!context) {
       return {
         ...createEmptyDashboardTodayReadinessViewModel(),
+        ...(warningText ? { changeSignals: ['Sleep', 'HRV'].map(label => ({ id: label.toLowerCase(), label,
+          sourceLabel: 'Source unavailable', state: 'unavailable' as const, statusText: 'Evidence unavailable', detailText: warningText })) } : {}),
         awaitingSleep,
         label: warningText ? 'Readiness unavailable' : 'Awaiting today’s sleep',
         scoreText: '',
@@ -2110,7 +2118,28 @@ export class SummariesComponent extends LoadingAbstractDirective implements OnIn
       { latestSleepAtMs: context.latestSleepAtMs, locale: this.locale, nowMs },
     );
     const overnightHeartRateTone = this.resolveDashboardTodayRatioTone(context.overnightHeartRateRatio, true);
+    const matchingNights = sleepTrend.points.filter(point => !point.isPlaceholder && !point.isNap
+      && (point.endTimeMs ?? point.startTimeMs) === context.latestSleepAtMs);
+    const sourceLabel = resolveHealthChangeSourceLabel(matchingNights, context.latestSleepAtMs !== null);
+    const hrvRange = context.hrvPersonalRange;
+    const matchingHrvNights = hrvRange ? sleepTrend.points.filter(point => !point.isPlaceholder && !point.isNap && point.provider !== null
+      && readinessHrvObservations(point).some(observation => observation.timestampMs === hrvRange.latestAtMs
+        && observation.value === hrvRange.latestMs)) : [];
+    const hrvSourceLabel = resolveHealthChangeSourceLabel(matchingHrvNights, !!hrvRange);
+    const recordedText = context.latestSleepAtMs === null ? 'No eligible current night.'
+      : `Night ended ${getDateTimeFormatter(this.locale, { dateStyle: 'medium', timeStyle: 'short' }).format(context.latestSleepAtMs)}.`;
     return {
+      changeSignals: [
+        { id: 'hrv', label: 'HRV · 7-day average', sourceLabel: `${hrvSourceLabel} · Sleep HRV`,
+          state: warningText ? 'unavailable' : personalRangeChangeState(context.hrvPersonalRange),
+          statusText: warningText ? 'Evidence unavailable' : hrv.statusText,
+          detailText: warningText || [hrv.valueText !== '—' ? `7-day average ${hrv.valueText}` : '',
+            hrv.rangeText, hrv.latestText || recordedText].filter(Boolean).join(' · ') },
+        { id: 'sleep', label: 'Sleep', sourceLabel,
+          state: warningText ? 'unavailable' : context.latestSleepAtMs === null ? 'insufficient' : 'recorded',
+          statusText: warningText ? 'Evidence unavailable' : context.latestSleepAtMs === null ? 'No eligible current night' : 'Recorded context',
+          detailText: warningText || `${recordedText} No change assessment for this metric.` },
+      ],
       loading: false,
       awaitingSleep,
       warningText,

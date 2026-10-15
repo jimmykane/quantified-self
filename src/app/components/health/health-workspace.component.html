@@ -53,6 +53,7 @@
       [groups]="metricCatalogGroups()" [showSleep]="showSleepMetric()" [darkTheme]="isDarkTheme()"
       [highlightedMetrics]="highlightedOverviewMetrics()"
       [vitalsHighlightedMetrics]="highlightedVitalsMetrics()"
+      [changeSignals]="overviewChangeSignals()"
       [referenceDate]="overviewEndDate()" [providerFilter]="selectedProviders()" [timelineNotes]="timelineNotes.context()"
       (metricSelected)="selectPriorityMetric($event)" (providersObserved)="rememberOverviewProviders($event)">
       <app-health-priority-summary healthOverviewHighlights
