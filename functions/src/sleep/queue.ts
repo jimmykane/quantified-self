@@ -1645,7 +1645,7 @@ function assertCOROSLifecycleContinuity(
 }
 
 /** Detect a refresh so the worker can retry; this never adopts new write authority. */
-async function didHealthFailureCredentialRotate(
+async function didHealthCredentialRotate(
     queueItem: SleepSyncQueueItemInterface,
     userID: string,
     guards: HealthSyncStateWriterDependencies,
@@ -1654,7 +1654,9 @@ async function didHealthFailureCredentialRotate(
     const tokenRef = guards.requiredExistingDocumentRef;
     const previous = guards.requiredExistingTokenCredential;
     if (!tokenRef || !previous) return false;
-    const snapshot = await tokenRef.get();
+    const snapshot = await tokenRef.get().catch(() => {
+        throw new Error('Health sync credential lifecycle could not be verified.');
+    });
     if (!snapshot.exists) return false;
     const credential = getTokenCredentialSnapshot(snapshot.data() as Record<string, unknown> | undefined);
     if (!credential.accessToken || credential.credentialGeneration !== previous.credentialGeneration
@@ -1668,7 +1670,9 @@ async function didHealthFailureCredentialRotate(
         );
     }
     if (snapshot.data()?.openId !== queueItem.providerUserId) return false;
-    const current = await getServiceConnectionMeta(userID, ServiceNames.COROSAPI);
+    const current = await getServiceConnectionMeta(userID, ServiceNames.COROSAPI).catch(() => {
+        throw new Error('Health sync credential lifecycle could not be verified.');
+    });
     const previousFields = guards.requiredDocumentFieldValues?.expectedFields;
     return !!previousFields && !!current && !isServiceUnavailableForSyncConnection(current)
         && previousFields.providerUserId === current.providerUserId
@@ -2848,6 +2852,10 @@ async function processHistoryGuardedSleepQueueItem(queueItem: SleepSyncQueueItem
         const corosHealthLifecycleGuards = queueItem.provider === SLEEP_PROVIDERS.COROSAPI
             ? corosLifecycleGuards
             : null;
+        const healthLifecycleGuards = garminHealthLifecycleGuards || corosHealthLifecycleGuards;
+        const shouldRetryAfterCredentialRefresh = () => healthLifecycleGuards
+            ? didHealthCredentialRotate(queueItem, firebaseUserID, healthLifecycleGuards)
+            : Promise.resolve(false);
         let result: Awaited<ReturnType<typeof upsertSleepSessions>>;
         if (isSuuntoHealthQueueItem(queueItem) || isGarminHealthQueueItem(queueItem)) {
             result = { written: 0, skipped: 0 };
@@ -2875,6 +2883,7 @@ async function processHistoryGuardedSleepQueueItem(queueItem: SleepSyncQueueItem
             result = await upsertSleepSessions(firebaseUserID, mapperResults);
         }
         if (result.lifecycleGuardSkipped) {
+            if (await shouldRetryAfterCredentialRefresh()) return QueueResult.Failed;
             return markQueueItemSkipped(queueItem, undefined, 'provider_disconnected_during_sync', {
                 skippedContext: 'PROVIDER_LIFECYCLE_GUARD',
                 sessionsWritten: result.written,
@@ -2951,6 +2960,7 @@ async function processHistoryGuardedSleepQueueItem(queueItem: SleepSyncQueueItem
                         });
                     }
                     if (writeResult.status === 'skipped_lifecycle_guard') {
+                        if (await shouldRetryAfterCredentialRefresh()) return QueueResult.Failed;
                         return markQueueItemSkipped(queueItem, undefined, 'provider_disconnected_during_sync', {
                             skippedContext: 'PROVIDER_LIFECYCLE_GUARD',
                             sessionsWritten: result.written,
@@ -3114,7 +3124,7 @@ async function processHistoryGuardedSleepQueueItem(queueItem: SleepSyncQueueItem
                     healthProvider,
                     healthStateUpdate,
                     stateUpdateMs,
-                    garminHealthLifecycleGuards,
+                    healthStateGuardsForCurrentQueueRevision(queueItem, garminHealthLifecycleGuards),
                 );
             } else {
                 healthStateWritten = await updateHealthSyncState(
@@ -3122,10 +3132,11 @@ async function processHistoryGuardedSleepQueueItem(queueItem: SleepSyncQueueItem
                     healthProvider,
                     healthStateUpdate,
                     stateUpdateMs,
-                    corosHealthLifecycleGuards || {},
+                    healthStateGuardsForCurrentQueueRevision(queueItem, corosHealthLifecycleGuards || {}),
                 );
             }
             if (!healthStateWritten) {
+                if (await shouldRetryAfterCredentialRefresh()) return QueueResult.Failed;
                 return markQueueItemSkipped(queueItem, undefined, 'user_or_provider_lifecycle_changed', {
                     skippedContext: 'USER_OR_PROVIDER_LIFECYCLE_GUARD',
                     sessionsWritten: result.written,
@@ -3183,6 +3194,7 @@ async function processHistoryGuardedSleepQueueItem(queueItem: SleepSyncQueueItem
                     : await updateSleepSyncState(firebaseUserID, queueItem.provider, sleepStateUpdate);
             }
             if (usedSleepLifecycleGuard && sleepStateWritten === false) {
+                if (await shouldRetryAfterCredentialRefresh()) return QueueResult.Failed;
                 return markQueueItemSkipped(queueItem, undefined, 'user_or_provider_lifecycle_changed', {
                     skippedContext: 'USER_OR_PROVIDER_LIFECYCLE_GUARD',
                     sessionsWritten: result.written,
@@ -3260,6 +3272,7 @@ async function processHistoryGuardedSleepQueueItem(queueItem: SleepSyncQueueItem
                     stateGuards,
                 );
                 if (!stateWritten) {
+                    if (await didHealthCredentialRotate(queueItem, error.userID, garminHealthLifecycleGuards)) return QueueResult.Failed;
                     return markQueueItemSkipped(
                         queueItem,
                         undefined,
@@ -3305,6 +3318,7 @@ async function processHistoryGuardedSleepQueueItem(queueItem: SleepSyncQueueItem
                     stateGuards,
                 );
                 if (!stateWritten) {
+                    if (await didHealthCredentialRotate(queueItem, resolvedFirebaseUserID, garminHealthLifecycleGuards)) return QueueResult.Failed;
                     return markQueueItemSkipped(
                         queueItem,
                         undefined,
@@ -3508,6 +3522,10 @@ async function processHistoryGuardedSleepQueueItem(queueItem: SleepSyncQueueItem
             if ((queueItem.provider === SLEEP_PROVIDERS.COROSAPI && corosLifecycleGuards
                 || queueItem.provider === SLEEP_PROVIDERS.SuuntoApp && suuntoSleepLifecycleGuards)
                 && sleepErrorStateWritten === false) {
+                if (corosLifecycleGuards && !(telemetryError instanceof COROSDailyAccountValidationError)
+                    && await didHealthCredentialRotate(
+                    queueItem, queueItem.userID, corosLifecycleGuards,
+                )) return QueueResult.Failed;
                 return markQueueItemSkipped(
                     queueItem,
                     undefined,
@@ -3533,7 +3551,7 @@ async function processHistoryGuardedSleepQueueItem(queueItem: SleepSyncQueueItem
                     : corosLifecycleGuards;
             const failedHealthUserID = queueItem.userID;
             if (failedHealthProvider && failedHealthLifecycleGuards && failedHealthUserID) {
-                retryCredentialRotationCheck = () => didHealthFailureCredentialRotate(
+                retryCredentialRotationCheck = () => didHealthCredentialRotate(
                     queueItem, failedHealthUserID, failedHealthLifecycleGuards,
                 );
                 try {

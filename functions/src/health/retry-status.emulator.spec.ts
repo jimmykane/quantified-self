@@ -131,6 +131,23 @@ describe.skipIf(!process.env.FIRESTORE_EMULATOR_HOST)('Health retry status in is
         expect((await stateRef.get()).data()).toMatchObject({ status: 'ready', retryPending: false, lastErrorCode: null, lastSyncedAtMs: 20_000 });
     });
 
+    it.each(['current', 'revision_changed', 'lease_changed'])(
+        'clears a retry warning only for the current queue revision and lease: %s', async authority => {
+            await seed(HEALTH_PROVIDERS.COROSAPI, 3);
+            await queueRef.update({ queueRevision: authority === 'revision_changed' ? 'replacement' : 'original',
+                processingOwner: authority === 'lease_changed' ? 'new-worker' : 'original-worker' });
+            const written = await updateHealthSyncState(uid, provider, {
+                status: 'ready', lastErrorCode: null, lastSyncedAtMs: 20_000,
+            }, 20_000, { db, additionalRequiredDocumentFieldValues: [{ documentRef: queueRef,
+                expectedFields: { userID: uid, processed: false, queueRevision: 'original', processingOwner: 'original-worker' },
+            }] });
+            expect(written).toBe(authority === 'current');
+            expect((await stateRef.get()).data()).toMatchObject(authority === 'current'
+                ? { status: 'ready', retryPending: false, lastSyncedAtMs: 20_000 }
+                : { status: 'failed', retryPending: true, lastSyncedAtMs: 9_000 });
+        },
+    );
+
     it.each(['missing', 'tombstoned'])('does not recreate Health state for a %s user', async kind => {
         await seed(HEALTH_PROVIDERS.SuuntoApp);
         await db.recursiveDelete(stateRef);
