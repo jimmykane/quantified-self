@@ -69,7 +69,8 @@ do not add a raised card or expansion panel. Evidence rows stack at narrow phone
 The local disclosure resets on owner change without feedback or persistence. This overview is additive: saved Dashboard
 charts remain mounted and controlled by their existing settings, including the Show/Hide Today choice.
 Keep the collapsed copy brief and use athlete-facing wording about readings and the user's usual range. Comparison
-counts belong inside Show details; the visible scope names Sleep and nightly HRV. On Dashboard, the heading's bottom
+counts stay visible at a glance alongside the headline and any outside-range readings; Show details contains the
+source and range breakdown. The visible scope names Sleep and nightly HRV. On Dashboard, the heading's bottom
 margin and the summary's top padding do not stack between the greeting and recovery title. Preserve the reserved
 status line, source/error distinctions, and the disclosure's 44px touch target. This is presentation only; no metric,
 readiness calculation, query, persistence, or MCP/Assistant contract changes.

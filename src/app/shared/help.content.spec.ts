@@ -446,7 +446,8 @@ describe('help.content', () => {
       'only manual rows can be edited or deleted', 'not training targets']) expect(health).toContain(phrase);
     expect(health).toContain('**All** starts with **Your recent Health** highlights');
     expect(health).toContain('**Your recovery** appears above the existing metrics');
-    expect(health).toContain('**Show details** to see comparison counts');
+    expect(health).toContain('Comparison counts stay visible at a glance');
+    expect(health).toContain('**Show details** to see the source');
     expect(health).toContain('not an assessment of every chart');
     expect(health).toContain('Loading, failed or incomplete reads are never treated as normal');
     expect(health).toContain('Your saved Dashboard charts stay visible and unchanged');

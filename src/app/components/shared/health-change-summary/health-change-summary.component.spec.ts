@@ -26,7 +26,10 @@ describe('Health change summary disclosure', () => {
     expect(host.querySelector('h2')?.textContent).toBe('Your recovery');
     expect(host.querySelector('[role="status"]')?.textContent).toContain('outside your usual range');
     expect(host.querySelector('.health-change-scope')?.textContent).toBe('From your latest sleep and nightly HRV readings.');
-    expect(details.contains(host.querySelector('.health-change-coverage'))).toBe(true);
+    const coverage = host.querySelector('.health-change-coverage')!;
+    expect(coverage.textContent).toBe('1 outside usual range');
+    expect(details.contains(coverage)).toBe(false);
+    expect(coverage.closest('[hidden]')).toBeNull();
     expect(button.getAttribute('aria-expanded')).toBe('false');
     expect(host.querySelector('.health-change-notice')?.textContent).toContain('Outside personal range');
     expect(haptics.selection).not.toHaveBeenCalled();
@@ -46,6 +49,8 @@ describe('Health change summary disclosure', () => {
     expect(haptics.selection).toHaveBeenCalledTimes(1);
     fixture.componentRef.setInput('scopeKey', 'second-owner'); fixture.detectChanges();
     expect(details.hidden).toBe(true);
+    expect(coverage.textContent).toBe('1 within usual range');
+    expect(coverage.closest('[hidden]')).toBeNull();
     expect(haptics.selection).toHaveBeenCalledTimes(1);
   });
 });
