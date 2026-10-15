@@ -63,7 +63,12 @@ contracts, consent, queries and mutations are unchanged. No backend deployment o
 ## Workspace Shells
 
 Health All and the owner Dashboard Today share the surface-free summary from
-`components/shared/health-change-summary/`. Health keeps **Your recovery** with established changes visible while evidence details are collapsed.
+`components/shared/health-change-summary/`. Its presentation delegates to
+`components/shared/summary-disclosure/`, shared with the saved-note and public-example
+`components/shared/note-comparison-summary/`. The shell owns headings, flat/rail layout, Material disclosure, haptics
+and local scope resets only; domain adapters retain their existing calculations. Note comparisons keep source-labelled
+differences and coverage visible and put the median table under **Show details**, without hiding the history chart.
+Their rail stays neutral regardless of the sign of a difference. Health keeps **Your recovery** with established changes visible while evidence details are collapsed.
 Use the existing Material Show/Hide button pattern with `aria-expanded`, `aria-controls` and a mounted hidden region;
 do not add a raised card or expansion panel. Evidence rows stack at narrow phone widths, preserving 44px button targets.
 The local disclosure resets on owner change without feedback or persistence. This overview is additive: saved Dashboard

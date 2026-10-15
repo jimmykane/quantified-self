@@ -24,14 +24,14 @@ import { HealthMetricQueryService } from '../../services/health-metric-query.ser
 import { TimelineNoteComparisonNavigationService } from '../../services/timeline-note-comparison-navigation.service';
 import { TimelineNoteComparisonService, type TimelineNoteComparisonEvidence } from '../../services/timeline-note-comparison.service';
 import { HealthMetricSeriesChartComponent } from '../health/health-metric-series-chart.component';
-import { ChartSourcePickerComponent } from '../shared/chart-source-picker/chart-source-picker.component';
+import { NoteComparisonSummaryComponent } from '../shared/note-comparison-summary/note-comparison-summary.component';
 import { PageHeaderComponent } from '../shared/page-header/page-header.component';
 import { TimelineNotesDialogComponent } from './timeline-notes-dialog.component';
 
 @Component({
   selector: 'app-timeline-note-comparison-page', standalone: true,
   imports: [MatButtonModule, MatButtonToggleModule, MatFormFieldModule, MatIconModule, MatProgressBarModule,
-    MatSelectModule, AppChartSharedModule, PageHeaderComponent, ChartSourcePickerComponent, HealthMetricSeriesChartComponent],
+    MatSelectModule, AppChartSharedModule, PageHeaderComponent, NoteComparisonSummaryComponent, HealthMetricSeriesChartComponent],
   templateUrl: './timeline-note-comparison-page.component.html', styleUrl: './timeline-note-comparison-page.component.scss',
   changeDetection: ChangeDetectionStrategy.OnPush,
 })
@@ -62,6 +62,8 @@ export class TimelineNoteComparisonPageComponent {
   readonly metrics = NOTE_COMPARISON_METRICS;
   readonly darkTheme = computed(() => this.theme.appTheme() === AppThemes.Dark);
   readonly window = computed(() => this.evidence()?.window || null);
+  readonly summaryScopeKey = computed(() => JSON.stringify([this.notes.uid(), this.noteId()]));
+  readonly summaryState = computed(() => this.loading() ? 'updating' as const : this.error() ? 'failed' as const : 'ready' as const);
   readonly subtitle = computed(() => {
     const note = this.note();
     return note ? `${note.startDate <= timelineToday(note.timeZone) ? 'Started' : 'Starts'} ${comparisonDateLabel(note.startDate)} · ${note.endDate === null ? 'Ongoing' : note.endDate === note.startDate ? 'Single-day note' : `Through ${comparisonDateLabel(note.endDate)}`} · Private note` : null;

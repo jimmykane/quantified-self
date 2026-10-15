@@ -22,6 +22,13 @@ describe('help.content', () => {
       expect(copy).toContain(phrase);
     }
   });
+  it('explains compact note differences and the shared disclosure without conflating them with recovery', () => {
+    const content = HELP_SECTIONS.map(section => section.content).join('\n');
+    expect(content).toContain('**Before & after this note**');
+    expect(content).toContain('full before/after median table');
+    expect(content).toContain('the history chart stays visible either way');
+    expect(content).toContain('neutral rail does not classify a numerical change as good/bad');
+  });
   it('explains saved Suunto route import scope without enabling outbound directions', () => {
     const content = HELP_SECTIONS.map(section => section.content).join('\n');
     expect(content).toContain('Suunto also includes existing saved routes');

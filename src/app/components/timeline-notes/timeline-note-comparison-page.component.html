@@ -37,23 +37,8 @@
     <p class="comparison-meta">Note timezone: {{ window.timeZone }} · Change day excluded · Today’s incomplete day excluded</p>
     @if (window.incomplete) { <p class="comparison-notice" role="status">The after window is still in progress. Available readings are shown; differences remain withheld until the requested window is complete.</p> }
     @for (notice of evidence().notices; track notice) { <p class="comparison-notice" role="status">{{ notice }}</p> }
-    <table class="comparison-table" aria-label="Recorded metric medians and coverage before and after the note" aria-live="polite">
-      <thead><tr><th scope="col">Metric &amp; source</th><th scope="col">Before median</th><th scope="col">After median</th><th scope="col">Observed difference</th></tr></thead>
-      <tbody>
-        @for (row of rows(); track row.metricId) {
-          <tr><th scope="row"><strong>{{ row.label }}</strong>
-            @if (row.choices.length || row.selectedKey) {
-              <app-chart-source-picker [choices]="row.choices" [selectedKey]="row.selectedKey" [chartTitle]="row.label"
-                [disabled]="loading()" (selected)="chooseSource(row.metricId, $event)" />
-              @if (row.series?.deviceLabel) { <span class="comparison-meta">Reported device: {{ row.series.deviceLabel }}</span> }
-            } @else { <span class="comparison-meta">No eligible recorded source</span> }
-          </th>
-          <td data-label="Before median"><strong class="comparison-number">{{ row.beforeText }}</strong><span class="comparison-meta">{{ row.beforeCount }}/{{ window.days }} {{ row.countLabel }}</span></td>
-          <td data-label="After median"><strong class="comparison-number">{{ row.afterText }}</strong><span class="comparison-meta">{{ row.afterCount }}/{{ window.days }} {{ row.countLabel }}</span></td>
-          <td data-label="Difference"><strong class="comparison-number">{{ row.differenceText }}</strong><span class="comparison-meta">{{ row.reason }}</span></td></tr>
-        }
-      </tbody>
-    </table>
+    <app-note-comparison-summary summaryId="note-comparison-summary" [scopeKey]="summaryScopeKey()" [rows]="rows()"
+      [days]="window.days" [state]="summaryState()" [disabled]="loading()" (sourceSelected)="chooseSource($event.metric, $event.key)" />
     <section class="comparison-history" aria-labelledby="comparison-history-title">
       <div class="comparison-history-heading"><h2 id="comparison-history-title">Recorded history</h2>
         <mat-form-field appearance="outline" subscriptSizing="dynamic"><mat-label>Metric</mat-label>

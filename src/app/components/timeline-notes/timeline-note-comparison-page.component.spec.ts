@@ -17,6 +17,8 @@ import { AppThemeService } from '../../services/app.theme.service';
 import { AppHapticsService } from '../../services/app.haptics.service';
 import { AppUserSettingsQueryService } from '../../services/app.user-settings-query.service';
 import { HealthMetricSeriesChartComponent } from '../health/health-metric-series-chart.component';
+import { NoteComparisonSummaryComponent } from '../shared/note-comparison-summary/note-comparison-summary.component';
+import { By } from '@angular/platform-browser';
 import { TimelineNoteComparisonPageComponent } from './timeline-note-comparison-page.component';
 
 @Component({ selector: 'app-health-metric-series-chart', standalone: true, template: '' })
@@ -89,6 +91,24 @@ describe('Timeline note comparison page', () => {
     expect(fixture.nativeElement.textContent).toContain('after window is still in progress');
     component.chooseWindow(28); expect(haptics.selection).toHaveBeenCalledTimes(3);
   });
+  it('uses the same neutral summary as the public example and forwards source choices without changing its chart/calculations', async () => {
+    const fixture = TestBed.createComponent(TimelineNoteComparisonPageComponent); await flush(fixture);
+    const component = fixture.componentInstance;
+    const summary = fixture.debugElement.query(By.directive(NoteComparisonSummaryComponent)).componentInstance as NoteComparisonSummaryComponent;
+    expect(summary.rows()).toBe(component.rows()); expect(summary.days()).toBe(14);
+    expect(summary.state()).toBe('ready'); expect(summary.headingLevel()).toBe(2);
+    const details = fixture.nativeElement.querySelector('#note-comparison-summary-details') as HTMLElement;
+    expect(details.hidden).toBe(true);
+    expect(fixture.nativeElement.querySelectorAll('.comparison-change')).toHaveLength(3);
+    fixture.nativeElement.querySelector('[aria-controls="note-comparison-summary-details"]').click(); fixture.detectChanges();
+    expect(details.hidden).toBe(false);
+    expect(fixture.nativeElement.querySelector('app-health-metric-series-chart').closest('[hidden]')).toBeNull();
+    const medians = component.rows().map(row => [row.before, row.after]);
+    summary.sourceSelected.emit({ metric: 'heart_rate_variability', key: 'other-hrv' }); await flush(fixture);
+    expect(component.selectedSources().heart_rate_variability).toBe('other-hrv');
+    expect(component.rows().map(row => [row.before, row.after])).toEqual(medians);
+    expect(comparisons.load).toHaveBeenCalledOnce(); expect(haptics.selection).toHaveBeenCalledTimes(2);
+  });
   it('withholds sparse differences in chart accessibility text as well as the metric table', async () => {
     comparisons.load.mockImplementationOnce(async (_uid, selected, days) => {
       const series = readings('hrv', 'heart_rate_variability', 'overnight_average');
@@ -138,9 +158,12 @@ describe('Timeline note comparison page', () => {
     expect(fixture.componentInstance.evidence()).toBe(previous); expect(fixture.componentInstance.chart()).not.toBeNull();
     expect(fixture.componentInstance.rows().every(row => row.difference === null && row.reason === 'Updating readings')).toBe(true);
     expect(fixture.nativeElement.textContent).toContain('Previous readings shown');
+    const summary = fixture.debugElement.query(By.directive(NoteComparisonSummaryComponent)).componentInstance as NoteComparisonSummaryComponent;
+    expect(summary.state()).toBe('updating'); expect(summary.disabled()).toBe(true);
     reject(new Error('offline')); await flush(fixture);
     expect(fixture.componentInstance.evidence()).toBe(previous);
     expect(fixture.componentInstance.rows().every(row => row.difference === null && row.reason === 'Refresh failed')).toBe(true);
+    expect(summary.state()).toBe('failed'); expect(summary.disabled()).toBe(false);
   });
   it('restores the notes manager after returning without changing visibility or note data', async () => {
     const restoreList = { page: 1, cursors: [null, null] }; navigation.returnToNotes.mockResolvedValue(restoreList);

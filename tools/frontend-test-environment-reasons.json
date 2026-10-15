@@ -43,6 +43,14 @@
     "environment": "angular",
     "reason": "Creates the chart with TestBed to verify signal input changes, rendered accessibility text, chart host initialization, responsive tooltips, haptic ownership and fixture teardown."
   },
+  "src/app/components/shared/note-comparison-summary/note-comparison-summary.component.spec.ts": {
+    "environment": "angular",
+    "reason": "Compiles shared note summary rows, source pickers and the Material disclosure to verify unchanged formatted evidence, visible coverage, source events, neutral deltas and owner/note reset behavior."
+  },
+  "src/app/components/shared/summary-disclosure/summary-disclosure.component.spec.ts": {
+    "environment": "angular",
+    "reason": "Compiles the shared Material summary shell with projected evidence/details to verify accessible disclosure, owner/scope resets, neutral presentation and single-owner haptic feedback."
+  },
   "src/app/components/tags/tags-page.component.spec.ts": {
     "environment": "angular",
     "reason": "Compiles the Tags route with TestBed to verify Material selector and search bindings, the events-table input/output boundary, async owner changes, route query hydration, DestroyRef teardown and haptic ownership."

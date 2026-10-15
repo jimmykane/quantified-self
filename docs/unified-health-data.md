@@ -402,6 +402,11 @@ The same flat shared component uses a compact **At a glance** presentation befor
 owner, following the existing Show/Hide Today preference. It is absent from another person's Dashboard, focused metric history and category views.
 It does not hide, reorder or rewrite saved Dashboard charts or change the Health card availability rules.
 
+The heading, accent rail and disclosure are presentation-only `SummaryDisclosureComponent` inputs/projection slots.
+The same shell hosts `NoteComparisonSummaryComponent` on the private note destination and public homepage/Health
+example, but it does not reuse recovery/Glance classification or headline builders for note differences. Their neutral
+source-labelled rows and optional median table are described in [Timeline notes](timeline-notes.md#beforeafter-comparisons).
+
 Health's recovery summary covers Sleep and nightly HRV from reads already owned by that surface. Existing HRV
 personal-range classifications count as assessed evidence: positive means within range, caution/negative means
 outside range, and neutral/missing baseline or recent average means insufficient evidence. Within range is not

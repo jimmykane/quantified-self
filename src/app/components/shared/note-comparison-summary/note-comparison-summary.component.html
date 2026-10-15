@@ -1,0 +1,32 @@
+<app-summary-disclosure title="Before & after this note" [headingLevel]="headingLevel()" [summaryId]="summaryId()"
+  [scopeKey]="scopeKey()" variant="rail" [headline]="headline()" [detailsAvailable]="rows().length > 0">
+  <dl summaryOverview class="comparison-changes" aria-live="polite">
+    @for (row of viewRows(); track row.metricId) {
+      <div class="comparison-change">
+        <dt><strong>{{ row.label }}</strong>
+          @if (row.choices.length || row.selectedKey) {
+            <app-chart-source-picker [choices]="row.choices" [selectedKey]="row.selectedKey" [chartTitle]="row.label"
+              [disabled]="disabled()" (selected)="sourceSelected.emit({ metric: row.metricId, key: $event })" />
+          } @else { <span class="comparison-meta">No eligible recorded source</span> }
+          @if (row.series?.deviceLabel) { <span class="comparison-meta">Reported device: {{ row.series.deviceLabel }}</span> }
+        </dt>
+        <dd><strong class="comparison-number">{{ row.differenceText }}</strong>
+          <span class="comparison-meta">Before {{ row.beforeCount }}/{{ days() }} · After {{ row.afterCount }}/{{ days() }} {{ row.countLabel }}</span>
+          @if (row.difference === null) { <span class="comparison-meta">{{ row.reason }}</span> }
+        </dd>
+      </div>
+    }
+  </dl>
+  <table summaryDetails class="comparison-table" aria-label="Recorded metric medians and coverage before and after the note">
+    <thead><tr><th scope="col">Metric &amp; source</th><th scope="col">Before median</th><th scope="col">After median</th><th scope="col">Observed difference</th></tr></thead>
+    <tbody>
+      @for (row of viewRows(); track row.metricId) {
+        <tr><th scope="row"><strong>{{ row.label }}</strong><span class="comparison-meta">{{ row.sourceText }}</span></th>
+          <td data-label="Before median"><strong class="comparison-number">{{ row.beforeText }}</strong><span class="comparison-meta">{{ row.beforeCount }}/{{ days() }} {{ row.countLabel }}</span></td>
+          <td data-label="After median"><strong class="comparison-number">{{ row.afterText }}</strong><span class="comparison-meta">{{ row.afterCount }}/{{ days() }} {{ row.countLabel }}</span></td>
+          <td data-label="Difference"><strong class="comparison-number">{{ row.differenceText }}</strong><span class="comparison-meta">{{ row.reason }}</span></td>
+        </tr>
+      }
+    </tbody>
+  </table>
+</app-summary-disclosure>

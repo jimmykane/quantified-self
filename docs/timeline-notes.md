@@ -119,8 +119,15 @@ other notes. Public/profile previews receive no private comparison evidence.
 
 The public homepage and Health feature page highlight comparisons beside the existing HRV example. Their deferred
 `HealthNoteComparisonPreviewComponent` reuses the same comparison helper, canonical formatters and
-`HealthMetricSeriesChartComponent`, with the existing fictional trip and Health example readings. Its fixed,
-completed seven-day windows exclude the change day; a local metric selector changes only the example. It has no
+`HealthMetricSeriesChartComponent`, with the existing fictional trip and Health example readings. Both public and
+saved-note views render `NoteComparisonSummaryComponent`: compact observed differences with source pickers and
+before/after day counts stay visible; **Show details** reveals the full median/coverage table independently of the
+history chart. `SummaryDisclosureComponent` owns only the shared flat/rail heading, Material disclosure, haptic and
+scope reset behavior also used by Health's **Your recovery** and Dashboard's **At a glance**. Recovery/Glance builders
+and note calculations remain independent; numerical note differences always use a neutral rail, never a good/bad,
+within-range or Readiness classification. Disclosure state resets on owner/note changes without feedback or persistence.
+The public adapter's fixed, completed seven-day windows exclude the change day; its local metric selector changes
+only recorded history, not the three summary rows. It has no
 auth, note, Health-query or Sleep-service dependency, reads no account data, saves nothing and makes no causal claim.
 
 `TimelineNoteComparisonService` reuses `HealthMetricQueryService` for one combined summary-only window per Health metric
