@@ -3179,7 +3179,8 @@ async function processHistoryGuardedSleepQueueItem(queueItem: SleepSyncQueueItem
         if (error instanceof ProviderOperationStillInFlightError) throw error;
         if (error instanceof SuuntoCredentialRotationRetryableError) {
             logger.warn('[SleepSync][Suunto] Credential kept rotating during an authorized write; retrying the current queue revision.');
-            return increaseRetryCountForQueueItem(queueItem, error);
+            // Health must finalize its retry badge with the same transaction as DLQ admission.
+            if (!isSuuntoHealthQueueItem(queueItem)) return increaseRetryCountForQueueItem(queueItem, error);
         }
         if (error instanceof SuuntoSleepLifecycleChangedError) {
             return markQueueItemSkipped(
@@ -3606,14 +3607,15 @@ async function processHistoryGuardedSleepQueueItem(queueItem: SleepSyncQueueItem
                     terminalHealthGuardRejected = false;
                     return retry();
                 },
-                () => terminalHealthGuardRejected,
+                result => result === QueueResult.Processed && terminalHealthGuardRejected,
             );
             suuntoHealthLifecycleGuards = attempt.guards;
             retryResult = attempt.result;
         } else {
             retryResult = await retry();
         }
-        if (terminalHealthGuardRejected) {
+        // A failed commit is not a confirmed lifecycle rejection; keep the job retryable.
+        if (retryResult === QueueResult.Processed && terminalHealthGuardRejected) {
             return markQueueItemSkipped(queueItem, undefined, 'user_or_provider_lifecycle_changed', {
                 skippedContext: 'USER_OR_PROVIDER_LIFECYCLE_GUARD', sessionsWritten: 0, sessionsSkipped: 0,
             });

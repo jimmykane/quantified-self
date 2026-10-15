@@ -4,6 +4,7 @@ import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } 
 import { HEALTH_PROVIDERS, type HealthProvider } from '../../../shared/health';
 import { increaseRetryCountIfCurrentUserActive, QueueResult } from '../queue-utils';
 import { getQueueCleanupTombstoneDocumentRef } from '../queue/cleanup-tombstone';
+import { claimSleepQueueRevision } from '../sleep/queue-revision';
 import { updateHealthSyncState } from './writer';
 
 vi.unmock('firebase-admin');
@@ -90,6 +91,21 @@ describe.skipIf(!process.env.FIRESTORE_EMULATOR_HOST)('Health retry status in is
         expect((await stateRef.get()).get('retryPending')).toBe(true);
         expect((await queueRef.get()).get('retryCount')).toBe(9);
         expect((await db.doc(`failed_jobs/${queueRef.id}`).get()).exists).toBe(false);
+    });
+
+    it('allows guarded Health retry writes after resolving a legacy provider-only row', async () => {
+        await seed(HEALTH_PROVIDERS.COROSAPI);
+        await queueRef.update({ userID: admin.firestore.FieldValue.delete() });
+        const item = { ...(await queueRef.get()).data(), id: queueRef.id, ref: queueRef,
+            provider, providerUserId: 'synthetic-provider-account', type: 'coros_poll', userID: uid,
+        } as Parameters<typeof claimSleepQueueRevision>[0];
+        expect(await claimSleepQueueRevision(item, uid, 'legacy-worker')).toBe('claimed');
+        expect(await updateHealthSyncState(uid, provider, { status: 'failed', retryPending: true }, 20_000, {
+            db, requiredDocumentFieldValues: { documentRef: queueRef,
+                expectedFields: { userID: uid, processingOwner: 'legacy-worker', processed: false } },
+        })).toBe(true);
+        expect((await stateRef.get()).get('retryPending')).toBe(true);
+        expect((await queueRef.get()).get('userID')).toBe(uid);
     });
 
     it('does not consume retries or overwrite a replacement connection', async () => {

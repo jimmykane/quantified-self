@@ -180,6 +180,21 @@ describe('Sleep queue revision lease', () => {
     expect(workerSnapshot.suuntoHealthWebhookFeedMask).toBe(3);
   });
 
+  it('pins the resolved owner when claiming a legacy provider-only row', async () => {
+    delete mocks.state.current!.userID;
+    await expect(claimSleepQueueRevision(queueItem('revision-1'), 'firebase-user-1', 'worker-r1'))
+      .resolves.toBe('claimed');
+    expect(mocks.state.current).toMatchObject({ userID: 'firebase-user-1', processingOwner: 'worker-r1' });
+  });
+
+  it('does not replace another owner while claiming a queue row', async () => {
+    mocks.state.current!.userID = 'another-user';
+    await expect(claimSleepQueueRevision(queueItem('revision-1'), 'firebase-user-1', 'worker-r1'))
+      .resolves.toBe('superseded');
+    expect(mocks.transactionUpdate).not.toHaveBeenCalled();
+    expect(mocks.state.current!.userID).toBe('another-user');
+  });
+
   it('reopens a replacement left behind by an expired older-revision lease', async () => {
     mocks.state.current = {
       ...queueItem('revision-2'),

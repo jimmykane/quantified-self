@@ -131,6 +131,8 @@ export async function claimSleepQueueRevision(
     if (activeLease && activeLease.processingOwner !== processingOwner) return 'busy';
 
     transaction.update(queueRef, {
+      // Pin the token-resolved owner for legacy rows before guarded state writes.
+      userID,
       processingOwner,
       processingRevision,
       processingLeaseExpiresAt: nowMs + SLEEP_QUEUE_PROCESSING_LEASE_MS,
