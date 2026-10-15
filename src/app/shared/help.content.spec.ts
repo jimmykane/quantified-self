@@ -1748,17 +1748,6 @@ describe('help.content', () => {
     expect(serviceConnectionsSection?.content).toContain('[Policies -> Suunto Data](/policies#suunto-data)');
     expect(serviceConnectionsSection?.content).toContain('[Policies -> COROS Data](/policies#coros-data)');
     expect(serviceConnectionsSection?.content).toContain('[AI & Third-Party Processing](/policies#ai-and-third-party-processing)');
-    expect(serviceConnectionsSection?.content).toContain("Suunto FIT activity uploads in Services show each file's upload status");
-    expect(serviceConnectionsSection?.content).toContain('retrying the same row checks that job instead of uploading the FIT again');
-    expect(serviceConnectionsSection?.content).toContain('A pending or ambiguous job is never replaced automatically');
-    expect(serviceConnectionsSection?.content).toContain('After eight automatic checks');
-    expect(serviceConnectionsSection?.content).toContain('**Check status again**');
-    expect(serviceConnectionsSection?.content).toContain('removes its local progress notifications');
-    expect(serviceConnectionsSection?.content).toContain('This does not cancel an upload that Suunto may still be processing');
-    expect(serviceConnectionsSection?.content).toContain('An explicit processing failure that requires a restart stops status checks');
-    expect(serviceConnectionsSection?.content).toContain('clear the upload list and choose the FIT file again');
-    expect(serviceConnectionsSection?.content).toContain('retry control');
-    expect(serviceConnectionsSection?.content).toContain('processed one file at a time with short pauses');
     expect(serviceConnectionsSection?.content).toContain('Saved FIT and GPX routes can be sent to Suunto from **Routes**');
     expect(serviceConnectionsSection?.content).toContain('**Uploads** in Suunto Services also accepts a selected GPX or FIT route');
     expect(serviceConnectionsSection?.content).toContain('converts a selected FIT route to GPX in memory before delivery');
@@ -2020,14 +2009,14 @@ describe('help.content', () => {
     expect(serviceConnectionsSection?.content).toContain('queued activities continue processing in the background');
     expect(serviceConnectionsSection?.content).toContain('does **not** delete activities already imported');
     expect(serviceConnectionsSection?.content).toContain('send a FIT activity file directly to Wahoo');
-    expect(serviceConnectionsSection?.content).toContain('checks that same upload instead of sending the FIT again');
+    expect(serviceConnectionsSection?.content).toContain('accepted upload IDs are checked without sending another copy');
     expect(serviceConnectionsSection?.content).toContain('Wahoo rejects repeated token refreshes');
     expect(serviceConnectionsSection?.content).toContain('keeps unaccepted automatic activity and saved-route deliveries parked');
     expect(serviceConnectionsSection?.content).toContain('does not turn your saved route settings off');
     expect(serviceConnectionsSection?.content).toContain('automatically synced from Garmin, COROS, or Suunto');
     expect(serviceConnectionsSection?.content).toContain("keeps Wahoo's inferred type instead of guessing");
     expect(serviceConnectionsSection?.content).toContain('parses the FIT on the server');
-    expect(serviceConnectionsSection?.content).toContain('browser temporarily echoes the server-derived mapped ID');
+    expect(serviceConnectionsSection?.content).toContain('Review the recording and mapped Wahoo category before confirmation');
     expect(serviceConnectionsSection?.content).toContain('preserves the existing Wahoo workout title');
     expect(serviceConnectionsSection?.content).toContain('send a GPX or FIT course or route file directly to Wahoo');
     expect(serviceConnectionsSection?.content).toContain('select **Reconnect Wahoo** in the displayed dialog');
@@ -2206,3 +2195,16 @@ it('explains separately approved activity description access and event semantics
     expect(content).toContain('With it enabled, Lap ends that step early');
     expect(content).toContain('generated time/distance alerts also mention Lap');
   });
+
+it('documents durable activity sending, explicit review, Pro and retention', () => {
+  const content = HELP_SECTIONS.map(section => section.content).join('\n');
+  for (const text of ['/send-activities', '20 MiB compressed and expanded', '200 MiB', '24 hours', 'seven days', '30 days', 'Unknown acceptance', 'Stop unsent activities', 'rather than Basic', 'temporary storage cleanup continues in the background', 'Start a new send to add a file you removed']) expect(content).toContain(text);
+  expect(content).not.toContain('upload rows are not retained across reloads');
+  expect(content).toContain('A temporary file-read failure pauses the preview without excluding the recording');
+  expect(content).toContain('If opening a new draft fails, reopen it from **Recent sends**');
+  expect(content).toContain('If you switch destinations, sources or sends during preparation, reopen the original draft to continue');
+  expect(content).toContain('Stopping closes retries and removes that temporary copy, freeing its storage allowance');
+  expect(content).toContain('If an accepted upload fails after you stop the batch, its temporary copy is removed when that failure is confirmed');
+  expect(content).toContain('**Delivery details** retain recorded send attempts and processing retries across explicit retries');
+  expect(content).toContain('cleanup resumes automatically after partial failures');
+});

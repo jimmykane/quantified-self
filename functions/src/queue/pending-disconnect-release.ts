@@ -15,6 +15,7 @@ import {
 } from '../queue-utils';
 import { getServiceWorkoutQueueName } from '../shared/queue-names';
 import { getExpireAtTimestamp, TTL_CONFIG } from '../shared/ttl-config';
+import { isSendWindowOpen } from '../activity-send/policy';
 import {
     getServiceDisconnectOperationGeneration,
     getServiceTokenCollectionRef,
@@ -342,7 +343,15 @@ async function releaseDeferredQueueDocument(
             if (!isQueueItemDeferredForReason(currentData, deferredReason) || !matchesService(currentData)) {
                 return false;
             }
-            transaction.update(doc.ref, updateData);
+            if (typeof currentData.sendBatchID === 'string') {
+                // Reconnection cannot reopen expired/stopped workspace authority.
+                // Accepted operations retain their independent status continuation.
+                if (!currentData.destinationUploadID && !currentData.providerOperationStartedAt) {
+                    const operation = await transaction.get(db.collection('users').doc(userID).collection('activitySendOperations').doc(currentData.sendBatchID));
+                    if (!isSendWindowOpen(operation.data())) return false;
+                }
+                transaction.update(doc.ref, { ...updateData, ...(currentData.expireAt ? { expireAt: currentData.expireAt } : {}) });
+            } else transaction.update(doc.ref, updateData);
             return true;
         });
         if (released) {

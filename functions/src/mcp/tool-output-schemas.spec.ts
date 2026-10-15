@@ -1716,6 +1716,8 @@ describe.each<FixtureTransport>(['in-memory', 'legacy-http', 'modern-http'])('MC
       await client.close();
       await server.close();
     }));
+    // Schema-heavy in-memory cases can otherwise starve worker result messages.
+    await new Promise<void>(resolve => setImmediate(resolve));
   });
 
   it('keeps public tools and derived payload schemas mechanically exhaustive', () => {

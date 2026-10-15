@@ -58,6 +58,8 @@ export const FUNCTIONS_MANIFEST = {
     getCOROSAPIWorkoutFileUploadStatus: { name: 'getCOROSAPIWorkoutFileUploadStatus', region: 'europe-west2' },
     importRouteToCOROSAPI: { name: 'importRouteToCOROSAPI', region: 'europe-west2' },
 
+    activitySendCommand: { name: 'activitySendCommand', region: 'europe-west2', clientTimeoutMs: 120000 },
+    uploadActivitySendFile: { name: 'uploadActivitySendFile', region: 'europe-west2' },
     // Wahoo Functions
     getWahooAPIAuthRequestTokenRedirectURI: { name: 'getWahooAPIAuthRequestTokenRedirectURI', region: 'europe-west2' },
     requestAndSetWahooAPIAccessToken: { name: 'requestAndSetWahooAPIAccessToken', region: 'europe-west2' },

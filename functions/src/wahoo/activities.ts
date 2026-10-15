@@ -79,6 +79,7 @@ export interface WahooActivityUploadResult {
 }
 
 export interface WahooActivityUploadOptions {
+  expectedProviderUserId?: string;
   filename?: unknown;
   timeZone?: unknown;
   expectedWorkoutTypeId?: number | null;
@@ -341,7 +342,8 @@ async function withWahooWorkoutWriteToken<T>(
   ) => Promise<T>,
   hooks: Pick<
     WahooActivityUploadOptions,
-    'beforeProviderRequest'
+    'expectedProviderUserId'
+    | 'beforeProviderRequest'
     | 'onProviderRequestAborted'
     | 'onProviderRequestStarting'
     | 'onProviderRequestFinished'
@@ -349,7 +351,7 @@ async function withWahooWorkoutWriteToken<T>(
 ): Promise<T> {
   await assertWahooActivityUploadProviderActionAllowed(userID, 'before_token_lookup');
 
-  const initialTokenSnapshot = await getActiveWahooTokenSnapshot(userID);
+  const initialTokenSnapshot = await getActiveWahooTokenSnapshot(userID, hooks.expectedProviderUserId);
   const providerUserId = initialTokenSnapshot.id;
 
   const execute = async (forceRefresh: boolean): Promise<T> => {
@@ -756,6 +758,7 @@ export async function getWahooActivityUploadStatus(
   userID: string,
   uploadId: unknown,
   expectedWorkoutTypeId?: number | null,
+  expectedProviderUserId?: string,
 ): Promise<WahooActivityUploadResult> {
   const token = normalizeWahooUploadToken(uploadId);
   if (!token) {
@@ -778,7 +781,7 @@ export async function getWahooActivityUploadStatus(
         ),
         workoutId: data?.workout_id,
       };
-    });
+    }, { expectedProviderUserId });
   } catch (error) {
     logWahooActivityUploadRequestError(error, 'status');
     return toWahooHttpsError(error);

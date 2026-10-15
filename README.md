@@ -254,6 +254,7 @@ Unified health history under `users/{uid}/healthSourceRecords` and `healthSample
 - [Wahoo integration architecture and release checklist](docs/wahoo-integration.md)
 - [Training workspace architecture and maintenance](docs/training-workspace.md)
 - [Recorded activity import monitoring and activation](docs/activity-import-monitoring.md)
+- [Activity sending workspace and recovery](docs/activity-sending-workspace.md)
 - [Recorded activity delivery monitoring and activation](docs/activity-delivery-monitoring.md)
 - [Route import and delivery monitoring](docs/route-monitoring.md)
 - [Connection-history imports and coordinator monitoring](docs/connection-history-import.md)

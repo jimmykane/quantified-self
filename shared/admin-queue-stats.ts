@@ -231,6 +231,7 @@ export interface ActivitySyncQueueStats extends SyncPipelineQueueStats {
     breakdowns?: {
         historical: ActivitySyncBreakdownStats;
         manualUploads: ActivitySyncBreakdownStats;
+        directFiles?: ActivitySyncBreakdownStats;
     };
 }
 

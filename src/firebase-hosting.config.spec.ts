@@ -368,8 +368,8 @@ describe('Firebase Hosting configuration', () => {
     // Help includes the dialog feedback and safe haptic behavior guidance.
     // Calmer overview help, including independent source attribution and HRV average/latest wording, is in this revision.
     expect(sitemapLastmodForUrl(`${siteOrigin}/help`)).toBe('2026-10-15');
-    expect(sitemapLastmodForUrl(`${siteOrigin}/policies`)).toBe('2026-10-07');
-    expect(sitemapLastmodForUrl(`${siteOrigin}/privacy`)).toBe('2026-10-07');
+    expect(sitemapLastmodForUrl(`${siteOrigin}/policies`)).toBe('2026-10-14');
+    expect(sitemapLastmodForUrl(`${siteOrigin}/privacy`)).toBe('2026-10-14');
     expect(sitemapLastmodForUrl(`${siteOrigin}/terms`)).toBe('2026-10-07');
   });
 

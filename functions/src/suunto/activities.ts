@@ -318,6 +318,7 @@ export interface SuuntoActivityUploadInitializationState extends SuuntoActivityU
 }
 
 export interface SuuntoActivityUploadOptions {
+  expectedProviderUserId?: string;
   /** Direct clients can own bounded polling without occupying this invocation. */
   statusPollOptions?: { maxAttempts: number; pollDelayMs: number };
   /** Runs after account validation and immediately before upload initialization. */
@@ -896,7 +897,9 @@ export async function uploadActivityFileToSuunto(
     throw new HttpsError('unauthenticated', 'No connected Suunto account found.');
   }
 
-  for (const tokenQueryDocumentSnapshot of tokenQuerySnapshots.docs) {
+  const selectedTokens = options.expectedProviderUserId ? tokenQuerySnapshots.docs.filter(token => token.id === options.expectedProviderUserId) : tokenQuerySnapshots.docs;
+  if (!selectedTokens.length) throw new HttpsError('unauthenticated', 'The reviewed Suunto account is no longer connected.');
+  for (const tokenQueryDocumentSnapshot of selectedTokens) {
     const providerUserId = tokenQueryDocumentSnapshot.id;
     let initializationResponseMetadata: requestPromise.ResponseMetadata | null = null;
     let initializationRequestStartedAtMs = Date.now();

@@ -42,6 +42,7 @@ const {
   mockTokenGet,
   mockEventGet,
   mockHistoricalEventGet,
+  mockActivitySendGet,
   mockHistoricalMetaGet,
   mockFileMetadata,
   mockDownload,
@@ -89,6 +90,7 @@ const {
     mockTokenGet,
     mockEventGet: vi.fn(),
     mockHistoricalEventGet: vi.fn(),
+    mockActivitySendGet: vi.fn(),
     mockHistoricalMetaGet: vi.fn(),
     mockFileMetadata: vi.fn(),
     mockDownload,
@@ -137,8 +139,8 @@ const {
 
 vi.mock('firebase-admin', () => ({
   firestore: () => ({
-    doc: vi.fn(() => ({
-      get: mockHistoricalEventGet,
+    doc: vi.fn((path: string) => ({
+      get: path.includes('/activitySendOperations/') ? mockActivitySendGet : mockHistoricalEventGet,
       collection: vi.fn(() => ({ doc: vi.fn(() => ({ get: mockHistoricalMetaGet })) })),
     })),
     collection: vi.fn((collectionName: string) => ({
@@ -370,6 +372,7 @@ const baseQueueItem: ActivitySyncQueueItemInterface = {
 describe('activity-sync/process-queue-item', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    mockActivitySendGet.mockResolvedValue({ exists: true, data: () => ({ state: 'confirmed', expiresAt: Date.now() + 60_000 }) });
     baseQueueItem.ref = createMockActivitySyncQueueItemRef();
     baseQueueItem.dispatchedToCloudTask = null;
     delete baseQueueItem.providerOperationStartedAt;
@@ -483,6 +486,24 @@ describe('activity-sync/process-queue-item', () => {
     expect(mockGetServiceConnectionMeta).not.toHaveBeenCalledWith('user-1', ServiceNames.GarminAPI);
     expect(mockUploadActivityFileToSuunto).toHaveBeenCalledWith('user-1', fit, expect.anything());
     expect(mockSetActivitySyncSuccessMetadata).toHaveBeenCalled();
+  });
+  it.each([{ state: 'confirmed', expiresAt: 1 }, { state: 'confirmed', expiresAt: Number.MAX_SAFE_INTEGER, stopped: true }, undefined])('does not upload an unaccepted workspace activity with closed authority: %j', async operation => {
+    mockActivitySendGet.mockResolvedValue({ exists: !!operation, data: () => operation });
+    const queueItem = { ...baseQueueItem, manual: true, deliveryMode: 'historical' as const, sendBatchID: 'batch', sendRowID: 'row' };
+    expect(await processActivitySyncQueueItem(queueItem)).toBe(QueueResult.Processed);
+    expect(mockUploadActivityFileToSuunto).not.toHaveBeenCalled(); expect(mockDownload).not.toHaveBeenCalled();
+    expect(mockUpdateQueueItemIfUserActive).toHaveBeenCalledWith(expect.objectContaining({ updateData: expect.objectContaining({ processed: true, resultStatus: 'skipped', skippedReason: operation?.stopped ? 'send_stopped' : 'send_source_expired' }) }));
+  });
+  it('rechecks workspace authority inside the provider-claim transaction', async () => {
+    const fit = Buffer.alloc(14); fit[0] = 12; fit.write('.FIT', 8, 'ascii'); mockDownload.mockResolvedValue([fit]);
+    await processActivitySyncQueueItem({ ...baseQueueItem, manual: true, deliveryMode: 'historical', sendBatchID: 'batch', sendRowID: 'row', originalFile: { ...baseQueueItem.originalFile, generation: '42' } });
+    const claim = mockUpdateQueueItemIfUserActive.mock.calls.map(([params]) => params).find(params => params.phase === 'before_activity_sync_destination_provider_operation');
+    expect(claim).toBeDefined();
+    const doc = vi.fn(() => 'operation-ref'); const get = vi.fn(async () => ({ data: () => ({ state: 'confirmed', expiresAt: Date.now() + 60_000 }) }));
+    expect(await claim.isAuthorizedInTransaction({ doc }, { get })).toBe(true);
+    expect(doc).toHaveBeenCalledWith('users/user-1/activitySendOperations/batch');
+    get.mockResolvedValue({ data: () => ({ state: 'confirmed', expiresAt: 1 }) });
+    expect(await claim.isAuthorizedInTransaction({ doc }, { get })).toBe(false);
   });
 
   it('does not upload a historical original with missing Storage size metadata', async () => {
@@ -1883,6 +1904,14 @@ describe('activity-sync/process-queue-item', () => {
     );
   });
 
+  it('requires explicit workspace retry after provider-confirmed processing failure', async () => {
+    const queueItem: ActivitySyncQueueItemInterface = { ...baseQueueItem, routeId: ACTIVITY_SYNC_ROUTE_IDS.GarminAPI_to_COROSAPI, destinationServiceName: ServiceNames.COROSAPI, destinationUploadID: 'accepted-id', destinationProviderUserID: 'coros-user-1', sendBatchID: 'reviewed-batch', sendRowID: 'row', retryCount: 1, ref: {} as NonNullable<ActivitySyncQueueItemInterface['ref']> };
+    mockGetCOROSActivityUploadStatus.mockRejectedValueOnce(new ProviderOperationError({ serviceName: ServiceNames.COROSAPI, operation: 'activity_upload_status', disposition: 'retryable', retryMode: 'restart', code: 'provider-processing-failed', message: 'Synthetic failed processing.', providerStatus: -1, providerUserId: 'coros-user-1', providerOperationId: 'accepted-id' }));
+    expect(await processActivitySyncQueueItem(queueItem)).toBe(QueueResult.Processed);
+    expect(mockUploadActivityFileToCOROS).not.toHaveBeenCalled();
+    expect(mockIncreaseRetryCountForQueueItem).not.toHaveBeenCalled();
+    expect(mockUpdateQueueItemIfUserActive).toHaveBeenCalledWith(expect.objectContaining({ updateData: expect.objectContaining({ resultStatus: 'skipped', sendConfirmedFailure: true }) }));
+  });
   it('restarts a confirmed COROS processing failure on the original account, then polls the new upload', async () => {
     const queueItem: ActivitySyncQueueItemInterface = {
       ...baseQueueItem,

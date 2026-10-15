@@ -405,7 +405,7 @@
         <div class="tool-subsection-header">
           <div class="tool-subsection-title">
             <mat-icon>cloud_upload</mat-icon>
-            <span>Upload FIT Activity</span>
+            <span>Send activities</span>
           </div>
           @if (suuntoServiceMeta && suuntoServiceMeta.uploadedActivitiesCount && suuntoServiceMeta.uploadedActivitiesCount
           > 0) {
@@ -418,7 +418,7 @@
           <span>Upload activity is a Pro feature.</span>
         </div>
         } @else if (!isReconnectRequired && isServiceConnected) {
-        <app-upload-activity-to-service [user]="user" [hasProAccess]="hasProAccess"></app-upload-activity-to-service>
+        <a mat-stroked-button routerLink="/send-activities/suunto" appHapticTap>Open activity sending workspace</a>
         } @else {
         <app-status-info type="info" title="Connect Account First">
           You need to connect your Suunto account before uploading activities.

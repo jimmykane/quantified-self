@@ -1,3 +1,4 @@
+import { Auth } from 'app/firebase/auth';
 import { ChangeDetectionStrategy, ChangeDetectorRef, Component, EventEmitter, Input, OnDestroy, OnInit, Output, inject } from '@angular/core';
 import { Location } from '@angular/common';
 import { Router } from '@angular/router';
@@ -39,6 +40,15 @@ import { AppHapticsService } from '../../services/app.haptics.service';
   standalone: false
 })
 export class EventActionsComponent implements OnInit, OnDestroy {
+  private readonly sendAuth = inject(Auth, { optional: true });
+  get canSendOwnedActivities(): boolean { return !!this.user && this.sendAuth?.currentUser?.uid === this.user.uid; }
+  async sendToService(): Promise<void> {
+    if (!this.canSendOwnedActivities) return;
+    const ids = [this.event.getID()];
+    const opened = await this.router.navigate(['/send-activities'], { queryParams: { source: 'saved' }, state: { activitySendSelection: ids, activitySendOwner: this.user.uid } });
+    if (opened) this.hapticsService.selection();
+  }
+
   @Input() event!: EventInterface;
   @Input() user!: User;
   @Input() showDownloadOriginal = false;
