@@ -1,4 +1,4 @@
-import { ChangeDetectionStrategy, Component, computed, effect, inject, signal } from '@angular/core';
+import { ChangeDetectionStrategy, Component, Injector, computed, effect, inject, signal } from '@angular/core';
 import { FormBuilder, ReactiveFormsModule, Validators } from '@angular/forms';
 import { MAT_DIALOG_DATA, MatDialog, MatDialogModule, MatDialogRef } from '@angular/material/dialog';
 import { MatButtonModule } from '@angular/material/button';
@@ -23,8 +23,10 @@ import { AppHapticsService } from '../../services/app.haptics.service';
 import { MAT_DAYJS_DATE_FORMATS } from '../../shared/adapters/mat-dayjs-date.module';
 import { TimelineNoteDateAdapter, timelineNoteDateInput, timelineNoteDateLabel } from './timeline-note-date-adapter';
 import { TIMELINE_NOTE_ICONS, TIMELINE_NOTE_COLOR_LABELS, timelineNoteColor } from '../../helpers/timeline-note-appearance.helper';
+import { TimelineNoteComparisonNavigationService } from '../../services/timeline-note-comparison-navigation.service';
 
-export interface TimelineNotesDialogData { uid: string; notes?: readonly TimelineNote[] }
+export interface TimelineNotesListState { page: number; cursors: Array<QueryDocumentSnapshot | null> }
+export interface TimelineNotesDialogData { uid: string; notes?: readonly TimelineNote[]; restoreList?: TimelineNotesListState; comparisonFailed?: boolean }
 
 @Component({
   selector: 'app-timeline-notes-dialog', standalone: true,
@@ -43,6 +45,7 @@ export class TimelineNotesDialogComponent {
   private readonly dialogs = inject(MatDialog);
   private readonly compatibility = inject(BrowserCompatibilityService);
   private readonly builder = inject(FormBuilder);
+  private readonly injector = inject(Injector);
   private readonly dateAdapter = inject(DateAdapter) as TimelineNoteDateAdapter;
   readonly view = signal<'list' | 'edit'>('list');
   readonly busy = signal(false);
@@ -72,6 +75,11 @@ export class TimelineNotesDialogComponent {
   get selectedCategory() { return this.options.find(option => option.id === this.form.controls.category.value)!; }
   get selectedColor() { return this.colorOptions.find(option => option.id === this.form.controls.color.value)!; }
   get today(): Dayjs { return this.dateAdapter.today(); }
+  get comparisonHasDraft(): boolean {
+    const note = this.existing();
+    const savedMode = note?.endDate === null ? 'ongoing' : note && note.endDate !== note.startDate ? 'range' : 'single';
+    return this.form.dirty || this.mode() !== savedMode;
+  }
 
   constructor() {
     effect(() => { if (this.service.uid() !== this.data.uid) this.ref.close(); });
@@ -86,7 +94,28 @@ export class TimelineNotesDialogComponent {
     });
     if (this.data.notes?.length === 1) this.edit(this.data.notes[0]);
     else if (this.data.notes?.length) this.notes.set(this.data.notes);
-    else void this.loadPage(0);
+    else {
+      const restored = this.data.restoreList;
+      if (restored && Number.isSafeInteger(restored.page) && restored.page >= 0 && restored.page < restored.cursors.length) {
+        this.cursors = [...restored.cursors];
+        void this.loadPage(restored.page);
+      } else void this.loadPage(0);
+    }
+  }
+  async compare(note: TimelineNote): Promise<void> {
+    if (this.busy() || !this.service.isOwner(this.data.uid) || this.view() === 'edit' && this.comparisonHasDraft) return;
+    const navigation = this.injector.get(TimelineNoteComparisonNavigationService);
+    const list = { page: this.pageNumber(), cursors: [...this.cursors] };
+    this.busy.set(true);
+    const closed = firstValueFrom(this.ref.afterClosed());
+    this.ref.close();
+    await closed;
+    if (this.service.isOwner(this.data.uid) && !await navigation.compare(this.data.uid, note.id, list) && this.service.isOwner(this.data.uid)) {
+      this.haptics.error();
+      this.dialogs.open(TimelineNotesDialogComponent, { width: '560px', maxWidth: 'calc(100vw - 32px)',
+        data: { uid: this.data.uid, restoreList: list, comparisonFailed: true } });
+    }
+    // Accepted route navigation owns feedback; no duplicate tap or mutation feedback.
   }
   async loadPage(index: number): Promise<void> {
     if (this.busy()) return;

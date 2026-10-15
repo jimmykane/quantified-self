@@ -1,0 +1,22 @@
+:host { display: block; min-width: 0; margin-block: 18px 8px; }
+.comparison-meta { display: block; color: var(--mat-sys-on-surface-variant); font: var(--mat-sys-body-small); margin-block-start: 4px; overflow-wrap: anywhere; }
+.comparison-changes { margin: 8px 0 0; }
+.comparison-change { display: grid; grid-template-columns: minmax(0, 1fr) minmax(110px, 0.8fr); gap: 12px; padding-block: 10px; border-top: 1px solid var(--mat-sys-outline-variant); }
+.comparison-change dt { min-width: 0; }
+.comparison-change dt > strong { display: block; font: var(--mat-sys-label-large); }
+.comparison-change dd { margin: 0; text-align: end; }
+.comparison-number { display: block; font: 600 24px / 1.2 'Barlow Condensed', sans-serif; font-variant-numeric: tabular-nums; overflow-wrap: anywhere; }
+.comparison-table { width: 100%; table-layout: fixed; border-collapse: collapse; text-align: start; margin-block: 12px; }
+.comparison-table th, .comparison-table td { text-align: start; }
+.comparison-table thead th { color: var(--mat-sys-on-surface-variant); font: var(--mat-sys-body-small); padding: 8px 8px 12px 0; }
+.comparison-table thead th:first-child { width: 34%; }
+.comparison-table tbody th, .comparison-table td { vertical-align: top; border-top: 1px solid var(--mat-sys-outline-variant); padding: 12px 8px 12px 0; overflow-wrap: anywhere; }
+.comparison-table tbody th > strong { display: block; font: var(--mat-sys-label-large); }
+@media (max-width: 620px) {
+  .comparison-table, .comparison-table tbody { display: block; }
+  .comparison-table thead { display: none; }
+  .comparison-table tbody tr { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); border-top: 1px solid var(--mat-sys-outline-variant); padding-block: 14px; }
+  .comparison-table tbody th { grid-column: 1 / -1; border: 0; padding: 0 0 12px; }
+  .comparison-table td { border: 0; padding: 0 5px 0 0; }
+  .comparison-table td::before { content: attr(data-label); display: block; min-block-size: 2lh; font: var(--mat-sys-body-small); color: var(--mat-sys-on-surface-variant); margin-block-end: 6px; }
+}

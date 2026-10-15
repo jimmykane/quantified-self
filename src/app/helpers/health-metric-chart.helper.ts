@@ -1,6 +1,7 @@
 import { getDateTimeFormatter } from './date-time-format.helper';
 import { getNumberFormatter } from './number-format.helper';
 import { healthChartReadingLabel } from './chart-source.helper';
+import { addComparisonDays, comparisonDateCarrier, type NoteComparisonWindow } from './timeline-note-comparison.helper';
 import type { EChartsType } from 'echarts/core';
 import {
   DashboardEChartsStyleTokens,
@@ -86,6 +87,11 @@ export interface HealthChartSeriesModel {
   ariaLabel: string;
 }
 
+export interface HealthChartModelOptions {
+  /** A gated comparison must not announce a separate ungated two-reading difference. */
+  includeTwoReadingComparison?: boolean;
+}
+
 export interface HealthChartStatusOverlay {
   rangePoints?: readonly { timestampMs: number; normalRange: { min: number; max: number } | null }[];
   normalRangeColor: string;
@@ -148,8 +154,9 @@ export function buildHealthChartModels(
   startTimeMs: number,
   endTimeMs: number,
   unitSettings: UserUnitSettingsInterface | null = null,
+  options: HealthChartModelOptions = {},
 ): HealthChartSeriesModel[] {
-  return seriesValues.map(series => buildSeriesModel(series, startTimeMs, endTimeMs, unitSettings));
+  return seriesValues.map(series => buildSeriesModel(series, startTimeMs, endTimeMs, unitSettings, options));
 }
 
 export function buildHealthMetricEChartsOption(
@@ -161,6 +168,7 @@ export function buildHealthMetricEChartsOption(
   unitSettings: UserUnitSettingsInterface | null = null,
   compact = false,
   statusOverlay: HealthChartStatusOverlay | null = null,
+  comparison: NoteComparisonWindow | null = null,
 ): ChartOption {
   const isCategorical = model.plotKind === 'step';
   const isPoint = model.plotKind === 'point';
@@ -243,7 +251,8 @@ export function buildHealthMetricEChartsOption(
         }
         const pointStatus = hrvPointStatuses.get(point.timestampMs);
         return renderDashboardEChartsTooltipCard(style, {
-          title: formatTooltipDate(point.timestampMs, point.timezoneOffsetSeconds),
+          title: comparison ? getDateTimeFormatter(undefined, { dateStyle: 'medium', timeZone: 'UTC' }).format(point.timestampMs)
+            : formatTooltipDate(point.timestampMs, point.timezoneOffsetSeconds),
           subtitle: model.series.sourceLabel,
           rows: [{
             label: 'Reading',
@@ -268,6 +277,7 @@ export function buildHealthMetricEChartsOption(
               model.series.metricId, pointStatus.normalRange.max, model.series.unit, model.series.nativeOnly, unitSettings)}`,
           }] : [])],
           notes: [
+            ...(comparison ? ['Daily median of recorded values; recorded calendar date.'] : []),
             ...(pointStatus ? [`Personal range: ${pointStatus.label}`] : []),
             ...(point.qualityCode ? [`Quality: ${humanize(point.qualityCode)}`] : []),
           ],
@@ -409,6 +419,29 @@ export function buildHealthMetricEChartsOption(
       : []), ...buildPersonalRangeBandSeries(rangeData, statusOverlay?.normalRangeColor)],
   };
 
+  if (comparison) {
+    // Explicit opt-in daily comparison. Keep the source model/identity, shared formatting and renderer;
+    // insert null days before splitting phases so no line bridges missing days or the excluded change day.
+    const first = option.series[0];
+    const byDate = new Map(model.displayedPoints.map(point => [point.calendarDate, point.value]));
+    const endDate = comparison.after.endDate < comparison.today ? comparison.after.endDate : addComparisonDays(comparison.today, -1);
+    const dates: string[] = [];
+    for (let date = comparison.before.startDate; date <= endDate; date = addComparisonDays(date, 1)) dates.push(date);
+    const phases = [{ name: 'Before', color: style.secondaryTextColor, before: true },
+      { name: 'After', color: seriesColor, before: false }];
+    Object.assign(option, { legend: { data: ['Before', 'After'], bottom: 0, textStyle: { color: style.textColor, fontSize: style.axisFontSize } } });
+    option.grid.bottom = 32;
+    option.series = phases.map(phase => ({ ...first, name: phase.name,
+      type: isPoint ? 'scatter' : 'line', connectNulls: false, showSymbol: true,
+      data: dates.map(date => [comparisonDateCarrier(date),
+        (phase.before ? date < comparison.anchor : date > comparison.anchor) ? byDate.get(date) ?? null : null]),
+      lineStyle: { width: HEALTH_TREND_LINE_WIDTH, color: phase.color }, itemStyle: { color: phase.color },
+      markPoint: undefined,
+      markLine: phase.before ? undefined : { silent: true, symbol: ['none', 'none'],
+        label: { formatter: 'Note starts', color: style.secondaryTextColor, fontSize: style.axisFontSize, position: 'insideEndTop' },
+        lineStyle: { color: style.secondaryTextColor, width: 1, type: 'dashed' }, data: [{ xAxis: comparisonDateCarrier(comparison.anchor) }] },
+    })) as typeof option.series;
+  }
   return option as ChartOption;
 }
 
@@ -716,6 +749,7 @@ function buildSeriesModel(
   startTimeMs: number,
   endTimeMs: number,
   unitSettings: UserUnitSettingsInterface | null,
+  options: HealthChartModelOptions,
 ): HealthChartSeriesModel {
   const sortedPoints = [...series.points].sort((left, right) => left.timestampMs - right.timestampMs);
   const displayedPoints = downsamplePoints(sortedPoints, MAX_DISPLAY_POINTS);
@@ -753,7 +787,8 @@ function buildSeriesModel(
   const readingCountText = `${getNumberFormatter().format(sortedPoints.length)} ${sortedPoints.length === 1 ? 'reading' : 'readings'}`;
   const evidenceText = `${readingCountText} recorded${plotKind === 'point' ? ' · No trend inferred' : ''}`;
   const recordedDateText = latest ? formatRecordedDate(latest.calendarDate) : null;
-  const twoReadingComparisonText = buildTwoReadingComparison(series, sortedPoints, plotKind, unitSettings);
+  const twoReadingComparisonText = options.includeTwoReadingComparison === false ? null
+    : buildTwoReadingComparison(series, sortedPoints, plotKind, unitSettings);
 
   return {
     series,

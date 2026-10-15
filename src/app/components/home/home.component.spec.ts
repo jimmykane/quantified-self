@@ -11,6 +11,7 @@ import { BehaviorSubject } from 'rxjs';
 import { ASSISTANT_REQUEST_LIMITS, USAGE_LIMITS, ROUTE_USAGE_LIMITS } from '@shared/limits';
 import { AppAuthService } from '../../authentication/app.auth.service';
 import { AppHapticsService } from '../../services/app.haptics.service';
+import { EChartsLoaderService } from '../../services/echarts-loader.service';
 import { PublicFeaturePreviewComponent } from '../public-seo/public-feature-preview.component';
 import { HomeComponent } from './home.component';
 
@@ -30,6 +31,11 @@ describe('HomeComponent', () => {
       providers: [
         { provide: AppAuthService, useValue: { user$: userSubject.asObservable() } },
         { provide: AppHapticsService, useValue: { selection } },
+        { provide: EChartsLoaderService, useValue: {
+          init: vi.fn().mockResolvedValue({ isDisposed: () => false, dispatchAction: vi.fn(), on: vi.fn(), off: vi.fn(), getWidth: () => 320 }),
+          setOption: vi.fn(), resize: vi.fn(), dispose: vi.fn(),
+          subscribeToViewportResize: () => () => undefined, attachMobileSeriesTapFeedback: () => () => undefined,
+        } },
       ],
     }).compileComponents();
     router = TestBed.inject(Router);
@@ -98,7 +104,7 @@ describe('HomeComponent', () => {
     expect(previews.map(preview => preview.componentInstance.previewKey()))
       .toEqual(['provider-flow', 'training-snapshot', 'training-readiness', 'training-signals',
         'training-explorer', 'dashboard', 'workout-analysis', 'training-plans',
-        'health-overview', 'health-sleep', 'health-hrv', 'health-weight', 'assistant-example', 'mcp-flow',
+        'health-overview', 'health-sleep', 'health-hrv', 'health-note-comparison', 'health-weight', 'assistant-example', 'mcp-flow',
         'activity-map', 'reviewer-benchmark']);
     expect(previews.every(preview => !!preview.nativeElement.querySelector(':scope > div[data-nosnippet]'))).toBe(true);
     expect(fixture.nativeElement.querySelector('app-training-explorer-preview')).toBeNull();
@@ -111,6 +117,12 @@ describe('HomeComponent', () => {
     expect(copy).toContain('Curated, KPI, Custom, and Map tiles');
     expect(copy).toContain('aerobic durability, and cadence versus power');
     expect(copy).toContain('blood pressure, weight, body composition');
+    const health = fixture.nativeElement.querySelector('#home-health') as HTMLElement;
+    expect(health.textContent).toContain('What Changed Around Your Note?');
+    expect(health.textContent).toContain('matching 7, 14, or 28-day windows');
+    expect(health.textContent).toContain('Observed differences, not cause and effect');
+    expect(health.querySelector('.preview-placeholder--note-comparison')).toBeTruthy();
+    expect(health.querySelector('app-health-note-comparison-preview')).toBeNull();
     expect(copy).toContain('reference and test devices');
     expect(copy).toContain('location access remains separate');
     expect(fixture.nativeElement.querySelectorAll('.training-plans-section app-compact-row')).toHaveLength(6);

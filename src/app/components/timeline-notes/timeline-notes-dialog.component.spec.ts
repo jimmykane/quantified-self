@@ -13,23 +13,48 @@ import { AppTimelineNotesService } from '../../services/app.timeline-notes.servi
 import { BrowserCompatibilityService } from '../../services/browser.compatibility.service';
 import { AppHapticsService } from '../../services/app.haptics.service';
 import { TimelineNoteDateAdapter, timelineNoteDateInput, timelineNoteDateLabel } from './timeline-note-date-adapter';
+import { TimelineNoteComparisonNavigationService } from '../../services/timeline-note-comparison-navigation.service';
 
 describe('Timeline notes editor', () => {
   const note = { id: 'a'.repeat(64), category: 'sickness' as const, title: 'Sickness', startDate: '2026-01-01', endDate: null, timeZone: 'Europe/Helsinki', revision: 1, createdAtMs: 1, updatedAtMs: 1 };
   const service = { uid: signal('owner'), showOnCharts: signal(true), setShowOnCharts: vi.fn(), list: vi.fn(), save: vi.fn(), remove: vi.fn(), get: vi.fn(), isOwner: () => true };
   let component: TimelineNotesDialogComponent;
   const haptics = { selection: vi.fn(), success: vi.fn(), error: vi.fn() };
+  const navigation = { compare: vi.fn() };
+  const ref = { close: vi.fn(), afterClosed: () => of(undefined) };
   beforeEach(() => {
     service.showOnCharts.set(true);
     vi.clearAllMocks(); service.list.mockResolvedValue({ notes: [note], cursor: null }); service.save.mockResolvedValue(note);
+    navigation.compare.mockResolvedValue(true);
     TestBed.configureTestingModule({ providers: [
       { provide: DateAdapter, useFactory: () => new TimelineNoteDateAdapter('en-US') },
       { provide: MAT_DIALOG_DATA, useValue: { uid: 'owner', notes: [note] } },
       { provide: AppHapticsService, useValue: haptics },
-      { provide: MatDialogRef, useValue: { close: vi.fn() } }, { provide: MatDialog, useValue: { open: () => ({ afterClosed: () => of(true) }) } },
+      { provide: MatDialogRef, useValue: ref }, { provide: MatDialog, useValue: { open: () => ({ afterClosed: () => of(true) }) } },
+      { provide: TimelineNoteComparisonNavigationService, useValue: navigation },
       { provide: AppTimelineNotesService, useValue: service }, { provide: BrowserCompatibilityService, useValue: { createRandomUUID: () => '123e4567-e89b-42d3-a456-426614174000' } },
     ] });
     component = TestBed.runInInjectionContext(() => new TimelineNotesDialogComponent());
+  });
+  it('compares only saved notes and leaves draft edits, visibility and persistence untouched', async () => {
+    component.form.markAsDirty(); await component.compare(note);
+    expect(navigation.compare).not.toHaveBeenCalled();
+    component.form.markAsPristine(); component.mode.set('single'); await component.compare(note);
+    expect(component.comparisonHasDraft).toBe(true); expect(navigation.compare).not.toHaveBeenCalled();
+    component.mode.set('ongoing'); await component.compare({ ...note, showOnCharts: false });
+    expect(ref.close).toHaveBeenCalledOnce();
+    expect(navigation.compare).toHaveBeenCalledExactlyOnceWith('owner', note.id, { page: 0, cursors: [null] });
+    expect(service.save).not.toHaveBeenCalled(); expect(service.setShowOnCharts).not.toHaveBeenCalled();
+    expect(haptics.selection).not.toHaveBeenCalled();
+  });
+  it('reopens the notes manager with a visible failure if comparison navigation is rejected', async () => {
+    navigation.compare.mockResolvedValueOnce(false);
+    const open = vi.spyOn(TestBed.inject(MatDialog), 'open');
+    await component.compare(note);
+    expect(open).toHaveBeenCalledWith(TimelineNotesDialogComponent, expect.objectContaining({ data: {
+      uid: 'owner', restoreList: { page: 0, cursors: [null] }, comparisonFailed: true,
+    } }));
+    expect(haptics.error).toHaveBeenCalledOnce(); expect(service.save).not.toHaveBeenCalled();
   });
   it('uses the edited note zone for the Material calendar, date limit, and End today', async () => {
     vi.useFakeTimers(); vi.setSystemTime(new Date('2026-09-08T12:30:00Z'));

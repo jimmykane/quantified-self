@@ -174,6 +174,13 @@ describe('AppRoutingModule routes', () => {
     });
     expect(healthRoute?.data?.['description']).toContain('source-separated');
   });
+  it('keeps selected-note comparisons owner-only through authenticated lazy routing, with a static noindex title', () => {
+    const route = routes.find(route => route.path === 'health/compare/:noteId');
+    expect(route?.canMatch).toEqual([authGuard, onboardingGuard]);
+    expect(route?.loadComponent).toBeTypeOf('function');
+    expect(route?.data).toMatchObject({ title: 'Note comparison', robots: 'noindex, nofollow' });
+    expect(publicLayoutRoute?.children?.some(route => route.path === 'health/compare/:noteId')).toBe(false);
+  });
 
   it('should keep the activity calendar authenticated and noindexed', () => {
     const calendarRoute = routes.find(route => route.path === 'calendar');
@@ -509,7 +516,7 @@ describe('AppRoutingModule routes', () => {
         path: PUBLIC_FEATURE_PATHS.health,
         title: 'Sleep, HRV and Health Trends Across Your Devices',
         h1: 'Your Health, Beyond Training.',
-        descriptionText: 'add timeline notes for travel, sickness and stress',
+        descriptionText: 'compare recorded health before and after a Timeline note',
       },
       {
         path: PUBLIC_FEATURE_PATHS.mcpServer,

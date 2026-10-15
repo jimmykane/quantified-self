@@ -31,6 +31,7 @@ import {
 import type { UserUnitSettingsInterface } from '@sports-alliance/sports-lib';
 import { EChartsLoaderService } from '../../services/echarts-loader.service';
 import { LoggerService } from '../../services/logger.service';
+import type { NoteComparisonWindow } from '../../helpers/timeline-note-comparison.helper';
 
 @Component({
   selector: 'app-health-metric-series-chart',
@@ -51,6 +52,7 @@ export class HealthMetricSeriesChartComponent implements AfterViewInit, OnChange
   @Input() fillHeight = false;
   @Input() statusOverlay: HealthChartStatusOverlay | null = null;
   @Input() statusDescription: string | null = null;
+  @Input() comparisonWindow: NoteComparisonWindow | null = null;
   @ViewChild('chartDiv', { static: true }) chartDiv!: ElementRef<HTMLDivElement>;
 
   private readonly chartHost: EChartsHostController;
@@ -78,7 +80,7 @@ export class HealthMetricSeriesChartComponent implements AfterViewInit, OnChange
     }
     if (this.viewInitialized && (
       changes.model || changes.startTimeMs || changes.endTimeMs || changes.darkTheme || changes.unitSettings
-      || changes.compact || changes.thumbnail || changes.statusOverlay || changes.timelineNotes
+      || changes.compact || changes.thumbnail || changes.statusOverlay || changes.timelineNotes || changes.comparisonWindow
     )) {
       void this.refresh();
     }
@@ -117,6 +119,7 @@ export class HealthMetricSeriesChartComponent implements AfterViewInit, OnChange
         this.unitSettings,
         this.compact || this.thumbnail,
         this.statusOverlay,
+        this.comparisonWindow,
       );
     if (this.thumbnail) {
       Object.assign(option, { grid:{left:2,right:2,top:3,bottom:3}, tooltip:{show:false}, legend:{show:false}, dataZoom:[] });

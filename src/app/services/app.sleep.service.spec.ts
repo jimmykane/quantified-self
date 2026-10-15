@@ -13,6 +13,8 @@ import {
   orderBy,
   query,
   where,
+  getDocsFromServer,
+  startAfter,
 } from 'app/firebase/firestore';
 import { AppSleepService } from './app.sleep.service';
 import { HrvHistoryService } from './hrv-history.service';
@@ -31,6 +33,7 @@ vi.mock('app/firebase/firestore', () => {
     orderBy: vi.fn((field: string, direction: string) => ({ type: 'orderBy', field, direction })),
     query: vi.fn((collectionRef: unknown, ...constraints: unknown[]) => ({ collectionRef, constraints })),
     where: vi.fn((field: string, operator: string, value: unknown) => ({ type: 'where', field, operator, value })),
+    getDocsFromServer: vi.fn(),
   };
 });
 
@@ -70,6 +73,39 @@ describe('AppSleepService', () => {
     health$.next([]);
     await vi.waitFor(() => expect(values).toEqual([undefined, 44, undefined]));
     sub.unsubscribe();
+  });
+
+  it('pages bounded native summaries without starting optional HRV enrichment', async () => {
+    const start = Date.parse('2026-09-01T00:00:00Z'), end = Date.parse('2026-10-15T00:00:00Z');
+    const docs = Array.from({ length: 33 }, (_, i) => ({ id: `night-${i}`, data: () => ({
+      startTimeMs: start + i * 1000, endTimeMs: start + i * 1000 + 800, source: { provider: 'GarminAPI' },
+    }) }));
+    vi.mocked(getDocsFromServer).mockResolvedValueOnce({ docs, size: 33 } as never)
+      .mockResolvedValueOnce({ docs: docs.slice(32), size: 1 } as never);
+    const loaded = await service.loadSummaryRange('owner', start, end, () => true);
+    expect(loaded.complete).toBe(true); expect(loaded.sessions).toHaveLength(33);
+    expect(limit).toHaveBeenCalledWith(33); expect(startAfter).toHaveBeenCalledWith(docs[31]);
+    expect(collectionData).not.toHaveBeenCalled();
+  });
+  it('returns incomplete native summaries at the record budget, not an apparently complete result', async () => {
+    const docs = Array.from({ length: 33 }, (_, i) => ({ id: `night-${i}`, data: () => ({ startTimeMs: 10, endTimeMs: 20 }) }));
+    vi.mocked(getDocsFromServer).mockResolvedValue({ docs, size: 33 } as never);
+    const loaded = await service.loadSummaryRange('owner', 1, 100, () => true);
+    expect(loaded).toMatchObject({ complete: false, limitReached: 'records' });
+    expect(loaded.sessions).toHaveLength(512); expect(getDocsFromServer).toHaveBeenCalledTimes(16);
+  });
+  it('fences paging and propagates failures rather than silently falling back', async () => {
+    let current = true;
+    vi.mocked(getDocsFromServer).mockImplementationOnce(async () => { current = false; return { docs: [], size: 0 } as never; });
+    await expect(service.loadSummaryRange('owner', 1, 100, () => current)).rejects.toThrow('cancelled');
+    vi.mocked(getDocsFromServer).mockRejectedValueOnce(new Error('offline'));
+    await expect(service.loadSummaryRange('owner', 1, 100, () => true)).rejects.toThrow('offline');
+    await expect(service.loadSummaryRange('owner', 1, 100 * 86_400_000, () => true)).rejects.toThrow('Invalid');
+  });
+  it('reports a byte-limited read without using partial evidence as complete', async () => {
+    const docs = [{ id: 'large', data: () => ({ startTimeMs: 10, endTimeMs: 20, providerFields: { value: 'é'.repeat(4_200_000) } }) }];
+    vi.mocked(getDocsFromServer).mockResolvedValueOnce({ docs, size: 1 } as never);
+    expect(await service.loadSummaryRange('owner', 1, 100, () => true)).toMatchObject({ sessions: [], complete: false, limitReached: 'bytes' });
   });
 
   it('listens beyond the first Health page and disposes every page', async () => {

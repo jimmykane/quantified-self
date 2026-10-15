@@ -276,6 +276,8 @@ describe('Firebase Hosting configuration', () => {
     expect(matchesAnyHostingSource(sources, '/training/plans/library/saved-workout-1')).toBe(true);
     expect(matchesAnyHostingSource(sources, '/routes')).toBe(true);
     expect(matchesAnyHostingSource(sources, '/tags')).toBe(true);
+    expect(matchesAnyHostingSource(sources, '/health/compare/example-note')).toBe(true);
+    expect(matchesAnyHostingSource(sources, '/health/compare/example-note/extra')).toBe(false);
     expect(matchesAnyHostingSource(sources, '/admin/queues/workout')).toBe(true);
     expect(matchesAnyHostingSource(sources, '/admin/queues/route-reparse')).toBe(true);
     expect(matchesAnyHostingSource(sources, '/user/user-1/event/event-1')).toBe(true);
@@ -339,8 +341,9 @@ describe('Firebase Hosting configuration', () => {
     }
   });
 
-  it('marks recently updated public discovery surfaces in sitemap', () => {
-    expect(sitemapLastmodForUrl(`${siteOrigin}/`)).toBe('2026-10-11');
+  it('marks note-comparison previews and other recently updated public discovery surfaces in sitemap', () => {
+    expect(sitemapLastmodForUrl(`${siteOrigin}/help`)).toBe('2026-10-15');
+    expect(sitemapLastmodForUrl(`${siteOrigin}/`)).toBe('2026-10-15');
     expect(sitemapLastmodForUrl(`${siteOrigin}/features/health`)).toBe('2026-10-15');
     expect(sitemapLastmodForUrl(`${siteOrigin}/features`)).toBe('2026-10-09');
     expect(sitemapLastmodForUrl(`${siteOrigin}/features/activity-calendar`)).toBe('2026-10-09');
@@ -367,6 +370,7 @@ describe('Firebase Hosting configuration', () => {
     expect(sitemapXml).not.toContain(`${siteOrigin}/features/sports-watch-benchmark`);
     // Help includes the dialog feedback and safe haptic behavior guidance.
     // This same-day Help revision covers sentence-only Dashboard glance, Health recovery, and the event-chart zone-color toggle.
+    // It also documents the flat Training & health navigation for Plans and Timeline notes.
     expect(sitemapLastmodForUrl(`${siteOrigin}/help`)).toBe('2026-10-15');
     expect(sitemapLastmodForUrl(`${siteOrigin}/policies`)).toBe('2026-10-14');
     expect(sitemapLastmodForUrl(`${siteOrigin}/privacy`)).toBe('2026-10-14');

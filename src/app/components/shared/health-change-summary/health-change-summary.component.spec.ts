@@ -27,7 +27,7 @@ describe('Health change summary disclosure', () => {
     expect(details.hidden).toBe(true);
     expect(host.querySelector('h2')?.textContent).toBe('Your recovery');
     expect(host.querySelector('.health-change-glance-icon')).toBeNull();
-    expect(host.querySelector('section')?.hasAttribute('data-glance-state')).toBe(false);
+    expect(host.querySelector('app-summary-disclosure')?.hasAttribute('data-glance-state')).toBe(false);
     expect(host.querySelector('[role="status"]')?.textContent).toContain('outside your usual range');
     expect(host.querySelector('.health-change-scope')?.textContent).toBe('From your latest sleep and nightly HRV readings.');
     const coverage = host.querySelector('.health-change-coverage')!;
@@ -72,7 +72,8 @@ describe('Health change summary disclosure', () => {
     fixture.detectChanges();
     const host = fixture.nativeElement as HTMLElement;
     expect(host.querySelector('h2')?.textContent).toBe('At a glance');
-    expect(host.querySelector('section')?.getAttribute('data-glance-state')).toBe('within-range');
+    expect(host.querySelector('app-summary-disclosure')?.getAttribute('data-glance-state')).toBe('within-range');
+    expect(host.querySelector('section')?.getAttribute('data-tone')).toBe('positive');
     expect(host.querySelector('.health-change-glance-icon')).toBeNull();
     expect(host.querySelector('[role="status"]')?.textContent).toBe('Your 7-day HRV average is within your usual range.');
     expect(host.querySelector('button')).toBeNull();
@@ -97,7 +98,7 @@ describe('Health change summary disclosure', () => {
     fixture.componentRef.setInput('signals', [attention, sleep]);
     fixture.detectChanges();
     const host = fixture.nativeElement as HTMLElement;
-    expect(host.querySelector('section')?.getAttribute('data-glance-state')).toBe('outside-range');
+    expect(host.querySelector('app-summary-disclosure')?.getAttribute('data-glance-state')).toBe('outside-range');
     expect(host.querySelector('.health-change-glance-icon')).toBeNull();
     expect(host.querySelector('[role="status"]')?.textContent).toBe('Your 7-day HRV average is outside your usual range.');
     expect(host.querySelector('button')).toBeNull();
@@ -144,7 +145,11 @@ describe('Health change summary disclosure', () => {
       state, statusText: state, detailText: 'Same-source evidence' }]);
     fixture.detectChanges();
     const host = fixture.nativeElement as HTMLElement;
-    expect(host.querySelector('section')?.getAttribute('data-glance-state')).toBe(state);
+    expect(host.querySelector('app-summary-disclosure')?.getAttribute('data-glance-state')).toBe(state);
+    expect(host.querySelector('section')?.getAttribute('data-tone')).toBe(
+      state === 'within-range' || state === 'available' ? 'positive'
+        : state === 'outside-range' || state === 'attention' ? 'caution'
+        : state === 'unavailable' ? 'error' : 'neutral');
     expect(host.querySelector('.health-change-glance-icon')).toBeNull();
     expect(host.querySelector('.health-change-heading > mat-icon')).toBeNull();
     expect(host.querySelector('button')).toBeNull();
@@ -155,9 +160,9 @@ describe('Health change summary disclosure', () => {
 });
 
 describe('Dashboard accent rail style contract', () => {
-  it('keeps the rail surface-free with wrapping content and Health’s existing touch target', () => {
-    const styles = readFileSync(resolve(__dirname, 'health-change-summary.component.scss'), 'utf8');
-    expect(styles).toContain('border-inline-start: 3px solid var(--health-glance-accent)');
+  it('keeps the shared rail surface-free with wrapping content and Health’s existing touch target', () => {
+    const styles = readFileSync(resolve(__dirname, '../summary-disclosure/summary-disclosure.component.scss'), 'utf8');
+    expect(styles).toContain('border-inline-start: 3px solid var(--summary-accent)');
     expect(styles).toContain('border-bottom: 0');
     expect(styles).toContain('grid-template-columns: minmax(0, 1fr); align-items: start');
     expect(styles).not.toContain('grid-template-columns: minmax(0, 1fr) auto');

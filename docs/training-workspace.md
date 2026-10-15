@@ -1805,7 +1805,7 @@ return entry when available and otherwise replaces a direct deep link with its s
 Route changes may replace a draft, but live schedule and unit-setting updates do not. A pending save captures the owner
 and editor generation so a response arriving after Back navigation cannot reopen or overwrite the new screen. The
 canonical route is `/training/plans`; `/plans` and the former query-parameter editor shapes are not registered and have
-no compatibility redirects. The sidebar entry sits beneath Training on a compact guide rail and carries a visible
+no compatibility redirects. The sidebar entry is a full-level row immediately after Training in **Training & health** and carries a visible
 **Beta** status label.
 
 Training Planning has no UID presentation rollout. Every signed-in owner can open the authenticated `/training/plans`
