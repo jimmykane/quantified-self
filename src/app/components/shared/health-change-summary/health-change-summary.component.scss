@@ -15,7 +15,6 @@
   &[data-glance-state='unavailable'] { --health-glance-accent: var(--mat-sys-error); }
   .health-change-heading { display: grid; grid-template-columns: minmax(0, 1fr); align-items: start; gap: 0.25rem; }
   .health-change-intro { display: grid; gap: 0.25rem; grid-column: 1; grid-row: 1; }
-  .health-change-heading button { grid-column: 1 / -1; justify-self: start; padding-inline: 0; }
   h2 { font: var(--mat-sys-title-small); }
   .health-change-headline { overflow-wrap: anywhere; }
 }

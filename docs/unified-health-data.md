@@ -416,13 +416,13 @@ loading evidence stay neutral rather than borrowing the within-range appearance.
 The combined Dashboard summary prioritizes existing caution/outside-range, unavailable, insufficient and loading
 states before the normal-day sentence, showing at most two attention clauses. `attention`/`available` presentation
 states preserve existing assessments without calling them personal ranges. Missing data cannot become an all-clear.
-**Show details** is available for existing caution, outside-range, unavailable or insufficient signals. Mixed/Recover
-Readiness includes all five contributing signals, including recorded Sleep scores and still-loading evidence; otherwise
-details contain only signals needing attention. Yesterday's sleep cannot satisfy today's Readiness gate and any older
-score is explicitly last available. TSS training state stays independent when sleep is loading or fails, and a missing
-training-state classification cannot become available. A pure loading state remains a loading sentence without an empty disclosure.
-The disclosure closes silently when its attention signals resolve, the owner changes or the presentation changes.
-**Show details** reveals source-separated evidence, existing range/baseline wording and recorded dates using shared local date and canonical metric formatters.
+Dashboard is always sentence-only: no disclosure control or mounted evidence breakdown, including Mixed/Recover,
+missing, failed and loading states. The existing Today card retains the scores, charts and supporting evidence instead
+of duplicating them under the sentence. Yesterday's sleep cannot satisfy today's Readiness gate and any older score
+in Today is explicitly last available. TSS training state stays independent when sleep is loading or fails, and a missing
+training-state classification cannot become available. Loading remains a loading sentence.
+Health retains its **Show details** disclosure for source-separated evidence, existing range/baseline wording and recorded
+dates using shared local date and canonical metric formatters. It resets silently when the owner or presentation changes.
 Loading, failed refreshes, bounded incomplete reads and missing evidence remain distinct from within range.
 Health follows the same selected Highlight account and semantic series, with missing or filtered choices unavailable without
 overwriting preferences. Dashboard attributes Sleep and HRV independently from their already-loaded evidence,

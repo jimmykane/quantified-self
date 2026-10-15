@@ -1575,7 +1575,8 @@ describe('SummariesComponent', () => {
     expect(summary.textContent).toContain('At a glance');
     expect(summary.querySelector('.health-change-coverage')).toBeNull();
     expect(host.querySelector('.dashboard-summary-heading')?.classList.contains('dashboard-summary-heading--with-recovery')).toBe(true);
-    summary.querySelector('button')!.click(); fixture.detectChanges();
+    expect(summary.querySelector('button')).toBeNull();
+    expect(summary.querySelector('dl')).toBeNull();
     expect(component.user.settings.dashboardSettings.tiles).toBe(savedTiles);
     expect(mockUserService.updateUserProperties).not.toHaveBeenCalled();
     dashboardSettings.showTodaySummary = false;
@@ -1608,7 +1609,7 @@ describe('SummariesComponent', () => {
     expect(mockUserService.updateUserProperties).not.toHaveBeenCalled();
   });
 
-  it('shows the existing Mixed assessment and its contributing sources only when details are requested', () => {
+  it.each(['Mixed', 'Recover'])('keeps %s readiness to a sentence without duplicating Today’s metric evidence', label => {
     component.user = { uid: 'owner', settings: { dashboardSettings: { tiles: [], showTodaySummary: true } } } as SummariesComponent['user'];
     component.isOwnerDashboard = true;
     const healthSignals: typeof component.dashboardGlanceSignals = [
@@ -1616,27 +1617,25 @@ describe('SummariesComponent', () => {
       { id: 'sleep', label: 'Sleep', sourceLabel: 'Suunto', state: 'recorded', statusText: 'Recorded', detailText: 'Night ended 15 Oct, 08:00' },
     ];
     component.dashboardGlanceSignals = buildDashboardGlanceSignals({ ...component.dashboardTodayReadiness,
-      loading: false, awaitingSleep: false, warningText: '', label: 'Mixed', scoreText: '64/100', sleepText: '62/100',
+      loading: false, awaitingSleep: false, warningText: '', label, scoreText: '64/100', sleepText: '62/100',
       confidenceText: 'High confidence', evidenceText: '4/4 signals', sleepContextText: 'Today', overnightHeartRateText: '-4%',
       overnightHeartRateTone: 'positive', changeSignals: healthSignals,
     }, { label: 'Balanced', caption: 'Stable load', scalePosition: 2, scaleTone: 'positive' }, 'available');
     fixture.detectChanges();
     const summary = (fixture.nativeElement as HTMLElement).querySelector('app-health-change-summary')!;
-    const details = summary.querySelector<HTMLElement>('#dashboard-today-changes-details')!;
-    expect(summary.querySelector('[role="status"]')?.textContent).toBe('Readiness is Mixed.');
-    expect(details.hidden).toBe(true);
-    summary.querySelector('button')!.click(); fixture.detectChanges();
-    expect(details.hidden).toBe(false);
-    expect(details.querySelectorAll('dt')).toHaveLength(5);
-    expect(details.textContent).toContain('Mixed · 64/100');
-    expect(details.textContent).toContain('Sleep score 62/100');
-    expect(details.textContent).toContain('Garmin · Overnight HRV');
-    expect(details.textContent).toContain('Suunto');
+    expect(summary.querySelector('[role="status"]')?.textContent).toBe(`Readiness is ${label}.`);
+    expect(summary.querySelector('button')).toBeNull();
+    expect(summary.querySelector('#dashboard-today-changes-details')).toBeNull();
+    expect(summary.querySelector('dl')).toBeNull();
+    expect(summary.querySelectorAll('p')).toHaveLength(1);
+    expect(summary.textContent).not.toMatch(/64\/100|62\/100|Garmin|Suunto/);
+    expect((fixture.nativeElement as HTMLElement).querySelector('.dashboard-current-state-row')).not.toBeNull();
     expect(summary.querySelector('.health-change-glance-icon')).toBeNull();
     expect(mockUserService.updateUserProperties).not.toHaveBeenCalled();
     component['resetDerivedMetricsState'](); component['changeDetector'].markForCheck(); fixture.detectChanges();
-    expect(details.textContent).not.toContain('Suunto');
-    expect(details.hidden).toBe(true);
+    expect(summary.querySelector('[role="status"]')?.textContent).toBe('Readiness is still loading.');
+    expect(summary.querySelector('button')).toBeNull();
+    expect(summary.querySelector('dl')).toBeNull();
     expect(component.dashboardGlanceSignals.every(signal => signal.state === 'loading')).toBe(true);
   });
 

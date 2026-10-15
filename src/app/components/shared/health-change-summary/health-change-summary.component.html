@@ -7,7 +7,7 @@
         <p class="health-change-headline" role="status" aria-atomic="true">{{ glance().headline }}</p>
       }
     </div>
-    @if (detailsAvailable()) {
+    @if (!compact()) {
       <button mat-button type="button" [attr.aria-expanded]="expanded()" [attr.aria-controls]="summaryId() + '-details'"
         (click)="toggleDetails()">
         {{ expanded() ? 'Hide details' : 'Show details' }}
@@ -22,15 +22,15 @@
       <p class="health-change-notice"><mat-icon aria-hidden="true">info_outline</mat-icon><span><strong>{{ change.label }} · {{ change.statusText }}</strong><small>{{ change.sourceLabel }}</small></span></p>
     }
     <p class="health-change-scope">From your latest sleep and nightly HRV readings.</p>
+    <div [id]="summaryId() + '-details'" [hidden]="!expanded()">
+      <dl class="health-change-evidence">
+        @for (signal of signals(); track signal.id) {
+          <div [attr.data-state]="signal.state">
+            <dt>{{ signal.label }}<small>{{ signal.sourceLabel }}</small></dt>
+            <dd><span class="health-change-status">{{ signal.statusText }}</span><small>{{ signal.detailText }}</small></dd>
+          </div>
+        }
+      </dl>
+    </div>
   }
-  <div [id]="summaryId() + '-details'" [hidden]="!expanded() || !detailsAvailable()">
-    <dl class="health-change-evidence">
-      @for (signal of detailSignals(); track signal.id) {
-        <div [attr.data-state]="signal.state">
-          <dt>{{ signal.label }}<small>{{ signal.sourceLabel }}</small></dt>
-          <dd><span class="health-change-status">{{ signal.statusText }}</span><small>{{ signal.detailText }}</small></dd>
-        </div>
-      }
-    </dl>
-  </div>
 </section>
